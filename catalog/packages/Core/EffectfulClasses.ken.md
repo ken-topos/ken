@@ -264,7 +264,7 @@ of `bind`'s field order (container first, per the chapter's own `bind m k
 
 ```ken
 lemma list_bind_lid (a : Type) (b : Type) (x : a) (k : a -> List b) :
-  Equal (List b) (list_bind a b (list_pure a x) k) (k x) = list_right_unit b (k x)
+  Equal (List b) (list_bind a b (list_pure a x) k) (k x) = list_append::right_unit b (k x)
 
 lemma list_bind_rid (a : Type) (m : List a) : Equal (List a) (list_bind a a m (list_pure a)) m =
   match m {
@@ -282,7 +282,7 @@ lemma concat_map_append_distrib (a : Type) (b : Type) (f : a -> List b) (xs : Li
         (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys)))
         (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys))
         (cong (List b) (List b) (concat_map a b f (list_append a t ys)) (list_append b (concat_map a b f t) (concat_map a b f ys)) (list_append b (f h)) (concat_map_append_distrib a b f t ys))
-        (sym (List b) (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys)) (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys))) (list_assoc b (f h) (concat_map a b f t) (concat_map a b f ys)))
+        (sym (List b) (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys)) (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys))) (list_append::assoc b (f h) (concat_map a b f t) (concat_map a b f ys)))
   }
 
 lemma list_bind_asc (a : Type) (b : Type) (c : Type) (m : List a) (k : a -> List b) (h : b -> List c) :
@@ -300,7 +300,7 @@ lemma list_bind_asc (a : Type) (b : Type) (c : Type) (m : List a) (k : a -> List
 ```
 
 `ap_id`/`ap_hom`/`map_coh` for `List` compose with the
-`list_right_unit`/`list_functor_id` (`Core/LawfulFunctors.ken`) — zero new
+`list_append::right_unit`/`list_map::id` (`Core/LawfulFunctors.ken`) — zero new
 induction needed for any of the three:
 
 ```ken
@@ -309,25 +309,25 @@ lemma list_ap_id (a : Type) (v : List a) : Equal (List a) (list_ap a a (list_pur
     (list_append a (list_map a a (idf a) v) (Nil a))
     (list_map a a (idf a) v)
     v
-    (list_right_unit a (list_map a a (idf a) v))
-    (list_functor_id a v)
+    (list_append::right_unit a (list_map a a (idf a) v))
+    (list_map::id a v)
 
 lemma list_ap_hom (a : Type) (b : Type) (g : a -> b) (x : a) :
   Equal (List b) (list_ap a b (list_pure (a -> b) g) (list_pure a x)) (list_pure b (g x)) =
-  list_right_unit b (Cons b (g x) (Nil b))
+  list_append::right_unit b (Cons b (g x) (Nil b))
 
 lemma list_map_coh (a : Type) (b : Type) (g : a -> b) (x : List a) :
   Equal (List b) (functor_map_of List Functor_instance_List a b g x) (list_ap a b (list_pure (a -> b) g) x) =
-  sym (List b) (list_append b (list_map a b g x) (Nil b)) (list_map a b g x) (list_right_unit b (list_map a b g x))
+  sym (List b) (list_append b (list_map a b g x) (Nil b)) (list_map a b g x) (list_append::right_unit b (list_map a b g x))
 ```
 
 `ap_ich` needs one real induction. A self-recursive proof stated directly
 via `list_ap` does not typecheck at the recursive call (`list_ap`'s own
-unfolding to a `list_map` form needs `list_right_unit`, a PROOF, not a raw
+unfolding to a `list_map` form needs `list_append::right_unit`, a PROOF, not a raw
 reduction, so the induction hypothesis's type does not definitionally
 match what `cong` needs at each step) — split into the true inductive
 content, phrased directly over `concat_map`/`list_map`, and the outer
-`list_ap`-phrased lemma composing it with the one `list_right_unit` step:
+`list_ap`-phrased lemma composing it with the one `list_append::right_unit` step:
 
 ```ken
 fn list_ap_inner (a : Type) (b : Type) (y : a) (g : a -> b) : List b = list_map a b g (list_pure a y)
@@ -351,7 +351,7 @@ lemma list_ap_ich (a : Type) (b : Type) (u : List (a -> b)) (y : a) :
     (list_map (a -> b) b (apply_to a b y) u)
     (list_append b (list_map (a -> b) b (apply_to a b y) u) (Nil b))
     (list_ap_ich_general a b u y)
-    (sym (List b) (list_append b (list_map (a -> b) b (apply_to a b y) u) (Nil b)) (list_map (a -> b) b (apply_to a b y) u) (list_right_unit b (list_map (a -> b) b (apply_to a b y) u)))
+    (sym (List b) (list_append b (list_map (a -> b) b (apply_to a b y) u) (Nil b)) (list_map (a -> b) b (apply_to a b y) u) (list_append::right_unit b (list_map (a -> b) b (apply_to a b y) u)))
 ```
 
 `ap_cmp` (composition) is the load-bearing law of the four — the standard
@@ -365,7 +365,7 @@ new inductive step (concat_map-after-concat_map):
 ```ken
 lemma list_ap_pure_left (a : Type) (b : Type) (g : a -> b) (xs : List a) :
   Equal (List b) (list_ap a b (list_pure (a -> b) g) xs) (list_map a b g xs) =
-  list_right_unit b (list_map a b g xs)
+  list_append::right_unit b (list_map a b g xs)
 
 lemma list_map_append_distrib (a : Type) (b : Type) (g : a -> b) (xs : List a) (ys : List a) :
   Equal (List b) (list_map a b g (list_append a xs ys)) (list_append b (list_map a b g xs) (list_map a b g ys)) =
@@ -419,7 +419,7 @@ lift through the outer `ap` via `cong`, fuse via `concat_map_map_fusion`),
 the MIDDLE (`list_bind_asc` for the outer `concat_map`-after-`concat_map`,
 `concat_map_map_fusion` again for the inner one), and the END (an inductive
 reconciliation of the two remaining `concat_map`/`list_map` orderings,
-needing `list_functor_fusion` plus
+needing `list_map::fusion` plus
 `list_map_append_distrib`):
 
 ```ken
@@ -461,7 +461,7 @@ lemma pf_probe (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (w : List a)
            (list_append c (list_map a c (compose a b c g1 h0) w) (ap_comp_h1 a b c t w g1))
            (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_comp_h1 a b c t w g1))
            (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_then_bind a b c t w g1))
-           (cong (List c) (List c) (list_map a c (compose a b c g1 h0) w) (list_map b c g1 (list_map a b h0 w)) (λz. list_append c z (ap_comp_h1 a b c t w g1)) (list_functor_fusion a b c g1 h0 w))
+           (cong (List c) (List c) (list_map a c (compose a b c g1 h0) w) (list_map b c g1 (list_map a b h0 w)) (λz. list_append c z (ap_comp_h1 a b c t w g1)) (list_map::fusion a b c g1 h0 w))
            (cong (List c) (List c) (ap_comp_h1 a b c t w g1) (ap_then_bind a b c t w g1) (list_append c (list_map b c g1 (list_map a b h0 w))) (pf_probe a b c t w g1)))
         (sym (List c)
            (list_map b c g1 (list_append b (list_map a b h0 w) (concat_map (a -> b) b (λh1. list_map a b h1 w) t)))

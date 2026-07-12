@@ -75,9 +75,9 @@ fn lawful_functors_source_cites_landed_laws_without_axiom() {
         "package must not leave the old closed List Nat Monoid instance"
     );
     assert!(
-        LAWFUL_FUNCTORS_KEN_MD.contains("assoc      = list_assoc a")
-            && LAWFUL_FUNCTORS_KEN_MD.contains("left_unit  = list_left_unit a")
-            && LAWFUL_FUNCTORS_KEN_MD.contains("right_unit = list_right_unit a"),
+        LAWFUL_FUNCTORS_KEN_MD.contains("assoc      = list_append::assoc a")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("left_unit  = list_append::left_unit a")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("right_unit = list_append::right_unit a"),
         "law fields should cite the existing generic List proofs"
     );
     assert!(

@@ -49,14 +49,14 @@ fn cat3_d1_structural_collections_package_elaborates_zero_delta() {
         "set_fst_pair_bool_bool",
         "fst_lens_get_set",
         "fst_lens_set_get",
-        "fst_lens_set_set",
+        "set_fst_pair_bool_bool::set_set",
         "bool_iso_to",
         "bool_iso_from",
         "bool_iso_to_from",
         "bool_iso_from_to",
         "true_refinement_project",
         "bool_pair_index_project",
-        "id_bool_respects",
+        "id_bool::respects",
     ] {
         let id = env
             .globals
@@ -332,7 +332,7 @@ fn cat3_d3_view_lens_records_and_flavors_check_against_real_package_defs() {
            : Equal (Pair Bool Bool) \
               (set_fst_pair_bool_bool False (set_fst_pair_bool_bool True (mk_pair Bool Bool True False))) \
               (set_fst_pair_bool_bool False (mk_pair Bool Bool True False)) \
-           = fst_lens_set_set True False (mk_pair Bool Bool True False)",
+           = set_fst_pair_bool_bool::set_set True False (mk_pair Bool Bool True False)",
     )
     .expect("set-set lens law should be proof-returning and check as full pair equality");
 
@@ -348,7 +348,7 @@ fn cat3_d3_view_lens_records_and_flavors_check_against_real_package_defs() {
     env.elaborate_decl(
         "lemma cat3_d3_setoid_project_sample \
            : Equal Bool (id_bool True) (id_bool True) = \
-             id_bool_respects True True Proved",
+             id_bool::respects True True Proved",
     )
     .expect("setoid-morphism respects law should check through project");
 }

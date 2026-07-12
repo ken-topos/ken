@@ -119,7 +119,7 @@ fn pair_compare (a : Type) (b : Type)
 fn pair_compare_result_of (tail : OrdResult) (head : OrdResult) : OrdResult =
   match head { Lt ↦ Lt ; Eq ↦ tail ; Gt ↦ Gt }
 
-lemma pair_compare_eq (a : Type) (b : Type)
+proof eq for pair_compare (a : Type) (b : Type)
   (cmpa : a → a → OrdResult) (cmpb : b → b → OrdResult)
   (x : Pair a b) (y : Pair a b)
   (ha : Equal OrdResult (cmpa (pair_fst a b x) (pair_fst a b y)) ord_eq)
@@ -248,7 +248,7 @@ lemma pair_compare_eq_cases_gt_at
       (Equal OrdResult (cmpb sndx sndy) ord_eq) =
   absurd (J (λr _. Equal OrdResult r ord_eq) peq pgt)
 
-lemma pair_compare_eq_cases (a : Type) (b : Type)
+proof eq_cases for pair_compare (a : Type) (b : Type)
   (cmpa : a → a → OrdResult) (cmpb : b → b → OrdResult)
   (x : Pair a b) (y : Pair a b)
   (h : Equal OrdResult (pair_compare a b cmpa cmpb x y) ord_eq)
@@ -451,7 +451,7 @@ lemma reverse_snoc (a : Type) (xs : List a) (y : a)
         (reverse_snoc a t y)
   }
 
-lemma reverse_involutive (a : Type) (xs : List a) : Equal (List a) (reverse a (reverse a xs)) xs =
+proof involutive for reverse (a : Type) (xs : List a) : Equal (List a) (reverse a (reverse a xs)) xs =
   match xs {
     Nil ↦ Proved ;
     Cons h t ↦
@@ -460,7 +460,7 @@ lemma reverse_involutive (a : Type) (xs : List a) : Equal (List a) (reverse a (r
         (Cons a h (reverse a (reverse a t)))
         (Cons a h t)
         (reverse_snoc a (reverse a t) h)
-        (cong (List a) (List a) (reverse a (reverse a t)) t (Cons a h) (reverse_involutive a t))
+        (cong (List a) (List a) (reverse a (reverse a t)) t (Cons a h) (reverse::involutive a t))
   }
 
 lemma append_length_snoc (a : Type) (xs : List a) (y : a)
@@ -603,7 +603,7 @@ fn bool_head_leq (x : Bool) (xs : List Bool) : Prop =
     Cons h t ↦ Equal Bool (bool_leq x h) True
   }
 
-lemma false_head_leq (xs : List Bool) : bool_head_leq False xs =
+proof false for bool_head_leq (xs : List Bool) : bool_head_leq False xs =
   match xs {
     Nil ↦ Proved ;
     Cons h t ↦ Proved
@@ -622,7 +622,7 @@ lemma bool_cons_sorted (x : Bool) (xs : List Bool)
         hxs
   }
 
-lemma bool_sorted_tail (x : Bool) (xs : List Bool)
+proof tail for is_sorted (x : Bool) (xs : List Bool)
   : is_sorted Bool bool_leq (Cons Bool x xs) → is_sorted Bool bool_leq xs =
   match xs {
     Nil ↦ λh. Proved ;
@@ -662,8 +662,8 @@ lemma sorted_insert_true_bool (xs : List Bool)
         bool_cons_sorted
           False
           (insert_true_bool t)
-          (sorted_insert_true_bool t (bool_sorted_tail False t hxs))
-          (false_head_leq (insert_true_bool t))
+          (sorted_insert_true_bool t (is_sorted::tail False t hxs))
+          (bool_head_leq::false (insert_true_bool t))
     }
   }
 
@@ -676,7 +676,7 @@ lemma sort_bool_sorted (xs : List Bool) : is_sorted Bool bool_leq (sort_bool xs)
           False
           (sort_bool t)
           (sort_bool_sorted t)
-          (false_head_leq (sort_bool t)) ;
+          (bool_head_leq::false (sort_bool t)) ;
       True ↦ sorted_insert_true_bool (sort_bool t) (sort_bool_sorted t)
     }
   }
@@ -841,7 +841,7 @@ lemma fst_lens_set_get (s : Pair Bool Bool)
   : Equal (Pair Bool Bool) (set_fst_pair_bool_bool (fst_pair_bool_bool s) s) s =
   Refl
 
-lemma fst_lens_set_set (a : Bool) (b : Bool) (s : Pair Bool Bool)
+proof set_set for set_fst_pair_bool_bool (a : Bool) (b : Bool) (s : Pair Bool Bool)
   : Equal (Pair Bool Bool)
       (set_fst_pair_bool_bool b (set_fst_pair_bool_bool a s))
       (set_fst_pair_bool_bool b s) =
@@ -856,7 +856,7 @@ instance Lens Unit {
   set = set_fst_pair_bool_bool ;
   get_set = fst_lens_get_set ;
   set_get = fst_lens_set_get ;
-  set_set = fst_lens_set_set
+  set_set = set_fst_pair_bool_bool::set_set
 }
 
 fn bool_iso_to (x : Bool) : Bool = x
@@ -895,13 +895,13 @@ instance IndexedView Unit {
   project = bool_pair_index_project
 }
 
-lemma id_bool_respects (x : Bool) (y : Bool)
+proof respects for id_bool (x : Bool) (y : Bool)
   : Equal Bool x y → Equal Bool (id_bool x) (id_bool y) =
   λp. p
 
 instance SetoidMorphism Unit {
   project = id_bool ;
-  respects = id_bool_respects
+  respects = id_bool::respects
 }
 ```
 
@@ -1057,7 +1057,7 @@ reference implementation.
 2. **Public API.** `OrdResult`, `list_append`, `nth`, `take`, `drop`,
    `nat_sub`, `list_eq`, `list_compare` (the 7-combinator floor); `map`,
    `filter`, `mem`, `length`, `min`, `take_drop_decomposition`,
-   `map_length`, `length_take_min` (CAT-3 D1); `reverse`, `reverse_involutive`,
+   `map_length`, `length_take_min` (CAT-3 D1); `reverse`, `reverse::involutive`,
    `zip`, `concat_map`, `range`, `foldl` and their proofs (DS-4); `count`,
    `Perm`, `insert`, `sort`, `sort_bool`, `sort_bool_sorted`,
    `sort_bool_perm` (CAT-3 D2); `View`, `Lens`, `Iso`, `Representation`,

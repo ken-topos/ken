@@ -50,7 +50,7 @@ equation(s), stated as a real proof term — never a comment claiming the
 behavior. `get_or_else`/`is_some`/`or_else` cover `Option`; `map_err`/
 `and_then`/`unwrap_or` cover `Result`; `either` (the eliminator), `map_left`/
 `map_right`, and `swap` cover `Either`. A caller reasoning about, say,
-`and_then`'s short-circuit behavior on `Err` reaches for `and_then_err`
+`and_then`'s short-circuit behavior on `Err` reaches for `and_then::err`
 directly rather than re-deriving it from `and_then`'s definition. Every
 proof reduces by `Refl` — each combinator is an ordinary structural
 case-split, so its defining equations hold by computation alone, with no
@@ -75,25 +75,25 @@ alongside the two defining equations.
 fn get_or_else (a : Type) (d : a) (x : Option a) : a =
   match x { None ↦ d ; Some v ↦ v }
 
-lemma get_or_else_none (a : Type) (d : a) : Equal a (get_or_else a d (None a)) d = Refl
+proof none for get_or_else (a : Type) (d : a) : Equal a (get_or_else a d (None a)) d = Refl
 
-lemma get_or_else_some (a : Type) (d : a) (v : a) : Equal a (get_or_else a d (Some a v)) v = Refl
+proof some for get_or_else (a : Type) (d : a) (v : a) : Equal a (get_or_else a d (Some a v)) v = Refl
 
 fn is_some (a : Type) (x : Option a) : Bool =
   match x { None ↦ False ; Some v ↦ True }
 
-lemma is_some_none (a : Type) : Equal Bool (is_some a (None a)) False = Proved
+proof none for is_some (a : Type) : Equal Bool (is_some a (None a)) False = Proved
 
-lemma is_some_some (a : Type) (v : a) : Equal Bool (is_some a (Some a v)) True = Proved
+proof some for is_some (a : Type) (v : a) : Equal Bool (is_some a (Some a v)) True = Proved
 
 fn or_else (a : Type) (x : Option a) (y : Option a) : Option a =
   match x { None ↦ y ; Some v ↦ Some a v }
 
-lemma or_else_none (a : Type) (y : Option a) : Equal (Option a) (or_else a (None a) y) y = Refl
+proof none for or_else (a : Type) (y : Option a) : Equal (Option a) (or_else a (None a) y) y = Refl
 
-lemma or_else_some (a : Type) (v : a) (y : Option a) : Equal (Option a) (or_else a (Some a v) y) (Some a v) = Refl
+proof some for or_else (a : Type) (v : a) (y : Option a) : Equal (Option a) (or_else a (Some a v) y) (Some a v) = Refl
 
-lemma or_else_none_rhs (a : Type) (x : Option a) : Equal (Option a) (or_else a x (None a)) x =
+proof none_rhs for or_else (a : Type) (x : Option a) : Equal (Option a) (or_else a x (None a)) x =
   match x { None ↦ Proved ; Some v ↦ Refl }
 ```
 
@@ -108,27 +108,27 @@ the contained value, or the default `d` at `Err`.
 fn map_err (e : Type) (f : Type) (a : Type) (g : e → f) (x : Result e a) : Result f a =
   match x { Err u ↦ Err f a (g u) ; Ok v ↦ Ok f a v }
 
-lemma map_err_ok (e : Type) (f : Type) (a : Type) (g : e → f) (v : a)
+proof ok for map_err (e : Type) (f : Type) (a : Type) (g : e → f) (v : a)
   : Equal (Result f a) (map_err e f a g (Ok e a v)) (Ok f a v) = Refl
 
-lemma map_err_err (e : Type) (f : Type) (a : Type) (g : e → f) (u : e)
+proof err for map_err (e : Type) (f : Type) (a : Type) (g : e → f) (u : e)
   : Equal (Result f a) (map_err e f a g (Err e a u)) (Err f a (g u)) = Refl
 
 fn and_then (e : Type) (a : Type) (b : Type) (k : a → Result e b) (x : Result e a) : Result e b =
   match x { Err u ↦ Err e b u ; Ok v ↦ k v }
 
-lemma and_then_ok (e : Type) (a : Type) (b : Type) (k : a → Result e b) (v : a)
+proof ok for and_then (e : Type) (a : Type) (b : Type) (k : a → Result e b) (v : a)
   : Equal (Result e b) (and_then e a b k (Ok e a v)) (k v) = Refl
 
-lemma and_then_err (e : Type) (a : Type) (b : Type) (k : a → Result e b) (u : e)
+proof err for and_then (e : Type) (a : Type) (b : Type) (k : a → Result e b) (u : e)
   : Equal (Result e b) (and_then e a b k (Err e a u)) (Err e b u) = Refl
 
 fn unwrap_or (e : Type) (a : Type) (d : a) (x : Result e a) : a =
   match x { Err u ↦ d ; Ok v ↦ v }
 
-lemma unwrap_or_ok (e : Type) (a : Type) (d : a) (v : a) : Equal a (unwrap_or e a d (Ok e a v)) v = Refl
+proof ok for unwrap_or (e : Type) (a : Type) (d : a) (v : a) : Equal a (unwrap_or e a d (Ok e a v)) v = Refl
 
-lemma unwrap_or_err (e : Type) (a : Type) (d : a) (u : e) : Equal a (unwrap_or e a d (Err e a u)) d = Refl
+proof err for unwrap_or (e : Type) (a : Type) (d : a) (u : e) : Equal a (unwrap_or e a d (Err e a u)) d = Refl
 ```
 
 ### 4.3 `Either`
@@ -139,10 +139,10 @@ declaration.
 
 `either f g x` is the eliminator: `f` on `Left`, `g` on `Right`.
 `map_left`/`map_right` apply a function to one side only, leaving the
-other side's payload untouched — `map_left_right`/`map_right_left` are the
+other side's payload untouched — `map_left::right`/`map_right::left` are the
 "untouched" proofs, as important to state as the "applied" ones.
 `swap` exchanges `Left`/`Right`, and is genuinely involutive
-(`swap_involutive`), not merely the identity.
+(`swap::involutive`), not merely the identity.
 
 ```ken
 data Either a b = Left a | Right b
@@ -150,34 +150,34 @@ data Either a b = Left a | Right b
 fn either (a : Type) (b : Type) (c : Type) (f : a → c) (g : b → c) (x : Either a b) : c =
   match x { Left v ↦ f v ; Right v ↦ g v }
 
-lemma either_left (a : Type) (b : Type) (c : Type) (f : a → c) (g : b → c) (v : a)
+proof left for either (a : Type) (b : Type) (c : Type) (f : a → c) (g : b → c) (v : a)
   : Equal c (either a b c f g (Left a b v)) (f v) = Refl
 
-lemma either_right (a : Type) (b : Type) (c : Type) (f : a → c) (g : b → c) (v : b)
+proof right for either (a : Type) (b : Type) (c : Type) (f : a → c) (g : b → c) (v : b)
   : Equal c (either a b c f g (Right a b v)) (g v) = Refl
 
 fn map_left (a : Type) (b : Type) (c : Type) (f : a → c) (x : Either a b) : Either c b =
   match x { Left v ↦ Left c b (f v) ; Right v ↦ Right c b v }
 
-lemma map_left_left (a : Type) (b : Type) (c : Type) (f : a → c) (v : a)
+proof left for map_left (a : Type) (b : Type) (c : Type) (f : a → c) (v : a)
   : Equal (Either c b) (map_left a b c f (Left a b v)) (Left c b (f v)) = Refl
 
-lemma map_left_right (a : Type) (b : Type) (c : Type) (f : a → c) (v : b)
+proof right for map_left (a : Type) (b : Type) (c : Type) (f : a → c) (v : b)
   : Equal (Either c b) (map_left a b c f (Right a b v)) (Right c b v) = Refl
 
 fn map_right (a : Type) (b : Type) (c : Type) (g : b → c) (x : Either a b) : Either a c =
   match x { Left v ↦ Left a c v ; Right v ↦ Right a c (g v) }
 
-lemma map_right_left (a : Type) (b : Type) (c : Type) (g : b → c) (v : a)
+proof left for map_right (a : Type) (b : Type) (c : Type) (g : b → c) (v : a)
   : Equal (Either a c) (map_right a b c g (Left a b v)) (Left a c v) = Refl
 
-lemma map_right_right (a : Type) (b : Type) (c : Type) (g : b → c) (v : b)
+proof right for map_right (a : Type) (b : Type) (c : Type) (g : b → c) (v : b)
   : Equal (Either a c) (map_right a b c g (Right a b v)) (Right a c (g v)) = Refl
 
 fn swap (a : Type) (b : Type) (x : Either a b) : Either b a =
   match x { Left v ↦ Right b a v ; Right v ↦ Left b a v }
 
-lemma swap_involutive (a : Type) (b : Type) (x : Either a b) : Equal (Either a b) (swap b a (swap a b x)) x =
+proof involutive for swap (a : Type) (b : Type) (x : Either a b) : Equal (Either a b) (swap b a (swap a b x)) x =
   match x { Left v ↦ Refl ; Right v ↦ Refl }
 ```
 

@@ -106,7 +106,7 @@ example before transporting a stuck `match`:
 ```ken example
 fn stuck_of (k : Bool) : Bool = match k { True |-> True ; False |-> False }
 
-lemma stuck_transport (k : Bool) (q : Equal Bool k True)
+proof transport for stuck_of (k : Bool) (q : Equal Bool k True)
   : Equal Bool (stuck_of k) True =
   J (λb' _. Equal Bool (stuck_of b') True) Proved (sym Bool k True q)
 ```

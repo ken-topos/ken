@@ -74,7 +74,7 @@ Once a concrete instance is registered, its fields project directly off the
 synthesized `C_instance_T` dictionary. `instance Monoid Bool` and
 `instance Monoid (List a)` are the two worked
 examples here: `Monoid_instance_Bool` restates the *same* `op`/`assoc`
-definitions (`bool_and`/`band_assoc`) that `Semigroup_instance_Bool` uses, and
+definitions (`bool_and`/`bool_and::assoc`) that `Semigroup_instance_Bool` uses, and
 `Monoid_instance_List`'s dictionary is genuinely generic in the element type
 — it elaborates as `(a : Type) → Monoid (List a)`, so a caller applies it to
 a concrete `a` before projecting a field, exactly like any other
@@ -104,11 +104,11 @@ remain stuck `Eq` goals and use `Refl`; step
 (`Cons h t`) is `cong` under `Cons a h` on the tail IH.
 
 ```ken
-lemma list_left_unit (a : Type) (xs : List a)
+proof left_unit for list_append (a : Type) (xs : List a)
   : Equal (List a) (list_append a (Nil a) xs) xs =
   Refl
 
-lemma list_assoc (a : Type) (xs : List a) (ys : List a) (zs : List a)
+proof assoc for list_append (a : Type) (xs : List a) (ys : List a) (zs : List a)
   : Equal (List a) (list_append a (list_append a xs ys) zs)
                    (list_append a xs (list_append a ys zs)) =
   match xs {
@@ -118,10 +118,10 @@ lemma list_assoc (a : Type) (xs : List a) (ys : List a) (zs : List a)
         (list_append a (list_append a t ys) zs)
         (list_append a t (list_append a ys zs))
         (Cons a h)
-        (list_assoc a t ys zs)
+        (list_append::assoc a t ys zs)
   }
 
-lemma list_right_unit (a : Type) (xs : List a)
+proof right_unit for list_append (a : Type) (xs : List a)
   : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
     Nil ↦ Proved ;
@@ -130,20 +130,20 @@ lemma list_right_unit (a : Type) (xs : List a)
         (list_append a t (Nil a))
         t
         (Cons a h)
-        (list_right_unit a t)
+        (list_append::right_unit a t)
   }
 
 instance Semigroup (List Nat) {
   op    = list_append Nat ;
-  assoc = list_assoc Nat
+  assoc = list_append::assoc Nat
 }
 
 instance Monoid (List a) {
   op         = list_append a ;
   mempty     = Nil a ;
-  assoc      = list_assoc a ;
-  left_unit  = list_left_unit a ;
-  right_unit = list_right_unit a
+  assoc      = list_append::assoc a ;
+  left_unit  = list_append::left_unit a ;
+  right_unit = list_append::right_unit a
 }
 ```
 
@@ -166,7 +166,7 @@ literal equal to itself → `Top` → `Proved`.
 fn bool_and (p : Bool) (q : Bool) : Bool =
   match p { True ↦ q ; False ↦ False }
 
-lemma band_assoc (x : Bool) (y : Bool) (z : Bool)
+proof assoc for bool_and (x : Bool) (y : Bool) (z : Bool)
   : Equal Bool (bool_and (bool_and x y) z) (bool_and x (bool_and y z)) =
   match x {
     True ↦ match y {
@@ -179,23 +179,23 @@ lemma band_assoc (x : Bool) (y : Bool) (z : Bool)
     }
   }
 
-lemma band_left_unit (x : Bool) : Equal Bool (bool_and True x) x =
+proof left_unit for bool_and (x : Bool) : Equal Bool (bool_and True x) x =
   Refl
 
-lemma band_right_unit (x : Bool) : Equal Bool (bool_and x True) x =
+proof right_unit for bool_and (x : Bool) : Equal Bool (bool_and x True) x =
   match x { True ↦ Proved ; False ↦ Proved }
 
 instance Semigroup Bool {
   op    = bool_and ;
-  assoc = band_assoc
+  assoc = bool_and::assoc
 }
 
 instance Monoid Bool {
   op         = bool_and ;
   mempty     = True ;
-  assoc      = band_assoc ;
-  left_unit  = band_left_unit ;
-  right_unit = band_right_unit
+  assoc      = bool_and::assoc ;
+  left_unit  = bool_and::left_unit ;
+  right_unit = bool_and::right_unit
 }
 ```
 
@@ -231,7 +231,7 @@ fn list_map (a : Type) (b : Type) (g : a → b) (xs : List a) : List b =
     Cons h t ↦ Cons b (g h) (list_map a b g t)
   }
 
-lemma list_functor_id (a : Type) (xs : List a)
+proof id for list_map (a : Type) (xs : List a)
   : Equal (List a) (list_map a a (idf a) xs) xs =
   match xs {
     Nil ↦ Proved ;
@@ -240,10 +240,10 @@ lemma list_functor_id (a : Type) (xs : List a)
         (list_map a a (idf a) t)
         t
         (Cons a h)
-        (list_functor_id a t)
+        (list_map::id a t)
   }
 
-lemma list_functor_fusion (a : Type) (b : Type) (c : Type)
+proof fusion for list_map (a : Type) (b : Type) (c : Type)
   (g : b → c) (h : a → b) (xs : List a)
   : Equal (List c)
       (list_map a c (comp a b c g h) xs)
@@ -255,7 +255,7 @@ lemma list_functor_fusion (a : Type) (b : Type) (c : Type)
         (list_map a c (comp a b c g h) rest)
         (list_map b c g (list_map a b h rest))
         (Cons c (g (h x)))
-        (list_functor_fusion a b c g h rest)
+        (list_map::fusion a b c g h rest)
   }
 
 fn option_map (a : Type) (b : Type) (g : a → b) (x : Option a) : Option b =
@@ -264,14 +264,14 @@ fn option_map (a : Type) (b : Type) (g : a → b) (x : Option a) : Option b =
     Some v ↦ Some b (g v)
   }
 
-lemma option_functor_id (a : Type) (x : Option a)
+proof id for option_map (a : Type) (x : Option a)
   : Equal (Option a) (option_map a a (idf a) x) x =
   match x {
     None ↦ Proved ;
     Some v ↦ Refl
   }
 
-lemma option_functor_fusion (a : Type) (b : Type) (c : Type)
+proof fusion for option_map (a : Type) (b : Type) (c : Type)
   (g : b → c) (h : a → b) (x : Option a)
   : Equal (Option c)
       (option_map a c (comp a b c g h) x)
@@ -280,14 +280,14 @@ lemma option_functor_fusion (a : Type) (b : Type) (c : Type)
 
 instance Functor List {
   map        = list_map ;
-  id_law     = list_functor_id ;
-  fusion_law = list_functor_fusion
+  id_law     = list_map::id ;
+  fusion_law = list_map::fusion
 }
 
 instance Functor Option {
   map        = option_map ;
-  id_law     = option_functor_id ;
-  fusion_law = option_functor_fusion
+  id_law     = option_map::id ;
+  fusion_law = option_map::fusion
 }
 ```
 

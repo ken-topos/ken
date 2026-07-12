@@ -77,23 +77,23 @@ fn raw_compare_discriminates_all_results_and_strict_negatives() {
 
     assert_decl(
         &mut env,
-        "lemma raw_eq_positive : Equal Bool True True = compare_eq_sound_raw Bool bool_leq (Ord_instance_Bool).antisym True True Proved",
+        "lemma raw_eq_positive : Equal Bool True True = compare_raw::eq_sound Bool bool_leq (Ord_instance_Bool).antisym True True Proved",
     );
     assert_decl(
         &mut env,
-        "lemma raw_lt_positive : Equal Bool (bool_leq False True) True = compare_lt_sound_raw Bool bool_leq False True Proved",
+        "lemma raw_lt_positive : Equal Bool (bool_leq False True) True = compare_raw::lt_sound Bool bool_leq False True Proved",
     );
     assert_decl(
         &mut env,
-        "lemma raw_gt_positive : Equal Bool (bool_leq False True) True = compare_gt_sound_raw Bool bool_leq (Ord_instance_Bool).total True False Proved",
+        "lemma raw_gt_positive : Equal Bool (bool_leq False True) True = compare_raw::gt_sound Bool bool_leq (Ord_instance_Bool).total True False Proved",
     );
     assert_decl(
         &mut env,
-        "lemma raw_lt_reverse_negative : Equal Bool (bool_leq True False) False = compare_lt_reverse_false_raw Bool bool_leq False True Proved",
+        "lemma raw_lt_reverse_negative : Equal Bool (bool_leq True False) False = compare_raw::lt_reverse_false Bool bool_leq False True Proved",
     );
     assert_decl(
         &mut env,
-        "lemma raw_gt_forward_negative : Equal Bool (bool_leq True False) False = compare_gt_forward_false_raw Bool bool_leq True False Proved",
+        "lemma raw_gt_forward_negative : Equal Bool (bool_leq True False) False = compare_raw::gt_forward_false Bool bool_leq True False Proved",
     );
 }
 

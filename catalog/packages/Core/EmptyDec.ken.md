@@ -201,9 +201,9 @@ over the concrete `DecEq Bool` instance from `§3` (the guide's `§7` named-
 proof-claims form):
 
 ```ken example
-lemma decide_yes_is_true : Equal Bool (decide (Equal Bool True True) true_is_true) True = Proved
+proof yes_is_true for decide : Equal Bool (decide (Equal Bool True True) true_is_true) True = Proved
 
-lemma decide_no_is_false : Equal Bool (decide (Equal Bool True False) true_is_not_false) False = Proved
+proof no_is_false for decide : Equal Bool (decide (Equal Bool True False) true_is_not_false) False = Proved
 ```
 
 Both close with `Proved`: `decide`/`true_is_true`/`true_is_not_false` are all closed,

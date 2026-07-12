@@ -97,13 +97,13 @@ fn source_bytes (s : Source) : Bytes =
 fn source_length (s : Source) : Nat =
   s.source_length_field
 
-lemma source_utf8 (s : Source) : IsUtf8 (source_bytes s) =
+proof utf8 for source_bytes (s : Source) : IsUtf8 (source_bytes s) =
   s.source_utf8_field
 
 fn source_length_unit (s : Source) : Bytes =
   s.source_length_unit_field
 
-lemma source_length_unit_valid (s : Source) : UnitByteLength (source_length_unit s) =
+proof valid for source_length_unit (s : Source) : UnitByteLength (source_length_unit s) =
   s.source_length_unit_valid_field
 
 lemma source_length_valid (s : Source)
@@ -114,7 +114,7 @@ lemma source_length_valid (s : Source)
 ## 3. Using it
 
 A caller builds a `Source` once per artifact (supplying its own
-`source_length_unit`, `source_length_unit_valid`, `source_utf8`, and
+`source_length_unit`, `source_length_unit::valid`, `source_bytes::utf8`, and
 `source_length_valid` evidence — this package states the record shape, not a
 constructor helper, so every field is honest at the call site), then drives
 `§4.3`'s `parse_bool_expr : Parser (Syntax BoolExpr)` over it. `format_bool_expr`
@@ -134,11 +134,11 @@ identifies a source artifact by itself. `ValidSpan s sp` requires
 `LessEqNat`, the same `Bool`-bridged pattern the lawful-classes packages use
 (`Equal Bool (nat_leq_bool m n) True`), here without a named `IsTrue` alias
 since this package has no `Eq`/`Ord`-style class to hang one on.
-`less_eq_nat_refl` is a genuine proof by induction on `n`; `less_eq_nat_zero_left`
+`LessEqNat::refl` is a genuine proof by induction on `n`; `LessEqNat::zero_left`
 is definitional (`nat_leq_bool Zero n` reduces to `True` on its very first
 match arm, for any `n`). `valid_zero_width_span` is the one composite proof
 in this package: given a valid offset (`LessEqNat offset (source_length s)`),
-a zero-width span at that offset is valid, by pairing `less_eq_nat_refl`
+a zero-width span at that offset is valid, by pairing `LessEqNat::refl`
 (the span's own `start <= end`, both `offset`) with the supplied hypothesis
 (`end <= source_length s`) via `and_intro`.
 
@@ -160,10 +160,10 @@ fn nat_leq_bool (m : Nat) (n : Nat) : Bool =
 fn LessEqNat (m : Nat) (n : Nat) : Prop =
   Equal Bool (nat_leq_bool m n) True
 
-lemma less_eq_nat_refl (n : Nat) : LessEqNat n n =
-  match n { Zero |-> Proved ; Suc n2 |-> less_eq_nat_refl n2 }
+proof refl for LessEqNat (n : Nat) : LessEqNat n n =
+  match n { Zero |-> Proved ; Suc n2 |-> LessEqNat::refl n2 }
 
-lemma less_eq_nat_zero_left (n : Nat) : LessEqNat Zero n =
+proof zero_left for LessEqNat (n : Nat) : LessEqNat Zero n =
   Proved
 
 fn ValidSpan (s : Source) (sp : Span) : Prop =
@@ -177,7 +177,7 @@ lemma valid_zero_width_span (s : Source) (offset : Nat)
     and_intro
       (LessEqNat offset offset)
       (LessEqNat offset (source_length s))
-      (less_eq_nat_refl offset)
+      (LessEqNat::refl offset)
       h
 ```
 
@@ -568,7 +568,7 @@ fn print_bool_expr (e : BoolExpr) : Bytes =
   }
 
 fn format_bool_expr (s : Source) : Result ParseError Bytes =
-  match parse_bool_expr s Zero (less_eq_nat_zero_left (source_length s)) {
+  match parse_bool_expr s Zero (LessEqNat::zero_left (source_length s)) {
     Parsed syntax consumed next |-> Ok ParseError Bytes (print_bool_expr (erase_spans syntax)) ;
     Failed err |-> Err ParseError Bytes err
   }
@@ -614,8 +614,8 @@ reference implementation.
 
 1. **Public API.** `SourceId`, `Source`, `IsUtf8`, `EmptyBytes`,
    `NonEmptyBytes`, `UnitByteLength`, `SourceLength`, `source_id`,
-   `source_bytes`, `source_utf8`, `source_length`, `source_length_unit`,
-   `source_length_unit_valid`, `source_length_valid`, `Span`, `span_start`,
+   `source_bytes`, `source_bytes::utf8`, `source_length`, `source_length_unit`,
+   `source_length_unit::valid`, `source_length_valid`, `Span`, `span_start`,
    `span_end`, `LessEqNat`, `ValidSpan`, `Located`, `located_source`,
    `located_span`, `located_value`, `ValidLocated`,
    `valid_zero_width_span`, `ParseError`, `error_source`, `error_span`,
@@ -639,10 +639,10 @@ reference implementation.
    parser-result data. It adds no kernel primitive, no source-loader
    behavior, and no language-semantics change.
 4. **`trusted_base()` delta.** **Zero.** Every proof in this package —
-   `less_eq_nat_refl`, `less_eq_nat_zero_left`, `valid_zero_width_span` — is
+   `LessEqNat::refl`, `LessEqNat::zero_left`, `valid_zero_width_span` — is
    real and kernel-checked; no law or predicate is postulated.
-5. **Proof families.** `less_eq_nat_refl` — induction on `n`.
-   `less_eq_nat_zero_left` — definitional (first match arm). `valid_zero_width_span`
+5. **Proof families.** `LessEqNat::refl` — induction on `n`.
+   `LessEqNat::zero_left` — definitional (first match arm). `valid_zero_width_span`
    — direct composition of the two via `and_intro`, no case-split of its
    own.
 6. **Consumers.** Source-aware parser implementations can use this package's
