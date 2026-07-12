@@ -17,19 +17,23 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > ### ⏭ 2026-07-12 ~21:xx — LIVE STATE (read this first) · `origin/main @ a3690cb8`
 >
 > **★ TWO PARALLEL RELEASES (operator "resume").**
-> - **B1 → LANGUAGE — MERGED, CI-GREEN** (`origin/main @ 9df1f465`, PR #580,
->   code; CI checks passed then merged). kenfmt lossless source layer (AST +
->   token/trivia stream, `FormattableSource` interface) is LIVE in
->   `crates/ken-elaborator`. QA + Architect-terminal APPROVE. **B1 retros
->   requested** from language-leader → close on "retros in". **★ UNBLOCKS
->   B2/B3/B4.** Next Language WP = **B2** (token-kind canon replacing
->   `canonical_unicode`) — frame in progress; released after B1 retros in +
->   Handoff-Gate. N3 Lane B queues behind B2.
-> - **N4 → ENCLAVE — frame authored** (`docs/program/wp/n4-program-admits.md`,
->   ADR 0014 MRES-4a–e + PKG-1..4; buildable-now core = `program`/`package`
->   grammar + admission gate + self-admission + provenance + source-graph
->   coherence; compiled-manifest/MRES-4d/package-manager DEFERRED). Publishing
->   doc-only → Handoff-Gate enclave → kick N4 Lane A (parallel to Language).
+> - **B1 → LANGUAGE — CLOSED ✅** (`origin/main @ 9df1f465`, PR #580, code,
+>   CI-green + **retros in** `evt_b8wa363845rw`). kenfmt lossless source layer
+>   (AST + token/trivia stream, `FormattableSource` interface) LIVE. B1 carry:
+>   preserve the three lossless gates downstream (contiguous single-ownership of
+>   every byte / exactly-one comment home / whole-catalog byte-exact reparse) +
+>   literal-locked oracle. **★ UNBLOCKS B2/B3/B4.**
+> - **B2 → LANGUAGE — frame authored** (`docs/program/wp/kenfmt-b2-token-kind-
+>   canon.md`). Replaces raw-byte `canonical_unicode` (format.rs:36) with
+>   token-kind dispatch over B1's stream; fixes the `l`/`level`→`ℓ` over-fire;
+>   flips WP S token-kind golden GREEN; no layout (B3). Single build lane,
+>   Architect-terminal. Publishing doc-only → **Handoff-Gate Language → kick B2**
+>   (ring free, B1 retros in). N3 Lane B queues behind B2.
+> - **N4 → ENCLAVE — frame MERGED** (`origin/main @ fcc0dca6`, PR #581). Enclave
+>   Handoff-Gate LAUNCHED (bg, compacting). **NEXT: verify enclave drops → kick
+>   N4 Lane A** (spec §33/§32 program/admits grammar + admission gate + golden;
+>   buildable-now core, compiled-manifest/MRES-4d/pkg-mgr DEFERRED). Parallel to
+>   the Language kenfmt track.
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
