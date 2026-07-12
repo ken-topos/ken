@@ -14,56 +14,45 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### proof-vocab-completion ACTIVE (Language) — 2026-07-11
+> ### proof-vocab-completion — MERGED @ `97c31b3f` (PR #531, CI green) — 2026-07-12
 >
-> **Bundled WP framed + merged to main** (`76d74621`, PR #529): `fn`⊥Ω gate +
-> `tt`→`Proved` + surface `Top` + one-pass 520-site Ω-`fn`→`lemma` catalog
-> migration. Absorbs the old `fn-lemma-partition` (task #21) + the `_ind` collapse.
-> **Owner Language, single atomic branch** `wp/proof-vocab-completion`.
-> - **Implementer (gpt-5.6-sol) DONE — `merge_ready` posted `evt_7zp1st58a3b3b`
->   (2026-07-12T00:17)**: branch `wp/proof-vocab-completion @ 8c65aaed`, rebased on
->   `origin/main @ 9a153c88`, released (back on `language-implementer/work`).
->   Symmetric `fn`/`const` Ω-result gate (annotated+inferred+mutual paths, exact
->   diagnostic; inferred computational still admitted, inferred Ω fail-closed);
->   surfaced `Proved`+`Top`, removed surface `tt` (kernel id preserved), Rust
->   prop-intro emission → `Proved`. Migration: **520/520** TSV + **159** current-tree
->   drift helpers = 679 sites, all gate-proven lemmas; 13 `_ind` collapses; 9 bounded
->   `Top` sites; catalog `tt` grep = 0. Isolation of the `pair_compare_eq` cone
->   defect: over-broad sweep had mis-migrated Type-valued `Or` producers
->   (`bool_dichotomy`/`total_leq_nat`) — restored as computational, migrated only
->   their Ω consumers. **No `ken-kernel/**`/Cargo/lockfile/TCB delta**;
->   `git diff --check` clean. 41 focused targets green; post-rebase 17-target rerun
->   green (`proof_vocabulary` 6/6, `map_build_acceptance` 24/24, DS7/8, CAT5/3, …).
-> - **ALL GATES CLEARED @ `8c65aaed`:** QA APPROVE (`evt_2t179v5yjpv8q`);
->   Architect surface/fidelity/partition APPROVE (`evt_4mkjwwtpr6kh5`); CV
->   conformance/spec-axis APPROVE (`evt_6yspgfbr70znj`); decision
->   `dec_y3svzskyybpm` resolved APPROVE by language-leader (`evt_zxrnh3ex19z9`).
-> - **Steward honesty gate PASSED @ `8c65aaed`:** origin/main direct ancestor;
->   36 files +1220/−1170; scope clean (no spec/conformance/kernel/Cargo/lock);
->   every `= Axiom` added line is a paired `const`→`lemma` keyword flip of a
->   pre-existing catalog/test demo (no net-new trust surface); no WP-tokens.
-> - **CI-safe confirmed:** the CI `conformance` job is the WP-F2 stub (`echo …not
->   yet implemented`); no crate loads the challenge corpus, so `cargo test
->   --workspace` never elaborates the `tt`-stranded fixture. Merge does not break
->   main/CI.
-> - **PUBLISHER RUNNING** (bg `b14jx9h5g`, non-doc → CI poll) on `8c65aaed` exactly
->   (chain-of-custody preserved; tracker + fast-follow sequencing land as a trailing
->   doc-only merge).
-> - **TWO REQUIRED tracked fast-follows** (CV `evt_6yspgfbr70znj`; NOT changes to
->   the merged diff — the `tt`→`Proved` surface rename strands two corpora this WP
->   didn't touch, both doc/fixture fidelity, neither CI-blocking):
->   1. **Spec erratum (Steward-sequenced → spec enclave):** 70 `tt` refs in `spec/`
->      (`16-observational`, `54/55/56`, `34/39` sugar) now spell a removed surface
->      term. Sequence with Handoff-Gate compaction.
->   2. **Conformance reconcile (CV-owned):** 143 `tt` refs incl. latently-broken
+> **MERGED `origin/main @ 97c31b3f`** (PR #531, CI passed): `fn`⊥Ω partition gate +
+> `tt`→`Proved` surface rename + `Top` + 679-site catalog migration. **Absorbs +
+> closes #21 (fn⊥lemma partition) and completes #19.** Frame was `76d74621` (PR
+> #529); code `8c65aaed`.
+> - **Landed:** symmetric `ensure_not_omega_type` on annotated/inferred/mutual
+>   `fn`/`const` paths (inferred computational admitted, inferred Ω fail-closed);
+>   surface `Proved`+`Top` over kernel `tt_id`/`top_id` (kernel ids untouched),
+>   surface `tt` removed, Rust prop-intro emits `Proved`. Migration 520 TSV + 159
+>   drift = 679 sites → `lemma`; 13 `_ind` collapses; 9 bounded `Top`; catalog `tt`
+>   grep = 0. `pair_compare_eq` cone fixed by keeping Type-valued `Or`-producers
+>   computational (Architect `evt_4eantd6r4s8hh`, Π-into-Ω impredicative).
+> - **Gates:** QA `evt_2t179v5yjpv8q` + Architect `evt_4mkjwwtpr6kh5` + CV
+>   `evt_6yspgfbr70znj`; decision `dec_y3svzskyybpm` resolved APPROVE by
+>   language-leader. **Steward honesty gate PASSED @ `8c65aaed`** (clean scope;
+>   every `= Axiom` a `const`→`lemma` keyword flip, no net-new trust surface;
+>   published `8c65aaed` exactly, chain-of-custody preserved).
+> - **RETROS: pending** — chase the Language ring's proof-vocab-completion retros
+>   before closing the WP.
+> - **TWO REQUIRED fast-follows still open** (CV `evt_6yspgfbr70znj`; the
+>   `tt`→`Proved` rename strands two corpora this WP didn't touch — both doc/fixture
+>   fidelity, neither CI-blocking since the CI `conformance` job is the WP-F2 stub):
+>   1. **Spec erratum — Steward to sequence → spec enclave (Handoff-Gate compact
+>      first).** 70 `tt` refs in `spec/` (`16-observational`, `54/55/56`, `34/39`
+>      sugar) now spell a removed surface term. **NEXT ACTION.**
+>   2. **Conformance reconcile — CV-owned.** 143 `tt` refs incl. latently-broken
 >      `conformance/challenge/C6-lawful-ord-vs-stub/sound-ord-proved.ken` +
 >      `seed-k5-omega-fragment`. CV picks up on merge.
-> - **Blocker resolved:** `pair_compare_eq` — Architect ruled (`evt_4eantd6r4s8hh`)
->   the partition holds, no exception, no gate change (Π-into-Ω is impredicative,
->   `sort_pi`); it was a migration-execution artifact.
-> - Practice: codified "keep the turn active through completion" for Codex seats
->   (`9a153c88`, playbooks); #20 corrected (codex tmux delivery works; real gap =
->   platform `reply_to` event_id, moot-owned).
+>
+> ### Fleet infra — Codex memory enabled (operator, 2026-07-12)
+>
+> Operator directed enabling Codex's memory feature for all Codex seats
+> (`[features] memories = true`). Set in the live `~/.codex/config.toml` **and** the
+> template `.devcontainer/post-create.sh` (survives rebuild; single global config,
+> all seats share it). **Takes effect at each seat's next restart** (read at codex
+> startup, not on `/compact`). **Supplemental** to the canonical `agent/memory/`
+> corpus (CLAUDE.md). All implementer seats are now gpt-5.6-sol (operator, fleet-wide);
+> the "keep your turn active through completion" Codex handoff phrasing still applies.
 
 > ### proof-vocabulary A/B/C — MERGED + CLOSED (#19) — 2026-07-11
 >
