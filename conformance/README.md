@@ -200,6 +200,14 @@ claim with no conformance case is a claim no one can rely on
   and a class/constructor same-name collision hard-reject through one specific
   diagnostic, paired with the live arity-gated `Eq`/`J` sugar coexistence
   control. The reject arms are explicitly red until N1 Lane B.
+- `surface/formatting/seed-canonical-format.md` — WP S canonical formatter
+  acceptance oracle (`31 §1`): the eight semantic gates (byte idempotence,
+  parse and elaboration preservation, whole-catalog posture, literate prose
+  identity, trivia/literal preservation, deterministic 88-column width, and
+  token-role ambiguity), with controlled pairs for arrows, `:`/`::`, dot
+  roles, `l`/level, `in`/membership, every protected literal form, and all four
+  literate fence roles. Formatter-output cases are red until B3–C; the narrow
+  unparseable `ignore`/`reject` exemption remains token-aware.
 - `surface/modules/seed-modules.md` — ES3 minimal modules/imports (`33 §3-4`,
   the bounded L4 slice): `module`/`import`/`pub`/abstract-export **elaborate
   away** to the kernel's single flat append-only `Σ` (`11 §4`) — **zero new
