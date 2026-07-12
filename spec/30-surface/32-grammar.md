@@ -8,7 +8,11 @@
 ## 1. Compilation units and declarations
 
 ```
-unit   ::= module_hdr? import* decl*
+unit   ::= boundary_hdr? module_hdr? import* decl*
+boundary_hdr ::= program_hdr | package_hdr
+program_hdr ::= "program" admits_clause
+package_hdr ::= "package" admits_clause?
+admits_clause ::= "admits" ModPath ("," ModPath)*
 module_hdr ::= "module" ConId "{"  -- or a file-level implicit module
 import ::= "import" ModPath ("as" ConId)?
                           ("(" import_item ("," import_item)* ")")?
@@ -63,6 +67,13 @@ path    ::= ident ("." ident)*                     -- qualified value/module pat
 prop_block ::= "where" "{" prop_intro (";" prop_intro)* "}"
 prop_intro ::= ident ":" type
 ```
+
+`program` and `package` are anonymous file-role markers. Neither production
+accepts a name token: the enclosing file path is the boundary's identity. A
+`program` is the admission root for a multi-package build. A `package` marks a
+package boundary and may omit `admits` when it has no instance-providing
+dependencies. The headers introduce no runtime entry declaration; any entry
+declaration is separate from this grammar (`33 §3.2.1`, §5.5.1).
 
 **Proof-claim declarations are ordinary checked terms.** `prop`, `lemma`, and
 attached `proof` all elaborate to existing checked terms only. `prop` requires
