@@ -23,7 +23,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use crate::ast::{CtorDecl, Decl, ExplicitDataCtor, ImportKind};
+use crate::ast::{BoundaryKind, CtorDecl, Decl, ExplicitDataCtor, ImportKind};
 use crate::error::{ElabError, Span};
 use crate::resolve::{
     self, RCtorDecl, RDecl, RDeclKind, RExplicitCtorDecl, RExpr, RMatchArm, RPatKind, RPattern,
@@ -281,6 +281,26 @@ fn imported_module_paths(decls: &[Decl], out: &mut Vec<(String, Span)>) {
     }
 }
 
+fn admission_boundary(
+    decls: &[Decl],
+) -> Result<Option<(BoundaryKind, HashSet<String>, Span)>, ElabError> {
+    let mut found = None;
+    for (index, decl) in decls.iter().enumerate() {
+        if let Decl::BoundaryDecl { kind, admits, span } = decl.unwrap_pub() {
+            if decl.is_pub() || index != 0 || found.is_some() {
+                return Err(ElabError::ParseError {
+                    msg:
+                        "an anonymous program/package boundary must be the single first file header"
+                            .to_string(),
+                    span: span.clone(),
+                });
+            }
+            found = Some((*kind, admits.iter().cloned().collect(), span.clone()));
+        }
+    }
+    Ok(found)
+}
+
 fn source_path(root: &Path, module: &str, span: &Span) -> Result<PathBuf, ElabError> {
     let valid_component = |component: &str| {
         let mut chars = component.chars();
@@ -373,6 +393,25 @@ fn load_unit(
     let path = source_path(&root, module, span)?;
     let decls = parse_unit_source(&path, span)?;
 
+    let previous_package = elab.class_env.current_package.clone();
+    let previous_direct_use = elab.class_env.direct_use_packages.clone();
+    let previous_implicit_single_provider = elab.class_env.implicit_single_provider;
+    let boundary = admission_boundary(&decls)?;
+    let has_boundary = boundary.is_some();
+    elab.class_env.current_package = Some(module.to_string());
+    elab.class_env.direct_use_packages = match boundary {
+        Some((_, admitted, _)) => Some(admitted),
+        None if previous_package.is_none() && previous_direct_use.is_none() => Some(HashSet::new()),
+        None => previous_direct_use.clone(),
+    };
+    elab.class_env.implicit_single_provider = if has_boundary {
+        false
+    } else if previous_package.is_none() && previous_direct_use.is_none() {
+        true
+    } else {
+        previous_implicit_single_provider
+    };
+
     elab.module_state.active_imports.push(module.to_string());
     let result = (|| {
         let mut local_modules = HashSet::new();
@@ -388,10 +427,22 @@ fn load_unit(
             load_unit(elab, &dependency, &import_span)?;
         }
 
+        // Every loaded source unit is an ordinary orphan-check module. Assign
+        // its id only after dependencies return so their current-module ids do
+        // not leak into this unit's declarations.
+        elab.class_env.next_module();
+
         let mut scope = Scope::default();
         let mut unit_definitions = HashSet::new();
         let (results, exports) =
-            expand_scope(elab, &decls, module, &mut scope, &mut unit_definitions)?;
+            expand_scope(
+                elab,
+                &decls,
+                module,
+                &mut scope,
+                &mut unit_definitions,
+                true,
+            )?;
         let ids: Vec<ken_kernel::GlobalId> =
             results.into_iter().map(|result| result.def_id).collect();
         elab.module_state
@@ -401,6 +452,9 @@ fn load_unit(
     })();
     let popped = elab.module_state.active_imports.pop();
     debug_assert_eq!(popped.as_deref(), Some(module));
+    elab.class_env.current_package = previous_package;
+    elab.class_env.direct_use_packages = previous_direct_use;
+    elab.class_env.implicit_single_provider = previous_implicit_single_provider;
 
     let ids = result?;
     elab.module_state
@@ -1034,11 +1088,7 @@ fn resolve_scoped_decl(
     } else {
         None
     };
-    let rdecl = resolve::resolve_decl_in_unit(
-        decl,
-        unit_definitions,
-        attached_name.as_deref(),
-    )?;
+    let rdecl = resolve::resolve_decl_in_unit(decl, unit_definitions, attached_name.as_deref())?;
     rewrite_rdecl(scope, exports, rdecl)
 }
 
@@ -1053,6 +1103,7 @@ fn expand_scope(
     prefix: &str,
     scope: &mut Scope,
     unit_definitions: &mut HashSet<String>,
+    allow_boundary: bool,
 ) -> Result<(Vec<crate::elab::ElabResult>, HashMap<String, String>), ElabError> {
     // Pre-pass: collect this scope's own local declared names FIRST, so
     // they unconditionally shadow any import processed below regardless of
@@ -1074,6 +1125,16 @@ fn expand_scope(
     while i < decls.len() {
         let decl = &decls[i];
         match decl {
+            Decl::BoundaryDecl { span, .. } => {
+                if !allow_boundary || i != 0 {
+                    return Err(ElabError::ParseError {
+                        msg: "program/package boundary is only valid as the first file header"
+                            .to_string(),
+                        span: span.clone(),
+                    });
+                }
+                i += 1;
+            }
             // Imports are applied HERE, in textual order, so `import M`
             // sees `M`'s export table only once `module M { … }` has
             // actually been expanded — which happens earlier in this same
@@ -1096,6 +1157,7 @@ fn expand_scope(
                     &child_prefix,
                     &mut child_scope,
                     unit_definitions,
+                    false,
                 )?;
                 ids.extend(child_ids);
                 elab.module_state
@@ -1508,10 +1570,33 @@ pub fn expand_and_elaborate(
     elab: &mut ElabEnv,
     decls: &[Decl],
 ) -> Result<Vec<crate::elab::ElabResult>, ElabError> {
+    let boundary = admission_boundary(decls)?;
+    let direct_call = boundary.is_some() && elab.class_env.current_package.is_none();
+    let previous_package = elab.class_env.current_package.clone();
+    let previous_direct_use = elab.class_env.direct_use_packages.clone();
+    let previous_implicit_single_provider = elab.class_env.implicit_single_provider;
+    if direct_call {
+        let (_, admitted, _) = boundary.expect("checked above");
+        elab.class_env.current_package = Some("<root>".to_string());
+        elab.class_env.direct_use_packages = Some(admitted);
+        elab.class_env.implicit_single_provider = false;
+    }
     let mut scope = elab.module_state.root_scope.clone();
     let mut unit_definitions = HashSet::new();
-    let (results, _root_exports) =
-        expand_scope(elab, decls, "", &mut scope, &mut unit_definitions)?;
+    let expanded = expand_scope(
+        elab,
+        decls,
+        "",
+        &mut scope,
+        &mut unit_definitions,
+        true,
+    );
+    if direct_call {
+        elab.class_env.current_package = previous_package;
+        elab.class_env.direct_use_packages = previous_direct_use;
+        elab.class_env.implicit_single_provider = previous_implicit_single_provider;
+    }
+    let (results, _root_exports) = expanded?;
     elab.module_state.root_scope = scope;
     Ok(results)
 }

@@ -9,8 +9,9 @@
 //! was `type`); `T a b` type app.
 
 use crate::ast::{
-    Binder, ClassField, ConstructorSignature, ConstructorSignatureArg, CtorDecl, Decl, DefKeyword,
-    EffectRowSyntax, ExplicitDataCtor, Expr, MatchArm, PatKind, Pattern, PropIntro, Type,
+    Binder, BoundaryKind, ClassField, ConstructorSignature, ConstructorSignatureArg, CtorDecl,
+    Decl, DefKeyword, EffectRowSyntax, ExplicitDataCtor, Expr, MatchArm, PatKind, Pattern,
+    PropIntro, Type,
 };
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
@@ -203,17 +204,56 @@ impl Parser {
             Token::KwImport => self.parse_import_decl(start),
             Token::KwUse => self.parse_use_decl(start),
             Token::KwPub => self.parse_pub_decl(start),
+            Token::KwProgram => self.parse_boundary_decl(start, BoundaryKind::Program),
+            Token::KwPackage => self.parse_boundary_decl(start, BoundaryKind::Package),
             other => Err(ElabError::ParseError {
                 msg: format!(
                     "expected 'view', 'const', 'fn', 'proc', 'let', 'prove', 'prop', 'lemma', 'proof', \
                      'law', 'data', 'def', 'foreign', 'temporal', 'class', 'instance', \
                      'derive', 'module', 'import', 'use', \
-                     'pub', or 'space proc', found {:?}",
+                     'pub', 'program', 'package', or 'space proc', found {:?}",
                     other
                 ),
                 span: self.peek_span().clone(),
             }),
         }
+    }
+
+    fn parse_boundary_decl(&mut self, start: usize, kind: BoundaryKind) -> Result<Decl, ElabError> {
+        self.advance(); // consume `program` / `package`
+
+        let requires_admits = kind == BoundaryKind::Program;
+        if !matches!(self.peek(), Token::KwAdmits) {
+            if requires_admits || matches!(self.peek(), Token::Ident(_) | Token::ConId(_)) {
+                return Err(ElabError::ParseError {
+                    msg: "anonymous boundary header accepts no name; expected `admits`".to_string(),
+                    span: self.peek_span().clone(),
+                });
+            }
+            return Ok(Decl::BoundaryDecl {
+                kind,
+                admits: Vec::new(),
+                span: Span::new(start, self.tokens[self.pos.saturating_sub(1)].1.end),
+            });
+        }
+
+        self.advance(); // consume `admits`
+        let mut admits = Vec::new();
+        let mut end;
+        loop {
+            let (path, span) = self.parse_dotted_module_path()?;
+            admits.push(path);
+            end = span.end;
+            if !matches!(self.peek(), Token::Comma) {
+                break;
+            }
+            self.advance();
+        }
+        Ok(Decl::BoundaryDecl {
+            kind,
+            admits,
+            span: Span::new(start, end),
+        })
     }
 
     fn parse_space_view_decl(&mut self, start: usize) -> Result<Decl, ElabError> {

@@ -732,7 +732,10 @@ pub(crate) fn resolve_decl_in_unit(
     // have no declared VALUE name of their own to guard here.
     if !matches!(
         decl,
-        Decl::ModuleDecl { .. } | Decl::ImportDecl { .. } | Decl::Pub(_)
+        Decl::BoundaryDecl { .. }
+            | Decl::ModuleDecl { .. }
+            | Decl::ImportDecl { .. }
+            | Decl::Pub(_)
     ) {
         let records_definition =
             !matches!(decl, Decl::InstanceDecl { .. } | Decl::DeriveDecl { .. });
@@ -763,11 +766,13 @@ pub(crate) fn resolve_decl_in_unit(
         // hands `resolve_decl` an already-unwrapped, already-qualified
         // ordinary decl. Unreachable from that pipeline; kept exhaustive
         // for `Decl`'s other (non-`ken-elaborator`-internal) callers.
-        Decl::ModuleDecl { .. } | Decl::ImportDecl { .. } | Decl::Pub(_) => {
-            Err(ElabError::Internal(
-                "resolve_decl: module/import/pub decls must be expanded by modules.rs first".into(),
-            ))
-        }
+        Decl::BoundaryDecl { .. }
+        | Decl::ModuleDecl { .. }
+        | Decl::ImportDecl { .. }
+        | Decl::Pub(_) => Err(ElabError::Internal(
+            "resolve_decl: boundary/module/import/pub decls must be expanded by modules.rs first"
+                .into(),
+        )),
         Decl::ViewDecl {
             keyword,
             name,

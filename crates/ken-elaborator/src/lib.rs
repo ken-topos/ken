@@ -49,8 +49,8 @@ use ken_kernel::{
 pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, ObligationKind};
 pub use error::{ElabError, Span};
 pub use ast::{
-    BinOp, ConstructorSignature, ConstructorSignatureArg, Decl, ExplicitDataCtor, Expr,
-    ImportKind, Type,
+    BinOp, BoundaryKind, ConstructorSignature, ConstructorSignatureArg, Decl, ExplicitDataCtor,
+    Expr, ImportKind, Type,
 };
 pub use extract::{
     v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,
@@ -90,7 +90,7 @@ pub use foreign::{
     trusted_base_delta, FfiRuntimeCheck, ForeignBinding, ForeignEnv, MarshalKind, MarshalSig,
 };
 pub use literate::{extract_ken_md, validate_ken_md_fences, KenMdExtraction};
-pub use classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
+pub use classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo, InstanceResolution};
 
 /// The surface-level elaboration environment.
 pub struct ElabEnv {

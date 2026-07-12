@@ -48,6 +48,10 @@ pub enum Token {
     KwImport, // "import" — qualified/aliased/selective import
     KwUse,    // "use"    — unqualified open import
     KwPub,    // "pub"    — visibility export marker
+    // N4 admission-boundary keywords (`33 §3.2.1`, §5.5.1)
+    KwProgram, // "program" — anonymous multi-package admission root
+    KwPackage, // "package" — anonymous package admission boundary
+    KwAdmits,  // "admits"  — direct instance-provider package list
     // SURF-named-proof-claims keywords (`33 §8`)
     KwProp,  // "prop"   — proposition-family claim shape
     KwLemma, // "lemma"  — standalone checked theorem
@@ -442,6 +446,9 @@ impl<'s> Lexer<'s> {
                 "import" => Token::KwImport,
                 "use" => Token::KwUse,
                 "pub" => Token::KwPub,
+                "program" => Token::KwProgram,
+                "package" => Token::KwPackage,
+                "admits" => Token::KwAdmits,
                 "prop" => Token::KwProp,
                 "lemma" => Token::KwLemma,
                 "proof" => Token::KwProof,
