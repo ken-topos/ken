@@ -118,7 +118,7 @@ proof assoc for list_append (a : Type) (xs : List a) (ys : List a) (zs : List a)
         (list_append a (list_append a t ys) zs)
         (list_append a t (list_append a ys zs))
         (Cons a h)
-        (list_append::assoc a t ys zs)
+        ((proof assoc for list_append) a t ys zs)
   }
 
 proof right_unit for list_append (a : Type) (xs : List a)
@@ -130,20 +130,20 @@ proof right_unit for list_append (a : Type) (xs : List a)
         (list_append a t (Nil a))
         t
         (Cons a h)
-        (list_append::right_unit a t)
+        ((proof right_unit for list_append) a t)
   }
 
 instance Semigroup (List Nat) {
   op    = list_append Nat ;
-  assoc = list_append::assoc Nat
+  assoc = proof assoc for list_append Nat
 }
 
 instance Monoid (List a) {
   op         = list_append a ;
   mempty     = Nil a ;
-  assoc      = list_append::assoc a ;
-  left_unit  = list_append::left_unit a ;
-  right_unit = list_append::right_unit a
+  assoc      = proof assoc for list_append a ;
+  left_unit  = proof left_unit for list_append a ;
+  right_unit = proof right_unit for list_append a
 }
 ```
 
@@ -187,15 +187,15 @@ proof right_unit for bool_and (x : Bool) : Equal Bool (bool_and x True) x =
 
 instance Semigroup Bool {
   op    = bool_and ;
-  assoc = bool_and::assoc
+  assoc = proof assoc for bool_and
 }
 
 instance Monoid Bool {
   op         = bool_and ;
   mempty     = True ;
-  assoc      = bool_and::assoc ;
-  left_unit  = bool_and::left_unit ;
-  right_unit = bool_and::right_unit
+  assoc      = proof assoc for bool_and ;
+  left_unit  = proof left_unit for bool_and ;
+  right_unit = proof right_unit for bool_and
 }
 ```
 
@@ -240,7 +240,7 @@ proof id for list_map (a : Type) (xs : List a)
         (list_map a a (idf a) t)
         t
         (Cons a h)
-        (list_map::id a t)
+        ((proof id for list_map) a t)
   }
 
 proof fusion for list_map (a : Type) (b : Type) (c : Type)
@@ -255,7 +255,7 @@ proof fusion for list_map (a : Type) (b : Type) (c : Type)
         (list_map a c (comp a b c g h) rest)
         (list_map b c g (list_map a b h rest))
         (Cons c (g (h x)))
-        (list_map::fusion a b c g h rest)
+        ((proof fusion for list_map) a b c g h rest)
   }
 
 fn option_map (a : Type) (b : Type) (g : a → b) (x : Option a) : Option b =
@@ -280,14 +280,14 @@ proof fusion for option_map (a : Type) (b : Type) (c : Type)
 
 instance Functor List {
   map        = list_map ;
-  id_law     = list_map::id ;
-  fusion_law = list_map::fusion
+  id_law     = proof id for list_map ;
+  fusion_law = proof fusion for list_map
 }
 
 instance Functor Option {
   map        = option_map ;
-  id_law     = option_map::id ;
-  fusion_law = option_map::fusion
+  id_law     = proof id for option_map ;
+  fusion_law = proof fusion for option_map
 }
 ```
 

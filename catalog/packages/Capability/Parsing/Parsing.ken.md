@@ -161,7 +161,7 @@ fn LessEqNat (m : Nat) (n : Nat) : Prop =
   Equal Bool (nat_leq_bool m n) True
 
 proof refl for LessEqNat (n : Nat) : LessEqNat n n =
-  match n { Zero ↦ Proved ; Suc n2 ↦ LessEqNat::refl n2 }
+  match n { Zero ↦ Proved ; Suc n2 ↦ proof refl for LessEqNat n2 }
 
 proof zero_left for LessEqNat (n : Nat) : LessEqNat Zero n =
   Proved
@@ -177,7 +177,7 @@ lemma valid_zero_width_span (s : Source) (offset : Nat)
     and_intro
       (LessEqNat offset offset)
       (LessEqNat offset (source_length s))
-      (LessEqNat::refl offset)
+      ((proof refl for LessEqNat) offset)
       h
 ```
 
@@ -568,7 +568,7 @@ fn print_bool_expr (e : BoolExpr) : Bytes =
   }
 
 fn format_bool_expr (s : Source) : Result ParseError Bytes =
-  match parse_bool_expr s Zero (LessEqNat::zero_left (source_length s)) {
+  match parse_bool_expr s Zero ((proof zero_left for LessEqNat) (source_length s)) {
     Parsed syntax consumed next ↦ Ok ParseError Bytes (print_bool_expr (erase_spans syntax)) ;
     Failed err ↦ Err ParseError Bytes err
   }

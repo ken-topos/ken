@@ -460,7 +460,7 @@ proof involutive for reverse (a : Type) (xs : List a) : Equal (List a) (reverse 
         (Cons a h (reverse a (reverse a t)))
         (Cons a h t)
         (reverse_snoc a (reverse a t) h)
-        (cong (List a) (List a) (reverse a (reverse a t)) t (Cons a h) (reverse::involutive a t))
+        (cong (List a) (List a) (reverse a (reverse a t)) t (Cons a h) ((proof involutive for reverse) a t))
   }
 
 lemma append_length_snoc (a : Type) (xs : List a) (y : a)
@@ -662,8 +662,8 @@ lemma sorted_insert_true_bool (xs : List Bool)
         bool_cons_sorted
           False
           (insert_true_bool t)
-          (sorted_insert_true_bool t (is_sorted::tail False t hxs))
-          (bool_head_leq::false (insert_true_bool t))
+          (sorted_insert_true_bool t ((proof tail for is_sorted) False t hxs))
+          ((proof false for bool_head_leq) (insert_true_bool t))
     }
   }
 
@@ -676,7 +676,7 @@ lemma sort_bool_sorted (xs : List Bool) : is_sorted Bool bool_leq (sort_bool xs)
           False
           (sort_bool t)
           (sort_bool_sorted t)
-          (bool_head_leq::false (sort_bool t)) ;
+          ((proof false for bool_head_leq) (sort_bool t)) ;
       True ↦ sorted_insert_true_bool (sort_bool t) (sort_bool_sorted t)
     }
   }
@@ -856,7 +856,7 @@ instance Lens Unit {
   set = set_fst_pair_bool_bool ;
   get_set = fst_lens_get_set ;
   set_get = fst_lens_set_get ;
-  set_set = set_fst_pair_bool_bool::set_set
+  set_set = proof set_set for set_fst_pair_bool_bool
 }
 
 fn bool_iso_to (x : Bool) : Bool = x
@@ -901,7 +901,7 @@ proof respects for id_bool (x : Bool) (y : Bool)
 
 instance SetoidMorphism Unit {
   project = id_bool ;
-  respects = id_bool::respects
+  respects = proof respects for id_bool
 }
 ```
 

@@ -50,7 +50,7 @@ fn leq_nat (m : Nat) (n : Nat) : Bool =
   }
 
 proof refl for leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
-  match x { Zero ↦ Proved ; Suc x2 ↦ leq_nat::refl x2 }
+  match x { Zero ↦ Proved ; Suc x2 ↦ proof refl for leq_nat x2 }
 
 proof trans for leq_nat
   (x : Nat)
@@ -64,7 +64,7 @@ proof trans for leq_nat
         Suc y2 ↦
           λz. match z {
             Zero ↦ λp.λq. absurd q ;
-            Suc z2 ↦ λp.λq. leq_nat::trans x2 y2 z2 p q
+            Suc z2 ↦ λp.λq. proof trans for leq_nat x2 y2 z2 p q
           }
       }
   }
@@ -82,7 +82,7 @@ proof antisym for leq_nat
     Suc x2 ↦
       λy. match y {
         Zero ↦ λp.λq. absurd p ;
-        Suc y2 ↦ λp.λq. cong Nat Nat x2 y2 Suc (leq_nat::antisym x2 y2 p q)
+        Suc y2 ↦ λp.λq. cong Nat Nat x2 y2 Suc ((proof antisym for leq_nat) x2 y2 p q)
       }
   }
 ```
@@ -152,10 +152,10 @@ proof eq_true_of_or for bool_or
 
 instance Ord Nat {
   leq     = leq_nat ;
-  refl    = leq_nat::refl ;
-  antisym = leq_nat::antisym ;
-  trans   = leq_nat::trans ;
-  total   = λx.λy. bool_or::eq_true_of_or (leq_nat x y) (leq_nat y x) (total_leq_nat x y)
+  refl    = proof refl for leq_nat ;
+  antisym = proof antisym for leq_nat ;
+  trans   = proof trans for leq_nat ;
+  total   = λx.λy. proof eq_true_of_or for bool_or (leq_nat x y) (leq_nat y x) (total_leq_nat x y)
 }
 ```
 
