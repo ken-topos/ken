@@ -168,6 +168,8 @@ fn ac3_overlap_check_first_ok_second_errors() {
             head_param_count: 0,
             head_type: None,
             constraints: vec![],
+            defining_package: "<local>".to_string(),
+            declaration_span: Default::default(),
         },
     );
     // Now try to declare a second instance for (Eq2, Int) → OverlappingInstances.
@@ -237,6 +239,8 @@ fn ac4_property_vs_structure_sort_discriminant() {
             head_param_count: 0,
             head_type: None,
             constraints: vec![],
+            defining_package: "<local>".to_string(),
+            declaration_span: Default::default(),
         },
     );
     let r4 = env_str.elaborate_decl("instance Count2 Int { n = n }");

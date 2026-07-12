@@ -6,6 +6,7 @@
 //! populates and `ElabEnv` carries.
 
 use crate::ast::DefKeyword;
+use crate::error::Span;
 use crate::resolve::RType;
 use ken_kernel::{GlobalId, Term};
 use std::collections::HashMap;
@@ -72,6 +73,20 @@ pub struct InstanceInfo {
     /// Prerequisite dictionaries, retained so use-site resolution can build
     /// their recursive applications rather than merely returning the head id.
     pub constraints: Vec<InstanceConstraintInfo>,
+    /// Dotted source-package path that defined this instance (N4 provenance).
+    /// Direct, non-loader elaboration uses the stable `<local>` sentinel.
+    pub defining_package: String,
+    /// Original declaration span, retained so overlap reports both sites.
+    pub declaration_span: Span,
+}
+
+/// Structured provenance emitted by a successful implicit resolution.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InstanceResolution {
+    pub instance_id: GlobalId,
+    pub class_name: String,
+    pub head_type: String,
+    pub defining_package: String,
 }
 
 /// A prerequisite dictionary required by a polymorphic instance.
@@ -104,6 +119,18 @@ pub struct ClassEnv {
     pub current_module: u32,
     /// Maps each `GlobalId` to the module where it was declared.
     pub global_modules: HashMap<GlobalId, u32>,
+    /// Package of the source unit currently elaborating through the N2 loader.
+    pub current_package: Option<String>,
+    /// Explicit direct-use roots of the active `program`/`package` boundary.
+    /// `None` keeps direct, non-loader elaboration backward compatible.
+    pub direct_use_packages: Option<std::collections::HashSet<String>>,
+    /// Whether a boundary-less source closure may use its sole provider
+    /// package without an explicit admission declaration.
+    pub implicit_single_provider: bool,
+    /// Distinct source packages which registered instances in this closure.
+    pub source_instance_packages: std::collections::HashSet<String>,
+    /// Successful implicit-resolution provenance in source order.
+    pub resolution_provenance: Vec<InstanceResolution>,
 }
 
 impl ClassEnv {
@@ -119,6 +146,11 @@ impl ClassEnv {
             record_nil_val_id: GlobalId(0),
             current_module: 0,
             global_modules: HashMap::new(),
+            current_package: None,
+            direct_use_packages: None,
+            implicit_single_provider: false,
+            source_instance_packages: std::collections::HashSet::new(),
+            resolution_provenance: Vec::new(),
         }
     }
 

@@ -2955,11 +2955,38 @@ fn resolve_instance_dictionary(
     globals: &HashMap<String, GlobalId>,
     num_values: &mut HashMap<GlobalId, NumericLitVal>,
     numeric_env: &NumericEnv,
-    class_env: &ClassEnv,
+    class_env: &mut ClassEnv,
     ctx: &Context,
     class_name: &str,
     requested: &RType,
     span: &Span,
+) -> Result<(Term, Term), ElabError> {
+    resolve_instance_dictionary_inner(
+        env,
+        globals,
+        num_values,
+        numeric_env,
+        class_env,
+        ctx,
+        class_name,
+        requested,
+        span,
+        true,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_instance_dictionary_inner(
+    env: &mut GlobalEnv,
+    globals: &HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    class_env: &mut ClassEnv,
+    ctx: &Context,
+    class_name: &str,
+    requested: &RType,
+    span: &Span,
+    enforce_direct_use: bool,
 ) -> Result<(Term, Term), ElabError> {
     let head_name = rtype_head_name(requested);
     let info = class_env
@@ -2968,9 +2995,32 @@ fn resolve_instance_dictionary(
         .cloned()
         .ok_or_else(|| ElabError::NoInstance {
             class: class_name.to_string(),
-            ty: head_name,
+            ty: head_name.clone(),
             span: span.clone(),
         })?;
+    if enforce_direct_use {
+        if let Some(admitted) = &class_env.direct_use_packages {
+            let self_admitted =
+                class_env.current_package.as_deref() == Some(info.defining_package.as_str());
+            let sole_implicit_provider = class_env.implicit_single_provider
+                && class_env.source_instance_packages.len() == 1
+                && class_env
+                    .source_instance_packages
+                    .contains(&info.defining_package);
+            if !self_admitted
+                && !sole_implicit_provider
+                && !admitted.contains(&info.defining_package)
+            {
+                return Err(ElabError::UnadmittedInstance {
+                    defining_package: info.defining_package.clone(),
+                    class: class_name.to_string(),
+                    head_type: head_name.clone(),
+                    instance_id: info.instance_id,
+                    span: span.clone(),
+                });
+            }
+        }
+    }
     let type_args = if info.head_param_count == 0 {
         Vec::new()
     } else if let Some(pattern) = &info.head_type {
@@ -3014,7 +3064,7 @@ fn resolve_instance_dictionary(
     for constraint in &info.constraints {
         let required_head =
             instantiate_instance_rtype(&constraint.head_type, &type_args, info.head_param_count);
-        let (dictionary, _) = resolve_instance_dictionary(
+        let (dictionary, _) = resolve_instance_dictionary_inner(
             env,
             globals,
             num_values,
@@ -3024,6 +3074,7 @@ fn resolve_instance_dictionary(
             &constraint.class_name,
             &required_head,
             span,
+            false,
         )?;
         candidate = Term::app(candidate, dictionary);
     }
@@ -3031,6 +3082,16 @@ fn resolve_instance_dictionary(
         error,
         span: span.clone(),
     })?;
+    if enforce_direct_use {
+        class_env
+            .resolution_provenance
+            .push(crate::classes::InstanceResolution {
+                instance_id: info.instance_id,
+                class_name: class_name.to_string(),
+                head_type: head_name,
+                defining_package: info.defining_package.clone(),
+            });
+    }
     Ok((candidate, ty))
 }
 
@@ -3901,6 +3962,11 @@ pub fn init_class_env(
         record_nil_val_id,
         current_module: 0,
         global_modules: std::collections::HashMap::new(),
+        current_package: None,
+        direct_use_packages: None,
+        implicit_single_provider: false,
+        source_instance_packages: std::collections::HashSet::new(),
+        resolution_provenance: Vec::new(),
     })
 }
 
@@ -4264,10 +4330,12 @@ fn elab_instance_decl(
 
     // ---- overlap check (`39 §6.1`) — skip for property classes (Ω-PI) ---
     if class_kind == ClassKind::Structure && class_env.instances.contains_key(&instance_key) {
+        let first_span = class_env.instances[&instance_key].declaration_span.clone();
         return Err(ElabError::OverlappingInstances {
             class: class_name.to_string(),
             head_type: head_name.clone(),
-            span: span.clone(),
+            first_span,
+            second_span: span.clone(),
         });
     }
 
@@ -4452,8 +4520,16 @@ fn elab_instance_decl(
                     core_type: core_type.clone(),
                 })
                 .collect(),
+            defining_package: class_env
+                .current_package
+                .clone()
+                .unwrap_or_else(|| "<local>".to_string()),
+            declaration_span: span.clone(),
         },
     );
+    if let Some(package) = &class_env.current_package {
+        class_env.source_instance_packages.insert(package.clone());
+    }
 
     Ok(ElabResult {
         name: rdecl.name.clone(),
@@ -4541,8 +4617,16 @@ fn elab_derive(
             head_param_count: 0,
             head_type: None,
             constraints: vec![],
+            defining_package: class_env
+                .current_package
+                .clone()
+                .unwrap_or_else(|| "<local>".to_string()),
+            declaration_span: span.clone(),
         },
     );
+    if let Some(package) = &class_env.current_package {
+        class_env.source_instance_packages.insert(package.clone());
+    }
 
     Ok(ElabResult {
         name: rdecl.name.clone(),

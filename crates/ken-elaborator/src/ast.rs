@@ -155,6 +155,14 @@ pub enum PatKind {
 /// A top-level V0/V1/L2 declaration (`32 §8`, `21 §6.2`, `34`).
 #[derive(Clone, Debug)]
 pub enum Decl {
+    /// Anonymous `program` / `package` instance-admission boundary
+    /// (`33 §3.2.1`, §5.5.1). The enclosing dotted file path is its identity;
+    /// the header deliberately carries no name or entry-point declaration.
+    BoundaryDecl {
+        kind: BoundaryKind,
+        admits: Vec<String>,
+        span: Span,
+    },
     ViewDecl {
         keyword: DefKeyword,
         name: String,
@@ -347,10 +355,20 @@ pub enum ImportKind {
     Open,
 }
 
+/// The two hosts of the N4 instance-admission boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoundaryKind {
+    Program,
+    Package,
+}
+
 impl Decl {
     pub fn name(&self) -> &str {
         match self {
             Decl::Pub(inner) => inner.name(),
+            // A boundary has no declared name. This sentinel is never entered
+            // into a scope or the flat kernel environment.
+            Decl::BoundaryDecl { .. } => "",
             Decl::ModuleDecl { name, .. } => name,
             // `ImportDecl` has no declared name of its own; callers that
             // need a per-decl name must special-case it (it's never
@@ -376,7 +394,8 @@ impl Decl {
     pub fn span(&self) -> &Span {
         match self {
             Decl::Pub(inner) => inner.span(),
-            Decl::ViewDecl { span, .. }
+            Decl::BoundaryDecl { span, .. }
+            | Decl::ViewDecl { span, .. }
             | Decl::LetDecl { span, .. }
             | Decl::ProveDecl { span, .. }
             | Decl::PropDecl { span, .. }

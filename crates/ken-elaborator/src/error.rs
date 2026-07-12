@@ -62,7 +62,21 @@ pub enum ElabError {
     OrphanInstance { class: String, head_type: String, span: Span },
     /// Two instances registered under the same `(class, head-type)` key
     /// (`39 §6.1`). Reports both candidate spans.
-    OverlappingInstances { class: String, head_type: String, span: Span },
+    OverlappingInstances {
+        class: String,
+        head_type: String,
+        first_span: Span,
+        second_span: Span,
+    },
+    /// A real implicit search selected a canonical dictionary whose defining
+    /// package is outside the active boundary's direct-use set (`33 §5.5.1`).
+    UnadmittedInstance {
+        defining_package: String,
+        class: String,
+        head_type: String,
+        instance_id: ken_kernel::GlobalId,
+        span: Span,
+    },
     /// The instance resolver found multiple candidates and cannot pick
     /// silently (`39 §6.2`, `39 §6.7`).
     AmbiguousInstance { class: String, head_type: String, span: Span },
@@ -148,11 +162,25 @@ impl fmt::Display for ElabError {
                  in the module of the class or the head type",
                 span.start, span.end, class, head_type,
             ),
-            ElabError::OverlappingInstances { class, head_type, span } => write!(
+            ElabError::OverlappingInstances {
+                class,
+                head_type,
+                first_span,
+                second_span,
+            } => write!(
                 f,
-                "overlapping instances at {}-{}: a canonical instance of '{}' for '{}' \
+                "overlapping instances at {}-{} and {}-{}: a canonical instance of '{}' for '{}' \
                  is already registered",
-                span.start, span.end, class, head_type,
+                first_span.start, first_span.end, second_span.start, second_span.end,
+                class, head_type,
+            ),
+            ElabError::UnadmittedInstance {
+                defining_package, class, head_type, instance_id, span,
+            } => write!(
+                f,
+                "unadmitted instance at {}-{}: package '{}' defines {:?} for '{} {}'; \
+                 add it to the boundary's admits list",
+                span.start, span.end, defining_package, instance_id, class, head_type,
             ),
             ElabError::AmbiguousInstance { class, head_type, span } => write!(
                 f,

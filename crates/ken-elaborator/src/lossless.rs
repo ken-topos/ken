@@ -493,7 +493,10 @@ fn collect_decl_spans(decl: &Decl, out: &mut Vec<Span>) {
             decls.iter().for_each(|decl| collect_decl_spans(decl, out));
         }
         Decl::Pub(inner) => collect_decl_spans(inner, out),
-        Decl::TemporalDecl { .. } | Decl::DeriveDecl { .. } | Decl::ImportDecl { .. } => {}
+        Decl::BoundaryDecl { .. }
+        | Decl::TemporalDecl { .. }
+        | Decl::DeriveDecl { .. }
+        | Decl::ImportDecl { .. } => {}
     }
 }
 
