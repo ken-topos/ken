@@ -84,13 +84,22 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > cache, plural-ready root API). **AC emphasizes the literal `cargo build/test
 > --workspace --locked` oracle** (their own N1 carry: wrapper-green ≠ CI-green).
 >
-> **⏭ AWAITING: Language hands the N2 Lane B SHA** (QA + Architect-terminal gates
-> in). On arrival: honesty-gate (scope = `crates/ken-elaborator` + tests only;
-> zero kernel/prelude/Cargo/lock/trust delta; assert the specific error variant)
-> → publisher-path **NON-doc** (`--target wp/<branch>`, NEVER main; CI polled
-> ~216s, run bg — publisher stops on CI-red). On merge: N2 CLOSED pending retro →
-> **N3** (import-exclusion, MRES-6) becomes the frontier. `main @ fbc4d3e1`.
-> Watchdog `dba0c569`.
+> **✅ N2 Lane B gates IN + PUBLISHING (non-doc).** Candidate `3f9cff6c` (4
+> `crates/ken-elaborator` files +392/−18): QA APPROVED exact SHA + **literal
+> `cargo build/test --workspace --locked` green**; Architect-terminal APPROVE
+> (`evt_737wr0dttdh7z`, "closes N2" — cycle gate before admission verified
+> structurally, strict bijection, lazy discovery, correct cache, no N3/N4/
+> instance leak). Honesty gate PASSED (byte-identical elaborator tree; no
+> trust/WP-token). **Cherry-picked onto current `origin/main 3a5cd323`** (candidate
+> was cut from fbc4d3e1 pre-ADR-0015; ADR 0015 docs ⟂ Lane B crates → clean, tree
+> byte-identical, approvals carry per N1 rebase pattern). Publisher-path NON-doc
+> → CI polled (bg). **On merge: N2 CLOSED pending Language retro.**
+>
+> **⏭ AFTER N2 merge:** N3 (import-exclusion, MRES-6) unblocks (loader now live) —
+> becomes the ADR-0014 frontier. Also in flight: **ADR 0015 enclave WP** (remove
+> `use M`) — requested N2 Lane A retros from enclave (`evt_18ajgevxqtwwc`); on
+> retros-in → Handoff-Gate enclave → kick ADR 0015 spec lane (fills enclave window
+> before N3). Watchdog `c4c9e87c`.
 >
 > ### ✅ 4b ISSUE RESOLVED — PACKAGE ABSTRACTION (operator ruled C) — 2026-07-12 ~16:2x
 >
