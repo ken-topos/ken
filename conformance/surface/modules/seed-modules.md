@@ -215,6 +215,10 @@ the strict, role-blind bijection, `A` and `B` name the unique leaf files
 `<fixture-root>/A.ken.md` and `<fixture-root>/B.ken.md`. No in-file module
 header or declaration-kind exception participates in resolution.
 
+The harness designates `A` as the entry unit to elaborate in both arms. The
+closed cycle is named in import-edge order rooted at that entry, fixing this
+fixture's payload as `A → B → A`.
+
 ### surface/modules/cross-file-import-resolves-through-single-root-list
 
 - spec: `33 §3.2` (N2 in-repo loader), ADR 0014 MRES-1/MRES-2/MRES-3a,
