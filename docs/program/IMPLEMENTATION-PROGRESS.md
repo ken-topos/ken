@@ -213,8 +213,9 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > APPROVE `f25159d7`, honesty gate clean (parser.rs +12 + test +136; zero
 > kernel/prelude/semantics), tests verified at CV structural bar. **✅ #29 COMPLETE**
 > (spec `proof_ref` atom + parser + tests all landed). CV conformance golden = #30
-> post-merge tail (now UNBLOCKED — parser landed). **⏭ RESUME: re-kick #28 bare-form
-> catalog rewrite from `69570b26`.**
+> post-merge tail. **✅ #30 CV golden MERGED @ `origin/main 06c07552`** (PR #554,
+> doc-only, conformance/ only +49/−8; reject→accept flip + spellings-identical pin;
+> honesty gate clean) — #29 fully closed incl. conformance tail.
 > **CV conformance determination (`evt_7vks88m4mm595`, accepted `evt_1na4d5t635wdj`):**
 > the 4 crate tests ARE the Lane B conformance gate, but must use
 > DISCRIMINATING/STRUCTURAL assertions (not green-vs-green): bare≡grouped≡`::` →
