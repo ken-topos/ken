@@ -47,24 +47,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > braces-now / lambda-Unicode+dot / type-app-preserve, folds P0's EBNF fix, + CV
 > golden for the 8 gates. Spec+conformance only. **B1 note bumped Accepted**
 > (architect/work `5a430c32`) — ready for doc-only publish so B2–B4 inherit.
-> **★ WP S MERGED** — `origin/main @ b9af8cca` (PR #576, doc-only, CI-clean). The
-> kenfmt canonical-form clause (`31 §1d` layout + token-kind closure + `.ken.md`/
-> fence exemption + braces/λ/type-app resolutions), the bundled **P0** (`§32`
-> comma→`;` four-only), and the **8-gate CV golden** (all formatter-output cases
-> red-until-built, redundant-parens property pinned) are now normative. Architect-
-> terminal APPROVE after the one determinism fold (parens permission→mandate,
-> both Steward + Architect confirmed the `54c023ce→d1d36a5d` delta = exactly the
-> fold). steward/work realigned (0 ahead; squash content confirmed on main).
-> **AWAITING: WP S retros** (requested `evt_5ksf1kpw2dxc7`) to fully close.
+> **★ WP S CLOSED** — merged `origin/main` (PR #576, doc-only) + **retros in**
+> (`evt_2m4rdt77d1hxb`; shared carry → memory
+> `canonicalizer-determinism-needs-explicit-convergence-direction`). kenfmt
+> canonical form (`31 §1d` + P0 `§32` + 8-gate golden) is normative. Steward
+> self-compacted here at a CLEAN SEAM (S closed, B1 frame landed, nothing
+> mid-flight).
 >
-> **★ FRONTIER now (S landed → two threads unblock):**
-> 1. **B1 (kenfmt build) → Language team.** Architecture Accepted (AST+trivia,
->    `docs/program/kenfmt-b1-source-representation.md`, 4-item contract). Language
->    ring idle, N2 retros in → frame B1 build WP → Handoff-Gate Language → kick.
->    (Operator priority; parallel to the enclave.)
-> 2. **N3 (module program) → enclave.** After S retros in → Handoff-Gate enclave →
->    kick (reduced opt-A scope). Then task #37 (`use`-keyword, Language), N4, N5.
-> kenfmt B2/B3/B4 follow B1; only capstone C needs the catalog freeze.
+> **★★ RESUME HERE — two unblocked threads, both READY TO RELEASE (parallel,
+> different teams):**
+> 1. **B1 (kenfmt build) → LANGUAGE.** Frame landed:
+>    `docs/program/wp/kenfmt-b1-lossless-layer.md` (architecture Accepted, AST+
+>    trivia, 4-item contract in `docs/program/kenfmt-b1-source-representation.md`).
+>    Language ring IDLE, N2 retros IN → **Handoff-Gate compact Language
+>    (language-leader/implementer/qa) → kick B1** (Architect-terminal reviews).
+>    Operator priority. B2/B3/B4 follow; capstone C needs catalog freeze.
+> 2. **N3 (module program) → ENCLAVE.** Enclave FREE (S retros in). **Frame
+>    `docs/program/wp/n3-import-exclusion.md`** at reduced opt-A scope (§3.3 local-
+>    vs-import clash reversal + per-name rename `import M (foo as bar)`; positive
+>    de-selection = default exclusion; NO `hiding`; prelude names UNSHADOWABLE;
+>    lexical binder shadowing untouched) → publish doc-only → **Handoff-Gate
+>    enclave → kick N3 Lane A** (spec+golden) → Lane B (Language). Then task #37
+>    (`use`-keyword retirement, Language), N4 (program/admits), N5 (re-export,
+>    non-`use` spelling).
+>
+> Both kicks require the Handoff-Gate (compact receiving unit BEFORE kickoff).
+> honesty-gate every publish; `--target wp/<branch>` never main; doc-only merges
+> instant. Operator said "proceed with S, etc." — clear to run both.
 >
 > **QUEUED behind S** (enclave serializes spec): **N3** (import-exclusion, reduced
 > opt-A scope) spec lane. Also **task #37** (retire `use` keyword — Language). N4
