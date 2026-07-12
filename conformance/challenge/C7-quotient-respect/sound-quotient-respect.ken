@@ -10,8 +10,8 @@ data DPair = MkDPair Int Int
 -- relation we quotient by. (Witness-exact form as in C1's decimalEq; the full
 -- relation is the landed decimal value-equality.)
 fn denoteEq (x : DPair) (y : DPair) : Prop =
-  match x { MkDPair cx ex ⇒
-    match y { MkDPair cy ey ⇒
+  match x { MkDPair cx ex ↦
+    match y { MkDPair cy ey ↦
       Equal Bool (and_bool (eq_int (add_int ex 1) ey) (eq_int cx (mul_int cy 10))) True } }
 
 -- The quotient carrier: canonical by construction (one class per denoted value).
@@ -19,7 +19,7 @@ const Decimal : Type = DPair / denoteEq
 
 -- isZeroPair RESPECTS denoteEq: equal-value pairs are both zero or both non-zero.
 fn isZeroPair (p : DPair) : Bool =
-  match p { MkDPair c e ⇒ eq_int c 0 }
+  match p { MkDPair c e ↦ eq_int c 0 }
 
 -- The respect proof obligation: (x y : DPair) -> denoteEq x y ->
 --   Equal Bool (isZeroPair x) (isZeroPair y). Provable (a value's zeroness is a

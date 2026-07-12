@@ -243,10 +243,10 @@ prototype's stubbed sums and missing exhaustiveness.
 
   ```ken
   fn head (A : Type) (n : Nat) (v : Vec A (n+1)) : A =
-    match v { VCons _ x _ => x }
+    match v { VCons _ x _ |-> x }
 
   fn bad_head_any (A : Type) (n : Nat) (v : Vec A n) : A =
-    match v { VCons _ x _ => x }
+    match v { VCons _ x _ |-> x }
   ```
 
 - expect:
@@ -288,8 +288,8 @@ prototype's stubbed sums and missing exhaustiveness.
   fn km_proof_motive_positive (b : Bool)
     : Equal Bool (km_scrutinee b) (km_scrutinee b) =
     match km_scrutinee b {
-      True  => tt ;
-      False => tt
+      True  |-> tt ;
+      False |-> tt
     }
   ```
 
@@ -300,8 +300,8 @@ prototype's stubbed sums and missing exhaustiveness.
     : Equal Bool (km_scrutinee b) True ->
       Equal Bool (km_scrutinee b) True =
     match km_scrutinee b {
-      True  => \p. p ;
-      False => \p. tt
+      True  |-> \p. p ;
+      False |-> \p. tt
     }
   ```
 
@@ -419,10 +419,10 @@ data Vec (A : Type) : Nat -> Type where {
 
   ```ken
   fn tail (A : Type) (n : Nat) (xs : Vec A (Suc n)) : Vec A n =
-    match xs { VCons m y ys => ys }
+    match xs { VCons m y ys |-> ys }
 
   fn wrongGoal (n : Nat) (xs : Vec Nat (Suc n)) : Vec Nat (Suc n) =
-    match xs { VCons m y ys => ys }
+    match xs { VCons m y ys |-> ys }
   ```
 - expect:
   - `tail` **accepts** — `VCons`'s equation `Suc m ≡ Suc n` reduces (kernel
@@ -448,10 +448,10 @@ data Vec (A : Type) : Nat -> Type where {
 
   ```ken
   fn firstIsSecond (n : Nat) (v : Vec Nat n) (w : Vec Nat n) : Bool =
-    match v { VNil => True ; VCons m a xs => match w { VCons k b ys => True } }
+    match v { VNil |-> True ; VCons m a xs |-> match w { VCons k b ys |-> True } }
 
   fn firstIsVNil (n : Nat) (v : Vec Nat n) (w : Vec Nat n) : Vec Nat n =
-    match v { VNil => VNil Nat ; VCons m a xs => v }
+    match v { VNil |-> VNil Nat ; VCons m a xs |-> v }
   ```
 - expect: both **accept**.
   - `firstIsSecond` — matching `v` refines `n`; the **outer** sibling binder `w`
@@ -476,8 +476,8 @@ data Vec (A : Type) : Nat -> Type where {
   ```ken
   fn zipNat (n : Nat) (v : Vec Nat n) (w : Vec Nat n) : Vec Nat n =
     match v {
-      VNil => VNil Nat ;
-      VCons m a xs => match w { VCons k b ys => VCons m a (zipNat m xs ys) }
+      VNil |-> VNil Nat ;
+      VCons m a xs |-> match w { VCons k b ys |-> VCons m a (zipNat m xs ys) }
     }
   ```
 - expect: `(gated: DS-5c)` — **rejects today** (`KernelRejected`), expected to

@@ -9,10 +9,10 @@
 -- count x xs : how many times x occurs in xs (element eq via a supplied `eq`).
 fn count (a : Type) (eq : a → a → Bool) (x : a) (xs : List a) : Nat =
   match xs {
-    Nil       ⇒ Zero ;
-    Cons h t  ⇒ match eq x h {
-                   True  ⇒ Suc (count a eq x t) ;
-                   False ⇒ count a eq x t } }
+    Nil       ↦ Zero ;
+    Cons h t  ↦ match eq x h {
+                   True  ↦ Suc (count a eq x t) ;
+                   False ↦ count a eq x t } }
 
 -- Perm as: for the witness element x, the counts agree. (The full relation
 -- quantifies over all x; shown here at a witness to stay Ω-clean and concrete.)

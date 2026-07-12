@@ -8,11 +8,11 @@
 fn unfoldUpTo (a : Type) (s : Type) (step : s → Option (Prod a s))
                 (n : Nat) (seed : s) : List a =
   match n {
-    Zero  ⇒ Nil a ;
-    Suc m ⇒ match step seed {
-               None   ⇒ Nil a ;
-               Some p ⇒ match p {
-                           MkProd x y ⇒ Cons a x (unfoldUpTo a s step m y) } } }
+    Zero  ↦ Nil a ;
+    Suc m ↦ match step seed {
+               None   ↦ Nil a ;
+               Some p ↦ match p {
+                           MkProd x y ↦ Cons a x (unfoldUpTo a s step m y) } } }
 
 -- A concrete stream-like producer, fuel-bounded: the naturals up to fuel n.
 fn natsStep (seed : Nat) : Option (Prod Nat Nat) =
