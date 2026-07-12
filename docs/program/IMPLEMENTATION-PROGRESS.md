@@ -14,7 +14,43 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### ✅ 4b ISSUE RESOLVED — PACKAGE ABSTRACTION (operator ruled C) — 2026-07-12 ~16:2x
+>
+> **Operator ruled option (C) + refined it into a PACKAGE ABSTRACTION** parallel
+> to the program abstraction, with its own `admits` section: just as a `program`
+> can be a single file, **each catalog package meant to be compiled + later
+> imported gets a package file carrying the package abstraction + `admits`** (reuse
+> program `admits` grammar). **Package file WITH the abstraction = a *compiled
+> package*** (compilable/importable; its own admission boundary → self-admits its
+> declared deps → buildable/testable in isolation, no ad-hoc program). **Package
+> file WITHOUT it = NOT compilable, but usable as a *source package*** composed
+> by-source into a parent program/package. This is the 4c compiled-vs-source seam
+> given surface (compiled pkg carries the instance-manifest; source pkg resolves in
+> parent graph). **Retires my A/B/C fork** in favor of the operator's package
+> abstraction. **ROUTED to @architect** (`evt_53fr398mhhse4`) to design + fold into
+> ADR 0014: package-abstraction form, compiled-vs-source mechanics + 4c reconcile,
+> admission at BOTH program & package level, N2/N4 reshape (loader distinguishes
+> source vs compiled pkgs; admission gate at pkg scope; each importable catalog pkg
+> needs a package file = the catalog-enrichment I was folding into N2), + any NEW
+> operator-decisions.
+> **↳ ARCHITECT DELIVERED @ `architect/work 95686623` — package abstraction
+> designed + folded into ADR 0014 (publishing over main now).** Compiled package
+> (has abstraction) = 4c compiled-import: carries instance-manifest + self-admits +
+> testable in isolation (resolves 4b); source package (no abstraction) = 4c
+> source-import: composed by-source into parent graph. ONE `admits` mechanism, two
+> hosts (program+package), composed recursively; coherence over union of admits +
+> admitted compiled-pkg manifests. **Zero `trusted_base()` delta** (manifest is
+> elaboration-level; kernel re-checks every dictionary VALUE). **RIDES N4** (same
+> admits gate, parameterized by boundary — not a new WP) + **N2** (loader
+> distinguishes source vs compiled, builds compiled→manifest; each importable
+> catalog pkg gets a package file = the catalog-enrichment). **FOUR new operator
+> forks PKG-1..4** (Architect recs): PKG-1 source-set implicit; PKG-2 source-
+> inclusion implicit-round-1; PKG-3 manifest trust-with-cross-check (flag vendor/
+> attestation); PKG-4 test-scoped admission DEFER. ⏭ publish ADR → route PKG-1..4
+> operator round → Architect folds → reshape N2/N4 acceptance.
+>
 > ### ⚠️ OPEN DESIGN ISSUE — 4b vs library-with-deps testing — 2026-07-12 ~16:0x
+> _(SUPERSEDED by the resolution above — kept for the reasoning trail.)_
 >
 > **Operator raised (against MRES-4b):** a catalog package that imports a second
 > package needs, to be tested, a synthesized `program` admitting the used
@@ -133,7 +169,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > | WP | MRES | Deps | Size | Round | State |
 > |----|------|------|------|-------|-------|
-> | **N1** fail-closed dup-def | 5/7/8 | none | S | 1 | **▶ Lane A MERGING; Lane B → Language next** |
+> | **N1** fail-closed dup-def | 5/7/8 | none | S | 1 | **⚠ Lane A MERGED; Lane B `f6856034` gates+honesty clean but CI RED (PR #560 build+test fail) → routed back to Language. NOT merged (main still 6e751130).** |
 > | **N2** in-repo loader (spine) | 1/2/3a | — | M | 2 | queued |
 > | **N3** import-exclusion + clash-err | 6 | N2 | M | 2 f-f | queued |
 > | **N4** program abstraction / `admits` | 4/4a/b/c | N2 | M/L | 3 | queued |
