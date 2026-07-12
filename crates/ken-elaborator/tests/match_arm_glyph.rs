@@ -56,8 +56,13 @@ fn pipe_grammar_remains_distinct_from_ascii_maps_to() {
 
 #[test]
 fn formatter_canonicalizes_ascii_maps_to_before_arrow() {
-    let formatted = canonical_unicode("match x { A |-> B } ; A -> B");
-    assert_eq!(formatted, "match x { A ↦ B } ; A → B");
+    let formatted = canonical_unicode(
+        "fn choose (x : Bool) : Bool -> Bool = \\y . match x { True |-> y ; False |-> x }",
+    );
+    assert_eq!(
+        formatted,
+        "fn choose (x : Bool) : Bool → Bool = λy . match x { True ↦ y ; False ↦ x }"
+    );
     assert_eq!(canonical_unicode("=> ⇒"), "=> ⇒");
 
     assert_eq!(

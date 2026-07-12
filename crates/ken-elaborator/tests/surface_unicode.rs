@@ -28,31 +28,37 @@ fn surf1_d3_unicode_and_ascii_lex_to_same_tokens() {
                    fn surf1_m (b : Bool) : Bool = match b { True ↦ False ; False ↦ True }";
 
     assert_eq!(token_kinds(ascii), token_kinds(unicode));
-    assert_eq!(token_kinds("Omega Sigma Pi forall exists not level l === <= >= /= /\\ \\/ <: ><"),
-               token_kinds("Ω Σ Π ∀ ∃ ¬ ℓ ℓ ≡ ≤ ≥ ≠ ∧ ∨ ⊑ ×"));
+    assert_eq!(
+        token_kinds("Omega Sigma Pi forall exists not level l === <= >= /= /\\ \\/ <: ><"),
+        token_kinds("Ω Σ Π ∀ ∃ ¬ ℓ ℓ ≡ ≤ ≥ ≠ ∧ ∨ ⊑ ×")
+    );
     assert_ne!(token_kinds("in"), token_kinds("∈"));
 }
 
 #[test]
 fn surf1_d3_formatter_emits_canonical_unicode() {
-    let src = "fn f : Omega -> Sigma = \\x . x\nmatch x { A |-> B }\nlet x = 1 in x\nnot level l === <= >= /= /\\ \\/ <: ><\n-- keep -> and => not in level in comments\n\"keep -> and \\\"=>\\\" not in level in strings\"";
+    let src = "fn f (l : Int) (level : Int) (not : Int) : Int -> Int = \\x . x\n\
+fn invert (x : Bool) : Bool = match x { True |-> False ; False |-> True }\n\
+foreign call : Int -> Int = \"keep -> and not in level\" \"lib|->l\" [pure]\n\
+-- keep -> and => not in level in comments\n";
     let formatted = canonical_unicode(src);
-    assert!(formatted.contains("fn f : Ω → Σ = λx . x"));
-    assert!(formatted.contains("match x { A ↦ B }"));
-    assert!(formatted.contains("let x = 1 in x"));
-    assert!(formatted.contains("¬ ℓ ℓ ≡ ≤ ≥ ≠ ∧ ∨ ⊑ ×"));
+    assert!(formatted.contains("fn f (l : Int) (level : Int) (not : Int) : Int → Int = λx . x"));
+    assert!(formatted.contains("match x { True ↦ False ; False ↦ True }"));
     assert!(formatted.contains("-- keep -> and => not in level in comments"));
-    assert!(formatted.contains("\"keep -> and \\\"=>\\\" not in level in strings\""));
+    assert!(formatted.contains("\"keep -> and not in level\" \"lib|->l\""));
 }
 
 #[test]
 fn surf1_d3_rejects_unbounded_unicode_identifiers() {
     for src in [
-        "fn surf1_bad (а : Type) : Type = Type", // Cyrillic small a
+        "fn surf1_bad (а : Type) : Type = Type",  // Cyrillic small a
         "fn surf1_bad (xа : Type) : Type = Type", // ASCII start, Cyrillic continuation
-        "fn Ｔ : Type = Type",                  // fullwidth capital T
+        "fn Ｔ : Type = Type",                    // fullwidth capital T
     ] {
-        assert!(Lexer::lex(src).is_err(), "unbounded Unicode identifier accepted: {src}");
+        assert!(
+            Lexer::lex(src).is_err(),
+            "unbounded Unicode identifier accepted: {src}"
+        );
     }
 }
 

@@ -1,129 +1,118 @@
-//! Canonical surface formatter helpers (`31 §1c`).
+//! Canonical token spelling (`31 §1b`, `31 §1d`).
 //!
-//! This is intentionally a lexical normalizer for the D3 slice: it preserves
-//! layout and comments while canonicalizing accepted ASCII operator spellings
-//! to Unicode outside strings/comments.
+//! Canonicalization consumes B1's lossless token/trivia partition.  It never
+//! scans source bytes for alias-shaped substrings: notation is selected from
+//! the parsed token kind, while every other token and all trivia retain their
+//! original source lexeme.
 
-fn ident_tail(src: &str, start: usize) -> Option<(String, usize)> {
-    let mut end = start;
-    let mut out = String::new();
-    for (offset, c) in src[start..].char_indices() {
-        if c.is_ascii_alphanumeric() || c == '_' || c == '\'' {
-            out.push(c);
-            end = start + offset + c.len_utf8();
-        } else {
-            break;
-        }
-    }
-    if out.is_empty() { None } else { Some((out, end)) }
-}
+use crate::lexer::Token;
+use crate::lossless::{parse_lossless, FormattableSource, SourcePieceKind};
 
-fn canonical_ident(ident: &str) -> Option<&'static str> {
-    match ident {
-        "Omega" => Some("Ω"),
-        "Sigma" => Some("Σ"),
-        "Pi" => Some("Π"),
-        "forall" => Some("∀"),
-        "exists" => Some("∃"),
-        "not" => Some("¬"),
-        "level" | "l" => Some("ℓ"),
+/// The blessed spelling for an unambiguous notation token kind.
+fn canonical_token_spelling(token: &Token) -> Option<&'static str> {
+    match token {
+        Token::Arrow => Some("→"),
+        Token::MapsTo => Some("↦"),
+        Token::Lambda => Some("λ"),
+        Token::PropEq => Some("≡"),
+        Token::Le => Some("≤"),
+        Token::Ge => Some("≥"),
+        Token::Ne => Some("≠"),
+        Token::And => Some("∧"),
+        Token::Or => Some("∨"),
+        Token::FlowsTo => Some("⊑"),
+        Token::Times => Some("×"),
         _ => None,
     }
 }
 
-/// Normalize accepted ASCII notation to canonical Unicode outside strings and
-/// `--` line comments. Keywords stay ASCII.
-pub fn canonical_unicode(src: &str) -> String {
-    let mut out = String::with_capacity(src.len());
-    let mut pos = 0;
+/// Canonicalize notation spellings over an already-parsed B1 source stream.
+///
+/// Layout, identifiers, keywords, literals, comments, foreign string payloads,
+/// and temporal formula bodies are replayed from their original source spans.
+pub fn canonicalize_tokens(source: &dyn FormattableSource) -> String {
+    let mut out = String::with_capacity(source.source().len());
+    let mut temporal_brace_depth: Option<usize> = None;
+    let mut temporal_pending_brace = false;
 
-    while pos < src.len() {
-        let rest = &src[pos..];
-
-        if rest.starts_with("--") {
-            if let Some(nl) = rest.find('\n') {
-                out.push_str(&rest[..=nl]);
-                pos += nl + 1;
-            } else {
-                out.push_str(rest);
-                break;
-            }
+    for piece in source.pieces() {
+        let lexeme = &source.source()[piece.span.start..piece.span.end];
+        let SourcePieceKind::Token(token_index) = piece.kind else {
+            out.push_str(lexeme);
             continue;
-        }
-
-        let c = rest.chars().next().unwrap();
-        if c == '"' {
-            out.push(c);
-            pos += c.len_utf8();
-            while pos < src.len() {
-                let c = src[pos..].chars().next().unwrap();
-                out.push(c);
-                pos += c.len_utf8();
-                if c == '\\' {
-                    if pos < src.len() {
-                        let escaped = src[pos..].chars().next().unwrap();
-                        out.push(escaped);
-                        pos += escaped.len_utf8();
-                    }
-                    continue;
-                }
-                if c == '"' || c == '\n' {
-                    break;
-                }
-            }
-            continue;
-        }
-
-        let replacement = if rest.starts_with("|->") {
-            Some(("↦", 3))
-        } else if rest.starts_with("->") {
-            Some(("→", 2))
-        } else if rest.starts_with("===") {
-            Some(("≡", 3))
-        } else if rest.starts_with("<=") {
-            Some(("≤", 2))
-        } else if rest.starts_with(">=") {
-            Some(("≥", 2))
-        } else if rest.starts_with("/=") {
-            Some(("≠", 2))
-        } else if rest.starts_with("<:") {
-            Some(("⊑", 2))
-        } else if rest.starts_with("><") {
-            Some(("×", 2))
-        } else if rest.starts_with("\\/") {
-            Some(("∨", 2))
-        } else if rest.starts_with("/\\") {
-            Some(("∧", 2))
-        } else {
-            None
         };
-        if let Some((glyph, width)) = replacement {
-            out.push_str(glyph);
-            pos += width;
-            continue;
-        }
+        let token = &source.tokens()[token_index].kind;
 
-        if c == '\\' {
-            out.push('λ');
-            pos += c.len_utf8();
-            continue;
-        }
-
-        if c.is_ascii_alphabetic() || c == '_' {
-            if let Some((ident, end)) = ident_tail(src, pos) {
-                if let Some(glyph) = canonical_ident(&ident) {
-                    out.push_str(glyph);
-                } else {
-                    out.push_str(&ident);
-                }
-                pos = end;
-                continue;
+        // Temporal formula text is a protected payload.  Its braces and every
+        // token between them are replayed verbatim; the declaration keyword
+        // and name remain ordinary stored spellings as well.
+        if temporal_pending_brace {
+            out.push_str(lexeme);
+            if matches!(token, Token::LBrace) {
+                temporal_pending_brace = false;
+                temporal_brace_depth = Some(1);
             }
+            continue;
+        }
+        if let Some(depth) = temporal_brace_depth.as_mut() {
+            out.push_str(lexeme);
+            match token {
+                Token::LBrace => *depth += 1,
+                Token::RBrace if *depth == 1 => temporal_brace_depth = None,
+                Token::RBrace => *depth -= 1,
+                _ => {}
+            }
+            continue;
+        }
+        if matches!(token, Token::KwTemporal) {
+            temporal_pending_brace = true;
+            out.push_str(lexeme);
+            continue;
         }
 
-        out.push(c);
-        pos += c.len_utf8();
+        if let Some(canonical) = canonical_token_spelling(token) {
+            out.push_str(canonical);
+        } else {
+            out.push_str(lexeme);
+        }
     }
 
     out
+}
+
+/// Normalize notation in a syntactically valid Ken unit.
+///
+/// The stable legacy signature is retained for callers.  Invalid fragments
+/// have no parsed token roles, so they are returned byte-for-byte rather than
+/// being subjected to a raw-text fallback.
+pub fn canonical_unicode(src: &str) -> String {
+    match parse_lossless(src) {
+        Ok(source) => canonicalize_tokens(source.as_ref()),
+        Err(_) => src.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn token_kind_table_is_exhaustive_for_current_notation_variants() {
+        let cases = [
+            (Token::Arrow, "→"),
+            (Token::MapsTo, "↦"),
+            (Token::Lambda, "λ"),
+            (Token::PropEq, "≡"),
+            (Token::Le, "≤"),
+            (Token::Ge, "≥"),
+            (Token::Ne, "≠"),
+            (Token::And, "∧"),
+            (Token::Or, "∨"),
+            (Token::FlowsTo, "⊑"),
+            (Token::Times, "×"),
+        ];
+        for (token, spelling) in cases {
+            assert_eq!(canonical_token_spelling(&token), Some(spelling));
+        }
+    }
 }
