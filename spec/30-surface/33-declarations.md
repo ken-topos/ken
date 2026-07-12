@@ -535,7 +535,9 @@ sets:
   from it. In one acyclic source graph, the orphan rule constructively ensures
   that at most one package may legally define a given `(class, head-type)` key.
   The existing §5.5 overlap check retains its intra-package duplicate coverage;
-  no separate source-world cross-package collision can arise.
+  no separate source-world cross-package collision can arise. The source-closure
+  coherence pass nevertheless performs one keyed collision test per structure
+  instance: O(total instances in the closure), not O(packages²).
 - The **direct-use set** contains the boundary's self-admitted package, when
   applicable, plus the packages named by its explicit `admits` section. An
   instance that one of the boundary's own units dispatches must be defined by a
