@@ -10,7 +10,7 @@
 > `57`'s lawful-class template: laws are `Ω` propositions **proved over the
 > landed carriers, zero `Axiom`, zero `trusted_base()` delta**, by the convoy
 > induction + `trans`/`cong` route-around grammar (`54 §2`/`§3`) with the
-> **sharpened per-branch `tt`-vs-`Refl`** endpoint rule (`57 §1 pt 3`).
+> **sharpened per-branch `Proved`-vs-`Refl`** endpoint rule (`57 §1 pt 3`).
 > **CAT-2/CAT-3-independent** — value-level, no `Monad`/collection-view needed.
 > **Kernel-untouched, outer-ring.** Four design forks are resolved here
 > (Architect, `main@7169300f`): **A** `union` takes a **combining function**;
@@ -44,16 +44,16 @@ re-litigated:
    and transports once with `J` (`53 §3`). The IH is an **ordinary
    self-recursive call on the subtree** (`54 §2.1` — the kernel's IH-slot binder
    is dead/surface-unreferenceable), never a synthesized `ih_l`/`ih_r`.
-3. **Per-branch `tt`-vs-`Refl`**, never uniform (`55 §3.2`/`57 §1 pt 3`,
-   sharpened by CAT-3): a branch closes with `tt` when both endpoints reduce to
+3. **Per-branch `Proved`-vs-`Refl`**, never uniform (`55 §3.2`/`57 §1 pt 3`,
+   sharpened by CAT-3): a branch closes with `Proved` when both endpoints reduce to
    the **same fully-collapsing** head — a **nullary** ctor or one whose
    components all collapse — going to `Top` (K7); and with `Refl` when they
    reduce to a **neutral**, *including a non-nullary head with any neutral
-   component* (it stays `Eq`-shaped, and `tt : Top` would be ill-typed there).
+   component* (it stays `Eq`-shaped, and `Proved : Top` would be ill-typed there).
    The landed capstone bases are the template: `ordered_empty`/`lookup_empty_is_none
-   → tt` (operation reduced into a collapsing `Equal Bool True True`); a
+   → Proved` (operation reduced into a collapsing `Equal Bool True True`); a
    `from_list_acc Nil acc` base is a **passthrough** (the accumulator's own
-   `Ordered`, not `tt`).
+   `Ordered`, not `Proved`).
 4. **Reuse, don't re-derive, the Map capstone** (frame §2 pin 2). `delete`/
    `union`/`intersection`/`difference` build **on** the landed
    `insert`/`lookup`/
@@ -103,19 +103,21 @@ site). Proof shapes, all `Nat`-structural, comparison-driven only through
 `leq_nat`'s own recursion:
 
 - **`reflLeq : (x:Nat) → IsTrue (leq_nat x x)`** — induction on `x`: `Zero` base
-  `leq_nat Zero Zero ⇝ True`, goal `Equal Bool True True → Top`, closed **`tt`**;
-  `Suc m` step `leq_nat (Suc m)(Suc m) ⇝ leq_nat m m`, closed by the self-call IH
-  `reflLeq m` (**neutral** result → the equality is carried, not collapsed).
+  `leq_nat Zero Zero ⇝ True`, goal `Equal Bool True True → Top`, closed
+  **`Proved`**; `Suc m` step `leq_nat (Suc m)(Suc m) ⇝ leq_nat m m`, closed by
+  the self-call IH `reflLeq m` (**neutral** result → the equality is carried,
+  not collapsed).
 - **`transLeq : (x y z:Nat) → IsTrue (leq_nat x y) → IsTrue (leq_nat y z) →
   IsTrue (leq_nat x z)`** — induction on all three; the `x = Zero` base is
-  **live** and closes by `tt` (`leq_nat Zero z ⇝ True → IsTrue True → Top`, no
-  false
+  **live** and closes by `Proved` (`leq_nat Zero z ⇝ True → IsTrue True → Top`,
+  no false
   hypothesis); the `Suc/Suc/Suc → leq_nat m m' m''` arm lifts the IH; every
   remaining `Zero`/`Suc` mismatch arm discharges from a `False` hypothesis by
   `absurd` (`prelude.rs`, `Bottom`).
 - **`antisymLeq : (x y:Nat) → IsTrue (leq_nat x y) → IsTrue (leq_nat y x) →
-  Equal Nat x y`** — the load-bearing one; induction on both, `Zero/Zero → tt`
-  (goal `Equal Nat Zero Zero` — two occurrences of the **nullary** ctor `Zero`,
+  Equal Nat x y`** — the load-bearing one; induction on both,
+  `Zero/Zero → Proved` (goal `Equal Nat Zero Zero` — two occurrences of the
+  **nullary** ctor `Zero`,
   K7-collapses to `Top`, exactly like `ordered_empty`/`lookup_empty_is_none`; `Refl`
   fails on the collapsed goal), `Suc/Suc → cong Suc` of the IH (non-nullary
   head, neutral components → stays `Eq`-shaped), the two mixed arms `absurd`
@@ -123,7 +125,7 @@ site). Proof shapes, all `Nat`-structural, comparison-driven only through
   `False` premise.
 - **`totalLeq : (x y:Nat) → Or (IsTrue (leq_nat x y)) (IsTrue (leq_nat y x))`** —
   induction on both; `Zero` on either side gives the corresponding `Inl`/`Inr`
-  with `tt`; `Suc/Suc` lifts the IH's `Or` unchanged.
+  with `Proved`; `Suc/Suc` lifts the IH's `Or` unchanged.
 
 `antisymLeq` is needed only for the `Distinct`-discharge boundary (`54 §4`, ADR
 0010-gated, **out of scope**); `delete`/`union` invariant-preservation uses only
@@ -190,7 +192,7 @@ view from_list_preserves_ordered
 
 - **List-induction over `xs`** (the `from_list_acc` accumulator): base `Nil` is a
   **passthrough** to the accumulator's `Ordered` (the initial `Leaf`, i.e.
-  `ordered_empty → tt`); step inserts one entry, closed by the **landed**
+  `ordered_empty → Proved`); step inserts one entry, closed by the **landed**
   `preserves_ordered` (law 1) applied to the accumulator's `Ordered`. Nothing
   new about `insert` is proved — it is reused wholesale.
 - `delete_preserves_ordered` is then `from_list_preserves_ordered … (drop_key …

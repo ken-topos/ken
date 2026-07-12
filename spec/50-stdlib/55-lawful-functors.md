@@ -102,7 +102,7 @@ with `cong` (`catalog/packages/transport`, `53 §2`):
 ```
 list_right_unit (a : Type) (xs : List a) : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
-    Nil      => tt                                         -- base
+    Nil      => Proved                                     -- base
     Cons h t => cong (List a) (List a) (list_append a t (Nil a)) t
                      (Cons a h) (list_right_unit a t)       -- step: cong under Cons on the IH
   }
@@ -113,23 +113,23 @@ type: `list_assoc`, `list_left_unit` (definitional — `list_append Nil x`
 ι-reduces to `x`, so `Refl`), `list_right_unit`. The `Bool` laws are the finite
 analog — a full case-split, every branch closed directly.
 
-### 3.2 The `tt`-vs-`Refl` discrimination (a load-bearing K7 subtlety)
+### 3.2 The `Proved`-vs-`Refl` discrimination (a load-bearing K7 subtlety)
 
-A base/branch closes with **`tt`** or **`Refl`** depending on what its two
+A base/branch closes with **`Proved`** or **`Refl`** depending on what its two
 endpoints **reduce to** — this is not interchangeable:
 
-- **Constructor-headed endpoints → `Top` → `tt`.** `list_right_unit`'s `Nil`
+- **Constructor-headed endpoints → `Top` → `Proved`.** `list_right_unit`'s `Nil`
   base reduces both sides to `Nil a`; two occurrences of the **same
   constructor** observationally collapse to `Top` (`16 §8.1`, K7), so the goal
   is **no longer `Eq`-shaped** and `Refl` (which requires an `Eq`-shaped goal)
-  does not apply — it is `Top`-introduced by `tt`. Likewise every `Bool` branch
+  does not apply — it is `Top`-introduced by `Proved`. Likewise every `Bool` branch
   whose sides reduce to the same literal.
 - **Neutral endpoints → stuck `Eq` → `Refl`.** `list_assoc`'s `Nil` base reduces
   both sides to the **neutral** `list_append a ys zs` (stuck on the free
   `ys`/`zs`); the goal stays `Eq`-shaped, closed by `Refl`.
 
 This is the exact discrimination `lawful_classes.ken`'s `Bool` proofs document
-(`51 §6`): ask what the endpoints reduce to — a constructor head (`Top`, `tt`)
+(`51 §6`): ask what the endpoints reduce to — a constructor head (`Top`, `Proved`)
 or a neutral (`Eq`, `Refl`).
 
 ## 4. Law-field sorts — every law is `Ω`, no truncation (AC2)

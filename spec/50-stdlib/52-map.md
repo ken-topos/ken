@@ -278,7 +278,7 @@ one `Map` correctness law that stays deferred (§7c).
 
 **In this WP (Branch A) — the two *non-inductive* laws.** Only proofs that never
 induct clear both walls, discharging by the landed idiom (`51 §6`, `Ord Bool` /
-`DecEq Bool.sound`): `Ordered empty` (`Ordered Leaf = ⊤`, closed by `tt`) and
+`DecEq Bool.sound`): `Ordered empty` (`Ordered Leaf = ⊤`, closed by `Proved`) and
 `lookup k empty = None` (`lookup k Leaf = None`). Neither case-splits a
 `Node`/`Cons`, so neither needs hypothesis-narrowing or transport.
 
@@ -322,10 +322,11 @@ discipline: an opaque invariant makes the obligation undischargeable or
 circular). It models `37 §6`'s `is_sorted` exactly, lifted from lists to trees.
 
 **Preservation.** `Ordered empty` is immediate (`Ordered Leaf = ⊤`, closed by
-`tt` — **Branch A, built**; no induction). `Ordered m ⇒ Ordered (insert k v m)`
-is **Branch B, LANDED** (`map-verified-laws`, §7d — Gap A via the `trans`/`cong`
-route-around + Gap B): it inducts over `m : Tree` narrowing the `Ordered`
-hypothesis (Gap B) **and** aligns the stuck `leq k k'` at each `Node` to thread
+`Proved` — **Branch A, built**; no induction). `Ordered m ⇒ Ordered (insert k v
+m)` is **Branch B, LANDED** (`map-verified-laws`, §7d — Gap A via the
+`trans`/`cong` route-around + Gap B): it inducts over `m : Tree` narrowing the
+`Ordered` hypothesis (Gap B) **and** aligns the stuck `leq k k'` at each `Node`
+to thread
 key bounds (Gap A). It makes `lookup` provably correct — both capabilities
 landed (`preserves_ordered`).
 
@@ -443,8 +444,8 @@ Confirmed by Architect (structure/scope) + spec-leader + Steward.
 
 - `Ordered`'s / `all_keys`' **definitions** (§5.1) — the `Ω`-predicates
   themselves (`declare_def` recursions), not any proof about them.
-- `Ordered empty` (`Leaf` → `tt`) and `lookup k empty = None` (`Leaf` → `None`)
-  — the two shipped **law proofs**.
+- `Ordered empty` (`Leaf` → `Proved`) and `lookup k empty = None` (`Leaf` →
+  `None`) — the two shipped **law proofs**.
 
 **Deferred to a tracked follow-on** (each a *named* follow-on, never a silent
 gap — AC3):

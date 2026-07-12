@@ -45,7 +45,7 @@ ops), the `Ordered`/`allKeys` **definitions**, **one** non-inductive law proof
 non-nullary `Tree`/`List`, the non-indexed `elab.rs:535-553` gate,
 `dependent-match-nonnullary` `282856c`) + **Gap A** (transport over a stuck
 `leq`, the `J` former + `catalog/packages/transport/`, `surface-transport` `19955d8`).
-`Ordered empty = tt` — the **second** Branch-A proof (Disc 1) — is added +
+`Ordered empty = Proved` — the **second** Branch-A proof (Disc 1) — is added +
 verified by the elaboration commit `df81689`, so it lands **realized on `main`**
 at this merge, sibling of `lookup empty`. **All five inductive laws are now
 BUILT + realized on `main`** — law 4 first (`ab40d64`, `dec_48nnx5m14dfsy`),
@@ -294,7 +294,7 @@ territory).
   (`law-fields-real-proofs-not-postulates`), `30 §6`
 - given: the shipped Branch-A proof `lookup k empty = None` (`map.ken:161`,
   realized on `main` `a592f0b`) — plus its Branch-A sibling
-  `Ordered empty = tt`, added + verified by spec-author's elaboration `df81689`
+  `Ordered empty = Proved`, added + verified by spec-author's elaboration `df81689`
   and so **co-realized at this merge** (Disc 1 resolved by option (a)), and the
   `Ordered`/`allKeys` **definitions**. Each closes **without induction**
   (`lookup … Leaf ⇝ None` by refl; `Ordered Leaf ⇝ ⊤` by `tt`), citing **no**

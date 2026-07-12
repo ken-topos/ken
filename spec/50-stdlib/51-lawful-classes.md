@@ -244,18 +244,20 @@ case-split — the laws whose per-branch obligation stays a **live `Eq`** (`Ord`
 The **concrete-equality-conclusion** laws — `Ord`'s **`antisym`** and `DecEq`'s
 **`sound`**/**`complete`**, which conclude or hypothesize the kernel `Eq a x y`
 — have per-branch obligations that reduce to a concrete **`Top`** (the
-trivially-equal case → `Top`-**introduction** with `tt`) or **`Bottom`** (the
+trivially-equal case → `Top`-**introduction** with kernel-internal `tt`) or
+**`Bottom`** (the
 contradictory-hypothesis case → `Bottom`-**elimination** / ex-falso with
 `absurd`). Closing them needs **two** kernel capabilities, not one:
 
 1. **K5** — the **observational-fragment completion** (`../10-kernel/16 §1.4`;
-   `tt`-intro / `absurd`-elim, the textbook unit/empty pair, sound because
-   `Bottom` is *empty*, distinct from the K4-forbidden singleton-elim-*out*) —
-   **landed** (`1c84a30`). K5 supplies the `tt` / `absurd` *terms*.
+   kernel-internal `tt`-intro / `absurd`-elim, the textbook unit/empty pair,
+   sound because `Bottom` is *empty*, distinct from the K4-forbidden
+   singleton-elim-*out*) —
+   **landed** (`1c84a30`). K5 supplies the internal `tt` / `absurd` *terms*.
 2. **K7** — the `eq_at_inductive` **operand-`whnf`** completeness fix
    (`../10-kernel/16 §8.1`: whnf the two `Eq` operands before the
    constructor-head compare, mirroring `eq_at_type`). K5's
-   `tt` / `absurd` fire only once the goal / hypothesis `Eq` has actually
+   internal `tt` / `absurd` fire only once the goal / hypothesis `Eq` has actually
    **reduced** to `Top` / `Bottom`, and these three laws wrap the carrier
    through the instance's **own operation** (`bool_leq` / `bool_eq`), so their
    operands are **redexes**, not bare constructors: `antisym`/`sound`'s
@@ -270,7 +272,7 @@ a total order; `sound`/`complete` for decidable equality) needed the **K5 + K7**
 kernel capability (K5 `1c84a30`; K7's operand-`whnf` fix `4ae2baf`, `16 §8.1`) —
 both now landed, and the three laws are **real, kernel-checked, zero-delta
 proofs on main** (ES4-lawproofs-remainder `9a82745`: `antisym` closes via
-`tt`/`absurd`, `sound`/`complete` via `absurd`; **no `Axiom` remains** in either
+`Proved`/`absurd`, `sound`/`complete` via `absurd`; **no `Axiom` remains** in either
 instance). **None needed K6** (no swapped-`Eq` hypothesis-reuse across a stuck
 congruence); K4 alone realized only the live-`Eq`-conclusion fragment, and the
 ES4-lawproofs build surfaced the K7 gap by pushing the real proofs to a wall
@@ -285,9 +287,10 @@ customerless.** Proving `Eq`'s **symmetry**/**transitivity** (from `Eq a x y`
 derive `Eq a y x`, and compose) was first thought to need a **`conv_struct`
 `Eq`-congruence** arm — call it **K6** — to reuse a hypothesis across a swap. It
 does **not**: a **full case-split** on the carrier (for `Bool`, `sym` splits
-`(x, y)`, `trans` splits `(x, y, z)`) closes every branch concretely — `tt` on a
-reflexive-conclusion branch, `absurd` on a branch whose hypothesis reduces to
-`Bottom` (`bool_eq` of mixed literals ⇝ `False` via K7 before the head-check) —
+`(x, y)`, `trans` splits `(x, y, z)`) closes every branch concretely —
+`Proved` on a reflexive-conclusion branch, `absurd` on a branch whose hypothesis
+reduces to `Bottom` (`bool_eq` of mixed literals ⇝ `False` via K7 before the
+head-check) —
 so **no hypothesis is ever reused across a swap** and the K6 congruence is
 **never exercised** (the `Eq Bool` `sym`/`trans` case-split WP; Architect-ruled
 `evt_78ntsfnyjdtq6`). These are **real, kernel-checked, zero-delta proofs**, no

@@ -288,8 +288,8 @@ prototype's stubbed sums and missing exhaustiveness.
   fn km_proof_motive_positive (b : Bool)
     : Equal Bool (km_scrutinee b) (km_scrutinee b) =
     match km_scrutinee b {
-      True  |-> tt ;
-      False |-> tt
+      True  |-> Proved ;
+      False |-> Proved
     }
   ```
 
@@ -301,7 +301,7 @@ prototype's stubbed sums and missing exhaustiveness.
       Equal Bool (km_scrutinee b) True =
     match km_scrutinee b {
       True  |-> \p. p ;
-      False |-> \p. tt
+      False |-> \p. Proved
     }
   ```
 
@@ -314,7 +314,7 @@ prototype's stubbed sums and missing exhaustiveness.
     `KernelRejected { TypeMismatch { expected: Type 0, found: Ω0 } }`, not a
     generic `is_err()`.
   - the negative case **rejects** after branch specialization: in the `False`
-    branch, the codomain is `Equal Bool False True` (`Bottom`), while `tt`
+    branch, the codomain is `Equal Bool False True` (`Bottom`), while `Proved`
     proves `Top`. This must remain a wrong-specialized-branch failure, not an
     accepted proof by proof irrelevance and not a constant motive that ignores
     `km_scrutinee b`.

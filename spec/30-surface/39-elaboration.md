@@ -115,7 +115,7 @@ speculation:
   plus Architect because `14 §3` already admits `Ω`-codomain motives.
 - **`Equal` lowering under branch refinement.** `Equal` is transparent to `Eq`;
   branch specialization substitutes the constructor form into the equality
-  operands before `Refl`, `tt`, `J`, `absurd`, or library transport is checked.
+  operands before `Refl`, `Proved`, `J`, `absurd`, or library transport is checked.
   A wrong-specialized branch must still reject. An acceptance of such a branch
   is a soundness issue, not an ergonomic diagnostic bug.
 - **Kernel `Term::Elim` checking.** The kernel checks the motive against

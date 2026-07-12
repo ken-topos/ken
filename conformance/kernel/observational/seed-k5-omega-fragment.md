@@ -75,8 +75,8 @@ posture, and every verdict** are **normative**.
 - spec: `16 §1.4` (Top-Intro), `16 §2.2` (`Eq` same-nullary-ctor ⇝ `Top`),
   `16 §1.2` (Ω-PI)
 - given: the goal `Eq Bool True True`, which whnf's to **`Top`** (`§2.2`,
-  same-nullary-constructor), discharged by the prelude constant `tt : Top`
-- expect: **accepts** — `tt : Top` is the canonical proof of the
+  same-nullary-constructor), discharged by the prelude constant `Proved : Top`
+- expect: **accepts** — `Proved : Top` is the canonical proof of the
   reduced-to-`Top` goal. **Verdict flip (anti-green-vs-green):** on the
   **pre-K5** kernel the same goal is **rejected/unprovable** — no `tt` symbol
   exists, so the `Top` reduct has **no canonical inhabitant** and the proof term
@@ -149,16 +149,16 @@ posture, and every verdict** are **normative**.
 - spec: `16 §1.4` (Bottom-Elim premise: `Gamma |- p : Bottom`)
 - given: `absurd C p` with the **motive held fixed** at `C : Omega_l`, the proof
   slot in two forms: (a) `p : Bottom` (a genuine `Bottom`-typed proof — e.g. a
-  hypothesis variable of type `Bottom`); (b) `p := tt : Top` (a **well-typed
+  hypothesis variable of type `Bottom`); (b) `p := Proved : Top` (a **well-typed
   term of the wrong type** — `Top`, not `Bottom`)
 - expect: **the verdict splits on the proof's type.** (a) **accepts**; (b)
   **rejected** — the proof slot is `check`ed at `Bottom` (`check(p, Bottom)`),
-  and `tt : Top` fails it (`Top ≢ Bottom`). Verdict flips on the proof's type,
+  and `Proved : Top` fails it (`Top ≢ Bottom`). Verdict flips on the proof's type,
   motive held fixed
 - why: (soundness ★) the **consistency-critical premise**. `absurd` is sound
   **only because** its proof is genuinely `Bottom`-typed (empty), so the
   eliminator never fires. A kernel admitting a **non-`Bottom`** proof —
-  `tt : Top` is a valid, *inhabited*-type term — would let `absurd C tt`
+  `Proved : Top` is a valid, *inhabited*-type term — would let `absurd C Proved`
   manufacture a proof of an **arbitrary** `C : Omega` from an **inhabited**
   hypothesis (prove `Eq Bool True False`, …) → **inconsistency**. The
   `check(p, Bottom)` is exactly what makes ex-falso vacuous. **Disconfirming
