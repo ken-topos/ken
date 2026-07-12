@@ -29,10 +29,10 @@ fn entry_elaborates_and_registers_the_free_laws() {
     for name in [
         "add",
         "mul",
-        "add_assoc",
-        "add_comm",
-        "mul_assoc",
-        "mul_comm",
+        "add::assoc",
+        "add::comm",
+        "mul::assoc",
+        "mul::comm",
         "mul_add_distrib_l",
         "mul_add_distrib_r",
     ] {

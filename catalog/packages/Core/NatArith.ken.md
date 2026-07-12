@@ -8,9 +8,9 @@ proof terms that establish them.
 ## Operations and laws
 
 The two computational names are introduced first because they occur in every
-law's type. The checked declarations remain dependency-first: each proof that
-needs induction places its recursive helper immediately before the thin lemma
-wrapper it establishes.
+law's type. The checked declarations remain dependency-first: each attached
+proof follows the operation whose public theory it belongs to and uses that
+operation's `S::name` namespace for recursive and cross-law references.
 
 ```ken
 fn add (a : Nat) (b : Nat) : Nat =
@@ -25,26 +25,26 @@ fn mul (a : Nat) (b : Nat) : Nat =
     Suc b2 => add (mul a b2) a
   }
 
-lemma add_zero_r (a : Nat) : Equal Nat (add a Zero) a = Refl
+proof zero_r for add (a : Nat) : Equal Nat (add a Zero) a = Refl
 
-lemma add_zero_l (a : Nat) : Equal Nat (add Zero a) a =
+proof zero_l for add (a : Nat) : Equal Nat (add Zero a) a =
   match a {
     Zero => Proved ;
-    Suc a2 => cong Nat Nat (add Zero a2) a2 Suc (add_zero_l a2)
+    Suc a2 => cong Nat Nat (add Zero a2) a2 Suc (add::zero_l a2)
   }
 
-lemma add_suc_r (a : Nat) (b : Nat)
+proof suc_r for add (a : Nat) (b : Nat)
   : Equal Nat (add a (Suc b)) (Suc (add a b)) = Refl
 
-lemma add_suc_l (a : Nat) (b : Nat)
+proof suc_l for add (a : Nat) (b : Nat)
   : Equal Nat (add (Suc a) b) (Suc (add a b)) =
   match b {
     Zero => Refl ;
     Suc b2 =>
-      cong Nat Nat (add (Suc a) b2) (Suc (add a b2)) Suc (add_suc_l a b2)
+      cong Nat Nat (add (Suc a) b2) (Suc (add a b2)) Suc (add::suc_l a b2)
   }
 
-lemma add_assoc (a : Nat) (b : Nat) (c : Nat)
+proof assoc for add (a : Nat) (b : Nat) (c : Nat)
   : Equal Nat (add a (add b c)) (add (add a b) c) =
   match c {
     Zero => Refl ;
@@ -53,36 +53,36 @@ lemma add_assoc (a : Nat) (b : Nat) (c : Nat)
         (add a (add b c2))
         (add (add a b) c2)
         Suc
-        (add_assoc a b c2)
+        (add::assoc a b c2)
   }
 
-lemma add_comm (a : Nat) (b : Nat) : Equal Nat (add a b) (add b a) =
+proof comm for add (a : Nat) (b : Nat) : Equal Nat (add a b) (add b a) =
   match b {
-    Zero => sym Nat (add Zero a) a (add_zero_l a) ;
+    Zero => sym Nat (add Zero a) a (add::zero_l a) ;
     Suc b2 =>
       trans Nat
         (add a (Suc b2))
         (Suc (add b2 a))
         (add (Suc b2) a)
-        (cong Nat Nat (add a b2) (add b2 a) Suc (add_comm a b2))
+        (cong Nat Nat (add a b2) (add b2 a) Suc (add::comm a b2))
         (sym Nat
           (add (Suc b2) a)
           (Suc (add b2 a))
-          (add_suc_l b2 a))
+          (add::suc_l b2 a))
   }
 
-lemma mul_zero_r (a : Nat) : Equal Nat (mul a Zero) Zero = Proved
+proof zero_r for mul (a : Nat) : Equal Nat (mul a Zero) Zero = Proved
 
-lemma mul_zero_l (a : Nat) : Equal Nat (mul Zero a) Zero =
+proof zero_l for mul (a : Nat) : Equal Nat (mul Zero a) Zero =
   match a {
     Zero => Proved ;
-    Suc a2 => mul_zero_l a2
+    Suc a2 => mul::zero_l a2
   }
 
-lemma mul_suc_r (a : Nat) (b : Nat)
+proof suc_r for mul (a : Nat) (b : Nat)
   : Equal Nat (mul a (Suc b)) (add (mul a b) a) = Refl
 
-lemma mul_suc_l (a : Nat) (b : Nat)
+proof suc_l for mul (a : Nat) (b : Nat)
   : Equal Nat (mul (Suc a) b) (add (mul a b) b) =
   match b {
     Zero => Proved ;
@@ -99,7 +99,7 @@ lemma mul_suc_l (a : Nat) (b : Nat)
             (mul (Suc a) b2)
             (add (mul a b2) b2)
             (λx. add x a)
-            (mul_suc_l a b2))
+            (mul::suc_l a b2))
           (trans Nat
             (add (add (mul a b2) b2) a)
             (add (mul a b2) (add b2 a))
@@ -107,7 +107,7 @@ lemma mul_suc_l (a : Nat) (b : Nat)
             (sym Nat
               (add (mul a b2) (add b2 a))
               (add (add (mul a b2) b2) a)
-              (add_assoc (mul a b2) b2 a))
+              (add::assoc (mul a b2) b2 a))
             (trans Nat
               (add (mul a b2) (add b2 a))
               (add (mul a b2) (add a b2))
@@ -116,13 +116,13 @@ lemma mul_suc_l (a : Nat) (b : Nat)
                 (add b2 a)
                 (add a b2)
                 (λx. add (mul a b2) x)
-                (add_comm b2 a))
-              (add_assoc (mul a b2) a b2))))
+                (add::comm b2 a))
+              (add::assoc (mul a b2) a b2))))
   }
 
-lemma mul_one_r (a : Nat) : Equal Nat (mul a (Suc Zero)) a = add_zero_l a
+proof one_r for mul (a : Nat) : Equal Nat (mul a (Suc Zero)) a = add::zero_l a
 
-lemma mul_one_l (a : Nat) : Equal Nat (mul (Suc Zero) a) a =
+proof one_l for mul (a : Nat) : Equal Nat (mul (Suc Zero) a) a =
   match a {
     Zero => Proved ;
     Suc a2 =>
@@ -134,13 +134,13 @@ lemma mul_one_l (a : Nat) : Equal Nat (mul (Suc Zero) a) a =
           (mul (Suc Zero) a2)
           a2
           (λx. add x (Suc Zero))
-          (mul_one_l a2))
-        (add_suc_r a2 Zero)
+          (mul::one_l a2))
+        (add::suc_r a2 Zero)
   }
 
-lemma mul_comm (a : Nat) (b : Nat) : Equal Nat (mul a b) (mul b a) =
+proof comm for mul (a : Nat) (b : Nat) : Equal Nat (mul a b) (mul b a) =
   match b {
-    Zero => sym Nat (mul Zero a) Zero (mul_zero_l a) ;
+    Zero => sym Nat (mul Zero a) Zero (mul::zero_l a) ;
     Suc b2 =>
       trans Nat
         (mul a (Suc b2))
@@ -150,11 +150,11 @@ lemma mul_comm (a : Nat) (b : Nat) : Equal Nat (mul a b) (mul b a) =
           (mul a b2)
           (mul b2 a)
           (λx. add x a)
-          (mul_comm a b2))
+          (mul::comm a b2))
         (sym Nat
           (mul (Suc b2) a)
           (add (mul b2 a) a)
-          (mul_suc_l b2 a))
+          (mul::suc_l b2 a))
   }
 
 lemma mul_add_distrib_r (a : Nat) (b : Nat) (c : Nat)
@@ -174,7 +174,7 @@ lemma mul_add_distrib_r (a : Nat) (b : Nat) (c : Nat)
         (sym Nat
           (add (mul a b) (add (mul a c2) a))
           (add (add (mul a b) (mul a c2)) a)
-          (add_assoc (mul a b) (mul a c2) a))
+          (add::assoc (mul a b) (mul a c2) a))
   }
 
 lemma mul_add_distrib_l (a : Nat) (b : Nat) (c : Nat)
@@ -183,7 +183,7 @@ lemma mul_add_distrib_l (a : Nat) (b : Nat) (c : Nat)
     (mul (add a b) c)
     (mul c (add a b))
     (add (mul a c) (mul b c))
-    (mul_comm (add a b) c)
+    (mul::comm (add a b) c)
     (trans Nat
       (mul c (add a b))
       (add (mul c a) (mul c b))
@@ -197,14 +197,14 @@ lemma mul_add_distrib_l (a : Nat) (b : Nat) (c : Nat)
           (mul c a)
           (mul a c)
           (λx. add x (mul c b))
-          (mul_comm c a))
+          (mul::comm c a))
         (cong Nat Nat
           (mul c b)
           (mul b c)
           (λx. add (mul a c) x)
-          (mul_comm c b))))
+          (mul::comm c b))))
 
-lemma mul_assoc (a : Nat) (b : Nat) (c : Nat)
+proof assoc for mul (a : Nat) (b : Nat) (c : Nat)
   : Equal Nat (mul a (mul b c)) (mul (mul a b) c) =
   match c {
     Zero => Proved ;
@@ -218,7 +218,7 @@ lemma mul_assoc (a : Nat) (b : Nat) (c : Nat)
           (mul a (mul b c2))
           (mul (mul a b) c2)
           (λx. add x (mul a b))
-          (mul_assoc a b c2))
+          (mul::assoc a b c2))
   }
 
 ```
@@ -226,9 +226,8 @@ lemma mul_assoc (a : Nat) (b : Nat) (c : Nat)
 ## How the document is layered
 
 `add` and `mul` recurse on their second argument and remain the only
-value-producing definitions. Each `_ind` helper contains exactly the structural
-recursion needed by its headline lemma; the public theorem itself stays
-non-recursive and keeps its original public name.
+value-producing definitions. Their checked laws carry exactly the structural
+recursion they need and are discoverable as members of `add::…` or `mul::…`.
 
 ## Using it
 
@@ -241,6 +240,6 @@ const mul_two_three : Nat = mul (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
 
 ## Trust derivation
 
-The operations, headline lemmas, and recursive helpers are ordinary checked
+The operations and attached proofs are ordinary checked
 definitions. Structural recursion is on `Nat`; no trusted declaration or
 numeric instance is introduced.
