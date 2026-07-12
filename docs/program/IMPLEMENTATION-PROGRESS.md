@@ -14,6 +14,32 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### match-arm separator `⇒`→`↦` (ASCII `|->`) — KICKING (operator go) — 2026-07-12
+>
+> **Operator-decided, Architect-ruled (`evt_5m0aq3ddrxb7s`), operator said "go".**
+> Match-arm separator changes `⇒`(`=>`) → **`↦`** (ASCII **`|->`**); the
+> function/implication arrow `→`(`->`) is DELIBERATELY unchanged (same `Π` former,
+> propositions-as-types). **Mechanism (settled):** lexer 2-char lookahead on `|`
+> → `MapsTo` only on exact `|->` (maximal-munch safe — `|->` can't occur in a valid
+> program, 0 grep hits), `↦` trivial codepoint token, rename `Token::FatArrow`→
+> `MapsTo` (AST/parse arm unchanged); `format.rs` add `|->`→`↦` arm BEFORE the
+> `->`→`→` arm (ordering load-bearing), drop `=>`→`⇒` arm at removal;
+> migrate-then-remove, NO deprecation window. **Trust: ZERO** (pure surface, same
+> AST/elaboration). **Sizing (fence-aware re-count, 17× the `~79` est): ~1,343
+> match-arm sites** — catalog ken-fences ~1,076 `⇒` + 123 `=>` (~1,200, dominant),
+> test `.rs` ken-snippets ~104 `⇒`, conformance ~34, spec fences ~4, prelude ~2;
+> all mechanical/scriptable except lexer/parser/formatter. **Two lanes + a gated
+> removal:**
+> - **`match-arm-glyph-lang` (Language)** — PR1: additive lexer/parser/formatter
+>   (accept `↦`/`|->` AND `⇒`/`=>`) + fence-aware scripted sweep of
+>   catalog/prelude/test Ken-source sites. **KICKING now.** PR2 (removal of
+>   `⇒`/`=>`) is Steward-gated on PR1 + the spec lane.
+> - **`match-arm-glyph-spec` (Spec enclave: spec-author grammar + CV conformance
+>   fixtures)** — starts AFTER lang-PR1 merges (needs additive lexer). ~38 sites.
+> - **Steward gates** lang-PR2 (removal) on lang-PR1 + spec-lane merged →
+>   single honest surface. Frames: `docs/program/wp/match-arm-glyph-lang.md`,
+>   `…-spec.md`. Task #24.
+>
 > ### proof-attachment membership convention — ADOPTED (Architect + operator) — 2026-07-12
 >
 > **Design ruled + operator-concurred.** `proof name for S` encodes **MEMBERSHIP**
