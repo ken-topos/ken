@@ -227,8 +227,11 @@ claim with no conformance case is a claim no one can rely on
   the same fixture to the specific `ImportCycle` diagnostic naming
   `A → B → A`. N4 adds source-world anonymous `program`/`package` boundaries,
   explicit `admits`, the direct-use-versus-transitive-coherence discriminator,
-  self-admission, and defining-package provenance. Compiled manifests,
-  re-export-carried instance surfaces, and multi-root precedence remain out.
+  self-admission, defining-package provenance, intra-package overlap, and
+  MRES-4f's source `ImportCycle` construction. A both-package collision oracle
+  is explicitly red until compiled manifests meet at the package-manager
+  boundary; re-export-carried instance surfaces and multi-root precedence
+  remain out.
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
 - `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware
