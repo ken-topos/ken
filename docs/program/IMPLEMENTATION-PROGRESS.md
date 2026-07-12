@@ -31,8 +31,11 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   `total_leq_nat` stayed `fn`. Coupled test-assertion migration (4th file,
 >   names-only) per scope-amendment `evt_4gg2d89k32kde`. Architect-terminal
 >   `dec_1wjhfngfpy4tn` APPROVE; QA 24/24; honesty gate clean @ `c7ab5e5f` (zero
->   trusted-base growth, fidelity = rename+swap only). **RETROS pending** — chase
->   Foundation ring. **Forward note (catalog-wide pass, operator to decide):**
+>   trusted-base growth, fidelity = rename+swap only). **RETROS IN → WP CLOSED**
+>   (impl `evt_4n157wf9k699n`, QA `evt_7rxxs36eh3zsv`, coord `evt_2y09a3g7r2bgj`;
+>   common carry: exported-name migrations need an attributed **whole-harness
+>   consumer inventory** alongside producer fidelity). **Forward note (catalog-wide
+>   pass, operator to decide):**
 >   whether pedagogical-showcase decls (`sub::self_is_zero_wrong`) attach vs stay
 >   `lemma` — Architect leans "non-API showcases stay `lemma`."
 > - **Track 2 — Spec enclave** (companion): normative spec convention clause
