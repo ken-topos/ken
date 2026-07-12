@@ -85,6 +85,24 @@ proof antisym for leq_nat
         Suc y2 ⇒ λp.λq. cong Nat Nat x2 y2 Suc (leq_nat::antisym x2 y2 p q)
       }
   }
+```
+
+**Why `total_leq_nat` is a `fn`, not a `proof`.** `Or : Omega → Omega →
+Type`. Its two alternatives are propositions, but the disjoint sum is data:
+case-splitting on whether the left or right alternative holds must preserve
+which branch was chosen. An `Omega`-valued disjunction would make `Inl` and
+`Inr` proof-irrelevantly equal and erase that choice; a proof-relevant,
+two-constructor inductive therefore cannot live at `Omega`.
+
+`total_leq_nat` computes whether `leq_nat x y` or `leq_nat y x` holds and
+returns the corresponding tag. It is therefore a program and is declared as
+a `fn`. In contrast, `leq_nat::refl`, `leq_nat::trans`, and
+`leq_nat::antisym` conclude `Equal` or `IsTrue` propositions at `Omega`:
+proof-irrelevant facts, so they are declared as `proof`. The vocabulary
+follows the `Omega`/`Type` boundary: `lemma` and `proof` establish
+irrelevant propositions; `const` and `fn` compute data.
+
+```ken
 
 fn total_leq_nat (x : Nat) (y : Nat)
   : Or (Equal Bool (leq_nat x y) True) (Equal Bool (leq_nat y x) True) =
@@ -272,7 +290,7 @@ rules remain visible beside the laws that use them.
 
    | Task | Section |
    |---|---|
-  | See the shape | [Order and its laws](#2-order-and-its-laws) |
+   | See the shape | [Order and its laws](#2-order-and-its-laws) |
    | Use it | [Using it](#3-using-it) |
    | Check the computation facts | [Laws  proofs](#4-laws--proofs) |
    | Why `total` needed a bridge, `refl`/`trans`/`antisym` didn't | [Design notes](#5-design-notes) |
