@@ -14,38 +14,35 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-12 ~19:2x — LIVE STATE (read this first)
+> ### ⏭ 2026-07-12 ~19:4x — LIVE STATE (read this first) · `origin/main @ 5674cb88`
 >
-> **`origin/main @ 9f12f3b5`.** **N2 CLOSED** (loader live @ 575f43d2; pending
-> Language N2 retro — chase). ADR 0014 fully settled. ADR 0015 published
-> (`3a5cd323`). WP reconciliation published (`9f12f3b5`: N3 drops `hiding`, N5
-> naming note).
+> **All merged this burst:** **N2 CLOSED** (in-repo loader LIVE — Lane A
+> `fbc4d3e1` + Lane B `575f43d2`, CI green). **ADR 0015 DONE in spec/conformance**
+> — `use M` open-import removed (ADR `3a5cd323`, spec/conf `5674cb88`, sweep
+> EMPTY). **MRES-6/MRES-10 reconciled** (`86e0ef34`): `hiding` retired,
+> prelude-unshadowable under operator opt-(A). ADR 0014 fully settled.
 >
-> **In flight (3):**
-> 1. **✅ ADR 0015 spec lane — Architect-APPROVED + PUBLISHING.** Candidate
->    `4f9ac778` (§33 + conformance seed, +29/−54); **removal-precondition sweep
->    EMPTY**; enclave gates + Architect-terminal APPROVE. Honesty gate PASSED
->    (spec/+conformance only; byte-identical; no trust/WP-token). Cherry-picked
->    onto current main (86e0ef34; MRES-6 fold moved main, disjoint ADR file →
->    trees byte-identical). Publishing doc-only. `use M` gone from the surface;
->    `KwUse`/parser retirement = explicitly-deferred build fast-follow.
-> 2. **✅ Prelude carve-out RULED — operator chose (A)** (`evt_61ymxdwpehdr2`).
->    Prelude names = primitive floor, **not shadowable**; local-vs-prelude clash =
->    clash error resolved by **renaming your own def**; **no opt-out grammar** →
->    `hiding` FULLY moot. **✅ Architect folded MRES-6/MRES-10** (`ed491922`) +
->    **Steward PUBLISHING doc-only now** (candidate `a71872d2`; ADR retires
->    `hiding`, keeps select+rename, pins prelude-unshadowable under A). **N3 frame
->    will pin: prelude names unshadowable, clash→rename-local, no prelude-exclusion
->    form.** N5 `pub use` naming agreed.
->    ⚠ NOTE: a `git reset --hard origin/main` on steward/work discarded 3 local
->    tracker commits; recovered from reflog `6aa0e2b3`. Don't reset steward/work
->    while it holds unpushed tracker state ahead of main.
-> 3. **Language N2 retro** — chase to close N2 fully.
+> **PENDING (event-driven):**
+> 1. **Language N2 retro** — nudged (`evt_js2ddeaszhx`); on "retros in" mark N2
+>    fully closed (task #33).
+> 2. **NEW WP to queue — ADR 0015 build fast-follow:** retire the `use` keyword
+>    from grammar/lexer (`KwUse`/parser) — a small **Language** build WP
+>    (explicitly deferred by the 0015 spec WP). Frame + kick after N2 retro.
 >
-> **Next frontier after ADR 0015 + N2 retro:** **N3** (import-exclusion MRES-6,
-> loader now live) — reduced scope (§3.3 clash-reversal + rename, no `hiding`).
-> Frame it, Handoff-Gate enclave, kick. Then N4 (program/admits), N5 (re-export).
-> Watchdog `a8bc0c76`.
+> **NEXT FRONTIER — N3 (import-exclusion, MRES-6) — now FRAMABLE** (both prereqs
+> landed: ADR 0015 spec removal + MRES-6 fold). **Reduced scope (operator opt-A,
+> Architect-confirmed):** §3.3 local-vs-import clash reversal (→ clash error) +
+> per-name **rename** `import M (foo as bar)`; positive de-selection is the
+> default exclusion; **NO `hiding`**; **prelude names unshadowable** (local-vs-
+> prelude clash → rename the local, no prelude-exclusion form); ordinary lexical
+> binder shadowing untouched. Frame `docs/program/wp/n3-import-exclusion.md` →
+> publish doc-only → Handoff-Gate enclave → kick N3 Lane A (enclave spec+golden) →
+> Lane B (Language build). Then N4 (program/admits), N5 (re-export, pick non-`use`
+> spelling). Watchdog `7102f5d7` (refresh on resume).
+>
+> ⚠ LESSON: `git reset --hard origin/main` on steward/work discards local tracker
+> commits ahead of main — recovered once via reflog `6aa0e2b3`. Before resetting
+> steward/work, confirm its tracker commits are already on main (bundled).
 >
 > ### 🆕 2026-07-12 ~19:0x — ADR 0015 (remove `use M` open-import) — operator-directed
 >
