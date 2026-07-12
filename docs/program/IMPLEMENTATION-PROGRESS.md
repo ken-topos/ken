@@ -14,6 +14,24 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### 🆕 2026-07-12 ~19:0x — ADR 0015 (remove `use M` open-import) — operator-directed
+>
+> Architect `evt_vz4v4n7vd4ry`: operator ruled **remove the wildcard open-import
+> `use M`** from the normative surface; keep `import M` / `import M as N` /
+> `import M (…)` (provenance-preserving). Subsumed by selective import; reversible
+> direction (add later = widening; remove later = breaking). Zero `use M` in-tree
+> (Architect swept). Two asks: (1) publish ADR `architect/work 2eddea2c` (new file
+> `docs/adr/0015-remove-open-import-use.md`); (2) route spec+conformance edit to
+> enclave. **Sequencing:** orthogonal to N2, but couples with **N3** on §33 §3.3
+> (N3 reverses shadowing; 0015 removes "Open ambiguity"). Enclave idle NOW + N3
+> blocked on N2 Lane B → run 0015 spec-lane now (fills enclave window, clears §3.3
+> before N3). Enclave scope: §3.2 drop `use M` bullet (3 forms); §3.3 remove
+> "Open ambiguity" rule + simplify resolution/failure lists; conformance retire
+> `use-open-ambiguity` + re-sweep catalog (authoritative removal-precondition
+> sweep). Grammar/lexer/`use`-keyword retirement = build fast-follow (not this
+> doc round). **PLAN:** publish ADR doc-only → frame `docs/program/wp/
+> adr0015-remove-use-open.md` → Handoff-Gate enclave → kick 0015 spec lane.
+>
 > ### ⏭ 2026-07-12 ~18:0x — ADR 0014 FULLY SETTLED; N1 CLOSED; N2 FRAMED (pending 1 Architect scope-confirm)
 >
 > **State.** `origin/main @ 9750726e` — ADR 0014 has **no open forks** (PKG-1..4
@@ -54,12 +72,25 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > clean ✓; zero crates/kernel/prelude/Cargo/lock ✓; no WP-tokens ✓ (the 2
 > `trusted_base()`/`Σ` grep hits are benign conformance-README prose).
 >
-> **⏭ PUBLISHING Lane A doc-only now** (tracker bundled). On merge: verify
-> origin/main → **Handoff-Gate-compact the Language ring** (language-leader
-> language-implementer language-qa) → kick **N2 Lane B** (loader build on
-> `ElabEnv`; AC = cross-file resolves + cycle rejected w/ specific `ImportCycle`
-> variant + literal `cargo build/test --workspace --locked` green). `main @
-> 855a0983`. Watchdog `c0415693`.
+> **✅ N2 Lane A MERGED → `origin/main fbc4d3e1` (PR #568, doc-only).** Spec §3.2
+> loader semantics (ImportCycle present) + conformance golden landed;
+> deterministic-entry fold in. Language Lane B now unblocked.
+>
+> **✅ N2 Lane B KICKED — Language ring working (`evt_1kjxe1penzzt5`).** All three
+> Handoff-Gate-compacted (leader/implementer/qa all "• Context compacted"
+> verified; N1 fully retro-closed) → kickoff posted + roused → all three
+> "Working." Lane B = loader build on `ElabEnv` per frame (cross-file resolves,
+> lazy import-edge discovery, specific `ImportCycle` variant `A → B → A`, per-run
+> cache, plural-ready root API). **AC emphasizes the literal `cargo build/test
+> --workspace --locked` oracle** (their own N1 carry: wrapper-green ≠ CI-green).
+>
+> **⏭ AWAITING: Language hands the N2 Lane B SHA** (QA + Architect-terminal gates
+> in). On arrival: honesty-gate (scope = `crates/ken-elaborator` + tests only;
+> zero kernel/prelude/Cargo/lock/trust delta; assert the specific error variant)
+> → publisher-path **NON-doc** (`--target wp/<branch>`, NEVER main; CI polled
+> ~216s, run bg — publisher stops on CI-red). On merge: N2 CLOSED pending retro →
+> **N3** (import-exclusion, MRES-6) becomes the frontier. `main @ fbc4d3e1`.
+> Watchdog `dba0c569`.
 >
 > ### ✅ 4b ISSUE RESOLVED — PACKAGE ABSTRACTION (operator ruled C) — 2026-07-12 ~16:2x
 >
