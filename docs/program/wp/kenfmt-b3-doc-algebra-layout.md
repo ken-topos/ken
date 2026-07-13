@@ -13,7 +13,7 @@ Base: `origin/main` (re-verify cites at pickup).
 
 Build the **layout engine**: a Wadler/Leijen document algebra + one printer per
 grammar production over B1's typed AST, producing the **single canonical
-layout** — line-breaking, indentation, the **88-column** display-width fill —
+layout** — line-breaking, indentation, the **96-column** display-width fill —
 that WP S `§1d` already mandates. B3 consumes B1's lossless token/trivia stream +
 comment attachments and B2's canonical token spellings, and emits final
 canonical text. B3 is the **build to `§1d`**, not a new design: every layout axis
@@ -23,13 +23,13 @@ is already normatively ruled there; B3 implements it.
 
 - **Algebra = Wadler/Leijen `Doc`** (`text` / soft `line` / hard `line` /
   `group` / `nest` / `flatten`), **display-width** measurement (canonical glyphs
-  `λ`/`→`/`Ω` count at terminal width — `§1d`'s "88 Unicode display columns"),
+  `λ`/`→`/`Ω` count at terminal width — `§1d`'s "96 Unicode display columns"),
   **one printer per grammar production** over `FormattableSource`'s typed AST.
   **NOT a Prettier-style fill model** — fill *packs* a sequence maximally per
   line, exactly what Ken forbids (one `match` arm per line, always).
 - **`group` is a BINARY, deterministic fit decision** — flat iff the flattened
   group fits the remaining width, else broken; a **pure function of `(subtree,
-  current column, 88)`** → exactly one layout per input. This is the `§1d`
+  current column, 96)`** → exactly one layout per input. This is the `§1d`
   "one deterministic canonical form" mandate; fill's packing latitude is the
   non-determinism `§1d` prohibits. Do **not** introduce any width-tie or packing
   choice.
@@ -62,7 +62,7 @@ is already normatively ruled there; B3 implements it.
     **never crossing a syntactic boundary**.
   - **Leading** (own line above) → a hard-`line`-separated line at the node's
     indent; a doc comment binds to the following declaration.
-  - **Trailing / EOL** → inline **iff** `code + 2 spaces + comment ≤ 88`, else
+  - **Trailing / EOL** → inline **iff** `code + 2 spaces + comment ≤ 96`, else
     moved to the line immediately above (a determinism axis — oracle **both**
     sides).
   - **Invariant (state once):** any `group` carrying an attached interstitial or
@@ -100,7 +100,7 @@ so byte round-trip no longer holds. B3's gate is the three-part property, run
    modulo trivia / spans / sanctioned aliases. (The paren printer is the
    highest-risk axis for this — see AC4.)
 2. **Idempotence** — `fmt(fmt(src)) == fmt(src)` **byte-exact**.
-3. **88-column width property** — every line `> 88` display columns is
+3. **96-column width property** — every line `> 96` display columns is
    classified **indivisible / verbatim** (an over-long string literal, a
    `ken ignore` fragment); **no breakable syntax silently overflows**.
 
@@ -124,14 +124,14 @@ so byte round-trip no longer holds. B3's gate is the three-part property, run
   different AST.
 - **AC5 — comments.** Interstitial → hard `line` forcing the enclosing group to
   break, at the node indent, no boundary crossing; leading → line above; trailing
-  → inline iff `code+2+comment ≤ 88` else moved above. **Any group carrying an
+  → inline iff `code+2+comment ≤ 96` else moved above. **Any group carrying an
   attached interstitial/leading comment never flattens** — assert this directly.
 - **AC6 — the WP S golden flips GREEN.** The formatter-output cases in
   `conformance/surface/formatting/seed-canonical-format.md` marked
   **red-until-B3** now pass, and the per-axis both-orientation oracles (the CV
   companion) pass. Don't fake a case whose oracle isn't yet authored — coordinate
   with CV.
-- **AC7 — the gate + build.** Parse-preservation + idempotence + 88-col width
+- **AC7 — the gate + build.** Parse-preservation + idempotence + 96-col width
   property green **read-only over the whole catalog**. `scripts/ken-cargo test -p
   ken-elaborator` green **AND** literal `cargo build --workspace --locked &&
   cargo test --workspace --locked` green. `git diff --check` clean; scope =
@@ -165,7 +165,7 @@ build.
 
 **Architect-terminal** (he owns the kenfmt B-series contracts and authored this
 design). Team QA runs the **three-gate property** (parse-preservation +
-idempotence + 88-col width) over the whole catalog **and** the literal locked CI
+idempotence + 96-col width) over the whole catalog **and** the literal locked CI
 as first-class gates. CV's `seed-canonical-format.md` (+ the per-axis oracle
 extension) is the acceptance oracle: B3 is the producer that flips the layout
 gate cases red→green.

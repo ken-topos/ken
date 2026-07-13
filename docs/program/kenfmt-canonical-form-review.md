@@ -7,8 +7,8 @@ Date: 2026-07-12
 Ken should adopt a syntax-aware, lossless, deterministic formatter with these
 headline choices:
 
-1. Use a soft limit of **88 display columns**, with a two-space indent and no
-   tabs. A breakable syntactic group must break before it exceeds 88 columns;
+1. Use a soft limit of **96 display columns**, with a two-space indent and no
+   tabs. A breakable syntactic group must break before it exceeds 96 columns;
    only indivisible literals, identifiers, and verbatim regions may exceed it.
 2. Emit the canonical Unicode operator vocabulary required by
    `spec/30-surface/31-lexical.md`, but canonicalize by **parsed token kind**,
@@ -100,7 +100,7 @@ The recurring readability failures are also clear:
 
 ### 1. Width, indentation, and physical text
 
-- Target **88 Unicode display columns**. Count display width, not UTF-8 bytes.
+- Target **96 Unicode display columns**. Count display width, not UTF-8 bytes.
   Canonical glyphs such as `lambda`, arrows, and Omega each occupy their normal
   terminal display width.
 - Use exactly two ASCII spaces per indentation level. Tabs are forbidden.
@@ -114,11 +114,11 @@ The recurring readability failures are also clear:
   hatches is no longer one canonical format. Verbatim literals and explicitly
   verbatim language constructs are semantic exceptions, not style escapes.
 
-Why 88 rather than 80: the repository's prose target is 80, but dependent type
+Why 96 rather than 80: the repository's prose target is 80, but dependent type
 applications contain more unavoidable punctuation and explicit type arguments
-than prose. Eight extra columns materially reduce vertical explosion while
+than prose. Sixteen extra columns materially reduce vertical explosion while
 remaining comfortable in a side-by-side review. A 100- or 120-column target
-would leave much of the observed proof density intact. The 88-column rule is a
+would leave much of the observed proof density intact. The 96-column rule is a
 soft width in the pretty-printer sense, but deterministic: a group either fits
 or it breaks.
 
@@ -387,7 +387,7 @@ data BoolExpr =
 - A leading comment remains immediately above the syntactic node it precedes,
   at that node's indentation.
 - An end-of-line comment may stay inline only if code plus two separating
-  spaces plus comment fits within 88 columns. Otherwise put it on the line
+  spaces plus comment fits within 96 columns. Otherwise put it on the line
   immediately above the node it annotates.
 - A comment between tokens forces the surrounding group to break rather than
   being silently relocated across a syntactic boundary.
@@ -516,7 +516,7 @@ The minimum hard gates are:
 5. **Prose preservation:** `.ken.md` prose is byte-identical.
 6. **Trivia/literal preservation:** comment text and protected literal payloads
    are identical.
-7. **Width property:** every line over 88 columns is classified as containing
+7. **Width property:** every line over 96 columns is classified as containing
    an indivisible or verbatim region; no breakable syntax silently exceeds it.
 8. **Property tests:** generate ASTs, print them, parse them, and check equality;
    also fuzz whitespace and ASCII/Unicode aliases around a fixed AST.

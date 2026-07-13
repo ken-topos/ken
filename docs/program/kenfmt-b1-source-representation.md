@@ -106,7 +106,7 @@ breaks across lines. The delta (1) buys here is smaller than it looks.
 - **Reuse CAT-5's printer, don't fork it**: B3's document algebra reuses
   `format.rs`'s glyph-choice table (moved behind token kind, B2) rather than
   rewriting it.
-- **88-col code / 80-col prose, no escape hatch**: orthogonal — width lives in
+- **96-col code / 80-col prose, no escape hatch**: orthogonal — width lives in
   the B3 document algebra, which consumes the same representation either way.
 
 ## Revisit if

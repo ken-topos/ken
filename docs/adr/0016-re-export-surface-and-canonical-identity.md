@@ -31,8 +31,10 @@ define.
 Three fixed inputs constrain the design:
 
 1. **`use M` is retired (ADR 0015).** Ken's only bring-all-unqualified form is
-   gone and the `use` keyword is freed. The re-export form therefore **cannot**
-   spell as `pub use` — that vehicle no longer exists. The surviving import
+   gone; the `use` *production* is retired — the keyword is kept **reserved**
+   with a migration diagnostic (#37, `KwUseReserved`), not freed. The re-export
+   form therefore **cannot** spell as `pub use` — that vehicle no longer exists.
+   The surviving import
    forms are the three provenance-preserving ones (`import M`, `import M as N`,
    `import M (…)`).
 2. **Canonical identity is one-per-declaration (MRES-9).** Every declaration
@@ -136,7 +138,8 @@ well-differentiated spellings were surfaced to the operator, each realizing the
 identical §1 semantics and differing only in ergonomics and granularity. **The
 operator chose Option B — the dedicated `export` declaration (2026-07-13)** for
 its clean import/export split, per-name granularity, and native renamed + local
-re-export; the new `export` keyword is budget-neutral (ADR 0015 freed `use`).
+re-export; the new `export` keyword is a net **+1** reserved word (#37 keeps
+`use` reserved, not freed) — a small, accepted cost for the clean split.
 Options A and C, and the rejected `pub`-alias shape, are retained below for the
 record; the resolved Option B semantics are in §2.1.
 
@@ -177,9 +180,9 @@ A statement distinct from `import`, dedicated to republishing.
   "republish to my clients" (`export`); re-exports imports **and** local names
   uniformly; **per-name granularity** and renamed re-export fall out naturally.
 - **Against.** **New reserved keyword `export`** (costs one identifier from the
-  surface — though ADR 0015 just freed `use`, so the keyword budget is
-  neutral). Two forms (`import` + `export`) where the `pub`-lever options
-  reuse one; slight conceptual overlap with `pub`.
+  surface — #37 keeps `use` reserved with a migration diagnostic, so `export` is
+  a net **+1** reserved keyword). Two forms (`import` + `export`) where the
+  `pub`-lever options reuse one; slight conceptual overlap with `pub`.
 
 ### Option C — per-item `pub` inside the selection list
 
@@ -278,7 +281,8 @@ export_item_list ::= export_item ("," export_item)*
 export_item ::= name ( "as" name )?
 ```
 
-- Reserve **`export`** as a keyword (freed budget — ADR 0015 retired `use`).
+- Reserve **`export`** as a keyword — a net **+1** reserved word; #37 keeps
+  `use` reserved (retired with a migration diagnostic, not freed).
 - The `module_path` uses the role-blind path identity of §3.2.1; `export M (…)`
   is a loader dependency edge to `M`.
 - The re-exported name's canonical identity is the imported (or defining)

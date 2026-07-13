@@ -15,7 +15,7 @@
 
 B3 is the layout engine: it consumes B1's lossless token/trivia stream + B2's
 canonical token spellings and produces the final canonical text (line-breaking,
-indentation, the 88-column code fill). The consult asked for a ruling on
+indentation, the 96-column code fill). The consult asked for a ruling on
 (1) the printer algebra, (2) each layout-canonicalization axis under the WP-S
 determinism discipline, (3) comment/trivia composition with breaking, and
 (4) whether B3 needs a spec sub-lane the way B2 had WP S.
@@ -49,7 +49,7 @@ Two reasons, and they point the same way:
   ("one deterministic canonical form… a deterministic fit decision, not
   formatting latitude"). Wadler/Leijen's `group` is a **binary** decision — flat
   if the flattened group fits the remaining width, else broken — a pure function
-  of `(subtree, current column, 88)`. That yields exactly one layout per input.
+  of `(subtree, current column, 96)`. That yields exactly one layout per input.
   A fill model has packing latitude (multiple valid fillings), which is the
   non-determinism `§1d` prohibits. So the structural fit *and* the determinism
   argument both select Wadler/Leijen.
@@ -62,7 +62,7 @@ Two constraints on the implementation, both already in `§1d`:
   alignment combinators** (they make a local edit reflow unrelated siblings and
   can push short code over width).
 - **The `group` fit test measures display width**, so canonical glyphs (`λ`,
-  `→`, `Ω`) count at their terminal width, matching `§1d`'s "88 Unicode display
+  `→`, `Ω`) count at their terminal width, matching `§1d`'s "96 Unicode display
   columns."
 
 ## Q2 — The axes are already ruled; B3 implements, the golden pins both ways
@@ -74,7 +74,7 @@ settled deterministic disposition:
 - **Blank-line runs** — 1 between top-level decls; 0 between siblings; around an
   attached comment **at most one preserved** (`0→0`, `1→1`, `2+→1`); the
   formatter otherwise owns vertical space.
-- **Break points** — fit-or-break at 88 for soft groups; a **mandatory** break
+- **Break points** — fit-or-break at 96 for soft groups; a **mandatory** break
   for `match` ≥2 arms / nested `match` / block body / non-trivial sum; a comment
   between tokens **forces** the enclosing group to break.
 - **Alignment** — **never** align sibling arrows / colons / equals / bodies;
@@ -121,8 +121,8 @@ exactly-one-home totality). B3 lifts those attachments into the `Doc`:
 - **Leading** (own line above a node): a hard-`line`-separated line at the
   node's indentation. A doc comment binds to the following declaration.
 - **Trailing / end-of-line**: stays inline **iff** `code + two spaces + comment
-  ≤ 88`; otherwise it moves to the line immediately above the node. That
-  88-column threshold is itself a determinism axis — its golden oracle must pin
+  ≤ 96`; otherwise it moves to the line immediately above the node. That
+  96-column threshold is itself a determinism axis — its golden oracle must pin
   **both** sides (fits → inline, overflows → moved-above).
 
 Composition rule, stated once: **any group carrying an attached interstitial or
@@ -154,8 +154,8 @@ same rules (subsume-don't-proliferate).
 - **The preservation gate transitions.** B1's gate was **byte round-trip**
   (layout-neutral). B3 **changes layout**, so byte round-trip no longer holds;
   B3's gate is **parse-preservation** (AST-equal modulo trivia/spans/aliases)
-  **+ idempotence** (`fmt∘fmt == fmt`, byte-exact) **+ the 88-column width
-  property** (every >88 line classified indivisible/verbatim; no breakable
+  **+ idempotence** (`fmt∘fmt == fmt`, byte-exact) **+ the 96-column width
+  property** (every >96 line classified indivisible/verbatim; no breakable
   syntax silently overflows). This runs continuously over the **whole catalog**,
   read-only — the one-time reformat is the capstone C, not B3.
 - **P0 (field separator) — not a B3 blocker.** `§1d`, the grammar

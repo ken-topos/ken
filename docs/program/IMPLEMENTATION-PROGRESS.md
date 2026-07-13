@@ -14,18 +14,34 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 431e36ea`
-> **CURRENT FRONTIER (newest at lines ~285–314):** CC2 **CLOSED ✅** (#59, PR #609
-> @ `132bb75e`, all 3 Foundation retros in). **kenfmt #58 (Language) — R1a
-> batch-1 MERGED ✅ @ `431e36ea` (PR #610)** — operator-approved R1a (short
-> applications inside a split return type stay inline); batch-1 only, strict gate
-> #57 stays paused for the later catalog-wide batch. Task #58 → close on 3 §10
-> retros. **All
-> other lanes idle/HELD:** Foundation idle (#60 fast-follows unframed, await
-> substrate); Runtime idle (I-4 needs Architect design); namespace remainder HELD
-> (ADR 0015 spec branches stale). WORKFLOW RULE (operator): local = TARGETED only,
-> never `--workspace` (full gate = CI). *Detailed session log below (accretes
-> downward; oldest I-2/I-3 first).*
+> ### ⏭ 2026-07-13 (21:xx) — LIVE STATE (read this first) · `origin/main @ f811a93a`
+> **3 LANES IN FLIGHT (event-driven; heartbeat catches handbacks):**
+> **(1) Enclave #39/#36 spec+conformance — PUBLISHING.** Honesty-gate CLEAN on
+> `44f928f4` (frame+3 spec chapters+conf README+fixture; linear; CV Spec/Fidelity
+> + Conformance APPROVE). Tracker-synced → `1731c3e4`; **scripted publisher pid
+> 3334361, PR #614, CI-polling.** On merge → relay + close #39/#36.
+> **(2) Runtime I-4 (ProgramCaps) — REDIRECTED by Pat, Architect re-ruling.** Pat:
+> *Ken owns program-VALIDITY only, NOT runtime constraint (SELinux/CLI grant = out
+> of scope); capabilities declared IN the program declaration, with the `admits`
+> roster.* → the whole CLI launch-grant fork (§SURFACE Options 1/2/3 + default) is
+> MOOT. Relayed to Architect `evt_49zx3brvzn1fm` (NOT compacted — same lane, hot
+> context); **I-4 build-frame transcription HELD until revised ruling.** Memory:
+> [[ken-owns-program-validity-not-runtime-constraint-caps-declared-in-program]].
+> **(3) batch-3 kenfmt vertical balance (#63) — ACTIVE.** Frame
+> `wp/kenfmt-vertical-balance @ dea3a5c2` (off f811a93a); Language ring
+> Handoff-Gate compacted (3/3 WIDE-verified) + KICKED `evt_3jn4d81r6ag2h` + leader
+> roused. Two-stage: stage-1 render one worst-case deep-proof file → me → Pat
+> approve → stage-2 sweep+re-arm+**automated balance gate** (must provably fire on
+> a pre-fix over-width sample — corrected AC5 lesson).
+> **#37 CLOSED ✅** (`f811a93a`, PR #613; all 3 Language retros in).
+> **✅ OPERATOR DIRECTIVE DONE — formatter budget 88→96 sweep:** code already
+> `CANONICAL_WIDTH = 96` (layout.rs:12); swept all owned docs (11 files, committed
+> `1363561e` on steward/work), preserved SHAs/event-IDs + dated transition records.
+> **PENDING (doc-only, low-pri, unblocks no one):** (a) publish the 8 budget-swept
+> kenfmt FRAMES to main (still say 88 there); (b) route Architect's ADR-0016
+> +1-keyword self-correct (committed on architect/work). **PARKED:** Foundation #60,
+> Kernel/Verify/Ergo idle. WORKFLOW RULE: local = TARGETED only, never
+> `--workspace`. *Detailed session log below (accretes downward).*
 >
 > **★ OPERATOR SEQUENCING (Pat, 2026-07-13, post-#58): spin up TWO lanes** —
 > **(A) kenfmt catalog-wide + re-arm gate #57** and **(B) unblock namespace

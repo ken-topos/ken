@@ -67,7 +67,7 @@ B1's layout so the output still round-trips.
 
 ### Out of scope (later B-series WPs)
 
-- **No layout / document algebra / line-breaking / 88-col** — that is **B3**
+- **No layout / document algebra / line-breaking / 96-col** — that is **B3**
   (Wadler/Prettier printer). B2 preserves B1's layout exactly; it only
   canonicalizes token spelling.
 - **No `.ken.md` splicing** — **B4**.
