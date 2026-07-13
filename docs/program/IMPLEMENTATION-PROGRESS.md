@@ -14,22 +14,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 106fd60c`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 549bf8d9`
 >
 > **★ CURRENT FRONTIER (one-line resume):** ADR-0014 R2 module round COMPLETE
-> (N1–N4 ✅; only N5 `pub use` gated on MRES-9 remains). **kenfmt B3: ALL DOC/
-> CONFORMANCE HALVES CLOSED ✅ — only the B3 layout-printer BUILD remains open.**
-> Merged this session: B3 oracle+§1d pin (PR #593), CV-playbook reachability-pass
-> practice (PR #594), **FMT9 reachability SWEEP (PR #595, `4938dd61`) — every
-> FMT9 label now honest vs landed surface (record RED-UNTIL record-surface+B3;
-> 29 parse / 4 record-reject; `class C a` sibling-blank reconstruction added;
-> Architect-terminal `aa4cba90`).** FMT9 fidelity item CLOSED. **NEXT: await the
-> corrected B3 BUILD SHA (Language, `wp/kenfmt-b3-doc-algebra-layout`, code —
-> generic hard-line path + execute-reachable-FMT9; record RED-gated) → honesty-
-> gate + CI-polled publish. Then B4/.ken.md + capstone C.** record-surface =
-> future surface-grammar WP (task #43), NOT B3. _(detail log below.)_
+> (N1–N4 ✅). **★★★ kenfmt B3 — THE LAYOUT ENGINE — CLOSED ✅** (`origin/main @
+> 549bf8d9`, PR #597; all 3 Language retros in → B3 FULLY CLOSED 2026-07-13).
+> **kenfmt P0/S/B1/B2/B3 ALL LANDED.** **★ ACTIVE FRONTIER = kenfmt B4** (`.ken.md`
+> splicing + prose byte-identity, size S, Language ring, deps B1/B2/B3 all met →
+> ACTIVE — KICKED). Frame: `docs/program/wp/kenfmt-b4-ken-md-splicing.md` on
+> `wp/kenfmt-b4-ken-md-splicing @ 986c8d54` (from `origin/main @ 549bf8d9`).
+> **B4 KICKED 2026-07-13** (`evt_62c6cnhnd9v92`): Language ring compacted @
+> ctx-verified (all 3 "Context compacted" WIDE, branches clean at origin/main) →
+> leader roused, Working. **NEXT: Language builds B4 → Architect-terminal → me;** then
+> capstone **C** (atomic whole-catalog reformat + strict `ken fmt --check` gate —
+> needs the Steward-scheduled catalog freeze, opened when B4 is landing). Carries:
+> task #43 record-surface WP (B3 door-open), task #44 `layout.rs::token_text`↔B2
+> `canonical_token_spelling` dedup at pipeline integration. _(detail log below.)_
 >
-> **★ B3 BUILD → AT ARCHITECT-TERMINAL (in review).** Candidate
+> **★ B3 BUILD → CLOSED ✅ MERGED `549bf8d9` (PR #597); all 3 Language retros IN
+> (leader `evt_3dq1rs636sxf7` / impl `evt_xn06qjt2g6s2` / qa `evt_7vy9p7d4p5221`)
+> → B3 FULLY CLOSED 2026-07-13. Shared carry: canonical-layout coverage must be
+> executable through the real `parse_lossless → FormattableSource` boundary (never
+> synthesize an unlanded surface); route construct-family layout by typed
+> structural ownership, not keyword allowlists; whole-catalog preservation is a
+> BACKSTOP only — every prefix/postfix/application precedence seam needs ADVERSARIAL
+> AST-shape + elaboration-preservation pairs, and each rebased correction re-runs
+> literal locked-workspace CI on its exact SHA. Historical build detail below (past
+> tense).** Candidate
 > `wp/kenfmt-b3-doc-algebra-layout @ e3fa0f41`, linear 2 commits atop `4938dd61`
 > (already rebased past the sweep), 4 `crates/ken-elaborator` files (+1852/−0),
 > zero TCB delta. QA APPROVED (`evt_6vj5vrx4abxcv`): generic structural
@@ -84,13 +95,29 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > (+2/−2, one file, doc-only, zero TCB).
 >
 > **★ NEXT (resume actions, in order):**
-> - **B3 code:** QA approves → leader posts Architect re-confirm → **⚠ WATCH-ITEM:
->   Architect is idle at "ping me when the corrected B3 SHA lands"; a threaded
->   re-confirm request may NOT wake it → PING it (standalone mention; capture WIDE
->   to confirm it engages) once QA is green.** On Architect APPROVE `2f10d5da` →
->   honesty-gate + **CI-polled (bg) publish** → **B3 CLOSED.**
-> - **§32 doc:** ✅ DONE — merged `106fd60c` (PR #596).
-> - Then drive B3 retros → close B3; kenfmt → **B4** (.ken.md splice) + capstone **C**.
+> 1. ✅ **B4 brief authored** — `986c8d54`, grounded (extractor data-model,
+>    `format_ken` entry, S §Literate parse-first rule; no fresh Architect ruling).
+> 2. ✅ **Handoff-Gate done** — Language ring compacted @ ctx-verified (3×
+>    "Context compacted" WIDE; branches clean at origin/main). `bxq94nghv` exit 0.
+> 3. ✅ **B4 KICKED** — `evt_62c6cnhnd9v92` → language-leader roused, Working.
+> 4. **AWAIT** B4 build (Language → Architect-terminal → git_request to me) →
+>    honesty-gate + CI-poll publish → **B4 CLOSED**. Then capstone **C**.
+> 5. **✅ OPERATOR CONFIRMED (2026-07-13): proceed B4 → C as planned; sequence
+>    remaining namespace work (N5, `use`-retire #37, MRES-6 #39) AFTER C.** C still
+>    needs the Steward-scheduled catalog-freeze window (open when B4 lands + no
+>    catalog/spec WP mid-flight). Operator away until ~11:00 UTC.
+>
+> **★★ NEW MEGA-EFFORT INCOMING — Ken CLI application tooling (operator, 2026-07-13).**
+> Report: `local/ken-cli-tooling-gap-report.md` (clean-room-clean; ~985 lines).
+> "Largest since the compiler effort." Multi-PROGRAM: (I) host-ABI + effect
+> drivers (entrypoint ABI + Console/FS/Env/Process effect families + capability
+> model — runtime/Language/Architect); (II) catalog closure (NonEmpty→Validation→
+> Codec/Numeric/keys→Cursor/Decoder→Diagnostic→Doc→Process.Args/Exit/Path→ArgParse
+> →env-config→Resource/Test.Property — Foundation, zero-trust, N2 ALREADY LANDED so
+> UNBLOCKED); (III) native parity (deferred). Interpreter-first vertical slice.
+> **Report is stale on N2 (says red-until-built @ 3a5cd323; live = landed).**
+> Awaiting operator answers on scope target / FS-capability staging / autonomy
+> depth before framing (conversation in progress).
 >
 > **★ (prior) B3 oracle + §1d sum-determinism pin** **MERGED** (`858c64a3`, PR #593, doc-only;
 > Architect-terminal APPROVE `321d42b5`; reviewed blobs byte-identical to
