@@ -229,9 +229,7 @@ pub fn format_ken_md(src: &str) -> Result<String, ElabError> {
         let body = &src[fence.body_range.clone()];
         let replacement = match crate::layout::format_ken(body) {
             Ok(formatted) => formatted,
-            Err(_)
-                if matches!(fence.role, KenMdFenceRole::Ignore | KenMdFenceRole::Reject) =>
-            {
+            Err(_) if matches!(fence.role, KenMdFenceRole::Ignore | KenMdFenceRole::Reject) => {
                 crate::format::canonicalize_lexed_tokens(body)?
             }
             Err(ElabError::ParseError { msg, span }) => {
