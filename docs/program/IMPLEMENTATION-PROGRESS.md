@@ -108,9 +108,22 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >       full fence-aware sweep (all .ken/.ken.md, all 3 kws): that ONE file is the
 >       only code collision; package/admits zero. **FOLD decision** → folded
 >       candidate `94aa5dcd` = `f05a3a10` + rosetta `program→prog` (66/75), 13
->       files. Architect **re-confirmed `94aa5dcd`**; honesty-gated clean (FF; 12
->       crate + 1 rosetta file; diff --check clean; zero TCB). **PUBLISHING code
->       CI-polled.** NEXT: confirm merge → retros → N3 Lane B. Enclave carry: add "reserve kw → sweep every
+>       files. **CLOSED ✅ → `origin/main @ 88cd242b`** (PR #591; all 3 Language retros
+>       IN). Admission gate + `UnadmittedInstance` LIVE; rosetta `program→prog`
+>       migrated. **★ N4 FULLY COMPLETE** (Lane A doc + Lane B build both closed).
+>       Retro lessons: self-admission provider-cardinality (0/local/1-ext/2+); a
+>       keyword reservation is a whole-repo source migration (sweep every .ken/
+>       .ken.md root — examples/rosetta invisible to workspace CI). **N3 Lane B → ACTIVE** (`evt_6frbpfmr4dnx8`): Language ring
+>       Handoff-Gate DONE (all 3 compacted @ 88cd242b, WIDE-verified; 0-ahead),
+>       kickoff posted + leader roused (Working). Build: parser `import M (foo as
+>       bar)` rename + reject `hiding`; `bind_import` clash reversal (modules.rs
+>       :75-77, order-indep + latent-clash); prelude unshadowable; lexical
+>       shadowing untouched; NO new keyword. Architect-terminal. QA + **Architect-terminal APPROVE** on `72e089b9` (7 crate files,
+>       +264/−53; `import M (foo as bar)` rename, `bind_import` clash reversal,
+>       prelude-unshadowable, lexical shadowing untouched; zero TCB). Honesty-gated
+>       clean. **PUBLISHING code CI-polled** (recovered a leader stall at the
+>       Architect-terminal seam). NEXT: confirm merge → retros → **ADR-0014 R2
+>       COMPLETE** → release B3 build. Enclave carry: add "reserve kw → sweep every
 >       .ken/.ken.md fence" to N4 spec build-forward (ADR-0015 pattern).**
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
