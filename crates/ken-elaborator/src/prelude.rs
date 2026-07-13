@@ -1422,21 +1422,13 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // field because `Cap` is indexed by the value-level `Auth` family. Use
     // the ordinary kernel inductive API, exactly as `FSOp` above does; this is
     // still a checked inductive and adds no primitive or trusted rule.
-    let apartial_id = elab
-        .globals
-        .get("APartial")
-        .copied()
-        .ok_or_else(|| ElabError::Internal("prelude: APartial missing".into()))?;
     let program_caps_id = declare_inductive(&mut elab.env, |_id| InductiveSpec {
         level_params: vec![],
-        params: vec![],
+        params: vec![auth_t.clone()],
         indices: vec![],
         level: Level::Zero,
         constructors: vec![CtorSpec {
-            args: vec![Term::app(
-                Term::const_(cap_id, vec![]),
-                Term::constructor(apartial_id, vec![]),
-            )],
+            args: vec![Term::app(Term::const_(cap_id, vec![]), Term::var(0))],
             target_indices: vec![],
         }],
     })
