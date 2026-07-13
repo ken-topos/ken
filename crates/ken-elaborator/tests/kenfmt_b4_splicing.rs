@@ -83,7 +83,7 @@ fn ac2_parse_first_role_gate_has_both_fallback_and_hard_error_orientations() {
     for role in ["ken", "ken ignore", "ken reject", "ken example"] {
         let document = format!("```{role}\n{parseable}```\n");
         let formatted = format_ken_md(&document).expect("parseable bodies fully format");
-        assert!(formatted.contains("fn id (x : Nat) : Nat = x\n"));
+        assert!(formatted.contains("fn id (x : Nat) : Nat = (x)\n"));
     }
 
     let ignore = "```ken ignore\nfn unfinished (f : Nat -> Nat) : Nat =\n```\n";

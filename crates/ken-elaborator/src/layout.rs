@@ -4,14 +4,12 @@
 //! production boundaries and the token stream supplies protected lexemes; the
 //! source is never re-lexed and notation spelling remains B2's responsibility.
 
-use std::collections::HashSet;
-
-use crate::ast::{BinOp, Decl, ExplicitDataCtor, Expr, MatchArm, Type};
+use crate::ast::{BinOp, Decl, Expr, MatchArm, Type};
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
 use crate::lossless::{parse_lossless, CommentPlacement, FormattableSource};
 
-pub const CANONICAL_WIDTH: usize = 88;
+pub const CANONICAL_WIDTH: usize = 96;
 pub const INDENT_WIDTH: usize = 2;
 
 /// The deliberately small Wadler/Leijen document algebra used by kenfmt.
@@ -26,6 +24,13 @@ pub enum Doc {
     Concat(Vec<Doc>),
     Nest(usize, Box<Doc>),
     Group(Box<Doc>),
+    /// A group whose fit decision is limited to its own flattened contents.
+    ///
+    /// Ordinary groups include the pending line suffix in their decision. A
+    /// declaration signature instead owns an independent width decision: if
+    /// the signature fits it stays horizontal even when the body must move to
+    /// the next line.
+    FitGroup(Box<Doc>),
 }
 
 impl Doc {
@@ -65,6 +70,10 @@ impl Doc {
         Self::Group(Box::new(self))
     }
 
+    pub fn fit_group(self) -> Self {
+        Self::FitGroup(Box::new(self))
+    }
+
     pub fn append(self, other: Doc) -> Self {
         Self::concat([self, other])
     }
@@ -81,7 +90,7 @@ impl Doc {
                 .map(Doc::flatten)
                 .collect::<Option<Vec<_>>>()
                 .map(Doc::concat),
-            Doc::Nest(_, child) | Doc::Group(child) => child.flatten(),
+            Doc::Nest(_, child) | Doc::Group(child) | Doc::FitGroup(child) => child.flatten(),
         }
     }
 }
@@ -153,6 +162,27 @@ pub fn render(doc: &Doc, width: usize) -> String {
                     doc: child,
                 });
             }
+            Doc::FitGroup(child) if command.mode == Mode::Flat => commands.push(Command {
+                indent: command.indent,
+                mode: Mode::Flat,
+                doc: child,
+            }),
+            Doc::FitGroup(child) => {
+                let fits_locally = child
+                    .flatten()
+                    .as_ref()
+                    .and_then(flat_width)
+                    .is_some_and(|flat| flat <= width.saturating_sub(column));
+                commands.push(Command {
+                    indent: command.indent,
+                    mode: if fits_locally {
+                        Mode::Flat
+                    } else {
+                        Mode::Broken
+                    },
+                    doc: child,
+                });
+            }
         }
     }
     output
@@ -197,7 +227,7 @@ fn fits(mut remaining: usize, mut commands: Vec<Command<'_>>) -> bool {
                 mode: command.mode,
                 doc: child,
             }),
-            Doc::Group(child) => commands.push(Command {
+            Doc::Group(child) | Doc::FitGroup(child) => commands.push(Command {
                 indent: command.indent,
                 mode: command.mode,
                 doc: child,
@@ -216,7 +246,7 @@ fn flat_width(doc: &Doc) -> Option<usize> {
         Doc::Concat(parts) => parts
             .iter()
             .try_fold(0usize, |sum, part| Some(sum + flat_width(part)?)),
-        Doc::Nest(_, child) | Doc::Group(child) => flat_width(child),
+        Doc::Nest(_, child) | Doc::Group(child) | Doc::FitGroup(child) => flat_width(child),
     }
 }
 
@@ -264,19 +294,11 @@ pub fn format_ken(source: &str) -> Result<String, ElabError> {
 
 struct LayoutPrinter<'a> {
     source: &'a dyn FormattableSource,
-    skipped_parens: HashSet<usize>,
 }
 
 impl<'a> LayoutPrinter<'a> {
     fn new(source: &'a dyn FormattableSource) -> Self {
-        let mut printer = Self {
-            source,
-            skipped_parens: HashSet::new(),
-        };
-        for decl in source.typed_decls() {
-            printer.collect_decl_parens(decl);
-        }
-        printer
+        Self { source }
     }
 
     fn format(&self) -> String {
@@ -341,7 +363,14 @@ impl<'a> LayoutPrinter<'a> {
     /// Expression production. It is intentionally separate from token block
     /// layout so precedence and mandatory match breaks have one owner.
     fn print_expr(&self, expr: &Expr) -> Doc {
-        match expr {
+        let reconstructed = matches!(
+            expr,
+            Expr::EMatch { .. }
+                | Expr::ELam(_, _, _)
+                | Expr::ELet(_, _, _, _, _)
+                | Expr::EApp(_, _, _)
+        );
+        let doc = match expr {
             Expr::EMatch { span, arms, .. } => self.print_match(span, arms),
             Expr::ELam(_, body, span) => self.print_lambda(span, body),
             Expr::ELet(_, _, value, body, span) => self.print_let(span, value, body),
@@ -353,6 +382,11 @@ impl<'a> LayoutPrinter<'a> {
             | Expr::EPi(_, _, _, span)
             | Expr::EArrow(_, _, span) => self.print_span(span),
             _ => self.print_span(expr.span()),
+        };
+        if reconstructed {
+            self.with_source_parens(expr.span(), doc)
+        } else {
+            doc
         }
     }
 
@@ -393,11 +427,29 @@ impl<'a> LayoutPrinter<'a> {
             return self.doc_from_tokens(span, TokenLayout::Block);
         };
         let head_span = Span::new(span.start, self.source.tokens()[indices[open_pos]].span.end);
-        let separator = Doc::concat([Doc::text(";"), Doc::hard_line()]);
         let close = &self.source.tokens()[indices[close_pos]].span;
+        let children = if let Decl::ModuleDecl { decls, .. } = decl {
+            children
+                .into_iter()
+                .zip(decls)
+                .enumerate()
+                .map(|(position, (child, child_decl))| {
+                    let limit = decls
+                        .get(position + 1)
+                        .map_or(close.start, |next| next.span().start);
+                    if self.has_token_between(Token::Semicolon, child_decl.span().end, limit) {
+                        Doc::concat([child, Doc::text(";")])
+                    } else {
+                        child
+                    }
+                })
+                .collect()
+        } else {
+            children
+        };
         Doc::concat([
             self.print_decl_signature(decl, &head_span),
-            Doc::concat([Doc::hard_line(), join(children, separator)]).nest(INDENT_WIDTH),
+            Doc::concat([Doc::hard_line(), join(children, Doc::hard_line())]).nest(INDENT_WIDTH),
             Doc::hard_line(),
             Doc::text(&self.source.source()[close.start..close.end]),
         ])
@@ -465,8 +517,9 @@ impl<'a> LayoutPrinter<'a> {
             .collect();
         Doc::concat([
             self.print_decl_signature(decl, &head),
-            Doc::concat([Doc::hard_line(), join(ctor_docs, Doc::hard_line())]).nest(INDENT_WIDTH),
+            Doc::concat([Doc::line(), join(ctor_docs, Doc::line())]).nest(INDENT_WIDTH),
         ])
+        .group()
     }
 
     fn print_decl_with_body(&self, decl: &Decl, span: &Span, body: &Expr) -> Doc {
@@ -486,79 +539,136 @@ impl<'a> LayoutPrinter<'a> {
         .group()
     }
 
-    /// Declaration telescopes have an enclosing-relative continuation level,
-    /// while each binder remains an independent group. A broken signature
-    /// therefore chooses line boundaries between binders without forcing a
-    /// fitting binder type to break token-by-token.
+    /// Render a declaration signature as an independent horizontal unit when
+    /// it fits. Its broken form follows the operator's readability ladder:
+    /// parameters at +6, clause markers at +4, and clause continuations at +6.
+    /// The declaration body is owned by `print_decl_with_body` and remains at
+    /// +2, so no signature continuation can be mistaken for body content.
     fn print_decl_signature(&self, decl: &Decl, span: &Span) -> Doc {
         let indices = self.token_indices(span);
+        if indices.is_empty() {
+            return Doc::Nil;
+        }
         let ranges = self.decl_binder_ranges(decl, &indices);
-        let Some(&(first_start, _)) = ranges.first() else {
-            let clauses = signature_clause_ranges(self.source, &indices);
-            let Some(&(prefix_end, _)) = clauses.first() else {
-                return self.doc_from_tokens(span, TokenLayout::Soft);
-            };
-            if prefix_end == 0 {
-                return self.doc_from_tokens(span, TokenLayout::Soft);
-            }
-            let prefix = self.grouped_token_slice(&indices[..prefix_end]);
-            let mut continuation = Vec::new();
-            for (start, end) in clauses {
-                continuation.push(self.token_boundary(
-                    indices[start - 1],
-                    indices[start],
-                    Doc::line(),
-                ));
-                continuation.push(self.grouped_token_slice(&indices[start..end]));
-            }
-            return Doc::concat([prefix, Doc::concat(continuation).nest(INDENT_WIDTH)]).group();
+        let clauses = signature_clause_ranges(self.source, &indices);
+        let prefix_end = ranges
+            .first()
+            .map(|(start, _)| *start)
+            .into_iter()
+            .chain(clauses.first().map(|(start, _)| *start))
+            .min();
+        let Some(prefix_end) = prefix_end else {
+            return self.doc_from_tokens(span, TokenLayout::Soft);
         };
-        if first_start == 0 {
+        if prefix_end == 0 {
             return self.doc_from_tokens(span, TokenLayout::Soft);
         }
 
-        let prefix = self.grouped_token_slice(&indices[..first_start]);
-        let mut continuation = Vec::new();
-        let mut cursor = first_start;
-        for (start, end) in ranges {
-            if cursor < start {
-                continuation.push(self.grouped_token_slice(&indices[cursor..start]));
-            }
-            continuation.push(self.token_boundary(indices[start - 1], indices[start], Doc::line()));
-            continuation.push(self.grouped_token_slice(&indices[start..end]));
-            cursor = end;
-        }
-        if cursor < indices.len() {
-            let tail = &indices[cursor..];
-            let clauses = signature_clause_ranges(self.source, tail);
-            if clauses.first().is_some_and(|(start, _)| *start == 0) {
-                for (start, end) in clauses {
-                    let left = if start == 0 {
-                        indices[cursor - 1]
-                    } else {
-                        tail[start - 1]
-                    };
-                    continuation.push(self.token_boundary(left, tail[start], Doc::line()));
-                    continuation.push(self.grouped_token_slice(&tail[start..end]));
+        let prefix = self.grouped_token_slice(&indices[..prefix_end]);
+        let mut signature = vec![prefix];
+
+        if !ranges.is_empty() {
+            let mut parameter_docs = Vec::new();
+            let mut previous_end = None;
+            for (start, end) in &ranges {
+                if let Some(previous_end) = previous_end {
+                    parameter_docs.push(self.token_boundary(
+                        indices[previous_end - 1],
+                        indices[*start],
+                        Doc::line(),
+                    ));
                 }
-            } else {
-                let left = &self.source.tokens()[indices[cursor - 1]].kind;
-                let right = &self.source.tokens()[indices[cursor]].kind;
-                let separator = if needs_space(left, right) {
-                    Doc::text(" ")
-                } else {
-                    Doc::Nil
-                };
-                continuation.push(self.token_boundary(
-                    indices[cursor - 1],
-                    indices[cursor],
-                    separator,
-                ));
-                continuation.push(self.grouped_token_slice(tail));
+                parameter_docs.push(self.grouped_token_slice(&indices[*start..*end]));
+                previous_end = Some(*end);
             }
+            let parameter_end = ranges.last().unwrap().1;
+            let next_clause = clauses.first().map_or(indices.len(), |(start, _)| *start);
+            if parameter_end < next_clause {
+                let tail = self.grouped_token_slice(&indices[parameter_end..next_clause]);
+                parameter_docs.push(self.token_boundary(
+                    indices[parameter_end - 1],
+                    indices[parameter_end],
+                    Doc::text(" "),
+                ));
+                parameter_docs.push(tail);
+            }
+            signature.push(
+                Doc::concat([Doc::line(), Doc::concat(parameter_docs).fit_group()])
+                    .nest(INDENT_WIDTH * 3),
+            );
         }
 
-        Doc::concat([prefix, Doc::concat(continuation).nest(INDENT_WIDTH)]).group()
+        for (start, end) in clauses {
+            signature.push(
+                Doc::concat([
+                    Doc::line(),
+                    self.print_signature_clause(&indices[start..end]),
+                ])
+                .nest(INDENT_WIDTH * 2),
+            );
+        }
+
+        Doc::concat(signature).fit_group()
+    }
+
+    fn print_signature_clause(&self, indices: &[usize]) -> Doc {
+        if indices.len() < 2 {
+            return self.grouped_token_slice(indices);
+        }
+        let boundary = self.token_boundary(indices[0], indices[1], Doc::text(" "));
+        let continuation = if matches!(self.source.tokens()[indices[0]].kind, Token::Colon) {
+            self.print_return_type(&indices[1..])
+        } else {
+            self.grouped_token_slice(&indices[1..]).fit_group()
+        };
+        Doc::concat([
+            Doc::text(self.token_text(indices[0])),
+            boundary,
+            continuation.nest(INDENT_WIDTH),
+        ])
+        .fit_group()
+    }
+
+    /// Preserve arrow chains as the return type's outer break structure. When
+    /// the chain breaks, each arrow and its operand remain a locally fitted
+    /// unit; only an operand that is itself too wide may break internally.
+    fn print_return_type(&self, indices: &[usize]) -> Doc {
+        let mut starts = vec![0usize];
+        let mut paren_depth = 0usize;
+        let mut bracket_depth = 0usize;
+        let mut brace_depth = 0usize;
+        for (position, index) in indices.iter().copied().enumerate() {
+            let token = &self.source.tokens()[index].kind;
+            if matches!(token, Token::Arrow)
+                && paren_depth == 0
+                && bracket_depth == 0
+                && brace_depth == 0
+            {
+                starts.push(position);
+            }
+            match token {
+                Token::LParen => paren_depth += 1,
+                Token::RParen => paren_depth = paren_depth.saturating_sub(1),
+                Token::LBracket => bracket_depth += 1,
+                Token::RBracket => bracket_depth = bracket_depth.saturating_sub(1),
+                Token::LBrace => brace_depth += 1,
+                Token::RBrace => brace_depth = brace_depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        if starts.len() == 1 {
+            return self.grouped_token_slice(indices).fit_group();
+        }
+
+        let mut operands = Vec::new();
+        for (position, start) in starts.iter().copied().enumerate() {
+            let end = starts.get(position + 1).copied().unwrap_or(indices.len());
+            if position > 0 {
+                operands.push(self.token_boundary(indices[start - 1], indices[start], Doc::line()));
+            }
+            operands.push(self.grouped_token_slice(&indices[start..end]).fit_group());
+        }
+        Doc::concat(operands).fit_group()
     }
 
     fn print_token_decl_block(&self, decl: &Decl, span: &Span) -> Doc {
@@ -742,7 +852,8 @@ impl<'a> LayoutPrinter<'a> {
             .enumerate()
             .map(|(index, arm)| {
                 let doc = self.print_match_arm(arm);
-                if index + 1 < arms.len() {
+                let limit = arms.get(index + 1).map_or(span.end, |next| next.span.start);
+                if self.has_token_between(Token::Semicolon, arm.span.end, limit) {
                     Doc::concat([doc, Doc::text(";")]).group()
                 } else {
                     doc
@@ -769,19 +880,11 @@ impl<'a> LayoutPrinter<'a> {
             arm.span.start,
             self.source.tokens()[indices[arrow_pos]].span.end,
         );
-        let broken_application = application_argument_count(&arm.body) >= 2;
-        let compound = matches!(arm.body, Expr::EMatch { .. })
-            || is_compound_expr(&arm.body)
-            || broken_application;
+        let compound = matches!(arm.body, Expr::EMatch { .. }) || is_compound_expr(&arm.body);
         if compound {
-            let body = if broken_application {
-                self.print_application(&arm.body, true)
-            } else {
-                self.print_expr(&arm.body)
-            };
             Doc::concat([
                 self.doc_from_tokens(&head, TokenLayout::Soft),
-                Doc::concat([Doc::hard_line(), body]).nest(INDENT_WIDTH),
+                Doc::concat([Doc::hard_line(), self.print_expr(&arm.body)]).nest(INDENT_WIDTH),
             ])
         } else {
             Doc::concat([
@@ -908,15 +1011,23 @@ impl<'a> LayoutPrinter<'a> {
     }
 
     fn rendered_expr_has_outer_parens(&self, expr: &Expr) -> bool {
-        matches!(
-            expr,
-            Expr::EAsc(_, _, _)
-                | Expr::EOld(_, _)
-                | Expr::EBinOp(_, _, _, _)
-                | Expr::EProj(_, _, _)
-                | Expr::EPi(_, _, _, _)
-                | Expr::EArrow(_, _, _)
-        ) && self.span_has_outer_parens(expr.span())
+        self.span_has_outer_parens(expr.span())
+    }
+
+    fn with_source_parens(&self, span: &Span, mut doc: Doc) -> Doc {
+        let mut indices = self.token_indices(span);
+        let mut wrappers = 0usize;
+        while indices.len() >= 2
+            && matches!(self.source.tokens()[indices[0]].kind, Token::LParen)
+            && matching_rparen(self.source, &indices, 0) == Some(indices.len() - 1)
+        {
+            wrappers += 1;
+            indices = indices[1..indices.len() - 1].to_vec();
+        }
+        for _ in 0..wrappers {
+            doc = Doc::concat([Doc::text("("), doc, Doc::text(")")]);
+        }
+        doc
     }
 
     fn print_span(&self, span: &Span) -> Doc {
@@ -947,10 +1058,6 @@ impl<'a> LayoutPrinter<'a> {
             }
             let token_span = &self.source.tokens()[index].span;
             self.push_comments_between(&mut docs, previous_end, token_span.start, span);
-            let next = indices
-                .get(position + 1)
-                .map(|next| &self.source.tokens()[*next].kind);
-
             if layout == TokenLayout::Sum && matches!(token, Token::Pipe) {
                 docs.push(Doc::hard_line());
                 previous = None;
@@ -964,17 +1071,6 @@ impl<'a> LayoutPrinter<'a> {
                         Doc::text(" ")
                     });
                 }
-            }
-
-            // Semicolon before a closing brace is non-canonical and omitted.
-            if matches!(token, Token::Semicolon)
-                && (matches!(next, Some(Token::RBrace))
-                    || (layout.breaks_siblings() && position + 1 == indices.len()))
-            {
-                previous = Some(token);
-                previous_end = token_span.end;
-                position += 1;
-                continue;
             }
 
             docs.push(Doc::text(self.token_text(index)));
@@ -1044,10 +1140,11 @@ impl<'a> LayoutPrinter<'a> {
                             self.source.tokens()[slice[0]].span.start,
                             self.source.tokens()[*slice.last().unwrap()].span.end,
                         );
-                        segments.push(
+                        segments.push((
                             self.doc_token_slice(slice, &segment_span, TokenLayout::Soft)
                                 .group(),
-                        );
+                            true,
+                        ));
                     }
                     start = position + 1;
                 }
@@ -1060,10 +1157,11 @@ impl<'a> LayoutPrinter<'a> {
                 self.source.tokens()[slice[0]].span.start,
                 self.source.tokens()[*slice.last().unwrap()].span.end,
             );
-            segments.push(
+            segments.push((
                 self.doc_token_slice(slice, &segment_span, TokenLayout::Soft)
                     .group(),
-            );
+                false,
+            ));
         }
         if segments.is_empty() {
             self.doc_token_slice(indices, span, layout)
@@ -1072,8 +1170,8 @@ impl<'a> LayoutPrinter<'a> {
             let segments = segments
                 .into_iter()
                 .enumerate()
-                .map(|(index, segment)| {
-                    if index + 1 < len {
+                .map(|(index, (segment, terminated))| {
+                    if terminated || index + 1 < len {
                         Doc::concat([segment, Doc::text(";")]).group()
                     } else {
                         segment
@@ -1122,265 +1220,13 @@ impl<'a> LayoutPrinter<'a> {
             .tokens()
             .iter()
             .enumerate()
-            .filter(|(index, token)| {
-                token.span.start != token.span.end
-                    && !self.skipped_parens.contains(index)
-                    && span.start <= token.span.start
-                    && token.span.end <= span.end
-            })
-            .map(|(index, _)| index)
-            .collect()
-    }
-
-    fn collect_decl_parens(&mut self, decl: &Decl) {
-        match decl {
-            Decl::Pub(inner) => self.collect_decl_parens(inner),
-            Decl::ViewDecl {
-                params,
-                ret_ty,
-                requires,
-                ensures,
-                constraints,
-                body,
-                ..
-            } => {
-                for binder in params {
-                    self.collect_type_parens(&binder.ty, TypeContext::Top);
-                }
-                if let Some(ty) = ret_ty {
-                    self.collect_type_parens(ty, TypeContext::Top);
-                }
-                for expr in requires.iter().chain(ensures) {
-                    self.collect_expr_parens(expr, ExprContext::Top);
-                }
-                for constraint in constraints {
-                    self.collect_type_parens(&constraint.head_type, TypeContext::Top);
-                }
-                self.collect_expr_parens(body, ExprContext::Top);
-            }
-            Decl::LetDecl { ty, val, .. } => {
-                if let Some(ty) = ty {
-                    self.collect_type_parens(ty, TypeContext::Top);
-                }
-                self.collect_expr_parens(val, ExprContext::Top);
-            }
-            Decl::ProveDecl { prop, .. } => self.collect_expr_parens(prop, ExprContext::Top),
-            Decl::PropDecl {
-                params,
-                ret_ty,
-                intros,
-                ..
-            } => {
-                for binder in params {
-                    self.collect_type_parens(&binder.ty, TypeContext::Top);
-                }
-                self.collect_type_parens(ret_ty, TypeContext::Top);
-                for intro in intros {
-                    self.collect_type_parens(&intro.ty, TypeContext::Top);
-                }
-            }
-            Decl::LemmaDecl {
-                params,
-                theorem,
-                body,
-                ..
-            }
-            | Decl::AttachedProofDecl {
-                params,
-                theorem,
-                body,
-                ..
-            } => {
-                for binder in params {
-                    self.collect_type_parens(&binder.ty, TypeContext::Top);
-                }
-                self.collect_type_parens(theorem, TypeContext::Top);
-                self.collect_expr_parens(body, ExprContext::Top);
-            }
-            Decl::LawDecl { fields, .. } => {
-                for (_, expr) in fields {
-                    self.collect_expr_parens(expr, ExprContext::Top);
-                }
-            }
-            // Constructor telescopes are token-delimited by the next
-            // constructor rather than a dedicated AST wrapper. Preserve their
-            // grouping until the type printer owns the whole production.
-            Decl::DataDecl { .. } => {}
-            Decl::ExplicitDataDecl {
-                params,
-                family,
-                ctors,
-                ..
-            } => {
-                for binder in params {
-                    self.collect_type_parens(&binder.ty, TypeContext::Top);
-                }
-                self.collect_type_parens(family, TypeContext::Top);
-                for ctor in ctors {
-                    match ctor {
-                        ExplicitDataCtor::Simple(_) => {}
-                        ExplicitDataCtor::Signature { signature, .. } => {
-                            for arg in &signature.args {
-                                match arg {
-                                    crate::ast::ConstructorSignatureArg::Explicit(binder)
-                                    | crate::ast::ConstructorSignatureArg::Implicit(binder) => {
-                                        self.collect_type_parens(&binder.ty, TypeContext::Top)
-                                    }
-                                    crate::ast::ConstructorSignatureArg::Anonymous(expr) => {
-                                        self.collect_expr_parens(expr, ExprContext::ArrowLeft)
-                                    }
-                                }
-                            }
-                            self.collect_expr_parens(&signature.result, ExprContext::ArrowRight);
-                        }
-                    }
-                }
-            }
-            Decl::TypeAlias { ty, .. } | Decl::ForeignDecl { ty, .. } => {
-                self.collect_type_parens(ty, TypeContext::Top)
-            }
-            Decl::ClassDecl {
-                param_kind, fields, ..
-            } => {
-                if let Some(kind) = param_kind {
-                    self.collect_type_parens(kind, TypeContext::Top);
-                }
-                for field in fields {
-                    self.collect_type_parens(&field.ty, TypeContext::Top);
-                }
-            }
-            Decl::InstanceDecl {
-                head_type,
-                constraints,
-                fields,
-                ..
-            } => {
-                self.collect_type_parens(head_type, TypeContext::Top);
-                for constraint in constraints {
-                    self.collect_type_parens(&constraint.head_type, TypeContext::Top);
-                }
-                for (_, expr) in fields {
-                    self.collect_expr_parens(expr, ExprContext::Top);
-                }
-            }
-            Decl::ModuleDecl { decls, .. } => {
-                for decl in decls {
-                    self.collect_decl_parens(decl);
-                }
-            }
-            Decl::BoundaryDecl { .. }
-            | Decl::TemporalDecl { .. }
-            | Decl::DeriveDecl { .. }
-            | Decl::ImportDecl { .. } => {}
-        }
-    }
-
-    fn collect_expr_parens(&mut self, expr: &Expr, context: ExprContext) {
-        let needed = expr_needs_parens(expr, context);
-        if !matches!(expr, Expr::EAttachedProofRef { .. }) {
-            self.mark_redundant_wrappers(expr.span(), needed);
-        }
-        match expr {
-            Expr::EApp(function, argument, _) => {
-                self.collect_expr_parens(function, ExprContext::ApplicationHead);
-                self.collect_expr_parens(argument, ExprContext::ApplicationArgument);
-            }
-            Expr::ELam(_, body, _) => self.collect_expr_parens(body, ExprContext::Top),
-            Expr::ELet(_, ty, value, body, _) => {
-                if let Some(ty) = ty {
-                    self.collect_type_parens(ty, TypeContext::Top);
-                }
-                self.collect_expr_parens(value, ExprContext::Top);
-                self.collect_expr_parens(body, ExprContext::Top);
-            }
-            Expr::EAsc(value, ty, _) => {
-                self.collect_expr_parens(value, ExprContext::AscriptionValue);
-                self.collect_type_parens(ty, TypeContext::Top);
-            }
-            Expr::EOld(value, _) => self.collect_expr_parens(value, ExprContext::OldOperand),
-            Expr::EProj(value, _, _) => {
-                self.collect_expr_parens(value, ExprContext::ProjectionBase)
-            }
-            Expr::EBinOp(op, left, right, _) => {
-                self.collect_expr_parens(left, ExprContext::InfixLeft(*op));
-                self.collect_expr_parens(right, ExprContext::InfixRight(*op));
-            }
-            Expr::EMatch { scrut, arms, .. } => {
-                self.collect_expr_parens(scrut, ExprContext::Top);
-                for arm in arms {
-                    self.collect_expr_parens(&arm.body, ExprContext::Top);
-                }
-            }
-            Expr::EPi(_, domain, codomain, _) => {
-                self.collect_type_parens(domain, TypeContext::Top);
-                self.collect_expr_parens(codomain, ExprContext::ArrowRight);
-            }
-            Expr::EArrow(left, right, _) => {
-                self.collect_expr_parens(left, ExprContext::ArrowLeft);
-                self.collect_expr_parens(right, ExprContext::ArrowRight);
-            }
-            Expr::EVar(_, _)
-            | Expr::ECon(_, _)
-            | Expr::EUniv(_, _)
-            | Expr::ENumLit(_, _)
-            | Expr::EStr(_, _)
-            | Expr::EAttachedProofRef { .. } => {}
-        }
-    }
-
-    fn collect_type_parens(&mut self, ty: &Type, context: TypeContext) {
-        self.mark_redundant_wrappers(ty.span(), type_needs_parens(ty, context));
-        match ty {
-            Type::TPi(_, domain, codomain, _) => {
-                self.collect_type_parens(domain, TypeContext::Top);
-                self.collect_type_parens(codomain, TypeContext::ArrowRight);
-            }
-            Type::TArr(left, right, _) | Type::TEffectArr(left, _, right, _) => {
-                self.collect_type_parens(left, TypeContext::ArrowLeft);
-                self.collect_type_parens(right, TypeContext::ArrowRight);
-            }
-            Type::TRefine(_, base, predicate, _) => {
-                self.collect_type_parens(base, TypeContext::Top);
-                self.collect_expr_parens(predicate, ExprContext::Top);
-            }
-            Type::TApp(head, argument, _) => {
-                self.collect_type_parens(head, TypeContext::ApplicationHead);
-                self.collect_type_parens(argument, TypeContext::ApplicationArgument);
-            }
-            Type::TUniv(_, _) | Type::TCon(_, _) | Type::TVar(_, _) => {}
-        }
-    }
-
-    fn mark_redundant_wrappers(&mut self, span: &Span, needed: bool) {
-        let mut indices: Vec<_> = self
-            .source
-            .tokens()
-            .iter()
-            .enumerate()
             .filter(|(_, token)| {
                 token.span.start != token.span.end
                     && span.start <= token.span.start
                     && token.span.end <= span.end
             })
             .map(|(index, _)| index)
-            .collect();
-        let mut pairs = Vec::new();
-        while indices.len() >= 2
-            && matches!(self.source.tokens()[indices[0]].kind, Token::LParen)
-            && matches!(
-                self.source.tokens()[*indices.last().unwrap()].kind,
-                Token::RParen
-            )
-            && matching_rparen(self.source, &indices, 0) == Some(indices.len() - 1)
-        {
-            pairs.push((indices[0], *indices.last().unwrap()));
-            indices = indices[1..indices.len() - 1].to_vec();
-        }
-        let keep = usize::from(needed && !pairs.is_empty());
-        for (open, close) in pairs.into_iter().skip(keep) {
-            self.skipped_parens.insert(open);
-            self.skipped_parens.insert(close);
-        }
+            .collect()
     }
 
     fn token_text(&self, index: usize) -> &str {
@@ -1403,6 +1249,12 @@ impl<'a> LayoutPrinter<'a> {
                     && same_variant(&token.kind, &wanted))
                 .then_some(index)
             })
+    }
+
+    fn has_token_between(&self, wanted: Token, start: usize, end: usize) -> bool {
+        self.source.tokens().iter().any(|token| {
+            start <= token.span.start && token.span.end <= end && same_variant(&token.kind, &wanted)
+        })
     }
 
     fn with_comments(&self, span: &Span, doc: Doc) -> Doc {
@@ -1495,25 +1347,8 @@ enum TokenLayout {
 
 #[derive(Clone, Copy)]
 enum ExprContext {
-    Top,
     ApplicationHead,
     ApplicationArgument,
-    OldOperand,
-    ProjectionBase,
-    AscriptionValue,
-    ArrowLeft,
-    ArrowRight,
-    InfixLeft(BinOp),
-    InfixRight(BinOp),
-}
-
-#[derive(Clone, Copy)]
-enum TypeContext {
-    Top,
-    ApplicationHead,
-    ApplicationArgument,
-    ArrowLeft,
-    ArrowRight,
 }
 
 fn expr_precedence(expr: &Expr) -> u8 {
@@ -1539,40 +1374,10 @@ fn binop_precedence(op: BinOp) -> u8 {
 fn expr_needs_parens(expr: &Expr, context: ExprContext) -> bool {
     let precedence = expr_precedence(expr);
     match context {
-        ExprContext::Top | ExprContext::ArrowRight => false,
         ExprContext::ApplicationHead => precedence < 7,
         // An arrow argument is a mandatory-clarity case; a nested application
         // argument also needs grouping to preserve the left-associated tree.
         ExprContext::ApplicationArgument => precedence <= 7,
-        ExprContext::OldOperand => precedence < 8,
-        ExprContext::ProjectionBase => {
-            matches!(
-                expr,
-                Expr::ECon(_, _) | Expr::EApp(_, _, _) | Expr::EOld(_, _)
-            ) || precedence < 7
-        }
-        ExprContext::AscriptionValue => precedence <= 2,
-        ExprContext::ArrowLeft => precedence <= 1,
-        ExprContext::InfixLeft(parent) => precedence < binop_precedence(parent),
-        ExprContext::InfixRight(parent) => precedence <= binop_precedence(parent),
-    }
-}
-
-fn type_precedence(ty: &Type) -> u8 {
-    match ty {
-        Type::TPi(_, _, _, _) | Type::TArr(_, _, _) | Type::TEffectArr(_, _, _, _) => 1,
-        Type::TApp(_, _, _) => 7,
-        _ => 9,
-    }
-}
-
-fn type_needs_parens(ty: &Type, context: TypeContext) -> bool {
-    let precedence = type_precedence(ty);
-    match context {
-        TypeContext::Top | TypeContext::ArrowRight => false,
-        TypeContext::ApplicationHead => precedence < 7,
-        TypeContext::ApplicationArgument => precedence <= 7,
-        TypeContext::ArrowLeft => precedence <= 1,
     }
 }
 
@@ -1801,16 +1606,6 @@ fn is_compound_expr(expr: &Expr) -> bool {
     }
 }
 
-fn application_argument_count(expr: &Expr) -> usize {
-    let mut count = 0usize;
-    let mut cursor = expr;
-    while let Expr::EApp(function, _, _) = cursor {
-        count += 1;
-        cursor = function;
-    }
-    count
-}
-
 fn flatten_application<'a>(expr: &'a Expr, arguments: &mut Vec<&'a Expr>) -> &'a Expr {
     if let Expr::EApp(function, argument, _) = expr {
         let head = flatten_application(function, arguments);
@@ -1871,7 +1666,7 @@ mod tests {
         let source = "module M { const a : Nat = Zero; const b : Nat = Zero; }";
         assert_eq!(
             format_ken(source).unwrap(),
-            "module M {\n  const a : Nat = Zero;\n  const b : Nat = Zero\n}\n"
+            "module M {\n  const a : Nat = Zero;\n  const b : Nat = Zero;\n}\n"
         );
     }
 

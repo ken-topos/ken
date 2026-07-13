@@ -14,7 +14,20 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 330f276b`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 132bb75e`
+> **CURRENT FRONTIER (newest at lines ~285–314):** CC2 **CLOSED ✅** (#59, PR #609
+> @ `132bb75e`, all 3 Foundation retros in). **kenfmt #58 (Language) — R1a
+> refinement IN FLIGHT:** operator chose REFINE (short applications inside a split
+> return type stay inline); ring re-applied to `Core/OrdNat.ken.md` + running the
+> TARGETED suite (no `--workspace`) → new SHA + diff → **I re-present to Pat** →
+> approve → publish batch-1 → later batch = catalog-wide + re-arm gate #57. **All
+> other lanes idle/HELD:** Foundation idle (#60 fast-follows unframed, await
+> substrate); Runtime idle (I-4 needs Architect design); namespace remainder HELD
+> (ADR 0015 spec branches stale). WORKFLOW RULE (operator): local = TARGETED only,
+> never `--workspace` (full gate = CI). *Detailed session log below (accretes
+> downward; oldest I-2/I-3 first).*
+>
+> ⋯ _historical session narrative (I-2/I-3 era, `@ 330f276b`) follows:_ ⋯
 > **I-2 (CA2 Console floor) CLOSED ✅ `1f85ad9a`** (PR #604; ACs met, all 3 §10 retros
 > in @ 10:28 → task #55 done). **Milestone B's Console effect floor is COMPLETE.** Carry
 > (→ bake into I-3 + host-ABI frames): enrich the existing coproduct summand in place
@@ -276,6 +289,66 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > production `crates/*/src/`); `conformance/` = ONLY the AC7 seed `seed-text-numeric.md`
 > (legit coupled, CV-approved); `diff --check` clean. Bundling tracker (§2a) → publish $NEW
 > via scripted-pr-automerge (NON-doc-only → CI-poll bg; `--target` the bundled SHA).
+> **★ CC2 CLOSED ✅ — all 3 §10 retros in** (impl `evt_72cnn94z4fqbe` / qa `evt_1cnvh50w5wrxf`
+> / leader `evt_gskwqdxwnk7q`; carries: pair kernel/transparency asserts for proof-carrying
+> instances with concrete lowest-layer computation; when authority changes post-branch-cut
+> publish a canonical frame blob + verify byte-identity before review; a conformance
+> discriminator must be checked against the accepted alphabet). Task #59 DONE. Foundation idle
+> (no next WP; #60 fast-follows unframed).
+> **★ kenfmt #58 R1a REFINED + OPERATOR-APPROVED @ `ee6ec5b5` → PUBLISHING batch-1
+> (2026-07-13).** Ring re-applied R1a to `Core/OrdNat.ken.md`: split-return arrow chains
+> now split at top-level `→` only, each fitting operand horizontal — witnesses exact
+> (`→ Equal Nat x y =`, `→ Equal Bool (leq_nat x z) True`). Leader re-confirmed clean
+> diff-check; targeted #58/B3/B4/CLI + token-stream/AST/idempotence/96-col green (NO
+> workspace). **Steward honesty-gate CLEAN** (object store): base `132bb75e` unchanged,
+> zero merges, all single-parent, forbidden-path EMPTY (no kernel/Cargo/lock/.github/spec/
+> trust-root), `diff --check` clean; scope = layout.rs + 3 elaborator tests + cli fmt test
+> + ONE catalog file + frame. **Operator APPROVED the OrdNat diff.** Publishing batch-1
+> (NOT doc-only → CI runs full gate). Still batch-1 (no catalog sweep; strict gate #57
+> stays paused → LATER batch re-arms it). Task #58 → close on publish + retros.
+> **★ kenfmt #58 QA-APPROVED @ `30d3969b` (atop 132bb75e)** (`evt_5bd2mccg2cryk`; QA followed
+> the new rule — targeted only, NO local workspace). 7-file diff = frame + layout.rs +
+> formatter/CLI/B3/B4/#58 tests + ONE rep file `Core/OrdNat.ken.md`. **→ OPERATOR-REVIEW
+> CHECKPOINT (AC2): present the OrdNat diff to Pat before catalog-wide + before publish.**
+> **★ OPERATOR REVIEW DONE — Pat chose REFINE FIRST (2026-07-13).** Horizontal collapses
+> approved; ONE rough spot: short applications inside a SPLIT RETURN TYPE splay one-token-
+> per-line (`→ Equal \n Nat \n x \n y`). Operator wants them inline (`→ Equal Nat x y =`).
+> Refinement sent to Language ring `evt_4jwkydb499nxe` (rule **R1a**: split return-type arrow
+> chain splits at `→` only; each operand that fits stays on ONE line; only break an operand
+> that itself exceeds budget). Frame amended with R1a (steward/work; blob `e98ee850`); sync
+> instruction to implementer `evt_3pjaz5we0q9hr` (pull frame via shared .git — same
+> propagation-trap lesson; frame is bundled in the kenfmt candidate). **NEXT: ring re-applies
+> to OrdNat + targeted validate (NO workspace) → new SHA + diff → I RE-PRESENT to Pat →
+> approve → publish batch-1 → LATER batch = catalog-wide + re-arm gate #57.** Still batch-1,
+> gate paused. Task #58 in_progress.
+> **★ CC2 MERGED ✅ `origin/main @ 132bb75e` (PR #609, squash, CI green) ~16:xx.** Landed
+> honesty-gate CLEAN (object store): single parent `330f276b`, 8 files = 7 reviewed + tracker
+> bundle, forbidden-path EMPTY. Trusted-base delta EXACTLY +1 at separately-homed
+> `StringBijection` cert; all Text fences zero-Axiom. Full CC2 scope in: Codec + Numeric
+> (parse + structural formatter) + lawful `DecEq`/`Ord String` keys (option (i)). Merge
+> relayed + retros requested `evt_72pzbxdn1rfp0`. **Task #59 → CLOSE on Foundation's 3 §10
+> retros.** #60 fast-follows (show_int, Bytes keys) remain. Foundation ring returns idle.
+> **★ WORKFLOW RULE CHANGE (operator, 2026-07-13) — LOCAL builds/tests TARGETED ONLY, NEVER
+> `--workspace`.** Operator: this box has limited CPU/RAM; a local `cargo test --workspace`
+> OOMs it (a kenfmt #58 implementer burned ~1h on a frame-mandated local locked-workspace
+> run). Full-workspace + `--locked` + conformance gate is **CI's** job (publisher polls it at
+> merge); local agents test only affected areas (`ken-cargo -p <crate>`/`--test <name>`).
+> Made PROMINENT + reconciled the contradiction (commit `700fc522`): AGENTS.md Conventions ⛔
+> banner; COORDINATION §12 strengthened; steward.md frame-authoring (no-regression AC =
+> workspace-green IN CI, never local); qa.md + leader.md banners; kenfmt frame AC3 fixed;
+> kernel memory `trust-root-reduction…workspace-gate` venue moved to CI. Language ring
+> redirected live `evt_5jqe1nhmb68j5`. **Going forward: NEVER author a frame AC that says
+> "run `cargo test --workspace`" locally — it means CI-green.**
+> **★ CC2 PUBLISH IN FLIGHT — PR #609.** Bundled publish commit `$NEW = 26da583ed6568e7df90
+> cec1432c8c12a5061d947` (= candidate `4f497eee` + 1 tracker-sync commit; verified
+> candidate→$NEW delta = ONLY IMPLEMENTATION-PROGRESS.md, code byte-identical; linear, 5
+> commits, no merges). Publisher pid 3151451 (nohup+disown, NO auto-notify — heartbeat/resume
+> catches completion), log `scratchpad/cc2-publish.log`; synthetic branch
+> `wp/scripted-merge-26da583e` pushed, PR #609 opened, waiting 348s then CI-poll → squash-
+> merge on green (`--match-head-commit`). **NEXT (on merge): relay landed origin/main SHA +
+> confirm trusted-base +1 at StringBijection; then CC2 retros (Foundation leader/impl/qa) →
+> close task #59; #60 fast-follows remain (show_int, Bytes keys).** Ack posted
+> `evt_6pzjtfve9jsev`. Git_request `evt_52gydjxnrxng`.
 > **(kenfmt layout rework batch-1 — FRAME READY, task #58)** `docs/program/wp/
 > kenfmt-signature-layout.md`. Operator refined 2026-07-13: governing principle = **prefer
 > horizontal** (kenfmt over-verticalizes; collapse to one line where it fits). Rules R1–R5:
