@@ -9,9 +9,12 @@
   **#39 MRES-6 general-clash amendment** (import×import + import×prelude,
   under the MRES-6 entry) and the **#36/N5 MRES-9 status flip** (re-export
   form designed in ADR 0016 — now *Accepted*; operator chose Option B, the
-  dedicated `export` declaration, 2026-07-13) are below.
+  dedicated `export` declaration, 2026-07-13) are below. **Runtime I-4 §C
+  amendment:** the anonymous `program` header also carries the independent
+  capability manifest from which runtime authority is minted.
 - **Date:** 2026-07-12 (framed); 2026-07-12 (operator review folded);
-  2026-07-13 (#39/#36 namespace-remainder design round folded).
+  2026-07-13 (#39/#36 namespace-remainder design round folded); 2026-07-13
+  (Runtime I-4 §C capability-manifest amendment).
 - **Deciders:** the operator (fork review 2026-07-12); framed by the
   Architect.
 - **Relates to:** ADR 0008 (typeclass/instance coherence), ADR 0011
@@ -403,11 +406,36 @@ Confirmed, not asserted:
   (MRES-2b), a header name is worse than redundant: it is a second, potentially
   *divergent* source of truth for the package's identity. Both headers are
   therefore bare markers — `program` (optionally hosting the entry declaration,
-  MRES-4a) and `package` — each carrying only its `admits` section. The file's
-  path is the single source of truth for identity; the header's *presence* (not
-  its name) is the signal — a `package` header's presence is what makes the file
-  a compiled package (MRES-4 extension). Documentary intent is served by an
-  ordinary comment, which cannot drift into a competing identity.
+  MRES-4a) and `package` — with no identity-bearing payload. Both may carry an
+  `admits` section; the later I-4 §C amendment gives `program` an independent
+  capability manifest without adding a name token. The file's path is the
+  single source of truth for identity; the header's *presence* (not its name) is
+  the signal — a `package` header's presence is what makes the file a compiled
+  package (MRES-4 extension). Documentary intent is served by an ordinary
+  comment, which cannot drift into a competing identity.
+
+##### I-4 §C amendment — the program capability manifest
+
+The anonymous `program` header may carry a `capabilities` clause alongside its
+`admits` clause. A declaration such as `capabilities FS AFull` records the
+authority level for one effect family. The program declaration is the source of
+that authority: the runner reads the clause and mints `ProgramCaps AFull`
+exactly from it. There is no CLI launch grant or other external counterparty in
+this language-validity contract.
+
+The clauses share a home but are otherwise orthogonal:
+
+| Clause | Purpose and namespace | Reader |
+|---|---|---|
+| `admits` | instance-dictionary dispatch and coherence; zero authority | elaborator admission gate |
+| `capabilities` | effect-family authority; zero instance dispatch | runner at capability mint |
+
+Neither clause changes the other's set or check. A package admitted for
+instance search does not thereby grant authority, and a declared capability
+does not admit an instance provider. The capability clause adds surface grammar
+and a runner input only: `Cap` remains an opaque value, capability-passing
+remains ordinary Π/λ, and the kernel gains no rule or trusted primitive. The
+runtime entry declaration remains separate under MRES-4a.
 
 ##### MRES-4f — Cross-package collision impossible in source — **ACCEPTED**
 - **Fork.** The required provenance deliverable "on a coherence collision, name

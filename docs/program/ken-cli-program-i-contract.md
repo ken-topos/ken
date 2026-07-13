@@ -114,11 +114,11 @@ result datatype again — the exact decoupling deliverable 4 mandates.
 
 1. Resolve `main` by name; type-check its signature against §1.1 (domains
    `ProcessInput`, `ProgramCaps`; codomain `HostIO ExitCode`; `visits` row ⊆
-   granted families).
+   families declared by the program's capability clause).
 2. Build `ProcessInput` from real argv-after-`--`, environment, and cwd (all
    `Bytes`).
-3. Mint `ProgramCaps` from the launch grants (§3), one capability per granted
-   family.
+3. Mint `ProgramCaps` from the program's declared capability clause (§3), one
+   capability per declared mediated family.
 4. `apply(main, input); apply(_, caps)`; drive the resulting `HostIO ExitCode`
    through `run_io` (§4).
 5. Map the returned `ExitCode` to process status (§1.1). Driver failures
@@ -158,7 +158,7 @@ Two coherent v1 spellings, both faithful to the current `read_bytes` authority-
 polymorphism:
 
 - **(a) Authority-monomorphic program** — `main` is checked at the concrete
-  authority the launch grant mints (the current mint-exactly model,
+  authority the program header declares (the current mint-exactly model,
   `main.rs:142-153`); `HostOp` fixes that authority. Simplest; matches today.
 - **(b) Authority-polymorphic program** — `main` is polymorphic in `a` like
   `read_bytes` is; the runner instantiates `a` at mint time.
@@ -250,11 +250,14 @@ boundary, because the difference is a security property:
 ### 3.1 v1 — coarse, functional, honestly over-privileged
 
 The current model, unchanged in mechanism: scalar `Authority` {`None`,`Partial`,
-`Full`} + effect label, minted **exactly** from the launch grant
-(`main.rs:142-153`), carried in each op, checked `required ⊑ granted` by the
-driver **before** the syscall (`authorizes`/`check_authority_sufficient`,
-`eval.rs:1918-1932`). `ProgramCaps` is the record delivered to `main` carrying
-one such capability per granted family.
+`Full`} + effect label, declared in the anonymous `program` header's
+`capabilities` clause and minted **exactly** from that declaration, carried in
+each op, and checked `required ⊑ held` by the driver **before** the syscall
+(`authorizes`/`check_authority_sufficient`, `eval.rs:1918-1932`). `ProgramCaps`
+is the record delivered to `main` carrying one such capability per declared
+mediated family. This contract specifies what Ken accepts as a valid program.
+CLI grants, OS sandboxing, and other constraints on a running process are a
+separate concern and are out of scope.
 
 **The honest caveat, stated loudly:** coarse authority confines *nothing to a
 path*. `authorizes(cap, path)` still ignores `path`. So v1 read is acceptable
