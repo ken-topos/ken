@@ -278,124 +278,11 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
         std::process::exit(1);
     }
 
-    // Bare names, matching the landed prelude's registration (`prelude.rs`:
-    // Constructors are registered under their bare (not dotted) names.
-    let (
-        itree_id,
-        ret_id,
-        vis_id,
-        read_id,
-        write_id,
-        flush_id,
-        is_terminal_id,
-        stdin_id,
-        stdout_id,
-        stderr_id,
-        chunk_id,
-        eof_id,
-        unit_id,
-        true_id,
-        false_id,
-        ok_id,
-        err_id,
-        notfound_id,
-        permissiondenied_id,
-        capabilitydenied_id,
-        brokenpipe_id,
-        interrupted_id,
-        other_id,
-    ) = match (
-        get("ITree"),
-        get("Ret"),
-        get("Vis"),
-        get("Read"),
-        get("Write"),
-        get("Flush"),
-        get("IsTerminal"),
-        get("Stdin"),
-        get("Stdout"),
-        get("Stderr"),
-        get("Chunk"),
-        get("Eof"),
-        get("MkUnit"),
-        get("True"),
-        get("False"),
-        get("Ok"),
-        get("Err"),
-        get("NotFound"),
-        get("PermissionDenied"),
-        get("CapabilityDenied"),
-        get("BrokenPipe"),
-        get("Interrupted"),
-        get("Other"),
-    ) {
-        (
-            Some(a),
-            Some(b),
-            Some(c),
-            Some(d),
-            Some(e),
-            Some(f),
-            Some(g),
-            Some(h),
-            Some(i),
-            Some(j),
-            Some(k),
-            Some(l),
-            Some(m),
-            Some(n),
-            Some(o),
-            Some(p),
-            Some(q),
-            Some(r),
-            Some(s),
-            Some(t),
-            Some(u),
-            Some(v),
-            Some(w),
-        ) => (
-            a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w,
-        ),
-        _ => {
-            eprintln!("ken run: Console ABI declarations are unavailable");
-            std::process::exit(2);
-        }
-    };
-
-    let console_ids = ken_interp::ConsoleIds {
-        itree_id,
-        ret_id,
-        vis_id,
-        read_id,
-        write_id,
-        flush_id,
-        is_terminal_id,
-        stdin_id,
-        stdout_id,
-        stderr_id,
-        chunk_id,
-        eof_id,
-        true_id,
-        false_id,
-        ok_id,
-        err_id,
-        notfound_id,
-        permissiondenied_id,
-        capabilitydenied_id,
-        brokenpipe_id,
-        interrupted_id,
-        other_id,
-        unit_id,
-        params_len: 3, // ITree (E:Type)(Resp:E->Type)(R:Type) — 3 type params (State-effect-build lift)
-    };
-
-    // Harvest FS IDs (FS-driver-build D1/D2); absent on a program that never
-    // registers `[FS]` (can't happen post-prelude, but degrade gracefully
-    // rather than assume, matching the Console harvest's own style above).
-    let fs_ids = match get("ReadFile") {
-        Some(readfile_id) => Some(ken_interp::FSIds { readfile_id }),
-        _ => None,
-    };
+    let console_ids = ken_interp::ConsoleIds::from_elab(&elab_env).unwrap_or_else(|| {
+        eprintln!("ken run: Console ABI declarations are unavailable");
+        std::process::exit(2);
+    });
+    let fs_ids = ken_interp::FSIds::from_elab(&elab_env);
 
     let mut store = build_eval_store(&elab_env);
 
@@ -403,6 +290,9 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
     let mut tree = ken_interp::eval(&[], &main_term, &elab_env.env, &mut store);
     let input = process_input_value(&elab_env, arguments);
     tree = ken_interp::apply(tree, input, &elab_env.env, &mut store);
+    // SECURITY: this current-capability runner mints only APartial. When I-4
+    // threads AFull, its write/delete authority is coarse and NOT path-
+    // confined: it reaches anywhere the process can access until CA4/I-5.
     let cap =
         ken_elaborator::capabilities::Cap::mint(ken_elaborator::capabilities::AUTH_PARTIAL, "FS");
     let caps = constructor_value(

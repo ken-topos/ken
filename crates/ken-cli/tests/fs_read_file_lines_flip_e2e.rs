@@ -95,14 +95,17 @@ proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Conso
 proc app (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console] =
   bind (Coproduct (FSOp {auth}) ConsoleOp)
        (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
-       (Result IOError Bytes) (Result IOError Unit)
-    (inject_l (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp (Result IOError Bytes)
+       (Result FileError Bytes) (Result IOError Unit)
+    (inject_l (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp (Result FileError Bytes)
       (read_bytes {auth} cap (bytes_encode "{path}")))
     (\r .
       match r {{
-        Err e    |-> Ret (Coproduct (FSOp {auth}) ConsoleOp)
-                        (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
-                        (Result IOError Unit) (Err IOError Unit e) ;
+        Err e    |-> match e {{
+          MkFileError operation path kind |->
+            Ret (Coproduct (FSOp {auth}) ConsoleOp)
+                (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+                (Result IOError Unit) (Err IOError Unit kind)
+        }} ;
         Ok bytes |-> printLines (lines (bytes_decode bytes))
       }})
 
@@ -123,7 +126,13 @@ proc main (_input : ProcessInput) (caps : ProgramCaps)
                 CapabilityDenied |-> host_program_then (print_line "CapabilityDenied") (Failure 1) ;
                 BrokenPipe |-> host_program_then (print_line "BrokenPipe") (Failure 1) ;
                 Interrupted |-> host_program_then (print_line "Interrupted") (Failure 1) ;
-                Other |-> host_program_then (print_line "Other") (Failure 1)
+                AlreadyExists |-> host_program_then (print_line "AlreadyExists") (Failure 1) ;
+                InvalidInput |-> host_program_then (print_line "InvalidInput") (Failure 1) ;
+                IsDirectory |-> host_program_then (print_line "IsDirectory") (Failure 1) ;
+                NotDirectory |-> host_program_then (print_line "NotDirectory") (Failure 1) ;
+                NotEmpty |-> host_program_then (print_line "NotEmpty") (Failure 1) ;
+                Unsupported |-> host_program_then (print_line "Unsupported") (Failure 1) ;
+                Other errno |-> host_program_then (print_line "Other") (Failure 1)
               }} ;
             Ok _ |-> host_exit Success
           }})

@@ -229,9 +229,23 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.elaborate_decl("data ReadResult = Chunk Bytes | Eof")
         .map_err(|e| ElabError::Internal(format!("prelude ReadResult failed: {}", e)))?;
     elab.elaborate_decl(
-        "data IOError = NotFound | PermissionDenied | CapabilityDenied | BrokenPipe | Interrupted | Other",
+        "data IOError = NotFound | PermissionDenied | CapabilityDenied | BrokenPipe | Interrupted | AlreadyExists | InvalidInput | IsDirectory | NotDirectory | NotEmpty | Unsupported | Other Int",
     )
     .map_err(|e| ElabError::Internal(format!("prelude IOError failed: {}", e)))?;
+    elab.elaborate_decl(
+        "data FileOperation = OpReadFile | OpWriteFile | OpAppendFile | OpMetadata | OpReadDirectory | OpCreateDirectory | OpRemoveFile | OpRemoveDirectory | OpRename",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude FileOperation failed: {}", e)))?;
+    elab.elaborate_decl("data FileError = MkFileError FileOperation (Option Bytes) IOError")
+        .map_err(|e| ElabError::Internal(format!("prelude FileError failed: {}", e)))?;
+    elab.elaborate_decl("data FileKind = KFile | KDirectory | KSymlink | KOther")
+        .map_err(|e| ElabError::Internal(format!("prelude FileKind failed: {}", e)))?;
+    elab.elaborate_decl("data FileMetadata = MkFileMetadata Int FileKind")
+        .map_err(|e| ElabError::Internal(format!("prelude FileMetadata failed: {}", e)))?;
+    elab.elaborate_decl("data DirEntry = MkDirEntry Bytes FileKind")
+        .map_err(|e| ElabError::Internal(format!("prelude DirEntry failed: {}", e)))?;
+    elab.elaborate_decl("data CreatePolicy = CreateNew | CreateOrTruncate | CreateOrKeep")
+        .map_err(|e| ElabError::Internal(format!("prelude CreatePolicy failed: {}", e)))?;
 
     // `ITree (E:Type) (Resp:E->Type) (R:Type)` — the LIFTED, effect-generic
     // interaction tree (State-effect-build, VAL2 #10 / OQ-C·C2, `36 §4.5.6`).
@@ -1206,7 +1220,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map(|id| Term::const_(id, vec![]))
         .ok_or_else(|| ElabError::Internal("prelude: 'Bytes' not registered".into()))?;
 
-    // `FSOp : Auth -> Type0`, `ReadFile : (a : Auth) -> Cap a -> Bytes -> FSOp a`
+    // `FSOp : Auth -> Type0`; every operation carries its authority token and
+    // raw-byte path in the node. The surface `data` parser cannot express the
+    // value-kind `Auth` parameter, so this remains an ordinary hand-built
+    // kernel inductive.
     // — a genuinely Auth-PARAMETERIZED family (a uniform parameter, not a
     // varying GADT index: the sole constructor always targets `FSOp` at its
     // OWN parameter, exactly like `List a`). Hand-built via
@@ -1220,47 +1237,91 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // path`) per D3's capability-carrying (not ambient authority) design —
     // the driver's FS arm reads both fields off the `Vis` node before any
     // syscall.
+    let create_policy_t = elab
+        .globals
+        .get("CreatePolicy")
+        .copied()
+        .map(|id| Term::indformer(id, vec![]))
+        .ok_or_else(|| ElabError::Internal("prelude: CreatePolicy missing".into()))?;
+    let bool_t = elab
+        .globals
+        .get("Bool")
+        .copied()
+        .map(|id| Term::indformer(id, vec![]))
+        .ok_or_else(|| ElabError::Internal("prelude: Bool missing".into()))?;
     let fsop_id = declare_inductive(&mut elab.env, |_fsop_id| InductiveSpec {
         level_params: vec![],
         params: vec![auth_t.clone()],
         indices: vec![],
         level: Level::Zero,
-        constructors: vec![CtorSpec {
-            // Ctor-arg context so far = `[a]` (the family's own param, the
-            // sole entry, at `Var(0)`); arg0 = `Cap a`, arg1 = `Bytes`
-            // (closed, no `a` reference).
-            args: vec![
-                Term::app(Term::const_(cap_id, vec![]), Term::var(0)),
-                bytes_t.clone(),
-            ],
-            target_indices: vec![],
-        }],
+        constructors: {
+            let cap_a = || Term::app(Term::const_(cap_id, vec![]), Term::var(0));
+            let named = |args| CtorSpec {
+                args,
+                target_indices: vec![],
+            };
+            vec![
+                named(vec![cap_a(), bytes_t.clone()]),
+                named(vec![
+                    cap_a(),
+                    bytes_t.clone(),
+                    create_policy_t,
+                    bytes_t.clone(),
+                ]),
+                named(vec![cap_a(), bytes_t.clone(), bytes_t.clone()]),
+                named(vec![cap_a(), bytes_t.clone()]),
+                named(vec![cap_a(), bytes_t.clone()]),
+                named(vec![cap_a(), bool_t.clone(), bytes_t.clone()]),
+                named(vec![cap_a(), bytes_t.clone()]),
+                named(vec![cap_a(), bool_t, bytes_t.clone()]),
+                named(vec![cap_a(), bytes_t.clone(), bytes_t.clone()]),
+            ]
+        },
     })
     .map_err(|e| ElabError::Internal(format!("prelude FSOp failed: {}", e)))?;
     elab.globals.insert("FSOp".to_string(), fsop_id);
-    let readfile_id = elab
+    let fs_ctor_ids: Vec<_> = elab
         .env
         .inductive(fsop_id)
-        .ok_or_else(|| ElabError::Internal("FSOp not found after declare".into()))?
-        .constructors[0]
-        .id;
-    elab.globals.insert("ReadFile".to_string(), readfile_id);
+        .expect("FSOp present after declaration")
+        .constructors
+        .iter()
+        .map(|ctor| ctor.id)
+        .collect();
+    for (name, id) in [
+        "ReadFile",
+        "WriteFile",
+        "AppendFile",
+        "Metadata",
+        "ReadDirectory",
+        "CreateDirectory",
+        "RemoveFile",
+        "RemoveDirectory",
+        "Rename",
+    ]
+    .into_iter()
+    .zip(fs_ctor_ids)
+    {
+        elab.globals.insert(name.to_string(), id);
+    }
 
-    // `fs_resp : (a : Auth) -> FSOp a -> Type = Result IOError Bytes` — every
-    // FS op (today, just `ReadFile`) responds with a `Result`; constant,
-    // ignoring both `a` and `op`, exactly like `console_resp`'s
-    // constant-`Unit` shape above. **Field-order fix**: `Result e a = Err e
-    // | Ok a` (`prelude.rs`'s `data Result` registration) means the FIRST
-    // type argument is `Err`'s field and the SECOND is `Ok`'s — so the
-    // success/failure payload is `Result IOError Bytes` (`Err : IOError`,
-    // `Ok : Bytes`), not the inverted `Result Bytes IOError` the Phase-2
-    // prose used. That inversion was harmless while nothing surface-side
-    // ever pattern-matched against this codomain (the driver's Rust
-    // `make_result` is untyped, unaffected either way) — but the first
-    // surface program to `match` a real `read_bytes` response needs the
-    // field types to actually agree with the runtime payload.
-    elab.elaborate_decl("fn fs_resp (a : Auth) (op : FSOp a) : Type = Result IOError Bytes")
-        .map_err(|e| ElabError::Internal(format!("prelude fs_resp failed: {}", e)))?;
+    // `fs_resp : (a : Auth) -> FSOp a -> Type` is a genuine non-constant
+    // large elimination. Every arm returns a total `Result FileError _`, with
+    // the success payload selected by the operation constructor.
+    elab.elaborate_decl(
+        "fn fs_resp (a : Auth) (op : FSOp a) : Type = match op { \
+           ReadFile cap path |-> Result FileError Bytes; \
+           WriteFile cap path policy contents |-> Result FileError Unit; \
+           AppendFile cap path contents |-> Result FileError Unit; \
+           Metadata cap path |-> Result FileError FileMetadata; \
+           ReadDirectory cap path |-> Result FileError (List DirEntry); \
+           CreateDirectory cap recursive path |-> Result FileError Unit; \
+           RemoveFile cap path |-> Result FileError Unit; \
+           RemoveDirectory cap recursive path |-> Result FileError Unit; \
+           Rename cap from to |-> Result FileError Unit \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude fs_resp failed: {}", e)))?;
 
     // `FS : Auth -> Type -> Type = \a r. ITree (FSOp a) (fs_resp a) r` — the
     // file-I/O analog of `IO`, reusing the lifted, effect-generic `ITree` (no
@@ -1276,9 +1337,9 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.elaborate_decl("fn FS (a : Auth) (r : Type) : Type = ITree (FSOp a) (fs_resp a) r")
         .map_err(|e| ElabError::Internal(format!("prelude FS failed: {}", e)))?;
 
-    // `read_bytes : (a : Auth) -> Cap a -> Bytes -> FS a (Result IOError Bytes)`
-    //   = \a cap path. Vis (FSOp a) (fs_resp a) (Result IOError Bytes) (ReadFile cap path)
-    //                    (\r. Ret (FSOp a) (fs_resp a) (Result IOError Bytes) r)
+    // `read_bytes : (a : Auth) -> Cap a -> Bytes -> FS a (Result FileError Bytes)`
+    //   = \a cap path. Vis (FSOp a) (fs_resp a) (Result FileError Bytes) (ReadFile cap path)
+    //                    (\r. Ret (FSOp a) (fs_resp a) (Result FileError Bytes) r)
     //
     // α (fs-read-file-lines-flip D2, forced by locked AC4 + SEAM-A, settled
     // by citation): `read_bytes` is authority-POLYMORPHIC — no static
@@ -1293,11 +1354,59 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // re-type (verified: `l6_acceptance.rs`'s tests never elaborate a real
     // `read_bytes` call term, only hand-built `EffectDecl`s).
     elab.elaborate_decl(
-        "proc read_bytes (a : Auth) (cap : Cap a) (path : Bytes) : FS a (Result IOError Bytes) visits [FS] = \
-         Vis (FSOp a) (fs_resp a) (Result IOError Bytes) (ReadFile a cap path) \
-           (\\r. Ret (FSOp a) (fs_resp a) (Result IOError Bytes) r)",
+        "proc read_bytes (a : Auth) (cap : Cap a) (path : Bytes) : FS a (Result FileError Bytes) visits [FS] = \
+         Vis (FSOp a) (fs_resp a) (Result FileError Bytes) (ReadFile a cap path) \
+           (\\r. Ret (FSOp a) (fs_resp a) (Result FileError Bytes) r)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude read_bytes failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc write_file (a : Auth) (cap : Cap a) (path : Bytes) (policy : CreatePolicy) (contents : Bytes) : FS a (Result FileError Unit) visits [FS] = \
+         Vis (FSOp a) (fs_resp a) (Result FileError Unit) (WriteFile a cap path policy contents) \
+           (\\r. Ret (FSOp a) (fs_resp a) (Result FileError Unit) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude write_file failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc append_file (a : Auth) (cap : Cap a) (path : Bytes) (contents : Bytes) : FS a (Result FileError Unit) visits [FS] = \
+         Vis (FSOp a) (fs_resp a) (Result FileError Unit) (AppendFile a cap path contents) \
+           (\\r. Ret (FSOp a) (fs_resp a) (Result FileError Unit) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude append_file failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc file_metadata (a : Auth) (cap : Cap a) (path : Bytes) : FS a (Result FileError FileMetadata) visits [FS] = \
+         Vis (FSOp a) (fs_resp a) (Result FileError FileMetadata) (Metadata a cap path) \
+           (\\r. Ret (FSOp a) (fs_resp a) (Result FileError FileMetadata) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude file_metadata failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc read_directory (a : Auth) (cap : Cap a) (path : Bytes) : FS a (Result FileError (List DirEntry)) visits [FS] = \
+         Vis (FSOp a) (fs_resp a) (Result FileError (List DirEntry)) (ReadDirectory a cap path) \
+           (\\r. Ret (FSOp a) (fs_resp a) (Result FileError (List DirEntry)) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude read_directory failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc create_directory (a : Auth) (cap : Cap a) (recursive : Bool) (path : Bytes) : FS a (Result FileError Unit) visits [FS] = \
+         Vis (FSOp a) (fs_resp a) (Result FileError Unit) (CreateDirectory a cap recursive path) \
+           (\\r. Ret (FSOp a) (fs_resp a) (Result FileError Unit) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude create_directory failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc remove_file (a : Auth) (cap : Cap a) (path : Bytes) : FS a (Result FileError Unit) visits [FS] = \
+         Vis (FSOp a) (fs_resp a) (Result FileError Unit) (RemoveFile a cap path) \
+           (\\r. Ret (FSOp a) (fs_resp a) (Result FileError Unit) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude remove_file failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc remove_directory (a : Auth) (cap : Cap a) (recursive : Bool) (path : Bytes) : FS a (Result FileError Unit) visits [FS] = \
+         Vis (FSOp a) (fs_resp a) (Result FileError Unit) (RemoveDirectory a cap recursive path) \
+           (\\r. Ret (FSOp a) (fs_resp a) (Result FileError Unit) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude remove_directory failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc rename_file (a : Auth) (cap : Cap a) (from : Bytes) (to : Bytes) : FS a (Result FileError Unit) visits [FS] = \
+         Vis (FSOp a) (fs_resp a) (Result FileError Unit) (Rename a cap from to) \
+           (\\r. Ret (FSOp a) (fs_resp a) (Result FileError Unit) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude rename_file failed: {}", e)))?;
 
     // Program-I I-1 entrypoint ABI. These are ordinary, kernel-checked Ken
     // declarations: the host runner knows their fixed shape, but no kernel
@@ -1339,7 +1448,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .and_then(|ind| ind.constructors.first())
         .map(|ctor| ctor.id)
         .ok_or_else(|| ElabError::Internal("prelude: MkProgramCaps missing".into()))?;
-    elab.globals.insert("MkProgramCaps".into(), program_caps_ctor);
+    elab.globals
+        .insert("MkProgramCaps".into(), program_caps_ctor);
 
     elab.elaborate_decl(
         "const HostIO (r : Type) : Type = \
