@@ -435,7 +435,8 @@ and those displayed bytes must format to themselves. Every assertion is
   and a non-trivial sum formats to:
 
   ```ken
-  data OptionNat = None
+  data OptionNat =
+    None
     | Some Nat
   ```
 
