@@ -34,9 +34,5 @@ const finalCheck : String =
     True ↦ "FAIL"
   }
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line finalCheck)

@@ -20,93 +20,37 @@
 -- `lookup` against the known frequency counts for a classic input
 -- ("mississippi"), folded to a single PASS/FAIL string (matching
 -- `palindrome`'s oracle style).
-data Tree k v =
-  Leaf
-  | Node (Tree k v) k v (Tree k v)
+data Tree k v = Leaf | Node (Tree k v) k v (Tree k v)
 
 const empty (k : Type) (v : Type) : Tree k v = Leaf k v
 
 fn insert
-  (k : Type)
-  (v : Type)
-  (leq : k → k → Bool)
-  (key : k)
-  (val : v)
-  (m : Tree k v)
-  : Tree k v =
+      (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v) (m : Tree k v)
+    : Tree k v =
   match m {
-    Leaf ↦
-      Node
-        k
-        v
-        (Leaf k v)
-        key
-        val
-        (Leaf k v);
+    Leaf ↦ Node k v (Leaf k v) key val (Leaf k v);
     Node l k2 v2 r ↦
       match leq key k2 {
         True ↦
           match leq k2 key {
-            True ↦
-              Node
-                k
-                v
-                l
-                key
-                val
-                r;
-            False ↦
-              Node
-                k
-                v
-                (insert k v leq key val l)
-                k2
-                v2
-                r
+            True ↦ Node k v l key val r;
+            False ↦ Node k v (insert k v leq key val l) k2 v2 r
           };
-        False ↦
-          Node
-            k
-            v
-            l
-            k2
-            v2
-            (insert k v leq key val r)
+        False ↦ Node k v l k2 v2 (insert k v leq key val r)
       }
   }
 
-fn lookup
-  (k : Type)
-  (v : Type)
-  (leq : k → k → Bool)
-  (key : k)
-  (m : Tree k v)
-  : Option v =
+fn lookup (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) : Option v =
   match m {
     Leaf ↦ None v;
     Node l k2 v2 r ↦
       match leq key k2 {
         True ↦
           match leq k2 key {
-            True ↦
-              Some
-                v
-                v2;
-            False ↦
-              lookup
-                k
-                v
-                leq
-                key
-                l
+            True ↦ Some v v2;
+            False ↦ lookup k v leq key l
           };
-        False ↦
-          lookup
-            k
-            v
-            leq
-            key
-            r
+        False ↦ lookup k v leq key r
       }
   }
 
@@ -115,14 +59,8 @@ fn countLetters (xs : List Char) (m : Tree Char Nat) : Tree Char Nat =
     Nil ↦ m;
     Cons c cs ↦
       match lookup Char Nat leq_int c m {
-        None ↦
-          countLetters
-            cs
-            (insert Char Nat leq_int c (Suc Zero) m);
-        Some n ↦
-          countLetters
-            cs
-            (insert Char Nat leq_int c (Suc n) m)
+        None ↦ countLetters cs (insert Char Nat leq_int c (Suc Zero) m);
+        Some n ↦ countLetters cs (insert Char Nat leq_int c (Suc n) m)
       }
   }
 
@@ -149,10 +87,7 @@ fn eq_nat (a : Nat) (b : Nat) : Bool =
     Suc a2 ↦
       match b {
         Zero ↦ False;
-        Suc b2 ↦
-          eq_nat
-            a2
-            b2
+        Suc b2 ↦ eq_nat a2 b2
       }
   }
 
@@ -175,9 +110,5 @@ const finalCheck : String =
     False ↦ "FAIL"
   }
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line finalCheck)

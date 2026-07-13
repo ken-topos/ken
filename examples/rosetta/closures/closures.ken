@@ -32,8 +32,7 @@
 -- `Nat`/`Int`.
 -- Boxes a `String -> String` so it can be a `List` element (GAP-arrow-
 -- type-as-type-arg workaround, see above).
-data StrFn =
-  MkStrFn (String → String)
+data StrFn = MkStrFn (String → String)
 
 fn applyStrFn (box : StrFn) (s : String) : String =
   match box {
@@ -54,10 +53,7 @@ const greeters : List StrFn =
 const greetings : List String = map StrFn String (λbox. applyStrFn box "World") greeters
 
 const expected : List String =
-  Cons
-    String
-    "Hello, World"
-    (Cons String "Bye, World" (Cons String "Hey, World" (Nil String)))
+  Cons String "Hello, World" (Cons String "Bye, World" (Cons String "Hey, World" (Nil String)))
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 const finalCheck : String =
@@ -66,9 +62,5 @@ const finalCheck : String =
     False ↦ "FAIL"
   }
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line finalCheck)

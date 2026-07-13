@@ -19,11 +19,7 @@
 fn reverseListChar (a : Type) (xs : List a) : List a =
   match xs {
     Nil ↦ Nil a;
-    Cons x xs2 ↦
-      list_append
-        a
-        (reverseListChar a xs2)
-        (Cons a x (Nil a))
+    Cons x xs2 ↦ list_append a (reverseListChar a xs2) (Cons a x (Nil a))
   }
 
 fn reverseString (s : String) : String =
@@ -56,9 +52,5 @@ const finalCheck : String =
     False ↦ "FAIL"
   }
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line finalCheck)

@@ -14,19 +14,180 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 132bb75e`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 431e36ea`
 > **CURRENT FRONTIER (newest at lines ~285–314):** CC2 **CLOSED ✅** (#59, PR #609
 > @ `132bb75e`, all 3 Foundation retros in). **kenfmt #58 (Language) — R1a
-> refinement IN FLIGHT:** operator chose REFINE (short applications inside a split
-> return type stay inline); ring re-applied to `Core/OrdNat.ken.md` + running the
-> TARGETED suite (no `--workspace`) → new SHA + diff → **I re-present to Pat** →
-> approve → publish batch-1 → later batch = catalog-wide + re-arm gate #57. **All
+> batch-1 MERGED ✅ @ `431e36ea` (PR #610)** — operator-approved R1a (short
+> applications inside a split return type stay inline); batch-1 only, strict gate
+> #57 stays paused for the later catalog-wide batch. Task #58 → close on 3 §10
+> retros. **All
 > other lanes idle/HELD:** Foundation idle (#60 fast-follows unframed, await
 > substrate); Runtime idle (I-4 needs Architect design); namespace remainder HELD
 > (ADR 0015 spec branches stale). WORKFLOW RULE (operator): local = TARGETED only,
 > never `--workspace` (full gate = CI). *Detailed session log below (accretes
 > downward; oldest I-2/I-3 first).*
 >
+> **★ OPERATOR SEQUENCING (Pat, 2026-07-13, post-#58): spin up TWO lanes** —
+> **(A) kenfmt catalog-wide + re-arm gate #57** and **(B) unblock namespace
+> remainder**. Runtime I-4 and CC2 #60 fast-follows stay PARKED. **Lane A (task
+> #61):** frame authored `docs/program/wp/kenfmt-catalog-wide.md`; branch
+> `wp/kenfmt-catalog-wide @ 072262b5` (off `431e36ea`); catalog-wide reformat with
+> the landed horizontal-first formatter + regenerate frozen-corpus fixture +
+> remove the 3 `#[ignore]` (re-arm the strict gates); AC5 = Steward spot-check
+> before publish; targeted-only. **Handoff-Gate compaction of the Language ring IN
+> FLIGHT** (helper pid 3220839, all 3 at origin/main 0-ahead/0-dirty, retros in) →
+> verify drops WIDE → kick. **Lane B (namespace #36/#37/#39/#42):** scope-mapping
+> subagent in flight (ADR 0015 / §32 / spec-chapter state) → author enclave
+> re-derivation frame → Handoff-Gate compact spec enclave → kick. NOT-kicked until
+> scope is mapped.
+> **★ Lane A KICKED ✅** — Language ring compacted (all 3 "Context compacted",
+> 0-ahead/0-dirty), kickoff posted `evt_z6hg03b0mxx1`, leader roused. Task #61
+> in_progress; building catalog-wide reformat + gate re-arm on `wp/kenfmt-catalog-
+> wide @ 072262b5`.
+> **★ Lane A batch-2 candidate `7bfd142b` → AC5 BLOCK → operator chose FIX-then-
+> RESWEEP → batch-2a (#62).** Implementer released `wp/kenfmt-catalog-wide @
+> 7bfd142b` (39 files: 10 catalog + examples/rosetta + gate re-arm; scope/
+> preservation CLEAN — forbidden-path EMPTY, `#[ignore]` removed, token/AST
+> preserved). **Steward AC5 spot-check FOUND a formatter gap:** horizontal-first
+> collapses signatures/returns (R1/R1a) but **leaves nested application/proof-term
+> args splayed one-token-per-line** — `(pair_fst a b x)` is inline in a signature
+> but 4 lines in the proof body of `LawfulClasses::pair_ord_head_sound`; pervasive
+> (Map 27k-line diff, Collections, Parsing); pre-existing (old capstone-C), the
+> current formatter doesn't collapse it. Per frame AC5 (escalate, don't re-tune in
+> the sweep WP) I surfaced fix-vs-accept to Pat → **Pat chose FIX THE FORMATTER,
+> then re-sweep.** `7bfd142b` PARKED on `wp/kenfmt-catalog-wide` (reference; sweep
+> redone with fixed formatter). **Task #61 BLOCKED-BY #62.** **batch-2a (#62):**
+> frame `docs/program/wp/kenfmt-nested-horizontal.md`; branch `wp/kenfmt-nested-
+> horizontal @ 38eceb13` (off `431e36ea`); make application/paren fit-grouping
+> RECURSIVE (generalize R3/R5 into nested/proof-term positions), no R1/R1a/R2
+> regression; TWO-STAGE gated on operator review — (1) layout.rs fix +
+> `LawfulClasses` representative → Steward presents to Pat → approve → (2)
+> catalog-wide re-sweep + regenerate fixture + re-arm 3 gates. **Handoff-Gate
+> compaction of Language ring IN FLIGHT** (pid 3239612; ring quiescent, 0-ahead/
+> 0-dirty, batch-1 retros in, batch-2 candidate parked on its own branch) →
+> verify drops WIDE → kick batch-2a. **AC5 did its job — the one-file-first
+> discipline caught a catalog-wide style defect before it froze into the gate.**
+> **★ batch-2a KICKED ✅** — Language ring compacted (all 3 "Context compacted"),
+> kickoff `evt_53hrbkxssdepb`, leader roused. Task #62 in_progress. Stage-1 =
+> layout.rs recursive fit-group fix + `LawfulClasses` representative → hand me the
+> diff → **I present to Pat** → approve → stage-2 catalog re-sweep + gate re-arm.
+> NEXT (Steward): await stage-1 SHA + LawfulClasses diff → operator review.
+> **★ Lane B TRIGGER refined (credit-conscious, 2026-07-13).** Do NOT route the
+> Architect for #39/#36 design speculatively: Language (the shared build resource)
+> is SATURATED on batch-2a, so #37 (build-only) can't start regardless, and the
+> #39/#36 design artifacts are only needed LATER — spending T1 Architect credits
+> now buys nothing on the critical path (fleet is already productively busy).
+> **Start Lane B when EITHER (a) Pat steers priority (I offered the #39/#36/#37
+> menu `evt_6zaape3m4zk2q`, unanswered), OR (b) batch-2a completes and Language
+> would otherwise idle** — then #39 Architect ADR-amendment design is justified
+> pipeline-fill. Dependency-first default = #39 (contained, extends landed N3);
+> #36/N5 (`pub use`, user-facing spelling) holds for explicit Pat input. Aligns
+> with credit-window discipline (reserve T1/Architect for when it's on the path).
+> **★ OPERATOR DIRECTIVE OVERRIDE (Pat, 2026-07-13): "don't worry about credits …
+> use tokens efficiently and USE THEM UP before the end of the weekly window."**
+> Unspent weekly allocation is WASTE → **idle units are the failure mode.** New
+> posture ([[dont-gate-pipeline-fill-on-credit-cost]]): parallelize AGGRESSIVELY,
+> keep every unit busy, go deep where valued. **Lane B started NOW (not deferred):
+> Architect Handoff-Gate compaction LAUNCHED** (pid 3254392; `architect/work` was
+> 254-ahead/115k-del-behind = badly stale → reset-helper brought it current,
+> preserved at `preserved/architect-work-af12fd66`). NEXT = author #39 (MRES-6
+> ADR amendment) + #36/N5 (`pub use` design — propose spelling options → surface to
+> Pat) brief → hand off after drops-verified + rouse. **THROUGHPUT PLAN — unpark to
+> fill the window:** (1) Architect: namespace #39/#36 design NOW, then Runtime I-4
+> (ProgramCaps) design; (2) enclave: independent spec-backlog work (SPEC-PROGRESS)
+> while Architect ADR pends; (3) Foundation: unpark #60 fast-follows (needs a
+> substrate/trust decision — surface to Pat/Architect); (4) Runtime: kick I-4 once
+> Architect-designed; (5) Language: #37 build queues behind batch-2a. Sequence
+> these across the next few turns — every idle ring gets real work.
+> **★ batch-2a stage-1 APPROVED ✅ → stage-2 GO (2026-07-13).** Candidate
+> `b13191d4` (layout.rs recursive fit + goldens + ONLY LawfulClasses + frame;
+> OrdNat byte-identical; ancestry linear; gate `#[ignore]` untouched). AC5 target
+> FIXED: `pair_ord_head_sound` motive collapsed to one line, `(pair_fst a b x)`
+> inline everywhere, over-width apps break at arg boundaries with each arg
+> horizontal. Operator APPROVED → **stage-2 relayed** `evt_3sxkea2czybrs`
+> (continuation of #62, NO re-Handoff-Gate): whole-corpus re-sweep + regenerate
+> fixture + remove 3 `#[ignore]` to re-arm gate; build on `b13191d4`. Language
+> building stage-2 → hand me SHA → **Steward AC5 spot-check across distinct
+> constructs** → publish → close #62 + #61. **★ Lane B: Architect COMPACTED +
+> CURRENT** (ctx 0%, worktree `431e36ea`; stale 254-ahead branch reset, preserved
+> `preserved/architect-work-af12fd66`). Namespace #39/#36 design brief DRAFTING
+> (subagent, protects Steward context) → Steward finalizes → hand to Architect +
+> rouse. **NEXT (Steward, post-self-compact):** (1) finalize + hand Architect the
+> #39/#36 brief; (2) receive batch-2a stage-2 SHA → AC5 spot-check → publish;
+> (3) continue unparking Runtime I-4 / Foundation #60 / enclave to fill the window.
+> **★ Lane B HANDED ✅** — namespace design brief `docs/program/wp/namespace-
+> remainder-design.md` (commit `6cdd3401`) handed to the Architect (compacted,
+> current @431e36ea) via send-keys rouse. Architect designing **#39 (ADR-0014
+> MRES-6 general-clash amendment)** + **#36/N5 (`pub use` re-export design doc —
+> spelling OPTIONS for Pat, MRES-9 status-flip)**, design-only, reads authoritative
+> ADR/spec from `origin/main`, hands artifacts back to me. **Both lanes now
+> active: Language (batch-2a stage-2 re-sweep) ∥ Architect (namespace design).**
+> Steward self-compacting at this seam. **ON RESUME:** (1) await Architect #39/#36
+> artifacts → frame follow-on spec/build WPs + surface #36/N5 spelling options to
+> Pat; (2) await batch-2a stage-2 SHA → AC5 spot-check across distinct constructs
+> → publish → close #62+#61; (3) keep filling the window — Runtime I-4 (Architect
+> after namespace), Foundation #60, enclave spec-backlog, #37 behind batch-2a.
+> **★ RESUMED post-self-compact (2026-07-13 ~19:5x) — both lanes verified STILL
+> in flight, no handbacks yet.** Language stage-2 branch `wp/kenfmt-nested-
+> horizontal` still at stage-1 head `b13191d4` (implementer status "validating"
+> — re-sweep not yet released); `architect/work` at reset base `431e36ea` (no
+> commits — namespace design still drafting). **Window-fill assessment:** the two
+> most expensive units (Architect T1, Language build) are FULLY DEPLOYED on the
+> two operator-directed lanes; enclave HELD as the imminent namespace-follow-on
+> receiver (its real next work = §3.3 spec + conformance WPs, not yet designed);
+> Runtime/Kernel/Verify/Foundation-#60 all funnel through the saturated Architect
+> design bottleneck. SPEC-PROGRESS is the DRAFT bootstrap outline, not a queue of
+> shovel-ready independent WPs — no genuinely-ready item to route without
+> manufacturing busy-work. **This is fully-deployed, NOT idle-through-timidity**
+> ([[dont-gate-pipeline-fill-on-credit-cost]] test: no unit with ready *designed*
+> work is idle). Stay event-driven on the two handbacks; each unblocks the next
+> wave. **#60 substrate decisions** (show_int Int→String, lawful Bytes keys) are
+> Architect-gated (need bridge+cert design) → BATCH with the namespace #36/N5
+> spelling options for Pat when the Architect hands back, rather than interrupt
+> Pat now for a decision no idle unit can act on today.
+> **★ Lane A batch-2a STAGE-2 RELEASED `2c68eda5` → QA APPROVE + Steward AC5 +
+> honesty-gate ALL GREEN → PUBLISHING (2026-07-13 ~20:0x).** Whole-corpus re-sweep
+> + gate re-arm (`evt_jzz21j4rfvtp`): 39 dynamic frozen sources (22 catalog + 16
+> rosetta + ProofErasure), 35 changed, OrdNat/Console/FS/LawfulClasses fixed
+> points; 3 named `#[ignore]` removed, `git grep 'gate paused'` empty; targeted
+> nets green. **AC5 GREEN** (`evt_701510cgfsf6t`): zero splay runs across Map(27k)/
+> EffectfulClasses/LawfulFunctors/Collections/Sums/Validation/Parsing/NatArith;
+> nested apps horizontal; OrdNat byte-identical to `b13191d4` (AC2 holds).
+> **Honesty-gate CLEAN** (`431e36ea`→`2c68eda5`): linear 3-commit, zero merges,
+> forbidden-path EMPTY, `diff --check` clean. Language QA approve + leader
+> git_request in (`evt_5wav3m6hn1svg`). → bundle tracker-sync commit (§2a) →
+> scripted publisher on the bundled SHA (CI-polled) → relay merge → close #62+#61.
+> **This ends the kenfmt line.** Lane B (Architect namespace) still drafting.
+> **★ Lane B PREMISE CORRECTED (scope-map subagent, 2026-07-13) — the "stale ADR-
+> 0015 branches need re-derivation" premise was WRONG.** The branches `wp/adr0015-
+> remove-use-open{,-spec,-conformance}` are **abandoned duplicates whose content
+> ALREADY MERGED to main** via `5674cb88` (+ N2/N3/N4 + §32-currency `106fd60c`).
+> `spec/30-surface/32-grammar.md` + `33-declarations.md` are **current and
+> post-§32** (Three import forms, MRES-6 local×import/local×prelude clash rules,
+> N4 admission headers all landed; `grep 'use M'`/`use-open` across spec+conformance
+> = EMPTY). So "unblock namespace" is NOT a re-derivation — it is **authoring FOUR
+> fresh WPs on current main** (matches [[my-own-tracker-capability-landed-line-can-
+> be-stale]] — my own tracker's "stale/blocked" line was itself stale). Decomposition
+> + dependency order:
+> >  - **#37 (retire `use` kw)** — BUILD-ONLY, spec already done, READY NOW. But it's
+> >    **Language work** (`lexer.rs` KwUse@49/447 + `parser.rs` parse_use_decl@205 +
+> >    kenfmt keyword list@129) → **contends with Lane A on the shared Language ring;
+> >    QUEUE behind kenfmt #61.**
+> >  - **#39 (MRES-6 general clash: import×import + import×prelude)** — needs
+> >    **Architect ADR-0014 MRES-6 amendment FIRST** → enclave §3.3 spec + conformance
+> >    → Language build. §3.3 currently specs only local×import/local×prelude.
+> >  - **#36/N5 (`pub use` re-export)** — LARGEST; new form (does not exist). Architect
+> >    design (spelling + MRES-9 status-flip) → spec (32-grammar new production + §4
+> >    canonical-identity + MRES-4d instance-surface, promote the §33 §4 L606-616
+> >    forward-compat text) → conformance → build.
+> >  - **#42 (keyword-reservation sweep)** — hygiene sweep over `.ken`/`.ken.md` fences;
+> >    kws already reserved in lexer; folds into N4 build-forward; low priority.
+> >  NO WP frame exists for any of the four yet; DAG/03-program carry no nodes.
+> **Lane B PLAN:** the non-Language-contending first move = route the **Architect** to
+> design #39 (ADR-0014 MRES-6 amendment) + #36/N5 (re-export approach) — parallel to
+> kenfmt. #37 queues behind Lane A on Language. **NEXT: surface the corrected picture
+> to Pat (brief status — spec isn't stale, it's 4 fresh WPs, my sequencing) → then
+> Handoff-Gate compact Architect → hand design brief.**
 > ⋯ _historical session narrative (I-2/I-3 era, `@ 330f276b`) follows:_ ⋯
 > **I-2 (CA2 Console floor) CLOSED ✅ `1f85ad9a`** (PR #604; ACs met, all 3 §10 retros
 > in @ 10:28 → task #55 done). **Milestone B's Console effect floor is COMPLETE.** Carry
@@ -295,6 +456,19 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > publish a canonical frame blob + verify byte-identity before review; a conformance
 > discriminator must be checked against the accepted alphabet). Task #59 DONE. Foundation idle
 > (no next WP; #60 fast-follows unframed).
+> **★ kenfmt #58 batch-1 MERGED ✅ `origin/main @ 431e36ea` (PR #610, squash, CI green).**
+> Landed honesty-gate CLEAN (object store): single parent `132bb75e`, 8 files = 7 reviewed
+> (layout.rs + 3 elaborator tests + cli fmt test + `Core/OrdNat.ken.md` + frame) + tracker
+> bundle; forbidden-path EMPTY; R1a witnesses present on main (`→ Equal Nat x y =` line 89,
+> `→ Equal Bool (leq_nat x z) True =` line 68). Batch-1 only — no catalog sweep; strict gate
+> #57 STAYS PAUSED (later catalog-wide batch re-arms it). **Task #58 CLOSED ✅** — all 3
+> Language §10 retros in (leader `evt_7br5dr28k9n1m`/impl `evt_1dmfmqsfyb914`/qa
+> `evt_1ybchtkrbw3tx`; carries: keep the one-file operator checkpoint as a real sequencing
+> gate ahead of any catalog sweep; layout needs two independent axes — exact shape goldens
+> for readability + token-stream/AST/idempotence for semantics; formatter-only changes run
+> targeted formatter/crate nets locally, leave the locked workspace gate to CI). Language
+> ring idle. **NEXT kenfmt: catalog-wide batch + re-arm gate #57 — a SEPARATE future WP,
+> operator-priority-gated (incremental directive: one file → review → then catalog).**
 > **★ kenfmt #58 R1a REFINED + OPERATOR-APPROVED @ `ee6ec5b5` → PUBLISHING batch-1
 > (2026-07-13).** Ring re-applied R1a to `Core/OrdNat.ken.md`: split-return arrow chains
 > now split at top-level `→` only, each fitting operand horizontal — witnesses exact

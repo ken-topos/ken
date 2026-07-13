@@ -62,10 +62,7 @@ fn natEq (a : Nat) (b : Nat) : Bool =
     Suc m ↦
       match b {
         Zero ↦ False;
-        Suc n ↦
-          natEq
-            m
-            n
+        Suc n ↦ natEq m n
       }
   }
 
@@ -82,23 +79,11 @@ fn hailstoneFueled (fuel : Nat) (n : Nat) (acc : List Nat) : List Nat =
     Zero ↦ acc;
     Suc f ↦
       match isOne n {
-        True ↦
-          Cons
-            Nat
-            n
-            acc;
+        True ↦ Cons Nat n acc;
         False ↦
           match isEven n {
-            True ↦
-              hailstoneFueled
-                f
-                (half n)
-                (Cons Nat n acc);
-            False ↦
-              hailstoneFueled
-                f
-                (tripleplus1 n)
-                (Cons Nat n acc)
+            True ↦ hailstoneFueled f (half n) (Cons Nat n acc);
+            False ↦ hailstoneFueled f (tripleplus1 n) (Cons Nat n acc)
           }
       }
   }
@@ -118,10 +103,7 @@ fn listEqNat (xs : List Nat) (ys : List Nat) : Bool =
         Nil ↦ False;
         Cons y ys2 ↦
           match natEq x y {
-            True ↦
-              listEqNat
-                xs2
-                ys2;
+            True ↦ listEqNat xs2 ys2;
             False ↦ False
           }
       }
@@ -158,9 +140,7 @@ const expectedReversed : List Nat =
                   (Suc
                     (Suc
                       (Suc
-                        (Suc
-                          (Suc
-                            (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))))))))))))
+                        (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))))))))))))
             (Cons
               Nat
               (Suc (Suc (Suc (Suc (Suc Zero)))))
@@ -194,9 +174,5 @@ const finalCheck : String =
     False ↦ "FAIL"
   }
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line finalCheck)

@@ -48,7 +48,6 @@ const FRAME_LINE_COUNTS: &[(&str, usize)] = &[
 ];
 
 #[test]
-#[ignore = "kenfmt strict frozen-corpus gate paused per operator 2026-07-13; catalog reformat is being reworked incrementally — re-enable after rework (see docs/program/IMPLEMENTATION-PROGRESS.md)"]
 fn canonical_frozen_corpus_is_a_31_file_fixed_point() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut literate = Vec::new();
@@ -98,7 +97,6 @@ fn canonical_frozen_corpus_is_a_31_file_fixed_point() {
 }
 
 #[test]
-#[ignore = "kenfmt strict frozen-corpus gate paused per operator 2026-07-13; catalog reformat is being reworked incrementally — re-enable after rework (see docs/program/IMPLEMENTATION-PROGRESS.md)"]
 fn canonical_reformat_has_no_pathological_line_expansion() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut frame_total = 0usize;

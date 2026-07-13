@@ -37,21 +37,12 @@ fn bool_and (a : Bool) (b : Bool) : Bool =
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
     Nil ↦ ys;
-    Cons x t ↦
-      Cons
-        a
-        x
-        (list_append a t ys)
+    Cons x t ↦ Cons a x (list_append a t ys)
   }
 
 lemma cong
-  (ty : Type)
-  (ty2 : Type)
-  (x : ty)
-  (y : ty)
-  (f : ty → ty2)
-  (p : Equal ty x y)
-  : Equal ty2 (f x) (f y) =
+      (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2) (p : Equal ty x y)
+    : Equal ty2 (f x) (f y) =
   J (λy' _. Equal ty2 (f x) (f y')) Refl p
 
 fn bool_eq (a : Bool) (b : Bool) : Bool =
@@ -185,20 +176,16 @@ for `list_append`: the base case has both sides reduce to the constructor
 result (the induction hypothesis) is lifted under `Cons x` by `cong`:
 
 ```ken example
-lemma list_right_unit
-  (a : Type)
-  (xs : List a)
-  : Equal (List a) (list_append a xs (Nil a)) xs =
+lemma list_right_unit (a : Type) (xs : List a) : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
     Nil ↦ Proved;
-    Cons x t ↦
-      cong
-        (List a)
-        (List a)
-        (list_append a t (Nil a))
-        t
-        (λl. Cons a x l)
-        (list_right_unit a t)
+    Cons x t ↦ cong
+      (List a)
+      (List a)
+      (list_append a t (Nil a))
+      t
+      (λl. Cons a x l)
+      (list_right_unit a t)
   }
 ```
 
@@ -375,10 +362,6 @@ entry's tangled fences run through `ken run`, so this final compiled
 declaration accepts the fixed process-input and capability ABI:
 
 ```ken
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line "proof techniques ok")
 ```

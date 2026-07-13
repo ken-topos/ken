@@ -21,10 +21,7 @@ fn natAdd (a : Nat) (b : Nat) : Nat =
 fn natMul (a : Nat) (b : Nat) : Nat =
   match a {
     Zero ↦ Zero;
-    Suc m ↦
-      natAdd
-        b
-        (natMul m b)
+    Suc m ↦ natAdd b (natMul m b)
   }
 
 -- Convert a Nat to Int for human-readable output.
@@ -40,10 +37,7 @@ fn natToInt (n : Nat) : Int =
 fn factorial (n : Nat) : Nat =
   match n {
     Zero ↦ Suc Zero;
-    Suc m ↦
-      natMul
-        n
-        (factorial m)
+    Suc m ↦ natMul n (factorial m)
   }
 
 -- ── Readable Nat literals ────────────────────────────────────────────────────
@@ -62,19 +56,12 @@ const five : Nat = Suc four
 -- `ken-interp` has no `div_int`/`mod_int` primitive, so decimal conversion
 -- goes via structural `Nat` peeling (`sub10`) + a `Nat`-fuel loop, same
 -- shape as `examples/rosetta/gcd/gcd.ken`'s own machinery.
-data OrdResult =
-  Lt
-  | Eq
-  | Gt
+data OrdResult = Lt | Eq | Gt
 
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
     Nil ↦ ys;
-    Cons x xs2 ↦
-      Cons
-        a
-        x
-        (list_append a xs2 ys)
+    Cons x xs2 ↦ Cons a x (list_append a xs2 ys)
   }
 
 fn concat (a : String) (b : String) : String =
@@ -110,10 +97,7 @@ fn sub10 (n : Nat) : Option Nat =
                                     Suc n9 ↦
                                       match n9 {
                                         Zero ↦ None Nat;
-                                        Suc n10 ↦
-                                          Some
-                                            Nat
-                                            n10
+                                        Suc n10 ↦ Some Nat n10
                                       }
                                   }
                               }
@@ -131,10 +115,7 @@ fn mod10Fueled (fuel : Nat) (n : Nat) : Nat =
     Suc f ↦
       match sub10 n {
         None ↦ n;
-        Some n2 ↦
-          mod10Fueled
-            f
-            n2
+        Some n2 ↦ mod10Fueled f n2
       }
   }
 
@@ -146,11 +127,7 @@ fn div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
     Suc f ↦
       match sub10 n {
         None ↦ q;
-        Some n2 ↦
-          div10Fueled
-            f
-            n2
-            (Suc q)
+        Some n2 ↦ div10Fueled f n2 (Suc q)
       }
   }
 
@@ -165,27 +142,17 @@ fn natToDecimalFueled (fuel : Nat) (n : Nat) : String =
     Suc f ↦
       match div10 n {
         Zero ↦ digitChar (mod10 n);
-        Suc q ↦
-          concat
-            (natToDecimalFueled f (Suc q))
-            (digitChar (mod10 n))
+        Suc q ↦ concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
       }
   }
 
 fn natToDecimal (n : Nat) : String =
   match n {
     Zero ↦ "0";
-    Suc m ↦
-      natToDecimalFueled
-        (Suc m)
-        (Suc m)
+    Suc m ↦ natToDecimalFueled (Suc m) (Suc m)
   }
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 -- main: 5! = 120
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line (natToDecimal (factorial five)))

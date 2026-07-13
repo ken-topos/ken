@@ -38,8 +38,7 @@ The `nonempty_` prefix keeps these operations distinct from the ordinary-list
 combinators in `Data.Collections` while preserving the same familiar names.
 
 ```ken
-data NonEmpty a =
-  NonEmptyCons a (List a)
+data NonEmpty a = NonEmptyCons a (List a)
 
 fn nonempty_head (a : Type) (xs : NonEmpty a) : a =
   match xs {
@@ -53,31 +52,19 @@ fn nonempty_tail (a : Type) (xs : NonEmpty a) : List a =
 
 fn nonempty_to_list (a : Type) (xs : NonEmpty a) : List a =
   match xs {
-    NonEmptyCons x rest ↦
-      Cons
-        a
-        x
-        rest
+    NonEmptyCons x rest ↦ Cons a x rest
   }
 
 fn nonempty_map (a : Type) (b : Type) (f : a → b) (xs : NonEmpty a) : NonEmpty b =
   match xs {
-    NonEmptyCons x rest ↦
-      NonEmptyCons
-        b
-        (f x)
-        (map a b f rest)
+    NonEmptyCons x rest ↦ NonEmptyCons b (f x) (map a b f rest)
   }
 
 fn nonempty_append (a : Type) (xs : NonEmpty a) (ys : NonEmpty a) : NonEmpty a =
   match xs {
     NonEmptyCons x rest ↦
       match ys {
-        NonEmptyCons y more ↦
-          NonEmptyCons
-            a
-            x
-            (list_append a rest (Cons a y more))
+        NonEmptyCons y more ↦ NonEmptyCons a x (list_append a rest (Cons a y more))
       }
   }
 ```
@@ -88,8 +75,7 @@ Construction itself supplies the non-empty guarantee. Forgetting that
 guarantee with `nonempty_to_list` always produces a `Cons`.
 
 ```ken example
-const one_two : NonEmpty Nat =
-  NonEmptyCons Nat (Suc Zero) (Cons Nat (Suc (Suc Zero)) (Nil Nat))
+const one_two : NonEmpty Nat = NonEmptyCons Nat (Suc Zero) (Cons Nat (Suc (Suc Zero)) (Nil Nat))
 
 const first_of_one_two : Nat = nonempty_head Nat one_two
 
@@ -104,30 +90,26 @@ lifts that equality beneath the shared `NonEmptyCons` head.
 
 ```ken
 proof assoc for nonempty_append
-  (a : Type)
-  (xs : NonEmpty a)
-  (ys : NonEmpty a)
-  (zs : NonEmpty a)
-  : Equal (NonEmpty a) (nonempty_append a (nonempty_append a xs ys) zs) (nonempty_append
-  a
-  xs
-  (nonempty_append
-  a
-  ys
-  zs)) =
+      (a : Type) (xs : NonEmpty a) (ys : NonEmpty a) (zs : NonEmpty a)
+    : Equal (NonEmpty a) (nonempty_append a (nonempty_append a xs ys) zs) (nonempty_append
+      a
+      xs
+      (nonempty_append
+      a
+      ys
+      zs)) =
   match xs {
     NonEmptyCons x rest ↦
       match ys {
         NonEmptyCons y more ↦
           match zs {
-            NonEmptyCons z last ↦
-              cong
-                (List a)
-                (NonEmpty a)
-                (list_append a (list_append a rest (Cons a y more)) (Cons a z last))
-                (list_append a rest (Cons a y (list_append a more (Cons a z last))))
-                (NonEmptyCons a x)
-                (list_append::assoc a rest (Cons a y more) (Cons a z last))
+            NonEmptyCons z last ↦ cong
+              (List a)
+              (NonEmpty a)
+              (list_append a (list_append a rest (Cons a y more)) (Cons a z last))
+              (list_append a rest (Cons a y (list_append a more (Cons a z last))))
+              (NonEmptyCons a x)
+              (list_append::assoc a rest (Cons a y more) (Cons a z last))
           }
       }
   }

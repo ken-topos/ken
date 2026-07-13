@@ -31,37 +31,18 @@ fn isNewline (c : Char) : Bool = eq_int (charToInt c) 10
 -- prepend `c` onto the CURRENT (first) segment being accumulated.
 fn consFirst (c : Char) (acc : List (List Char)) : List (List Char) =
   match acc {
-    Nil ↦
-      Cons
-        (List Char)
-        (Cons Char c (Nil Char))
-        (Nil (List Char));
-    Cons seg rest ↦
-      Cons
-        (List Char)
-        (Cons Char c seg)
-        rest
+    Nil ↦ Cons (List Char) (Cons Char c (Nil Char)) (Nil (List Char));
+    Cons seg rest ↦ Cons (List Char) (Cons Char c seg) rest
   }
 
 -- split on '\n' as a SEPARATOR (a trailing '\n' yields a trailing "").
 fn splitNL (xs : List Char) : List (List Char) =
   match xs {
-    Nil ↦
-      Cons
-        (List Char)
-        (Nil Char)
-        (Nil (List Char));
+    Nil ↦ Cons (List Char) (Nil Char) (Nil (List Char));
     Cons c cs ↦
       match isNewline c {
-        True ↦
-          Cons
-            (List Char)
-            (Nil Char)
-            (splitNL cs);
-        False ↦
-          consFirst
-            c
-            (splitNL cs)
+        True ↦ Cons (List Char) (Nil Char) (splitNL cs);
+        False ↦ consFirst c (splitNL cs)
       }
   }
 
@@ -75,28 +56,16 @@ fn dropTrailingEmpty (segs : List (List Char)) : List (List Char) =
         Nil ↦
           match seg {
             Nil ↦ Nil (List Char);
-            Cons _ _ ↦
-              Cons
-                (List Char)
-                seg
-                (Nil (List Char))
+            Cons _ _ ↦ Cons (List Char) seg (Nil (List Char))
           };
-        Cons _ _ ↦
-          Cons
-            (List Char)
-            seg
-            (dropTrailingEmpty rest)
+        Cons _ _ ↦ Cons (List Char) seg (dropTrailingEmpty rest)
       }
   }
 
 fn mapListCharToString (segs : List (List Char)) : List String =
   match segs {
     Nil ↦ Nil String;
-    Cons seg rest ↦
-      Cons
-        String
-        (list_char_to_string seg)
-        (mapListCharToString rest)
+    Cons seg rest ↦ Cons String (list_char_to_string seg) (mapListCharToString rest)
   }
 
 fn lines (s : String) : List String =
@@ -117,26 +86,18 @@ const Compose (r : Type) : Type =
 -- resume N times through `print_line`'s continuation).
 proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Console] =
   match xs {
-    Nil ↦
-      Ret
-        (Coproduct (FSOp APartial) ConsoleOp)
-        (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
-        (Result IOError Unit)
-        (Ok IOError Unit MkUnit);
-    Cons x xs' ↦
-      bind
-        (Coproduct (FSOp APartial) ConsoleOp)
-        (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
-        Unit
-        (Result IOError Unit)
-        (inject_r
-          (FSOp APartial)
-          ConsoleOp
-          (fs_resp APartial)
-          console_resp
-          Unit
-          (print_line x))
-        (λ_. printLines xs')
+    Nil ↦ Ret
+      (Coproduct (FSOp APartial) ConsoleOp)
+      (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+      (Result IOError Unit)
+      (Ok IOError Unit MkUnit);
+    Cons x xs' ↦ bind
+      (Coproduct (FSOp APartial) ConsoleOp)
+      (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+      Unit
+      (Result IOError Unit)
+      (inject_r (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp Unit (print_line x))
+      (λ_. printLines xs')
   }
 
 -- Reads the fixture via `inject_l (read_bytes ...)`, and on success prints
@@ -153,103 +114,53 @@ proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Consol
       (fs_resp APartial)
       console_resp
       (Result FileError Bytes)
-      (read_bytes
-        APartial
-        cap
-        (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
+      (read_bytes APartial cap (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
     (λr.
       match r {
         Err e ↦
           match e {
-            MkFileError operation path kind ↦
-              Ret
-                (Coproduct (FSOp APartial) ConsoleOp)
-                (resp_coproduct
-                  (FSOp APartial)
-                  ConsoleOp
-                  (fs_resp APartial)
-                  console_resp)
-                (Result IOError Unit)
-                (Err IOError Unit kind)
+            MkFileError operation path kind ↦ Ret
+              (Coproduct (FSOp APartial) ConsoleOp)
+              (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+              (Result IOError Unit)
+              (Err IOError Unit kind)
           };
         Ok bytes ↦
           match bytes_decode bytes {
-            Err _ ↦
-              Ret
-                (Coproduct (FSOp APartial) ConsoleOp)
-                (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
-                (Result IOError Unit)
-                (Err IOError Unit (Other 0));
+            Err _ ↦ Ret
+              (Coproduct (FSOp APartial) ConsoleOp)
+              (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+              (Result IOError Unit)
+              (Err IOError Unit (Other 0));
             Ok text ↦ printLines (lines text)
           }
       })
 
-proc main
-  (_input : ProcessInput)
-  (caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [FS, Console] =
+proc main (_input : ProcessInput) (caps : ProgramCaps) : HostIO ExitCode visits [FS, Console] =
   match caps {
-    MkProgramCaps cap ↦
-      bind
-        (Coproduct (FSOp APartial) ConsoleOp)
-        (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
-        (Result IOError Unit)
-        ExitCode
-        (app cap)
-        (λr.
-          match r {
-            Err e ↦
-              match e {
-                NotFound ↦
-                  host_program_then
-                    (print_line "NotFound")
-                    (Failure 1);
-                PermissionDenied ↦
-                  host_program_then
-                    (print_line "PermissionDenied")
-                    (Failure 1);
-                CapabilityDenied ↦
-                  host_program_then
-                    (print_line "CapabilityDenied")
-                    (Failure 1);
-                BrokenPipe ↦
-                  host_program_then
-                    (print_line "BrokenPipe")
-                    (Failure 1);
-                Interrupted ↦
-                  host_program_then
-                    (print_line "Interrupted")
-                    (Failure 1);
-                AlreadyExists ↦
-                  host_program_then
-                    (print_line "AlreadyExists")
-                    (Failure 1);
-                InvalidInput ↦
-                  host_program_then
-                    (print_line "InvalidInput")
-                    (Failure 1);
-                IsDirectory ↦
-                  host_program_then
-                    (print_line "IsDirectory")
-                    (Failure 1);
-                NotDirectory ↦
-                  host_program_then
-                    (print_line "NotDirectory")
-                    (Failure 1);
-                NotEmpty ↦
-                  host_program_then
-                    (print_line "NotEmpty")
-                    (Failure 1);
-                Unsupported ↦
-                  host_program_then
-                    (print_line "Unsupported")
-                    (Failure 1);
-                Other errno ↦
-                  host_program_then
-                    (print_line "Other")
-                    (Failure 1)
-              };
-            Ok _ ↦ host_exit Success
-          })
+    MkProgramCaps cap ↦ bind
+      (Coproduct (FSOp APartial) ConsoleOp)
+      (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+      (Result IOError Unit)
+      ExitCode
+      (app cap)
+      (λr.
+        match r {
+          Err e ↦
+            match e {
+              NotFound ↦ host_program_then (print_line "NotFound") (Failure 1);
+              PermissionDenied ↦ host_program_then (print_line "PermissionDenied") (Failure 1);
+              CapabilityDenied ↦ host_program_then (print_line "CapabilityDenied") (Failure 1);
+              BrokenPipe ↦ host_program_then (print_line "BrokenPipe") (Failure 1);
+              Interrupted ↦ host_program_then (print_line "Interrupted") (Failure 1);
+              AlreadyExists ↦ host_program_then (print_line "AlreadyExists") (Failure 1);
+              InvalidInput ↦ host_program_then (print_line "InvalidInput") (Failure 1);
+              IsDirectory ↦ host_program_then (print_line "IsDirectory") (Failure 1);
+              NotDirectory ↦ host_program_then (print_line "NotDirectory") (Failure 1);
+              NotEmpty ↦ host_program_then (print_line "NotEmpty") (Failure 1);
+              Unsupported ↦ host_program_then (print_line "Unsupported") (Failure 1);
+              Other errno ↦ host_program_then (print_line "Other") (Failure 1)
+            };
+          Ok _ ↦ host_exit Success
+        })
   }

@@ -16,16 +16,10 @@
 -- closure recursive combinator shape confirmed SCT-acceptable by VAL2's
 -- own `printLoop` probe.
 -- Classification result.
-data FizzTag =
-  Plain
-  | IsFizz
-  | IsBuzz
-  | IsFizzBuzz
+data FizzTag = Plain | IsFizz | IsBuzz | IsFizzBuzz
 
 -- Helper: is a Nat zero?
-data IsZero =
-  Zero_
-  | NonZero_
+data IsZero = Zero_ | NonZero_
 
 fn isZero (n : Nat) : IsZero =
   match n {
@@ -36,10 +30,7 @@ fn isZero (n : Nat) : IsZero =
 -- ── mod3 ──────────────────────────────────────────────────────────────────────
 -- Modular accumulator for mod3: a 3-element cycle type avoids nested patterns
 -- and mutual recursion. `mod3Step n acc` steps n times from acc.
-data Mod3 =
-  Zero3
-  | One3
-  | Two3
+data Mod3 = Zero3 | One3 | Two3
 
 fn incMod3 (x : Mod3) : Mod3 =
   match x {
@@ -58,22 +49,14 @@ fn isZeroMod3 (x : Mod3) : IsZero =
 fn mod3Step (n : Nat) (acc : Mod3) : Mod3 =
   match n {
     Zero ↦ acc;
-    Suc m ↦
-      mod3Step
-        m
-        (incMod3 acc)
+    Suc m ↦ mod3Step m (incMod3 acc)
   }
 
 fn mod3 (n : Nat) : Mod3 = mod3Step n Zero3
 
 -- ── mod5 ──────────────────────────────────────────────────────────────────────
 -- Same pattern with a 5-element cycle type.
-data Mod5 =
-  Zero5
-  | One5
-  | Two5
-  | Three5
-  | Four5
+data Mod5 = Zero5 | One5 | Two5 | Three5 | Four5
 
 fn incMod5 (x : Mod5) : Mod5 =
   match x {
@@ -96,10 +79,7 @@ fn isZeroMod5 (x : Mod5) : IsZero =
 fn mod5Step (n : Nat) (acc : Mod5) : Mod5 =
   match n {
     Zero ↦ acc;
-    Suc m ↦
-      mod5Step
-        m
-        (incMod5 acc)
+    Suc m ↦ mod5Step m (incMod5 acc)
   }
 
 fn mod5 (n : Nat) : Mod5 = mod5Step n Zero5
@@ -136,11 +116,7 @@ fn natToInt (n : Nat) : Int =
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
     Nil ↦ ys;
-    Cons x xs2 ↦
-      Cons
-        a
-        x
-        (list_append a xs2 ys)
+    Cons x xs2 ↦ Cons a x (list_append a xs2 ys)
   }
 
 fn concat (a : String) (b : String) : String =
@@ -176,10 +152,7 @@ fn sub10 (n : Nat) : Option Nat =
                                     Suc n9 ↦
                                       match n9 {
                                         Zero ↦ None Nat;
-                                        Suc n10 ↦
-                                          Some
-                                            Nat
-                                            n10
+                                        Suc n10 ↦ Some Nat n10
                                       }
                                   }
                               }
@@ -197,10 +170,7 @@ fn mod10Fueled (fuel : Nat) (n : Nat) : Nat =
     Suc f ↦
       match sub10 n {
         None ↦ n;
-        Some n2 ↦
-          mod10Fueled
-            f
-            n2
+        Some n2 ↦ mod10Fueled f n2
       }
   }
 
@@ -212,11 +182,7 @@ fn div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
     Suc f ↦
       match sub10 n {
         None ↦ q;
-        Some n2 ↦
-          div10Fueled
-            f
-            n2
-            (Suc q)
+        Some n2 ↦ div10Fueled f n2 (Suc q)
       }
   }
 
@@ -231,20 +197,14 @@ fn natToDecimalFueled (fuel : Nat) (n : Nat) : String =
     Suc f ↦
       match div10 n {
         Zero ↦ digitChar (mod10 n);
-        Suc q ↦
-          concat
-            (natToDecimalFueled f (Suc q))
-            (digitChar (mod10 n))
+        Suc q ↦ concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
       }
   }
 
 fn natToDecimal (n : Nat) : String =
   match n {
     Zero ↦ "0";
-    Suc m ↦
-      natToDecimalFueled
-        (Suc m)
-        (Suc m)
+    Suc m ↦ natToDecimalFueled (Suc m) (Suc m)
   }
 
 -- ── Output line + IO loop ────────────────────────────────────────────────────
@@ -266,23 +226,17 @@ fn fizzBuzzLine (n : Nat) : String =
 -- VAL2 #10 / OQ-C.C2): `E=ConsoleOp`, `Resp=console_resp`, `R=Unit`.
 proc fizzBuzzLoop (remaining : Nat) (current : Nat) : IO Unit visits [Console] =
   match remaining {
-    Zero ↦
-      Ret
-        ConsoleOp
-        console_resp
-        Unit
-        MkUnit;
-    Suc r ↦
-      Vis
-        ConsoleOp
-        console_resp
-        Unit
-        (Write
-          Stdout
-          (bytes_concat
-            (bytes_encode (fizzBuzzLine current))
-            (bytes_encode (list_char_to_string (Cons Char (10 : Int) (Nil Char))))))
-        (λ_. fizzBuzzLoop r (Suc current))
+    Zero ↦ Ret ConsoleOp console_resp Unit MkUnit;
+    Suc r ↦ Vis
+      ConsoleOp
+      console_resp
+      Unit
+      (Write
+        Stdout
+        (bytes_concat
+          (bytes_encode (fizzBuzzLine current))
+          (bytes_encode (list_char_to_string (Cons Char (10 : Int) (Nil Char))))))
+      (λ_. fizzBuzzLoop r (Suc current))
   }
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
@@ -298,14 +252,7 @@ const twenty : Nat =
                 (Suc
                   (Suc
                     (Suc
-                      (Suc
-                        (Suc
-                          (Suc
-                            (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero)))))))))))))))))))
+                      (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero)))))))))))))))))))
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (fizzBuzzLoop twenty (Suc Zero))

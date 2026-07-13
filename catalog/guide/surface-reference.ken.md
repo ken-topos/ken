@@ -41,10 +41,7 @@ block, being runnable, ends in an ABI-shaped `proc main` (§8 covers why a
 catalog *package* entry, a library rather than a runnable file, carries none):
 
 ```ken
-data Color =
-  Red
-  | Green
-  | Blue
+data Color = Red | Green | Blue
 
 const favorite : Color = Blue
 
@@ -62,11 +59,7 @@ proc announce (c : Color) : IO Unit visits [Console] =
     Blue ↦ print_line "it's blue"
   }
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (announce favorite)
 ```
 
@@ -137,8 +130,7 @@ that must be pattern-matched apart before its payload is usable —
 "just an Int" underneath:
 
 ```ken reject
-data Box =
-  MkBox Int
+data Box = MkBox Int
 
 fn add_years_wrong (n : Int) (b : Box) : Int = add_int n b
 ```
@@ -154,20 +146,12 @@ remaining constructors (`34 §4.1`, `§4.2`); there is no way to *skip* a
 case, not a ban on wildcards.
 
 ```ken example
-data Shape =
-  Circle Int
-  | Rectangle Int Int
+data Shape = Circle Int | Rectangle Int Int
 
 fn area (s : Shape) : Int =
   match s {
-    Circle r ↦
-      mul_int
-        r
-        r;
-    Rectangle w h ↦
-      mul_int
-        w
-        h
+    Circle r ↦ mul_int r r;
+    Rectangle w h ↦ mul_int w h
   }
 ```
 
@@ -176,10 +160,7 @@ possibility — the surface catches it before the kernel ever sees the term.
 Below, `Caution` and `Go` are left unhandled, so it rejects as non-exhaustive:
 
 ```ken reject
-data TrafficLight =
-  Stop
-  | Caution
-  | Go
+data TrafficLight = Stop | Caution | Go
 
 fn is_stop (t : TrafficLight) : Bool =
   match t {
@@ -194,10 +175,7 @@ special-cased sum type:
 fn safe_head (a : Type) (xs : List a) : Option a =
   match xs {
     Nil ↦ None a;
-    Cons x _ ↦
-      Some
-        a
-        x
+    Cons x _ ↦ Some a x
   }
 ```
 
@@ -216,10 +194,7 @@ lawful-classes package builds `Ord` on top of:
 fn abs_int (x : Int) : {y : Int | Equal Bool (leq_int 0 y) True} =
   match leq_int 0 x {
     True ↦ x;
-    False ↦
-      sub_int
-        0
-        x
+    False ↦ sub_int 0 x
   }
 ```
 
@@ -395,16 +370,8 @@ the recursion, so it resolves cleanly:
 ```ken example
 fn trivial_by_list (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
   match ys {
-    Nil ↦
-      Trivial.triv
-        a
-        x;
-    Cons _ t ↦
-      trivial_by_list
-        a
-        x
-        b
-        t
+    Nil ↦ Trivial.triv a x;
+    Cons _ t ↦ trivial_by_list a x b t
   }
 
 lemma trivial_by_list_lemma (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
