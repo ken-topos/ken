@@ -240,6 +240,26 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   silence you find is raised to the author, not papered over.
 - **Ground before locking (§7):** verify the expected output against the
   `/spec`, permissive references, and first principles; don't assume it.
+- **Reachability pass — MANDATORY, mechanical, ends every output-oracle
+  authoring.** An output oracle (a case asserting canonical/expected *bytes* a
+  producer must emit, e.g. a formatter/canonicalizer golden) may only gate on a
+  construct whose **surface is landed on `main`**. The spec *specifying* a
+  construct is **not** the same as the construct being *built* — a case whose
+  input can't enter the real producer pipeline is mislabeled (a
+  `RED-UNTIL-<producer>` claim that the producer can never satisfy). So, as the
+  **last step** before handing an output-oracle candidate off: run the producer's
+  front end (e.g. `parse_lossless`) over **every** non-canonical input **and**
+  every canonical expected block; **any input that fails to produce the
+  producer's input structure** (e.g. a `FormattableSource`) is unreachable and
+  must be reclassified — a construct-**agnostic** invariant → **reconstruct it on
+  a landed construct** that reaches the same invariant; a construct-**specific**
+  case → **relabel** `RED-UNTIL(<missing-surface> + <producer>)`. Attach the
+  per-fixture reachability evidence so the classification is **proven, not
+  spot-checked.** (2026-07-13: this recurred as a *class* — both a `{- -}` block
+  comment and a `record` decl block were labeled RED-UNTIL-B3 while their surface
+  was unbuilt; a per-construct grounding *judgment* was not enough, so it is now
+  a per-fixture mechanical gate. Fixing one mislabel is whack-a-mole; **sweep all
+  fixtures, don't patch one.**)
 - Behavioral forks you surface become Decisions; scope forks escalate to
   Steward.
 
