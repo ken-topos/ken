@@ -14,18 +14,49 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ d6acd6fe`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 858c64a3`
 >
 > **★ CURRENT FRONTIER (one-line resume):** ADR-0014 R2 module round COMPLETE
-> (N1–N4 ✅; only N5 `pub use` gated on MRES-9 remains). **kenfmt B3 co-release
-> ACTIVE** — B3 build (Language, `wp/kenfmt-b3-doc-algebra-layout`) + CV oracle
-> companion (enclave, `wp/kenfmt-b3-conformance-oracle`). Oracle in a **§1d-fold
-> re-spin**: Architect-terminal BLOCKED oracle `72d34188` on a non-trivial-sum
-> determinism hole; **Steward RULED (`evt_3dgghse7z1zpe`) fold the minimal §1d
-> own-line pin into the companion** (now doc-only spec+conf, not conf-only) +
-> swap the unbuilt `{- -}` interstitial fixture for a `--` line comment. **NEXT:
-> await (a) re-confirmed oracle SHA → doc-only publish, (b) B3 build SHA → honesty
-> -gate + CI-polled publish.** (The block below is the running detail log.)
+> (N1–N4 ✅; only N5 `pub use` gated on MRES-9 remains). **kenfmt B3 co-release:
+> ORACLE HALF CLOSED ✅, BUILD HALF ACTIVE.** B3 conformance oracle + §1d
+> sum-determinism pin **MERGED** (`origin/main @ 858c64a3`, PR #593, doc-only;
+> Architect-terminal APPROVE `321d42b5`; reviewed blobs byte-identical to
+> spec-author `5700455d` + CV `2c145022`). The §1d own-line pin closed the
+> determinism hole the oracle surfaced. **Enclave oracle retros IN** (triple
+> complete: spec-author `evt_2w0hgb3tg8cy4` · CV `evt_3nsbygb9gyxn4` · spec-leader
+> `evt_3cahxzzavr4d5`) — **ORACLE HALF FULLY CLOSED ✅.** Shared carry: a
+> both-orientation oracle is a determinism *probe* on the spec, not a mirror;
+> validate RED-UNTIL against landed capability; fold an already-ruled
+> oracle-surfaced normative pin atomically with its consumer. **NEXT: await B3
+> build SHA (Language, `wp/kenfmt-b3-doc-algebra-layout`, code) → honesty-gate +
+> CI-polled publish → its AC6 flips the FMT9 cases green. B4/.ken.md + capstone C
+> after.** _(2026-07-13: build implementer gpt-5.6-sol took a transient "model at
+> capacity" turn-end mid-build [focused test was passing]; recovered via resume
+> send-keys nudge → back to Working. Watch for a re-hit → operator-infra. See
+> memory `codex-seat-model-at-capacity-ends-turn-silently`.)_
+> _(2026-07-13: B3 QA found the printer left narrow record/class/instance
+> nonempty blocks FLAT [only module/law/class/instance-populated took hard-line
+> routes]; implementer fixing via ONE generic hard-line path for every nonempty
+> decl block. **Steward scope RULING (`evt_76qze6y7k5dyw`):** NO synthetic
+> `FormattableSource` seam — `record` DECL surface is unbuilt on `858c64a3`
+> [no `Token::KwRecord`/`Decl::RecordDecl`/parser prod], so B3 can't produce a
+> real record `FormattableSource`; the FMT9 record pair is NOT B3's to flip →
+> gate it RED-UNTIL (record-surface + B3). B3 AC6 = flip green every
+> representable nonempty block [class/instance/law/module] via the generic path;
+> door-open clause means record formats free when its surface lands. **Oracle
+> fidelity follow-up** (`evt_3r5502zavaj7z`, routed to CV/spec-leader/architect):
+> FMT9's record case mislabeled RED-UNTIL-B3 [block-comment twin] — relabel
+> RED-UNTIL (record-surface + B3). CV overruled my batch-lean → correct now;
+> **Architect then upgraded patch→SWEEP** (`evt_2jt5sdpwykkj9`): the defect is a
+> CLASS [2× in FMT9], so CV must mechanically `parse_lossless` EVERY FMT9 fixture
+> vs main + reclassify all unreachable [agnostic→reconstruct on landed block;
+> record-specific→relabel]. **Steward sequencing (`evt_7wwk4b8qdghpg`): the sweep
+> candidate SUPERSEDES the narrow `aa84f34f` — I publish ONCE, not the partial.**
+> Practice codified: mandatory per-fixture `parse_lossless` reachability pass at
+> the end of every output-oracle authoring → conformance-validator playbook
+> (`agent/playbooks/spec/conformance-validator.md` Discipline §), publishing
+> doc-only. record-surface = future surface-grammar WP (task #43), NOT B3.)_
+> (The block below is the running detail log.)
 >
 > **★ TWO PARALLEL RELEASES (operator "resume").**
 > - **B1 → LANGUAGE — CLOSED ✅** (`origin/main @ 9df1f465`, PR #580, code,
