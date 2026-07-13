@@ -13,7 +13,7 @@ boundary_hdr ::= program_hdr | package_hdr
 program_hdr ::= "program" admits_clause
 package_hdr ::= "package" admits_clause?
 admits_clause ::= "admits" ModPath ("," ModPath)*
-module_hdr ::= "module" ConId "{"  -- or a file-level implicit module
+module_hdr ::= "module" ModPath "{" (decl ";"?)* "}"  -- or a file-level implicit module
 import ::= "import" ModPath ("as" ConId)?
                           ("(" import_item ("," import_item)* ")")?
 import_item ::= name | name "as" rename
