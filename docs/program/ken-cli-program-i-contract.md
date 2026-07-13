@@ -68,7 +68,7 @@ class ProcessInput {
   workingDirectory : Bytes
 }
 
-proc main (input : ProcessInput) (caps : ProgramCaps)
+proc main (input : ProcessInput) (caps : ProgramCaps a)
   : HostIO ExitCode
   visits [Console, FS, Environment, Process]
 ```
@@ -77,11 +77,9 @@ The exact record/capability *spelling* may be refined at build time (defer
 spelling, not concept), but these **semantic** choices are fixed:
 
 - **Named resolution, not positional.** The runner resolves the declaration
-  **named `main`**; missing or duplicate `main` is a hard, named error. (Fast-
-  follow: a program-header-declared entrypoint name, riding the N4 `program`
-  header I reviewed — `program App` already exists as surface; a
-  `program App { entry = run }` field is the natural home. v1 uses the fixed
-  name `main`.)
+  **named `main`**; missing or duplicate `main` is a hard, named error. The N4
+  `program` header is anonymous, does not designate the entry point, and rejects
+  `program App`. v1 uses the fixed name `main`.
 - **Raw `List Bytes` argv.** POSIX `argv`, environment values, and filenames are
   byte sequences and need not be valid UTF-8. Modeling them as `String` would
   silently normalize (NFC) or reject legitimate input. **UTF-8 decoding is an
