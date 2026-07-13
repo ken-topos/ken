@@ -349,7 +349,7 @@ determine the numeric story (`35`):
 ## 4. Keywords (proposal)
 
 ```
-const fn proc let def data record module import use space
+const fn proc let def data record module import export space
 match if then else where requires ensures prop proof lemma prove law
 visits foreign forall exists in as mut class instance
 becomes declassify policy temporal assume test
@@ -357,7 +357,10 @@ becomes declassify policy temporal assume test
 
 Reserved but spelling-revisable (OQ-syntax), **except** the purity keywords
 `const`/`fn`/`proc` (`36 §1.6`), whose spellings are **fixed** by the operator
-ruling (SURF-1); `view` is **retired**. `let` remains reserved for the local
+ruling (SURF-1); `view` and the open-import form `use` are **retired**. `use`
+remains reserved and produces a migration diagnostic rather than becoming a
+free identifier. Reserving `export` is therefore a net increase of one keyword,
+not reuse of a freed `use` slot. `let` remains reserved for the local
 `let … in …` expression (`32 §3`). `type` is **reserved but not a declaration
 keyword** — it named the definition/refinement construct before
 `SURF-def-refinement` (`33 §1`) renamed it to `def`; `type` stays rejected as a
