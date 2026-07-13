@@ -247,6 +247,8 @@ A short sum containing only nullary constructors may remain flat. Otherwise a
 sum is multiline with one constructor per line and a leading `|` on every
 continuation constructor. An explicit dependent family always uses a multiline
 `where { ... }` block with one constructor signature per line.
+For a non-trivial sum, the first constructor begins on the line after `=`, at
+one indent; every continuation constructor is led by `|`.
 
 Every nonempty `record`, `class`, `instance`, `law`, `space`, `policy`, and
 `module` block is multiline with one field, assignment, or declaration per
