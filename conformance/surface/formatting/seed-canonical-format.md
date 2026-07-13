@@ -578,8 +578,8 @@ and those displayed bytes must format to themselves. Every assertion is
   already equal to its expected bytes. The non-canonical sources place a blank
   line between the leading comment and declaration, keep the interstitial
   comment inside the flat spelling
-  `combine left {- keep this edge -} right`, place the 88-column comment above
-  its node, and leave the 89-column comment inline.
+  `combine left -- keep this edge` with `right` on the following line, place
+  the 88-column comment above its node, and leave the 89-column comment inline.
 - expect: the leading-comment fixture formats to:
 
   ```ken
@@ -593,7 +593,7 @@ and those displayed bytes must format to themselves. Every assertion is
   const combined : Nat =
     combine
       left
-      {- keep this edge -}
+      -- keep this edge
       right
   ```
 
