@@ -50,7 +50,11 @@ sidestepping UTF-8 boundary bugs entirely; `IsUtf8` is a proof the bytes
 data SourceId =
   MkSourceId Nat
 
-fn IsUtf8 (bs : Bytes) : Prop = Equal Bytes (bytes_encode (bytes_decode bs)) bs
+fn IsUtf8 (bs : Bytes) : Prop =
+  match bytes_decode bs {
+    Err _ ↦ Bottom;
+    Ok text ↦ Equal Bytes (bytes_encode text) bs
+  }
 
 fn byte_unit_zero_int (unit : Bytes) : Int = bytes_length unit - bytes_length unit
 
@@ -61,7 +65,10 @@ fn byte_unit_nat_to_int (unit : Bytes) (n : Nat) : Int =
   }
 
 fn EmptyBytes (bs : Bytes) : Prop =
-  Equal Bytes bs (bytes_slice bs (bytes_length bs) (byte_unit_zero_int bs))
+  Equal
+    (Option Bytes)
+    (Some Bytes bs)
+    (bytes_slice bs (bytes_length bs) (byte_unit_zero_int bs))
 
 fn NonEmptyBytes (bs : Bytes) : Prop = EmptyBytes bs → Bottom
 
@@ -513,9 +520,12 @@ fn bool_and (p : Bool) (q : Bool) : Bool =
 fn source_byte_eq (s : Source) (pos : Nat) (code : Int) : Bool =
   match nat_lt_bool pos (source_length s) {
     True ↦
-      eq_int
-        (bytes_at (source_bytes s) (byte_unit_nat_to_int (source_length_unit s) pos))
-        code;
+      match bytes_at
+        (source_bytes s)
+        (byte_unit_nat_to_int (source_length_unit s) pos) {
+        None ↦ False;
+        Some byte ↦ eq_int (uint8_to_int byte) code
+      };
     False ↦ False
   }
 

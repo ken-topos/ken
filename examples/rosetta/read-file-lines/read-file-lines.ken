@@ -172,7 +172,16 @@ proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Consol
                 (Result IOError Unit)
                 (Err IOError Unit kind)
           };
-        Ok bytes ↦ printLines (lines (bytes_decode bytes))
+        Ok bytes ↦
+          match bytes_decode bytes {
+            Err _ ↦
+              Ret
+                (Coproduct (FSOp APartial) ConsoleOp)
+                (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+                (Result IOError Unit)
+                (Err IOError Unit (Other 0));
+            Ok text ↦ printLines (lines text)
+          }
       })
 
 proc main

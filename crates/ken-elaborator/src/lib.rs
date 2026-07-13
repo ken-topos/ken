@@ -159,11 +159,10 @@ impl ElabEnv {
             .map_err(|e| ElabError::Internal(format!("numeric tower init failed: {}", e)))?;
         let bytes_env = bytes::register_bytes_env(&mut env, &mut globals)
             .map_err(|e| ElabError::Internal(format!("bytes layer init failed: {}", e)))?;
-        let effect_rows = bytes_env
-            .io_effect_rows
-            .iter()
-            .map(|(name, row)| (name.clone(), effects::RowType::Concrete(row.clone())))
-            .collect();
+        // Effect rows are populated only from elaborated declarations. An
+        // independent seed would let producer-binding tests stay green after
+        // the real declaration lost its `visits` row.
+        let effect_rows = HashMap::new();
         let mut elab = Self {
             env,
             globals,
@@ -182,6 +181,9 @@ impl ElabEnv {
         // collection inductives + Ω constants (`37`). Registered via the landed
         // `data` / postulate machinery — no new kernel rule.
         elab.prelude_env = prelude::register_prelude(&mut elab)?;
+        // Safe Bytes ops return the prelude's `Option`/`Result` sums, so their
+        // primitive signatures are installed only after those sums exist.
+        bytes::register_safe_bytes_ops(&mut elab.env, &mut elab.globals)?;
         // Lc typeclass env: pre-declare RecordNil + record_nil_val (`33 §5`).
         elab.class_env =
             elab::init_class_env(&mut elab.env, &mut elab.globals)?;

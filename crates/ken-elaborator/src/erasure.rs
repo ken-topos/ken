@@ -1103,7 +1103,7 @@ fn lower_primitive_application(
     }
 
     Ok(RuntimeExpr::PrimitiveCall {
-        primitive: runtime_primitive_from_view(&view.primitive),
+        primitive: runtime_primitive_from_view(root_symbol, &view.primitive),
         args,
     })
 }
@@ -1149,10 +1149,43 @@ fn hex_nibble(byte: u8) -> Option<u8> {
     }
 }
 
-fn runtime_primitive_from_view(view: &checked_core::CheckedCorePrimitiveView) -> RuntimePrimitive {
+fn runtime_primitive_from_view(
+    root_symbol: &StableSymbol,
+    view: &checked_core::CheckedCorePrimitiveView,
+) -> RuntimePrimitive {
+    let constructor = |family: &str, name: &str| {
+        let package = root_symbol
+            .components
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "package".to_string());
+        let family = StableSymbol::new(
+            checked_core::SymbolNamespace::Declaration,
+            vec![package, family.to_string()],
+        );
+        StableSymbol::constructor(&family, name).to_string()
+    };
+    let partiality = match view.registry_symbol.as_str() {
+        "bytes_at" => RuntimePartiality::SafeOption {
+            none: constructor("Option", "None"),
+            some: constructor("Option", "Some"),
+            obligation: Some(StableSymbol::obligation("bytes_at.bounds").to_string()),
+        },
+        "bytes_slice" => RuntimePartiality::SafeOption {
+            none: constructor("Option", "None"),
+            some: constructor("Option", "Some"),
+            obligation: None,
+        },
+        "bytes_decode" => RuntimePartiality::SafeResult {
+            err: constructor("Result", "Err"),
+            ok: constructor("Result", "Ok"),
+            error: constructor("Utf8Error", "InvalidUtf8"),
+        },
+        _ => runtime_partiality_from_checked(&view.partiality),
+    };
     RuntimePrimitive {
         symbol: view.registry_symbol.clone(),
-        partiality: runtime_partiality_from_checked(&view.partiality),
+        partiality,
     }
 }
 

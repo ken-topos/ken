@@ -1,17 +1,13 @@
 //! `Bytes` primitive + binary I/O registration (`38 §1`, `41`, `14 §5`).
 //!
 //! Registers `Bytes` (opaque immutable byte sequence), `String` (opaque, by-
-//! construction valid UTF-8), their core ops, and the effect-tracked I/O ops
-//! (`read_bytes`/`write_bytes`/`send`/`recv`) with their declared effect rows.
-//!
-//! Pattern mirrors `numbers.rs`: declare types + ops as kernel primitives;
-//! store the I/O op effect rows in `BytesEnv.io_effect_rows` so AC2/AC3 tests
-//! derive their seed from the actual L6 binding (not a hand-fed literal).
+//! construction valid UTF-8), and their core ops. The real `read_bytes`
+//! surface operation and its effect row are registered later by the prelude.
 
 use std::collections::HashMap;
 
-use ken_kernel::{declare_postulate, declare_primitive, GlobalEnv, GlobalId, Level, Term};
 use ken_kernel::env::PrimReduction;
+use ken_kernel::{declare_postulate, declare_primitive, GlobalEnv, GlobalId, Level, Term};
 
 use crate::effects::EffectRow;
 use crate::error::ElabError;
@@ -26,12 +22,9 @@ pub struct BytesEnv {
     /// (`38 §1.5`). AC5's `prove` obligation anchors here; the inductive
     /// proof is the L8 stdlib follow-on.
     pub bytes_round_trip_law_id: GlobalId,
-    /// Effect rows for registered I/O ops (`36`/L5).
-    ///
-    /// Keyed by op name (e.g. `"read_bytes"` → `[FS]`, `"send"` → `[Net]`).
-    /// AC2/AC3 tests derive their `infer_all` seed from this map — NOT from
-    /// a hard-coded literal — so removing the L6 registration makes those
-    /// tests fail (green-vs-green is structurally impossible).
+    /// Legacy Bytes-layer effect-row registry (`36`/L5), intentionally empty.
+    /// Real producers are registered only from their elaborated declarations
+    /// in `ElabEnv.effect_rows`; this map cannot hand-feed an oracle.
     pub io_effect_rows: HashMap<String, EffectRow>,
 }
 
@@ -46,15 +39,13 @@ pub fn register_bytes_env(
     let omega0 = Term::omega(Level::Zero);
 
     // -- Bytes : Type 0 --
-    let bytes_id =
-        declare_primitive(env, vec![], type0.clone(), PrimReduction::OpaqueType)
-            .map_err(|e| ElabError::Internal(format!("prim Bytes failed: {}", e)))?;
+    let bytes_id = declare_primitive(env, vec![], type0.clone(), PrimReduction::OpaqueType)
+        .map_err(|e| ElabError::Internal(format!("prim Bytes failed: {}", e)))?;
     globals.insert("Bytes".to_string(), bytes_id);
 
     // -- String : Type 0 --
-    let string_id =
-        declare_primitive(env, vec![], type0.clone(), PrimReduction::OpaqueType)
-            .map_err(|e| ElabError::Internal(format!("prim String failed: {}", e)))?;
+    let string_id = declare_primitive(env, vec![], type0.clone(), PrimReduction::OpaqueType)
+        .map_err(|e| ElabError::Internal(format!("prim String failed: {}", e)))?;
     globals.insert("String".to_string(), string_id);
 
     // Int is registered by the numeric tower before us.
@@ -70,106 +61,59 @@ pub fn register_bytes_env(
     // -- bytes_length : Bytes → Int --
     {
         let ty = Term::pi(bytes_t.clone(), int_t.clone());
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "bytes_length" })
-            .map_err(|e| ElabError::Internal(format!("prim bytes_length failed: {}", e)))?;
+        let id = declare_primitive(
+            env,
+            vec![],
+            ty,
+            PrimReduction::Op {
+                symbol: "bytes_length",
+            },
+        )
+        .map_err(|e| ElabError::Internal(format!("prim bytes_length failed: {}", e)))?;
         globals.insert("bytes_length".to_string(), id);
-    }
-
-    // -- bytes_at : Bytes → Int → Int --
-    {
-        let ty = Term::pi(bytes_t.clone(), Term::pi(int_t.clone(), int_t.clone()));
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "bytes_at" })
-            .map_err(|e| ElabError::Internal(format!("prim bytes_at failed: {}", e)))?;
-        globals.insert("bytes_at".to_string(), id);
-    }
-
-    // -- bytes_slice : Bytes → Int → Int → Bytes --
-    {
-        let ty = Term::pi(
-            bytes_t.clone(),
-            Term::pi(int_t.clone(), Term::pi(int_t.clone(), bytes_t.clone())),
-        );
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "bytes_slice" })
-            .map_err(|e| ElabError::Internal(format!("prim bytes_slice failed: {}", e)))?;
-        globals.insert("bytes_slice".to_string(), id);
     }
 
     // -- bytes_concat : Bytes → Bytes → Bytes --
     {
         let ty = Term::pi(bytes_t.clone(), Term::pi(bytes_t.clone(), bytes_t.clone()));
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "bytes_concat" })
-            .map_err(|e| ElabError::Internal(format!("prim bytes_concat failed: {}", e)))?;
+        let id = declare_primitive(
+            env,
+            vec![],
+            ty,
+            PrimReduction::Op {
+                symbol: "bytes_concat",
+            },
+        )
+        .map_err(|e| ElabError::Internal(format!("prim bytes_concat failed: {}", e)))?;
         globals.insert("bytes_concat".to_string(), id);
     }
 
     // -- bytes_encode : String → Bytes (total) --
     {
         let ty = Term::pi(string_t.clone(), bytes_t.clone());
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "bytes_encode" })
-            .map_err(|e| ElabError::Internal(format!("prim bytes_encode failed: {}", e)))?;
+        let id = declare_primitive(
+            env,
+            vec![],
+            ty,
+            PrimReduction::Op {
+                symbol: "bytes_encode",
+            },
+        )
+        .map_err(|e| ElabError::Internal(format!("prim bytes_encode failed: {}", e)))?;
         globals.insert("bytes_encode".to_string(), id);
     }
 
-    // -- bytes_decode : Bytes → String (partial — Neutral on invalid UTF-8) --
-    {
-        let ty = Term::pi(bytes_t.clone(), string_t.clone());
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "bytes_decode" })
-            .map_err(|e| ElabError::Internal(format!("prim bytes_decode failed: {}", e)))?;
-        globals.insert("bytes_decode".to_string(), id);
-    }
-
-    // -- Effect-tracked I/O ops (`36`/L5): typed as Bytes → Bytes (placeholder).
-    //    Real argument types (Path, Socket) are L7 (FFI surface) concerns.
-    //    The EFFECT ROW is what matters for AC2/AC3; stored in io_effect_rows. --
-
-    // `read_bytes` is declared for REAL in `prelude.rs` (FS-driver-build D1:
+    // The safe `Option`/`Result`-returning primitives are registered by
+    // `register_safe_bytes_ops` after the prelude has declared those sum
+    // types. `read_bytes` is declared for REAL in `prelude.rs` (FS-driver-build D1:
     // `Cap -> Bytes -> FS (Result Bytes IOError)`, a genuine kernel-rechecked
     // `view` reducing to a `Vis` node — `run_io`'s FS arm is the real driver,
     // `36 §2.1`). It can't be declared HERE: `register_bytes_env` runs before
     // `register_prelude`, so `ITree`/`Result`/`Cap`/`FSOp` don't exist yet.
-    // The `io_effect_rows` seed below is a name-keyed static-analysis table
-    // (`effects/infer.rs`), independent of the kernel `GlobalId` — it stays
-    // valid regardless of where/how `read_bytes` is actually declared.
-
-    // write_bytes : Bytes → Bytes → Bytes  visits [FS]
-    {
-        let ty = Term::pi(bytes_t.clone(), Term::pi(bytes_t.clone(), bytes_t.clone()));
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "write_bytes" })
-            .map_err(|e| ElabError::Internal(format!("prim write_bytes failed: {}", e)))?;
-        globals.insert("write_bytes".to_string(), id);
-    }
-
-    // append : Bytes → Bytes → Bytes  visits [FS]
-    {
-        let ty = Term::pi(bytes_t.clone(), Term::pi(bytes_t.clone(), bytes_t.clone()));
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "append" })
-            .map_err(|e| ElabError::Internal(format!("prim append failed: {}", e)))?;
-        globals.insert("append".to_string(), id);
-    }
-
-    // send : Bytes → Bytes → Bytes  visits [Net]
-    {
-        let ty = Term::pi(bytes_t.clone(), Term::pi(bytes_t.clone(), bytes_t.clone()));
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "send" })
-            .map_err(|e| ElabError::Internal(format!("prim send failed: {}", e)))?;
-        globals.insert("send".to_string(), id);
-    }
-
-    // recv : Bytes → Bytes  visits [Net]
-    {
-        let ty = Term::pi(bytes_t.clone(), bytes_t.clone());
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "recv" })
-            .map_err(|e| ElabError::Internal(format!("prim recv failed: {}", e)))?;
-        globals.insert("recv".to_string(), id);
-    }
-
-    // -- I/O effect row registry (AC2/AC3 test seed source) --
-    let mut io_effect_rows: HashMap<String, EffectRow> = HashMap::new();
-    io_effect_rows.insert("read_bytes".to_string(), EffectRow::singleton("FS"));
-    io_effect_rows.insert("write_bytes".to_string(), EffectRow::singleton("FS"));
-    io_effect_rows.insert("append".to_string(), EffectRow::singleton("FS"));
-    io_effect_rows.insert("send".to_string(), EffectRow::singleton("Net"));
-    io_effect_rows.insert("recv".to_string(), EffectRow::singleton("Net"));
+    // No I/O row is installed here. `modules::register_effect_row` records
+    // `read_bytes` from its final prelude declaration, so deleting `visits
+    // [FS]` deletes the only producer-binding evidence.
+    let io_effect_rows: HashMap<String, EffectRow> = HashMap::new();
 
     // -- BytesRoundTripLaw : Ω₀ (oracle-tagged, `38 §1.5`) --
     // Represents `∀ s : String, decode(encode s) = Ok s`.
@@ -188,4 +132,62 @@ pub fn register_bytes_env(
         bytes_round_trip_law_id,
         io_effect_rows,
     })
+}
+
+/// Register the safe Bytes operations after `Option`, `Result`, and
+/// `Utf8Error` have been installed by the prelude.
+pub fn register_safe_bytes_ops(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+) -> Result<(), ElabError> {
+    let lookup = |name: &str| {
+        globals
+            .get(name)
+            .copied()
+            .ok_or_else(|| ElabError::Internal(format!("safe Bytes op: '{name}' not registered")))
+    };
+    let bytes_t = Term::const_(lookup("Bytes")?, vec![]);
+    let string_t = Term::const_(lookup("String")?, vec![]);
+    let int_t = Term::const_(lookup("Int")?, vec![]);
+    let uint8_t = Term::const_(lookup("UInt8")?, vec![]);
+    let utf8_error_t = Term::indformer(lookup("Utf8Error")?, vec![]);
+    let option = Term::indformer(lookup("Option")?, vec![]);
+    let result = Term::indformer(lookup("Result")?, vec![]);
+    let option_uint8 = Term::app(option.clone(), uint8_t);
+    let option_bytes = Term::app(option, bytes_t.clone());
+    let result_string = Term::app(Term::app(result, utf8_error_t), string_t);
+
+    let register = |env: &mut GlobalEnv,
+                    globals: &mut HashMap<String, GlobalId>,
+                    name: &'static str,
+                    ty: Term|
+     -> Result<(), ElabError> {
+        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: name })
+            .map_err(|e| ElabError::Internal(format!("prim {name} failed: {e}")))?;
+        globals.insert(name.to_string(), id);
+        Ok(())
+    };
+
+    register(
+        env,
+        globals,
+        "bytes_at",
+        Term::pi(bytes_t.clone(), Term::pi(int_t.clone(), option_uint8)),
+    )?;
+    register(
+        env,
+        globals,
+        "bytes_slice",
+        Term::pi(
+            bytes_t.clone(),
+            Term::pi(int_t.clone(), Term::pi(int_t, option_bytes)),
+        ),
+    )?;
+    register(
+        env,
+        globals,
+        "bytes_decode",
+        Term::pi(bytes_t, result_string),
+    )?;
+    Ok(())
 }

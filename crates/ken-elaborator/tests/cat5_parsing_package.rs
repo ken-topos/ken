@@ -364,7 +364,8 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
         .join(" ");
     assert!(
         compact.contains("fn IsUtf8 (bs : Bytes) : Prop =")
-            && compact.contains("bytes_encode (bytes_decode bs)")
+            && compact.contains("match bytes_decode bs")
+            && compact.contains("Ok text ↦ Equal Bytes (bytes_encode text) bs")
             && !PARSING_KEN_MD.contains("Equal Bytes bs bs"),
         "IsUtf8 must be round-trip evidence over the source bytes, not reflexive equality"
     );

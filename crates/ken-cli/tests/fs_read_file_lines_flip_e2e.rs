@@ -106,7 +106,13 @@ proc app (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console]
                 (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
                 (Result IOError Unit) (Err IOError Unit kind)
         }} ;
-        Ok bytes |-> printLines (lines (bytes_decode bytes))
+        Ok bytes |->
+          match bytes_decode bytes {{
+            Err _ |-> Ret (Coproduct (FSOp {auth}) ConsoleOp)
+                         (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+                         (Result IOError Unit) (Err IOError Unit (Other 0)) ;
+            Ok text |-> printLines (lines text)
+          }}
       }})
 
 proc main (_input : ProcessInput) (caps : ProgramCaps)

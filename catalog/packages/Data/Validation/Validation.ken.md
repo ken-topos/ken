@@ -112,10 +112,20 @@ first message.
 
 ```ken example
 const name_failure : NonEmpty String =
-  NonEmptyCons String (bytes_decode (bytes_encode "name is missing")) (Nil String)
+  NonEmptyCons String
+    (match bytes_decode (bytes_encode "name is missing") {
+      Err _ ↦ "name is missing";
+      Ok text ↦ text
+    })
+    (Nil String)
 
 const age_failure : NonEmpty String =
-  NonEmptyCons String (bytes_decode (bytes_encode "age is invalid")) (Nil String)
+  NonEmptyCons String
+    (match bytes_decode (bytes_encode "age is invalid") {
+      Err _ ↦ "age is invalid";
+      Ok text ↦ text
+    })
+    (Nil String)
 
 fn check_name (present : Bool) : Validation (NonEmpty String) Bool =
   match present {

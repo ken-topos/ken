@@ -717,7 +717,9 @@ fn validate_runtime_expr(
         RuntimeExpr::If { .. } => Err(unsupported_runtime_expr_error("If", fact_subject)),
         RuntimeExpr::PrimitiveCall { primitive, args } => {
             match &primitive.partiality {
-                RuntimePartiality::Total => {
+                RuntimePartiality::Total
+                | RuntimePartiality::SafeOption { .. }
+                | RuntimePartiality::SafeResult { .. } => {
                     validate_total_primitive_call(&primitive.symbol, args, fact_subject)?;
                 }
                 RuntimePartiality::CheckedTrap { .. } => {}

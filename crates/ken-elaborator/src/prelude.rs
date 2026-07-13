@@ -213,6 +213,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Option failed: {}", e)))?;
     elab.elaborate_decl("data Result e a = Err e | Ok a")
         .map_err(|e| ElabError::Internal(format!("prelude Result failed: {}", e)))?;
+    elab.elaborate_decl("data Utf8Error = InvalidUtf8")
+        .map_err(|e| ElabError::Internal(format!("prelude Utf8Error failed: {}", e)))?;
     elab.elaborate_decl("data Prod a b = MkProd a b")
         .map_err(|e| ElabError::Internal(format!("prelude Prod failed: {}", e)))?;
 
@@ -1348,11 +1350,9 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     //
     // A **pure, total** constructor-application definition (D5/AC5): reduces
     // in the pure core to a `Vis (ReadFile cap path) (λr. Ret r)` `ITree`
-    // value — no syscall, no partiality. The static `[FS]` escape/capability
-    // check (`bytes.rs::io_effect_rows`) is a name-keyed analysis
-    // independent of the kernel `Decl` kind, so it stays green through this
-    // re-type (verified: `l6_acceptance.rs`'s tests never elaborate a real
-    // `read_bytes` call term, only hand-built `EffectDecl`s).
+    // value — no syscall, no partiality. Declaration elaboration records its
+    // `[FS]` row in the final `ElabEnv.effect_rows`; L6's escape oracle reads
+    // that declaration-backed entry directly.
     elab.elaborate_decl(
         "proc read_bytes (a : Auth) (cap : Cap a) (path : Bytes) : FS a (Result FileError Bytes) visits [FS] = \
          Vis (FSOp a) (fs_resp a) (Result FileError Bytes) (ReadFile a cap path) \

@@ -301,8 +301,25 @@ pub struct RuntimePrimitive {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimePartiality {
     Total,
-    CheckedTrap { obligation: RuntimeSymbol },
-    TrustedTrap { assumption: RuntimeSymbol },
+    /// A checked operation whose failure is represented by `None`, never a
+    /// trap. `obligation` names the native bounds check when one is required.
+    SafeOption {
+        none: RuntimeSymbol,
+        some: RuntimeSymbol,
+        obligation: Option<RuntimeSymbol>,
+    },
+    /// A checked operation whose failure is represented by `Err error`.
+    SafeResult {
+        err: RuntimeSymbol,
+        ok: RuntimeSymbol,
+        error: RuntimeSymbol,
+    },
+    CheckedTrap {
+        obligation: RuntimeSymbol,
+    },
+    TrustedTrap {
+        assumption: RuntimeSymbol,
+    },
 }
 
 /// Backend-neutral runtime expression language.
@@ -511,12 +528,12 @@ pub fn nc5_seed_examples() -> Vec<RuntimeExample> {
         },
         RuntimeExample {
             name: "explicit-partial-primitive-trap".to_string(),
-            checked_core_shape: "bytes_at empty 0".to_string(),
+            checked_core_shape: "checked_index empty 0".to_string(),
             ir: RuntimeExpr::PrimitiveCall {
                 primitive: RuntimePrimitive {
-                    symbol: "bytes_at".to_string(),
+                    symbol: "checked_index".to_string(),
                     partiality: RuntimePartiality::CheckedTrap {
-                        obligation: "obl:bytes_at.bounds".to_string(),
+                        obligation: "obl:checked_index.bounds".to_string(),
                     },
                 },
                 args: vec![
@@ -526,7 +543,7 @@ pub fn nc5_seed_examples() -> Vec<RuntimeExample> {
             },
             observation: RuntimeObservation::Trapped(RuntimeTrap {
                 code: RuntimeTrapCode::ExplicitTrap,
-                message: "bytes_at bounds obligation failed".to_string(),
+                message: "checked_index bounds obligation failed".to_string(),
             }),
         },
     ]
