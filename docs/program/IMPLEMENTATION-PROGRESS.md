@@ -14,7 +14,18 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-12 ~22:xx — LIVE STATE (read this first) · `origin/main @ 5fb84954`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ d6acd6fe`
+>
+> **★ CURRENT FRONTIER (one-line resume):** ADR-0014 R2 module round COMPLETE
+> (N1–N4 ✅; only N5 `pub use` gated on MRES-9 remains). **kenfmt B3 co-release
+> ACTIVE** — B3 build (Language, `wp/kenfmt-b3-doc-algebra-layout`) + CV oracle
+> companion (enclave, `wp/kenfmt-b3-conformance-oracle`). Oracle in a **§1d-fold
+> re-spin**: Architect-terminal BLOCKED oracle `72d34188` on a non-trivial-sum
+> determinism hole; **Steward RULED (`evt_3dgghse7z1zpe`) fold the minimal §1d
+> own-line pin into the companion** (now doc-only spec+conf, not conf-only) +
+> swap the unbuilt `{- -}` interstitial fixture for a `--` line comment. **NEXT:
+> await (a) re-confirmed oracle SHA → doc-only publish, (b) B3 build SHA → honesty
+> -gate + CI-polled publish.** (The block below is the running detail log.)
 >
 > **★ TWO PARALLEL RELEASES (operator "resume").**
 > - **B1 → LANGUAGE — CLOSED ✅** (`origin/main @ 9df1f465`, PR #580, code,
@@ -118,13 +129,35 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >       kickoff posted + leader roused (Working). Build: parser `import M (foo as
 >       bar)` rename + reject `hiding`; `bind_import` clash reversal (modules.rs
 >       :75-77, order-indep + latent-clash); prelude unshadowable; lexical
->       shadowing untouched; NO new keyword. Architect-terminal. QA + **Architect-terminal APPROVE** on `72e089b9` (7 crate files,
->       +264/−53; `import M (foo as bar)` rename, `bind_import` clash reversal,
->       prelude-unshadowable, lexical shadowing untouched; zero TCB). Honesty-gated
->       clean. **PUBLISHING code CI-polled** (recovered a leader stall at the
->       Architect-terminal seam). NEXT: confirm merge → retros → **ADR-0014 R2
->       COMPLETE** → release B3 build. Enclave carry: add "reserve kw → sweep every
->       .ken/.ken.md fence" to N4 spec build-forward (ADR-0015 pattern).**
+>       shadowing untouched; NO new keyword. Architect-terminal. **CLOSED ✅ → `origin/main @ d6acd6fe`** (PR #592; all 3 Language retros
+>       IN). Rename + `bind_import` clash reversal + prelude-unshadowable LIVE.
+>       Leader retro captured the handoff-stall carry (keep turn active through
+>       every gate); implementer captured the prelude-floor grounding trap
+>       (derive privileged set from the taxonomy invariant, not a producer's
+>       globals). **★★★ ADR-0014 R2 MODULE ROUND COMPLETE — N1✅ N2✅ N3✅ N4✅.**
+>       Only N5 (`pub use`, gated on MRES-9) remains. **B3 CO-RELEASE LAUNCHED** (dual Handoff-Gate done, all 6 compacted @
+>       d6acd6fe WIDE-verified): **B3 build → Language** (`evt_4ermmz5k70g2k`,
+>       leader roused) — Wadler/Leijen Doc printer over B1/B2, gate=parse-preserv
+>       +idempotence+88col read-only, parens=highest-risk; **CV oracle companion
+>       → enclave** (`evt_tbsr8smgt90q`, spec-leader+CV roused) — per-axis
+>       both-orientation oracles extending seed-canonical-format.md, DERIVED FROM
+>       §1d not printer emission (anti green-vs-green). Both Architect-terminal.
+>       **★ ORACLE RE-SPIN (`72d34188` BLOCKED, Architect-terminal fidelity):**
+>       (F1) non-trivial-sum bytes internally inconsistent — §1d underdetermines
+>       whether the first constructor shares the `=` line (WP-S permission-vs-
+>       mandate hole recurring); design review §9 resolves to OWN-LINE. (F2)
+>       interstitial fixture uses UNBUILT `{- -}` block-comment lexer → mislabeled
+>       RED-UNTIL-B3. **Steward RULED (`evt_3dgghse7z1zpe`): fold the minimal §1d
+>       own-line determinism pin INTO the companion** (settled design =
+>       transcription not a fork; oracle un-completable while §1d silent; atomic
+>       rule+oracle provenance > separate erratum). Constraints: §1d gets ONLY the
+>       one own-line/`|`-continuation sentence; CV fixes `OptionNat`→own-line +
+>       swaps `{- -}`→`--` line comment; one exact-parent candidate → Architect
+>       re-confirm (sum+interstitial+coverage lines only) → **doc-only publish**
+>       (spec+conf markdown, zero TCB). **NEXT: await (a) re-confirmed oracle SHA
+>       → doc-only publish, (b) B3 build SHA (code) → honesty-gate + CI-polled
+>       publish. B4/.ken.md + capstone C after.** Enclave carry: add "reserve kw →
+>       sweep every .ken/.ken.md fence" to N4 spec build-forward (ADR-0015 pattern).**
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
