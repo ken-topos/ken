@@ -114,17 +114,11 @@ non-structural loop.
 
 ```ken
 data DecimalDigit : Type where {
-  MkDecimalDigit : (value : Int)
-  → (glyph : Char)
-  → Equal
-  (Option
-  Int)
-  (char_to_digit
-  glyph)
-  (Some
-  Int
-  value)
-  → DecimalDigit
+  MkDecimalDigit :
+    (value : Int)
+    → (glyph : Char)
+    → Equal (Option Int) (char_to_digit glyph) (Some Int value)
+    → DecimalDigit
 }
 
 fn decimal_digit_value (digit : DecimalDigit) : Int =
@@ -139,10 +133,10 @@ fn decimal_digit_to_char (digit : DecimalDigit) : Char =
 
 proof valid for decimal_digit_to_char
       (digit : DecimalDigit)
-    : Equal (Option Int) (char_to_digit (decimal_digit_to_char digit)) (Some
-      Int
-      (decimal_digit_value
-      digit)) =
+    : Equal
+        (Option Int)
+        (char_to_digit (decimal_digit_to_char digit))
+        (Some Int (decimal_digit_value digit)) =
   match digit {
     MkDecimalDigit value glyph valid ↦ valid
   }
@@ -184,11 +178,10 @@ fn show_digits (digits : List DecimalDigit) : String =
 
 lemma format_digits_roundtrip
       (digits : List DecimalDigit)
-    : Equal (Option (List Int)) (parse_formatted_digits (format_digits digits)) (Some
-      (List
-      Int)
-      (decimal_digit_values
-      digits)) =
+    : Equal
+        (Option (List Int))
+        (parse_formatted_digits (format_digits digits))
+        (Some (List Int) (decimal_digit_values digits)) =
   match digits {
     Nil ↦ Proved;
     Cons digit rest ↦ trans

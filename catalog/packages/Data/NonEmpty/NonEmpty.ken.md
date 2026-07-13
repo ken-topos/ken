@@ -91,13 +91,10 @@ lifts that equality beneath the shared `NonEmptyCons` head.
 ```ken
 proof assoc for nonempty_append
       (a : Type) (xs : NonEmpty a) (ys : NonEmpty a) (zs : NonEmpty a)
-    : Equal (NonEmpty a) (nonempty_append a (nonempty_append a xs ys) zs) (nonempty_append
-      a
-      xs
-      (nonempty_append
-      a
-      ys
-      zs)) =
+    : Equal
+        (NonEmpty a)
+        (nonempty_append a (nonempty_append a xs ys) zs)
+        (nonempty_append a xs (nonempty_append a ys zs)) =
   match xs {
     NonEmptyCons x rest ↦
       match ys {
