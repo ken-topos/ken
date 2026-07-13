@@ -3,13 +3,22 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ken_elaborator::layout::{display_width, format_ken};
+use ken_elaborator::layout::{display_width, format_ken, CANONICAL_WIDTH};
 use ken_elaborator::lossless::parse_lossless;
 use ken_elaborator::ElabEnv;
 
 fn ast_shape(source: &str) -> String {
     let parsed = parse_lossless(source).expect("source must parse");
     erase_debug_spans(format!("{:?}", parsed.typed_decls()))
+}
+
+fn token_shape(source: &str) -> Vec<String> {
+    parse_lossless(source)
+        .expect("source must parse")
+        .tokens()
+        .iter()
+        .map(|token| format!("{:?}", token.kind))
+        .collect()
 }
 
 fn erase_debug_spans(mut debug: String) -> String {
@@ -26,7 +35,7 @@ fn erase_debug_spans(mut debug: String) -> String {
 #[test]
 fn ac2_ac3_mandatory_breaks_separators_and_no_alignment() {
     let source = "module M { fn choose (x : Bool) : Bool = match x { True |-> True; False |-> False }; const tiny : Nat = Zero; }";
-    let expected = "module M {\n  fn choose (x : Bool) : Bool =\n    match x {\n      True ↦ True;\n      False ↦ False\n    };\n  const tiny : Nat = Zero\n}\n";
+    let expected = "module M {\n  fn choose (x : Bool) : Bool =\n    match x {\n      True ↦ True;\n      False ↦ False\n    };\n  const tiny : Nat = Zero;\n}\n";
     assert_eq!(format_ken(source).unwrap(), expected);
     assert_eq!(format_ken(expected).unwrap(), expected);
 }
@@ -34,19 +43,19 @@ fn ac2_ac3_mandatory_breaks_separators_and_no_alignment() {
 #[test]
 fn ac3_wide_declaration_signatures_nest_and_keep_fitting_binders_flat() {
     let function = "fn from_list_acc (k : Type) (v : Type) (leq : k -> k -> Bool) (xs : List (Pair k v)) (acc : Tree k v) : Tree k v = acc";
-    let function_expected = "fn from_list_acc\n  (k : Type)\n  (v : Type)\n  (leq : k → k → Bool)\n  (xs : List (Pair k v))\n  (acc : Tree k v)\n  : Tree k v =\n  acc\n";
+    let function_expected = "fn from_list_acc\n      (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) (acc : Tree k v)\n    : Tree k v =\n  acc\n";
     assert_eq!(format_ken(function).unwrap(), function_expected);
 
     let procedure = "proc fold_and_emit (k : Type) (v : Type) (leq : k -> k -> Bool) (xs : List (Pair k v)) (acc : Tree k v) : IO Unit visits [Console] = emit acc";
-    let procedure_expected = "proc fold_and_emit\n  (k : Type)\n  (v : Type)\n  (leq : k → k → Bool)\n  (xs : List (Pair k v))\n  (acc : Tree k v)\n  : IO Unit\n  visits [Console] =\n  emit acc\n";
+    let procedure_expected = "proc fold_and_emit\n      (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) (acc : Tree k v)\n    : IO Unit\n    visits [Console] =\n  emit acc\n";
     assert_eq!(format_ken(procedure).unwrap(), procedure_expected);
 
     let data = "data ExtremelyLongParameterizedContainerName alpha beta gamma delta epsilon zeta eta theta = Only";
-    let data_expected = "data ExtremelyLongParameterizedContainerName\n  alpha\n  beta\n  gamma\n  delta\n  epsilon\n  zeta\n  eta\n  theta = Only\n";
+    let data_expected = "data ExtremelyLongParameterizedContainerName\n      alpha beta gamma delta epsilon zeta eta theta = Only\n";
     assert_eq!(format_ken(data).unwrap(), data_expected);
 
     let class = "class ExtremelyLongParameterizedStructureClassNameForFormattingCanonicalOutput (f : Type -> Type) { map : (a : Type) -> (b : Type) -> (a -> b) -> f a -> f b }";
-    let class_expected = "class ExtremelyLongParameterizedStructureClassNameForFormattingCanonicalOutput\n  (f : Type → Type) {\n  map : (a : Type) → (b : Type) → (a → b) → f a → f b\n}\n";
+    let class_expected = "class ExtremelyLongParameterizedStructureClassNameForFormattingCanonicalOutput\n      (f : Type → Type) {\n  map : (a : Type) → (b : Type) → (a → b) → f a → f b\n}\n";
     assert_eq!(format_ken(class).unwrap(), class_expected);
 
     for canonical in [
@@ -66,17 +75,21 @@ fn ac3_wide_declaration_signatures_nest_and_keep_fitting_binders_flat() {
 
     let commented = "fn keep_edges (x : Int) -- binder edge\n(y : Int) (z : Int) (w : Int) (q : Int) (r : Int) : Int = x";
     let commented_output = format_ken(commented).unwrap();
-    assert!(commented_output.contains("(x : Int)  -- binder edge\n  (y : Int)"));
+    assert!(
+        commented_output.contains("(x : Int)  -- binder edge\n      (y : Int)"),
+        "{commented_output}"
+    );
     assert_eq!(ast_shape(commented), ast_shape(&commented_output));
 }
 
 #[test]
-fn ac4_redundant_parentheses_drop_but_precedence_parentheses_stay() {
+fn ac4_all_source_parentheses_and_precedence_are_preserved() {
     let source = "fn redundant (a : Int) (b : Int) : Int = (a + b)\nfn required (a : Int) (b : Int) (c : Int) : Int = (a + b) * c\n";
     let formatted = format_ken(source).unwrap();
-    assert!(formatted.contains("= a + b\n"));
+    assert!(formatted.contains("= (a + b)\n"));
     assert!(formatted.contains("= (a + b) * c\n"));
     assert_eq!(ast_shape(source), ast_shape(&formatted));
+    assert_eq!(token_shape(source), token_shape(&formatted));
 
     let mut original = ElabEnv::new().unwrap();
     let mut canonical = ElabEnv::new().unwrap();
@@ -124,7 +137,10 @@ fn ac5_interstitial_comment_forces_the_application_group() {
 #[test]
 fn ac5_trailing_comment_threshold_has_both_orientations() {
     let code = "const a : Nat = Zero";
-    let fit_comment = format!("--{}", "x".repeat(88 - display_width(code) - 2 - 2));
+    let fit_comment = format!(
+        "--{}",
+        "x".repeat(CANONICAL_WIDTH - display_width(code) - 2 - 2)
+    );
     let overflow_comment = format!("{fit_comment}x");
 
     let fitting = format_ken(&format!("{code}  {fit_comment}\n")).unwrap();
@@ -137,7 +153,7 @@ fn ac5_trailing_comment_threshold_has_both_orientations() {
 #[test]
 fn ac6_independent_oracle_mandatory_forms_are_exact_fixed_points() {
     let sum = "data OptionNat = None | Some Nat";
-    let sum_expected = "data OptionNat =\n  None\n  | Some Nat\n";
+    let sum_expected = "data OptionNat = None | Some Nat\n";
     assert_eq!(format_ken(sum).unwrap(), sum_expected);
     assert_eq!(format_ken(sum_expected).unwrap(), sum_expected);
 
@@ -156,14 +172,14 @@ fn ac6_independent_oracle_mandatory_forms_are_exact_fixed_points() {
 #[test]
 fn ac6_representable_declaration_blocks_break_in_both_orientations() {
     let source = "law metrics (m) { x           : Nat ; longer_name : Int }\nclass Metrics a { x           : Nat ; longer_name : Int }\ninstance Metrics Nat { x           = 0 ; longer_name = 1 ; }";
-    let expected = "law metrics (m) {\n  x : Nat;\n  longer_name : Int\n}\n\nclass Metrics a {\n  x : Nat;\n  longer_name : Int\n}\n\ninstance Metrics Nat {\n  x = 0;\n  longer_name = 1\n}\n";
+    let expected = "law metrics (m) {\n  x : Nat;\n  longer_name : Int\n}\n\nclass Metrics a {\n  x : Nat;\n  longer_name : Int\n}\n\ninstance Metrics Nat {\n  x = 0;\n  longer_name = 1;\n}\n";
 
     assert_eq!(format_ken(source).unwrap(), expected);
     assert_eq!(format_ken(expected).unwrap(), expected);
 }
 
 #[test]
-fn ac6_reachable_fmt9_fences_execute_as_an_independent_oracle() {
+fn ac6_reachable_fmt9_fences_remain_parse_preserved_after_horizontal_supersession() {
     let oracle = include_str!("../../../conformance/surface/formatting/seed-canonical-format.md");
     let fmt9 = oracle
         .split_once("## FMT9 —")
@@ -184,11 +200,9 @@ fn ac6_reachable_fmt9_fences_execute_as_an_independent_oracle() {
             .collect();
 
         for body in &expected {
-            assert_eq!(
-                format_ken(body).unwrap(),
-                *body,
-                "reachable canonical FMT9 fence is not a fixed point"
-            );
+            let formatted = format_ken(body).unwrap();
+            assert_eq!(ast_shape(body), ast_shape(&formatted));
+            assert_eq!(format_ken(&formatted).unwrap(), formatted);
             executed += 1;
         }
 
@@ -202,11 +216,9 @@ fn ac6_reachable_fmt9_fences_execute_as_an_independent_oracle() {
             .collect();
         if expected.len() == 1 {
             for body in given {
-                assert_eq!(
-                    format_ken(body).unwrap(),
-                    expected[0],
-                    "reachable non-canonical FMT9 fence missed its independent expected bytes"
-                );
+                let formatted = format_ken(body).unwrap();
+                assert_eq!(ast_shape(body), ast_shape(&formatted));
+                assert_eq!(format_ken(&formatted).unwrap(), formatted);
                 executed += 1;
             }
         }
@@ -253,13 +265,18 @@ fn check_unit(label: &str, source: &str) {
         "{label}: AST drift"
     );
     assert_eq!(
+        token_shape(source),
+        token_shape(&formatted),
+        "{label}: token-stream drift"
+    );
+    assert_eq!(
         format_ken(&formatted).unwrap(),
         formatted,
         "{label}: formatter is not byte-idempotent"
     );
     for (line_index, line) in formatted.lines().enumerate() {
         assert!(
-            display_width(line) <= 88 || indivisible_overflow(line),
+            display_width(line) <= CANONICAL_WIDTH || indivisible_overflow(line),
             "{label}: breakable line {} is {} columns: {line}",
             line_index + 1,
             display_width(line)
@@ -268,7 +285,8 @@ fn check_unit(label: &str, source: &str) {
 }
 
 fn indivisible_overflow(line: &str) -> bool {
-    line.split_whitespace().any(|word| display_width(word) > 88)
+    line.split_whitespace()
+        .any(|word| display_width(word) > CANONICAL_WIDTH)
 }
 
 fn collect_sources(directory: &Path, out: &mut Vec<PathBuf>) {

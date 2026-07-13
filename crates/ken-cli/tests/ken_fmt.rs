@@ -14,10 +14,13 @@ fn fixture(name: &str, contents: &str) -> PathBuf {
 
 #[test]
 fn fmt_rewrites_plain_and_literate_sources_through_landed_entry_points() {
-    let plain = fixture("fmt_rewrite.ken", "fn id (x : Nat) : Nat = (x)\n");
+    let plain = fixture(
+        "fmt_rewrite.ken",
+        "fn id (f : Nat -> Nat) (x : Nat) : Nat = f   (x)\n",
+    );
     let literate = fixture(
         "fmt_rewrite.ken.md",
-        "Prose -> unchanged.\n```ken\nfn id (x : Nat) : Nat = (x)\n```\n",
+        "Prose -> unchanged.\n```ken\nfn id (f : Nat -> Nat) (x : Nat) : Nat = f   (x)\n```\n",
     );
     let output = Command::new(ken_bin())
         .arg("fmt")
@@ -32,18 +35,18 @@ fn fmt_rewrites_plain_and_literate_sources_through_landed_entry_points() {
     );
     assert_eq!(
         fs::read_to_string(plain).unwrap(),
-        "fn id (x : Nat) : Nat = x\n"
+        "fn id (f : Nat → Nat) (x : Nat) : Nat = f (x)\n"
     );
     assert_eq!(
         fs::read_to_string(literate).unwrap(),
-        "Prose -> unchanged.\n```ken\nfn id (x : Nat) : Nat = x\n```\n"
+        "Prose -> unchanged.\n```ken\nfn id (f : Nat → Nat) (x : Nat) : Nat = f (x)\n```\n"
     );
 }
 
 #[test]
 fn fmt_check_names_every_offender_and_never_writes() {
-    let first = fixture("fmt_check_first.ken", "const first : Nat = (Zero)\n");
-    let second = fixture("fmt_check_second.ken", "const second : Nat = (Zero)\n");
+    let first = fixture("fmt_check_first.ken", "const first   : Nat = Zero\n");
+    let second = fixture("fmt_check_second.ken", "const second   : Nat = Zero\n");
     let before_first = fs::read(&first).unwrap();
     let before_second = fs::read(&second).unwrap();
     let output = Command::new(ken_bin())
