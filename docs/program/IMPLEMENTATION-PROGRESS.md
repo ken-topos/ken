@@ -14,22 +14,46 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 549bf8d9`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 50d187bb`
 >
-> **★ CURRENT FRONTIER (one-line resume):** ADR-0014 R2 module round COMPLETE
-> (N1–N4 ✅). **★★★ kenfmt B3 — THE LAYOUT ENGINE — CLOSED ✅** (`origin/main @
-> 549bf8d9`, PR #597; all 3 Language retros in → B3 FULLY CLOSED 2026-07-13).
-> **kenfmt P0/S/B1/B2/B3 ALL LANDED.** **★ ACTIVE FRONTIER = kenfmt B4** (`.ken.md`
-> splicing + prose byte-identity, size S, Language ring, deps B1/B2/B3 all met →
-> ACTIVE — KICKED). Frame: `docs/program/wp/kenfmt-b4-ken-md-splicing.md` on
-> `wp/kenfmt-b4-ken-md-splicing @ 986c8d54` (from `origin/main @ 549bf8d9`).
-> **B4 KICKED 2026-07-13** (`evt_62c6cnhnd9v92`): Language ring compacted @
-> ctx-verified (all 3 "Context compacted" WIDE, branches clean at origin/main) →
-> leader roused, Working. **NEXT: Language builds B4 → Architect-terminal → me;** then
-> capstone **C** (atomic whole-catalog reformat + strict `ken fmt --check` gate —
-> needs the Steward-scheduled catalog freeze, opened when B4 is landing). Carries:
-> task #43 record-surface WP (B3 door-open), task #44 `layout.rs::token_text`↔B2
-> `canonical_token_spelling` dedup at pipeline integration. _(detail log below.)_
+> **★ CURRENT FRONTIER (one-line resume):** Two parallel efforts running —
+> **(1) kenfmt B4→C** (Language) and **(2) Ken CLI Program I** (contract
+> PUBLISHED, two build lanes kicking). Both disjoint from the frozen catalog.
+>
+> **① kenfmt B4** (`.ken.md` splicing + prose byte-identity, size S, Language).
+> B3 layout engine CLOSED ✅ (P0/S/B1/B2/B3 all landed). **B4 candidate
+> `wp/kenfmt-b4-ken-md-splicing @ f6dfaffa` — QA APPROVED (AC 6/6) + Architect-
+> terminal APPROVED (`evt_4c2q2sea0v747`); `git_request` in
+> (`evt_6t52p76mjn6ah`).** Steward honesty-gate CLEAN (4 `crates/ken-elaborator`
+> files +437/−5 + frame doc rides; diff-check clean; zero TCB). Rebased onto
+> `50d187bb` (Architect note — raw base 549bf8d9 would have reverted my contract
+> doc + tracker; rebased clean → only 4 B4 files + frame doc). **PUBLISHING
+> (CI-polled — code merge).** Then capstone **C** (atomic whole-catalog reformat + strict
+> `ken fmt --check` gate — needs the Steward-scheduled catalog freeze, opened when
+> B4 lands + no catalog/spec WP mid-flight). Carries: task #43 record-surface WP,
+> task #44 `layout.rs::token_text`↔B2 dedup at pipeline integration.
+>
+> **② Ken CLI Program I — host-ABI/effect/capability contract PUBLISHED ✅**
+> `origin/main @ 50d187bb` (PR #598, doc-only; Architect design ruling
+> `docs/program/ken-cli-program-i-contract.md`, was architect/work `adb3abbc`).
+> Reflect-don't-extend: more constructors on the existing ITree/Coproduct spine +
+> more `run_io` arms + a runner that stops guessing entrypoint/result-shape. Zero
+> TCB delta, no new kernel rules, no second effect system. **Decomposition final**
+> (I-1..I-7 + §5.1/§5.2 enclave prereqs; see work-program doc §7). **ONE ready,
+> idle, catalog-disjoint lane KICKING now:** **I-1** entrypoint ABI + runner
+> (named `main`, `ProcessInput`, total `ExitCode`, `List Bytes` argv, `--` split,
+> delete `render_fs_result`) → **Runtime ring**. Frame:
+> `docs/program/wp/cli-i1-entrypoint-abi-runner.md` on
+> `wp/cli-i1-entrypoint-abi-runner` (off `origin/main @ 50d187bb`). Architect is
+> WP reviewer (owns the host-ABI contract), self-compacting at seam.
+> **§5.2 safe-Bytes sigs — HELD (revised):** it edits
+> `catalog/packages/Capability/Parsing/Parsing.ken.md` (uses `bytes_decode/at/
+> slice`, incl. a round-trip law at line 53), so it collides with the kenfmt-C
+> catalog freeze; its only downstream (Text.Codec/ArgParse) is Milestone-C, also
+> held. HOLD behind C. **Program II (catalog closure / Milestone-C packages) HELD**
+> — behind the kenfmt-C catalog freeze (operator: "no catalog changes in flight
+> during C"); contract §7 also flags an N2-block — VERIFY vs my "N2 landed" note
+> before kicking Milestone C. _(B3 historical detail below, past tense.)_
 >
 > **★ B3 BUILD → CLOSED ✅ MERGED `549bf8d9` (PR #597); all 3 Language retros IN
 > (leader `evt_3dq1rs636sxf7` / impl `evt_xn06qjt2g6s2` / qa `evt_7vy9p7d4p5221`)
@@ -95,29 +119,38 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > (+2/−2, one file, doc-only, zero TCB).
 >
 > **★ NEXT (resume actions, in order):**
-> 1. ✅ **B4 brief authored** — `986c8d54`, grounded (extractor data-model,
->    `format_ken` entry, S §Literate parse-first rule; no fresh Architect ruling).
-> 2. ✅ **Handoff-Gate done** — Language ring compacted @ ctx-verified (3×
->    "Context compacted" WIDE; branches clean at origin/main). `bxq94nghv` exit 0.
-> 3. ✅ **B4 KICKED** — `evt_62c6cnhnd9v92` → language-leader roused, Working.
-> 4. **AWAIT** B4 build (Language → Architect-terminal → git_request to me) →
+> 1. **AWAIT** B4 build (Language → Architect-terminal → `git_request` to me) →
 >    honesty-gate + CI-poll publish → **B4 CLOSED**. Then capstone **C**.
+> 2. **KICK I-1** (CLI entrypoint ABI + runner) → Runtime ring: author frame,
+>    Handoff-Gate Runtime (leader+impl+qa), kick. Architect terminal reviewer.
+> 3. **KICK §5.2** (safe total Bytes sigs) → spec enclave: author frame,
+>    Handoff-Gate enclave (spec-leader+spec-author+CV — confirm §32 ghost cleared),
+>    kick. Independent, no deps; gates Text.Codec/ArgParse.
+> 4. **HOLD** Program II / Milestone-C catalog-closure packages behind kenfmt-C
+>    catalog freeze (+ verify the N2-block claim in the fresh contract §7).
 > 5. **✅ OPERATOR CONFIRMED (2026-07-13): proceed B4 → C as planned; sequence
->    remaining namespace work (N5, `use`-retire #37, MRES-6 #39) AFTER C.** C still
->    needs the Steward-scheduled catalog-freeze window (open when B4 lands + no
->    catalog/spec WP mid-flight). Operator away until ~11:00 UTC.
+>    remaining namespace work (N5, `use`-retire #37, MRES-6 #39) AFTER C.**
+>    Operator away until ~11:00 UTC — keep the fleet running on the sanctioned CLI
+>    setup; no new autonomous work beyond it.
 >
-> **★★ NEW MEGA-EFFORT INCOMING — Ken CLI application tooling (operator, 2026-07-13).**
-> Report: `local/ken-cli-tooling-gap-report.md` (clean-room-clean; ~985 lines).
-> "Largest since the compiler effort." Multi-PROGRAM: (I) host-ABI + effect
-> drivers (entrypoint ABI + Console/FS/Env/Process effect families + capability
-> model — runtime/Language/Architect); (II) catalog closure (NonEmpty→Validation→
-> Codec/Numeric/keys→Cursor/Decoder→Diagnostic→Doc→Process.Args/Exit/Path→ArgParse
-> →env-config→Resource/Test.Property — Foundation, zero-trust, N2 ALREADY LANDED so
-> UNBLOCKED); (III) native parity (deferred). Interpreter-first vertical slice.
-> **Report is stale on N2 (says red-until-built @ 3a5cd323; live = landed).**
-> Awaiting operator answers on scope target / FS-capability staging / autonomy
-> depth before framing (conversation in progress).
+> **★ CLI Program I decomposition (final; Architect I-1..I-7 + §5 enclave prereqs;
+> full frame in `docs/program/ken-cli-tooling-work-program.md §7`):**
+> - **I-1** entrypoint ABI + runner (Milestone A, Runtime) — READY, kicking.
+> - **I-2** Console floor (Stream×{Read,Write,Flush,IsTerminal} over Bytes, Runtime)
+>   — follows I-1 in same ring.
+> - **I-3** FS floor (extended `FSOp` + structured `IOError`, Runtime) — **folds in
+>   §5.1** (replace `write_bytes`/`append` placeholders with real `FSOp` ctors);
+>   spec companion for the primitive-registry change.
+> - **I-4** coarse capability threading (`ProgramCaps`; write/delete gated `AFull`
+>   w/ "not path-confined" caveat).
+> - **I-5** scoped capability model (rights×scope×symlink×attenuation×openat) —
+>   the gating fast-follow; needs Architect design first.
+> - **I-6** injectable host-handlers (virtual FS / captured streams / scripted
+>   stdin / fixed clocks) — deterministic tests.
+> - **I-7** Env/Process families.
+> - **§5.2** safe total pure-Bytes sigs (enclave) — READY, kicking. Independent.
+> - **Milestone C** package floor (ArgParse/Cursor/Validation/Diagnostic/Doc…) —
+>   HELD (catalog freeze; contract also flags N2-block — verify).
 >
 > **★ (prior) B3 oracle + §1d sum-determinism pin** **MERGED** (`858c64a3`, PR #593, doc-only;
 > Architect-terminal APPROVE `321d42b5`; reviewed blobs byte-identical to

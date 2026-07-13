@@ -5,7 +5,8 @@
 //! the parsed token kind, while every other token and all trivia retain their
 //! original source lexeme.
 
-use crate::lexer::Token;
+use crate::error::{ElabError, Span};
+use crate::lexer::{Lexer, Token};
 use crate::lossless::{parse_lossless, FormattableSource, SourcePieceKind};
 
 /// The blessed spelling for an unambiguous notation token kind.
@@ -78,6 +79,72 @@ pub fn canonicalize_tokens(source: &dyn FormattableSource) -> String {
     }
 
     out
+}
+
+/// Canonicalize recognizable notation tokens in a fragment that need not
+/// parse. Unrecognized bytes, layout, comments, strings, and temporal payloads
+/// are replayed verbatim. This is the narrow B4 fallback for incomplete
+/// `` ```ken ignore `` and syntax-erroring `` ```ken reject `` bodies.
+pub fn canonicalize_lexed_tokens(src: &str) -> Result<String, ElabError> {
+    let mut tokens = Vec::new();
+    let mut cursor = 0usize;
+    while cursor < src.len() {
+        let mut lexer = Lexer::new(&src[cursor..]);
+        match lexer.next_token() {
+            Ok((Token::Eof, _)) => break,
+            Ok((token, span)) => {
+                let absolute = Span::new(cursor + span.start, cursor + span.end);
+                cursor += span.end;
+                tokens.push((token, absolute));
+            }
+            Err(ElabError::ParseError { span, .. }) => {
+                let advance = span.end.max(
+                    src[cursor..]
+                        .chars()
+                        .next()
+                        .map(char::len_utf8)
+                        .unwrap_or(1),
+                );
+                cursor += advance;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    let mut replacements = Vec::new();
+    let mut temporal_brace_depth: Option<usize> = None;
+    let mut temporal_pending_brace = false;
+    for (token, span) in tokens {
+        if temporal_pending_brace {
+            if matches!(token, Token::LBrace) {
+                temporal_pending_brace = false;
+                temporal_brace_depth = Some(1);
+            }
+            continue;
+        }
+        if let Some(depth) = temporal_brace_depth.as_mut() {
+            match token {
+                Token::LBrace => *depth += 1,
+                Token::RBrace if *depth == 1 => temporal_brace_depth = None,
+                Token::RBrace => *depth -= 1,
+                _ => {}
+            }
+            continue;
+        }
+        if matches!(token, Token::KwTemporal) {
+            temporal_pending_brace = true;
+            continue;
+        }
+        if let Some(canonical) = canonical_token_spelling(&token) {
+            replacements.push((span.start..span.end, canonical));
+        }
+    }
+
+    let mut out = src.to_owned();
+    for (range, canonical) in replacements.into_iter().rev() {
+        out.replace_range(range, canonical);
+    }
+    Ok(out)
 }
 
 /// Normalize notation in a syntactically valid Ken unit.
