@@ -7,8 +7,9 @@ pub mod eval;
 pub mod proof_erasure_checker;
 
 pub use eval::{
-    apply, decimal_value, drive_h, drive_h_instrumented, eval, run_io, ConsoleIds, Env, EvalStore,
-    EvalVal, FSIds, ITreeIds, RunIoError, SlotId, CoproductIds,
+    apply, decimal_value, drive_h, drive_h_instrumented, eval, run_io, CaptureHost, ConsoleIds,
+    ConsoleStream, ConsoleTrace, CoproductIds, Env, EvalStore, EvalVal, FSIds, HostHandler,
+    HostRead, ITreeIds, PosixHost, RunIoError, SlotId,
 };
 pub use proof_erasure_checker::{
     ken_check_proof_erasure_boundary_witness, KenProofErasureBoundaryCheckError,
@@ -965,7 +966,9 @@ mod tests {
         // But a projection chain may demand only an earlier concrete field.
         let r = eval(
             &[],
-            &Term::Proj1(Box::new(Term::Proj2(Box::new(pair_with_unknown_tail.clone())))),
+            &Term::Proj1(Box::new(Term::Proj2(Box::new(
+                pair_with_unknown_tail.clone(),
+            )))),
             &env,
             &mut store,
         );
@@ -1000,7 +1003,11 @@ mod tests {
             &env,
             &mut store,
         );
-        assert_eq!(r, EvalVal::Unknown, "requested unknown field must stay Unknown");
+        assert_eq!(
+            r,
+            EvalVal::Unknown,
+            "requested unknown field must stay Unknown"
+        );
 
         // elim on unknown scrutinee → unknown
         let r = eval(
@@ -1452,8 +1459,8 @@ mod eff_tests {
 
     use super::eval::{drive_h, eval, EvalStore, EvalVal, ITreeIds};
     use ken_kernel::{
-        declare_inductive, declare_postulate, CtorSpec, GlobalEnv, GlobalId, InductiveSpec,
-        Level, Term,
+        declare_inductive, declare_postulate, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, Level,
+        Term,
     };
 
     // ── ITree test environment ─────────────────────────────────────────────────
@@ -1502,9 +1509,18 @@ mod eff_tests {
 
         let ret_id = env.inductive(itree).unwrap().constructors[0].id;
         let vis_id = env.inductive(itree).unwrap().constructors[1].id;
-        let ids = ITreeIds { ret_id, vis_id, params_len: 0 };
+        let ids = ITreeIds {
+            ret_id,
+            vis_id,
+            params_len: 0,
+        };
 
-        ITreeEnv { itree, ret_id, vis_id, ids }
+        ITreeEnv {
+            itree,
+            ret_id,
+            vis_id,
+            ids,
+        }
     }
 
     fn mk_store() -> EvalStore {
@@ -1514,7 +1530,10 @@ mod eff_tests {
     /// `Ret val_term` as a closed core Term (0-param ITree).
     fn mk_ret(val_term: Term, ret_id: GlobalId) -> Term {
         Term::App(
-            Box::new(Term::Constructor { id: ret_id, level_args: vec![] }),
+            Box::new(Term::Constructor {
+                id: ret_id,
+                level_args: vec![],
+            }),
             Box::new(val_term),
         )
     }
@@ -1523,7 +1542,10 @@ mod eff_tests {
     fn mk_vis(op_term: Term, k_term: Term, vis_id: GlobalId) -> Term {
         Term::App(
             Box::new(Term::App(
-                Box::new(Term::Constructor { id: vis_id, level_args: vec![] }),
+                Box::new(Term::Constructor {
+                    id: vis_id,
+                    level_args: vec![],
+                }),
                 Box::new(op_term),
             )),
             Box::new(k_term),
@@ -1545,7 +1567,7 @@ mod eff_tests {
 
         // op = Bool(true) — represents Console.Write "hi" (oracle)
         let op_term = Term::Type(Level::zero()); // evaluates to TypeUniverse — our mock op
-        // k = λ r. Ret r
+                                                 // k = λ r. Ret r
         let k_term = Term::Lam(
             Box::new(Term::Type(Level::zero())),
             Box::new(mk_ret(Term::var(0), it.ret_id)),
@@ -1555,10 +1577,16 @@ mod eff_tests {
 
         let mut ops_performed: Vec<EvalVal> = vec![];
         let mock_resp = EvalVal::Bool(true); // mock Unit response
-        let result = drive_h(tree_val, &mut |op: EvalVal| {
-            ops_performed.push(op.clone());
-            EvalVal::Bool(true)
-        }, &it.ids, &env, &mut store);
+        let result = drive_h(
+            tree_val,
+            &mut |op: EvalVal| {
+                ops_performed.push(op.clone());
+                EvalVal::Bool(true)
+            },
+            &it.ids,
+            &env,
+            &mut store,
+        );
 
         // H called once; result is the response fed through Ret.
         assert_eq!(ops_performed.len(), 1, "one effect must be performed");
@@ -1578,11 +1606,11 @@ mod eff_tests {
         // Five distinct mock op terms, each in its own `Vis op (λ r. Ret r)` tree.
         // We use Bool(true), Bool(false), and three distinct type-formers as mock ops.
         let op_terms: Vec<Term> = vec![
-            Term::Type(Level::zero()),     // Console (mock)
-            Term::Omega(Level::zero()),    // Clock (mock)
-            Term::Type(Level::zero()),     // FS — same type but distinct Vis (oracle)
-            Term::Omega(Level::zero()),    // Net
-            Term::Type(Level::zero()),     // Rand
+            Term::Type(Level::zero()),  // Console (mock)
+            Term::Omega(Level::zero()), // Clock (mock)
+            Term::Type(Level::zero()),  // FS — same type but distinct Vis (oracle)
+            Term::Omega(Level::zero()), // Net
+            Term::Type(Level::zero()),  // Rand
         ];
 
         // For a cleaner uniform test: use distinct lambda bodies to give distinct k closures,
@@ -1599,10 +1627,16 @@ mod eff_tests {
             let tree_val = eval(&[], &tree_term, &env, &mut store);
 
             let mut call_count = 0usize;
-            let result = drive_h(tree_val, &mut |_op: EvalVal| {
-                call_count += 1;
-                EvalVal::Int(i as i64) // distinct response per class
-            }, &it.ids, &env, &mut store);
+            let result = drive_h(
+                tree_val,
+                &mut |_op: EvalVal| {
+                    call_count += 1;
+                    EvalVal::Int(i as i64) // distinct response per class
+                },
+                &it.ids,
+                &env,
+                &mut store,
+            );
 
             assert_eq!(call_count, 1, "class {i}: H called exactly once");
             assert_eq!(
@@ -1632,7 +1666,7 @@ mod eff_tests {
         // op2 body = `Omega 0` (constant closure returning omega)
         let op1_term = Term::Lam(
             Box::new(Term::Type(Level::zero())),
-            Box::new(Term::Type(Level::zero())),  // body ≠ op2's body
+            Box::new(Term::Type(Level::zero())), // body ≠ op2's body
         );
         let op2_term = Term::Lam(
             Box::new(Term::Type(Level::zero())),
@@ -1665,25 +1699,36 @@ mod eff_tests {
 
         // Record ops in order (1 = op1, 2 = op2, 0 = unexpected)
         let mut trace_ids: Vec<u8> = vec![];
-        let result = drive_h(tree_val, &mut |op: EvalVal| {
-            match &op {
-                EvalVal::Closure { code_id, .. } => {
-                    if *code_id == op1_code_id {
-                        trace_ids.push(1); // op1
-                    } else {
-                        trace_ids.push(2); // op2
+        let result = drive_h(
+            tree_val,
+            &mut |op: EvalVal| {
+                match &op {
+                    EvalVal::Closure { code_id, .. } => {
+                        if *code_id == op1_code_id {
+                            trace_ids.push(1); // op1
+                        } else {
+                            trace_ids.push(2); // op2
+                        }
                     }
+                    _ => trace_ids.push(0),
                 }
-                _ => trace_ids.push(0),
-            }
-            EvalVal::Bool(true) // mock response (ignored by λ _)
-        }, &it.ids, &env, &mut store);
+                EvalVal::Bool(true) // mock response (ignored by λ _)
+            },
+            &it.ids,
+            &env,
+            &mut store,
+        );
 
         // Trace must be [1, 2] — op1 then op2, spine order (§6.4)
-        assert_eq!(trace_ids, vec![1u8, 2u8], "trace must be op1 then op2 (spine order)");
+        assert_eq!(
+            trace_ids,
+            vec![1u8, 2u8],
+            "trace must be op1 then op2 (spine order)"
+        );
         assert!(
             !matches!(result, EvalVal::Neutral | EvalVal::Unknown),
-            "result must be a concrete value; got {:?}", result
+            "result must be a concrete value; got {:?}",
+            result
         );
     }
 
@@ -1725,20 +1770,32 @@ mod eff_tests {
         // Mock H: for op1 (a Closure) return a distinct sentinel; for op2 (whatever op1's resp was) return Bool(true).
         let mut ops: Vec<EvalVal> = vec![];
         let sentinel = EvalVal::Int(42); // H's response to op1
-        let result = drive_h(tree_val, &mut |op: EvalVal| {
-            ops.push(op.clone());
-            if ops.len() == 1 {
-                sentinel.clone() // response to op1
-            } else {
-                EvalVal::Bool(true) // response to op2
-            }
-        }, &it.ids, &env, &mut store);
+        let result = drive_h(
+            tree_val,
+            &mut |op: EvalVal| {
+                ops.push(op.clone());
+                if ops.len() == 1 {
+                    sentinel.clone() // response to op1
+                } else {
+                    EvalVal::Bool(true) // response to op2
+                }
+            },
+            &it.ids,
+            &env,
+            &mut store,
+        );
 
         assert_eq!(ops.len(), 2, "exactly two effects must be performed");
         // ops[1] (the second op) must BE the sentinel (= resp from op1) — response threaded
-        assert_eq!(ops[1], sentinel, "second op must equal op1's response (response threaded)");
+        assert_eq!(
+            ops[1], sentinel,
+            "second op must equal op1's response (response threaded)"
+        );
         // Result is Ret(sentinel) → sentinel (outer resp carried through Var(1))
-        assert_eq!(result, sentinel, "result must be op1's response (threaded through bind)");
+        assert_eq!(
+            result, sentinel,
+            "result must be op1's response (threaded through bind)"
+        );
     }
 
     // ── EFF3 — row-bounding (elaboration-layer) ────────────────────────────────
@@ -1792,11 +1849,17 @@ mod eff_tests {
         let mv = Term::Lam(
             Box::new(Term::Type(Level::zero())),
             Box::new(Term::Lam(
-                Box::new(Term::Pi(Box::new(Term::Type(Level::zero())), Box::new(Term::Type(Level::zero())))),
+                Box::new(Term::Pi(
+                    Box::new(Term::Type(Level::zero())),
+                    Box::new(Term::Type(Level::zero())),
+                )),
                 Box::new(Term::Lam(
                     Box::new(Term::Pi(
                         Box::new(Term::Type(Level::zero())),
-                        Box::new(Term::Pi(Box::new(Term::Type(Level::zero())), Box::new(Term::Type(Level::zero())))),
+                        Box::new(Term::Pi(
+                            Box::new(Term::Type(Level::zero())),
+                            Box::new(Term::Type(Level::zero())),
+                        )),
                     )),
                     Box::new(Term::Lam(
                         Box::new(Term::Type(Level::zero())),
@@ -1810,7 +1873,10 @@ mod eff_tests {
         );
 
         // tree = Vis op (λs. Ret s)  — a single `get`.
-        let k_term = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(mk_ret(Term::var(0), it.ret_id)));
+        let k_term = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(mk_ret(Term::var(0), it.ret_id)),
+        );
         let tree_term = mk_vis(Term::Type(Level::zero()), k_term, it.vis_id);
 
         let elim = Term::Elim {
@@ -1833,15 +1899,28 @@ mod eff_tests {
         let run1 = super::eval::apply(fold_val, s1.clone(), &env, &mut store);
 
         match (&run0, &run1) {
-            (EvalVal::Pair { fst: f0, snd: s0_, .. }, EvalVal::Pair { fst: f1, snd: s1_, .. }) => {
-                assert_eq!(**f0, s0, "run from s0: result must be s0 (get returns current state)");
+            (
+                EvalVal::Pair {
+                    fst: f0, snd: s0_, ..
+                },
+                EvalVal::Pair {
+                    fst: f1, snd: s1_, ..
+                },
+            ) => {
+                assert_eq!(
+                    **f0, s0,
+                    "run from s0: result must be s0 (get returns current state)"
+                );
                 assert_eq!(**s0_, s0, "run from s0: final state must be s0 (unchanged)");
                 assert_eq!(**f1, s1, "run from s1: result must be s1");
                 assert_eq!(**s1_, s1, "run from s1: final state must be s1");
             }
             other => panic!("expected two Pairs from the pure fold; got {:?}", other),
         }
-        assert_ne!(run0, run1, "two initial states must yield two independent pairs");
+        assert_ne!(
+            run0, run1,
+            "two initial states must yield two independent pairs"
+        );
     }
 
     /// `runtime/effects/handled-discharges-unhandled-reaches-driver`
@@ -1873,15 +1952,24 @@ mod eff_tests {
         let mv = Term::Lam(
             Box::new(Term::Type(Level::zero())),
             Box::new(Term::Lam(
-                Box::new(Term::Pi(Box::new(Term::Type(Level::zero())), Box::new(Term::Type(Level::zero())))),
+                Box::new(Term::Pi(
+                    Box::new(Term::Type(Level::zero())),
+                    Box::new(Term::Type(Level::zero())),
+                )),
                 Box::new(Term::Lam(
-                    Box::new(Term::Pi(Box::new(Term::Type(Level::zero())), Box::new(Term::Type(Level::zero())))),
+                    Box::new(Term::Pi(
+                        Box::new(Term::Type(Level::zero())),
+                        Box::new(Term::Type(Level::zero())),
+                    )),
                     Box::new(Term::App(Box::new(Term::var(0)), Box::new(Term::var(2)))),
                 )),
             )),
         );
         let op_marker = Term::Type(Level::zero());
-        let k_term = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(mk_ret(Term::var(0), it.ret_id)));
+        let k_term = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(mk_ret(Term::var(0), it.ret_id)),
+        );
         let handled_tree = mk_vis(op_marker, k_term, it.vis_id);
         let elim = Term::Elim {
             fam: it.itree,
@@ -1902,7 +1990,10 @@ mod eff_tests {
         // Phase 2 — a genuinely unhandled Vis (standing in for Console):
         // `Vis op (λr. Ret r)`, driven through `drive_h`. The driver must be
         // called exactly once.
-        let k2 = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(mk_ret(Term::var(0), it.ret_id)));
+        let k2 = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(mk_ret(Term::var(0), it.ret_id)),
+        );
         let unhandled_tree = mk_vis(Term::Omega(Level::zero()), k2, it.vis_id);
         let unhandled_val = eval(&[], &unhandled_tree, &env, &mut store);
         let mut h_calls = 0usize;
@@ -1916,8 +2007,15 @@ mod eff_tests {
             &env,
             &mut store,
         );
-        assert_eq!(h_calls, 1, "the unhandled Vis must reach the driver exactly once");
-        assert_eq!(driven_result, EvalVal::Bool(true), "driven result must be the handler's response");
+        assert_eq!(
+            h_calls, 1,
+            "the unhandled Vis must reach the driver exactly once"
+        );
+        assert_eq!(
+            driven_result,
+            EvalVal::Bool(true),
+            "driven result must be the handler's response"
+        );
     }
 
     // ── EFF5 — X1 == L5 ITree (definitional reconciliation) ───────────────────
@@ -1938,11 +2036,11 @@ mod eff_tests {
         // The spine = [op1, op2]. X1 running this tree MUST produce the same spine.
         let op1_term = Term::Lam(
             Box::new(Term::Type(Level::zero())),
-            Box::new(Term::var(0)),  // clock-now mock (closure tag)
+            Box::new(Term::var(0)), // clock-now mock (closure tag)
         );
         let op2_term = Term::Lam(
             Box::new(Term::Omega(Level::zero())),
-            Box::new(Term::var(0)),  // console-write mock (closure tag, distinct)
+            Box::new(Term::var(0)), // console-write mock (closure tag, distinct)
         );
         let inner = mk_vis(
             op2_term.clone(),
@@ -1965,30 +2063,47 @@ mod eff_tests {
         let op1_val = eval(&[], &op1_term, &env, &mut mk_store());
         let op2_val = eval(&[], &op2_term, &env, &mut mk_store());
         let mut trace: Vec<EvalVal> = vec![];
-        let result = drive_h(tree_val, &mut |op: EvalVal| {
-            trace.push(op.clone());
-            EvalVal::Bool(true) // uniform mock response
-        }, &it.ids, &env, &mut store);
+        let result = drive_h(
+            tree_val,
+            &mut |op: EvalVal| {
+                trace.push(op.clone());
+                EvalVal::Bool(true) // uniform mock response
+            },
+            &it.ids,
+            &env,
+            &mut store,
+        );
 
         // X1's performed spine must match the denotation's Vis-tag sequence.
-        assert_eq!(trace.len(), 2, "must perform exactly 2 effects (the two Vis nodes)");
+        assert_eq!(
+            trace.len(),
+            2,
+            "must perform exactly 2 effects (the two Vis nodes)"
+        );
         // op1 comes first (left Vis, spine order), op2 second.
         // Verify structural identity: trace[0] is the op1 closure, trace[1] is op2.
         match (&trace[0], &op1_val) {
             (EvalVal::Closure { code_id: c1, .. }, EvalVal::Closure { code_id: c2, .. }) => {
-                assert_eq!(c1, c2, "EFF5: trace[0] must be op1 (same code_id as L5 denotation)");
+                assert_eq!(
+                    c1, c2,
+                    "EFF5: trace[0] must be op1 (same code_id as L5 denotation)"
+                );
             }
             _ => panic!("EFF5: expected Closure op; got {:?}", trace[0]),
         }
         match (&trace[1], &op2_val) {
             (EvalVal::Closure { code_id: c1, .. }, EvalVal::Closure { code_id: c2, .. }) => {
-                assert_eq!(c1, c2, "EFF5: trace[1] must be op2 (same code_id as L5 denotation)");
+                assert_eq!(
+                    c1, c2,
+                    "EFF5: trace[1] must be op2 (same code_id as L5 denotation)"
+                );
             }
             _ => panic!("EFF5: expected Closure op; got {:?}", trace[1]),
         }
         assert!(
             !matches!(result, EvalVal::Neutral | EvalVal::Unknown),
-            "result must be the Ret leaf value; got {:?}", result
+            "result must be the Ret leaf value; got {:?}",
+            result
         );
     }
 
@@ -2007,12 +2122,12 @@ mod eff_tests {
         // (a) op depends on an open hole → EvalVal::Unknown → drive_h returns Unknown
         {
             let mut store = mk_store();
-            let hole_id = declare_postulate(
-                &mut env,
-                vec![],
-                Term::Type(Level::zero()),
-            ).expect("hole");
-            let hole_term = Term::Const { id: hole_id, level_args: vec![] };
+            let hole_id =
+                declare_postulate(&mut env, vec![], Term::Type(Level::zero())).expect("hole");
+            let hole_term = Term::Const {
+                id: hole_id,
+                level_args: vec![],
+            };
             // k = λ r. Ret r
             let k_term = Term::Lam(
                 Box::new(Term::Type(Level::zero())),
@@ -2024,10 +2139,16 @@ mod eff_tests {
             let tree_val = eval(&[], &tree_term, &env, &mut store);
 
             let mut h_called = false;
-            let result = drive_h(tree_val, &mut |_: EvalVal| {
-                h_called = true;
-                EvalVal::Bool(true)
-            }, &it.ids, &env, &mut store);
+            let result = drive_h(
+                tree_val,
+                &mut |_: EvalVal| {
+                    h_called = true;
+                    EvalVal::Bool(true)
+                },
+                &it.ids,
+                &env,
+                &mut store,
+            );
 
             assert_eq!(result, EvalVal::Unknown, "(a) holed op must yield Unknown");
             assert!(!h_called, "(a) H must not be called when op is unknown");
@@ -2036,10 +2157,8 @@ mod eff_tests {
         // (b) Concrete op (hole discharged to a real value): yields real trace.
         {
             let mut store = mk_store();
-            let concrete_op = Term::Lam(
-                Box::new(Term::Type(Level::zero())),
-                Box::new(Term::var(0)),
-            );
+            let concrete_op =
+                Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(Term::var(0)));
             let k_term = Term::Lam(
                 Box::new(Term::Type(Level::zero())),
                 Box::new(mk_ret(Term::var(0), it.ret_id)),
@@ -2048,13 +2167,23 @@ mod eff_tests {
             let tree_val = eval(&[], &tree_term, &env, &mut store);
 
             let mut h_called = false;
-            let result = drive_h(tree_val, &mut |_: EvalVal| {
-                h_called = true;
-                EvalVal::Bool(true)
-            }, &it.ids, &env, &mut store);
+            let result = drive_h(
+                tree_val,
+                &mut |_: EvalVal| {
+                    h_called = true;
+                    EvalVal::Bool(true)
+                },
+                &it.ids,
+                &env,
+                &mut store,
+            );
 
             assert!(h_called, "(b) H must be called for a hole-free op");
-            assert_eq!(result, EvalVal::Bool(true), "(b) hole-free must yield real result");
+            assert_eq!(
+                result,
+                EvalVal::Bool(true),
+                "(b) hole-free must yield real result"
+            );
         }
     }
 
@@ -2098,13 +2227,13 @@ mod eff_tests {
             let tag = decode_op(&op);
             let resp = match tag {
                 MockOp::Console => EvalVal::Int(100), // Unit resp (mock)
-                MockOp::Clock   => EvalVal::Int(101), // Instant resp (mock)
-                MockOp::FS      => EvalVal::Int(102), // Bytes resp (mock)
-                MockOp::Net     => EvalVal::Int(103), // Unit/Bytes resp (mock)
-                MockOp::Rand    => EvalVal::Int(104), // drawn value resp (mock)
-                // NO `_ =>` arm: a new MockOp variant = COMPILE ERROR.
-                // (Disconfirming check: would a new op be a build error or silently
-                // skipped? Only exhaustive-by-construction makes it the former.)
+                MockOp::Clock => EvalVal::Int(101),   // Instant resp (mock)
+                MockOp::FS => EvalVal::Int(102),      // Bytes resp (mock)
+                MockOp::Net => EvalVal::Int(103),     // Unit/Bytes resp (mock)
+                MockOp::Rand => EvalVal::Int(104),    // drawn value resp (mock)
+                                                       // NO `_ =>` arm: a new MockOp variant = COMPILE ERROR.
+                                                       // (Disconfirming check: would a new op be a build error or silently
+                                                       // skipped? Only exhaustive-by-construction makes it the former.)
             };
             (resp, tag)
         }
@@ -2114,7 +2243,13 @@ mod eff_tests {
 
         // Test each MockOp class: build `Vis Int(i) (λ r. Ret r)`, run drive_h.
         // Each must call exhaustive_mock_h exactly once and return the mock resp.
-        let classes = [MockOp::Console, MockOp::Clock, MockOp::FS, MockOp::Net, MockOp::Rand];
+        let classes = [
+            MockOp::Console,
+            MockOp::Clock,
+            MockOp::FS,
+            MockOp::Net,
+            MockOp::Rand,
+        ];
         for (i, expected_class) in classes.iter().enumerate() {
             let mut store = mk_store();
             // Build a Vis with Int(i) as op — but Int isn't a Term form; use
@@ -2128,10 +2263,7 @@ mod eff_tests {
             // For test clarity: build op as distinct Bool-level closures and let
             // H's behavior (capturing i) determine the "class". The structural
             // property is: H has a match with no `_` arm.
-            let op_term = Term::Lam(
-                Box::new(Term::Type(Level::zero())),
-                Box::new(Term::var(0)),
-            );
+            let op_term = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(Term::var(0)));
             let k_term = Term::Lam(
                 Box::new(Term::Type(Level::zero())),
                 Box::new(mk_ret(Term::var(0), it.ret_id)),
@@ -2140,19 +2272,29 @@ mod eff_tests {
             let tree_val = eval(&[], &tree_term, &env, &mut store);
 
             let captured_i = i;
-            let result = drive_h(tree_val, &mut |_op: EvalVal| {
-                // Inject Int(i) as the mock op tag for this iteration,
-                // so exhaustive_mock_h can dispatch on it.
-                let (resp, got_class) = exhaustive_mock_h(EvalVal::Int(captured_i as i64));
-                assert_eq!(
-                    &got_class, expected_class,
-                    "exhaustive dispatch: class {i} must map to {:?}", expected_class
-                );
-                resp
-            }, &it.ids, &env, &mut store);
+            let result = drive_h(
+                tree_val,
+                &mut |_op: EvalVal| {
+                    // Inject Int(i) as the mock op tag for this iteration,
+                    // so exhaustive_mock_h can dispatch on it.
+                    let (resp, got_class) = exhaustive_mock_h(EvalVal::Int(captured_i as i64));
+                    assert_eq!(
+                        &got_class, expected_class,
+                        "exhaustive dispatch: class {i} must map to {:?}",
+                        expected_class
+                    );
+                    resp
+                },
+                &it.ids,
+                &env,
+                &mut store,
+            );
 
             let expected_resp = EvalVal::Int(100 + i as i64);
-            assert_eq!(result, expected_resp, "class {i}: response must be from exhaustive H");
+            assert_eq!(
+                result, expected_resp,
+                "class {i}: response must be from exhaustive H"
+            );
         }
     }
 
@@ -2182,7 +2324,8 @@ mod eff_tests {
         // Pure evaluation must succeed without a driver.
         assert!(
             matches!(&result, EvalVal::OmegaUniverse(_)),
-            "pure (id Omega) must evaluate to Omega in §3; got {:?}", result
+            "pure (id Omega) must evaluate to Omega in §3; got {:?}",
+            result
         );
 
         // Verify: a Ret-only tree also doesn't need the driver.
@@ -2193,15 +2336,25 @@ mod eff_tests {
         let ret_val = eval(&[], &ret_tree, &env, &mut store);
 
         let mut h_called = false;
-        let ret_result = drive_h(ret_val, &mut |_: EvalVal| {
-            h_called = true;
-            EvalVal::Unknown
-        }, &_it.ids, &env, &mut store);
+        let ret_result = drive_h(
+            ret_val,
+            &mut |_: EvalVal| {
+                h_called = true;
+                EvalVal::Unknown
+            },
+            &_it.ids,
+            &env,
+            &mut store,
+        );
 
-        assert!(!h_called, "a Ret tree (pure program) must never reach the driver");
+        assert!(
+            !h_called,
+            "a Ret tree (pure program) must never reach the driver"
+        );
         assert!(
             matches!(&ret_result, EvalVal::OmegaUniverse(_)),
-            "Ret(Omega) must return Omega; got {:?}", ret_result
+            "Ret(Omega) must return Omega; got {:?}",
+            ret_result
         );
     }
 }
@@ -2216,7 +2369,7 @@ mod console_io_tests {
     //! Each test checks a distinct branch; the non-Write test in particular
     //! ensures exhaustive dispatch (§6.5): no catch-all.
 
-    use super::eval::{eval, run_io, ConsoleIds, EvalStore, EvalVal, RunIoError};
+    use super::eval::{eval, run_io, CaptureHost, ConsoleIds, EvalStore, EvalVal, RunIoError};
     use ken_kernel::{
         declare_inductive, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, Level, Term,
     };
@@ -2226,11 +2379,11 @@ mod console_io_tests {
     struct ConsoleEnv {
         #[allow(dead_code)]
         itree_id: GlobalId,
-        ret_id:   GlobalId,
-        vis_id:   GlobalId,
+        ret_id: GlobalId,
+        vis_id: GlobalId,
         write_id: GlobalId,
-        unit_id:  GlobalId,
-        ids:      ConsoleIds,
+        unit_id: GlobalId,
+        ids: ConsoleIds,
     }
 
     fn mk_env(env: &mut GlobalEnv) -> ConsoleEnv {
@@ -2240,7 +2393,10 @@ mod console_io_tests {
             params: vec![],
             indices: vec![],
             level: Level::zero(),
-            constructors: vec![CtorSpec { args: vec![], target_indices: vec![] }],
+            constructors: vec![CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            }],
         })
         .expect("Unit");
         let unit_id = env.inductive(unit_ind).unwrap().constructors[0].id;
@@ -2298,12 +2454,37 @@ mod console_io_tests {
             itree_id: itree,
             ret_id,
             vis_id,
+            read_id: GlobalId(0),
             write_id,
+            flush_id: GlobalId(0),
+            is_terminal_id: GlobalId(0),
+            stdin_id: GlobalId(0),
+            stdout_id: unit_id,
+            stderr_id: GlobalId(0),
+            chunk_id: GlobalId(0),
+            eof_id: GlobalId(0),
+            true_id: GlobalId(0),
+            false_id: GlobalId(0),
+            ok_id: unit_id,
+            err_id: GlobalId(0),
+            notfound_id: GlobalId(0),
+            permissiondenied_id: GlobalId(0),
+            capabilitydenied_id: GlobalId(0),
+            brokenpipe_id: GlobalId(0),
+            interrupted_id: GlobalId(0),
+            other_id: GlobalId(0),
             unit_id,
             params_len: 0,
         };
 
-        ConsoleEnv { itree_id: itree, ret_id, vis_id, write_id, unit_id, ids }
+        ConsoleEnv {
+            itree_id: itree,
+            ret_id,
+            vis_id,
+            write_id,
+            unit_id,
+            ids,
+        }
     }
 
     fn mk_store() -> EvalStore {
@@ -2313,7 +2494,10 @@ mod console_io_tests {
     // Helpers for building closed ITree terms (0-param).
     fn mk_ret(val: Term, ret_id: GlobalId) -> Term {
         Term::App(
-            Box::new(Term::Constructor { id: ret_id, level_args: vec![] }),
+            Box::new(Term::Constructor {
+                id: ret_id,
+                level_args: vec![],
+            }),
             Box::new(val),
         )
     }
@@ -2329,15 +2513,20 @@ mod console_io_tests {
 
         // Ret(unit) — the return value is `()`.
         let tree_term = mk_ret(
-            Term::Constructor { id: ce.unit_id, level_args: vec![] },
+            Term::Constructor {
+                id: ce.unit_id,
+                level_args: vec![],
+            },
             ce.ret_id,
         );
         let tree = eval(&[], &tree_term, &env, &mut store);
-        let result = run_io(tree, &ce.ids, None, None, &env, &mut store);
+        let mut host = CaptureHost::new(Vec::new());
+        let result = run_io(tree, &mut host, &ce.ids, None, None, &env, &mut store);
 
         assert!(
             matches!(result, Ok(EvalVal::Ctor { id, .. }) if id == ce.unit_id),
-            "Ret(unit) must return Ok(unit); got {:?}", result
+            "Ret(unit) must return Ok(unit); got {:?}",
+            result
         );
     }
 
@@ -2355,10 +2544,18 @@ mod console_io_tests {
         let ce = mk_env(&mut env);
         let mut store = mk_store();
 
-        // Build Write("hello") EvalVal directly (no kernel encoding of Str needed).
+        // Build Write(Stdout, bytes) directly. This legacy unit environment
+        // reuses its sole nullary ctor as the synthetic Stdout tag.
         let write_op = EvalVal::Ctor {
             id: ce.write_id,
-            args: std::rc::Rc::new(vec![EvalVal::Str("hello".to_string())]),
+            args: std::rc::Rc::new(vec![
+                EvalVal::Ctor {
+                    id: ce.unit_id,
+                    args: std::rc::Rc::new(vec![]),
+                    slot: 0,
+                },
+                EvalVal::Bytes(b"hello".to_vec()),
+            ]),
             slot: 0,
         };
 
@@ -2366,7 +2563,10 @@ mod console_io_tests {
         // Build it as an EvalVal::Closure wrapping a kernel term.
         // Simpler: use a postulate for the continuation and override with a closure.
         // Easiest: build the continuation EvalVal directly as a Closure.
-        let unit_ctor = Term::Constructor { id: ce.unit_id, level_args: vec![] };
+        let unit_ctor = Term::Constructor {
+            id: ce.unit_id,
+            level_args: vec![],
+        };
         let ret_unit = mk_ret(unit_ctor.clone(), ce.ret_id);
         // k_term = λ(_ : Unit). Ret unit  (de Bruijn index 0 unused)
         let k_term = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(ret_unit));
@@ -2379,12 +2579,15 @@ mod console_io_tests {
             slot: 0,
         };
 
-        let result = run_io(vis_val, &ce.ids, None, None, &env, &mut store);
+        let mut host = CaptureHost::new(Vec::new());
+        let result = run_io(vis_val, &mut host, &ce.ids, None, None, &env, &mut store);
 
         assert!(
             matches!(result, Ok(EvalVal::Ctor { id, .. }) if id == ce.unit_id),
-            "Vis(Write \"hello\") must resume to Ok(unit); got {:?}", result
+            "Vis(Write bytes) must resume to unit; got {:?}",
+            result
         );
+        assert_eq!(host.stdout(), b"hello");
     }
 
     // ── VAL1-C3: unknown op → Err(UnknownEffect) ──────────────────────────────
@@ -2406,7 +2609,10 @@ mod console_io_tests {
             params: vec![],
             indices: vec![],
             level: Level::zero(),
-            constructors: vec![CtorSpec { args: vec![], target_indices: vec![] }],
+            constructors: vec![CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            }],
         })
         .expect("OtherOp");
         let other_id = env.inductive(other_ind).unwrap().constructors[0].id;
@@ -2426,11 +2632,13 @@ mod console_io_tests {
             slot: 0,
         };
 
-        let result = run_io(vis_val, &ce.ids, None, None, &env, &mut store);
+        let mut host = CaptureHost::new(Vec::new());
+        let result = run_io(vis_val, &mut host, &ce.ids, None, None, &env, &mut store);
 
         assert!(
             matches!(result, Err(RunIoError::UnknownEffect(_))),
-            "Vis(OtherOp) must return Err(UnknownEffect); got {:?}", result
+            "Vis(OtherOp) must return Err(UnknownEffect); got {:?}",
+            result
         );
     }
 }

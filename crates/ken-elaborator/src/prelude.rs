@@ -25,8 +25,8 @@
 //! gate is enforced at elaboration time (`37 §6`).
 
 use ken_kernel::{
-    declare_def, declare_inductive, declare_primitive, env::PrimReduction, subst::weaken,
-    CtorSpec, GlobalId, InductiveSpec, Level, Term,
+    declare_def, declare_inductive, declare_primitive, env::PrimReduction, subst::weaken, CtorSpec,
+    GlobalId, InductiveSpec, Level, Term,
 };
 
 use crate::error::ElabError;
@@ -63,8 +63,18 @@ pub fn empty_prelude_env() -> PreludeEnv {
         // VAL1-surface Console/IO declarations (`36 §2.1`, VAL1-surface).
         unit_id: z,
         mkunit_id: z,
+        stream_id: z,
+        stdin_id: z,
+        stdout_id: z,
+        stderr_id: z,
         console_op_id: z,
+        read_id: z,
         write_id: z,
+        flush_id: z,
+        is_terminal_id: z,
+        read_result_id: z,
+        chunk_id: z,
+        eof_id: z,
         itree_id: z,
         ret_id: z,
         vis_id: z,
@@ -131,18 +141,29 @@ pub struct PreludeEnv {
     /// `Unit` — the one-element type (`data Unit = MkUnit`).
     pub unit_id: GlobalId,
     pub mkunit_id: GlobalId,
-    /// `ConsoleOp` — Console effect operations (`Write : String → ConsoleOp`).
+    /// `Stream` — the process's three ambient console streams.
+    pub stream_id: GlobalId,
+    pub stdin_id: GlobalId,
+    pub stdout_id: GlobalId,
+    pub stderr_id: GlobalId,
+    /// `ConsoleOp` — the stream-indexed Console effect algebra.
     pub console_op_id: GlobalId,
+    pub read_id: GlobalId,
     pub write_id: GlobalId,
+    pub flush_id: GlobalId,
+    pub is_terminal_id: GlobalId,
+    /// Total response carrier for Console reads.
+    pub read_result_id: GlobalId,
+    pub chunk_id: GlobalId,
+    pub eof_id: GlobalId,
     /// `ITree R` — the simplified W-style interaction tree (`36 §2.1`, K1.5).
     /// `Ret : R → ITree R ; Vis : (Nat → ITree R) → ITree R`.
     pub itree_id: GlobalId,
     pub ret_id: GlobalId,
     pub vis_id: GlobalId,
-    /// `IO : Type → Type` — Console-effect IO type (postulate; prim reduction
-    /// held until `wp/VAL1-console-exec` lands).
+    /// `IO : Type → Type` — ordinary Console-effect ITree specialization.
     pub io_id: GlobalId,
-    /// `print_line : String → IO Unit` — the surface Console print postulate.
+    /// `print_line : String → IO Unit` — ordinary surface compatibility helper.
     pub print_line_id: GlobalId,
     /// `MkDecimalPair` — the derived `Decimal`'s constructor (`18a §5.6.1`),
     /// surfaced so literal-conversion call sites outside this crate can
@@ -199,8 +220,18 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // conflicting borrows (elaborate_decl needs &mut elab).
     elab.elaborate_decl("data Unit = MkUnit")
         .map_err(|e| ElabError::Internal(format!("prelude Unit failed: {}", e)))?;
-    elab.elaborate_decl("data ConsoleOp = Write String")
-        .map_err(|e| ElabError::Internal(format!("prelude ConsoleOp failed: {}", e)))?;
+    elab.elaborate_decl("data Stream = Stdin | Stdout | Stderr")
+        .map_err(|e| ElabError::Internal(format!("prelude Stream failed: {}", e)))?;
+    elab.elaborate_decl(
+        "data ConsoleOp = Read Stream Int | Write Stream Bytes | Flush Stream | IsTerminal Stream",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude ConsoleOp failed: {}", e)))?;
+    elab.elaborate_decl("data ReadResult = Chunk Bytes | Eof")
+        .map_err(|e| ElabError::Internal(format!("prelude ReadResult failed: {}", e)))?;
+    elab.elaborate_decl(
+        "data IOError = NotFound | PermissionDenied | CapabilityDenied | BrokenPipe | Interrupted | Other",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude IOError failed: {}", e)))?;
 
     // `ITree (E:Type) (Resp:E->Type) (R:Type)` — the LIFTED, effect-generic
     // interaction tree (State-effect-build, VAL2 #10 / OQ-C·C2, `36 §4.5.6`).
@@ -212,10 +243,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `Term`/`Decl` variant — `crate::effects::state`'s module doc explains
     // why hand-building here is SAFER than reopening `compile_match_matrix`).
     // Replaces the earlier Console-hardwired 1-param `ITree r = Ret r | Vis
-    // ConsoleOp (Unit -> ITree r)` — Console's own `print_line` prim
-    // reduction is untyped/erased at eval time (its STATIC type is the
-    // separate `IO Unit` postulate below, unaffected by this arity change)
-    // and only needs its `ConsoleIds.params_len` bumped at call sites.
+    // ConsoleOp (Unit -> ITree r)` — Console now uses the general encoding
+    // below, and the host driver handles the resulting algebra directly.
     let (itree_id, ret_id, vis_id) =
         crate::effects::state::declare_itree(&mut elab.env).map_err(ElabError::Internal)?;
     elab.globals.insert("ITree".to_string(), itree_id);
@@ -246,8 +275,18 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // VAL1-surface inductives (declared before lookup closure above).
     let unit_id = lookup("Unit")?;
     let mkunit_id = lookup("MkUnit")?;
+    let stream_id = lookup("Stream")?;
+    let stdin_id = lookup("Stdin")?;
+    let stdout_id = lookup("Stdout")?;
+    let stderr_id = lookup("Stderr")?;
     let console_op_id = lookup("ConsoleOp")?;
+    let read_id = lookup("Read")?;
     let write_id = lookup("Write")?;
+    let flush_id = lookup("Flush")?;
+    let is_terminal_id = lookup("IsTerminal")?;
+    let read_result_id = lookup("ReadResult")?;
+    let chunk_id = lookup("Chunk")?;
+    let eof_id = lookup("Eof")?;
     let itree_id = lookup("ITree")?;
     let ret_id = lookup("Ret")?;
     let vis_id = lookup("Vis")?;
@@ -267,7 +306,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.globals.insert("Get".to_string(), get_id);
     elab.globals.insert("Put".to_string(), put_id);
 
-    let (coproduct_id, inl_id, inr_id) = state_eff::declare_coproduct(&mut elab.env).map_err(ElabError::Internal)?;
+    let (coproduct_id, inl_id, inr_id) =
+        state_eff::declare_coproduct(&mut elab.env).map_err(ElabError::Internal)?;
     elab.globals.insert("Coproduct".to_string(), coproduct_id);
     elab.globals.insert("InL".to_string(), inl_id);
     elab.globals.insert("InR".to_string(), inr_id);
@@ -276,10 +316,13 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(ElabError::Internal)?;
     elab.globals.insert("resp_state".to_string(), resp_state_id);
 
-    let resp_coproduct_id = state_eff::declare_resp_coproduct(&mut elab.env, coproduct_id).map_err(ElabError::Internal)?;
-    elab.globals.insert("resp_coproduct".to_string(), resp_coproduct_id);
+    let resp_coproduct_id = state_eff::declare_resp_coproduct(&mut elab.env, coproduct_id)
+        .map_err(ElabError::Internal)?;
+    elab.globals
+        .insert("resp_coproduct".to_string(), resp_coproduct_id);
 
-    let bind_id = state_eff::declare_bind(&mut elab.env, itree_id, vis_id).map_err(ElabError::Internal)?;
+    let bind_id =
+        state_eff::declare_bind(&mut elab.env, itree_id, vis_id).map_err(ElabError::Internal)?;
     elab.globals.insert("bind".to_string(), bind_id);
 
     let run_state_id = state_eff::declare_run_state(
@@ -302,13 +345,34 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.globals.insert("run_state".to_string(), run_state_id);
 
     let get_fn_id = state_eff::declare_get(
-        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, get_id, coproduct_id, inl_id, resp_coproduct_id, resp_state_id, unit_id,
+        &mut elab.env,
+        itree_id,
+        ret_id,
+        vis_id,
+        state_op_id,
+        get_id,
+        coproduct_id,
+        inl_id,
+        resp_coproduct_id,
+        resp_state_id,
+        unit_id,
     )
     .map_err(ElabError::Internal)?;
     elab.globals.insert("get".to_string(), get_fn_id);
 
     let put_fn_id = state_eff::declare_put(
-        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, put_id, coproduct_id, inl_id, resp_coproduct_id, resp_state_id, unit_id, mkunit_id,
+        &mut elab.env,
+        itree_id,
+        ret_id,
+        vis_id,
+        state_op_id,
+        put_id,
+        coproduct_id,
+        inl_id,
+        resp_coproduct_id,
+        resp_state_id,
+        unit_id,
+        mkunit_id,
     )
     .map_err(ElabError::Internal)?;
     elab.globals.insert("put".to_string(), put_fn_id);
@@ -318,13 +382,25 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `get`/`put`'s hand-baked `InL` (`state.rs::declare_get`/`declare_put`
     // stay unchanged — State's tagging is *subsumed*, not forked, §D2.5).
     let inject_l_id = state_eff::declare_inject_l(
-        &mut elab.env, itree_id, ret_id, vis_id, coproduct_id, resp_coproduct_id, inl_id,
+        &mut elab.env,
+        itree_id,
+        ret_id,
+        vis_id,
+        coproduct_id,
+        resp_coproduct_id,
+        inl_id,
     )
     .map_err(ElabError::Internal)?;
     elab.globals.insert("inject_l".to_string(), inject_l_id);
 
     let inject_r_id = state_eff::declare_inject_r(
-        &mut elab.env, itree_id, ret_id, vis_id, coproduct_id, resp_coproduct_id, inr_id,
+        &mut elab.env,
+        itree_id,
+        ret_id,
+        vis_id,
+        coproduct_id,
+        resp_coproduct_id,
+        inr_id,
     )
     .map_err(ElabError::Internal)?;
     elab.globals.insert("inject_r".to_string(), inject_r_id);
@@ -370,7 +446,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let and_ty = Term::pi(omega0.clone(), Term::pi(omega0.clone(), omega0.clone()));
     let and_body = Term::lam(
         omega0.clone(),
-        Term::lam(omega0.clone(), Term::sigma(Term::var(1), weaken(&Term::var(0), 1))),
+        Term::lam(
+            omega0.clone(),
+            Term::sigma(Term::var(1), weaken(&Term::var(0), 1)),
+        ),
     );
     let and_id = declare_def(&mut elab.env, vec![], and_ty, and_body)
         .map_err(|e| ElabError::Internal(format!("prelude And failed: {}", e)))?;
@@ -390,10 +469,14 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // trusted_base delta: both reduce through the already-trusted
     // `Term::Pair`/`Term::Proj1`/`Term::Proj2` (Sigma is already in
     // `trusted_base()` via `And`/`Pair` themselves).
-    let and_app_at_len2 =
-        Term::app(Term::app(Term::const_(and_id, vec![]), Term::var(1)), Term::var(0));
-    let and_app_at_len4 =
-        Term::app(Term::app(Term::const_(and_id, vec![]), Term::var(3)), Term::var(2));
+    let and_app_at_len2 = Term::app(
+        Term::app(Term::const_(and_id, vec![]), Term::var(1)),
+        Term::var(0),
+    );
+    let and_app_at_len4 = Term::app(
+        Term::app(Term::const_(and_id, vec![]), Term::var(3)),
+        Term::var(2),
+    );
 
     // `and_intro : (a:Prop) -> (b:Prop) -> a -> b -> And a b`.
     let and_intro_ty = Term::pi(
@@ -407,7 +490,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         omega0.clone(),
         Term::lam(
             omega0.clone(),
-            Term::lam(Term::var(1), Term::lam(Term::var(1), Term::pair(Term::var(1), Term::var(0)))),
+            Term::lam(
+                Term::var(1),
+                Term::lam(Term::var(1), Term::pair(Term::var(1), Term::var(0))),
+            ),
         ),
     );
     let and_intro_id = declare_def(&mut elab.env, vec![], and_intro_ty, and_intro_body)
@@ -417,11 +503,17 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `and_fst : (a:Prop) -> (b:Prop) -> And a b -> a`.
     let and_fst_ty = Term::pi(
         omega0.clone(),
-        Term::pi(omega0.clone(), Term::pi(and_app_at_len2.clone(), Term::var(2))),
+        Term::pi(
+            omega0.clone(),
+            Term::pi(and_app_at_len2.clone(), Term::var(2)),
+        ),
     );
     let and_fst_body = Term::lam(
         omega0.clone(),
-        Term::lam(omega0.clone(), Term::lam(and_app_at_len2.clone(), Term::proj1(Term::var(0)))),
+        Term::lam(
+            omega0.clone(),
+            Term::lam(and_app_at_len2.clone(), Term::proj1(Term::var(0))),
+        ),
     );
     let and_fst_id = declare_def(&mut elab.env, vec![], and_fst_ty, and_fst_body)
         .map_err(|e| ElabError::Internal(format!("prelude and_fst failed: {}", e)))?;
@@ -430,11 +522,17 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `and_snd : (a:Prop) -> (b:Prop) -> And a b -> b`.
     let and_snd_ty = Term::pi(
         omega0.clone(),
-        Term::pi(omega0.clone(), Term::pi(and_app_at_len2.clone(), Term::var(1))),
+        Term::pi(
+            omega0.clone(),
+            Term::pi(and_app_at_len2.clone(), Term::var(1)),
+        ),
     );
     let and_snd_body = Term::lam(
         omega0.clone(),
-        Term::lam(omega0.clone(), Term::lam(and_app_at_len2, Term::proj2(Term::var(0)))),
+        Term::lam(
+            omega0.clone(),
+            Term::lam(and_app_at_len2, Term::proj2(Term::var(0))),
+        ),
     );
     let and_snd_id = declare_def(&mut elab.env, vec![], and_snd_ty, and_snd_body)
         .map_err(|e| ElabError::Internal(format!("prelude and_snd failed: {}", e)))?;
@@ -448,8 +546,13 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `Omega(l) : Type (suc l)`); its BODY is `Term::Omega(Zero)` literally,
     // so kernel `check`/`convert` sees `Prop ≡ Ω₀` by ordinary δ-unfolding —
     // used only as a type-position spelling, never as a value.
-    let prop_id = declare_def(&mut elab.env, vec![], Term::ty(Level::Zero.suc()), omega0.clone())
-        .map_err(|e| ElabError::Internal(format!("prelude Prop failed: {}", e)))?;
+    let prop_id = declare_def(
+        &mut elab.env,
+        vec![],
+        Term::ty(Level::Zero.suc()),
+        omega0.clone(),
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude Prop failed: {}", e)))?;
     elab.globals.insert("Prop".to_string(), prop_id);
 
     // `Proved : Top` — the kernel's prelude `Top`-introduction constant (K5,
@@ -472,7 +575,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // *eliminate* a `Bottom`-typed hypothesis but never lets a `view`
     // signature *name* the type. Zero trusted_base delta: same existing
     // prelude constant, no new declaration.
-    elab.globals.insert("Bottom".to_string(), elab.env.bottom_id());
+    elab.globals
+        .insert("Bottom".to_string(), elab.env.bottom_id());
 
     // `Top : Ω₀` — surface the kernel's existing truth proposition alongside
     // `Bottom`. Its sole inhabitant is the surface spelling `Proved` above.
@@ -489,7 +593,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // Pi-formation + the pre-existing `Bottom`, no new kernel primitive.
     let bottom_const = Term::const_(elab.env.bottom_id(), vec![]);
     let not_ty = Term::pi(omega0.clone(), omega0.clone());
-    let not_body = Term::lam(omega0.clone(), Term::pi(Term::var(0), weaken(&bottom_const, 1)));
+    let not_body = Term::lam(
+        omega0.clone(),
+        Term::pi(Term::var(0), weaken(&bottom_const, 1)),
+    );
     let not_id = declare_def(&mut elab.env, vec![], not_ty, not_body)
         .map_err(|e| ElabError::Internal(format!("prelude Not failed: {}", e)))?;
     elab.globals.insert("Not".to_string(), not_id);
@@ -509,17 +616,24 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let pair_ty_ty = Term::pi(type0.clone(), Term::pi(type0.clone(), type0.clone()));
     let pair_ty_body = Term::lam(
         type0.clone(),
-        Term::lam(type0.clone(), Term::sigma(Term::var(1), weaken(&Term::var(0), 1))),
+        Term::lam(
+            type0.clone(),
+            Term::sigma(Term::var(1), weaken(&Term::var(0), 1)),
+        ),
     );
     let pair_ty_id = declare_def(&mut elab.env, vec![], pair_ty_ty, pair_ty_body)
         .map_err(|e| ElabError::Internal(format!("prelude Pair failed: {}", e)))?;
     elab.globals.insert("Pair".to_string(), pair_ty_id);
 
     // `mk_pair : (a:Type) -> (b:Type) -> a -> b -> Pair a b`.
-    let pair_app_at_len2 =
-        Term::app(Term::app(Term::const_(pair_ty_id, vec![]), Term::var(1)), Term::var(0));
-    let pair_app_at_len4 =
-        Term::app(Term::app(Term::const_(pair_ty_id, vec![]), Term::var(3)), Term::var(2));
+    let pair_app_at_len2 = Term::app(
+        Term::app(Term::const_(pair_ty_id, vec![]), Term::var(1)),
+        Term::var(0),
+    );
+    let pair_app_at_len4 = Term::app(
+        Term::app(Term::const_(pair_ty_id, vec![]), Term::var(3)),
+        Term::var(2),
+    );
     let mkpair_ty = Term::pi(
         type0.clone(),
         Term::pi(
@@ -531,7 +645,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         type0.clone(),
         Term::lam(
             type0.clone(),
-            Term::lam(Term::var(1), Term::lam(Term::var(1), Term::pair(Term::var(1), Term::var(0)))),
+            Term::lam(
+                Term::var(1),
+                Term::lam(Term::var(1), Term::pair(Term::var(1), Term::var(0))),
+            ),
         ),
     );
     let mkpair_id = declare_def(&mut elab.env, vec![], mkpair_ty, mkpair_body)
@@ -541,11 +658,17 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `pair_fst : (a:Type) -> (b:Type) -> Pair a b -> a`.
     let fst_ty = Term::pi(
         type0.clone(),
-        Term::pi(type0.clone(), Term::pi(pair_app_at_len2.clone(), Term::var(2))),
+        Term::pi(
+            type0.clone(),
+            Term::pi(pair_app_at_len2.clone(), Term::var(2)),
+        ),
     );
     let fst_body = Term::lam(
         type0.clone(),
-        Term::lam(type0.clone(), Term::lam(pair_app_at_len2.clone(), Term::proj1(Term::var(0)))),
+        Term::lam(
+            type0.clone(),
+            Term::lam(pair_app_at_len2.clone(), Term::proj1(Term::var(0))),
+        ),
     );
     let fst_id = declare_def(&mut elab.env, vec![], fst_ty, fst_body)
         .map_err(|e| ElabError::Internal(format!("prelude pair_fst failed: {}", e)))?;
@@ -554,11 +677,17 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `pair_snd : (a:Type) -> (b:Type) -> Pair a b -> b`.
     let snd_ty = Term::pi(
         type0.clone(),
-        Term::pi(type0.clone(), Term::pi(pair_app_at_len2.clone(), Term::var(1))),
+        Term::pi(
+            type0.clone(),
+            Term::pi(pair_app_at_len2.clone(), Term::var(1)),
+        ),
     );
     let snd_body = Term::lam(
         type0.clone(),
-        Term::lam(type0.clone(), Term::lam(pair_app_at_len2, Term::proj2(Term::var(0)))),
+        Term::lam(
+            type0.clone(),
+            Term::lam(pair_app_at_len2, Term::proj2(Term::var(0))),
+        ),
     );
     let snd_id = declare_def(&mut elab.env, vec![], snd_ty, snd_body)
         .map_err(|e| ElabError::Internal(format!("prelude pair_snd failed: {}", e)))?;
@@ -635,7 +764,16 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     );
     let cons_app = |a: Term, h: Term, t: Term| -> Term {
         Term::app(
-            Term::app(Term::app(Term::Constructor { id: cons_id, level_args: vec![] }, a), h),
+            Term::app(
+                Term::app(
+                    Term::Constructor {
+                        id: cons_id,
+                        level_args: vec![],
+                    },
+                    a,
+                ),
+                h,
+            ),
             t,
         )
     };
@@ -666,14 +804,22 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
                 //    Perm_rel a (x::y::r) (y::x::r)`.
                 ken_kernel::CtorSpec {
                     args: vec![
-                        Term::var(0),           // x:a,        ctx [a]
-                        Term::var(1),           // y:a,        ctx [a,x]      (a=Var1)
-                        list_a(Term::var(2)),   // r:List a,   ctx [a,x,y]    (a=Var2)
+                        Term::var(0),         // x:a,        ctx [a]
+                        Term::var(1),         // y:a,        ctx [a,x]      (a=Var1)
+                        list_a(Term::var(2)), // r:List a,   ctx [a,x,y]    (a=Var2)
                     ],
                     // ctx [a,x,y,r]: a=Var3, x=Var2, y=Var1, r=Var0.
                     target_indices: vec![
-                        cons_app(Term::var(3), Term::var(2), cons_app(Term::var(3), Term::var(1), Term::var(0))),
-                        cons_app(Term::var(3), Term::var(1), cons_app(Term::var(3), Term::var(2), Term::var(0))),
+                        cons_app(
+                            Term::var(3),
+                            Term::var(2),
+                            cons_app(Term::var(3), Term::var(1), Term::var(0)),
+                        ),
+                        cons_app(
+                            Term::var(3),
+                            Term::var(1),
+                            cons_app(Term::var(3), Term::var(2), Term::var(0)),
+                        ),
                     ],
                 },
                 // `perm_trans : (xs ys zs:List a) ->
@@ -744,9 +890,15 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
             level: Level::Zero,
             constructors: vec![
                 // `Inl : a -> Or a b`, ctx `[a,b]`: `a` = Var(1).
-                ken_kernel::CtorSpec { args: vec![Term::var(1)], target_indices: vec![] },
+                ken_kernel::CtorSpec {
+                    args: vec![Term::var(1)],
+                    target_indices: vec![],
+                },
                 // `Inr : b -> Or a b`, ctx `[a,b]`: `b` = Var(0).
-                ken_kernel::CtorSpec { args: vec![Term::var(0)], target_indices: vec![] },
+                ken_kernel::CtorSpec {
+                    args: vec![Term::var(0)],
+                    target_indices: vec![],
+                },
             ],
         }
     })
@@ -755,10 +907,14 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let or_ind = elab
         .env
         .inductive(or_id)
-        .ok_or_else(|| ElabError::Internal("prelude: 'Or' inductive not found after declare".into()))?
+        .ok_or_else(|| {
+            ElabError::Internal("prelude: 'Or' inductive not found after declare".into())
+        })?
         .clone();
-    elab.globals.insert("Inl".to_string(), or_ind.constructors[0].id);
-    elab.globals.insert("Inr".to_string(), or_ind.constructors[1].id);
+    elab.globals
+        .insert("Inl".to_string(), or_ind.constructors[0].id);
+    elab.globals
+        .insert("Inr".to_string(), or_ind.constructors[1].id);
 
     // `Empty : Type0` — the computational false (DS-1, `docs/program/wp/
     // catalog-ds-1-empty-dec.md` Fork 1), zero params/zero constructors.
@@ -810,7 +966,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
             level: Level::Zero,
             constructors: vec![
                 // `Yes : P -> Dec P`.
-                ken_kernel::CtorSpec { args: vec![Term::var(0)], target_indices: vec![] },
+                ken_kernel::CtorSpec {
+                    args: vec![Term::var(0)],
+                    target_indices: vec![],
+                },
                 // `No : (P -> Empty) -> Dec P`.
                 ken_kernel::CtorSpec {
                     args: vec![Term::pi(Term::var(0), Term::indformer(empty_id, vec![]))],
@@ -824,10 +983,14 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let dec_ind = elab
         .env
         .inductive(dec_id)
-        .ok_or_else(|| ElabError::Internal("prelude: 'Dec' inductive not found after declare".into()))?
+        .ok_or_else(|| {
+            ElabError::Internal("prelude: 'Dec' inductive not found after declare".into())
+        })?
         .clone();
-    elab.globals.insert("Yes".to_string(), dec_ind.constructors[0].id);
-    elab.globals.insert("No".to_string(), dec_ind.constructors[1].id);
+    elab.globals
+        .insert("Yes".to_string(), dec_ind.constructors[0].id);
+    elab.globals
+        .insert("No".to_string(), dec_ind.constructors[1].id);
 
     // `decide : (P:Omega) -> Dec P -> Bool` — the kernel-direct accessor
     // (DS-1 deliverable 1). `Dec`/`Yes`/`No` are already real `globals`
@@ -936,50 +1099,60 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // after the IO declaration; an explicit drop lets IO borrow elab cleanly.
     drop(reg_prim);
 
-    // `IO : Type → Type` — the Console-effect IO type.
-    //
-    // ES2: DERIVABLE — `IO` is a definition, not an assumed axiom: it is
-    // `ITree` (`36`) specialized to the Console effect. `IO A := ITree
-    // ConsoleOp (\_:ConsoleOp. Unit) A` — Console's every op has a `Unit`
-    // response (matches the pre-lift hardwired `Unit -> ITree r` shape),
-    // now expressed as a CONSTANT `Resp` function over the lifted, 3-param
-    // `ITree` (State-effect-build) rather than baked into the family itself.
-    let io_ty = Term::pi(type0.clone(), type0.clone());
-    let const_unit_resp = Term::lam(Term::indformer(console_op_id, vec![]), Term::indformer(unit_id, vec![]));
-    let io_body = Term::lam(
-        type0.clone(),
-        crate::effects::state::itree3_standalone(
-            itree_id,
-            Term::indformer(console_op_id, vec![]),
-            weaken(&const_unit_resp, 1),
-            Term::var(0),
-        ),
-    );
-    let io_id = declare_def(&mut elab.env, vec![], io_ty, io_body)
+    // Console's response family is a genuine non-constant large elimination,
+    // kernel-checked as ordinary Ken. Host failures remain total values.
+    elab.elaborate_decl(
+        "fn console_resp (op : ConsoleOp) : Type = match op { \
+           Read stream limit |-> Result IOError ReadResult; \
+           Write stream bytes |-> Result IOError Unit; \
+           Flush stream |-> Result IOError Unit; \
+           IsTerminal stream |-> Bool \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude console_resp failed: {}", e)))?;
+
+    // `IO` is the existing `ITree` specialized to the one Console algebra.
+    elab.elaborate_decl("const IO (a : Type) : Type = ITree ConsoleOp console_resp a")
         .map_err(|e| ElabError::Internal(format!("prelude IO failed: {}", e)))?;
-    elab.globals.insert("IO".to_string(), io_id);
+    let io_id = elab
+        .globals
+        .get("IO")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: 'IO' not registered".into()))?;
 
-    // `print_line : String → IO Unit` — Console print, per the VAL1-step2
-    // wiring (`6789e42`).
-    //
-    // `console_resp : ConsoleOp -> Type = \_. Unit` — every Console op has a
-    // `Unit` response; NAMED (not an inline argument-position lambda) so
-    // `Vis`/`Ret`'s `Resp` param is always a plain `Const` reference,
-    // matching the shape the ORIGINAL 1-param `print_line` body already used
-    // successfully (a single continuation lambda, nothing else).
-    elab.elaborate_decl("fn console_resp (op : ConsoleOp) : Type = Unit")
-        .map_err(|e| ElabError::Internal(format!("prelude console_resp failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc read (stream : Stream) (limit : Int) : IO (Result IOError ReadResult) visits [Console] = \
+         Vis ConsoleOp console_resp (Result IOError ReadResult) (Read stream limit) \
+           (\\r. Ret ConsoleOp console_resp (Result IOError ReadResult) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude read failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc write (stream : Stream) (bytes : Bytes) : IO (Result IOError Unit) visits [Console] = \
+         Vis ConsoleOp console_resp (Result IOError Unit) (Write stream bytes) \
+           (\\r. Ret ConsoleOp console_resp (Result IOError Unit) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude write failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc flush (stream : Stream) : IO (Result IOError Unit) visits [Console] = \
+         Vis ConsoleOp console_resp (Result IOError Unit) (Flush stream) \
+           (\\r. Ret ConsoleOp console_resp (Result IOError Unit) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude flush failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc is_terminal (stream : Stream) : IO Bool visits [Console] = \
+         Vis ConsoleOp console_resp Bool (IsTerminal stream) \
+           (\\r. Ret ConsoleOp console_resp Bool r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude is_terminal failed: {}", e)))?;
 
-    // ES2: DERIVABLE — a definition in terms of the `ITree` constructors
-    // (`Vis`/`Ret`) + the `Console.Op` payload (`Write`), not an irreducible
-    // primitive: `print_line s := Vis (Write s) (\_. Ret MkUnit)`. Declared
-    // via surface syntax (not a hand-built raw `Term`) so ordinary δ/ι
-    // reduction produces the `Vis` node directly — no bespoke `apply`
-    // interception needed. `ITree`'s 3 explicit params (State-effect-build
-    // lift) are supplied explicitly: `E=ConsoleOp`, `Resp=console_resp`, `R=Unit`.
+    // Compatibility helper retained for existing examples. It is still an
+    // ordinary definition and now emits exact UTF-8 bytes plus one newline.
     elab.elaborate_decl(
         "proc print_line (s : String) : IO Unit visits [Console] = \
-         Vis ConsoleOp console_resp Unit (Write s) (\\_. Ret ConsoleOp console_resp Unit MkUnit)",
+         Vis ConsoleOp console_resp Unit \
+           (Write Stdout (bytes_concat (bytes_encode s) \
+             (bytes_encode (list_char_to_string (Cons Char (10 : Int) (Nil Char)))))) \
+           (\\_. Ret ConsoleOp console_resp Unit MkUnit)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude print_line failed: {}", e)))?;
     let print_line_id = elab
@@ -992,10 +1165,9 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     //
     // Mirrors `print_line`'s own real-`view` pattern above (`ITree`/`Vis`/
     // `Ret` applied at their 3 explicit type params) — a genuine kernel-
-    // rechecked reduction, no `apply()` interception needed (unlike the now-
-    // dead-code `build_print_line_tree`/`store.print_line_id` path in
-    // `ken-interp`, which nothing sets anymore: `print_line` reduces by
-    // ordinary δ/ι through its real `view` body, and `read_bytes` does too).
+    // rechecked reduction with no `apply()` interception: `print_line`
+    // reduces by ordinary delta/iota through its real body, and `read_bytes`
+    // does too.
     //
     // `Auth = ANone | APartial | AFull` — the authority-level lattice
     // (fs-read-file-lines-flip D2, operator-locked "type IS the manifest"
@@ -1057,7 +1229,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
             // Ctor-arg context so far = `[a]` (the family's own param, the
             // sole entry, at `Var(0)`); arg0 = `Cap a`, arg1 = `Bytes`
             // (closed, no `a` reference).
-            args: vec![Term::app(Term::const_(cap_id, vec![]), Term::var(0)), bytes_t.clone()],
+            args: vec![
+                Term::app(Term::const_(cap_id, vec![]), Term::var(0)),
+                bytes_t.clone(),
+            ],
             target_indices: vec![],
         }],
     })
@@ -1070,12 +1245,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .constructors[0]
         .id;
     elab.globals.insert("ReadFile".to_string(), readfile_id);
-
-    // `IOError = NotFound | PermissionDenied | CapabilityDenied | Other` — a
-    // small in-language sum the driver maps `std::io::ErrorKind`/capability
-    // refusal onto (D2, D5: failure surfaces as a total `Result`, never a panic).
-    elab.elaborate_decl("data IOError = NotFound | PermissionDenied | CapabilityDenied | Other")
-        .map_err(|e| ElabError::Internal(format!("prelude IOError failed: {}", e)))?;
 
     // `fs_resp : (a : Auth) -> FSOp a -> Type = Result IOError Bytes` — every
     // FS op (today, just `ReadFile`) responds with a `Result`; constant,
@@ -1226,8 +1395,18 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         list_char_to_string_id,
         unit_id,
         mkunit_id,
+        stream_id,
+        stdin_id,
+        stdout_id,
+        stderr_id,
         console_op_id,
+        read_id,
         write_id,
+        flush_id,
+        is_terminal_id,
+        read_result_id,
+        chunk_id,
+        eof_id,
         itree_id,
         ret_id,
         vis_id,

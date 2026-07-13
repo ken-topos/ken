@@ -23,7 +23,9 @@
 //!   programs never reach this per canonicity).
 
 use std::collections::HashMap;
+use std::io::{self, IsTerminal, Read, Write};
 use std::rc::Rc;
+use std::sync::Once;
 
 use ken_elaborator::capabilities;
 use ken_kernel::env::{Decl, GlobalEnv, PrimReduction};
@@ -53,18 +55,11 @@ pub struct EvalStore {
     /// Propagates a `CapacityExhausted` error from the intern helper (`44 §2`).
     /// Set when the store's soft limit is hit; callers must not silently drop it.
     pub capacity_error: Option<(u64, u64)>,
-    /// `print_line` prim reduction: GlobalId of the postulate, set by the Language
-    /// layer after `ElabEnv::new()` registers it. When `Some`, `apply` intercepts
-    /// `App(print_line_id, Str s)` and builds `Vis (Write s) (\\_. Ret MkUnit)`.
-    pub print_line_id: Option<GlobalId>,
-    /// Console IDs needed to build the ITree response to `print_line`.
-    /// Set alongside `print_line_id` by the Language driver / test setup.
-    pub console_ids: Option<ConsoleIds>,
     /// `List Char` constructor IDs needed by `string_to_list_char`/
     /// `list_char_to_string` (`37 §2.3`, wp/L3-strings-roundtrip) — same
-    /// wiring shape as `console_ids` (`apply` needs `store`/GlobalIds to
-    /// build/inspect `Ctor` values, which the pure `prim_reduce(symbol,args)`
-    /// fn cannot access). Set by the Language driver / test setup from
+    /// `apply` needs `store`/GlobalIds to build/inspect `Ctor` values, which
+    /// the pure `prim_reduce(symbol,args)` fn cannot access. Set by the
+    /// Language driver / test setup from
     /// `ElabEnv.prelude_env.{nil_id,cons_id}`.
     pub list_char_ids: Option<ListCharIds>,
 }
@@ -77,8 +72,6 @@ impl EvalStore {
             next_code_id: 1,
             num_values: HashMap::new(),
             capacity_error: None,
-            print_line_id: None,
-            console_ids: None,
             list_char_ids: None,
         }
     }
@@ -91,8 +84,6 @@ impl EvalStore {
             next_code_id: 1,
             num_values: HashMap::new(),
             capacity_error: None,
-            print_line_id: None,
-            console_ids: None,
             list_char_ids: None,
         }
     }
@@ -155,9 +146,9 @@ pub enum EvalVal {
     Bytes(Vec<u8>),
     /// NFC-normalized UTF-8 string (for encode/decode boundary, `38 §1.4`).
     Str(String),
-    BigInt(BigInt),                        // Int values > i64::MAX or < i64::MIN (arbitrary-precision, `18a §5.2.1`)
-    Float(f64),                           // IEEE 754 double
-    Float32(f32),                         // IEEE 754 single
+    BigInt(BigInt), // Int values > i64::MAX or < i64::MIN (arbitrary-precision, `18a §5.2.1`)
+    Float(f64),     // IEEE 754 double
+    Float32(f32),   // IEEE 754 single
     /// A real, opaque capability token (fs-read-file-lines-flip D3,
     /// Architect ruling `evt_35knjqv2k941h` §D3 — structural self-evidence
     /// over a positional-scalar `EvalVal::Int(level)`). The *sole* producer
@@ -582,7 +573,9 @@ fn term_var_free(t: &Term, target: usize) -> bool {
         }
         Term::Lam(a, body) => term_var_free(a, target) || term_var_free(body, target + 1),
         Term::Let { ty, val, body } => {
-            term_var_free(ty, target) || term_var_free(val, target) || term_var_free(body, target + 1)
+            term_var_free(ty, target)
+                || term_var_free(val, target)
+                || term_var_free(body, target + 1)
         }
         Term::App(f, a) => term_var_free(f, target) || term_var_free(a, target),
         Term::Pair(a, b) => term_var_free(a, target) || term_var_free(b, target),
@@ -605,13 +598,25 @@ fn term_var_free(t: &Term, target: usize) -> bool {
         Term::QuotClass(t2) => term_var_free(t2, target),
         Term::Trunc(a) => term_var_free(a, target),
         Term::TruncProj(t2) => term_var_free(t2, target),
-        Term::QuotElim { motive, method, respect, scrut } => {
+        Term::QuotElim {
+            motive,
+            method,
+            respect,
+            scrut,
+        } => {
             term_var_free(motive, target)
                 || term_var_free(method, target)
                 || term_var_free(respect, target)
                 || term_var_free(scrut, target)
         }
-        Term::Elim { params, motive, methods, indices, scrut, .. } => {
+        Term::Elim {
+            params,
+            motive,
+            methods,
+            indices,
+            scrut,
+            ..
+        } => {
             params.iter().any(|p| term_var_free(p, target))
                 || term_var_free(motive, target)
                 || methods.iter().any(|m| term_var_free(m, target))
@@ -1186,9 +1191,9 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         // they degrade to stuck `Neutral`, never the wrapped value. The
         // sanctioned modular class (`wrapping_*_intN`/`+%`, below) is the
         // only path permitted to wrap — left untouched.
-        ("add_int8",  [a, b]) => checked_binop_i8(a, b, i8::checked_add),
-        ("sub_int8",  [a, b]) => checked_binop_i8(a, b, i8::checked_sub),
-        ("mul_int8",  [a, b]) => checked_binop_i8(a, b, i8::checked_mul),
+        ("add_int8", [a, b]) => checked_binop_i8(a, b, i8::checked_add),
+        ("sub_int8", [a, b]) => checked_binop_i8(a, b, i8::checked_sub),
+        ("mul_int8", [a, b]) => checked_binop_i8(a, b, i8::checked_mul),
         ("add_int16", [a, b]) => checked_binop_i16(a, b, i16::checked_add),
         ("sub_int16", [a, b]) => checked_binop_i16(a, b, i16::checked_sub),
         ("mul_int16", [a, b]) => checked_binop_i16(a, b, i16::checked_mul),
@@ -1198,15 +1203,15 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         ("add_int64", [a, b]) => checked_binop_i64(a, b, i64::checked_add),
         ("sub_int64", [a, b]) => checked_binop_i64(a, b, i64::checked_sub),
         ("mul_int64", [a, b]) => checked_binop_i64(a, b, i64::checked_mul),
-        ("add_uint8",  [a, b]) => checked_binop_u8(a, b, u8::checked_add),
+        ("add_uint8", [a, b]) => checked_binop_u8(a, b, u8::checked_add),
         ("add_uint16", [a, b]) => checked_binop_u16(a, b, u16::checked_add),
         ("add_uint32", [a, b]) => checked_binop_u32(a, b, u32::checked_add),
         ("add_uint64", [a, b]) => checked_binop_u64(a, b, u64::checked_add),
 
         // ---- Wrapping variants (explicit `+%`) ----
-        ("wrapping_add_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_add),
-        ("wrapping_sub_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_sub),
-        ("wrapping_mul_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_mul),
+        ("wrapping_add_int8", [a, b]) => fixed_binop_i8(a, b, i8::wrapping_add),
+        ("wrapping_sub_int8", [a, b]) => fixed_binop_i8(a, b, i8::wrapping_sub),
+        ("wrapping_mul_int8", [a, b]) => fixed_binop_i8(a, b, i8::wrapping_mul),
         ("wrapping_add_int16", [a, b]) => fixed_binop_i16(a, b, i16::wrapping_add),
         ("wrapping_add_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_add),
         ("wrapping_sub_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_sub),
@@ -1222,17 +1227,21 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         // shares `Int`'s own value representation (`EvalVal::Int`/`BigInt`),
         // so the reduction is identity — only the KERNEL type changes
         // (`IntN -> Int`), never the value.
-        ("int8_to_int" | "int16_to_int" | "int32_to_int" | "int64_to_int"
-         | "uint8_to_int" | "uint16_to_int" | "uint32_to_int" | "uint64_to_int",
-         [a]) => a.clone(),
+        (
+            "int8_to_int" | "int16_to_int" | "int32_to_int" | "int64_to_int" | "uint8_to_int"
+            | "uint16_to_int" | "uint32_to_int" | "uint64_to_int",
+            [a],
+        ) => a.clone(),
         // Narrowing raw cast `Int -> IntN` (UNCHECKED — identity at the value
         // level, same representation-sharing as widening). Not part of the
         // public surface: only called internally by the derived `intToIntN`
         // (Ken view, `conversions.rs`) AFTER its own range check, and by the
         // `saturating*` family after clamping — never exposed un-guarded.
-        ("int_to_int8_raw" | "int_to_int16_raw" | "int_to_int32_raw" | "int_to_int64_raw"
-         | "int_to_uint8_raw" | "int_to_uint16_raw" | "int_to_uint32_raw" | "int_to_uint64_raw",
-         [a]) => a.clone(),
+        (
+            "int_to_int8_raw" | "int_to_int16_raw" | "int_to_int32_raw" | "int_to_int64_raw"
+            | "int_to_uint8_raw" | "int_to_uint16_raw" | "int_to_uint32_raw" | "int_to_uint64_raw",
+            [a],
+        ) => a.clone(),
 
         // `neg_intN` (`18a §5`, ~L256) — fixed-width negation stays NATIVE
         // and checked (does NOT demote to `sub_int 0 x`, unlike bignum
@@ -1241,7 +1250,7 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         // never a wrapped value. Signed widths only — unsigned negation of
         // any nonzero value is out of range by construction and out of
         // scope (`18a` names no `neg_uintN`).
-        ("neg_int8",  [a]) => checked_neg_i8(a),
+        ("neg_int8", [a]) => checked_neg_i8(a),
         ("neg_int16", [a]) => checked_neg_i16(a),
         ("neg_int32", [a]) => checked_neg_i32(a),
         ("neg_int64", [a]) => checked_neg_i64(a),
@@ -1257,16 +1266,16 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         ("sub_float", [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Float(a - b),
         ("mul_float", [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Float(a * b),
         ("div_float", [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Float(a / b),
-        ("eq_float",  [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Bool(a == b),
+        ("eq_float", [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Bool(a == b),
 
         // ---- Float32 (IEEE 754 f32) ----
         ("add_float32", [EvalVal::Float32(a), EvalVal::Float32(b)]) => EvalVal::Float32(a + b),
-        ("eq_float32",  [EvalVal::Float32(a), EvalVal::Float32(b)]) => EvalVal::Bool(a == b),
+        ("eq_float32", [EvalVal::Float32(a), EvalVal::Float32(b)]) => EvalVal::Bool(a == b),
 
         // ---- Bool ----
         ("not_bool", [EvalVal::Bool(b)]) => EvalVal::Bool(!b),
         ("and_bool", [EvalVal::Bool(a), EvalVal::Bool(b)]) => EvalVal::Bool(*a && *b),
-        ("or_bool",  [EvalVal::Bool(a), EvalVal::Bool(b)]) => EvalVal::Bool(*a || *b),
+        ("or_bool", [EvalVal::Bool(a), EvalVal::Bool(b)]) => EvalVal::Bool(*a || *b),
 
         // Legacy `add`/`sub`/`mul` (wrapping i64) retired (`18a §5 F3`):
         // unregistered (no `reg_binop!`/`declare_primitive` in
@@ -1562,19 +1571,6 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
             }
             args.push(u);
             if args.len() >= need {
-                // `print_line s` prim reduction: App(print_line_id, Str s)
-                // → Vis (Write s) (\\_. Ret MkUnit)  (`36 §2.1`, VAL1-surface).
-                // Intercepted here before the generic prim path so we have
-                // access to `store` (needed for make_ctor/make_closure) and
-                // `console_ids` (GlobalIds for ITree/ConsoleOp constructors).
-                if let (Some(pl_id), Some(_)) = (store.print_line_id, &store.console_ids) {
-                    if id == pl_id {
-                        if let [EvalVal::Str(s)] = args.as_slice() {
-                            let cids = store.console_ids.clone().unwrap();
-                            return build_print_line_tree(s.clone(), &cids, store);
-                        }
-                    }
-                }
                 // Saturated — check if this is a prim or a data constructor.
                 if let Some(Decl::Primitive { reduction, .. }) = globals.lookup(id) {
                     if let PrimReduction::Op { symbol } = reduction {
@@ -1608,7 +1604,14 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
         }
 
         // --- K1.5 W-style IH: accumulate branch args, fold when saturated ---
-        EvalVal::IhClosure { rec_field, fam, methods, ih_env, nb, applied } => {
+        EvalVal::IhClosure {
+            rec_field,
+            fam,
+            methods,
+            ih_env,
+            nb,
+            applied,
+        } => {
             let mut applied2 = (*applied).clone();
             applied2.push(u);
             if applied2.len() >= nb {
@@ -1635,35 +1638,6 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
         // --- Neutral: remain stuck ---
         _ => EvalVal::Neutral,
     }
-}
-
-/// Build `Vis (Write s) (\\_. Ret MkUnit)` — the ITree value produced by
-/// `print_line s`.  Called from `apply` when `print_line_id` is saturated.
-///
-/// Shape with `params_len = 1` (ITree r has one type param `r`):
-/// - `Write s` : ConsoleOp — `Ctor { write_id, args: [Str(s)] }`
-/// - `\\_. Ret MkUnit` — closure ignoring its arg; body is `App(App(Ret, Type₀), MkUnit)`
-/// - `Vis (Write s) k` — `Ctor { vis_id, args: [Unknown, Write_s, k] }` (args[0] = type param)
-fn build_print_line_tree(s: String, cids: &ConsoleIds, store: &mut EvalStore) -> EvalVal {
-    let m = cids.params_len;
-    // Write s : ConsoleOp (no type params on ConsoleOp itself).
-    let write_s = make_ctor(cids.write_id, vec![EvalVal::Str(s)], store);
-    // Continuation body: App(App(Constructor(ret_id), Type₀), Constructor(unit_id))
-    // Evaluates (in any env) to Ctor{ret_id, args:[Type0_val, MkUnit]}.
-    // The closure ignores its argument (body has no Var(0)); run_io reads args[m].
-    let body = Rc::new(Term::App(
-        Box::new(Term::App(
-            Box::new(Term::Constructor { id: cids.ret_id, level_args: vec![] }),
-            Box::new(Term::Type(Level::zero())),
-        )),
-        Box::new(Term::Constructor { id: cids.unit_id, level_args: vec![] }),
-    ));
-    let k = make_closure(body, Rc::new(vec![]), store);
-    // Vis node: type param(s) as Unknown, then op, then continuation.
-    let mut vis_args = vec![EvalVal::Unknown; m];
-    vis_args.push(write_s);
-    vis_args.push(k);
-    make_ctor(cids.vis_id, vis_args, store)
 }
 
 // ── effect driver (`42 §6`) ───────────────────────────────────────────────────
@@ -1750,12 +1724,62 @@ pub struct ConsoleIds {
     pub ret_id: GlobalId,
     /// `GlobalId` of the `Vis` constructor (k = 1).
     pub vis_id: GlobalId,
-    /// `GlobalId` of `Console.Op::Write` (k = 0, carries a `String` arg).
+    pub read_id: GlobalId,
     pub write_id: GlobalId,
+    pub flush_id: GlobalId,
+    pub is_terminal_id: GlobalId,
+    pub stdin_id: GlobalId,
+    pub stdout_id: GlobalId,
+    pub stderr_id: GlobalId,
+    pub chunk_id: GlobalId,
+    pub eof_id: GlobalId,
+    pub true_id: GlobalId,
+    pub false_id: GlobalId,
+    pub ok_id: GlobalId,
+    pub err_id: GlobalId,
+    pub notfound_id: GlobalId,
+    pub permissiondenied_id: GlobalId,
+    pub capabilitydenied_id: GlobalId,
+    pub brokenpipe_id: GlobalId,
+    pub interrupted_id: GlobalId,
+    pub other_id: GlobalId,
     /// `GlobalId` of the `Unit` constructor (response to `Write`).
     pub unit_id: GlobalId,
     /// Number of ITree type-level params. Ctor-specific args start at this offset.
     pub params_len: usize,
+}
+
+impl ConsoleIds {
+    /// Harvest the complete Console ABI table from an elaboration environment.
+    pub fn from_elab(elab: &ken_elaborator::ElabEnv) -> Option<Self> {
+        let get = |name: &str| elab.globals.get(name).copied();
+        Some(Self {
+            itree_id: get("ITree")?,
+            ret_id: get("Ret")?,
+            vis_id: get("Vis")?,
+            read_id: get("Read")?,
+            write_id: get("Write")?,
+            flush_id: get("Flush")?,
+            is_terminal_id: get("IsTerminal")?,
+            stdin_id: get("Stdin")?,
+            stdout_id: get("Stdout")?,
+            stderr_id: get("Stderr")?,
+            chunk_id: get("Chunk")?,
+            eof_id: get("Eof")?,
+            true_id: get("True")?,
+            false_id: get("False")?,
+            ok_id: get("Ok")?,
+            err_id: get("Err")?,
+            notfound_id: get("NotFound")?,
+            permissiondenied_id: get("PermissionDenied")?,
+            capabilitydenied_id: get("CapabilityDenied")?,
+            brokenpipe_id: get("BrokenPipe")?,
+            interrupted_id: get("Interrupted")?,
+            other_id: get("Other")?,
+            unit_id: get("MkUnit")?,
+            params_len: 3,
+        })
+    }
 }
 
 /// `List Char` constructor IDs needed by `string_to_list_char`/
@@ -1763,7 +1787,7 @@ pub struct ConsoleIds {
 /// `Ctor.args = [type_param]` and `Cons`'s `Ctor.args = [type_param, head,
 /// tail]` (`prelude.rs`'s `cons_app` helper — `Cons` is always applied to the
 /// element type first). The type-param slot carries no runtime information
-/// (mirrors `build_print_line_tree`'s `EvalVal::Unknown` type-param filler).
+/// (type parameters are carried as `EvalVal::Unknown` fillers).
 #[derive(Clone)]
 pub struct ListCharIds {
     pub nil_id: GlobalId,
@@ -1844,6 +1868,252 @@ pub struct CoproductIds {
     pub inr_id: GlobalId,
 }
 
+/// The three process-owned streams exposed by the Console ABI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsoleStream {
+    Stdin,
+    Stdout,
+    Stderr,
+}
+
+/// A total host read: an explicit chunk or an explicit end-of-file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HostRead {
+    Chunk(Vec<u8>),
+    Eof,
+}
+
+/// Exact Console operations observed by the injectable host seam.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConsoleTrace {
+    Read {
+        stream: ConsoleStream,
+        limit: usize,
+    },
+    Write {
+        stream: ConsoleStream,
+        bytes: Vec<u8>,
+    },
+    Flush {
+        stream: ConsoleStream,
+    },
+    IsTerminal {
+        stream: ConsoleStream,
+    },
+}
+
+/// Provides host effects to `run_io`. Console is injectable now; the FS
+/// default deliberately remains real passthrough until I-3 supplies a virtual
+/// implementation.
+pub trait HostHandler {
+    fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead>;
+    fn console_write(&mut self, stream: ConsoleStream, bytes: &[u8]) -> io::Result<()>;
+    fn console_flush(&mut self, stream: ConsoleStream) -> io::Result<()>;
+    fn console_is_terminal(&mut self, stream: ConsoleStream) -> bool;
+
+    fn fs_read(&mut self, path: &str) -> io::Result<Vec<u8>> {
+        std::fs::read(path)
+    }
+}
+
+/// Real process stdio handler. Rust binaries already avoid terminating on a
+/// broken pipe on supported platforms; the explicit mask pins the ABI rule at
+/// the driver boundary as well.
+pub struct PosixHost;
+
+impl PosixHost {
+    pub fn new() -> Self {
+        mask_sigpipe();
+        Self
+    }
+}
+
+impl Default for PosixHost {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl HostHandler for PosixHost {
+    fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead> {
+        if stream != ConsoleStream::Stdin {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "stream is not readable",
+            ));
+        }
+        if limit == 0 {
+            return Ok(HostRead::Chunk(Vec::new()));
+        }
+        let mut bytes = vec![0; limit];
+        let count = io::stdin().lock().read(&mut bytes)?;
+        if count == 0 {
+            Ok(HostRead::Eof)
+        } else {
+            bytes.truncate(count);
+            Ok(HostRead::Chunk(bytes))
+        }
+    }
+
+    fn console_write(&mut self, stream: ConsoleStream, bytes: &[u8]) -> io::Result<()> {
+        mask_sigpipe();
+        match stream {
+            ConsoleStream::Stdout => io::stdout().lock().write_all(bytes),
+            ConsoleStream::Stderr => io::stderr().lock().write_all(bytes),
+            ConsoleStream::Stdin => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "stream is not writable",
+            )),
+        }
+    }
+
+    fn console_flush(&mut self, stream: ConsoleStream) -> io::Result<()> {
+        match stream {
+            ConsoleStream::Stdout => io::stdout().lock().flush(),
+            ConsoleStream::Stderr => io::stderr().lock().flush(),
+            ConsoleStream::Stdin => Ok(()),
+        }
+    }
+
+    fn console_is_terminal(&mut self, stream: ConsoleStream) -> bool {
+        match stream {
+            ConsoleStream::Stdin => io::stdin().is_terminal(),
+            ConsoleStream::Stdout => io::stdout().is_terminal(),
+            ConsoleStream::Stderr => io::stderr().is_terminal(),
+        }
+    }
+}
+
+/// Deterministic in-memory Console provider used by tests and embedding.
+pub struct CaptureHost {
+    stdin: Vec<u8>,
+    stdin_cursor: usize,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    terminals: [bool; 3],
+    closed: [bool; 3],
+    trace: Vec<ConsoleTrace>,
+}
+
+impl CaptureHost {
+    pub fn new(stdin: Vec<u8>) -> Self {
+        Self {
+            stdin,
+            stdin_cursor: 0,
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+            terminals: [false; 3],
+            closed: [false; 3],
+            trace: Vec::new(),
+        }
+    }
+
+    pub fn set_terminal(&mut self, stream: ConsoleStream, value: bool) {
+        self.terminals[stream_index(stream)] = value;
+    }
+
+    pub fn close(&mut self, stream: ConsoleStream) {
+        self.closed[stream_index(stream)] = true;
+    }
+
+    pub fn stdout(&self) -> &[u8] {
+        &self.stdout
+    }
+
+    pub fn stderr(&self) -> &[u8] {
+        &self.stderr
+    }
+
+    pub fn trace(&self) -> &[ConsoleTrace] {
+        &self.trace
+    }
+}
+
+impl HostHandler for CaptureHost {
+    fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead> {
+        self.trace.push(ConsoleTrace::Read { stream, limit });
+        if stream != ConsoleStream::Stdin {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "stream is not readable",
+            ));
+        }
+        if self.stdin_cursor >= self.stdin.len() {
+            return Ok(HostRead::Eof);
+        }
+        let end = self
+            .stdin_cursor
+            .saturating_add(limit)
+            .min(self.stdin.len());
+        let bytes = self.stdin[self.stdin_cursor..end].to_vec();
+        self.stdin_cursor = end;
+        Ok(HostRead::Chunk(bytes))
+    }
+
+    fn console_write(&mut self, stream: ConsoleStream, bytes: &[u8]) -> io::Result<()> {
+        self.trace.push(ConsoleTrace::Write {
+            stream,
+            bytes: bytes.to_vec(),
+        });
+        if self.closed[stream_index(stream)] {
+            return Err(io::Error::from(io::ErrorKind::BrokenPipe));
+        }
+        match stream {
+            ConsoleStream::Stdout => self.stdout.extend_from_slice(bytes),
+            ConsoleStream::Stderr => self.stderr.extend_from_slice(bytes),
+            ConsoleStream::Stdin => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "stream is not writable",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn console_flush(&mut self, stream: ConsoleStream) -> io::Result<()> {
+        self.trace.push(ConsoleTrace::Flush { stream });
+        if self.closed[stream_index(stream)] {
+            Err(io::Error::from(io::ErrorKind::BrokenPipe))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn console_is_terminal(&mut self, stream: ConsoleStream) -> bool {
+        self.trace.push(ConsoleTrace::IsTerminal { stream });
+        self.terminals[stream_index(stream)]
+    }
+}
+
+fn stream_index(stream: ConsoleStream) -> usize {
+    match stream {
+        ConsoleStream::Stdin => 0,
+        ConsoleStream::Stdout => 1,
+        ConsoleStream::Stderr => 2,
+    }
+}
+
+#[cfg(unix)]
+fn mask_sigpipe() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        const SIGPIPE: i32 = 13;
+        const SIG_IGN: usize = 1;
+        unsafe extern "C" {
+            fn signal(signal: i32, handler: usize) -> usize;
+        }
+        // SAFETY: POSIX `signal(SIGPIPE, SIG_IGN)` installs a process-global
+        // disposition and dereferences no Rust memory. `Once` avoids races.
+        unsafe {
+            signal(SIGPIPE, SIG_IGN);
+        }
+    });
+}
+
+#[cfg(not(unix))]
+fn mask_sigpipe() {}
+
 /// Recursively strip `InL`/`InR` wrappers off an op value, returning the
 /// innermost non-`Coproduct` base tag (`effect-composition` D3.2). `InL`/`InR`'s
 /// `ctor_arity` = 2 params (`g,h`) + 1 arg (the payload) = 3, so the payload
@@ -1853,10 +2123,14 @@ pub struct CoproductIds {
 /// pass through unchanged — a total no-op descent; `coproduct_ids = None` disables
 /// peeling entirely (pre-composition callers, BV6).
 fn peel_coproduct(mut op: EvalVal, coproduct_ids: Option<&CoproductIds>) -> EvalVal {
-    let Some(coproduct_ids) = coproduct_ids else { return op };
+    let Some(coproduct_ids) = coproduct_ids else {
+        return op;
+    };
     loop {
         match &op {
-            EvalVal::Ctor { id, args, .. } if *id == coproduct_ids.inl_id || *id == coproduct_ids.inr_id => {
+            EvalVal::Ctor { id, args, .. }
+                if *id == coproduct_ids.inl_id || *id == coproduct_ids.inr_id =>
+            {
                 match args.get(2) {
                     Some(payload) => op = payload.clone(),
                     // Malformed arity — leave as-is; the base-tag match below
@@ -1872,7 +2146,7 @@ fn peel_coproduct(mut op: EvalVal, coproduct_ids: Option<&CoproductIds>) -> Eval
 /// Error returned by `run_io` (`42 §6`).
 #[derive(Debug)]
 pub enum RunIoError {
-    /// A `Vis` node carried an op-tag that is not `Console.Write`.
+    /// A `Vis` node carried an op-tag outside the supported host algebra.
     UnknownEffect(EvalVal),
     /// The tree evaluated to `Unknown` (open hole, `42 §6.7`).
     UnknownTree,
@@ -1890,12 +2164,6 @@ pub struct FSIds {
     /// `GlobalId` of `FSOp::ReadFile` (carries `[Cap, Bytes]` — the
     /// capability + path, capability-*carrying*, not ambient authority).
     pub readfile_id: GlobalId,
-    pub ok_id: GlobalId,
-    pub err_id: GlobalId,
-    pub notfound_id: GlobalId,
-    pub permissiondenied_id: GlobalId,
-    pub capabilitydenied_id: GlobalId,
-    pub other_id: GlobalId,
 }
 
 /// The authority a `read_bytes` sink demands (`62 §3.1`'s sink-sufficiency
@@ -1940,10 +2208,12 @@ fn authorizes(cap: &EvalVal, _path: &str) -> bool {
 
 /// Map a `std::io::ErrorKind` to Ken's in-language `IOError` sum (D2, D5:
 /// failure surfaces as a total `Result`, never a panic).
-fn io_error_kind_to_ctor(kind: std::io::ErrorKind, ids: &FSIds) -> GlobalId {
+fn io_error_kind_to_ctor(kind: std::io::ErrorKind, ids: &ConsoleIds) -> GlobalId {
     match kind {
         std::io::ErrorKind::NotFound => ids.notfound_id,
         std::io::ErrorKind::PermissionDenied => ids.permissiondenied_id,
+        std::io::ErrorKind::BrokenPipe => ids.brokenpipe_id,
+        std::io::ErrorKind::Interrupted => ids.interrupted_id,
         _ => ids.other_id,
     }
 }
@@ -1954,26 +2224,50 @@ fn io_error_kind_to_ctor(kind: std::io::ErrorKind, ids: &FSIds) -> GlobalId {
 /// + args.len()). Untyped at this layer regardless — `make_result` puts
 /// `payload` at position 2 for both `Ok`/`Err` ctors, unaffected by which
 /// static field type the surface ascription assigns.
-fn make_result(ok: bool, payload: EvalVal, ids: &FSIds, store: &mut EvalStore) -> EvalVal {
+fn make_result(ok: bool, payload: EvalVal, ids: &ConsoleIds, store: &mut EvalStore) -> EvalVal {
     let ctor_id = if ok { ids.ok_id } else { ids.err_id };
-    make_ctor(ctor_id, vec![EvalVal::Unknown, EvalVal::Unknown, payload], store)
+    make_ctor(
+        ctor_id,
+        vec![EvalVal::Unknown, EvalVal::Unknown, payload],
+        store,
+    )
+}
+
+fn decode_stream(value: &EvalVal, ids: &ConsoleIds) -> Option<ConsoleStream> {
+    match value {
+        EvalVal::Ctor { id, .. } if *id == ids.stdin_id => Some(ConsoleStream::Stdin),
+        EvalVal::Ctor { id, .. } if *id == ids.stdout_id => Some(ConsoleStream::Stdout),
+        EvalVal::Ctor { id, .. } if *id == ids.stderr_id => Some(ConsoleStream::Stderr),
+        _ => None,
+    }
+}
+
+fn read_limit(value: &EvalVal) -> Option<usize> {
+    const MAX_CONSOLE_READ: usize = 64 * 1024;
+    let n = eval_to_bigint(value)?;
+    if n.sign() == NumSign::Minus {
+        Some(0)
+    } else {
+        Some(n.to_usize().unwrap_or(usize::MAX).min(MAX_CONSOLE_READ))
+    }
 }
 
 /// Console-effect driver (`42 §6.2`, `§6.3`): runs an `ITree` value to
-/// completion, dispatching `Vis` nodes to the Console `Write` arm and,
+/// completion, dispatching `Vis` nodes to the Console algebra and,
 /// when `fs_ids` is supplied, the FS `ReadFile` arm (FS-driver-build D2) —
 /// one driver, two arms, not a second dispatcher (shares `ids`'s
 /// `ret_id`/`vis_id`/`params_len`, the same `ITree`).
 ///
 /// Dispatches exhaustively — no catch-all (`42 §6.5`): any op-tag that
-/// matches neither `Write` nor (if `fs_ids` is `Some`) `ReadFile` is
+/// matches neither Console nor (if `fs_ids` is `Some`) `ReadFile` is
 /// `Err(UnknownEffect)`, never silently skipped.
 ///
 /// `ids.params_len` must equal the number of type-level params on `ITree`
 /// (3 for the lifted `ITree (E:Type)(Resp:E->Type)(R:Type)`; 0 for the
 /// simplified 0-param test ITree).
-pub fn run_io(
+pub fn run_io<H: HostHandler>(
     mut tree: EvalVal,
+    handler: &mut H,
     ids: &ConsoleIds,
     fs_ids: Option<&FSIds>,
     coproduct_ids: Option<&CoproductIds>,
@@ -1992,37 +2286,148 @@ pub fn run_io(
                     // Guard args access — a malformed Vis returns Err rather than panic.
                     let op = match args.get(m).cloned() {
                         Some(v) => v,
-                        None => return Err(RunIoError::NotAnIOTree(EvalVal::Ctor { id, args, slot: NULL_SLOT })),
+                        None => {
+                            return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
+                                id,
+                                args,
+                                slot: NULL_SLOT,
+                            }))
+                        }
                     };
                     let k = match args.get(m + 1).cloned() {
                         Some(v) => v,
-                        None => return Err(RunIoError::NotAnIOTree(EvalVal::Ctor { id, args: Rc::new(vec![op]), slot: NULL_SLOT })),
+                        None => {
+                            return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
+                                id,
+                                args: Rc::new(vec![op]),
+                                slot: NULL_SLOT,
+                            }))
+                        }
                     };
                     // D3 coproduct peel: strip InL/InR down to the innermost
                     // base tag BEFORE dispatch — effect-blind, a no-op when
                     // `coproduct_ids` is absent or the op carries no wrapper.
                     let op = peel_coproduct(op, coproduct_ids);
-                    // Dispatch on the op — exhaustive, no catch-all (42 §6.5).
+                    // Dispatch on every constructor in the sealed Console/FS
+                    // floor. Unknown tags fail loudly below.
                     let resp = match &op {
-                        EvalVal::Ctor { id: op_id, args: op_args, .. }
-                            if *op_id == ids.write_id =>
-                        {
-                            let maybe_s = match op_args.get(0) {
-                                Some(EvalVal::Str(s)) => Some(s.clone()),
-                                _ => None,
+                        EvalVal::Ctor {
+                            id: op_id,
+                            args: op_args,
+                            ..
+                        } if *op_id == ids.read_id => {
+                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
+                            else {
+                                return Err(RunIoError::UnknownEffect(op));
                             };
-                            match maybe_s {
-                                Some(s) => {
-                                    println!("{}", s);
-                                    make_ctor(ids.unit_id, vec![], store)
-                                }
-                                None => return Err(RunIoError::UnknownEffect(op)),
+                            let Some(limit) = op_args.get(1).and_then(read_limit) else {
+                                return Err(RunIoError::UnknownEffect(op));
+                            };
+                            match handler.console_read(stream, limit) {
+                                Ok(HostRead::Chunk(bytes)) => make_result(
+                                    true,
+                                    make_ctor(ids.chunk_id, vec![EvalVal::Bytes(bytes)], store),
+                                    ids,
+                                    store,
+                                ),
+                                Ok(HostRead::Eof) => make_result(
+                                    true,
+                                    make_ctor(ids.eof_id, vec![], store),
+                                    ids,
+                                    store,
+                                ),
+                                Err(error) => make_result(
+                                    false,
+                                    make_ctor(
+                                        io_error_kind_to_ctor(error.kind(), ids),
+                                        vec![],
+                                        store,
+                                    ),
+                                    ids,
+                                    store,
+                                ),
                             }
                         }
-                        EvalVal::Ctor { id: op_id, args: op_args, .. }
-                            if fs_ids.is_some_and(|fs| *op_id == fs.readfile_id) =>
-                        {
-                            let fs = fs_ids.unwrap();
+                        EvalVal::Ctor {
+                            id: op_id,
+                            args: op_args,
+                            ..
+                        } if *op_id == ids.write_id => {
+                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
+                            else {
+                                return Err(RunIoError::UnknownEffect(op));
+                            };
+                            let Some(EvalVal::Bytes(bytes)) = op_args.get(1) else {
+                                return Err(RunIoError::UnknownEffect(op));
+                            };
+                            match handler.console_write(stream, bytes) {
+                                Ok(()) => make_result(
+                                    true,
+                                    make_ctor(ids.unit_id, vec![], store),
+                                    ids,
+                                    store,
+                                ),
+                                Err(error) => make_result(
+                                    false,
+                                    make_ctor(
+                                        io_error_kind_to_ctor(error.kind(), ids),
+                                        vec![],
+                                        store,
+                                    ),
+                                    ids,
+                                    store,
+                                ),
+                            }
+                        }
+                        EvalVal::Ctor {
+                            id: op_id,
+                            args: op_args,
+                            ..
+                        } if *op_id == ids.flush_id => {
+                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
+                            else {
+                                return Err(RunIoError::UnknownEffect(op));
+                            };
+                            match handler.console_flush(stream) {
+                                Ok(()) => make_result(
+                                    true,
+                                    make_ctor(ids.unit_id, vec![], store),
+                                    ids,
+                                    store,
+                                ),
+                                Err(error) => make_result(
+                                    false,
+                                    make_ctor(
+                                        io_error_kind_to_ctor(error.kind(), ids),
+                                        vec![],
+                                        store,
+                                    ),
+                                    ids,
+                                    store,
+                                ),
+                            }
+                        }
+                        EvalVal::Ctor {
+                            id: op_id,
+                            args: op_args,
+                            ..
+                        } if *op_id == ids.is_terminal_id => {
+                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
+                            else {
+                                return Err(RunIoError::UnknownEffect(op));
+                            };
+                            let bool_id = if handler.console_is_terminal(stream) {
+                                ids.true_id
+                            } else {
+                                ids.false_id
+                            };
+                            make_ctor(bool_id, vec![], store)
+                        }
+                        EvalVal::Ctor {
+                            id: op_id,
+                            args: op_args,
+                            ..
+                        } if fs_ids.is_some_and(|fs| *op_id == fs.readfile_id) => {
                             // BV3: `ReadFile`'s ctor args are now
                             // `[Auth-value, Cap, Bytes]` (`ctor_arity =
                             // params.len() + args.len()`; the enriched
@@ -2043,27 +2448,27 @@ pub fn run_io(
                                     let resp = match std::str::from_utf8(&path_bytes) {
                                         Err(_) => make_result(
                                             false,
-                                            make_ctor(fs.other_id, vec![], store),
-                                            fs,
+                                            make_ctor(ids.other_id, vec![], store),
+                                            ids,
                                             store,
                                         ),
                                         Ok(path) if !authorizes(&cap, path) => make_result(
                                             false,
-                                            make_ctor(fs.capabilitydenied_id, vec![], store),
-                                            fs,
+                                            make_ctor(ids.capabilitydenied_id, vec![], store),
+                                            ids,
                                             store,
                                         ),
-                                        Ok(path) => match std::fs::read(path) {
+                                        Ok(path) => match handler.fs_read(path) {
                                             Ok(bytes) => {
-                                                make_result(true, EvalVal::Bytes(bytes), fs, store)
+                                                make_result(true, EvalVal::Bytes(bytes), ids, store)
                                             }
                                             Err(e) => {
                                                 let err_ctor_id =
-                                                    io_error_kind_to_ctor(e.kind(), fs);
+                                                    io_error_kind_to_ctor(e.kind(), ids);
                                                 make_result(
                                                     false,
                                                     make_ctor(err_ctor_id, vec![], store),
-                                                    fs,
+                                                    ids,
                                                     store,
                                                 )
                                             }
@@ -2169,7 +2574,12 @@ fn prim_arity(symbol: &str) -> usize {
         "add_float" | "sub_float" | "mul_float" | "div_float" | "eq_float" => 2,
         "add_float32" | "eq_float32" => 2,
         s if s.starts_with("add_int") || s.starts_with("sub_int") || s.starts_with("mul_int") => 2,
-        s if s.starts_with("add_uint") || s.starts_with("sub_uint") || s.starts_with("mul_uint") => 2,
+        s if s.starts_with("add_uint")
+            || s.starts_with("sub_uint")
+            || s.starts_with("mul_uint") =>
+        {
+            2
+        }
         s if s.starts_with("wrapping_") => 2,
         // ── Bytes ops (`38 §1.2`, `38 §1.4`) ─────────────────────────────
         "bytes_length" | "bytes_encode" | "bytes_decode" => 1,
@@ -2299,7 +2709,10 @@ mod f1_bignum_tests {
         let mut bytes2 = Vec::new();
         rt.encode_canonical(&mut bytes1);
         rt_again.encode_canonical(&mut bytes2);
-        assert_eq!(bytes1, bytes2, "round-trip must be byte-identical (18a §5.2.1(3))");
+        assert_eq!(
+            bytes1, bytes2,
+            "round-trip must be byte-identical (18a §5.2.1(3))"
+        );
 
         let mut store = EvalStore::new();
         let (InternResult::New(slot1) | InternResult::Hit(slot1)) = store.k3.intern(&rt) else {
@@ -2309,7 +2722,10 @@ mod f1_bignum_tests {
         else {
             panic!("expected successful intern, not capacity exhaustion");
         };
-        assert_eq!(slot1, slot2, "round-tripped value must content-address identically");
+        assert_eq!(
+            slot1, slot2,
+            "round-tripped value must content-address identically"
+        );
 
         // "reduces identically": the reconstructed value behaves like the
         // original under further reduction.
@@ -2366,7 +2782,11 @@ mod f1_bignum_tests {
             vec![0u64],
             "zero must canonicalize to exactly one zero limb"
         );
-        assert_eq!(zero_sign, RtSign::NonNegative, "zero must have canonical sign");
+        assert_eq!(
+            zero_sign,
+            RtSign::NonNegative,
+            "zero must have canonical sign"
+        );
 
         // given: -(2^128) via sub_int 0 (2^128).
         let neg = prim_reduce("sub_int", &[EvalVal::Int(0), n.clone()]);

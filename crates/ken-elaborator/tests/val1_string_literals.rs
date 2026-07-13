@@ -7,15 +7,21 @@
 //! Batch-2: verifies fibonacci/gcd/ackermann views elaborate (batch-2 fixes).
 
 use ken_elaborator::{ElabEnv, NumericLitVal};
-use ken_interp::eval::{ConsoleIds, EvalStore, EvalVal};
+use ken_interp::eval::{EvalStore, EvalVal};
 use ken_kernel::{Decl, GlobalId};
 
 fn make_store(env: &ElabEnv) -> EvalStore {
     let mut store = EvalStore::new();
     let mkdecimalpair_id = env.prelude_env.mkdecimalpair_id;
     for (id, v) in &env.num_values {
-        store.num_values.insert(*id, lit_to_eval(v, mkdecimalpair_id));
+        store
+            .num_values
+            .insert(*id, lit_to_eval(v, mkdecimalpair_id));
     }
+    store.list_char_ids = Some(ken_interp::eval::ListCharIds {
+        nil_id: env.prelude_env.nil_id,
+        cons_id: env.prelude_env.cons_id,
+    });
     store
 }
 
@@ -33,9 +39,7 @@ fn lit_to_eval(v: &NumericLitVal, mkdecimalpair_id: GlobalId) -> EvalVal {
 
 fn eval_def(env: &ElabEnv, store: &mut EvalStore, id: GlobalId) -> EvalVal {
     match env.env.lookup(id) {
-        Some(Decl::Transparent { body, .. }) => {
-            ken_interp::eval::eval(&[], body, &env.env, store)
-        }
+        Some(Decl::Transparent { body, .. }) => ken_interp::eval::eval(&[], body, &env.env, store),
         _ => EvalVal::Unknown,
     }
 }
@@ -125,13 +129,12 @@ fn print_line_type_checks_as_io_unit() {
     assert_eq!(ty, io_unit, "main must have type IO Unit");
 }
 
-// ── AC5: print_line prim reduction builds Vis (Write s) (\\_. Ret MkUnit) ─────
+// ── AC5: print_line ordinary reduction builds byte-exact Write ───────────────
 
 /// `surface/io/print-line-prim-reduction` (VAL1-surface, `36 §2.1`)
 ///
-/// When `store.print_line_id` + `store.console_ids` are wired, evaluating
-/// `print_line "Hello, World!"` produces a `Vis (Write s) k` ITree value.
-/// This pins the full prim-reduction path end-to-end.
+/// Ordinary delta/iota reduction produces a `Vis` carrying UTF-8 bytes and
+/// exactly one newline; no interpreter primitive is involved.
 #[test]
 fn print_line_prim_reduction_builds_itree() {
     let mut env = ElabEnv::new().expect("base env");
@@ -139,35 +142,38 @@ fn print_line_prim_reduction_builds_itree() {
         .elaborate_decl("proc main : IO Unit visits [Console] = print_line \"Hello, World!\"")
         .expect("print_line app elaborates");
 
-    let p = &env.prelude_env;
-    let console_ids = ConsoleIds {
-        itree_id: p.itree_id,
-        ret_id: p.ret_id,
-        vis_id: p.vis_id,
-        write_id: p.write_id,
-        unit_id: p.mkunit_id,  // `unit_id` in ConsoleIds = MkUnit constructor
-        params_len: 3,          // lifted `ITree (E:Type)(Resp:E->Type)(R:Type)` — 3 type params (State-effect-build)
-    };
     let mut store = make_store(&env);
-    store.print_line_id = Some(p.print_line_id);
-    store.console_ids = Some(console_ids.clone());
-
     let val = eval_def(&env, &mut store, id);
+    let p = &env.prelude_env;
 
     // The result must be a Vis node: Ctor { vis_id, args: [E, Resp, R, Write_s, k] }
     match val {
-        EvalVal::Ctor { id: ctor_id, ref args, .. } => {
+        EvalVal::Ctor {
+            id: ctor_id,
+            ref args,
+            ..
+        } => {
             assert_eq!(ctor_id, p.vis_id, "outer ctor must be Vis");
             // args[0..2] = the 3 type params (E,Resp,R); args[3] = Write s; args[4] = continuation
-            assert!(args.len() >= 5, "Vis must have >= 5 args (3 type params + op + k)");
+            assert!(
+                args.len() >= 5,
+                "Vis must have >= 5 args (3 type params + op + k)"
+            );
             match &args[3] {
-                EvalVal::Ctor { id: op_id, args: op_args, .. } => {
+                EvalVal::Ctor {
+                    id: op_id,
+                    args: op_args,
+                    ..
+                } => {
                     assert_eq!(*op_id, p.write_id, "op must be Write");
-                    assert_eq!(
-                        op_args.as_ref(),
-                        &[EvalVal::Str("Hello, World!".to_owned())],
-                        "Write arg must be the string"
-                    );
+                    assert!(matches!(
+                        op_args.first(),
+                        Some(EvalVal::Ctor { id, .. }) if *id == p.stdout_id
+                    ));
+                    assert!(matches!(
+                        op_args.get(1),
+                        Some(EvalVal::Bytes(bytes)) if bytes == b"Hello, World!\n"
+                    ));
                 }
                 other => panic!("expected Write ctor, got {:?}", other),
             }
@@ -192,7 +198,8 @@ fn fizzbuzz_classification_elaborates() {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_decl("data FizzTag = Plain | IsFizz | IsBuzz | IsFizzBuzz")
         .expect("FizzTag");
-    env.elaborate_decl("data IsZero = Zero_ | NonZero_").expect("IsZero");
+    env.elaborate_decl("data IsZero = Zero_ | NonZero_")
+        .expect("IsZero");
     env.elaborate_decl(
         "fn isZero (n : Nat) : IsZero = \
          match n { Zero |-> Zero_ ; Suc m |-> NonZero_ }",
@@ -200,7 +207,8 @@ fn fizzbuzz_classification_elaborates() {
     .expect("isZero");
 
     // mod3 via Mod3 accumulator type
-    env.elaborate_decl("data Mod3 = Zero3 | One3 | Two3").expect("Mod3");
+    env.elaborate_decl("data Mod3 = Zero3 | One3 | Two3")
+        .expect("Mod3");
     env.elaborate_decl(
         "fn incMod3 (x : Mod3) : Mod3 = \
          match x { Zero3 |-> One3 ; One3 |-> Two3 ; Two3 |-> Zero3 }",
@@ -216,10 +224,12 @@ fn fizzbuzz_classification_elaborates() {
          match n { Zero |-> acc ; Suc m |-> mod3Step m (incMod3 acc) }",
     )
     .expect("mod3Step");
-    env.elaborate_decl("fn mod3 (n : Nat) : Mod3 = mod3Step n Zero3").expect("mod3");
+    env.elaborate_decl("fn mod3 (n : Nat) : Mod3 = mod3Step n Zero3")
+        .expect("mod3");
 
     // mod5 via Mod5 accumulator type
-    env.elaborate_decl("data Mod5 = Zero5 | One5 | Two5 | Three5 | Four5").expect("Mod5");
+    env.elaborate_decl("data Mod5 = Zero5 | One5 | Two5 | Three5 | Four5")
+        .expect("Mod5");
     env.elaborate_decl(
         "fn incMod5 (x : Mod5) : Mod5 = match x { \
          Zero5 |-> One5 ; One5 |-> Two5 ; Two5 |-> Three5 ; Three5 |-> Four5 ; Four5 |-> Zero5 }",
@@ -236,7 +246,8 @@ fn fizzbuzz_classification_elaborates() {
          match n { Zero |-> acc ; Suc m |-> mod5Step m (incMod5 acc) }",
     )
     .expect("mod5Step");
-    env.elaborate_decl("fn mod5 (n : Nat) : Mod5 = mod5Step n Zero5").expect("mod5");
+    env.elaborate_decl("fn mod5 (n : Nat) : Mod5 = mod5Step n Zero5")
+        .expect("mod5");
 
     // classify
     env.elaborate_decl(
@@ -276,19 +287,40 @@ fn fibonacci_iterative_elaborates() {
     env.elaborate_decl("fn fib (n : Nat) : Nat = fibStep n Zero (Suc Zero)")
         .expect("fib");
     // F(10): define ten via chain
-    for (name, pred) in [("one","Zero"),("two","Suc Zero"),("three","Suc (Suc Zero)"),
-                         ("four","Suc (Suc (Suc Zero))"),("five","Suc (Suc (Suc (Suc Zero)))"),
-                         ("six","Suc five"),("seven","Suc six"),("eight","Suc seven"),
-                         ("nine","Suc eight"),("ten","Suc nine")] {
+    for (name, pred) in [
+        ("one", "Zero"),
+        ("two", "Suc Zero"),
+        ("three", "Suc (Suc Zero)"),
+        ("four", "Suc (Suc (Suc Zero))"),
+        ("five", "Suc (Suc (Suc (Suc Zero)))"),
+        ("six", "Suc five"),
+        ("seven", "Suc six"),
+        ("eight", "Suc seven"),
+        ("nine", "Suc eight"),
+        ("ten", "Suc nine"),
+    ] {
         let _ = pred; // suppress warning
-        env.elaborate_decl(&format!("const {} : Nat = Suc {}", name,
-            match name { "one" => "Zero", "two" => "one", "three" => "two",
-                         "four" => "three", "five" => "four", "six" => "five",
-                         "seven" => "six", "eight" => "seven", "nine" => "eight",
-                         "ten" => "nine", _ => "Zero" }))
-            .expect(name);
+        env.elaborate_decl(&format!(
+            "const {} : Nat = Suc {}",
+            name,
+            match name {
+                "one" => "Zero",
+                "two" => "one",
+                "three" => "two",
+                "four" => "three",
+                "five" => "four",
+                "six" => "five",
+                "seven" => "six",
+                "eight" => "seven",
+                "nine" => "eight",
+                "ten" => "nine",
+                _ => "Zero",
+            }
+        ))
+        .expect(name);
     }
-    env.elaborate_decl("const main : Int = natToInt (fib ten)").expect("main");
+    env.elaborate_decl("const main : Int = natToInt (fib ten)")
+        .expect("main");
 }
 
 /// Regression for GAP-nested-patterns (`elab.rs::infer_match` pattern-matrix
@@ -300,16 +332,24 @@ fn fibonacci_iterative_elaborates() {
 #[test]
 fn is_even_nested_pattern_elaborates_and_reduces() {
     let mut env = ElabEnv::new().expect("base env");
-    env.elaborate_decl("data BoolL = TrueL | FalseL").expect("BoolL");
+    env.elaborate_decl("data BoolL = TrueL | FalseL")
+        .expect("BoolL");
     env.elaborate_decl(
         "fn isEven (n : Nat) : BoolL = \
          match n { Zero |-> TrueL ; Suc Zero |-> FalseL ; Suc (Suc m) |-> isEven m }",
     )
     .expect("isEven");
-    for (name, pred) in [("one", "Zero"), ("two", "one"), ("three", "two"), ("four", "three")] {
-        env.elaborate_decl(&format!("const {} : Nat = Suc {}", name, pred)).expect(name);
+    for (name, pred) in [
+        ("one", "Zero"),
+        ("two", "one"),
+        ("three", "two"),
+        ("four", "three"),
+    ] {
+        env.elaborate_decl(&format!("const {} : Nat = Suc {}", name, pred))
+            .expect(name);
     }
-    env.elaborate_decl("const result : BoolL = isEven four").expect("result");
+    env.elaborate_decl("const result : BoolL = isEven four")
+        .expect("result");
 }
 
 // ── Batch-2: GCD (subtraction-based with fuel) ───────────────────────────────
@@ -331,7 +371,8 @@ fn gcd_views_elaborate() {
     // ES2 retired the prelude's `OrdResult` (bloat — no primitive signature
     // named it, `30-taxonomy §6`); a genuine 3-way comparison (gcd needs
     // Lt/Eq/Gt, not just Bool) still gets one, declared locally here.
-    env.elaborate_decl("data OrdResult = Lt | Eq | Gt").expect("OrdResult");
+    env.elaborate_decl("data OrdResult = Lt | Eq | Gt")
+        .expect("OrdResult");
     env.elaborate_decl(
         "fn natCmpZero (b : Nat) : OrdResult = \
          match b { Zero |-> Eq ; Suc n |-> Lt }",
