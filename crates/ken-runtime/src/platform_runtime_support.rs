@@ -667,6 +667,8 @@ fn collect_runtime_support_for_expr(
             shapes.insert(PlatformRuntimeShape::PrimitiveOperation);
             match primitive.partiality {
                 crate::RuntimePartiality::Total
+                | crate::RuntimePartiality::SafeOption { .. }
+                | crate::RuntimePartiality::SafeResult { .. }
                 | crate::RuntimePartiality::CheckedTrap { .. }
                 | crate::RuntimePartiality::TrustedTrap { .. } => {}
             }

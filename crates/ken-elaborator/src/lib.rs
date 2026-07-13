@@ -182,6 +182,9 @@ impl ElabEnv {
         // collection inductives + Ω constants (`37`). Registered via the landed
         // `data` / postulate machinery — no new kernel rule.
         elab.prelude_env = prelude::register_prelude(&mut elab)?;
+        // Safe Bytes ops return the prelude's `Option`/`Result` sums, so their
+        // primitive signatures are installed only after those sums exist.
+        bytes::register_safe_bytes_ops(&mut elab.env, &mut elab.globals)?;
         // Lc typeclass env: pre-declare RecordNil + record_nil_val (`33 §5`).
         elab.class_env =
             elab::init_class_env(&mut elab.env, &mut elab.globals)?;

@@ -8,8 +8,10 @@
 //! - AC2: `read_bytes` visits `[FS]`; untracked call rejects (escape check).
 //!   Seed derives from `ElabEnv.bytes_env.io_effect_rows` — the actual L6
 //!   binding — so removing the registration makes the test fail.
-//! - AC3: `send` visits `[Net]`; same derivation, distinct effect class.
-//! - AC4: `decode` is the only `Bytes → String` path; partial on invalid UTF-8.
+//! - AC3: real `read_bytes` `[FS]` and `print_line` `[Console]` producers stay
+//!   distinct; no synthetic Net producer is admitted.
+//! - AC4: `decode` is the only `Bytes → String` path and returns an explicit
+//!   `Result` on invalid UTF-8.
 //! - AC5: `decode(encode s) == Ok s` is a **provable obligation** (kernel hole),
 //!   not merely a representative sample. The hole is dischargeable.
 //!
@@ -20,12 +22,58 @@ use ken_elaborator::{
     effects::{check_escape, infer_all, EffectDecl, EffectError, WitnessMap},
     ElabEnv, ObligationKind,
 };
-use ken_interp::eval::{EvalVal, prim_reduce};
-use ken_kernel::Term;
+use ken_interp::eval::{prim_reduce, prim_reduce_elaborated, EvalStore, EvalVal};
+use ken_kernel::{declare_primitive, PrimReduction, Term};
+use std::collections::BTreeSet;
 
 // ============================================================
 // AC1 — Bytes primitive ops: registered reductions over literals
 // ============================================================
+
+#[test]
+fn retired_placeholder_primitives_are_absent_and_trusted_base_shrinks() {
+    let current = ElabEnv::new().expect("ElabEnv::new()");
+    for name in ["write_bytes", "append", "send", "recv"] {
+        assert!(
+            !current.globals.contains_key(name),
+            "retired placeholder {name} must not remain globally callable"
+        );
+        assert!(
+            !current.bytes_env.io_effect_rows.contains_key(name),
+            "retired placeholder {name} must not retain an effect-row seed"
+        );
+    }
+
+    // Reconstruct the prior trust shape in an isolated environment: the four
+    // bogus primitive declarations each add exactly one trusted-base member.
+    // The production environment is the strict four-entry-smaller subset.
+    let mut prior = ElabEnv::new().expect("prior ElabEnv::new()");
+    let bytes = Term::const_(prior.globals["Bytes"], vec![]);
+    let binary = Term::pi(bytes.clone(), Term::pi(bytes.clone(), bytes.clone()));
+    let unary = Term::pi(bytes.clone(), bytes);
+    let mut retired_ids = Vec::new();
+    for (name, ty) in [
+        ("write_bytes", binary.clone()),
+        ("append", binary.clone()),
+        ("send", binary),
+        ("recv", unary),
+    ] {
+        retired_ids.push(
+            declare_primitive(
+                &mut prior.env,
+                vec![],
+                ty,
+                PrimReduction::Op { symbol: name },
+            )
+            .expect("legacy placeholder shape is kernel-admissible"),
+        );
+    }
+    let current_tb: BTreeSet<_> = current.env.trusted_base().into_iter().collect();
+    let prior_tb: BTreeSet<_> = prior.env.trusted_base().into_iter().collect();
+    assert!(current_tb.is_subset(&prior_tb));
+    assert_eq!(prior_tb.len() - current_tb.len(), retired_ids.len());
+    assert!(retired_ids.iter().all(|id| prior_tb.contains(id)));
+}
 
 /// `surface/bytes-io/bytes-prim-reduces-over-literals` (soundness)
 ///
@@ -71,7 +119,11 @@ fn bytes_immutable_concat_allocates_fresh() {
     let result = prim_reduce("bytes_concat", &[a_val.clone(), b_val.clone()]);
     match &result {
         EvalVal::Bytes(out) => {
-            assert_eq!(out.as_slice(), &[0x01, 0x02, 0x03, 0x04], "concat must join bytes");
+            assert_eq!(
+                out.as_slice(),
+                &[0x01, 0x02, 0x03, 0x04],
+                "concat must join bytes"
+            );
             // Immutability: result slice ≠ a slice (no aliasing into a's backing store).
             assert_ne!(
                 out.as_ptr(),
@@ -85,68 +137,79 @@ fn bytes_immutable_concat_allocates_fresh() {
 
 /// `surface/bytes-io/bytes-index-inbounds-and-oob` (oracle)
 ///
-/// `at b i` returns the byte for in-bounds `i`, and is stuck (Neutral) for
-/// out-of-bounds — no silent OOB read. Verdict FLIPS: in-bounds → byte value,
-/// OOB → Neutral.
+/// `at b i` returns `Some UInt8` in bounds and `None` out of bounds.
 #[test]
 fn bytes_index_inbounds_and_oob() {
+    let env = ElabEnv::new().expect("ElabEnv::new()");
+    let mut store = EvalStore::new();
+    let some_id = env.globals["Some"];
+    let none_id = env.globals["None"];
     let b = EvalVal::Bytes(vec![0xAB, 0xCD]);
 
-    // In-bounds: index 0 → 0xAB (Int(171))
-    let r_in = prim_reduce("bytes_at", &[b.clone(), EvalVal::Int(0)]);
-    assert_eq!(r_in, EvalVal::Int(0xAB), "at b 0 must return byte 0 (0xAB)");
-
-    // In-bounds: index 1 → 0xCD (Int(205))
-    let r_in2 = prim_reduce("bytes_at", &[b.clone(), EvalVal::Int(1)]);
-    assert_eq!(r_in2, EvalVal::Int(0xCD), "at b 1 must return byte 1 (0xCD)");
-
-    // OOB: index 2 → Neutral (no value produced silently)
-    let r_oob = prim_reduce("bytes_at", &[b.clone(), EvalVal::Int(2)]);
+    let r_in = prim_reduce_elaborated("bytes_at", &[b.clone(), EvalVal::Int(0)], &env, &mut store);
     assert!(
-        matches!(r_oob, EvalVal::Neutral),
-        "at b 2 (OOB) must be Neutral — no silent OOB read; got {:?}",
-        r_oob
+        matches!(r_in, EvalVal::Ctor { id, ref args, .. }
+            if id == some_id && matches!(args.last(), Some(EvalVal::Int(0xAB)))),
+        "at b 0 must return Some UInt8 0xAB; got {r_in:?}"
     );
 
-    // OOB negative index → Neutral
-    let r_neg = prim_reduce("bytes_at", &[b, EvalVal::Int(-1)]);
+    let r_oob = prim_reduce_elaborated("bytes_at", &[b.clone(), EvalVal::Int(2)], &env, &mut store);
     assert!(
-        matches!(r_neg, EvalVal::Neutral),
-        "at b -1 (OOB) must be Neutral; got {:?}",
-        r_neg
+        matches!(r_oob, EvalVal::Ctor { id, .. } if id == none_id),
+        "at b 2 (OOB) must return None, never neutral 0; got {r_oob:?}"
+    );
+
+    let r_neg = prim_reduce_elaborated("bytes_at", &[b, EvalVal::Int(-1)], &env, &mut store);
+    assert!(
+        matches!(r_neg, EvalVal::Ctor { id, .. } if id == none_id),
+        "at b -1 must return None; got {r_neg:?}"
     );
 }
 
 /// `surface/bytes-io/bytes-slice-inbounds-and-oob` (oracle)
 ///
-/// `slice b start len` returns the sub-slice for in-bounds params, Neutral
-/// otherwise. Verdict FLIPS: valid range → Bytes, out-of-range → Neutral.
+/// `slice b start len` returns `Some Bytes` in bounds and `None` otherwise.
 #[test]
 fn bytes_slice_inbounds_and_oob() {
+    let env = ElabEnv::new().expect("ElabEnv::new()");
+    let mut store = EvalStore::new();
+    let some_id = env.globals["Some"];
+    let none_id = env.globals["None"];
     let b = EvalVal::Bytes(vec![0x10, 0x20, 0x30, 0x40]);
 
-    // In-bounds: slice(b, 1, 2) = [0x20, 0x30]
-    let r = prim_reduce("bytes_slice", &[b.clone(), EvalVal::Int(1), EvalVal::Int(2)]);
-    assert_eq!(
-        r,
-        EvalVal::Bytes(vec![0x20, 0x30]),
-        "slice(b,1,2) must return [0x20,0x30]"
+    let r = prim_reduce_elaborated(
+        "bytes_slice",
+        &[b.clone(), EvalVal::Int(1), EvalVal::Int(2)],
+        &env,
+        &mut store,
+    );
+    assert!(
+        matches!(r, EvalVal::Ctor { id, ref args, .. }
+            if id == some_id
+                && matches!(args.last(), Some(EvalVal::Bytes(bytes)) if bytes == &[0x20, 0x30])),
+        "slice(b,1,2) must return Some [0x20,0x30]; got {r:?}"
     );
 
-    // OOB: slice(b, 3, 2) overflows
-    let r_oob = prim_reduce("bytes_slice", &[b.clone(), EvalVal::Int(3), EvalVal::Int(2)]);
+    let r_oob = prim_reduce_elaborated(
+        "bytes_slice",
+        &[b.clone(), EvalVal::Int(3), EvalVal::Int(2)],
+        &env,
+        &mut store,
+    );
     assert!(
-        matches!(r_oob, EvalVal::Neutral),
-        "slice(b,3,2) OOB must be Neutral; got {:?}",
-        r_oob
+        matches!(r_oob, EvalVal::Ctor { id, .. } if id == none_id),
+        "slice(b,3,2) OOB must be None; got {r_oob:?}"
     );
 
-    // OOB: start = 0, len = 5 (> len(b))
-    let r_oob2 = prim_reduce("bytes_slice", &[b, EvalVal::Int(0), EvalVal::Int(5)]);
+    let r_oob2 = prim_reduce_elaborated(
+        "bytes_slice",
+        &[b, EvalVal::Int(0), EvalVal::Int(5)],
+        &env,
+        &mut store,
+    );
     assert!(
-        matches!(r_oob2, EvalVal::Neutral),
-        "slice(b,0,5) OOB must be Neutral; got {:?}",
-        r_oob2
+        matches!(r_oob2, EvalVal::Ctor { id, .. } if id == none_id),
+        "slice(b,0,5) OOB must be None; got {r_oob2:?}"
     );
 }
 
@@ -216,90 +279,42 @@ fn read_bytes_tracked_accepts() {
 }
 
 // ============================================================
-// AC3 — I/O is effect-tracked: Net escape check
+// AC3 — two real producer rows remain distinct
 // ============================================================
 
-/// `surface/bytes-io/send-untracked-is-type-error` (soundness)
-///
-/// `send` visits `[Net]`; calling it without declaring `[Net]` must be
-/// rejected. This is a DISTINCT effect class from AC2's `[FS]` — same
-/// metatheory shape, different label. Verdict FLIPS against `send-tracked-accepts`.
+/// The direct two-producer discriminator uses only landed operations:
+/// `read_bytes : [FS]` and `print_line : [Console]`.
 #[test]
-fn send_untracked_is_type_error() {
+fn fs_and_console_real_producer_rows_are_distinct() {
     let env = ElabEnv::new().expect("ElabEnv::new()");
-    let seed = env.bytes_env.io_effect_rows.clone();
-
-    let caller = EffectDecl::new("caller").with_callee("send");
-    let rows = infer_all(&seed, &[caller.clone()]);
-
-    let mut witnesses = WitnessMap::new();
-    witnesses.insert("Net".to_string(), "send".to_string());
-
-    let err = check_escape(&caller, &rows["caller"], &witnesses)
-        .expect_err("Net must escape when not declared — must reject");
-    match err {
-        EffectError::EffectEscapes { witnesses: ws, .. } => {
-            assert!(
-                ws.iter().any(|(e, _)| e == "Net"),
-                "error must name Net as the escaping effect"
-            );
-        }
-        other => panic!("expected EffectEscapes, got {:?}", other),
-    }
-}
-
-/// `surface/bytes-io/send-tracked-accepts` (oracle)
-///
-/// Same caller but declares `visits [Net]` — escape check accepts.
-/// Verdict FLIPS against `send-untracked-is-type-error`.
-#[test]
-fn send_tracked_accepts() {
-    let env = ElabEnv::new().expect("ElabEnv::new()");
-    let seed = env.bytes_env.io_effect_rows.clone();
-
-    let net_row = seed
-        .get("send")
-        .cloned()
-        .expect("send must be registered with an effect row in L6");
-
-    let caller = EffectDecl::new("caller")
-        .with_declared_row(net_row)
-        .with_callee("send");
-    let rows = infer_all(&seed, &[caller.clone()]);
-
-    check_escape(&caller, &rows["caller"], &WitnessMap::new())
-        .expect("declared [Net] must accept send — no escape");
-}
-
-/// `surface/bytes-io/fs-and-net-effects-are-distinct` (oracle)
-///
-/// Declaring only `[FS]` does NOT cover `[Net]` — and vice versa.
-/// Ensures AC2 and AC3 test different effect classes (cross-case consistency).
-#[test]
-fn fs_and_net_effects_are_distinct() {
-    let env = ElabEnv::new().expect("ElabEnv::new()");
-    let seed = env.bytes_env.io_effect_rows.clone();
+    let mut seed = env.bytes_env.io_effect_rows.clone();
+    seed.insert(
+        "print_line".to_string(),
+        env.effect_rows["print_line"].concrete_effects(),
+    );
 
     let fs_row = seed
         .get("read_bytes")
         .cloned()
         .expect("read_bytes registered");
 
-    // Caller declares [FS] only but calls both: Net must escape.
     let caller = EffectDecl::new("caller")
         .with_declared_row(fs_row)
         .with_callee("read_bytes")
-        .with_callee("send");
+        .with_callee("print_line");
     let rows = infer_all(&seed, &[caller.clone()]);
 
     let mut witnesses = WitnessMap::new();
-    witnesses.insert("Net".to_string(), "send".to_string());
+    witnesses.insert("Console".to_string(), "print_line".to_string());
 
     let err = check_escape(&caller, &rows["caller"], &witnesses)
-        .expect_err("[FS] declaration must not cover [Net] — must reject");
+        .expect_err("[FS] declaration must not cover [Console]");
     match err {
         EffectError::EffectEscapes { witnesses: ws, .. } => {
-            assert!(ws.iter().any(|(e, _)| e == "Net"), "Net must escape");
+            assert!(
+                ws.iter().any(|(e, _)| e == "Console"),
+                "Console must escape"
+            );
             assert!(!ws.iter().any(|(e, _)| e == "FS"), "FS must not escape");
         }
         other => panic!("expected EffectEscapes; got {:?}", other),
@@ -312,18 +327,24 @@ fn fs_and_net_effects_are_distinct() {
 
 /// `surface/bytes-io/decode-invalid-utf8-returns-error` (oracle)
 ///
-/// `bytes_decode` is partial: `0xFF` is not valid UTF-8 → returns Neutral
-/// (representing `Err(_)`). A bug that silently produces a string from
-/// invalid bytes would return `Str(_)` instead.
+/// `bytes_decode` returns an explicit `Err Utf8Error` on invalid input.
 #[test]
 fn decode_invalid_utf8_returns_error() {
-    // 0xFF is not valid UTF-8.
-    let result = prim_reduce("bytes_decode", &[EvalVal::Bytes(vec![0xFF])]);
+    let env = ElabEnv::new().expect("ElabEnv::new()");
+    let mut store = EvalStore::new();
+    let result = prim_reduce_elaborated(
+        "bytes_decode",
+        &[EvalVal::Bytes(vec![0xFF])],
+        &env,
+        &mut store,
+    );
+    let err_id = env.globals["Err"];
+    let invalid_id = env.globals["InvalidUtf8"];
     assert!(
-        matches!(result, EvalVal::Neutral),
-        "bytes_decode 0xFF must return Neutral (Err); implicit charset coercion \
-         would return Str — got {:?}",
-        result
+        matches!(result, EvalVal::Ctor { id, ref args, .. }
+            if id == err_id
+                && matches!(args.last(), Some(EvalVal::Ctor { id, .. }) if *id == invalid_id)),
+        "bytes_decode 0xFF must return Err InvalidUtf8; got {result:?}"
     );
 }
 
@@ -333,15 +354,19 @@ fn decode_invalid_utf8_returns_error() {
 /// Verdict FLIPS against `decode-invalid-utf8-returns-error`.
 #[test]
 fn decode_valid_utf8_returns_string() {
-    // "hello" in UTF-8.
-    let result = prim_reduce(
+    let env = ElabEnv::new().expect("ElabEnv::new()");
+    let mut store = EvalStore::new();
+    let result = prim_reduce_elaborated(
         "bytes_decode",
         &[EvalVal::Bytes(b"hello".to_vec())],
+        &env,
+        &mut store,
     );
-    assert_eq!(
-        result,
-        EvalVal::Str("hello".to_string()),
-        "bytes_decode valid UTF-8 must return Str"
+    assert!(
+        matches!(result, EvalVal::Ctor { id, ref args, .. }
+            if id == env.globals["Ok"]
+                && matches!(args.last(), Some(EvalVal::Str(text)) if text == "hello")),
+        "bytes_decode valid UTF-8 must return Ok String; got {result:?}"
     );
 }
 
@@ -458,15 +483,24 @@ fn decode_encode_roundtrip_provable() {
 /// `0x[c3 a9]` (U+00E9), distinct from `0x[65 cc 81]`.
 #[test]
 fn reverse_roundtrip_is_not_a_law() {
+    let env = ElabEnv::new().expect("ElabEnv::new()");
+    let mut store = EvalStore::new();
     // NFD "é": e (0x65) + combining acute accent (U+0301 = 0xCC 0x81)
     let nfd_e_acute: Vec<u8> = vec![0x65, 0xCC, 0x81];
 
     // Step 1: decode the NFD bytes — valid UTF-8, produces a String.
-    let decoded = prim_reduce("bytes_decode", &[EvalVal::Bytes(nfd_e_acute.clone())]);
-    let EvalVal::Str(ref s) = decoded else {
-        // NFD is valid UTF-8; if decode returns Neutral here it's an
-        // implementation bug, not the expected outcome.
-        panic!("NFD bytes are valid UTF-8; decode must return Str, got {:?}", decoded);
+    let decoded = prim_reduce_elaborated(
+        "bytes_decode",
+        &[EvalVal::Bytes(nfd_e_acute.clone())],
+        &env,
+        &mut store,
+    );
+    let EvalVal::Ctor { id, ref args, .. } = decoded else {
+        panic!("NFD bytes are valid UTF-8; decode must return Ok, got {decoded:?}");
+    };
+    assert_eq!(id, env.globals["Ok"]);
+    let Some(EvalVal::Str(s)) = args.last() else {
+        panic!("decode Ok payload must be a String, got {decoded:?}");
     };
 
     // Step 2: re-encode the decoded string.
@@ -478,14 +512,17 @@ fn reverse_roundtrip_is_not_a_law() {
     // The forward round-trip still holds for the string that was decoded.
     // The KEY asymmetry: bytes → decode → encode may NOT reproduce the original
     // bytes if they were non-canonical (NFD vs NFC). This is the spec's witness.
-    let forward_check = prim_reduce(
+    let forward_check = prim_reduce_elaborated(
         "bytes_decode",
         &[EvalVal::Bytes(reenc_bytes.clone())],
+        &env,
+        &mut store,
     );
-    assert_eq!(
-        forward_check,
-        EvalVal::Str(s.clone()),
-        "forward round-trip decode(encode(s)) must still hold for the decoded string"
+    assert!(
+        matches!(forward_check, EvalVal::Ctor { id, ref args, .. }
+            if id == env.globals["Ok"]
+                && matches!(args.last(), Some(EvalVal::Str(text)) if text == s)),
+        "forward round-trip decode(encode(s)) must still return Ok s; got {forward_check:?}"
     );
 
     // Assert the non-NFC witness: original NFD bytes ≠ NFC bytes

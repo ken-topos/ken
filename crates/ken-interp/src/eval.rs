@@ -1290,33 +1290,6 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         // ── Bytes primitive ops (`38 §1.2`) ──────────────────────────────────
         ("bytes_length", [EvalVal::Bytes(b)]) => EvalVal::Int(b.len() as i64),
 
-        // `at b i` — in-bounds: byte as Int; OOB: Neutral (no silent OOB read).
-        ("bytes_at", [EvalVal::Bytes(b), EvalVal::Int(i)]) => {
-            let idx = *i;
-            if idx >= 0 && (idx as usize) < b.len() {
-                EvalVal::Int(b[idx as usize] as i64)
-            } else {
-                EvalVal::Neutral
-            }
-        }
-
-        // `slice b start len` — in-bounds: sub-slice as Bytes; OOB: Neutral.
-        ("bytes_slice", [EvalVal::Bytes(b), EvalVal::Int(start), EvalVal::Int(len)]) => {
-            let s = *start;
-            let l = *len;
-            if s >= 0 && l >= 0 {
-                let s = s as usize;
-                let l = l as usize;
-                if s <= b.len() && l <= b.len() - s {
-                    EvalVal::Bytes(b[s..s + l].to_vec())
-                } else {
-                    EvalVal::Neutral
-                }
-            } else {
-                EvalVal::Neutral
-            }
-        }
-
         ("bytes_concat", [EvalVal::Bytes(a), EvalVal::Bytes(b)]) => {
             let mut out = a.clone();
             out.extend_from_slice(b);
@@ -1327,11 +1300,10 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         // encode: total — String is always valid UTF-8 at construction.
         ("bytes_encode", [EvalVal::Str(s)]) => EvalVal::Bytes(s.as_bytes().to_vec()),
 
-        // decode: partial — Neutral on invalid UTF-8 (represents Err(_)).
-        ("bytes_decode", [EvalVal::Bytes(b)]) => match std::str::from_utf8(b) {
-            Ok(s) => EvalVal::Str(s.to_string()),
-            Err(_) => EvalVal::Neutral,
-        },
+        // The safe `bytes_at`, `bytes_slice`, and `bytes_decode` reductions
+        // require their elaborated Option/Result constructor identities and
+        // are therefore handled by `prim_reduce_elaborated`, not this
+        // environment-free helper.
 
         // ── L3a String surface ops (`37 §2`) ───────────────────────────────
         // `byte_length s` — the stored UTF-8 byte count (`37 §2.2`). Real now
@@ -1597,6 +1569,9 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
                                 }
                             }
                         }
+                        if matches!(*symbol, "bytes_at" | "bytes_slice" | "bytes_decode") {
+                            return reduce_safe_bytes_primitive(id, symbol, &args, globals, store);
+                        }
                         return prim_reduce(symbol, &args);
                     }
                 }
@@ -1640,6 +1615,150 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
 
         // --- Neutral: remain stuck ---
         _ => EvalVal::Neutral,
+    }
+}
+
+fn primitive_result_type<'a>(id: GlobalId, globals: &'a GlobalEnv) -> Option<&'a Term> {
+    let Decl::Primitive { ty, .. } = globals.lookup(id)? else {
+        return None;
+    };
+    let mut result = ty;
+    while let Term::Pi(_, codomain) = result {
+        result = codomain;
+    }
+    Some(result)
+}
+
+fn type_application(term: &Term) -> Option<(GlobalId, Vec<&Term>)> {
+    let mut args = Vec::new();
+    let mut head = term;
+    while let Term::App(function, argument) = head {
+        args.push(argument.as_ref());
+        head = function;
+    }
+    args.reverse();
+    let Term::IndFormer { id, .. } = head else {
+        return None;
+    };
+    Some((*id, args))
+}
+
+fn reduce_safe_bytes_primitive(
+    primitive_id: GlobalId,
+    symbol: &str,
+    args: &[EvalVal],
+    globals: &GlobalEnv,
+    store: &mut EvalStore,
+) -> EvalVal {
+    let Some((result_family, result_params)) =
+        primitive_result_type(primitive_id, globals).and_then(type_application)
+    else {
+        return EvalVal::Neutral;
+    };
+    let Some(result_decl) = globals.inductive(result_family) else {
+        return EvalVal::Neutral;
+    };
+    let type_args = || vec![EvalVal::Neutral; result_params.len()];
+
+    match (symbol, args) {
+        ("bytes_at", [EvalVal::Bytes(bytes), EvalVal::Int(index)]) => {
+            let Some(none) = result_decl.constructors.first() else {
+                return EvalVal::Neutral;
+            };
+            let Some(some) = result_decl.constructors.get(1) else {
+                return EvalVal::Neutral;
+            };
+            match usize::try_from(*index)
+                .ok()
+                .and_then(|index| bytes.get(index).copied())
+            {
+                Some(byte) => {
+                    let mut ctor_args = type_args();
+                    ctor_args.push(EvalVal::Int(i64::from(byte)));
+                    make_ctor(some.id, ctor_args, store)
+                }
+                None => make_ctor(none.id, type_args(), store),
+            }
+        }
+        ("bytes_slice", [EvalVal::Bytes(bytes), EvalVal::Int(start), EvalVal::Int(len)]) => {
+            let Some(none) = result_decl.constructors.first() else {
+                return EvalVal::Neutral;
+            };
+            let Some(some) = result_decl.constructors.get(1) else {
+                return EvalVal::Neutral;
+            };
+            let slice = usize::try_from(*start)
+                .ok()
+                .zip(usize::try_from(*len).ok())
+                .and_then(|(start, len)| {
+                    start
+                        .checked_add(len)
+                        .filter(|end| *end <= bytes.len())
+                        .map(|end| bytes[start..end].to_vec())
+                });
+            match slice {
+                Some(slice) => {
+                    let mut ctor_args = type_args();
+                    ctor_args.push(EvalVal::Bytes(slice));
+                    make_ctor(some.id, ctor_args, store)
+                }
+                None => make_ctor(none.id, type_args(), store),
+            }
+        }
+        ("bytes_decode", [EvalVal::Bytes(bytes)]) => {
+            let Some(err) = result_decl.constructors.first() else {
+                return EvalVal::Neutral;
+            };
+            let Some(ok) = result_decl.constructors.get(1) else {
+                return EvalVal::Neutral;
+            };
+            match std::str::from_utf8(bytes) {
+                Ok(string) => {
+                    let mut ctor_args = type_args();
+                    ctor_args.push(EvalVal::Str(string.to_string()));
+                    make_ctor(ok.id, ctor_args, store)
+                }
+                Err(_) => {
+                    let Some(error_ty) = result_params.first() else {
+                        return EvalVal::Neutral;
+                    };
+                    let Some((error_family, _)) = type_application(error_ty) else {
+                        return EvalVal::Neutral;
+                    };
+                    let Some(error_ctor) = globals
+                        .inductive(error_family)
+                        .and_then(|decl| decl.constructors.first())
+                    else {
+                        return EvalVal::Neutral;
+                    };
+                    let error = make_ctor(error_ctor.id, vec![], store);
+                    let mut ctor_args = type_args();
+                    ctor_args.push(error);
+                    make_ctor(err.id, ctor_args, store)
+                }
+            }
+        }
+        _ => EvalVal::Neutral,
+    }
+}
+
+/// Reduce a registered primitive with access to its elaborated result type.
+/// Safe Bytes primitives need that type to construct real `Option`/`Result`
+/// values; the legacy pure `prim_reduce` helper deliberately has no global
+/// environment and therefore cannot manufacture constructor identities.
+pub fn prim_reduce_elaborated(
+    symbol: &str,
+    args: &[EvalVal],
+    elab: &ken_elaborator::ElabEnv,
+    store: &mut EvalStore,
+) -> EvalVal {
+    if matches!(symbol, "bytes_at" | "bytes_slice" | "bytes_decode") {
+        let Some(id) = elab.globals.get(symbol).copied() else {
+            return EvalVal::Neutral;
+        };
+        reduce_safe_bytes_primitive(id, symbol, args, &elab.env, store)
+    } else {
+        prim_reduce(symbol, args)
     }
 }
 

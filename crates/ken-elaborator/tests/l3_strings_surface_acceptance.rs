@@ -16,7 +16,7 @@
 //! - DS-AC4 `string-eq-codepoint-wise-accept-reject-pair` +
 //!   `string-compare-3way-lexicographic-triple` +
 //!   `list-eq-is-codepoint-wise-not-nfc-folding`.
-//! - DS-AC6 `list-append-does-not-shadow-bytes-append`.
+//! - DS-AC6 distinct pure `list_append`/`bytes_concat` operations.
 //! - DS-AC7 `concat-slice-compose-and-floor-totality`.
 
 use ken_elaborator::{foreign::trusted_base_delta, ElabEnv, NumericLitVal};
@@ -388,27 +388,25 @@ fn list_eq_is_codepoint_wise_not_nfc_folding() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DS-AC6 — `list-append-does-not-shadow-bytes-append`
+// DS-AC6 — pure List/Bytes concatenation operations stay distinct
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
-fn list_append_does_not_shadow_bytes_append() {
+fn list_append_and_bytes_concat_are_distinct_pure_operations() {
     let env = mk_env();
     let list_append_id = env.globals["list_append"];
-    let bytes_append_id = env.globals["append"];
+    let bytes_concat_id = env.globals["bytes_concat"];
     assert_ne!(
-        list_append_id, bytes_append_id,
-        "list_append must be a distinct global from the Bytes-domain append"
+        list_append_id, bytes_concat_id,
+        "list_append and bytes_concat must resolve to their distinct intended globals"
     );
-    // The Bytes `append`'s `[FS]` effect row is keyed by name in `bytes_env`;
-    // `list_append` must not appear there (it's the pure List op).
     assert!(
         !env.bytes_env.io_effect_rows.contains_key("list_append"),
-        "list_append must not carry the Bytes [FS] effect row"
+        "list_append must remain pure"
     );
     assert!(
-        env.bytes_env.io_effect_rows.contains_key("append"),
-        "sanity: the landed Bytes append really is FS-effectful"
+        !env.bytes_env.io_effect_rows.contains_key("bytes_concat"),
+        "bytes_concat must remain a pure Bytes operation"
     );
 }
 

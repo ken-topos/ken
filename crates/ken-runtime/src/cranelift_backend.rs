@@ -1579,6 +1579,7 @@ impl<'a> Lowering<'a> {
 
         match &primitive.partiality {
             RuntimePartiality::Total => {}
+            RuntimePartiality::SafeOption { .. } | RuntimePartiality::SafeResult { .. } => {}
             RuntimePartiality::CheckedTrap { obligation } => {
                 self.assumptions.insert(format!(
                     "checked partial obligation {obligation} not discharged"
@@ -1656,11 +1657,11 @@ impl<'a> Lowering<'a> {
                 |lhs, rhs| lhs || rhs,
             ),
             "bytes_length" => self.lower_bytes_length(builder, lowered_args),
-            "bytes_at" => self.lower_bytes_at(builder, lowered_args),
-            "bytes_slice" => self.lower_bytes_slice(lowered_args),
+            "bytes_at" => self.lower_bytes_at(builder, lowered_args, &primitive.partiality),
+            "bytes_slice" => self.lower_bytes_slice(lowered_args, &primitive.partiality),
             "bytes_concat" => self.lower_bytes_concat(lowered_args),
             "bytes_encode" => self.lower_bytes_encode(lowered_args),
-            "bytes_decode" => self.lower_bytes_decode(lowered_args),
+            "bytes_decode" => self.lower_bytes_decode(lowered_args, &primitive.partiality),
             "byte_length" => self.lower_string_byte_length(builder, lowered_args),
             "char_length" => self.lower_string_char_length(builder, lowered_args),
             other => Err(unsupported(
@@ -1840,7 +1841,14 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         args: Vec<Lowered>,
+        partiality: &RuntimePartiality,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let RuntimePartiality::SafeOption { none, some, .. } = partiality else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "bytes_at requires safe Option result metadata",
+            ));
+        };
         let (bytes, index) = expect_two_args("bytes_at", args)?;
         let (
             Lowered::Bytes(bytes),
@@ -1854,22 +1862,35 @@ impl<'a> Lowering<'a> {
                 "bytes_at requires Bytes and statically known Int arguments",
             ));
         };
-        let Some(byte) = usize::try_from(index)
+        let byte = usize::try_from(index)
             .ok()
-            .and_then(|index| bytes.get(index).copied())
-        else {
-            return Ok(Lowered::Trap(RuntimeTrap {
-                code: RuntimeTrapCode::ExplicitTrap,
-                message: "bytes_at bounds obligation failed".to_string(),
-            }));
-        };
-        Ok(Lowered::Int {
-            value: builder.ins().iconst(types::I64, i64::from(byte)),
-            known: Some(i64::from(byte)),
+            .and_then(|index| bytes.get(index).copied());
+        Ok(match byte {
+            Some(byte) => Lowered::Constructor {
+                constructor: some.clone(),
+                args: vec![Lowered::Int {
+                    value: builder.ins().iconst(types::I64, i64::from(byte)),
+                    known: Some(i64::from(byte)),
+                }],
+            },
+            None => Lowered::Constructor {
+                constructor: none.clone(),
+                args: Vec::new(),
+            },
         })
     }
 
-    fn lower_bytes_slice(&mut self, args: Vec<Lowered>) -> Result<Lowered, CraneliftBackendError> {
+    fn lower_bytes_slice(
+        &mut self,
+        args: Vec<Lowered>,
+        partiality: &RuntimePartiality,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let RuntimePartiality::SafeOption { none, some, .. } = partiality else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "bytes_slice requires safe Option result metadata",
+            ));
+        };
         let [bytes, start, len]: [Lowered; 3] = args.try_into().map_err(|args: Vec<Lowered>| {
             unsupported(
                 "PrimitiveCall",
@@ -1891,19 +1912,25 @@ impl<'a> Lowering<'a> {
                 "bytes_slice requires Bytes and statically known Int bounds",
             ));
         };
-        let (Ok(start), Ok(len)) = (usize::try_from(start), usize::try_from(len)) else {
-            return Ok(Lowered::Trap(RuntimeTrap {
-                code: RuntimeTrapCode::ExplicitTrap,
-                message: "bytes_slice bounds obligation failed".to_string(),
-            }));
-        };
-        let Some(end) = start.checked_add(len).filter(|end| *end <= bytes.len()) else {
-            return Ok(Lowered::Trap(RuntimeTrap {
-                code: RuntimeTrapCode::ExplicitTrap,
-                message: "bytes_slice bounds obligation failed".to_string(),
-            }));
-        };
-        Ok(Lowered::Bytes(bytes[start..end].to_vec()))
+        let value = usize::try_from(start)
+            .ok()
+            .zip(usize::try_from(len).ok())
+            .and_then(|(start, len)| {
+                start
+                    .checked_add(len)
+                    .filter(|end| *end <= bytes.len())
+                    .map(|end| bytes[start..end].to_vec())
+            });
+        Ok(match value {
+            Some(bytes) => Lowered::Constructor {
+                constructor: some.clone(),
+                args: vec![Lowered::Bytes(bytes)],
+            },
+            None => Lowered::Constructor {
+                constructor: none.clone(),
+                args: Vec::new(),
+            },
+        })
     }
 
     fn lower_bytes_concat(&mut self, args: Vec<Lowered>) -> Result<Lowered, CraneliftBackendError> {
@@ -1934,7 +1961,17 @@ impl<'a> Lowering<'a> {
         Ok(Lowered::Bytes(value.into_bytes()))
     }
 
-    fn lower_bytes_decode(&mut self, args: Vec<Lowered>) -> Result<Lowered, CraneliftBackendError> {
+    fn lower_bytes_decode(
+        &mut self,
+        args: Vec<Lowered>,
+        partiality: &RuntimePartiality,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let RuntimePartiality::SafeResult { err, ok, error } = partiality else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "bytes_decode requires safe Result metadata",
+            ));
+        };
         let [arg]: [Lowered; 1] = args.try_into().map_err(|args: Vec<Lowered>| {
             unsupported(
                 "PrimitiveCall",
@@ -1947,11 +1984,18 @@ impl<'a> Lowering<'a> {
                 "bytes_decode only supports Bytes arguments in native lowering",
             ));
         };
-        String::from_utf8(value).map(Lowered::String).map_err(|_| {
-            unsupported(
-                "PrimitiveCall",
-                "bytes_decode only supports valid UTF-8 bytes in native lowering",
-            )
+        Ok(match String::from_utf8(value) {
+            Ok(value) => Lowered::Constructor {
+                constructor: ok.clone(),
+                args: vec![Lowered::String(value)],
+            },
+            Err(_) => Lowered::Constructor {
+                constructor: err.clone(),
+                args: vec![Lowered::Constructor {
+                    constructor: error.clone(),
+                    args: Vec::new(),
+                }],
+            },
         })
     }
 
@@ -3205,15 +3249,112 @@ mod tests {
     }
 
     #[test]
+    fn safe_bytes_at_oob_lowers_to_none_with_bounds_obligation() {
+        let none = "ctor:fixture::Option::None".to_string();
+        let some = "ctor:fixture::Option::Some".to_string();
+        let example = RuntimeExample {
+            name: "safe-bytes-at-oob".to_string(),
+            checked_core_shape: "bytes_at empty 0 : Option UInt8".to_string(),
+            ir: RuntimeExpr::PrimitiveCall {
+                primitive: RuntimePrimitive {
+                    symbol: "bytes_at".to_string(),
+                    partiality: RuntimePartiality::SafeOption {
+                        none: none.clone(),
+                        some,
+                        obligation: Some("obl:bytes_at.bounds".to_string()),
+                    },
+                },
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Bytes(Vec::new())),
+                    RuntimeExpr::Value(RuntimeValue::Int(0)),
+                ],
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Constructor {
+                constructor: none,
+                args: Vec::new(),
+            }),
+        };
+
+        let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+            .expect("safe bytes_at native lowering succeeds");
+        assert!(report.verifier_passed);
+        assert_eq!(report.observation, example.observation);
+    }
+
+    #[test]
+    fn safe_bytes_slice_and_decode_native_results_are_explicit() {
+        let none = "ctor:fixture::Option::None".to_string();
+        let some = "ctor:fixture::Option::Some".to_string();
+        let err = "ctor:fixture::Result::Err".to_string();
+        let ok = "ctor:fixture::Result::Ok".to_string();
+        let invalid = "ctor:fixture::Utf8Error::InvalidUtf8".to_string();
+        let examples = [
+            RuntimeExample {
+                name: "safe-bytes-slice".to_string(),
+                checked_core_shape: "bytes_slice [0,1,2] 1 2".to_string(),
+                ir: RuntimeExpr::PrimitiveCall {
+                    primitive: RuntimePrimitive {
+                        symbol: "bytes_slice".to_string(),
+                        partiality: RuntimePartiality::SafeOption {
+                            none,
+                            some: some.clone(),
+                            obligation: None,
+                        },
+                    },
+                    args: vec![
+                        RuntimeExpr::Value(RuntimeValue::Bytes(vec![0, 1, 2])),
+                        RuntimeExpr::Value(RuntimeValue::Int(1)),
+                        RuntimeExpr::Value(RuntimeValue::Int(2)),
+                    ],
+                },
+                observation: RuntimeObservation::Returned(RuntimeGroundValue::Constructor {
+                    constructor: some,
+                    args: vec![RuntimeGroundValue::Bytes(vec![1, 2])],
+                }),
+            },
+            RuntimeExample {
+                name: "safe-bytes-decode-invalid".to_string(),
+                checked_core_shape: "bytes_decode [255]".to_string(),
+                ir: RuntimeExpr::PrimitiveCall {
+                    primitive: RuntimePrimitive {
+                        symbol: "bytes_decode".to_string(),
+                        partiality: RuntimePartiality::SafeResult {
+                            err: err.clone(),
+                            ok,
+                            error: invalid.clone(),
+                        },
+                    },
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Bytes(vec![0xff]))],
+                },
+                observation: RuntimeObservation::Returned(RuntimeGroundValue::Constructor {
+                    constructor: err,
+                    args: vec![RuntimeGroundValue::Constructor {
+                        constructor: invalid,
+                        args: Vec::new(),
+                    }],
+                }),
+            },
+        ];
+
+        for example in examples {
+            let report =
+                run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+                    .expect("safe Bytes native lowering succeeds");
+            assert!(report.verifier_passed);
+            assert_eq!(report.observation, example.observation);
+        }
+    }
+
+    #[test]
     fn checked_partial_primitive_still_rejects_unknown_arguments() {
         let example = RuntimeExample {
             name: "unknown-partial-arg".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::PrimitiveCall {
                 primitive: RuntimePrimitive {
-                    symbol: "bytes_at".to_string(),
+                    symbol: "checked_index".to_string(),
                     partiality: RuntimePartiality::CheckedTrap {
-                        obligation: "obl:bytes_at.bounds".to_string(),
+                        obligation: "obl:checked_index.bounds".to_string(),
                     },
                 },
                 args: vec![RuntimeExpr::Value(RuntimeValue::Unknown)],

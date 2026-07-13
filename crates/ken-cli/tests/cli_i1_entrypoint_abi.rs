@@ -97,9 +97,12 @@ proc main (input : ProcessInput) (_caps : ProgramCaps)
       match arguments {
         Nil |-> host_exit (Failure 2) ;
         Cons bytes _rest |->
-          match eq_int (bytes_at bytes 0) 255 {
-            True  |-> host_program (print_line "raw-ok") ;
-            False |-> host_exit (Failure 3)
+          match bytes_at bytes 0 {
+            None |-> host_exit (Failure 3) ;
+            Some byte |-> match eq_int (uint8_to_int byte) 255 {
+              True  |-> host_program (print_line "raw-ok") ;
+              False |-> host_exit (Failure 3)
+            }
           }
       }
   }

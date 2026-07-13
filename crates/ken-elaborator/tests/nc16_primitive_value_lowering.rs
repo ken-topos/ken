@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use ken_elaborator::checked_core::{
     canonical_decl_bytes, emit_checked_core_package, CheckedCoreArtifactInputs, CheckedCorePackage,
-    CheckedCorePackageHeader, CheckedCoreSemanticInputs, LowerabilityStatus, ObligationMetadata,
-    ObligationStatus, PartialityMetadata, PrimitiveMetadata, PrimitiveReductionMetadata,
-    StableSymbol, StableSymbolTable, SymbolNamespace,
+    CheckedCorePackageHeader, CheckedCoreSemanticInputs, LowerabilityStatus, PartialityMetadata,
+    PrimitiveMetadata, PrimitiveReductionMetadata, StableSymbol, StableSymbolTable,
+    SymbolNamespace,
 };
 use ken_elaborator::erasure::{erase_checked_core_package_for_target, ErasureError};
 use ken_interp::{eval, EvalStore, EvalVal};
@@ -14,7 +14,7 @@ use ken_runtime::{
     RuntimeArtifactIdentity, RuntimeDeclarationKind, RuntimeExample, RuntimeGroundValue,
     RuntimeInterpreterObservation, RuntimeIrDifferentialStage, RuntimeIrDifferentialVerdict,
     RuntimeIrSeedEnvironment, RuntimeIrTargetIdentity, RuntimeObservation, RuntimePartiality,
-    RuntimePrimitive, RuntimeTrap, RuntimeTrapCode,
+    RuntimePrimitive,
 };
 
 fn decl_symbol(package: &str, name: &str) -> StableSymbol {
@@ -134,12 +134,6 @@ fn primitive_package(
     )
     .expect("checked-core package emits");
     (package, target)
-}
-
-fn reemit(mut package: CheckedCorePackage) -> CheckedCorePackage {
-    package.header.dependency_semantic_hashes =
-        package.artifact.semantic.dependency_semantic_hashes.clone();
-    emit_checked_core_package(package.header, package.artifact).expect("package re-emits")
 }
 
 fn lowered_body(
@@ -434,7 +428,7 @@ fn primitive_bool_string_and_bytes_values_lower_and_evaluate() {
 }
 
 #[test]
-fn checked_partial_primitive_application_reports_explicit_trap() {
+fn safe_bytes_at_lowering_returns_none_and_carries_bounds_obligation() {
     let package_name = "nc16_partial_pkg";
     let target = decl_symbol(package_name, "target");
     let empty = StableSymbol::primitive("lit_bytes_hex_");
@@ -447,7 +441,7 @@ fn checked_partial_primitive_application_reports_explicit_trap() {
         (GlobalId(42), bytes_at.clone()),
     ]);
     let obligation = StableSymbol::obligation("bytes_at.bounds");
-    let (mut package, target) = primitive_package(
+    let (package, target) = primitive_package(
         package_name,
         app2(
             primitive_const(GlobalId(42)),
@@ -471,40 +465,23 @@ fn checked_partial_primitive_application_reports_explicit_trap() {
             (
                 "bytes_at",
                 PrimitiveReductionMetadata::Op,
-                PartialityMetadata::CheckedPartial {
-                    obligation: obligation.clone(),
-                },
+                PartialityMetadata::Total,
                 LowerabilityStatus::Supported,
             ),
         ],
     );
-    package.artifact.semantic.symbols.insert(obligation.clone());
-    package
-        .artifact
-        .semantic
-        .obligations
-        .insert(obligation.clone(), b"bytes_at bounds check".to_vec());
-    package.artifact.semantic.obligation_metadata.insert(
-        obligation.clone(),
-        ObligationMetadata {
-            status: ObligationStatus::Unknown,
-            origin: bytes_at,
-            affects_runtime_meaning: true,
-        },
-    );
-    let package = reemit(package);
 
     let program = erase_checked_core_package_for_target(&package, [&target])
-        .expect("checked partial primitive body lowers");
+        .expect("safe bytes_at primitive body lowers");
     let body = lowered_body(&program, &target);
 
     let observation = evaluate_runtime_ir_expr(&body, &RuntimeIrSeedEnvironment::empty())
-        .expect("checked partial primitive reports a runtime trap");
+        .expect("safe bytes_at evaluates to None");
     assert_eq!(
         observation,
-        RuntimeObservation::Trapped(RuntimeTrap {
-            code: RuntimeTrapCode::ExplicitTrap,
-            message: "bytes_at bounds obligation failed".to_string(),
+        RuntimeObservation::Returned(RuntimeGroundValue::Constructor {
+            constructor: "ctor:nc16_partial_pkg::Option::None".to_string(),
+            args: Vec::new(),
         })
     );
     let ken_runtime::RuntimeExpr::PrimitiveCall { primitive, .. } = body else {
@@ -514,8 +491,10 @@ fn checked_partial_primitive_application_reports_explicit_trap() {
         primitive,
         RuntimePrimitive {
             symbol: "bytes_at".to_string(),
-            partiality: RuntimePartiality::CheckedTrap {
-                obligation: obligation.to_string(),
+            partiality: RuntimePartiality::SafeOption {
+                none: "ctor:nc16_partial_pkg::Option::None".to_string(),
+                some: "ctor:nc16_partial_pkg::Option::Some".to_string(),
+                obligation: Some(obligation.to_string()),
             },
         }
     );

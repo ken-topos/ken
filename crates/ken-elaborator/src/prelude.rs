@@ -213,6 +213,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Option failed: {}", e)))?;
     elab.elaborate_decl("data Result e a = Err e | Ok a")
         .map_err(|e| ElabError::Internal(format!("prelude Result failed: {}", e)))?;
+    elab.elaborate_decl("data Utf8Error = InvalidUtf8")
+        .map_err(|e| ElabError::Internal(format!("prelude Utf8Error failed: {}", e)))?;
     elab.elaborate_decl("data Prod a b = MkProd a b")
         .map_err(|e| ElabError::Internal(format!("prelude Prod failed: {}", e)))?;
 

@@ -1474,6 +1474,7 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
 
         match &primitive.partiality {
             RuntimePartiality::Total => {}
+            RuntimePartiality::SafeOption { .. } | RuntimePartiality::SafeResult { .. } => {}
             RuntimePartiality::CheckedTrap { obligation } => {
                 let message = if obligation.ends_with(".bounds") {
                     format!("{} bounds obligation failed", primitive.symbol)
@@ -1503,11 +1504,11 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
             "and_bool" => eval_bool_binop(&primitive.symbol, args, |lhs, rhs| lhs && rhs),
             "or_bool" => eval_bool_binop(&primitive.symbol, args, |lhs, rhs| lhs || rhs),
             "bytes_length" => eval_bytes_length(&primitive.symbol, args),
-            "bytes_at" => eval_bytes_at(&primitive.symbol, args),
-            "bytes_slice" => eval_bytes_slice(&primitive.symbol, args),
+            "bytes_at" => eval_bytes_at(&primitive.symbol, args, &primitive.partiality),
+            "bytes_slice" => eval_bytes_slice(&primitive.symbol, args, &primitive.partiality),
             "bytes_concat" => eval_bytes_concat(&primitive.symbol, args),
             "bytes_encode" => eval_bytes_encode(&primitive.symbol, args),
-            "bytes_decode" => eval_bytes_decode(&primitive.symbol, args),
+            "bytes_decode" => eval_bytes_decode(&primitive.symbol, args, &primitive.partiality),
             "byte_length" => eval_string_byte_length(&primitive.symbol, args),
             "char_length" => eval_string_char_length(&primitive.symbol, args),
             other => Err(eval_unsupported(
@@ -1574,54 +1575,61 @@ fn eval_bytes_length(
 fn eval_bytes_at(
     symbol: &str,
     args: Vec<EvaluatedValue>,
+    partiality: &RuntimePartiality,
 ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
-    let (bytes, index) = expect_bytes_int(symbol, args)?;
-    let index = usize::try_from(index).map_err(|_| {
-        eval_unsupported(
-            "PrimitiveCall",
-            format!("{symbol} index must be non-negative"),
-        )
-    })?;
-    let Some(byte) = bytes.get(index) else {
+    let RuntimePartiality::SafeOption { none, some, .. } = partiality else {
         return Err(eval_unsupported(
             "PrimitiveCall",
-            format!("{symbol} index {index} is outside the byte buffer"),
+            format!("{symbol} requires safe Option result metadata"),
         ));
     };
-    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(i64::from(
-        *byte,
-    ))))
+    let (bytes, index) = expect_bytes_int(symbol, args)?;
+    let value = usize::try_from(index)
+        .ok()
+        .and_then(|index| bytes.get(index).copied());
+    Ok(RuntimeIrOutcome::Value(match value {
+        Some(byte) => EvaluatedValue::Constructor {
+            constructor: some.clone(),
+            args: vec![EvaluatedValue::Int(i64::from(byte))],
+        },
+        None => EvaluatedValue::Constructor {
+            constructor: none.clone(),
+            args: Vec::new(),
+        },
+    }))
 }
 
 fn eval_bytes_slice(
     symbol: &str,
     args: Vec<EvaluatedValue>,
+    partiality: &RuntimePartiality,
 ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
-    let (bytes, start, len) = expect_bytes_int_int(symbol, args)?;
-    let start = usize::try_from(start).map_err(|_| {
-        eval_unsupported(
-            "PrimitiveCall",
-            format!("{symbol} start must be non-negative"),
-        )
-    })?;
-    let len = usize::try_from(len).map_err(|_| {
-        eval_unsupported(
-            "PrimitiveCall",
-            format!("{symbol} length must be non-negative"),
-        )
-    })?;
-    if start > bytes.len() || len > bytes.len() - start {
+    let RuntimePartiality::SafeOption { none, some, .. } = partiality else {
         return Err(eval_unsupported(
             "PrimitiveCall",
-            format!(
-                "{symbol} slice [{start}, {}) is outside the byte buffer",
-                start + len
-            ),
+            format!("{symbol} requires safe Option result metadata"),
         ));
-    }
-    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Bytes(
-        bytes[start..start + len].to_vec(),
-    )))
+    };
+    let (bytes, start, len) = expect_bytes_int_int(symbol, args)?;
+    let value = usize::try_from(start)
+        .ok()
+        .zip(usize::try_from(len).ok())
+        .and_then(|(start, len)| {
+            start
+                .checked_add(len)
+                .filter(|end| *end <= bytes.len())
+                .map(|end| bytes[start..end].to_vec())
+        });
+    Ok(RuntimeIrOutcome::Value(match value {
+        Some(bytes) => EvaluatedValue::Constructor {
+            constructor: some.clone(),
+            args: vec![EvaluatedValue::Bytes(bytes)],
+        },
+        None => EvaluatedValue::Constructor {
+            constructor: none.clone(),
+            args: Vec::new(),
+        },
+    }))
 }
 
 fn eval_bytes_concat(
@@ -1653,15 +1661,28 @@ fn eval_bytes_encode(
 fn eval_bytes_decode(
     symbol: &str,
     args: Vec<EvaluatedValue>,
+    partiality: &RuntimePartiality,
 ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
-    let bytes = expect_one_bytes(symbol, args)?;
-    let value = String::from_utf8(bytes).map_err(|_| {
-        eval_unsupported(
+    let RuntimePartiality::SafeResult { err, ok, error } = partiality else {
+        return Err(eval_unsupported(
             "PrimitiveCall",
-            format!("{symbol} input is not valid UTF-8 in the supported runtime-IR subset"),
-        )
-    })?;
-    Ok(RuntimeIrOutcome::Value(EvaluatedValue::String(value)))
+            format!("{symbol} requires safe Result metadata"),
+        ));
+    };
+    let bytes = expect_one_bytes(symbol, args)?;
+    Ok(RuntimeIrOutcome::Value(match String::from_utf8(bytes) {
+        Ok(value) => EvaluatedValue::Constructor {
+            constructor: ok.clone(),
+            args: vec![EvaluatedValue::String(value)],
+        },
+        Err(_) => EvaluatedValue::Constructor {
+            constructor: err.clone(),
+            args: vec![EvaluatedValue::Constructor {
+                constructor: error.clone(),
+                args: Vec::new(),
+            }],
+        },
+    }))
 }
 
 fn eval_string_byte_length(

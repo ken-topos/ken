@@ -277,7 +277,7 @@ fn declassify_every_use_audited_and_in_delta() {
 // F. Authority + flow compose (AC6)
 // ────────────────────────────────────────────────────────────────────────────
 
-/// F1: `send c s msg` to a Public socket exercised three ways.
+/// F1: a file write to a Public sink exercised three ways.
 ///
 /// (i)  cap present + `msg @ Public` → accepts (both concessions met)
 /// (ii) cap present + `msg @ Secret` → rejects (IFC-FLOW despite holding cap)
@@ -285,32 +285,32 @@ fn declassify_every_use_audited_and_in_delta() {
 ///
 /// Authority and flow are INDEPENDENT gates — neither subsumes the other.
 #[test]
-fn net_write_needs_capability_and_clearance() {
-    let net_row = EffectRow::singleton("Net".to_owned());
+fn file_write_needs_capability_and_clearance() {
+    let fs_row = EffectRow::singleton("FS".to_owned());
     let flow_ctx = FlowCtx::new(); // pc = BOTTOM
 
     // (i) cap present, data PUBLIC → both pass
-    let decl_cap = EffectDecl::new("send")
-        .with_cap_param(CapParam::new("net", "Net"));
+    let decl_cap =
+        EffectDecl::new("write_file").with_cap_param(CapParam::new("fs", "FS"));
     let r1 = check_authority_and_flow(
-        &decl_cap, &net_row, &EffectRow::empty(),
-        &flow_ctx, PUBLIC, PUBLIC, "net_sink",
+        &decl_cap, &fs_row, &EffectRow::empty(),
+        &flow_ctx, PUBLIC, PUBLIC, "file_sink",
     );
     assert!(matches!(r1, AuthAndFlowResult::Accept), "(i) both concessions → Accept");
 
     // (ii) cap present, data SECRET → flow rejects despite holding Cap_Net
     let r2 = check_authority_and_flow(
-        &decl_cap, &net_row, &EffectRow::empty(),
-        &flow_ctx, SECRET, PUBLIC, "net_sink",
+        &decl_cap, &fs_row, &EffectRow::empty(),
+        &flow_ctx, SECRET, PUBLIC, "file_sink",
     );
     assert!(matches!(r2, AuthAndFlowResult::FlowRejected(_)),
         "(ii) Secret to Public sink → FlowRejected despite cap");
 
     // (iii) cap absent, data PUBLIC → cap rejects despite clean flow
-    let decl_no_cap = EffectDecl::new("send_no_cap");
+    let decl_no_cap = EffectDecl::new("write_file_no_cap");
     let r3 = check_authority_and_flow(
-        &decl_no_cap, &net_row, &EffectRow::empty(),
-        &flow_ctx, PUBLIC, PUBLIC, "net_sink",
+        &decl_no_cap, &fs_row, &EffectRow::empty(),
+        &flow_ctx, PUBLIC, PUBLIC, "file_sink",
     );
     assert!(matches!(r3, AuthAndFlowResult::CapRejected(_)),
         "(iii) no cap → CapRejected despite clean flow");
