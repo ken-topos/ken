@@ -14,7 +14,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 46a65fdb`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ feb908e3`
 > **I-2 (CA2 Console floor) CLOSED ✅ `1f85ad9a`** (PR #604; ACs met, all 3 §10 retros
 > in @ 10:28 → task #55 done). **Milestone B's Console effect floor is COMPLETE.** Carry
 > (→ bake into I-3 + host-ABI frames): enrich the existing coproduct summand in place
@@ -50,8 +50,13 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > — CP0 boundary respected). **D2 probe SUCCEEDED — surface match, no `Elim` fallback.**
 > 9 FSOp ctors, shared additive `IOError`+`Other Int`, FS-local `FileError`, atomic-replace,
 > `CaptureHost` virtual FS, coarse AFull-gated authority (gate-before-host proven), zero-TCB.
-> Publishing candidate `3f009f6b` + tracker bundle (CI-poll bg). On merge: relay → 3 §10
-> retros → close I-3.
+> **MERGED ✅ `origin/main @ feb908e3`** (PR #606, squash; CI green). Landed honesty-gate
+> CLEAN: single parent `46a65fdb`, forbidden-path EMPTY, 11 reviewed files + tracker.
+> **Milestone B Console+FS floors BOTH IN + I-3 CLOSED ✅** — all 3 §10 retros in
+> (leader `evt_5a66bwbezppza`/qa `evt_2z6783kgpb273`/impl `evt_7fp3dj90rtsx9`; carries:
+> probe surface-match with declaration-accurate field arity before `Elim` escalation; add
+> the whole reviewable triangle together; absent-trace = pre-host denial evidence).
+> **Runtime ring IDLE** — no next WP queued (I-4 ProgramCaps needs Architect design first).
 > **(3) §5.2/CP0 FRAME AUTHORED ✅ + Architect re-confirmed FAITHFUL** (`evt_55vyqjpfz787t`).
 > `wp/cp0-safe-bytes @ bd6be579`. **OWNERSHIP: Language-led** (Rust migration = bytes.rs
 > sigs + native Cranelith lowering + 8-site consumer sweep, the bulk) **+ enclave-owned
@@ -67,13 +72,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > PROHIBITED (spec-author `evt_1mvfj73whdgay`, CV aligned); `append`→pure `list_append`/
 > `bytes_concat`. Enclave released spec `62634dc8` (`38-ffi-io.md` +91/−76) + conformance
 > `wp/cp0-safe-bytes-conformance @ 288a6a38` (`seed-bytes-io.md` +198/−128) for atomic
-> assembly into the ONE CP0 candidate. Event-driven → Language QA + CV vote → Architect
-> terminal → git_request → publish → unblocks CC2. Task #50.
-> **(kenfmt signature-layout rework)** — operator handed 5 layout rules (2026-07-13) then
-> **said HOLD, refining before work.** Verbatim capture parked in `docs/program/wp/
-> kenfmt-signature-layout.md` (DRAFT, not framed, no team touched). Language owns kenfmt
-> (mid-CP0); gate disabled = no CI pressure. **Await operator's refined rules.** Flagged
-> one ambiguity (rule-4 split: name-alone+params-indented-4 vs name+params-inline).
+> assembly into the ONE CP0 candidate. **CANDIDATE ASSEMBLED + ALL GATES GREEN ✅**
+> `wp/cp0-safe-bytes @ 5902036079176bdc925127db8355f577d83dbfc4` (4-commit atomic stack
+> frame→spec→conformance→impl atop `feb908e3`; 23 files +1272/−652). **CV caught a REAL
+> oracle bug on the prior SHA `af9421a7`** (FS row hand-fed from a static `BytesEnv` seed
+> — removing the real `visits [FS]` decl wouldn't flip the L6 test; verify-the-mechanism
+> trap) → fixed at `59020360` (+55/−41: row now sourced from final prelude decl via
+> `modules::register_effect_row`; CV reproduced the counterfactual, 101/101, a real
+> discriminator). **QA APPROVE + CV CONFORMANT + Architect TERMINAL APPROVE**
+> (`dec_vc66ph14ghnk`; git_request `evt_1gzwxfdqh178y`). **Steward honesty-gate CLEAN**
+> (independent object-store): linear 4-commit stack atop `feb908e3` (no merges),
+> forbidden-path grep EMPTY (zero kernel/Cargo.lock/Cargo.toml/.github), `diff --check`
+> clean; `prelude.rs` delta = only `data Utf8Error` + comment (**no FSOp/fs_resp/Path** —
+> I-3 boundary respected); 4 placeholders (`write_bytes`/`append`/`send`/`recv`) retired
+> tree-wide on the candidate blob (−4 primitives, −4 seeds = TCB SHRINK), safe ops
+> `bytes_at`/`bytes_slice`/`bytes_decode` present. **→ PUBLISHING now (CI-poll bg).**
+> **Publish unblocks CC2 (Foundation).** Task #50.
+> **(kenfmt layout rework batch-1 — FRAME READY, task #58)** `docs/program/wp/
+> kenfmt-signature-layout.md`. Operator refined 2026-07-13: governing principle = **prefer
+> horizontal** (kenfmt over-verticalizes; collapse to one line where it fits). Rules R1–R5:
+> R1 split-signature indent = **params +6 (triple) / `:` +4 (double) / split-return +6**,
+> body +2 — signature ALWAYS deeper than body (operator invariant); R2 `proof … for …`
+> atomic; R3 short parens inline; R4 short `data` one line; R5 small exprs inline.
+> **Width budget = 96 col** (operator-confirmed). **Hard invariant: layout-only,
+> semantics-preserving** (AC4 gates token-stream unchanged; the R5 arg-order example was
+> an editing slip). Apply to ONE file first → operator reviews → then catalog → re-arm gate.
+> **Sequencing: next Language WP AFTER CP0** (Language owns kenfmt, mid-CP0; gate disabled
+> = no rush). Kick at CP0 close via Handoff-Gate. Not kicked; no team touched.
 > (gate-disable #57 CLOSED ✅ — all 3 §10 retros in `evt_763rq2p58vj5z`/`evt_5b2x78sqgpfrv`/
 > `evt_sk9j8sedaan5`.)
 > Contract detail (from `evt_2sxd7pszs42af` Del-2; frame is authoritative):
