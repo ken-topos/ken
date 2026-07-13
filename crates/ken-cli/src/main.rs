@@ -2,12 +2,27 @@
 
 mod repl;
 
+use std::ffi::{OsStr, OsString};
+use std::path::PathBuf;
+use std::rc::Rc;
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    match args.get(1).map(|s| s.as_str()).unwrap_or("") {
+    let args: Vec<OsString> = std::env::args_os().collect();
+    match args.get(1).and_then(|s| s.to_str()).unwrap_or("") {
         "repl" => repl::run(),
-        "run" => run_file(args.get(2).map(|s| s.as_str())),
-        "check" => check_file(args.get(2).map(|s| s.as_str())),
+        "run" => match parse_run_invocation(&args[2..]) {
+            Ok(invocation) => run_file(invocation.path.as_os_str(), &invocation.arguments),
+            Err(RunArgumentError::MissingPath) => {
+                eprintln!("ken run: missing <file> argument");
+                eprintln!("Usage: ken run <file.ken> [-- <arguments>...]");
+                std::process::exit(1);
+            }
+            Err(RunArgumentError::UnexpectedBeforeSeparator(argument)) => {
+                eprintln!("ken run: unexpected argument before '--': {:?}", argument);
+                std::process::exit(1);
+            }
+        },
+        "check" => check_file(args.get(2).map(OsString::as_os_str)),
         "fmt" => format_files(&args[2..]),
         "version" | "--version" | "-V" => {
             println!(
@@ -26,10 +41,14 @@ fn main() {
 }
 
 /// `ken fmt [--check] <paths...>` — the thin CLI over the landed formatter.
-fn format_files(args: &[String]) {
+fn format_files(args: &[OsString]) {
     let mut check = false;
     let mut paths = Vec::new();
     for arg in args {
+        let Some(arg) = arg.to_str() else {
+            eprintln!("ken fmt: path is not valid UTF-8: {:?}", arg);
+            std::process::exit(1);
+        };
         if arg == "--check" {
             check = true;
         } else if arg.starts_with('-') {
@@ -91,6 +110,48 @@ fn format_files(args: &[String]) {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum RunArgumentError {
+    MissingPath,
+    UnexpectedBeforeSeparator(OsString),
+}
+
+struct RunInvocation {
+    path: PathBuf,
+    arguments: Vec<Vec<u8>>,
+}
+
+fn parse_run_invocation(args: &[OsString]) -> Result<RunInvocation, RunArgumentError> {
+    let Some(path) = args.first() else {
+        return Err(RunArgumentError::MissingPath);
+    };
+    let rest = &args[1..];
+    let program_args = match rest.first() {
+        None => &[][..],
+        Some(separator) if separator == "--" => &rest[1..],
+        Some(unexpected) => {
+            return Err(RunArgumentError::UnexpectedBeforeSeparator(
+                unexpected.clone(),
+            ));
+        }
+    };
+    Ok(RunInvocation {
+        path: PathBuf::from(path),
+        arguments: program_args.iter().map(|arg| os_bytes(arg)).collect(),
+    })
+}
+
+#[cfg(unix)]
+fn os_bytes(value: &OsStr) -> Vec<u8> {
+    use std::os::unix::ffi::OsStrExt;
+    value.as_bytes().to_vec()
+}
+
+#[cfg(not(unix))]
+fn os_bytes(value: &OsStr) -> Vec<u8> {
+    value.to_string_lossy().into_owned().into_bytes()
+}
+
 /// Read `<file>` and elaborate it (`` .ken.md `` via the literate path,
 /// otherwise the plain `.ken` path) — the shared front half of both `ken run`
 /// and `ken check`. Exits 1 on a missing argument, an unreadable file,
@@ -99,8 +160,8 @@ fn format_files(args: &[String]) {
 /// typed, not a borrowed one.
 fn elaborate_cli_file(
     cmd: &str,
-    path: Option<&str>,
-) -> (String, ken_elaborator::ElabEnv, Vec<ken_kernel::GlobalId>) {
+    path: Option<&OsStr>,
+) -> (PathBuf, ken_elaborator::ElabEnv, Vec<ken_kernel::GlobalId>) {
     let path = match path {
         Some(p) => p,
         None => {
@@ -113,7 +174,7 @@ fn elaborate_cli_file(
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("ken {cmd}: cannot read '{}': {}", path, e);
+            eprintln!("ken {cmd}: cannot read '{}': {}", path.to_string_lossy(), e);
             std::process::exit(1);
         }
     };
@@ -126,7 +187,7 @@ fn elaborate_cli_file(
         }
     };
 
-    let ids_result = if path.ends_with(".ken.md") {
+    let ids_result = if path.to_string_lossy().ends_with(".ken.md") {
         elab_env.elaborate_ken_md_file(&src)
     } else {
         elab_env.elaborate_file(&src)
@@ -134,13 +195,23 @@ fn elaborate_cli_file(
 
     let ids = match ids_result {
         Ok(ids) => ids,
+        Err(ken_elaborator::ElabError::DuplicateDefinition { name, .. })
+            if cmd == "run" && name == "main" =>
+        {
+            eprintln!("ken run: duplicate entrypoint 'main'");
+            std::process::exit(1);
+        }
         Err(e) => {
-            eprintln!("ken {cmd}: elaboration error in '{}': {:?}", path, e);
+            eprintln!(
+                "ken {cmd}: elaboration error in '{}': {:?}",
+                path.to_string_lossy(),
+                e
+            );
             std::process::exit(1);
         }
     };
 
-    (path.to_string(), elab_env, ids)
+    (PathBuf::from(path), elab_env, ids)
 }
 
 /// `ken check <file>` — FR-3 (`docs/program/wp/ds-1-findings-remediation.md`):
@@ -155,25 +226,23 @@ fn elaborate_cli_file(
 /// runnable program's `main` is simply never executed here (`ken run` is
 /// still how you run it) — `ken run` itself is unchanged, strict, and has no
 /// auto-detect fallthrough to this mode.
-fn check_file(path: Option<&str>) {
+fn check_file(path: Option<&OsStr>) {
     elaborate_cli_file("check", path);
 }
 
 /// `ken run <file>` — elaborate, evaluate, and drive a Console IO program.
 ///
-/// Elaborates every declaration in `<file>` in order, then evaluates the last
-/// top-level definition and runs it through the Console effect driver (`42 §6`).
+/// Elaborates every declaration in `<file>`, resolves the ABI-shaped `main` by
+/// name, supplies process input and capabilities, and drives its host tree.
 ///
 /// Console IDs are harvested from the elaboration environment (`ElabEnv::globals`).
 /// Until the Language layer registers ITree/Console.Op, this returns an error.
-fn run_file(path: Option<&str>) {
-    let (path, elab_env, ids) = elaborate_cli_file("run", path);
-    let path = path.as_str();
-
-    let main_id = match ids.last() {
-        Some(&id) => id,
-        None => {
-            eprintln!("ken run: '{}' contains no declarations", path);
+fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
+    let (path, elab_env, _ids) = elaborate_cli_file("run", Some(path));
+    let main_id = match resolve_main(&elab_env) {
+        Ok(id) => id,
+        Err(EntrypointResolutionError::MissingMain) => {
+            eprintln!("ken run: missing entrypoint 'main' in '{}'", path.display());
             std::process::exit(1);
         }
     };
@@ -183,6 +252,33 @@ fn run_file(path: Option<&str>) {
     // map will not contain them and we surface a clear "not yet wired" message.
     let g = &elab_env.globals;
     let get = |name: &str| -> Option<ken_kernel::GlobalId> { g.get(name).copied() };
+
+    let (process_input_id, program_caps_id, host_io_id, exit_code_id) = match (
+        get("ProcessInput"),
+        get("ProgramCaps"),
+        get("HostIO"),
+        get("ExitCode"),
+    ) {
+        (Some(a), Some(b), Some(c), Some(d)) => (a, b, c, d),
+        _ => {
+            eprintln!("ken run: entrypoint ABI declarations are unavailable");
+            std::process::exit(2);
+        }
+    };
+    if !entrypoint_has_abi(
+        &elab_env,
+        main_id,
+        process_input_id,
+        program_caps_id,
+        host_io_id,
+        exit_code_id,
+    ) {
+        eprintln!(
+            "ken run: invalid entrypoint 'main': expected \
+             ProcessInput -> ProgramCaps -> HostIO ExitCode"
+        );
+        std::process::exit(1);
+    }
 
     // Bare names, matching the landed prelude's registration (`prelude.rs`:
     // `data ITree r = Ret r | Vis ConsoleOp (Unit -> ITree r)` — one type
@@ -247,24 +343,15 @@ fn run_file(path: Option<&str>) {
 
     let main_term = ken_kernel::Term::const_(main_id, vec![]);
     let mut tree = ken_interp::eval(&[], &main_term, &elab_env.env, &mut store);
-
-    // fs-read-file-lines-flip D2b — the manifest→mint-exactly→bind sequence
-    // (the gap `FS-driver-conformance.md`/`fs-read-file-lines-flip.md` D2
-    // names): read the authority `main`'s OWN TYPE declares on its `Cap`
-    // param (a structural read — non-widenable by construction, the audit
-    // point), mint EXACTLY that (never full, never ambient — the operator's
-    // locked least-privilege ruling), and bind it to `main` before `run_io`.
-    // A `main` with no FS cap param mints/binds nothing (`declared_fs_
-    // authority` returns `None`) — unchanged from today's behavior.
-    if let Some(authority) = declared_fs_authority(&elab_env, main_id) {
-        let cap = ken_elaborator::capabilities::Cap::mint(authority, "FS");
-        tree = ken_interp::apply(
-            tree,
-            ken_interp::EvalVal::Cap(cap),
-            &elab_env.env,
-            &mut store,
-        );
-    }
+    let input = process_input_value(&elab_env, arguments);
+    tree = ken_interp::apply(tree, input, &elab_env.env, &mut store);
+    let cap =
+        ken_elaborator::capabilities::Cap::mint(ken_elaborator::capabilities::AUTH_PARTIAL, "FS");
+    let caps = constructor_value(
+        get("MkProgramCaps").expect("ProgramCaps constructor registered"),
+        vec![ken_interp::EvalVal::Cap(cap)],
+    );
+    tree = ken_interp::apply(tree, caps, &elab_env.env, &mut store);
 
     let coproduct_ids = ken_interp::CoproductIds {
         inl_id: elab_env.prelude_env.inl_id,
@@ -279,24 +366,11 @@ fn run_file(path: Option<&str>) {
         &elab_env.env,
         &mut store,
     ) {
-        Ok(final_val) => {
-            // fs-read-file-lines-flip D4 (Option 3, Steward/Architect
-            // ruling `evt_5a6kr3sgsmzp0`): `main`'s `[FS]` computation is
-            // pure FS-read + parse, NOT Console-composed — the returned
-            // `Result IOError (List String)` is rendered HERE, post-`run_io`,
-            // not printed from within the Ken program itself. A non-FS
-            // program's return value (`fs_ids` absent, or a value whose
-            // ctor doesn't match `Ok`/`Err`) is left untouched — unchanged
-            // behavior for every Console-only example.
-            if let Some(fs) = fs_ids.as_ref() {
-                render_fs_result(
-                    &final_val,
-                    fs,
-                    elab_env.prelude_env.nil_id,
-                    elab_env.prelude_env.cons_id,
-                );
-            }
-        }
+        Ok(final_val) => std::process::exit(exit_status(
+            &final_val,
+            get("Success").expect("Success registered"),
+            get("Failure").expect("Failure registered"),
+        )),
         Err(ken_interp::RunIoError::UnknownTree) => {
             eprintln!("ken run: program evaluated to an open hole (Unknown)");
             std::process::exit(1);
@@ -306,143 +380,154 @@ fn run_file(path: Option<&str>) {
             std::process::exit(1);
         }
         Err(ken_interp::RunIoError::NotAnIOTree(v)) => {
-            eprintln!("ken run: last definition is not an IO tree: {:?}", v);
+            eprintln!("ken run: entrypoint did not return an IO tree: {:?}", v);
             std::process::exit(1);
         }
     }
 }
 
-/// fs-read-file-lines-flip D4 (Option 3): render a `main` return value shaped
-/// `Result IOError (List String)` — print each line on `Ok`, render the
-/// failure and exit non-zero on `Err` (fail-closed: a `CapabilityDenied`/
-/// `NotFound` must never be mistaken for success by anything diffing stdout).
-/// A value whose ctor matches neither `ok_id` nor `err_id` is a non-FS
-/// program's return value and is left alone.
-fn render_fs_result(
-    val: &ken_interp::EvalVal,
-    fs: &ken_interp::FSIds,
-    nil_id: ken_kernel::GlobalId,
-    cons_id: ken_kernel::GlobalId,
-) {
-    match val {
-        ken_interp::EvalVal::Ctor { id, args, .. } if *id == fs.ok_id => {
-            if let Some(lines) = args.get(2) {
-                print_string_list(lines, nil_id, cons_id);
-            }
-        }
-        ken_interp::EvalVal::Ctor { id, args, .. } if *id == fs.err_id => {
-            let name = match args.get(2) {
-                Some(ken_interp::EvalVal::Ctor { id: err_id, .. }) if *err_id == fs.notfound_id => {
-                    "NotFound"
-                }
-                Some(ken_interp::EvalVal::Ctor { id: err_id, .. })
-                    if *err_id == fs.permissiondenied_id =>
-                {
-                    "PermissionDenied"
-                }
-                Some(ken_interp::EvalVal::Ctor { id: err_id, .. })
-                    if *err_id == fs.capabilitydenied_id =>
-                {
-                    "CapabilityDenied"
-                }
-                Some(ken_interp::EvalVal::Ctor { id: err_id, .. }) if *err_id == fs.other_id => {
-                    "Other"
-                }
-                other => {
-                    eprintln!("ken run: IOError (unrecognized payload {:?})", other);
-                    std::process::exit(1);
-                }
-            };
-            eprintln!("ken run: IOError({})", name);
-            std::process::exit(1);
-        }
-        _ => {}
-    }
+#[derive(Debug, PartialEq, Eq)]
+enum EntrypointResolutionError {
+    MissingMain,
 }
 
-/// Print every element of a `List String` value, one per line (mirrors
-/// `print_line`'s own `println!`). `Cons`'s args are `[type-param-filler,
-/// head, tail]` (`ctor_arity = params.len() + args.len()`, `List`'s single
-/// param `a` fills index 0); `Nil`'s sole arg is its own type-param filler
-/// — distinguished by CTOR ID, not arg count (`Nil` is non-empty: `[filler]`).
-fn print_string_list(
-    val: &ken_interp::EvalVal,
-    nil_id: ken_kernel::GlobalId,
-    cons_id: ken_kernel::GlobalId,
-) {
-    let mut cur = val;
-    loop {
-        match cur {
-            ken_interp::EvalVal::Ctor { id, .. } if *id == nil_id => break,
-            ken_interp::EvalVal::Ctor { id, args, .. } if *id == cons_id => {
-                match (args.get(1), args.get(2)) {
-                    (Some(ken_interp::EvalVal::Str(s)), Some(tail)) => {
-                        println!("{}", s);
-                        cur = tail;
-                    }
-                    _ => break,
-                }
-            }
-            _ => break,
-        }
-    }
+fn resolve_main(
+    elab_env: &ken_elaborator::ElabEnv,
+) -> Result<ken_kernel::GlobalId, EntrypointResolutionError> {
+    elab_env
+        .globals
+        .get("main")
+        .copied()
+        .ok_or(EntrypointResolutionError::MissingMain)
 }
 
-/// Peel an application spine `f a₁ a₂ … aₙ` into `(f, [a₁, …, aₙ])`.
-fn peel_app(t: &ken_kernel::Term) -> (&ken_kernel::Term, Vec<&ken_kernel::Term>) {
-    let mut args = Vec::new();
-    let mut cur = t;
-    while let ken_kernel::Term::App(f, a) = cur {
-        args.push(a.as_ref());
-        cur = f.as_ref();
-    }
-    args.reverse();
-    (cur, args)
-}
-
-/// D2b's manifest read: does `main`'s type declare an FS capability
-/// parameter, and if so, at what authority level?
-///
-/// Walks `main`'s type to its FIRST Π-domain and peels its application
-/// spine to the head (BV2: the enrichment changed a cap-param domain from
-/// `Const(Cap)` to `App(Cap, a)`, so detection must key on the `Cap` HEAD
-/// through the spine, not the domain as a whole). Returns `None` for a
-/// `main` with no FS cap param (mint/bind nothing — unchanged behavior) —
-/// this is a structural read of the type, never a computed/inflatable
-/// value (Architect's non-widenable constraint).
-fn declared_fs_authority(
+fn entrypoint_has_abi(
     elab_env: &ken_elaborator::ElabEnv,
     main_id: ken_kernel::GlobalId,
-) -> Option<ken_elaborator::capabilities::Authority> {
-    use ken_elaborator::capabilities::{AUTH_FULL, AUTH_NONE, AUTH_PARTIAL};
+    process_input_id: ken_kernel::GlobalId,
+    program_caps_id: ken_kernel::GlobalId,
+    host_io_id: ken_kernel::GlobalId,
+    exit_code_id: ken_kernel::GlobalId,
+) -> bool {
     use ken_kernel::{Decl, Term};
 
-    let g = &elab_env.globals;
-    let cap_id = g.get("Cap").copied()?;
-    let anone_id = g.get("ANone").copied()?;
-    let apartial_id = g.get("APartial").copied()?;
-    let afull_id = g.get("AFull").copied()?;
-
-    let ty = match elab_env.env.lookup(main_id)? {
-        Decl::Transparent { ty, .. } | Decl::Opaque { ty, .. } | Decl::Primitive { ty, .. } => ty,
-        Decl::Inductive(_) => return None,
-    };
-    let dom = match ty {
-        Term::Pi(dom, _) => dom.as_ref(),
-        _ => return None,
-    };
-    let (head, args) = peel_app(dom);
-    let (Term::Const { id, .. }, [auth_arg]) = (head, args.as_slice()) else {
-        return None;
-    };
-    if *id != cap_id {
-        return None;
+    if let Some(row) = elab_env.effect_rows.get("main") {
+        let granted = ken_elaborator::effects::EffectRow::from_effects([
+            "Console".to_string(),
+            "FS".to_string(),
+        ]);
+        if !row.row_vars().is_empty() || !row.concrete_effects().is_subset_of(&granted) {
+            return false;
+        }
     }
-    match auth_arg {
-        Term::Constructor { id, .. } if *id == anone_id => Some(AUTH_NONE),
-        Term::Constructor { id, .. } if *id == apartial_id => Some(AUTH_PARTIAL),
-        Term::Constructor { id, .. } if *id == afull_id => Some(AUTH_FULL),
-        _ => None,
+
+    let actual = match elab_env.env.lookup(main_id) {
+        Some(Decl::Transparent { ty, .. })
+        | Some(Decl::Opaque { ty, .. })
+        | Some(Decl::Primitive { ty, .. }) => ty,
+        _ => return false,
+    };
+    let process_input = Term::indformer(process_input_id, vec![]);
+    let program_caps = Term::indformer(program_caps_id, vec![]);
+    let exit_code = Term::indformer(exit_code_id, vec![]);
+    let host_exit = Term::app(Term::const_(host_io_id, vec![]), exit_code);
+    let expected = Term::pi(process_input, Term::pi(program_caps, host_exit));
+    ken_kernel::convert_type(
+        &elab_env.env,
+        &ken_kernel::Context::new(),
+        actual,
+        &expected,
+    )
+}
+
+fn constructor_value(
+    id: ken_kernel::GlobalId,
+    args: Vec<ken_interp::EvalVal>,
+) -> ken_interp::EvalVal {
+    ken_interp::EvalVal::Ctor {
+        id,
+        args: Rc::new(args),
+        slot: 0,
+    }
+}
+
+fn list_value(
+    nil_id: ken_kernel::GlobalId,
+    cons_id: ken_kernel::GlobalId,
+    values: impl IntoIterator<Item = ken_interp::EvalVal>,
+) -> ken_interp::EvalVal {
+    let values: Vec<_> = values.into_iter().collect();
+    values.into_iter().rev().fold(
+        constructor_value(nil_id, vec![ken_interp::EvalVal::Unknown]),
+        |tail, head| constructor_value(cons_id, vec![ken_interp::EvalVal::Unknown, head, tail]),
+    )
+}
+
+fn process_input_value(
+    elab_env: &ken_elaborator::ElabEnv,
+    arguments: &[Vec<u8>],
+) -> ken_interp::EvalVal {
+    let get = |name: &str| {
+        elab_env
+            .globals
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| panic!("entrypoint ABI global '{name}' missing"))
+    };
+    let arguments = list_value(
+        elab_env.prelude_env.nil_id,
+        elab_env.prelude_env.cons_id,
+        arguments.iter().cloned().map(ken_interp::EvalVal::Bytes),
+    );
+    let environment = std::env::vars_os().map(|(key, value)| {
+        constructor_value(
+            elab_env.prelude_env.mkprod_id,
+            vec![
+                ken_interp::EvalVal::Unknown,
+                ken_interp::EvalVal::Unknown,
+                ken_interp::EvalVal::Bytes(os_bytes(&key)),
+                ken_interp::EvalVal::Bytes(os_bytes(&value)),
+            ],
+        )
+    });
+    let environment = list_value(
+        elab_env.prelude_env.nil_id,
+        elab_env.prelude_env.cons_id,
+        environment,
+    );
+    let cwd = std::env::current_dir().unwrap_or_else(|error| {
+        eprintln!("ken run: cannot read working directory: {error}");
+        std::process::exit(1);
+    });
+    constructor_value(
+        get("MkProcessInput"),
+        vec![
+            arguments,
+            environment,
+            ken_interp::EvalVal::Bytes(os_bytes(cwd.as_os_str())),
+        ],
+    )
+}
+
+fn exit_status(
+    value: &ken_interp::EvalVal,
+    success_id: ken_kernel::GlobalId,
+    failure_id: ken_kernel::GlobalId,
+) -> i32 {
+    match value {
+        ken_interp::EvalVal::Ctor { id, .. } if *id == success_id => 0,
+        ken_interp::EvalVal::Ctor { id, args, .. } if *id == failure_id => match args.first() {
+            Some(ken_interp::EvalVal::Int(0)) => 1,
+            Some(ken_interp::EvalVal::Int(code @ 1..=255)) => *code as i32,
+            _ => {
+                eprintln!("ken run: malformed ExitCode::Failure payload");
+                1
+            }
+        },
+        _ => {
+            eprintln!("ken run: entrypoint returned a malformed ExitCode");
+            1
+        }
     }
 }
 
@@ -510,47 +595,73 @@ fn print_help() {
 }
 
 #[cfg(test)]
-mod declared_fs_authority_tests {
-    use super::declared_fs_authority;
+mod entrypoint_tests {
+    use std::ffi::OsString;
 
-    /// BV2 — positive: `(cap : Cap APartial)` (the enriched `App(Cap, a)`
-    /// domain shape) IS detected as an FS cap param, and the declared
-    /// authority is read correctly off the app spine.
+    use super::*;
+
     #[test]
-    fn cap_apartial_detected_with_correct_authority() {
-        let mut env = ken_elaborator::ElabEnv::new().expect("env");
-        let main_id = env
-            .elaborate_decl("fn main (cap : Cap APartial) : Cap APartial = cap")
-            .expect("elaborates");
+    fn exit_code_mapping_is_total_and_failure_zero_fails_closed() {
+        let success = ken_kernel::GlobalId(1);
+        let failure = ken_kernel::GlobalId(2);
         assert_eq!(
-            declared_fs_authority(&env, main_id),
-            Some(ken_elaborator::capabilities::AUTH_PARTIAL)
+            exit_status(&constructor_value(success, vec![]), success, failure),
+            0
+        );
+        for (payload, expected) in [(3, 3), (255, 255), (0, 1)] {
+            assert_eq!(
+                exit_status(
+                    &constructor_value(failure, vec![ken_interp::EvalVal::Int(payload)]),
+                    success,
+                    failure,
+                ),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn missing_and_duplicate_main_have_distinct_specific_errors() {
+        let env = ken_elaborator::ElabEnv::new().expect("env");
+        assert_eq!(
+            resolve_main(&env),
+            Err(EntrypointResolutionError::MissingMain)
+        );
+
+        let mut env = ken_elaborator::ElabEnv::new().expect("env");
+        let error = env
+            .elaborate_file("const main : Nat = Zero\nconst main : Nat = Zero")
+            .expect_err("duplicate main must fail");
+        assert!(matches!(
+            error,
+            ken_elaborator::ElabError::DuplicateDefinition { ref name, .. }
+                if name == "main"
+        ));
+    }
+
+    #[test]
+    fn unknown_argument_before_separator_is_a_specific_error() {
+        let args = vec![OsString::from("app.ken"), OsString::from("--bad")];
+        assert_eq!(
+            parse_run_invocation(&args).map(|_| ()),
+            Err(RunArgumentError::UnexpectedBeforeSeparator(OsString::from(
+                "--bad"
+            )))
         );
     }
 
-    /// SEAM-A: `(cap : Cap ANone)` is STILL detected (the cap param is kept,
-    /// not absent) — it is minted+bound and denied at the driver, never at
-    /// this manifest-read step.
+    #[cfg(unix)]
     #[test]
-    fn cap_anone_detected_with_correct_authority() {
-        let mut env = ken_elaborator::ElabEnv::new().expect("env");
-        let main_id = env
-            .elaborate_decl("fn main (cap : Cap ANone) : Cap ANone = cap")
-            .expect("elaborates");
-        assert_eq!(
-            declared_fs_authority(&env, main_id),
-            Some(ken_elaborator::capabilities::AUTH_NONE)
-        );
-    }
+    fn program_arguments_after_separator_preserve_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
 
-    /// A `main` with no FS cap param at all mints/binds nothing — the
-    /// distinct `MissingCapability`-at-elaboration foil, not this gate.
-    #[test]
-    fn no_cap_param_detects_nothing() {
-        let mut env = ken_elaborator::ElabEnv::new().expect("env");
-        let main_id = env
-            .elaborate_decl("const main : Nat = Zero")
-            .expect("elaborates");
-        assert_eq!(declared_fs_authority(&env, main_id), None);
+        let raw = vec![0xff, 0x00, b'a'];
+        let args = vec![
+            OsString::from("app.ken"),
+            OsString::from("--"),
+            OsString::from_vec(raw.clone()),
+        ];
+        let invocation = parse_run_invocation(&args).expect("valid invocation");
+        assert_eq!(invocation.arguments, vec![raw]);
     }
 }

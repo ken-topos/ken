@@ -3,11 +3,9 @@
 --
 -- Task: read a text file and process it line by line.
 --
--- fs-read-file-lines-flip (VAL2 #9/OQ-B closure) + effect-composition
--- (retires the flip's Option-3 honesty asterisk). `main` declares EXACTLY
--- the FS authority it needs on its own type (`Cap APartial` -- the manifest
--- IS the signature, operator-locked); the CLI reads that declaration, mints
--- precisely that authority, and binds it -- never full, never ambient.
+-- fs-read-file-lines-flip (VAL2 #9/OQ-B closure) + effect-composition.
+-- `ProgramCaps` carries the fixed I-1 `Cap APartial` grant; `main` unwraps
+-- that value and passes it to the application tree.
 -- `read_bytes` carries the cap into a real `[FS]` effect computation, gated
 -- by the runtime `authorizes` check (`ken-interp/src/eval.rs`) before any
 -- syscall.
@@ -21,10 +19,9 @@
 -- `bind`. `run_io`'s coproduct-aware terminal driver (D3) strips the
 -- `InL`/`InR` tags down to each real base op and dispatches both effects
 -- through the SAME loop -- no hand-fed `Coproduct` anywhere in this file. On a
--- denied/insufficient capability or a missing file, `main` does NOT print
--- (fail-closed) and instead returns `Err e`, which `ken-cli`'s post-run
--- render still surfaces as a non-zero exit with the exact `IOError` variant
--- (`ken-cli/src/main.rs::render_fs_result`, unchanged from the flip).
+-- missing file, the application reports the exact error through Console and
+-- returns `Failure 1`; the runner only maps the final `ExitCode`.
+
 -- D1: `lines : String -> List String`, terminator semantics (`str::lines()`)
 -- -- a trailing '\n' yields NO trailing empty segment. Pure, total,
 -- structural recursion on the `Cons` tail (SCT-safe, no `Bottom`). Lives
@@ -143,27 +140,15 @@ proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Conso
         (λ_. printLines xs')
   }
 
--- D2/D4: `main` declares `Cap APartial` (partial/read-level FS authority) on
--- its OWN signature -- the manifest. Reads the fixture via `inject_l
--- (read_bytes ...)`, and on success prints each parsed line via `inject_r
--- (print_line ...)` -- both effects composed in ONE `bind`-sequenced tree.
-proc main (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Console] =
-  bind
-    (Coproduct (FSOp APartial) ConsoleOp)
-    (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
-    (Result IOError Bytes)
-    (Result IOError Unit)
-    (inject_l
-      (FSOp APartial)
-      ConsoleOp
-      (fs_resp APartial)
-      console_resp
-      (Result IOError Bytes)
-      (read_bytes
-        APartial
-        cap
-        (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
-    (λr.
+-- Reads the fixture via `inject_l (read_bytes ...)`, and on success prints
+-- each parsed line via `inject_r (print_line ...)` in one composed tree.
+proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Console] =
+  bind (Coproduct (FSOp APartial) ConsoleOp)
+       (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+       (Result IOError Bytes) (Result IOError Unit)
+     (inject_l (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp (Result IOError Bytes)
+       (read_bytes APartial cap (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
+     (λr .
       match r {
         Err e ↦
           Ret
@@ -173,3 +158,26 @@ proc main (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Conso
             (Err IOError Unit e);
         Ok bytes ↦ printLines (lines (bytes_decode bytes))
       })
+
+proc main (_input : ProcessInput) (caps : ProgramCaps)
+  : HostIO ExitCode visits [FS, Console] =
+  match caps {
+    MkProgramCaps cap ↦
+      bind (Coproduct (FSOp APartial) ConsoleOp)
+           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+           (Result IOError Unit) ExitCode
+        (app cap)
+        (λr .
+          match r {
+            Err e ↦
+              match e {
+                NotFound ↦ host_program_then (print_line "NotFound") (Failure 1) ;
+                PermissionDenied ↦
+                  host_program_then (print_line "PermissionDenied") (Failure 1) ;
+                CapabilityDenied ↦
+                  host_program_then (print_line "CapabilityDenied") (Failure 1) ;
+                Other ↦ host_program_then (print_line "Other") (Failure 1)
+              } ;
+            Ok _ ↦ host_exit Success
+          })
+  }

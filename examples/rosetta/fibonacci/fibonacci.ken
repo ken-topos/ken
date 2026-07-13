@@ -189,4 +189,4 @@ fn natToDecimal (n : Nat) : String =
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 -- main: F(10) = 55
-proc main : IO Unit visits [Console] = print_line (natToDecimal (fib ten))
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] = host_program (print_line (natToDecimal (fib ten)))

@@ -42,7 +42,7 @@ fn notBool2 (b : Bool) : Bool = match b { True |-> False ; False |-> True }
 const IO_KEN_MD: &str = r#"A runnable program.
 
 ```ken
-proc main : IO Unit visits [Console] = print_line "check mode ran main? no."
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] = host_program (print_line "check mode ran main? no.")
 ```
 "#;
 
@@ -119,12 +119,10 @@ fn check_io_shaped_file_also_exits_zero_without_running_io() {
     );
 }
 
-// Regression: ken run stays strict and unchanged — a pure-library file
-// (no IO main) still fails ken run exactly as before FR-3, with the
-// pre-existing "not an IO tree" error. No auto-detect fallthrough to check
-// mode.
+// `ken run` stays strict: a pure-library file has no named entrypoint and
+// fails without auto-detect fallthrough to check mode.
 #[test]
-fn ken_run_still_rejects_a_pure_library_file_unchanged() {
+fn ken_run_rejects_a_pure_library_without_named_main() {
     let path = write_fixture("run_pure_library.ken.md", PURE_LIBRARY_KEN_MD);
 
     let output = Command::new(ken_bin())
@@ -135,12 +133,12 @@ fn ken_run_still_rejects_a_pure_library_file_unchanged() {
 
     assert!(
         !output.status.success(),
-        "ken run on a pure-library file must still fail (strict, unchanged)"
+        "ken run on a pure-library file must fail strictly"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("not an IO tree"),
-        "ken run's pre-existing library-file error must be unchanged: {stderr}"
+        stderr.contains("missing entrypoint 'main'"),
+        "ken run must name the missing entrypoint: {stderr}"
     );
 }
 

@@ -36,9 +36,9 @@ the signature and the body, not a comment
   that may carry an effect row (§6).
 
 All three keywords in one runnable block. A literate entry's compiled fences
-tangle into one module, and `ken run` executes its last definition — so this
-block, being runnable, ends in a nullary `proc main` (§8 covers why a catalog
-*package* entry, a library rather than a runnable file, carries none):
+tangle into one module, and `ken run` executes its named `main` — so this
+block, being runnable, ends in an ABI-shaped `proc main` (§8 covers why a
+catalog *package* entry, a library rather than a runnable file, carries none):
 
 ```ken
 data Color =
@@ -62,7 +62,9 @@ proc announce (c : Color) : IO Unit visits [Console] =
     Blue ↦ print_line "it's blue"
   }
 
-proc main : IO Unit visits [Console] = announce favorite
+proc main (_input : ProcessInput) (_caps : ProgramCaps)
+  : HostIO ExitCode visits [Console] =
+  host_program (announce favorite)
 ```
 
 **Every landed catalog type parameter is explicit**, `(a : Type)`, never the

@@ -161,5 +161,7 @@ fold the next validated move in here (retro-action wiring, `README.md`).
   no separate kind of declaration) is `spec/50-stdlib/51-lawful-classes.md`.
 
 ```ken
-proc main : IO Unit visits [Console] = print_line "decomposition guide ok"
+proc main (_input : ProcessInput) (_caps : ProgramCaps)
+  : HostIO ExitCode visits [Console] =
+  host_program (print_line "decomposition guide ok")
 ```

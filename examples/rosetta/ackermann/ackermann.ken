@@ -168,4 +168,4 @@ fn natToDecimal (n : Nat) : String =
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 -- main: A(3, 2) = 29 (A(3,4) = 125 needs far more recursive calls at
 -- runtime; A(3,2) is the feasible pinned oracle).
-proc main : IO Unit visits [Console] = print_line (natToDecimal (ack three two))
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] = host_program (print_line (natToDecimal (ack three two)))

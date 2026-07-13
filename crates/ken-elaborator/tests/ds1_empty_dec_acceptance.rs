@@ -219,7 +219,13 @@ fn ac3_trusted_base_delta_is_ordinary_inductive_admission_only() {
     let dec_block_start = prelude_src
         .find("`Dec (P : Omega) : Type0 = Yes P | No (P -> Empty)`")
         .expect("Dec's declaration comment must be present");
-    let dec_block = &prelude_src[dec_block_start..(dec_block_start + 2000).min(prelude_src.len())];
+    let dec_tail = &prelude_src[dec_block_start..];
+    let dec_block_end = dec_tail
+        .char_indices()
+        .nth(2000)
+        .map(|(index, _)| index)
+        .unwrap_or(dec_tail.len());
+    let dec_block = &dec_tail[..dec_block_end];
     assert!(
         dec_block.contains("ken_kernel::declare_inductive"),
         "Dec must be admitted via declare_inductive (kernel-direct), not a primitive"
