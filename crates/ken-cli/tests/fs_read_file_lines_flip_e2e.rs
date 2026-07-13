@@ -121,6 +121,8 @@ proc main (_input : ProcessInput) (caps : ProgramCaps)
                 NotFound |-> host_program_then (print_line "NotFound") (Failure 1) ;
                 PermissionDenied |-> host_program_then (print_line "PermissionDenied") (Failure 1) ;
                 CapabilityDenied |-> host_program_then (print_line "CapabilityDenied") (Failure 1) ;
+                BrokenPipe |-> host_program_then (print_line "BrokenPipe") (Failure 1) ;
+                Interrupted |-> host_program_then (print_line "Interrupted") (Failure 1) ;
                 Other |-> host_program_then (print_line "Other") (Failure 1)
               }} ;
             Ok _ |-> host_exit Success

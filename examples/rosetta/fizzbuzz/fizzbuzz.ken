@@ -277,7 +277,11 @@ proc fizzBuzzLoop (remaining : Nat) (current : Nat) : IO Unit visits [Console] =
         ConsoleOp
         console_resp
         Unit
-        (Write (fizzBuzzLine current))
+        (Write
+          Stdout
+          (bytes_concat
+            (bytes_encode (fizzBuzzLine current))
+            (bytes_encode (list_char_to_string (Cons Char (10 : Int) (Nil Char))))))
         (λ_. fizzBuzzLoop r (Suc current))
   }
 

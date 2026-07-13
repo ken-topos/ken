@@ -50,33 +50,21 @@ fn mk_env() -> FsEnv {
     let elab_env = ken_elaborator::ElabEnv::new().expect("prelude registers");
     let g = &elab_env.globals;
     let get = |name: &str| -> ken_kernel::GlobalId {
-        *g.get(name).unwrap_or_else(|| panic!("prelude: '{}' not registered", name))
+        *g.get(name)
+            .unwrap_or_else(|| panic!("prelude: '{}' not registered", name))
     };
-    let console_ids = ken_interp::ConsoleIds {
-        itree_id: get("ITree"),
-        ret_id: get("Ret"),
-        vis_id: get("Vis"),
-        write_id: get("Write"),
-        unit_id: get("Unit"),
-        params_len: 3,
-    };
+    let console_ids = ken_interp::ConsoleIds::from_elab(&elab_env).expect("Console ABI");
     let fs_ids = ken_interp::FSIds {
         readfile_id: get("ReadFile"),
-        ok_id: get("Ok"),
-        err_id: get("Err"),
-        notfound_id: get("NotFound"),
-        permissiondenied_id: get("PermissionDenied"),
-        capabilitydenied_id: get("CapabilityDenied"),
-        other_id: get("Other"),
     };
     FsEnv {
         read_bytes_id: get("read_bytes"),
         afull_id: get("AFull"),
         vis_id: console_ids.vis_id,
         ret_id: console_ids.ret_id,
-        ok_id: fs_ids.ok_id,
-        err_id: fs_ids.err_id,
-        notfound_id: fs_ids.notfound_id,
+        ok_id: console_ids.ok_id,
+        err_id: console_ids.err_id,
+        notfound_id: console_ids.notfound_id,
         console_ids,
         fs_ids,
         elab_env,
@@ -95,15 +83,20 @@ fn read_via_real_driver(
     let mut store = ken_interp::EvalStore::new();
     let term = ken_kernel::Term::const_(env.read_bytes_id, vec![]);
     let f = ken_interp::eval(&[], &term, &env.elab_env.env, &mut store);
-    let a_term = ken_kernel::Term::Constructor { id: env.afull_id, level_args: vec![] };
+    let a_term = ken_kernel::Term::Constructor {
+        id: env.afull_id,
+        level_args: vec![],
+    };
     let a_val = ken_interp::eval(&[], &a_term, &env.elab_env.env, &mut store);
     let step0 = ken_interp::apply(f, a_val, &env.elab_env.env, &mut store);
     let cap = Cap::mint(AUTH_FULL, "FS");
     let step1 = ken_interp::apply(step0, cap_evalval(&cap), &env.elab_env.env, &mut store);
     let path_val = ken_interp::EvalVal::Bytes(path.as_bytes().to_vec());
     let tree = ken_interp::apply(step1, path_val, &env.elab_env.env, &mut store);
+    let mut host = ken_interp::PosixHost::new();
     ken_interp::run_io(
         tree,
+        &mut host,
         &env.console_ids,
         Some(&env.fs_ids),
         None,
@@ -124,15 +117,19 @@ fn positive_read_returns_exact_fixture_bytes() {
     let result = read_via_real_driver(&mut env, path.to_str().unwrap());
 
     match result {
-        Ok(ken_interp::EvalVal::Ctor { id, args, .. }) if id == env.ok_id => {
-            match args.get(2) {
-                Some(ken_interp::EvalVal::Bytes(b)) => {
-                    assert_eq!(*b, expected, "read_bytes must return the fixture's exact bytes");
-                }
-                other => panic!("expected Ok(Bytes(..)), got payload {:?}", other),
+        Ok(ken_interp::EvalVal::Ctor { id, args, .. }) if id == env.ok_id => match args.get(2) {
+            Some(ken_interp::EvalVal::Bytes(b)) => {
+                assert_eq!(
+                    *b, expected,
+                    "read_bytes must return the fixture's exact bytes"
+                );
             }
-        }
-        other => panic!("expected Ok(<fixture bytes>) via real driver, got {:?}", other),
+            other => panic!("expected Ok(Bytes(..)), got payload {:?}", other),
+        },
+        other => panic!(
+            "expected Ok(<fixture bytes>) via real driver, got {:?}",
+            other
+        ),
     }
 }
 
@@ -145,19 +142,23 @@ fn positive_read_returns_exact_fixture_bytes() {
 fn absent_path_surfaces_total_not_found_result() {
     let mut env = mk_env();
     let path = fixture_path("does-not-exist.txt");
-    assert!(!path.exists(), "fixture harness precondition: path must be absent");
+    assert!(
+        !path.exists(),
+        "fixture harness precondition: path must be absent"
+    );
 
     let result = read_via_real_driver(&mut env, path.to_str().unwrap());
 
     match result {
-        Ok(ken_interp::EvalVal::Ctor { id, args, .. }) if id == env.err_id => {
-            match args.get(2) {
-                Some(ken_interp::EvalVal::Ctor { id: err_id, .. }) => {
-                    assert_eq!(*err_id, env.notfound_id, "absent path must surface IOError::NotFound");
-                }
-                other => panic!("expected Err(NotFound), got payload {:?}", other),
+        Ok(ken_interp::EvalVal::Ctor { id, args, .. }) if id == env.err_id => match args.get(2) {
+            Some(ken_interp::EvalVal::Ctor { id: err_id, .. }) => {
+                assert_eq!(
+                    *err_id, env.notfound_id,
+                    "absent path must surface IOError::NotFound"
+                );
             }
-        }
+            other => panic!("expected Err(NotFound), got payload {:?}", other),
+        },
         other => panic!("expected a total Err(NotFound) Result, got {:?}", other),
     }
 }
@@ -171,7 +172,10 @@ fn pure_reduction_builds_vis_before_any_syscall() {
     let mut store = ken_interp::EvalStore::new();
     let term = ken_kernel::Term::const_(env.read_bytes_id, vec![]);
     let f = ken_interp::eval(&[], &term, &env.elab_env.env, &mut store);
-    let a_term = ken_kernel::Term::Constructor { id: env.afull_id, level_args: vec![] };
+    let a_term = ken_kernel::Term::Constructor {
+        id: env.afull_id,
+        level_args: vec![],
+    };
     let a_val = ken_interp::eval(&[], &a_term, &env.elab_env.env, &mut store);
     let step0 = ken_interp::apply(f, a_val, &env.elab_env.env, &mut store);
     let cap_val = ken_interp::EvalVal::Cap(Cap::mint(AUTH_FULL, "FS"));
@@ -185,7 +189,10 @@ fn pure_reduction_builds_vis_before_any_syscall() {
 
     match tree {
         ken_interp::EvalVal::Ctor { id, .. } if id == env.vis_id => {}
-        other => panic!("expected a pure Vis node with zero syscall, got {:?}", other),
+        other => panic!(
+            "expected a pure Vis node with zero syscall, got {:?}",
+            other
+        ),
     }
     let _ = env.ret_id;
 }

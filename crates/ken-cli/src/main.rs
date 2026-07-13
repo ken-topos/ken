@@ -236,7 +236,6 @@ fn check_file(path: Option<&OsStr>) {
 /// name, supplies process input and capabilities, and drives its host tree.
 ///
 /// Console IDs are harvested from the elaboration environment (`ElabEnv::globals`).
-/// Until the Language layer registers ITree/Console.Op, this returns an error.
 fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
     let (path, elab_env, _ids) = elaborate_cli_file("run", Some(path));
     let main_id = match resolve_main(&elab_env) {
@@ -248,8 +247,7 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
     };
 
     // Harvest Console IDs from the elaboration environment.
-    // These are registered by the Language layer; until that lands the globals
-    // map will not contain them and we surface a clear "not yet wired" message.
+    // These are registered by the prelude and harvested explicitly.
     let g = &elab_env.globals;
     let get = |name: &str| -> Option<ken_kernel::GlobalId> { g.get(name).copied() };
 
@@ -281,19 +279,85 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
     }
 
     // Bare names, matching the landed prelude's registration (`prelude.rs`:
-    // `data ITree r = Ret r | Vis ConsoleOp (Unit -> ITree r)` — one type
-    // param, constructors registered under their bare (not dotted) names).
-    let (itree_id, ret_id, vis_id, write_id, unit_id) = match (
+    // Constructors are registered under their bare (not dotted) names.
+    let (
+        itree_id,
+        ret_id,
+        vis_id,
+        read_id,
+        write_id,
+        flush_id,
+        is_terminal_id,
+        stdin_id,
+        stdout_id,
+        stderr_id,
+        chunk_id,
+        eof_id,
+        unit_id,
+        true_id,
+        false_id,
+        ok_id,
+        err_id,
+        notfound_id,
+        permissiondenied_id,
+        capabilitydenied_id,
+        brokenpipe_id,
+        interrupted_id,
+        other_id,
+    ) = match (
         get("ITree"),
         get("Ret"),
         get("Vis"),
+        get("Read"),
         get("Write"),
-        get("Unit"),
+        get("Flush"),
+        get("IsTerminal"),
+        get("Stdin"),
+        get("Stdout"),
+        get("Stderr"),
+        get("Chunk"),
+        get("Eof"),
+        get("MkUnit"),
+        get("True"),
+        get("False"),
+        get("Ok"),
+        get("Err"),
+        get("NotFound"),
+        get("PermissionDenied"),
+        get("CapabilityDenied"),
+        get("BrokenPipe"),
+        get("Interrupted"),
+        get("Other"),
     ) {
-        (Some(a), Some(b), Some(c), Some(d), Some(e)) => (a, b, c, d, e),
+        (
+            Some(a),
+            Some(b),
+            Some(c),
+            Some(d),
+            Some(e),
+            Some(f),
+            Some(g),
+            Some(h),
+            Some(i),
+            Some(j),
+            Some(k),
+            Some(l),
+            Some(m),
+            Some(n),
+            Some(o),
+            Some(p),
+            Some(q),
+            Some(r),
+            Some(s),
+            Some(t),
+            Some(u),
+            Some(v),
+            Some(w),
+        ) => (
+            a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w,
+        ),
         _ => {
-            // Language layer not yet landed — normal during the Runtime-only build.
-            eprintln!("ken run: Console not yet wired (Language layer pending)");
+            eprintln!("ken run: Console ABI declarations are unavailable");
             std::process::exit(2);
         }
     };
@@ -302,7 +366,25 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
         itree_id,
         ret_id,
         vis_id,
+        read_id,
         write_id,
+        flush_id,
+        is_terminal_id,
+        stdin_id,
+        stdout_id,
+        stderr_id,
+        chunk_id,
+        eof_id,
+        true_id,
+        false_id,
+        ok_id,
+        err_id,
+        notfound_id,
+        permissiondenied_id,
+        capabilitydenied_id,
+        brokenpipe_id,
+        interrupted_id,
+        other_id,
         unit_id,
         params_len: 3, // ITree (E:Type)(Resp:E->Type)(R:Type) — 3 type params (State-effect-build lift)
     };
@@ -310,32 +392,8 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
     // Harvest FS IDs (FS-driver-build D1/D2); absent on a program that never
     // registers `[FS]` (can't happen post-prelude, but degrade gracefully
     // rather than assume, matching the Console harvest's own style above).
-    let fs_ids = match (
-        get("ReadFile"),
-        get("Ok"),
-        get("Err"),
-        get("NotFound"),
-        get("PermissionDenied"),
-        get("CapabilityDenied"),
-        get("Other"),
-    ) {
-        (
-            Some(readfile_id),
-            Some(ok_id),
-            Some(err_id),
-            Some(notfound_id),
-            Some(permissiondenied_id),
-            Some(capabilitydenied_id),
-            Some(other_id),
-        ) => Some(ken_interp::FSIds {
-            readfile_id,
-            ok_id,
-            err_id,
-            notfound_id,
-            permissiondenied_id,
-            capabilitydenied_id,
-            other_id,
-        }),
+    let fs_ids = match get("ReadFile") {
+        Some(readfile_id) => Some(ken_interp::FSIds { readfile_id }),
         _ => None,
     };
 
@@ -358,8 +416,10 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
         inr_id: elab_env.prelude_env.inr_id,
     };
 
+    let mut host = ken_interp::PosixHost::new();
     match ken_interp::run_io(
         tree,
+        &mut host,
         &console_ids,
         fs_ids.as_ref(),
         Some(&coproduct_ids),

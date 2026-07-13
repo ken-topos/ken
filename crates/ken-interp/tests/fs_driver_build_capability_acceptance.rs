@@ -39,33 +39,21 @@ fn mk_env() -> FsEnv {
     let elab_env = ken_elaborator::ElabEnv::new().expect("prelude registers");
     let g = &elab_env.globals;
     let get = |name: &str| -> ken_kernel::GlobalId {
-        *g.get(name).unwrap_or_else(|| panic!("prelude: '{}' not registered", name))
+        *g.get(name)
+            .unwrap_or_else(|| panic!("prelude: '{}' not registered", name))
     };
-    let console_ids = ken_interp::ConsoleIds {
-        itree_id: get("ITree"),
-        ret_id: get("Ret"),
-        vis_id: get("Vis"),
-        write_id: get("Write"),
-        unit_id: get("Unit"),
-        params_len: 3,
-    };
+    let console_ids = ken_interp::ConsoleIds::from_elab(&elab_env).expect("Console ABI");
     let fs_ids = ken_interp::FSIds {
         readfile_id: get("ReadFile"),
-        ok_id: get("Ok"),
-        err_id: get("Err"),
-        notfound_id: get("NotFound"),
-        permissiondenied_id: get("PermissionDenied"),
-        capabilitydenied_id: get("CapabilityDenied"),
-        other_id: get("Other"),
     };
     FsEnv {
         read_bytes_id: get("read_bytes"),
         anone_id: get("ANone"),
         apartial_id: get("APartial"),
         afull_id: get("AFull"),
-        ok_id: fs_ids.ok_id,
-        err_id: fs_ids.err_id,
-        capabilitydenied_id: fs_ids.capabilitydenied_id,
+        ok_id: console_ids.ok_id,
+        err_id: console_ids.err_id,
+        capabilitydenied_id: console_ids.capabilitydenied_id,
         console_ids,
         fs_ids,
         elab_env,
@@ -85,7 +73,10 @@ fn cap_evalval(cap: &Cap) -> ken_interp::EvalVal {
 /// REAL enforcement reads `Authority` off the carried `EvalVal::Cap`), but
 /// `read_bytes` is authority-polymorphic in `a`, so SOME `Auth` value must be
 /// supplied to reach the `Cap`/`Bytes` arguments.
-fn auth_ctor_id(env: &FsEnv, authority: ken_elaborator::capabilities::Authority) -> ken_kernel::GlobalId {
+fn auth_ctor_id(
+    env: &FsEnv,
+    authority: ken_elaborator::capabilities::Authority,
+) -> ken_kernel::GlobalId {
     use ken_elaborator::capabilities::{AUTH_FULL, AUTH_NONE, AUTH_PARTIAL};
     match authority {
         AUTH_NONE => env.anone_id,
@@ -104,14 +95,19 @@ fn read_via_real_driver(
     let term = ken_kernel::Term::const_(env.read_bytes_id, vec![]);
     let f = ken_interp::eval(&[], &term, &env.elab_env.env, &mut store);
     let a_id = auth_ctor_id(env, ken_elaborator::capabilities::authority(cap));
-    let a_term = ken_kernel::Term::Constructor { id: a_id, level_args: vec![] };
+    let a_term = ken_kernel::Term::Constructor {
+        id: a_id,
+        level_args: vec![],
+    };
     let a_val = ken_interp::eval(&[], &a_term, &env.elab_env.env, &mut store);
     let step0 = ken_interp::apply(f, a_val, &env.elab_env.env, &mut store);
     let step1 = ken_interp::apply(step0, cap_evalval(cap), &env.elab_env.env, &mut store);
     let path_val = ken_interp::EvalVal::Bytes(path.as_bytes().to_vec());
     let tree = ken_interp::apply(step1, path_val, &env.elab_env.env, &mut store);
+    let mut host = ken_interp::PosixHost::new();
     ken_interp::run_io(
         tree,
+        &mut host,
         &env.console_ids,
         Some(&env.fs_ids),
         None,
@@ -138,7 +134,10 @@ fn r1_sufficient_cap_reads_fixture() {
             Some(ken_interp::EvalVal::Bytes(b)) => assert_eq!(*b, expected),
             other => panic!("expected Ok(Bytes(..)), got payload {:?}", other),
         },
-        other => panic!("expected Ok(<fixture bytes>) for a sufficient cap, got {:?}", other),
+        other => panic!(
+            "expected Ok(<fixture bytes>) for a sufficient cap, got {:?}",
+            other
+        ),
     }
 }
 
@@ -151,7 +150,10 @@ fn r1_sufficient_cap_reads_fixture() {
 fn r2_insufficient_cap_denied_before_read() {
     let mut env = mk_env();
     let path = fixture_path("three-lines.txt");
-    assert!(path.exists(), "fixture harness precondition: path must exist (isolates capability denial from NotFound)");
+    assert!(
+        path.exists(),
+        "fixture harness precondition: path must exist (isolates capability denial from NotFound)"
+    );
 
     let parent = Cap::mint(AUTH_FULL, "FS");
     let (cap, _obl) = attenuate(&parent, AUTH_NONE);
@@ -161,10 +163,16 @@ fn r2_insufficient_cap_denied_before_read() {
     match result {
         Ok(ken_interp::EvalVal::Ctor { id, args, .. }) if id == env.err_id => match args.get(2) {
             Some(ken_interp::EvalVal::Ctor { id: err_id, .. }) => {
-                assert_eq!(*err_id, env.capabilitydenied_id, "insufficient cap must surface CapabilityDenied, not e.g. NotFound");
+                assert_eq!(
+                    *err_id, env.capabilitydenied_id,
+                    "insufficient cap must surface CapabilityDenied, not e.g. NotFound"
+                );
             }
             other => panic!("expected Err(CapabilityDenied), got payload {:?}", other),
         },
-        other => panic!("expected a total Err(CapabilityDenied) Result, got {:?}", other),
+        other => panic!(
+            "expected a total Err(CapabilityDenied) Result, got {:?}",
+            other
+        ),
     }
 }
