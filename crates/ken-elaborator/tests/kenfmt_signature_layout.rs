@@ -24,6 +24,22 @@ fn token_shape(source: &str) -> Vec<String> {
         .collect()
 }
 
+fn ast_shape(source: &str) -> String {
+    let parsed = parse_lossless(source).expect("source must parse");
+    erase_debug_spans(format!("{:?}", parsed.typed_decls()))
+}
+
+fn erase_debug_spans(mut debug: String) -> String {
+    const PREFIX: &str = "Span { start: ";
+    while let Some(start) = debug.find(PREFIX) {
+        let Some(relative_end) = debug[start..].find(" }") else {
+            break;
+        };
+        debug.replace_range(start..start + relative_end + 2, "Span");
+    }
+    debug
+}
+
 #[test]
 fn r1_signature_fit_and_split_ladder_are_exact() {
     check(
@@ -75,4 +91,14 @@ fn layout_changes_only_whitespace_and_token_spelling_by_existing_token_kind() {
     assert!(formatted.contains("apply a b"));
     assert!(formatted.contains("apply b a"));
     assert_eq!(format_ken(&formatted).unwrap(), formatted);
+}
+
+#[test]
+fn r3_r5_nested_applications_fit_recursively_inside_a_broken_parent() {
+    let source = "lemma nested : Claim = outer (\\r. Equal OrdResult (compare a da (pair_fst a b x) (pair_fst a b y)) r -> Equal Bool (ord_leq_at a da (pair_fst a b x) (pair_fst a b y)) True) tail";
+    let expected = "lemma nested : Claim =\n  outer\n    (λr.\n      Equal OrdResult (compare a da (pair_fst a b x) (pair_fst a b y)) r\n      → Equal Bool (ord_leq_at a da (pair_fst a b x) (pair_fst a b y)) True)\n    tail\n";
+
+    check(source, expected);
+    assert_eq!(token_shape(source), token_shape(expected));
+    assert_eq!(ast_shape(source), ast_shape(expected));
 }

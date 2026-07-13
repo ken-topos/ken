@@ -26,10 +26,11 @@ pub enum Doc {
     Group(Box<Doc>),
     /// A group whose fit decision is limited to its own flattened contents.
     ///
-    /// Ordinary groups include the pending line suffix in their decision. A
-    /// declaration signature instead owns an independent width decision: if
-    /// the signature fits it stays horizontal even when the body must move to
-    /// the next line.
+    /// Ordinary groups include the pending line suffix in their decision.
+    /// Locally fitted productions such as declaration signatures,
+    /// applications, and parenthesized expressions instead own independent
+    /// width decisions, so a fitting child stays horizontal when its parent
+    /// must break.
     FitGroup(Box<Doc>),
 }
 
@@ -168,11 +169,15 @@ pub fn render(doc: &Doc, width: usize) -> String {
                 doc: child,
             }),
             Doc::FitGroup(child) => {
-                let fits_locally = child
-                    .flatten()
-                    .as_ref()
-                    .and_then(flat_width)
-                    .is_some_and(|flat| flat <= width.saturating_sub(column));
+                let punctuation_suffix = pending_punctuation_width(&commands);
+                let fits_locally =
+                    child
+                        .flatten()
+                        .as_ref()
+                        .and_then(flat_width)
+                        .is_some_and(|flat| {
+                            flat <= width.saturating_sub(column.saturating_add(punctuation_suffix))
+                        });
                 commands.push(Command {
                     indent: command.indent,
                     mode: if fits_locally {
@@ -186,6 +191,23 @@ pub fn render(doc: &Doc, width: usize) -> String {
         }
     }
     output
+}
+
+fn pending_punctuation_width(commands: &[Command<'_>]) -> usize {
+    commands
+        .iter()
+        .rev()
+        .map_while(|command| match command.doc {
+            Doc::Text(text)
+                if text
+                    .chars()
+                    .all(|ch| matches!(ch, ')' | ']' | '}' | ',' | ';')) =>
+            {
+                Some(display_width(text))
+            }
+            _ => None,
+        })
+        .sum()
 }
 
 #[derive(Clone)]
@@ -369,22 +391,25 @@ impl<'a> LayoutPrinter<'a> {
                 | Expr::ELam(_, _, _)
                 | Expr::ELet(_, _, _, _, _)
                 | Expr::EApp(_, _, _)
+                | Expr::EArrow(_, _, _)
         );
         let doc = match expr {
             Expr::EMatch { span, arms, .. } => self.print_match(span, arms),
             Expr::ELam(_, body, span) => self.print_lambda(span, body),
             Expr::ELet(_, _, value, body, span) => self.print_let(span, value, body),
             Expr::EApp(_, _, _) => self.print_application(expr, false),
+            Expr::EArrow(left, right, _) => self.print_arrow(left, right),
             Expr::EAsc(_, _, span)
             | Expr::EOld(_, span)
             | Expr::EBinOp(_, _, _, span)
             | Expr::EProj(_, _, span)
-            | Expr::EPi(_, _, _, span)
-            | Expr::EArrow(_, _, span) => self.print_span(span),
+            | Expr::EPi(_, _, _, span) => self.print_span(span),
             _ => self.print_span(expr.span()),
         };
         if reconstructed {
             self.with_source_parens(expr.span(), doc)
+        } else if self.span_has_outer_parens(expr.span()) {
+            doc.fit_group()
         } else {
             doc
         }
@@ -932,12 +957,21 @@ impl<'a> LayoutPrinter<'a> {
         let prefix = Span::new(start, body.span().start);
         Doc::concat([
             self.doc_from_tokens(&prefix, TokenLayout::Soft),
-            Doc::concat([Doc::line(), self.print_expr(body)]).nest(INDENT_WIDTH),
+            Doc::concat([Doc::line(), self.print_expr_locally(body)]).nest(INDENT_WIDTH),
         ])
         .group()
     }
 
-    fn print_application(&self, expr: &Expr, force_break: bool) -> Doc {
+    fn print_expr_locally(&self, expr: &Expr) -> Doc {
+        if matches!(expr, Expr::EApp(_, _, _)) {
+            let doc = self.print_application(expr, true);
+            self.with_source_parens(expr.span(), doc)
+        } else {
+            self.print_expr(expr)
+        }
+    }
+
+    fn print_application(&self, expr: &Expr, local_fit: bool) -> Doc {
         let mut arguments = Vec::new();
         let head = flatten_application(expr, &mut arguments);
         let mut continuation = Vec::new();
@@ -945,11 +979,7 @@ impl<'a> LayoutPrinter<'a> {
         for argument in arguments {
             let comments = self.comments_between(previous_end, argument.span().start);
             if comments.is_empty() {
-                continuation.push(if force_break {
-                    Doc::hard_line()
-                } else {
-                    Doc::line()
-                });
+                continuation.push(Doc::line());
             } else {
                 continuation.push(Doc::hard_line());
                 for comment in comments {
@@ -957,12 +987,12 @@ impl<'a> LayoutPrinter<'a> {
                     continuation.push(Doc::hard_line());
                 }
             }
-            let argument_doc = self.print_expr(argument);
+            let argument_doc = self.print_expr_locally(argument);
             continuation.push(
                 if expr_needs_parens(argument, ExprContext::ApplicationArgument)
                     && !self.rendered_expr_has_outer_parens(argument)
                 {
-                    Doc::concat([Doc::text("("), argument_doc, Doc::text(")")])
+                    Doc::concat([Doc::text("("), argument_doc, Doc::text(")")]).fit_group()
                 } else {
                     argument_doc
                 },
@@ -973,11 +1003,28 @@ impl<'a> LayoutPrinter<'a> {
         let head_doc = if expr_needs_parens(head, ExprContext::ApplicationHead)
             && !self.rendered_expr_has_outer_parens(head)
         {
-            Doc::concat([Doc::text("("), head_doc, Doc::text(")")])
+            Doc::concat([Doc::text("("), head_doc, Doc::text(")")]).fit_group()
         } else {
             head_doc
         };
-        Doc::concat([head_doc, Doc::concat(continuation).nest(INDENT_WIDTH)]).group()
+        let application = Doc::concat([head_doc, Doc::concat(continuation).nest(INDENT_WIDTH)]);
+        if local_fit {
+            application.fit_group()
+        } else {
+            application.group()
+        }
+    }
+
+    fn print_arrow(&self, left: &Expr, right: &Expr) -> Doc {
+        let boundary = Span::new(left.span().end, right.span().start);
+        Doc::concat([
+            self.print_expr_locally(left),
+            Doc::line(),
+            self.doc_from_tokens(&boundary, TokenLayout::Soft),
+            Doc::text(" "),
+            self.print_expr_locally(right),
+        ])
+        .fit_group()
     }
 
     fn comments_between(&self, start: usize, end: usize) -> Vec<String> {
@@ -1025,7 +1072,7 @@ impl<'a> LayoutPrinter<'a> {
             indices = indices[1..indices.len() - 1].to_vec();
         }
         for _ in 0..wrappers {
-            doc = Doc::concat([Doc::text("("), doc, Doc::text(")")]);
+            doc = Doc::concat([Doc::text("("), doc, Doc::text(")")]).fit_group();
         }
         doc
     }
