@@ -14,7 +14,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 4938dd61`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 106fd60c`
 >
 > **★ CURRENT FRONTIER (one-line resume):** ADR-0014 R2 module round COMPLETE
 > (N1–N4 ✅; only N5 `pub use` gated on MRES-9 remains). **kenfmt B3: ALL DOC/
@@ -68,12 +68,20 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `EOld`; dedicated atom-tight `OldOperand` ctx (prec<8). Regressions
 > `(old b).value`+`old (f x)` assert canonical-bytes+ast-shape+idempotence+elab.
 > 10/10 focused + whole-catalog + literal locked CI green; zero TCB. **Position:
-> QA re-gate (`evt_4c8r8z2ajcd3c`) → then Architect narrow re-confirm (ONLY the 2
-> `old` cases; verdict must FLIP).** **(2) §32 currency (DOC)
-> `871ff0605326bfd8a075520942a140101f780a04`** (spec-author; one file
-> `32-grammar.md` +1/−1: `module_hdr ::= "module" ModPath "{" (decl ";"?)* "}"`;
-> parser-grounded to `e3fa0f41` parser.rs:896–906; §1d canonical rule unchanged).
-> **Position: Spec/Fidelity review (`evt_4r0mf0wbfb3d6`).**
+> QA APPROVED + rebased → tip **`c68ef42a`**; **Architect terminal re-confirm
+> APPROVE `evt_4xqxpgbap8k6s` — B3 CLOSED on the build side.** Verdict-flip
+> confirmed empirically (both `old` cases now PRESERVED, was false); pre-correction
+> tree byte-identical to the earlier faithful approval; ac4 regression locks the
+> counterexamples. **Steward honesty-gate CLEAN** (4 crates/ken-elaborator files
+> +1874/−0, FF atop 106fd60c, diff-check clean, zero production trust-surface
+> delta — the 2 `trusted_base` refs are TEST invariance-asserts, the ac4 backstop).
+> **PUBLISHING (CI-polled, bg).** **(2) §32 currency (DOC) —
+> **CLOSED ✅ MERGED `origin/main @ 106fd60c` (PR #596, doc-only).** Landed SHA
+> `b1942cd7` (spec-author `871ff060` → placement reconcile → **CV Spec/Fidelity
+> APPROVE** `evt_5d3t0skcve8ad`): `unit` drops `module_hdr?`; adds recursive
+> `decl` arm `| "module" ModPath "{" (decl ";"?)* "}"` (nested modules
+> expressible, §33 §3.1); §1d canonical rule unchanged. Honesty-gated clean
+> (+2/−2, one file, doc-only, zero TCB).
 >
 > **★ NEXT (resume actions, in order):**
 > - **B3 code:** QA approves → leader posts Architect re-confirm → **⚠ WATCH-ITEM:
@@ -81,7 +89,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   re-confirm request may NOT wake it → PING it (standalone mention; capture WIDE
 >   to confirm it engages) once QA is green.** On Architect APPROVE `2f10d5da` →
 >   honesty-gate + **CI-polled (bg) publish** → **B3 CLOSED.**
-> - **§32 doc:** on Spec/Fidelity APPROVE `871ff060` → doc-only publish.
+> - **§32 doc:** ✅ DONE — merged `106fd60c` (PR #596).
 > - Then drive B3 retros → close B3; kenfmt → **B4** (.ken.md splice) + capstone **C**.
 >
 > **★ (prior) B3 oracle + §1d sum-determinism pin** **MERGED** (`858c64a3`, PR #593, doc-only;

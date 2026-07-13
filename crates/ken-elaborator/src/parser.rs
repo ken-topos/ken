@@ -898,6 +898,9 @@ impl Parser {
         let mut decls = Vec::new();
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
             decls.push(self.parse_decl()?);
+            if matches!(self.peek(), Token::Semicolon) {
+                self.advance();
+            }
         }
         let end = self.peek_span().end;
         self.expect(&Token::RBrace)?;
