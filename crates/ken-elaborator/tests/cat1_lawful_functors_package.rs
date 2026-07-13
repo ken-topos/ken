@@ -4,7 +4,8 @@
 use ken_elaborator::ElabEnv;
 use ken_kernel::Term;
 
-const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+const COLLECTIONS_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
 const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
 const LAWFUL_FUNCTORS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
@@ -66,8 +67,12 @@ fn lawful_functors_package_elaborates_with_parametric_list_monoid() {
 
 #[test]
 fn lawful_functors_source_cites_landed_laws_without_axiom() {
+    let compact = LAWFUL_FUNCTORS_KEN_MD
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(
-        LAWFUL_FUNCTORS_KEN_MD.contains("instance Monoid (List a)"),
+        compact.contains("instance Monoid (List a)"),
         "package must use the parametric List Monoid instance head"
     );
     assert!(
@@ -75,11 +80,9 @@ fn lawful_functors_source_cites_landed_laws_without_axiom() {
         "package must not leave the old closed List Nat Monoid instance"
     );
     assert!(
-        LAWFUL_FUNCTORS_KEN_MD.contains("assoc      = proof assoc for list_append a")
-            && LAWFUL_FUNCTORS_KEN_MD
-                .contains("left_unit  = proof left_unit for list_append a")
-            && LAWFUL_FUNCTORS_KEN_MD
-                .contains("right_unit = proof right_unit for list_append a"),
+        compact.contains("assoc = proof assoc for list_append a;")
+            && compact.contains("left_unit = proof left_unit for list_append a;")
+            && compact.contains("right_unit = proof right_unit for list_append a"),
         "law fields should cite the existing generic List proofs"
     );
     assert!(
@@ -87,10 +90,10 @@ fn lawful_functors_source_cites_landed_laws_without_axiom() {
         "lawful-functors package must not fill laws with Axiom"
     );
     assert!(
-        LAWFUL_FUNCTORS_KEN_MD.contains("class Functor (f : Type → Type)")
-            && LAWFUL_FUNCTORS_KEN_MD.contains("id_law     : (a : Type) → (x : f a)")
-            && LAWFUL_FUNCTORS_KEN_MD.contains("fusion_law : (a : Type) → (b : Type) → (c : Type)")
-            && LAWFUL_FUNCTORS_KEN_MD.contains("(g : b → c) → (h : a → b) → (x : f a)"),
+        compact.contains("class Functor (f : Type → Type)")
+            && compact.contains("id_law : (a : Type) → (x : f a)")
+            && compact.contains("fusion_law : (a : Type) → (b : Type) → (c : Type)")
+            && compact.contains("(g : b → c) → (h : a → b) → (x : f a)"),
         "Functor should use the settled single pointwise law fields"
     );
     assert!(

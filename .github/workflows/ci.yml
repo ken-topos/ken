@@ -26,6 +26,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build
         run: cargo build --workspace --locked
+      - name: Canonical Ken source
+        run: >-
+          cargo run -p ken-cli -- fmt --check
+          $(find catalog -type f -name '*.ken.md' | sort)
+          catalog/packages/Capability/Verify/ProofErasureBoundaryChecker.ken
+          $(find examples/rosetta -type f -name '*.ken' | sort)
       - name: Test
         run: cargo test --workspace --locked
 

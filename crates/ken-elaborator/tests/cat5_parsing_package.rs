@@ -10,7 +10,8 @@ use ken_kernel::Decl;
 use ken_kernel::GlobalId;
 use std::collections::HashSet;
 
-const PARSING_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Parsing.ken.md");
+const PARSING_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/Parsing/Parsing.ken.md");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
@@ -268,33 +269,36 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
 
 #[test]
 fn cat5_d2_parser_result_surface_is_total_and_located() {
+    let compact = PARSING_KEN_MD
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(
-        PARSING_KEN_MD.contains("data ParseError = MkParseError SourceId Span")
-            && PARSING_KEN_MD.contains("fn error_source (err : ParseError) : SourceId =")
-            && PARSING_KEN_MD.contains("fn error_span (err : ParseError) : Span ="),
+        compact.contains("data ParseError = MkParseError SourceId Span")
+            && compact.contains("fn error_source (err : ParseError) : SourceId =")
+            && compact.contains("fn error_span (err : ParseError) : Span ="),
         "ParseError must carry source identity and a span with accessors"
     );
     assert!(
-        PARSING_KEN_MD.contains("data ParseResult a =")
-            && PARSING_KEN_MD.contains("Parsed a Span Nat")
-            && PARSING_KEN_MD.contains("Failed ParseError"),
+        compact.contains("data ParseResult a =")
+            && compact.contains("Parsed a Span Nat")
+            && compact.contains("Failed ParseError"),
         "ParseResult must be the total Parsed/Failed result surface"
     );
     assert!(
-        PARSING_KEN_MD.contains("const Parser (a : Type) : Type =")
-            && PARSING_KEN_MD
-                .contains("(s : Source) → (start : Nat) → LessEqNat start (source_length s)")
-            && PARSING_KEN_MD.contains("→ ParseResult a"),
+        compact.contains("const Parser (a : Type) : Type =")
+            && compact.contains("(s : Source) → (start : Nat) → LessEqNat start (source_length s)")
+            && compact.contains("→ ParseResult a"),
         "Parser must be total over well-formed source/start inputs"
     );
     assert!(
-        PARSING_KEN_MD.contains("fn ParsedValid")
-            && PARSING_KEN_MD.contains("Equal Nat (span_start consumed) start")
-            && PARSING_KEN_MD.contains("Equal Nat (span_end consumed) next")
-            && PARSING_KEN_MD.contains("fn FailedValid")
-            && PARSING_KEN_MD.contains("Equal SourceId (error_source err) (source_id s)")
-            && PARSING_KEN_MD.contains("ValidSpan s (error_span err)")
-            && PARSING_KEN_MD.contains("fn ParserLaws"),
+        compact.contains("fn ParsedValid")
+            && compact.contains("Equal Nat (span_start consumed) start")
+            && compact.contains("Equal Nat (span_end consumed) next")
+            && compact.contains("fn FailedValid")
+            && compact.contains("Equal SourceId (error_source err) (source_id s)")
+            && compact.contains("ValidSpan s (error_span err)")
+            && compact.contains("fn ParserLaws"),
         "D2 laws must state success validity, failure validity, totality, and source locality"
     );
     assert!(
@@ -312,32 +316,36 @@ fn cat5_d2_parser_result_surface_is_total_and_located() {
 
 #[test]
 fn cat5_d3_bool_expression_surface_is_package_owned() {
+    let compact = PARSING_KEN_MD
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(
-        PARSING_KEN_MD.contains("data BoolExpr =")
-            && PARSING_KEN_MD.contains("BTrue")
-            && PARSING_KEN_MD.contains("BFalse")
-            && PARSING_KEN_MD.contains("BNot BoolExpr")
-            && PARSING_KEN_MD.contains("BAnd BoolExpr BoolExpr"),
+        compact.contains("data BoolExpr =")
+            && compact.contains("BTrue")
+            && compact.contains("BFalse")
+            && compact.contains("BNot BoolExpr")
+            && compact.contains("BAnd BoolExpr BoolExpr"),
         "D3 must expose the package-owned BoolExpr data surface"
     );
     assert!(
-        PARSING_KEN_MD.contains("data Syntax a = MkSyntax (Located a) (List (Located a))")
-            && PARSING_KEN_MD.contains("fn erase_spans (x : Syntax BoolExpr) : BoolExpr =")
-            && PARSING_KEN_MD.contains("fn ValidSyntax"),
+        compact.contains("data Syntax a = MkSyntax (Located a) (List (Located a))")
+            && compact.contains("fn erase_spans (x : Syntax BoolExpr) : BoolExpr =")
+            && compact.contains("fn ValidSyntax"),
         "D3 Syntax must be package-owned located syntax, not compiler AST"
     );
     assert!(
-        PARSING_KEN_MD.contains("const parse_bool_expr : Parser (Syntax BoolExpr) =")
-            && PARSING_KEN_MD.contains("fn print_bool_expr (e : BoolExpr) : Bytes =")
-            && PARSING_KEN_MD.contains("fn format_bool_expr (s : Source) : Result ParseError Bytes ="),
+        compact.contains("const parse_bool_expr : Parser (Syntax BoolExpr) =")
+            && compact.contains("fn print_bool_expr (e : BoolExpr) : Bytes =")
+            && compact.contains("fn format_bool_expr (s : Source) : Result ParseError Bytes ="),
         "D3 must export parser, printer, and formatter with the pinned types"
     );
     assert!(
-        PARSING_KEN_MD.contains("bytes_at (source_bytes s)")
-            && PARSING_KEN_MD.contains("bytes_encode \"true\"")
-            && PARSING_KEN_MD.contains("bytes_encode \"false\"")
-            && PARSING_KEN_MD.contains("bytes_encode \"(not \"")
-            && PARSING_KEN_MD.contains("bytes_encode \"(and \""),
+        compact.contains("bytes_at (source_bytes s)")
+            && compact.contains("bytes_encode \"true\"")
+            && compact.contains("bytes_encode \"false\"")
+            && compact.contains("bytes_encode \"(not \"")
+            && compact.contains("bytes_encode \"(and \""),
         "D3 must operate over Source bytes and canonical ASCII token bytes"
     );
     assert!(
@@ -350,34 +358,36 @@ fn cat5_d3_bool_expression_surface_is_package_owned() {
 
 #[test]
 fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
+    let compact = PARSING_KEN_MD
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(
-        PARSING_KEN_MD.contains("fn IsUtf8 (bs : Bytes) : Prop =")
-            && PARSING_KEN_MD.contains("bytes_encode (bytes_decode bs)")
+        compact.contains("fn IsUtf8 (bs : Bytes) : Prop =")
+            && compact.contains("bytes_encode (bytes_decode bs)")
             && !PARSING_KEN_MD.contains("Equal Bytes bs bs"),
         "IsUtf8 must be round-trip evidence over the source bytes, not reflexive equality"
     );
     assert!(
-        PARSING_KEN_MD.contains("fn byte_unit_nat_to_int (unit : Bytes) (n : Nat) : Int =")
-            && PARSING_KEN_MD.contains("fn EmptyBytes (bs : Bytes) : Prop =")
-            && PARSING_KEN_MD.contains("fn NonEmptyBytes (bs : Bytes) : Prop =")
-            && PARSING_KEN_MD.contains("fn UnitByteLength (unit : Bytes) : Prop =")
-            && PARSING_KEN_MD.contains("fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =")
-            && PARSING_KEN_MD.contains("bytes_concat left right")
-            && PARSING_KEN_MD.contains("NonEmptyBytes unit")
-            && PARSING_KEN_MD.contains("bytes_length bs")
-            && PARSING_KEN_MD.contains("byte_unit_nat_to_int unit n"),
+        compact.contains("fn byte_unit_nat_to_int (unit : Bytes) (n : Nat) : Int =")
+            && compact.contains("fn EmptyBytes (bs : Bytes) : Prop =")
+            && compact.contains("fn NonEmptyBytes (bs : Bytes) : Prop =")
+            && compact.contains("fn UnitByteLength (unit : Bytes) : Prop =")
+            && compact.contains("fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =")
+            && compact.contains("bytes_concat left right")
+            && compact.contains("NonEmptyBytes unit")
+            && compact.contains("bytes_length bs")
+            && compact.contains("byte_unit_nat_to_int unit n"),
         "SourceLength must tie source_length to source_bytes through a non-empty byte-atomic unit witness"
     );
     assert!(
-        PARSING_KEN_MD.contains("class Source {")
-            && PARSING_KEN_MD.contains("source_bytes_field : Bytes")
-            && PARSING_KEN_MD.contains("source_length_field : Nat")
-            && PARSING_KEN_MD.contains("source_length_unit_field : Bytes")
-            && PARSING_KEN_MD
-                .contains("source_length_unit_valid_field : UnitByteLength source_length_unit_field")
-            && PARSING_KEN_MD.contains("source_utf8_field : IsUtf8 source_bytes_field")
-            && PARSING_KEN_MD
-                .contains("source_length_valid_field : SourceLength source_length_unit_field source_bytes_field source_length_field"),
+        compact.contains("class Source {")
+            && compact.contains("source_bytes_field : Bytes")
+            && compact.contains("source_length_field : Nat")
+            && compact.contains("source_length_unit_field : Bytes")
+            && compact.contains("source_length_unit_valid_field : UnitByteLength source_length_unit_field")
+            && compact.contains("source_utf8_field : IsUtf8 source_bytes_field")
+            && compact.contains("source_length_valid_field : SourceLength source_length_unit_field source_bytes_field source_length_field"),
         "Source must be a dependent record carrying bytes, length, and both proof fields"
     );
     assert!(
@@ -385,16 +395,17 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
         "Source must not expose the old unconstrained MkSource constructor"
     );
     assert!(
-        !PARSING_KEN_MD.contains("source_bytes_field : String") && !PARSING_KEN_MD.contains("String Nat"),
+        !PARSING_KEN_MD.contains("source_bytes_field : String")
+            && !PARSING_KEN_MD.contains("String Nat"),
         "Source must not use normalized String as the offset basis"
     );
     assert!(
-        PARSING_KEN_MD.contains("data Span = MkSpan Nat Nat"),
+        compact.contains("data Span = MkSpan Nat Nat"),
         "Span must carry only byte endpoints"
     );
     assert!(
-        PARSING_KEN_MD.contains("data Located a = MkLocated SourceId Span a")
-            && PARSING_KEN_MD.contains("fn ValidLocated"),
+        compact.contains("data Located a = MkLocated SourceId Span a")
+            && compact.contains("fn ValidLocated"),
         "source identity must be supplied by Located/validity, not by bare Span"
     );
     assert!(

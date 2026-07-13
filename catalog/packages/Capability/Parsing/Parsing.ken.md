@@ -47,67 +47,82 @@ sidestepping UTF-8 boundary bugs entirely; `IsUtf8` is a proof the bytes
 *happen* to decode losslessly, not a requirement they must.
 
 ```ken
-data SourceId = MkSourceId Nat
+data SourceId =
+  MkSourceId Nat
 
-fn IsUtf8 (bs : Bytes) : Prop =
-  Equal Bytes (bytes_encode (bytes_decode bs)) bs
+fn IsUtf8 (bs : Bytes) : Prop = Equal Bytes (bytes_encode (bytes_decode bs)) bs
 
-fn byte_unit_zero_int (unit : Bytes) : Int =
-  (bytes_length unit) - (bytes_length unit)
+fn byte_unit_zero_int (unit : Bytes) : Int = bytes_length unit - bytes_length unit
 
 fn byte_unit_nat_to_int (unit : Bytes) (n : Nat) : Int =
   match n {
-    Zero ↦ byte_unit_zero_int unit ;
-    Suc n2 ↦ (bytes_length unit) + (byte_unit_nat_to_int unit n2)
+    Zero ↦ byte_unit_zero_int unit;
+    Suc n2 ↦ bytes_length unit + byte_unit_nat_to_int unit n2
   }
 
 fn EmptyBytes (bs : Bytes) : Prop =
   Equal Bytes bs (bytes_slice bs (bytes_length bs) (byte_unit_zero_int bs))
 
-fn NonEmptyBytes (bs : Bytes) : Prop =
-  EmptyBytes bs → Bottom
+fn NonEmptyBytes (bs : Bytes) : Prop = EmptyBytes bs → Bottom
 
 fn UnitByteLength (unit : Bytes) : Prop =
   And
     (NonEmptyBytes unit)
-    ((left : Bytes) → (right : Bytes) →
-      Equal Bytes unit (bytes_concat left right) →
-      NonEmptyBytes left →
-      EmptyBytes right)
+    ((left : Bytes)
+    → (right : Bytes)
+    → Equal
+    Bytes
+    unit
+    (bytes_concat
+    left
+    right)
+    → NonEmptyBytes
+    left
+    → EmptyBytes
+    right)
 
 fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =
   Equal Int (bytes_length bs) (byte_unit_nat_to_int unit n)
 
 class Source {
-  source_id_field : SourceId ;
-  source_bytes_field : Bytes ;
-  source_length_field : Nat ;
-  source_length_unit_field : Bytes ;
-  source_length_unit_valid_field : UnitByteLength source_length_unit_field ;
-  source_utf8_field : IsUtf8 source_bytes_field ;
-  source_length_valid_field : SourceLength source_length_unit_field source_bytes_field source_length_field
+  source_id_field : SourceId;
+  source_bytes_field : Bytes;
+  source_length_field : Nat;
+  source_length_unit_field : Bytes;
+  source_length_unit_valid_field : UnitByteLength source_length_unit_field;
+  source_utf8_field : IsUtf8 source_bytes_field;
+  source_length_valid_field : SourceLength
+  source_length_unit_field
+  source_bytes_field
+  source_length_field
 }
 
-fn source_id (s : Source) : SourceId =
-  s.source_id_field
+fn source_id (s : Source) : SourceId = s.source_id_field
 
-fn source_bytes (s : Source) : Bytes =
-  s.source_bytes_field
+fn source_bytes (s : Source) : Bytes = s.source_bytes_field
 
-fn source_length (s : Source) : Nat =
-  s.source_length_field
+fn source_length (s : Source) : Nat = s.source_length_field
 
-proof utf8 for source_bytes (s : Source) : IsUtf8 (source_bytes s) =
-  s.source_utf8_field
+proof utf8 for source_bytes (s : Source) : IsUtf8 (source_bytes s) = s.source_utf8_field
 
-fn source_length_unit (s : Source) : Bytes =
-  s.source_length_unit_field
+fn source_length_unit (s : Source) : Bytes = s.source_length_unit_field
 
-proof valid for source_length_unit (s : Source) : UnitByteLength (source_length_unit s) =
+proof valid
+for
+source_length_unit
+(s : Source) : UnitByteLength
+(source_length_unit
+s) =
   s.source_length_unit_valid_field
 
-lemma source_length_valid (s : Source)
-  : SourceLength (source_length_unit s) (source_bytes s) (source_length s) =
+lemma source_length_valid
+(s : Source) : SourceLength
+(source_length_unit
+s)
+(source_bytes
+s)
+(source_length
+s) =
   s.source_length_valid_field
 ```
 
@@ -143,36 +158,58 @@ a zero-width span at that offset is valid, by pairing `LessEqNat::refl`
 (`end <= source_length s`) via `and_intro`.
 
 ```ken
-data Span = MkSpan Nat Nat
+data Span =
+  MkSpan Nat Nat
 
 fn span_start (sp : Span) : Nat =
-  match sp { MkSpan start end ↦ start }
+  match sp {
+    MkSpan start end ↦ start
+  }
 
 fn span_end (sp : Span) : Nat =
-  match sp { MkSpan start end ↦ end }
+  match sp {
+    MkSpan start end ↦ end
+  }
 
 fn nat_leq_bool (m : Nat) (n : Nat) : Bool =
   match m {
-    Zero ↦ True ;
-    Suc m2 ↦ match n { Zero ↦ False ; Suc n2 ↦ nat_leq_bool m2 n2 }
+    Zero ↦ True;
+    Suc m2 ↦
+      match n {
+        Zero ↦ False;
+        Suc n2 ↦
+          nat_leq_bool
+            m2
+            n2
+      }
   }
 
-fn LessEqNat (m : Nat) (n : Nat) : Prop =
-  Equal Bool (nat_leq_bool m n) True
+fn LessEqNat (m : Nat) (n : Nat) : Prop = Equal Bool (nat_leq_bool m n) True
 
 proof refl for LessEqNat (n : Nat) : LessEqNat n n =
-  match n { Zero ↦ Proved ; Suc n2 ↦ proof refl for LessEqNat n2 }
+  match n {
+    Zero ↦ Proved;
+    Suc n2 ↦ proof refl for LessEqNat n2
+  }
 
-proof zero_left for LessEqNat (n : Nat) : LessEqNat Zero n =
-  Proved
+proof zero_left for LessEqNat (n : Nat) : LessEqNat Zero n = Proved
 
 fn ValidSpan (s : Source) (sp : Span) : Prop =
   And
     (LessEqNat (span_start sp) (span_end sp))
     (LessEqNat (span_end sp) (source_length s))
 
-lemma valid_zero_width_span (s : Source) (offset : Nat)
-  : LessEqNat offset (source_length s) → ValidSpan s (MkSpan offset offset) =
+lemma valid_zero_width_span
+(s : Source)
+(offset : Nat) : LessEqNat
+offset
+(source_length
+s)
+→ ValidSpan
+s
+(MkSpan
+offset
+offset) =
   λh.
     and_intro
       (LessEqNat offset offset)
@@ -198,33 +235,45 @@ the former always succeeds on a zero-width span at `start`, the latter
 always fails at `start` with a zero-width error span.
 
 ```ken
-data Located a = MkLocated SourceId Span a
+data Located a =
+  MkLocated SourceId Span a
 
 fn located_source (a : Type) (x : Located a) : SourceId =
-  match x { MkLocated sid sp value ↦ sid }
+  match x {
+    MkLocated sid sp value ↦ sid
+  }
 
 fn located_span (a : Type) (x : Located a) : Span =
-  match x { MkLocated sid sp value ↦ sp }
+  match x {
+    MkLocated sid sp value ↦ sp
+  }
 
 fn located_value (a : Type) (x : Located a) : a =
-  match x { MkLocated sid sp value ↦ value }
+  match x {
+    MkLocated sid sp value ↦ value
+  }
 
 fn ValidLocated (a : Type) (s : Source) (x : Located a) : Prop =
   And
     (Equal SourceId (located_source a x) (source_id s))
     (ValidSpan s (located_span a x))
 
-data ParseError = MkParseError SourceId Span
+data ParseError =
+  MkParseError SourceId Span
 
 fn error_source (err : ParseError) : SourceId =
-  match err { MkParseError sid sp ↦ sid }
+  match err {
+    MkParseError sid sp ↦ sid
+  }
 
 fn error_span (err : ParseError) : Span =
-  match err { MkParseError sid sp ↦ sp }
+  match err {
+    MkParseError sid sp ↦ sp
+  }
 
 data ParseResult a =
-  Parsed a Span Nat |
-  Failed ParseError
+  Parsed a Span Nat
+  | Failed ParseError
 
 const Parser (a : Type) : Type =
   (s : Source) → (start : Nat) → LessEqNat start (source_length s) → ParseResult a
@@ -232,49 +281,91 @@ const Parser (a : Type) : Type =
 fn ParsedValid (s : Source) (start : Nat) (consumed : Span) (next : Nat) : Prop =
   And
     (ValidSpan s consumed)
-    (And
-      (Equal Nat (span_start consumed) start)
-      (Equal Nat (span_end consumed) next))
+    (And (Equal Nat (span_start consumed) start) (Equal Nat (span_end consumed) next))
 
 fn FailedValid (s : Source) (err : ParseError) : Prop =
-  And
-    (Equal SourceId (error_source err) (source_id s))
-    (ValidSpan s (error_span err))
+  And (Equal SourceId (error_source err) (source_id s)) (ValidSpan s (error_span err))
 
 fn ParseResultValid (a : Type) (s : Source) (start : Nat) (r : ParseResult a) : Prop =
   match r {
-    Parsed value consumed next ↦ ParsedValid s start consumed next ;
-    Failed err ↦ FailedValid s err
+    Parsed value consumed next ↦
+      ParsedValid
+        s
+        start
+        consumed
+        next;
+    Failed err ↦
+      FailedValid
+        s
+        err
   }
 
 fn ParserValid (a : Type) (p : Parser a) : Prop =
-  (s : Source) → (start : Nat) → (h : LessEqNat start (source_length s)) →
-    ParseResultValid a s start (p s start h)
+  (s : Source)
+  → (start : Nat)
+  → (h : LessEqNat
+  start
+  (source_length
+  s))
+  → ParseResultValid
+  a
+  s
+  start
+  (p
+  s
+  start
+  h)
 
 fn ParseResultTotal (a : Type) (r : ParseResult a) : Prop =
   match r {
-    Parsed value consumed next ↦ Top ;
+    Parsed value consumed next ↦ Top;
     Failed err ↦ Top
   }
 
 fn ParserTotal (a : Type) (p : Parser a) : Prop =
-  (s : Source) → (start : Nat) → (h : LessEqNat start (source_length s)) →
-    ParseResultTotal a (p s start h)
+  (s : Source)
+  → (start : Nat)
+  → (h : LessEqNat
+  start
+  (source_length
+  s))
+  → ParseResultTotal
+  a
+  (p
+  s
+  start
+  h)
 
 fn ParseResultSourceLocal (a : Type) (s : Source) (r : ParseResult a) : Prop =
   match r {
-    Parsed value consumed next ↦ ValidSpan s consumed ;
-    Failed err ↦ Equal SourceId (error_source err) (source_id s)
+    Parsed value consumed next ↦
+      ValidSpan
+        s
+        consumed;
+    Failed err ↦
+      Equal
+        SourceId
+        (error_source err)
+        (source_id s)
   }
 
 fn ParserSourceLocal (a : Type) (p : Parser a) : Prop =
-  (s : Source) → (start : Nat) → (h : LessEqNat start (source_length s)) →
-    ParseResultSourceLocal a s (p s start h)
+  (s : Source)
+  → (start : Nat)
+  → (h : LessEqNat
+  start
+  (source_length
+  s))
+  → ParseResultSourceLocal
+  a
+  s
+  (p
+  s
+  start
+  h)
 
 fn ParserLaws (a : Type) (p : Parser a) : Prop =
-  And
-    (ParserValid a p)
-    (And (ParserTotal a p) (ParserSourceLocal a p))
+  And (ParserValid a p) (And (ParserTotal a p) (ParserSourceLocal a p))
 
 fn parser_pure (a : Type) (value : a) : Parser a =
   λs. λstart. λh. Parsed a value (MkSpan start start) start
@@ -311,31 +402,40 @@ that otherwise takes no catalog dependency.
 
 ```ken
 data BoolExpr =
-  BTrue |
-  BFalse |
-  BNot BoolExpr |
-  BAnd BoolExpr BoolExpr
+  BTrue
+  | BFalse
+  | BNot BoolExpr
+  | BAnd BoolExpr BoolExpr
 
-data Syntax a = MkSyntax (Located a) (List (Located a))
+data Syntax a =
+  MkSyntax (Located a) (List (Located a))
 
 fn syntax_root (a : Type) (x : Syntax a) : Located a =
-  match x { MkSyntax root children ↦ root }
+  match x {
+    MkSyntax root children ↦ root
+  }
 
 fn syntax_children (a : Type) (x : Syntax a) : List (Located a) =
-  match x { MkSyntax root children ↦ children }
+  match x {
+    MkSyntax root children ↦ children
+  }
 
 fn erase_spans (x : Syntax BoolExpr) : BoolExpr =
   located_value BoolExpr (syntax_root BoolExpr x)
 
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
-    Nil ↦ ys ;
-    Cons x rest ↦ Cons a x (list_append a rest ys)
+    Nil ↦ ys;
+    Cons x rest ↦
+      Cons
+        a
+        x
+        (list_append a rest ys)
   }
 
 fn ValidLocatedList (a : Type) (s : Source) (xs : List (Located a)) : Prop =
   match xs {
-    Nil ↦ Top ;
+    Nil ↦ Top;
     Cons x rest ↦
       And
         (ValidLocated a s x)
@@ -343,49 +443,94 @@ fn ValidLocatedList (a : Type) (s : Source) (xs : List (Located a)) : Prop =
   }
 
 fn ValidSyntax (a : Type) (s : Source) (x : Syntax a) : Prop =
-  And
-    (ValidLocated a s (syntax_root a x))
-    (ValidLocatedList a s (syntax_children a x))
+  And (ValidLocated a s (syntax_root a x)) (ValidLocatedList a s (syntax_children a x))
 
 fn bool_expr_eq (x : BoolExpr) (y : BoolExpr) : Bool =
   match x {
-    BTrue ↦ match y { BTrue ↦ True ; BFalse ↦ False ; BNot y1 ↦ False ; BAnd yl yr ↦ False } ;
-    BFalse ↦ match y { BTrue ↦ False ; BFalse ↦ True ; BNot y1 ↦ False ; BAnd yl yr ↦ False } ;
-    BNot x1 ↦ match y {
-      BTrue ↦ False ;
-      BFalse ↦ False ;
-      BNot y1 ↦ bool_expr_eq x1 y1 ;
-      BAnd yl yr ↦ False
-    } ;
-    BAnd xl xr ↦ match y {
-      BTrue ↦ False ;
-      BFalse ↦ False ;
-      BNot y1 ↦ False ;
-      BAnd yl yr ↦ match bool_expr_eq xl yl {
-        True ↦ bool_expr_eq xr yr ;
-        False ↦ False
+    BTrue ↦
+      match y {
+        BTrue ↦ True;
+        BFalse ↦ False;
+        BNot y1 ↦ False;
+        BAnd yl yr ↦ False
+      };
+    BFalse ↦
+      match y {
+        BTrue ↦ False;
+        BFalse ↦ True;
+        BNot y1 ↦ False;
+        BAnd yl yr ↦ False
+      };
+    BNot x1 ↦
+      match y {
+        BTrue ↦ False;
+        BFalse ↦ False;
+        BNot y1 ↦
+          bool_expr_eq
+            x1
+            y1;
+        BAnd yl yr ↦ False
+      };
+    BAnd xl xr ↦
+      match y {
+        BTrue ↦ False;
+        BFalse ↦ False;
+        BNot y1 ↦ False;
+        BAnd yl yr ↦
+          match bool_expr_eq xl yl {
+            True ↦
+              bool_expr_eq
+                xr
+                yr;
+            False ↦ False
+          }
       }
-    }
   }
 
 fn nat_eq_bool (m : Nat) (n : Nat) : Bool =
   match m {
-    Zero ↦ match n { Zero ↦ True ; Suc n2 ↦ False } ;
-    Suc m2 ↦ match n { Zero ↦ False ; Suc n2 ↦ nat_eq_bool m2 n2 }
+    Zero ↦
+      match n {
+        Zero ↦ True;
+        Suc n2 ↦ False
+      };
+    Suc m2 ↦
+      match n {
+        Zero ↦ False;
+        Suc n2 ↦
+          nat_eq_bool
+            m2
+            n2
+      }
   }
 
 fn nat_add (m : Nat) (n : Nat) : Nat =
-  match n { Zero ↦ m ; Suc n2 ↦ Suc (nat_add m n2) }
+  match n {
+    Zero ↦ m;
+    Suc n2 ↦ Suc (nat_add m n2)
+  }
 
 fn nat_lt_bool (m : Nat) (n : Nat) : Bool =
-  match n { Zero ↦ False ; Suc n2 ↦ nat_leq_bool m n2 }
+  match n {
+    Zero ↦ False;
+    Suc n2 ↦
+      nat_leq_bool
+        m
+        n2
+  }
 
 fn bool_and (p : Bool) (q : Bool) : Bool =
-  match p { True ↦ q ; False ↦ False }
+  match p {
+    True ↦ q;
+    False ↦ False
+  }
 
 fn source_byte_eq (s : Source) (pos : Nat) (code : Int) : Bool =
   match nat_lt_bool pos (source_length s) {
-    True ↦ eq_int (bytes_at (source_bytes s) (byte_unit_nat_to_int (source_length_unit s) pos)) code ;
+    True ↦
+      eq_int
+        (bytes_at (source_bytes s) (byte_unit_nat_to_int (source_length_unit s) pos))
+        code;
     False ↦ False
   }
 
@@ -436,129 +581,258 @@ fn starts_and_open_token (s : Source) (start : Nat) : Bool =
 
 fn skip_spaces_fuel (fuel : Nat) (s : Source) (pos : Nat) : Nat =
   match fuel {
-    Zero ↦ pos ;
-    Suc fuel2 ↦ match source_byte_eq s pos (32 : Int) {
-      True ↦ skip_spaces_fuel fuel2 s (Suc pos) ;
-      False ↦ pos
-    }
+    Zero ↦ pos;
+    Suc fuel2 ↦
+      match source_byte_eq s pos (32 : Int) {
+        True ↦
+          skip_spaces_fuel
+            fuel2
+            s
+            (Suc pos);
+        False ↦ pos
+      }
   }
 
-fn skip_spaces (s : Source) (pos : Nat) : Nat =
-  skip_spaces_fuel (source_length s) s pos
+fn skip_spaces (s : Source) (pos : Nat) : Nat = skip_spaces_fuel (source_length s) s pos
 
-fn syntax_leaf (s : Source) (start : Nat) (end : Nat) (value : BoolExpr) : Syntax BoolExpr =
-  MkSyntax BoolExpr
+fn syntax_leaf
+(s : Source)
+(start : Nat)
+(end : Nat)
+(value : BoolExpr) : Syntax
+BoolExpr =
+  MkSyntax
+    BoolExpr
     (MkLocated BoolExpr (source_id s) (MkSpan start end) value)
     (Nil (Located BoolExpr))
 
 fn syntax_node_unary
-  (s : Source) (start : Nat) (end : Nat) (value : BoolExpr) (child : Syntax BoolExpr)
-  : Syntax BoolExpr =
-  MkSyntax BoolExpr
+(s : Source)
+(start : Nat)
+(end : Nat)
+(value : BoolExpr)
+(child : Syntax
+BoolExpr) : Syntax
+BoolExpr =
+  MkSyntax
+    BoolExpr
     (MkLocated BoolExpr (source_id s) (MkSpan start end) value)
-    (Cons (Located BoolExpr)
+    (Cons
+      (Located BoolExpr)
       (syntax_root BoolExpr child)
       (syntax_children BoolExpr child))
 
 fn syntax_node_binary
-  (s : Source) (start : Nat) (end : Nat) (value : BoolExpr)
-  (left : Syntax BoolExpr) (right : Syntax BoolExpr)
-  : Syntax BoolExpr =
-  MkSyntax BoolExpr
+(s : Source)
+(start : Nat)
+(end : Nat)
+(value : BoolExpr)
+(left : Syntax
+BoolExpr)
+(right : Syntax
+BoolExpr) : Syntax
+BoolExpr =
+  MkSyntax
+    BoolExpr
     (MkLocated BoolExpr (source_id s) (MkSpan start end) value)
     (list_append
       (Located BoolExpr)
-      (Cons (Located BoolExpr)
+      (Cons
+        (Located BoolExpr)
         (syntax_root BoolExpr left)
         (syntax_children BoolExpr left))
-      (Cons (Located BoolExpr)
+      (Cons
+        (Located BoolExpr)
         (syntax_root BoolExpr right)
         (syntax_children BoolExpr right)))
 
-fn parse_bool_expr_at_fuel (fuel : Nat) (s : Source) (start : Nat) : ParseResult (Syntax BoolExpr) =
+fn parse_bool_expr_at_fuel
+(fuel : Nat)
+(s : Source)
+(start : Nat) : ParseResult
+(Syntax
+BoolExpr) =
   match fuel {
-    Zero ↦ Failed (Syntax BoolExpr) (MkParseError (source_id s) (MkSpan start start)) ;
-    Suc fuel2 ↦ match starts_true_token s start {
-      True ↦
-        Parsed (Syntax BoolExpr)
-          (syntax_leaf s start (nat_add start (Suc (Suc (Suc (Suc Zero))))) BTrue)
-          (MkSpan start (nat_add start (Suc (Suc (Suc (Suc Zero))))))
-          (nat_add start (Suc (Suc (Suc (Suc Zero))))) ;
-      False ↦ match starts_false_token s start {
+    Zero ↦
+      Failed
+        (Syntax BoolExpr)
+        (MkParseError (source_id s) (MkSpan start start));
+    Suc fuel2 ↦
+      match starts_true_token s start {
         True ↦
-          Parsed (Syntax BoolExpr)
-            (syntax_leaf s start (nat_add start (Suc (Suc (Suc (Suc (Suc Zero)))))) BFalse)
-            (MkSpan start (nat_add start (Suc (Suc (Suc (Suc (Suc Zero)))))))
-            (nat_add start (Suc (Suc (Suc (Suc (Suc Zero)))))) ;
-        False ↦ match starts_not_open_token s start {
-          True ↦
-            match parse_bool_expr_at_fuel fuel2 s (skip_spaces s (nat_add start (Suc (Suc (Suc (Suc (Suc Zero))))))) {
-              Parsed child childSpan childNext ↦ match source_byte_eq s (skip_spaces s childNext) (41 : Int) {
-                True ↦
-                  Parsed (Syntax BoolExpr)
-                    (syntax_node_unary
-                      s
-                      start
-                      (Suc (skip_spaces s childNext))
-                      (BNot (erase_spans child))
-                      child)
-                    (MkSpan start (Suc (skip_spaces s childNext)))
-                    (Suc (skip_spaces s childNext)) ;
-                False ↦ Failed (Syntax BoolExpr) (MkParseError (source_id s) (MkSpan (skip_spaces s childNext) (skip_spaces s childNext)))
-              } ;
-              Failed err ↦ Failed (Syntax BoolExpr) err
-            } ;
-          False ↦ match starts_and_open_token s start {
+          Parsed
+            (Syntax BoolExpr)
+            (syntax_leaf s start (nat_add start (Suc (Suc (Suc (Suc Zero))))) BTrue)
+            (MkSpan start (nat_add start (Suc (Suc (Suc (Suc Zero))))))
+            (nat_add start (Suc (Suc (Suc (Suc Zero)))));
+        False ↦
+          match starts_false_token s start {
             True ↦
-              match parse_bool_expr_at_fuel fuel2 s (skip_spaces s (nat_add start (Suc (Suc (Suc (Suc (Suc Zero))))))) {
-                Parsed left leftSpan leftNext ↦ match source_byte_eq s leftNext (32 : Int) {
-                  True ↦
-                    match parse_bool_expr_at_fuel fuel2 s (skip_spaces s (Suc leftNext)) {
-                      Parsed right rightSpan rightNext ↦ match source_byte_eq s (skip_spaces s rightNext) (41 : Int) {
+              Parsed
+                (Syntax BoolExpr)
+                (syntax_leaf
+                  s
+                  start
+                  (nat_add start (Suc (Suc (Suc (Suc (Suc Zero))))))
+                  BFalse)
+                (MkSpan start (nat_add start (Suc (Suc (Suc (Suc (Suc Zero)))))))
+                (nat_add start (Suc (Suc (Suc (Suc (Suc Zero))))));
+            False ↦
+              match starts_not_open_token s start {
+                True ↦
+                  match parse_bool_expr_at_fuel
+                  fuel2
+                  s
+                  (skip_spaces
+                  s
+                  (nat_add
+                  start
+                  (Suc
+                  (Suc
+                  (Suc
+                  (Suc
+                  (Suc
+                  Zero))))))) {
+                    Parsed child childSpan childNext ↦
+                      match source_byte_eq s (skip_spaces s childNext) (41 : Int) {
                         True ↦
-                          Parsed (Syntax BoolExpr)
-                            (syntax_node_binary
+                          Parsed
+                            (Syntax BoolExpr)
+                            (syntax_node_unary
                               s
                               start
-                              (Suc (skip_spaces s rightNext))
-                              (BAnd (erase_spans left) (erase_spans right))
-                              left
-                              right)
-                            (MkSpan start (Suc (skip_spaces s rightNext)))
-                            (Suc (skip_spaces s rightNext)) ;
-                        False ↦ Failed (Syntax BoolExpr) (MkParseError (source_id s) (MkSpan (skip_spaces s rightNext) (skip_spaces s rightNext)))
-                      } ;
-                      Failed err ↦ Failed (Syntax BoolExpr) err
-                    } ;
-                  False ↦ Failed (Syntax BoolExpr) (MkParseError (source_id s) (MkSpan leftNext leftNext))
-                } ;
-                Failed err ↦ Failed (Syntax BoolExpr) err
-              } ;
-            False ↦ Failed (Syntax BoolExpr) (MkParseError (source_id s) (MkSpan start start))
+                              (Suc (skip_spaces s childNext))
+                              (BNot (erase_spans child))
+                              child)
+                            (MkSpan start (Suc (skip_spaces s childNext)))
+                            (Suc (skip_spaces s childNext));
+                        False ↦
+                          Failed
+                            (Syntax BoolExpr)
+                            (MkParseError
+                              (source_id s)
+                              (MkSpan
+                                (skip_spaces s childNext)
+                                (skip_spaces s childNext)))
+                      };
+                    Failed err ↦
+                      Failed
+                        (Syntax BoolExpr)
+                        err
+                  };
+                False ↦
+                  match starts_and_open_token s start {
+                    True ↦
+                      match parse_bool_expr_at_fuel
+                      fuel2
+                      s
+                      (skip_spaces
+                      s
+                      (nat_add
+                      start
+                      (Suc
+                      (Suc
+                      (Suc
+                      (Suc
+                      (Suc
+                      Zero))))))) {
+                        Parsed left leftSpan leftNext ↦
+                          match source_byte_eq s leftNext (32 : Int) {
+                            True ↦
+                              match parse_bool_expr_at_fuel
+                              fuel2
+                              s
+                              (skip_spaces
+                              s
+                              (Suc
+                              leftNext)) {
+                                Parsed right rightSpan rightNext ↦
+                                  match source_byte_eq
+                                  s
+                                  (skip_spaces
+                                  s
+                                  rightNext)
+                                  (41 : Int) {
+                                    True ↦
+                                      Parsed
+                                        (Syntax BoolExpr)
+                                        (syntax_node_binary
+                                          s
+                                          start
+                                          (Suc (skip_spaces s rightNext))
+                                          (BAnd (erase_spans left) (erase_spans right))
+                                          left
+                                          right)
+                                        (MkSpan start (Suc (skip_spaces s rightNext)))
+                                        (Suc (skip_spaces s rightNext));
+                                    False ↦
+                                      Failed
+                                        (Syntax BoolExpr)
+                                        (MkParseError
+                                          (source_id s)
+                                          (MkSpan
+                                            (skip_spaces s rightNext)
+                                            (skip_spaces s rightNext)))
+                                  };
+                                Failed err ↦
+                                  Failed
+                                    (Syntax BoolExpr)
+                                    err
+                              };
+                            False ↦
+                              Failed
+                                (Syntax BoolExpr)
+                                (MkParseError (source_id s) (MkSpan leftNext leftNext))
+                          };
+                        Failed err ↦
+                          Failed
+                            (Syntax BoolExpr)
+                            err
+                      };
+                    False ↦
+                      Failed
+                        (Syntax BoolExpr)
+                        (MkParseError (source_id s) (MkSpan start start))
+                  }
+              }
           }
-        }
       }
-    }
   }
 
 const parse_bool_expr : Parser (Syntax BoolExpr) =
-  λs. λstart. λh.
-    match parse_bool_expr_at_fuel (source_length s) s (skip_spaces s start) {
-      Parsed syntax consumed next ↦ match nat_eq_bool (skip_spaces s next) (source_length s) {
-        True ↦ Parsed (Syntax BoolExpr) syntax (MkSpan start (skip_spaces s next)) (skip_spaces s next) ;
-        False ↦ Failed (Syntax BoolExpr) (MkParseError (source_id s) (MkSpan (skip_spaces s next) (skip_spaces s next)))
-      } ;
-      Failed err ↦ Failed (Syntax BoolExpr) err
-    }
+  λs.
+    λstart.
+      λh.
+        match parse_bool_expr_at_fuel (source_length s) s (skip_spaces s start) {
+          Parsed syntax consumed next ↦
+            match nat_eq_bool (skip_spaces s next) (source_length s) {
+              True ↦
+                Parsed
+                  (Syntax BoolExpr)
+                  syntax
+                  (MkSpan start (skip_spaces s next))
+                  (skip_spaces s next);
+              False ↦
+                Failed
+                  (Syntax BoolExpr)
+                  (MkParseError
+                    (source_id s)
+                    (MkSpan (skip_spaces s next) (skip_spaces s next)))
+            };
+          Failed err ↦
+            Failed
+              (Syntax BoolExpr)
+              err
+        }
 
 fn print_bool_expr (e : BoolExpr) : Bytes =
   match e {
-    BTrue ↦ bytes_encode "true" ;
-    BFalse ↦ bytes_encode "false" ;
+    BTrue ↦ bytes_encode "true";
+    BFalse ↦ bytes_encode "false";
     BNot child ↦
       bytes_concat
         (bytes_concat (bytes_encode "(not ") (print_bool_expr child))
-        (bytes_encode ")") ;
+        (bytes_encode ")");
     BAnd left right ↦
       bytes_concat
         (bytes_concat
@@ -569,8 +843,16 @@ fn print_bool_expr (e : BoolExpr) : Bytes =
 
 fn format_bool_expr (s : Source) : Result ParseError Bytes =
   match parse_bool_expr s Zero ((proof zero_left for LessEqNat) (source_length s)) {
-    Parsed syntax consumed next ↦ Ok ParseError Bytes (print_bool_expr (erase_spans syntax)) ;
-    Failed err ↦ Err ParseError Bytes err
+    Parsed syntax consumed next ↦
+      Ok
+        ParseError
+        Bytes
+        (print_bool_expr (erase_spans syntax));
+    Failed err ↦
+      Err
+        ParseError
+        Bytes
+        err
   }
 ```
 

@@ -30,38 +30,39 @@
 -- Output steers around the tracked `natToDecimal` exponential-blowup gap
 -- (VAL2 finding): the oracle is a PASS/FAIL `String`, never a printed
 -- `Nat`/`Int`.
-
 -- Boxes a `String -> String` so it can be a `List` element (GAP-arrow-
 -- type-as-type-arg workaround, see above).
-data StrFn = MkStrFn (String → String)
+data StrFn =
+  MkStrFn (String → String)
 
 fn applyStrFn (box : StrFn) (s : String) : String =
-  match box { MkStrFn f ↦ f s }
+  match box {
+    MkStrFn f ↦ f s
+  }
 
 -- Each closure captures its own `p` independently -- the defining property
 -- Closures/Value_capture probes (a naive shared-mutable-capture bug would
 -- make all three prepend the SAME, last-bound prefix).
-fn mkPrefixer (p : String) : StrFn = MkStrFn (λs . concat p s)
+fn mkPrefixer (p : String) : StrFn = MkStrFn (λs. concat p s)
 
 const greeters : List StrFn =
-  Cons StrFn (mkPrefixer "Hello, ")
-    (Cons StrFn (mkPrefixer "Bye, ")
-      (Cons StrFn (mkPrefixer "Hey, ")
-        (Nil StrFn)))
+  Cons
+    StrFn
+    (mkPrefixer "Hello, ")
+    (Cons StrFn (mkPrefixer "Bye, ") (Cons StrFn (mkPrefixer "Hey, ") (Nil StrFn)))
 
-const greetings : List String = map StrFn String (λbox . applyStrFn box "World") greeters
+const greetings : List String = map StrFn String (λbox. applyStrFn box "World") greeters
 
 const expected : List String =
-  Cons String "Hello, World"
-    (Cons String "Bye, World"
-      (Cons String "Hey, World"
-        (Nil String)))
+  Cons
+    String
+    "Hello, World"
+    (Cons String "Bye, World" (Cons String "Hey, World" (Nil String)))
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
-
 const finalCheck : String =
   match list_eq String eq greetings expected {
-    True ↦ "PASS" ;
+    True ↦ "PASS";
     False ↦ "FAIL"
   }
 

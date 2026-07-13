@@ -28,23 +28,61 @@ endpoints through a function — is `catalog/packages/Core/Transport.ken`'s
 idiom, inlined here so this strand's examples are self-contained:
 
 ```ken
-fn bool_and (a : Bool) (b : Bool) : Bool = match a { True ↦ b ; False ↦ False }
+fn bool_and (a : Bool) (b : Bool) : Bool =
+  match a {
+    True ↦ b;
+    False ↦ False
+  }
 
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
-    Nil       ↦ ys ;
-    Cons x t  ↦ Cons a x (list_append a t ys)
+    Nil ↦ ys;
+    Cons x t ↦
+      Cons
+        a
+        x
+        (list_append a t ys)
   }
 
-lemma cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2)
-         (p : Equal ty x y) : Equal ty2 (f x) (f y) =
+lemma cong
+(ty : Type)
+(ty2 : Type)
+(x : ty)
+(y : ty)
+(f : ty
+→ ty2)
+(p : Equal
+ty
+x
+y) : Equal
+ty2
+(f
+x)
+(f
+y) =
   J (λy' _. Equal ty2 (f x) (f y')) Refl p
 
 fn bool_eq (a : Bool) (b : Bool) : Bool =
-  match a { True ↦ b ; False ↦ match b { True ↦ False ; False ↦ True } }
+  match a {
+    True ↦ b;
+    False ↦
+      match b {
+        True ↦ False;
+        False ↦ True
+      }
+  }
 
-fn not_bool (b : Bool) : Bool = match b { True ↦ False ; False ↦ True }
-fn flip_bool (b : Bool) : Bool = match b { False ↦ True ; True ↦ False }
+fn not_bool (b : Bool) : Bool =
+  match b {
+    True ↦ False;
+    False ↦ True
+  }
+
+fn flip_bool (b : Bool) : Bool =
+  match b {
+    False ↦ True;
+    True ↦ False
+  }
 ```
 
 ## 1. `Proved` vs. `Refl`: the two-way discriminator
@@ -155,14 +193,28 @@ for `list_append`: the base case has both sides reduce to the constructor
 result (the induction hypothesis) is lifted under `Cons x` by `cong`:
 
 ```ken example
-lemma list_right_unit (a : Type) (xs : List a)
-  : Equal (List a) (list_append a xs (Nil a)) xs =
+lemma list_right_unit
+(a : Type)
+(xs : List
+a) : Equal
+(List
+a)
+(list_append
+a
+xs
+(Nil
+a))
+xs =
   match xs {
-    Nil      ↦ Proved ;
-    Cons x t ↦ cong (List a) (List a)
-                     (list_append a t (Nil a)) t
-                     (λl. Cons a x l)
-                     (list_right_unit a t)
+    Nil ↦ Proved;
+    Cons x t ↦
+      cong
+        (List a)
+        (List a)
+        (list_append a t (Nil a))
+        t
+        (λl. Cons a x l)
+        (list_right_unit a t)
   }
 ```
 
@@ -196,26 +248,34 @@ between different nullary constructors, which collapses to `Bottom`, K5):
 ```ken example
 fn bool_eq_sound (x : Bool) : (y : Bool) → IsTrue (bool_eq x y) → Equal Bool x y =
   match x {
-    True  ↦ λy. match y {
-              True  ↦ λh. Proved ;
-              False ↦ λh. absurd h
-            } ;
-    False ↦ λy. match y {
-              True  ↦ λh. absurd h ;
-              False ↦ λh. Proved
-            }
+    True ↦
+      λy.
+        match y {
+          True ↦ λh. Proved;
+          False ↦ λh. absurd h
+        };
+    False ↦
+      λy.
+        match y {
+          True ↦ λh. absurd h;
+          False ↦ λh. Proved
+        }
   }
 
 fn bool_eq_complete (x : Bool) : (y : Bool) → Equal Bool x y → IsTrue (bool_eq x y) =
   match x {
-    True  ↦ λy. match y {
-              True  ↦ λp. Proved ;
-              False ↦ λp. absurd p
-            } ;
-    False ↦ λy. match y {
-              True  ↦ λp. absurd p ;
-              False ↦ λp. Proved
-            }
+    True ↦
+      λy.
+        match y {
+          True ↦ λp. Proved;
+          False ↦ λp. absurd p
+        };
+    False ↦
+      λy.
+        match y {
+          True ↦ λp. absurd p;
+          False ↦ λp. Proved
+        }
   }
 ```
 
@@ -240,7 +300,11 @@ whnf-reduces to exactly that pointwise Pi type:
 
 ```ken example
 lemma not_functions_equal : Equal (Bool → Bool) not_bool flip_bool =
-  λb. match b { True ↦ Proved ; False ↦ Proved }
+  λb.
+    match b {
+      True ↦ Proved;
+      False ↦ Proved
+    }
 ```
 
 **Do not proliferate a second, function-level law field when a class's

@@ -25,8 +25,10 @@ fn mk_env() -> ElabEnv {
 fn assert_bool_reduces(env: &mut ElabEnv, name: &str, expression: &str, expected: &str) {
     env.elaborate_decl(&format!("const {name} : Bool = {expression}"))
         .unwrap_or_else(|e| panic!("{name} must elaborate: {e}"));
-    env.elaborate_decl(&format!("lemma {name}_reduces : Equal Bool {name} {expected} = Proved"))
-        .unwrap_or_else(|e| panic!("{name} must reduce to {expected}: {e}"));
+    env.elaborate_decl(&format!(
+        "lemma {name}_reduces : Equal Bool {name} {expected} = Proved"
+    ))
+    .unwrap_or_else(|e| panic!("{name} must reduce to {expected}: {e}"));
 }
 
 #[test]
@@ -40,7 +42,10 @@ fn structural_instances_are_checked_transparent_and_zero_delta() {
         );
         let mut delta = trusted_base_delta(&env.env, id);
         delta.remove(&env.class_env.record_nil_val_id);
-        assert!(delta.is_empty(), "{name} must add no trusted base entries: {delta:?}");
+        assert!(
+            delta.is_empty(),
+            "{name} must add no trusted base entries: {delta:?}"
+        );
     }
 }
 
@@ -64,25 +69,38 @@ fn list_neutral_path_uses_case_eq_not_a_postulate() {
         .find("### 4.5 Structural `DecEq` liftings")
         .expect("structural lifting section must remain present");
     let section = &LAWFUL_CLASSES_KEN_MD[start..];
-    let fence_start = section.find("\n```ken").expect("structural lifting fence must open") + 7;
+    let fence_start = section
+        .find("\n```ken")
+        .expect("structural lifting fence must open")
+        + 7;
     let code_end = section[fence_start..]
         .find("\n```")
         .expect("structural lifting fence must close")
         + fence_start;
     let code = &section[fence_start..code_end];
+    let compact = code.split_whitespace().collect::<Vec<_>>().join(" ");
     for required in [
-        "match (list_deceq_head_eq a da x y) eqn: h",
+        "match list_deceq_head_eq a da x y eqn : h",
         "lemma list_deceq_sound_cons",
         "da.sound x y h",
         "da.complete x x Refl",
         "λp. absurd p",
     ] {
-        assert!(code.contains(required), "missing required neutral-proof route: {required}");
+        assert!(
+            compact.contains(required),
+            "missing required neutral-proof route: {required}"
+        );
     }
     for removed in ["bool_dichotomy", "list_deceq_sound_cons_dispatch"] {
-        assert!(!code.contains(removed), "removed hand-written scaffolding remains: {removed}");
+        assert!(
+            !code.contains(removed),
+            "removed hand-written scaffolding remains: {removed}"
+        );
     }
     for forbidden in ["Axiom", "postulate", "sorry"] {
-        assert!(!code.contains(forbidden), "structural lifting code must not contain {forbidden}");
+        assert!(
+            !code.contains(forbidden),
+            "structural lifting code must not contain {forbidden}"
+        );
     }
 }

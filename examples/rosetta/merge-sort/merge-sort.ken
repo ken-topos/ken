@@ -17,10 +17,9 @@
 -- decreases structurally (`Suc f -> f`) while the actual list arguments
 -- ride along as arbitrary computed values. SCT-verified empirically
 -- (scratch probe) before writing this for real.
-
 fn listLength (a : Type) (xs : List a) : Nat =
   match xs {
-    Nil ↦ Zero ;
+    Nil ↦ Zero;
     Cons x xs2 ↦ Suc (listLength a xs2)
   }
 
@@ -30,10 +29,21 @@ fn listLength (a : Type) (xs : List a) : Nat =
 -- sub-term.
 fn splitAlt (a : Type) (xs : List a) : Prod (List a) (List a) =
   match xs {
-    Nil ↦ MkProd (List a) (List a) (Nil a) (Nil a) ;
-    Cons x xs2 ↦ match splitAlt a xs2 {
-      MkProd rest1 rest2 ↦ MkProd (List a) (List a) (Cons a x rest2) rest1
-    }
+    Nil ↦
+      MkProd
+        (List a)
+        (List a)
+        (Nil a)
+        (Nil a);
+    Cons x xs2 ↦
+      match splitAlt a xs2 {
+        MkProd rest1 rest2 ↦
+          MkProd
+            (List a)
+            (List a)
+            (Cons a x rest2)
+            rest1
+      }
   }
 
 -- Merges two already-sorted lists. Each recursive call decreases exactly
@@ -43,36 +53,60 @@ fn splitAlt (a : Type) (xs : List a) : Prod (List a) (List a) =
 -- one literal strict-subterm argument).
 fn merge (a : Type) (leqf : a → a → Bool) (xs : List a) (ys : List a) : List a =
   match xs {
-    Nil ↦ ys ;
-    Cons x xs2 ↦ match ys {
-      Nil ↦ xs ;
-      Cons y ys2 ↦ match leqf x y {
-        True  ↦ Cons a x (merge a leqf xs2 ys) ;
-        False ↦ Cons a y (merge a leqf xs ys2)
+    Nil ↦ ys;
+    Cons x xs2 ↦
+      match ys {
+        Nil ↦ xs;
+        Cons y ys2 ↦
+          match leqf x y {
+            True ↦
+              Cons
+                a
+                x
+                (merge a leqf xs2 ys);
+            False ↦
+              Cons
+                a
+                y
+                (merge a leqf xs ys2)
+          }
       }
-    }
   }
 
-fn mergeSortFueled (a : Type) (leqf : a → a → Bool) (fuel : Nat) (xs : List a) : List a =
+fn mergeSortFueled
+(a : Type)
+(leqf : a
+→ a
+→ Bool)
+(fuel : Nat)
+(xs : List
+a) : List
+a =
   match fuel {
-    Zero ↦ xs ;
-    Suc f ↦ match xs {
-      Nil ↦ Nil a ;
-      Cons x xs2 ↦ match xs2 {
-        Nil ↦ xs ;
-        Cons y xs3 ↦ match splitAlt a xs {
-          MkProd left right ↦
-            merge a leqf (mergeSortFueled a leqf f left) (mergeSortFueled a leqf f right)
-        }
+    Zero ↦ xs;
+    Suc f ↦
+      match xs {
+        Nil ↦ Nil a;
+        Cons x xs2 ↦
+          match xs2 {
+            Nil ↦ xs;
+            Cons y xs3 ↦
+              match splitAlt a xs {
+                MkProd left right ↦
+                  merge
+                    a
+                    leqf
+                    (mergeSortFueled a leqf f left)
+                    (mergeSortFueled a leqf f right)
+              }
+          }
       }
-    }
   }
 
 fn mergeSort (a : Type) (leqf : a → a → Bool) (xs : List a) : List a =
   mergeSortFueled a leqf (listLength a xs) xs
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
-
 -- Corpus size note: `mergeSortFueled`'s fuel parameter `f` is referenced
 -- twice per level (once per recursive child call) -- the same "bound value
 -- referenced twice in one body" shape as the tracked `natToDecimal`
@@ -85,15 +119,21 @@ fn mergeSort (a : Type) (leqf : a → a → Bool) (xs : List a) : List a =
 -- largest size that's still comfortably within a generous test timeout,
 -- don't force the un-shrunk "natural" example size through an infeasible
 -- cost.
+-- "dcbafe"
 const scrambled : List Char =
-  Cons Char 100 (Cons Char 99 (Cons Char 98 (Cons Char 97
-    (Cons Char 102 (Cons Char 101 (Nil Char))))))  -- "dcbafe"
+  Cons
+    Char
+    100
+    (Cons
+      Char
+      99
+      (Cons Char 98 (Cons Char 97 (Cons Char 102 (Cons Char 101 (Nil Char))))))
 
 const sortedResult : String = list_char_to_string (mergeSort Char leqChar scrambled)
 
 const finalCheck : String =
   match eq sortedResult "abcdef" {
-    True ↦ "PASS" ;
+    True ↦ "PASS";
     False ↦ "FAIL"
   }
 

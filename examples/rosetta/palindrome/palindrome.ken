@@ -14,13 +14,16 @@
 -- Output steers around the tracked `natToDecimal` exponential-blowup gap
 -- (VAL2 finding, `evt_4pdzxech177bp`): the oracle is a `String` ("PASS"/
 -- "FAIL"), never a printed `Nat`/`Int`.
-
 -- reverseListChar: structural recursion on `xs`, SCT decreasing on the
 -- `Cons` tail (`xs2`) -- same sound-zone shape as the landed floor.
 fn reverseListChar (a : Type) (xs : List a) : List a =
   match xs {
-    Nil ↦ Nil a ;
-    Cons x xs2 ↦ list_append a (reverseListChar a xs2) (Cons a x (Nil a))
+    Nil ↦ Nil a;
+    Cons x xs2 ↦
+      list_append
+        a
+        (reverseListChar a xs2)
+        (Cons a x (Nil a))
   }
 
 fn reverseString (s : String) : String =
@@ -37,16 +40,19 @@ fn palindrome (s : String) : Bool = eq s (reverseString s)
 -- wrong flips the result to "FAIL".
 const finalCheck : String =
   match palindrome "racecar" {
-    True ↦ match palindrome "hello" {
-      False ↦ match palindrome "" {
-        True ↦ match palindrome "a" {
-          True ↦ "PASS" ;
-          False ↦ "FAIL"
-        } ;
-        False ↦ "FAIL"
-      } ;
-      True ↦ "FAIL"
-    } ;
+    True ↦
+      match palindrome "hello" {
+        False ↦
+          match palindrome "" {
+            True ↦
+              match palindrome "a" {
+                True ↦ "PASS";
+                False ↦ "FAIL"
+              };
+            False ↦ "FAIL"
+          };
+        True ↦ "FAIL"
+      };
     False ↦ "FAIL"
   }
 

@@ -1145,20 +1145,8 @@ impl<'a> LayoutPrinter<'a> {
         let span = &self.source.tokens()[index].span;
         // `canonical` has different byte offsets, so obtain B2's spelling by
         // kind and otherwise replay the B1 token lexeme.
-        match &self.source.tokens()[index].kind {
-            Token::Arrow => "→",
-            Token::MapsTo => "↦",
-            Token::Lambda => "λ",
-            Token::PropEq => "≡",
-            Token::Le => "≤",
-            Token::Ge => "≥",
-            Token::Ne => "≠",
-            Token::And => "∧",
-            Token::Or => "∨",
-            Token::FlowsTo => "⊑",
-            Token::Times => "×",
-            _ => &self.source.source()[span.start..span.end],
-        }
+        crate::format::canonical_token_spelling(&self.source.tokens()[index].kind)
+            .unwrap_or(&self.source.source()[span.start..span.end])
     }
 
     fn last_token_index_before(&self, wanted: Token, before: usize, span: &Span) -> Option<usize> {
