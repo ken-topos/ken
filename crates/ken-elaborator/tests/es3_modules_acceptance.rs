@@ -199,33 +199,25 @@ fn use_open_ambiguity_rejected_naming_both() {
     }
 }
 
-/// `local-shadows-imported-lexically`: a local declaration shadows a
-/// `use`-opened import of the same bare name — lexical, innermost wins,
-/// never an ambiguity error (the discriminating pair against the case
-/// above: same shape, but a LOCAL is present so it must NOT error).
+/// N3 reversal: a TOP-LEVEL local and an opened import of the same bare name
+/// clash even when the name is never referenced. This was ES3's local-wins
+/// seed; N3 deliberately flips it while retaining narrower lexical shadowing.
 #[test]
-fn local_shadows_imported_lexically() {
+fn top_level_local_import_clash_is_rejected_latently() {
     let mut env = mk_env();
-    env.elaborate_file(
+    let result = env.elaborate_file(
         "module M { pub const foo : Int = 0 } \
          use M \
-         const foo : Int = 9 \
-         const getFoo : Int = foo",
-    )
-    .expect("local-over-import must elaborate without any ambiguity error");
-
-    let root_foo = env.globals["foo"];
-    let m_foo = env.globals["M.foo"];
-    assert_ne!(root_foo, m_foo, "the root `foo` and `M.foo` are distinct decls");
-
-    let getfoo_id = env.globals["getFoo"];
-    let (_, body) = env.env.transparent_body(getfoo_id).expect("getFoo is transparent");
-    assert!(
-        matches!(body, Term::Const { id, .. } if id == root_foo),
-        "AC3: `getFoo` must resolve `foo` to the LOCAL binding (innermost wins), \
-         not the `use M`-imported `M.foo`; got {:?}",
-        body
+         const foo : Int = 9",
     );
+    match result {
+        Err(ElabError::AmbiguousReference { name, sources, .. }) => {
+            assert_eq!(name, "foo");
+            assert!(sources.contains(&"foo".to_string()));
+            assert!(sources.contains(&"M.foo".to_string()));
+        }
+        other => panic!("N3: expected latent top-level clash, got {other:?}"),
+    }
 }
 
 /// `four-import-forms-resolve-to-one-binding`: qualified / aliased /

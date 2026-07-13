@@ -45,8 +45,12 @@ fn selective_import_accepts_a_dotted_module_path() {
     };
     assert_eq!(module, "Core.LawfulClasses");
     match kind {
-        ImportKind::Selective(names) => {
-            assert_eq!(names, vec!["eq".to_string(), "Ord".to_string()])
+        ImportKind::Selective(items) => {
+            assert_eq!(items.len(), 2);
+            assert_eq!(items[0].name, "eq");
+            assert_eq!(items[0].rename, None);
+            assert_eq!(items[1].name, "Ord");
+            assert_eq!(items[1].rename, None);
         }
         other => panic!("expected Selective, got {other:?}"),
     }
