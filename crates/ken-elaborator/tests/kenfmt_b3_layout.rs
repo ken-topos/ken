@@ -32,6 +32,45 @@ fn ac2_ac3_mandatory_breaks_separators_and_no_alignment() {
 }
 
 #[test]
+fn ac3_wide_declaration_signatures_nest_and_keep_fitting_binders_flat() {
+    let function = "fn from_list_acc (k : Type) (v : Type) (leq : k -> k -> Bool) (xs : List (Pair k v)) (acc : Tree k v) : Tree k v = acc";
+    let function_expected = "fn from_list_acc\n  (k : Type)\n  (v : Type)\n  (leq : k → k → Bool)\n  (xs : List (Pair k v))\n  (acc : Tree k v)\n  : Tree k v =\n  acc\n";
+    assert_eq!(format_ken(function).unwrap(), function_expected);
+
+    let procedure = "proc fold_and_emit (k : Type) (v : Type) (leq : k -> k -> Bool) (xs : List (Pair k v)) (acc : Tree k v) : IO Unit visits [Console] = emit acc";
+    let procedure_expected = "proc fold_and_emit\n  (k : Type)\n  (v : Type)\n  (leq : k → k → Bool)\n  (xs : List (Pair k v))\n  (acc : Tree k v)\n  : IO Unit\n  visits [Console] =\n  emit acc\n";
+    assert_eq!(format_ken(procedure).unwrap(), procedure_expected);
+
+    let data = "data ExtremelyLongParameterizedContainerName alpha beta gamma delta epsilon zeta eta theta = Only";
+    let data_expected = "data ExtremelyLongParameterizedContainerName\n  alpha\n  beta\n  gamma\n  delta\n  epsilon\n  zeta\n  eta\n  theta = Only\n";
+    assert_eq!(format_ken(data).unwrap(), data_expected);
+
+    let class = "class ExtremelyLongParameterizedStructureClassNameForFormattingCanonicalOutput (f : Type -> Type) { map : (a : Type) -> (b : Type) -> (a -> b) -> f a -> f b }";
+    let class_expected = "class ExtremelyLongParameterizedStructureClassNameForFormattingCanonicalOutput\n  (f : Type → Type) {\n  map : (a : Type) → (b : Type) → (a → b) → f a → f b\n}\n";
+    assert_eq!(format_ken(class).unwrap(), class_expected);
+
+    for canonical in [
+        function_expected,
+        procedure_expected,
+        data_expected,
+        class_expected,
+    ] {
+        assert_eq!(format_ken(canonical).unwrap(), canonical);
+        assert!(canonical.lines().skip(1).all(|line| {
+            line.is_empty()
+                || line == "}"
+                || line.starts_with("  ")
+                || matches!(line, "fn" | "proc" | "data" | "class")
+        }));
+    }
+
+    let commented = "fn keep_edges (x : Int) -- binder edge\n(y : Int) (z : Int) (w : Int) (q : Int) (r : Int) : Int = x";
+    let commented_output = format_ken(commented).unwrap();
+    assert!(commented_output.contains("(x : Int)  -- binder edge\n  (y : Int)"));
+    assert_eq!(ast_shape(commented), ast_shape(&commented_output));
+}
+
+#[test]
 fn ac4_redundant_parentheses_drop_but_precedence_parentheses_stay() {
     let source = "fn redundant (a : Int) (b : Int) : Int = (a + b)\nfn required (a : Int) (b : Int) (c : Int) : Int = (a + b) * c\n";
     let formatted = format_ken(source).unwrap();

@@ -12,36 +12,54 @@
 -- SCT: `n` is structurally decreasing.
 --
 -- This is also O(n) instead of the naive exponential double-recursion.
-
 -- ── Nat helpers ──────────────────────────────────────────────────────────────
-
 fn natAdd (a : Nat) (b : Nat) : Nat =
-  match a { Zero ↦ b ; Suc m ↦ Suc (natAdd m b) }
+  match a {
+    Zero ↦ b;
+    Suc m ↦ Suc (natAdd m b)
+  }
 
 fn natToInt (n : Nat) : Int =
-  match n { Zero ↦ (0 : Int) ; Suc m ↦ (1 : Int) + natToInt m }
+  match n {
+    Zero ↦ 0 : Int;
+    Suc m ↦ (1 : Int) + natToInt m
+  }
 
 -- ── Fibonacci (iterative accumulator) ────────────────────────────────────────
-
 -- fibStep n a b = F(n) when a = F(0), b = F(1).
 -- Shifts (a,b) -> (b, a+b) at each Suc step.
 fn fibStep (n : Nat) (a : Nat) (b : Nat) : Nat =
-  match n { Zero ↦ a ; Suc m ↦ fibStep m b (natAdd a b) }
+  match n {
+    Zero ↦ a;
+    Suc m ↦
+      fibStep
+        m
+        b
+        (natAdd a b)
+  }
 
 fn fib (n : Nat) : Nat = fibStep n Zero (Suc Zero)
 
 -- ── Readable Nat literals ────────────────────────────────────────────────────
+const one : Nat = Suc Zero
 
-const one   : Nat = Suc Zero
-const two   : Nat = Suc one
+const two : Nat = Suc one
+
 const three : Nat = Suc two
-const four  : Nat = Suc three
-const five  : Nat = Suc four
-const six   : Nat = Suc five
+
+const four : Nat = Suc three
+
+const five : Nat = Suc four
+
+const six : Nat = Suc five
+
 const seven : Nat = Suc six
+
 const eight : Nat = Suc seven
-const nine  : Nat = Suc eight
-const ten   : Nat = Suc nine
+
+const nine : Nat = Suc eight
+
+const ten : Nat = Suc nine
 
 -- ── Decimal printing ─────────────────────────────────────────────────────────
 --
@@ -50,39 +68,96 @@ const ten   : Nat = Suc nine
 -- shape as `examples/rosetta/gcd/gcd.ken`'s own machinery. Was blocked
 -- pending `wp/RTP1-interp-sharing` (eager-IH-computation cost) --
 -- resolved (`e88ffa8`), now prints correctly and fast.
-
-data OrdResult = Lt | Eq | Gt
+data OrdResult =
+  Lt
+  | Eq
+  | Gt
 
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
-  match xs { Nil ↦ ys ; Cons x xs2 ↦ Cons a x (list_append a xs2 ys) }
+  match xs {
+    Nil ↦ ys;
+    Cons x xs2 ↦
+      Cons
+        a
+        x
+        (list_append a xs2 ys)
+  }
 
 fn concat (a : String) (b : String) : String =
   list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
 
 fn sub10 (n : Nat) : Option Nat =
-  match n { Zero ↦ None Nat ; Suc n1 ↦
-  match n1 { Zero ↦ None Nat ; Suc n2 ↦
-  match n2 { Zero ↦ None Nat ; Suc n3 ↦
-  match n3 { Zero ↦ None Nat ; Suc n4 ↦
-  match n4 { Zero ↦ None Nat ; Suc n5 ↦
-  match n5 { Zero ↦ None Nat ; Suc n6 ↦
-  match n6 { Zero ↦ None Nat ; Suc n7 ↦
-  match n7 { Zero ↦ None Nat ; Suc n8 ↦
-  match n8 { Zero ↦ None Nat ; Suc n9 ↦
-  match n9 { Zero ↦ None Nat ; Suc n10 ↦ Some Nat n10 } } } } } } } } } }
+  match n {
+    Zero ↦ None Nat;
+    Suc n1 ↦
+      match n1 {
+        Zero ↦ None Nat;
+        Suc n2 ↦
+          match n2 {
+            Zero ↦ None Nat;
+            Suc n3 ↦
+              match n3 {
+                Zero ↦ None Nat;
+                Suc n4 ↦
+                  match n4 {
+                    Zero ↦ None Nat;
+                    Suc n5 ↦
+                      match n5 {
+                        Zero ↦ None Nat;
+                        Suc n6 ↦
+                          match n6 {
+                            Zero ↦ None Nat;
+                            Suc n7 ↦
+                              match n7 {
+                                Zero ↦ None Nat;
+                                Suc n8 ↦
+                                  match n8 {
+                                    Zero ↦ None Nat;
+                                    Suc n9 ↦
+                                      match n9 {
+                                        Zero ↦ None Nat;
+                                        Suc n10 ↦
+                                          Some
+                                            Nat
+                                            n10
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+      }
+  }
 
 fn mod10Fueled (fuel : Nat) (n : Nat) : Nat =
   match fuel {
-    Zero ↦ n ;
-    Suc f ↦ match sub10 n { None ↦ n ; Some n2 ↦ mod10Fueled f n2 }
+    Zero ↦ n;
+    Suc f ↦
+      match sub10 n {
+        None ↦ n;
+        Some n2 ↦
+          mod10Fueled
+            f
+            n2
+      }
   }
 
 fn mod10 (n : Nat) : Nat = mod10Fueled n n
 
 fn div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
   match fuel {
-    Zero ↦ q ;
-    Suc f ↦ match sub10 n { None ↦ q ; Some n2 ↦ div10Fueled f n2 (Suc q) }
+    Zero ↦ q;
+    Suc f ↦
+      match sub10 n {
+        None ↦ q;
+        Some n2 ↦
+          div10Fueled
+            f
+            n2
+            (Suc q)
+      }
   }
 
 fn div10 (n : Nat) : Nat = div10Fueled n n Zero
@@ -92,17 +167,26 @@ fn digitChar (d : Nat) : String =
 
 fn natToDecimalFueled (fuel : Nat) (n : Nat) : String =
   match fuel {
-    Zero ↦ digitChar n ;
-    Suc f ↦ match div10 n {
-      Zero  ↦ digitChar (mod10 n) ;
-      Suc q ↦ concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
-    }
+    Zero ↦ digitChar n;
+    Suc f ↦
+      match div10 n {
+        Zero ↦ digitChar (mod10 n);
+        Suc q ↦
+          concat
+            (natToDecimalFueled f (Suc q))
+            (digitChar (mod10 n))
+      }
   }
 
 fn natToDecimal (n : Nat) : String =
-  match n { Zero ↦ "0" ; Suc m ↦ natToDecimalFueled (Suc m) (Suc m) }
+  match n {
+    Zero ↦ "0";
+    Suc m ↦
+      natToDecimalFueled
+        (Suc m)
+        (Suc m)
+  }
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
-
 -- main: F(10) = 55
 proc main : IO Unit visits [Console] = print_line (natToDecimal (fib ten))

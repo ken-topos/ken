@@ -42,7 +42,7 @@ a propositional equation in `Omega`.
 
 ```ken
 class Semigroup a {
-  op    : a → a → a ;
+  op : a → a → a;
   assoc : (x : a) → (y : a) → (z : a) → Equal a (op (op x y) z) (op x (op y z))
 }
 ```
@@ -54,10 +54,10 @@ forgetting `mempty`, `left_unit`, and `right_unit`, while keeping `op` and
 
 ```ken
 class Monoid a {
-  op         : a → a → a ;
-  mempty     : a ;
-  assoc      : (x : a) → (y : a) → (z : a) → Equal a (op (op x y) z) (op x (op y z)) ;
-  left_unit  : (x : a) → Equal a (op mempty x) x ;
+  op : a → a → a;
+  mempty : a;
+  assoc : (x : a) → (y : a) → (z : a) → Equal a (op (op x y) z) (op x (op y z));
+  left_unit : (x : a) → Equal a (op mempty x) x;
   right_unit : (x : a) → Equal a (op x mempty) x
 }
 ```
@@ -104,29 +104,46 @@ remain stuck `Eq` goals and use `Refl`; step
 (`Cons h t`) is `cong` under `Cons a h` on the tail IH.
 
 ```ken
-proof left_unit for list_append (a : Type) (xs : List a)
+proof left_unit for list_append
+  (a : Type)
+  (xs : List a)
   : Equal (List a) (list_append a (Nil a) xs) xs =
   Refl
 
-proof assoc for list_append (a : Type) (xs : List a) (ys : List a) (zs : List a)
-  : Equal (List a) (list_append a (list_append a xs ys) zs)
-                   (list_append a xs (list_append a ys zs)) =
+proof assoc for list_append
+  (a : Type)
+  (xs : List a)
+  (ys : List a)
+  (zs : List a)
+  : Equal (List a) (list_append a (list_append a xs ys) zs) (list_append
+  a
+  xs
+  (list_append
+  a
+  ys
+  zs)) =
   match xs {
-    Nil ↦ Refl ;
+    Nil ↦ Refl;
     Cons h t ↦
-      cong (List a) (List a)
+      cong
+        (List a)
+        (List a)
         (list_append a (list_append a t ys) zs)
         (list_append a t (list_append a ys zs))
         (Cons a h)
         ((proof assoc for list_append) a t ys zs)
   }
 
-proof right_unit for list_append (a : Type) (xs : List a)
+proof right_unit for list_append
+  (a : Type)
+  (xs : List a)
   : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
-    Nil ↦ Proved ;
+    Nil ↦ Proved;
     Cons h t ↦
-      cong (List a) (List a)
+      cong
+        (List a)
+        (List a)
         (list_append a t (Nil a))
         t
         (Cons a h)
@@ -134,15 +151,15 @@ proof right_unit for list_append (a : Type) (xs : List a)
   }
 
 instance Semigroup (List Nat) {
-  op    = list_append Nat ;
+  op = list_append Nat;
   assoc = proof assoc for list_append Nat
 }
 
 instance Monoid (List a) {
-  op         = list_append a ;
-  mempty     = Nil a ;
-  assoc      = proof assoc for list_append a ;
-  left_unit  = proof left_unit for list_append a ;
+  op = list_append a;
+  mempty = Nil a;
+  assoc = proof assoc for list_append a;
+  left_unit = proof left_unit for list_append a;
   right_unit = proof right_unit for list_append a
 }
 ```
@@ -164,37 +181,63 @@ literal equal to itself → `Top` → `Proved`.
 
 ```ken
 fn bool_and (p : Bool) (q : Bool) : Bool =
-  match p { True ↦ q ; False ↦ False }
-
-proof assoc for bool_and (x : Bool) (y : Bool) (z : Bool)
-  : Equal Bool (bool_and (bool_and x y) z) (bool_and x (bool_and y z)) =
-  match x {
-    True ↦ match y {
-      True  ↦ match z { True ↦ Proved ; False ↦ Proved } ;
-      False ↦ match z { True ↦ Proved ; False ↦ Proved }
-    } ;
-    False ↦ match y {
-      True  ↦ match z { True ↦ Proved ; False ↦ Proved } ;
-      False ↦ match z { True ↦ Proved ; False ↦ Proved }
-    }
+  match p {
+    True ↦ q;
+    False ↦ False
   }
 
-proof left_unit for bool_and (x : Bool) : Equal Bool (bool_and True x) x =
-  Refl
+proof assoc for bool_and
+  (x : Bool)
+  (y : Bool)
+  (z : Bool)
+  : Equal Bool (bool_and (bool_and x y) z) (bool_and x (bool_and y z)) =
+  match x {
+    True ↦
+      match y {
+        True ↦
+          match z {
+            True ↦ Proved;
+            False ↦ Proved
+          };
+        False ↦
+          match z {
+            True ↦ Proved;
+            False ↦ Proved
+          }
+      };
+    False ↦
+      match y {
+        True ↦
+          match z {
+            True ↦ Proved;
+            False ↦ Proved
+          };
+        False ↦
+          match z {
+            True ↦ Proved;
+            False ↦ Proved
+          }
+      }
+  }
+
+proof left_unit for bool_and (x : Bool) : Equal Bool (bool_and True x) x = Refl
 
 proof right_unit for bool_and (x : Bool) : Equal Bool (bool_and x True) x =
-  match x { True ↦ Proved ; False ↦ Proved }
+  match x {
+    True ↦ Proved;
+    False ↦ Proved
+  }
 
 instance Semigroup Bool {
-  op    = bool_and ;
+  op = bool_and;
   assoc = proof assoc for bool_and
 }
 
 instance Monoid Bool {
-  op         = bool_and ;
-  mempty     = True ;
-  assoc      = proof assoc for bool_and ;
-  left_unit  = proof left_unit for bool_and ;
+  op = bool_and;
+  mempty = True;
+  assoc = proof assoc for bool_and;
+  left_unit = proof left_unit for bool_and;
   right_unit = proof right_unit for bool_and
 }
 ```
@@ -211,47 +254,92 @@ and uses `Refl`.
 ```ken
 fn idf (a : Type) (x : a) : a = x
 
-fn comp (a : Type) (b : Type) (c : Type) (g : b → c) (h : a → b) (x : a) : c =
-  g (h x)
+fn comp (a : Type) (b : Type) (c : Type) (g : b → c) (h : a → b) (x : a) : c = g (h x)
 
 class Functor (f : Type → Type) {
-  map        : (a : Type) → (b : Type) → (a → b) → f a → f b ;
-  id_law     : (a : Type) → (x : f a) →
-                 Equal (f a) (map a a (idf a) x) x ;
-  fusion_law : (a : Type) → (b : Type) → (c : Type) →
-                 (g : b → c) → (h : a → b) → (x : f a) →
-                 Equal (f c)
-                   (map a c (comp a b c g h) x)
-                   (map b c g (map a b h x))
+  map : (a : Type) → (b : Type) → (a → b) → f a → f b;
+  id_law : (a : Type) → (x : f a) → Equal (f a) (map a a (idf a) x) x;
+  fusion_law : (a : Type)
+  → (b : Type)
+  → (c : Type)
+  → (g : b
+  → c)
+  → (h : a
+  → b)
+  → (x : f
+  a)
+  → Equal
+  (f
+  c)
+  (map
+  a
+  c
+  (comp
+  a
+  b
+  c
+  g
+  h)
+  x)
+  (map
+  b
+  c
+  g
+  (map
+  a
+  b
+  h
+  x))
 }
 
 fn list_map (a : Type) (b : Type) (g : a → b) (xs : List a) : List b =
   match xs {
-    Nil ↦ Nil b ;
-    Cons h t ↦ Cons b (g h) (list_map a b g t)
+    Nil ↦ Nil b;
+    Cons h t ↦
+      Cons
+        b
+        (g h)
+        (list_map a b g t)
   }
 
-proof id for list_map (a : Type) (xs : List a)
+proof id for list_map
+  (a : Type)
+  (xs : List a)
   : Equal (List a) (list_map a a (idf a) xs) xs =
   match xs {
-    Nil ↦ Proved ;
+    Nil ↦ Proved;
     Cons h t ↦
-      cong (List a) (List a)
+      cong
+        (List a)
+        (List a)
         (list_map a a (idf a) t)
         t
         (Cons a h)
         ((proof id for list_map) a t)
   }
 
-proof fusion for list_map (a : Type) (b : Type) (c : Type)
-  (g : b → c) (h : a → b) (xs : List a)
-  : Equal (List c)
-      (list_map a c (comp a b c g h) xs)
-      (list_map b c g (list_map a b h xs)) =
+proof fusion for list_map
+  (a : Type)
+  (b : Type)
+  (c : Type)
+  (g : b → c)
+  (h : a → b)
+  (xs : List a)
+  : Equal (List c) (list_map a c (comp a b c g h) xs) (list_map
+  b
+  c
+  g
+  (list_map
+  a
+  b
+  h
+  xs)) =
   match xs {
-    Nil ↦ Proved ;
+    Nil ↦ Proved;
     Cons x rest ↦
-      cong (List c) (List c)
+      cong
+        (List c)
+        (List c)
         (list_map a c (comp a b c g h) rest)
         (list_map b c g (list_map a b h rest))
         (Cons c (g (h x)))
@@ -260,33 +348,52 @@ proof fusion for list_map (a : Type) (b : Type) (c : Type)
 
 fn option_map (a : Type) (b : Type) (g : a → b) (x : Option a) : Option b =
   match x {
-    None ↦ None b ;
-    Some v ↦ Some b (g v)
+    None ↦ None b;
+    Some v ↦
+      Some
+        b
+        (g v)
   }
 
-proof id for option_map (a : Type) (x : Option a)
+proof id for option_map
+  (a : Type)
+  (x : Option a)
   : Equal (Option a) (option_map a a (idf a) x) x =
   match x {
-    None ↦ Proved ;
+    None ↦ Proved;
     Some v ↦ Refl
   }
 
-proof fusion for option_map (a : Type) (b : Type) (c : Type)
-  (g : b → c) (h : a → b) (x : Option a)
-  : Equal (Option c)
-      (option_map a c (comp a b c g h) x)
-      (option_map b c g (option_map a b h x)) =
-  match x { None ↦ Proved ; Some v ↦ Refl }
+proof fusion for option_map
+  (a : Type)
+  (b : Type)
+  (c : Type)
+  (g : b → c)
+  (h : a → b)
+  (x : Option a)
+  : Equal (Option c) (option_map a c (comp a b c g h) x) (option_map
+  b
+  c
+  g
+  (option_map
+  a
+  b
+  h
+  x)) =
+  match x {
+    None ↦ Proved;
+    Some v ↦ Refl
+  }
 
 instance Functor List {
-  map        = list_map ;
-  id_law     = proof id for list_map ;
+  map = list_map;
+  id_law = proof id for list_map;
   fusion_law = proof fusion for list_map
 }
 
 instance Functor Option {
-  map        = option_map ;
-  id_law     = proof id for option_map ;
+  map = option_map;
+  id_law = proof id for option_map;
   fusion_law = proof fusion for option_map
 }
 ```
@@ -302,107 +409,203 @@ equality.
 ```ken
 fn monoid_mempty (m : Type) (mon : Monoid m) : m = mon.mempty
 
-fn fold_map_step (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
-  (y : a) (acc : m) : m =
-  (mon.op) (g y) acc
+fn fold_map_step
+  (a : Type)
+  (m : Type)
+  (mon : Monoid m)
+  (g : a → m)
+  (y : a)
+  (acc : m)
+  : m =
+  mon.op (g y) acc
 
 class Foldable (f : Type → Type) {
-  foldr             : (a : Type) → (b : Type) → (a → b → b) → b → f a → b ;
-  fold_map           : (a : Type) → (m : Type) → Monoid m → (a → m) → f a → m ;
-  to_list            : (a : Type) → f a → List a ;
-  foldr_to_list      : (a : Type) → (x : f a) →
-                        Equal (List a)
-                          (foldr a (List a) (Cons a) (Nil a) x)
-                          (to_list a x) ;
-  fold_map_coherence : (a : Type) → (m : Type) → (mon : Monoid m) →
-                        (g : a → m) → (x : f a) →
-                        Equal m
-                          (fold_map a m mon g x)
-                          (foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) x)
+  foldr : (a : Type) → (b : Type) → (a → b → b) → b → f a → b;
+  fold_map : (a : Type) → (m : Type) → Monoid m → (a → m) → f a → m;
+  to_list : (a : Type) → f a → List a;
+  foldr_to_list : (a : Type)
+  → (x : f
+  a)
+  → Equal
+  (List
+  a)
+  (foldr
+  a
+  (List
+  a)
+  (Cons
+  a)
+  (Nil
+  a)
+  x)
+  (to_list
+  a
+  x);
+  fold_map_coherence : (a : Type)
+  → (m : Type)
+  → (mon : Monoid
+  m)
+  → (g : a
+  → m)
+  → (x : f
+  a)
+  → Equal
+  m
+  (fold_map
+  a
+  m
+  mon
+  g
+  x)
+  (foldr
+  a
+  m
+  (fold_map_step
+  a
+  m
+  mon
+  g)
+  (monoid_mempty
+  m
+  mon)
+  x)
 }
 
 fn list_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (xs : List a) : b =
   match xs {
-    Nil ↦ z ;
-    Cons h t ↦ k h (list_foldr a b k z t)
+    Nil ↦ z;
+    Cons h t ↦
+      k
+        h
+        (list_foldr a b k z t)
   }
 
-fn list_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
-  (xs : List a) : m =
+fn list_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m) (xs : List a) : m =
   match xs {
-    Nil ↦ mon.mempty ;
-    Cons h t ↦ (mon.op) (g h) (list_fold_map a m mon g t)
+    Nil ↦ mon.mempty;
+    Cons h t ↦
+      mon.op
+        (g h)
+        (list_fold_map a m mon g t)
   }
 
 fn list_to_list (a : Type) (xs : List a) : List a = xs
 
-lemma list_foldr_to_list (a : Type) (xs : List a)
+lemma list_foldr_to_list
+  (a : Type)
+  (xs : List a)
   : Equal (List a) (list_foldr a (List a) (Cons a) (Nil a) xs) (list_to_list a xs) =
   match xs {
-    Nil ↦ Proved ;
+    Nil ↦ Proved;
     Cons h t ↦
-      cong (List a) (List a)
+      cong
+        (List a)
+        (List a)
         (list_foldr a (List a) (Cons a) (Nil a) t)
         (list_to_list a t)
         (Cons a h)
         (list_foldr_to_list a t)
   }
 
-lemma list_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
-  (g : a → m) (xs : List a)
-  : Equal m
-      (list_fold_map a m mon g xs)
-      (list_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) xs) =
+lemma list_fold_map_coherence
+  (a : Type)
+  (m : Type)
+  (mon : Monoid m)
+  (g : a → m)
+  (xs : List a)
+  : Equal m (list_fold_map a m mon g xs) (list_foldr
+  a
+  m
+  (fold_map_step
+  a
+  m
+  mon
+  g)
+  (monoid_mempty
+  m
+  mon)
+  xs) =
   match xs {
-    Nil ↦ Refl ;
+    Nil ↦ Refl;
     Cons h t ↦
-      cong m m
+      cong
+        m
+        m
         (list_fold_map a m mon g t)
         (list_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) t)
-        ((mon.op) (g h))
+        (mon.op (g h))
         (list_fold_map_coherence a m mon g t)
   }
 
 fn option_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (x : Option a) : b =
   match x {
-    None ↦ z ;
-    Some v ↦ k v z
+    None ↦ z;
+    Some v ↦
+      k
+        v
+        z
   }
 
-fn option_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
-  (x : Option a) : m =
+fn option_fold_map
+  (a : Type)
+  (m : Type)
+  (mon : Monoid m)
+  (g : a → m)
+  (x : Option a)
+  : m =
   match x {
-    None ↦ mon.mempty ;
-    Some v ↦ (mon.op) (g v) (mon.mempty)
+    None ↦ mon.mempty;
+    Some v ↦
+      mon.op
+        (g v)
+        mon.mempty
   }
 
 fn option_to_list (a : Type) (x : Option a) : List a =
   option_foldr a (List a) (Cons a) (Nil a) x
 
-lemma option_foldr_to_list (a : Type) (x : Option a)
+lemma option_foldr_to_list
+  (a : Type)
+  (x : Option a)
   : Equal (List a) (option_foldr a (List a) (Cons a) (Nil a) x) (option_to_list a x) =
   Refl
 
-lemma option_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
-  (g : a → m) (x : Option a)
-  : Equal m
-      (option_fold_map a m mon g x)
-      (option_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) x) =
-  match x { None ↦ Refl ; Some v ↦ Refl }
+lemma option_fold_map_coherence
+  (a : Type)
+  (m : Type)
+  (mon : Monoid m)
+  (g : a → m)
+  (x : Option a)
+  : Equal m (option_fold_map a m mon g x) (option_foldr
+  a
+  m
+  (fold_map_step
+  a
+  m
+  mon
+  g)
+  (monoid_mempty
+  m
+  mon)
+  x) =
+  match x {
+    None ↦ Refl;
+    Some v ↦ Refl
+  }
 
 instance Foldable List {
-  foldr             = list_foldr ;
-  fold_map           = list_fold_map ;
-  to_list            = list_to_list ;
-  foldr_to_list      = list_foldr_to_list ;
+  foldr = list_foldr;
+  fold_map = list_fold_map;
+  to_list = list_to_list;
+  foldr_to_list = list_foldr_to_list;
   fold_map_coherence = list_fold_map_coherence
 }
 
 instance Foldable Option {
-  foldr             = option_foldr ;
-  fold_map           = option_fold_map ;
-  to_list            = option_to_list ;
-  foldr_to_list      = option_foldr_to_list ;
+  foldr = option_foldr;
+  fold_map = option_fold_map;
+  to_list = option_to_list;
+  foldr_to_list = option_foldr_to_list;
   fold_map_coherence = option_fold_map_coherence
 }
 ```

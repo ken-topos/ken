@@ -41,18 +41,25 @@ block, being runnable, ends in a nullary `proc main` (§8 covers why a catalog
 *package* entry, a library rather than a runnable file, carries none):
 
 ```ken
-data Color = Red | Green | Blue
+data Color =
+  Red
+  | Green
+  | Blue
 
 const favorite : Color = Blue
 
 fn is_red (c : Color) : Bool =
-  match c { Red ↦ True ; Green ↦ False ; Blue ↦ False }
+  match c {
+    Red ↦ True;
+    Green ↦ False;
+    Blue ↦ False
+  }
 
 proc announce (c : Color) : IO Unit visits [Console] =
   match c {
-    Red   ↦ print_line "it's red" ;
-    Green ↦ print_line "it's green" ;
-    Blue  ↦ print_line "it's blue"
+    Red ↦ print_line "it's red";
+    Green ↦ print_line "it's green";
+    Blue ↦ print_line "it's blue"
   }
 
 proc main : IO Unit visits [Console] = announce favorite
@@ -94,7 +101,7 @@ type's value.
 introduces a boundary the way an inductive `data` former does:
 
 ```ken example
-def PosInt = { n : Int | Equal Bool (leq_int 0 n) True }
+def PosInt = {n : Int | Equal Bool (leq_int 0 n) True}
 
 const five : PosInt = 5
 
@@ -125,7 +132,8 @@ that must be pattern-matched apart before its payload is usable —
 "just an Int" underneath:
 
 ```ken reject
-data Box = MkBox Int
+data Box =
+  MkBox Int
 
 fn add_years_wrong (n : Int) (b : Box) : Int = add_int n b
 ```
@@ -141,12 +149,20 @@ remaining constructors (`34 §4.1`, `§4.2`); there is no way to *skip* a
 case, not a ban on wildcards.
 
 ```ken example
-data Shape = Circle Int | Rectangle Int Int
+data Shape =
+  Circle Int
+  | Rectangle Int Int
 
 fn area (s : Shape) : Int =
   match s {
-    Circle r      ↦ mul_int r r ;
-    Rectangle w h ↦ mul_int w h
+    Circle r ↦
+      mul_int
+        r
+        r;
+    Rectangle w h ↦
+      mul_int
+        w
+        h
   }
 ```
 
@@ -155,10 +171,15 @@ possibility — the surface catches it before the kernel ever sees the term.
 Below, `Caution` and `Go` are left unhandled, so it rejects as non-exhaustive:
 
 ```ken reject
-data TrafficLight = Stop | Caution | Go
+data TrafficLight =
+  Stop
+  | Caution
+  | Go
 
 fn is_stop (t : TrafficLight) : Bool =
-  match t { Stop ↦ True }
+  match t {
+    Stop ↦ True
+  }
 ```
 
 `Option`/`Result` are ordinary `data` declarations built the same way — no
@@ -167,8 +188,11 @@ special-cased sum type:
 ```ken example
 fn safe_head (a : Type) (xs : List a) : Option a =
   match xs {
-    Nil      ↦ None a ;
-    Cons x _ ↦ Some a x
+    Nil ↦ None a;
+    Cons x _ ↦
+      Some
+        a
+        x
   }
 ```
 
@@ -184,10 +208,13 @@ Int, and `leq_int 0 y` is the same `Bool`-valued comparator the
 lawful-classes package builds `Ord` on top of:
 
 ```ken example
-fn abs_int (x : Int) : { y : Int | Equal Bool (leq_int 0 y) True } =
+fn abs_int (x : Int) : {y : Int | Equal Bool (leq_int 0 y) True} =
   match leq_int 0 x {
-    True  ↦ x ;
-    False ↦ sub_int 0 x
+    True ↦ x;
+    False ↦
+      sub_int
+        0
+        x
   }
 ```
 
@@ -201,7 +228,7 @@ accepting only Booleans equal to `True`, the same shape
 uses:
 
 ```ken example
-fn project_true (x : { b : Bool | Equal Bool b True }) : Bool = x
+fn project_true (x : {b : Bool | Equal Bool b True}) : Bool = x
 ```
 
 ## 5. `class` and `instance`
@@ -221,7 +248,10 @@ class Describe a {
 }
 
 instance Describe Bool {
-  describe = λb. match b { True ↦ "true" ; False ↦ "false" }
+  describe = λb.match b {
+    True ↦ "true";
+    False ↦ "false"
+  }
 }
 
 fn announce_it (b : Bool) : String = (Describe_instance_Bool).describe b
@@ -243,7 +273,7 @@ strand. `Eq` below elides `sym`/`trans` for brevity; see
 
 ```ken ignore
 class Eq a {
-  eq   : a → a → Bool ;
+  eq : a → a → Bool;
   refl : (x : a) → IsTrue (eq x x)
 }
 ```
@@ -256,8 +286,7 @@ inferred** — a call to an effectful function requires its effects to already
 be in the caller's own row (`spec/30-surface/36-effects.md §1`).
 
 ```ken example
-proc greet (name : String) : IO Unit visits [Console] =
-  print_line name
+proc greet (name : String) : IO Unit visits [Console] = print_line name
 ```
 
 Omitting a used effect from the row is rejected the same way an exhaustive
@@ -265,8 +294,7 @@ match omission is — the checker infers the body's real effects and compares.
 Below, the body performs Console but the declared row is empty:
 
 ```ken reject
-proc silent_greet (name : String) : IO Unit =
-  print_line name
+proc silent_greet (name : String) : IO Unit = print_line name
 ```
 
 A row-polymorphic function keeps a helper's effect abstract instead of
@@ -319,10 +347,9 @@ order — so this rejects with `"prop intro 'nil' is outside the v0
 Omega-clean seed shape"`, not a generic syntax error:
 
 ```ken reject
-prop AppendsTo (a : Type) (xs : List a) (ys : List a) (zs : List a) : Ω
-  where {
-    nil : AppendsTo a (Nil a) ys ys
-  }
+prop AppendsTo (a : Type) (xs : List a) (ys : List a) (zs : List a) : Ω where {
+  nil : AppendsTo a (Nil a) ys ys
+}
 ```
 
 `proof <name> for <subject>` attaches a checked proof to a subject that is
@@ -363,8 +390,16 @@ the recursion, so it resolves cleanly:
 ```ken example
 fn trivial_by_list (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
   match ys {
-    Nil      ↦ Trivial.triv a x ;
-    Cons _ t ↦ trivial_by_list a x b t
+    Nil ↦
+      Trivial.triv
+        a
+        x;
+    Cons _ t ↦
+      trivial_by_list
+        a
+        x
+        b
+        t
   }
 
 lemma trivial_by_list_lemma (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =

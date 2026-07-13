@@ -9,7 +9,8 @@ use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
 use ken_kernel::Decl;
 
 const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
-const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+const COLLECTIONS_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
@@ -101,21 +102,23 @@ fn cat3_d1_structural_collections_package_elaborates_zero_delta() {
 
 #[test]
 fn cat3_d1_law_surfaces_are_proof_returning_not_prop_wrappers() {
+    let compact = COLLECTIONS_KEN_MD
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(
-        COLLECTIONS_KEN_MD.contains("lemma take_drop_decomposition")
-            && COLLECTIONS_KEN_MD
-                .contains(": Equal (List a) (list_append a (take a n xs) (drop a n xs)) xs"),
+        compact.contains("lemma take_drop_decomposition")
+            && compact.contains(": Equal (List a) (list_append a (take a n xs) (drop a n xs)) xs"),
         "take/drop decomposition must be a proof-returning Equal surface"
     );
     assert!(
-        COLLECTIONS_KEN_MD.contains("lemma map_length")
-            && COLLECTIONS_KEN_MD.contains(": Equal Nat (length b (map a b f xs)) (length a xs)"),
+        compact.contains("lemma map_length")
+            && compact.contains(": Equal Nat (length b (map a b f xs)) (length a xs)"),
         "map length preservation must be a proof-returning Equal surface"
     );
     assert!(
-        COLLECTIONS_KEN_MD.contains("lemma length_take_min")
-            && COLLECTIONS_KEN_MD
-                .contains(": Equal Nat (length a (take a n xs)) (min n (length a xs))"),
+        compact.contains("lemma length_take_min")
+            && compact.contains(": Equal Nat (length a (take a n xs)) (min n (length a xs))"),
         "take length/min law must be a proof-returning Equal surface"
     );
     assert!(
@@ -131,22 +134,19 @@ fn cat3_d1_law_surfaces_are_proof_returning_not_prop_wrappers() {
         "CAT-3 D2 permutation must be count equality, not a raw proof-relevant data family"
     );
     assert!(
-        COLLECTIONS_KEN_MD.contains("fn Perm (a : Type) (eqf : a → a → Bool)")
-            && COLLECTIONS_KEN_MD.contains(
-                "(x : a) → Equal Nat (count a eqf x xs) (count a eqf x ys)"
-            ),
+        compact.contains("fn Perm (a : Type) (eqf : a → a → Bool)")
+            && compact.contains("(x : a) → Equal Nat (count a eqf x xs) (count a eqf x ys)"),
         "CAT-3 D2 Perm must be the comparator-indexed count/multiset equality surface"
     );
     assert!(
-        COLLECTIONS_KEN_MD.contains("fn eq_from_ord")
-            && COLLECTIONS_KEN_MD.contains("bool_and (le x y) (le y x)"),
+        compact.contains("fn eq_from_ord") && compact.contains("bool_and (le x y) (le y x)"),
         "eq_from_ord must be the pinned bool_and (le x y) (le y x) definition"
     );
     assert!(
-        COLLECTIONS_KEN_MD.contains("class View A")
-            && COLLECTIONS_KEN_MD.contains("class Lens A")
-            && COLLECTIONS_KEN_MD.contains("class SetoidMorphism A")
-            && COLLECTIONS_KEN_MD.contains("project : Bool → Bool"),
+        compact.contains("class View A")
+            && compact.contains("class Lens A")
+            && compact.contains("class SetoidMorphism A")
+            && compact.contains("project : Bool → Bool"),
         "CAT-3 D3 must expose capitalized View/Lens records and a setoid-morphism project field"
     );
     assert!(

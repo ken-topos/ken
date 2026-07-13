@@ -227,26 +227,30 @@ pub fn format_ken_md(src: &str) -> Result<String, ElabError> {
 
     for fence in &extraction.fences {
         let body = &src[fence.body_range.clone()];
-        let replacement = match crate::layout::format_ken(body) {
-            Ok(formatted) => formatted,
-            Err(_) if matches!(fence.role, KenMdFenceRole::Ignore | KenMdFenceRole::Reject) => {
-                crate::format::canonicalize_lexed_tokens(body)?
+        let replacement = if body.is_empty() {
+            String::new()
+        } else {
+            match crate::layout::format_ken(body) {
+                Ok(formatted) => formatted,
+                Err(_) if matches!(fence.role, KenMdFenceRole::Ignore | KenMdFenceRole::Reject) => {
+                    crate::format::canonicalize_lexed_tokens(body)?
+                }
+                Err(ElabError::ParseError { msg, span }) => {
+                    let role = match fence.role {
+                        KenMdFenceRole::Source => "ken",
+                        KenMdFenceRole::Example => "ken example",
+                        KenMdFenceRole::Ignore | KenMdFenceRole::Reject => unreachable!(),
+                    };
+                    return Err(ElabError::ParseError {
+                        msg: format!("non-parseable `{role}` fence body: {msg}"),
+                        span: Span::new(
+                            fence.body_range.start + span.start,
+                            fence.body_range.start + span.end,
+                        ),
+                    });
+                }
+                Err(error) => return Err(error),
             }
-            Err(ElabError::ParseError { msg, span }) => {
-                let role = match fence.role {
-                    KenMdFenceRole::Source => "ken",
-                    KenMdFenceRole::Example => "ken example",
-                    KenMdFenceRole::Ignore | KenMdFenceRole::Reject => unreachable!(),
-                };
-                return Err(ElabError::ParseError {
-                    msg: format!("non-parseable `{role}` fence body: {msg}"),
-                    span: Span::new(
-                        fence.body_range.start + span.start,
-                        fence.body_range.start + span.end,
-                    ),
-                });
-            }
-            Err(error) => return Err(error),
         };
         replacements.push((fence.body_range.clone(), replacement));
     }

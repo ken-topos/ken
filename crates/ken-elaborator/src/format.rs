@@ -3,14 +3,16 @@
 //! Canonicalization consumes B1's lossless token/trivia partition.  It never
 //! scans source bytes for alias-shaped substrings: notation is selected from
 //! the parsed token kind, while every other token and all trivia retain their
-//! original source lexeme.
+//! original source lexeme. The sole sanctioned re-lexing exception is
+//! `canonicalize_lexed_tokens`, used only for non-parseable `ken ignore` and
+//! `ken reject` fence bodies.
 
 use crate::error::{ElabError, Span};
 use crate::lexer::{Lexer, Token};
 use crate::lossless::{parse_lossless, FormattableSource, SourcePieceKind};
 
 /// The blessed spelling for an unambiguous notation token kind.
-fn canonical_token_spelling(token: &Token) -> Option<&'static str> {
+pub(crate) fn canonical_token_spelling(token: &Token) -> Option<&'static str> {
     match token {
         Token::Arrow => Some("→"),
         Token::MapsTo => Some("↦"),

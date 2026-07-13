@@ -162,6 +162,12 @@ fn ac5_full_document_is_byte_idempotent_and_canonical_input_is_a_noop() {
 }
 
 #[test]
+fn ac5_empty_fences_are_first_pass_fixed_points_in_all_roles() {
+    let source = "```ken\n```\n```ken ignore\n```\n```ken reject\n```\n```ken example\n```\n";
+    assert_eq!(format_ken_md(source).unwrap(), source);
+}
+
+#[test]
 fn ac6_whole_literate_corpus_preserves_prose_ast_and_idempotence_read_only() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut paths = Vec::new();

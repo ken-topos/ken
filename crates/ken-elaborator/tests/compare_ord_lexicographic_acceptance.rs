@@ -29,16 +29,13 @@ fn mk_env() -> ElabEnv {
 fn assert_bool_reduces(env: &mut ElabEnv, name: &str, expression: &str, expected: &str) {
     env.elaborate_decl(&format!("const {name} : Bool = {expression}"))
         .unwrap_or_else(|e| panic!("{name} must elaborate: {e}"));
-    env.elaborate_decl(&format!("lemma {name}_reduces : Equal Bool {name} {expected} = Proved"))
-        .unwrap_or_else(|e| panic!("{name} must reduce to {expected}: {e}"));
+    env.elaborate_decl(&format!(
+        "lemma {name}_reduces : Equal Bool {name} {expected} = Proved"
+    ))
+    .unwrap_or_else(|e| panic!("{name} must reduce to {expected}: {e}"));
 }
 
-fn assert_ord_result_reduces(
-    env: &mut ElabEnv,
-    name: &str,
-    expression: &str,
-    expected: &str,
-) {
+fn assert_ord_result_reduces(env: &mut ElabEnv, name: &str, expression: &str, expected: &str) {
     env.elaborate_decl(&format!("const {name} : OrdResult = {expression}"))
         .unwrap_or_else(|e| panic!("{name} must elaborate: {e}"));
     env.elaborate_decl(&format!(
@@ -106,33 +103,25 @@ fn pair_and_list_instances_compute_lexicographically() {
     assert_bool_reduces(
         &mut env,
         "pair_head_lt",
-        &format!(
-            "({pair_ord}).leq (mk_pair Bool Bool False True) (mk_pair Bool Bool True False)"
-        ),
+        &format!("({pair_ord}).leq (mk_pair Bool Bool False True) (mk_pair Bool Bool True False)"),
         "True",
     );
     assert_bool_reduces(
         &mut env,
         "pair_head_gt",
-        &format!(
-            "({pair_ord}).leq (mk_pair Bool Bool True False) (mk_pair Bool Bool False True)"
-        ),
+        &format!("({pair_ord}).leq (mk_pair Bool Bool True False) (mk_pair Bool Bool False True)"),
         "False",
     );
     assert_bool_reduces(
         &mut env,
         "pair_equal_head_tail_lt",
-        &format!(
-            "({pair_ord}).leq (mk_pair Bool Bool True False) (mk_pair Bool Bool True True)"
-        ),
+        &format!("({pair_ord}).leq (mk_pair Bool Bool True False) (mk_pair Bool Bool True True)"),
         "True",
     );
     assert_bool_reduces(
         &mut env,
         "pair_equal_head_tail_gt",
-        &format!(
-            "({pair_ord}).leq (mk_pair Bool Bool True True) (mk_pair Bool Bool True False)"
-        ),
+        &format!("({pair_ord}).leq (mk_pair Bool Bool True True) (mk_pair Bool Bool True False)"),
         "False",
     );
 
@@ -181,7 +170,10 @@ fn structural_ord_instances_and_all_laws_are_checked_zero_delta() {
         );
         let mut delta = trusted_base_delta(&env.env, id);
         delta.remove(&env.class_env.record_nil_val_id);
-        assert!(delta.is_empty(), "{name} must add no trusted base entries: {delta:?}");
+        assert!(
+            delta.is_empty(),
+            "{name} must add no trusted base entries: {delta:?}"
+        );
     }
 
     let pair_ord = "Ord_instance_Pair Bool Bool Ord_instance_Bool Ord_instance_Bool";
@@ -231,12 +223,20 @@ fn structural_ord_instances_and_all_laws_are_checked_zero_delta() {
 
 #[test]
 fn list_instance_routes_the_canonical_compare_into_raw_list_compare() {
+    let lawful = LAWFUL_CLASSES_KEN_MD
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let collections = COLLECTIONS_KEN_MD
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(
-        LAWFUL_CLASSES_KEN_MD.contains("list_compare a (compare a d) xs ys"),
+        lawful.contains("list_compare a (compare a d) xs ys"),
         "Ord (List a) must route the canonical derived compare at the instance layer"
     );
     assert!(
-        COLLECTIONS_KEN_MD.contains(
+        collections.contains(
             "fn list_compare (a : Type) (cmp : a → a → OrdResult) (xs : List a) (ys : List a) : OrdResult"
         ),
         "Collections list_compare must remain raw-comparator parameterized"

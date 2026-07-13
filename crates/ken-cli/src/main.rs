@@ -8,8 +8,12 @@ fn main() {
         "repl" => repl::run(),
         "run" => run_file(args.get(2).map(|s| s.as_str())),
         "check" => check_file(args.get(2).map(|s| s.as_str())),
+        "fmt" => format_files(&args[2..]),
         "version" | "--version" | "-V" => {
-            println!("ken {} — verified topos-oriented language", env!("CARGO_PKG_VERSION"));
+            println!(
+                "ken {} — verified topos-oriented language",
+                env!("CARGO_PKG_VERSION")
+            );
             println!("kernel {}", ken_kernel::version());
             println!("{}", ken_interp::describe());
         }
@@ -21,13 +25,82 @@ fn main() {
     }
 }
 
+/// `ken fmt [--check] <paths...>` — the thin CLI over the landed formatter.
+fn format_files(args: &[String]) {
+    let mut check = false;
+    let mut paths = Vec::new();
+    for arg in args {
+        if arg == "--check" {
+            check = true;
+        } else if arg.starts_with('-') {
+            eprintln!("ken fmt: unknown option '{arg}'");
+            std::process::exit(1);
+        } else {
+            paths.push(arg.as_str());
+        }
+    }
+    if paths.is_empty() {
+        eprintln!("ken fmt: missing <paths...> argument");
+        eprintln!("Usage: ken fmt [--check] <paths...>");
+        std::process::exit(1);
+    }
+
+    let mut failed = false;
+    for path in paths {
+        let source = match std::fs::read_to_string(path) {
+            Ok(source) => source,
+            Err(error) => {
+                eprintln!("ken fmt: cannot read '{path}': {error}");
+                failed = true;
+                continue;
+            }
+        };
+        let formatted = if path.ends_with(".ken.md") {
+            ken_elaborator::format_ken_md(&source)
+        } else if path.ends_with(".ken") {
+            ken_elaborator::layout::format_ken(&source)
+        } else {
+            eprintln!("ken fmt: unsupported path '{path}' (expected .ken or .ken.md)");
+            failed = true;
+            continue;
+        };
+        let formatted = match formatted {
+            Ok(formatted) => formatted,
+            Err(error) => {
+                eprintln!("ken fmt: formatting error in '{path}': {error:?}");
+                failed = true;
+                continue;
+            }
+        };
+
+        if check {
+            if formatted != source {
+                eprintln!("ken fmt --check: non-canonical: {path}");
+                failed = true;
+            }
+        } else if formatted != source {
+            if let Err(error) = std::fs::write(path, formatted) {
+                eprintln!("ken fmt: cannot write '{path}': {error}");
+                failed = true;
+            }
+        }
+    }
+
+    if failed {
+        std::process::exit(1);
+    }
+}
+
 /// Read `<file>` and elaborate it (`` .ken.md `` via the literate path,
 /// otherwise the plain `.ken` path) — the shared front half of both `ken run`
 /// and `ken check`. Exits 1 on a missing argument, an unreadable file,
 /// elaborator init failure, or an elaboration error, with a message prefixed
 /// by `cmd` (`"run"`/`"check"`) so a user sees the subcommand they actually
 /// typed, not a borrowed one.
-fn elaborate_cli_file(cmd: &str, path: Option<&str>) -> (String, ken_elaborator::ElabEnv, Vec<ken_kernel::GlobalId>) {
+fn elaborate_cli_file(
+    cmd: &str,
+    path: Option<&str>,
+) -> (String, ken_elaborator::ElabEnv, Vec<ken_kernel::GlobalId>) {
     let path = match path {
         Some(p) => p,
         None => {
@@ -150,17 +223,23 @@ fn run_file(path: Option<&str>) {
         get("CapabilityDenied"),
         get("Other"),
     ) {
-        (Some(readfile_id), Some(ok_id), Some(err_id), Some(notfound_id), Some(permissiondenied_id), Some(capabilitydenied_id), Some(other_id)) => {
-            Some(ken_interp::FSIds {
-                readfile_id,
-                ok_id,
-                err_id,
-                notfound_id,
-                permissiondenied_id,
-                capabilitydenied_id,
-                other_id,
-            })
-        }
+        (
+            Some(readfile_id),
+            Some(ok_id),
+            Some(err_id),
+            Some(notfound_id),
+            Some(permissiondenied_id),
+            Some(capabilitydenied_id),
+            Some(other_id),
+        ) => Some(ken_interp::FSIds {
+            readfile_id,
+            ok_id,
+            err_id,
+            notfound_id,
+            permissiondenied_id,
+            capabilitydenied_id,
+            other_id,
+        }),
         _ => None,
     };
 
@@ -179,7 +258,12 @@ fn run_file(path: Option<&str>) {
     // authority` returns `None`) — unchanged from today's behavior.
     if let Some(authority) = declared_fs_authority(&elab_env, main_id) {
         let cap = ken_elaborator::capabilities::Cap::mint(authority, "FS");
-        tree = ken_interp::apply(tree, ken_interp::EvalVal::Cap(cap), &elab_env.env, &mut store);
+        tree = ken_interp::apply(
+            tree,
+            ken_interp::EvalVal::Cap(cap),
+            &elab_env.env,
+            &mut store,
+        );
     }
 
     let coproduct_ids = ken_interp::CoproductIds {
@@ -187,7 +271,14 @@ fn run_file(path: Option<&str>) {
         inr_id: elab_env.prelude_env.inr_id,
     };
 
-    match ken_interp::run_io(tree, &console_ids, fs_ids.as_ref(), Some(&coproduct_ids), &elab_env.env, &mut store) {
+    match ken_interp::run_io(
+        tree,
+        &console_ids,
+        fs_ids.as_ref(),
+        Some(&coproduct_ids),
+        &elab_env.env,
+        &mut store,
+    ) {
         Ok(final_val) => {
             // fs-read-file-lines-flip D4 (Option 3, Steward/Architect
             // ruling `evt_5a6kr3sgsmzp0`): `main`'s `[FS]` computation is
@@ -274,7 +365,11 @@ fn render_fs_result(
 /// head, tail]` (`ctor_arity = params.len() + args.len()`, `List`'s single
 /// param `a` fills index 0); `Nil`'s sole arg is its own type-param filler
 /// — distinguished by CTOR ID, not arg count (`Nil` is non-empty: `[filler]`).
-fn print_string_list(val: &ken_interp::EvalVal, nil_id: ken_kernel::GlobalId, cons_id: ken_kernel::GlobalId) {
+fn print_string_list(
+    val: &ken_interp::EvalVal,
+    nil_id: ken_kernel::GlobalId,
+    cons_id: ken_kernel::GlobalId,
+) {
     let mut cur = val;
     loop {
         match cur {
@@ -396,7 +491,10 @@ fn build_eval_store(elab_env: &ken_elaborator::ElabEnv) -> ken_interp::EvalStore
 }
 
 fn print_help() {
-    println!("ken {} — verified topos-oriented language", env!("CARGO_PKG_VERSION"));
+    println!(
+        "ken {} — verified topos-oriented language",
+        env!("CARGO_PKG_VERSION")
+    );
     println!();
     println!("Usage: ken <subcommand>");
     println!();
@@ -404,6 +502,8 @@ fn print_help() {
     println!("  run <file>    Elaborate and run a Ken source file (Console IO)");
     println!("  check <file>  Elaborate a Ken source file and verify its fences,");
     println!("                without driving IO (for pure-library entries)");
+    println!("  fmt [--check] <paths...>");
+    println!("                Canonicalize Ken source, or check without writing");
     println!("  repl          Start the interactive REPL (the Little Prover loop)");
     println!("  version       Print version and kernel information");
     println!("  help          Print this message");
@@ -448,7 +548,9 @@ mod declared_fs_authority_tests {
     #[test]
     fn no_cap_param_detects_nothing() {
         let mut env = ken_elaborator::ElabEnv::new().expect("env");
-        let main_id = env.elaborate_decl("const main : Nat = Zero").expect("elaborates");
+        let main_id = env
+            .elaborate_decl("const main : Nat = Zero")
+            .expect("elaborates");
         assert_eq!(declared_fs_authority(&env, main_id), None);
     }
 }

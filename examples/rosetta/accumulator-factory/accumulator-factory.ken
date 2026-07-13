@@ -23,51 +23,88 @@
 -- constructs an `InR` variant, so the `Vis`-over-`f` branch is never
 -- actually taken -- `f`'s inhabitedness is irrelevant to a program that
 -- never uses it.
-
 const Eff : Type = Unit
+
 fn RespEff (u : Eff) : Type = Unit
 
 const Op : Type = Coproduct (StateOp Nat) Eff
+
 -- `resp_coproduct` is now the GENERAL `(g h:Type)->(rg:g->Type)->(rh:h->Type)->
 -- Coproduct g h -> Type` (`effect-composition` D1) -- State is the literal
 -- instance `resp_coproduct (StateOp Nat) Eff (resp_state Nat) RespEff`.
 const Resp : Op → Type = resp_coproduct (StateOp Nat) Eff (resp_state Nat) RespEff
 
 fn addNat (a : Nat) (b : Nat) : Nat =
-  match a { Zero ↦ b ; Suc a2 ↦ Suc (addNat a2 b) }
+  match a {
+    Zero ↦ b;
+    Suc a2 ↦ Suc (addNat a2 b)
+  }
 
 -- one "call": read the running total, add `n`, store it back, return the
 -- NEW total (the task's own semantics: "returns the current total").
 fn addTo (n : Nat) : ITree Op Resp Nat =
-  bind Op Resp Nat Nat
+  bind
+    Op
+    Resp
+    Nat
+    Nat
     (get Nat Eff RespEff MkUnit)
     (λprev.
-      bind Op Resp Unit Nat
+      bind
+        Op
+        Resp
+        Unit
+        Nat
         (put Nat Eff RespEff (addNat prev n))
         (λ_. Ret Op Resp Nat (addNat prev n)))
 
 fn eq_nat (a : Nat) (b : Nat) : Bool =
   match a {
-    Zero ↦ match b { Zero ↦ True ; Suc _ ↦ False } ;
-    Suc a2 ↦ match b { Zero ↦ False ; Suc b2 ↦ eq_nat a2 b2 }
+    Zero ↦
+      match b {
+        Zero ↦ True;
+        Suc _ ↦ False
+      };
+    Suc a2 ↦
+      match b {
+        Zero ↦ False;
+        Suc b2 ↦
+          eq_nat
+            a2
+            b2
+      }
   }
 
 fn and_bool (a : Bool) (b : Bool) : Bool =
-  match a { True ↦ b ; False ↦ False }
+  match a {
+    True ↦ b;
+    False ↦ False
+  }
 
-const two   : Nat = Suc (Suc Zero)
+const two : Nat = Suc (Suc Zero)
+
 const three : Nat = Suc (Suc (Suc Zero))
-const five  : Nat = addNat two three
-const ten   : Nat = addNat five five
+
+const five : Nat = addNat two three
+
+const ten : Nat = addNat five five
 
 -- Two independently-driven "calls" against the SAME hidden accumulator,
 -- discriminating: each returns the NEW running total (2, then 5), and the
 -- state persists/accumulates across calls (not just constant per-call).
 const prog : ITree Op Resp Bool =
-  bind Op Resp Nat Bool
+  bind
+    Op
+    Resp
+    Nat
+    Bool
     (addTo two)
     (λr1.
-      bind Op Resp Nat Bool
+      bind
+        Op
+        Resp
+        Nat
+        Bool
         (addTo three)
         (λr2. Ret Op Resp Bool (and_bool (eq_nat r1 two) (eq_nat r2 five))))
 
@@ -83,12 +120,21 @@ const finalResult : ITree Eff RespEff (Pair Bool Nat) =
 -- path.
 fn unwrapRet (r : ITree Eff RespEff (Pair Bool Nat)) : Pair Bool Nat =
   match r {
-    Ret v ↦ v ;
-    Vis op k ↦ mk_pair Bool Nat False Zero
+    Ret v ↦ v;
+    Vis op k ↦
+      mk_pair
+        Bool
+        Nat
+        False
+        Zero
   }
 
 const finalBool : Bool = pair_fst Bool Nat (unwrapRet finalResult)
 
-const finalCheck : String = match finalBool { True ↦ "PASS" ; False ↦ "FAIL" }
+const finalCheck : String =
+  match finalBool {
+    True ↦ "PASS";
+    False ↦ "FAIL"
+  }
 
 proc main : IO Unit visits [Console] = print_line finalCheck

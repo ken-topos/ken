@@ -73,7 +73,7 @@ identifier is reserved checked-mode surface sugar for `Ω`-classified
 `absurd_empty` is the clear, reachable name this entry uses instead:
 
 ```ken
-fn absurd_empty (C : Type) (e : Empty) : C = match e { }
+fn absurd_empty (C : Type) (e : Empty) : C = match e {}
 ```
 
 `Yes`/`No` already work directly as constructors; the lowercase `yes`/`no`
@@ -83,6 +83,7 @@ better at call sites and mirrors `yes`/`no` on the referenced Lean/Agda
 
 ```ken
 fn yes (prp : Ω) (p : prp) : Dec prp = Yes prp p
+
 fn no (prp : Ω) (f : prp → Empty) : Dec prp = No prp f
 ```
 
@@ -92,26 +93,43 @@ instance in scope:
 
 ```ken
 class DecEq a {
-  eq       : a → a → Bool ;
-  sound    : (x : a) → (y : a) → IsTrue (eq x y) → Equal a x y ;
+  eq : a → a → Bool;
+  sound : (x : a) → (y : a) → IsTrue (eq x y) → Equal a x y;
   complete : (x : a) → (y : a) → Equal a x y → IsTrue (eq x y)
 }
 
 fn bool_eq (a : Bool) (b : Bool) : Bool =
-  match a { True ↦ b ; False ↦ match b { True ↦ False ; False ↦ True } }
+  match a {
+    True ↦ b;
+    False ↦
+      match b {
+        True ↦ False;
+        False ↦ True
+      }
+  }
 
 instance DecEq Bool {
-  eq = bool_eq ;
-  sound =
-    λx. match x {
-      True  ↦ λy. match y { True ↦ λp. Proved ; False ↦ λp. absurd p } ;
-      False ↦ λy. match y { True ↦ λp. absurd p ; False ↦ λp. Proved }
-    } ;
-  complete =
-    λx. match x {
-      True  ↦ λy. match y { True ↦ λp. Proved ; False ↦ λp. absurd p } ;
-      False ↦ λy. match y { True ↦ λp. absurd p ; False ↦ λp. Proved }
+  eq = bool_eq;
+  sound = λx.match x {
+    True ↦ λy.match y {
+      True ↦ λp.Proved;
+      False ↦ λp.absurd p
+    };
+    False ↦ λy.match y {
+      True ↦ λp.absurd p;
+      False ↦ λp.Proved
     }
+  };
+  complete = λx.match x {
+    True ↦ λy.match y {
+      True ↦ λp.Proved;
+      False ↦ λp.absurd p
+    };
+    False ↦ λy.match y {
+      True ↦ λp.absurd p;
+      False ↦ λp.Proved
+    }
+  }
 }
 ```
 
@@ -126,8 +144,14 @@ uses for `cong`) for the No-branch contradiction below:
 lemma sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
   J (λy' _. Equal ty y' x) Refl p
 
-lemma trans (ty : Type) (x : ty) (y : ty) (z : ty)
-         (p : Equal ty x y) (q : Equal ty y z) : Equal ty x z =
+lemma trans
+  (ty : Type)
+  (x : ty)
+  (y : ty)
+  (z : ty)
+  (p : Equal ty x y)
+  (q : Equal ty y z)
+  : Equal ty x z =
   J (λz' _. Equal ty x z') p q
 ```
 
@@ -142,13 +166,23 @@ discharges it into `Empty` directly; this bridge is `Ω → Type`, not
 
 ```ken
 fn dec_eq_decides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
-  match (d.eq x y) eqn: h {
-    True ↦ Yes (Equal a x y) (d.sound x y h) ;
+  match d.eq x y eqn : h {
+    True ↦
+      Yes
+        (Equal a x y)
+        (d.sound x y h);
     False ↦
-      No (Equal a x y)
-         (λpxy. absurd (trans Bool False (d.eq x y) True
-                              (sym Bool (d.eq x y) False h)
-                              (d.complete x y pxy)))
+      No
+        (Equal a x y)
+        (λpxy.
+          absurd
+            (trans
+              Bool
+              False
+              (d.eq x y)
+              True
+              (sym Bool (d.eq x y) False h)
+              (d.complete x y pxy)))
   }
 ```
 
@@ -170,6 +204,7 @@ const true_is_not_false : Dec (Equal Bool True False) =
 
 ```ken example
 const true_is_true_tag : Bool = decide (Equal Bool True True) true_is_true
+
 const true_is_not_false_tag : Bool = decide (Equal Bool True False) true_is_not_false
 ```
 
@@ -201,9 +236,13 @@ over the concrete `DecEq Bool` instance from `§3` (the guide's `§7` named-
 proof-claims form):
 
 ```ken example
-proof yes_is_true for decide : Equal Bool (decide (Equal Bool True True) true_is_true) True = Proved
+proof yes_is_true for decide
+  : Equal Bool (decide (Equal Bool True True) true_is_true) True =
+  Proved
 
-proof no_is_false for decide : Equal Bool (decide (Equal Bool True False) true_is_not_false) False = Proved
+proof no_is_false for decide
+  : Equal Bool (decide (Equal Bool True False) true_is_not_false) False =
+  Proved
 ```
 
 Both close with `Proved`: `decide`/`true_is_true`/`true_is_not_false` are all closed,
@@ -239,9 +278,9 @@ injective — with zero trusted-base delta) so the showcase is not vacuous — s
 independently named uninhabited type:
 
 ```ken example
-data EmptyAttempt : Type where { }
+data EmptyAttempt : Type where {}
 
-fn absurd_empty_attempt (C : Type) (e : EmptyAttempt) : C = match e { }
+fn absurd_empty_attempt (C : Type) (e : EmptyAttempt) : C = match e {}
 ```
 
 The legacy `data D = …` form does not take a `:`-ascribed family type, so the
@@ -252,7 +291,7 @@ explicit-family `where { }` spelling is the usable form here.
 `'absurd' collides with a reserved surface sugar identifier`.
 
 ```ken reject
-fn absurd (C : Type) (e : Empty) : C = match e { }
+fn absurd (C : Type) (e : Empty) : C = match e {}
 ```
 
 ## 6. References
