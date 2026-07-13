@@ -86,8 +86,8 @@ pub enum ElabError {
     /// chain — i.e. search would not terminate (`39 §6.4`, `17 §4.2`).
     /// Detected at admission time; never a search-time hang.
     NonTerminatingInstances { span: Span },
-    /// A `use`-open ambiguity (`33 §3.3`, ES3-build): two opened modules
-    /// export the same unqualified name binding distinct declarations.
+    /// An unqualified import clash (`33 §3.3`): a top-level local and a
+    /// selective import, or two selective imports, bind distinct declarations.
     /// `sources` names every colliding qualified origin (the reject must
     /// name both, never pick silently).
     AmbiguousReference { name: String, sources: Vec<String>, span: Span },

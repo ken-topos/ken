@@ -325,8 +325,8 @@ pub enum Decl {
         decls: Vec<Decl>,
         span: Span,
     },
-    /// `import M` / `import M as N` / `import M (foo, Bar)` / `use M`
-    /// (`33 §3.2`) — brings another module's `pub` exports into scope.
+    /// `import M` / `import M as N` / `import M (foo, Bar)` (`33 §3.2`)
+    /// — brings another module's `pub` exports into scope.
     /// Surface/elaboration-time only; resolved away before the kernel.
     ImportDecl {
         module: String,
@@ -342,7 +342,7 @@ pub enum Decl {
     Pub(Box<Decl>),
 }
 
-/// The four import forms (`33 §3.2`).
+/// The three import forms (`33 §3.2`).
 #[derive(Clone, Debug)]
 pub enum ImportKind {
     /// `import M` — qualified: `M`'s exports accessible as `M.foo`.
@@ -352,8 +352,6 @@ pub enum ImportKind {
     /// `import M (foo, Bar as Baz)` — selective: exactly these names,
     /// optionally renamed at the import site, unqualified.
     Selective(Vec<ImportItem>),
-    /// `use M` — open: all of `M`'s exports, unqualified.
-    Open,
 }
 
 /// One selective-import item (`33 §3.2`). `rename` is the unqualified name

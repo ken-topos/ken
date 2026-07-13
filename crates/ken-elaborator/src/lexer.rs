@@ -44,10 +44,10 @@ pub enum Token {
     // B2 keywords (`72 §4`, spellings are `(oracle)`/`OQ-syntax`)
     KwTemporal, // "temporal" — a delegated temporal-obligation block
     // ES3 keywords (`33 §3-4` — modules/imports/visibility)
-    KwModule, // "module" — module namespace declaration
-    KwImport, // "import" — qualified/aliased/selective import
-    KwUse,    // "use"    — unqualified open import
-    KwPub,    // "pub"    — visibility export marker
+    KwModule,      // "module" — module namespace declaration
+    KwImport,      // "import" — qualified/aliased/selective import
+    KwUseReserved, // "use" — reserved (ADR-0015); retired open import
+    KwPub,         // "pub" — visibility export marker
     // N4 admission-boundary keywords (`33 §3.2.1`, §5.5.1)
     KwProgram, // "program" — anonymous multi-package admission root
     KwPackage, // "package" — anonymous package admission boundary
@@ -444,7 +444,7 @@ impl<'s> Lexer<'s> {
                 "where" => Token::KwWhere,
                 "module" => Token::KwModule,
                 "import" => Token::KwImport,
-                "use" => Token::KwUse,
+                "use" => Token::KwUseReserved,
                 "pub" => Token::KwPub,
                 "program" => Token::KwProgram,
                 "package" => Token::KwPackage,

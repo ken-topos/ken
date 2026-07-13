@@ -1,12 +1,12 @@
 //! `catalog-taxonomy-paths-imports` WP, P2(a) — `import`/`import … as`/
-//! selective `import`/`use`/`module` all accept a dotted module path
+//! selective `import`/`module` all accept a dotted module path
 //! (`ConId` then zero-or-more `.ConId`), mirroring the catalog's Section >
 //! Domain path↔import identity (`docs/program/07-catalog-style-guide.md`).
 //! Module stays path-inferred (P2b) — these tests only exercise the parser,
 //! never assert a mandatory in-file `module` header.
 
 use ken_elaborator::parser::parse_decls;
-use ken_elaborator::{Decl, ImportKind};
+use ken_elaborator::{Decl, ElabError, ImportKind, Span};
 
 fn single_decl(src: &str) -> Decl {
     let mut decls = parse_decls(src).expect("source must parse");
@@ -57,13 +57,20 @@ fn selective_import_accepts_a_dotted_module_path() {
 }
 
 #[test]
-fn use_accepts_a_dotted_module_path() {
-    let decl = single_decl("use Capability.Parsing.Parsing");
-    let Decl::ImportDecl { module, kind, .. } = decl else {
-        panic!("expected ImportDecl, got {decl:?}");
-    };
-    assert_eq!(module, "Capability.Parsing.Parsing");
-    assert!(matches!(kind, ImportKind::Open));
+fn use_is_retired_before_dotted_module_path_parsing() {
+    let err = parse_decls("use Capability.Parsing.Parsing")
+        .expect_err("the retired `use` keyword must fail closed");
+    match err {
+        ElabError::ParseError { msg, span } => {
+            assert_eq!(
+                msg,
+                "`use` is retired (ADR-0015); use `import M`, `import M as N`, or \
+                 `import M (…)` for a provenance-preserving import."
+            );
+            assert_eq!(span, Span::new(0, 3));
+        }
+        other => panic!("expected the specific retired-`use` ParseError, got {other:?}"),
+    }
 }
 
 #[test]
@@ -86,12 +93,6 @@ fn undotted_forms_still_parse() {
     };
     assert_eq!(module, "Nat");
     assert!(matches!(kind, ImportKind::Qualified));
-
-    let decl = single_decl("use Nat");
-    let Decl::ImportDecl { module, .. } = decl else {
-        panic!("expected ImportDecl, got {decl:?}");
-    };
-    assert_eq!(module, "Nat");
 
     let decl = single_decl("module Nat { fn id (x : Bool) : Bool = x }");
     let Decl::ModuleDecl { name, .. } = decl else {
