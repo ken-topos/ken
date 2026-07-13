@@ -21,7 +21,6 @@
 -- through the SAME loop -- no hand-fed `Coproduct` anywhere in this file. On a
 -- missing file, the application reports the exact error through Console and
 -- returns `Failure 1`; the runner only maps the final `ExitCode`.
-
 -- D1: `lines : String -> List String`, terminator semantics (`str::lines()`)
 -- -- a trailing '\n' yields NO trailing empty segment. Pure, total,
 -- structural recursion on the `Cons` tail (SCT-safe, no `Bottom`). Lives
@@ -143,12 +142,22 @@ proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Conso
 -- Reads the fixture via `inject_l (read_bytes ...)`, and on success prints
 -- each parsed line via `inject_r (print_line ...)` in one composed tree.
 proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Console] =
-  bind (Coproduct (FSOp APartial) ConsoleOp)
-       (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
-       (Result IOError Bytes) (Result IOError Unit)
-     (inject_l (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp (Result IOError Bytes)
-       (read_bytes APartial cap (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
-     (λr .
+  bind
+    (Coproduct (FSOp APartial) ConsoleOp)
+    (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+    (Result IOError Bytes)
+    (Result IOError Unit)
+    (inject_l
+      (FSOp APartial)
+      ConsoleOp
+      (fs_resp APartial)
+      console_resp
+      (Result IOError Bytes)
+      (read_bytes
+        APartial
+        cap
+        (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
+    (λr.
       match r {
         Err e ↦
           Ret
@@ -159,25 +168,40 @@ proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Consol
         Ok bytes ↦ printLines (lines (bytes_decode bytes))
       })
 
-proc main (_input : ProcessInput) (caps : ProgramCaps)
-  : HostIO ExitCode visits [FS, Console] =
+proc main
+  (_input : ProcessInput)
+  (caps : ProgramCaps)
+  : HostIO ExitCode
+  visits [FS, Console] =
   match caps {
     MkProgramCaps cap ↦
-      bind (Coproduct (FSOp APartial) ConsoleOp)
-           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
-           (Result IOError Unit) ExitCode
+      bind
+        (Coproduct (FSOp APartial) ConsoleOp)
+        (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+        (Result IOError Unit)
+        ExitCode
         (app cap)
-        (λr .
+        (λr.
           match r {
             Err e ↦
               match e {
-                NotFound ↦ host_program_then (print_line "NotFound") (Failure 1) ;
+                NotFound ↦
+                  host_program_then
+                    (print_line "NotFound")
+                    (Failure 1);
                 PermissionDenied ↦
-                  host_program_then (print_line "PermissionDenied") (Failure 1) ;
+                  host_program_then
+                    (print_line "PermissionDenied")
+                    (Failure 1);
                 CapabilityDenied ↦
-                  host_program_then (print_line "CapabilityDenied") (Failure 1) ;
-                Other ↦ host_program_then (print_line "Other") (Failure 1)
-              } ;
+                  host_program_then
+                    (print_line "CapabilityDenied")
+                    (Failure 1);
+                Other ↦
+                  host_program_then
+                    (print_line "Other")
+                    (Failure 1)
+              };
             Ok _ ↦ host_exit Success
           })
   }

@@ -375,7 +375,10 @@ entry's tangled fences run through `ken run`, so this final compiled
 declaration accepts the fixed process-input and capability ABI:
 
 ```ken
-proc main (_input : ProcessInput) (_caps : ProgramCaps)
-  : HostIO ExitCode visits [Console] =
+proc main
+  (_input : ProcessInput)
+  (_caps : ProgramCaps)
+  : HostIO ExitCode
+  visits [Console] =
   host_program (print_line "proof techniques ok")
 ```

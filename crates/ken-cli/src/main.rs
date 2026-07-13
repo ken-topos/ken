@@ -55,7 +55,7 @@ fn format_files(args: &[OsString]) {
             eprintln!("ken fmt: unknown option '{arg}'");
             std::process::exit(1);
         } else {
-            paths.push(arg.as_str());
+            paths.push(arg);
         }
     }
     if paths.is_empty() {

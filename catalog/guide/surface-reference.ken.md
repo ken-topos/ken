@@ -62,8 +62,11 @@ proc announce (c : Color) : IO Unit visits [Console] =
     Blue ↦ print_line "it's blue"
   }
 
-proc main (_input : ProcessInput) (_caps : ProgramCaps)
-  : HostIO ExitCode visits [Console] =
+proc main
+  (_input : ProcessInput)
+  (_caps : ProgramCaps)
+  : HostIO ExitCode
+  visits [Console] =
   host_program (announce favorite)
 ```
 
