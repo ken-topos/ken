@@ -25,9 +25,8 @@ overflow failure.
 
 - given: the text `"12x4"`.
 - expect: `parse_nat "12x4" = Err (MkNumericError InvalidDigit 2)`.
-- why: the exact index defeats a location-free implementation and both
-  one-based and byte-offset variants. Parsing stops at the first invalid
-  character.
+- why: the exact index defeats a location-free implementation and one-based
+  variants. Parsing stops at the first invalid character.
 
 ### text/numeric/signed-decimal-parse
 
