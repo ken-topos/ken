@@ -45,21 +45,13 @@ fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   }
 
 lemma cong
-(ty : Type)
-(ty2 : Type)
-(x : ty)
-(y : ty)
-(f : ty
-→ ty2)
-(p : Equal
-ty
-x
-y) : Equal
-ty2
-(f
-x)
-(f
-y) =
+  (ty : Type)
+  (ty2 : Type)
+  (x : ty)
+  (y : ty)
+  (f : ty → ty2)
+  (p : Equal ty x y)
+  : Equal ty2 (f x) (f y) =
   J (λy' _. Equal ty2 (f x) (f y')) Refl p
 
 fn bool_eq (a : Bool) (b : Bool) : Bool =
@@ -194,17 +186,9 @@ result (the induction hypothesis) is lifted under `Cons x` by `cong`:
 
 ```ken example
 lemma list_right_unit
-(a : Type)
-(xs : List
-a) : Equal
-(List
-a)
-(list_append
-a
-xs
-(Nil
-a))
-xs =
+  (a : Type)
+  (xs : List a)
+  : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
     Nil ↦ Proved;
     Cons x t ↦

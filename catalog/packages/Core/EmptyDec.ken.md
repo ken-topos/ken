@@ -145,21 +145,13 @@ lemma sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
   J (λy' _. Equal ty y' x) Refl p
 
 lemma trans
-(ty : Type)
-(x : ty)
-(y : ty)
-(z : ty)
-(p : Equal
-ty
-x
-y)
-(q : Equal
-ty
-y
-z) : Equal
-ty
-x
-z =
+  (ty : Type)
+  (x : ty)
+  (y : ty)
+  (z : ty)
+  (p : Equal ty x y)
+  (q : Equal ty y z)
+  : Equal ty x z =
   J (λz' _. Equal ty x z') p q
 ```
 
@@ -244,30 +236,12 @@ over the concrete `DecEq Bool` instance from `§3` (the guide's `§7` named-
 proof-claims form):
 
 ```ken example
-proof yes_is_true
-for
-decide : Equal
-Bool
-(decide
-(Equal
-Bool
-True
-True)
-true_is_true)
-True =
+proof yes_is_true for decide
+  : Equal Bool (decide (Equal Bool True True) true_is_true) True =
   Proved
 
-proof no_is_false
-for
-decide : Equal
-Bool
-(decide
-(Equal
-Bool
-True
-False)
-true_is_not_false)
-False =
+proof no_is_false for decide
+  : Equal Bool (decide (Equal Bool True False) true_is_not_false) False =
   Proved
 ```
 

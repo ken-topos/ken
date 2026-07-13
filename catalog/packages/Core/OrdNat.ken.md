@@ -62,29 +62,11 @@ proof refl for leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
     Suc x2 ↦ proof refl for leq_nat x2
   }
 
-proof trans
-for
-leq_nat
-(x : Nat) : (y : Nat)
-→ (z : Nat)
-→ Equal
-Bool
-(leq_nat
-x
-y)
-True
-→ Equal
-Bool
-(leq_nat
-y
-z)
-True
-→ Equal
-Bool
-(leq_nat
-x
-z)
-True =
+proof trans for leq_nat
+  (x : Nat)
+  : (y : Nat) → (z : Nat) → Equal Bool (leq_nat x y) True → Equal Bool (leq_nat
+  y
+  z) True → Equal Bool (leq_nat x z) True =
   match x {
     Zero ↦ λy. λz. λp. λq. Proved;
     Suc x2 ↦
@@ -100,26 +82,13 @@ True =
         }
   }
 
-proof antisym
-for
-leq_nat
-(x : Nat) : (y : Nat)
-→ Equal
-Bool
-(leq_nat
-x
-y)
-True
-→ Equal
-Bool
-(leq_nat
-y
-x)
-True
-→ Equal
-Nat
-x
-y =
+proof antisym for leq_nat
+  (x : Nat)
+  : (y : Nat) → Equal Bool (leq_nat x y) True → Equal Bool (leq_nat y x) True
+  → Equal
+  Nat
+  x
+  y =
   match x {
     Zero ↦
       λy.
@@ -154,20 +123,9 @@ irrelevant propositions; `const` and `fn` compute data.
 
 ```ken
 fn total_leq_nat
-(x : Nat)
-(y : Nat) : Or
-(Equal
-Bool
-(leq_nat
-x
-y)
-True)
-(Equal
-Bool
-(leq_nat
-y
-x)
-True) =
+  (x : Nat)
+  (y : Nat)
+  : Or (Equal Bool (leq_nat x y) True) (Equal Bool (leq_nat y x) True) =
   match x {
     Zero ↦
       Inl
@@ -209,23 +167,11 @@ True q` and `bool_or False q` reduce to a literal, so `Proved`/the hypothesis
 itself close it):
 
 ```ken
-proof eq_true_of_or
-for
-bool_or
-(p : Bool)
-(q : Bool)
-(h : Or
-(Equal
-Bool
-p
-True)
-(Equal
-Bool
-q
-True)) : IsTrue
-(bool_or
-p
-q) =
+proof eq_true_of_or for bool_or
+  (p : Bool)
+  (q : Bool)
+  (h : Or (Equal Bool p True) (Equal Bool q True))
+  : IsTrue (bool_or p q) =
   match h {
     Inl hp ↦
       trans
@@ -319,17 +265,8 @@ fn compare (a : Nat) (b : Nat) : OrdResult =
 ## 3. Using it
 
 ```ken example
-proof two_leq_three
-for
-leq_nat : IsTrue
-(leq_nat
-(Suc
-(Suc
-Zero))
-(Suc
-(Suc
-(Suc
-Zero)))) =
+proof two_leq_three for leq_nat
+  : IsTrue (leq_nat (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) =
   Proved
 
 const min_of_two_and_three : Nat = min (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
@@ -350,16 +287,8 @@ presented as a checked lemma:
 ```ken example
 const ord_nat_leq : Bool = (Ord_instance_Nat).leq (Suc Zero) (Suc (Suc Zero))
 
-lemma ord_nat_total : IsTrue
-(bool_or
-(leq_nat
-(Suc
-Zero)
-Zero)
-(leq_nat
-Zero
-(Suc
-Zero))) =
+lemma ord_nat_total
+  : IsTrue (bool_or (leq_nat (Suc Zero) Zero) (leq_nat Zero (Suc Zero))) =
   (Ord_instance_Nat).total (Suc Zero) Zero
 ```
 

@@ -104,48 +104,24 @@ remain stuck `Eq` goals and use `Refl`; step
 (`Cons h t`) is `cong` under `Cons a h` on the tail IH.
 
 ```ken
-proof left_unit
-for
-list_append
-(a : Type)
-(xs : List
-a) : Equal
-(List
-a)
-(list_append
-a
-(Nil
-a)
-xs)
-xs =
+proof left_unit for list_append
+  (a : Type)
+  (xs : List a)
+  : Equal (List a) (list_append a (Nil a) xs) xs =
   Refl
 
-proof assoc
-for
-list_append
-(a : Type)
-(xs : List
-a)
-(ys : List
-a)
-(zs : List
-a) : Equal
-(List
-a)
-(list_append
-a
-(list_append
-a
-xs
-ys)
-zs)
-(list_append
-a
-xs
-(list_append
-a
-ys
-zs)) =
+proof assoc for list_append
+  (a : Type)
+  (xs : List a)
+  (ys : List a)
+  (zs : List a)
+  : Equal (List a) (list_append a (list_append a xs ys) zs) (list_append
+  a
+  xs
+  (list_append
+  a
+  ys
+  zs)) =
   match xs {
     Nil ↦ Refl;
     Cons h t ↦
@@ -158,20 +134,10 @@ zs)) =
         ((proof assoc for list_append) a t ys zs)
   }
 
-proof right_unit
-for
-list_append
-(a : Type)
-(xs : List
-a) : Equal
-(List
-a)
-(list_append
-a
-xs
-(Nil
-a))
-xs =
+proof right_unit for list_append
+  (a : Type)
+  (xs : List a)
+  : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
     Nil ↦ Proved;
     Cons h t ↦
@@ -220,23 +186,11 @@ fn bool_and (p : Bool) (q : Bool) : Bool =
     False ↦ False
   }
 
-proof assoc
-for
-bool_and
-(x : Bool)
-(y : Bool)
-(z : Bool) : Equal
-Bool
-(bool_and
-(bool_and
-x
-y)
-z)
-(bool_and
-x
-(bool_and
-y
-z)) =
+proof assoc for bool_and
+  (x : Bool)
+  (y : Bool)
+  (z : Bool)
+  : Equal Bool (bool_and (bool_and x y) z) (bool_and x (bool_and y z)) =
   match x {
     True ↦
       match y {
@@ -348,21 +302,10 @@ fn list_map (a : Type) (b : Type) (g : a → b) (xs : List a) : List b =
         (list_map a b g t)
   }
 
-proof id
-for
-list_map
-(a : Type)
-(xs : List
-a) : Equal
-(List
-a)
-(list_map
-a
-a
-(idf
-a)
-xs)
-xs =
+proof id for list_map
+  (a : Type)
+  (xs : List a)
+  : Equal (List a) (list_map a a (idf a) xs) xs =
   match xs {
     Nil ↦ Proved;
     Cons h t ↦
@@ -375,39 +318,22 @@ xs =
         ((proof id for list_map) a t)
   }
 
-proof fusion
-for
-list_map
-(a : Type)
-(b : Type)
-(c : Type)
-(g : b
-→ c)
-(h : a
-→ b)
-(xs : List
-a) : Equal
-(List
-c)
-(list_map
-a
-c
-(comp
-a
-b
-c
-g
-h)
-xs)
-(list_map
-b
-c
-g
-(list_map
-a
-b
-h
-xs)) =
+proof fusion for list_map
+  (a : Type)
+  (b : Type)
+  (c : Type)
+  (g : b → c)
+  (h : a → b)
+  (xs : List a)
+  : Equal (List c) (list_map a c (comp a b c g h) xs) (list_map
+  b
+  c
+  g
+  (list_map
+  a
+  b
+  h
+  xs)) =
   match xs {
     Nil ↦ Proved;
     Cons x rest ↦
@@ -429,59 +355,31 @@ fn option_map (a : Type) (b : Type) (g : a → b) (x : Option a) : Option b =
         (g v)
   }
 
-proof id
-for
-option_map
-(a : Type)
-(x : Option
-a) : Equal
-(Option
-a)
-(option_map
-a
-a
-(idf
-a)
-x)
-x =
+proof id for option_map
+  (a : Type)
+  (x : Option a)
+  : Equal (Option a) (option_map a a (idf a) x) x =
   match x {
     None ↦ Proved;
     Some v ↦ Refl
   }
 
-proof fusion
-for
-option_map
-(a : Type)
-(b : Type)
-(c : Type)
-(g : b
-→ c)
-(h : a
-→ b)
-(x : Option
-a) : Equal
-(Option
-c)
-(option_map
-a
-c
-(comp
-a
-b
-c
-g
-h)
-x)
-(option_map
-b
-c
-g
-(option_map
-a
-b
-h
-x)) =
+proof fusion for option_map
+  (a : Type)
+  (b : Type)
+  (c : Type)
+  (g : b → c)
+  (h : a → b)
+  (x : Option a)
+  : Equal (Option c) (option_map a c (comp a b c g h) x) (option_map
+  b
+  c
+  g
+  (option_map
+  a
+  b
+  h
+  x)) =
   match x {
     None ↦ Proved;
     Some v ↦ Refl
@@ -512,14 +410,13 @@ equality.
 fn monoid_mempty (m : Type) (mon : Monoid m) : m = mon.mempty
 
 fn fold_map_step
-(a : Type)
-(m : Type)
-(mon : Monoid
-m)
-(g : a
-→ m)
-(y : a)
-(acc : m) : m =
+  (a : Type)
+  (m : Type)
+  (mon : Monoid m)
+  (g : a → m)
+  (y : a)
+  (acc : m)
+  : m =
   mon.op (g y) acc
 
 class Foldable (f : Type → Type) {
@@ -595,23 +492,9 @@ fn list_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m) (xs : List
 fn list_to_list (a : Type) (xs : List a) : List a = xs
 
 lemma list_foldr_to_list
-(a : Type)
-(xs : List
-a) : Equal
-(List
-a)
-(list_foldr
-a
-(List
-a)
-(Cons
-a)
-(Nil
-a)
-xs)
-(list_to_list
-a
-xs) =
+  (a : Type)
+  (xs : List a)
+  : Equal (List a) (list_foldr a (List a) (Cons a) (Nil a) xs) (list_to_list a xs) =
   match xs {
     Nil ↦ Proved;
     Cons h t ↦
@@ -625,33 +508,23 @@ xs) =
   }
 
 lemma list_fold_map_coherence
-(a : Type)
-(m : Type)
-(mon : Monoid
-m)
-(g : a
-→ m)
-(xs : List
-a) : Equal
-m
-(list_fold_map
-a
-m
-mon
-g
-xs)
-(list_foldr
-a
-m
-(fold_map_step
-a
-m
-mon
-g)
-(monoid_mempty
-m
-mon)
-xs) =
+  (a : Type)
+  (m : Type)
+  (mon : Monoid m)
+  (g : a → m)
+  (xs : List a)
+  : Equal m (list_fold_map a m mon g xs) (list_foldr
+  a
+  m
+  (fold_map_step
+  a
+  m
+  mon
+  g)
+  (monoid_mempty
+  m
+  mon)
+  xs) =
   match xs {
     Nil ↦ Refl;
     Cons h t ↦
@@ -674,14 +547,12 @@ fn option_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (x : Option a)
   }
 
 fn option_fold_map
-(a : Type)
-(m : Type)
-(mon : Monoid
-m)
-(g : a
-→ m)
-(x : Option
-a) : m =
+  (a : Type)
+  (m : Type)
+  (mon : Monoid m)
+  (g : a → m)
+  (x : Option a)
+  : m =
   match x {
     None ↦ mon.mempty;
     Some v ↦
@@ -694,53 +565,29 @@ fn option_to_list (a : Type) (x : Option a) : List a =
   option_foldr a (List a) (Cons a) (Nil a) x
 
 lemma option_foldr_to_list
-(a : Type)
-(x : Option
-a) : Equal
-(List
-a)
-(option_foldr
-a
-(List
-a)
-(Cons
-a)
-(Nil
-a)
-x)
-(option_to_list
-a
-x) =
+  (a : Type)
+  (x : Option a)
+  : Equal (List a) (option_foldr a (List a) (Cons a) (Nil a) x) (option_to_list a x) =
   Refl
 
 lemma option_fold_map_coherence
-(a : Type)
-(m : Type)
-(mon : Monoid
-m)
-(g : a
-→ m)
-(x : Option
-a) : Equal
-m
-(option_fold_map
-a
-m
-mon
-g
-x)
-(option_foldr
-a
-m
-(fold_map_step
-a
-m
-mon
-g)
-(monoid_mempty
-m
-mon)
-x) =
+  (a : Type)
+  (m : Type)
+  (mon : Monoid m)
+  (g : a → m)
+  (x : Option a)
+  : Equal m (option_fold_map a m mon g x) (option_foldr
+  a
+  m
+  (fold_map_step
+  a
+  m
+  mon
+  g)
+  (monoid_mempty
+  m
+  mon)
+  x) =
   match x {
     None ↦ Refl;
     Some v ↦ Refl

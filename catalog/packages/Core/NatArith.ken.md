@@ -59,23 +59,11 @@ proof suc_l for add (a : Nat) (b : Nat) : Equal Nat (add (Suc a) b) (Suc (add a 
         ((proof suc_l for add) a b2)
   }
 
-proof assoc
-for
-add
-(a : Nat)
-(b : Nat)
-(c : Nat) : Equal
-Nat
-(add
-a
-(add
-b
-c))
-(add
-(add
-a
-b)
-c) =
+proof assoc for add
+  (a : Nat)
+  (b : Nat)
+  (c : Nat)
+  : Equal Nat (add a (add b c)) (add (add a b) c) =
   match c {
     Zero ↦ Refl;
     Suc c2 ↦
@@ -204,22 +192,10 @@ proof comm for mul (a : Nat) (b : Nat) : Equal Nat (mul a b) (mul b a) =
   }
 
 lemma mul_add_distrib_r
-(a : Nat)
-(b : Nat)
-(c : Nat) : Equal
-Nat
-(mul
-a
-(add
-b
-c))
-(add
-(mul
-a
-b)
-(mul
-a
-c)) =
+  (a : Nat)
+  (b : Nat)
+  (c : Nat)
+  : Equal Nat (mul a (add b c)) (add (mul a b) (mul a c)) =
   match c {
     Zero ↦ Refl;
     Suc c2 ↦
@@ -243,22 +219,10 @@ c)) =
   }
 
 lemma mul_add_distrib_l
-(a : Nat)
-(b : Nat)
-(c : Nat) : Equal
-Nat
-(mul
-(add
-a
-b)
-c)
-(add
-(mul
-a
-c)
-(mul
-b
-c)) =
+  (a : Nat)
+  (b : Nat)
+  (c : Nat)
+  : Equal Nat (mul (add a b) c) (add (mul a c) (mul b c)) =
   trans
     Nat
     (mul (add a b) c)
@@ -291,23 +255,11 @@ c)) =
           (λx. add (mul a c) x)
           ((proof comm for mul) c b))))
 
-proof assoc
-for
-mul
-(a : Nat)
-(b : Nat)
-(c : Nat) : Equal
-Nat
-(mul
-a
-(mul
-b
-c))
-(mul
-(mul
-a
-b)
-c) =
+proof assoc for mul
+  (a : Nat)
+  (b : Nat)
+  (c : Nat)
+  : Equal Nat (mul a (mul b c)) (mul (mul a b) c) =
   match c {
     Zero ↦ Proved;
     Suc c2 ↦

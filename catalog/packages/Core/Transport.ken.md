@@ -50,18 +50,13 @@ five combinators follow that convention.
 
 ```ken
 fn subst
-(ty : Type)
-(x : ty)
-(y : ty)
-(fam : ty
-→ Type)
-(p : Eq
-ty
-x
-y)
-(px : fam
-x) : fam
-y =
+  (ty : Type)
+  (x : ty)
+  (y : ty)
+  (fam : ty → Type)
+  (p : Eq ty x y)
+  (px : fam x)
+  : fam y =
   J (λy' _. fam y') px p
 ```
 
@@ -71,21 +66,13 @@ unconstrained codomain sort (`34 §3.4`).
 
 ```ken
 lemma cong
-(ty : Type)
-(ty2 : Type)
-(x : ty)
-(y : ty)
-(f : ty
-→ ty2)
-(p : Eq
-ty
-x
-y) : Eq
-ty2
-(f
-x)
-(f
-y) =
+  (ty : Type)
+  (ty2 : Type)
+  (x : ty)
+  (y : ty)
+  (f : ty → ty2)
+  (p : Eq ty x y)
+  : Eq ty2 (f x) (f y) =
   J (λy' _. Eq ty2 (f x) (f y')) Refl p
 ```
 
@@ -109,21 +96,13 @@ lemma sym (ty : Type) (x : ty) (y : ty) (p : Eq ty x y) : Eq ty y x =
 
 ```ken
 lemma trans
-(ty : Type)
-(x : ty)
-(y : ty)
-(z : ty)
-(p : Eq
-ty
-x
-y)
-(q : Eq
-ty
-y
-z) : Eq
-ty
-x
-z =
+  (ty : Type)
+  (x : ty)
+  (y : ty)
+  (z : ty)
+  (p : Eq ty x y)
+  (q : Eq ty y z)
+  : Eq ty x z =
   J (λz' _. Eq ty x z') p q
 ```
 
@@ -148,18 +127,10 @@ fn stuck_of (k : Bool) : Bool =
     False ↦ False
   }
 
-proof transport
-for
-stuck_of
-(k : Bool)
-(q : Equal
-Bool
-k
-True) : Equal
-Bool
-(stuck_of
-k)
-True =
+proof transport for stuck_of
+  (k : Bool)
+  (q : Equal Bool k True)
+  : Equal Bool (stuck_of k) True =
   J (λb' _. Equal Bool (stuck_of b') True) Proved (sym Bool k True q)
 ```
 
@@ -179,21 +150,13 @@ reduction shortcut):
 
 ```ken example
 lemma sym_trans_compose
-(ty : Type)
-(a : ty)
-(b : ty)
-(c : ty)
-(p : Eq
-ty
-a
-b)
-(q : Eq
-ty
-c
-b) : Eq
-ty
-a
-c =
+  (ty : Type)
+  (a : ty)
+  (b : ty)
+  (c : ty)
+  (p : Eq ty a b)
+  (q : Eq ty c b)
+  : Eq ty a c =
   trans ty a b c p (sym ty c b q)
 ```
 

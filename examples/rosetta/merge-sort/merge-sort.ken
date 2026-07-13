@@ -74,14 +74,11 @@ fn merge (a : Type) (leqf : a → a → Bool) (xs : List a) (ys : List a) : List
   }
 
 fn mergeSortFueled
-(a : Type)
-(leqf : a
-→ a
-→ Bool)
-(fuel : Nat)
-(xs : List
-a) : List
-a =
+  (a : Type)
+  (leqf : a → a → Bool)
+  (fuel : Nat)
+  (xs : List a)
+  : List a =
   match fuel {
     Zero ↦ xs;
     Suc f ↦

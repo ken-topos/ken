@@ -107,22 +107,14 @@ proof utf8 for source_bytes (s : Source) : IsUtf8 (source_bytes s) = s.source_ut
 
 fn source_length_unit (s : Source) : Bytes = s.source_length_unit_field
 
-proof valid
-for
-source_length_unit
-(s : Source) : UnitByteLength
-(source_length_unit
-s) =
+proof valid for source_length_unit
+  (s : Source)
+  : UnitByteLength (source_length_unit s) =
   s.source_length_unit_valid_field
 
 lemma source_length_valid
-(s : Source) : SourceLength
-(source_length_unit
-s)
-(source_bytes
-s)
-(source_length
-s) =
+  (s : Source)
+  : SourceLength (source_length_unit s) (source_bytes s) (source_length s) =
   s.source_length_valid_field
 ```
 
@@ -200,16 +192,9 @@ fn ValidSpan (s : Source) (sp : Span) : Prop =
     (LessEqNat (span_end sp) (source_length s))
 
 lemma valid_zero_width_span
-(s : Source)
-(offset : Nat) : LessEqNat
-offset
-(source_length
-s)
-→ ValidSpan
-s
-(MkSpan
-offset
-offset) =
+  (s : Source)
+  (offset : Nat)
+  : LessEqNat offset (source_length s) → ValidSpan s (MkSpan offset offset) =
   λh.
     and_intro
       (LessEqNat offset offset)
@@ -596,24 +581,23 @@ fn skip_spaces_fuel (fuel : Nat) (s : Source) (pos : Nat) : Nat =
 fn skip_spaces (s : Source) (pos : Nat) : Nat = skip_spaces_fuel (source_length s) s pos
 
 fn syntax_leaf
-(s : Source)
-(start : Nat)
-(end : Nat)
-(value : BoolExpr) : Syntax
-BoolExpr =
+  (s : Source)
+  (start : Nat)
+  (end : Nat)
+  (value : BoolExpr)
+  : Syntax BoolExpr =
   MkSyntax
     BoolExpr
     (MkLocated BoolExpr (source_id s) (MkSpan start end) value)
     (Nil (Located BoolExpr))
 
 fn syntax_node_unary
-(s : Source)
-(start : Nat)
-(end : Nat)
-(value : BoolExpr)
-(child : Syntax
-BoolExpr) : Syntax
-BoolExpr =
+  (s : Source)
+  (start : Nat)
+  (end : Nat)
+  (value : BoolExpr)
+  (child : Syntax BoolExpr)
+  : Syntax BoolExpr =
   MkSyntax
     BoolExpr
     (MkLocated BoolExpr (source_id s) (MkSpan start end) value)
@@ -623,15 +607,13 @@ BoolExpr =
       (syntax_children BoolExpr child))
 
 fn syntax_node_binary
-(s : Source)
-(start : Nat)
-(end : Nat)
-(value : BoolExpr)
-(left : Syntax
-BoolExpr)
-(right : Syntax
-BoolExpr) : Syntax
-BoolExpr =
+  (s : Source)
+  (start : Nat)
+  (end : Nat)
+  (value : BoolExpr)
+  (left : Syntax BoolExpr)
+  (right : Syntax BoolExpr)
+  : Syntax BoolExpr =
   MkSyntax
     BoolExpr
     (MkLocated BoolExpr (source_id s) (MkSpan start end) value)
@@ -647,11 +629,10 @@ BoolExpr =
         (syntax_children BoolExpr right)))
 
 fn parse_bool_expr_at_fuel
-(fuel : Nat)
-(s : Source)
-(start : Nat) : ParseResult
-(Syntax
-BoolExpr) =
+  (fuel : Nat)
+  (s : Source)
+  (start : Nat)
+  : ParseResult (Syntax BoolExpr) =
   match fuel {
     Zero ↦
       Failed

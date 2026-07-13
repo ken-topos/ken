@@ -27,18 +27,13 @@ data Tree k v =
 const empty (k : Type) (v : Type) : Tree k v = Leaf k v
 
 fn insert
-(k : Type)
-(v : Type)
-(leq : k
-→ k
-→ Bool)
-(key : k)
-(val : v)
-(m : Tree
-k
-v) : Tree
-k
-v =
+  (k : Type)
+  (v : Type)
+  (leq : k → k → Bool)
+  (key : k)
+  (val : v)
+  (m : Tree k v)
+  : Tree k v =
   match m {
     Leaf ↦
       Node
@@ -81,16 +76,12 @@ v =
   }
 
 fn lookup
-(k : Type)
-(v : Type)
-(leq : k
-→ k
-→ Bool)
-(key : k)
-(m : Tree
-k
-v) : Option
-v =
+  (k : Type)
+  (v : Type)
+  (leq : k → k → Bool)
+  (key : k)
+  (m : Tree k v)
+  : Option v =
   match m {
     Leaf ↦ None v;
     Node l k2 v2 r ↦

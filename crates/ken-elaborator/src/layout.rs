@@ -311,21 +311,28 @@ impl<'a> LayoutPrinter<'a> {
                 }
                 _ => None,
             };
-            let core = self.print_hard_line_decl_block(span, recursive_children);
+            let core = self.print_hard_line_decl_block(decl, span, recursive_children);
             return self.with_comments(decl.span(), core);
         }
         let core = match decl {
             Decl::DataDecl { ctors, span, .. }
                 if ctors.len() > 1 || ctors.iter().any(|ctor| !ctor.args.is_empty()) =>
             {
-                self.print_sum(span, ctors.iter().map(|ctor| ctor.span.clone()).collect())
+                self.print_sum(
+                    decl,
+                    span,
+                    ctors.iter().map(|ctor| ctor.span.clone()).collect(),
+                )
             }
             Decl::ViewDecl { body, span, .. }
             | Decl::LetDecl {
                 val: body, span, ..
             }
             | Decl::LemmaDecl { body, span, .. }
-            | Decl::AttachedProofDecl { body, span, .. } => self.print_decl_with_body(span, body),
+            | Decl::AttachedProofDecl { body, span, .. } => {
+                self.print_decl_with_body(decl, span, body)
+            }
+            Decl::DataDecl { span, .. } => self.print_decl_signature(decl, span),
             _ => self.print_span(decl.span()),
         };
         self.with_comments(decl.span(), core)
@@ -366,9 +373,14 @@ impl<'a> LayoutPrinter<'a> {
     /// The single entry path for §1d nonempty declaration blocks. Most block
     /// siblings are token-delimited; modules supply recursively printed child
     /// declarations so compound bodies retain their production-specific docs.
-    fn print_hard_line_decl_block(&self, span: &Span, children: Option<Vec<Doc>>) -> Doc {
+    fn print_hard_line_decl_block(
+        &self,
+        decl: &Decl,
+        span: &Span,
+        children: Option<Vec<Doc>>,
+    ) -> Doc {
         let Some(children) = children else {
-            return self.doc_from_tokens(span, TokenLayout::Block);
+            return self.print_token_decl_block(decl, span);
         };
         let indices = self.token_indices(span);
         let Some(open_pos) = indices
@@ -384,7 +396,7 @@ impl<'a> LayoutPrinter<'a> {
         let separator = Doc::concat([Doc::text(";"), Doc::hard_line()]);
         let close = &self.source.tokens()[indices[close_pos]].span;
         Doc::concat([
-            self.doc_from_tokens(&head_span, TokenLayout::Soft),
+            self.print_decl_signature(decl, &head_span),
             Doc::concat([Doc::hard_line(), join(children, separator)]).nest(INDENT_WIDTH),
             Doc::hard_line(),
             Doc::text(&self.source.source()[close.start..close.end]),
@@ -410,7 +422,7 @@ impl<'a> LayoutPrinter<'a> {
         })
     }
 
-    fn print_sum(&self, span: &Span, ctors: Vec<Span>) -> Doc {
+    fn print_sum(&self, decl: &Decl, span: &Span, ctors: Vec<Span>) -> Doc {
         let mut complete = span.clone();
         loop {
             let next = self.source.tokens().iter().find(|token| {
@@ -452,12 +464,12 @@ impl<'a> LayoutPrinter<'a> {
             })
             .collect();
         Doc::concat([
-            self.doc_from_tokens(&head, TokenLayout::Soft),
+            self.print_decl_signature(decl, &head),
             Doc::concat([Doc::hard_line(), join(ctor_docs, Doc::hard_line())]).nest(INDENT_WIDTH),
         ])
     }
 
-    fn print_decl_with_body(&self, span: &Span, body: &Expr) -> Doc {
+    fn print_decl_with_body(&self, decl: &Decl, span: &Span, body: &Expr) -> Doc {
         let Some(eq) = self.last_token_index_before(Token::Eq, body.span().start, span) else {
             return self.print_span(span);
         };
@@ -468,10 +480,240 @@ impl<'a> LayoutPrinter<'a> {
             Doc::line()
         };
         Doc::concat([
-            self.doc_from_tokens(&head_span, TokenLayout::Soft),
+            self.print_decl_signature(decl, &head_span),
             Doc::concat([separator, self.print_expr(body)]).nest(INDENT_WIDTH),
         ])
         .group()
+    }
+
+    /// Declaration telescopes have an enclosing-relative continuation level,
+    /// while each binder remains an independent group. A broken signature
+    /// therefore chooses line boundaries between binders without forcing a
+    /// fitting binder type to break token-by-token.
+    fn print_decl_signature(&self, decl: &Decl, span: &Span) -> Doc {
+        let indices = self.token_indices(span);
+        let ranges = self.decl_binder_ranges(decl, &indices);
+        let Some(&(first_start, _)) = ranges.first() else {
+            let clauses = signature_clause_ranges(self.source, &indices);
+            let Some(&(prefix_end, _)) = clauses.first() else {
+                return self.doc_from_tokens(span, TokenLayout::Soft);
+            };
+            if prefix_end == 0 {
+                return self.doc_from_tokens(span, TokenLayout::Soft);
+            }
+            let prefix = self.grouped_token_slice(&indices[..prefix_end]);
+            let mut continuation = Vec::new();
+            for (start, end) in clauses {
+                continuation.push(self.token_boundary(
+                    indices[start - 1],
+                    indices[start],
+                    Doc::line(),
+                ));
+                continuation.push(self.grouped_token_slice(&indices[start..end]));
+            }
+            return Doc::concat([prefix, Doc::concat(continuation).nest(INDENT_WIDTH)]).group();
+        };
+        if first_start == 0 {
+            return self.doc_from_tokens(span, TokenLayout::Soft);
+        }
+
+        let prefix = self.grouped_token_slice(&indices[..first_start]);
+        let mut continuation = Vec::new();
+        let mut cursor = first_start;
+        for (start, end) in ranges {
+            if cursor < start {
+                continuation.push(self.grouped_token_slice(&indices[cursor..start]));
+            }
+            continuation.push(self.token_boundary(indices[start - 1], indices[start], Doc::line()));
+            continuation.push(self.grouped_token_slice(&indices[start..end]));
+            cursor = end;
+        }
+        if cursor < indices.len() {
+            let tail = &indices[cursor..];
+            let clauses = signature_clause_ranges(self.source, tail);
+            if clauses.first().is_some_and(|(start, _)| *start == 0) {
+                for (start, end) in clauses {
+                    let left = if start == 0 {
+                        indices[cursor - 1]
+                    } else {
+                        tail[start - 1]
+                    };
+                    continuation.push(self.token_boundary(left, tail[start], Doc::line()));
+                    continuation.push(self.grouped_token_slice(&tail[start..end]));
+                }
+            } else {
+                let left = &self.source.tokens()[indices[cursor - 1]].kind;
+                let right = &self.source.tokens()[indices[cursor]].kind;
+                let separator = if needs_space(left, right) {
+                    Doc::text(" ")
+                } else {
+                    Doc::Nil
+                };
+                continuation.push(self.token_boundary(
+                    indices[cursor - 1],
+                    indices[cursor],
+                    separator,
+                ));
+                continuation.push(self.grouped_token_slice(tail));
+            }
+        }
+
+        Doc::concat([prefix, Doc::concat(continuation).nest(INDENT_WIDTH)]).group()
+    }
+
+    fn print_token_decl_block(&self, decl: &Decl, span: &Span) -> Doc {
+        let indices = self.token_indices(span);
+        let Some(open_pos) = indices
+            .iter()
+            .position(|index| matches!(self.source.tokens()[*index].kind, Token::LBrace))
+        else {
+            return self.doc_from_tokens(span, TokenLayout::Block);
+        };
+        let Some(close_pos) = matching_rbrace(self.source, &indices, open_pos) else {
+            return self.doc_from_tokens(span, TokenLayout::Block);
+        };
+        if close_pos == open_pos + 1 {
+            return self.doc_from_tokens(span, TokenLayout::Block);
+        }
+
+        let head_span = Span::new(span.start, self.source.tokens()[indices[open_pos]].span.end);
+        let inner = &indices[open_pos + 1..close_pos];
+        let inner_span = Span::new(
+            self.source.tokens()[inner[0]].span.start,
+            self.source.tokens()[*inner.last().unwrap()].span.end,
+        );
+        Doc::concat([
+            self.print_decl_signature(decl, &head_span),
+            Doc::concat([
+                Doc::hard_line(),
+                self.print_block_inner(inner, &inner_span, TokenLayout::Block),
+            ])
+            .nest(INDENT_WIDTH),
+            Doc::hard_line(),
+            Doc::text("}"),
+        ])
+    }
+
+    fn grouped_token_slice(&self, indices: &[usize]) -> Doc {
+        if matches!(self.source.tokens()[indices[0]].kind, Token::LParen)
+            && matching_rparen(self.source, indices, 0) == Some(indices.len() - 1)
+        {
+            return self.raw_grouped_token_slice(indices);
+        }
+
+        let mut segments = Vec::new();
+        let mut start = 0usize;
+        let mut position = 0usize;
+        while position < indices.len() {
+            if matches!(self.source.tokens()[indices[position]].kind, Token::LParen) {
+                let Some(close) = matching_rparen(self.source, indices, position) else {
+                    break;
+                };
+                if start < position {
+                    segments.push((start, position));
+                }
+                segments.push((position, close + 1));
+                start = close + 1;
+                position = close + 1;
+            } else {
+                position += 1;
+            }
+        }
+        if start < indices.len() {
+            segments.push((start, indices.len()));
+        }
+        if segments.len() <= 1 {
+            return self.raw_grouped_token_slice(indices);
+        }
+
+        let mut docs = Vec::new();
+        let mut previous_end: Option<usize> = None;
+        for (start, end) in segments {
+            if let Some(previous) = previous_end {
+                let left = &self.source.tokens()[indices[previous - 1]].kind;
+                let right = &self.source.tokens()[indices[start]].kind;
+                let separator = if needs_space(left, right) {
+                    Doc::text(" ")
+                } else {
+                    Doc::Nil
+                };
+                docs.push(self.token_boundary(indices[previous - 1], indices[start], separator));
+            }
+            docs.push(self.raw_grouped_token_slice(&indices[start..end]));
+            previous_end = Some(end);
+        }
+        Doc::concat(docs).group()
+    }
+
+    fn raw_grouped_token_slice(&self, indices: &[usize]) -> Doc {
+        let span = Span::new(
+            self.source.tokens()[indices[0]].span.start,
+            self.source.tokens()[*indices.last().unwrap()].span.end,
+        );
+        self.doc_token_slice(indices, &span, TokenLayout::Soft)
+            .group()
+    }
+
+    fn token_boundary(&self, left: usize, right: usize, default: Doc) -> Doc {
+        let start = self.source.tokens()[left].span.end;
+        let end = self.source.tokens()[right].span.start;
+        let owner = Span::new(start, end);
+        let mut comments = Vec::new();
+        self.push_comments_between(&mut comments, start, end, &owner);
+        if comments.is_empty() {
+            default
+        } else {
+            Doc::concat(comments)
+        }
+    }
+
+    fn decl_binder_ranges(&self, decl: &Decl, indices: &[usize]) -> Vec<(usize, usize)> {
+        let spans: Vec<&Span> = match decl {
+            Decl::ViewDecl { params, .. }
+            | Decl::PropDecl { params, .. }
+            | Decl::LemmaDecl { params, .. }
+            | Decl::AttachedProofDecl { params, .. }
+            | Decl::ExplicitDataDecl { params, .. } => {
+                params.iter().map(|binder| &binder.span).collect()
+            }
+            _ => Vec::new(),
+        };
+        let mut ranges = spans
+            .into_iter()
+            .filter_map(|span| token_range_for_span(self.source, indices, span))
+            .collect::<Vec<_>>();
+
+        if ranges.is_empty() {
+            match decl {
+                Decl::DataDecl { type_params, .. } if !type_params.is_empty() => {
+                    let eq = indices
+                        .iter()
+                        .position(|index| matches!(self.source.tokens()[*index].kind, Token::Eq));
+                    let limit = eq.unwrap_or(indices.len());
+                    ranges.extend(
+                        (2..limit)
+                            .filter(|position| {
+                                matches!(
+                                    self.source.tokens()[indices[*position]].kind,
+                                    Token::Ident(_)
+                                )
+                            })
+                            .take(type_params.len())
+                            .map(|position| (position, position + 1)),
+                    );
+                }
+                Decl::ClassDecl { param: Some(_), .. } => {
+                    if let Some(range) = first_top_level_paren_range(self.source, indices, 2) {
+                        ranges.push(range);
+                    } else if indices.len() > 2 {
+                        ranges.push((2, 3));
+                    }
+                }
+                _ => {}
+            }
+        }
+        ranges.sort_unstable();
+        ranges
     }
 
     fn print_match(&self, span: &Span, arms: &[MatchArm]) -> Doc {
@@ -1398,6 +1640,85 @@ fn matching_rparen(
         }
     }
     None
+}
+
+fn token_range_for_span(
+    source: &dyn FormattableSource,
+    indices: &[usize],
+    span: &Span,
+) -> Option<(usize, usize)> {
+    let start = indices.iter().position(|index| {
+        let token = &source.tokens()[*index];
+        span.start <= token.span.start && token.span.end <= span.end
+    })?;
+    let end = indices.iter().rposition(|index| {
+        let token = &source.tokens()[*index];
+        span.start <= token.span.start && token.span.end <= span.end
+    })? + 1;
+    Some((start, end))
+}
+
+fn first_top_level_paren_range(
+    source: &dyn FormattableSource,
+    indices: &[usize],
+    from: usize,
+) -> Option<(usize, usize)> {
+    let mut depth = 0usize;
+    for position in from..indices.len() {
+        match &source.tokens()[indices[position]].kind {
+            Token::LParen if depth == 0 => {
+                let close = matching_rparen(source, indices, position)?;
+                return Some((position, close + 1));
+            }
+            Token::LParen => depth += 1,
+            Token::RParen => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn signature_clause_ranges(
+    source: &dyn FormattableSource,
+    indices: &[usize],
+) -> Vec<(usize, usize)> {
+    let mut starts = Vec::new();
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut brace_depth = 0usize;
+    for (position, index) in indices.iter().copied().enumerate() {
+        let token = &source.tokens()[index].kind;
+        if paren_depth == 0
+            && bracket_depth == 0
+            && brace_depth == 0
+            && (matches!(
+                token,
+                Token::Colon | Token::KwRequires | Token::KwEnsures | Token::KwWhere
+            ) || (matches!(token, Token::Ident(name) if name == "visits")
+                && indices
+                    .get(position + 1)
+                    .is_some_and(|next| matches!(source.tokens()[*next].kind, Token::LBracket))))
+        {
+            starts.push(position);
+        }
+        match token {
+            Token::LParen => paren_depth += 1,
+            Token::RParen => paren_depth = paren_depth.saturating_sub(1),
+            Token::LBracket => bracket_depth += 1,
+            Token::RBracket => bracket_depth = bracket_depth.saturating_sub(1),
+            Token::LBrace => brace_depth += 1,
+            Token::RBrace => brace_depth = brace_depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    starts
+        .iter()
+        .enumerate()
+        .map(|(position, start)| {
+            let end = starts.get(position + 1).copied().unwrap_or(indices.len());
+            (*start, end)
+        })
+        .collect()
 }
 
 fn needs_space(left: &Token, right: &Token) -> bool {
