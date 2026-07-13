@@ -14,7 +14,64 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 10e453aa`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ bd9e6c4b`
+> **I-1 CLOSED ✅** (PR #601, squash; `origin/main @ bd9e6c4b`; verified on main:
+> `resolve_main` present, frame oracle retired, tracker bundle landed). Milestone A
+> (Program I entrypoint ABI + runner) is IN; all 3 §10 retros in (leader/impl/qa @
+> 08:50 — carry: two-symptom C-AC2 arc, retire discharged one-shot proof not
+> re-baseline; Path-B rebase needs 2 proofs — semantic delta + landed formatter
+> gates). **I-2 (CA2 Console floor) next in Runtime ring** (hold for shovel-ready
+> frame; Handoff-Gate compact Runtime ring first; Architect-terminal host-ABI).
+> **Design-framing ROUTED to Architect** `evt_6azhycxm8a5k1` (5 host-ABI forks:
+> ConsoleOp encoding+reflection onto ITree/Coproduct spine; ConsoleCap vs ProgramCaps
+> field; EOF/broken-pipe/IsTerminal as total values; zero-TCB print* package; capture
+> handler seam) — pipeline-fill while floor-fix+CC1 proceed. On his ruling → author
+> frame → Handoff-Gate Runtime → kick. (CA0/§5.2 placeholder-primitive reconcile is
+> NOT a Console-floor dep at current authority level — confirming w/ Architect.)
+> **CC1 (Foundation): TWO blockers now.** Candidate rebased to `3f71f2a8` (off
+> `bd9e6c4b`, clean). **BLOCKER-2 (deeper, package-model): `ken check <file>` is
+> single-file** (`main.rs:189–193` calls `elaborate_file`/`elaborate_ken_md_file`;
+> the N2 root-loader `elaborate_module_from_roots` `modules.rs:503` exists+tested but
+> the CLI never invokes it — I grep-verified). So CC1's packages, which depend on
+> `Data.Collections` (`map`/`list_append`) + external `Semigroup`/`Functor`/`Applicative`,
+> can't pass standalone `ken check` (only moves failure to `UnboundName` at import).
+> They DO kernel-check under whole-catalog loading (deps resolve there).
+> **RESOLVED — Architect RULED Shape (c)** (`evt_4b62dwdjh4zq5`): dependency-ordered
+> elaboration into a shared `ElabEnv` (the mechanism EVERY peer package uses — DS-7/DS-8),
+> NOT standalone `ken check` (mis-specified AC), NOT import/pub (rejected — Spec-level
+> module flip). Verified grounding: README:44 (import non-operative), `ds7_applicative_
+> monad_acceptance.rs` order-elaborates deps→dependent into one env, zero import/pub in
+> catalog. **Steward: AC1 REFRAMED** (`evt_276qsdyt8dq5j`) → CC1 delivers an ordered
+> shared-env acceptance harness (Rust test à la ds7/ds8) elaborating dep-closure then
+> NonEmpty+Validation, asserting globals + law terms + accumulation example; standalone
+> `ken check` NOT the gate. **No operator escalation** — (c) needs no new capability / no
+> `pub`-export migration → HELD namespace work UNTOUCHED. CC1 UNBLOCKED (blocker-2). QA
+> re-evaluates via harness (substance now, parallel). **CLI check-in-context ergonomic =
+> separate later WP (task #56)**, NOT a CC1 dep, NOT the import/pub flip. **BLOCKER-1
+> (orthogonal, in flight): kenfmt-C strict-gate COUNT** — floor-fix `wp/kenfmt-strict-
+> gate-floor @ 30c9ca68` merge_ready → in Language QA; CC1 final locked gate rebases on
+> its merge.
+> **I-2 (CA2 Console floor) FRAME AUTHORED** ✅ (`steward/work @ a1e61db5`;
+> `docs/program/wp/i2-console-floor.md`) from Architect design `evt_6w0x364s4bvk8` — 6
+> settled decisions pinned (ambient v1 Console/ProgramCaps unchanged, shared+additive
+> IOError, ReadResult=Chunk|Eof, SIGPIPE-mask driver, built run_io handler trait, remove
+> dead build_print_line_tree). NEXT for I-2: Handoff-Gate Runtime ring → kick (task #55;
+> pipeline-fill, behind floor-fix publish + CC1).
+> **Architect RULED** (`evt_5x7cgmtz7ygt9`): gates already glob dynamically; the
+> count asserts do anti-vacuity → replace `assert_eq!(len,N)` with FLOOR
+> `assert!(len>=N)` (catches broken-glob/deleted-file drift, growth-robust, no
+> per-WP treadmill). **Floor-fix micro-frame AUTHORED** `wp/kenfmt-strict-gate-floor
+> @ 093d9d25` (off `bd9e6c4b`; XS test-only, ~4 asserts; Language-owned, Architect
+> reviewer; task #54). **KICKED ✅ 2026-07-13** — Handoff-Gate COMPLETE (all 3
+> Language members compacted @ WIDE-verified "Context compacted"; branches 0-ahead
+> + clean); kickoff `evt_1fddgkqrc23k8` + post-compaction rouse landed (leader
+> engaged, re-orienting). Frame maps to real lines (verified on `bd9e6c4b`:
+> `ken_fmt.rs:94/95`, `kenfmt_c_capstone.rs:62/63`). **★ NEXT ACTION: event-driven**
+> — (a) floor-fix through Language build→QA→Architect re-confirm→`git_request`→
+> honesty-gate+CI-poll publish; on merge → signal Foundation to rebase CC1 onto new
+> main + re-run locked gate → CC1 unblocked → close on retros. (b) CC1 QA substance
+> result (foundation-qa Working @ 852d65ba). (c) **I-1 ready to CLOSE** — all 3
+> Runtime §10 retros IN (leader `evt`/impl/qa @ 08:50); close on next pass.
 >
 > **★ CURRENT FRONTIER (one-line resume):** **kenfmt series COMPLETE + C CLOSED ✅**
 > (`origin/main @ 10e453aa`, PR #600; §1d-conformant whole-catalog reformat +
