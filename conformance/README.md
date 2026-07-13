@@ -200,6 +200,13 @@ claim with no conformance case is a claim no one can rely on
   and a class/constructor same-name collision hard-reject through one specific
   diagnostic, paired with the live arity-gated `Eq`/`J` sugar coexistence
   control. The reject arms are explicitly red until N1 Lane B.
+- `surface/declarations/seed-namespace-export.md` — ADR 0014 MRES-6 #39 and
+  ADR 0016 N5 namespace/re-export oracle: latent import×import and
+  import×prelude clashes, the same-identity carve-out, facade and renamed
+  re-export `GlobalId` preservation, facade-vs-body scope, a structured
+  re-export-site collision, MRES-4d instance carry, and abstract-constructor
+  hiding. All producer-dependent arms are red until the Language
+  namespace/export follow-on.
 - `surface/formatting/seed-canonical-format.md` — WP S canonical formatter
   acceptance oracle (`31 §1`): the eight semantic gates (byte idempotence,
   parse and elaboration preservation, whole-catalog posture, literate prose
