@@ -24,7 +24,7 @@ Operator-ruled; the program implements them, it does not relitigate.
 - **Enforcement = STRICT CI GATE from day one** (operator, 2026-07-11):
   `ken fmt --check` blocks any non-canonical file, landed **atomically** with a
   whole-catalog reformat so the gate is green on arrival.
-- **Column target = 88 display columns for code** (operator, 2026-07-12), with
+- **Column target = 96 display columns for code** (operator, 2026-07-12), with
   the prose rule staying **80**. A *soft* pretty-printer width but deterministic:
   a syntactic group either fits or it breaks. Rationale: dependent-type proofs
   carry more unavoidable punctuation than prose; 8 extra columns cut vertical
@@ -163,7 +163,7 @@ graph LR
   recursively; **no** regex/line-based heuristics, **no** global alignment
   combinators. The **whole-catalog preservation gate runs continuously**.
 - **AC.** AC1 (parse-preservation) + AC2 (idempotence, byte) hold over the
-  **entire** catalog, not a sample; 88-col width property holds (every >88 line
+  **entire** catalog, not a sample; 96-col width property holds (every >96 line
   classified as indivisible/verbatim); no breakable syntax silently overflows.
 
 ### B4 — `.ken.md` splicing + prose identity · size S · Language

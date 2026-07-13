@@ -30,7 +30,7 @@ guardrails) and the canonical-form spec (`spec/30-surface/31-lexical.md §1a–d
   the parsed AST** (the soundness AC). This is the whole point of the B1–B4
   parse-/elaboration-preservation gates; C inherits them at whole-corpus scale.
 - **One canonical form. No escape hatch, no config, no `--width` knob** exposed
-  (88-col is fixed internally). Verbatim regions (string/comment/foreign/temporal
+  (96-col is fixed internally). Verbatim regions (string/comment/foreign/temporal
   payloads) are **semantic, not style escapes** — untouched.
 - **No literal normalization; no import/field/row/instance sorting** — source
   order is resolution-relevant and part of the author's explanatory order.

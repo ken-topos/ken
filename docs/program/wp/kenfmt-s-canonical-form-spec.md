@@ -32,7 +32,7 @@ settled principles.
 
 ## Fixed inputs — SETTLED, do not reopen
 
-- **88 display columns for code / 80 for prose** (operator, 2026-07-12); soft
+- **96 display columns for code / 80 for prose** (operator, 2026-07-12); soft
   pretty-printer width, deterministic (a group fits or breaks).
 - **No escape hatch** (operator) — no `fmt:off`; verbatim regions are semantic
   exceptions, not style escapes.
@@ -54,7 +54,7 @@ settled principles.
 1. **New normative subsection: canonical LAYOUT** (place as `§1d` or extend
    `§1c`, enclave's call on chapter structure). Transcribe the review's layout
    rules (its §§1, 3–12) as normative spec:
-   - **Width/physical text** (review §1): 88 cols display-width; 2-space indent,
+   - **Width/physical text** (review §1): 96 cols display-width; 2-space indent,
      no tabs; trailing-whitespace removal; LF; final newline; blank-line rules.
    - **Spacing** (review §3): infix/`=`/`:`/match-arrow/`as`/guard-`if`/row-`|`
      spacing; none inside `()`/`[]`/braces; comma spacing; **no vertical
@@ -83,7 +83,7 @@ settled principles.
      verbatim; verbatim bodies untouched.
    - **Comments** (review §11): preserved exactly (bar trailing WS); attachment
      (doc→following decl; leading→above at node indent; EOL inline only if it
-     fits 88, else moved above); a comment between tokens forces the group to
+     fits 96, else moved above); a comment between tokens forces the group to
      break.
 2. **Token-kind canonicalization made normative** (review §2) — state that
    canonicalization is driven by parsed **token kind**, and **close the §1b `ℓ`
@@ -114,7 +114,7 @@ settled principles.
    idempotence law to the real grammar): idempotence (`fmt∘fmt == fmt`),
    parse-preservation (AST-equal mod trivia/sanctioned aliases),
    elaboration-preservation (where a stable comparison exists), whole-catalog
-   coverage posture, prose byte-identity, trivia/literal preservation, the 88-col
+   coverage posture, prose byte-identity, trivia/literal preservation, the 96-col
    width property, and the **ambiguity suite** (match-arrow vs arrow; `:` vs `::`;
    projection vs qualified path; `l`-ident vs level; `in`-keyword vs membership;
    aliases inside every literal form; all four fence roles). Encode these as the
@@ -135,7 +135,7 @@ settled principles.
 ## AC
 
 - §1 carries a normative **canonical layout** subsection transcribing review
-  §§1,3–12; the 88-col width is stated as a soft-but-deterministic rule.
+  §§1,3–12; the 96-col width is stated as a soft-but-deterministic rule.
 - Token-kind canonicalization is normative and the §1b `ℓ` overload open note is
   **closed** (identifier `l` stays `l`).
 - `.ken.md` canonical form + the narrow `ignore`/`reject` fence-role exemption are
