@@ -14,7 +14,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 6088e0b8`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 330f276b`
 > **I-2 (CA2 Console floor) CLOSED ✅ `1f85ad9a`** (PR #604; ACs met, all 3 §10 retros
 > in @ 10:28 → task #55 done). **Milestone B's Console effect floor is COMPLETE.** Carry
 > (→ bake into I-3 + host-ABI frames): enrich the existing coproduct summand in place
@@ -151,6 +151,131 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > Handoff-Gate Foundation ring → kick** (Text.Codec + Text.Numeric build now zero-new-trust;
 > lawful String keys = FINAL gated deliverable on operator (i)/(ii) answer to Pat
 > `evt_5d61192kcqp4y`). Bytes-keys lawful = descoped fast-follow WP (no substrate).
+> **★ CC2 Architect RE-CONFIRM: FAITHFUL ✅ (`evt_6zp37xvewdayd`) → KICKING.** Both guard-rail
+> checks landed on explicit text. One non-blocking ③ note folded in: `char_to_digit`
+> returns **`Option Int`** not `Option UInt8` (no `int_to_uint8` landed; Int feeds base
+> accumulation). Frame re-committed `a62ad3a7`; WP branch rebuilt **`wp/cc2-text-codec-numeric
+> @ 903a24ee`** (off 6088e0b8, shared local ref). **Foundation Handoff-Gate compaction
+> launched** (pid 3076945); on drops-verified → post CC2 kickoff (Codec+Numeric now;
+> String-keys gated on Pat (i)/(ii)) + rouse foundation-leader. Task #59.
+> **★ CC2 KICKED ✅ ~15:0x** (`evt_1f18z4qmczdf8`) — Foundation ring compacted-verified (all
+> 3 "Context compacted"), kickoff posted, foundation-leader roused + engaged. Building
+> Text.Codec + Text.Numeric NOW; String-keys HELD for operator (i)/(ii). **kenfmt #58
+> watch:** the language-implementer HUNG ~19m in a stuck "Working" turn (last action =
+> post-compaction playbook read, zero progress) — Steward interrupted (Escape) + re-nudged
+> to proceed on #58; "Working" restarted. Watch it re-engages with real edits, not another
+> hang. (Codex silent-stall pattern: extended "Working" with no tool call past a completed
+> action.)
+> **★ README refresh (Librarian) MERGED ✅ `origin/main @ 330f276b`** (PR #608, doc-only;
+> honesty-gate CLEAN README.md-only + tracker bundle). steward/work re-synced current.
+> **★ UPDATE ~15:04 — CC2 `show_int` SUBSTRATE-GAP ruling (Architect `evt_5vzbvwzvqkbpb`
+> +`evt_12j6eeq7jfes9`) folded into frame; both build rings HEALTHY.** foundation-implementer
+> surfaced a real boundary (`evt_km2dtchb65yg`): opaque `Int` is **constructible but not
+> destructible** — `numbers.rs` = add/sub/mul/eq/leq only, NO div/rem/mod/int_to_nat/
+> destructor (I re-verified tree-wide on origin/main). So **parse** (`List Char→Int`, rides
+> mul+add) ships; **`Int→String` show CANNOT be built** without a div/rem primitive (trust
+> delta forbidden). Routed to Architect (my option (a), grounding-forced, same shape as
+> Bytes-keys descope); Architect RULED: **ship the structural `Nat`/`List DecimalDigit →
+> String` formatter now** (Nat/digit-lists ARE destructible), **DEFER `show_int : Int →
+> String` as a NAMED substrate gap** → fast-follow WP (needs div/rem-or-int_to_nat prim OR
+> structural-Int bridge+cert; do NOT fake it). Guard-rail extended to the Int axis: verified
+> round-trip law stays at digit-list level (`parse_digits (format_digits ds) = ds`), crosses
+> NEITHER Int NOR String; NO `parse_int (show_int n)` inversion law. **Frame amended** (deliv
+> 2, fixed-input-4d, AC4 replacement, do-not-reopen bullet) — Architect-provided drop-in text
+> verbatim. Frame commit `49dc99d4`-blob on steward/work (WP branch ref held by
+> foundation-implementer worktree, can't move — implementer has the ruling via leader relay
+> `evt_5xax3nfamfnf8`). Implementer NOT idle — building Codec+char_to_digit+parse+structural
+> formatter. Architect stays terminal reviewer (checks round-trip is structural-only +
+> show_int a clean named defer). **kenfmt #58 watch RESOLVED:** language-implementer
+> re-engaged with REAL edits (editing `layout.rs` — FitGroup Doc variants), no re-hang. **New
+> fast-follow WP queued:** `show_int : Int→String` substrate gap (parallels Bytes-keys
+> fast-follow; both await a substrate/primitive+cert). This is a design refinement, NOT a
+> re-gate — no re-Handoff-Gate; CC2 review chain unchanged (Foundation→QA→Architect→CV seed).
+> **★ UPDATE — OPERATOR CHOSE (i): lawful String keys UN-GATED ✅** (Pat, 2026-07-13;
+> relayed `evt_6na0x25ejn00a`). Pay the one named `string_to_list_char`-injectivity
+> certificate for GENUINE lawful `DecEq`/`Ord String` keys (over (ii) functions-only). The
+> FINAL CC2 deliverable is now released to Foundation as **release-of-held-scope within the
+> in-flight CC2 WP** (NOT a new handoff → NO re-Handoff-Gate; compacting would wrongly drop
+> the live CC2 build context). Build per Architect ruling: cert is a **separately-homed
+> prereq at the bijection layer** (retraction `list_char_to_string (string_to_list_char s)
+> = s`, like `DecEqCert`/`BytesRoundTripLaw`), lands ahead of the transport instances;
+> `sound`/`antisym` cite it BY NAME, `complete`/`refl`/`trans`/`total` = zero-delta
+> projection+cong off landed `List Char` instances; CC2's own fences zero-`Axiom` (AC2
+> backstop catches a smuggled in-fence mint). Frame deliverable 3 pinned to (i). Bytes keys
+> stay OUT (fast-follow #60). CC2 scope now COMPLETE: Codec + Numeric (parse+structural fmt)
+> + lawful String keys; show_int deferred (#60). Review chain unchanged.
+> **★ CC2 CANDIDATE RELEASED → IN QA ~15:29** (`evt_56vff9113edks`). `wp/cc2-text-codec-
+> numeric @ c2455f66de689668009b8da47b02d07d5a2c4882`, rebased on `origin/main @ 330f276b`.
+> **6 deliverables:** `Data/Collections/StringBijection.ken.md` (the (i) injectivity cert —
+> SEPARATELY HOMED, outside Text fences ✓), `Text/Codec/Codec.ken.md`, `Text/Numeric/
+> Numeric.ken.md`, `Text/StringKeys/StringKeys.ken.md`, `conformance/stdlib/text/
+> seed-text-numeric.md` (AC7 seed), `cc2_text_codec_numeric_acceptance.rs`. **Trust: exactly
+> 1 retraction Axiom at the StringBijection prereq, delta 1 there only; all Text fences
+> zero-Axiom.** DecEq String/Ord String transparent, sound/antisym consume the cert;
+> structural `format_digits_roundtrip` kernel-checks; show_int deferred; parse located
+> discriminators exact; CC2 acceptance 5/5, DecEq 3/3, Ord 4/4; literal locked
+> build+test green. **Chain: Foundation QA (kicked `evt_59yyakvj0t80r`) → Architect terminal
+> → CV (AC7 seed) → git_request.** ★ HONESTY-GATE PRE-NOTE for the eventual git_request:
+> this candidate LEGITIMATELY touches `conformance/` (AC7 `seed-text-numeric.md`) — the
+> coupled-WP exception (like CP0), **CV-gated, NOT a forbidden delta**; NO `spec/`, zero
+> kernel/Cargo.lock/Cargo.toml/.github. Catalog `.ken.md` + conformance seed + one
+> acceptance test = expected shape. Verify on the CANDIDATE BLOB at git_request time.
+> **★ CC2 QA BLOCKED → rework loop ~15:5x** (foundation-qa). TWO blockers, both to the
+> implementer, NOT a re-gate: **(1) stale frame doc in the candidate** — the candidate
+> `c2455f66` carries the PRE-amendment frame (line 148 still "format / `show_int`
+> direction"); my show_int-ruling + (i)-pin amendments landed on `steward/work` ONLY because
+> the WP branch was checked out by foundation-implementer when I amended (couldn't
+> force-update the ref). **CODE is correct (show_int deferred); only the frame DOC text is
+> stale.** Fix handed to implementer (`evt_72reh5m98tyyk`): `git show
+> steward/work:docs/program/wp/cc2-text-codec-numeric.md > <path>` via shared .git, commit
+> into re-release. **(2) String-key assertions missing** — acceptance suite must EVALUATE
+> equal/distinct/lexicographic String-key behavior, not just elaborate the instances (legit
+> QA strengthening). Implementer folds both → re-run locked gate → new SHA → QA → Architect
+> terminal → CV → git_request. **LESSON (frame-propagation trap):** a frame amendment made
+> AFTER the receiving ring branches does NOT reach their candidate — the WP branch is
+> checked out (ref locked), so the amend lands on steward/work only and the candidate keeps
+> the stale frame until explicitly re-synced. When amending a frame post-handoff, IMMEDIATELY
+> hand the ring the amended frame (shared-.git `git show steward/work:<path>`) to fold in;
+> do not assume the WP-branch ref moved. (Memory: bundled-frame-doc-goes-stale, 2nd trigger.)
+> **★ CC2 REWORK RESOLVED → Architect TERMINAL APPROVE ~15:5x.** Re-release
+> **`wp/cc2-text-codec-numeric @ 292ef45f974d4f43b9ecb6341148071da231693d`** (atop `origin/
+> main @ 330f276b`). Both QA blockers closed: frame synced byte-for-byte from steward/work
+> (SHA-256 `653e0396…15093`; blob `7ad2ade0`), acceptance now EVALUATES String-key
+> discriminators (equal→true, distinct→false, `alpha<beta`→true) + retains transparent
+> law checks. **QA re-APPROVE `evt_33qk6gpxy3m21`; Architect TERMINAL APPROVE `evt_6b7a6xt5prhfb`**
+> (merge-vote APPROVE, not resolving a Decision). Scope: **7 files additive-only +1336, zero
+> kernel/prelude/Cargo/lock/.github/`numbers.rs`/`bytes.rs`/`decimal_char.rs` delta.** Trust:
+> 1 retraction Axiom in separately-homed `StringBijection` only; Text fences zero-Axiom,
+> zero trusted-base delta. **NEXT: CV AC7 conformance-seed review → git_request → my
+> honesty-gate + publish.** ★ HONESTY-GATE PRE-NOTE (updated SHA): gate the CANDIDATE BLOB at
+> `292ef45f`; `conformance/stdlib/text/seed-text-numeric.md` = LEGIT AC7 coupled touch
+> (CV-gated), NOT forbidden; NO `spec/`, zero kernel/Cargo/lock/.github. Code-touching →
+> CI-poll background publish (`--target` the WP branch/SHA, NEVER main).
+> **★ CC2 CV BLOCK (narrow, green-vs-green) → FIXED → CV binary re-review ~16:0x.** CV caught
+> a REAL overclaim in the AC7 seed: the `"12x4"`/index-2 witness claims to "defeat byte-offset
+> variants" but CAN'T — all accepted ASCII-decimal prefix chars are one-byte, so byte-offset
+> == List-Char index (both 2); no black-box input distinguishes the axis without an accepted
+> multibyte char before the failure. Classic vacuous-discriminator / green-vs-green. Fix
+> (`evt_35xdv50s6p3cx`): doc-only, removed the untestable claim from `seed-text-numeric.md`
+> (+2/−3), KEPT the normative List-Char-index contract + exact-index fixture (genuinely
+> defeats location-free/off-by-one). **New candidate `wp/cc2-text-codec-numeric @
+> 4f497eee4834dfefd298579fe8d4f2f1c4e77ec7`** = `292ef45f` + 1 doc-only commit; zero
+> production/prelude/frame/acceptance/trust bytes changed. **Architect REAFFIRMED APPROVE @
+> 4f497eee `evt_75nkwvjk9kvj5`** (exact-SHA delta verified = 1 seed-only commit). **CV binary
+> re-review IN FLIGHT `evt_71wsjg34bwg4t` — last gate before git_request.** ★ HONESTY-GATE
+> PRE-NOTE (SHA advanced to 4f497eee): gate the CANDIDATE BLOB at `4f497eee`; conformance seed
+> = legit AC7 coupled touch (CV now approving it), zero kernel/Cargo/lock/spec/.github/
+> production delta. Code-touching → CI-poll bg publish, `--target` WP branch NEVER main.
+> **★ CC2 GIT_REQUEST RECEIVED + HONESTY-GATE CLEAN ✅ → PUBLISHING ~16:0x.** Leader
+> git_request `evt_52gydjxnrxng`; approvals QA `evt_33qk6gpxy3m21` + Architect
+> `evt_75nkwvjk9kvj5` + CV `evt_2nmpgd0b01dph`. Candidate `4f497eee` atop origin/main
+> `330f276b` (fetch-confirmed unchanged). **Steward independent honesty-gate (object store,
+> candidate blob) CLEAN:** linear 4-commit chain (frame→catalog→test→doc-narrow), ZERO
+> merges; 7 files all ADDED +1335; forbidden-path assertion ALL EMPTY (no kernel / Cargo.lock
+> / Cargo.toml / .github / spec / prelude.rs / numbers.rs / bytes.rs / decimal_char.rs / any
+> production `crates/*/src/`); `conformance/` = ONLY the AC7 seed `seed-text-numeric.md`
+> (legit coupled, CV-approved); `diff --check` clean. Bundling tracker (§2a) → publish $NEW
+> via scripted-pr-automerge (NON-doc-only → CI-poll bg; `--target` the bundled SHA).
 > **(kenfmt layout rework batch-1 — FRAME READY, task #58)** `docs/program/wp/
 > kenfmt-signature-layout.md`. Operator refined 2026-07-13: governing principle = **prefer
 > horizontal** (kenfmt over-verticalizes; collapse to one line where it fits). Rules R1–R5:
