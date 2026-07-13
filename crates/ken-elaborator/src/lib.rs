@@ -90,7 +90,10 @@ pub use prelude::PreludeEnv;
 pub use foreign::{
     trusted_base_delta, FfiRuntimeCheck, ForeignBinding, ForeignEnv, MarshalKind, MarshalSig,
 };
-pub use literate::{extract_ken_md, validate_ken_md_fences, KenMdExtraction};
+pub use literate::{
+    extract_ken_md, format_ken_md, validate_ken_md_fences, KenMdExtraction, KenMdFence,
+    KenMdFenceRole,
+};
 pub use classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo, InstanceResolution};
 
 /// The surface-level elaboration environment.

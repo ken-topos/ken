@@ -21,6 +21,26 @@ pub struct KenMdExtraction {
     /// present in `source` — must elaborate, but does not tangle into the
     /// module.
     pub example_ranges: Vec<Range<usize>>,
+    /// Every complete recognized Ken fence, including `` ```ken ignore ``.
+    /// These ranges are offsets into the original Markdown source and are
+    /// additive to the compiler-facing extraction fields above.
+    pub fences: Vec<KenMdFence>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KenMdFenceRole {
+    Source,
+    Ignore,
+    Reject,
+    Example,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KenMdFence {
+    pub role: KenMdFenceRole,
+    pub body_range: Range<usize>,
+    pub opener_span: Span,
+    pub closer_span: Span,
 }
 
 pub fn extract_ken_md(src: &str) -> Result<KenMdExtraction, ElabError> {
@@ -32,6 +52,7 @@ pub fn extract_ken_md(src: &str) -> Result<KenMdExtraction, ElabError> {
     let mut compiled_ranges = Vec::new();
     let mut reject_ranges = Vec::new();
     let mut example_ranges = Vec::new();
+    let mut fences = Vec::new();
     let bytes = src.as_bytes();
     let mut line_start = 0usize;
     let mut state = FenceState::Prose;
@@ -55,16 +76,25 @@ pub fn extract_ken_md(src: &str) -> Result<KenMdExtraction, ElabError> {
                         FenceOpener::Source => {
                             state = FenceState::Compiled {
                                 opener_start: line_start,
+                                opener_end: line_end,
                                 body_start: next_line,
                             };
                         }
-                        FenceOpener::Ignore | FenceOpener::OtherLanguage => {
+                        FenceOpener::Ignore => {
+                            state = FenceState::Ignored {
+                                opener_start: line_start,
+                                opener_end: line_end,
+                                body_start: next_line,
+                            };
+                        }
+                        FenceOpener::OtherLanguage => {
                             state = FenceState::ProseFence;
                         }
                         FenceOpener::Reject => {
                             state = FenceState::Checked {
                                 role: CheckedRole::Reject,
                                 opener_start: line_start,
+                                opener_end: line_end,
                                 body_start: next_line,
                             };
                         }
@@ -72,6 +102,7 @@ pub fn extract_ken_md(src: &str) -> Result<KenMdExtraction, ElabError> {
                             state = FenceState::Checked {
                                 role: CheckedRole::Example,
                                 opener_start: line_start,
+                                opener_end: line_end,
                                 body_start: next_line,
                             };
                         }
@@ -94,19 +125,42 @@ pub fn extract_ken_md(src: &str) -> Result<KenMdExtraction, ElabError> {
                     state = FenceState::Prose;
                 }
             }
+            FenceState::Ignored {
+                opener_start,
+                opener_end,
+                body_start,
+            } => {
+                if line == b"```" {
+                    fences.push(KenMdFence {
+                        role: KenMdFenceRole::Ignore,
+                        body_range: body_start..line_start,
+                        opener_span: Span::new(opener_start, opener_end),
+                        closer_span: Span::new(line_start, line_end),
+                    });
+                    state = FenceState::Prose;
+                }
+            }
             FenceState::Compiled {
-                opener_start: _,
+                opener_start,
+                opener_end,
                 body_start,
             } => {
                 if line == b"```" {
                     out[body_start..line_start].copy_from_slice(&bytes[body_start..line_start]);
                     compiled_ranges.push(body_start..line_start);
+                    fences.push(KenMdFence {
+                        role: KenMdFenceRole::Source,
+                        body_range: body_start..line_start,
+                        opener_span: Span::new(opener_start, opener_end),
+                        closer_span: Span::new(line_start, line_end),
+                    });
                     state = FenceState::Prose;
                 }
             }
             FenceState::Checked {
                 role,
-                opener_start: _,
+                opener_start,
+                opener_end,
                 body_start,
             } => {
                 if line == b"```" {
@@ -114,6 +168,15 @@ pub fn extract_ken_md(src: &str) -> Result<KenMdExtraction, ElabError> {
                         CheckedRole::Reject => reject_ranges.push(body_start..line_start),
                         CheckedRole::Example => example_ranges.push(body_start..line_start),
                     }
+                    fences.push(KenMdFence {
+                        role: match role {
+                            CheckedRole::Reject => KenMdFenceRole::Reject,
+                            CheckedRole::Example => KenMdFenceRole::Example,
+                        },
+                        body_range: body_start..line_start,
+                        opener_span: Span::new(opener_start, opener_end),
+                        closer_span: Span::new(line_start, line_end),
+                    });
                     state = FenceState::Prose;
                 }
             }
@@ -152,7 +215,50 @@ pub fn extract_ken_md(src: &str) -> Result<KenMdExtraction, ElabError> {
         compiled_ranges,
         reject_ranges,
         example_ranges,
+        fences,
     })
+}
+
+/// Format every recognized Ken fence body and splice the replacements back
+/// without touching Markdown prose or fence markers.
+pub fn format_ken_md(src: &str) -> Result<String, ElabError> {
+    let extraction = extract_ken_md(src)?;
+    let mut replacements = Vec::with_capacity(extraction.fences.len());
+
+    for fence in &extraction.fences {
+        let body = &src[fence.body_range.clone()];
+        let replacement = match crate::layout::format_ken(body) {
+            Ok(formatted) => formatted,
+            Err(_)
+                if matches!(fence.role, KenMdFenceRole::Ignore | KenMdFenceRole::Reject) =>
+            {
+                crate::format::canonicalize_lexed_tokens(body)?
+            }
+            Err(ElabError::ParseError { msg, span }) => {
+                let role = match fence.role {
+                    KenMdFenceRole::Source => "ken",
+                    KenMdFenceRole::Example => "ken example",
+                    KenMdFenceRole::Ignore | KenMdFenceRole::Reject => unreachable!(),
+                };
+                return Err(ElabError::ParseError {
+                    msg: format!("non-parseable `{role}` fence body: {msg}"),
+                    span: Span::new(
+                        fence.body_range.start + span.start,
+                        fence.body_range.start + span.end,
+                    ),
+                });
+            }
+            Err(error) => return Err(error),
+        };
+        replacements.push((fence.body_range.clone(), replacement));
+    }
+
+    let mut formatted = src.to_owned();
+    replacements.sort_by_key(|(range, _)| std::cmp::Reverse(range.start));
+    for (range, replacement) in replacements {
+        formatted.replace_range(range, &replacement);
+    }
+    Ok(formatted)
 }
 
 pub fn validate_ken_md_fences(extraction: &KenMdExtraction) -> Result<(), ElabError> {
@@ -184,13 +290,20 @@ impl KenMdExtraction {
 enum FenceState {
     Prose,
     ProseFence,
+    Ignored {
+        opener_start: usize,
+        opener_end: usize,
+        body_start: usize,
+    },
     Compiled {
         opener_start: usize,
+        opener_end: usize,
         body_start: usize,
     },
     Checked {
         role: CheckedRole,
         opener_start: usize,
+        opener_end: usize,
         body_start: usize,
     },
 }
