@@ -299,6 +299,331 @@ accepting both arms is insufficient.
 
 ---
 
+## FMT9 — B3 per-axis canonical-byte oracles
+
+The expected bytes in this section are derived directly from `31 §1d`. They
+are not snapshots of a formatter implementation. Each case has two
+orientations: a non-canonical source must normalize to the displayed bytes,
+and those displayed bytes must format to themselves. Every assertion is
+**RED-UNTIL-BUILT (B3)**.
+
+### surface/formatting/blank-runs-normalize-in-both-orientations (property)
+
+- spec: `31 §1d` (physical text and spacing), B3 AC3
+- given: one source with three blank lines between the two top-level
+  declarations and two blank lines between the `record` fields; and a second
+  source already byte-identical to the expected block below. The first source
+  is exactly:
+
+  ```ken
+  const one : Nat = 1
+
+
+
+  const two : Nat = 2
+
+  record Pair {
+    left : Nat;
+
+
+    right : Nat
+  }
+  ```
+- expect: both sources format byte-for-byte to:
+
+  ```ken
+  const one : Nat = 1
+
+  const two : Nat = 2
+
+  record Pair {
+    left : Nat;
+    right : Nat
+  }
+  ```
+
+  The final `}` is followed by exactly one LF. Formatting those bytes again
+  is byte-identical.
+- why: the first orientation pins `2+ → 1` between top-level declarations and
+  sibling `2+ → 0`; the canonical orientation prevents a formatter from
+  oscillating or inserting a sibling blank line.
+
+### surface/formatting/fit-breaks-at-display-width-boundary (property)
+
+- spec: `31 §1d` (88 display columns and deterministic fit), B3 AC1/AC3
+- given: the following 88-display-column source, the same source with one
+  additional `d` in its final identifier, and each expected output below as a
+  canonical input:
+
+  ```ken
+  apply aaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbb cccccccccccccccccccc ddddddddddddddddddd
+  ```
+- expect: the 88-column group and its canonical input both produce one line:
+
+  ```ken
+  apply aaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbb cccccccccccccccccccc ddddddddddddddddddd
+  ```
+
+  The 89-column source and its canonical input both produce:
+
+  ```ken
+  apply
+    aaaaaaaaaaaaaaaaaaaa
+    bbbbbbbbbbbbbbbbbbbb
+    cccccccccccccccccccc
+    dddddddddddddddddddd
+  ```
+
+  The decision counts display columns after canonical token spelling, not
+  UTF-8 bytes; each output is a byte fixed point.
+- why: both sides of the fit boundary distinguish the ruled binary `group`
+  decision from eager breaking, byte-width measurement, and over-wide flat
+  output.
+
+### surface/formatting/mandatory-breaks-ignore-available-width (property)
+
+- spec: `31 §1d` (branching expressions and declaration blocks), B3 AC2
+- given: narrow one-line spellings of each mandatory-break form, plus a second
+  source already equal to each expected block below. The non-canonical inputs
+  are exactly `match flag { True |-> yes; False |-> no }`,
+  `match outer { Left |-> match inner { Only |-> value }; Right |-> other }`,
+  `record Box { value : Nat }`, and `data OptionNat = None | Some Nat`.
+- expect: a two-arm match formats to exactly:
+
+  ```ken
+  match flag {
+    True ↦ yes;
+    False ↦ no
+  }
+  ```
+
+  a single-arm match nested as an arm body remains compound and formats to:
+
+  ```ken
+  match outer {
+    Left ↦
+      match inner {
+        Only ↦ value
+      };
+    Right ↦ other
+  }
+  ```
+
+  a nonempty declaration block formats to:
+
+  ```ken
+  record Box {
+    value : Nat
+  }
+  ```
+
+  a declaration with the compound block body
+  `fn compute (x : Nat) : Nat = let y = match x { Zero |-> 0; Suc n |-> n }
+  in finish y` formats to:
+
+  ```ken
+  fn compute (x : Nat) : Nat =
+    let y =
+      match x {
+        Zero ↦ 0;
+        Suc n ↦ n
+      }
+    in
+      finish y
+  ```
+
+  and a non-trivial sum formats to:
+
+  ```ken
+  data OptionNat =
+    None
+    | Some Nat
+  ```
+
+  Each displayed block is unchanged by another formatting pass, even though
+  every line would fit within 88 columns.
+- why: this isolates all four mandatory-break families and the nonempty-block
+  rule. A fit-only printer would
+  incorrectly flatten at least one narrow first orientation; a printer with
+  unstable hard lines would change the canonical orientation.
+
+### surface/formatting/siblings-use-spacing-not-alignment (property)
+
+- spec: `31 §1d` (physical spacing and no alignment), B3 AC3
+- given: a source whose field colons and assignment equals signs are padded
+  into visual columns, plus a source already equal to the canonical bytes
+  below. The non-canonical source contains:
+
+  ```ken
+  record Metrics { x           : Nat ; longer_name : Int }
+  instance Defaults Nat { x           = 0 ; longer_name = 1 ; }
+  ```
+- expect: both format byte-for-byte to:
+
+  ```ken
+  record Metrics {
+    x : Nat;
+    longer_name : Int
+  }
+
+  instance Defaults Nat {
+    x = 0;
+    longer_name = 1
+  }
+  ```
+
+  There is exactly one space on each side of every `:` and `=`, no padding to
+  a sibling's column, and the result is a byte fixed point.
+- why: accepting either input is green-vs-green for alignment. Exact unequal
+  sibling bytes make global alignment and subsequent de-alignment observable.
+
+### surface/formatting/separators-normalize-in-both-orientations (property)
+
+- spec: `31 §1d` (spacing and declaration blocks), B3 AC3
+- given: a non-canonical source with trailing block semicolons, missing or
+  over-spaced sibling separators, and irregular commas in a record literal,
+  record pattern, and named constructor argument; plus the canonical source
+  below. Its exact non-canonical spelling is:
+
+  ```ken
+  record Pair { left:Nat ; right : Nat ; }
+  fn swap (p:Pair):Pair=match p {{left ,right}|->{left=right ,right=left}}
+  data Wrapped = Wrap { value:Nat ,valid :Bool }
+  ```
+- expect: both format byte-for-byte to:
+
+  ```ken
+  record Pair {
+    left : Nat;
+    right : Nat
+  }
+
+  fn swap (p : Pair) : Pair =
+    match p {
+      { left, right } ↦
+        { left = right, right = left }
+    }
+
+  data Wrapped =
+    Wrap { value : Nat, valid : Bool }
+  ```
+
+  Semicolons occur between declaration-block siblings and never trail the last
+  sibling. Commas, with no preceding and one following space, separate record
+  literal fields, record-pattern fields, and named constructor arguments.
+  Reformatting the displayed bytes changes nothing.
+- why: one generic punctuation assertion could pass while using semicolons in
+  expression records or commas in declaration blocks. The three comma roles
+  and the block-semicolon role are pinned independently in one exact output.
+
+### surface/formatting/indent-is-two-space-enclosing-relative (property)
+
+- spec: `31 §1d` (indentation, applications, and branching), B3 AC3
+- given: a tab-indented and visually column-aligned spelling of the same nested
+  expression, plus a source already equal to the expected bytes below. In the
+  first source, every displayed indentation step below is one tab and the
+  arguments align under the end of `apply` rather than under its enclosing
+  continuation indent.
+- expect: both format byte-for-byte to:
+
+  ```ken
+  const choose : Nat =
+    match flag {
+      True ↦
+        apply
+          first
+          second;
+      False ↦ zero
+    }
+  ```
+
+  Each nesting step is exactly two ASCII spaces relative to its enclosing
+  construct; there are no tabs and `first`/`second` do not align under the end
+  of `apply`. The output is a byte fixed point.
+- why: a coincidental-column `align` combinator can produce valid, stable text
+  while violating enclosing-relative nesting. Exact leading bytes distinguish
+  it from the ruled two-space form.
+
+### surface/formatting/parentheses-have-one-canonical-owner (property)
+
+- spec: `31 §1d` (precedence and the three mandatory-clarity cases), B3 AC4
+- given: a non-canonical source containing `((a + b))`,
+  `(((a + b)) * c)`, `consume (((A -> B)))`, and `f (((x : A)))`; plus a
+  source already equal to the expected bytes below
+- expect: after alias canonicalization, both format byte-for-byte to:
+
+  ```ken
+  const redundant : Nat = a + b
+
+  const precedence : Nat = (a + b) * c
+
+  const arrow_argument : R = consume (A → B)
+
+  const ascribed_subexpression : R = f (x : A)
+  ```
+
+  The first arm loses every redundant grouping parenthesis. The lower-
+  precedence infix operand, arrow type used as an application argument, and
+  ascription used as a subexpression each retain exactly one required or
+  mandatory-clarity pair. Parsing and elaborating before and after must retain
+  the same AST and stable core result, and the displayed bytes are a fixed
+  point.
+- why: this is a controlled remove-versus-retain matrix. Preserve-all fails
+  the first arm; strip-all fails three distinct ownership rules; adding extra
+  clarity pairs fails the canonical-input orientation.
+
+### surface/formatting/comments-pin-hard-lines-and-the-88-threshold (property)
+
+- spec: `31 §1d` (comments), B3 AC5
+- given: four paired fixtures, each once in a non-canonical placement and once
+  already equal to its expected bytes. The non-canonical sources place a blank
+  line between the leading comment and declaration, keep the interstitial
+  comment inside the flat spelling
+  `combine left -- keep this edge` with `right` on the following line, place
+  the 88-column comment above its node, and leave the 89-column comment inline.
+- expect: the leading-comment fixture formats to:
+
+  ```ken
+  -- choose the default
+  const chosen : Nat = value
+  ```
+
+  The interstitial fixture formats to:
+
+  ```ken
+  const combined : Nat =
+    combine
+      left
+      -- keep this edge
+      right
+  ```
+
+  The comment remains between `left` and `right`, forces the enclosing
+  application group to break, and cannot be flattened even when the whole
+  expression is narrow. For the EOL boundary, the 61-character identifier
+  makes `code + two spaces + comment` exactly 88 display columns, so the
+  comment remains inline:
+
+  ```ken
+  const nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn : Nat = value  -- note
+  ```
+
+  With one additional identifier character, the same attached comment moves
+  immediately above its node:
+
+  ```ken
+  -- note
+  const nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn : Nat = value
+  ```
+
+  Comment text is byte-identical, except that trailing horizontal whitespace
+  is removed. Every displayed output formats to itself.
+- why: attachment identity plus exact bytes distinguishes relocation from mere
+  retention. The 88/89 pair proves the threshold's two orientations, while
+  the leading and interstitial pairs directly pin the no-flatten invariant.
+
+---
+
 ## Coverage map
 
 | Gate | Acceptance home | Build gate |
@@ -311,6 +636,7 @@ accepting both arms is insufficient.
 | 6. Trivia/literals | `comments-retain-text-and-attachment`, `all-literal-lexemes-are-verbatim` | B2/B3/B4/C |
 | 7. Width | `breakable-syntax-never-exceeds-88-columns` | B3/C |
 | 8. Ambiguity | all FMT8 cases | B2/B3/B4/C |
+| B3 layout axes | all FMT9 cases | B3 |
 
 ## Cross-case consistency
 
@@ -329,3 +655,6 @@ accepting both arms is insufficient.
 - The four-fence case is the sole structural-layout exemption. It is gated by
   both eligible role and actual parse failure; it never weakens token-aware
   canonicalization or prose identity.
+- Every FMT9 expected block is derived from `31 §1d` before running a printer.
+  Its paired non-canonical and canonical inputs must converge to the same
+  independently fixed bytes; observed printer output is never an oracle.
