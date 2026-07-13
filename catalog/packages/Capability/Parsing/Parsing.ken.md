@@ -75,17 +75,15 @@ fn UnitByteLength (unit : Bytes) : Prop =
   And
     (NonEmptyBytes unit)
     ((left : Bytes)
-    → (right : Bytes)
-    → Equal
-    Bytes
-    unit
-    (bytes_concat
-    left
-    right)
-    → NonEmptyBytes
-    left
-    → EmptyBytes
-    right)
+      → (right : Bytes)
+      → Equal
+      Bytes
+      unit
+      (bytes_concat left right)
+      → NonEmptyBytes
+      left
+      → EmptyBytes
+      right)
 
 fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =
   Equal Int (bytes_length bs) (byte_unit_nat_to_int unit n)
@@ -97,10 +95,8 @@ class Source {
   source_length_unit_field : Bytes;
   source_length_unit_valid_field : UnitByteLength source_length_unit_field;
   source_utf8_field : IsUtf8 source_bytes_field;
-  source_length_valid_field : SourceLength
-  source_length_unit_field
-  source_bytes_field
-  source_length_field
+  source_length_valid_field :
+    SourceLength source_length_unit_field source_bytes_field source_length_field
 }
 
 fn source_id (s : Source) : SourceId = s.source_id_field
@@ -270,19 +266,10 @@ fn ParseResultValid (a : Type) (s : Source) (start : Nat) (r : ParseResult a) : 
 
 fn ParserValid (a : Type) (p : Parser a) : Prop =
   (s : Source)
-  → (start : Nat)
-  → (h : LessEqNat
-  start
-  (source_length
-  s))
-  → ParseResultValid
-  a
-  s
-  start
-  (p
-  s
-  start
-  h)
+    → (start : Nat)
+    → (h : LessEqNat start (source_length s))
+    → ParseResultValid a s start
+    (p s start h)
 
 fn ParseResultTotal (a : Type) (r : ParseResult a) : Prop =
   match r {
@@ -292,17 +279,10 @@ fn ParseResultTotal (a : Type) (r : ParseResult a) : Prop =
 
 fn ParserTotal (a : Type) (p : Parser a) : Prop =
   (s : Source)
-  → (start : Nat)
-  → (h : LessEqNat
-  start
-  (source_length
-  s))
-  → ParseResultTotal
-  a
-  (p
-  s
-  start
-  h)
+    → (start : Nat)
+    → (h : LessEqNat start (source_length s))
+    → ParseResultTotal a
+    (p s start h)
 
 fn ParseResultSourceLocal (a : Type) (s : Source) (r : ParseResult a) : Prop =
   match r {
@@ -312,18 +292,10 @@ fn ParseResultSourceLocal (a : Type) (s : Source) (r : ParseResult a) : Prop =
 
 fn ParserSourceLocal (a : Type) (p : Parser a) : Prop =
   (s : Source)
-  → (start : Nat)
-  → (h : LessEqNat
-  start
-  (source_length
-  s))
-  → ParseResultSourceLocal
-  a
-  s
-  (p
-  s
-  start
-  h)
+    → (start : Nat)
+    → (h : LessEqNat start (source_length s))
+    → ParseResultSourceLocal a s
+    (p s start h)
 
 fn ParserLaws (a : Type) (p : Parser a) : Prop =
   And (ParserValid a p) (And (ParserTotal a p) (ParserSourceLocal a p))
@@ -581,19 +553,8 @@ fn parse_bool_expr_at_fuel
             False ↦
               match starts_not_open_token s start {
                 True ↦
-                  match parse_bool_expr_at_fuel
-                  fuel2
-                  s
-                  (skip_spaces
-                  s
-                  (nat_add
-                  start
-                  (Suc
-                  (Suc
-                  (Suc
-                  (Suc
-                  (Suc
-                  Zero))))))) {
+                  match parse_bool_expr_at_fuel fuel2 s
+                    (skip_spaces s (nat_add start (Suc (Suc (Suc (Suc (Suc Zero))))))) {
                     Parsed child childSpan childNext ↦
                       match source_byte_eq s (skip_spaces s childNext) (41 : Int) {
                         True ↦ Parsed
@@ -617,29 +578,13 @@ fn parse_bool_expr_at_fuel
                 False ↦
                   match starts_and_open_token s start {
                     True ↦
-                      match parse_bool_expr_at_fuel
-                      fuel2
-                      s
-                      (skip_spaces
-                      s
-                      (nat_add
-                      start
-                      (Suc
-                      (Suc
-                      (Suc
-                      (Suc
-                      (Suc
-                      Zero))))))) {
+                      match parse_bool_expr_at_fuel fuel2 s
+                        (skip_spaces s (nat_add start (Suc (Suc (Suc (Suc (Suc Zero))))))) {
                         Parsed left leftSpan leftNext ↦
                           match source_byte_eq s leftNext (32 : Int) {
                             True ↦
-                              match parse_bool_expr_at_fuel
-                              fuel2
-                              s
-                              (skip_spaces
-                              s
-                              (Suc
-                              leftNext)) {
+                              match parse_bool_expr_at_fuel fuel2 s
+                                (skip_spaces s (Suc leftNext)) {
                                 Parsed right rightSpan rightNext ↦
                                   match source_byte_eq s (skip_spaces s rightNext) (41 : Int) {
                                     True ↦ Parsed

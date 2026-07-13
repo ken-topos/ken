@@ -154,22 +154,11 @@ const expectedReversed : List Nat =
 
 const finalCheck : String =
   match listEqNat
-  (hailstoneFueled
-  (Suc
-  (Suc
-  (Suc
-  (Suc
-  (Suc
-  (Suc
-  (Suc
-  (Suc
-  (Suc
-  (Suc
-  Zero))))))))))
-  six
-  (Nil
-  Nat))
-  expectedReversed {
+    (hailstoneFueled
+      (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))))))
+      six
+      (Nil Nat))
+    expectedReversed {
     True ↦ "PASS";
     False ↦ "FAIL"
   }

@@ -134,13 +134,10 @@ const expected_errors : Validation (NonEmpty String) (Pair Bool Bool) =
 
 lemma same_invalid_example
       (errors : NonEmpty String)
-    : Equal (Validation (NonEmpty String) (Pair Bool Bool)) (Invalid
-      (NonEmpty
-      String)
-      (Pair
-      Bool
-      Bool)
-      errors) (Invalid (NonEmpty String) (Pair Bool Bool) errors) =
+    : Equal
+        (Validation (NonEmpty String) (Pair Bool Bool))
+        (Invalid (NonEmpty String) (Pair Bool Bool) errors)
+        (Invalid (NonEmpty String) (Pair Bool Bool) errors) =
   cong
     (NonEmpty String)
     (Validation (NonEmpty String) (Pair Bool Bool))
@@ -172,17 +169,10 @@ proof id for validation_map
 
 proof fusion for validation_map
       (e : Type) (a : Type) (b : Type) (c : Type) (g : b → c) (h : a → b) (x : Validation e a)
-    : Equal (Validation e c) (validation_map e a c (comp a b c g h) x) (validation_map
-      e
-      b
-      c
-      g
-      (validation_map
-      e
-      a
-      b
-      h
-      x)) =
+    : Equal
+        (Validation e c)
+        (validation_map e a c (comp a b c g h) x)
+        (validation_map e b c g (validation_map e a b h x)) =
   match x {
     Invalid err ↦ Refl;
     Valid value ↦ Refl
@@ -214,40 +204,18 @@ lemma validation_ap_id
 
 lemma validation_ap_hom
       (e : Type) (sg : Semigroup e) (a : Type) (b : Type) (g : a → b) (x : a)
-    : Equal (Validation e b) (validation_ap
-      e
-      sg
-      a
-      b
-      (validation_pure
-      e
-      (a
-      → b)
-      g)
-      (validation_pure
-      e
-      a
-      x)) (validation_pure e b (g x)) =
+    : Equal
+        (Validation e b)
+        (validation_ap e sg a b (validation_pure e (a → b) g) (validation_pure e a x))
+        (validation_pure e b (g x)) =
   Refl
 
 lemma validation_ap_ich
       (e : Type) (sg : Semigroup e) (a : Type) (b : Type) (u : Validation e (a → b)) (y : a)
-    : Equal (Validation e b) (validation_ap e sg a b u (validation_pure e a y)) (validation_ap
-      e
-      sg
-      (a
-      → b)
-      b
-      (validation_pure
-      e
-      ((a
-      → b)
-      → b)
-      (apply_to
-      a
-      b
-      y))
-      u) =
+    : Equal
+        (Validation e b)
+        (validation_ap e sg a b u (validation_pure e a y))
+        (validation_ap e sg (a → b) b (validation_pure e ((a → b) → b) (apply_to a b y)) u) =
   match u {
     Invalid err ↦ Refl;
     Valid g ↦ Refl
@@ -262,42 +230,28 @@ lemma validation_ap_cmp
       (u : Validation e (b → c))
       (v : Validation e (a → b))
       (w : Validation e a)
-    : Equal (Validation e c) (validation_ap
-      e
-      sg
-      a
-      c
-      (validation_ap
-      e
-      sg
-      (a
-      → b)
-      (a
-      → c)
-      (validation_ap
-      e
-      sg
-      (b
-      → c)
-      ((a
-      → b)
-      → (a
-      → c))
-      (validation_pure
-      e
-      ((b
-      → c)
-      → (a
-      → b)
-      → (a
-      → c))
-      (compose
-      a
-      b
-      c))
-      u)
-      v)
-      w) (validation_ap e sg b c u (validation_ap e sg a b v w)) =
+    : Equal
+        (Validation e c)
+        (validation_ap
+          e
+          sg
+          a
+          c
+          (validation_ap
+            e
+            sg
+            (a → b)
+            (a → c)
+            (validation_ap
+              e
+              sg
+              (b → c)
+              ((a → b) → (a → c))
+              (validation_pure e ((b → c) → (a → b) → (a → c)) (compose a b c))
+              u)
+            v)
+          w)
+        (validation_ap e sg b c u (validation_ap e sg a b v w)) =
   match u {
     Invalid first ↦
       match v {
@@ -335,15 +289,10 @@ lemma validation_ap_cmp
 
 lemma validation_map_coh
       (e : Type) (sg : Semigroup e) (a : Type) (b : Type) (g : a → b) (x : Validation e a)
-    : Equal (Validation e b) (functor_map_of
-      (Validation
-      e)
-      (Functor_instance_Validation
-      e)
-      a
-      b
-      g
-      x) (validation_ap e sg a b (validation_pure e (a → b) g) x) =
+    : Equal
+        (Validation e b)
+        (functor_map_of (Validation e) (Functor_instance_Validation e) a b g x)
+        (validation_ap e sg a b (validation_pure e (a → b) g) x) =
   match x {
     Invalid err ↦ Refl;
     Valid value ↦ Refl

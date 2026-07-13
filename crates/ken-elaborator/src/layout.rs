@@ -197,17 +197,28 @@ fn pending_punctuation_width(commands: &[Command<'_>]) -> usize {
     commands
         .iter()
         .rev()
-        .map_while(|command| match command.doc {
-            Doc::Text(text)
-                if text
-                    .chars()
-                    .all(|ch| matches!(ch, ')' | ']' | '}' | ',' | ';')) =>
-            {
-                Some(display_width(text))
-            }
-            _ => None,
-        })
+        .map_while(|command| flat_punctuation_width(command.doc))
         .sum()
+}
+
+fn flat_punctuation_width(doc: &Doc) -> Option<usize> {
+    match doc {
+        Doc::Nil => Some(0),
+        Doc::Text(text)
+            if text
+                .chars()
+                .all(|ch| matches!(ch, ')' | ']' | '}' | ',' | ';' | '=' | ' ' | '\t')) =>
+        {
+            Some(display_width(text))
+        }
+        Doc::Concat(parts) => parts.iter().try_fold(0usize, |sum, part| {
+            Some(sum + flat_punctuation_width(part)?)
+        }),
+        Doc::Nest(_, child) | Doc::Group(child) | Doc::FitGroup(child) => {
+            flat_punctuation_width(child)
+        }
+        _ => None,
+    }
 }
 
 #[derive(Clone)]
@@ -745,7 +756,7 @@ impl<'a> LayoutPrinter<'a> {
             return Doc::concat([
                 Doc::text(self.token_text(indices[0])),
                 before,
-                self.grouped_token_slice(&indices[1..indices.len() - 1]),
+                self.consistent_token_slice(&indices[1..indices.len() - 1]),
                 after,
                 Doc::text(self.token_text(indices[indices.len() - 1])),
             ])
@@ -795,6 +806,53 @@ impl<'a> LayoutPrinter<'a> {
                 indices[previous_end - 1],
                 indices[start],
                 separator,
+            ));
+            continuation.push(self.raw_grouped_token_slice(&indices[start..end]));
+            previous_end = end;
+        }
+        Doc::concat([head, Doc::concat(continuation).nest(INDENT_WIDTH)]).fit_group()
+    }
+
+    /// Build a recursive application/arrow group inside a delimited child.
+    /// Unlike the declaration-level R1 return ladder, every top-level atom in
+    /// this local group is an application child and therefore owns a +2 break.
+    fn consistent_token_slice(&self, indices: &[usize]) -> Doc {
+        let mut starts = vec![0usize];
+        let mut paren_depth = 0usize;
+        let mut bracket_depth = 0usize;
+        let mut brace_depth = 0usize;
+        for position in 0..indices.len() {
+            if position > 0 && paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 {
+                let left = &self.source.tokens()[indices[position - 1]].kind;
+                let right = &self.source.tokens()[indices[position]].kind;
+                if needs_space(left, right) && soft_break_between(left, right, TokenLayout::Soft) {
+                    starts.push(position);
+                }
+            }
+            match &self.source.tokens()[indices[position]].kind {
+                Token::LParen => paren_depth += 1,
+                Token::RParen => paren_depth = paren_depth.saturating_sub(1),
+                Token::LBracket => bracket_depth += 1,
+                Token::RBracket => bracket_depth = bracket_depth.saturating_sub(1),
+                Token::LBrace => brace_depth += 1,
+                Token::RBrace => brace_depth = brace_depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        if starts.len() == 1 {
+            return self.raw_grouped_token_slice(indices);
+        }
+
+        let head_end = starts[1];
+        let head = self.raw_grouped_token_slice(&indices[..head_end]);
+        let mut continuation = Vec::new();
+        let mut previous_end = head_end;
+        for (position, start) in starts.iter().copied().enumerate().skip(1) {
+            let end = starts.get(position + 1).copied().unwrap_or(indices.len());
+            continuation.push(self.token_boundary(
+                indices[previous_end - 1],
+                indices[start],
+                Doc::line(),
             ));
             continuation.push(self.raw_grouped_token_slice(&indices[start..end]));
             previous_end = end;
@@ -1166,11 +1224,10 @@ impl<'a> LayoutPrinter<'a> {
 
     fn doc_from_tokens(&self, span: &Span, layout: TokenLayout) -> Doc {
         let indices = self.token_indices(span);
-        let doc = self.doc_token_slice(&indices, span, layout);
         if layout == TokenLayout::Soft {
-            doc.group()
+            self.grouped_token_slice(&indices)
         } else {
-            doc
+            self.doc_token_slice(&indices, span, layout)
         }
     }
 
@@ -1266,11 +1323,7 @@ impl<'a> LayoutPrinter<'a> {
                 Token::Semicolon if brace_depth == 0 => {
                     if start < position {
                         let slice = &indices[start..position];
-                        let segment_span = Span::new(
-                            self.source.tokens()[slice[0]].span.start,
-                            self.source.tokens()[*slice.last().unwrap()].span.end,
-                        );
-                        segments.push((self.print_block_segment(slice, &segment_span), true));
+                        segments.push((self.print_block_segment(slice), true));
                     }
                     start = position + 1;
                 }
@@ -1279,11 +1332,7 @@ impl<'a> LayoutPrinter<'a> {
         }
         if start < indices.len() {
             let slice = &indices[start..];
-            let segment_span = Span::new(
-                self.source.tokens()[slice[0]].span.start,
-                self.source.tokens()[*slice.last().unwrap()].span.end,
-            );
-            segments.push((self.print_block_segment(slice, &segment_span), false));
+            segments.push((self.print_block_segment(slice), false));
         }
         if segments.is_empty() {
             self.doc_token_slice(indices, span, layout)
@@ -1308,7 +1357,7 @@ impl<'a> LayoutPrinter<'a> {
     /// hierarchy as a top-level declaration signature.  This keeps the field
     /// head with `:`, then lets an over-width arrow chain break only at its
     /// top-level arrows; parenthesized inner arrows retain their own groups.
-    fn print_block_segment(&self, indices: &[usize], span: &Span) -> Doc {
+    fn print_block_segment(&self, indices: &[usize]) -> Doc {
         let mut paren_depth = 0usize;
         let mut bracket_depth = 0usize;
         let mut brace_depth = 0usize;
@@ -1333,9 +1382,7 @@ impl<'a> LayoutPrinter<'a> {
             });
 
         let Some(colon) = colon.filter(|colon| colon + 1 < indices.len()) else {
-            return self
-                .doc_token_slice(indices, span, TokenLayout::Soft)
-                .group();
+            return self.grouped_token_slice(indices);
         };
         let boundary = self.token_boundary(indices[colon], indices[colon + 1], Doc::line());
         Doc::concat([

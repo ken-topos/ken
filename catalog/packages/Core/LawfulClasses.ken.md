@@ -204,23 +204,8 @@ instance Eq Int {
   eq = eq_int;
   refl = λx.int_eq_complete x x Refl;
   sym = λx.λy.λp.int_eq_complete y x (J (λy' _.Equal Int y' x) Refl (int_eq_sound x y p));
-  trans = λx.λy.λz.λp.λq.int_eq_complete
-  x
-  z
-  (J
-  (λz'
-  _.Equal
-  Int
-  x
-  z')
-  (int_eq_sound
-  x
-  y
-  p)
-  (int_eq_sound
-  y
-  z
-  q))
+  trans = λx.λy.λz.λp.λq.int_eq_complete x z
+    (J (λz' _.Equal Int x z') (int_eq_sound x y p) (int_eq_sound y z q))
 }
 
 instance Ord Int {
@@ -564,23 +549,19 @@ lemma compare_eq_sound_raw_second_true
       (a : Type)
       (leq : a → a → Bool)
       (antisym_law : (x : a)
-      → (y : a)
-      → Equal
-      Bool
-      (leq
-      x
-      y)
-      True
-      → Equal
-      Bool
-      (leq
-      y
-      x)
-      True
-      → Equal
-      a
-      x
-      y)
+        → (y : a)
+        → Equal
+        Bool
+        (leq x y)
+        True
+        → Equal
+        Bool
+        (leq y x)
+        True
+        → Equal
+        a
+        x
+        y)
       (x : a)
       (y : a)
       (hxy : Equal Bool (leq x y) True)
@@ -597,23 +578,19 @@ lemma compare_eq_sound_raw_second_dispatch
       (a : Type)
       (leq : a → a → Bool)
       (antisym_law : (x : a)
-      → (y : a)
-      → Equal
-      Bool
-      (leq
-      x
-      y)
-      True
-      → Equal
-      Bool
-      (leq
-      y
-      x)
-      True
-      → Equal
-      a
-      x
-      y)
+        → (y : a)
+        → Equal
+        Bool
+        (leq x y)
+        True
+        → Equal
+        Bool
+        (leq y x)
+        True
+        → Equal
+        a
+        x
+        y)
       (x : a)
       (y : a)
       (hxy : Equal Bool (leq x y) True)
@@ -628,23 +605,19 @@ lemma compare_eq_sound_raw_first_true
       (a : Type)
       (leq : a → a → Bool)
       (antisym_law : (x : a)
-      → (y : a)
-      → Equal
-      Bool
-      (leq
-      x
-      y)
-      True
-      → Equal
-      Bool
-      (leq
-      y
-      x)
-      True
-      → Equal
-      a
-      x
-      y)
+        → (y : a)
+        → Equal
+        Bool
+        (leq x y)
+        True
+        → Equal
+        Bool
+        (leq y x)
+        True
+        → Equal
+        a
+        x
+        y)
       (x : a)
       (y : a)
       (hxy : Equal Bool (leq x y) True)
@@ -670,23 +643,19 @@ lemma compare_eq_sound_raw_dispatch
       (a : Type)
       (leq : a → a → Bool)
       (antisym_law : (x : a)
-      → (y : a)
-      → Equal
-      Bool
-      (leq
-      x
-      y)
-      True
-      → Equal
-      Bool
-      (leq
-      y
-      x)
-      True
-      → Equal
-      a
-      x
-      y)
+        → (y : a)
+        → Equal
+        Bool
+        (leq x y)
+        True
+        → Equal
+        Bool
+        (leq y x)
+        True
+        → Equal
+        a
+        x
+        y)
       (x : a)
       (y : a)
       (choice : Or (Equal Bool (leq x y) True) (Equal Bool (leq x y) False))
@@ -700,23 +669,19 @@ proof eq_sound for compare_raw
       (a : Type)
       (leq : a → a → Bool)
       (antisym_law : (x : a)
-      → (y : a)
-      → Equal
-      Bool
-      (leq
-      x
-      y)
-      True
-      → Equal
-      Bool
-      (leq
-      y
-      x)
-      True
-      → Equal
-      a
-      x
-      y)
+        → (y : a)
+        → Equal
+        Bool
+        (leq x y)
+        True
+        → Equal
+        Bool
+        (leq y x)
+        True
+        → Equal
+        a
+        x
+        y)
       (x : a)
       (y : a)
     : Equal OrdResult (compare_raw a leq x y) ord_eq → Equal a x y =
@@ -941,20 +906,9 @@ lemma pair_ord_leq_transport_head
       (r : OrdResult)
       (p : Equal OrdResult (compare a da (pair_fst a b x) (pair_fst a b y)) r)
       (h : IsTrue (pair_ord_leq a b da db x y))
-    : IsTrue (ord_result_leq
-      (pair_compare_result_of
-      (compare
-      b
-      db
-      (pair_snd
-      a
-      b
-      x)
-      (pair_snd
-      a
-      b
-      y))
-      r)) =
+    : IsTrue
+        (ord_result_leq
+          (pair_compare_result_of (compare b db (pair_snd a b x) (pair_snd a b y)) r)) =
   J
     (λq _.
       IsTrue
@@ -973,20 +927,8 @@ lemma pair_ord_leq_untransport_head
       (r : OrdResult)
       (p : Equal OrdResult (compare a da (pair_fst a b x) (pair_fst a b y)) r)
       (h : IsTrue
-      (ord_result_leq
-      (pair_compare_result_of
-      (compare
-      b
-      db
-      (pair_snd
-      a
-      b
-      x)
-      (pair_snd
-      a
-      b
-      y))
-      r)))
+        (ord_result_leq
+          (pair_compare_result_of (compare b db (pair_snd a b x) (pair_snd a b y)) r)))
     : IsTrue (pair_ord_leq a b da db x y) =
   J
     (λq _.
@@ -1751,28 +1693,14 @@ lemma list_ord_trans_cons
       (ys : List a)
       (z : a)
       (zs : List a)
-      (ih : (ys2 : List
-      a)
-      → (zs2 : List
-      a)
-      → IsTrue
-      (list_ord_leq
-      a
-      d
-      xs
-      ys2)
-      → IsTrue
-      (list_ord_leq
-      a
-      d
-      ys2
-      zs2)
-      → IsTrue
-      (list_ord_leq
-      a
-      d
-      xs
-      zs2))
+      (ih : (ys2 : List a)
+        → (zs2 : List a)
+        → IsTrue
+        (list_ord_leq a d xs ys2)
+        → IsTrue
+        (list_ord_leq a d ys2 zs2)
+        → IsTrue
+        (list_ord_leq a d xs zs2))
       (hxy : IsTrue (list_ord_leq a d (Cons a x xs) (Cons a y ys)))
       (hyz : IsTrue (list_ord_leq a d (Cons a y ys) (Cons a z zs)))
       (haxy : Equal Bool (ord_leq_at a d x y) True)
@@ -1869,29 +1797,10 @@ lemma list_ord_total_cons_head_both
       (ih : IsTrue (bool_or (list_ord_leq a d xs ys) (list_ord_leq a d ys xs)))
       (hxy : Equal Bool (ord_leq_at a d x y) True)
       (hyx : Equal Bool (ord_leq_at a d y x) True)
-    : IsTrue (bool_or
-      (list_ord_leq
-      a
-      d
-      (Cons
-      a
-      x
-      xs)
-      (Cons
-      a
-      y
-      ys))
-      (list_ord_leq
-      a
-      d
-      (Cons
-      a
-      y
-      ys)
-      (Cons
-      a
-      x
-      xs))) =
+    : IsTrue
+        (bool_or
+          (list_ord_leq a d (Cons a x xs) (Cons a y ys))
+          (list_ord_leq a d (Cons a y ys) (Cons a x xs))) =
   match compare_bool_cases (list_ord_leq a d xs ys) {
     Inl htxy ↦ proof left_true_intro for bool_or
       (list_ord_leq a d (Cons a x xs) (Cons a y ys))
@@ -1924,29 +1833,10 @@ lemma list_ord_total_cons_head_forward
       (ys : List a)
       (ih : IsTrue (bool_or (list_ord_leq a d xs ys) (list_ord_leq a d ys xs)))
       (hxy : Equal Bool (ord_leq_at a d x y) True)
-    : IsTrue (bool_or
-      (list_ord_leq
-      a
-      d
-      (Cons
-      a
-      x
-      xs)
-      (Cons
-      a
-      y
-      ys))
-      (list_ord_leq
-      a
-      d
-      (Cons
-      a
-      y
-      ys)
-      (Cons
-      a
-      x
-      xs))) =
+    : IsTrue
+        (bool_or
+          (list_ord_leq a d (Cons a x xs) (Cons a y ys))
+          (list_ord_leq a d (Cons a y ys) (Cons a x xs))) =
   match compare_bool_cases (ord_leq_at a d y x) {
     Inl hyx ↦ list_ord_total_cons_head_both a d x xs y ys ih hxy hyx;
     Inr hyx ↦ proof left_true_intro for bool_or
@@ -1963,29 +1853,10 @@ lemma list_ord_total_cons
       (y : a)
       (ys : List a)
       (ih : IsTrue (bool_or (list_ord_leq a d xs ys) (list_ord_leq a d ys xs)))
-    : IsTrue (bool_or
-      (list_ord_leq
-      a
-      d
-      (Cons
-      a
-      x
-      xs)
-      (Cons
-      a
-      y
-      ys))
-      (list_ord_leq
-      a
-      d
-      (Cons
-      a
-      y
-      ys)
-      (Cons
-      a
-      x
-      xs))) =
+    : IsTrue
+        (bool_or
+          (list_ord_leq a d (Cons a x xs) (Cons a y ys))
+          (list_ord_leq a d (Cons a y ys) (Cons a x xs))) =
   match compare_bool_cases (ord_leq_at a d x y) {
     Inl hxy ↦ list_ord_total_cons_head_forward a d x xs y ys ih hxy;
     Inr hxy ↦ proof right_true_intro for bool_or
