@@ -22,6 +22,7 @@ pub mod effects;
 pub mod erasure;
 pub mod export;
 pub mod format;
+pub mod layout;
 pub mod foreign;
 pub mod ifc;
 pub mod literate;
