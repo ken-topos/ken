@@ -14,24 +14,154 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 50d187bb`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 10e453aa`
 >
-> **★ CURRENT FRONTIER (one-line resume):** Two parallel efforts running —
-> **(1) kenfmt B4→C** (Language) and **(2) Ken CLI Program I** (contract
-> PUBLISHED, two build lanes kicking). Both disjoint from the frozen catalog.
+> **★ CURRENT FRONTIER (one-line resume):** **kenfmt series COMPLETE + C CLOSED ✅**
+> (`origin/main @ 10e453aa`, PR #600; §1d-conformant whole-catalog reformat +
+> `ken fmt` CLI + workspace-test strict gate; all 3 §10 retros in — carry: gate
+> emitted SHAPE not only meaning; strict CI belongs in a workspace `#[test]`).
+> Freeze CLOSED. **Two lanes live in parallel:** I-1 (Runtime, oracle-normalize
+> test-only fold) + CC1 kick (Foundation, Handoff-Gate compact in flight).
+> **★ POST-C QUEUE (event-driven + proactive):**
+> (1) **C CLOSED ✅** — retros in (leader/impl/qa 07:57); tasks #51/#38 done.
+> (2) **I-1 — TWO C-AC2 conflicts, both test-only, both routed.** Rebased post-C
+> → `db3bef64` (base `10e453aa`; 19 corpus files canonical, strict 4/4, CLI +
+> locked build green). **(2a) trusted_base proxy — RULED + implemented.** C AC2
+> hashed **Debug-form `trusted_base()`**; I-1's prelude decls uniformly shift
+> GlobalIds. **Architect RULED** (`evt_5wztan68d16t7`): offset/rank-normalize
+> (subtract min GlobalId, then hash) — NOT bare count (substitution-blind), NOT
+> digest-refresh; Steward GO'd (`evt_3gzthnkeenp3h`). Implemented: normalized +
+> add/drop/shift discriminator green, ONE golden moved — **but SUPERSEDED (2b).**
+> **(2b) frame-AST drift → UNIFIED RULING supersedes 2a's fix.** Symptom #2:
+> accumulator-factory `(10005,…)→(10197,…)` — a TRUE positive (I-1's reviewed ABI
+> migration genuinely grows the AST). **Architect ruled** (`evt_48vvh35040xxw`);
+> **Steward scope-APPROVE + re-baseline WITHDRAW** (`evt_6gkz7ctnkde2y`): **RETIRE
+> the frame-anchored `actual_frozen_reformat_matches_frame_semantics_and_literate_
+> bytes` wholesale** — it's a discharged one-shot C-merge proof (delivered +
+> consumed at merge); a frame-pinned golden can't distinguish authorized evolution
+> from drift (review's job), and re-baselining proliferates exceptions (violates
+> subsume-don't-proliferate). Discard the 2a normalization delta too.
+> **No durable coverage lost** — strict day-one AC1 lives in
+> `canonical_frozen_corpus_is_a_31_file_fixed_point` (P1) + `ken_fmt.rs` CLI corpus
+> check, NOT the frame test; canonical file ⇒ reformat is a byte no-op ⇒
+> meaning/prose/fence-roles trivially preserved (incl. 14 literate); I-1 semantic
+> correctness = I-1's own e2e gates. **Test-only, deletion-only.**
+> **I-1 PUBLISHING** — final SHA `wp/cli-i1-entrypoint-abi-runner @ 3679aa58`
+> (retire frame oracle: `kenfmt_c_capstone.rs` +1/−370, deletion-only). QA
+> APPROVE (`evt_550mcy7f1nsgc`) + Architect narrow re-confirm APPROVE
+> (`evt_12emgejgg51ha`, his 3 checks + 6-axis I-1 verdict re-grounded). **Steward
+> honesty-gate CLEAN** — linear from `origin/main @ 10e453aa`; 32-file scope; zero
+> kernel/Cargo.lock/spec/conformance/`.github` delta; fixed-point + `ken_fmt.rs`
+> strict gates byte-identical (AC1 non-vacuous). Bundling tracker → CI-poll publish
+> under `dec_2aj8vq586m14p`. **On merge: I-1 CLOSED → I-2 (Console floor) next in
+> Runtime ring (Architect-terminal, host-ABI).**
+> **Follow-up #53:** durable `trusted_base_delta` DS-N unit (real zero-TCB
+> invariant; non-blocking, later lane).
+> (3) **CC1 — KICKED ✅.** Frame `wp/cc1-nonempty-validation @ 3afe0031` (off
+> `10e453aa`; task #52). Foundation's stale `691c88c6` (bare-selector, pre-C)
+> PARKED (`evt_3q8m0ne5dg2gh`; branch preserved). Handoff-Gate COMPLETE — ring
+> quiescent + branches clean (0 ahead) + all 3 compacted (WIDE-verified "Context
+> compacted"); kickoff posted (`evt_56xs22dbcbhb5`, new thread) + foundation-leader
+> ROUSED (now Working). **NEXT:** Foundation builds → QA → Architect review →
+> git_request → publish → close on retros. CC2 follows in ring.
+> (4) **Namespace remainder — NOT a clean kick (grounded 2026-07-13).** Operator:
+> "sequence after C." Critical path = ADR 0015 spec+conf round must merge → gates
+> #37 (Language `use`-keyword-retire build). **But the spec-round branches
+> (`wp/adr0015-remove-use-open{,-spec,-conformance}`) are STALE:** base
+> `3a5cd323` is 31 commits behind main; all 9 touched files (incl.
+> `spec/…/33-declarations.md` §3.2/§3.3, `modules.rs`, `seed-modules.md`,
+> `n2_in_repo_loader.rs`) were rewritten by the N2/N3/N4 + §32 work that landed
+> since — and the branch carries `crates/` deltas despite its frame's "no build
+> this round," so it diverges from its own frame. **Needs spec-enclave
+> RE-DERIVATION onto current main** (enclave is on §32 now) before it can merge;
+> then #37 → Language. N5 (#36) + MRES-6 (#39) still need framing (MRES-6 needs an
+> Architect ADR follow-on). **HELD — surface to operator for priority** (interrupt
+> §32 for ADR 0015, or queue after). Not kicking mis-sequenced/stale work.
+> (5) §5.2 (enclave prereq) + Program II CC2+ framing.
 >
-> **① kenfmt B4** (`.ken.md` splicing + prose byte-identity, size S, Language).
-> B3 layout engine CLOSED ✅ (P0/S/B1/B2/B3 all landed). **B4 candidate
-> `wp/kenfmt-b4-ken-md-splicing @ f6dfaffa` — QA APPROVED (AC 6/6) + Architect-
-> terminal APPROVED (`evt_4c2q2sea0v747`); `git_request` in
-> (`evt_6t52p76mjn6ah`).** Steward honesty-gate CLEAN (4 `crates/ken-elaborator`
-> files +437/−5 + frame doc rides; diff-check clean; zero TCB). Rebased onto
-> `50d187bb` (Architect note — raw base 549bf8d9 would have reverted my contract
-> doc + tracker; rebased clean → only 4 B4 files + frame doc). **PUBLISHING
-> (CI-polled — code merge).** Then capstone **C** (atomic whole-catalog reformat + strict
-> `ken fmt --check` gate — needs the Steward-scheduled catalog freeze, opened when
-> B4 lands + no catalog/spec WP mid-flight). Carries: task #43 record-surface WP,
-> task #44 `layout.rs::token_text`↔B2 dedup at pipeline integration.
+> **① kenfmt — B-SERIES COMPLETE ✅.** **B4 MERGED CI-green → `origin/main @
+> 96f5c45b`** (PR #599; honesty-gated + rebased past `50d187bb`; 4
+> `crates/ken-elaborator` files +437/−5 + frame doc + tracker; zero TCB). **P0 / S
+> / B1 / B2 / B3 / B4 all landed.** **B4 CLOSED ✅** — all 3 Language retros in
+> (leader `evt_1hya1y07f6av` / impl `evt_1e5en3qe02xrb` / qa `evt_3g2q1q496vyjd`;
+> Steward close `evt_15zezf4nqp9vk`). **★ NEXT = capstone C — KICKING NOW.**
+> Frame authored (shovel-ready): `docs/program/wp/kenfmt-c-capstone.md` on
+> `wp/kenfmt-c-capstone @ 4276c9e4` (off `origin/main @ 96f5c45b`). C = build the
+> **`ken fmt` CLI tool** (format + `--check`) + **whole-catalog+rosetta reformat**
+> (15 catalog files + 16 rosetta) + **strict `ken fmt --check` CI gate**, in ONE
+> atomic merge. Owner Language; **Architect gate** (AST-preservation = soundness
+> AC). **FREEZE PRECONDITION VERIFIED CLEAN** — all fleet "ahead" commits are
+> squash-merge leftovers already on main (spec-author §32 `106fd60c`, CV FMT9
+> `4938dd61`, librarian OrdNat `b8601557`/PR#538 — librarian confirmed via object
+> store `evt_3cge9f3dg872g`); §5.2 + Program II held; no live catalog/spec lane.
+> **★ C KICKED + 🧊 CATALOG-FREEZE WINDOW OPEN** (`evt_4qzg2dnhb87pr`,
+> 2026-07-13). Language ring Handoff-Gate done (all 3 "Context compacted" WIDE @
+> origin/main). **NO catalog merge until C lands** — Foundation + Librarian
+> notified to hold catalog lanes; librarian committed to no catalog pub during
+> freeze. **CLI I-1 turned out to touch the frozen corpus (19 files) → also HELD
+> behind C (Path B, `evt_5xjsw09hkte14`); see ② below.** `crates/`/`spec/` lanes
+> that are genuinely corpus-disjoint still run alongside. **★ C BLOCKED at
+> Architect gate 2026-07-13** (`evt_6zk2xfma2y8mc`, candidate `3d2c2f27`): reformat
+> is AST-sound but **§1d-NONCONFORMANT** — the pre-existing **B3 signature-layout
+> engine defect** breaks wide (>88-col) declaration signatures one-token-per-line
+> at **column 0** (zero continuation indent + binder-internal over-break). ~16,145
+> malformed lines across 9 catalog packages — *that's* the +50k diff (Map.ken.md
+> 6,710→31,452 lines). Every soundness gate went green because they check *meaning*
+> not *layout* (newlines are whitespace → identical AST; mangled output is a fixed
+> point; each line <88 col). **Defect is in `layout.rs` telescope nesting, NOT C's
+> code** (C's layout delta is only the task#44 glyph fold). **Fix (Language
+> routing): (1) B3 engine — nest param telescope 1 level, sub-group each binder so
+> fitting ones stay flat; (2) regenerate whole-corpus reformat off fixed engine
+> (diff collapses); (3) ADD layout-conformance gate — no required continuation at
+> col 0 + pathological-expansion bound.** Steward freeze-partition offered
+> (`evt_7n41hn1rxhtne`): the B3 engine fix is `crates/`-only & FREEZE-SAFE → can
+> publish standalone ahead of the reformat, OR fold into C; only the reformat+gate
+> stays the atomic in-window merge. **🧊 FREEZE STAYS OPEN** until a §1d-conformant
+> reformat lands. **★ C BLOCK RESOLVED → Architect gate APPROVE 2026-07-13**
+> (`evt_1kbj9yftjwx13`, corrected candidate `91ea984d`, linear off `96f5c45b`):
+> B3 engine fixed in-C (`layout.rs` telescope nesting; fitting binder groups stay
+> whole; layout-conformance gate added — no col-0 continuation + per-file ≤4.5×/
+> aggregate ≤3× expansion bounds, excludes the blocked output). Language QA APPROVE
+> `evt_6cxtdvrret1tm`; leader publish request `evt_6xdm89056dz70`. **HONESTY-GATE
+> PASSED** (45 files +33,472/−7,258; zero kernel/Cargo.lock/spec/conformance/
+> trusted_base delta — the 2 `trusted_base` hits are read-only test-oracle; scope =
+> `layout.rs`+`format.rs`+`literate.rs`+`ken-cli`+test nets+CI+frozen corpus).
+ **★ PUBLISH BLOCKED 2026-07-13 — PERMISSIONS, not code**
+> (`evt_45cxrrt8tdxjz`): scripted-publisher GitHub App refused the branch push —
+> `refusing to allow a GitHub App to create or update workflow .github/workflows/
+> ci.yml without workflows permission`. C candidate wires the strict gate via a
+> `ci.yml` step; the publisher identity CANNOT push workflow-file changes. NOTHING
+> LANDED — `origin/main` still `96f5c45b`, no PR, clean. Code stays Architect-
+> approved. **FIX ROUTED = Path 2 (recommended): relocate the `ken fmt --check`
+> gate from `ci.yml` into a workspace `#[test]` (read each of 31 corpus files,
+> assert canonical), DROP the `ci.yml` edit → existing `cargo test --workspace
+> --locked` CI enforces it, candidate touches no `.github/workflows/` → publisher
+> can push. Narrow re-spin (gate relocation only) → QA re-gate → Architect
+> re-confirm the relocated gate → re-hand exact SHA → I publish.** Path 1 (grant
+> app `workflows` perm / operator lands ci.yml manually) = operator decision +
+> security-sensitive; deferred to operator brief, NOT pursued now. **★ PATH-2 RE-SPIN DONE → APPROVED → PUBLISHING 2026-07-13.**
+> Workflow-free SHA `9692dcc6` (child of `91ea984d`; delta = EXACTLY the ci.yml
+> removal; QA APPROVE `evt_4h7pw6rvwzxcf`; Architect-terminal re-confirm
+> `evt_6bv6xvv54fa7y` — verdict carries verbatim; leader publish req
+> `evt_13ke9aq71st9y`). **HONESTY-GATE PASSED**: linear off `96f5c45b`; diff
+> 91ea984d..9692dcc6 = exactly `.github/workflows/ci.yml`; `.github/**` delta vs
+> main EMPTY (publisher-safe); non-ci.yml delta vs 91ea984d EMPTY (byte-identical
+> to the already-scope-gated SHA → inherits zero kernel/Cargo.lock/spec/conf/
+> trusted_base delta). Strict gate now enforced as workspace test
+> `strict_frozen_corpus_gate_is_green` under `cargo test --workspace --locked`.
+> **★ PUBLISHING via scripted-publisher bg task `bmfqn7t23`, CI-poll, stop-on-red;
+> EXACT SHA `9692dcc6`** (tracker bundles into the following I-1 publish).
+> **★ C MERGED ✅ `origin/main @ 10e453aa` (PR #600, squash) 2026-07-13** —
+> publisher CI-green + merge succeeded; content verified on main (reformatted Map
+> `from_list_acc` head-on-own-line + `strict_frozen_corpus_gate_is_green` present).
+> **kenfmt series P0/S/B1/B2/B3/B4/C ALL LANDED — DONE.** **C WP close pending 3
+> Language retros** (requested `evt_2vnasc8t546nm`). 🧊 **FREEZE CLOSED** (fleet
+> announce `evt_2c67nbxj09g6p`). **I-1 rebase greenlit to Runtime**
+> (`evt_3z4mbqrk5px9`, Path B, onto `10e453aa`). §5.2 + Program II reopened. Tracker (steward/work commits ahead of main) bundles into the I-1
+> publish. Carries folded
+> into C frame: task #44 `token_text`↔B2 dedup; empty-fence first-pass test;
+> `format.rs` re-lex note. Task #43 record-surface WP stays separate (post-C).
+> **On C merge: reopen §5.2 + Program II (catalog-closure) lanes.**
 >
 > **② Ken CLI Program I — host-ABI/effect/capability contract PUBLISHED ✅**
 > `origin/main @ 50d187bb` (PR #598, doc-only; Architect design ruling
@@ -39,13 +169,27 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > Reflect-don't-extend: more constructors on the existing ITree/Coproduct spine +
 > more `run_io` arms + a runner that stops guessing entrypoint/result-shape. Zero
 > TCB delta, no new kernel rules, no second effect system. **Decomposition final**
-> (I-1..I-7 + §5.1/§5.2 enclave prereqs; see work-program doc §7). **ONE ready,
-> idle, catalog-disjoint lane KICKING now:** **I-1** entrypoint ABI + runner
-> (named `main`, `ProcessInput`, total `ExitCode`, `List Bytes` argv, `--` split,
-> delete `render_fs_result`) → **Runtime ring**. Frame:
-> `docs/program/wp/cli-i1-entrypoint-abi-runner.md` on
-> `wp/cli-i1-entrypoint-abi-runner` (off `origin/main @ 50d187bb`). Architect is
-> WP reviewer (owns the host-ABI contract), self-compacting at seam.
+ (I-1..I-7 + §5.1/§5.2 enclave prereqs; see work-program doc §7). **I-1
+> DESIGN-APPROVED, MERGE HELD BEHIND C (freeze collision) — 2026-07-13.** **I-1**
+> entrypoint ABI + runner (named `main`, `ProcessInput`, total `ExitCode`, `List
+> Bytes` argv, `--` split, delete `render_fs_result`) built by Runtime →
+> `wp/cli-i1-entrypoint-abi-runner @ e4fc652c` (linear off `96f5c45b`; Runtime QA
+> APPROVED `evt_550mcy7f1nsgc`; Architect-terminal DESIGN-APPROVED zero-TCB
+> `evt_3qx46eq8mj8wh`, merge decision `dec_2aj8vq586m14p`). **COLLISION:** my
+> "crates/-only, catalog-disjoint" kickoff premise was WRONG — the entrypoint-ABI
+> change rewrites every runnable example's `main`, i.e. **19 files INSIDE C's
+> frozen corpus** (3 `catalog/guide/*.ken.md` + all 16 `examples/rosetta/**`), and
+> those migrations are load-bearing for I-1's own `cargo test` gate (can't split
+> out). **STEWARD RULING = PATH B (hold I-1 behind C)** (`evt_5xjsw09hkte14`):
+> honors operator "no catalog changes in flight during C"; puts the one
+> unavoidable rebase on the less-delicate WP (I-1 re-fmt, not C's soundness-gate
+> regen); keeps freeze whole. **On C merge:** Runtime rebases I-1 onto reformatted
+> main → re-`ken fmt` the 19 touched files (satisfy C's strict gate) → re-run
+> locked build/test on rebased SHA → re-`git_request`; Architect verdict carries
+> verbatim (mechanical re-fmt doesn't re-open review); `dec_2aj8vq586m14p` stays
+> open. I-2 (Console) follows I-1 in Runtime ring. Frame:
+> `docs/program/wp/cli-i1-entrypoint-abi-runner.md`. Architect is WP reviewer
+> (owns the host-ABI contract).
 > **§5.2 safe-Bytes sigs — HELD (revised):** it edits
 > `catalog/packages/Capability/Parsing/Parsing.ken.md` (uses `bytes_decode/at/
 > slice`, incl. a round-trip law at line 53), so it collides with the kenfmt-C
