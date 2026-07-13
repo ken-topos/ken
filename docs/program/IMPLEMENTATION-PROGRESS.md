@@ -279,6 +279,42 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > budget-neutral — #37 keeps `use` RESERVED); route ADR-0016 self-correct into
 > Architect I-4 pickup + FYI Pat. **NEXT:** publish #37; verify A+E drops → kick I-4
 > + enclave lane; finalize batch-3 frame; #60 substrate + Foundation still queued.
+> **★ UPDATE ~21:0x — TWO LANES KICKED; THREE units busy.** **(A) #37** publishing
+> (PR #613, CI-poll). **(B) ENCLAVE #39+#36 KICKED** (`evt_43xwx82n6b3rp`, spec-
+> leader roused; compacted 3/3) — frame `wp/namespace-export-spec-conformance @
+> 92654e08`; building spec §3.2/§3.3/§4/§32/§31/§5.5.1 + 9 conformance fixtures;
+> CV casts spec vote; #39+#36 tasks in_progress. **(C) ARCHITECT I-4 KICKED**
+> (`evt_4rzmzcx2s02c0`, roused; compacted ctx 0%) — frame `wp/i4-program-caps-
+> design @ 7fc4c35a`; design v1 ProgramCaps; **launch-grant = operator fork (lay
+> out, don't pick)**; folded in the ADR-0016 **+1-keyword self-correct** (export
+> is NET +1, not budget-neutral — #37 keeps `use` reserved). **(D) batch-3 frame
+> DRAFTED** `docs/program/wp/kenfmt-vertical-balance.md` — needs 2 CORRECTIONS
+> before kick: (i) **gates ALREADY ARMED on main** (subagent read the STALE steward
+> working-tree — steward/work is pre-batch-2a; `git grep 'gate paused' origin/main`
+> EMPTY, gates green; batch-3 REGENERATES the fixture, doesn't un-pause); (ii)
+> **budget = `CANONICAL_WIDTH = 96` in layout.rs:12** (operator raised 88→96 on
+> 2026-07-13; frame doesn't touch it — break-shape only). Change-sites: `grouped_token_slice:597` (fill
+> flavor) + `doc_token_slice:936`/class-field-bypass (mid-atom); `print_application`
+> = correct model. QUEUED behind #37. **NEXT:** #37 merge → relay+close → Language
+> Handoff-Gate → kick batch-3 (after frame corrections); FYI Pat (+1 keyword, 88 vs
+> 96); enclave/I-4 handbacks → review/publish/transcribe. Stale-working-tree lesson
+> reinforced ([[check-main-via-git-object-store-not-find]]).
+> **★ CHECKPOINT ~21:1x — #37 MERGED `origin/main @ f811a93a` (PR #613)**, relayed
+> `evt_45qcgyzegm2ee` + #37 retros requested → CLOSE-ON-RETROS. batch-3 frame
+> CORRECTED (gates already-armed on main; base→f811a93a) + committed. **Steward
+> self-compacting at 33% (clean seam).** **ON RESUME — 3 lanes in flight (event-
+> driven, no poll):** (1) **enclave #39+#36** building (spec-leader/author/CV all
+> "Working"; frame `wp/namespace-export-spec-conformance @ 92654e08`) → handback →
+> honesty-gate + CV spec-vote → publish. (2) **Architect I-4** designing ("Orbiting
+> high-effort"; frame `wp/i4-program-caps-design @ 7fc4c35a`) → handback → transcribe
+> ruling, frame Runtime build, **surface launch-grant fork to Pat**, publish the
+> ADR-0016 +1-keyword self-correct. (3) **#37 retros** → close #37 → Handoff-Gate
+> Language → place batch-3 frame on wp branch off main → kick (two-stage review).
+> **FYI-PAT QUEUE (non-urgent):** `export` = +1 keyword (not budget-neutral).
+> [RESOLVED 07-13: budget FYI moot — operator set `CANONICAL_WIDTH = 96`; sweeping
+> stale 88→96 in all owned docs.] **IDLE/
+> QUEUED:** #60 substrate (Architect after I-4), Foundation/Runtime/Kernel/Verify
+> (gated on designs). Heartbeat catches all handbacks.
 > **★ Lane B PREMISE CORRECTED (scope-map subagent, 2026-07-13) — the "stale ADR-
 > 0015 branches need re-derivation" premise was WRONG.** The branches `wp/adr0015-
 > remove-use-open{,-spec,-conformance}` are **abandoned duplicates whose content
@@ -860,12 +896,12 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > that are genuinely corpus-disjoint still run alongside. **★ C BLOCKED at
 > Architect gate 2026-07-13** (`evt_6zk2xfma2y8mc`, candidate `3d2c2f27`): reformat
 > is AST-sound but **§1d-NONCONFORMANT** — the pre-existing **B3 signature-layout
-> engine defect** breaks wide (>88-col) declaration signatures one-token-per-line
+> engine defect** breaks wide (>96-col) declaration signatures one-token-per-line
 > at **column 0** (zero continuation indent + binder-internal over-break). ~16,145
 > malformed lines across 9 catalog packages — *that's* the +50k diff (Map.ken.md
 > 6,710→31,452 lines). Every soundness gate went green because they check *meaning*
 > not *layout* (newlines are whitespace → identical AST; mangled output is a fixed
-> point; each line <88 col). **Defect is in `layout.rs` telescope nesting, NOT C's
+> point; each line <96 col). **Defect is in `layout.rs` telescope nesting, NOT C's
 > code** (C's layout delta is only the task#44 glyph fold). **Fix (Language
 > routing): (1) B3 engine — nest param telescope 1 level, sub-group each binder so
 > fitting ones stay flat; (2) regenerate whole-corpus reformat off fixed engine
@@ -974,7 +1010,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > reachability-swept FMT9 as an independent source (surfaced+closed 2 more
 > discriminators: forced-broken multi-arg match-arm bodies, duplicate
 > clarity-parens); record RED-UNTIL(record-surface+B3), no fabricated
-> `FormattableSource`; whole-catalog parse/idempotence/88-col + literal locked CI
+> `FormattableSource`; whole-catalog parse/idempotence/96-col + literal locked CI
 > green on the exact SHA. Leader posted Architect-terminal (`evt_2jvxwt9epxvj6`);
 > **Architect actively reviewing** (parens = the sharp edge). Steward flow-nudge
 > `evt_4dcdvn8zmnwgw` (redundant — was already Working; narrow tail hid the
@@ -1203,7 +1239,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >       Only N5 (`pub use`, gated on MRES-9) remains. **B3 CO-RELEASE LAUNCHED** (dual Handoff-Gate done, all 6 compacted @
 >       d6acd6fe WIDE-verified): **B3 build → Language** (`evt_4ermmz5k70g2k`,
 >       leader roused) — Wadler/Leijen Doc printer over B1/B2, gate=parse-preserv
->       +idempotence+88col read-only, parens=highest-risk; **CV oracle companion
+>       +idempotence+96col read-only, parens=highest-risk; **CV oracle companion
 >       → enclave** (`evt_tbsr8smgt90q`, spec-leader+CV roused) — per-axis
 >       both-orientation oracles extending seed-canonical-format.md, DERIVED FROM
 >       §1d not printer emission (anti green-vs-green). Both Architect-terminal.
@@ -1259,7 +1295,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > comment can't flatten); **NO spec sub-lane** (§1d is the home) but a **CV
 > conformance companion** = per-axis both-orientation oracles extending
 > seed-canonical-format.md. Gate TRANSITIONS: not byte-round-trip (B1) but
-> **parse-preservation + idempotence + 88-col width**, whole-catalog read-only
+> **parse-preservation + idempotence + 96-col width**, whole-catalog read-only
 > (reformat = capstone C). Parens = highest-risk (only token-content change →
 > parse-preservation + elab backstop). Owner Language (build) + CV (oracles);
 > Architect-terminal. Task #41. **Queues on Language behind N4 Lane B + N3 Lane B**
