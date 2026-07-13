@@ -241,6 +241,44 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > conformance WP frame (parallel); (3) Handoff-Gate compact Architect → kick I-4;
 > (4) Handoff-Gate compact enclave → kick combined lane. **#37 building** —
 > language-implementer picked up (`evt_6sm1zdkk1gvhz`), auditing lexer/parser seams.
+> **★ IN FLIGHT (2026-07-13 ~20:4x) — resume here.** (1) **ADR doc-only publish**
+> PR #612 `28cc3836` (2 ADRs + tracker; honesty-gate EMPTY/0-merge) pid 3287394 —
+> on merge → confirm ADRs on main + relay. (2) **Subagents drafting frames**
+> (parallel): Runtime I-4 design brief → `docs/program/wp/i4-program-caps-design.md`;
+> combined #39+#36 enclave spec/conformance WP → `docs/program/wp/namespace-export-
+> spec-conformance.md`. (3) **#37** building (Language). **ON EACH EVENT:** ADR
+> merge → confirm+relay, THEN Handoff-Gate compact Architect (ADRs banked, reset
+> safe) → kick I-4 (once brief finalized); I-4 brief ready → review/finalize/place
+> on wp branch; enclave frame ready → review/finalize → Handoff-Gate compact spec
+> enclave (spec-leader+spec-author+CV) → kick combined lane; #37 SHA → QA →
+> honesty-gate → publish → close. Hold Architect compaction until ADR merge
+> confirms (auto-preserve is the net, publish-first is clean).
+> **★ CONSOLIDATED FRONTIER (2026-07-13 ~20:5x) — RESUME HERE.** `origin/main @
+> 5a28ecfd` (namespace ADRs merged, PR #612). **(A) #37 PUBLISHING** — built fast,
+> QA-approved (`26fb4245`, es3_modules 9/9 + dotted 7/7) + Architect terminal
+> APPROVE; honesty-gate CLEAN (7 elaborator files + frame, forbidden EMPTY); bundled
+> `d8551532` (+tracker) → scripted publisher (CI-poll) → relay + close #37. **(B)
+> ARCHITECT + ENCLAVE Handoff-Gate compaction IN FLIGHT** (pid 3293880; architect +
+> spec-leader/spec-author/CV reset to main + /compact; preserved: architect-work
+> `4824b211`, cp0-safe-bytes-spec/conformance leftovers) → verify drops WIDE → kick.
+> **(C) I-4 brief DRAFTED** `docs/program/wp/i4-program-caps-design.md` (I-4 =
+> Program-I contract §7 ProgramCaps mint/threading, S, "confirm/pin" not derive;
+> pattern Architect-rules→Steward-transcribes; **flags operator fork = launch-grant
+> surface**) → review/finalize/place on wp branch → kick Architect post-compact.
+> **(D) ENCLAVE combined #39+#36 frame DRAFTED** `docs/program/wp/namespace-export-
+> spec-conformance.md` (one lane confirmed; 6 spec edits §3.2/§3.3/§4/§32/§31/§5.5.1
+> + 9 conformance fixtures; §5.5.1 flip is TWO-SITE :606-610 + :616-619/§5.7 reconcile;
+> §31 `use` straggler folded; CV casts spec vote) → review/finalize/place → kick
+> enclave post-compact. **(E) kenfmt batch-3 QUEUED behind #37 (operator-directed)**
+> — batch-2a over-width splay (~1,200 regions, my AC5 missed it, gate froze it);
+> fix = consistent-break vertical balance (split high, +2 indent, no mid-atom
+> break) + AUTOMATED balance gate; Pat confirmed seq (#37→batch-3) + gate; frame
+> drafting (subagent a9b7dbae) → `docs/program/wp/kenfmt-vertical-balance.md`; TWO-
+> STAGE review. Lesson recorded [[splay-gate-only-as-good-as-its-detector-verify-
+> the-check]]. **(F) ADR wording nit:** Architect flagged `export`= +1 keyword (NOT
+> budget-neutral — #37 keeps `use` RESERVED); route ADR-0016 self-correct into
+> Architect I-4 pickup + FYI Pat. **NEXT:** publish #37; verify A+E drops → kick I-4
+> + enclave lane; finalize batch-3 frame; #60 substrate + Foundation still queued.
 > **★ Lane B PREMISE CORRECTED (scope-map subagent, 2026-07-13) — the "stale ADR-
 > 0015 branches need re-derivation" premise was WRONG.** The branches `wp/adr0015-
 > remove-use-open{,-spec,-conformance}` are **abandoned duplicates whose content
