@@ -8,12 +8,11 @@
 ## 1. Compilation units and declarations
 
 ```
-unit   ::= boundary_hdr? module_hdr? import* decl*
+unit   ::= boundary_hdr? import* decl*
 boundary_hdr ::= program_hdr | package_hdr
 program_hdr ::= "program" admits_clause
 package_hdr ::= "package" admits_clause?
 admits_clause ::= "admits" ModPath ("," ModPath)*
-module_hdr ::= "module" ModPath "{" (decl ";"?)* "}"  -- or a file-level implicit module
 import ::= "import" ModPath ("as" ConId)?
                           ("(" import_item ("," import_item)* ")")?
 import_item ::= name | name "as" rename
@@ -27,6 +26,7 @@ decl ::=
   | "record" ConId tyvar* "{" field (";" field)* "}" derive?  -- product
   | "data" ConId tyvar* "=" simple_ctor ("|" simple_ctor)* derive?  -- simple sum sugar
   | "data" ConId data_param* ":" data_family data_block derive?  -- inductive family
+  | "module" ModPath "{" (decl ";"?)* "}"
   | "class" ConId binder* "{" class_field (";" class_field)* "}"  -- typeclass (33 §5, ADR 0008)
   | "instance" ConId atype* constraint_clause? "{" field_assign (";" field_assign)* "}"  -- instance (33 §5, §5.4)
   | "prop" ConId tyvar* binder* ":" type prop_block?  -- proposition family / claim shape
