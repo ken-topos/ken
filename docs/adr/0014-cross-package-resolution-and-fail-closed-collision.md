@@ -1,12 +1,19 @@
 # ADR 0014 — Cross-package module resolution (F3b) and fail-closed single-namespace collision
 
 - **Status:** Accepted (design). Fork review complete 2026-07-12 (incl.
-  MRES-4a/b/c/d/e and the keyword `admits`); the operator extended MRES-4 to a
-  `package` abstraction parallel to `program` (2026-07-12), and the `package`
-  sub-round **PKG-1..4 is now resolved** (2026-07-12) — all folded below.
-  Round 1 (MRES-5/7/8) is settled and building; see Consequences.
-- **Date:** 2026-07-12 (framed); 2026-07-12 (operator review folded).
-- **Deciders:** the operator (fork review 2026-07-12); framed by the Architect.
+  MRES-4a/b/c/d/e and the keyword `admits`); the operator extended MRES-4 to
+  a `package` abstraction parallel to `program` (2026-07-12), and the
+  `package` sub-round **PKG-1..4 is now resolved** (2026-07-12) — all folded
+  below. Round 1 (MRES-5/7/8) is settled and building; see Consequences.
+  **Namespace-remainder design round folded (Architect, 2026-07-13):** the
+  **#39 MRES-6 general-clash amendment** (import×import + import×prelude,
+  under the MRES-6 entry) and the **#36/N5 MRES-9 status flip** (re-export
+  form designed in ADR 0016 — now *Accepted*; operator chose Option B, the
+  dedicated `export` declaration, 2026-07-13) are below.
+- **Date:** 2026-07-12 (framed); 2026-07-12 (operator review folded);
+  2026-07-13 (#39/#36 namespace-remainder design round folded).
+- **Deciders:** the operator (fork review 2026-07-12); framed by the
+  Architect.
 - **Relates to:** ADR 0008 (typeclass/instance coherence), ADR 0011
   (platform-dependent code / manifest ABI), spec `30-surface/33 §3`–`§5`,
   `docs/program/wp/catalog-taxonomy-paths-imports.md` (the addressing WP).
@@ -681,6 +688,89 @@ below).**
   slice**
   and rides the loader/import round, **not** round one (see Consequences).
 
+#### MRES-6 general-clash amendment (#39 — Architect, 2026-07-13)
+
+**The gap this closes.** MRES-6 landed as N3, and spec §3.3 now specs exactly
+**two** of the four unqualified-name clash pairings: **local×import** (the
+"Top-level local/import clash" bullet) and **local×prelude** (the "Prelude
+floor" bullet). It is **silent on import×import and import×prelude** — two
+selective imports binding one unqualified name to different declarations
+(`import M (foo)` + `import N (foo)`), or a selective import bringing a name
+that collides with a prelude name (`import M (map)`). With `use M` retired
+(ADR 0015) these are the *only* remaining ways two imports, or an import and
+the prelude, can contend for one unqualified name — and both currently fall
+through §3.3 unspecified. #39 closes exactly that gap; it is a **contained
+follow-on to landed N3**, not a re-derivation.
+
+**The general rule (order-independent, fail-closed).** Unify all four pairings
+under one rule rather than four special cases:
+
+> When **more than one** of {top-level local definition, selective/renamed
+> import, prelude} binds the same unqualified name **to distinct canonical
+> declarations**, resolution yields **`AmbiguousReference`** — **order-
+> independent** and **fail-closed** (raised whether or not any expression
+> references the name).
+
+This subsumes the two landed pairings (local×import, local×prelude) and the
+two newly-closed ones:
+
+- **import×import** — two selective/renamed imports bind one unqualified name
+  to two different declarations. Newly closed. (Previously reachable only via
+  `use`, now retired; the selective-import form makes it reachable again.)
+- **import×prelude** — a selective/renamed import binds a name that also names
+  a prelude declaration, to a *different* declaration. Newly closed.
+
+**Same-canonical-identity carve-out (load-bearing — the seam to #36/N5).** The
+rule keys on **distinct canonical declarations**, not on surface spelling.
+Multiple bindings of one unqualified name that all resolve to the **same**
+canonical identity are **not** a clash. This (a) makes a redundant duplicate
+selective import idempotent rather than an error, and (b) is the exact seam
+through which **re-export (MRES-9 / ADR 0016) stays non-ambiguous**: a name
+reaching a scope by two paths to one identity does not trip the rule, while
+two genuinely different declarations under one name still do. This preserves
+the original MRES-6 "must-qualify-unless-same-decl;
+re-export-is-not-ambiguous" intent and coheres #39 with #36/N5 by
+construction.
+
+**Disambiguation escape hatches (unchanged levers, generalized).** The prelude
+is the immovable **primitive floor** (MRES-10) — it is never `import`ed, so it
+can be neither dropped nor renamed at an import site. Among the movable parties
+the author leaves **exactly one** binding for the unqualified name:
+
+- **Qualified / aliased access** — `M.name` (or `N.name` under `import M as N`)
+  is never in the unqualified clash set; switching a colliding selective import
+  to qualified/aliased form resolves the clash.
+- **Selective drop or per-name rename** — `import M (…)` omitting the name, or
+  `import M (foo as myFoo)`, leaves a single surviving unqualified binding.
+- **Rename the local definition** — for any clash the prelude is party to
+  (local×prelude, and the resolution side of import×prelude where the prelude
+  must win), the non-prelude side gives way: a local is renamed; a colliding
+  import item is dropped or renamed. There is **no** prelude-exclusion form.
+
+**Scope of the reversal (unchanged from N3).** This governs **top-level
+definition / import / prelude** clashes only. **Ordinary lexical shadowing is
+untouched** — a `λ`, `let`, parameter, or pattern binder in a narrower scope
+still shadows an outer or imported name (innermost wins); that is the term
+language, orthogonal to the module-level clash rule (§3.3 "Narrower lexical
+shadowing").
+
+**Named follow-ons (this amendment does NOT author them).**
+
+- **Spec enclave — §3.3 edit.** Generalize the two currently-specified
+  pairings to the single four-pairing rule above, and **encode the
+  same-canonical-identity carve-out** (the clash keys on distinct
+  declarations). Normative §3.3 change; the enclave elaborates the text.
+- **Conformance WP.** Add rejection fixtures for **import×import** and
+  **import×prelude** clashes, plus a **positive** same-identity **non-clash**
+  fixture (a redundant duplicate binding of one identity is accepted). Assert
+  the `AmbiguousReference` variant and its order-independence (latent, unused
+  clash still rejects).
+- **Language resolver build.** Extend the clash detection in the import-binding
+  path (today `bind_import`, `modules.rs`) to fire on import×import and
+  import×prelude, **keyed on canonical identity** so a same-identity re-export
+  or redundant import does not trip it. Rides the loader/import round with the
+  rest of MRES-6.
+
 ### MRES-7 — class/ctor cross-namespace collision (`class Eq` vs ctor `Eq`)
 - **Fork.** Under Ken's single-flat-namespace (types-are-terms, the D8-③
   ruling), `class Eq` and constructor `Eq` genuinely collide. Does fail-closed
@@ -726,6 +816,28 @@ below).**
   when built, re-export also carries the re-exported name's **instance** surface
   into an admitting consumer's direct-use set (MRES-4d) — the same lever governs
   public names and public instances.
+- **STATUS FLIP (#36/N5 — Architect, 2026-07-13): form now DESIGNED (ADR
+  0016).** The post-loader round has been reached, so the re-export form is
+  designed in **[ADR 0016](0016-re-export-surface-and-canonical-identity.md)**.
+  Decided there (Architect design authority): the **canonical-identity
+  invariant** (`defined-at` owns the one `GlobalId`; `re-exported-as`
+  republishes it under a possibly-renamed surface name, minting no second
+  identity, invariant under renaming and transitive hops); **collision
+  behaviour keyed on identity** (same-identity-via-two-paths is not a clash —
+  the seam to the #39 general-clash rule above; two identities under one
+  surface name is a re-export-site error); and the concrete **MRES-4d
+  instance-surface carry** mechanism (re-export is the one lever governing
+  both the public name and public instance surface, computed at the §5.5.1
+  admission boundary, zero TCB). **MRES-4d and the canonical-identity
+  invariant are hereby recorded as now-designed.** **Surface spelling DECIDED
+  (operator, 2026-07-13): Option B — the dedicated `export` declaration**
+  (`export M (foo, Bar)`, `export M (foo as bar)`, `export foo, Bar` for names
+  already in scope). `pub use` was off the table (ADR 0015 retired `use`);
+  options A (`pub import`) and C (per-item `pub`) were considered and not taken.
+  **ADR 0016 is now *Accepted*** with the resolved Option B semantics (the
+  import/export split, the facade `export M (…)` vs in-scope `export foo` forms,
+  re-export-site collision) and the pinned `export_decl` grammar; its
+  spec/conformance/build follow-ons are unblocked.
 
 ### MRES-10 — Cross-package + prelude shadowing precedence
 - **Fork.** §3.3 specs intra-unit local-over-imported; cross-package + prelude

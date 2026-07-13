@@ -158,6 +158,89 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > git_request in (`evt_5wav3m6hn1svg`). → bundle tracker-sync commit (§2a) →
 > scripted publisher on the bundled SHA (CI-polled) → relay merge → close #62+#61.
 > **This ends the kenfmt line.** Lane B (Architect namespace) still drafting.
+> **★ batch-2a MERGED ✅ `origin/main @ 5efa317b`** (PR #611, checks passed,
+> squash `587199b1`). layout.rs +93, gate tests `#[ignore]` removed, Map
+> reformatted, tracker bundled; `git grep 'gate paused'` under crates EMPTY — the
+> **3 strict gates re-armed + green in CI.** Merge relayed `evt_4zn4qk9bw4p85`.
+> **#62 + #61 CLOSE-ON-RETROS** (requested #62 §10 retros from language-leader);
+> kenfmt layout line DONE (batch-1 horizontal-first + batch-2a recursive nested).
+> **★ Lane B DELIVERED + PAT DECIDED (2026-07-13).** Architect handed namespace
+> design `architect/work @ dba7131f` (2 ADR files only; `ARCHITECT-STATE.md`/
+> `f4095502` = local scratch, NOT routed to main — verified). **#39** = MRES-6
+> general-clash amendment: one order-independent fail-closed 4-pairing rule
+> (local/import/prelude × each other) **keyed on canonical identity**, with the
+> same-identity carve-out that's the seam keeping re-export non-ambiguous.
+> **#36/N5** = new ADR 0016 (semantics decided: canonical-identity invariant,
+> identity-keyed collision, MRES-4d instance carry, zero TCB; spelling deferred).
+> **PAT PICKS:** (1) re-export spelling = **OPTION B, dedicated `export` decl**
+> (`export M (foo, Bar)` / `export M (foo as bar)` / `export foo, Bar`; new
+> `export` keyword, budget-neutral); (2) Architect next design lane = **Runtime
+> I-4 (ProgramCaps)** (Foundation #60 follows). Relayed B to Architect
+> `evt_5was34gc3t61g` → he flips ADR 0016 → Accepted, pins §3 grammar branch B,
+> commits to architect/work → I frame #36 follow-ons off the Accepted ADR.
+> **NEXT (Steward):** (a) frame **#39 enclave follow-on** NOW (spelling-independent
+> — §3.3 four-pairing + carve-out edit + conformance import×import/import×prelude
+> reject fixtures + same-identity non-clash positive) → Handoff-Gate compact spec
+> enclave → kick; (b) on Architect's ADR-0016-Accepted commit → frame #36 spec/
+> conformance/build follow-ons (grammar B) + Handoff-Gate + kick I-4 design;
+> (c) review+commit **#37 frame** (`docs/program/wp/adr0015-retire-use-keyword.md`,
+> subagent-drafted: reserved-with-diagnostic `use`→KwUse err, S; catalog CLEAN;
+> tests need genuine migration not just deletion) → Language next lane after #62
+> retros + Handoff-Gate. **SPEC STRAGGLER (subagent found):** `spec/30-surface/
+> 31-lexical.md:352` keyword list still lists `use` (retirement para :358-364
+> omits it) → fold into the enclave §3.3 lane or a small enclave follow-up.
+> **THREE idle rings now unblockable:** enclave (#39 follow-on, ready), Runtime
+> (I-4, after Architect designs), Foundation (#60, after Runtime). Window filling.
+> **★ ENCLAVE SEQUENCING DECISION (deliberate, not idle-timidity):** BUNDLE #39 +
+> #36 into ONE enclave spec/conformance lane rather than kick #39 now. Both edit
+> §3.3's clash rule — #39's same-identity carve-out is the exact seam #36 re-export
+> relies on — so a single §3.3 pass (encode 4-pairing rule + carve-out + re-export
+> participation + §3.2 `export` form + §4 interface + §32 grammar B) avoids
+> double-churn and a wasted re-compaction. #39 is ready now but #36 needs the
+> Architect's ADR-0016-Accepted commit (grammar B pinned) — IMMINENT (I just
+> relayed B). The short wait buys a coherent combined lane; kicking #39-then-
+> interrupting-for-#36 would burn more (churn + extra compaction). **On Architect's
+> Accepted-ADR-0016 commit → frame the combined enclave lane (fold in §31-lexical
+> `use` straggler) → Handoff-Gate compact spec enclave → kick.** #37 frame
+> reviewed + committed to steward/work (shovel-ready, base updates to current main
+> at kick). Event-driven watch: (1) Architect ADR-0016-Accepted → enclave lane +
+> I-4 frame; (2) Language #62 retros → close #62/#61 + Handoff-Gate + kick #37.
+> **★ #62 + #61 CLOSED ✅ (retros in: leader `evt_475083x3ce800`, QA
+> `evt_6w8ambs8bjb8t`, impl `evt_5p9bwqydhrr88`).** kenfmt layout line COMPLETE.
+> #37 frame placed `wp/adr0015-retire-use-keyword @ 76016c20` (frame-only off
+> 5efa317b). **Language Handoff-Gate compaction IN FLIGHT** (pid 3279719; ring
+> quiescent + retros in, 3 worktrees reset to origin/main + /compact sent) →
+> verify drops WIDE (tail-18) → kick #37. **REMAINING EVENT-DRIVEN:** (1) Language
+> drops verified → kick #37; (2) Architect ADR-0016-Accepted → frame combined
+> #39+#36 enclave lane (+ §31-lexical straggler) + Handoff-Gate enclave + kick,
+> then frame I-4 + Handoff-Gate Architect + kick I-4 design.
+> **★ #37 KICKED ✅ (2026-07-13).** Language ring compacted-verified (all 3
+> "Context compacted", drops WIDE), Handoff-Gate complete. Kickoff
+> `evt_6pvhsxd6tre13`, leader roused. Frame `wp/adr0015-retire-use-keyword @
+> 76016c20`. Task #37 in_progress — Language building the `use`-keyword retirement
+> (reserved-with-diagnostic, targeted-only) → hand me SHA → QA → honesty-gate →
+> publish → close. **Architect: ADR-0016-Accepted NOT yet landed** (architect/work
+> still @ dba7131f) — enclave combined #39+#36 lane + I-4 frame HOLD for it.
+> **★ NAMESPACE ROUND FINALIZED ✅ (Architect `789dfa9b`, 2026-07-13).** ADR 0016
+> flipped Proposed→ACCEPTED with **Option B** (`export` decl); ADR 0014 MRES-9 flip
+> + top note updated. Resolved Option-B semantics: `export M (…)` = pure facade
+> republish (no prior import needed, does NOT bind into body scope); `export foo,
+> Bar` = republish names already in scope (pair `import M (foo)` + `export foo`);
+> import→body-scope / export→interface split is load-bearing; rename native both
+> forms; `export foo` of a local == `pub` on the def; re-export-site collision =
+> §1.2 identity-keyed. §3 pinned `export_decl ::= "export" ( module_path
+> selection_list | export_item_list )`, reserve `export`. **ADRs PUBLISHING to
+> main** (doc-only): architect/work is base-431e36ea STALE (behind main 5efa317b),
+> so extracted the 2 ADR blobs onto current main via plumbing → `7c64da2f` (diff =
+> ONLY the 2 ADR files) → bundle tracker → doc-only publish. **MUST bank ADRs
+> before Handoff-Gate-compacting Architect** (reset would discard architect/work's
+> ahead commits; auto-preserved but publish-first is clean). **Architect at CLEAN
+> SEAM, ready for Handoff-Gate → Runtime I-4 (ProgramCaps) design.** MRES-6→general
+> rule carry DISCHARGED by #39. **NEXT (Steward, this turn):** (1) publish ADRs;
+> (2) subagents drafting Runtime-I-4 design brief + combined #39+#36 enclave spec/
+> conformance WP frame (parallel); (3) Handoff-Gate compact Architect → kick I-4;
+> (4) Handoff-Gate compact enclave → kick combined lane. **#37 building** —
+> language-implementer picked up (`evt_6sm1zdkk1gvhz`), auditing lexer/parser seams.
 > **★ Lane B PREMISE CORRECTED (scope-map subagent, 2026-07-13) — the "stale ADR-
 > 0015 branches need re-derivation" premise was WRONG.** The branches `wp/adr0015-
 > remove-use-open{,-spec,-conformance}` are **abandoned duplicates whose content
