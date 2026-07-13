@@ -40,6 +40,11 @@ fn r1_signature_fit_and_split_ladder_are_exact() {
         "fn wide (x : Nat) : SomeLongReturnConstructorName AlphaArgumentName BetaArgumentName GammaArgumentName DeltaArgumentName = x",
         "fn wide\n      (x : Nat)\n    : SomeLongReturnConstructorName\n      AlphaArgumentName\n      BetaArgumentName\n      GammaArgumentName\n      DeltaArgumentName =\n  x\n",
     );
+
+    check(
+        "proof transitive_witness for leq_nat (x : Nat) : (y : Nat) -> Equal Bool (leq_nat x y) True -> (z : Nat) -> Equal Bool (leq_nat y z) True -> Equal Bool (leq_nat x z) True = x",
+        "proof transitive_witness for leq_nat\n      (x : Nat)\n    : (y : Nat)\n      → Equal Bool (leq_nat x y) True\n      → (z : Nat)\n      → Equal Bool (leq_nat y z) True\n      → Equal Bool (leq_nat x z) True =\n  x\n",
+    );
 }
 
 #[test]

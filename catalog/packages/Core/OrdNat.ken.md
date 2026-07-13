@@ -61,9 +61,11 @@ proof refl for leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
 
 proof trans for leq_nat
       (x : Nat)
-    : (y : Nat) → (z : Nat) → Equal Bool (leq_nat x y) True → Equal Bool (leq_nat y z) True
-      → Equal
-      Bool (leq_nat x z) True =
+    : (y : Nat)
+      → (z : Nat)
+      → Equal Bool (leq_nat x y) True
+      → Equal Bool (leq_nat y z) True
+      → Equal Bool (leq_nat x z) True =
   match x {
     Zero ↦ λy. λz. λp. λq. Proved;
     Suc x2 ↦
@@ -81,11 +83,10 @@ proof trans for leq_nat
 
 proof antisym for leq_nat
       (x : Nat)
-    : (y : Nat) → Equal Bool (leq_nat x y) True → Equal Bool (leq_nat y x) True
-      → Equal
-      Nat
-      x
-      y =
+    : (y : Nat)
+      → Equal Bool (leq_nat x y) True
+      → Equal Bool (leq_nat y x) True
+      → Equal Nat x y =
   match x {
     Zero ↦
       λy.

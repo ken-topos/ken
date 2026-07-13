@@ -65,6 +65,22 @@ body (+2) — the signature and body are always visually separable.
   ```
   (`:` at +4; the split return-type lines at +6.)
 
+  **R1a · Split return type — split at arrows only; short operands stay inline
+  (operator refinement, 2026-07-13).** When the return type is an **arrow chain**
+  (`A → B → C → …`) that must split, split **only at the `→` arrows** — put each
+  arrow's operand on its own continuation line (at +6). Each operand that **fits
+  the width budget as a single application stays on ONE line**; **never splay a
+  short application one-token-per-line.** Only break an operand further when that
+  operand *itself* exceeds the budget. Example (operator):
+  ```
+  proof antisym for leq_nat
+        (x : Nat)
+      : (y : Nat) → Equal Bool (leq_nat x y) True → Equal Bool (leq_nat y x) True
+        → Equal Nat x y =                 -- NOT  → Equal \n Nat \n x \n y
+  ```
+  (`Equal Nat x y` fits, so it stays inline; the chain broke at the last `→`
+  only. Same for `→ Equal Bool (leq_nat x z) True` — one line, not splayed.)
+
 **R2 · Proof references are atomic.** `proof <name> for <target>` **never
 splits** — always one horizontal unit, even inside a λ body:
   ```
@@ -111,7 +127,11 @@ inline when short.
   reviews that diff before any catalog-wide reformat.
 - **AC3** — golden tests pin each rule: R1 signature ladder (fits / params-split),
   R2 proof-atomic, R3 short-paren-inline, R4 short-data-inline, R5 small-expr-
-  inline; locked workspace green; `ken fmt` idempotent (format-of-format = format).
+  inline; `ken fmt` idempotent (format-of-format = format). **Validate LOCALLY
+  targeted only** — the formatter/layout goldens + affected crate via
+  `scripts/ken-cargo -p <crate>` / `--test <name>` (operator hard rule,
+  COORDINATION §12: NO local `cargo test --workspace` — the box OOMs). The
+  full-workspace `--locked` gate is **CI's** job; the publisher polls it at merge.
 - **AC4** — **semantics-preserving:** a round-trip corpus check that the token
   stream is unchanged by formatting (only whitespace/layout differs) — the hard
   invariant, mechanically gated.

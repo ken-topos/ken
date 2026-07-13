@@ -616,14 +616,59 @@ impl<'a> LayoutPrinter<'a> {
             return self.grouped_token_slice(indices);
         }
         let boundary = self.token_boundary(indices[0], indices[1], Doc::text(" "));
+        let continuation = if matches!(self.source.tokens()[indices[0]].kind, Token::Colon) {
+            self.print_return_type(&indices[1..])
+        } else {
+            self.grouped_token_slice(&indices[1..]).fit_group()
+        };
         Doc::concat([
             Doc::text(self.token_text(indices[0])),
             boundary,
-            self.grouped_token_slice(&indices[1..])
-                .fit_group()
-                .nest(INDENT_WIDTH),
+            continuation.nest(INDENT_WIDTH),
         ])
         .fit_group()
+    }
+
+    /// Preserve arrow chains as the return type's outer break structure. When
+    /// the chain breaks, each arrow and its operand remain a locally fitted
+    /// unit; only an operand that is itself too wide may break internally.
+    fn print_return_type(&self, indices: &[usize]) -> Doc {
+        let mut starts = vec![0usize];
+        let mut paren_depth = 0usize;
+        let mut bracket_depth = 0usize;
+        let mut brace_depth = 0usize;
+        for (position, index) in indices.iter().copied().enumerate() {
+            let token = &self.source.tokens()[index].kind;
+            if matches!(token, Token::Arrow)
+                && paren_depth == 0
+                && bracket_depth == 0
+                && brace_depth == 0
+            {
+                starts.push(position);
+            }
+            match token {
+                Token::LParen => paren_depth += 1,
+                Token::RParen => paren_depth = paren_depth.saturating_sub(1),
+                Token::LBracket => bracket_depth += 1,
+                Token::RBracket => bracket_depth = bracket_depth.saturating_sub(1),
+                Token::LBrace => brace_depth += 1,
+                Token::RBrace => brace_depth = brace_depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        if starts.len() == 1 {
+            return self.grouped_token_slice(indices).fit_group();
+        }
+
+        let mut operands = Vec::new();
+        for (position, start) in starts.iter().copied().enumerate() {
+            let end = starts.get(position + 1).copied().unwrap_or(indices.len());
+            if position > 0 {
+                operands.push(self.token_boundary(indices[start - 1], indices[start], Doc::line()));
+            }
+            operands.push(self.grouped_token_slice(&indices[start..end]).fit_group());
+        }
+        Doc::concat(operands).fit_group()
     }
 
     fn print_token_decl_block(&self, decl: &Decl, span: &Span) -> Doc {
