@@ -537,13 +537,15 @@ does not preclude a genuine cross-package collision here.
 ## G. Program-header capability manifest (I-4 §C)
 
 These fixtures extend N4's anonymous `program` boundary with the capability
-manifest settled by the I-4 ruling. The selected source spelling is `caps`,
-with one family and authority per item: `caps FS AFull`. `caps` is a manifest
-noun and does not suggest an external grant counterparty; it is also distinct
-from expression-level `requires`. The grammar and spec artifact remain the
-authority for the production.
+manifest settled by the I-4 ruling. The selected source spelling is
+`capabilities`, with one family and authority per item:
+`capabilities FS AFull`. It declares source-owned authority and does not
+suggest an external grant counterparty; it is also distinct from
+expression-level `requires`. The grammar and spec artifact remain the authority
+for the production.
 
-The `admits` and `caps` clauses share a header but not a namespace or reader.
+The `admits` and `capabilities` clauses share a header but not a namespace or
+reader.
 The former supplies package paths to the instance-admission gate; the latter
 supplies effect-family authorities to the runner's capability mint. Harness
 field names for the two manifest projections are not pinned, but their values,
@@ -554,7 +556,7 @@ Each gate below therefore names its exact reachability precondition. A harness
 that directly constructs a boundary record, inserts a capability into an
 `ElabEnv`, or calls the raw I-3 producer does not satisfy any gate.
 
-### surface/modules/program-caps-clause-carries-declared-authority
+### surface/modules/program-capabilities-clause-carries-declared-authority
 
 - spec: I-4 §C frame deliverable 1 and the accepted I-4 ruling §C/A.2
 - fixture: elaborate this boundary and import prefix through the real unit
@@ -563,7 +565,7 @@ that directly constructs a boundary record, inserts a capability into an
   ```ken
   program
   admits P
-  caps FS AFull
+  capabilities FS AFull
 
   import P (Render, PItem)
   ```
@@ -601,7 +603,7 @@ that directly constructs a boundary record, inserts a capability into an
   control. The negative removes only this header line:
 
   ```ken
-  caps FS APartial
+  capabilities FS APartial
   ```
 
   It leaves `program`, `admits P`, the resolved typed wrapper, and the body
@@ -635,7 +637,7 @@ that directly constructs a boundary record, inserts a capability into an
   admits P
   ```
 
-  The unit performs no `FS` effect and contains no `caps` clause.
+  The unit performs no `FS` effect and contains no `capabilities` clause.
 - expect: instance search accepts and records `defining_package = P`, exactly
   as in the N4 admitted control. The separately projected capability manifest
   is empty. The program boundary does not infer `FS`, `APartial`, or `AFull`
@@ -659,7 +661,7 @@ that directly constructs a boundary record, inserts a capability into an
 
   ```ken
   program
-  caps FS AFull
+  capabilities FS AFull
   ```
 
   The positive body performs an `AFull` operation through the typed I-4 API and
@@ -720,7 +722,7 @@ that directly constructs a boundary record, inserts a capability into an
   provenance): `compiled-manifest-collision-names-both-packages` (**RED UNTIL
   the compiled-manifest/package-manager round**).
 - **I-4 §C** (program-header capability manifest, static family gate, and
-  orthogonality): `program-caps-clause-carries-declared-authority`,
+  orthogonality): `program-capabilities-clause-carries-declared-authority`,
   `fs-effect-without-capability-clause-is-ill-typed`,
   `admits-only-does-not-mint-capability`, and
   `capability-only-does-not-admit-instances` (parser / N4 / I-4 §B gates are
@@ -782,7 +784,8 @@ that directly constructs a boundary record, inserts a capability into an
 - **I-4 keeps admission and authority as orthogonal header projections.** The
   admits-only and capability-only cases are converse controls. Adding or
   removing `admits P` changes only the instance verdict; adding or removing
-  `caps FS a` changes only the capability binding and `ProgramCaps a`. A
+  `capabilities FS a` changes only the capability binding and `ProgramCaps a`.
+  A
   package import never mints authority, and a capability family never admits a
   package. The combined-header case observes both readers in one source unit.
 - **Static absence and op-time insufficiency are different gates.** No `FS`

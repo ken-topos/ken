@@ -237,8 +237,9 @@ claim with no conformance case is a claim no one can rely on
   self-admission, defining-package provenance, intra-package overlap, and
   MRES-4f's source `ImportCycle` construction. A both-package collision oracle
   is explicitly red until compiled manifests meet at the package-manager
-  boundary. I-4 §C adds the program-header `caps` manifest: the parser and
-  runner carry the declared per-family authority, a source program using `FS`
+  boundary. I-4 §C adds the program-header capability manifest: the
+  `capabilities` parser and runner carry the declared per-family authority, a
+  source program using `FS`
   without that clause reaches the named `MissingCapability` static reject, and
   admits-only / capability-only controls keep instance dispatch and authority
   minting orthogonal. Each assertion names its parser, N4, or
