@@ -137,4 +137,9 @@ const finalCheck : String =
     False ↦ "FAIL"
   }
 
-proc main : IO Unit visits [Console] = print_line finalCheck
+proc main
+  (_input : ProcessInput)
+  (_caps : ProgramCaps)
+  : HostIO ExitCode
+  visits [Console] =
+  host_program (print_line finalCheck)

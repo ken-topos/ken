@@ -1,30 +1,20 @@
 //! fs-read-file-lines-flip D5 — end-to-end acceptance driving the REAL
-//! `ken` CLI binary (subprocess) against a real elaborated `(cap : Cap …)`
-//! program. No test in this file hand-constructs a cap value at any
-//! `EvalVal`/`apply` site — the cap originates **inside** `ken-cli`'s
-//! `run_file` manifest-read -> mint-exactly -> `apply` path (AC3's
-//! producer-grep: grep this file for `EvalVal::Cap`/`EvalVal::Int`/
-//! `cap_evalval` — none exist).
+//! `ken` CLI binary (subprocess) against a real ABI-shaped program. No test in
+//! this file hand-constructs a cap value at any `EvalVal`/`apply` site — the
+//! cap originates inside `ken-cli`'s `ProgramCaps` mint-and-bind path.
 //!
-//! AC4's discriminating pair: two `main`s, identical except the declared
-//! `Auth` index on the cap param. AC6: a missing-file arm surfaces a total
-//! `Err(NotFound)`, never a panic.
+//! The fixed `ProgramCaps` grant carries `Cap APartial`; a missing-file arm
+//! surfaces a total `Err(NotFound)`, never a panic.
 //!
 //! **effect-composition update (AC6 asterisk retirement):** `main` now
 //! genuinely composes `[FS]` and `[Console]` in ONE `bind`-sequenced,
 //! `inject_l`/`inject_r`-tagged `ITree (Coproduct (FSOp a) ConsoleOp) …` — the
-//! program itself prints each line via `[Console]` (`printLines`), not a
-//! CLI-side post-render. Also no test in this file hand-constructs a `Coproduct`/
+//! program itself prints each line via `[Console]` (`printLines`). Also no
+//! test in this file hand-constructs a `Coproduct`/
 //! `InL`/`InR` value (AC7's producer-grep, `effect-composition-conformance.md`
 //! §2) — `inject_l`/`inject_r` are elaborated from the surface `.ken` source
-//! above. On a denied/insufficient cap or a missing file, `main` does NOT
-//! print (fail-closed) and returns `Err e`; `ken-cli`'s unchanged
-//! `render_fs_result` still surfaces the exact `IOError` variant on stderr
-//! with a non-zero exit — so the M-insuff/missing-file assertions below are
-//! unchanged even though the mechanism (in-program vs. post-hoc printing)
-//! flipped. M-suff's stdout assertion is also unchanged: the composed
-//! program's own `println!`-per-line `[Console]` output is byte-identical
-//! to the old CLI-side render.
+//! above. On a missing file, the application reports the exact `IOError`
+//! through Console and returns `Failure 1`; the runner only maps `ExitCode`.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -37,10 +27,9 @@ fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// The D1 `lines` helper + a `main` reading `path` under authority `auth`.
-/// Identical for every case except `auth`/`path` — the discriminating pair
-/// (AC4) and the missing-file arm (AC6) are pure substitutions here.
-fn program_src(auth: &str, path: &str) -> String {
+/// The D1 `lines` helper + an ABI-shaped `main` reading `path` through the
+/// fixed `ProgramCaps` grant.
+fn program_src(path: &str) -> String {
     format!(
         r#"
 fn isNewline (c : Char) : Bool = eq_int (charToInt c) 10
@@ -103,7 +92,7 @@ proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Conso
         (\_ . printLines xs')
   }}
 
-proc main (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console] =
+proc app (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console] =
   bind (Coproduct (FSOp {auth}) ConsoleOp)
        (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
        (Result IOError Bytes) (Result IOError Unit)
@@ -116,8 +105,29 @@ proc main (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console
                         (Result IOError Unit) (Err IOError Unit e) ;
         Ok bytes |-> printLines (lines (bytes_decode bytes))
       }})
+
+proc main (_input : ProcessInput) (caps : ProgramCaps)
+  : HostIO ExitCode visits [FS, Console] =
+  match caps {{
+    MkProgramCaps cap |->
+      bind (Coproduct (FSOp APartial) ConsoleOp)
+           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+           (Result IOError Unit) ExitCode
+        (app cap)
+        (\r .
+          match r {{
+            Err e |->
+              match e {{
+                NotFound |-> host_program_then (print_line "NotFound") (Failure 1) ;
+                PermissionDenied |-> host_program_then (print_line "PermissionDenied") (Failure 1) ;
+                CapabilityDenied |-> host_program_then (print_line "CapabilityDenied") (Failure 1) ;
+                Other |-> host_program_then (print_line "Other") (Failure 1)
+              }} ;
+            Ok _ |-> host_exit Success
+          }})
+  }}
 "#,
-        auth = auth,
+        auth = "APartial",
         path = path,
     )
 }
@@ -145,38 +155,16 @@ fn run(name: &str, src: &str) -> (String, String, bool) {
     )
 }
 
-/// AC4 M-suff: `main` declares `Cap APartial` (sufficient — read requires
-/// `AUTH_PARTIAL`) — the CLI mints exactly that, the driver's `authorizes`
-/// gate allows it, the fixture is read.
+/// The fixed `ProgramCaps` grant is sufficient for `ReadFile`, so the driver
+/// reaches the fixture and the application prints its lines.
 #[test]
 fn m_suff_apartial_reads_fixture() {
-    let src = program_src("APartial", "conformance/fs/fixtures/three-lines.txt");
+    let src = program_src("conformance/fs/fixtures/three-lines.txt");
     let (stdout, stderr, success) = run("m_suff", &src);
     assert!(success, "M-suff must succeed; stderr: {stderr}");
-    assert_eq!(stdout, "alpha\nbeta\ngamma\n", "M-suff must print the exact fixture lines");
-}
-
-/// AC4 M-insuff (the load-bearing negative arm, SEAM-A): `main` declares
-/// `Cap ANone` — it still KEEPS its cap param (clears the static face,
-/// unlike a no-cap-param `main`), gets a level-0 cap minted + bound,
-/// reaches the driver, and is denied at `authorizes` with EXACTLY
-/// `CapabilityDenied` — not a bare failure, not `NotFound` (the fixture
-/// path exists, isolating the denial from a not-found confound). A
-/// full-minting CLI (the precise bug this AC targets) would pass this arm
-/// too — that's what makes the pair non-vacuous.
-#[test]
-fn m_insuff_anone_denied_capabilitydenied_not_notfound() {
-    let src = program_src("ANone", "conformance/fs/fixtures/three-lines.txt");
-    let (stdout, stderr, success) = run("m_insuff", &src);
-    assert!(!success, "M-insuff must fail (exit non-zero), got stdout: {stdout:?}");
-    assert_eq!(stdout, "", "M-insuff must print nothing to stdout (fail-closed, never partial success)");
-    assert!(
-        stderr.contains("CapabilityDenied"),
-        "M-insuff must be denied with EXACTLY CapabilityDenied, not e.g. NotFound/a panic; stderr: {stderr}"
-    );
-    assert!(
-        !stderr.contains("NotFound"),
-        "the fixture path exists — a NotFound here would mean the denial fired for the wrong reason; stderr: {stderr}"
+    assert_eq!(
+        stdout, "alpha\nbeta\ngamma\n",
+        "M-suff must print the exact fixture lines"
     );
 }
 
@@ -185,9 +173,18 @@ fn m_insuff_anone_denied_capabilitydenied_not_notfound() {
 /// never a panic, never a false success.
 #[test]
 fn missing_file_surfaces_total_not_found() {
-    let src = program_src("APartial", "conformance/fs/fixtures/does-not-exist.txt");
+    let src = program_src("conformance/fs/fixtures/does-not-exist.txt");
     let (stdout, stderr, success) = run("missing_file", &src);
-    assert!(!success, "missing file must fail (exit non-zero), got stdout: {stdout:?}");
-    assert_eq!(stdout, "", "missing-file must print nothing to stdout");
-    assert!(stderr.contains("NotFound"), "must surface NotFound, not a panic; stderr: {stderr}");
+    assert!(
+        !success,
+        "missing file must fail (exit non-zero), got stdout: {stdout:?}"
+    );
+    assert_eq!(
+        stdout, "NotFound\n",
+        "application must report through Console"
+    );
+    assert!(
+        stderr.is_empty(),
+        "runner must not render app results: {stderr}"
+    );
 }

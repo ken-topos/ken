@@ -35,6 +35,15 @@ const prog : ITree ConsoleOp console_resp (Pair Unit Nat) =
     (bind (Coproduct (StateOp Nat) ConsoleOp) (resp_coproduct (StateOp Nat) ConsoleOp (resp_state Nat) console_resp) Nat Unit
       (get Nat ConsoleOp console_resp MkUnit)
       (\n . inject_r (StateOp Nat) ConsoleOp (resp_state Nat) console_resp Unit (print_line "state-console-pairing")))
+
+proc main (_input : ProcessInput) (_caps : ProgramCaps)
+  : HostIO ExitCode visits [Console] =
+  bind (Coproduct (FSOp APartial) ConsoleOp)
+       (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+       (Pair Unit Nat) ExitCode
+    (inject_r (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp
+      (Pair Unit Nat) prog)
+    (\_ . host_exit Success)
 "#;
 
 #[test]
@@ -54,5 +63,8 @@ fn state_console_pairing_runs_through_run_state_then_run_io() {
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     assert!(output.status.success(), "must succeed; stderr: {stderr}");
-    assert_eq!(stdout, "state-console-pairing\n", "the Console residual must print exactly once");
+    assert_eq!(
+        stdout, "state-console-pairing\n",
+        "the Console residual must print exactly once"
+    );
 }

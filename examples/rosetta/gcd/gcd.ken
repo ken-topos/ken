@@ -252,4 +252,9 @@ fn natToDecimal (n : Nat) : String =
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 -- main: gcd(12, 8) = 4
-proc main : IO Unit visits [Console] = print_line (natToDecimal (natGcd twelve eight))
+proc main
+  (_input : ProcessInput)
+  (_caps : ProgramCaps)
+  : HostIO ExitCode
+  visits [Console] =
+  host_program (print_line (natToDecimal (natGcd twelve eight)))

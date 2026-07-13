@@ -299,4 +299,9 @@ const twenty : Nat =
                           (Suc
                             (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero)))))))))))))))))))
 
-proc main : IO Unit visits [Console] = fizzBuzzLoop twenty (Suc Zero)
+proc main
+  (_input : ProcessInput)
+  (_caps : ProgramCaps)
+  : HostIO ExitCode
+  visits [Console] =
+  host_program (fizzBuzzLoop twenty (Suc Zero))

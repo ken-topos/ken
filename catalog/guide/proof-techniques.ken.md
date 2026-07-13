@@ -372,8 +372,13 @@ exactly the definitions that would make the kernel unsound if admitted.
 
 As with the surface reference strand's own compiled block (§1 there), this
 entry's tangled fences run through `ken run`, so this final compiled
-declaration is a nullary `proc main`:
+declaration accepts the fixed process-input and capability ABI:
 
 ```ken
-proc main : IO Unit visits [Console] = print_line "proof techniques ok"
+proc main
+  (_input : ProcessInput)
+  (_caps : ProgramCaps)
+  : HostIO ExitCode
+  visits [Console] =
+  host_program (print_line "proof techniques ok")
 ```

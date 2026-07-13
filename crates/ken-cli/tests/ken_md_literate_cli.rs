@@ -14,7 +14,7 @@ fn ken_run_accepts_exact_ken_md_fence() {
         r#"A literate Ken file.
 
 ```ken
-proc main : IO Unit visits [Console] = print_line "literate ok"
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] = host_program (print_line "literate ok")
 ```
 "#,
     )
@@ -73,7 +73,7 @@ fn ken_ignore_fence_is_prose_only_for_cli() {
     std::fs::write(
         &path,
         r#"```ken ignore
-proc main : IO Unit visits [Console] = print_line "ignored"
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] = host_program (print_line "ignored")
 ```
 "#,
     )
@@ -90,8 +90,8 @@ proc main : IO Unit visits [Console] = print_line "ignored"
         "ken ignore must not compile as Ken"
     );
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("contains no declarations"),
-        "only non-compiled fences should leave no declarations; stderr: {}",
+        String::from_utf8_lossy(&output.stderr).contains("missing entrypoint 'main'"),
+        "only non-compiled fences should leave no entrypoint; stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
 }
@@ -103,7 +103,7 @@ fn ken_run_accepts_a_correctly_failing_reject_block() {
     std::fs::write(
         &path,
         r#"```ken
-proc main : IO Unit visits [Console] = print_line "reject ok"
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] = host_program (print_line "reject ok")
 ```
 ```ken reject
 const bad : Nat = undefinedName
@@ -133,7 +133,7 @@ fn ken_run_rejects_a_stale_reject_block() {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let path = dir.join("literate_reject_stale.ken.md");
     let fixture = r#"```ken
-proc main : IO Unit visits [Console] = print_line "unreachable"
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] = host_program (print_line "unreachable")
 ```
 ```ken reject
 const stale : Nat = Zero
@@ -189,7 +189,7 @@ fn plain_ken_run_path_still_executes() {
     let path = dir.join("plain_success.ken");
     std::fs::write(
         &path,
-        r#"proc main : IO Unit visits [Console] = print_line "plain ok"
+        r#"proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] = host_program (print_line "plain ok")
 "#,
     )
     .expect("write fixture");

@@ -22,5 +22,7 @@ prints `Hello, World!` and exits 0 — confirmed after
   resulting `ITree` through `run_io`, printing to real stdout.
 
 ```ken
-view main : IO Unit = print_line "Hello, World!"
+proc main (_input : ProcessInput) (_caps : ProgramCaps)
+  : HostIO ExitCode visits [Console] =
+  host_program (print_line "Hello, World!")
 ```

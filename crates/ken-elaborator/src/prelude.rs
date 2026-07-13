@@ -1130,6 +1130,77 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     )
     .map_err(|e| ElabError::Internal(format!("prelude read_bytes failed: {}", e)))?;
 
+    // Program-I I-1 entrypoint ABI. These are ordinary, kernel-checked Ken
+    // declarations: the host runner knows their fixed shape, but no kernel
+    // rule or trusted primitive is added for them.
+    elab.elaborate_decl("data ExitCode = Success | Failure UInt8")
+        .map_err(|e| ElabError::Internal(format!("prelude ExitCode failed: {}", e)))?;
+    elab.elaborate_decl(
+        "data ProcessInput = MkProcessInput (List Bytes) (List (Prod Bytes Bytes)) Bytes",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude ProcessInput failed: {}", e)))?;
+
+    // The surface `data` helper cannot currently express this constructor
+    // field because `Cap` is indexed by the value-level `Auth` family. Use
+    // the ordinary kernel inductive API, exactly as `FSOp` above does; this is
+    // still a checked inductive and adds no primitive or trusted rule.
+    let apartial_id = elab
+        .globals
+        .get("APartial")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: APartial missing".into()))?;
+    let program_caps_id = declare_inductive(&mut elab.env, |_id| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![],
+        level: Level::Zero,
+        constructors: vec![CtorSpec {
+            args: vec![Term::app(
+                Term::const_(cap_id, vec![]),
+                Term::constructor(apartial_id, vec![]),
+            )],
+            target_indices: vec![],
+        }],
+    })
+    .map_err(|e| ElabError::Internal(format!("prelude ProgramCaps failed: {e}")))?;
+    elab.globals.insert("ProgramCaps".into(), program_caps_id);
+    let program_caps_ctor = elab
+        .env
+        .inductive(program_caps_id)
+        .and_then(|ind| ind.constructors.first())
+        .map(|ctor| ctor.id)
+        .ok_or_else(|| ElabError::Internal("prelude: MkProgramCaps missing".into()))?;
+    elab.globals.insert("MkProgramCaps".into(), program_caps_ctor);
+
+    elab.elaborate_decl(
+        "const HostIO (r : Type) : Type = \
+         ITree (Coproduct (FSOp APartial) ConsoleOp) \
+           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp) r",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude HostIO failed: {}", e)))?;
+    elab.elaborate_decl(
+        "fn host_exit (code : ExitCode) : HostIO ExitCode = \
+         Ret (Coproduct (FSOp APartial) ConsoleOp) \
+           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp) \
+           ExitCode code",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude host_exit failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc host_program_then (action : IO Unit) (code : ExitCode) \
+         : HostIO ExitCode visits [Console] = \
+         bind (Coproduct (FSOp APartial) ConsoleOp) \
+           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp) \
+           Unit ExitCode \
+           (inject_r (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp Unit action) \
+           (\\_. host_exit code)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude host_program_then failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc host_program (action : IO Unit) : HostIO ExitCode visits [Console] = \
+         host_program_then action Success",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude host_program failed: {}", e)))?;
+
     Ok(PreludeEnv {
         nat_id,
         zero_id,
