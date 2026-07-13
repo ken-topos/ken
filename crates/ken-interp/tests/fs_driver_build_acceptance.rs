@@ -54,9 +54,7 @@ fn mk_env() -> FsEnv {
             .unwrap_or_else(|| panic!("prelude: '{}' not registered", name))
     };
     let console_ids = ken_interp::ConsoleIds::from_elab(&elab_env).expect("Console ABI");
-    let fs_ids = ken_interp::FSIds {
-        readfile_id: get("ReadFile"),
-    };
+    let fs_ids = ken_interp::FSIds::from_elab(&elab_env).expect("FS ABI");
     FsEnv {
         read_bytes_id: get("read_bytes"),
         afull_id: get("AFull"),
@@ -151,7 +149,13 @@ fn absent_path_surfaces_total_not_found_result() {
 
     match result {
         Ok(ken_interp::EvalVal::Ctor { id, args, .. }) if id == env.err_id => match args.get(2) {
-            Some(ken_interp::EvalVal::Ctor { id: err_id, .. }) => {
+            Some(ken_interp::EvalVal::Ctor {
+                args: file_args, ..
+            }) => {
+                let err_id = match file_args.get(2) {
+                    Some(ken_interp::EvalVal::Ctor { id, .. }) => id,
+                    other => panic!("expected FileError kind, got {other:?}"),
+                };
                 assert_eq!(
                     *err_id, env.notfound_id,
                     "absent path must surface IOError::NotFound"

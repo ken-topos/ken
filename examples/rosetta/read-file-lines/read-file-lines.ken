@@ -145,14 +145,14 @@ proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Consol
   bind
     (Coproduct (FSOp APartial) ConsoleOp)
     (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
-    (Result IOError Bytes)
+    (Result FileError Bytes)
     (Result IOError Unit)
     (inject_l
       (FSOp APartial)
       ConsoleOp
       (fs_resp APartial)
       console_resp
-      (Result IOError Bytes)
+      (Result FileError Bytes)
       (read_bytes
         APartial
         cap
@@ -160,11 +160,18 @@ proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Consol
     (λr.
       match r {
         Err e ↦
-          Ret
-            (Coproduct (FSOp APartial) ConsoleOp)
-            (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
-            (Result IOError Unit)
-            (Err IOError Unit e);
+          match e {
+            MkFileError operation path kind ↦
+              Ret
+                (Coproduct (FSOp APartial) ConsoleOp)
+                (resp_coproduct
+                  (FSOp APartial)
+                  ConsoleOp
+                  (fs_resp APartial)
+                  console_resp)
+                (Result IOError Unit)
+                (Err IOError Unit kind)
+          };
         Ok bytes ↦ printLines (lines (bytes_decode bytes))
       })
 
@@ -205,7 +212,31 @@ proc main
                   host_program_then
                     (print_line "Interrupted")
                     (Failure 1);
-                Other ↦
+                AlreadyExists ↦
+                  host_program_then
+                    (print_line "AlreadyExists")
+                    (Failure 1);
+                InvalidInput ↦
+                  host_program_then
+                    (print_line "InvalidInput")
+                    (Failure 1);
+                IsDirectory ↦
+                  host_program_then
+                    (print_line "IsDirectory")
+                    (Failure 1);
+                NotDirectory ↦
+                  host_program_then
+                    (print_line "NotDirectory")
+                    (Failure 1);
+                NotEmpty ↦
+                  host_program_then
+                    (print_line "NotEmpty")
+                    (Failure 1);
+                Unsupported ↦
+                  host_program_then
+                    (print_line "Unsupported")
+                    (Failure 1);
+                Other errno ↦
                   host_program_then
                     (print_line "Other")
                     (Failure 1)

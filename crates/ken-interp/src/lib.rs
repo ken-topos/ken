@@ -8,8 +8,9 @@ pub mod proof_erasure_checker;
 
 pub use eval::{
     apply, decimal_value, drive_h, drive_h_instrumented, eval, run_io, CaptureHost, ConsoleIds,
-    ConsoleStream, ConsoleTrace, CoproductIds, Env, EvalStore, EvalVal, FSIds, HostHandler,
-    HostRead, ITreeIds, PosixHost, RunIoError, SlotId,
+    ConsoleStream, ConsoleTrace, CoproductIds, Env, EvalStore, EvalVal, FSIds, FsTrace,
+    HostCreatePolicy, HostDirEntry, HostFileKind, HostFileMetadata, HostHandler, HostRead,
+    ITreeIds, PosixHost, RunIoError, SlotId, VirtualFsNode,
 };
 pub use proof_erasure_checker::{
     ken_check_proof_erasure_boundary_witness, KenProofErasureBoundaryCheckError,
@@ -2472,6 +2473,12 @@ mod console_io_tests {
             capabilitydenied_id: GlobalId(0),
             brokenpipe_id: GlobalId(0),
             interrupted_id: GlobalId(0),
+            alreadyexists_id: GlobalId(0),
+            invalidinput_id: GlobalId(0),
+            isdirectory_id: GlobalId(0),
+            notdirectory_id: GlobalId(0),
+            notempty_id: GlobalId(0),
+            unsupported_id: GlobalId(0),
             other_id: GlobalId(0),
             unit_id,
             params_len: 0,
