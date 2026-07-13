@@ -14,34 +14,58 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 (21:xx) — LIVE STATE (read this first) · `origin/main @ f811a93a`
+> ### ⏭ 2026-07-13 (23:xx) — LIVE STATE (read this first) · `origin/main @ 66c6e15f`
 > **3 LANES IN FLIGHT (event-driven; heartbeat catches handbacks):**
-> **(1) Enclave #39/#36 spec+conformance — PUBLISHING.** Honesty-gate CLEAN on
-> `44f928f4` (frame+3 spec chapters+conf README+fixture; linear; CV Spec/Fidelity
-> + Conformance APPROVE). Tracker-synced → `1731c3e4`; **scripted publisher pid
-> 3334361, PR #614, CI-polling.** On merge → relay + close #39/#36.
-> **(2) Runtime I-4 (ProgramCaps) — REDIRECTED by Pat, Architect re-ruling.** Pat:
-> *Ken owns program-VALIDITY only, NOT runtime constraint (SELinux/CLI grant = out
-> of scope); capabilities declared IN the program declaration, with the `admits`
-> roster.* → the whole CLI launch-grant fork (§SURFACE Options 1/2/3 + default) is
-> MOOT. Relayed to Architect `evt_49zx3brvzn1fm` (NOT compacted — same lane, hot
-> context); **I-4 build-frame transcription HELD until revised ruling.** Memory:
+> **(1) batch-3 kenfmt vertical balance (#63) — STAGE-2 QA-APPROVED → ARCHITECT-TERMINAL
+> REVIEW IN FLIGHT.** Candidate `wp/kenfmt-vertical-balance @ 7b8c5d88` (linear
+> `66c6e15f → 93f5dc84 → 927c19ba → 7b8c5d88`; 14 files: frame + layout.rs + 2 elab
+> tests + 9 catalog + 1 Rosetta; forbidden-path EMPTY, CANONICAL_WIDTH=96 untouched,
+> OrdNat byte-identical; balance gate non-vacuous — old splay rejects on named
+> `mid-arrow` + `missing +2`). QA APPROVED (`evt_39t4dntqcqn6a`);
+> **Architect TERMINAL APPROVE `evt_7j4b19gkag7s3`** (identity/scope ✓, zero
+> kernel/Cargo/lock/.github/spec/conformance, zero trusted_base delta). **Steward
+> honesty-gate CLEAN** (0 merges, 14 files kenfmt-allowed, forbidden-path empty,
+> diff-check clean). **PUBLISHING** — tracker bundled, scripted publisher on the code
+> path (CI-poll bg). ON MERGE: relay + close #63.
+> _Prior stage-2 detail:_ Stage-1
+> rendering (consistent-break: split-high, inner arrow flat, +2 children, fitting
+> tail horizontal) **Pat-APPROVED**; honesty-gate CLEAN on `927c19ba` (4 files,
+> OrdNat byte-identical, CANONICAL_WIDTH untouched). **Stage-2 GREENLIT**
+> `evt_4m23stnj5szd`: catalog-wide sweep + regenerate frozen fixture + **automated
+> balance gate that provably fires on a pre-fix over-width sample** (corrected-AC5).
+> Language building (same warm WP, no re-compaction). → QA → Architect-terminal →
+> honesty-gate + publish + close #63.
+> **(2) Runtime I-4 (ProgramCaps) — REV-2 ACCEPTED + sub-fork RESOLVED; TRANSCRIBE
+> NEXT.** Architect REV-2 ruling `architect/work:docs/program/wp/i4-program-caps-ruling.md
+> @ be52d82b` (§A.5.1 now marked RESOLVED-(ii); transcribe from THIS sha, not 222320da)
+> reconciled to Pat's reframe (caps declared ON the anonymous `program`
+> header, sibling of `admits`/ADR-0014-MRES-4; static kernel-backed family
+> containment via cap-passing translation; ambient Console; zero-TCB). **Pat picked
+> §A.5.1 Option (ii) = STATIC authority-level via a typed capability-API wrapper**
+> (`writeFile : Cap AFull -> …` over the UNCHANGED polymorphic core; APartial-writes
+> ill-typed; does NOT reopen I-3). Architect acked + STOOD DOWN (clean seam). **BOTH I-4 FRAMES
+> PLACED, BOTH RINGS COMPACTING:**
+> **• §C (enclave lead, task #64) — KICKED + ACTIVE** `evt_55y4jzcfvc7se`. Frame on
+> **`wp/i4c-program-header-caps @ 629972f9`** (plumbing off origin/main 66c6e15f;
+> frame-only verified, 0 merges). Enclave Handoff-Gate DONE (all 3 "Context
+> compacted" @ 66c6e15f); spec-leader roused + working ("frame pinned — surface/
+> contract transcription only; assigning spec + named-oracle lanes"). Deliverables:
+> N4 capability clause sibling of `admits` + ADR-0014 amendment FOLDED IN + Program-I
+> §1.3-step-3/§3.1 (source=declaration) + typed cap-API signature contract +
+> conformance named variants; CV casts Spec/Fidelity vote. → assembly → hand me SHA.
+> **• §B (Runtime build, task #65, blocked-by #64) — KICKED + ACTIVE** `evt_3dwykrds2z2zy`.
+> Frame on **`wp/i4b-runtime-program-caps @ c3e50692`** (plumbing off origin/main;
+> frame-only, 0 merges). Runtime Handoff-Gate DONE (all 3 "Context compacted" @
+> 66c6e15f); runtime-leader roused + working. **Scoped: STEP 1 (ProgramCaps a
+> generalization, no §C dep) runs NOW as pipeline-fill; steps 2/3/4/7 gate on §C's
+> minimal surface (landing in parallel — relay when §C lands it).** Memory:
 > [[ken-owns-program-validity-not-runtime-constraint-caps-declared-in-program]].
-> **(3) batch-3 kenfmt vertical balance (#63) — ACTIVE.** Frame
-> `wp/kenfmt-vertical-balance @ dea3a5c2` (off f811a93a); Language ring
-> Handoff-Gate compacted (3/3 WIDE-verified) + KICKED `evt_3jn4d81r6ag2h` + leader
-> roused. Two-stage: stage-1 render one worst-case deep-proof file → me → Pat
-> approve → stage-2 sweep+re-arm+**automated balance gate** (must provably fire on
-> a pre-fix over-width sample — corrected AC5 lesson).
-> **#37 CLOSED ✅** (`f811a93a`, PR #613; all 3 Language retros in).
-> **✅ OPERATOR DIRECTIVE DONE — formatter budget 88→96 sweep:** code already
-> `CANONICAL_WIDTH = 96` (layout.rs:12); swept all owned docs (11 files, committed
-> `1363561e` on steward/work), preserved SHAs/event-IDs + dated transition records.
-> **PENDING (doc-only, low-pri, unblocks no one):** (a) publish the 8 budget-swept
-> kenfmt FRAMES to main (still say 88 there); (b) route Architect's ADR-0016
-> +1-keyword self-correct (committed on architect/work). **PARKED:** Foundation #60,
-> Kernel/Verify/Ergo idle. WORKFLOW RULE: local = TARGETED only, never
-> `--workspace`. *Detailed session log below (accretes downward).*
+> **✅ DONE THIS SESSION:** #37 CLOSED (`f811a93a`); Enclave #39/#36 MERGED (`09acda41`,
+> PR #614) + CLOSED; **doc-only PR #615 MERGED `66c6e15f`** = operator budget 88→96
+> sweep (code was already `CANONICAL_WIDTH=96` layout.rs:12; all owned docs+frames+
+> memory to main) + ADR-0016 `export`=net-+1-keyword fix. Budget directive FULLY done.
+> **PARKED:** Foundation #60 substrate, Kernel/Verify/Ergo idle (gated on designs).
+> WORKFLOW RULE: local = TARGETED only, never `--workspace`. *Log below (accretes).*
 >
 > **★ OPERATOR SEQUENCING (Pat, 2026-07-13, post-#58): spin up TWO lanes** —
 > **(A) kenfmt catalog-wide + re-arm gate #57** and **(B) unblock namespace
