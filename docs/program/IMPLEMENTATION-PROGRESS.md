@@ -14,12 +14,77 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 858c64a3`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 4938dd61`
 >
 > **★ CURRENT FRONTIER (one-line resume):** ADR-0014 R2 module round COMPLETE
-> (N1–N4 ✅; only N5 `pub use` gated on MRES-9 remains). **kenfmt B3 co-release:
-> ORACLE HALF CLOSED ✅, BUILD HALF ACTIVE.** B3 conformance oracle + §1d
-> sum-determinism pin **MERGED** (`origin/main @ 858c64a3`, PR #593, doc-only;
+> (N1–N4 ✅; only N5 `pub use` gated on MRES-9 remains). **kenfmt B3: ALL DOC/
+> CONFORMANCE HALVES CLOSED ✅ — only the B3 layout-printer BUILD remains open.**
+> Merged this session: B3 oracle+§1d pin (PR #593), CV-playbook reachability-pass
+> practice (PR #594), **FMT9 reachability SWEEP (PR #595, `4938dd61`) — every
+> FMT9 label now honest vs landed surface (record RED-UNTIL record-surface+B3;
+> 29 parse / 4 record-reject; `class C a` sibling-blank reconstruction added;
+> Architect-terminal `aa4cba90`).** FMT9 fidelity item CLOSED. **NEXT: await the
+> corrected B3 BUILD SHA (Language, `wp/kenfmt-b3-doc-algebra-layout`, code —
+> generic hard-line path + execute-reachable-FMT9; record RED-gated) → honesty-
+> gate + CI-polled publish. Then B4/.ken.md + capstone C.** record-surface =
+> future surface-grammar WP (task #43), NOT B3. _(detail log below.)_
+>
+> **★ B3 BUILD → AT ARCHITECT-TERMINAL (in review).** Candidate
+> `wp/kenfmt-b3-doc-algebra-layout @ e3fa0f41`, linear 2 commits atop `4938dd61`
+> (already rebased past the sweep), 4 `crates/ken-elaborator` files (+1852/−0),
+> zero TCB delta. QA APPROVED (`evt_6vj5vrx4abxcv`): generic structural
+> `nonempty_outer_decl_block_span` routing (no keyword special-casing;
+> law/class/instance/module, module children recursive); AC6 executes the
+> reachability-swept FMT9 as an independent source (surfaced+closed 2 more
+> discriminators: forced-broken multi-arg match-arm bodies, duplicate
+> clarity-parens); record RED-UNTIL(record-surface+B3), no fabricated
+> `FormattableSource`; whole-catalog parse/idempotence/88-col + literal locked CI
+> green on the exact SHA. Leader posted Architect-terminal (`evt_2jvxwt9epxvj6`);
+> **Architect actively reviewing** (parens = the sharp edge). Steward flow-nudge
+> `evt_4dcdvn8zmnwgw` (redundant — was already Working; narrow tail hid the
+> Swirling line). **Architect terminal → BLOCK (narrow, paren) `evt_1zm0d3waytsxt`:**
+> two confirmed meaning-changing parse-preservation violations on `old`'s operand
+> — `(old x).field → old x.field` and `old (f x) → old f x` — root-caused to
+> `layout.rs` (ProjectionBase paren-set omits `EOld` prec-8; `EOld` operand reuses
+> `ApplicationHead` prec<7 but `old`'s operand is an atom → needs prec<8 tight
+> ctx). **Gate was green only because the catalog has no `old`-with-compound-
+> operand program** — parse-preservation is only as strong as the corpus; paren
+> axis needs ADVERSARIAL fixtures. Everything else APPROVED-as-faithful (Doc
+> algebra, mandatory breaks, seam, nest, rest of paren matrix, generic block
+> routing, AC6/FMT9). **Re-spin IN PROGRESS** (leader→implementer: 2 paren-ctx
+> fixes + 2 regression fixtures `(old x).field`/`old (f x)` via ac4 ast_shape+elab
+> backstop); Architect re-confirms only the `old` cases. **Carries:** (a) module
+> `;`-widening (parser.rs +3) = surface-grammar acceptance widening, Architect-
+> approved as §1d-realizing → flagged spec-leader; **spec-leader found §32
+> `module_hdr` ends at `{` (no body/separator) → spun a minimal parser-grounded
+> §32 CURRENCY correction to spec-author (incoming doc SHA — 2nd item to me)**;
+> (b) `layout.rs::token_text` 11-entry glyph map dupes B2 `canonical_token_spelling`
+> → fold at pipeline integration (capstone carry, task #44).
+>
+> **★★ TWO SHAs LANDED (both atop `4938dd61`), both MID-GATE (not at me yet):**
+> **(1) B3 re-spin (CODE) `2f10d5dae2de0ec8c611841356c227147e207f52`** (parent
+> `e3fa0f41`; correction scope `layout.rs`+`kenfmt_b3_layout.rs` +24/−2; full B3 =
+> 4 ken-elaborator files +1874/−0). Fix: `ProjectionBase` retains parens around
+> `EOld`; dedicated atom-tight `OldOperand` ctx (prec<8). Regressions
+> `(old b).value`+`old (f x)` assert canonical-bytes+ast-shape+idempotence+elab.
+> 10/10 focused + whole-catalog + literal locked CI green; zero TCB. **Position:
+> QA re-gate (`evt_4c8r8z2ajcd3c`) → then Architect narrow re-confirm (ONLY the 2
+> `old` cases; verdict must FLIP).** **(2) §32 currency (DOC)
+> `871ff0605326bfd8a075520942a140101f780a04`** (spec-author; one file
+> `32-grammar.md` +1/−1: `module_hdr ::= "module" ModPath "{" (decl ";"?)* "}"`;
+> parser-grounded to `e3fa0f41` parser.rs:896–906; §1d canonical rule unchanged).
+> **Position: Spec/Fidelity review (`evt_4r0mf0wbfb3d6`).**
+>
+> **★ NEXT (resume actions, in order):**
+> - **B3 code:** QA approves → leader posts Architect re-confirm → **⚠ WATCH-ITEM:
+>   Architect is idle at "ping me when the corrected B3 SHA lands"; a threaded
+>   re-confirm request may NOT wake it → PING it (standalone mention; capture WIDE
+>   to confirm it engages) once QA is green.** On Architect APPROVE `2f10d5da` →
+>   honesty-gate + **CI-polled (bg) publish** → **B3 CLOSED.**
+> - **§32 doc:** on Spec/Fidelity APPROVE `871ff060` → doc-only publish.
+> - Then drive B3 retros → close B3; kenfmt → **B4** (.ken.md splice) + capstone **C**.
+>
+> **★ (prior) B3 oracle + §1d sum-determinism pin** **MERGED** (`858c64a3`, PR #593, doc-only;
 > Architect-terminal APPROVE `321d42b5`; reviewed blobs byte-identical to
 > spec-author `5700455d` + CV `2c145022`). The §1d own-line pin closed the
 > determinism hole the oracle surfaced. **Enclave oracle retros IN** (triple
