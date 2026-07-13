@@ -94,7 +94,7 @@ implicit module named by its path. Modules **nest**
 fragment**: its declarations elaborate into `Σ` in dependency order under their
 qualified names, exactly as if written flat.
 
-### 3.2 Importing
+### 3.2 Importing and exporting
 
 Within a module, an `import` brings another module's **exported** names (`§4`)
 into scope. Three forms:
@@ -108,6 +108,24 @@ A selective item is either a name or a per-name rename. Thus `import M (foo,
 Bar as Baz)` brings `foo` unqualified and brings `M.Bar` unqualified under the
 name `Baz`; it does not also bind `Bar`. The per-name `as Baz` is inside the
 selection list and is distinct from the module alias in `import M as N`.
+
+An `export` declaration adds names to the current module's public interface.
+It has two forms:
+
+- **`export M (foo, Bar)`** is a facade republish. It takes the selected names
+  directly from `M`'s exports, requires no prior `import M`, and does not bind
+  `foo` or `Bar` in the current module's body scope. The declaration is itself
+  a loader dependency edge to `M`, using the role-blind dotted-path identity
+  below.
+- **`export foo, Bar`** republishes names already resolved in the current
+  module's scope, whether imported or defined locally. A listed name that does
+  not resolve in that scope is an ordinary unresolved-name surface error.
+
+Both forms permit per-name renaming: `export M (foo as bar)` and `export foo as
+bar` publish the source declaration under the surface name `bar`. Renaming
+does not change its canonical identity. To use and republish a name, import it
+and then use the in-scope form; a facade export alone deliberately does not
+make the name available to the module body.
 
 For in-repo compilation units, dotted module paths and source-file paths obey a
 total, role-blind bijection under a catalog root. A path with `N` components
@@ -126,14 +144,15 @@ remain deferred to the package-manager round (MRES-1(a)/MRES-2). The plural form
 is nevertheless the normative resolver input, so adding roots changes the
 input data rather than the module-path contract.
 
-The loader discovers compilation units lazily, following `import` edges from
-units already being compiled; it does not scan a catalog tree eagerly. Each
-unit is loaded and elaborated at most once in a compilation run, and later
-imports reuse the per-run cached result. An import edge to a unit already on
-the active import chain is the hard surface error **`ImportCycle`**. The
-diagnostic names the closed cycle in edge order rooted at the entry unit. The
-conformance harness elaborates `A` as its entry unit, so its cycle payload is
-`A → B → A`. Cycles are not accepted as recursive module groups (MRES-2).
+The loader discovers compilation units lazily, following `import` and facade
+`export M (…)` edges from units already being compiled; it does not scan a
+catalog tree eagerly. Each unit is loaded and elaborated at most once in a
+compilation run, and later dependency edges reuse the per-run cached result. A
+dependency edge to a unit already on the active chain is the hard surface error
+**`ImportCycle`**. The diagnostic names the closed cycle in edge order rooted
+at the entry unit. The conformance harness elaborates `A` as its entry unit, so
+its cycle payload is `A → B → A`. Cycles are not accepted as recursive module
+groups (MRES-2).
 
 The in-repo loader discovers the source graph; the `admits` / `program` /
 `package` boundary below adds the instance-admission rule over that graph. The
@@ -172,23 +191,29 @@ is a **surface error** (`24`) — it never reaches the kernel:
 
 - **Qualified / aliased / selective import targets** each identify exactly one
   declaration before collision checking: `M.foo`, `N.foo`, and a selectively
-  imported or renamed name retain the imported declaration's identity.
-- **Top-level local/import clash.** If one unqualified name is bound both by a
-  top-level local definition and by an import, resolution raises the surface
-  error **`AmbiguousReference`**. Silent local-wins is not permitted. The check
-  is order-independent and fail-closed: it runs whether or not any expression
-  references the clashing name. The source must leave the imported name out of
-  the selective list or rename it per-name at the import site, so that only one
-  declaration retains the original unqualified name.
+  imported or renamed name retain the imported declaration's canonical
+  identity.
+- **Top-level identity-keyed clash.** Consider every binding of an unqualified
+  name supplied by a top-level local definition, a selective or renamed import,
+  or the prelude. If more than one binding names **distinct canonical
+  declarations**, resolution raises **`AmbiguousReference`**. This single rule
+  covers all four pairings: local×import, local×prelude, import×import, and
+  import×prelude. It is order-independent and fail-closed: a latent clash is
+  rejected even when no expression references the name. Multiple paths that
+  bind the name to the **same** canonical declaration are idempotent and are
+  not a clash. An exported name entering a consumer's scope participates by
+  that same canonical identity, so a direct import and a re-exported path to
+  one declaration remain non-ambiguous, while two declarations do not.
+- **Explicit resolution.** Leave a colliding item out of a selective import,
+  rename it per-name, use qualified or aliased access, or rename the local
+  definition so exactly one unqualified binding remains. Prelude bindings are
+  the immutable primitive floor: they cannot be excluded or renamed. A local
+  that clashes with the prelude must be renamed; a colliding selective import
+  must be omitted, renamed, or kept qualified.
 - **Narrower lexical shadowing.** A `λ`, `let`, parameter, or pattern binder in
   a narrower lexical scope still shadows an outer or imported name. Resolution
   is lexical (innermost wins) and is never a module-level clash error; this
   term-language rule is orthogonal to the preceding top-level rule.
-- **Prelude floor.** Prelude names are always-present unqualified bindings and
-  cannot be shadowed by top-level local definitions. Such a collision raises
-  **`AmbiguousReference`** and is resolved by renaming the local definition.
-  There is no form that excludes or renames a prelude binding; keeping this
-  floor deliberately small bounds its collision surface.
 - Every failure — unresolved name, **`AmbiguousReference`** from a top-level
   clash, or an out-of-scope private name (`§4`) — is a **surface diagnostic**;
   the flattened `Σ` the kernel receives contains only resolved, in-scope
@@ -199,9 +224,10 @@ is a **surface error** (`24`) — it never reaches the kernel:
 ### 4.1 Visibility — private by default, `pub` to export
 
 Top-level names in a module are **module-private by default**; **`pub`** exports
-them. The `pub` names form the module's **interface**; a non-`pub` name is
-invisible outside its module, and accessing it from outside is a **surface
-error** (name not in scope), *not* a kernel error.
+names at their definition. A module's **interface** is the union of its own
+`pub` definitions and the names introduced by `export` declarations. A private
+name absent from that union is invisible outside its module, and accessing it
+from outside is a **surface error** (name not in scope), *not* a kernel error.
 
 **The default is private — settled (was `OQ-syntax`).** Rationale:
 private-by-default is the **least-surface, information-hiding-forward** choice —
@@ -232,8 +258,28 @@ represented") — information hiding with **no new kernel feature**:
   **rejected** by this spec; the elaborates-away form is the whole mechanism.
 
 This is the AC1/AC2 invariant made concrete: `module` / `import` / `pub` /
-abstract-export cost the trust root **nothing** — surface namespacing +
+`export` / abstract-export cost the trust root **nothing** — surface namespacing +
 information-hiding over the unchanged flat `Σ`.
+
+### 4.3 Re-export preserves identity and visibility
+
+Every declaration has one canonical identity, owned by its **defined-at**
+module. An `export` declaration records a **re-exported-at** public path to that
+identity; it republishes the existing `GlobalId` and never mints another one.
+This remains true through renaming and any number of re-export hops. The export
+statement keeps the provenance grep-recoverable at the republishing module.
+
+Two distinct identities may not occupy one surface name in a module interface:
+that is a hard surface error at the re-export site, reported with both the
+defined-at declaration and the conflicting re-exported-at path. Republishing
+an identity already present under the same surface name is idempotent.
+
+Visibility travels with canonical identity, not with a public path. Re-exporting
+an abstract type therefore republishes the same opaque constant while its
+constructors remain hidden; `export` cannot widen constructor visibility. For
+a locally defined name, `export foo` has the same interface effect as declaring
+`pub foo`, without creating a second identity. `pub` on the local definition
+remains the idiomatic spelling.
 
 ## 5. Constraints — typeclasses as subobjects of the universe
 
@@ -539,17 +585,31 @@ sets:
   coherence pass nevertheless performs one keyed collision test per structure
   instance: O(total instances in the closure), not O(packages²).
 - The **direct-use set** contains the boundary's self-admitted package, when
-  applicable, plus the packages named by its explicit `admits` section. An
-  instance that one of the boundary's own units dispatches must be defined by a
-  package in this set. Transitive membership in the coherence set does not grant
+  applicable, plus the packages named by its explicit `admits` section and the
+  canonical instances carried by their re-exported public surfaces. An
+  instance that one of the boundary's own units dispatches must be granted by
+  this set. Transitive membership in the coherence set alone does not grant
   dispatch rights.
 
-After implicit search selects an instance, the elaborator checks its defining
-package against the current boundary's direct-use set. A miss is the hard
-surface error **`UnadmittedInstance`** and names both the defining package and
-the selected instance. Thus reaching directly for an instance that was present
-only because an admitted dependency used it makes its provider a direct
-instance dependency that must itself be listed in `admits`.
+**Re-export carries the instance surface (MRES-4d).** Re-exporting a name
+carries into an admitting consumer's direct-use set every canonical structure
+instance whose `(class, head-type)` key's head-type or class is part of the
+re-exported public surface. These instances may be defined anywhere in the
+re-exporting package's coherence closure. Property instances are Ω-valued and
+proof-irrelevant, so they carry trivially. A transitive instance not carried by
+a re-export remains coherence-only; direct dispatch still requires admitting
+its defining package and otherwise raises **`UnadmittedInstance`**. The carry is
+computed by the elaborator from the re-export set at the admission boundary. It
+is a direct-use-set computation, not a kernel rule; every dictionary value is
+still kernel-checked, so it adds no TCB.
+
+After implicit search selects an instance, the elaborator checks that the
+current boundary's direct-use set grants it, either through its defining
+package or as a carried canonical instance. A miss is the hard surface error
+**`UnadmittedInstance`** and names both the defining package and the selected
+instance. Thus reaching directly for an instance that was present only because
+an admitted dependency used it, and was not carried by a re-export, makes its
+provider a direct instance dependency that must itself be listed in `admits`.
 
 This admission check is additive to the existing rules. The orphan check still
 runs at the instance declaration (§5.3), and the §5.5 overlap check still
@@ -603,20 +663,14 @@ The following rules are normative forward-compatibility requirements, but are
   The kernel still re-checks every instance dictionary value, so there is no
   new TCB. Signed or attested manifest validation belongs to the package-manager
   and supply-chain round.
-- When public re-export lands after MRES-9, re-exporting a name also carries the
-  instance surface that the re-exported name's public API commits to. Those
-  carried instances enter the admitting consumer's direct-use set. A transitive
-  instance not carried by a re-export remains coherence-only; direct dispatch
-  still requires admitting its defining package.
 - Persisted content-addressed manifests, registries, lockfiles, and
   supply-chain validation are package-manager concerns. Test-scoped admission
   is likewise deferred; the package's ordinary `admits` section is the only
   test boundary specified in this round.
 
-No compiled manifest, registry, lockfile, re-export handling, or test-only
-admission syntax is required by the current source-world build. These deferred
-rules do not widen the direct-use set until their respective surface and
-package-manager mechanisms exist.
+No compiled manifest, registry, lockfile, or test-only admission syntax is
+required by the current source-world build. These deferred rules do not widen
+the direct-use set until their package-manager mechanisms exist.
 
 ### 5.6 `derive` — an untrusted, kernel-re-checked candidate
 
@@ -650,9 +704,11 @@ layer over the N2 loader graph. Its current build contract stops at anonymous
 headers, the constructive source-coherence invariant, direct-use admission,
 self-admission, and resolution/admission provenance. Explicit package
 membership, compiled manifests, cross-package collision detection and
-both-package provenance, public re-export propagation, registries, lockfiles,
-and test-scoped admission remain the clearly marked SPEC-NOW / BUILD-LATER rules
-above.
+both-package provenance, registries, lockfiles, and test-scoped admission remain
+the clearly marked SPEC-NOW / BUILD-LATER rules above. The `export` declaration
+and public re-export propagation are instead current normative surface and
+elaboration rules (§3.2, §4, §5.5.1), with their build in the named Language
+follow-on.
 
 ## 6. Fixity and operators
 

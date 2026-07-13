@@ -17,6 +17,10 @@ import ::= "import" ModPath ("as" ConId)?
                           ("(" import_item ("," import_item)* ")")?
 import_item ::= name | name "as" rename
 rename ::= name
+export_decl ::= "export" ( ModPath selection_list | export_item_list )
+selection_list   ::= "(" export_item ("," export_item)* ")"
+export_item_list ::= export_item ("," export_item)*
+export_item      ::= name ( "as" name )?
 
 decl ::=
     "const" ident binder* (":" type)? contract* constraint_clause? "=" expr  -- pure value (36 §1.6)
@@ -27,6 +31,7 @@ decl ::=
   | "data" ConId tyvar* "=" simple_ctor ("|" simple_ctor)* derive?  -- simple sum sugar
   | "data" ConId data_param* ":" data_family data_block derive?  -- inductive family
   | "module" ModPath "{" (decl ";"?)* "}"
+  | export_decl  -- facade or in-scope re-export (33 §3.2, §4)
   | "class" ConId binder* "{" class_field (";" class_field)* "}"  -- typeclass (33 §5, ADR 0008)
   | "instance" ConId atype* constraint_clause? "{" field_assign (";" field_assign)* "}"  -- instance (33 §5, §5.4)
   | "prop" ConId tyvar* binder* ":" type prop_block?  -- proposition family / claim shape
@@ -67,6 +72,12 @@ path    ::= ident ("." ident)*                     -- qualified value/module pat
 prop_block ::= "where" "{" prop_intro (";" prop_intro)* "}"
 prop_intro ::= ident ":" type
 ```
+
+In `export_decl`, `ModPath` is governed by the same role-blind path identity as
+an `import` target (`33 §3.2`). Neither form of `export_decl`, including a
+renamed item, mints a new `GlobalId`: it republishes the declaration's
+defined-at identity. The dedicated `export` declaration is the selected
+surface; `pub import` and per-item `pub` are not productions.
 
 `program` and `package` are anonymous file-role markers. Neither production
 accepts a name token: the enclosing file path is the boundary's identity. A
