@@ -14,7 +14,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 5f8e5ed5`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 1fa9c344`
 > **I-1 CLOSED ✅** (PR #601, squash; `origin/main @ bd9e6c4b`; verified on main:
 > `resolve_main` present, frame oracle retired, tracker bundle landed). Milestone A
 > (Program I entrypoint ABI + runner) is IN; all 3 §10 retros in (leader/impl/qa @
@@ -45,8 +45,31 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > 5f8e5ed5` (PR #602; verified — floors present, old `assert_eq!(len,N)` gone).
 > **Rebase signal SENT** (`evt_1wc76jmxpzk15`): Foundation rebases the CC1 candidate
 > (with the new acceptance harness) onto `5f8e5ed5` + re-runs locked gate → green →
-> QA approve → `git_request` → publish → CC1 closes. **BOTH CC1 blockers now
-> resolved; CC1 = harness build in flight (foundation-implementer) → rebase → gate.**
+> QA approve → `git_request` → publish → CC1 closes. **BOTH CC1 blockers resolved.**
+> **CC1 CLOSED ✅ `origin/main @ 1fa9c344`** (PR #603, squash; 2 packages + acceptance
+> harness; zero forbidden delta; all 3 §10 retros in @ 09:53 → task #52 done). First
+> Program II package IN. **Carry (→ memory + bake into CC2+ frames):** dependency-
+> bearing catalog pkg AC1 = ordered shared-`ElabEnv` harness (DS-7/8 pattern), NOT
+> standalone `ken check`; escalate package-model gaps, don't smuggle import/pub;
+> `Semigroup.assoc:Ω` = structural soundness hinge. **CC2 (Text.Codec + Text.Numeric +
+> lawful Bytes/String keys) — GATED, NOT immediately ready:** its UTF-8 decode needs
+> §5.2's safe `bytes_decode` (work-program L117 forbids CLI libs standardizing the
+> current unsafe/neutral-on-invalid sigs); §5.2 (CA0/task #50) is "gated-by the Architect
+> contract naming what the effect floor needs" (L116) → sits behind I-2/I-3.
+> **→ OPERATOR SEQUENCING CALL** (in status): Foundation next-WP options — (a) hold
+> Foundation for §5.2 then CC2; (b) split **CC2a** = lawful Bytes/String DecEq/Ord keys
+> (independent of decode, immediately useful for Map/sets/dedup across later CC pkgs) to
+> run now, deferring UTF-8 codec to CC2b post-§5.2; (c) a different Foundation priority.
+> Foundation ring idle-clear meanwhile (Runtime I-2 + enclave §32 carry the active lanes;
+> NOT a stall — a genuine operator-priority gate). Was: candidate `wp/cc1-nonempty-validation @ 2ec6a1e9`
+> (3 linear commits on `5f8e5ed5`; scope = frame + 2 packages + acceptance harness
+> `cc1_nonempty_validation_acceptance.rs`; zero kernel/CLI/prelude/Cargo.lock/spec/
+> conformance/import-export/`.github`/trusted_base delta). QA `evt_7s3j48v5zqst8` +
+> **Architect terminal APPROVE** `evt_6xwss89npvg3n` (accumulating-Applicative soundness
+> via required-Ω `assoc`; real cong-proof Semigroup; no postulate/Axiom; harness
+> discriminates accumulation vs short-circuit + zero trusted_base delta). Steward
+> honesty-gate CLEAN → publishing `2ec6a1e9` + doc-tracker bundle `59f4a94a` (CI-poll,
+> waiter `bwudirvx6`). **On merge: verify SHA → relay → CC1 CLOSES on 3 §10 retros.**
 > **I-2 (CA2 Console floor) FRAME AUTHORED** ✅ (`steward/work @ a1e61db5`;
 > `docs/program/wp/i2-console-floor.md`) from Architect design `evt_6w0x364s4bvk8` — 6
 > settled decisions pinned (ambient v1 Console/ProgramCaps unchanged, shared+additive
@@ -55,23 +78,37 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `5f8e5ed5`; Handoff-Gate COMPLETE — Runtime ring compacted @ WIDE-verified "Context
 > compacted", branches 0-ahead/reset to 5f8e5ed5; kickoff `evt_42xn6qjw449rm` + rouse
 > landed, leader engaged). Runtime building; Architect-terminal reviewer. Runs in
-> parallel with CC1 (different ring). NEXT: event-driven → Runtime build→QA→Architect
-> re-confirm→`git_request`→publish→close.
+> parallel with CC1 (different ring). **IN-REVIEW → near publish:** impl COMPLETE
+> (`wp/i2-console-floor @ 437fa96a`, rebased onto current `origin/main @ 1fa9c344`,
+> 13 files +1872/−562, self-checked zero kernel/Cargo.lock/spec/conformance/.github
+> delta) → **Runtime QA APPROVED exact SHA** `437fa96a` (evt_6aerjbtpge7ee, 2m42s) →
+> **Architect terminal APPROVE** ✅ exact SHA `437fa96a` (`evt_35vcnnfwngg1j`, decision
+> `dec_46fxh6geaf36k`; verified all 6 host-ABI decisions at mechanism level — one
+> Stream-indexed ConsoleOp/non-constant console_resp, ambient Console/ProgramCaps
+> byte-absent, ReadResult Eof distinct total, one shared additive IOError, dead
+> build_print_line_tree+intercept grep-clean, injectable HostHandler seam w/ FS
+> passthrough for I-3). Runtime-leader publish request `evt_3nb680t448htx`.
+> **Steward honesty-gate CLEAN** (independent, object store): linear `1fa9c344 →
+> 1faeb3b4 → 437fa96a` (single-parent); 14 files all in-scope (Console pkg + CLI/interp/
+> elaborator host-ABI/seam + tests + frame + 2 Rosetta); **zero** kernel/Cargo.lock/spec/
+> conformance/.github delta. **PUBLISHING now** (`437fa96a` + doc-only tracker bundle;
+> CI-poll bg). On merge: verify SHA → relay → close #55 on 3 §10 retros.
 > **Architect RULED** (`evt_5x7cgmtz7ygt9`): gates already glob dynamically; the
 > count asserts do anti-vacuity → replace `assert_eq!(len,N)` with FLOOR
 > `assert!(len>=N)` (catches broken-glob/deleted-file drift, growth-robust, no
 > per-WP treadmill). **Floor-fix micro-frame AUTHORED** `wp/kenfmt-strict-gate-floor
 > @ 093d9d25` (off `bd9e6c4b`; XS test-only, ~4 asserts; Language-owned, Architect
-> reviewer; task #54). **MERGED ✅ `origin/main @ 5f8e5ed5`** (PR #602, squash;
-> full gate chain: Handoff-Gate compact → Language build+QA locked → Architect
-> terminal re-confirm 3 checks → Steward honesty-gate clean → CI-poll). **Awaiting 3
-> §10 retros** (requested `evt_1pxs4fmnh1a7k`; carry: count-assert on a globbed gate
-> guards VACUITY not just membership → floor it, don't delete) → close task #54.
-> **★ NEXT ACTION: event-driven** — (a) **CC1** harness build (foundation-implementer)
-> → rebase onto `5f8e5ed5` → locked gate → QA approve → `git_request` → publish →
-> close. (b) **I-2** Handoff-Gate compact Runtime ring → kick (frame `a1e61db5` ready;
-> pipeline-fill after CC1). (c) floor-fix retros → close #54. (d) operator status
-> ~11:00 UTC (both CC1 blockers resolved narrative; Shape-A-would-have-hit-HELD-work
+> reviewer; task #54). **CLOSED ✅ `origin/main @ 5f8e5ed5`** (PR #602, squash; full
+> gate chain; all 3 Language §10 retros in @ 09:30 → task #54 done; carry: count-assert
+> on a globbed gate guards VACUITY not just membership → floor it, don't delete).
+> **★ NEXT ACTION: event-driven** — (a) **I-2** building (runtime-implementer,
+> continuous turn) → Runtime QA → Architect re-confirm → `git_request` → publish →
+> close #55. (b) **CC2 frame** — author shovel-ready (bake harness-AC1 per CC1 carry) →
+> Handoff-Gate Foundation → kick (Foundation ring idle, ready). (c) **operator status
+> ~11:00 UTC** (milestone throughput; both-CC1-blockers-resolved + Shape-A-would-have-
+> hit-HELD-work near-miss narrative). (d) legacy `_-publish` remote branches (floor-fix,
+> CC1) stale post-squash — optional cleanup.
+> (former next-action, resolved:) both-CC1-blockers-resolved; Shape-A-would-have-hit-HELD
 > near-miss).
 >
 > **★ CURRENT FRONTIER (one-line resume):** **kenfmt series COMPLETE + C CLOSED ✅**
