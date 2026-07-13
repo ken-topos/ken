@@ -300,46 +300,21 @@ impl<'a> LayoutPrinter<'a> {
     /// Declaration production. Structure-sensitive blocks are emitted here;
     /// expression/type sub-productions retain their own span boundaries.
     fn print_decl(&self, decl: &Decl) -> Doc {
+        if let Decl::Pub(inner) = decl {
+            let core = Doc::concat([Doc::text("pub "), self.print_decl(inner)]);
+            return self.with_comments(decl.span(), core);
+        }
+        if let Some(span) = self.nonempty_outer_decl_block_span(decl) {
+            let recursive_children = match decl {
+                Decl::ModuleDecl { decls, .. } => {
+                    Some(decls.iter().map(|child| self.print_decl(child)).collect())
+                }
+                _ => None,
+            };
+            let core = self.print_hard_line_decl_block(span, recursive_children);
+            return self.with_comments(decl.span(), core);
+        }
         let core = match decl {
-            Decl::Pub(inner) => Doc::concat([Doc::text("pub "), self.print_decl(inner)]),
-            Decl::ModuleDecl { decls, span, .. } => {
-                self.print_decl_block(span, decls.iter().map(|d| self.print_decl(d)).collect())
-            }
-            Decl::PropDecl { intros, span, .. } if !intros.is_empty() => {
-                let children = intros
-                    .iter()
-                    .map(|intro| self.print_span(&intro.span))
-                    .collect();
-                self.print_token_block(span, children)
-            }
-            Decl::ExplicitDataDecl { ctors, span, .. } => {
-                let children = ctors
-                    .iter()
-                    .map(|ctor| self.print_explicit_ctor(ctor))
-                    .collect();
-                self.print_token_block(span, children)
-            }
-            Decl::LawDecl { fields, span, .. } if !fields.is_empty() => {
-                let children = fields
-                    .iter()
-                    .map(|(_, expr)| self.print_span(expr.span()))
-                    .collect();
-                self.print_token_block(span, children)
-            }
-            Decl::ClassDecl { fields, span, .. } if !fields.is_empty() => {
-                let children = fields
-                    .iter()
-                    .map(|field| self.print_span(field.ty.span()))
-                    .collect();
-                self.print_token_block(span, children)
-            }
-            Decl::InstanceDecl { fields, span, .. } if !fields.is_empty() => {
-                let children = fields
-                    .iter()
-                    .map(|(_, expr)| self.print_span(expr.span()))
-                    .collect();
-                self.print_token_block(span, children)
-            }
             Decl::DataDecl { ctors, span, .. }
                 if ctors.len() > 1 || ctors.iter().any(|ctor| !ctor.args.is_empty()) =>
             {
@@ -356,13 +331,6 @@ impl<'a> LayoutPrinter<'a> {
         self.with_comments(decl.span(), core)
     }
 
-    fn print_explicit_ctor(&self, ctor: &ExplicitDataCtor) -> Doc {
-        match ctor {
-            ExplicitDataCtor::Simple(ctor) => self.print_span(&ctor.span),
-            ExplicitDataCtor::Signature { span, .. } => self.print_span(span),
-        }
-    }
-
     /// Expression production. It is intentionally separate from token block
     /// layout so precedence and mandatory match breaks have one owner.
     fn print_expr(&self, expr: &Expr) -> Doc {
@@ -370,7 +338,7 @@ impl<'a> LayoutPrinter<'a> {
             Expr::EMatch { span, arms, .. } => self.print_match(span, arms),
             Expr::ELam(_, body, span) => self.print_lambda(span, body),
             Expr::ELet(_, _, value, body, span) => self.print_let(span, value, body),
-            Expr::EApp(_, _, _) => self.print_application(expr),
+            Expr::EApp(_, _, _) => self.print_application(expr, false),
             Expr::EAsc(_, _, span)
             | Expr::EOld(_, span)
             | Expr::EBinOp(_, _, _, span)
@@ -395,24 +363,24 @@ impl<'a> LayoutPrinter<'a> {
         }
     }
 
-    fn print_decl_block(&self, span: &Span, children: Vec<Doc>) -> Doc {
+    /// The single entry path for §1d nonempty declaration blocks. Most block
+    /// siblings are token-delimited; modules supply recursively printed child
+    /// declarations so compound bodies retain their production-specific docs.
+    fn print_hard_line_decl_block(&self, span: &Span, children: Option<Vec<Doc>>) -> Doc {
+        let Some(children) = children else {
+            return self.doc_from_tokens(span, TokenLayout::Block);
+        };
         let indices = self.token_indices(span);
         let Some(open_pos) = indices
             .iter()
             .position(|index| matches!(self.source.tokens()[*index].kind, Token::LBrace))
         else {
-            return self.print_token_block(span, children);
+            return self.doc_from_tokens(span, TokenLayout::Block);
         };
         let Some(close_pos) = matching_rbrace(self.source, &indices, open_pos) else {
-            return self.print_token_block(span, children);
+            return self.doc_from_tokens(span, TokenLayout::Block);
         };
         let head_span = Span::new(span.start, self.source.tokens()[indices[open_pos]].span.end);
-        if children.is_empty() {
-            return Doc::concat([
-                self.doc_from_tokens(&head_span, TokenLayout::Soft),
-                Doc::text("}"),
-            ]);
-        }
         let separator = Doc::concat([Doc::text(";"), Doc::hard_line()]);
         let close = &self.source.tokens()[indices[close_pos]].span;
         Doc::concat([
@@ -423,8 +391,23 @@ impl<'a> LayoutPrinter<'a> {
         ])
     }
 
-    fn print_token_block(&self, span: &Span, _children: Vec<Doc>) -> Doc {
-        self.doc_from_tokens(span, TokenLayout::Block)
+    /// Recognize a declaration block from its typed production boundary and
+    /// outer brace pair, rather than from a list of block keywords. The
+    /// negative cases own expression/type/verbatim braces, so a future parsed
+    /// declaration-block variant automatically takes this path.
+    fn nonempty_outer_decl_block_span<'d>(&self, decl: &'d Decl) -> Option<&'d Span> {
+        if decl_owns_non_block_braces(decl) {
+            return None;
+        }
+        let span = decl.span();
+        let indices = self.token_indices(span);
+        indices.iter().enumerate().find_map(|(position, index)| {
+            if !matches!(self.source.tokens()[*index].kind, Token::LBrace) {
+                return None;
+            }
+            let close = matching_rbrace(self.source, &indices, position)?;
+            (close + 1 == indices.len() && close > position + 1).then_some(span)
+        })
     }
 
     fn print_sum(&self, span: &Span, ctors: Vec<Span>) -> Doc {
@@ -544,11 +527,19 @@ impl<'a> LayoutPrinter<'a> {
             arm.span.start,
             self.source.tokens()[indices[arrow_pos]].span.end,
         );
-        let compound = matches!(arm.body, Expr::EMatch { .. }) || is_compound_expr(&arm.body);
+        let broken_application = application_argument_count(&arm.body) >= 2;
+        let compound = matches!(arm.body, Expr::EMatch { .. })
+            || is_compound_expr(&arm.body)
+            || broken_application;
         if compound {
+            let body = if broken_application {
+                self.print_application(&arm.body, true)
+            } else {
+                self.print_expr(&arm.body)
+            };
             Doc::concat([
                 self.doc_from_tokens(&head, TokenLayout::Soft),
-                Doc::concat([Doc::hard_line(), self.print_expr(&arm.body)]).nest(INDENT_WIDTH),
+                Doc::concat([Doc::hard_line(), body]).nest(INDENT_WIDTH),
             ])
         } else {
             Doc::concat([
@@ -601,7 +592,7 @@ impl<'a> LayoutPrinter<'a> {
         .group()
     }
 
-    fn print_application(&self, expr: &Expr) -> Doc {
+    fn print_application(&self, expr: &Expr, force_break: bool) -> Doc {
         let mut arguments = Vec::new();
         let head = flatten_application(expr, &mut arguments);
         let mut continuation = Vec::new();
@@ -609,7 +600,11 @@ impl<'a> LayoutPrinter<'a> {
         for argument in arguments {
             let comments = self.comments_between(previous_end, argument.span().start);
             if comments.is_empty() {
-                continuation.push(Doc::line());
+                continuation.push(if force_break {
+                    Doc::hard_line()
+                } else {
+                    Doc::line()
+                });
             } else {
                 continuation.push(Doc::hard_line());
                 for comment in comments {
@@ -619,7 +614,9 @@ impl<'a> LayoutPrinter<'a> {
             }
             let argument_doc = self.print_expr(argument);
             continuation.push(
-                if expr_needs_parens(argument, ExprContext::ApplicationArgument) {
+                if expr_needs_parens(argument, ExprContext::ApplicationArgument)
+                    && !self.rendered_expr_has_outer_parens(argument)
+                {
                     Doc::concat([Doc::text("("), argument_doc, Doc::text(")")])
                 } else {
                     argument_doc
@@ -628,7 +625,9 @@ impl<'a> LayoutPrinter<'a> {
             previous_end = argument.span().end;
         }
         let head_doc = self.print_expr(head);
-        let head_doc = if expr_needs_parens(head, ExprContext::ApplicationHead) {
+        let head_doc = if expr_needs_parens(head, ExprContext::ApplicationHead)
+            && !self.rendered_expr_has_outer_parens(head)
+        {
             Doc::concat([Doc::text("("), head_doc, Doc::text(")")])
         } else {
             head_doc
@@ -655,6 +654,27 @@ impl<'a> LayoutPrinter<'a> {
         self.source.comment_attachments().iter().any(|attachment| {
             span.start <= attachment.comment_span.start && attachment.comment_span.end <= span.end
         })
+    }
+
+    fn span_has_outer_parens(&self, span: &Span) -> bool {
+        let indices = self.token_indices(span);
+        let Some(first) = indices.first() else {
+            return false;
+        };
+        matches!(self.source.tokens()[*first].kind, Token::LParen)
+            && matching_rparen(self.source, &indices, 0) == Some(indices.len() - 1)
+    }
+
+    fn rendered_expr_has_outer_parens(&self, expr: &Expr) -> bool {
+        matches!(
+            expr,
+            Expr::EAsc(_, _, _)
+                | Expr::EOld(_, _)
+                | Expr::EBinOp(_, _, _, _)
+                | Expr::EProj(_, _, _)
+                | Expr::EPi(_, _, _, _)
+                | Expr::EArrow(_, _, _)
+        ) && self.span_has_outer_parens(expr.span())
     }
 
     fn print_span(&self, span: &Span) -> Doc {
@@ -1218,6 +1238,23 @@ impl<'a> LayoutPrinter<'a> {
     }
 }
 
+/// Productions whose final braces belong to an expression, type, constructor,
+/// or verbatim payload rather than a declaration-block sibling list.
+fn decl_owns_non_block_braces(decl: &Decl) -> bool {
+    match decl {
+        Decl::ViewDecl { .. }
+        | Decl::LetDecl { .. }
+        | Decl::ProveDecl { .. }
+        | Decl::LemmaDecl { .. }
+        | Decl::AttachedProofDecl { .. }
+        | Decl::DataDecl { .. }
+        | Decl::TypeAlias { .. }
+        | Decl::TemporalDecl { .. } => true,
+        Decl::Pub(inner) => decl_owns_non_block_braces(inner),
+        _ => false,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TokenLayout {
     Soft,
@@ -1448,6 +1485,16 @@ fn is_compound_expr(expr: &Expr) -> bool {
         Expr::ELet(_, _, value, body, _) => is_compound_expr(value) || is_compound_expr(body),
         _ => false,
     }
+}
+
+fn application_argument_count(expr: &Expr) -> usize {
+    let mut count = 0usize;
+    let mut cursor = expr;
+    while let Expr::EApp(function, _, _) = cursor {
+        count += 1;
+        cursor = function;
+    }
+    count
 }
 
 fn flatten_application<'a>(expr: &'a Expr, arguments: &mut Vec<&'a Expr>) -> &'a Expr {

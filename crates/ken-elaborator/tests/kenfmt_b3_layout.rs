@@ -28,6 +28,7 @@ fn ac2_ac3_mandatory_breaks_separators_and_no_alignment() {
     let source = "module M { fn choose (x : Bool) : Bool = match x { True |-> True; False |-> False }; const tiny : Nat = Zero; }";
     let expected = "module M {\n  fn choose (x : Bool) : Bool =\n    match x {\n      True ↦ True;\n      False ↦ False\n    };\n  const tiny : Nat = Zero\n}\n";
     assert_eq!(format_ken(source).unwrap(), expected);
+    assert_eq!(format_ken(expected).unwrap(), expected);
 }
 
 #[test]
@@ -94,6 +95,68 @@ fn ac6_independent_oracle_mandatory_forms_are_exact_fixed_points() {
     let compound_expected = "fn compute (x : Nat) : Nat =\n  let y =\n    match x {\n      Zero ↦ 0;\n      Suc n ↦ n\n    }\n  in\n    finish y\n";
     assert_eq!(format_ken(compound).unwrap(), compound_expected);
     assert_eq!(format_ken(compound_expected).unwrap(), compound_expected);
+}
+
+#[test]
+fn ac6_representable_declaration_blocks_break_in_both_orientations() {
+    let source = "law metrics (m) { x           : Nat ; longer_name : Int }\nclass Metrics a { x           : Nat ; longer_name : Int }\ninstance Metrics Nat { x           = 0 ; longer_name = 1 ; }";
+    let expected = "law metrics (m) {\n  x : Nat;\n  longer_name : Int\n}\n\nclass Metrics a {\n  x : Nat;\n  longer_name : Int\n}\n\ninstance Metrics Nat {\n  x = 0;\n  longer_name = 1\n}\n";
+
+    assert_eq!(format_ken(source).unwrap(), expected);
+    assert_eq!(format_ken(expected).unwrap(), expected);
+}
+
+#[test]
+fn ac6_reachable_fmt9_fences_execute_as_an_independent_oracle() {
+    let oracle = include_str!("../../../conformance/surface/formatting/seed-canonical-format.md");
+    let fmt9 = oracle
+        .split_once("## FMT9 —")
+        .expect("FMT9 oracle section must exist")
+        .1;
+    let mut executed = 0usize;
+
+    for section in fmt9.split("### surface/formatting/").skip(1) {
+        let expected_marker = section.find("- expect:");
+        let blocks = indented_ken_blocks(section);
+        let expected: Vec<_> = blocks
+            .iter()
+            .filter(|(offset, body)| {
+                expected_marker.is_some_and(|marker| *offset > marker)
+                    && parse_lossless(body).is_ok()
+            })
+            .map(|(_, body)| body.as_str())
+            .collect();
+
+        for body in &expected {
+            assert_eq!(
+                format_ken(body).unwrap(),
+                *body,
+                "reachable canonical FMT9 fence is not a fixed point"
+            );
+            executed += 1;
+        }
+
+        let given: Vec<_> = blocks
+            .iter()
+            .filter(|(offset, body)| {
+                expected_marker.is_none_or(|marker| *offset < marker)
+                    && parse_lossless(body).is_ok()
+            })
+            .map(|(_, body)| body.as_str())
+            .collect();
+        if expected.len() == 1 {
+            for body in given {
+                assert_eq!(
+                    format_ken(body).unwrap(),
+                    expected[0],
+                    "reachable non-canonical FMT9 fence missed its independent expected bytes"
+                );
+                executed += 1;
+            }
+        }
+    }
+
+    assert!(executed > 0, "FMT9 reachability gate executed no fixtures");
 }
 
 #[test]
@@ -185,4 +248,29 @@ fn ken_fence_bodies(source: &str) -> Vec<&str> {
         offset += line.len();
     }
     bodies
+}
+
+fn indented_ken_blocks(section: &str) -> Vec<(usize, String)> {
+    let mut blocks = Vec::new();
+    let mut body = None::<(usize, String)>;
+    let mut offset = 0usize;
+    for line in section.split_inclusive('\n') {
+        let text = line.strip_suffix('\n').unwrap_or(line);
+        if let Some((start, content)) = &mut body {
+            if text == "  ```" {
+                if !content.ends_with('\n') {
+                    content.push('\n');
+                }
+                blocks.push((*start, std::mem::take(content)));
+                body = None;
+            } else {
+                content.push_str(text.strip_prefix("  ").unwrap_or(text));
+                content.push('\n');
+            }
+        } else if text == "  ```ken" {
+            body = Some((offset, String::new()));
+        }
+        offset += line.len();
+    }
+    blocks
 }
