@@ -35,12 +35,9 @@ This is the minimal pre-diagnostic carrier. A later diagnostic package can
 subsume it without changing the parsing semantics.
 
 ```ken
-data NumericErrorKind =
-  EmptyInput
-  | InvalidDigit
+data NumericErrorKind = EmptyInput | InvalidDigit
 
-data NumericError =
-  MkNumericError NumericErrorKind Nat
+data NumericError = MkNumericError NumericErrorKind Nat
 ```
 
 ## 3. Decimal parsing
@@ -52,91 +49,49 @@ base-ten accumulator.
 ```ken
 fn char_to_digit (c : Char) : Option Int =
   match and_bool (leq_int (48 : Int) (charToInt c)) (leq_int (charToInt c) (57 : Int)) {
-    True ↦
-      Some
-        Int
-        (sub_int (charToInt c) (48 : Int));
+    True ↦ Some Int (sub_int (charToInt c) (48 : Int));
     False ↦ None Int
   }
 
 fn parse_digits_at
-  (chars : List Char)
-  (position : Nat)
-  (accumulator : Int)
-  : Result NumericError Int =
+      (chars : List Char) (position : Nat) (accumulator : Int)
+    : Result NumericError Int =
   match chars {
-    Nil ↦
-      Ok
-        NumericError
-        Int
-        accumulator;
+    Nil ↦ Ok NumericError Int accumulator;
     Cons c rest ↦
       match char_to_digit c {
-        None ↦
-          Err
-            NumericError
-            Int
-            (MkNumericError InvalidDigit position);
-        Some digit ↦
-          parse_digits_at
-            rest
-            (Suc position)
-            (add_int (mul_int accumulator (10 : Int)) digit)
+        None ↦ Err NumericError Int (MkNumericError InvalidDigit position);
+        Some digit ↦ parse_digits_at
+          rest
+          (Suc position)
+          (add_int (mul_int accumulator (10 : Int)) digit)
       }
   }
 
 fn parse_nat_chars (chars : List Char) : Result NumericError Int =
   match chars {
-    Nil ↦
-      Err
-        NumericError
-        Int
-        (MkNumericError EmptyInput Zero);
-    Cons c rest ↦
-      parse_digits_at
-        (Cons Char c rest)
-        Zero
-        (0 : Int)
+    Nil ↦ Err NumericError Int (MkNumericError EmptyInput Zero);
+    Cons c rest ↦ parse_digits_at (Cons Char c rest) Zero (0 : Int)
   }
 
 fn negate_parsed (x : Result NumericError Int) : Result NumericError Int =
   match x {
-    Err problem ↦
-      Err
-        NumericError
-        Int
-        problem;
-    Ok value ↦
-      Ok
-        NumericError
-        Int
-        (sub_int (0 : Int) value)
+    Err problem ↦ Err NumericError Int problem;
+    Ok value ↦ Ok NumericError Int (sub_int (0 : Int) value)
   }
 
 fn parse_int_chars (chars : List Char) : Result NumericError Int =
   match chars {
-    Nil ↦
-      Err
-        NumericError
-        Int
-        (MkNumericError EmptyInput Zero);
+    Nil ↦ Err NumericError Int (MkNumericError EmptyInput Zero);
     Cons c rest ↦
       match eq_int (charToInt c) (45 : Int) {
         True ↦
           match rest {
-            Nil ↦
-              Err
-                NumericError
-                Int
-                (MkNumericError EmptyInput (Suc Zero));
+            Nil ↦ Err NumericError Int (MkNumericError EmptyInput (Suc Zero));
             Cons d more ↦ negate_parsed
               (parse_digits_at (Cons Char d more) (Suc Zero) (0 : Int))
           };
-        False ↦
-          parse_digits_at
-            (Cons Char c rest)
-            Zero
-            (0 : Int)
+        False ↦ parse_digits_at (Cons Char c rest) Zero (0 : Int)
       }
   }
 
@@ -183,11 +138,11 @@ fn decimal_digit_to_char (digit : DecimalDigit) : Char =
   }
 
 proof valid for decimal_digit_to_char
-  (digit : DecimalDigit)
-  : Equal (Option Int) (char_to_digit (decimal_digit_to_char digit)) (Some
-  Int
-  (decimal_digit_value
-  digit)) =
+      (digit : DecimalDigit)
+    : Equal (Option Int) (char_to_digit (decimal_digit_to_char digit)) (Some
+      Int
+      (decimal_digit_value
+      digit)) =
   match digit {
     MkDecimalDigit value glyph valid ↦ valid
   }
@@ -195,94 +150,70 @@ proof valid for decimal_digit_to_char
 fn decimal_digit_values (digits : List DecimalDigit) : List Int =
   match digits {
     Nil ↦ Nil Int;
-    Cons digit rest ↦
-      Cons
-        Int
-        (decimal_digit_value digit)
-        (decimal_digit_values rest)
+    Cons digit rest ↦ Cons Int (decimal_digit_value digit) (decimal_digit_values rest)
   }
 
 fn format_digits (digits : List DecimalDigit) : List Char =
   match digits {
     Nil ↦ Nil Char;
-    Cons digit rest ↦
-      Cons
-        Char
-        (decimal_digit_to_char digit)
-        (format_digits rest)
+    Cons digit rest ↦ Cons Char (decimal_digit_to_char digit) (format_digits rest)
   }
 
 fn parsed_int_prepend (digit : Int) (parsed : Option (List Int)) : Option (List Int) =
   match parsed {
     None ↦ None (List Int);
-    Some rest ↦
-      Some
-        (List Int)
-        (Cons Int digit rest)
+    Some rest ↦ Some (List Int) (Cons Int digit rest)
   }
 
 fn parse_digit_result
-  (parsed_rest : Option (List Int))
-  (parsed_digit : Option Int)
-  : Option (List Int) =
+      (parsed_rest : Option (List Int)) (parsed_digit : Option Int)
+    : Option (List Int) =
   match parsed_digit {
     None ↦ None (List Int);
-    Some digit ↦
-      parsed_int_prepend
-        digit
-        parsed_rest
+    Some digit ↦ parsed_int_prepend digit parsed_rest
   }
 
 fn parse_formatted_digits (chars : List Char) : Option (List Int) =
   match chars {
-    Nil ↦
-      Some
-        (List Int)
-        (Nil Int);
-    Cons c rest ↦
-      parse_digit_result
-        (parse_formatted_digits rest)
-        (char_to_digit c)
+    Nil ↦ Some (List Int) (Nil Int);
+    Cons c rest ↦ parse_digit_result (parse_formatted_digits rest) (char_to_digit c)
   }
 
 fn show_digits (digits : List DecimalDigit) : String =
   list_char_to_string (format_digits digits)
 
 lemma format_digits_roundtrip
-  (digits : List DecimalDigit)
-  : Equal (Option (List Int)) (parse_formatted_digits (format_digits digits)) (Some
-  (List
-  Int)
-  (decimal_digit_values
-  digits)) =
+      (digits : List DecimalDigit)
+    : Equal (Option (List Int)) (parse_formatted_digits (format_digits digits)) (Some
+      (List
+      Int)
+      (decimal_digit_values
+      digits)) =
   match digits {
     Nil ↦ Proved;
-    Cons digit rest ↦
-      trans
+    Cons digit rest ↦ trans
+      (Option (List Int))
+      (parse_digit_result
+        (parse_formatted_digits (format_digits rest))
+        (char_to_digit (decimal_digit_to_char digit)))
+      (parsed_int_prepend
+        (decimal_digit_value digit)
+        (parse_formatted_digits (format_digits rest)))
+      (Some (List Int) (Cons Int (decimal_digit_value digit) (decimal_digit_values rest)))
+      (cong
+        (Option Int)
         (Option (List Int))
-        (parse_digit_result
-          (parse_formatted_digits (format_digits rest))
-          (char_to_digit (decimal_digit_to_char digit)))
-        (parsed_int_prepend
-          (decimal_digit_value digit)
-          (parse_formatted_digits (format_digits rest)))
-        (Some
-          (List Int)
-          (Cons Int (decimal_digit_value digit) (decimal_digit_values rest)))
-        (cong
-          (Option Int)
-          (Option (List Int))
-          (char_to_digit (decimal_digit_to_char digit))
-          (Some Int (decimal_digit_value digit))
-          (parse_digit_result (parse_formatted_digits (format_digits rest)))
-          ((proof valid for decimal_digit_to_char) digit))
-        (cong
-          (Option (List Int))
-          (Option (List Int))
-          (parse_formatted_digits (format_digits rest))
-          (Some (List Int) (decimal_digit_values rest))
-          (parsed_int_prepend (decimal_digit_value digit))
-          (format_digits_roundtrip rest))
+        (char_to_digit (decimal_digit_to_char digit))
+        (Some Int (decimal_digit_value digit))
+        (parse_digit_result (parse_formatted_digits (format_digits rest)))
+        ((proof valid for decimal_digit_to_char) digit))
+      (cong
+        (Option (List Int))
+        (Option (List Int))
+        (parse_formatted_digits (format_digits rest))
+        (Some (List Int) (decimal_digit_values rest))
+        (parsed_int_prepend (decimal_digit_value digit))
+        (format_digits_roundtrip rest))
   }
 ```
 

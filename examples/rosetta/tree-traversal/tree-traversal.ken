@@ -11,18 +11,12 @@
 --
 -- Output steers around the tracked `natToDecimal` exponential-blowup gap:
 -- the oracle is a `String` ("PASS"/"FAIL"), never a printed `Nat`/`Int`.
-data Tree =
-  Leaf
-  | Node Tree Char Tree
+data Tree = Leaf | Node Tree Char Tree
 
 fn inorder (t : Tree) : List Char =
   match t {
     Leaf ↦ Nil Char;
-    Node l c r ↦
-      list_append
-        Char
-        (inorder l)
-        (Cons Char c (inorder r))
+    Node l c r ↦ list_append Char (inorder l) (Cons Char c (inorder r))
   }
 
 const sampleTree : Tree =
@@ -39,9 +33,5 @@ const finalCheck : String =
     False ↦ "FAIL"
   }
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line finalCheck)

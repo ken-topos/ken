@@ -19,11 +19,7 @@
 -- `-`/`*` are now idiomatic infix (VAL2 #11, `83f728a`) -- rewritten
 -- below from the earlier prefix `sub_int`/`mul_int` workaround; same
 -- primitives underneath, value unchanged.
-data RpnOp =
-  Push Int
-  | Add
-  | Sub
-  | Mul
+data RpnOp = Push Int | Add | Sub | Mul
 
 -- rpnStep: applies one op to a stack. `Add`/`Sub`/`Mul` need two flat
 -- `Cons` peels (nested constructor PATTERNS still trigger
@@ -32,20 +28,14 @@ data RpnOp =
 -- own `natCmp`).
 fn rpnStep (stack : List Int) (op : RpnOp) : Option (List Int) =
   match op {
-    Push n ↦
-      Some
-        (List Int)
-        (Cons Int n stack);
+    Push n ↦ Some (List Int) (Cons Int n stack);
     Add ↦
       match stack {
         Nil ↦ None (List Int);
         Cons a rest1 ↦
           match rest1 {
             Nil ↦ None (List Int);
-            Cons b rest2 ↦
-              Some
-                (List Int)
-                (Cons Int (a + b) rest2)
+            Cons b rest2 ↦ Some (List Int) (Cons Int (a + b) rest2)
           }
       };
     Sub ↦
@@ -54,10 +44,7 @@ fn rpnStep (stack : List Int) (op : RpnOp) : Option (List Int) =
         Cons a rest1 ↦
           match rest1 {
             Nil ↦ None (List Int);
-            Cons b rest2 ↦
-              Some
-                (List Int)
-                (Cons Int (b - a) rest2)
+            Cons b rest2 ↦ Some (List Int) (Cons Int (b - a) rest2)
           }
       };
     Mul ↦
@@ -66,10 +53,7 @@ fn rpnStep (stack : List Int) (op : RpnOp) : Option (List Int) =
         Cons a rest1 ↦
           match rest1 {
             Nil ↦ None (List Int);
-            Cons b rest2 ↦
-              Some
-                (List Int)
-                (Cons Int (a * b) rest2)
+            Cons b rest2 ↦ Some (List Int) (Cons Int (a * b) rest2)
           }
       }
   }
@@ -80,17 +64,11 @@ fn rpnStep (stack : List Int) (op : RpnOp) : Option (List Int) =
 -- sub-term.
 fn rpnEvalList (stack : List Int) (ops : List RpnOp) : Option (List Int) =
   match ops {
-    Nil ↦
-      Some
-        (List Int)
-        stack;
+    Nil ↦ Some (List Int) stack;
     Cons op ops2 ↦
       match rpnStep stack op {
         None ↦ None (List Int);
-        Some stack2 ↦
-          rpnEvalList
-            stack2
-            ops2
+        Some stack2 ↦ rpnEvalList stack2 ops2
       }
   }
 
@@ -101,10 +79,7 @@ fn top (stack : List Int) : Option Int =
     Nil ↦ None Int;
     Cons v rest ↦
       match rest {
-        Nil ↦
-          Some
-            Int
-            v;
+        Nil ↦ Some Int v;
         Cons w rest2 ↦ None Int
       }
   }
@@ -130,8 +105,7 @@ const exprOk : List RpnOp =
 -- "3 +" = stack-underflow (only one operand for a binary op) -- the
 -- discriminating failure case (Option-composition must actually reject
 -- this, not silently produce a wrong number).
-const exprUnderflow : List RpnOp =
-  Cons RpnOp (Push (3 : Int)) (Cons RpnOp Add (Nil RpnOp))
+const exprUnderflow : List RpnOp = Cons RpnOp (Push (3 : Int)) (Cons RpnOp Add (Nil RpnOp))
 
 const finalCheck : String =
   match rpnEval exprOk {
@@ -147,9 +121,5 @@ const finalCheck : String =
     None ↦ "FAIL"
   }
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line finalCheck)

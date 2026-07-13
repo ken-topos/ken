@@ -21,10 +21,7 @@
 -- Local `OrdResult` (matches the `natCmp`-adjacent precedent,
 -- `val1_string_literals.rs:334`) -- needed by `natCmp` for the GCD
 -- algorithm itself.
-data OrdResult =
-  Lt
-  | Eq
-  | Gt
+data OrdResult = Lt | Eq | Gt
 
 -- Local `list_append`/`concat` -- only what `natToDecimalFueled` needs
 -- for its multi-digit branch; kept self-contained rather than pulling in
@@ -32,11 +29,7 @@ data OrdResult =
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
     Nil ↦ ys;
-    Cons x xs2 ↦
-      Cons
-        a
-        x
-        (list_append a xs2 ys)
+    Cons x xs2 ↦ Cons a x (list_append a xs2 ys)
   }
 
 fn concat (a : String) (b : String) : String =
@@ -56,10 +49,7 @@ fn natSub (a : Nat) (b : Nat) : Nat =
     Suc n ↦
       match a {
         Zero ↦ Zero;
-        Suc m ↦
-          natSub
-            m
-            n
+        Suc m ↦ natSub m n
       }
   }
 
@@ -79,10 +69,7 @@ fn natCmp (a : Nat) (b : Nat) : OrdResult =
     Suc m ↦
       match b {
         Zero ↦ Gt;
-        Suc n ↦
-          natCmp
-            m
-            n
+        Suc n ↦ natCmp m n
       }
   }
 
@@ -101,22 +88,13 @@ fn natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat =
     Suc f ↦
       match natCmp a b {
         Eq ↦ a;
-        Gt ↦
-          natGcdFueled
-            f
-            (natSub a b)
-            b;
-        Lt ↦
-          natGcdFueled
-            f
-            a
-            (natSub b a)
+        Gt ↦ natGcdFueled f (natSub a b) b;
+        Lt ↦ natGcdFueled f a (natSub b a)
       }
   }
 
 -- natGcd: uses a + b as fuel (always sufficient for subtraction-based GCD).
-fn natGcd (a : Nat) (b : Nat) : Nat =
-  let fuel : Nat = natAdd a b in natGcdFueled fuel a b
+fn natGcd (a : Nat) (b : Nat) : Nat = let fuel : Nat = natAdd a b in natGcdFueled fuel a b
 
 -- ── Readable Nat literals ────────────────────────────────────────────────────
 const one : Nat = Suc Zero
@@ -179,10 +157,7 @@ fn sub10 (n : Nat) : Option Nat =
                                     Suc n9 ↦
                                       match n9 {
                                         Zero ↦ None Nat;
-                                        Suc n10 ↦
-                                          Some
-                                            Nat
-                                            n10
+                                        Suc n10 ↦ Some Nat n10
                                       }
                                   }
                               }
@@ -200,10 +175,7 @@ fn mod10Fueled (fuel : Nat) (n : Nat) : Nat =
     Suc f ↦
       match sub10 n {
         None ↦ n;
-        Some n2 ↦
-          mod10Fueled
-            f
-            n2
+        Some n2 ↦ mod10Fueled f n2
       }
   }
 
@@ -215,11 +187,7 @@ fn div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
     Suc f ↦
       match sub10 n {
         None ↦ q;
-        Some n2 ↦
-          div10Fueled
-            f
-            n2
-            (Suc q)
+        Some n2 ↦ div10Fueled f n2 (Suc q)
       }
   }
 
@@ -234,27 +202,17 @@ fn natToDecimalFueled (fuel : Nat) (n : Nat) : String =
     Suc f ↦
       match div10 n {
         Zero ↦ digitChar (mod10 n);
-        Suc q ↦
-          concat
-            (natToDecimalFueled f (Suc q))
-            (digitChar (mod10 n))
+        Suc q ↦ concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
       }
   }
 
 fn natToDecimal (n : Nat) : String =
   match n {
     Zero ↦ "0";
-    Suc m ↦
-      natToDecimalFueled
-        (Suc m)
-        (Suc m)
+    Suc m ↦ natToDecimalFueled (Suc m) (Suc m)
   }
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 -- main: gcd(12, 8) = 4
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line (natToDecimal (natGcd twelve eight)))

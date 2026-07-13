@@ -145,13 +145,8 @@ lemma sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
   J (λy' _. Equal ty y' x) Refl p
 
 lemma trans
-  (ty : Type)
-  (x : ty)
-  (y : ty)
-  (z : ty)
-  (p : Equal ty x y)
-  (q : Equal ty y z)
-  : Equal ty x z =
+      (ty : Type) (x : ty) (y : ty) (z : ty) (p : Equal ty x y) (q : Equal ty y z)
+    : Equal ty x z =
   J (λz' _. Equal ty x z') p q
 ```
 
@@ -167,22 +162,12 @@ discharges it into `Empty` directly; this bridge is `Ω → Type`, not
 ```ken
 fn dec_eq_decides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
   match d.eq x y eqn : h {
-    True ↦
-      Yes
-        (Equal a x y)
-        (d.sound x y h);
-    False ↦
-      No
-        (Equal a x y)
-        (λpxy.
-          absurd
-            (trans
-              Bool
-              False
-              (d.eq x y)
-              True
-              (sym Bool (d.eq x y) False h)
-              (d.complete x y pxy)))
+    True ↦ Yes (Equal a x y) (d.sound x y h);
+    False ↦ No
+      (Equal a x y)
+      (λpxy.
+        absurd
+          (trans Bool False (d.eq x y) True (sym Bool (d.eq x y) False h) (d.complete x y pxy)))
   }
 ```
 
@@ -236,12 +221,11 @@ over the concrete `DecEq Bool` instance from `§3` (the guide's `§7` named-
 proof-claims form):
 
 ```ken example
-proof yes_is_true for decide
-  : Equal Bool (decide (Equal Bool True True) true_is_true) True =
+proof yes_is_true for decide : Equal Bool (decide (Equal Bool True True) true_is_true) True =
   Proved
 
 proof no_is_false for decide
-  : Equal Bool (decide (Equal Bool True False) true_is_not_false) False =
+    : Equal Bool (decide (Equal Bool True False) true_is_not_false) False =
   Proved
 ```
 

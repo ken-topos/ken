@@ -35,41 +35,30 @@ fn byte_is_ascii (byte : UInt8) : Bool = leq_int (uint8_to_int byte) (127 : Int)
 fn classify_ascii_result (found : Option UInt8) : Option Bool =
   match found {
     None ↦ None Bool;
-    Some byte ↦
-      Some
-        Bool
-        (byte_is_ascii byte)
+    Some byte ↦ Some Bool (byte_is_ascii byte)
   }
 
 fn ascii_view (bs : Bytes) (index : Int) : Option Bool =
   classify_ascii_result (bytes_at bs index)
 
 proof definition for decode_utf8
-  (bs : Bytes)
-  : Equal (Result Utf8Error String) (decode_utf8 bs) (bytes_decode bs) =
+      (bs : Bytes)
+    : Equal (Result Utf8Error String) (decode_utf8 bs) (bytes_decode bs) =
   Refl
 
 lemma codec_roundtrip_anchor (p : BytesRoundTripLaw) : BytesRoundTripLaw = p
 
 lemma ascii_view_none
-  (bs : Bytes)
-  (index : Int)
-  (h : Equal (Option UInt8) (bytes_at bs index) (None UInt8))
-  : Equal (Option Bool) (ascii_view bs index) (None Bool) =
-  cong
-    (Option UInt8)
-    (Option Bool)
-    (bytes_at bs index)
-    (None UInt8)
-    classify_ascii_result
-    h
+      (bs : Bytes) (index : Int) (h : Equal (Option UInt8) (bytes_at bs index) (None UInt8))
+    : Equal (Option Bool) (ascii_view bs index) (None Bool) =
+  cong (Option UInt8) (Option Bool) (bytes_at bs index) (None UInt8) classify_ascii_result h
 
 lemma ascii_view_some
-  (bs : Bytes)
-  (index : Int)
-  (byte : UInt8)
-  (h : Equal (Option UInt8) (bytes_at bs index) (Some UInt8 byte))
-  : Equal (Option Bool) (ascii_view bs index) (Some Bool (byte_is_ascii byte)) =
+      (bs : Bytes)
+      (index : Int)
+      (byte : UInt8)
+      (h : Equal (Option UInt8) (bytes_at bs index) (Some UInt8 byte))
+    : Equal (Option Bool) (ascii_view bs index) (Some Bool (byte_is_ascii byte)) =
   cong
     (Option UInt8)
     (Option Bool)

@@ -29,20 +29,10 @@ fn listLength (a : Type) (xs : List a) : Nat =
 -- sub-term.
 fn splitAlt (a : Type) (xs : List a) : Prod (List a) (List a) =
   match xs {
-    Nil ↦
-      MkProd
-        (List a)
-        (List a)
-        (Nil a)
-        (Nil a);
+    Nil ↦ MkProd (List a) (List a) (Nil a) (Nil a);
     Cons x xs2 ↦
       match splitAlt a xs2 {
-        MkProd rest1 rest2 ↦
-          MkProd
-            (List a)
-            (List a)
-            (Cons a x rest2)
-            rest1
+        MkProd rest1 rest2 ↦ MkProd (List a) (List a) (Cons a x rest2) rest1
       }
   }
 
@@ -59,26 +49,13 @@ fn merge (a : Type) (leqf : a → a → Bool) (xs : List a) (ys : List a) : List
         Nil ↦ xs;
         Cons y ys2 ↦
           match leqf x y {
-            True ↦
-              Cons
-                a
-                x
-                (merge a leqf xs2 ys);
-            False ↦
-              Cons
-                a
-                y
-                (merge a leqf xs ys2)
+            True ↦ Cons a x (merge a leqf xs2 ys);
+            False ↦ Cons a y (merge a leqf xs ys2)
           }
       }
   }
 
-fn mergeSortFueled
-  (a : Type)
-  (leqf : a → a → Bool)
-  (fuel : Nat)
-  (xs : List a)
-  : List a =
+fn mergeSortFueled (a : Type) (leqf : a → a → Bool) (fuel : Nat) (xs : List a) : List a =
   match fuel {
     Zero ↦ xs;
     Suc f ↦
@@ -89,12 +66,11 @@ fn mergeSortFueled
             Nil ↦ xs;
             Cons y xs3 ↦
               match splitAlt a xs {
-                MkProd left right ↦
-                  merge
-                    a
-                    leqf
-                    (mergeSortFueled a leqf f left)
-                    (mergeSortFueled a leqf f right)
+                MkProd left right ↦ merge
+                  a
+                  leqf
+                  (mergeSortFueled a leqf f left)
+                  (mergeSortFueled a leqf f right)
               }
           }
       }
@@ -121,10 +97,7 @@ const scrambled : List Char =
   Cons
     Char
     100
-    (Cons
-      Char
-      99
-      (Cons Char 98 (Cons Char 97 (Cons Char 102 (Cons Char 101 (Nil Char))))))
+    (Cons Char 99 (Cons Char 98 (Cons Char 97 (Cons Char 102 (Cons Char 101 (Nil Char))))))
 
 const sortedResult : String = list_char_to_string (mergeSort Char leqChar scrambled)
 
@@ -134,9 +107,5 @@ const finalCheck : String =
     False ↦ "FAIL"
   }
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line finalCheck)

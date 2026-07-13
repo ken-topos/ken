@@ -106,8 +106,7 @@ elsewhere, a reachability precondition, an absence of any other producer).
 Prefer a dedicated wrapper for an authority-carrying value:
 
 ```ken example
-data Cap =
-  MkCap Int
+data Cap = MkCap Int
 
 fn cap_level (c : Cap) : Int =
   match c {
@@ -161,10 +160,6 @@ fold the next validated move in here (retro-action wiring, `README.md`).
   no separate kind of declaration) is `spec/50-stdlib/51-lawful-classes.md`.
 
 ```ken
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line "decomposition guide ok")
 ```

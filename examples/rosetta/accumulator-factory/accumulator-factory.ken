@@ -68,10 +68,7 @@ fn eq_nat (a : Nat) (b : Nat) : Bool =
     Suc a2 ↦
       match b {
         Zero ↦ False;
-        Suc b2 ↦
-          eq_nat
-            a2
-            b2
+        Suc b2 ↦ eq_nat a2 b2
       }
   }
 
@@ -108,8 +105,7 @@ const prog : ITree Op Resp Bool =
         (addTo three)
         (λr2. Ret Op Resp Bool (and_bool (eq_nat r1 two) (eq_nat r2 five))))
 
-const finalResult : ITree Eff RespEff (Pair Bool Nat) =
-  run_state Nat Eff RespEff Bool Zero prog
+const finalResult : ITree Eff RespEff (Pair Bool Nat) = run_state Nat Eff RespEff Bool Zero prog
 
 -- Observing `finalResult`: match-compiler W-style IH-slot support landed
 -- (`dependent-match-wstyle`) -- `match` on `ITree` (any instantiation, incl.
@@ -121,12 +117,7 @@ const finalResult : ITree Eff RespEff (Pair Bool Nat) =
 fn unwrapRet (r : ITree Eff RespEff (Pair Bool Nat)) : Pair Bool Nat =
   match r {
     Ret v ↦ v;
-    Vis op k ↦
-      mk_pair
-        Bool
-        Nat
-        False
-        Zero
+    Vis op k ↦ mk_pair Bool Nat False Zero
   }
 
 const finalBool : Bool = pair_fst Bool Nat (unwrapRet finalResult)
@@ -137,9 +128,5 @@ const finalCheck : String =
     False ↦ "FAIL"
   }
 
-proc main
-  (_input : ProcessInput)
-  (_caps : ProgramCaps)
-  : HostIO ExitCode
-  visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
   host_program (print_line finalCheck)

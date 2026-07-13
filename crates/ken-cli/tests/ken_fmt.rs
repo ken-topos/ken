@@ -86,7 +86,6 @@ fn fmt_fails_loudly_for_unsupported_paths_and_must_parse_bodies() {
 }
 
 #[test]
-#[ignore = "kenfmt strict frozen-corpus gate paused per operator 2026-07-13; catalog reformat is being reworked incrementally — re-enable after rework (see docs/program/IMPLEMENTATION-PROGRESS.md)"]
 fn strict_frozen_corpus_gate_is_green() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut catalog = Vec::new();

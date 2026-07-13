@@ -11,22 +11,14 @@ The assumption is explicit and unique. It is not minted in a Text package.
 
 ```ken
 lemma string_to_list_char_retraction
-  : (text : String) → Equal String (list_char_to_string
-  (string_to_list_char
-  text)) text =
+    : (text : String) → Equal String (list_char_to_string (string_to_list_char text)) text =
   Axiom
 
 lemma string_to_list_char_injective
-  (left : String)
-  (right : String)
-  (same_chars : Equal
-  (List
-  Char)
-  (string_to_list_char
-  left)
-  (string_to_list_char
-  right))
-  : Equal String left right =
+      (left : String)
+      (right : String)
+      (same_chars : Equal (List Char) (string_to_list_char left) (string_to_list_char right))
+    : Equal String left right =
   trans
     String
     left
