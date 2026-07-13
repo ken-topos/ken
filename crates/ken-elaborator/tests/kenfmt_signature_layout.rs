@@ -1,6 +1,7 @@
 //! WP #58 batch 1 — 96-column, horizontal-first declaration layout.
 
 use ken_elaborator::layout::{display_width, format_ken, CANONICAL_WIDTH};
+use ken_elaborator::literate::format_ken_md;
 use ken_elaborator::lossless::parse_lossless;
 
 fn check(source: &str, expected: &str) {
@@ -101,4 +102,34 @@ fn r3_r5_nested_applications_fit_recursively_inside_a_broken_parent() {
     check(source, expected);
     assert_eq!(token_shape(source), token_shape(expected));
     assert_eq!(ast_shape(source), ast_shape(expected));
+}
+
+#[test]
+fn batch3_stage1_breaks_high_and_keeps_each_fitting_child_horizontal() {
+    let fusion = "class Functor (f : Type -> Type) { fusion_law : (a : Type) -> (b : Type) -> (c : Type) -> (g : b -> c) -> (h : a -> b) -> (x : f a) -> Equal (f c) (map a c (comp a b c g h) x) (map b c g (map a b h x)) }";
+    let fusion_expected = "class Functor (f : Type → Type) {\n  fusion_law :\n    (a : Type)\n    → (b : Type)\n    → (c : Type)\n    → (g : b → c)\n    → (h : a → b)\n    → (x : f a)\n    → Equal (f c) (map a c (comp a b c g h) x) (map b c g (map a b h x))\n}\n";
+    check(fusion, fusion_expected);
+    assert_eq!(token_shape(fusion), token_shape(fusion_expected));
+    assert_eq!(ast_shape(fusion), ast_shape(fusion_expected));
+    assert!(fusion_expected.contains("→ (g : b → c)"));
+    assert!(!fusion_expected.contains("(g : b\n"));
+
+    let assoc = "proof assoc for list_append (a : Type) (xs : List a) (ys : List a) (zs : List a) : Equal (List a) (list_append a (list_append a xs ys) zs) (list_append a xs (list_append a ys zs)) = Refl";
+    let assoc_expected = "proof assoc for list_append\n      (a : Type) (xs : List a) (ys : List a) (zs : List a)\n    : Equal\n        (List a)\n        (list_append a (list_append a xs ys) zs)\n        (list_append a xs (list_append a ys zs)) =\n  Refl\n";
+    check(assoc, assoc_expected);
+    assert_eq!(token_shape(assoc), token_shape(assoc_expected));
+    assert_eq!(ast_shape(assoc), ast_shape(assoc_expected));
+
+    let lawful_functors = include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
+    assert_eq!(format_ken_md(lawful_functors).unwrap(), lawful_functors);
+    assert!(lawful_functors.contains(
+        "  fusion_law :\n    (a : Type)\n    → (b : Type)\n    → (c : Type)\n    → (g : b → c)"
+    ));
+
+    let ord_nat = include_str!("../../../catalog/packages/Core/OrdNat.ken.md");
+    assert_eq!(
+        format_ken_md(ord_nat).unwrap(),
+        ord_nat,
+        "batch-1 OrdNat rendering must remain byte-identical"
+    );
 }
