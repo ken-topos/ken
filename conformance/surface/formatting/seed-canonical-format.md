@@ -305,7 +305,8 @@ The expected bytes in this section are derived directly from `31 §1d`. They
 are not snapshots of a formatter implementation. Each case has two
 orientations: a non-canonical source must normalize to the displayed bytes,
 and those displayed bytes must format to themselves. Every assertion is
-**RED-UNTIL-BUILT (B3)**.
+**RED-UNTIL-BUILT (B3)** except a record-bearing input, which is
+**RED-UNTIL (record-surface + B3)**.
 
 ### surface/formatting/blank-runs-normalize-in-both-orientations (property)
 
@@ -347,6 +348,36 @@ and those displayed bytes must format to themselves. Every assertion is
 - why: the first orientation pins `2+ → 1` between top-level declarations and
   sibling `2+ → 0`; the canonical orientation prevents a formatter from
   oscillating or inserting a sibling blank line.
+
+### surface/formatting/sibling-blank-collapse-is-b3-reachable (property)
+
+- spec: `31 §1d` (zero blank lines between block siblings), B3 AC3
+- given: this landed, parseable nonempty class block:
+
+  ```ken
+  class C a {
+    foo : Nat;
+
+
+    bar : Nat
+  }
+  ```
+
+  and a second source already byte-identical to the expected block below
+- expect: **RED-UNTIL-BUILT (B3)** — both sources format byte-for-byte to:
+
+  ```ken
+  class C a {
+    foo : Nat;
+    bar : Nat
+  }
+  ```
+
+  Formatting those bytes again is byte-identical.
+- why: this reconstructs the record fixture's construct-agnostic sibling
+  blank-collapse invariant on a block that `parse_lossless` can produce now.
+  The forward record fixture remains gated on record-surface, but B3 cannot
+  regress `2+ → 0` while that future surface is absent.
 
 ### surface/formatting/fit-breaks-at-display-width-boundary (property)
 
@@ -416,6 +447,10 @@ and those displayed bytes must format to themselves. Every assertion is
     value : Nat
   }
   ```
+
+  This record pair is **RED-UNTIL (record-surface + B3)**; it is not an
+  end-to-end B3 acceptance claim until the parser can produce a record
+  `FormattableSource`.
 
   a declaration with the compound block body
   `fn compute (x : Nat) : Nat = let y = match x { Zero |-> 0; Suc n |-> n }
@@ -622,6 +657,32 @@ and those displayed bytes must format to themselves. Every assertion is
   retention. The 88/89 pair proves the threshold's two orientations, while
   the leading and interstitial pairs directly pin the no-flatten invariant.
 
+### FMT9 reachability method and result
+
+The fidelity gate embeds every expression fragment in the smallest complete
+declaration that preserves its tokens, then calls `parse_lossless` on every
+non-canonical input and every canonical expected block. The sweep runs against
+the exact oracle base before the output assertions are assigned a build gate;
+a hand-built `FormattableSource` is forbidden.
+
+On `858c64a3` (with parser sources byte-identical at `267e8386`), the
+mechanical sweep parsed all 29 reachable orientations and confirmed rejection
+for all four record-surface orientations:
+
+| Fixture family | Non-canonical | Canonical | Gate disposition |
+|---|---|---|---|
+| blank runs, reachable class sibling control | parses | parses | B3 |
+| 88/89 fit and indentation | parses | parses | B3 |
+| match, nested match, compound `let`, sum | parses | parses | B3 |
+| class/instance alignment and block separators | parses | parses | B3 |
+| named-field constructor commas | parses | parses | B3 |
+| parentheses and comment-placement pairs | parses | parses | B3 |
+| any fixture containing record declaration/literal/pattern surface | rejects | rejects | record-surface + B3 |
+
+`record` was the sole unbuilt construct found. The rejection is a reachability
+classification, not a synthetic negative formatter test: those forward
+oracles remain dormant until real source parsing can produce their input.
+
 ---
 
 ## Coverage map
@@ -636,7 +697,7 @@ and those displayed bytes must format to themselves. Every assertion is
 | 6. Trivia/literals | `comments-retain-text-and-attachment`, `all-literal-lexemes-are-verbatim` | B2/B3/B4/C |
 | 7. Width | `breakable-syntax-never-exceeds-88-columns` | B3/C |
 | 8. Ambiguity | all FMT8 cases | B2/B3/B4/C |
-| B3 layout axes | all FMT9 cases | B3 |
+| B3 layout axes | all FMT9 cases | B3; record inputs also require record-surface |
 
 ## Cross-case consistency
 
