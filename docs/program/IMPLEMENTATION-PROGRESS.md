@@ -14,7 +14,56 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 1fa9c344`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 1f85ad9a`
+> **I-2 (CA2 Console floor) CLOSED ✅ `1f85ad9a`** (PR #604; ACs met, all 3 §10 retros
+> in @ 10:28 → task #55 done). **Milestone B's Console effect floor is COMPLETE.** Carry
+> (→ bake into I-3 + host-ABI frames): enrich the existing coproduct summand in place
+> (don't fork a spine); model host-boundary outcomes as named total values (Eof≠empty
+> Chunk, BrokenPipe a total IOError) + assert exact constructors via CaptureHost, never
+> `is_err`; land the provide+observe handler seam with the first real algebra (FS an
+> explicit default/fast-follow); Ken string literals don't interpret `\n` (build Char 10
+> → list_char_to_string → bytes_encode).
+>
+> **★★ OPERATOR RETURNED @~11:15 — DECISIONS + NEW DIRECTIVE (2026-07-13):**
+> **(NEW/urgent) DISABLE the kenfmt strict frozen-corpus gate — reversibly.** Operator:
+> the full-catalog reformat + strict gate (capstone C) was approved *before* they
+> reviewed the formatter output; it needs **incremental rework (one file at a time),
+> then re-enable the gate**. Frame `docs/program/wp/kenfmt-gate-disable.md` (branch
+> `wp/kenfmt-gate-disable` off `1f85ad9a`) — `#[ignore]` (reversible) on 3
+> frozen-corpus tests: `strict_frozen_corpus_gate_is_green` (ken_fmt.rs) +
+> `canonical_frozen_corpus_is_a_31_file_fixed_point` + `canonical_reformat_has_no_
+> pathological_line_expansion` (kenfmt_c_capstone.rs); KEEP the 3 fixture tool-behavior
+> tests; catalog NOT reverted. Task #57 → Language. **git_request `eee6e3a0`; Steward
+> honesty-gate CLEAN** (linear `1f85ad9a→33b48853→eee6e3a0`; 2 test files + frame only,
+> exactly 3 verbatim `#[ignore]`, tool tests untouched; zero kernel/Cargo.lock/spec/
+> conformance/.github/catalog delta). **PUBLISHING (`eee6e3a0` + tracker bundle, CI-poll
+> bg).** On merge: CI stops enforcing the gate → close #57 on retros.
+> **(1) Foundation → HOLD for §5.2 then CC2** (operator chose hold, not CC2a-split).
+> **(2) Runtime → I-3 GO — Architect DESIGN RULED** (`evt_2sxd7pszs42af`, D1–D8).
+> **I-3 FRAME AUTHORED ✅** `docs/program/wp/i3-fs-floor.md` (branch `wp/i3-fs-floor @
+> 789b7d32` off `1f85ad9a`) — sent to Architect for transcription re-confirm
+> (`evt_6c9j8t1jf91df`). **ON re-confirm → Handoff-Gate Runtime ring → kick.** (D2
+> build-risk: Auth-param `fs_resp` match may need hand-built `Elim` — flagged in frame.)
+> **(3) §5.2/CP0 FRAME PENDING — author from `evt_2sxd7pszs42af` Deliverable-2** (enclave-
+> owned per contract; pipelines w/ I-3, no shared-file churn — CP0 owns `elaborator/src/
+> bytes.rs` + consumer sweep, I-3 owns prelude FSOp+Path):
+>   • **(A) Placeholder retirement** — FS floor consumes NONE of `write_bytes`/`append`/
+>     `send`/`recv` (`bytes.rs:134-164`, bogus `Bytes→Bytes→Bytes`). `write_bytes`+`recv`
+>     free; **`append` load-bearing for DS-AC6 name-hygiene** (`l3_strings_surface_
+>     acceptance.rs:398,410` + `seed-collections.md:785`); **`send` ref'd by
+>     `l6_acceptance.rs`+`sec2_acceptance.rs`** (Net effect-row seed) → migrate fixtures OR
+>     re-anchor those props on a real distinct pair = **Foundation/Spec coordination**.
+>   • **(B) Safe pure sigs (real migration)** — `bytes_decode:Bytes→String`(neutral,
+>     `bytes.rs:113`)→`Bytes→Result Utf8Error String`; `bytes_at:Bytes→Int→Int`→`→Option
+>     UInt8`; `bytes_slice:Bytes→Int→Int→Bytes`→`→Option Bytes`. Native Cranelift lowering +
+>     `bytes_at.bounds` obligation. **Whole-consumer sweep:** Parsing pkg, Validation pkg,
+>     `rosetta/read-file-lines`, CLI-E2E `fs_read_file_lines_flip`, `l6_acceptance`/
+>     `cat5_parsing`/`nc16` + runtime lowering. **Land safe sigs BEFORE Text.Codec/ArgParse
+>     freeze unsafe shapes = why CC2 is gated.** Architect terminal-reviews CP0 too.
+> **(Q0) §32 reconcile — RESOLVED, no-op:** approved grammar content already on
+> `origin/main @ 1f85ad9a` via `106fd60c` (blob `496bab5d` == reviewed `b1942cd7`;
+> spec-leader `evt_7etvc9371ezgd` + spec-author `evt_3bn456k47htpe`). Nothing to publish.
+> HELD namespace remainder still untouched (operator priority).
 > **I-1 CLOSED ✅** (PR #601, squash; `origin/main @ bd9e6c4b`; verified on main:
 > `resolve_main` present, frame oracle retired, tracker bundle landed). Milestone A
 > (Program I entrypoint ABI + runner) is IN; all 3 §10 retros in (leader/impl/qa @
@@ -91,8 +140,10 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **Steward honesty-gate CLEAN** (independent, object store): linear `1fa9c344 →
 > 1faeb3b4 → 437fa96a` (single-parent); 14 files all in-scope (Console pkg + CLI/interp/
 > elaborator host-ABI/seam + tests + frame + 2 Rosetta); **zero** kernel/Cargo.lock/spec/
-> conformance/.github delta. **PUBLISHING now** (`437fa96a` + doc-only tracker bundle;
-> CI-poll bg). On merge: verify SHA → relay → close #55 on 3 §10 retros.
+> conformance/.github delta. **MERGED ✅ `origin/main @ 1f85ad9a`** (PR #604, squash;
+> verified on main: `Console.ken.md` + `i2_console_floor.rs` present, dead
+> `build_print_line_tree` grep-clean, squash onto prior `1fa9c344`). Milestone B Console
+> floor IN. Relay + retro-request sent; **CLOSES on 3 §10 retros → task #55.**
 > **Architect RULED** (`evt_5x7cgmtz7ygt9`): gates already glob dynamically; the
 > count asserts do anti-vacuity → replace `assert_eq!(len,N)` with FLOOR
 > `assert!(len>=N)` (catches broken-glob/deleted-file drift, growth-robust, no
