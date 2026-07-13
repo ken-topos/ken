@@ -1055,7 +1055,7 @@ impl<'a> LayoutPrinter<'a> {
                 self.collect_expr_parens(value, ExprContext::AscriptionValue);
                 self.collect_type_parens(ty, TypeContext::Top);
             }
-            Expr::EOld(value, _) => self.collect_expr_parens(value, ExprContext::ApplicationHead),
+            Expr::EOld(value, _) => self.collect_expr_parens(value, ExprContext::OldOperand),
             Expr::EProj(value, _, _) => {
                 self.collect_expr_parens(value, ExprContext::ProjectionBase)
             }
@@ -1268,6 +1268,7 @@ enum ExprContext {
     Top,
     ApplicationHead,
     ApplicationArgument,
+    OldOperand,
     ProjectionBase,
     AscriptionValue,
     ArrowLeft,
@@ -1313,8 +1314,12 @@ fn expr_needs_parens(expr: &Expr, context: ExprContext) -> bool {
         // An arrow argument is a mandatory-clarity case; a nested application
         // argument also needs grouping to preserve the left-associated tree.
         ExprContext::ApplicationArgument => precedence <= 7,
+        ExprContext::OldOperand => precedence < 8,
         ExprContext::ProjectionBase => {
-            matches!(expr, Expr::ECon(_, _) | Expr::EApp(_, _, _)) || precedence < 7
+            matches!(
+                expr,
+                Expr::ECon(_, _) | Expr::EApp(_, _, _) | Expr::EOld(_, _)
+            ) || precedence < 7
         }
         ExprContext::AscriptionValue => precedence <= 2,
         ExprContext::ArrowLeft => precedence <= 1,

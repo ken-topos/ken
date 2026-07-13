@@ -47,6 +47,23 @@ fn ac4_redundant_parentheses_drop_but_precedence_parentheses_stay() {
 }
 
 #[test]
+fn ac4_old_atom_boundary_parentheses_preserve_meaning() {
+    let source = "class Box a { value : a }\nspace proc project_old (b : Box Nat) : Nat ensures Equal Nat result (old b).value = b.value\nspace proc apply_old (f : Nat → Nat) (x : Nat) : Nat ensures Equal Nat result (old (f x)) = f x\n";
+    let formatted = format_ken(source).unwrap();
+
+    assert!(formatted.contains("(old b).value"), "{formatted}");
+    assert!(formatted.contains("old (f"), "{formatted}");
+    assert_eq!(ast_shape(source), ast_shape(&formatted));
+    assert_eq!(format_ken(&formatted).unwrap(), formatted);
+
+    let mut original = ElabEnv::new().unwrap();
+    let mut canonical = ElabEnv::new().unwrap();
+    assert!(original.elaborate_file(source).is_ok());
+    assert!(canonical.elaborate_file(&formatted).is_ok());
+    assert_eq!(original.env.trusted_base(), canonical.env.trusted_base());
+}
+
+#[test]
 fn ac5_comments_are_retained_and_force_breaks() {
     let source = "-- lead\nfn keep (x : Int) : Int = (\n  -- middle\n  x\n) -- tail\n";
     let formatted = format_ken(source).unwrap();
