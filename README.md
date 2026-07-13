@@ -1,111 +1,141 @@
 # Ken
 
-**Ken** is a clean-room, agents-write/humans-read **verified language**: a
-language an agent can write *and prove correct*, with a small auditable trust
-root and a permissive license. Machine-checkable correctness — not just
-tests — is the deployable guarantee.
+Ken is an MIT-licensed, verified software-engineering language designed for a
+world in which agents write programs and humans review them.
 
-**The thesis** ([`spec/00-overview §1`](spec/00-overview.md)): an L2 guarantee
-(kernel-checked proof) delivered with L1 ergonomics — write a function, state
-a property, get back a verdict an agent can act on without reading the kernel.
+The scarce resource in that world is not typing code. It is understanding what
+the code promises and deciding whether those promises are justified. Ken makes
+that boundary part of the language: programs state properties alongside their
+implementations, the toolchain proves what it can, and the remaining claims are
+identified honestly as tested, delegated, or unknown.
 
-- **License:** MIT (see `LICENSE`). Programs you write in Ken are yours under
-  any license you choose.
-- **Host:** Rust, `#![forbid(unsafe_code)]`.
-- **Trust root:** a small, permanent Rust **kernel** — dependent type theory
-  with observational equality, a decidable conversion checker, and a proof
-  checker that re-checks every certificate. The **de Bruijn criterion**: the
-  thing you must trust is small enough to audit
-  ([`docs/PRINCIPLES.md §5`](docs/PRINCIPLES.md)).
-- **Reference semantics:** an interpreter (strict CBV); the interpreter is the
-  oracle — native codegen (X3) is deferred and is correct iff it agrees.
+Ken is intended for systems-adjacent through application-level software. It
+combines a dependently typed language with a small, permanent proof kernel, a
+strict reference interpreter, and a native compiler. The kernel re-checks proof
+certificates produced by the rest of the toolchain, so the trusted foundation
+remains small enough to audit.
 
-## What's built
+Read [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) for the project's reasoning
+charter and [`spec/00-overview.md`](spec/00-overview.md) for the language
+overview.
 
-The implementation is underway (~42,400 lines of Rust across 6 crates,
-multi-agent federation). **Bold** marks are covered by landed kernel code;
-*draft* marks have a written spec whose implementation is in progress or
-not started; *deferred* marks are post-verification-loop.
+## Language
 
-| Workstream | Status | What |
-|---|---|---|
-| **Kernel trust-root (WS-K)** | **complete (K1→K-api)** | Π, Σ, inductive families, predicative universes, observational `Eq`/`cast`/`Ω`/quotients, W-style eliminators (K1.5), decidable conversion (NbE + SCT), the stable TCB API — the auditable trust boundary |
-| **Verification spine (WS-V)** | **complete (V0→V4, T1)** | V0 elaborator, V1 spec syntax (`requires`/`ensures`/four-way status), V2 obligation generation (body-as-motive extraction), V3 automated prover (IPC tactic w/ kernel-re-checked certificates; Z3 oracle spec'd, not yet wired), V4 diagnostics (countermodels, typed holes, three-region decomposition), T1 machine-readable agent protocol |
-| **Surface language (WS-L)** | **core landed (L1–L7, L3b)** | L1 numeric types (`Int`, `Decimal`, fixed-width), L2 sum types + `match` + exhaustiveness + refinements (nested constructor patterns via pattern-matrix compilation), L3 strings & collections, L3b user-type instance elaboration (DecEq/Ord), L5 effects (interaction-tree, Console I/O driver runs end-to-end), L6 `Bytes` + binary I/O, L7 foreign FFI + trust boundary |
-| **Typeclasses (Lc)** | **landed (ADR 0008)** | Classes-as-subobjects, coherence gate, one canonical instance per type |
-| **Everyday-surface taxonomy (ES1–ES2)** | **landed** | Built-in/prelude/package minimality proof, both directions (ES1); `trusted_base()` shrink — 7 of 9 assumed postulates resolved: 5 demoted to kernel-checked defs, 2 honestly relabeled audited rather than assumed; `isSorted`/`Perm` spec-pinned, demotion follow-on pending (ES2); minimal modules/import spec + conformance drafted (ES3, elaborator impl pending) |
-| **Security (WS-Sec)** | **G5 spine landed (Sec1, Sec1ct, Sec2, Sec4, Sec5)** | Sec1 IFC-by-typing (label lattice, declassification, non-interference), Sec1ct `@ct` constant-time discipline, Sec2 capabilities (PoLA, attenuation, revocation, audit), Sec4 trust-model & TCB/kernel audit, Sec5 policy-as-code |
-| **Behavioural seam (WS-B)** | **complete (B1–B4)** | B1 assumption-boundary export emitter, B2 Temporal-as-data (Temporal Σ datatype), B3 trace/instrumentation contract, B4 agentic boundary (agent-as-consumer model) |
-| **Runtime (WS-X)** | **core landed (X1, X2)** | X1 strict-CBV interpreter (content-addressed store, effect evaluation), X2 runtime hardening (capacity conformance, NULL_SLOT fix) |
-| Surface: L4 package system (L4-pkg, ES4), L8 stdlib, L-fmt | draft | Minimal modules landed (ES3); the package *mechanism* (fork/registry) and standard-package catalog are still ahead, not yet spec'd; §39 stdlib drafted; L-stream remaining |
-| Native codegen (X3) | deferred | After the verification loop is proven; conformance seed landed (§45) |
-| Self-hosting (S1/S2) | deferred | After native codegen |
+Ken brings specifications, proofs, programs, and their trust boundaries into
+one readable source language.
 
-## Origin
+- **Dependent types.** Pi and Sigma types, inductive families, predicative
+  universes, refinements, and total pattern matching express relationships that
+  ordinary type systems leave to tests or comments.
+- **Observational equality.** Equality, casts, proof irrelevance in `Omega`,
+  quotients, and decidable conversion live behind a compact kernel interface.
+- **Proofs and specifications.** Functions can carry requirements and
+  guarantees. The elaborator generates obligations, the prover produces
+  certificates, and the kernel checks them independently.
+- **Honest verification status.** Ken distinguishes claims that are `proved`,
+  `tested`, `delegated`, or `unknown` instead of presenting every successful
+  build as the same kind of assurance.
+- **Everyday data.** Arbitrary-precision and fixed-width numbers, strings,
+  bytes, sums, records, collections, recursive data, and nested patterns are
+  available in the surface language and packages.
+- **Canonical type classes.** Classes support reusable interfaces while a
+  coherence discipline keeps instance resolution predictable and readable.
+- **Effects and foreign boundaries.** Interaction-tree effects, capabilities,
+  information-flow labels, constant-time annotations, and explicit foreign
+  interfaces keep environmental assumptions visible.
+- **Modules and packages.** Names can be organized, imported, qualified, and
+  shared across package boundaries without making source-file layout the
+  semantic authority.
+- **One canonical format.** `ken fmt` formats both `.ken` source and literate
+  `.ken.md` files; `ken fmt --check` makes formatting enforceable in automation.
 
-Ken was inspired by **[yon](https://yon-lang.org/)**, a language exploring
-dependent types and proof. Ken's design departs from yon in several ways
-considered important:
+Ken optimizes the permanent form for reading and checking. Rich mathematical
+notation has an ASCII transliteration, proof-relevant choices remain visibly
+different from proof-irrelevant facts, and ambiguity is rejected rather than
+resolved by hidden convention.
 
-- **Observational equality, not cubical paths.** Ken's kernel uses
-  observational type theory (OTT — `TTobs`/`CICobs` lineage, ADR 0005). OTT's
-  equality is defined by recursion on type structure, keeping the trusted
-  kernel smaller and its decidable conversion simpler to audit. Cubical's
-  interval, cofibrations, and `Glue` add trusted surface area the rest of
-  Ken's design does not need.
-- **Agents write, humans read.** Ken is a *software-engineering* language:
-  code is generated, and the scarce resource is human review, not authorship
-  ([`docs/PRINCIPLES.md §1`](docs/PRINCIPLES.md)). The four-way epistemic
-  status (`proved`/`tested`/`delegated`/`unknown`) is visible in source and
-  exported — Ken never overstates what it has proved.
-- **A small, permanent, auditable trust root.** The de Bruijn criterion is a
-  design target, not a convenience (PRINCIPLES §5). Every untrusted tool that
-  produces a *proof* — the elaborator, the prover, the agent — emits
-  certificates the kernel re-checks; a bug there yields a rejected
-  certificate, never a false `proved`. The execution backends are checked
-  differently: the interpreter is the reference oracle, and native codegen is
-  validated by differential agreement with it (it is deliberately outside the
-  trusted kernel).
-- **MIT license.** Ken is its own design; its programs are yours under any
-  terms you choose.
+## Catalog
 
-See [`CLEAN-ROOM.md`](CLEAN-ROOM.md) for how Ken maintains its provenance.
+[`catalog/`](catalog/) is the public, executable guide to the language. It is
+both reference material and real Ken source checked by the toolchain.
 
-## Map
+- [`catalog/guide/`](catalog/guide/) teaches the surface language and its proof
+  techniques.
+- [`catalog/packages/`](catalog/packages/) contains standard packages with
+  their laws, proofs, examples, and design rationale.
+- Literate `.ken.md` files keep explanations next to the code while preserving
+  byte-stable prose during formatting.
+- The catalog covers core abstractions, lawful functors and classes, natural
+  ordering, sums, maps, parsing, effects, collections, and related proof
+  patterns.
 
-- **Spec:** [`spec/`](spec/) — the language specification, the authority
-  implementation teams build from. Status backbone:
-  [`spec/SPEC-PROGRESS.md`](spec/SPEC-PROGRESS.md).
-- **Conformance:** [`conformance/`](conformance/) — black-box test seeds
-  (kernel, verification, runtime, security, surface, behavioral).
-- **Plan:** [`docs/program/`](docs/program/README.md) — strategy, roadmap,
-  work-package DAG, and the git/integration model.
-- **Decisions:** [`docs/adr/`](docs/adr/) — architecture decision records.
-- **Principles:** [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) — the reasoning
-  charter; when the spec does not settle a choice, reason from this.
-- **Workflow:** [`CONTRIBUTING.md`](CONTRIBUTING.md) +
-  [`docs/program/04-git-and-integration.md`](
-  docs/program/04-git-and-integration.md)
-  + per-role playbooks under [`agent/playbooks/`](agent/playbooks/).
-- **Code:** [`crates/`](crates/) — `ken-kernel` (trusted kernel),
-  `ken-elaborator` (elaboration + verification surface), `ken-interp`
-  (reference interpreter), `ken-runtime` (runtime harness),
-  `ken-foundation` (content-addressing + value model), `ken-cli` (CLI driver).
-- **Provenance:** [`CLEAN-ROOM.md`](CLEAN-ROOM.md).
+The catalog is a good place to begin if you want to see how Ken reads before
+diving into the normative specification.
+
+## Interpreter and compiler
+
+Ken has two execution paths with deliberately different roles.
+
+The **reference interpreter** defines program behavior. It evaluates Ken using
+strict call-by-value semantics over the content-addressed value model and drives
+supported effects through explicit capabilities. The REPL and `ken run` use
+this path. When another execution backend disagrees with the interpreter, the
+interpreter is the semantic reference.
+
+The **Rust bootstrap compiler** consumes kernel-admitted checked core, erases
+proof-only content, lowers executable code to Ken's runtime IR, and uses
+Cranelift to produce native artifacts for the supported closed-program subset.
+Native results are compared with the interpreter, and build artifacts carry
+provenance and trust information. The compiler is not part of the
+type-soundness trust root: compilation bugs must not become false proofs.
+
+The compiler and interpreter therefore complement each other. The interpreter
+provides the simple, stable meaning of a program; the compiler provides native
+execution while remaining accountable to that meaning.
+
+## Command-line tools
+
+The `ken` driver currently provides:
+
+```text
+ken check <file>
+ken run <file> [-- <arguments>...]
+ken fmt [--check] <paths...>
+ken repl
+ken version
+```
+
+`check` elaborates source and verifies literate fence expectations without
+running a program. `run` executes a Console-capable entry point through the
+reference interpreter. `fmt` canonicalizes plain and literate Ken source.
+
+Full support for building command-line tools is in progress. A full POSIX
+interface and Linux ABI support are up next. Until those surfaces land, the
+current command runner and native executable path should be read as supported
+subsets rather than a complete systems interface.
+
+## Repository map
+
+- [`catalog/`](catalog/) — executable guide and standard packages.
+- [`crates/`](crates/) — the kernel, elaborator, prover-facing surface,
+  interpreter, runtime/compiler support, content-addressed foundation, and CLI.
+- [`spec/`](spec/) — normative language and runtime specification.
+- [`conformance/`](conformance/) — black-box conformance cases and seeds.
+- [`docs/adr/`](docs/adr/) — architecture decisions.
+- [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) — the reasoning charter.
+- [`CLEAN-ROOM.md`](CLEAN-ROOM.md) — provenance and clean-room policy.
 
 ## Build
 
-```bash
-source scripts/ken-env.sh           # shared sccache + registry (once per shell)
-scripts/ken-cargo build -p ken-kernel
-scripts/ken-cargo test -p ken-kernel
-```
+Ken is implemented in Rust. To build the CLI and run the workspace tests:
 
-The machine-wide build lock (`scripts/ken-cargo`, default 1 slot) keeps the
-shared dev box from swapping. Scope to the touched crate; full-workspace and
-`--release`/LTO builds run in CI. See
-[`docs/ops/compute-budget.md`](docs/ops/compute-budget.md).
+```bash
+cargo build --workspace --locked
+cargo test --workspace --locked
+cargo run -p ken-cli -- help
+```
 
 ## License
 
-MIT.
+Ken is licensed under the [MIT License](LICENSE). Programs written in Ken may
+use any license their authors choose.
