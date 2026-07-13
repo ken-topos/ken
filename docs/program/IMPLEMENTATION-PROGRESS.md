@@ -14,21 +14,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ bd9e6c4b`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 5f8e5ed5`
 > **I-1 CLOSED ✅** (PR #601, squash; `origin/main @ bd9e6c4b`; verified on main:
 > `resolve_main` present, frame oracle retired, tracker bundle landed). Milestone A
 > (Program I entrypoint ABI + runner) is IN; all 3 §10 retros in (leader/impl/qa @
 > 08:50 — carry: two-symptom C-AC2 arc, retire discharged one-shot proof not
 > re-baseline; Path-B rebase needs 2 proofs — semantic delta + landed formatter
-> gates). **I-2 (CA2 Console floor) next in Runtime ring** (hold for shovel-ready
-> frame; Handoff-Gate compact Runtime ring first; Architect-terminal host-ABI).
-> **Design-framing ROUTED to Architect** `evt_6azhycxm8a5k1` (5 host-ABI forks:
-> ConsoleOp encoding+reflection onto ITree/Coproduct spine; ConsoleCap vs ProgramCaps
-> field; EOF/broken-pipe/IsTerminal as total values; zero-TCB print* package; capture
-> handler seam) — pipeline-fill while floor-fix+CC1 proceed. On his ruling → author
-> frame → Handoff-Gate Runtime → kick. (CA0/§5.2 placeholder-primitive reconcile is
-> NOT a Console-floor dep at current authority level — confirming w/ Architect.)
-> **CC1 (Foundation): TWO blockers now.** Candidate rebased to `3f71f2a8` (off
+> gates).
+> **CC1 (Foundation): TWO blockers, BOTH now RESOLVED.** Candidate rebased to `3f71f2a8` (off
 > `bd9e6c4b`, clean). **BLOCKER-2 (deeper, package-model): `ken check <file>` is
 > single-file** (`main.rs:189–193` calls `elaborate_file`/`elaborate_ken_md_file`;
 > the N2 root-loader `elaborate_module_from_roots` `modules.rs:503` exists+tested but
@@ -47,31 +40,39 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `ken check` NOT the gate. **No operator escalation** — (c) needs no new capability / no
 > `pub`-export migration → HELD namespace work UNTOUCHED. CC1 UNBLOCKED (blocker-2). QA
 > re-evaluates via harness (substance now, parallel). **CLI check-in-context ergonomic =
-> separate later WP (task #56)**, NOT a CC1 dep, NOT the import/pub flip. **BLOCKER-1
-> (orthogonal, in flight): kenfmt-C strict-gate COUNT** — floor-fix `wp/kenfmt-strict-
-> gate-floor @ 30c9ca68` merge_ready → in Language QA; CC1 final locked gate rebases on
-> its merge.
+> separate later WP (task #56)**, NOT a CC1 dep, NOT the import/pub flip.
+> **BLOCKER-1 (strict-gate COUNT) — CLEARED ✅:** floor-fix MERGED `origin/main @
+> 5f8e5ed5` (PR #602; verified — floors present, old `assert_eq!(len,N)` gone).
+> **Rebase signal SENT** (`evt_1wc76jmxpzk15`): Foundation rebases the CC1 candidate
+> (with the new acceptance harness) onto `5f8e5ed5` + re-runs locked gate → green →
+> QA approve → `git_request` → publish → CC1 closes. **BOTH CC1 blockers now
+> resolved; CC1 = harness build in flight (foundation-implementer) → rebase → gate.**
 > **I-2 (CA2 Console floor) FRAME AUTHORED** ✅ (`steward/work @ a1e61db5`;
 > `docs/program/wp/i2-console-floor.md`) from Architect design `evt_6w0x364s4bvk8` — 6
 > settled decisions pinned (ambient v1 Console/ProgramCaps unchanged, shared+additive
 > IOError, ReadResult=Chunk|Eof, SIGPIPE-mask driver, built run_io handler trait, remove
-> dead build_print_line_tree). NEXT for I-2: Handoff-Gate Runtime ring → kick (task #55;
-> pipeline-fill, behind floor-fix publish + CC1).
+> dead build_print_line_tree). **KICKED ✅ `wp/i2-console-floor @ 3055264f`** (off
+> `5f8e5ed5`; Handoff-Gate COMPLETE — Runtime ring compacted @ WIDE-verified "Context
+> compacted", branches 0-ahead/reset to 5f8e5ed5; kickoff `evt_42xn6qjw449rm` + rouse
+> landed, leader engaged). Runtime building; Architect-terminal reviewer. Runs in
+> parallel with CC1 (different ring). NEXT: event-driven → Runtime build→QA→Architect
+> re-confirm→`git_request`→publish→close.
 > **Architect RULED** (`evt_5x7cgmtz7ygt9`): gates already glob dynamically; the
 > count asserts do anti-vacuity → replace `assert_eq!(len,N)` with FLOOR
 > `assert!(len>=N)` (catches broken-glob/deleted-file drift, growth-robust, no
 > per-WP treadmill). **Floor-fix micro-frame AUTHORED** `wp/kenfmt-strict-gate-floor
 > @ 093d9d25` (off `bd9e6c4b`; XS test-only, ~4 asserts; Language-owned, Architect
-> reviewer; task #54). **KICKED ✅ 2026-07-13** — Handoff-Gate COMPLETE (all 3
-> Language members compacted @ WIDE-verified "Context compacted"; branches 0-ahead
-> + clean); kickoff `evt_1fddgkqrc23k8` + post-compaction rouse landed (leader
-> engaged, re-orienting). Frame maps to real lines (verified on `bd9e6c4b`:
-> `ken_fmt.rs:94/95`, `kenfmt_c_capstone.rs:62/63`). **★ NEXT ACTION: event-driven**
-> — (a) floor-fix through Language build→QA→Architect re-confirm→`git_request`→
-> honesty-gate+CI-poll publish; on merge → signal Foundation to rebase CC1 onto new
-> main + re-run locked gate → CC1 unblocked → close on retros. (b) CC1 QA substance
-> result (foundation-qa Working @ 852d65ba). (c) **I-1 ready to CLOSE** — all 3
-> Runtime §10 retros IN (leader `evt`/impl/qa @ 08:50); close on next pass.
+> reviewer; task #54). **MERGED ✅ `origin/main @ 5f8e5ed5`** (PR #602, squash;
+> full gate chain: Handoff-Gate compact → Language build+QA locked → Architect
+> terminal re-confirm 3 checks → Steward honesty-gate clean → CI-poll). **Awaiting 3
+> §10 retros** (requested `evt_1pxs4fmnh1a7k`; carry: count-assert on a globbed gate
+> guards VACUITY not just membership → floor it, don't delete) → close task #54.
+> **★ NEXT ACTION: event-driven** — (a) **CC1** harness build (foundation-implementer)
+> → rebase onto `5f8e5ed5` → locked gate → QA approve → `git_request` → publish →
+> close. (b) **I-2** Handoff-Gate compact Runtime ring → kick (frame `a1e61db5` ready;
+> pipeline-fill after CC1). (c) floor-fix retros → close #54. (d) operator status
+> ~11:00 UTC (both CC1 blockers resolved narrative; Shape-A-would-have-hit-HELD-work
+> near-miss).
 >
 > **★ CURRENT FRONTIER (one-line resume):** **kenfmt series COMPLETE + C CLOSED ✅**
 > (`origin/main @ 10e453aa`, PR #600; §1d-conformant whole-catalog reformat +
