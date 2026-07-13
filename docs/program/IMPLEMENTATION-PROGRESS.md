@@ -14,7 +14,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 1f85ad9a`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 46a65fdb`
 > **I-2 (CA2 Console floor) CLOSED ✅ `1f85ad9a`** (PR #604; ACs met, all 3 §10 retros
 > in @ 10:28 → task #55 done). **Milestone B's Console effect floor is COMPLETE.** Carry
 > (→ bake into I-3 + host-ABI frames): enrich the existing coproduct summand in place
@@ -36,17 +36,47 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > tests; catalog NOT reverted. Task #57 → Language. **git_request `eee6e3a0`; Steward
 > honesty-gate CLEAN** (linear `1f85ad9a→33b48853→eee6e3a0`; 2 test files + frame only,
 > exactly 3 verbatim `#[ignore]`, tool tests untouched; zero kernel/Cargo.lock/spec/
-> conformance/.github/catalog delta). **PUBLISHING (`eee6e3a0` + tracker bundle, CI-poll
-> bg).** On merge: CI stops enforcing the gate → close #57 on retros.
+> conformance/.github/catalog delta). **MERGED ✅ `origin/main @ 46a65fdb`** (PR #605,
+> squash; CI green). Landed-commit honesty-gate CLEAN: single parent `1f85ad9a`, 2 test
+> files + tracker + frame only, exactly 3 `#[ignore]` on main (1 ken_fmt.rs + 2
+> kenfmt_c_capstone.rs). **CI no longer enforces the strict frozen-corpus gate.** Relay +
+> retro-request posted `evt_67z2bq37xx3md`. **Task #57 → close on Language's 3 §10 retros.**
 > **(1) Foundation → HOLD for §5.2 then CC2** (operator chose hold, not CC2a-split).
 > **(2) Runtime → I-3 GO — Architect DESIGN RULED** (`evt_2sxd7pszs42af`, D1–D8).
-> **I-3 FRAME AUTHORED ✅** `docs/program/wp/i3-fs-floor.md` (branch `wp/i3-fs-floor @
-> 789b7d32` off `1f85ad9a`) — sent to Architect for transcription re-confirm
-> (`evt_6c9j8t1jf91df`). **ON re-confirm → Handoff-Gate Runtime ring → kick.** (D2
-> build-risk: Auth-param `fs_resp` match may need hand-built `Elim` — flagged in frame.)
-> **(3) §5.2/CP0 FRAME PENDING — author from `evt_2sxd7pszs42af` Deliverable-2** (enclave-
-> owned per contract; pipelines w/ I-3, no shared-file churn — CP0 owns `elaborator/src/
-> bytes.rs` + consumer sweep, I-3 owns prelude FSOp+Path):
+> **I-3 FS floor — Architect TERMINAL APPROVE ✅ → PUBLISHING** (`dec_1k5r8zabzepzn`,
+> `wp/i3-fs-floor @ 3f009f6b`, git_request `evt_7ygewdxqca1h8`). Steward honesty-gate
+> CLEAN: linear on `46a65fdb` (frame `4e50292a`→`3f009f6b`), 11 files +1669/−263,
+> forbidden-path grep EMPTY (zero kernel/Cargo.lock/spec/conformance/.github/**bytes.rs**
+> — CP0 boundary respected). **D2 probe SUCCEEDED — surface match, no `Elim` fallback.**
+> 9 FSOp ctors, shared additive `IOError`+`Other Int`, FS-local `FileError`, atomic-replace,
+> `CaptureHost` virtual FS, coarse AFull-gated authority (gate-before-host proven), zero-TCB.
+> Publishing candidate `3f009f6b` + tracker bundle (CI-poll bg). On merge: relay → 3 §10
+> retros → close I-3.
+> **(3) §5.2/CP0 FRAME AUTHORED ✅ + Architect re-confirmed FAITHFUL** (`evt_55vyqjpfz787t`).
+> `wp/cp0-safe-bytes @ bd6be579`. **OWNERSHIP: Language-led** (Rust migration = bytes.rs
+> sigs + native Cranelith lowering + 8-site consumer sweep, the bulk) **+ enclave-owned
+> spec/conformance reconcile + CV vote; ONE coupled WP** (atomic sig/spec/conformance);
+> Architect terminal-reviews; DS-AC6/L6 re-anchor = Foundation/Spec coord. **★ KICKED ✅
+> 2026-07-13 ~12:2x** (`evt_6qk3d0dhy0mhp`) — `wp/cp0-safe-bytes @ 136e9552` (off
+> `46a65fdb`). Handoff-Gate compacted all 6 receiving members (Language ring + enclave)
+> @ `46a65fdb`, drops verified WIDE (§32-noop CV re-confirmed on 46a65fdb post-compact).
+> Frame review-chain fixed to Language-led (was stale enclave-led after ownership flip).
+> **Building: Language (Rust bulk) ∥ enclave (spec/conformance) — ASSEMBLING.** `send`/`[Net]`
+> re-anchor boundary RESOLVED as **(b)** (Steward-recommended): re-anchor L6 on real
+> `read_bytes:[FS]` vs `print_line:[Console]`, Net witness deferred, synthetic producer
+> PROHIBITED (spec-author `evt_1mvfj73whdgay`, CV aligned); `append`→pure `list_append`/
+> `bytes_concat`. Enclave released spec `62634dc8` (`38-ffi-io.md` +91/−76) + conformance
+> `wp/cp0-safe-bytes-conformance @ 288a6a38` (`seed-bytes-io.md` +198/−128) for atomic
+> assembly into the ONE CP0 candidate. Event-driven → Language QA + CV vote → Architect
+> terminal → git_request → publish → unblocks CC2. Task #50.
+> **(kenfmt signature-layout rework)** — operator handed 5 layout rules (2026-07-13) then
+> **said HOLD, refining before work.** Verbatim capture parked in `docs/program/wp/
+> kenfmt-signature-layout.md` (DRAFT, not framed, no team touched). Language owns kenfmt
+> (mid-CP0); gate disabled = no CI pressure. **Await operator's refined rules.** Flagged
+> one ambiguity (rule-4 split: name-alone+params-indented-4 vs name+params-inline).
+> (gate-disable #57 CLOSED ✅ — all 3 §10 retros in `evt_763rq2p58vj5z`/`evt_5b2x78sqgpfrv`/
+> `evt_sk9j8sedaan5`.)
+> Contract detail (from `evt_2sxd7pszs42af` Del-2; frame is authoritative):
 >   • **(A) Placeholder retirement** — FS floor consumes NONE of `write_bytes`/`append`/
 >     `send`/`recv` (`bytes.rs:134-164`, bogus `Bytes→Bytes→Bytes`). `write_bytes`+`recv`
 >     free; **`append` load-bearing for DS-AC6 name-hygiene** (`l3_strings_surface_
