@@ -132,6 +132,14 @@ State them as fixed; the whole WP is built on them.
    `Text.Numeric` is confirmed **independent of** `DecEq`/`Ord String` (parse /
    format never compare `String` keys), so it is genuinely decoupled from the
    gated keys deliverable.
+   - **(d) — extend the guard-rail to the opaque `Int` axis** (Architect,
+     `evt_5vzbvwzvqkbpb`/`evt_12j6eeq7jfes9`): The same confinement applies to
+     opaque `Int`: it is constructible (parse builds via `mul_int`/`add_int`) but
+     **not destructible** (no `div`/`rem`/`int_to_nat`/destructor). Verified
+     numeric round-trip laws stay at the structural `List DecimalDigit`/`Nat`
+     level and cross **NEITHER** the `String` **NOR** the `Int` boundary. The
+     `Int↔digits` hop is un-provable on opaque `Int` and is confined wholly to the
+     deferred `show_int` gap.
 
 ## Mandated deliverable outline
 
@@ -145,17 +153,43 @@ Each section ends in a concrete, implementable choice — not a survey.
    what this surface needs — no speculative encoders/formats.
 
 2. **`Text.Numeric`** — `char_to_digit` (fixed input 3); `parse_nat` / `parse_int`
-   returning `Result NumericError Int`; and a format / `show_int` direction. Parse
+   returning `Result NumericError Int`; and a **structural formatter**. Parse
    folds `char_to_digit` over `string_to_list_char` input with base accumulation,
    failing **located** on the first bad digit (`InvalidDigit` at the char index)
    and on empty input (`EmptyInput` at `0`).
+   **Format — structural formatter SHIPS; `Int → String` show is a NAMED
+   SUBSTRATE GAP, deferred (Architect ruling `evt_5vzbvwzvqkbpb`, `origin/main @
+   6088e0b8`).** Grounding: `Int` is **constructible but not destructible** —
+   `numbers.rs` registers only `add_int`/`sub_int`/`mul_int`/`eq_int`/`leq_int`
+   (+ DecEqCert); **no `div_int`/`rem_int`/`mod_int`/`int_to_nat`/`Int`-destructor
+   exists tree-wide**. Parse *builds* an `Int` from digits (`add_int (mul_int acc
+   10) digit`, landed, total = construction — sound); format must *take an `Int`
+   apart* into decimal digits, needing `div/mod 10` (absent) or structural
+   recursion on an opaque value (impossible — no destructor; repeated-subtraction
+   fails SCT on a non-structural argument). So:
+   - **SHIP the structural formatter** `Nat → String` / `List DecimalDigit ->
+     String` (sign/magnitude handled structurally) — `Nat`/digit-list ARE
+     destructible, so this is genuinely constructible and useful (renders any
+     structural numeric / the parsed digit form). A real deliverable, not a stub.
+   - **DEFER `show_int : Int → String`** as a named substrate gap → **fast-follow
+     WP** that first lands a `div_int`/`rem_int` (or `int_to_nat`/`int_to_digits`)
+     **trusted primitive** (a trust delta this WP's boundary forbids) OR a
+     structural-`Int` bridge with its own extensionality cert (exactly parallel to
+     the String-keys injectivity cert). **Do NOT fake it** — no bounded-range
+     lookup masquerading as total, no smuggled primitive; name it honestly, like
+     Bytes keys. This is the opaque-`Int` analog of the String/Bytes opacity gaps.
 
-3. **Lawful `DecEq`/`Ord String` (GATED, final — see fixed input 1).** The
-   transport instance skeleton: `sound` (DecEq) and `antisym` (Ord) **cite the
-   prereq injectivity cert BY NAME** (homed at the bijection layer); `complete` /
-   `refl` / `trans` / `total` are **zero-delta** `.`-projection + `cong` off the
-   landed `List Char` instances. Does **not** start until the operator confirms
-   option (i) vs (ii).
+3. **Lawful `DecEq`/`Ord String` (final — OPERATOR CHOSE (i), UN-GATED
+   2026-07-13).** The operator picked **option (i)** — pay the one named
+   injectivity certificate for genuine lawful String keys (`evt_6na0x25ejn00a`).
+   Build the separately-homed prereq cert at the bijection layer (≡
+   `string_to_list_char` injectivity / the retraction
+   `list_char_to_string (string_to_list_char s) = s`), then the transport
+   instances: `sound` (DecEq) and `antisym` (Ord) **cite the prereq cert BY
+   NAME**; `complete` / `refl` / `trans` / `total` are **zero-delta**
+   `.`-projection + `cong` off the landed `List Char` instances. The cert is NOT
+   minted inside CC2's own fences (AC2 backstop). Harness order includes the
+   `(i)` cert prereq before Text.Codec.
 
 ## Acceptance criteria (testable)
 
@@ -175,14 +209,23 @@ Each section ends in a concrete, implementable choice — not a survey.
   rides pre-existing `Ord Int` `Axiom`s + the `DecEq Int` cert, and — under
   option (i) — the one prereq injectivity cert. The gate must **not** count
   landed upstream `Axiom`s against CC2.
-- **AC4 — `Text.Numeric` located-error discriminators.** Parse of a valid decimal
-  string → `Ok n`; empty input → `Err (MkNumericError EmptyInput 0)`; a bad digit
-  at position `k` → `Err (MkNumericError InvalidDigit k)` with the **exact** `k`
-  (defeats a location-free or off-by-one impl). `char_to_digit`: `'0'..'9'` →
-  `Some 0..9`, non-digit → `None`. **Any VERIFIED round-trip law (fixed input 4b)
-  is stated at the `List Char`/digit level** (`parse_digits (format_digits n) =
-  Ok n`, structural) and **must NOT cross into `String`** — the `String`-facing
-  `parse`/`format` wrappers are functions, not proof-carrying.
+- **AC4 — `Text.Numeric` parse/format: located discriminators + structural
+  round-trip.**
+  - **Parse (ships, →`Int`):** valid decimal string → `Ok n`; empty input →
+    `Err (MkNumericError EmptyInput 0)`; a bad digit at position `k` →
+    `Err (MkNumericError InvalidDigit k)` with the **exact** `k` (defeats a
+    location-free or off-by-one impl). `char_to_digit`: `'0'..'9' → Some 0..9`,
+    non-digit → `None`.
+  - **Format (ships, structural):** a `Nat`/`List DecimalDigit → String`
+    formatter (sign/magnitude structural) — constructible because `Nat`/digit-
+    lists are destructible.
+  - **Verified round-trip law is stated purely at the digit-list/structural
+    level** — `parse_digits (format_digits ds) = ds` — and crosses **NEITHER** the
+    opaque `Int` **NOR** the opaque `String` boundary. The `String`- and
+    `Int`-facing wrappers are functions, not proof-carrying.
+  - **`show_int : Int → String` is NOT in CC2** — deferred as a named substrate
+    gap (`div`/`rem`-or-`int_to_nat` primitive, or structural-`Int` bridge+cert;
+    fast-follow). No faked/bounded-range/smuggled construction may stand in for it.
 - **AC5 — `Text.Codec` elaborates and classifies.** `decode_utf8` wraps
   `bytes_decode` returning `Result Utf8Error String`; the `ascii_view` /
   byte-classification surface elaborates and its in-package ASCII-view laws are
@@ -226,6 +269,11 @@ Each section ends in a concrete, implementable choice — not a survey.
   homed at the prereq bijection layer, not in a `Text` fence.
 - Do **NOT** overload `Utf8Error` for numeric parse failure, and do **NOT** add an
   `Overflow` kind while `Int` is arbitrary-precision.
+- **No `Int`-crossing inversion law in any `Text` fence** —
+  `parse_int (show_int n) = Ok n` is **forbidden** (`show_int` is a deferred
+  substrate gap). The verified round-trip law lives at the digit-list level only
+  (`parse_digits (format_digits ds) = ds`), crossing neither `Int` nor `String`
+  (fixed input 4d).
 
 ## Sequencing & review chain
 

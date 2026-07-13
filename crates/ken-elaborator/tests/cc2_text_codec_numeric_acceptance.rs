@@ -98,6 +98,15 @@ fn small_int(value: &EvalVal) -> i64 {
     }
 }
 
+fn bool_value(env: &ElabEnv, value: &EvalVal) -> bool {
+    match value {
+        EvalVal::Bool(value) => *value,
+        EvalVal::Ctor { id, args, .. } if *id == env.globals["True"] && args.is_empty() => true,
+        EvalVal::Ctor { id, args, .. } if *id == env.globals["False"] && args.is_empty() => false,
+        other => panic!("expected a Bool, got {other:?}"),
+    }
+}
+
 fn nat_count(env: &ElabEnv, value: &EvalVal) -> u64 {
     match value {
         EvalVal::Ctor { id, args, .. } if *id == env.prelude_env.zero_id && args.is_empty() => 0,
@@ -291,8 +300,38 @@ fn located_numeric_discriminators_and_codec_boundary_are_checked() {
     assert!(NUMERIC_SEED.contains("text/numeric/empty-input-located-at-zero"));
     assert!(NUMERIC_SEED.contains("text/numeric/invalid-digit-exact-char-index"));
 
-    let env = full_env();
+    let mut env = full_env();
+    for declaration in [
+        "const cc2_string_key_equal_compute : Bool = list_eq Char eqChar (string_to_list_char \"alpha\") (string_to_list_char \"alpha\")",
+        "const cc2_string_key_distinct_compute : Bool = list_eq Char eqChar (string_to_list_char \"alpha\") (string_to_list_char \"beta\")",
+        "const cc2_string_key_order_compute : Bool = ord_result_leq (list_compare Char compare_char (string_to_list_char \"alpha\") (string_to_list_char \"beta\"))",
+    ] {
+        env.elaborate_decl(declaration)
+            .expect("equivalent String-key discriminator must elaborate");
+    }
     let mut store = make_store(&env);
+
+    assert!(
+        bool_value(
+            &env,
+            &eval_global(&env, &mut store, "cc2_string_key_equal_compute")
+        ),
+        "equal String keys must compare equal"
+    );
+    assert!(
+        !bool_value(
+            &env,
+            &eval_global(&env, &mut store, "cc2_string_key_distinct_compute")
+        ),
+        "distinct String keys must compare unequal"
+    );
+    assert!(
+        bool_value(
+            &env,
+            &eval_global(&env, &mut store, "cc2_string_key_order_compute")
+        ),
+        "String ordering must be lexicographic"
+    );
 
     let zero = eval_global(&env, &mut store, "digit_zero_result");
     assert_eq!(small_int(ctor_args(&env, &zero, "Some").last().unwrap()), 0);
