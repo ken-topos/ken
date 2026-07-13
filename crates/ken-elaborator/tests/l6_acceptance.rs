@@ -6,8 +6,8 @@
 //! - AC1: `Bytes` primitive ops reduce over literals; neutral on stuck args;
 //!   `concat` allocates fresh (immutability); hex-vs-int distinction.
 //! - AC2: `read_bytes` visits `[FS]`; untracked call rejects (escape check).
-//!   Seed derives from `ElabEnv.bytes_env.io_effect_rows` — the actual L6
-//!   binding — so removing the registration makes the test fail.
+//!   Seed derives from final declaration-backed `ElabEnv.effect_rows`, so
+//!   removing the real declaration row makes the test fail.
 //! - AC3: real `read_bytes` `[FS]` and `print_line` `[Console]` producers stay
 //!   distinct; no synthetic Net producer is admitted.
 //! - AC4: `decode` is the only `Bytes → String` path and returns an explicit
@@ -217,11 +217,9 @@ fn bytes_slice_inbounds_and_oob() {
 // AC2 — I/O is effect-tracked: FS escape check
 // ============================================================
 //
-// Both tests derive the `infer_all` seed from `ElabEnv::new().bytes_env
-// .io_effect_rows` — the ACTUAL L6 registration. If the registration is
-// removed, the seed is empty, `infer_all` sees no effects, `check_escape`
-// passes, and the `expect_err` assertion FAILS — so green-vs-green is
-// structurally impossible with this seed source.
+// Both tests derive the `infer_all` seed from final `ElabEnv.effect_rows` —
+// the row registered by elaborating the actual `read_bytes` declaration.
+// `BytesEnv` cannot independently hand-feed this producer binding.
 
 /// `surface/bytes-io/read-bytes-untracked-is-type-error` (soundness)
 ///
@@ -232,9 +230,18 @@ fn bytes_slice_inbounds_and_oob() {
 fn read_bytes_untracked_is_type_error() {
     let env = ElabEnv::new().expect("ElabEnv::new()");
 
-    // Seed from the actual L6 binding (not a hand-fed literal).
-    // Removing bytes::register_bytes_env empties io_effect_rows → test fails.
-    let seed = env.bytes_env.io_effect_rows.clone();
+    assert!(
+        !env.bytes_env.io_effect_rows.contains_key("read_bytes"),
+        "BytesEnv must not hand-feed the read_bytes producer row"
+    );
+    let mut seed = std::collections::HashMap::new();
+    seed.insert(
+        "read_bytes".to_string(),
+        env.effect_rows
+            .get("read_bytes")
+            .expect("actual read_bytes declaration must register its row")
+            .concrete_effects(),
+    );
 
     let caller = EffectDecl::new("caller").with_callee("read_bytes");
     let rows = infer_all(&seed, &[caller.clone()]);
@@ -253,6 +260,13 @@ fn read_bytes_untracked_is_type_error() {
         }
         other => panic!("expected EffectEscapes, got {:?}", other),
     }
+
+    // Mechanical counterfactual: removing the sole declaration-derived row
+    // flips the same caller to effect-free acceptance. The rejection above
+    // therefore cannot remain green if `read_bytes` loses `visits [FS]`.
+    let rows_without = infer_all(&std::collections::HashMap::new(), &[caller.clone()]);
+    check_escape(&caller, &rows_without["caller"], &WitnessMap::new())
+        .expect("without the declaration row, the verdict must flip to acceptance");
 }
 
 /// `surface/bytes-io/read-bytes-tracked-accepts` (oracle)
@@ -262,7 +276,14 @@ fn read_bytes_untracked_is_type_error() {
 #[test]
 fn read_bytes_tracked_accepts() {
     let env = ElabEnv::new().expect("ElabEnv::new()");
-    let seed = env.bytes_env.io_effect_rows.clone();
+    let mut seed = std::collections::HashMap::new();
+    seed.insert(
+        "read_bytes".to_string(),
+        env.effect_rows
+            .get("read_bytes")
+            .expect("actual read_bytes declaration must register its row")
+            .concrete_effects(),
+    );
 
     let fs_row = seed
         .get("read_bytes")
@@ -287,7 +308,14 @@ fn read_bytes_tracked_accepts() {
 #[test]
 fn fs_and_console_real_producer_rows_are_distinct() {
     let env = ElabEnv::new().expect("ElabEnv::new()");
-    let mut seed = env.bytes_env.io_effect_rows.clone();
+    let mut seed = std::collections::HashMap::new();
+    seed.insert(
+        "read_bytes".to_string(),
+        env.effect_rows
+            .get("read_bytes")
+            .expect("actual read_bytes declaration must register its row")
+            .concrete_effects(),
+    );
     seed.insert(
         "print_line".to_string(),
         env.effect_rows["print_line"].concrete_effects(),

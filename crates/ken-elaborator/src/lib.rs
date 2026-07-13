@@ -159,11 +159,10 @@ impl ElabEnv {
             .map_err(|e| ElabError::Internal(format!("numeric tower init failed: {}", e)))?;
         let bytes_env = bytes::register_bytes_env(&mut env, &mut globals)
             .map_err(|e| ElabError::Internal(format!("bytes layer init failed: {}", e)))?;
-        let effect_rows = bytes_env
-            .io_effect_rows
-            .iter()
-            .map(|(name, row)| (name.clone(), effects::RowType::Concrete(row.clone())))
-            .collect();
+        // Effect rows are populated only from elaborated declarations. An
+        // independent seed would let producer-binding tests stay green after
+        // the real declaration lost its `visits` row.
+        let effect_rows = HashMap::new();
         let mut elab = Self {
             env,
             globals,

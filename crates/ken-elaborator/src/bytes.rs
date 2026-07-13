@@ -2,12 +2,7 @@
 //!
 //! Registers `Bytes` (opaque immutable byte sequence), `String` (opaque, by-
 //! construction valid UTF-8), and their core ops. The real `read_bytes`
-//! surface operation is registered later by the prelude and contributes the
-//! sole Bytes-layer effect-row seed.
-//!
-//! Pattern mirrors `numbers.rs`: declare types + ops as kernel primitives;
-//! store the I/O op effect rows in `BytesEnv.io_effect_rows` so AC2/AC3 tests
-//! derive their seed from the actual L6 binding (not a hand-fed literal).
+//! surface operation and its effect row are registered later by the prelude.
 
 use std::collections::HashMap;
 
@@ -27,12 +22,9 @@ pub struct BytesEnv {
     /// (`38 §1.5`). AC5's `prove` obligation anchors here; the inductive
     /// proof is the L8 stdlib follow-on.
     pub bytes_round_trip_law_id: GlobalId,
-    /// Effect rows for registered I/O ops (`36`/L5).
-    ///
-    /// Keyed by real op name (`"read_bytes"` → `[FS]`).
-    /// AC2/AC3 tests derive their `infer_all` seed from this map — NOT from
-    /// a hard-coded literal — so removing the L6 registration makes those
-    /// tests fail (green-vs-green is structurally impossible).
+    /// Legacy Bytes-layer effect-row registry (`36`/L5), intentionally empty.
+    /// Real producers are registered only from their elaborated declarations
+    /// in `ElabEnv.effect_rows`; this map cannot hand-feed an oracle.
     pub io_effect_rows: HashMap<String, EffectRow>,
 }
 
@@ -118,13 +110,10 @@ pub fn register_bytes_env(
     // `view` reducing to a `Vis` node — `run_io`'s FS arm is the real driver,
     // `36 §2.1`). It can't be declared HERE: `register_bytes_env` runs before
     // `register_prelude`, so `ITree`/`Result`/`Cap`/`FSOp` don't exist yet.
-    // The `io_effect_rows` seed below is a name-keyed static-analysis table
-    // (`effects/infer.rs`), independent of the kernel `GlobalId` — it stays
-    // valid regardless of where/how `read_bytes` is actually declared.
-
-    // -- I/O effect row registry (real producers only) --
-    let mut io_effect_rows: HashMap<String, EffectRow> = HashMap::new();
-    io_effect_rows.insert("read_bytes".to_string(), EffectRow::singleton("FS"));
+    // No I/O row is installed here. `modules::register_effect_row` records
+    // `read_bytes` from its final prelude declaration, so deleting `visits
+    // [FS]` deletes the only producer-binding evidence.
+    let io_effect_rows: HashMap<String, EffectRow> = HashMap::new();
 
     // -- BytesRoundTripLaw : Ω₀ (oracle-tagged, `38 §1.5`) --
     // Represents `∀ s : String, decode(encode s) = Ok s`.
