@@ -139,7 +139,7 @@ impl Parser {
     }
 
     /// `ConId ('.' ConId)*` — a dotted **module path** (`33 §3.2`), shared by
-    /// `import`/`import … as`/selective `import`/`use`/`module`. Every
+    /// `import`/`import … as`/selective `import`/`module`. Every
     /// component is a `ConId` (uppercase-initial, `31 §1`: module names are
     /// `conid`) — this mirrors the catalog taxonomy's path↔import identity
     /// (`docs/program/07-catalog-style-guide.md`, N dotted components → N-1
@@ -202,7 +202,12 @@ impl Parser {
             Token::KwDerive => self.parse_derive_decl(start),
             Token::KwModule => self.parse_module_decl(start),
             Token::KwImport => self.parse_import_decl(start),
-            Token::KwUse => self.parse_use_decl(start),
+            Token::KwUseReserved => Err(ElabError::ParseError {
+                msg: "`use` is retired (ADR-0015); use `import M`, `import M as N`, or \
+                      `import M (…)` for a provenance-preserving import."
+                    .to_string(),
+                span: self.peek_span().clone(),
+            }),
             Token::KwPub => self.parse_pub_decl(start),
             Token::KwProgram => self.parse_boundary_decl(start, BoundaryKind::Program),
             Token::KwPackage => self.parse_boundary_decl(start, BoundaryKind::Package),
@@ -210,7 +215,7 @@ impl Parser {
                 msg: format!(
                     "expected 'view', 'const', 'fn', 'proc', 'let', 'prove', 'prop', 'lemma', 'proof', \
                      'law', 'data', 'def', 'foreign', 'temporal', 'class', 'instance', \
-                     'derive', 'module', 'import', 'use', \
+                     'derive', 'module', 'import', \
                      'pub', 'program', 'package', or 'space proc', found {:?}",
                     other
                 ),
@@ -949,18 +954,6 @@ impl Parser {
         Ok(Decl::ImportDecl {
             module,
             kind,
-            span: Span::new(start, end),
-        })
-    }
-
-    /// `use M.N` — unqualified open import (`33 §3.2`).
-    fn parse_use_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
-        self.advance(); // consume 'use'
-        let (module, _) = self.parse_dotted_module_path()?;
-        let end = self.tokens[self.pos - 1].1.end;
-        Ok(Decl::ImportDecl {
-            module,
-            kind: crate::ast::ImportKind::Open,
             span: Span::new(start, end),
         })
     }

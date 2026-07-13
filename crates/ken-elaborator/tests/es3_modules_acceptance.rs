@@ -169,21 +169,21 @@ fn private_name_access_rejected_at_surface() {
     }
 }
 
-/// `use-open-ambiguity-rejected-naming-both`: two `use`-opened modules
-/// exporting the same bare name → an unqualified reference is rejected,
-/// naming both sources; the qualified forms still resolve unambiguously.
+/// Two selective imports binding the same bare name to different declarations
+/// make an unqualified reference ambiguous while qualified references remain
+/// unambiguous.
 #[test]
-fn use_open_ambiguity_rejected_naming_both() {
+fn selective_import_ambiguity_rejected_naming_both() {
     let mut env = mk_env();
     env.elaborate_file(
         "module M { pub const foo : Int = 0 } \
          module N { pub const foo : Int = 1 } \
-         use M \
-         use N",
+         import M (foo) \
+         import N (foo)",
     )
-    .expect("both modules + opens elaborate");
+    .expect("both modules + selective imports elaborate");
 
-    // Qualified references disambiguate regardless of the open-collision.
+    // Qualified references disambiguate regardless of the selective collision.
     assert!(env.elaborate_decl("const viaM : Int = M.foo").is_ok());
     assert!(env.elaborate_decl("const viaN : Int = N.foo").is_ok());
 
@@ -199,7 +199,7 @@ fn use_open_ambiguity_rejected_naming_both() {
     }
 }
 
-/// N3 reversal: a TOP-LEVEL local and an opened import of the same bare name
+/// N3 reversal: a TOP-LEVEL local and a selective import of the same bare name
 /// clash even when the name is never referenced. This was ES3's local-wins
 /// seed; N3 deliberately flips it while retaining narrower lexical shadowing.
 #[test]
@@ -207,7 +207,7 @@ fn top_level_local_import_clash_is_rejected_latently() {
     let mut env = mk_env();
     let result = env.elaborate_file(
         "module M { pub const foo : Int = 0 } \
-         use M \
+         import M (foo) \
          const foo : Int = 9",
     );
     match result {
@@ -220,15 +220,16 @@ fn top_level_local_import_clash_is_rejected_latently() {
     }
 }
 
-/// `four-import-forms-resolve-to-one-binding`: qualified / aliased /
-/// selective / open all resolve to the **same** underlying `GlobalId` — the
+/// `three-import-forms-resolve-to-one-binding`: qualified / aliased /
+/// selective all resolve to the **same** underlying `GlobalId` — the
 /// accept anchor confirming import is re-naming, not re-declaration.
 #[test]
-fn four_import_forms_resolve_to_one_binding() {
+fn three_import_forms_resolve_to_one_binding() {
     let mut env = mk_env();
     env.elaborate_file("module M { pub const foo : Int = 0 }").expect("module M elaborates");
     let m_foo = env.globals["M.foo"];
 
+    env.elaborate_file("import M").unwrap();
     let via_qualified = env
         .elaborate_decl("const c1 : Int = M.foo")
         .expect("import M / qualified M.foo");
@@ -242,19 +243,29 @@ fn four_import_forms_resolve_to_one_binding() {
     let via_selective = env.elaborate_decl("const c3 : Int = foo").expect("import M (foo)");
     let (_, b3) = env.env.transparent_body(via_selective).unwrap();
 
-    // `use M` (open) brings the SAME `M.foo` binding under bare `foo` — since
-    // it's the identical qualified origin as the prior selective import, this
-    // merges (not an ambiguity: `33 §3.3`'s "same declaration" exception).
-    env.elaborate_file("use M").unwrap();
-    let via_open = env.elaborate_decl("const c4 : Int = foo").expect("use M");
-    let (_, b4) = env.env.transparent_body(via_open).unwrap();
-
-    for (label, body) in [("qualified", &b1), ("aliased", &b2), ("selective", &b3), ("open", &b4)] {
+    for (label, body) in [("qualified", &b1), ("aliased", &b2), ("selective", &b3)] {
         assert!(
             matches!(body, Term::Const { id, .. } if *id == m_foo),
             "AC3/AC1: the {} import form must resolve to the SAME GlobalId as \
              `M.foo` (re-naming, not re-declaration); got {:?}",
             label, body
         );
+    }
+}
+
+#[test]
+fn retired_use_reports_the_migration_diagnostic() {
+    let mut env = mk_env();
+    let result = env.elaborate_file("use Capability.Parsing.Parsing");
+    match result {
+        Err(ElabError::ParseError { msg, span }) => {
+            assert_eq!(
+                msg,
+                "`use` is retired (ADR-0015); use `import M`, `import M as N`, or \
+                 `import M (…)` for a provenance-preserving import."
+            );
+            assert_eq!(span, ken_elaborator::Span::new(0, 3));
+        }
+        other => panic!("expected the specific retired-`use` ParseError, got {other:?}"),
     }
 }

@@ -1,7 +1,7 @@
 //! Module namespacing, import resolution, and visibility (`33 §3-4`,
 //! ES3-build) — a pure surface/elaboration-time layer.
 //!
-//! `module`/`import`/`use`/`pub` add **no kernel feature**: a `module M { … }`
+//! `module`/`import`/`pub` add **no kernel feature**: a `module M { … }`
 //! block is an environment fragment whose declarations are renamed to their
 //! fully-qualified surface names (`M.foo`) and elaborated through the exact
 //! same `resolve::resolve_decl` → `elab::elaborate_rdecl_v1` pipeline as a
@@ -34,7 +34,7 @@ use crate::ElabEnv;
 /// Persistent cross-call module bookkeeping (lives on `ElabEnv`).
 #[derive(Default, Clone)]
 pub struct ModuleState {
-    /// The root (unqualified, file-level) scope: accumulates `import`/`use`
+    /// The root (unqualified, file-level) scope: accumulates selective-import
     /// bindings and top-level local names seen across separate
     /// `elaborate_decl`/`elaborate_file` calls, so a later call's bare
     /// references still see earlier imports/locals (a "file" is an implicit
@@ -79,8 +79,8 @@ enum Binding {
     Ambiguous(Vec<String>),
 }
 
-/// Per-scope bare-name resolution: import bindings (qualified/aliased/
-/// selective/open) plus this scope's own local declarations. A top-level
+/// Per-scope bare-name resolution: selective-import bindings plus this scope's
+/// own local declarations. A top-level
 /// local/import collision is fail-closed regardless of source order (`33
 /// §3.3`); narrower lexical binders remain innermost-wins.
 #[derive(Default, Clone)]
@@ -169,7 +169,7 @@ fn qualify(prefix: &str, name: &str) -> String {
 /// for qualified (`M.foo`) references. Returns the name **unchanged** if it
 /// isn't module-tracked at all (not imported, not locally shadowed) — this
 /// is what keeps every non-module program byte-for-byte backward
-/// compatible: `scope`/`exports` are empty unless `module`/`import`/`use`
+/// compatible: `scope`/`exports` are empty unless `module`/`import`
 /// actually appear, so every lookup here is a no-op passthrough to the
 /// pre-existing flat `cx.globals` resolution.
 fn resolve_ref(
@@ -281,11 +281,6 @@ fn apply_import(
                         span: span.clone(),
                     })?;
                 scope.bind_import(item.rename.as_deref().unwrap_or(&item.name), q, span)?;
-            }
-        }
-        ImportKind::Open => {
-            for (n, q) in pubmap.iter() {
-                scope.bind_import(n, q, span)?;
             }
         }
     }
