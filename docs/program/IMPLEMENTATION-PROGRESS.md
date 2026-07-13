@@ -14,7 +14,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ feb908e3`
+> ### ⏭ 2026-07-13 — LIVE STATE (read this first) · `origin/main @ 6088e0b8`
 > **I-2 (CA2 Console floor) CLOSED ✅ `1f85ad9a`** (PR #604; ACs met, all 3 §10 retros
 > in @ 10:28 → task #55 done). **Milestone B's Console effect floor is COMPLETE.** Carry
 > (→ bake into I-3 + host-ABI frames): enrich the existing coproduct summand in place
@@ -86,8 +86,71 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > clean; `prelude.rs` delta = only `data Utf8Error` + comment (**no FSOp/fs_resp/Path** —
 > I-3 boundary respected); 4 placeholders (`write_bytes`/`append`/`send`/`recv`) retired
 > tree-wide on the candidate blob (−4 primitives, −4 seeds = TCB SHRINK), safe ops
-> `bytes_at`/`bytes_slice`/`bytes_decode` present. **→ PUBLISHING now (CI-poll bg).**
-> **Publish unblocks CC2 (Foundation).** Task #50.
+> `bytes_at`/`bytes_slice`/`bytes_decode` present. **MERGED ✅ `origin/main @ 6088e0b8`**
+> (PR #607, squash; CI green). Landed honesty-gate CLEAN: single parent `feb908e3`,
+> forbidden-path EMPTY, 24 files = 23 reviewed + tracker, no FSOp/fs_resp/Path. **CP0
+> CLOSED ✅** — all 3 §10 retros in (leader `evt_1st026j4d9yh3`/qa `evt_4ar9sajna4e6y`/
+> impl `evt_wr7geqq0ef4a`; carry: source every real-producer/effect-row oracle from the
+> FINAL elaborated declaration registry, never a parallel bootstrap seed + pair with the
+> removal counterfactual). Task #50 DONE. **→ CC2 (Foundation) and kenfmt #58 (Language)
+> both UNBLOCKED.** NEXT: (i) **kenfmt #58 (Language) — KICK IN PROGRESS**: frame
+> DRAFT→READY (operator-confirmed), WP branch `wp/kenfmt-signature-layout @ ac7a3639`
+> (frame-only off 6088e0b8, shared local ref — push blocked but worktrees share refs);
+> Handoff-Gate compaction of Language ring launched (pid 3066845); post kickoff after
+> drops verified. (ii) CC2 (Foundation) — **NOT Steward-frame-directly**; survey (@ 6088e0b8)
+> found 3 soundness forks → **Architect design-framing REQUESTED** `evt_1c6j1cndm2tbb`
+> (I-3 pattern: Architect rules → Steward transcribes → re-confirm → kick). Forks: ①
+> LOAD-BEARING lawful `Ord`/`DecEq` on **opaque** String/Bytes keys — certificate (trust
+> delta) vs `string_to_list_char`-bijection-lift to `Ord (List Char)` (zero-trust); ②
+> located errors (`Utf8Error` is nullary/no-offset) — in-pkg carrier vs generic-over-`e`;
+> ③ digit extraction — no codepoint prim, build via List Char cmp not a new prim. Settled
+> pins ready: zero-TCB catalog Ken, AC1 = DS-7/8 shared-`ElabEnv` harness, zero-`Axiom`
+> fences, Reviewer=Architect (CV only if spec/conformance touched). Foundation ring idle
+> meanwhile. (Note: steward/work merged origin/main @ 6088e0b8 — working tree current
+> with CP0, tracker still ahead.)
+> **★ UPDATE ~14:35 — kenfmt #58 KICKED ✅ + CC2 design RULED + frame drafting.**
+> **kenfmt #58 (Language):** frame READY (`wp/kenfmt-signature-layout @ ac7a3639`, shared
+> local ref off 6088e0b8); Language ring Handoff-Gate compacted (leader/impl/qa all
+> verified "Context compacted"; **impl needed an interrupt+re-compact — it hung 5.5m in a
+> stuck "Working" turn, Escape then re-sent `/compact`**); kickoff `evt_4hbrc8wyr92ak`,
+> leader engaged `evt_tnvzs4r0kgwd`. QA-reviewed (no Architect gate); QA-approve →
+> git_request → publish. Task #58 in_progress.
+> **CC2 (Foundation): Architect design RULING in `evt_3gc9dcvy0fgx`** (thread thr_14vmgenac55j).
+> Rulings: **① lawful String keys = transport through landed List Char** (List-lifting +
+> Ord/DecEq Char already LANDED Axiom-free — NOT deliverables); only `sound`/`antisym`
+> need ONE `string_to_list_char`-injectivity cert homed at the bijection layer.
+> **② located `NumericError = MkNumericError NumericErrorKind Nat`** (char-index offset;
+> `EmptyInput|InvalidDigit`), minimal pre-CC4 carrier. **③ `char_to_digit` via landed
+> `charToInt`+`leq_int`** (no new prim). Steward scope decisions (`evt_6ccq8d4zvkdrw`):
+> **Bytes keys DESCOPED to fast-follow** (no substrate); **Text.Codec + Text.Numeric build
+> NOW (zero-new-trust); lawful String keys = FINAL deliverable GATED on OPERATOR (i-vs-ii)
+> decision** — (i) pay one injectivity cert prereq [rec] vs (ii) functions-only. **Operator
+> decision surfaced `evt_5d61192kcqp4y`** (Pat). **CC2 frame drafting in flight** (subagent
+> a924d39d → `docs/program/wp/cc2-text-codec-numeric.md`); on return: review → route to
+> Architect re-confirm → Handoff-Gate Foundation → kick (Codec+Numeric now; String-keys on
+> operator answer). Harness order: Transport→Collections→LawfulClasses→[(i)cert]→Codec→Numeric.
+> **★ Architect endorsed the split + ONE guard-rail to BAKE INTO FRAME (`evt_49zk7vabtbfq8`)
+> — MUST fold into subagent draft on review:** confine ALL String↔List Char bijection debt
+> to the single gated keys cert; do NOT let it leak into Numeric/Codec verified laws.
+> Neither bijection direction is a landed law (only tested-to-reduce on ground terms,
+> `l3_strings_roundtrip_acceptance.rs:172,199`); a `∀ s:String` round-trip over opaque
+> String does NOT reduce (neutral var) — ground-test ≠ universal law. So: (1) Codec+Numeric
+> ship parse/format/view as FUNCTIONS (reduce on ground inputs, zero-trust); (2) any
+> VERIFIED round-trip law is stated at the `List Char`/digit level (`parse_digits
+> (format_digits n) = Ok n`, structural over the digit fold + landed List/Int facts), NOT
+> crossing into String — String-facing wrappers stay functions; (3) Codec round-trip rides
+> landed `BytesRoundTripLaw`, no String↔List Char crossing law. Architect re-confirm will
+> check (a) no Numeric/Codec fence states a String-crossing round-trip law, (b) ①-cert
+> homed at prereq bijection layer not a Text fence. (Text.Numeric confirmed independent of
+> DecEq/Ord String — parse/format never compare String keys.)
+> **★ CC2 FRAME AUTHORED ✅ + guard-rail folded + routed to Architect re-confirm.** Frame
+> `docs/program/wp/cc2-text-codec-numeric.md`; WP branch `wp/cc2-text-codec-numeric @
+> b1865ff9` (frame-only off 6088e0b8, shared local ref). Guard-rail folded at 4 points
+> (fixed-input-4 + AC4 + AC5 + guardrail bullet w/ the 2 Architect re-confirm checks).
+> Architect re-confirm requested `evt_3nnssrydaszm0`. Task #59. **On Architect green →
+> Handoff-Gate Foundation ring → kick** (Text.Codec + Text.Numeric build now zero-new-trust;
+> lawful String keys = FINAL gated deliverable on operator (i)/(ii) answer to Pat
+> `evt_5d61192kcqp4y`). Bytes-keys lawful = descoped fast-follow WP (no substrate).
 > **(kenfmt layout rework batch-1 — FRAME READY, task #58)** `docs/program/wp/
 > kenfmt-signature-layout.md`. Operator refined 2026-07-13: governing principle = **prefer
 > horizontal** (kenfmt over-verticalizes; collapse to one line where it fits). Rules R1–R5:
