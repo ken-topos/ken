@@ -35,13 +35,15 @@
 ## 1. `Bytes` and binary I/O
 
 `Bytes` is an **immutable, finite byte sequence** — the substrate for binary
-protocols, hashing, serialization, and (in L7) FFI buffers. Binary I/O
-reads/writes `Bytes` to files, sockets, and streams, and every such operation is
-**effect-tracked** (`36`): an I/O operation that does not carry its effect row
-is a **type error**. Text is **never** an implicit reinterpretation of bytes — a
+protocols, hashing, serialization, and (in L7) FFI buffers. At the world
+boundary, `read_bytes` reads bytes from files and `print_line` writes text to
+the console. Every such operation is **effect-tracked** (`36`): an I/O
+operation that does not carry its effect row is a **type error**. Text is
+**never** an implicit reinterpretation of bytes — a
 `String` is obtained from `Bytes` only through an **explicit, named**
-`encode`/`decode` step (no hidden charset). Over that substrate sits a **lawful
-serialization round-trip** (`§1.5`), the verified-component target for G6.
+`bytes_encode`/`bytes_decode` step (no hidden charset). Over that substrate sits
+a **lawful serialization round-trip** (`§1.5`), the verified-component target
+for G6.
 
 ### 1.1 The `Bytes` primitive
 
@@ -94,56 +96,61 @@ new kernel rule** — only registered `prim` reductions, like `add` on `Int`.
 | Op | Type | Notes |
 |---|---|---|
 | `length` | `Bytes → Int` | byte count; total, non-negative |
-| `at` | `Bytes → Int → Option UInt8` | indexed byte; **partial** (out-of-range ⇒ `None`) |
-| `slice` | `Bytes → Int → Int → Option Bytes` | `slice b start len`; `None` on an out-of-range window |
+| `bytes_at` | `Bytes → Int → Option UInt8` | indexed byte; **partial** (invalid index ⇒ `None`) |
+| `bytes_slice` | `Bytes → Int(start) → Int(len) → Option Bytes` | `None` on an invalid span |
 | `concat` | `Bytes → Bytes → Bytes` | total; `++` on `Bytes` |
 | `empty` | `Bytes` | the zero-length value; `length empty ≡ 0` |
 
 - **Partiality follows the `35 §3` / `43 §2` discipline.** Indexing and slicing
   are the **partial** operations (bounds), handled the same way `35` handles
-  `div`/`mod` by zero: either an **explicit `Option`** result (shown above) or,
-  for verified code, an **obligation-generating** total form over a refinement
-  (`at_pf : (b : Bytes) → (i : Int) → { i ≥ 0 ∧ i < length b } → UInt8`, `34
-  §5`) — proven in-range ⇒ total and safe; unproven ⇒ a marked partial point
-  that degrades to a runtime check (`unknown`/panic), **never** a silent
-  out-of-bounds read. The two faces are the §`35 §3` "checked is the runtime
-  face of an undischarged obligation," not a separate mode.
+  `div`/`mod` by zero. `bytes_at b i` returns `None` when `i` is negative or
+  outside `b`. `bytes_slice b start len` returns `None` when `start` or `len`
+  is negative, or when that span extends past `b`; its third argument is a
+  **length**, not an end offset. Neither operation returns a neutral or a
+  fabricated byte/empty slice for invalid bounds. For verified code, an
+  **obligation-generating** total form over a refinement (`at_pf : (b : Bytes)
+  → (i : Int) → { i ≥ 0 ∧ i < length b } → UInt8`, `34 §5`) is proven in-range
+  ⇒ total and safe; unproven ⇒ a marked partial point that degrades to a runtime
+  check (`unknown`/panic), **never** a silent out-of-bounds read. The two faces
+  are the §`35 §3` "checked is the runtime face of an undischarged obligation,"
+  not a separate mode.
 - **A byte is `UInt8`** (`35`); `length`/indices are `Int` (the default integer,
   arbitrary-precision, `35 §2`).
 - **Non-definitional laws are propositions** (`14 §5`), not assumed:
   `length (concat a b) == length a + length b`, `concat`-associativity,
   `concat a empty == a`, etc. — proved in the prelude (`50-stdlib/`,
   `20-verification/`), not baked into the kernel.
-- **Exact surface spellings** of the prelude ops (`at` vs `get` vs `index`, `++`
-  vs `concat`) are a **`31`/prelude naming** detail (oracle-tagged for the build
-  team); the **signatures, totality/partiality treatment, and the registered
-  reductions over literals** are fixed here.
+- **Exact surface spellings.** The primitive names `bytes_at` and
+  `bytes_slice`, their signatures, their total failure behavior, and their
+  registered reductions over literals are fixed here. Spellings of the
+  remaining prelude conveniences (`++` vs `concat`, for example) remain a
+  **`31`/prelude naming** detail (oracle-tagged for the build team).
 
-### 1.3 Effect-tracked binary I/O
+### 1.3 Effect-tracked I/O
 
-Every binary I/O operation carries its **exact effect row** (`visits`, `36 §1`).
-The surface (signatures fixed; spellings oracle-tagged):
+Every I/O operation carries its **exact effect row** (`visits`, `36 §1`). The
+two landed, ordinary surface witnesses used by this clause are:
 
-```
-read_bytes  : Path   → Bytes            visits [FS]
-write_bytes : Path   → Bytes → Unit     visits [FS]
-append      : Path   → Bytes → Unit     visits [FS]
-send        : Socket → Bytes → Unit     visits [Net]
-recv        : Socket → Int   → Bytes    visits [Net]
-```
+| Landed operation | Mandatory row |
+|---|---|
+| `read_bytes` | `visits [FS]` |
+| `print_line` | `visits [Console]` |
 
-Stream operations (open/read-chunk/write-chunk/close over a file or socket
-handle) carry the **same** row as their underlying device (`[FS]` or `[Net]`).
+Their complete result and capability types are defined by the landed FS and
+Console floors; this clause fixes the operation-to-row association. Ken has no
+landed `Net` operation in this round. A `Net`-specific operation-binding witness
+is deferred until a real `Net` producer lands; conformance must not synthesize
+one merely to preserve an old oracle.
 
 - **The no-untracked-I/O guard is the `36 §1.4` escape check — L6 introduces no
   new gate.** Each I/O operation is a `perform_E` site (`36 §1.2`): it is the
-  **one** place its label (`FS`/`Net`) enters the inferred row. A call to an I/O
-  operation from a context whose declared row does **not** contain that label is
+  **one** place its label (`FS`/`Console`) enters the inferred row. A call to an
+  I/O operation from a context whose declared row does **not** contain that label is
   an **EFFECT-ESCAPE static error** (`ρ_inf ⊄ ρ_decl`). Pure-by-default ⇒ a
   `view` with **no** `visits` has `ρ_decl = ∅`, so **any** I/O call escapes ⇒
   **untracked I/O is a compile error** (AC2/AC3). The accepting case carries the
   effect in its row; the rejecting case drops it — a **verdict flip**, exercised
-  with the **≥2 distinct effects** `FS` and `Net` (`36 §1.4`).
+  with the **≥2 distinct effects** `FS` and `Console` (`36 §1.4`).
 - **Every I/O act is a `Vis` node (`36 §3.1` contract).** The I/O operations are
   the tree's `perform` sites: a function's effects are recoverable from its
   **type** (the latent row `A →[ρ] B`), never hidden between nodes. This is the
@@ -162,56 +169,61 @@ handle) carry the **same** row as their underlying device (`[FS]` or `[Net]`).
   type-error-if-untracked guarantee) and leaves capability *threading* as the
   `36 §3` mechanism it already is — no new machinery here.
 
-### 1.4 Text is explicit `encode` / `decode` — no hidden charset
+### 1.4 Text is explicit `bytes_encode` / `bytes_decode` — no hidden charset
 
 A `String` is obtained from `Bytes` **only** through a named, visible boundary;
 there is **no** implicit charset reinterpretation anywhere in the surface
 (AC4).
 
 ```
-encode : String → Bytes          -- total; UTF-8 serialization (the named charset)
-decode : Bytes   → Result String  -- partial; UTF-8 parse, Err on invalid input
+bytes_encode : String → Bytes
+bytes_decode : Bytes → Result Utf8Error String
 ```
 
-- **`encode` is total and UTF-8 by contract.** It serializes a `String` (which
-  is **NFC-normalized UTF-8** by construction, `41 §3a`) to its UTF-8 bytes. The
-  **charset is named in the operation**, not hidden: a non-UTF-8 codec (if ever
-  added) is a **different named function** (`encode_latin1`, …), never an
-  implicit reinterpretation. There is no `Bytes`-to-`String` coercion, no
-  "default charset," and no path that yields text from bytes without a `decode`.
-- **`decode` is partial (`Result`).** Not every `Bytes` is valid UTF-8, so
-  `decode` returns `Err` on invalid input (`Result String`, `36`) — the partial,
-  fail-visible boundary for untrusted bytes. AC4's negative face: the **only**
-  way to a `String` is this named, partial step; an implicit/hidden-charset path
-  is **rejected** (does not exist).
+- **`bytes_encode` is total and UTF-8 by contract.** It serializes a `String`
+  (which is **NFC-normalized UTF-8** by construction, `41 §3a`) to its UTF-8
+  bytes. The **charset is named in the operation**, not hidden: a non-UTF-8
+  codec (if ever added) is a **different named function** (`encode_latin1`,
+  …), never an implicit reinterpretation. There is no `Bytes`-to-`String`
+  coercion, no "default charset," and no path that yields text from bytes
+  without `bytes_decode`.
+- **`bytes_decode` is total with explicit failure.** For valid UTF-8 it returns
+  `Ok s`; invalid UTF-8 returns `Err e` for an `e : Utf8Error`. It never returns
+  a neutral term or silently substitutes text. AC4's negative face: the
+  **only** way to a `String` is this named, fail-visible step; an implicit or
+  hidden-charset path is **rejected** (does not exist).
 
 ### 1.5 The serialization round-trip law
 
-Over the `encode`/`decode` boundary, the **serialization contract** is the
-**one-directional** round-trip law, **provable** against `20-verification/`:
+Over the `bytes_encode`/`bytes_decode` boundary, `BytesRoundTripLaw` is the
+**one-directional** round-trip law, **provable** against `20-verification/`.
+Its byte input is explicitly conditional on having been produced by
+`bytes_encode`:
 
 ```
-∀ (s : String).  decode (encode s) == Ok s          -- (L6 law, provable; AC5)
+BytesRoundTripLaw :=
+  ∀ (s : String). bytes_decode (bytes_encode s) == Ok s
 ```
 
-- **Why it holds (and the direction matters).** `encode s` is the UTF-8 bytes of
-  `s`; `decode` parses valid UTF-8 (which `encode` always produces) and
-  **re-constructs** a `String`, NFC-normalizing at construction (`41 §3a`).
-  Because `s` is **already** NFC and NFC is **idempotent**, the reconstructed
-  string equals `s` — so the law holds. The proof obligation is
+- **Why it holds (and the direction matters).** `bytes_encode s` is the UTF-8
+  bytes of `s`; `bytes_decode` parses valid UTF-8 (which `bytes_encode` always
+  produces) and **re-constructs** a `String`, NFC-normalizing at construction
+  (`41 §3a`). Because `s` is **already** NFC and NFC is **idempotent**, the
+  reconstructed string equals `s` — so the law holds. The proof obligation is
   **dischargeable** (AC5 asserts the obligation is provable — a verified-
-  component target — not merely that one sample round-trips; structural, per the
-  untrusted-layer lesson).
+  component target — not merely that one sample round-trips; structural, per
+  the untrusted-layer lesson).
 - **The reverse is NOT a law — pin the silence so it is not over-claimed.**
-  `encode (decode b) == Ok b` does **not** hold for all `b : Bytes`: (1)
-  `decode` is partial (invalid UTF-8 has no `String`), and (2) even valid
+  There is no unconditional inverse for arbitrary bytes: from
+  `bytes_decode b == Ok s`, it does **not** follow in general that
+  `bytes_encode s == b`. Invalid UTF-8 has no `String`, and even valid
   **non-NFC** bytes normalize on `String` construction (`41 §3a`), so
-  `encode ∘ decode` is
-  **not** the identity on `Bytes`. Conformance must assert the law in the
-  `String → Bytes → String` direction only; a `Bytes → String → Bytes` case is a
-  **wrong** case (it would reject conforming implementations). This is a
-  verdict/law-boundary silence resolved **at the source** so the conformance
-  author does not fill it the other way.
+  `bytes_encode` after a successful `bytes_decode` is not the identity on every
+  `Bytes`. Conformance must assert only the conditional
+  `String → Bytes → Result Utf8Error String` direction above; a general
+  `Bytes → String → Bytes` inverse is a **wrong** case (it would reject
+  conforming implementations). This is a verdict/law-boundary silence resolved
+  **at the source** so the conformance author does not fill it the other way.
 - **L6 delivers the interface + the law; the generic derivation is L8.** The
   derivable `encode`/`decode` for **arbitrary** types (the `Serialize`-class
   machinery) is the stdlib follow-on (`L8`); L6 fixes the `Bytes` substrate, the
@@ -227,8 +239,9 @@ primitive** (`§1.1`, `14 §5` opaque constant + `41 §3a` `0x05` encoding,
 immutable, `b"…"`/`0x[…]` literals); the **core ops** (`§1.2`, registered
 reductions, `35 §3` partiality); the **effect-tracked I/O surface** (`§1.3`,
 each op `visits` its exact row, untracked = type error via the `36 §1.4` escape
-check); the **explicit `encode`/`decode`** boundary (`§1.4`, no hidden charset);
-and the **round-trip law** (`§1.5`, provable, one-directional). **No new kernel
+check); the explicit **`bytes_encode`/`bytes_decode`** boundary (`§1.4`, no
+hidden charset); and the **round-trip law** (`§1.5`, provable,
+one-directional). **No new kernel
 rule** (`§1.1`); **no `foreign`** (that is L7, `§2`–`§3`).
 
 **Acceptance (AC1–AC5).**
@@ -239,18 +252,20 @@ rule** (`§1.1`); **no `foreign`** (that is L7, `§2`–`§3`).
 - **AC2 — `[FS]` tracked.** `read_bytes` (`visits [FS]`) called from a context
   lacking `FS` is a **type error** (reject); the properly-rowed call **accepts**
   — a **verdict flip**.
-- **AC3 — `[Net]` tracked.** `send` (`visits [Net]`) — the **same** flip on a
-  **distinct** effect (the ≥2-effect discrimination of `36 §1.4`).
+- **AC3 — `[Console]` tracked.** `print_line` (`visits [Console]`) — the
+  **same** flip on a **distinct**, real effect (the ≥2-effect discrimination of
+  `36 §1.4`). A `Net` witness remains deferred until a real producer lands.
 - **AC4 — no hidden charset.** Producing text from `Bytes` **requires** the
-  named `decode`; an implicit/hidden-charset path is **rejected** (or absent),
-  and `decode` is **partial** (`Result`) on invalid input.
-- **AC5 — round-trip law.** `decode (encode s) == Ok s` is **provable** (the
-  obligation is dischargeable — structural), not merely sampled; the reverse is
-  **not** asserted (`§1.5`).
+  named `bytes_decode`; an implicit/hidden-charset path is **rejected** (or
+  absent), and invalid input produces `Err`.
+- **AC5 — round-trip law.**
+  `bytes_decode (bytes_encode s) == Ok s` is **provable** (the obligation is
+  dischargeable — structural), not merely sampled; the reverse is **not**
+  asserted (`§1.5`).
 
 **Conformance:** `../../conformance/surface/bytes-io/` — AC1–AC5 with per-case
 **verdict/structural flip** and the **cross-case sweep** (the effect-tracking
-cases `FS`/`Net` agree as one metatheory class). The **QA gate**: the
+cases `FS`/`Console` agree as one metatheory class). The **QA gate**: the
 effect-tracking cases route a **real** I/O signature through the **actual** `36
 §1.4` escape check (a real untracked call → real reject), not a synthetic flag.
 (The L7 `foreign`/trust-boundary cases live separately under
