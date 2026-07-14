@@ -135,6 +135,48 @@ STOP. You are in I-8b.**
 
 ## 4. Mandated deliverables
 
+### ⚠ STEP 0 (FIRST, own commit) — repair two oracles you are about to copy
+
+**`crates/ken-interp/tests/i2_console_floor.rs:132` and
+`crates/ken-interp/tests/i3_fs_floor.rs:141` are BROKEN**, in the exact way that
+took SUB-1's CI red this morning:
+
+```rust
+const CONSOLE_PACKAGE: &str = include_str!(…/Console.ken.md);   // ← RAW literate file
+assert!(!CONSOLE_PACKAGE.contains("Axiom"));                    // ← greps PROSE + fences
+```
+
+**These are the two tests nearest to I-8, they are the ones you will crib the
+zero-`Axiom` idiom from, and they are wrong.** They grep the **raw `.ken.md`** —
+prose *and* code — for the substring `Axiom`. **They pass today only because no
+prose in `Console.ken.md` / `FS.ken.md` has yet happened to use the word.** The
+moment an author documents *"this package needs no `Axiom`"* — **a true and
+valuable sentence** — CI goes red on a lie. **That already happened**: DS-4's
+identical oracle fired on SUB-1's prose *asserting the absence of an `Axiom`*.
+
+**Fix both to extract first, then assert on the extracted Ken code** — the idiom
+CC6a already uses correctly (`cc6a_process_arguments_exit_acceptance.rs:390`,
+which asserts on `extract_ken_md(…).source`):
+
+```rust
+let extracted = ken_elaborator::literate::extract_ken_md(CONSOLE_PACKAGE)
+    .expect("Console.ken.md must extract");
+assert!(!extracted.source.contains("Axiom"), "Console.ken code must declare no Axiom");
+```
+
+**This STRENGTHENS both gates** — still fails on a real `Axiom` in a fence (all
+they ever meant to catch), stops false-firing on prose. **Do NOT weaken or
+delete either assertion, and NEVER reword a document to appease a grep.**
+
+**★ The law you are inheriting: a "zero-X" gate checks what the artifact
+DECLARES — never whether the string `X` occurs in it.** Prohibitions, negative
+assertions, doc comments, and WP frames all **name the thing they forbid** —
+*that is what forbidding looks like.* **A grep SELECTS candidates; it never
+DECIDES.** (Fleet memory:
+`agent/memory/fleet/an-oracle-that-greps-a-name-fires-on-prose-that-denies-it.md`.)
+
+### Then the WP proper
+
 1. **Surface:** `data Instant = MkInstant Int`; `wall_now : {Clock} → Instant`
    (catalog package, e.g. `Time/Clock.ken.md`).
 2. **Effect:** one `Clock` entry in the effect row; `ClockOp` with the `WallNow`
@@ -160,14 +202,28 @@ STOP. You are in I-8b.**
    `is_err()`.)* **This is the AC that carries the whole "no cap needed"
    argument — if it does not hold, the ambient ruling is unsound and you must
    stop and report.**
-4. **AC4 — `trusted_base()` MUST NOT GROW.** **Zero new `Axiom`, zero
-   `Decl::Opaque`, zero new opaque primitive, zero kernel change.** Grep the diff
-   for `crates/ken-kernel` — it must be **empty**.
+4. **AC4 — `trusted_base()` MUST NOT GROW.** Zero new `Axiom`, zero
+   `Decl::Opaque`, zero new opaque primitive, zero kernel change.
+   **★ ASSERT THIS AT THE EMISSION, NOT AT THE TOKENS.** The check is
+   `trusted_base()` **before == after** across elaboration of the new package,
+   plus **zero trust-adding DECLARATIONS** in the *extracted* Ken. **Do not gate
+   on a token grep of the diff** — this frame, and your own acceptance test's
+   forbidden-list, both spell `Axiom` and `Clock` *while prohibiting them*, and a
+   naive grep reads a prohibition as a violation. **(The Steward's own I-7 gate
+   did exactly that and nearly blocked a clean WP; see Step 0.)** The one grep
+   that *is* sound here is the **path** probe — `crates/ken-kernel` must be
+   **absent from the diff** — because that asks about files, not meaning.
 5. **AC5 — no ordering law anywhere.** No `≤`/`leq` law on `Instant`, no
-   monotonicity claim in the docs, no `Axiom`. **A green diff that added one
-   still FAILS this WP.**
+   monotonicity claim in the docs, **no `Axiom` DECLARED anywhere.** **A green
+   diff that added one still FAILS this WP.** *Saying the words "no ordering
+   law" in prose is required and correct; **declaring** one is the violation.*
+   **State the absence of the law out loud** — §3 explains why a wall clock
+   genuinely has none, and that honesty is a deliverable, not a gap.
 6. **AC6 — no regression.** Green **in CI** (never a local `--workspace` run —
-   `COORDINATION.md §12`).
+   `COORDINATION.md §12`). **Enumerate every corpus-walking oracle your new
+   catalog file will be swept into** (`ken_fmt`, `kenfmt_c_capstone`, and any
+   test that globs `catalog/packages/`) and run them — that enumeration is
+   Runtime's own I-7 carry, and it is what CI will do to you anyway.
 
 ## 6. Do-not-reopen guardrails
 
