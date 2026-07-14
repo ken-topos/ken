@@ -206,8 +206,9 @@ Everything outside the kernel reaches it only through this surface. The API is
 below are the **landed `ken-kernel` surface** (grounded against the code, not an
 idealized sketch); names and shapes are **normative**. Two conventions the
 contract depends on: the kernel keys every declaration on a `GlobalId` it
-allocates (**naming is the elaborator's job** — no declarator takes a name), and
-all term inputs are **by reference** (`&Term`); `env` is `&mut GlobalEnv`
+allocates (source binding remains the elaborator's job; the postulate
+declarator additionally requires the kernel-inert audit label pinned below),
+and all term inputs are **by reference** (`&Term`); `env` is `&mut GlobalEnv`
 for the declarators (they extend Σ) and `&GlobalEnv` everywhere else.
 
 ### 4.1 The stable surface
@@ -223,8 +224,9 @@ fn declare_recursive_group(
         -> KernelResult<Vec<GlobalId>>;
 fn declare_inductive(env: &mut GlobalEnv,
         build: impl FnOnce(GlobalId) -> InductiveSpec) -> KernelResult<GlobalId>;
-fn declare_postulate(env: &mut GlobalEnv, level_params: Vec<LevelVar>,
-                     ty: Term) -> KernelResult<GlobalId>;
+fn declare_postulate(env: &mut GlobalEnv, name: String,
+                     level_params: Vec<LevelVar>, ty: Term)
+                     -> KernelResult<GlobalId>;
 fn declare_primitive(env: &mut GlobalEnv, level_params: Vec<LevelVar>,
                      ty: Term, reduction: PrimReduction) -> KernelResult<GlobalId>;
 
@@ -264,7 +266,7 @@ entry may return.
 | `declare_def` | `ty`, `body` raw-well-formed over `·` | `· ⊢ ty type`; `· ⊢ body ⇐ ty`; the def's group passes **SCT** (`17 §4`); `id` admitted **transparent** (δ-unfoldable). Pre-admitted opaque during checking so `body` may self-reference `id` | `TypeMismatch`, `UniverseInconsistency`, `NotTerminating` (SCT reject ⇒ `id` removed, Σ unchanged) |
 | `declare_recursive_group` | one `(level_params, ty)` per member; `bodies_fn` returns one body per member, in order | each `ty` checked; all members pre-admitted opaque; each body checked; **SCT on the whole group**; accept ⇒ all transparent; **reject ⇒ the whole group rolled back** | as `declare_def`; `NotTerminating` rolls back every member |
 | `declare_inductive` | `build(id)` yields a well-formed `InductiveSpec` self-referencing `id` | signatures checked; **strict positivity** (`14 §8`) and the **W-style admission boundary** (`14 §8.4`: W-style admitted, negative / non-`D`-free-domain rejected) hold; type former + constructors admitted; the **dependent eliminator** (Π-abstracted IH + W-ι, `14 §3.1`/`§7.7`) generated on use | `PositivityViolation`, `IllFormedDecl`, `LevelArityMismatch` |
-| `declare_postulate` | `ty` raw-well-formed over `·` | `· ⊢ ty type`; `id` admitted **opaque**; **recorded in the trusted base** (appears in `trusted_base()`). A postulate of an empty type is admitted but **visible** as an assumption | `TypeMismatch`, `UniverseInconsistency` |
+| `declare_postulate` | `name` is a non-positional audit label; `ty` raw-well-formed over `·` | `· ⊢ ty type`; `id` admitted **opaque** with `name`; **recorded in the trusted base** (appears as a named entry in `trusted_base()`). A postulate of an empty type is admitted but **visible** as an assumption | `TypeMismatch`, `UniverseInconsistency` |
 | `declare_primitive` | `ty` raw-well-formed; `reduction` the registered operation descriptor | `· ⊢ ty type`; `id` admitted opaque + descriptor **registered in the trusted-base ledger**. `Literal` records a value class; `Op` is opaque to landed conversion and names interpreter dispatch (§5) | `TypeMismatch`, `UniverseInconsistency` |
 | `infer` | `ctx` well-formed; `t` raw-well-formed | returns the **unique** `A` with `ctx ⊢ t ⇒ A` (§3.1) | `VarOutOfScope`, `NotAFunction`, `NotASigma`, `LevelArityMismatch`, `TypeMismatch`; a non-inferable head ⇒ error |
 | `check` | `ctx` well-formed; `t` raw-well-formed; **`ty` a well-formed type** | `ctx ⊢ t ⇐ ty` (§3.2); the single conversion call is the mode switch | `TypeMismatch` (the two non-converting types), plus any from `infer` |
@@ -274,7 +276,36 @@ entry may return.
 | `whnf` | `t` raw-well-formed | **weak-head normal form**: head is not a redex. **Infallible** — an ι arity mismatch leaves the eliminator stuck/neutral, which is sound (`14 §7.6`). δ enabled at the head | none — total |
 | `normalize` | `t` well-typed | **full normal form** (NbE): whnf then normalize under binders. Total on well-typed terms | none — total |
 | `raw_well_formed` | — | `Ok` ⇒ `t`'s de Bruijn indices are in scope under `ctx` and it uses no reserved former — the **elaborator precondition** before `infer`/`check` | `VarOutOfScope`, `IllFormedDecl` |
-| `GlobalEnv::trusted_base` | — | enumerates **exactly** the postulates + primitives (as `GlobalId`s), excluding the prelude (`Top`/`Bottom`) and excluding definitions/inductives (re-checked, not trusted) — §5 | none — total |
+| `GlobalEnv::trusted_base` | — | enumerates **exactly** the postulates + primitives (as `GlobalId`s), excluding the prelude (`Top`/`Bottom`/`tt`) and excluding definitions/inductives (re-checked, not trusted); every postulate id resolves to its audit label — §5 | none — total |
+
+The required `String` is an audit label stored on the opaque declaration, not a
+term and not part of definitional identity. `Decl::Opaque` has a required,
+non-optional `name: String` field, and every `declare_postulate` caller
+MUST supply the corresponding required argument; there is no default, optional,
+or builder path for an unnamed postulate. This type-level requirement forces
+surface, elaborator, and Rust-side producers through the same naming choke
+point.
+
+A surface `Axiom` in a top-level declaration uses that declaration's canonical
+name. An `Axiom` in an instance field uses exactly
+`Class.HeadType.field`. A non-surface elaborator or Rust producer supplies its
+stable declared symbol at the same entry point. No producer may derive a label
+from a term position, `GlobalId`, allocation order, generated counter, gensym,
+or occurrence index. Multiple `Axiom` occurrences in one declaration therefore
+legitimately share the same owner label while retaining distinct `GlobalId`s;
+both entries remain visible in `trusted_base()`. Labels identify semantic
+owners, not individual occurrences. Inserting an unrelated declaration or field
+cannot rename an existing postulate. The current corpus has at most one
+canonical structure instance per class/head pair by coherence
+(`../30-surface/33 §5.5`), but that observation is not a unique-label
+invariant.
+
+The label is deliberately kernel-inert (`11 §4`). Apart from storing it and
+making it available to audit enumeration, the kernel MUST NOT read it:
+conversion, typing, admission, positivity, universe checking, and elimination
+may not branch on a postulate label. In particular, two declarations with
+different labels are not distinguished *because* of those labels; their
+ordinary `GlobalId`s already provide declaration identity.
 
 **Internal (reachable but not the frozen contract):** the gate functions
 `check_positivity`, `sct_check`, and the quotient respect/relation checks (these
@@ -375,18 +406,22 @@ relies on the interpreter semantics named by (2):
    correct for runtime semantic correctness, but a wrong result is a wrong
    runtime value rather than an inhabitant of a false proposition.
 3. **Any postulates** admitted via `declare_postulate` — each is an *assumed*
-   axiom; a postulate of an empty type would make the system inconsistent.
+   axiom carrying the stable audit label required by §4.2; a postulate of an
+   empty type would make the system inconsistent.
 
 Nothing else is trusted for proof soundness: not the elaborator, the prover,
 Z3, the surface compiler, or the runtime. The kernel MUST be able to
 **enumerate (2) and (3)**
 on request via the method `GlobalEnv::trusted_base() -> Vec<GlobalId>` (§4.1),
 which returns **exactly** the registered primitives + admitted postulates —
-excluding the prelude (`Top`/`Bottom`) and excluding definitions/inductives,
-which are re-checked rather than trusted. So a reviewer or agent can see the
-complete set of unchecked assumptions a given program depends on. Idiomatic Ken
-adds **no** postulates; classical axioms, if used, appear here and are visible
-(`16 §1.3` — Ω is intuitionistic, excluded middle is not assumed).
+excluding the prelude (`Top`/`Bottom`/`tt`) and excluding
+definitions/inductives, which are re-checked rather than trusted. Every returned
+postulate id resolves to the label stored by `declare_postulate`, so a reviewer
+or agent sees names rather than an allocation-order-only list. This includes
+postulates minted internally by the elaborator or its Rust support, not only
+surface `Axiom` expressions. Idiomatic Ken adds **no** postulates; classical
+axioms, if used, appear here and are visible (`16 §1.3` — Ω is
+intuitionistic, excluded middle is not assumed).
 
 The enumeration records the trusted primitive declarations/signatures while
 current `Op` execution remains in the tested-not-trusted interpreter ring. It

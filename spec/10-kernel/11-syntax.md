@@ -127,6 +127,15 @@ local context Γ) recording top-level declarations in dependency order:
   introducing opaque constants of empty types is a soundness-relevant action the
   kernel records but does not itself forbid — policy is the elaborator's (`18
   §4`).
+- Every opaque declaration has a required, non-optional human-readable audit
+  label: abstractly, `Decl::Opaque { id, name, level_params, ty }`. There is no
+  defaulted or unnamed opaque form. The label is metadata, distinct from the
+  declaration's `GlobalId` and absent from core terms. It is **kernel-inert**:
+  conversion, typing, admission, positivity, universe checking, and elimination
+  MUST NOT inspect it or branch on it. These judgments depend only on the
+  declaration identity, levels, type, and body or reduction data already shown
+  above. Audit enumeration may expose the label; changing only the label cannot
+  change any kernel judgment.
 - **Inductive declarations** and **primitives** are detailed in `14` and `41`.
 - The environment is **append-only and acyclic**: a declaration may reference
   only earlier ones. This is what makes δ-unfolding well-founded and is a

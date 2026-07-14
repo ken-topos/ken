@@ -511,6 +511,10 @@ names) and emits core terms (`11 §1`). V0's minimal forms keep it small: `infer
 for variables, applications, and ascriptions; `check` for λ and `let`; a single
 `infer`-then-convert fallback everywhere else.
 
+Both judgments below carry an implicit `owner_label: String` supplied by the
+enclosing named declaration; every recursive `infer`/`check` call preserves that
+context. The label is not derived from the expression being checked.
+
 ```
 infer(Γ, e) → (Term, Type):
   case e of
@@ -533,6 +537,9 @@ infer(Γ, e) → (Term, Type):
     RVarTy(i):      return (Var(i), lookup(Γ, i))     -- type-pos var, term pos
 
 check(Γ, e, expected) → Term:
+  if e = RCon("Axiom"):
+    id := declare_postulate(Σ, owner_label, [], expected)
+    return Const(id)                                     -- checked-mode intercept
   case (e, whnf(Γ, expected)) of
     (RLam(x, body), Pi(y, A, B)):                     -- 13 §1 Π-Intro
       body' := check(extend(Γ, A), body, B)           -- under x : A; B already binds y≡x
@@ -567,6 +574,25 @@ elabType(Γ, t) → Term:                                -- type-position elabor
     RCon(c):        return constOf(Σ, c)              -- base type by name (11 §4)
     RVarTy(i):      return Var(i)                     -- a type-position bound variable
 ```
+
+**`Axiom` is a checking-mode elaborator intercept, not a kernel term.** The
+intercept runs before ordinary constructor lookup and requires the `expected`
+type supplied by `check`; there is no corresponding inference rule. It calls
+`declare_postulate` with that expected type. The kernel classifies the type and,
+on success, admits a fresh typed, body-less opaque declaration; elaboration
+returns only an ordinary constant reference to that declaration. An ill-formed
+expected type is rejected by the ordinary declaration check. No `Axiom` node is
+emitted into core syntax and no kernel judgment recognizes one.
+
+Because the rule depends only on checking mode, `Axiom` is legal in every term
+position that has an expected type, including an instance field or a nested
+operand checked against a known parameter type. Its
+postulate label comes from the enclosing semantic owner (`18 §4.2`); position,
+allocation order, and a generated counter do not participate. The declaration
+sugar `axiom N : T` is only `lemma N : T = Axiom` (`32 §1`): it does not
+deprecate, remove, hoist, or otherwise restrict expression-position `Axiom`.
+Multiple `Axiom` occurrences within one named declaration legitimately receive
+the same owner label while `declare_postulate` gives each a distinct `GlobalId`.
 
 Notes tying each clause to the kernel:
 

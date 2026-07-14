@@ -372,7 +372,7 @@ rowed Ken type. The defensive elaboration entry:
 ```
 elabForeign(Σ, ⟨ foreign f : T visits ρ = symbol s library l [pure] ⟩):
   T'  := elabType(·, rowed(T, ρ))      -- the latent-row type A →[ρ] B (36 §1); pure ⇒ ρ=∅
-  id  := declare_postulate(Σ, [], T')  -- opaque constant (11 §4); enters trusted_base() (18 §4.2/§5)
+  id  := declare_postulate(Σ, f, [], T')  -- required label = foreign declaration name
   recordForeign(id, symbol = s, library = l, row = ρ)   -- elaborator-side link/marshalling record
   bind f ↦ id
 ```

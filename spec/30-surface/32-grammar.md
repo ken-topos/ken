@@ -38,6 +38,7 @@ decl ::=
   | "instance" ConId atype* constraint_clause? "{" field_assign (";" field_assign)* "}"  -- instance (33 §5, §5.4)
   | "prop" ConId tyvar* binder* ":" type prop_block?  -- proposition family / claim shape
   | "lemma" ident binder* ":" type "=" expr  -- standalone checked proof theorem
+  | "axiom" ident ":" type  -- mechanical postulate-declaration sugar
   | "proof" ident "for" path binder* ":" type "=" expr  -- attached proof theorem
   | "foreign" ident ":" type foreign_spec  -- FFI (38)
   | "space" ConId "{" (cell | decl | becomes)* "}"  -- state region (36)
@@ -108,6 +109,15 @@ family namespace. `lemma` is a checked theorem in the ordinary module
 namespace. `proof` attaches a checked theorem to a resolved subject path, and
 the canonical attached name is `subject::proof_name`. None of these forms adds
 a new kernel declaration class, a trusted proof table, or ambient proof search.
+
+An `axiom` declaration is exactly the mechanical expansion
+`axiom N : T` ⇒ `lemma N : T = Axiom`. The production introduces no new
+elaboration rule: the expanded `lemma` retains its ordinary `Omega`-valued
+claim check, and its `Axiom` body uses the checking-mode rule in `39 §5.4`.
+For example, `axiom assumed_top : Top` mechanically expands to
+`lemma assumed_top : Top = Axiom`; both forms satisfy the productions above.
+The expression `Axiom` remains independently legal wherever a term is checked;
+this additive declaration sugar neither removes nor restricts it.
 
 **Definition keywords are purity-checked (`33 §1`, `36 §1.6`).** `const`/`fn`/
 `proc` replace the retired `view`; the grammar admits `binder*` on all, but
