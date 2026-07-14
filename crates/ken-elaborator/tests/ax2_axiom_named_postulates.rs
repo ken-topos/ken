@@ -5,6 +5,18 @@ use std::collections::BTreeSet;
 use ken_elaborator::layout::format_ken;
 use ken_elaborator::parser::parse_decls;
 use ken_elaborator::{Decl, ElabEnv};
+use ken_kernel::{Decl as KernelDecl, GlobalId};
+
+fn trusted_opaque_entries(env: &ElabEnv) -> Vec<(GlobalId, String)> {
+    env.env
+        .trusted_base()
+        .into_iter()
+        .filter_map(|id| match env.env.lookup(id) {
+            Some(KernelDecl::Opaque { name, .. }) => Some((id, name.clone())),
+            _ => None,
+        })
+        .collect()
+}
 
 #[test]
 fn axiom_surface_parses_formats_and_elaborates_as_a_named_postulate() {
@@ -22,12 +34,11 @@ fn axiom_surface_parses_formats_and_elaborates_as_a_named_postulate() {
     let mut env = ElabEnv::new().expect("base environment builds");
     env.elaborate_file(source)
         .expect("axiom declaration elaborates through the lemma lane");
-    let entries = env.env.trusted_base();
+    let entries = trusted_opaque_entries(&env);
     assert!(
         entries
-            .entries()
             .iter()
-            .any(|entry| entry.name == "assumed_top"),
+            .any(|(_, name)| name == "assumed_top"),
         "trusted-base audit must expose the declared axiom name"
     );
 }
@@ -41,15 +52,14 @@ fn repeated_expression_axioms_share_the_owner_label_but_not_identity() {
     )
     .expect("both expression-position Axiom terms elaborate");
 
-    let entries = env.env.trusted_base();
+    let entries = trusted_opaque_entries(&env);
     let shared = entries
-        .entries()
         .iter()
-        .filter(|entry| entry.name == "shared")
+        .filter(|(_, name)| name == "shared")
         .collect::<Vec<_>>();
     assert_eq!(shared.len(), 2, "both Axiom occurrences retain provenance");
     assert_eq!(
-        shared.iter().map(|entry| entry.id).collect::<BTreeSet<_>>().len(),
+        shared.iter().map(|(id, _)| id).collect::<BTreeSet<_>>().len(),
         2,
         "shared provenance is not shared identity"
     );
@@ -64,12 +74,11 @@ fn instance_field_axiom_uses_the_canonical_owner_path() {
     )
     .expect("instance field Axiom elaborates");
 
-    let entries = env.env.trusted_base();
+    let entries = trusted_opaque_entries(&env);
     assert!(
         entries
-            .entries()
             .iter()
-            .any(|entry| entry.name == "Witness.Int.evidence"),
+            .any(|(_, name)| name == "Witness.Int.evidence"),
         "instance-field provenance must be Class.HeadType.field"
     );
 }
@@ -80,11 +89,9 @@ fn standalone_api_requires_and_preserves_its_caller_owner() {
     env.elaborate_expr("standalone_assumption", "Axiom : Top")
         .expect("checking-mode Axiom remains legal through the standalone API");
     assert!(
-        env.env
-            .trusted_base()
-            .entries()
+        trusted_opaque_entries(&env)
             .iter()
-            .any(|entry| entry.name == "standalone_assumption")
+            .any(|(_, name)| name == "standalone_assumption")
     );
 
     env.elaborate_file("lemma choose_api (x : Top) (y : Top) : Top = x")
@@ -94,14 +101,13 @@ fn standalone_api_requires_and_preserves_its_caller_owner() {
         "choose_api Axiom Axiom",
     )
     .expect("both standalone Axiom operands elaborate");
-    let trusted = env.env.trusted_base();
+    let trusted = trusted_opaque_entries(&env);
     let shared = trusted
-        .entries()
         .iter()
-        .filter(|entry| entry.name == "standalone_shared_owner")
+        .filter(|(_, name)| name == "standalone_shared_owner")
         .collect::<Vec<_>>();
     assert_eq!(shared.len(), 2);
-    assert_ne!(shared[0].id, shared[1].id);
+    assert_ne!(shared[0].0, shared[1].0);
 }
 
 #[test]
@@ -110,10 +116,8 @@ fn module_qualification_is_the_axiom_owner() {
     env.elaborate_file("module Claims { pub axiom admitted : Top }")
         .expect("module-owned axiom elaborates");
     assert!(
-        env.env
-            .trusted_base()
-            .entries()
+        trusted_opaque_entries(&env)
             .iter()
-            .any(|entry| entry.name == "Claims.admitted")
+            .any(|(_, name)| name == "Claims.admitted")
     );
 }

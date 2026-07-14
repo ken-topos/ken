@@ -191,60 +191,6 @@ pub enum Decl {
     },
 }
 
-/// One readable entry in the unchecked-assumption ledger (`18 §4.2`).
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TrustedBaseEntry {
-    pub id: GlobalId,
-    pub name: String,
-}
-
-/// The readable trusted-base ledger.
-///
-/// Owned iteration intentionally yields the historical `GlobalId` stream so
-/// existing trust-delta set/count checks keep their exact semantics. Audit
-/// clients use [`TrustedBase::entries`] to read the required labels.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct TrustedBase {
-    entries: Vec<TrustedBaseEntry>,
-}
-
-impl TrustedBase {
-    pub fn entries(&self) -> &[TrustedBaseEntry] {
-        &self.entries
-    }
-
-    /// Iterate over opaque ids for compatibility with the historical
-    /// set-shaped trust audit API. Use [`Self::entries`] when labels matter.
-    pub fn iter(&self) -> impl Iterator<Item = &GlobalId> {
-        self.entries.iter().map(|entry| &entry.id)
-    }
-
-    pub fn contains(&self, id: &GlobalId) -> bool {
-        self.entries.iter().any(|entry| entry.id == *id)
-    }
-
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-}
-
-impl IntoIterator for TrustedBase {
-    type Item = GlobalId;
-    type IntoIter = std::vec::IntoIter<GlobalId>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.entries
-            .into_iter()
-            .map(|entry| entry.id)
-            .collect::<Vec<_>>()
-            .into_iter()
-    }
-}
-
 impl Decl {
     pub fn id(&self) -> GlobalId {
         match self {
@@ -528,9 +474,8 @@ impl GlobalEnv {
     /// excluded: they are fixed kernel vocabulary (`16 §1.3`), not user
     /// assumptions. Checked surface literals are also excluded: their values
     /// are stored as syntax-derived data, not as primitive operations.
-    pub fn trusted_base(&self) -> TrustedBase {
-        let entries = self
-            .decls
+    pub fn trusted_base(&self) -> Vec<GlobalId> {
+        self.decls
             .iter()
             .filter(|d| match d {
                 Decl::Opaque { .. } => true,
@@ -538,36 +483,8 @@ impl GlobalEnv {
                 _ => false,
             })
             .filter(|d| !self.is_prelude(d.id()))
-            .map(|d| match d {
-                Decl::Opaque { id, name, .. } => TrustedBaseEntry {
-                    id: *id,
-                    name: name.clone(),
-                },
-                Decl::Primitive {
-                    id,
-                    reduction: PrimReduction::OpaqueType,
-                    ..
-                } => TrustedBaseEntry {
-                    id: *id,
-                    name: "opaque primitive type".to_string(),
-                },
-                Decl::Primitive {
-                    id,
-                    reduction: PrimReduction::Op { symbol },
-                    ..
-                } => TrustedBaseEntry {
-                    id: *id,
-                    name: (*symbol).to_string(),
-                },
-                Decl::Primitive {
-                    reduction: PrimReduction::Literal,
-                    ..
-                }
-                | Decl::Transparent { .. }
-                | Decl::Inductive(_) => unreachable!("trusted-base filter mismatch"),
-            })
-            .collect();
-        TrustedBase { entries }
+            .map(|d| d.id())
+            .collect()
     }
 }
 
