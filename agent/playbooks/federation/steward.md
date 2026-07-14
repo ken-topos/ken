@@ -314,9 +314,39 @@ brief** — the implementer should execute mostly mechanically, not design
 > can't write that line truthfully, you did not
 > run the gate — go back.
 
-1. **Steward authors the brief** at `docs/program/wp/<ID>-<slug>.md`, on the WP
-   branch `wp/<ID>-<slug>` (`git branch wp/<ID>-<slug> origin/main` — the fetched
-   ref, never stale local `main`). It must: pin every
+1. **Steward authors the brief** at `docs/program/wp/<ID>-<slug>.md`, on the
+   **FRAME branch `wp/<ID>-frame`** (`git branch wp/<ID>-frame origin/main` — the
+   fetched ref, never stale local `main`).
+
+   > ### ⛔ THE FRAME BRANCH AND THE BUILD BRANCH MUST NOT SHARE A NAME
+   >
+   > **Name the frame branch `wp/<ID>-frame`. Never `wp/<ID>-<slug>`.** The
+   > build branch `wp/<ID>-<slug>` is cut **fresh from `origin/main` by the team,
+   > AFTER the frame merges** — the team does **not** "continue" the frame branch,
+   > and cannot.
+   >
+   > **Why it is structurally impossible to continue it:** the frame branch is
+   > **squash-merged** at step 3. That deletes the remote branch and leaves the
+   > local ref **dangling *ahead* of `origin/main` while its content is already
+   > in** (the squash-merge trap). A team told to "continue" that branch is being
+   > pointed at a **stale leftover** — and if the Steward's own worktree is still
+   > sitting on it, the team is **hard-blocked**, because one branch cannot be
+   > checked out in two worktrees.
+   >
+   > **This is not hypothetical — it fired on LET-3 Phase 2 (2026-07-14).** I
+   > published the frame from `wp/let3-p2-map-acc-lookup`, the frame squash-merged
+   > as `2739c30c`, my worktree stayed on the branch, and `foundation-leader`
+   > **could not take the WP** — it correctly held the kickoff rather than forking
+   > a competing branch, and had to ask me to release the checkout. AX-2 escaped
+   > the same trap **only by luck**, because I happened to name its branches
+   > `wp/ax2-frame` and `wp/ax2-…-build`.
+   >
+   > **⇒ Two names, always.** `wp/<ID>-frame` (mine, merges and dies) ·
+   > `wp/<ID>-<slug>` (theirs, cut fresh from `origin/main` after the frame is on
+   > it). And **switch your own worktree off the frame branch the moment you
+   > publish it** — a Steward parked on a WP branch is a silent ring-blocker.
+
+   The brief must: pin every
    **settled** decision as a *fixed input* (cite `/spec` + the OQ register; never
    leave a decided fork "open" for a lower-tier model to relitigate — that is the
    failure mode); give a **mandated deliverable outline** (each section ending in
@@ -633,9 +663,13 @@ brief** — the implementer should execute mostly mechanically, not design
    GATE FIRST** (checklist above): the whole team (leader + implementer + QA) is
    `compact-verified` **then** mentioned. Compact BEFORE the kickoff; verify
    each ctx dropped; then mention the **leader only** (§2) in the
-   WP thread, pointing at the now-on-`main` elaborated brief + spec. The team
-   continues `wp/<ID>-<slug>` for the implementation. (Leaders do **not** compact
-   their members — compaction is yours; see below.)
+   WP thread, pointing at the now-on-`main` elaborated brief + spec. **The team
+   cuts the build branch `wp/<ID>-<slug>` FRESH from current `origin/main`** (the
+   frame is already on it) — it does **not** continue your `wp/<ID>-frame` branch,
+   which squash-merged and is now a dangling leftover (step 1). **Confirm your own
+   worktree is OFF that branch before you kick**, or the team is hard-blocked by
+   your checkout. (Leaders do **not** compact their members — compaction is yours;
+   see below.)
 
 **A kickoff is a LIVE signal until you explicitly retract it (learned twice:
 F4, K1).** If you kick a WP off to a team and then **hold, re-scope, or
