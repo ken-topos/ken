@@ -278,6 +278,172 @@ not a capability-producing surface spelling; deferred runtime mechanisms remain
 
 ---
 
+## G. I-5 least-privilege FS confinement — RED-UNTIL-I-5
+
+These cases transcribe ADR-0017 §3–§5/§4a and the I-5 frame. **Every case in
+this section is RED-UNTIL-I-5**: its reachability precondition is the integrated
+I-5 build — the product scope carried by a real runner-minted opaque `Cap`, the
+handle-only `HostHandler` seam, and the inode-keyed capture VFS. No case may be
+made green by calling a helper with a fabricated verdict, by bypassing
+`fs_dispatch`, or by handing an already-resolved success to the operation.
+
+The harness drives the real capability gate and resolver from an FS operation.
+On a denial it matches the exact `CapabilityDenied` variant and asserts
+`host.fs_trace().is_empty()`: the denied operation never reaches a host FS
+effect. On the paired acceptance it asserts both the returned value/state and
+the exact handle-based host operation. Resolver observations may be recorded
+separately, but never count as the denied operation having run.
+
+For the real host, the positive mechanism is an `openat2` walk with
+`RESOLVE_BENEATH` and the selected symlink policy, or a component-wise `openat`
+fallback with `O_NOFOLLOW`; the operation consumes the resulting fd. A
+normalized-string check wrapped in a handle-shaped type does not satisfy these
+oracles.
+
+This is a trusted-runtime-driver property, conformance-netted and **not
+kernel-proved**. The pairs below are the security net. A case that cannot fail
+against a naive path-string implementation is not an acceptable substitute.
+
+### security/capabilities/i5-handle-only-seam-replaces-byte-path-bypass
+**RED-UNTIL-I-5**
+
+- spec: ADR-0017 §4a(i)–(iii); I-5 AC0
+- given: inspect the landed `HostHandler` trait and the route reachable from
+  `fs_dispatch`
+- expect: the positive half finds an owned resolved-handle type,
+  `fs_resolve`, and handle-only `fs_read_at`/`fs_write_at`/creation operations.
+  The negative half finds **none** of the old byte-path operate entries
+  `fs_read`/`fs_write`/`fs_append`/`fs_metadata`/`fs_read_directory`/
+  `fs_create_directory`/`fs_remove_file`/`fs_remove_directory`/`fs_rename`
+  taking unresolved `&[u8]`. `fs_dispatch` threads the minted handle verbatim;
+  no operate call also receives a path.
+- why: this is a two-sided structural discriminator: the replacement API must
+  be present **and** the bypass API absent. Keeping both makes every runtime
+  pair below avoidable by a wrong op-id or future call, so a green value test
+  would not establish confinement.
+
+### security/capabilities/i5-dotdot-beneath-root-pair
+**RED-UNTIL-I-5**
+
+- spec: ADR-0017 §4.4/§5; I-5 AC1–AC3
+- given: one real `AFull` FS cap rooted at `dir1/sub`, with `secret` reachable
+  only from the parent and `ok` a file beneath the root; issue the same read
+  shape with public targets `dir1/sub/../secret` and `dir1/sub/ok` (root-relative
+  component lists `../secret` and `ok`)
+- expect: `../secret` **denies** as exactly `ScopeEscape` and leaves
+  `host.fs_trace()` empty; `ok` **accepts** and reads the beneath-root node via
+  its resolved handle
+- why: deny+accept on one cap and operation catches both permissive
+  unnormalized-prefix checking (which wrongly accepts `../secret`) and blanket
+  traversal rejection (which wrongly rejects `ok`). The target is resolved
+  component-by-component relative to the cap root, never normalized and
+  reopened as a string.
+
+### security/capabilities/i5-symlink-policy-pairs
+**RED-UNTIL-I-5**
+
+- spec: ADR-0017 §3/§4.4/§4a(iv)/§5; I-5 AC1–AC3
+- given: an inode-keyed VFS under root `dir1` containing real file `x`, an
+  in-scope symlink `inside -> x`, and escape symlink `link -> /etc`; exercise
+  reads through the real resolver with each settled policy
+- expect: under `NoFollow`, `link/x` **denies** as exactly `SymlinkDenied` with
+  an empty operation trace while direct `x` **accepts**. Under
+  `FollowWithinScope`, `link/x` **denies** as exactly `ScopeEscape` with an
+  empty operation trace while `inside` **accepts** and reads the same node as
+  direct `x`.
+- why: both policy orientations have a same-root accept arm. A resolver that
+  rejects every symlink fails `inside`; one that follows strings without
+  re-verifying beneath-root fails `link/x`; a VFS without a real `Symlink`
+  node cannot reach either distinction.
+
+### security/capabilities/i5-absolute-target-pair
+**RED-UNTIL-I-5**
+
+- spec: ADR-0017 §4.4/§5; I-5 AC1–AC3
+- given: one subtree cap rooted at `dir1` and the same existing leaf `x`, read
+  once as absolute target `/dir1/x` and once as relative target `x`
+- expect: `/dir1/x` **denies** as exactly `ScopeEscape` with an empty operation
+  trace; `x` **accepts** through the cap's root handle
+- why: the verdict flips only on absolute-vs-relative addressing. Ignoring the
+  root for an absolute string wrongly accepts the first arm; rejecting all
+  targets fails the second.
+
+### security/capabilities/i5-right-not-held-pair
+**RED-UNTIL-I-5**
+
+- spec: ADR-0017 §3/§4.2/§5; I-5 AC1–AC3/AC5
+- given: one real runner-minted `Cap AFull` whose product scope holds only
+  `{Read}`, rooted at `dir1`, and one existing file `x`; issue a write and a
+  read through the same cap and target
+- expect: write **denies** as exactly `RightNotHeld` before resolution or host
+  effect and leaves `host.fs_trace()` empty; read **accepts** and records the
+  handle-only read of `x`
+- why: the coarse `AFull` index is deliberately held constant, so the pair
+  isolates the runtime right set rather than the unchanged static write gate.
+  An implementation that checks only coarse authority wrongly accepts the
+  write; one that rejects the cap wholesale fails the read.
+
+### security/capabilities/i5-product-attenuation-orientation-pair
+**RED-UNTIL-I-5**
+
+- spec: ADR-0017 §1.3–§1.4/§4/§5; `62 §3.1`/§H; I-5 AC3
+- given: real runner/host caps and the real product-meet attenuation path.
+  First derive `{Read}` at `dir1/sub` from a `{Read,Write}` cap at `dir1` and
+  discharge its emitted obligation. Then construct the two non-degenerate
+  deviant obligations independently: `{Read,Write}` from a `{Read}` parent,
+  and scope `dir1/../dir2` from parent scope `dir1`.
+- expect: the canonical rights+scope narrowing **discharges**. Each single-axis
+  widening is **undischargeable** (`Unknown`), with the other axis held fixed.
+  No Ken-callable attenuation or opaque-`Cap` construction is introduced.
+- why: the accept/reject orientations isolate both components of the product
+  order and catch a backwards `⊑` or a join disguised as meet. As in C3, the
+  emitted `Eq` + `Refl` mirrors the elaborator's Rust comparison; the kernel
+  does not compute rights, reachability, or their meet. The product
+  implementation plus this non-degenerate pair is the net.
+
+### security/capabilities/i5-inode-pinned-structural-toctou-pair
+**RED-UNTIL-I-5**
+
+- spec: ADR-0017 §3(b)/§4a(i)–(ii)/§4a(iv)/§5; I-5 AC3-TOCTOU
+- given: the capture VFS stores nodes by identity. Initially
+  `(dir1, sub) -> node 3` and `(node 3, file) -> node 7`; replacement directory
+  node 4 contains `(node 4, file) -> node 8`. Drive one write through the real
+  dispatcher. Its deterministic host hook runs **after** `fs_resolve` returns
+  `Existing(handle 7)` but before operate: it renames entry `(dir1, sub)` to
+  `(dir1, other)` and installs `(dir1, sub) -> node 4`. Run the same write once
+  without the hook as the control orientation.
+- expect: both orientations accept and `fs_write_at` consumes the resolved
+  handle for **node 7**. With the intervening rename, node 7 changes and node 8
+  remains byte-identical; the trace contains one resolve followed by
+  `WriteAt(node 7)` and **no second resolve**. Without the rename, the same
+  handle and node are used.
+- why: the renamed arm fails a naive path-string check-then-reopen: re-resolving
+  `dir1/sub/file` hits replacement node 8, not pinned node 7. The control arm
+  prevents a fixture that merely makes all writes fail. This is structural,
+  deterministic, and only expressible because directory entries and node
+  identity are separate; a path-keyed VFS or a timing race is not an equivalent
+  oracle.
+
+### I-5 reachability and anti-tautology sweep
+
+- Each value case enters through `fs_dispatch` with a real runner-minted opaque
+  cap; no test invokes `authorizes`, `fs_resolve`, or `fs_*_at` as its verdict
+  producer.
+- Every deny arm matches its exact named variant and an empty operation trace;
+  every accept arm asserts the concrete returned bytes or inode state and the
+  matching handle operation.
+- The `..`, absolute, right, and symlink cases each share root/cap/target shape
+  across their flip. The product-meet case changes one lattice axis at a time.
+- The TOCTOU hook mutates only directory entries after a real resolution. It
+  neither supplies the resolved handle nor chooses the write target, and node 8
+  is asserted unchanged, so the test cannot pass by observing a hand-fed node.
+- AC0's absence sweep is mandatory: a green secure route does not compensate
+  for a surviving byte-path bypass.
+- These cases assert trusted-runtime behavior only. No case name, expectation,
+  comment, or diagnostic calls confinement kernel-backed or kernel-proved.
+
+---
+
 ## Coverage map (AC → cases)
 
 - **AC1** no ambient → A1 (`world-action-without-capability-rejected`),
@@ -292,6 +458,19 @@ not a capability-producing surface spelling; deferred runtime mechanisms remain
   E2 (`declassify-every-use-audited-and-in-delta`).
 - **AC6** authority + flow compose → F1 (`net-write-needs-capability-and-
   clearance`).
+- **I-5 AC0** handle-only seam / no byte-path bypass → G0
+  (`i5-handle-only-seam-replaces-byte-path-bypass`).
+- **I-5 AC1–AC3** named pre-operation denials + non-degenerate accept arms →
+  G1 (`i5-dotdot-beneath-root-pair`), G2 (`i5-symlink-policy-pairs`), G3
+  (`i5-absolute-target-pair`), G4 (`i5-right-not-held-pair`).
+- **I-5 AC3 product meet** → G5
+  (`i5-product-attenuation-orientation-pair`).
+- **I-5 AC3-TOCTOU** → G6
+  (`i5-inode-pinned-structural-toctou-pair`).
+- **I-5 AC5** unchanged monomorphic write gate → G4 holds `Cap AFull`
+  constant and discriminates only the runtime right set.
+- **I-5 AC7** honest boundary → the section method + reachability sweep: trusted
+  Rust + conformance net, never kernel-proved confinement.
 
 ## Cross-case consistency sweep (pre-handoff gate)
 
@@ -328,6 +507,18 @@ not a capability-producing surface spelling; deferred runtime mechanisms remain
 - **Compose class {F1}** — both concessions independent and required; the cap
   discriminator (kernel-backed) and the flow discriminator (trusted-by-typing)
   each flip on the same sink shape — composes Sec1 + Sec2.
+- **I-5 path class {G1, G2, G3}** — all use root-relative resolution and pair a
+  named denial with a real beneath-root acceptance. Together they distinguish
+  lexical `..`, absolute addressing, `NoFollow`, and follow-within-scope; no
+  blanket allow or blanket deny satisfies the class.
+- **I-5 authority class {G4, G5}** — G4 holds coarse `AFull` constant while the
+  runtime right flips; G5 holds one product axis fixed while the other narrows
+  or widens. The static write gate, runtime rights, and attenuation order are
+  therefore observed separately rather than collapsed into one green result.
+- **I-5 seam/identity class {G0, G6}** — G0 removes every unresolved-byte-path
+  operation; G6 proves why by changing the directory entry after resolution
+  and requiring the operation to retain node 7. A handle-shaped path string or
+  a path-keyed VFS fails G6, while a second legacy route fails G0.
 
 ## Placeholder absorption (reconcile note)
 
@@ -352,4 +543,6 @@ lands at `level(Cap E) = ℓ_op` (predicative, same as the carrier, `21 §2`/
 `62 §9`). Literal source spellings `Cap_FS`/`revoke` stay
 `OQ-syntax`-deferred; cases pin value-sets + invariants, never a Ken-callable
 `attenuate` token. Sec2 **unblocks B4** (the agentic boundary = Sec1 + Sec2
-envelope) and contributes to **G-Sec**.
+envelope) and contributes to **G-Sec**. Section G is a land-together companion
+to Runtime I-5: it remains RED until that integrated build reaches the cases and
+must not be published through a standalone conformance route.
