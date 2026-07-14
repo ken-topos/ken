@@ -14,7 +14,42 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (18:15 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 23a7eb31`
+> ### ⏭ 2026-07-14 (19:40 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 26d5255e`
+>
+> ## ▶ LANGUAGE BUILDING LET-4 (only thing on the critical path) · ✅ POSIX/LINUX ABI CAMPAIGN FRAMED
+>
+> **Pat's new direction (2026-07-14):** the next big effort is the **POSIX/Linux
+> ABI surface**, from `local/ken-posix-linux-interface-gap-report.md`,
+> **sequenced after the CLI and `let` work.** Charter + full work program:
+> **`docs/program/09-posix-linux-abi-campaign.md`** (catalog pointer: `03` §WS-P).
+>
+> **Order:** LET-4 → LET-2b → LET-3 → CC9 → **PX1 … PX9**.
+>
+> ### ★★ The regrounding changed the campaign's shape — and found a live defect
+> The report was written at `3a5cd323`; **75 commits have landed since.** Two of
+> its three headline "current state" claims are **STALE**: we have **16 driven
+> host ops** (not one), and `Cap` **already carries** a rights bitset, an
+> inode-keyed identity, an `OwnedFd` root, and a delegation lineage (ADR-0017).
+>
+> **But its §16 RISK — *"ABI facts drift silently"* — is not a risk. It is ON
+> `main`, in the security-enforcement path:** `eval.rs:2371-2394` hand-declares
+> five `unsafe extern "C"` syscalls **inline in the 4,600-line evaluator** with
+> **three target-ABI constants asserted from memory**, `#[cfg(unix)]`-gated but
+> **Linux-valued**. **`O_NOFOLLOW` is the enforcement mechanism for
+> `SymlinkPolicy::NoFollow`** — an **ADR-0017 security property resting on a magic
+> number nobody probed.** Only `ken-kernel` forbids `unsafe`; `ken-interp` does
+> not. **PX1 + PX2 close this and could be pulled ahead of CC9 on request.**
+>
+> ### ★ Three forks are open with Pat (charter §3)
+> **(1)** how far the campaign commits (I recommend PX-A→PX-C, exit = **the CLI
+> tool as a NATIVE EXECUTABLE**); **(2)** whose `unsafe` — hand-declared vs
+> `rustix` vs `libc`-for-constants (**ADR-worthy, Sec3 supply-chain dimension**;
+> I lean hand-declared+probed); **(3)** native early or late (**the interp/native
+> gap is WIDENING** — interp +16 ops since `3a5cd323`, native +0).
+>
+> ---
+>
+> ### ⏭ 2026-07-14 (18:15 UTC) — `origin/main @ 23a7eb31`
 >
 > ## ✅ CC6b MERGED+CLOSED · ✅ LET-4 PIN MERGED+CLOSED @ `23a7eb31` · ▶ LANGUAGE BUILDING
 >

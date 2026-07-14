@@ -372,6 +372,42 @@ consumer can read; no Ward result is ever recorded as `proved`.
 
 ---
 
+## WS-P — POSIX / Linux ABI (campaign; sequenced after the CLI + `let` work)
+
+**Charter and full work program: `09-posix-linux-abi-campaign.md`.** Framed
+2026-07-14 from `local/ken-posix-linux-interface-gap-report.md`, **regrounded
+against `origin/main @ 26d5255e`** — the report predates the `I-*`/`CC*` arc and
+its two headline "current state" claims are stale.
+
+Hosted user-space Linux programs on a small, audited, **manifest-bound** host
+boundary, with the OS surface above it as ordinary kernel-checked Ken. **The
+kernel does not grow** (ADR-0012 stands; bare-metal/drivers remain out of scope).
+
+| ID | Objective | Owner | Size |
+|---|---|---|---|
+| **PX1** | `ken-host` — extract the `unsafe` POSIX boundary out of the evaluator into an audited crate; then `forbid(unsafe_code)` on `ken-interp` | Runtime | M |
+| **PX2** | Target ABI identity + a **generated, probed** ABI manifest; delete the hand-asserted constants; fail closed on mismatch | Runtime | M |
+| **PX3** | `USize`/`ISize`/`CInt` — manifest-bound machine scalars, explicit partial conversions | Language | S |
+| **PX4** | Native entrypoint ABI beyond `ClosedNullary` (argv, env, exit status) | Runtime | M |
+| **PX5** | Native lowering for `RuntimeExpr::Effect`; unsupported ops stay stable *unavailable lanes* | Runtime | L |
+| **PX6** | Interpreter/native **differential harness on external deltas** (not return values) | **Verify** | M |
+| **PX7** | Ken-visible resource handles + `System.Resource` bracket; generation-checked, fail-visible | Runtime + Foundation | L |
+| **PX8** | Partial/positioned IO + `System.Buffer`; a short write is progress, not an error | Runtime + Foundation | L |
+| **PX9** | `System.Error` — structured errno retaining operation + handle context | Foundation | M |
+| PX10–PX12 | Processes/sockets; nonblocking + event loop — **booked, not committed** | — | — |
+
+**★ PX7 depends on `R2` (linear/affine types) for its *permanent* fix.**
+Exactly-once release **cannot be stated in Ken today**; PX7 enforces it in the
+runtime and reports it **`tested`, never `proved`**, with the disclosure in the
+**source**. PX7 must not smuggle affinity in — that is R2's job, and R2 is
+research.
+
+**Open forks (see the charter §3):** campaign ambition · whose `unsafe`
+(hand-declared vs `rustix` vs `libc`-for-constants — an ADR with a **Sec3**
+supply-chain dimension) · native early vs late.
+
+---
+
 ## WS-S — Self-hosting (Phase 5, deferred)
 
 ### S1 — Stage1 Ken-subset compiler · L · ★★★
