@@ -186,9 +186,9 @@ expr ::=
   | expr binop expr  -- operators (declared fixity)
   | "(" ident ":" type ")" "->" expr  -- dependent function type Π (a term; §2, 11 §1)
   | expr "->" expr  -- non-dependent function type (arrow); elaborates to kernel Pi
-  | "let" ident (":" type)? "=" expr "in" expr  -- local binding
+  | let_expr  -- sequential local binding group
   | "if" expr "then" expr "else" expr  -- = match on Bool
-  | "match" expr ("eqn:" ident)? ("," expr)* "{" arm+ "}"  -- pattern match (34); single-scrutinee eqn: modifier (34 §3.6)
+  | match_expr  -- pattern match (34); single-scrutinee eqn: modifier (34 §3.6)
   | expr "." ident | expr ".1" | expr ".2"  -- field / projection
   | path "::" ident  -- canonical attached-proof path
   | proof_ref  -- attached-proof selector atom
@@ -197,10 +197,48 @@ expr ::=
   | "temporal" "{" expr "}"  -- temporal obligation → Temporal data (72) [OQ-syntax]
   | literal | ident | ConId | "(" operator ")"
   | "(" expr ":" type ")"  -- type ascription
+let_expr ::= "let" let_binding (";" let_binding)* "in" expr
+let_binding ::= ident (":" type)? "=" expr
+match_expr ::= "match" expr ("eqn:" ident)? ("," expr)*
+               "{" arm (";" arm)* "}"
 arm  ::= pattern ("if" expr)? ("↦" | "|->") expr  -- guard optional
 proof_ref ::= "proof" ident "for" path
 field_assign ::= ident "=" expr | ident  -- punning allowed
 ```
+
+`let_expr` contains one or more bindings. A semicolon occurs only between two
+bindings: a trailing semicolon before `in` and a comma in place of a semicolon
+are syntax errors. Newlines are whitespace, so the same production admits both
+horizontal and block layout. A one-binding `let` remains the same production
+with zero repetitions of `";" let_binding`.
+
+The scope of a binding group is sequential and nonrecursive. When resolving
+binding `b_i`, the names from `b_1` through `b_(i-1)` are in scope in both its
+optional annotation and its RHS. The name introduced by `b_i`, and every later
+name, is not in scope there. Every group name is in scope in the final body. A
+second binding of the same identifier in one group is rejected as a duplicate
+local binding; ordinary lexical shadowing by a separately nested `let` in the
+body remains valid.
+
+**Semicolon-context derivation.** The grammar admits a binding separator only
+after a complete `let_binding`, in the list opened by `let` and closed by the
+mandatory `in`. It admits a match-arm separator only after a complete `arm`, in
+the list enclosed by `{` and `}`. These parser states are disjoint: the former
+expects either `;` followed by another `let_binding` or `in`, while the latter
+expects either `;` followed by another `arm` or `}`. In particular,
+
+```ken ignore
+let x : A = match s { P ↦ p; Q ↦ q }; y : B = next x in finish y
+```
+
+first consumes the inner semicolon while parsing the brace-delimited arm list.
+The closing `}` completes the match-expression production, after which the
+following semicolon is read in the enclosing binding-list state. No grammar
+state can shift that token as both kinds of separator, so neither a shift/shift
+nor a shift/reduce choice exists. A grouped `let` used as an arm body is dual:
+its mandatory `in` closes the binding list before the surrounding arm can end.
+Nested-let and arrow RHS expressions likewise complete under their own
+productions before the enclosing binding-list separator is considered.
 
 `proof_ref` is a primary expression atom and therefore binds more tightly than
 application or any infix operator. Its subject is exactly one `path`; subsequent
@@ -325,11 +363,12 @@ type   ::= "(" ident ":" type ")" "->" type            -- dependent Π
          | ConId                                        -- base type by name
 expr   ::= ("\" | "λ") ident+ "." expr                  -- lambda
          | expr expr                                    -- application (left assoc)
-         | "let" ident (":" type)? "=" expr "in" expr   -- local binding
+         | "let" let_binding (";" let_binding)* "in" expr
          | "(" expr ":" type ")"                        -- type ascription
          | ident                                        -- variable
          | ConId                                        -- base type used as a term
          | "Type" level?                                -- universe used as a term
+let_binding ::= ident (":" type)? "=" expr
 level  ::= NAT                                          -- 0, 1, 2, …
 ```
 

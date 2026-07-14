@@ -92,7 +92,9 @@ infer_row(Γ, e) = match e:
                                                   ∪ infer_row(Γ,a)
                                                   ∪ latent(typeof(Γ,f))
                      -- evaluate operator, operand, THEN release the call's latent ρ
-  let x = e1 in e2                                → infer_row(Γ,e1) ∪ infer_row(Γ,x:_ ⊢ e2)
+  let b1; …; bn in body                           → infer_row(Γ₀,rhs₁) ∪ …
+                                                    ∪ infer_row(Γₙ₋₁,rhsₙ)
+                                                    ∪ infer_row(Γₙ,body)
   if c then t else u  /  match c { … }            → infer_row(Γ,c) ∪ ⋃ (branch rows)
   handle_E h c     (handler, §5)                  → (infer_row(Γ,c) \ {E}) ∪ rows(h)
                      -- handling E DISCHARGES it from the row
@@ -106,6 +108,12 @@ infer_row(Γ, e) = match e:
 - `λ` has row `∅` and **defers** its body's row to the arrow as the latent `ρ` —
   this is what gives the latent-arrow its meaning and what makes higher-order
   functions row-polymorphic (the `ρ` instantiates per call site, below).
+- In the grouped-`let` clause, `Γ₀ = Γ` and `Γᵢ` extends `Γᵢ₋₁` with
+  binding `b_i`. The union computes the static row; it does not license
+  reordering.
+  Evaluation and the effect-tree denotation sequence the RHSs strictly in
+  source order, once each, before the body (§2.4). The one-binding form is the
+  `n = 1` case.
 
 ### 1.3 Recursion — least fixpoint over the call graph
 
@@ -412,8 +420,9 @@ the three keywords by the §1.6.1 rule:
 | effect-polymorphic (declares a row variable, §1.5) | `proc` |
 | operator (symbolic name, `33 §6`) | `fn`/`proc` (or `const` if nullary-pure) |
 
-The local `let … in …` **expression** (`32 §3`) is unchanged — only the
-*definition* keyword splits.
+The local `let … in …` **expression** (`32 §3`) is unaffected by this
+*definition*-keyword split; its sequential binding-group behavior is specified
+by §1.2 and §2.4.
 
 **Kernel-untouched (AC5).** The classification is a surface keyword plus an
 elaborator check layered over the existing row inference (§1.2–§1.5); it emits
@@ -576,6 +585,8 @@ kernel term `⟦e⟧ : ITree ⟦ρ⟧ ⟦B⟧`:
 ⟦ v ⟧                 = Ret ⟦v⟧                       -- a pure value / sub-expression
 ⟦ perform_E op ⟧      = Vis (inj_E op) (λ r. Ret r)   -- = perform (inj_E op)
 ⟦ let x = e1 in e2 ⟧  = bind ⟦e1⟧ (λ x. ⟦e2⟧)          -- monadic sequencing
+⟦ let x = e1; y = e2; … in body ⟧
+                         = bind ⟦e1⟧ (λ x. bind ⟦e2⟧ (λ y. … ⟦body⟧))
 ⟦ g a1 … an ⟧         = bind ⟦a1⟧ (λ x1. … bind ⟦an⟧ (λ xn.
                           incl_{ρ_g ↪ ρ} (g↓ caps x1 … xn)))   -- splice the callee's tree
 ⟦ if c then t else u ⟧ = bind ⟦c⟧ (λ b. elim_Bool _ ⟦t⟧ ⟦u⟧ b)
@@ -591,6 +602,13 @@ kernel term `⟦e⟧ : ITree ⟦ρ⟧ ⟦B⟧`:
   elaborator **collapses** it to the plain term `⟦B⟧`: pure code pays nothing
   for the encoding and the kernel sees an ordinary term. This is the formal
   content of "purity is the default and free."
+
+The grouped equation is the source list's left-to-right monadic sequence: each
+RHS tree is bound exactly once, its result extends the environment seen by the
+next continuation, and the body is last. It is definitionally the repeated
+application of the one-binding equation, hence identical to the explicitly
+nested spelling. Grouping never hoists an RHS across another binding, a lambda,
+a match branch, or a handler; branch-local effects remain branch-local.
 
 ### 2.5 Capability-passing (the authority layer)
 

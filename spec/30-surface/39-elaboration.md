@@ -275,7 +275,8 @@ from `31`–`38`:
   - `expr expr` — application (left-associative).
   - `ident` — a variable reference (resolved in `§5.3`).
   - `( expr : type )` — type ascription (a checking hint, `11 §1`).
-  - `let x : A = expr in expr` — a local binding.
+  - `let x : A = expr; y : B = expr in expr` — one or more sequential local
+    bindings; the one-binding form remains valid.
 
 **Explicitly out of V0** (each owned elsewhere, do not absorb): `data`/`match`
 (`34`, Team Language), `record`/modules (`33`), the proof-claim surface
@@ -304,7 +305,7 @@ core term (`§5.4`) → is accepted by the kernel's `check`/`infer` (`18 §3`).
 
 V0 reads the **brace form** of the grammar; layout (`31 §6`) is OQ-syntax and
 out of V0 scope. The token set is the minimal lexer of `31 §8`: the keywords
-`view let in Type`, the punctuation `( ) : = .` and the arrow `->`/`→`, the λ
+`view let in Type`, the punctuation `( ) : = . ;` and the arrow `->`/`→`, the λ
 spelling `\`/`λ`, lowercase-initial `ident` (term variables) and
 uppercase-initial `ConId` (base types). The concrete grammar is the minimal
 EBNF of `32 §8`; reproduced here for the elaborator's view of it:
@@ -319,11 +320,12 @@ type   ::= "(" ident ":" type ")" "->" type    -- dependent Π
          | ConId                                 -- base type by name
 expr   ::= ("\" | "λ") ident+ "." expr          -- lambda
          | expr expr                             -- application (left assoc)
-         | "let" ident (":" type)? "=" expr "in" expr
+         | "let" let_binding (";" let_binding)* "in" expr
          | "(" expr ":" type ")"                 -- ascription
          | ident                                 -- variable
          | ConId                                 -- base type used as a term
          | "Type" level?                         -- universe used as a term
+let_binding ::= ident (":" type)? "=" expr
 level  ::= NAT                                   -- 0, 1, 2, …
 ```
 
@@ -344,10 +346,12 @@ Decl ::= ViewDecl name (binder list) (Type option) Expr   -- params, result, bod
 Expr ::= EVar  name span                  -- unresolved: still a name
        | EApp  Expr Expr span
        | ELam  name Expr span               -- single binder (see desugaring below)
-       | ELet  name (Type option) Expr Expr span
+       | ELet  (nonempty LetBinding list) Expr span
        | EAsc  Expr Type span
        | ECon  name span                    -- base type used as a term
        | EUniv (level option) span          -- Type / Type n used as a term
+
+LetBinding ::= name (Type option) Expr span -- name, annotation, RHS
 
 Type ::= TPi   name Type Type span          -- (x : A) -> B   (x bound in B)
        | TArr  Type Type span               -- A -> B         (sugar: x ∉ B)
@@ -386,10 +390,19 @@ resolve(scope, node):                  -- scope: name list, innermost first
       return RAsc(resolve(scope, e), resolveTy(scope, t))
     ECon(c):   return RCon(c)             -- base type as a term; resolved in Σ
     EUniv(l):  return RUniv(l)            -- Type / Type n as a term
-    ELet(x, tyopt, rhs, body):
-      rhs' := resolve(scope, rhs)                 -- x NOT in scope of its own rhs
-      body' := resolve(push(x, scope), body)      -- x in scope of the body
-      return RLet(x, mapTy(resolveTy(scope), tyopt), rhs', body')
+    ELet(bindings, body):
+      return resolveLetGroup(scope, ∅, bindings, body)
+
+resolveLetGroup(scope, seen, bindings, body):
+  case bindings of
+    []:
+      return resolve(scope, body)                 -- every group name is in scope
+    LetBinding(x, tyopt, rhs, span) :: rest:
+      if x ∈ seen: error DuplicateLocalBinding(x, span)
+      tyopt' := mapTy(resolveTy(scope), tyopt)     -- x NOT in its own annotation
+      rhs' := resolve(scope, rhs)                 -- x NOT in its own RHS
+      tail' := resolveLetGroup(push(x, scope), seen ∪ {x}, rest, body)
+      return RLet(x, tyopt', rhs', tail')          -- existing single-binder node
 
 resolveTy(scope, ty):
   case ty of
@@ -411,14 +424,23 @@ indexOf(scope, name):                  -- de Bruijn: distance to nearest binder
   first entry equal to name, or none.
 ```
 
-**Desugaring to single binders.** All multi-binder surface forms are flattened
-to nested single-binder forms in a parse pre-pass, *before* resolution, so the
+**Desugaring to single binders.** Lambda and Π binder groups are flattened to
+nested single-binder forms in a parse pre-pass, *before* resolution, so their
 resolved AST (`RLam`, `RPi`) is uniformly single-binder:
 
 - a λ over several names `\x y z . e` → `\x . \y . \z . e`;
 - a binder group `(x y z : A)` → three Π/λ binders each of type `A`;
 - a `view f (x : A) (y : B) : C = body` → nested λ over the parameter telescope
   with the declared type read as the matching nested Π `(x : A) → (y : B) → C`.
+
+A local binding group is lowered during the scope walk instead: `b1; ...; bn`
+becomes `RLet(b1, RLet(..., RLet(bn, body)))` in source order. Resolving before
+each recursive step is load-bearing: earlier names enter scope for every later
+annotation and RHS, while a binding cannot see itself or a later name. The
+duplicate-name check runs over the source group before lexical shadowing could
+make a repeated sibling appear to be an ordinary nested shadow. The resulting
+resolved and core terms are structurally identical to the explicitly nested
+single-binding spelling, modulo source spans.
 
 Parameter binders thus enter the scope stack left-to-right (outermost first),
 exactly as λ/Π binders do (`§5.4`). The output is a **resolved AST** (`RVar` /
@@ -432,9 +454,10 @@ only — the index is what elaboration emits).
    special shadowing logic is needed or permitted — getting this from the stack
    is what makes it correct.
 2. **A binder scopes only where the grammar says.** In `(x : A) → B`, `x` is in
-   scope in `B` but **not** in `A`; in `let x : A = e in body`, `x` is in scope
-   in `body` but **not** in `e` (no V0 recursion in `let`). The pseudocode
-   pushes the binder on exactly the right recursive call.
+   scope in `B` but **not** in `A`. In a local binding group, `x_i` is absent
+   from its own annotation and RHS, present in every later binding, and present
+   in the body (there is no local recursion). The pseudocode pushes each binder
+   on exactly the right recursive call.
 3. **Unbound is a name-resolution error**, raised *here* with a source span
    (`§5.6`), never deferred to the kernel.
 
@@ -572,6 +595,14 @@ The emitted core term is **fully explicit**: de Bruijn indices, explicit domains
 on every λ and Π, and explicit levels on every `Univ` (`§5.7`). It contains no
 metavariables — V0 solves all level metas before emission — so the kernel
 receives exactly the language of `11 §1`.
+
+For a local binding group, `resolveLetGroup` has already produced the existing
+nested `RLet` chain. The `RLet` clause above therefore elaborates `b_1` under
+the incoming context, extends that context for `b_2`, and continues
+left-to-right until it checks the body under every group binding. It emits the
+same ordered nest of existing core `Let` terms as the explicitly nested surface
+spelling. There is no grouped core term, new conversion rule, recursion
+mechanism, or trusted-base entry.
 
 ### 5.5 The pipeline
 
