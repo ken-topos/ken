@@ -42,7 +42,8 @@ fn notBool2 (b : Bool) : Bool = match b { True |-> False ; False |-> True }
 const IO_KEN_MD: &str = r#"A runnable program.
 
 ```ken
-proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] = host_program (print_line "check mode ran main? no.")
+program capabilities FS APartial
+proc main (_input : ProcessInput) (_caps : ProgramCaps APartial) : HostIO APartial ExitCode visits [Console] = host_program APartial (print_line "check mode ran main? no.")
 ```
 "#;
 

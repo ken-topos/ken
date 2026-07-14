@@ -1674,6 +1674,29 @@ pub fn expand_and_elaborate(
     }
     let (results, _root_exports) = expanded?;
     if direct_call {
+        if let Some((header, header_span)) = &boundary {
+            let main_span = decls
+                .iter()
+                .find(|decl| decl.name() == "main")
+                .map(|decl| decl.span().clone());
+            let main_uses_fs = main_span.is_some()
+                && elab
+                    .effect_rows
+                    .get("main")
+                    .is_some_and(|row| row.concrete_effects().contains("FS"));
+            let declares_fs = header
+                .capabilities
+                .as_ref()
+                .is_some_and(|caps| caps.iter().any(|cap| cap.family == "FS"));
+            if header.kind == crate::ast::BoundaryKind::Program && main_uses_fs && !declares_fs {
+                return Err(ElabError::MissingCapability {
+                    effect: "FS".to_string(),
+                    span: main_span.unwrap_or_else(|| header_span.clone()),
+                });
+            }
+        }
+    }
+    if direct_call {
         elab.module_state.boundary_header = boundary.map(|(header, _)| header);
     }
     elab.module_state.root_scope = scope;

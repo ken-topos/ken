@@ -18,16 +18,21 @@ fn fixture(name: &str, source: &str) -> PathBuf {
 }
 
 fn run(name: &str, source: &str, args: impl IntoIterator<Item = OsString>) -> Output {
+    let source = if source.trim_start().starts_with("program") {
+        source.to_owned()
+    } else {
+        format!("program capabilities FS APartial\n{source}")
+    };
     let mut command = Command::new(ken_bin());
-    command.arg("run").arg(fixture(name, source));
+    command.arg("run").arg(fixture(name, &source));
     command.args(args);
     command.output().expect("run ken fixture")
 }
 
 fn abi_main(body: &str) -> String {
     format!(
-        "proc main (_input : ProcessInput) (_caps : ProgramCaps) \
-         : HostIO ExitCode visits [Console] = {body}\n"
+        "proc main (_input : ProcessInput) (_caps : ProgramCaps APartial) \
+         : HostIO APartial ExitCode visits [Console] = {body}\n"
     )
 }
 
@@ -35,7 +40,7 @@ fn abi_main(body: &str) -> String {
 fn named_main_runs_when_it_is_not_the_last_declaration() {
     let source = format!(
         "{}\nconst afterMain : Nat = Zero\n",
-        abi_main("host_program (print_line \"named-main\")")
+        abi_main("host_program APartial (print_line \"named-main\")")
     );
     let output = run("not-last", &source, []);
     assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
@@ -56,8 +61,8 @@ fn missing_and_duplicate_main_report_distinct_named_errors() {
         "duplicate",
         &format!(
             "{}{}",
-            abi_main("host_exit Success"),
-            abi_main("host_exit Success")
+            abi_main("host_exit APartial Success"),
+            abi_main("host_exit APartial Success")
         ),
         [],
     );
@@ -73,7 +78,8 @@ fn missing_and_duplicate_main_report_distinct_named_errors() {
 fn named_main_with_wrong_signature_is_rejected_before_execution() {
     let output = run(
         "wrong-signature",
-        "fn main (_input : ProcessInput) (_caps : ProgramCaps) : Nat = Zero\n",
+        "program capabilities FS APartial\n\
+         fn main (_input : ProcessInput) (_caps : ProgramCaps APartial) : Nat = Zero\n",
         [],
     );
     assert_eq!(output.status.code(), Some(1));
@@ -89,19 +95,19 @@ fn named_main_with_wrong_signature_is_rejected_before_execution() {
 fn argv_after_separator_round_trips_non_utf8_and_pre_separator_is_rejected() {
     use std::os::unix::ffi::OsStringExt;
 
-    let source = r#"
-proc main (input : ProcessInput) (_caps : ProgramCaps)
-  : HostIO ExitCode visits [Console] =
+    let source = r#"program capabilities FS APartial
+proc main (input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [Console] =
   match input {
     MkProcessInput arguments _environment _cwd |->
       match arguments {
-        Nil |-> host_exit (Failure 2) ;
+        Nil |-> host_exit APartial (Failure 2) ;
         Cons bytes _rest |->
           match bytes_at bytes 0 {
-            None |-> host_exit (Failure 3) ;
+            None |-> host_exit APartial (Failure 3) ;
             Some byte |-> match eq_int (uint8_to_int byte) 255 {
-              True  |-> host_program (print_line "raw-ok") ;
-              False |-> host_exit (Failure 3)
+              True  |-> host_program APartial (print_line "raw-ok") ;
+              False |-> host_exit APartial (Failure 3)
             }
           }
       }
@@ -114,7 +120,7 @@ proc main (input : ProcessInput) (_caps : ProgramCaps)
 
     let rejected = run(
         "pre-separator",
-        &abi_main("host_exit Success"),
+        &abi_main("host_exit APartial Success"),
         [OsString::from("--unknown")],
     );
     assert_eq!(rejected.status.code(), Some(1));
@@ -133,7 +139,11 @@ fn exit_code_mapping_covers_every_contract_arm() {
         ("failure-max", "Failure 255", 255),
         ("failure-zero", "Failure 0", 1),
     ] {
-        let output = run(name, &abi_main(&format!("host_exit ({value})")), []);
+        let output = run(
+            name,
+            &abi_main(&format!("host_exit APartial ({value})")),
+            [],
+        );
         assert_eq!(
             output.status.code(),
             Some(expected),

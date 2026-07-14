@@ -61,9 +61,10 @@ fn collections_prelude() -> String {
     let transport = ken_elaborator::literate::extract_ken_md(&transport_md)
         .expect("catalog/packages/Core/Transport.ken.md must extract")
         .source;
-    let collections_md =
-        fs::read_to_string(workspace_root().join("catalog/packages/Data/Collections/Collections.ken.md"))
-            .expect("catalog/packages/Data/Collections/Collections.ken.md must be readable");
+    let collections_md = fs::read_to_string(
+        workspace_root().join("catalog/packages/Data/Collections/Collections.ken.md"),
+    )
+    .expect("catalog/packages/Data/Collections/Collections.ken.md must be readable");
     let collections = ken_elaborator::literate::extract_ken_md(&collections_md)
         .expect("catalog/packages/Data/Collections/Collections.ken.md must extract")
         .source;
@@ -103,7 +104,14 @@ fn run_example(slug: &str, ken_src_path: &Path, tmp_dir: &Path) -> Option<(Strin
     let own_src = fs::read_to_string(ken_src_path)
         .unwrap_or_else(|e| panic!("{}: cannot read {}: {}", slug, ken_src_path.display(), e));
     let full_src = if NEEDS_COLLECTIONS.contains(&slug) {
-        format!("{}\n{}", collections_prelude(), own_src)
+        let body = own_src
+            .strip_prefix("program capabilities FS APartial\n")
+            .expect("runnable Rosetta source starts with its program header");
+        format!(
+            "program capabilities FS APartial\n{}\n{}",
+            collections_prelude(),
+            body
+        )
     } else {
         own_src
     };
@@ -157,7 +165,11 @@ fn rosetta_examples_match_their_oracles() {
         .collect();
     entries.sort();
 
-    assert!(!entries.is_empty(), "expected at least one dir under {}", root.display());
+    assert!(
+        !entries.is_empty(),
+        "expected at least one dir under {}",
+        root.display()
+    );
 
     let mut failures: Vec<String> = Vec::new();
     let mut known_gaps: Vec<String> = Vec::new();
@@ -179,7 +191,9 @@ fn rosetta_examples_match_their_oracles() {
                 None => failures.push(format!("{slug}: timed out after {PER_EXAMPLE_TIMEOUT:?}")),
                 Some((stdout, success)) => {
                     if !success {
-                        failures.push(format!("{slug}: `ken run` exited non-zero, stdout: {stdout:?}"));
+                        failures.push(format!(
+                            "{slug}: `ken run` exited non-zero, stdout: {stdout:?}"
+                        ));
                     } else if stdout != expected {
                         failures.push(format!(
                             "{slug}: stdout mismatch — expected {expected:?}, got {stdout:?}"

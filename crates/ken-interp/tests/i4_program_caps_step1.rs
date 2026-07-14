@@ -39,6 +39,16 @@ fn program_caps_is_authority_parametric_and_adds_zero_trust() {
         !elab.env.trusted_base().contains(&constructor_id),
         "MkProgramCaps must be ordinary kernel-checked Ken"
     );
+    for name in ["readFile", "writeFile"] {
+        let id = *elab
+            .globals
+            .get(name)
+            .unwrap_or_else(|| panic!("{name} wrapper registered"));
+        assert!(
+            !elab.env.trusted_base().contains(&id),
+            "{name} must be an ordinary checked consuming wrapper"
+        );
+    }
 
     let before = elab.env.trusted_base();
     elab.elaborate_decl(

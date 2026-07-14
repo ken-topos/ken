@@ -1,3 +1,5 @@
+program capabilities FS APartial
+
 -- Rosetta Code: Factorial
 -- https://rosettacode.org/wiki/Factorial
 --
@@ -154,5 +156,8 @@ fn natToDecimal (n : Nat) : String =
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 -- main: 5! = 120
-proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
-  host_program (print_line (natToDecimal (factorial five)))
+proc main
+      (_input : ProcessInput) (_caps : ProgramCaps APartial)
+    : HostIO APartial ExitCode
+    visits [Console] =
+  host_program APartial (print_line (natToDecimal (factorial five)))

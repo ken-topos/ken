@@ -28,6 +28,8 @@ endpoints through a function — is `catalog/packages/Core/Transport.ken`'s
 idiom, inlined here so this strand's examples are self-contained:
 
 ```ken
+program capabilities FS APartial
+
 fn bool_and (a : Bool) (b : Bool) : Bool =
   match a {
     True ↦ b;
@@ -362,6 +364,9 @@ entry's tangled fences run through `ken run`, so this final compiled
 declaration accepts the fixed process-input and capability ABI:
 
 ```ken
-proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
-  host_program (print_line "proof techniques ok")
+proc main
+      (_input : ProcessInput) (_caps : ProgramCaps APartial)
+    : HostIO APartial ExitCode
+    visits [Console] =
+  host_program APartial (print_line "proof techniques ok")
 ```

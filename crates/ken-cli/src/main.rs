@@ -263,6 +263,14 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
             std::process::exit(2);
         }
     };
+    let declared_fs = declared_fs_authority(&elab_env).unwrap_or_else(|error| {
+        match error {
+            ProgramValidationError::MissingCapability { effect } => {
+                eprintln!("ken run: MissingCapability {{ effect = {effect} }}");
+            }
+        }
+        std::process::exit(1);
+    });
     if !entrypoint_has_abi(
         &elab_env,
         main_id,
@@ -270,10 +278,12 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
         program_caps_id,
         host_io_id,
         exit_code_id,
+        declared_fs.constructor_id,
     ) {
         eprintln!(
-            "ken run: invalid entrypoint 'main': expected \
-             ProcessInput -> ProgramCaps -> HostIO ExitCode"
+            "ken run: invalid entrypoint 'main': expected ProcessInput -> \
+             ProgramCaps {} -> HostIO {} ExitCode",
+            declared_fs.name, declared_fs.name
         );
         std::process::exit(1);
     }
@@ -285,21 +295,7 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
     let fs_ids = ken_interp::FSIds::from_elab(&elab_env);
 
     let mut store = build_eval_store(&elab_env);
-
-    let main_term = ken_kernel::Term::const_(main_id, vec![]);
-    let mut tree = ken_interp::eval(&[], &main_term, &elab_env.env, &mut store);
-    let input = process_input_value(&elab_env, arguments);
-    tree = ken_interp::apply(tree, input, &elab_env.env, &mut store);
-    // SECURITY: this current-capability runner mints only APartial. When I-4
-    // threads AFull, its write/delete authority is coarse and NOT path-
-    // confined: it reaches anywhere the process can access until CA4/I-5.
-    let cap =
-        ken_elaborator::capabilities::Cap::mint(ken_elaborator::capabilities::AUTH_PARTIAL, "FS");
-    let caps = constructor_value(
-        get("MkProgramCaps").expect("ProgramCaps constructor registered"),
-        vec![ken_interp::EvalVal::Cap(cap)],
-    );
-    tree = ken_interp::apply(tree, caps, &elab_env.env, &mut store);
+    let tree = apply_entrypoint(&elab_env, main_id, arguments, declared_fs, &mut store);
 
     let coproduct_ids = ken_interp::CoproductIds {
         inl_id: elab_env.prelude_env.inl_id,
@@ -341,6 +337,47 @@ enum EntrypointResolutionError {
     MissingMain,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ProgramValidationError {
+    MissingCapability { effect: String },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DeclaredFsAuthority {
+    name: &'static str,
+    authority: ken_elaborator::capabilities::Authority,
+    constructor_id: ken_kernel::GlobalId,
+}
+
+fn declared_fs_authority(
+    elab_env: &ken_elaborator::ElabEnv,
+) -> Result<DeclaredFsAuthority, ProgramValidationError> {
+    use ken_elaborator::capabilities::{AUTH_FULL, AUTH_NONE, AUTH_PARTIAL};
+
+    let declaration = elab_env
+        .boundary_header()
+        .and_then(|header| header.capabilities.as_ref())
+        .and_then(|capabilities| capabilities.iter().find(|cap| cap.family == "FS"))
+        .ok_or_else(|| ProgramValidationError::MissingCapability {
+            effect: "FS".to_owned(),
+        })?;
+    let (name, authority) = match declaration.authority.as_str() {
+        "ANone" => ("ANone", AUTH_NONE),
+        "APartial" => ("APartial", AUTH_PARTIAL),
+        "AFull" => ("AFull", AUTH_FULL),
+        authority => unreachable!("parser admitted invalid FS authority {authority}"),
+    };
+    let constructor_id = *elab_env
+        .globals
+        .get(name)
+        .expect("parsed Auth constructor registered by the prelude");
+    Ok(DeclaredFsAuthority {
+        name,
+        authority,
+        constructor_id,
+    })
+}
+
 fn resolve_main(
     elab_env: &ken_elaborator::ElabEnv,
 ) -> Result<ken_kernel::GlobalId, EntrypointResolutionError> {
@@ -358,6 +395,7 @@ fn entrypoint_has_abi(
     program_caps_id: ken_kernel::GlobalId,
     host_io_id: ken_kernel::GlobalId,
     exit_code_id: ken_kernel::GlobalId,
+    authority_id: ken_kernel::GlobalId,
 ) -> bool {
     use ken_kernel::{Decl, Term};
 
@@ -378,9 +416,13 @@ fn entrypoint_has_abi(
         _ => return false,
     };
     let process_input = Term::indformer(process_input_id, vec![]);
-    let program_caps = Term::indformer(program_caps_id, vec![]);
+    let authority = Term::constructor(authority_id, vec![]);
+    let program_caps = Term::app(Term::indformer(program_caps_id, vec![]), authority.clone());
     let exit_code = Term::indformer(exit_code_id, vec![]);
-    let host_exit = Term::app(Term::const_(host_io_id, vec![]), exit_code);
+    let host_exit = Term::app(
+        Term::app(Term::const_(host_io_id, vec![]), authority),
+        exit_code,
+    );
     let expected = Term::pi(process_input, Term::pi(program_caps, host_exit));
     ken_kernel::convert_type(
         &elab_env.env,
@@ -399,6 +441,60 @@ fn constructor_value(
         args: Rc::new(args),
         slot: 0,
     }
+}
+
+fn apply_entrypoint(
+    elab_env: &ken_elaborator::ElabEnv,
+    main_id: ken_kernel::GlobalId,
+    arguments: &[Vec<u8>],
+    declared_fs: DeclaredFsAuthority,
+    store: &mut ken_interp::EvalStore,
+) -> ken_interp::EvalVal {
+    let get = |name: &str| {
+        *elab_env
+            .globals
+            .get(name)
+            .unwrap_or_else(|| panic!("entrypoint ABI global '{name}' missing"))
+    };
+    let mut tree = ken_interp::eval(
+        &[],
+        &ken_kernel::Term::const_(main_id, vec![]),
+        &elab_env.env,
+        store,
+    );
+    tree = ken_interp::apply(
+        tree,
+        process_input_value(elab_env, arguments),
+        &elab_env.env,
+        store,
+    );
+
+    // SECURITY: the FS authority comes only from the parsed root declaration.
+    // AFull remains coarse and is not path-confined until CA4/I-5. Console is
+    // ambient process context (stdio), so ProgramCaps deliberately has no
+    // Console field and the runner mints no Console capability.
+    let cap = mint_declared_fs_cap(declared_fs);
+    let mut caps = ken_interp::eval(
+        &[],
+        &ken_kernel::Term::constructor(get("MkProgramCaps"), vec![]),
+        &elab_env.env,
+        store,
+    );
+    caps = ken_interp::apply(
+        caps,
+        constructor_value(declared_fs.constructor_id, vec![]),
+        &elab_env.env,
+        store,
+    );
+    caps = ken_interp::apply(caps, cap, &elab_env.env, store);
+    ken_interp::apply(tree, caps, &elab_env.env, store)
+}
+
+fn mint_declared_fs_cap(declared_fs: DeclaredFsAuthority) -> ken_interp::EvalVal {
+    ken_interp::EvalVal::Cap(ken_elaborator::capabilities::Cap::mint(
+        declared_fs.authority,
+        "FS",
+    ))
 }
 
 fn list_value(
@@ -549,6 +645,241 @@ mod entrypoint_tests {
     use std::ffi::OsString;
 
     use super::*;
+
+    fn elaborate_program(source: &str) -> ken_elaborator::ElabEnv {
+        let mut env = ken_elaborator::ElabEnv::new().expect("prelude");
+        env.elaborate_file(source).expect("program elaborates");
+        env
+    }
+
+    fn coproduct_ids(env: &ken_elaborator::ElabEnv) -> ken_interp::CoproductIds {
+        ken_interp::CoproductIds {
+            inl_id: env.prelude_env.inl_id,
+            inr_id: env.prelude_env.inr_id,
+        }
+    }
+
+    #[test]
+    fn declared_afull_mints_runner_caps_and_writes_through_capture_host() {
+        let env = elaborate_program(
+            r#"program capabilities FS AFull
+proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
+  : HostIO AFull ExitCode visits [FS] =
+  match caps {
+    MkProgramCaps cap |->
+      bind (Coproduct (FSOp AFull) ConsoleOp)
+           (resp_coproduct (FSOp AFull) ConsoleOp (fs_resp AFull) console_resp)
+           (Result FileError Unit) ExitCode
+        (inject_l (FSOp AFull) ConsoleOp (fs_resp AFull) console_resp
+          (Result FileError Unit)
+          (writeFile cap (bytes_encode "root/out") CreateNew (bytes_encode "lit")))
+        (\_. host_exit AFull Success)
+  }"#,
+        );
+        let declared = declared_fs_authority(&env).expect("FS AFull declared");
+        assert_eq!(declared.name, "AFull");
+        let main_id = *env.globals.get("main").expect("main");
+        assert!(entrypoint_has_abi(
+            &env,
+            main_id,
+            *env.globals.get("ProcessInput").expect("ProcessInput"),
+            *env.globals.get("ProgramCaps").expect("ProgramCaps"),
+            *env.globals.get("HostIO").expect("HostIO"),
+            *env.globals.get("ExitCode").expect("ExitCode"),
+            declared.constructor_id,
+        ));
+
+        let console = ken_interp::ConsoleIds::from_elab(&env).expect("Console ABI");
+        let fs = ken_interp::FSIds::from_elab(&env).expect("FS ABI");
+        let mut store = build_eval_store(&env);
+        let tree = apply_entrypoint(&env, main_id, &[], declared, &mut store);
+        let mut host = ken_interp::CaptureHost::new(Vec::new());
+        host.insert_directory(b"root".to_vec());
+        let result = ken_interp::run_io(
+            tree,
+            &mut host,
+            &console,
+            Some(&fs),
+            Some(&coproduct_ids(&env)),
+            &env.env,
+            &mut store,
+        )
+        .expect("declared AFull write runs");
+        assert!(matches!(
+            result,
+            ken_interp::EvalVal::Ctor { id, .. }
+                if id == *env.globals.get("Success").expect("Success")
+        ));
+        assert_eq!(
+            host.fs_trace(),
+            &[ken_interp::FsTrace::WriteFile {
+                path: b"root/out".to_vec(),
+                policy: ken_interp::HostCreatePolicy::CreateNew,
+                bytes: b"lit".to_vec(),
+            }]
+        );
+    }
+
+    #[test]
+    fn fs_effect_without_declared_family_is_named_static_rejection() {
+        let mut env = ken_elaborator::ElabEnv::new().expect("prelude");
+        let error = env
+            .elaborate_file(
+                r#"program
+proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [FS] =
+  match caps {
+    MkProgramCaps cap |->
+      bind (Coproduct (FSOp APartial) ConsoleOp)
+           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+           (Result FileError Bytes) ExitCode
+        (inject_l (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp
+          (Result FileError Bytes)
+          (readFile APartial cap (bytes_encode "missing")))
+        (\_. host_exit APartial Success)
+  }"#,
+            )
+            .expect_err("an FS effect requires a declared FS capability");
+        match error {
+            ken_elaborator::ElabError::MissingCapability { effect, .. } => {
+                assert_eq!(effect, "FS")
+            }
+            other => panic!("expected MissingCapability {{ effect = FS }}, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn apartial_write_returns_named_denial_before_capture_host_syscall() {
+        let env = elaborate_program("program capabilities FS APartial\n");
+        let declared = declared_fs_authority(&env).expect("FS APartial declared");
+        let console = ken_interp::ConsoleIds::from_elab(&env).expect("Console ABI");
+        let fs = ken_interp::FSIds::from_elab(&env).expect("FS ABI");
+        let mut store = build_eval_store(&env);
+        let mut tree = ken_interp::eval(
+            &[],
+            &ken_kernel::Term::const_(
+                *env.globals.get("write_file").expect("raw I-3 producer"),
+                vec![],
+            ),
+            &env.env,
+            &mut store,
+        );
+        for argument in [
+            constructor_value(declared.constructor_id, vec![]),
+            mint_declared_fs_cap(declared),
+            ken_interp::EvalVal::Bytes(b"root/denied".to_vec()),
+            constructor_value(fs.create_new_id, vec![]),
+            ken_interp::EvalVal::Bytes(b"no".to_vec()),
+        ] {
+            tree = ken_interp::apply(tree, argument, &env.env, &mut store);
+        }
+        let mut host = ken_interp::CaptureHost::new(Vec::new());
+        host.insert_directory(b"root".to_vec());
+        let result = ken_interp::run_io(
+            tree,
+            &mut host,
+            &console,
+            Some(&fs),
+            None,
+            &env.env,
+            &mut store,
+        )
+        .expect("denial is a total FileError result");
+        let kind = match result {
+            ken_interp::EvalVal::Ctor { id, args, .. } if id == console.err_id => {
+                match args.get(2) {
+                    Some(ken_interp::EvalVal::Ctor { id, args, .. })
+                        if *id == fs.mk_file_error_id =>
+                    {
+                        match args.get(2) {
+                            Some(ken_interp::EvalVal::Ctor { id, .. }) => *id,
+                            other => panic!("FileError kind missing: {other:?}"),
+                        }
+                    }
+                    other => panic!("expected FileError payload: {other:?}"),
+                }
+            }
+            other => panic!("expected Err(FileError): {other:?}"),
+        };
+        assert_eq!(kind, console.capabilitydenied_id);
+        assert!(host.fs_trace().is_empty(), "denial must precede syscall");
+        assert!(!host.fs_nodes().contains_key(b"root/denied".as_slice()));
+    }
+
+    #[test]
+    fn anone_readfile_reaches_named_denial_before_capture_host_syscall() {
+        let env = elaborate_program("program capabilities FS ANone\n");
+        let declared = declared_fs_authority(&env).expect("FS ANone declared");
+        let console = ken_interp::ConsoleIds::from_elab(&env).expect("Console ABI");
+        let fs = ken_interp::FSIds::from_elab(&env).expect("FS ABI");
+        let mut store = build_eval_store(&env);
+        let mut tree = ken_interp::eval(
+            &[],
+            &ken_kernel::Term::const_(
+                *env.globals.get("readFile").expect("typed read wrapper"),
+                vec![],
+            ),
+            &env.env,
+            &mut store,
+        );
+        for argument in [
+            constructor_value(declared.constructor_id, vec![]),
+            mint_declared_fs_cap(declared),
+            ken_interp::EvalVal::Bytes(b"root/input".to_vec()),
+        ] {
+            tree = ken_interp::apply(tree, argument, &env.env, &mut store);
+        }
+        let mut host = ken_interp::CaptureHost::new(Vec::new());
+        host.insert_directory(b"root".to_vec());
+        host.insert_file(b"root/input".to_vec(), b"secret".to_vec());
+        let result = ken_interp::run_io(
+            tree,
+            &mut host,
+            &console,
+            Some(&fs),
+            None,
+            &env.env,
+            &mut store,
+        )
+        .expect("ANone denial is a total FileError result");
+        let kind = match result {
+            ken_interp::EvalVal::Ctor { id, args, .. } if id == console.err_id => {
+                match args.get(2) {
+                    Some(ken_interp::EvalVal::Ctor { id, args, .. })
+                        if *id == fs.mk_file_error_id =>
+                    {
+                        match args.get(2) {
+                            Some(ken_interp::EvalVal::Ctor { id, .. }) => *id,
+                            other => panic!("FileError kind missing: {other:?}"),
+                        }
+                    }
+                    other => panic!("expected FileError payload: {other:?}"),
+                }
+            }
+            other => panic!("expected Err(FileError): {other:?}"),
+        };
+        assert_eq!(kind, console.capabilitydenied_id);
+        assert!(host.fs_trace().is_empty(), "denial must precede syscall");
+    }
+
+    #[test]
+    fn apartial_cannot_apply_afull_writefile_wrapper() {
+        let mut env = ken_elaborator::ElabEnv::new().expect("prelude");
+        let error = env
+            .elaborate_file(
+                r#"proc rejected (cap : Cap APartial)
+  : FS AFull (Result FileError Unit) visits [FS] =
+  writeFile cap (bytes_encode "out") CreateNew (bytes_encode "no")"#,
+            )
+            .expect_err("APartial must not satisfy writeFile's AFull argument");
+        assert!(matches!(
+            error,
+            ken_elaborator::ElabError::KernelRejected {
+                error: ken_kernel::KernelError::TypeMismatch { .. },
+                ..
+            }
+        ));
+    }
 
     #[test]
     fn exit_code_mapping_is_total_and_failure_zero_fails_closed() {

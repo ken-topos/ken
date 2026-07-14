@@ -1,3 +1,5 @@
+program capabilities FS APartial
+
 -- Rosetta Code: Hello world
 -- https://rosettacode.org/wiki/Hello_world/Text
 --
@@ -6,5 +8,8 @@
 -- String literals (`37 §2.1`) and `print_line : String → IO Unit`
 -- (`36 §2.1`) are both declared; `ken run` drives the Console effect
 -- end-to-end (`42 §6`, wp/console-harvest-fix).
-proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
-  host_program (print_line "Hello, World!")
+proc main
+      (_input : ProcessInput) (_caps : ProgramCaps APartial)
+    : HostIO APartial ExitCode
+    visits [Console] =
+  host_program APartial (print_line "Hello, World!")

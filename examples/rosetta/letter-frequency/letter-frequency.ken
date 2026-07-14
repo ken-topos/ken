@@ -1,3 +1,5 @@
+program capabilities FS APartial
+
 -- Rosetta Code: Letter frequency
 -- https://rosettacode.org/wiki/Letter_frequency
 --
@@ -110,5 +112,8 @@ const finalCheck : String =
     False ↦ "FAIL"
   }
 
-proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
-  host_program (print_line finalCheck)
+proc main
+      (_input : ProcessInput) (_caps : ProgramCaps APartial)
+    : HostIO APartial ExitCode
+    visits [Console] =
+  host_program APartial (print_line finalCheck)

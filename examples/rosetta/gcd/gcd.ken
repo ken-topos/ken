@@ -1,3 +1,5 @@
+program capabilities FS APartial
+
 -- Rosetta Code: Greatest common divisor
 -- https://rosettacode.org/wiki/Greatest_common_divisor
 --
@@ -214,5 +216,8 @@ fn natToDecimal (n : Nat) : String =
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 -- main: gcd(12, 8) = 4
-proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
-  host_program (print_line (natToDecimal (natGcd twelve eight)))
+proc main
+      (_input : ProcessInput) (_caps : ProgramCaps APartial)
+    : HostIO APartial ExitCode
+    visits [Console] =
+  host_program APartial (print_line (natToDecimal (natGcd twelve eight)))
