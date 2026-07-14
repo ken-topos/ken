@@ -12,8 +12,9 @@ amplify` → AC3, `no-ambient-authority` → AC1; retired there in this WP — s
 
 Grounding (landed `§`-bodies + landed code on this branch, content-reconciled —
 not the plan): `62 §1`–`§9`/`§H` (no-ambient, the authority lattice, attenuation
-as a kernel-re-checked refinement obligation, revocation static-contract, audit,
-compose, trust-boundary table); `36 §2.5`/`§3`/`§3.1` (the capability-passing
+as an emitted but direction-degenerate refinement obligation, revocation static
+contract, audit, compose, trust-boundary table); `36 §2.5`/`§3`/`§3.1` (the
+capability-passing
 translation: `Cap E` is a value parameter via ordinary Π, minted by a handler;
 the cross-workstream contract "capability `Cap E` → a value parameter (Π) → read
 by Sec2 authority/attenuation `62`"); `36 §1.4` (the EFFECT-ESCAPE check — a no-
@@ -40,23 +41,21 @@ values and their real authority checks; a Ken source call is not its fixture.
 
 ## Reading these cases — the Sec2-specific disciplines
 
-**Capabilities are REAL Π values — attenuation's bound is KERNEL-BACKED, unlike
-Sec1's erased labels (`62 §3.1`/`§H`).** Sec1's IFC labels are *erased* before
-the kernel, so its flow rules are trusted and conformance is the **sole** net
-(`61 §9 N1`). Sec2 is different **when the authority is kernel-visible** (FS
-paths, `Net` hosts, quotas — the common case): a `Cap E` is a real Π parameter
-(`36 §2.5`) and `authority c`/`⊑` are real terms (`62 §2.1`), so
-attenuation's bound `authority c' ⊑ authority c ⊓ w` is a **`34 §5`/`21 §2`
-refinement obligation the kernel re-checks** (`23 §1`, `18 §4`) — a too-strong
-result makes it undischargeable and the kernel nets it (AC3-C3). **The one
-exception (do not over-claim):** the **declassify** cap's bound `ℓ' ⊑ ℓ` is over
-**erased IFC labels** (`61 §3`/§9 N1), so **trusted-by-typing** (the landed
-`DeclassifyCap.is_valid`), *not* kernel-backed — Sec1's posture (`62 §H`).
-**real-value authority → kernel-backed; label-mediated (declassify) → trusted.**
-These cases assert **accept/reject of
-the elaboration** AND, where the bound is concerned, **the emitted obligation
-structurally** — never a synthetic `is_weaker` predicate over literals (that
-guards nothing).
+**Capabilities are REAL Π values, but attenuation's bound is trusted-Rust +
+conformance-netted (`62 §3.1`/`§H`, ADR-0017 §2).** A `Cap E` is a real Π
+parameter (`36 §2.5`), so **cap presence** has a genuine independent kernel net:
+a missing-capability `perform` denotes to an unbound variable and is rejected.
+That does not make the attenuation bound independently kernel-proved. For
+`authority c' ⊑ authority c ⊓ w`, `discharge_attenuation` emits an `Eq` + `Refl`
+obligation over fresh opaque postulates, but the elaborator's Rust comparison
+chooses whether `child` and `bound` name the same postulate. The kernel never
+computes the meet or sees the authority lattice; its discharge mirrors the
+elaborator's decision. The real net for the bound is the elaborator's `meet`/`⊑`
+computation plus the non-degenerate {C1, C2} conformance pair. This gives the
+bound the same trust class as declassify: trusted-by-typing and conformance-
+netted, not an independent kernel proof. These cases assert **accept/reject of
+the elaboration** and the emitted obligation structurally — never a synthetic
+`is_weaker` predicate over literals (that guards nothing).
 
 **The order-dual orientation — the `[Sec2-dual]` discipline (`62 §3.2`; the
 `[Sec1-dual]` trap-class).** `⊑` on `Authority` is a **direction**: *more
@@ -80,7 +79,8 @@ Ken-callable constructor. A degenerate (meet-equal) instance collapses the
 direction and passes green-vs-green under a flipped order.
 
 **No amplification is an ABSENCE — assert no operation exists (`62 §3.2`).**
-"Downward-only" rests on three facts: the kernel-backed semantic bound (above),
+"Downward-only" rests on three facts: the trusted-Rust, conformance-netted
+semantic bound (above),
 the **enumerated absence** of any Ken-callable capability producer
 (`attenuate`/`strengthen`/`amplify`/public-`Cap` constructor), and
 **unforgeability** (`62 §2.2`: `Cap E` is opaque). The semantic host operation
@@ -149,7 +149,8 @@ not a capability-producing surface spelling; deferred runtime mechanisms remain
 
 > The order-dual distinguishing pair is **{C1, C2}** on the **same** attenuated
 > cap, strict authorities (`authority c ⊓ w ⊏ authority c`): verdict **flips**
-> on the sink's demand. C3 pins the **kernel-backed bound**; C4 the **absence**.
+> on the sink's demand. C3 pins the emitted-but-degenerate discharge mechanism;
+> C4 pins the **absence**.
 
 ### security/capabilities/attenuated-cap-at-weak-sink-accepts
 - spec: `62 §3`/`§3.1`
@@ -179,23 +180,22 @@ not a capability-producing surface spelling; deferred runtime mechanisms remain
   required (a meet-equal `c_tmp` collapses it). Real `Cap` through the real
   `authority`-`⊑` check (QA gate), never a synthetic flag.
 
-### security/capabilities/attenuate-bound-is-kernel-rechecked
+### security/capabilities/attenuate-bound-discharge-mirrors-elaborator
 - spec: `62 §3.1`/`§H`, `34 §5`, `21 §2`, `23 §1`, `18 §4`
 - given: the runner/host semantic `capabilities.rs::attenuate(c, w)` derives a
   child and its **emitted obligation**; observe the discharge core for
   `authority c' ⊑ authority c ⊓ w`. No Ken source expression constructs `c'`.
-- expect: the elaborator **emits the obligation** `authority c' ⊑ authority c ⊓
-  w` (`22 §2.1`), discharged (canonical body: `authority c' = authority c ⊓ w` →
-  `⊑-refl`) and **re-checked by the kernel**; a witness with `authority c' ⊐
-  authority c ⊓ w` (too-strong) makes the obligation **undischargeable**
-  → the kernel re-check **rejects**
-- why: (soundness) the **kernel-backed face** of attenuation — *distinct from
-  Sec1* (whose erased labels make the analogous bound invisible to the kernel,
-  `61 §9 N1`). **Structural assertion** on the emitted obligation, not merely
-  "accepts" (cf. Sec1ct AC6's structural emit). The kernel-backed bound
-  nets a too-strong result; the **orientation** of that bound is *still*
-  conformance-netted by {C1, C2} (the bound is direction-degenerate at the meet,
-  `62 §3.2`) — both faces are required.
+- expect: the elaborator **emits an obligation** for
+  `authority c' ⊑ authority c ⊓ w` (`22 §2.1`) as `Eq(child, bound)` over fresh
+  opaque postulates. For the canonical child, the elaborator chooses the same
+  postulate for both sides and `Refl` discharges. For a too-strong child it
+  chooses distinct postulates, so `Refl` yields `Unknown` and the obligation is
+  **undischargeable**. The kernel never computes the meet or `⊑` relation.
+- why: (soundness) **trust-boundary assertion**, not an independent kernel net.
+  The emitted `Eq` + `Refl` mechanism is real, but its postulate identities are
+  chosen by the elaborator's Rust comparison. Therefore the discharge mirrors
+  the elaborator's decision and is direction-degenerate; the elaborator's
+  `meet`/`⊑` computation plus the non-degenerate {C1, C2} pair nets the bound.
 
 ### security/capabilities/no-amplifying-operation-exists
 - spec: `62 §3.2`/`§2.2`
@@ -207,8 +207,9 @@ not a capability-producing surface spelling; deferred runtime mechanisms remain
   constructor (`62 §2.2`). The separate semantic host derivation still yields
   `authority c' ⊑ authority c` and cannot exceed the parent even at `w = ⊤`.
 - why: (soundness) **assert absence** — "downward-only" is the conjunction of
-  the kernel-backed semantic bound (C3), this enumerated Ken-surface absence,
-  and unforgeability (`62 §2.2`). The kernel cannot witness a missing source
+  the trusted-Rust + conformance-netted semantic bound ({C1, C2, C3}), this
+  enumerated Ken-surface absence, and unforgeability (`62 §2.2`). The kernel
+  cannot witness a missing source
   operation, so the **absence** is the guard. (Absorbs `../seed-security.md`'s
   `attenuation-cannot-amplify` — a child cannot exceed `w`.)
 
@@ -283,8 +284,9 @@ not a capability-producing surface spelling; deferred runtime mechanisms remain
   A2 (`no-row-view-is-inert`).
 - **AC2** least by default → B1 (`uses-unpassed-capability-rejected`).
 - **AC3** attenuation monotone-downward (THE headline) → **C1↔C2** (the order-
-  dual non-degenerate pair), C3 (`attenuate-bound-is-kernel-rechecked`,
-  kernel-backed face), C4 (`no-amplifying-operation-exists`, the absence).
+  dual non-degenerate pair), C3
+  (`attenuate-bound-discharge-mirrors-elaborator`, emitted-but-degenerate
+  mechanism), C4 (`no-amplifying-operation-exists`, the absence).
 - **AC4** revocation transitive → D1 (static contract; runtime `(oracle)`).
 - **AC5** audit points static → E1 (`unaudited-boundary-effect-is-impossible`),
   E2 (`declassify-every-use-audited-and-in-delta`).
@@ -304,13 +306,14 @@ not a capability-producing surface spelling; deferred runtime mechanisms remain
   the pair (not a single case) holds the orientation. The `[Sec2-dual]` net,
   the same shape as `[Sec1-dual]` integrity/`@ct` (`../ct/`) and the cast-
   direction non-degenerate-endpoints rule.
-- **Two faces of the bound {C2, C3}** — agree without merging: the *bound*
-  `authority c' ⊑ authority c ⊓ w` is **kernel-backed** (C3 — too-strong result
-  is kernel-rejected, *unlike* Sec1's erased labels); the *orientation* of that
-  bound is **conformance-netted** (C2 — the bound is direction-degenerate at the
-  meet). A reading that claimed the kernel nets the orientation, or that the
-  orientation case is redundant given C3, is the bug this pair forecloses
-  (`62 §3.2`/`§H`).
+- **Two faces of the bound {C2, C3}** — agree without merging: C3 pins that an
+  `Eq` + `Refl` obligation is emitted and that a too-strong child becomes
+  undischargeable, while also pinning that the elaborator chooses the postulate
+  identities. Therefore the discharge is **not an independent kernel proof** of
+  `authority c' ⊑ authority c ⊓ w`; it mirrors trusted Rust. C2 supplies the
+  non-degenerate conformance net for the orientation that C3 cannot distinguish
+  at the meet. Treating C3 as a stronger kernel net, or C2 as redundant, is the
+  bug this pair forecloses (`62 §3.2`/`§H`, ADR-0017 §2).
 - **Semantic operation vs Ken surface {C1–C4}** — all four attenuation cases
   observe the runner/host operation and real `Cap` values. C4 independently
   requires the Ken source environment to expose neither `attenuate` nor any
