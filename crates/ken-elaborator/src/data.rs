@@ -500,20 +500,23 @@ fn surface_universe_error(
     family_level: Level,
     decl_span: &Span,
 ) -> ElabError {
-    let located = located.unwrap_or_else(|| UniverseArgument {
-        constructor: "<unknown>".into(),
-        name: None,
-        index: 0,
-        span: decl_span.clone(),
-    });
-    ElabError::ConstructorUniverseViolation {
-        data: d_name.to_string(),
-        constructor: located.constructor,
-        argument_name: located.name,
-        argument_index: located.index,
-        argument_level,
-        family_level,
-        span: located.span,
+    match located {
+        Some(located) => ElabError::ConstructorUniverseViolation {
+            data: d_name.to_string(),
+            constructor: located.constructor,
+            argument_name: located.name,
+            argument_index: located.index,
+            argument_level,
+            family_level,
+            span: located.span,
+        },
+        None => ElabError::KernelRejected {
+            error: KernelError::ConstructorUniverseViolation {
+                argument: argument_level,
+                family: family_level,
+            },
+            span: decl_span.clone(),
+        },
     }
 }
 

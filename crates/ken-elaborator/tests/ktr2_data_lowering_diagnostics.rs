@@ -1,5 +1,5 @@
 use ken_elaborator::{ElabEnv, ElabError};
-use ken_kernel::Level;
+use ken_kernel::{KernelError, Level};
 
 fn env() -> ElabEnv {
     ElabEnv::new().expect("base environment must build")
@@ -92,4 +92,34 @@ fn explicit_type_one_family_accepts_type_payload() {
     env()
         .elaborate_decl("data D : Type 1 where { C : (s : Type) -> D }")
         .expect("the existing explicit Type-1 escape must remain valid");
+}
+
+#[test]
+fn failed_localization_preserves_the_unattributed_kernel_error() {
+    let error = env()
+        .elaborate_decl(
+            "data D (x : Int Int) : Type where { \
+             C : (safe : Int) -> (payload : Type) -> D x }",
+        )
+        .expect_err("the malformed family must reject without invented attribution");
+    assert!(
+        matches!(
+            &error,
+            ElabError::KernelRejected {
+                error: KernelError::ConstructorUniverseViolation {
+                    argument,
+                    family,
+                },
+                ..
+            } if *argument == Level::zero().suc() && *family == Level::zero()
+        ),
+        "expected the honest unattributed kernel error, got {error:?}"
+    );
+    let diagnostic = error.to_string();
+    for invented in ["<unknown>", "#1", "C.safe"] {
+        assert!(
+            !diagnostic.contains(invented),
+            "diagnostic fabricated source attribution '{invented}': {diagnostic}"
+        );
+    }
 }
