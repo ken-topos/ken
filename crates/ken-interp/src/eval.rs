@@ -4727,9 +4727,7 @@ mod px0_target_classification_tests {
             1,
             "only the unrelated OsString fallback stays cfg(not(unix))"
         );
-        assert!(source.contains(&format!(
-            "{linux_gate}\nunsafe extern \"C\""
-        )));
+        assert!(source.contains(&format!("{linux_gate}\nunsafe extern \"C\"")));
         assert_eq!(source.matches("unsafe extern \"C\"").count(), 2);
         assert!(source.contains("fn openat("));
         assert!(source.contains("fn mkdirat("));
