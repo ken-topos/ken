@@ -7,12 +7,23 @@ source: extracted from private memory
 related: kernel-completeness-gap-shapes, exhaustive-term-traversals
 ---
 
-# A trust-root reduction/whnf change needs a full-workspace gate
+# A trust-root reduction/whnf change has a workspace-wide blast radius (gated in CI)
 
 A sound kernel **completeness** (reduction) change — one that makes *more* goals
 reduce than before — forces downstream proof-term migrations. So "kernel-only
-diff" is a **false scope premise**, and the correct gate is
-`cargo test --workspace`, never just the changed crate.
+diff" is a **false scope premise**: the blast radius reaches `catalog/packages/`
+proofs and other crates' tests.
+
+**The gate is the full workspace — but it runs in CI, NOT locally** (operator
+hard rule, COORDINATION §12: a local `cargo test --workspace` OOMs the shared
+box). Locally you validate **targeted** (`scripts/ken-cargo -p <crate>` /
+`--test <name>`); the whole-repo `--workspace --locked` run is CI's, and the
+scripted publisher gates the merge on it. The lesson here is therefore **not**
+"run a local workspace build" — it is **design the landing so CI's workspace run
+stays green**: migrate every downstream proof term *in the same landing* as the
+kernel change, so `main` never reddens. If CI does redden, it comes back as a
+publisher `blocked` mention on your implementer — that is the workspace gate
+doing its job.
 
 **The concrete failure.** A kernel fix (`obs.rs::eq_at_inductive` whnf-before-
 head-check) was itself correct and cleared in full — but as shipped it regressed
@@ -36,11 +47,16 @@ incompleteness stay realizable after the fix (the goal still holds), but their
 proof *terms* must change shape, or the workspace won't build.
 
 **How to apply.** On any change to a kernel reduction/whnf/conversion function:
-(1) run `cargo test --workspace`, not just the crate you touched, before calling
-the change clean; (2) if something outside the touched crate regresses, migrate
-the affected proof terms **together with** the kernel change, in the same
-landing, so `main` never reddens in between; (3) treat "I only touched
-`ken-kernel`" as a claim to verify, not a scope boundary that excuses skipping
-the rest of the workspace — the kernel not being *structurally* touched (e.g.
-`conv.rs` byte-identical) is a separate, real, and worth-stating fact from
-"nothing downstream needs to change."
+(1) **enumerate the blast radius up front** — grep for `Refl`-on-operation-
+wrapped goals in `catalog/packages/` and every crate's tests, and migrate those
+proof terms **together with** the kernel change in the **same landing**, so
+`main` never reddens (CI's workspace run is what would otherwise catch it, late);
+(2) validate **locally targeted** on the crates you migrated (`scripts/ken-cargo
+-p <crate>` / `--test <name>`) — do **NOT** run a local `cargo test --workspace`
+(COORDINATION §12); the whole-repo gate is CI's and the publisher polls it at
+merge; (3) treat "I only touched `ken-kernel`" as a claim to verify, not a scope
+boundary — the kernel not being *structurally* touched (e.g. `conv.rs` byte-
+identical) is a separate fact from "nothing downstream needs to change." The
+frame should design the workspace coverage in (steward.md: distinguish the
+soundness surface from the landing unit) so CI confirms it rather than discovers
+a regression.

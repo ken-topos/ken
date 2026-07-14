@@ -14,7 +14,127 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (09:5x UTC) — ★★ NEWEST · LIVE STATE · `origin/main @ c5f73b9c`
+> ### ⏭ 2026-07-14 (10:4x UTC) — ★★★ NEWEST · LIVE STATE · `origin/main @ 7b4adf5b`
+>
+> **★ HONESTY SWEEP: PUBLISHING NOW. Both terminal votes are on `b93b8f9b`.**
+> @architect **re-cast** (`evt_2p19ekr20qne7`) + confirmed (`evt_6ze6hxhp84tdc`); `91ecff78` is
+> **VOID**. He **did not take my byte-identity proof on trust** — he re-ran the §14.5 two-axis gate
+> against the actual trees and converged independently. *That is the correct posture: my arithmetic
+> is not a substitute for his verification on `64-trust-model`.*
+>
+> **⚠ MY ONE-ROUTE RULING WAS MECHANICALLY IMPOSSIBLE, AND CV CAUGHT IT.** I said "fast-forward
+> `wp/primitive-op-conversion-honesty` to `b93b8f9b`." The official branch is at **`01eee645`
+> (stale, pre-I-6)**; CV's re-anchor **REPLAYED** the commits onto post-I-6 main → **new SHAs** →
+> `01eee645` is **not an ancestor**. **There is no fast-forward, only a REPOINT.** I issued a ruling
+> in the vocabulary of a graph op the graph does not support.
+> **⇒ FIX: I pinned MY OWN immutable route branch — `wp/primitive-op-conversion-honesty-publish`
+> @ `b93b8f9b`** — owned by me, checked out by nobody, **verified tree-identical** (`7a346083…`),
+> so no other seat can move the tip mid-publish. **Passing the bare SHA would have resolved to
+> CV's `…-cv-current`, a ref CV owns and could move under the publisher.** The other 3 branches are
+> **evidence, never merge routes.**
+>
+> **★ GATE CALL WORTH REMEMBERING: I did NOT pass `--doc-only`.** All 19 files are markdown, so
+> `--doc-only` *looks* right — and it **merges immediately without polling CI**. But 4 of them are
+> **`conformance/` seeds = EXECUTABLE CORPUS that runs in CI**, and this change **re-tags a
+> `(soundness)` assertion** in `seed-bytes-io`. **"All-markdown" is not the test; "does anything
+> EXECUTE it?" is.** CI is polling now.
+>
+> **★ I-6 CLOSED — all three retros in** (leader `evt_…`, implementer `evt_20defgthmf8az`, QA).
+> Runtime ring: clean trees, 0 ahead of `origin/main`, quiescent. **Handoff Gate compactions
+> STARTED** (`scripts/handoff-gate-compact.sh runtime-leader runtime-implementer runtime-qa`).
+>
+> ### ★★ I-7 RE-SCOPED AND SPLIT — THE CLOCK IS NOW **I-8**. Frame: `wp/i7-env-process-projectors @ cb5cccfd`.
+> Two findings from grounding, both load-bearing:
+> 1. **THE CLOCK IS 0% BUILT, AND `rg Clock` RETURNS ~10 HITS THAT ALL LIE.** Every hit is either a
+>    **doc-comment example** (`effects/row.rs:14` — *"a named effect: FS, Clock, Console, Net, …"*)
+>    or a **synthetic test-fixture string** (`tests/effects.rs` — `("now", singleton("Clock"))`).
+>    The effect-row engine is **generic over effect-name STRINGS**, so an effect "exists" in a test
+>    the moment someone types its name in a literal. **No `IOOp` arm, no `HostHandler` method, no
+>    `now`, no driver arm, no `PosixHost` time source.** (Textbook *grep-the-emission-not-the-name*.)
+> 2. **env + cwd ARE ALREADY CAPTURED AND ALREADY INJECTABLE.** `ProcessInput = MkProcessInput
+>    (List Bytes) (List (Prod Bytes Bytes)) Bytes` — argv / **env pairs** / **cwd**. CC6a's `match`
+>    **already binds and passes through** fields 1–2; it just never *named* them. And I-6 made them
+>    injectable (`std::env` count in `lib.rs` = **0**; `main.rs` passes them in).
+>
+> **⇒ THEY ARE TWO DIFFERENT KINDS OF THING:** env/cwd are **pure projections of a captured,
+> immutable input** (zero effects, zero TCB, ~two `match`es + two `Refl`-closed structural proofs);
+> **a clock is a REAL EFFECT** — an observation of a *changing world* — needing the full vertical
+> (op + `HostHandler` + `PosixHost` + `CaptureHost` **fixed clock** + effect row + driver arm).
+> **CC8 is BLOCKED and needs the ENV. It never calls a clock.** Gating CC8 behind a clock effect
+> would be **inventing a dependency** — the I-6 lesson (*ship the honest small thing; don't invent
+> an `L` to justify a line item*) applied deliberately instead of accidentally.
+>
+> **⚠ I-7 MUST NOT BUILD AN ENV *LOOKUP*.** A lookup compares keys → needs **`DecEq Bytes`** → the
+> **`Axiom` wall** (`bytes_eq` is a `PrimReduction::Op`, opaque to conversion). **That is the seam:
+> I-7 PROJECTS (no comparison, no `Axiom`); CC8 LOOKS UP (needs `DecEq Bytes` ← SUB-1).** It is
+> exactly why I-7 is unblocked and CC8 is held. Both traps are named in the frame's §1.
+>
+> ### ★ CC8 FRAME AMENDED — AN OWNERSHIP ERROR OF MINE (`wp/cc8-env-config-decoder @ fc8a0513`)
+> My CC8 frame §3.1 said *"a `Process.Environment` accessor is a **CC8** deliverable."* **It sits on
+> the `ProcessInput` runtime ABI — Runtime's boundary — and the CLI contract §7 already scopes it to
+> I-7.** Had both frames stood, **Foundation and Runtime would each have built
+> `process_environment`** on separate branches and **collided on merge.** Withdrawn; CC8 now
+> **consumes** it. **CC8's dep set = SUB-1 (bridge) AND I-7 (projector).** Also rebased onto
+> `7b4adf5b`.
+>
+> **▶ NEXT:** verify honesty sweep on `origin/main` **BY CONTENT** → verify Runtime compaction drops
+> → **kick I-7** → author **I-8** (clock effect) → SUB-1 lands → **re-kick CC8** → SUB-2 → CC9.
+> **FOR PAT:** **K3 registered reductions** (dissolves the `Axiom` tax; grows kernel TCB) ·
+> **7 seats on `sol`/T1 doing T2 work** (confirmed: `runtime-implementer` is on `gpt-5.6-sol`) ·
+> `export` specified-but-unparsed. **Doc-only PR still pending** (PRINCIPLES #15, memories,
+> playbook audit (b″)) — lives only on `steward/work`.
+
+> ### ⏭ 2026-07-14 (10:3x UTC) — `origin/main @ 7b4adf5b`
+> **★ I-6 MERGED — `origin/main @ 7b4adf5b` (PR #630, CI green). PROGRAM I = I-1…I-6.**
+> **VERIFIED BY CONTENT** (never by SHA/task-status): `crates/ken-cli/src/lib.rs` **present** ·
+> `[lib]` in `Cargo.toml` · **`std::env` count in landed `lib.rs` = 0**.
+> **⚠ THE PUBLISHER LIED TWICE AND I ONLY CAUGHT IT BY CONTENT:** (1) first run **failed**
+> (`--body` is not a flag — it is `--description` / `--description-file`) **AND STILL EXITED 0**,
+> so the task reported "completed" with **nothing landed**; (2) my first content-check was
+> `grep -c 'fn mint_fs_cap'` → **2 hits on un-merged main** — those are the two **pre-existing
+> INHERENT** methods, not the new trait decl. **A count of 2 reads as "landed."** **⇒ CONTENT-VERIFY
+> WITH A DISCRIMINATOR THE WP ACTUALLY *ADDS*** (a new file / new decl), never a name that already
+> occurs. Memory: `roles/steward/publisher-flags-are-description-not-body…`.
+> **▶ I-6 RETROS REQUESTED (`evt_mc6tp3hj8avr`) — merged ≠ closed.** Then Handoff-Gate Runtime →
+> **I-7** (Env/Process; **owns the clock**).
+>
+> **★★ HONESTY SWEEP — CANDIDATE `b93b8f9b` (RE-ANCHORED on `7b4adf5b` after I-6 landed). MY GATE
+> IS CLEAN; AWAITING ARCHITECT TERMINAL REVIEW (`evt_4bt6bzdvng2vj`, route `evt_9h4dpq8zzpcc`).
+> I PUBLISH ONLY ON HIS VOTE.**
+> **⛔ `91ecff78` IS DEAD — it predates I-6 and is no longer a descendant of main. DO NOT PUBLISH
+> IT.** CV re-anchored topology-only, unprompted, and was right: **a stale base is a loaded gun —
+> a three-dot diff against a moved `main` lists files the branch merely PREDATES, and merging it
+> can REVERT them with a green suite.**
+> **I VERIFIED THE REPLAY IS CLEAN:** diffed `91ecff78` vs `b93b8f9b` across `spec/ docs/
+> conformance/` — **the ONLY delta is I-6's own content** (brought in by the new base); **the
+> sweep's 19 files are BYTE-IDENTICAL.** The replay moved the base, not the work.
+> Gate on `b93b8f9b`: linear `7b4adf5b → 74a0e1e1` (spec) `→ 8fca4612` (conformance) `→ b93b8f9b`
+> (residue) · **0 merges** · **exactly 19 files** · **forbidden-path probe EMPTY** (no `crates/`,
+> no `Cargo.lock`; doc+corpus ONLY) · `diff --check` clean. ✓
+> **⚠ THREE BRANCHES NOW EXIST** (`…-honesty`, `…-cv-respin`, `…-cv-current`). **I RULED: ONE
+> ROUTE — spec-leader FFs the official `wp/primitive-op-conversion-honesty` to `b93b8f9b`; the
+> other two are EVIDENCE, never merge routes. Re-verify the official tip is byte-identical to
+> `b93b8f9b` immediately before publishing.**
+> **★ THE SCOPE IS BIGGER THAN MY ESCALATION, AND THAT IS THE RIGHT ANSWER:** I flagged `37 §2.4`;
+> the sweep corrects the same false posture across **`11`, `14`, `16`, `17`, `18`, `18a`, `30`,
+> `35`, `37`, `38`, `42`, `45`, `51`, `64`** + `g5-soundness-story` + 4 conformance files.
+> **The over-claim was not a sentence — it was a POSTURE, repeated across the kernel spec, surface
+> spec, runtime spec, trust model, and corpus. It went unchallenged BECAUSE it was consistent.**
+> **THE THREE THINGS THE ARCHITECT MUST VERIFY (a green diff hides all three):** (1) **`Literal`
+> stays definitional** (`14 §5`/ADR-0013) — only **`Op`** loses it; **a sweep that flattens both
+> swaps one false claim for another.** (2) The **soundness obligation was RE-HOMED to
+> `ken-interp::prim_reduce`, not deleted** — an obligation changing layers must not evaporate.
+> (3) Positive conv/`Refl` cases are **RED/deferred to K3, not REMOVED** — *a deleted failing case
+> and a passing one look identical in a summary.*
+>
+> **▶ LANES:** **SUB-1 → LANGUAGE** building (`wp/sub1-bytes-structural-view @ e8321140`) ·
+> **honesty sweep → Architect review** · **CC8 → FOUNDATION ⛔ HELD on purpose** (re-frame on the
+> bridge once SUB-1 lands) · **Runtime → I-6 retros, then I-7.**
+> **▶ STILL FOR PAT:** **K3 registered reductions** (Architect: real, high-leverage, **would
+> dissolve the `Axiom` tax outright**, but grows **kernel TCB**; same family as `Bytes → Nat` —
+> **sequence together**) · **7 seats on `sol`/T1** doing T2 work · `export` unparsed.
+>
+> ### ⏭ 2026-07-14 (09:5x UTC) — LIVE STATE (superseded) · `origin/main @ c5f73b9c`
 > **★★★ PAT RULED THE `Bytes → Nat` SUBSTRATE DECISION: LAND THE BRIDGE (Option B).**
 > **His reasoning is now `docs/PRINCIPLES.md` #15** (committed `0f14b873`), verbatim:
 > *"`String → List Char` is an essential reasoning tool that needs to be part of the trusted

@@ -30,6 +30,7 @@ role's own mechanics (not shared reasoning) belongs in `roles/<role>` instead.
 | [enclave-ruling-in-thread-is-not-a-durable-deliverable](enclave-ruling-in-thread-is-not-a-durable-deliverable.md) | An enclave ruling articulated in a thread is not yet a deliverable |
 | [grounding-a-fabricated-citation-two-failure-modes](grounding-a-fabricated-citation-two-failure-modes.md) | Fixing a laundered citation has two failure modes past stripping the token |
 | [higher-kinded-class-param-and-funext-definitional](higher-kinded-class-param-and-funext-definitional.md) | Higher-kinded class params are hard-coded to Type0; funext is definitional |
+| [ken-owns-program-validity-not-runtime-constraint-caps-declared-in-program](ken-owns-program-validity-not-runtime-constraint-caps-declared-in-program.md) | Ken owns program validity, not runtime constraint; capabilities are declared IN the program (with the admits roster), not granted at the CLI |
 | [kernel-backed-claim-grep-the-emission-not-the-name](kernel-backed-claim-grep-the-emission-not-the-name.md) | Verify a kernel-backed claim by grepping the emission, not the name |
 | [kernel-backed-obligation-certificate-vs-discrimination](kernel-backed-obligation-certificate-vs-discrimination.md) | A kernel-backed obligation can notarize a certificate without re-deriving the discrimination |
 | [kernel-rejects-is-completeness-fix-is-where-soundness-converts](kernel-rejects-is-completeness-fix-is-where-soundness-converts.md) | The kernel rejecting a valid program is completeness; the soundness risk is in the fix |

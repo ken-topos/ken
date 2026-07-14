@@ -113,6 +113,14 @@ product programs, with a relational *logic* only as a reflective embedding if
 ever needed (`OQ-relational`). If your instinct is "add a primitive," first ask:
 *can this be data the existing kernel reasons over?*
 
+**The one case this does not cover — see #15.** When the fact is a guarantee
+**the implementation itself makes** (an opaque primitive's length, structure, or
+decidable equality), it is *not* data the kernel can reason over at any price,
+and refusing the primitive does not avoid the trust — it **scatters** it, as an
+`Axiom` in every consumer. Reflection is the default; #15 is the narrow, tested
+exception, and its tell is that **the consumers are all writing the same
+`Axiom`.**
+
 ### 7. Subsume, don't proliferate — and know what Ken is *not*
 
 Before adding a mechanism, check whether **already-decided machinery composes to
@@ -257,6 +265,41 @@ language-proper home, that is a signal to **extend the language** (or file the
 gap), never to enshrine the fact in a comment. The catalog style guide follows
 this: proof-review information lives in the entry's Ken, and comments/prose are
 reserved for the narrative that genuinely cannot be checked (`07 §8`).
+
+### 15. A guarantee the implementation makes must be reasonable-from in Ken
+
+Where the implementation **already guarantees** a fact — a `Bytes` value *has* a
+length; a `String` *is* a sequence of `Char`s — the language must expose the
+**proposition or structure that lets a program reason from it**. Where it does
+not, every consumer who needs that fact must **postulate** it, and the cost is
+not one assumption: it is **one per call site, forever**.
+
+*In practice:* **prefer a fixed extension of the trusted base — one entry per
+built-in — over an unbounded number of `Axiom`s added by consumers of Ken**
+(operator ruling, 2026-07-14). Postulating does **not** avoid TCB growth: a
+surface `Axiom` is `declare_postulate` → `Decl::Opaque` → **a real
+`trusted_base()` entry**. So the two routes differ only in *shape*. One is
+**bounded, reviewed once, and paid by us**; the other is **unbounded, paid by
+everyone downstream, and never reviewed at all**. Take the bounded one.
+
+**This is not a licence to add primitives — #6 still binds.** If the fact can be
+**data the kernel reasons over, reflect it**. This principle governs only the
+case where the guarantee is **the implementation's own**, and is therefore *not*
+derivable inside Ken at any price: an opaque primitive's length, its structure,
+its decidable equality. There the choice was never *primitive vs. reflection* —
+it is **primitive vs. every consumer postulating the same fact independently**.
+The tell that you are in this case, and not in #6's: **the consumers cannot
+prove it, cannot reflect it, and are all writing the same `Axiom`.**
+
+*The landed instance, and the one that was missing:* `String` is opaque, yet
+`string_to_list_char : String → List Char` (with its inverse, `37 §2.3`) exposes
+its structure as an inductive view — so programs **recurse structurally instead
+of assuming**. `Bytes` had no such view: `bytes_length : Bytes → Int`, with `Int`
+opaque and **no `Int → Nat`**, so a byte length could be *named* but never
+*used*. Every consumer therefore carried a cached `Nat` plus an `Axiom` that the
+cache agreed with the real length (CAT-5's `Source`, CC3's `ArgBytes`). **Four
+consumers paid that tax before the asymmetry was recognized as a defect rather
+than a fact of life.** The fix is the parallel view, not a fifth carrier.
 
 ---
 

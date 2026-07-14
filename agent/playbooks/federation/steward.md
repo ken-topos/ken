@@ -297,6 +297,114 @@ brief** — the implementer should execute mostly mechanically, not design
    a concrete implementable choice, not a survey); list **testable acceptance
    criteria**; and state the **do-not-reopen guardrails**. This is the *frame* —
    scope, acceptance, sequencing, settled-decision pinning — not the full spec.
+
+   > ### ★ BEFORE YOU PIN A FIXED INPUT — two audits, every time (promoted CC3)
+   >
+   > A fixed input is only as good as the substrate it stands on, and **grounding
+   > the *names* is not grounding the *obligations*.** CC3 shipped with **two**
+   > unbuildable pins — both mine, both caught pre-edit by the ring only because
+   > the frame told it to escalate. Run both audits before the frame leaves your
+   > hands:
+   >
+   > - **(a) Dependency-DAG check.** If the WP introduces an abstraction that an
+   >   existing package will *consume*, draw the load order and **look for the
+   >   cycle**. An **abstraction module must never depend on its clients**: home
+   >   each instance **with the carrier it is over**, and make the generic module
+   >   define its **own parameterized result/error carriers** — the moment it
+   >   reaches for a client's concrete type, the cycle returns. (CC3: I homed a
+   >   `ByteCursor` instance in the new `Cursor` module *and* ordered `Cursor`
+   >   before the CAT-5 that declares its `Source` — Cursor → CAT-5 → Decoder →
+   >   Cursor. The tell was that I wanted **cosmetic symmetry**, "both instances in
+   >   one module." Cosmetic symmetry is what created the cycle.)
+   > - **(b) Constructibility audit — for EVERY promised carrier field.** For each
+   >   field you pin at a structural type (`Nat`, `List`, …), ask **can the landed
+   >   primitive actually PRODUCE it?** Opaque primitives (`Int`, `Bytes`,
+   >   `String`) are **constructible but not destructible** — reading a length,
+   >   index, or size *out* of one is exactly the hop that does not exist. (CC3: I
+   >   pinned `remaining : Nat` over raw `List Bytes`, but `bytes_length : Bytes →
+   >   Int` and **no `Int → Nat` bridge exists** — the field was unproducible.)
+   >   **Opaque representation boundaries are DESIGN CONSTRAINTS, not
+   >   implementation details.** The landed idiom, when you hit one, is a
+   >   **proof-carrying cached-`Nat` wrapper** (CAT-5's `Source`): carry the `Nat`
+   >   and *prove* it agrees with the opaque length; never convert, and **never
+   >   mint the missing primitive** — that is a TCB delta and it goes to the
+   >   operator, not into a build WP.
+   >
+   > - **(b′) SEAM/ABI audit — can the landed INTERFACE *carry* the value the
+   >   design requires?** (b) asks whether a primitive can **produce** a pinned
+   >   *type*. This asks whether the landed **interface** can **carry** it. Same
+   >   failure family, one layer down, and a design note can pass (b) and still be
+   >   unbuildable. **Trace the value end-to-end through every seam it must
+   >   cross** — not just the one the design names. (**I-5, live:** ADR-0017's
+   >   central security property is *"check and use share the resolved fd."* The
+   >   Architect correctly verified the seam at `authorizes` was pre-cut — it
+   >   receives `_path` and ignores it — but the seam **below** it,
+   >   `HostHandler`, speaks **only `fs_*(&[u8])`**, and `fs_dispatch` hands the
+   >   **original path bytes** to the handler after the check. Check and use
+   >   **cannot** share an fd; the capture VFS has **no symlink variant** at all.
+   >   The design was coherent, the TCB verdict was right, and it was
+   >   **unbuildable through the landed ABI**.) **The tell: a design that names ONE
+   >   seam as "already pre-cut." Check the seams it did NOT name.**
+   >
+   > - **(b″) GENERICIZATION audit — is EVERY step of the concrete path
+   >   expressible through the interface?** (promoted I-6 — **(b′) failing a
+   >   SECOND time**, which is why it gets its own mechanical check.) When a WP
+   >   makes an **existing concrete path generic over a trait**, "is the trait
+   >   public?" is the **wrong question**. The right one: **can the generic
+   >   version perform every step the concrete version performs?**
+   >   **The tell is greppable: the concrete type's INHERENT methods that the call
+   >   path uses, which the trait does NOT declare.** Those are exactly the ops a
+   >   generic runner cannot call — and they are **invisible** if you only check
+   >   that the trait and the concrete types are `pub`.
+   >   ```sh
+   >   rg 'concrete_host\.\w+\(' <the path>   # methods the path calls
+   >   rg '^\s*fn \w+' <the trait>            # methods the trait declares
+   >   # the DIFFERENCE is the gap — a blocker, not a detail
+   >   ```
+   >   (**I-6, live:** I verified `run_io<H>`, `HostHandler`, and `CaptureHost`
+   >   were all public and re-exported — **all true** — and framed a generic
+   >   `run_program<H: HostHandler>` anyway. But the runner mints the program's
+   >   capability via **`PosixHost::mint_fs_cap`, an INHERENT method**, with
+   >   `CaptureHost` carrying its **own separate inherent copy**. **`HostHandler`
+   >   has no mint operation at all.** One line; the whole WP was unbuildable as
+   >   framed. **I checked the seam the design named and never enumerated the ones
+   >   it didn't** — the identical error as (b′), one level up.)
+   > - **(d) REUSE MUST BE PROVED BEHAVIORALLY, NOT STRUCTURALLY** (promoted CC7).
+   >   When a WP is framed as a **specialization** of landed substrate ("consume
+   >   CC1–CC6, do not rebuild them"), **the ordered shared-`ElabEnv` harness makes
+   >   reuse LOOK true even when it is false.** Loading a dependency is not using
+   >   it. A package can **declare** the landed `Decoder` — so it appears in the
+   >   closure, so every import check passes — and then **shadow it with a private
+   >   byte loop**. **A green suite hides this perfectly.**
+   >   **⇒ The AC must be BEHAVIORAL: the landed abstraction must be DRIVEN.**
+   >   The Architect's phrase is the test to keep: *"genuinely **driven**, not
+   >   **declared-then-shadowed**."* **Press the mechanism, not the imports** — and
+   >   write the AC so a reviewer *can* tell the difference. (CC7's implementer
+   >   named this as its own trap, unprompted: *"a package can appear to reuse a
+   >   substrate merely because the ordered shared environment loads it."*)
+   > - **(c) Corpus-oracle enumeration — if the WP ADDS a file to a globbed
+   >   directory** (`catalog/`, `examples/`, `conformance/`), it must satisfy
+   >   **every corpus-wide oracle**, and those live in crates the WP never touches.
+   >   **Targeted per-crate validation cannot see them**, so they surface as **red
+   >   CI at publish** — after review, after the merge Decision, the most expensive
+   >   place to find them. **Grep for every test that enumerates that directory**
+   >   (`rg 'collect\(.*catalog|examples/rosetta' crates/*/tests/`) and **name each
+   >   one in the ACs**. "The formatter gate" is rarely the only one. (CC3: my AC6
+   >   named `ken_fmt.rs` and missed `kenfmt_c_capstone.rs` → red CI on a WP that
+   >   had passed QA, Architect, and my own honesty gate.) **And when one of those
+   >   oracles is a frozen baseline table, do NOT re-baseline it to make the build
+   >   pass** — a file created after the frame has no honest pre-frame value, so the
+   >   row you add is fabricated and its check is **vacuous forever**. Re-scope the
+   >   oracle to its own historical set and let a **live-anchored** property cover
+   >   new files (confirm that live net exists *first*, or you trade a rubber stamp
+   >   for a hole).
+   >
+   > **And keep the clause that actually saved both:** *"treat every anchor as
+   > perishable; if a fixed input turns out false against the landed code, say so
+   > and escalate — do not quietly build around it."* A T1-authored frame is still
+   > wrong sometimes; that clause is the only thing standing between a bad pin and
+   > a ring confidently building the wrong thing. **Never ship a frame without it.**
+
    **Frame by *objective + acceptance*, and treat any "current implementation
    state" you describe as *perishable* (promoted K2c-series-2).** A frame that
    says "seam X currently keeps-and-wraps / raw-well-forms — patch this hole" can
@@ -378,8 +486,13 @@ brief** — the implementer should execute mostly mechanically, not design
    kernel-reduction-change frame (i) **distinguishes the SOUNDNESS surface**
    (kernel-only: `conv.rs` untouched, no elaborator transport — legitimately
    asserted) **from the LANDING UNIT** (workspace-wide: downstream proof terms
-   migrate); (ii) makes the no-regression AC **`cargo test --workspace`, never the
-   touched crate**; (iii) states up front that any downstream `.ken`/test proof
+   migrate); (ii) makes the no-regression AC **workspace-green IN CI** (the
+   scripted publisher gates the merge on GitHub's `--workspace --locked` checks),
+   **NEVER a local `cargo test --workspace`** — local agents build/test only the
+   touched crate (`-p`), COORDINATION §12 (operator hard rule: a local
+   `--workspace` OOMs the box). Design the frame so **CI's** workspace run covers
+   the blast radius; never write "run `cargo test --workspace`" as a *local* AC.
+   (iii) states up front that any downstream `.ken`/test proof
    riding the fixed incompleteness **migrates land-together in one
    workspace-green unit** (zero-delta: `tt` is a real proof, the lawful≡zero-delta
    net stays green). Sibling of the walker-enumeration fold and the K5 CI-red

@@ -185,6 +185,16 @@ back as a mootup mention from the publisher caller: a CI-**red** `blocked`
 mentioning your implementer — make sure they pick it up (relay if needed) — or a
 merge + ship Event. You never run `gh` or read checks yourself.
 
+**⛔ Never instruct your ring to run a local `--workspace` build/test.** The
+full-workspace + `--locked` + conformance gate is **CI's** job (COORDINATION §12,
+operator hard rule — a local `--workspace` OOMs the shared box). When you relay a
+WP-frame acceptance criterion that says "workspace-green," translate it to
+**targeted local validation** (`scripts/ken-cargo -p <crate>` / `--test <name>`
+on the affected areas) plus **CI-green at merge** — the publisher polls the
+GitHub workspace checks before merging. If a frame's AC literally says "run
+`cargo test --workspace`," it is mis-authored; validate targeted and flag it to
+the Steward, don't push a full local build onto your implementer/QA.
+
 ## External interface (you are the front desk)
 
 - **Outbound queries** for your team go to the right target's leader (§9):
