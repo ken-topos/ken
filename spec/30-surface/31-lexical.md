@@ -222,6 +222,10 @@ in
   body
 ```
 
+A `let` body that is itself a `let` is compound for this layout decision. The
+complete binding chain remains flat only when it fits; otherwise every nested
+binding follows the structural `let`/`in` form above.
+
 An `if` that does not fit, or that has a compound branch, has this structure:
 
 ```ken ignore
