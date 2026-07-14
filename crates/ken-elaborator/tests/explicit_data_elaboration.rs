@@ -257,20 +257,24 @@ fn same_level_universe_constructor_rejects_before_decoder_can_form() {
     assert!(
         matches!(
             &error,
-            ElabError::KernelRejected {
-                error: KernelError::ConstructorUniverseViolation {
-                    argument,
-                    family,
-                },
+            ElabError::ConstructorUniverseViolation {
+                data,
+                constructor,
+                argument_name: Some(argument_name),
+                argument_level,
+                family_level,
                 ..
-            } if *argument == Level::zero().suc() && *family == Level::zero()
+            } if data == "D"
+                && constructor == "C"
+                && argument_name == "s"
+                && *argument_level == Level::zero().suc()
+                && *family_level == Level::zero()
         ),
         "expected the constructor-universe gate, got {error:?}"
     );
-    assert_eq!(
-        error.to_string(),
-        "kernel rejected at 13-82: constructor argument universe suc 0 exceeds family universe 0"
-    );
+    let diagnostic = error.to_string();
+    assert!(diagnostic.contains("argument 's' of 'C'"));
+    assert!(diagnostic.contains("data D : Type n where"));
 }
 
 #[test]

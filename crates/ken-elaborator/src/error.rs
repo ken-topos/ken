@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use ken_kernel::KernelError;
+use ken_kernel::{KernelError, Level};
 
 /// A source span (byte offsets, 0-based).
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -69,6 +69,19 @@ pub enum ElabError {
     LevelConflict { span: Span },
     /// The kernel rejected the emitted term (wrapped kernel error).
     KernelRejected { error: KernelError, span: Span },
+    /// A constructor argument lives above its data family's universe.
+    ///
+    /// The kernel remains the authority for the rejection; this surface form
+    /// adds source attribution and the existing explicit-family remedy.
+    ConstructorUniverseViolation {
+        data: String,
+        constructor: String,
+        argument_name: Option<String>,
+        argument_index: usize,
+        argument_level: Level,
+        family_level: Level,
+        span: Span,
+    },
     /// A non-exhaustive match: `missing` names the first uncovered constructor (`34 §4`).
     ExhaustivenessError { missing: String, span: Span },
     /// A redundant match arm (`34 §5`): the arm's constructor was already covered.
@@ -209,6 +222,34 @@ impl fmt::Display for ElabError {
                     f,
                     "kernel rejected at {}-{}: {}",
                     span.start, span.end, error
+                )
+            }
+            ElabError::ConstructorUniverseViolation {
+                data,
+                constructor,
+                argument_name,
+                argument_index,
+                argument_level,
+                family_level,
+                span,
+            } => {
+                let argument = argument_name
+                    .as_deref()
+                    .map(|name| format!("'{}'", name))
+                    .unwrap_or_else(|| format!("#{}", argument_index + 1));
+                write!(
+                    f,
+                    "constructor argument {} of '{}' at {}-{} has universe {:?}, \
+                     which exceeds data family '{}' universe {:?}; use the explicit \
+                     family form `data {} : Type n where {{ … }}` with a sufficient n",
+                    argument,
+                    constructor,
+                    span.start,
+                    span.end,
+                    argument_level,
+                    data,
+                    family_level,
+                    data,
                 )
             }
             ElabError::ExhaustivenessError { missing, span } => {
