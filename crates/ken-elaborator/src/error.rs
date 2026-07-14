@@ -31,6 +31,20 @@ impl Span {
 pub enum ElabError {
     /// A lexer/parser failure (`31 §8`, `32 §8`).
     ParseError { msg: String, span: Span },
+    /// A forbidden documentary name in an anonymous boundary header.
+    NamedBoundaryHeader { name: String, span: Span },
+    /// A `capabilities` item named no supported effect family.
+    UnknownCapabilityFamily { family: String, span: Span },
+    /// The authority is not a constructor of the family's authority type.
+    InvalidCapabilityAuthority {
+        family: String,
+        authority: String,
+        span: Span,
+    },
+    /// A program declared two authorities for the same effect family.
+    DuplicateCapabilityFamily { family: String, span: Span },
+    /// Package boundaries do not carry runtime capabilities in this round.
+    PackageCapabilitiesNotAllowed { span: Span },
     /// An unresolved name at the name-resolution stage (`39 §5.3`).
     UnboundName { name: String, span: Span },
     /// A `ConId` with no global declaration.
@@ -59,7 +73,11 @@ pub enum ElabError {
     /// An instance declared outside the module of its class AND its head-type
     /// (`33 §5.3`, `39 §6.1`). The orphan check is a syntactic, per-module
     /// predicate that keeps canonicity per-module-decidable.
-    OrphanInstance { class: String, head_type: String, span: Span },
+    OrphanInstance {
+        class: String,
+        head_type: String,
+        span: Span,
+    },
     /// Two instances registered under the same `(class, head-type)` key
     /// (`39 §6.1`). Reports both candidate spans.
     OverlappingInstances {
@@ -79,9 +97,17 @@ pub enum ElabError {
     },
     /// The instance resolver found multiple candidates and cannot pick
     /// silently (`39 §6.2`, `39 §6.7`).
-    AmbiguousInstance { class: String, head_type: String, span: Span },
+    AmbiguousInstance {
+        class: String,
+        head_type: String,
+        span: Span,
+    },
     /// No instance found for the requested `(class, head-type)` (`39 §6.7`).
-    NoInstance { class: String, ty: String, span: Span },
+    NoInstance {
+        class: String,
+        ty: String,
+        span: Span,
+    },
     /// The `sct_check` on the reified dictionary group rejected the resolution
     /// chain — i.e. search would not terminate (`39 §6.4`, `17 §4.2`).
     /// Detected at admission time; never a search-time hang.
@@ -90,7 +116,11 @@ pub enum ElabError {
     /// selective import, or two selective imports, bind distinct declarations.
     /// `sources` names every colliding qualified origin (the reject must
     /// name both, never pick silently).
-    AmbiguousReference { name: String, sources: Vec<String>, span: Span },
+    AmbiguousReference {
+        name: String,
+        sources: Vec<String>,
+        span: Span,
+    },
     /// Catch-all for internal elaborator errors.
     Internal(String),
 }
@@ -101,6 +131,37 @@ impl fmt::Display for ElabError {
             ElabError::ParseError { msg, span } => {
                 write!(f, "parse error at {}-{}: {}", span.start, span.end, msg)
             }
+            ElabError::NamedBoundaryHeader { name, span } => write!(
+                f,
+                "named boundary header at {}-{}: '{}' is forbidden; \
+                 program/package headers are anonymous",
+                span.start, span.end, name,
+            ),
+            ElabError::UnknownCapabilityFamily { family, span } => write!(
+                f,
+                "unknown capability family '{}' at {}-{}",
+                family, span.start, span.end,
+            ),
+            ElabError::InvalidCapabilityAuthority {
+                family,
+                authority,
+                span,
+            } => write!(
+                f,
+                "invalid authority '{}' for capability family '{}' at {}-{}",
+                authority, family, span.start, span.end,
+            ),
+            ElabError::DuplicateCapabilityFamily { family, span } => write!(
+                f,
+                "duplicate capability family '{}' at {}-{}",
+                family, span.start, span.end,
+            ),
+            ElabError::PackageCapabilitiesNotAllowed { span } => write!(
+                f,
+                "package capability clause at {}-{}: only program headers may \
+                 declare capabilities",
+                span.start, span.end,
+            ),
             ElabError::UnboundName { name, span } => {
                 write!(f, "unbound name '{}' at {}-{}", name, span.start, span.end)
             }

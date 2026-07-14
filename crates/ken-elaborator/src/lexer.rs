@@ -52,6 +52,8 @@ pub enum Token {
     KwProgram, // "program" — anonymous multi-package admission root
     KwPackage, // "package" — anonymous package admission boundary
     KwAdmits,  // "admits"  — direct instance-provider package list
+    /// "capabilities" — program effect-family authority declarations
+    KwCapabilities,
     // SURF-named-proof-claims keywords (`33 §8`)
     KwProp,  // "prop"   — proposition-family claim shape
     KwLemma, // "lemma"  — standalone checked theorem
@@ -449,6 +451,7 @@ impl<'s> Lexer<'s> {
                 "program" => Token::KwProgram,
                 "package" => Token::KwPackage,
                 "admits" => Token::KwAdmits,
+                "capabilities" => Token::KwCapabilities,
                 "prop" => Token::KwProp,
                 "lemma" => Token::KwLemma,
                 "proof" => Token::KwProof,

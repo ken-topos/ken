@@ -160,7 +160,13 @@ pub enum Decl {
     /// the header deliberately carries no name or entry-point declaration.
     BoundaryDecl {
         kind: BoundaryKind,
-        admits: Vec<String>,
+        /// Present iff an `admits` clause was written. `None` is distinct
+        /// from a clause value, so admission and capability readers remain
+        /// structurally independent.
+        admits: Option<Vec<String>>,
+        /// Present iff a `capabilities` clause was written. Packages never
+        /// carry this field; the parser rejects that surface before loading.
+        capabilities: Option<Vec<CapabilityDecl>>,
         span: Span,
     },
     ViewDecl {
@@ -368,6 +374,24 @@ pub struct ImportItem {
 pub enum BoundaryKind {
     Program,
     Package,
+}
+
+/// One `capabilities Family Authority` item from an anonymous program header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapabilityDecl {
+    pub family: String,
+    pub authority: String,
+}
+
+/// The runner-readable projection of a parsed anonymous boundary header.
+///
+/// This is surface data only. It neither mints a capability nor introduces a
+/// kernel declaration.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BoundaryHeader {
+    pub kind: BoundaryKind,
+    pub admits: Option<Vec<String>>,
+    pub capabilities: Option<Vec<CapabilityDecl>>,
 }
 
 impl Decl {

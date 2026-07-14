@@ -23,7 +23,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use crate::ast::{BoundaryKind, CtorDecl, Decl, ExplicitDataCtor, ImportKind};
+use crate::ast::{BoundaryHeader, CtorDecl, Decl, ExplicitDataCtor, ImportKind};
 use crate::error::{ElabError, Span};
 use crate::resolve::{
     self, RCtorDecl, RDecl, RDeclKind, RExplicitCtorDecl, RExpr, RMatchArm, RPatKind, RPattern,
@@ -34,6 +34,10 @@ use crate::ElabEnv;
 /// Persistent cross-call module bookkeeping (lives on `ElabEnv`).
 #[derive(Default, Clone)]
 pub struct ModuleState {
+    /// The anonymous boundary parsed from the active root source unit. This is
+    /// the shared reader seam: admission consumes `admits`; the runner may
+    /// independently consume `capabilities` after elaboration.
+    boundary_header: Option<BoundaryHeader>,
     /// The root (unqualified, file-level) scope: accumulates selective-import
     /// bindings and top-level local names seen across separate
     /// `elaborate_decl`/`elaborate_file` calls, so a later call's bare
@@ -60,6 +64,10 @@ pub struct ModuleState {
 impl ModuleState {
     pub(crate) fn loaded_unit_count(&self) -> usize {
         self.loaded_units.len()
+    }
+
+    pub(crate) fn boundary_header(&self) -> Option<&BoundaryHeader> {
+        self.boundary_header.as_ref()
     }
 
     pub(crate) fn install_prelude_floor(&mut self) {
@@ -314,10 +322,16 @@ fn imported_module_paths(decls: &[Decl], out: &mut Vec<(String, Span)>) {
 
 fn admission_boundary(
     decls: &[Decl],
-) -> Result<Option<(BoundaryKind, HashSet<String>, Span)>, ElabError> {
+) -> Result<Option<(BoundaryHeader, Span)>, ElabError> {
     let mut found = None;
     for (index, decl) in decls.iter().enumerate() {
-        if let Decl::BoundaryDecl { kind, admits, span } = decl.unwrap_pub() {
+        if let Decl::BoundaryDecl {
+            kind,
+            admits,
+            capabilities,
+            span,
+        } = decl.unwrap_pub()
+        {
             if decl.is_pub() || index != 0 || found.is_some() {
                 return Err(ElabError::ParseError {
                     msg:
@@ -326,7 +340,14 @@ fn admission_boundary(
                     span: span.clone(),
                 });
             }
-            found = Some((*kind, admits.iter().cloned().collect(), span.clone()));
+            found = Some((
+                BoundaryHeader {
+                    kind: *kind,
+                    admits: admits.clone(),
+                    capabilities: capabilities.clone(),
+                },
+                span.clone(),
+            ));
         }
     }
     Ok(found)
@@ -429,9 +450,17 @@ fn load_unit(
     let previous_implicit_single_provider = elab.class_env.implicit_single_provider;
     let boundary = admission_boundary(&decls)?;
     let has_boundary = boundary.is_some();
+    let root_unit = previous_package.is_none() && previous_direct_use.is_none();
     elab.class_env.current_package = Some(module.to_string());
-    elab.class_env.direct_use_packages = match boundary {
-        Some((_, admitted, _)) => Some(admitted),
+    elab.class_env.direct_use_packages = match &boundary {
+        Some((header, _)) => Some(
+            header
+                .admits
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .collect(),
+        ),
         None if previous_package.is_none() && previous_direct_use.is_none() => Some(HashSet::new()),
         None => previous_direct_use.clone(),
     };
@@ -488,6 +517,9 @@ fn load_unit(
     elab.class_env.implicit_single_provider = previous_implicit_single_provider;
 
     let ids = result?;
+    if root_unit {
+        elab.module_state.boundary_header = boundary.map(|(header, _)| header);
+    }
     elab.module_state
         .loaded_units
         .insert(module.to_string(), ids.clone());
@@ -1615,7 +1647,12 @@ pub fn expand_and_elaborate(
     let previous_direct_use = elab.class_env.direct_use_packages.clone();
     let previous_implicit_single_provider = elab.class_env.implicit_single_provider;
     if direct_call {
-        let (_, admitted, _) = boundary.expect("checked above");
+        let admitted = boundary
+            .as_ref()
+            .and_then(|(header, _)| header.admits.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
         elab.class_env.current_package = Some("<root>".to_string());
         elab.class_env.direct_use_packages = Some(admitted);
         elab.class_env.implicit_single_provider = false;
@@ -1636,6 +1673,9 @@ pub fn expand_and_elaborate(
         elab.class_env.implicit_single_provider = previous_implicit_single_provider;
     }
     let (results, _root_exports) = expanded?;
+    if direct_call {
+        elab.module_state.boundary_header = boundary.map(|(header, _)| header);
+    }
     elab.module_state.root_scope = scope;
     Ok(results)
 }

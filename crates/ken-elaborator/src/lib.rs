@@ -50,8 +50,8 @@ use ken_kernel::{
 pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, ObligationKind};
 pub use error::{ElabError, Span};
 pub use ast::{
-    BinOp, BoundaryKind, ConstructorSignature, ConstructorSignatureArg, Decl, ExplicitDataCtor,
-    Expr, ImportKind, Type,
+    BinOp, BoundaryHeader, BoundaryKind, CapabilityDecl, ConstructorSignature,
+    ConstructorSignatureArg, Decl, ExplicitDataCtor, Expr, ImportKind, Type,
 };
 pub use extract::{
     v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,
@@ -278,6 +278,14 @@ impl ElabEnv {
     /// Exposed so acceptance tests and drivers can verify at-most-once loading.
     pub fn loaded_module_count(&self) -> usize {
         self.module_state.loaded_unit_count()
+    }
+
+    /// Read the anonymous boundary declared by the root source unit.
+    ///
+    /// The two optional clauses remain independent in the returned AST. This
+    /// accessor performs no capability minting; Runtime owns that later step.
+    pub fn boundary_header(&self) -> Option<&BoundaryHeader> {
+        self.module_state.boundary_header()
     }
 
     /// Elaborate a single `.ken.md` source artifact.

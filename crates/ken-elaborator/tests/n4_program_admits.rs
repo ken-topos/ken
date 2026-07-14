@@ -46,14 +46,17 @@ fn load(root: &FixtureRoot, entry: &str) -> Result<ElabEnv, ElabError> {
 
 #[test]
 fn anonymous_headers_parse_structurally_and_named_headers_reject_at_name() {
+    let expected_admits = vec!["Core.Laws".to_string(), "Data.Map".to_string()];
     let program = parser::parse_decls("program admits Core.Laws, Data.Map").unwrap();
     assert!(matches!(
         program.as_slice(),
         [Decl::BoundaryDecl {
             kind: BoundaryKind::Program,
             admits,
+            capabilities,
             ..
-        }] if admits == &["Core.Laws", "Data.Map"]
+        }] if admits.as_ref() == Some(&expected_admits)
+            && capabilities.is_none()
     ));
 
     let package = parser::parse_decls("package").unwrap();
@@ -62,13 +65,14 @@ fn anonymous_headers_parse_structurally_and_named_headers_reject_at_name() {
         [Decl::BoundaryDecl {
             kind: BoundaryKind::Package,
             admits,
+            capabilities,
             ..
-        }] if admits.is_empty()
+        }] if admits.is_none() && capabilities.is_none()
     ));
 
     for (source, expected_start) in [("program App admits P", 8), ("package Lib", 8)] {
         match parser::parse_decls(source) {
-            Err(ElabError::ParseError { span, .. }) => {
+            Err(ElabError::NamedBoundaryHeader { span, .. }) => {
                 assert_eq!(
                     span.start, expected_start,
                     "reject points at the name token"
