@@ -963,12 +963,19 @@ lemma sort_bool_sorted (xs : List Bool) : is_sorted Bool bool_leq (sort_bool xs)
     Nil ↦ Proved;
     Cons h t ↦
       match h {
-        False ↦ bool_cons_sorted
-          False
-          (sort_bool t)
-          (sort_bool_sorted t)
-          ((proof false for bool_head_leq) (sort_bool t));
-        True ↦ sorted_insert_true_bool (sort_bool t) (sort_bool_sorted t)
+        False ↦
+          let
+            sorted_tail = sort_bool t;
+            tail_is_sorted = sort_bool_sorted t;
+            false_precedes_tail = (proof false for bool_head_leq) sorted_tail
+          in
+            bool_cons_sorted False sorted_tail tail_is_sorted false_precedes_tail;
+        True ↦
+          let
+            sorted_tail = sort_bool t;
+            tail_is_sorted = sort_bool_sorted t
+          in
+            sorted_insert_true_bool sorted_tail tail_is_sorted
       }
   }
 
@@ -1320,7 +1327,13 @@ fn concat (a : String) (b : String) : String =
   list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
 
 fn slice (i : Nat) (j : Nat) (s : String) : String =
-  list_char_to_string (take Char (nat_sub j i) (drop Char i (string_to_list_char s)))
+  let
+    characters = string_to_list_char s;
+    suffix = drop Char i characters;
+    slice_width = nat_sub j i;
+    selected_window = take Char slice_width suffix
+  in
+    list_char_to_string selected_window
 
 fn char_at (i : Nat) (s : String) : Option Char = nth Char i (string_to_list_char s)
 
