@@ -84,10 +84,15 @@ frame.**
      MkCursorOps (c → Nat) (c → Option el) (c → c) (c → loc)
    --             remaining  peek            advance  locate
    ```
-   The two instances are two **values** of this record — `byte_cursor_ops` and
-   `arg_cursor_ops` — **not** `instance` declarations. If this shape genuinely
-   cannot be made to work, **escalate to the Architect**; do not reach for a
-   class with a higher-kinded or associated-type parameter.
+   Across their two homes, the instances are two **values** of this record —
+   `byte_cursor_ops` and `arg_cursor_ops` — **not** `instance` declarations.
+   Each instance lives with the carrier it is over: `arg_cursor_ops` lives in
+   `Parsing.Cursor`, while
+   `byte_cursor_ops` lives downstream in CAT-5 beside CAT-5's `Source` and
+   `Span`. This acyclic home split supersedes the original frame wording that
+   placed both values in `Parsing.Cursor`. If the explicit-dictionary shape
+   genuinely cannot be made to work, **escalate to the Architect**; do not
+   reach for a class with a higher-kinded or associated-type parameter.
 
 3. **Location stays PARAMETERIZED — CC3 does NOT build the origin-neutral
    diagnostic.** That is **CC4** (`Diagnostic.Core`, which generalizes
@@ -99,8 +104,16 @@ frame.**
 
 4. **`ArgCursor` is a CURSOR INSTANCE ONLY.** No argv tokenization, no
    `CommandSpec`/`OptionSpec`, no usage/help rendering, no `--`-handling policy
-   — those are **CC6/CC7**. CC3's `ArgCursor` is exactly: a cursor over `List
-   Bytes` that preserves **arg index + byte range** in its location.
+   — those are **CC6/CC7**. Because `bytes_length : Bytes → Int` has no landed
+   `Int → Nat` bridge, CC3's carrier is a proof-carrying wrapper whose payload
+   is `List Bytes`: it caches each argument's length as `Nat` and carries
+   `SourceLength`-style evidence that every cached length agrees with the
+   opaque byte length. Concretely, the carrier is a list of length-certified
+   byte values, so the remaining bound is the sum of the cached per-argument
+   lengths minus the current byte offset. `ArgCursor` preserves **arg index +
+   byte range** in its location. This cached-length carrier supersedes the
+   original raw-`List Bytes` wording; it adds no primitive or trusted
+   conversion.
 
 5. **Package model — NO cross-file `import`/`pub` smuggling.** The catalog has
    **no disk loader** (`07-catalog-style-guide.md §13`, final bullet): a
@@ -132,12 +145,9 @@ Each section ends in a concrete, implementable choice — not a survey.
 1. **`Parsing.Cursor`** — the `CursorOps` record (fixed input 2); the
    **progress law** and the bounds/validity laws as plain predicates over a
    cursor (mirroring CAT-5's `ParserValid`-style posture: checkable per
-   instance, not enforced by the type); and the **two instances**:
-   - **`byte_cursor_ops`** over CAT-5's `Source` + a `Nat` position —
-     `remaining = source_length s − pos`, `peek` via the landed `bytes_at`
-     path, `locate` → a CAT-5 `Span`.
-   - **`arg_cursor_ops`** over `List Bytes` — position is **(arg index, byte
-     offset within that arg)**; `locate` → an arg-index + byte-range carrier.
+   instance, not enforced by the type); and **`arg_cursor_ops`** over the
+   proof-carrying cached-length `List Bytes` wrapper — position is **(arg
+   index, byte offset within that arg)**; `locate` → an arg-index + byte-range carrier.
      Crossing an arg boundary is an ordinary advance, not a special case.
 
 2. **`Parsing.Decoder`** — progress-safe combinators over a `CursorOps`:
@@ -149,7 +159,10 @@ Each section ends in a concrete, implementable choice — not a survey.
 
 3. **The CAT-5 refactor — the subsumption.** Re-express
    `Capability/Parsing`'s worked Boolean grammar as a **`Decoder` over
-   `byte_cursor_ops`**, so `Parser a` becomes a *specialization* of the decoder
+   `byte_cursor_ops`**, defined in CAT-5 beside the `Source`/`Span` carrier it
+   is over (`remaining = source_length s − pos`, `peek` via the landed
+   `bytes_at` path, `locate` → a CAT-5 `Span`). `Parser a` becomes a
+   *specialization* of the decoder
    rather than a parallel universe. CAT-5's landed laws and its worked grammar
    **must survive** (AC2). Delete CAT-5's now-subsumed bespoke recursion
    (`parse_bool_expr_at_fuel` / `skip_spaces_fuel`) **only** to the extent the

@@ -162,6 +162,44 @@ fn span_end (sp : Span) : Nat =
     MkSpan start end ↦ end
   }
 
+data ByteCursor = MkByteCursor Source Nat
+
+fn byte_cursor_source (cur : ByteCursor) : Source =
+  match cur {
+    MkByteCursor source position ↦ source
+  }
+
+fn byte_cursor_position (cur : ByteCursor) : Nat =
+  match cur {
+    MkByteCursor source position ↦ position
+  }
+
+fn byte_cursor_remaining (cur : ByteCursor) : Nat =
+  cursor_nat_sub (source_length (byte_cursor_source cur)) (byte_cursor_position cur)
+
+fn byte_cursor_peek (cur : ByteCursor) : Option UInt8 =
+  bytes_at
+    (source_bytes (byte_cursor_source cur))
+    (byte_unit_nat_to_int
+      (source_length_unit (byte_cursor_source cur))
+      (byte_cursor_position cur))
+
+fn byte_cursor_advance (cur : ByteCursor) : ByteCursor =
+  MkByteCursor (byte_cursor_source cur) (Suc (byte_cursor_position cur))
+
+fn byte_cursor_locate (cur : ByteCursor) : Span =
+  MkSpan (byte_cursor_position cur) (byte_cursor_position cur)
+
+const byte_cursor_ops : CursorOps ByteCursor UInt8 Span =
+  MkCursorOps
+    ByteCursor
+    UInt8
+    Span
+    byte_cursor_remaining
+    byte_cursor_peek
+    byte_cursor_advance
+    byte_cursor_locate
+
 fn nat_leq_bool (m : Nat) (n : Nat) : Bool =
   match m {
     Zero ↦ True;
@@ -250,6 +288,22 @@ data ParseResult a = Parsed a Span Nat | Failed ParseError
 const Parser (a : Type) : Type =
   (s : Source) → (start : Nat) → LessEqNat start (source_length s) → ParseResult a
 
+fn decoder_parse_error (s : Source) (err : DecoderError Span) : ParseError =
+  MkParseError (source_id s) (decoder_error_location Span err)
+
+fn parser_from_decoder (a : Type) (decoder : Decoder ByteCursor Span a) : Parser a =
+  λs.
+    λstart.
+      λh.
+        match decoder (MkByteCursor s start) {
+          Decoded value next ↦ Parsed
+            a
+            value
+            (MkSpan start (byte_cursor_position next))
+            (byte_cursor_position next);
+          DecoderFailed err ↦ Failed a (decoder_parse_error s err)
+        }
+
 fn ParsedValid (s : Source) (start : Nat) (consumed : Span) (next : Nat) : Prop =
   And
     (ValidSpan s consumed)
@@ -301,10 +355,10 @@ fn ParserLaws (a : Type) (p : Parser a) : Prop =
   And (ParserValid a p) (And (ParserTotal a p) (ParserSourceLocal a p))
 
 fn parser_pure (a : Type) (value : a) : Parser a =
-  λs. λstart. λh. Parsed a value (MkSpan start start) start
+  parser_from_decoder a (decoder_pure ByteCursor Span a value)
 
 const parser_fail (a : Type) : Parser a =
-  λs. λstart. λh. Failed a (MkParseError (source_id s) (MkSpan start start))
+  parser_from_decoder a (decoder_fail ByteCursor UInt8 Span a byte_cursor_ops)
 ```
 
 ### 4.3 A worked grammar: parenthesized Boolean expressions
@@ -317,21 +371,18 @@ this worked example. `Syntax a` pairs a `Located a` root with a `List` of
 its value's own recursive structure; `erase_spans` recovers the bare
 `BoolExpr` by walking back down to the root value.
 
-Token recognition is byte-by-byte through `source_byte_eq_at`, matching
-literal ASCII codepoints spelled as `Int` literals (`116` is `t`, `102` is
-`f`, `40` is `(`, `32` is space, and so on) — this package has no `Char`
-literal syntax of its own, so every fixed token is matched digit by digit
-against `bytes_at`. `parse_bool_expr_at_fuel` and `skip_spaces_fuel` are both
-fuel-bounded recursive descent: each takes an explicit `Nat` fuel parameter
-decremented on every recursive step and seeded from `source_length s` (an
-upper bound on how many bytes remain to consume), the standard
-structural-recursion-via-fuel pattern for a function whose real termination
-measure — unconsumed input — is not syntactically a subterm of the fuel
-itself. `list_append` here is a second, verbatim copy local to this
-package, not a re-export of `catalog/packages/Data/Collections/Collections.ken`'s
-combinator of the same name — a self-containment choice
-(`07-catalog-style-guide.md §13`) appropriate for a leaf capability package
-that otherwise takes no catalog dependency.
+Token recognition is byte-by-byte through CAT-5's explicit
+`byte_cursor_ops`, matching literal ASCII codepoints spelled as `Int` literals
+(`116` is `t`, `102` is `f`, `40` is `(`, `32` is space, and so on). The
+worked grammar is a genuine `Parsing.Decoder` client: fixed tokens use
+`decoder_satisfy`/`decoder_seq`, whitespace uses progress-checked
+`decoder_many`, and recursive expressions use `decoder_recursive`. Both
+repetition and recursive descent seed their private structural fuel from the
+cursor's `remaining`; the old CAT-5-local fuel recursions are retired.
+`list_append` remains a second, verbatim package-local copy rather than a
+re-export. Keeping that landed helper avoids widening this focused refactor;
+the shared environment's later CAT-5 declaration intentionally shadows the
+earlier catalog helper for this compilation unit.
 
 ```ken
 data BoolExpr = BTrue | BFalse | BNot BoolExpr | BAnd BoolExpr BoolExpr
@@ -402,105 +453,6 @@ fn bool_expr_eq (x : BoolExpr) (y : BoolExpr) : Bool =
       }
   }
 
-fn nat_eq_bool (m : Nat) (n : Nat) : Bool =
-  match m {
-    Zero ↦
-      match n {
-        Zero ↦ True;
-        Suc n2 ↦ False
-      };
-    Suc m2 ↦
-      match n {
-        Zero ↦ False;
-        Suc n2 ↦ nat_eq_bool m2 n2
-      }
-  }
-
-fn nat_add (m : Nat) (n : Nat) : Nat =
-  match n {
-    Zero ↦ m;
-    Suc n2 ↦ Suc (nat_add m n2)
-  }
-
-fn nat_lt_bool (m : Nat) (n : Nat) : Bool =
-  match n {
-    Zero ↦ False;
-    Suc n2 ↦ nat_leq_bool m n2
-  }
-
-fn bool_and (p : Bool) (q : Bool) : Bool =
-  match p {
-    True ↦ q;
-    False ↦ False
-  }
-
-fn source_byte_eq (s : Source) (pos : Nat) (code : Int) : Bool =
-  match nat_lt_bool pos (source_length s) {
-    True ↦
-      match bytes_at (source_bytes s) (byte_unit_nat_to_int (source_length_unit s) pos) {
-        None ↦ False;
-        Some byte ↦ eq_int (uint8_to_int byte) code
-      };
-    False ↦ False
-  }
-
-fn source_byte_eq_at (s : Source) (start : Nat) (offset : Nat) (code : Int) : Bool =
-  source_byte_eq s (nat_add start offset) code
-
-fn starts_true_token (s : Source) (start : Nat) : Bool =
-  bool_and
-    (source_byte_eq_at s start Zero (116 : Int))
-    (bool_and
-      (source_byte_eq_at s start (Suc Zero) (114 : Int))
-      (bool_and
-        (source_byte_eq_at s start (Suc (Suc Zero)) (117 : Int))
-        (source_byte_eq_at s start (Suc (Suc (Suc Zero))) (101 : Int))))
-
-fn starts_false_token (s : Source) (start : Nat) : Bool =
-  bool_and
-    (source_byte_eq_at s start Zero (102 : Int))
-    (bool_and
-      (source_byte_eq_at s start (Suc Zero) (97 : Int))
-      (bool_and
-        (source_byte_eq_at s start (Suc (Suc Zero)) (108 : Int))
-        (bool_and
-          (source_byte_eq_at s start (Suc (Suc (Suc Zero))) (115 : Int))
-          (source_byte_eq_at s start (Suc (Suc (Suc (Suc Zero)))) (101 : Int)))))
-
-fn starts_not_open_token (s : Source) (start : Nat) : Bool =
-  bool_and
-    (source_byte_eq_at s start Zero (40 : Int))
-    (bool_and
-      (source_byte_eq_at s start (Suc Zero) (110 : Int))
-      (bool_and
-        (source_byte_eq_at s start (Suc (Suc Zero)) (111 : Int))
-        (bool_and
-          (source_byte_eq_at s start (Suc (Suc (Suc Zero))) (116 : Int))
-          (source_byte_eq_at s start (Suc (Suc (Suc (Suc Zero)))) (32 : Int)))))
-
-fn starts_and_open_token (s : Source) (start : Nat) : Bool =
-  bool_and
-    (source_byte_eq_at s start Zero (40 : Int))
-    (bool_and
-      (source_byte_eq_at s start (Suc Zero) (97 : Int))
-      (bool_and
-        (source_byte_eq_at s start (Suc (Suc Zero)) (110 : Int))
-        (bool_and
-          (source_byte_eq_at s start (Suc (Suc (Suc Zero))) (100 : Int))
-          (source_byte_eq_at s start (Suc (Suc (Suc (Suc Zero)))) (32 : Int)))))
-
-fn skip_spaces_fuel (fuel : Nat) (s : Source) (pos : Nat) : Nat =
-  match fuel {
-    Zero ↦ pos;
-    Suc fuel2 ↦
-      match source_byte_eq s pos (32 : Int) {
-        True ↦ skip_spaces_fuel fuel2 s (Suc pos);
-        False ↦ pos
-      }
-  }
-
-fn skip_spaces (s : Source) (pos : Nat) : Nat = skip_spaces_fuel (source_length s) s pos
-
 fn syntax_leaf (s : Source) (start : Nat) (end : Nat) (value : BoolExpr) : Syntax BoolExpr =
   MkSyntax
     BoolExpr
@@ -531,116 +483,286 @@ fn syntax_node_binary
       (Cons (Located BoolExpr) (syntax_root BoolExpr left) (syntax_children BoolExpr left))
       (Cons (Located BoolExpr) (syntax_root BoolExpr right) (syntax_children BoolExpr right)))
 
-fn parse_bool_expr_at_fuel
-      (fuel : Nat) (s : Source) (start : Nat)
-    : ParseResult (Syntax BoolExpr) =
-  match fuel {
-    Zero ↦ Failed (Syntax BoolExpr) (MkParseError (source_id s) (MkSpan start start));
-    Suc fuel2 ↦
-      match starts_true_token s start {
-        True ↦ Parsed
-          (Syntax BoolExpr)
-          (syntax_leaf s start (nat_add start (Suc (Suc (Suc (Suc Zero))))) BTrue)
-          (MkSpan start (nat_add start (Suc (Suc (Suc (Suc Zero))))))
-          (nat_add start (Suc (Suc (Suc (Suc Zero)))));
-        False ↦
-          match starts_false_token s start {
-            True ↦ Parsed
-              (Syntax BoolExpr)
-              (syntax_leaf s start (nat_add start (Suc (Suc (Suc (Suc (Suc Zero)))))) BFalse)
-              (MkSpan start (nat_add start (Suc (Suc (Suc (Suc (Suc Zero)))))))
-              (nat_add start (Suc (Suc (Suc (Suc (Suc Zero))))));
-            False ↦
-              match starts_not_open_token s start {
-                True ↦
-                  match parse_bool_expr_at_fuel fuel2 s
-                    (skip_spaces s (nat_add start (Suc (Suc (Suc (Suc (Suc Zero))))))) {
-                    Parsed child childSpan childNext ↦
-                      match source_byte_eq s (skip_spaces s childNext) (41 : Int) {
-                        True ↦ Parsed
-                          (Syntax BoolExpr)
-                          (syntax_node_unary
-                            s
-                            start
-                            (Suc (skip_spaces s childNext))
-                            (BNot (erase_spans child))
-                            child)
-                          (MkSpan start (Suc (skip_spaces s childNext)))
-                          (Suc (skip_spaces s childNext));
-                        False ↦ Failed
-                          (Syntax BoolExpr)
-                          (MkParseError
-                            (source_id s)
-                            (MkSpan (skip_spaces s childNext) (skip_spaces s childNext)))
-                      };
-                    Failed err ↦ Failed (Syntax BoolExpr) err
-                  };
-                False ↦
-                  match starts_and_open_token s start {
-                    True ↦
-                      match parse_bool_expr_at_fuel fuel2 s
-                        (skip_spaces s (nat_add start (Suc (Suc (Suc (Suc (Suc Zero))))))) {
-                        Parsed left leftSpan leftNext ↦
-                          match source_byte_eq s leftNext (32 : Int) {
-                            True ↦
-                              match parse_bool_expr_at_fuel fuel2 s
-                                (skip_spaces s (Suc leftNext)) {
-                                Parsed right rightSpan rightNext ↦
-                                  match source_byte_eq s (skip_spaces s rightNext) (41 : Int) {
-                                    True ↦ Parsed
-                                      (Syntax BoolExpr)
-                                      (syntax_node_binary
-                                        s
-                                        start
-                                        (Suc (skip_spaces s rightNext))
-                                        (BAnd (erase_spans left) (erase_spans right))
-                                        left
-                                        right)
-                                      (MkSpan start (Suc (skip_spaces s rightNext)))
-                                      (Suc (skip_spaces s rightNext));
-                                    False ↦ Failed
-                                      (Syntax BoolExpr)
-                                      (MkParseError
-                                        (source_id s)
-                                        (MkSpan
-                                          (skip_spaces s rightNext)
-                                          (skip_spaces s rightNext)))
-                                  };
-                                Failed err ↦ Failed (Syntax BoolExpr) err
-                              };
-                            False ↦ Failed
-                              (Syntax BoolExpr)
-                              (MkParseError (source_id s) (MkSpan leftNext leftNext))
-                          };
-                        Failed err ↦ Failed (Syntax BoolExpr) err
-                      };
-                    False ↦ Failed
-                      (Syntax BoolExpr)
-                      (MkParseError (source_id s) (MkSpan start start))
-                  }
+fn byte_code_decoder (code : Int) : Decoder ByteCursor Span UInt8 =
+  decoder_satisfy ByteCursor UInt8 Span byte_cursor_ops (λbyte. eq_int (uint8_to_int byte) code)
+
+const true_token_decoder : Decoder ByteCursor Span UInt8 =
+  decoder_seq
+    ByteCursor
+    Span
+    UInt8
+    UInt8
+    (byte_code_decoder (116 : Int))
+    (decoder_seq
+      ByteCursor
+      Span
+      UInt8
+      UInt8
+      (byte_code_decoder (114 : Int))
+      (decoder_seq
+        ByteCursor
+        Span
+        UInt8
+        UInt8
+        (byte_code_decoder (117 : Int))
+        (byte_code_decoder (101 : Int))))
+
+const false_token_decoder : Decoder ByteCursor Span UInt8 =
+  decoder_seq
+    ByteCursor
+    Span
+    UInt8
+    UInt8
+    (byte_code_decoder (102 : Int))
+    (decoder_seq
+      ByteCursor
+      Span
+      UInt8
+      UInt8
+      (byte_code_decoder (97 : Int))
+      (decoder_seq
+        ByteCursor
+        Span
+        UInt8
+        UInt8
+        (byte_code_decoder (108 : Int))
+        (decoder_seq
+          ByteCursor
+          Span
+          UInt8
+          UInt8
+          (byte_code_decoder (115 : Int))
+          (byte_code_decoder (101 : Int)))))
+
+const not_open_token_decoder : Decoder ByteCursor Span UInt8 =
+  decoder_seq
+    ByteCursor
+    Span
+    UInt8
+    UInt8
+    (byte_code_decoder (40 : Int))
+    (decoder_seq
+      ByteCursor
+      Span
+      UInt8
+      UInt8
+      (byte_code_decoder (110 : Int))
+      (decoder_seq
+        ByteCursor
+        Span
+        UInt8
+        UInt8
+        (byte_code_decoder (111 : Int))
+        (decoder_seq
+          ByteCursor
+          Span
+          UInt8
+          UInt8
+          (byte_code_decoder (116 : Int))
+          (byte_code_decoder (32 : Int)))))
+
+const and_open_token_decoder : Decoder ByteCursor Span UInt8 =
+  decoder_seq
+    ByteCursor
+    Span
+    UInt8
+    UInt8
+    (byte_code_decoder (40 : Int))
+    (decoder_seq
+      ByteCursor
+      Span
+      UInt8
+      UInt8
+      (byte_code_decoder (97 : Int))
+      (decoder_seq
+        ByteCursor
+        Span
+        UInt8
+        UInt8
+        (byte_code_decoder (110 : Int))
+        (decoder_seq
+          ByteCursor
+          Span
+          UInt8
+          UInt8
+          (byte_code_decoder (100 : Int))
+          (byte_code_decoder (32 : Int)))))
+
+const spaces_decoder : Decoder ByteCursor Span (List UInt8) =
+  decoder_many ByteCursor UInt8 Span UInt8 byte_cursor_ops (byte_code_decoder (32 : Int))
+
+fn bool_true_decoder (cur : ByteCursor) : DecoderResult ByteCursor Span (Syntax BoolExpr) =
+  match true_token_decoder cur {
+    DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+    Decoded ignored next ↦ Decoded
+      ByteCursor
+      Span
+      (Syntax BoolExpr)
+      (syntax_leaf
+        (byte_cursor_source cur)
+        (byte_cursor_position cur)
+        (byte_cursor_position next)
+        BTrue)
+      next
+  }
+
+fn bool_false_decoder (cur : ByteCursor) : DecoderResult ByteCursor Span (Syntax BoolExpr) =
+  match false_token_decoder cur {
+    DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+    Decoded ignored next ↦ Decoded
+      ByteCursor
+      Span
+      (Syntax BoolExpr)
+      (syntax_leaf
+        (byte_cursor_source cur)
+        (byte_cursor_position cur)
+        (byte_cursor_position next)
+        BFalse)
+      next
+  }
+
+fn bool_not_decoder
+      (recur : Decoder ByteCursor Span (Syntax BoolExpr))
+    : Decoder ByteCursor Span (Syntax BoolExpr) =
+  λcur.
+    match not_open_token_decoder cur {
+      DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+      Decoded ignored after_open ↦
+        match spaces_decoder after_open {
+          DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+          Decoded spaces child_start ↦
+            match recur child_start {
+              DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+              Decoded child child_end ↦
+                match spaces_decoder child_end {
+                  DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+                  Decoded trailing close_start ↦
+                    match byte_code_decoder (41 : Int) close_start {
+                      DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+                      Decoded close after_close ↦ Decoded
+                        ByteCursor
+                        Span
+                        (Syntax BoolExpr)
+                        (syntax_node_unary
+                          (byte_cursor_source cur)
+                          (byte_cursor_position cur)
+                          (byte_cursor_position after_close)
+                          (BNot (erase_spans child))
+                          child)
+                        after_close
+                    }
+                }
+            }
+        }
+    }
+
+fn bool_and_decoder
+      (recur : Decoder ByteCursor Span (Syntax BoolExpr))
+    : Decoder ByteCursor Span (Syntax BoolExpr) =
+  λcur.
+    match and_open_token_decoder cur {
+      DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+      Decoded ignored after_open ↦
+        match spaces_decoder after_open {
+          DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+          Decoded leading left_start ↦
+            match recur left_start {
+              DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+              Decoded left left_end ↦
+                match byte_code_decoder (32 : Int) left_end {
+                  DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+                  Decoded separator after_separator ↦
+                    match spaces_decoder after_separator {
+                      DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+                      Decoded middle right_start ↦
+                        match recur right_start {
+                          DecoderFailed err ↦ DecoderFailed
+                            ByteCursor
+                            Span
+                            (Syntax BoolExpr)
+                            err;
+                          Decoded right right_end ↦
+                            match spaces_decoder right_end {
+                              DecoderFailed err ↦ DecoderFailed
+                                ByteCursor
+                                Span
+                                (Syntax BoolExpr)
+                                err;
+                              Decoded trailing close_start ↦
+                                match byte_code_decoder (41 : Int) close_start {
+                                  DecoderFailed err ↦ DecoderFailed
+                                    ByteCursor
+                                    Span
+                                    (Syntax BoolExpr)
+                                    err;
+                                  Decoded close after_close ↦ Decoded
+                                    ByteCursor
+                                    Span
+                                    (Syntax BoolExpr)
+                                    (syntax_node_binary
+                                      (byte_cursor_source cur)
+                                      (byte_cursor_position cur)
+                                      (byte_cursor_position after_close)
+                                      (BAnd (erase_spans left) (erase_spans right))
+                                      left
+                                      right)
+                                    after_close
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+fn bool_decoder_layer
+      (recur : Decoder ByteCursor Span (Syntax BoolExpr))
+    : Decoder ByteCursor Span (Syntax BoolExpr) =
+  decoder_alt
+    ByteCursor
+    Span
+    (Syntax BoolExpr)
+    bool_true_decoder
+    (decoder_alt
+      ByteCursor
+      Span
+      (Syntax BoolExpr)
+      bool_false_decoder
+      (decoder_alt
+        ByteCursor
+        Span
+        (Syntax BoolExpr)
+        (bool_not_decoder recur)
+        (bool_and_decoder recur)))
+
+const bool_expression_decoder : Decoder ByteCursor Span (Syntax BoolExpr) =
+  decoder_recursive ByteCursor UInt8 Span (Syntax BoolExpr) byte_cursor_ops bool_decoder_layer
+
+fn complete_bool_decoder (cur : ByteCursor) : DecoderResult ByteCursor Span (Syntax BoolExpr) =
+  match spaces_decoder cur {
+    DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+    Decoded leading start ↦
+      match bool_expression_decoder start {
+        DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+        Decoded syntax next ↦
+          match spaces_decoder next {
+            DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+            Decoded trailing end ↦
+              match byte_cursor_remaining end {
+                Zero ↦ Decoded ByteCursor Span (Syntax BoolExpr) syntax end;
+                Suc rest ↦ DecoderFailed
+                  ByteCursor
+                  Span
+                  (Syntax BoolExpr)
+                  (DecoderRejected Span (byte_cursor_locate end))
               }
           }
       }
   }
 
 const parse_bool_expr : Parser (Syntax BoolExpr) =
-  λs.
-    λstart.
-      λh.
-        match parse_bool_expr_at_fuel (source_length s) s (skip_spaces s start) {
-          Parsed syntax consumed next ↦
-            match nat_eq_bool (skip_spaces s next) (source_length s) {
-              True ↦ Parsed
-                (Syntax BoolExpr)
-                syntax
-                (MkSpan start (skip_spaces s next))
-                (skip_spaces s next);
-              False ↦ Failed
-                (Syntax BoolExpr)
-                (MkParseError (source_id s) (MkSpan (skip_spaces s next) (skip_spaces s next)))
-            };
-          Failed err ↦ Failed (Syntax BoolExpr) err
-        }
+  parser_from_decoder (Syntax BoolExpr) complete_bool_decoder
 
 fn print_bool_expr (e : BoolExpr) : Bytes =
   match e {
@@ -680,13 +802,12 @@ not over-read "Total" here as more than "this function always returns one
 of its two constructors," which the type checker already guarantees; see
 `§6`.
 
-**Why unguarded repetition is not exported.** An unguarded `many`-style
-combinator could loop forever on an inner parser that succeeds without
-consuming input; a fuel-bounded one would need its own checked
-progress/next-validity surface to be trustworthy. Neither is exported by
-this package — `§4.3`'s `parse_bool_expr_at_fuel`/`skip_spaces_fuel` are
-package-internal, fuel-bounded recursions over a syntactically-decreasing
-`Nat`, not a general combinator a caller could misuse.
+**Why repetition is progress checked.** `Parsing.Decoder` exports repetition,
+but a successful step must strictly decrease the cursor's remaining count.
+`decoder_many` reports the named `DecoderZeroProgress` failure when that
+check fails and derives its private fuel from `remaining`, so it neither loops
+nor truncates at an arbitrary caller budget. CAT-5's whitespace decoder is a
+direct client of that shared mechanism.
 
 **Why the Boolean grammar has no precedence table.** `true`, `false`,
 `(not e)`, and `(and e1 e2)` are fully parenthesized on purpose — `true and
@@ -705,12 +826,14 @@ reference implementation.
    `NonEmptyBytes`, `UnitByteLength`, `SourceLength`, `source_id`,
    `source_bytes`, `source_bytes::utf8`, `source_length`, `source_length_unit`,
    `source_length_unit::valid`, `source_length_valid`, `Span`, `span_start`,
-   `span_end`, `LessEqNat`, `ValidSpan`, `Located`, `located_source`,
+   `span_end`, `ByteCursor`, `byte_cursor_ops`, `LessEqNat`, `ValidSpan`,
+   `Located`, `located_source`,
    `located_span`, `located_value`, `ValidLocated`,
    `valid_zero_width_span`, `ParseError`, `error_source`, `error_span`,
    `ParseResult`, `Parser`, `ParsedValid`, `FailedValid`,
    `ParseResultValid`, `ParserValid`, `ParserTotal`, `ParserSourceLocal`,
-   `ParserLaws`, `parser_pure`, `parser_fail`, `BoolExpr`, `Syntax`,
+   `ParserLaws`, `parser_from_decoder`, `parser_pure`, `parser_fail`,
+   `BoolExpr`, `Syntax`,
    `syntax_root`, `syntax_children`, `erase_spans`, `ValidLocatedList`,
    `ValidSyntax`, `parse_bool_expr`, `print_bool_expr`, `format_bool_expr`.
 2. **Source map.**
