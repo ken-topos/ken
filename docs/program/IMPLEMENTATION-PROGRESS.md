@@ -136,6 +136,70 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > lands → **ONE combined SHA** → honesty gate → publish → **verify on main by CONTENT** →
 > §B retros → **I-4 ARC COMPLETE**.
 >
+> ### ⏭ 2026-07-14 (07:2x) — ★★★★★ PROGRAM I IS COMPLETE · `origin/main @ f2450fcc`
+> **✅✅✅ I-5 MERGED — `origin/main @ f2450fcc`** (PR #626, CI green). **★ PROGRAM I COMPLETE:
+> I-1 ✅ I-2 ✅ I-3 ✅ I-4 ✅ I-5 ✅.**
+> **VERIFIED ON MAIN BY CONTENT:** **0** byte-path operate methods on the `HostHandler` trait
+> (**no bypass**) · **inode-keyed VFS** (26 `fs_entries` refs) + `Symlink` node (**fd-pinning is
+> REAL**) · **structural TOCTOU test present** · **0 kernel files touched** (zero-TCB verdict
+> HELD through the build).
+> **⇒ KEN NOW HAS LEAST-PRIVILEGE FS CONFINEMENT** — rights × scope × symlink policy,
+> `openat`-relative enforcement where **check and use share the handle BY CONSTRUCTION**,
+> narrowing-only attenuation, fail-closed denials **before** any syscall — **at zero
+> kernel-TCB**, honestly netted by trusted Rust + discriminators (ADR-0017 §2).
+> **★★ I-5 NEARLY SHIPPED THREE WAYS THAT WOULD HAVE LOOKED EXACTLY LIKE SUCCESS. NONE WOULD
+> HAVE BEEN A RED BUILD:**
+> **1.** runtime-implementer **hard-stopped** when the ADR's central property was inexpressible
+> through the landed seam. The cheap escape — re-open the path bytes after the check — **would
+> have shipped a TOCTOU RACE WITH A GREEN SUITE.**
+> **2.** The **Architect** caught that a path-keyed VFS makes the TOCTOU discriminator
+> **UNFALSIFIABLE** — and required the inode re-key. **He found it against a design HE
+> AUTHORED**, on the axis I asked him to press but **before anyone pressed it**.
+> **3.** **CV BLOCKED ITS OWN WP's SECURITY TESTS**: every deny path discarded the `Result`
+> returned to Ken ⇒ a regression that denies, does no syscall, **but returns `Ok` to the
+> program** left all 7 security tests GREEN. **A denial the program never learns about is not a
+> denial.**
+> **⇒ ALL THREE ARE THE SAME SHAPE: the wrong thing produces a PLAUSIBLE, GREEN result.** On a
+> property netted by trusted Rust rather than kernel proof, **the discriminators ARE the
+> guarantee** ⇒ each was a **HOLE, not a test gap**. **None shipped because three separate
+> seats refused to accept something that looked fine.**
+> **▶ I-5 RETROS REQUESTED** (`evt_432209gzwrd6e`) — Runtime ×3 + Architect + CV. Merged ≠
+> closed. **I asked the question that matters: what made REFUSING — on a clean tree, mid-build,
+> against a Steward frame — feel like the EXPECTED move? I want to know exactly what to keep.**
+> **▶ REMAINING PROGRAM I: I-6 (injectable handlers — NOW MUCH CHEAPER: the injectable
+> host-handler seam IS I-5's step 0) + I-7 (Env/Process).** Both → Runtime after Handoff Gate.
+> **▶ CATALOG: CC1–CC4 ✅ · CC5 blocked-on-Architect (proof, not bug) · CC6 → CC7 (`ArgParse`,
+> the Milestone-C exit criterion) → CC8 → CC9.**
+>
+> ### ⏭ 2026-07-14 (07:1x) — ★★★ I-5 PUBLISHING — THE LAST PROGRAM-I WP
+> **✅ I-5 FULLY GATED — `wp/i5-scoped-capability-model @ 1b9c8c06`** (12 files, +2540/−442,
+> linear on `edb99c1e`). QA + **Architect terminal** + **CV** (binary re-review after the Err
+> fix) all APPROVE. **PUBLISHING.**
+> **★ MY GATE VERIFIED EVERY SECURITY AC *BY CONTENT* — these are not test gaps, they are
+> HOLES, and all five hold:**
+> **AC0 — NO BYPASS ✓** The `HostHandler` trait now carries **ONLY handle-taking `*_at`
+> methods** (`Self::Handle` associated type; `fs_read_at`/`fs_write_at`/`fs_create_file_at`/…).
+> **Zero byte-path operate methods survive** ⇒ there is **no byte-path an op could re-open**.
+> `fs_resolve` is the sole path-taking method — by design, it IS the resolver.
+> **fd-PINNING IS REAL ✓** The capture VFS is **genuinely re-keyed to INODE identity** —
+> `fs_nodes: BTreeMap<VfsNodeId, VirtualFsNode>` + `fs_entries: BTreeMap<(VfsNodeId, Vec<u8>),
+> VfsNodeId>` + `Symlink(Vec<u8>)`. **NOT "just a new enum variant."**
+> **STRUCTURAL TOCTOU ✓** `resolved_virtual_handle_stays_pinned_across_parent_replacement` —
+> resolve → replace the parent entry → the write **still hits the pinned node**. (A path-keyed
+> VFS would have made this **UNFALSIFIABLE**.)
+> **CV's FIX LANDED ✓** 11 `Err` assertions on the deny paths ⇒ **deny ⇒ `Err`, accept ⇒ `Ok`**.
+> **A denial the program never learns about is not a denial.**
+> **AC7 ✓** The only "kernel proves confinement" strings in the diff are **DISCLAIMERS DENYING
+> IT** (*"never kernel-proved confinement"*, *"NOT an independent kernel proof"*).
+> **CONFORMANCE BLOBS BYTE-IDENTICAL to CV's authored `9a06d2a8` ✓** ⇒ the cherry-pick assembly
+> altered nothing CV wrote — **no CC4 revert, no tampering.**
+> **ZERO KERNEL / Cargo / .github delta ✓ · 0 merges ✓ · `diff --check` clean ✓.**
+> **▶ ON MERGE: verify on main BY CONTENT → collect I-5 retros → PROGRAM I IS COMPLETE**
+> (I-1…I-5). Remaining Program-I: **I-6 (injectable handlers)** + **I-7 (Env/Process)** —
+> note **I-6 is now MUCH cheaper**: the injectable host-handler seam was just *built* as I-5's
+> step 0.
+> **▶ CC5 still blocked-on-Architect** (proof, not bug; computation layer green).
+>
 > ### ⏭ 2026-07-14 (07:0x) — ⛔ CV BLOCKS I-5: THE DENIAL ORACLE DIDN'T ASSERT THE DENIAL
 > **⛔ CV BLOCK (narrow, CORRECT, endorsed `evt_6d4aw4987av7y`) on `c4d5f039`.**
 > **THE HOLE:** every deny path in `i5_scoped_capability.rs` **DISCARDS `drive(...)`'s returned
