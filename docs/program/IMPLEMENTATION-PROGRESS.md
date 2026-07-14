@@ -14,7 +14,86 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (15:20 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 62205675`
+> ### ⏭ 2026-07-14 (16:40 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ f8096072`
+>
+> ## ✅ CC8 MERGED @ `f8096072` · ✅ LET-2 CLOSED · ✅ LET-1 CLOSED · ✅ SUB-1b/SUB-2 CLOSED
+>
+> ## ⛔⛔ LET-1b IS HELD — SUPERSEDED BY **LET-4** (operator-originated). NEVER STARTED.
+>
+> **Pat handed me `local/wp-multi-binding-let.md`: a semicolon-separated binding
+> GROUP with sequential (`let*`) semantics, desugaring to the nested `let`s we
+> already have.** No new kernel term, no new keyword, no recursion.
+>
+> ```ken
+> let
+>   left_chars  : List Char = string_to_list_char left;
+>   right_chars : List Char = string_to_list_char right
+> in
+>   append Char left_chars right_chars
+> ```
+>
+> **It SUBSUMES LET-1b.** Its S6 canonicalizes a maximal nested chain **into the
+> grouped spelling**, so after LET-4 **a nested chain never survives formatting**
+> — LET-1b's amended §31 production would be **dead the day LET-4 merged**, and
+> it would have put Ergo on `layout.rs` while Language is also on `layout.rs`.
+>
+> **★ The staircase was never a formatting bug. It was a SURFACE bug wearing a
+> formatting bug's clothes.** Ken had no way to *say* "these bindings are one
+> group," so a group had to be spelled as a nest — and we then asked the printer
+> to render a nest as though it weren't one. **A workaround fossil: the fix is
+> the language, not the printer.** *Pat saw the feature; I was patching the
+> symptom.*
+>
+> ## ▶ LET-4 — `wp/let4-multi-binding-let`. **Spec enclave FIRST, then Language.**
+> Route: **Spec pins S1–S6** (`spec/30-surface/{32-grammar,31-lexical,39-elaboration,36-effects}.md`)
+> → **Language** builds from the landed pin → Language QA → Architect terminal →
+> CV ratifies → CI. **Language must NOT start before the pin lands.**
+>
+> **Two ACs I added — today's carry:**
+> - **AC-READER** — render the broken group, an in-a-match-arm group, and
+>   `let_staged_color`; **paste verbatim**; state the property in a reader's
+>   terms. **No mechanical test may discharge it.**
+> - **AC-DERIVE** — CV derives expected layout **from the amended spec**, never
+>   from the formatter's output. Two admissible texts ⇒ **STOP, spec gap.**
+>
+> **Three corrections to the draft (written against stale `c5f73b9c`):** its
+> motivation cites the **shred** defect + `is_compound_expr` as live — **both
+> FIXED by LET-1**; its follow-on §1–4 is **already done — that was LET-2**; its
+> 96-col budget is **CORRECT** (`layout.rs:12`, verified).
+>
+> ## Blocked / booked
+> - **LET-3** (catalog pilot) blocks on **LET-4**, not LET-1b. *If LET-3 ran
+>   first it would author chains in the single-binding spelling and LET-4 would
+>   canonicalize every one into a group — churning the catalog twice.*
+> - **LET-2b** — LET-2's guides/`write-ken`/overlays teach the **single-binding**
+>   spelling; LET-4 makes the **group** canonical. **Rides LET-4's landing.** *A
+>   scheduled certainty, not a risk — written down because two of my frames went
+>   stale under a landing today.*
+>
+> ## ▶ CC6b — hard-stopped, RULED, Runtime building
+> **runtime-implementer proved AC4 FALSE against the carrier I mandated.** `Path
+> = MkPath Bool (List (List UInt8))` cannot express *"each segment is nonempty
+> and contains no `/`"* — **my frame put that invariant in a `--` COMMENT**
+> (`cc6b-path-posix.md:118`). **PRINCIPLES #14 / the (b‴) expressibility audit —
+> from my own playbook, one day later.** Architect ruled → **segment-valid
+> qualification**. ⚠ **The reaching lemma is mandatory** (`∀ b. path_valid
+> (path_parse b)`) or the law is true-but-**VACUOUS**.
+>
+> ## ⚠ `--doc-only` MERGES WITHOUT CI. `catalog/**/*.ken.md` IS CODE.
+> LET-2 landed the two guide strands **unformatted** → frozen-corpus gate RED on
+> main → **blocked the publisher for every subsequent non-doc merge.** Fixed at
+> `62205675`. **The `.md` extension is literate packaging, not a statement about
+> what the file IS. `catalog/` · `examples/` · `conformance/` ⇒ FULL CI, always.**
+>
+> ## Rings
+> **Spec enclave** = LET-4 pin (compacted, free) · **Language** = LET-4 build
+> (after the pin) · **Runtime** = CC6b · **Foundation** = CC8 retros, then parked
+> for LET-3 · **Ergo** = stood down (LET-1b held), Handoff-Gate-ready ·
+> Kernel/Verify idle by design.
+>
+> ---
+>
+> ### ⏭ 2026-07-14 (15:20 UTC) — `origin/main @ 62205675`
 >
 > ## ✅ LET-2 **CLOSED** @ `8853b475` (all 3 retros in) · ✅ LET-1 CLOSED · ✅ SUB-1b CLOSED
 >

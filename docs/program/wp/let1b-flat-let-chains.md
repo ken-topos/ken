@@ -1,7 +1,35 @@
 # LET-1b — a `let` chain is a sequence, not a staircase
 
-**Owner:** Ergo · **Size:** S/M · **Depends on:** LET-1 (merged `ec980d76`),
-LET-2 (merged `8853b475`) · **Blocks:** **LET-3** (the catalog `let` pilot)
+# ⛔⛔ HELD — SUPERSEDED BY LET-4. DO NOT BUILD THIS.
+
+> **Superseded by `docs/program/wp/let4-multi-binding-let.md` (Steward,
+> 2026-07-14, on an operator-originated WP). LET-1b was never started.**
+>
+> **LET-1b framed the staircase as a FORMATTING defect** and would have amended
+> §31 to render a nested chain flat. **LET-4 makes a chain NOT BE A NEST** — its
+> S6 canonicalizes a maximal nested chain into a semicolon-separated binding
+> **group**, so after LET-4 **a nested chain never survives formatting** and this
+> WP's amended production would be **dead the day LET-4 merged**.
+>
+> **The staircase was never a formatting bug. It was a SURFACE bug wearing a
+> formatting bug's clothes:** Ken had no way to *say* "these bindings are one
+> group," so a group had to be spelled as a nest — and we then asked the printer
+> to render a nest as though it weren't one. **That is a workaround fossil, and
+> the fix is the language, not the printer.**
+>
+> **What survives, folded into LET-4:**
+> - **D1** (a fitting binding's RHS forced onto its own line) → LET-4 **AC5.1 /
+>   AC5.4**.
+> - **AC4 "a reader looked"** → LET-4 **AC-READER**, strengthened.
+> - **The no-re-baseline rule** → LET-4 **AC-DERIVE**.
+>
+> **The analysis below is RETAINED as the evidence record** — it is why LET-4
+> exists and why its layout ACs are shaped as they are. **It is not a build
+> order.**
+
+**Owner:** ~~Ergo~~ **HELD** · **Size:** S/M · **Depends on:** LET-1 (merged
+`ec980d76`), LET-2 (merged `8853b475`) · **Blocked LET-3** — *that dependency now
+routes through **LET-4***
 
 > **Treat every anchor in this frame as PERISHABLE.** If a fixed input below is
 > false against the landed code, **say so with exact tree anchors and
