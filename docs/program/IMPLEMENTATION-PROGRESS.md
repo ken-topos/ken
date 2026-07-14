@@ -14,7 +14,227 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (18:32 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ ad102bcd`
+> ### ⏭ 2026-07-14 (19:45 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 65d68cfc`
+>
+> ## ✅ KTR-1 **MERGED** `65d68cfc` (full CI, PR #675). LET-2b in CI. KTR-2 framed.
+>
+> **KTR-1 content-verified on `origin/main`:** `ConstructorUniverseViolation`
+> present in `error.rs`; `tests/ktr1_constructor_universe_gate.rs` present.
+> **The kernel's missing trust-root admission gate is CLOSED.**
+>
+> | lane | state | next |
+> |---|---|---|
+> | **KTR-1** | **MERGED `65d68cfc`** | ⚠ **chase Kernel retros** (merged ≠ closed) |
+> | **LET-2b** | **in CI** (`ecfb7931`) | verify merge by CONTENT, then chase Language retros |
+> | **KTR-2** | **FRAMED** — `docs/program/wp/ktr2-data-lowering-diagnostics.md` | publish doc-only → **Handoff Gate → Team Language** |
+>
+> ### ⚖ ARCHITECT RULED LANE 2 (`evt_28bw30t80dx7d`) — **no enclave gate needed**
+>
+> He **concurred** and independently re-derived my chain. **Settled, do not
+> reopen:** no universe **inference** (a declaration's type would depend on its
+> own body); no universe slot for the legacy **sugar** (it is intentionally the
+> bounded `Type 0` non-indexed form); the **kernel gate stays authoritative** —
+> the *elaborator* translates the error; the kernel gets no surface advice.
+>
+> **He also CLOSED the question I flagged as unverified:** file elaboration is
+> **in declaration order**, so a **forward** reference must reject exactly like
+> an undefined name — while an **earlier** declaration must keep working.
+>
+> ### ⛔ KTR-2's core: a PRODUCTION sort-fabrication bug
+>
+> **`data.rs:391` fabricates `Term::ty(Level::Zero)` for an unknown type name**
+> — the *same* sort-as-placeholder idiom KTR-1 was built to catch in fixtures,
+> sitting in the elaborator itself. Legacy sugar (`:64`) uses the **unchecked**
+> `rtype_to_kernel`; the explicit form uses `rtype_to_kernel_checked` (`:433`),
+> which correctly returns `UnresolvedCon`. **Reachable**, because `resolve_type`
+> (`resolve.rs:1589`) never rejects an unknown type name (`TCon → RCon`
+> unconditionally; `TVar` *falls back* to `RCon`).
+>
+> ⇒ `data D = C Foo` (Foo undefined) **silently declared `C : Type 0 → D`** —
+> pre-KTR-1 a typo produced a wrong declaration with **no error at all**. KTR-1
+> converts it from **silent** to **loud-but-misleading** (a *universe* error for
+> an *undefined name*). **Strict improvement; KTR-2 makes it honest.**
+>
+> **⛔ DO NOT mass-replace `Term::ty(Level::Zero)`** — most sites are CORRECT
+> (`Δ_p` params `:46`, genuine `Type` lowering `:417`/`:490`). Only the
+> **unknown-name fallback** dies. *The idiom is right in one position and wrong
+> in another.*
+>
+> ### WAS (19:35): KTR-1 approved + publishing; LET-2b with the Architect.
+>
+> ### 🔴 THE ARCHITECT SEAT WAS WEDGED — how I found it, so you find it faster
+>
+> Both rings went QA-green and then **nothing moved for 5 minutes.** The
+> Architect pane was **idle at an empty prompt with BOTH terminal-review
+> requests sitting UNSUBMITTED in its input buffer as pasted content.** Its
+> last turn ended at 19:17; the two mentions (KTR-1 19:23, LET-2b 19:25)
+> arrived as pastes and **never got an `Enter`.**
+>
+> **`post_response` returning an event id proves the event EXISTS, not that any
+> agent READ it.** A single `tmux send-keys -t moot-architect Enter` submitted
+> both and it woke immediately. **⇒ On any "ring is green but the gate is
+> silent" stall, `capture-pane` the GATE seat FIRST and look for an unsubmitted
+> paste.** (Already in fleet memory as a convo-mention hazard — this is its
+> second sighting, now on the Architect.)
+>
+> ### ★★ LANE 2 RE-GROUNDED — AND IT IS NOT THE FORK I ANNOUNCED
+>
+> I told the space Lane 2 was a fork: *"does Ken INFER the family universe, or
+> REQUIRE an annotation?"* **I read the whole chain on `origin/main` and the
+> annotation escape ALREADY EXISTS, fully plumbed.** Verified link by link:
+>
+> | link | file | what it does |
+> |---|---|---|
+> | surface AST | `ast.rs:596` | `TUniv(Option<u32>, Span)` — `Type 1` is real |
+> | resolve | `resolve.rs:516` | `TUniv(level,_) => (indices=[], level)` |
+> | elaborate | `data.rs:161` | `level.map(level_from_nat).unwrap_or(Zero)` |
+> | kernel | — | `InductiveSpec { level: Succ(Zero) }` |
+>
+> **⇒ `data D : Type 1 where { C : (s : Type) → D }` declares the family at
+> level 1; KTR-1's `Δₖ` check sees arg-type `Type 1 ≤ 1` and ADMITS it. Today.
+> No new machinery.**
+>
+> **What is ACTUALLY broken is narrower — and I nearly handed the enclave an
+> invented fork instead of it:**
+>
+> 1. **The SUGAR form cannot lift.** `data D a = C A | …` (grammar `32:33`)
+>    has **no family slot at all**, and `data.rs:79` hardcodes `level: Zero`.
+>    No escape *in that form*.
+> 2. **The diagnostic is a raw `ConstructorUniverseViolation`** — it never tells
+>    the author "annotate the family as `: Type 1`". **This is the real
+>    deliverable.**
+>
+> **My recommendation (to the Architect, NOT an open fork):** **do not infer,
+> and do not grow the sugar a slot.** Inference would make a declaration's
+> **type depend on its own body** — adding a constructor could silently lift
+> `D`'s universe and break every downstream user at a distance. That is exactly
+> what predicativity and explicit annotation protect. The explicit form is
+> already the documented general form (`32-grammar:121`: the sugar *is* sugar
+> for a non-indexed family). **⇒ Lane 2 collapses to a DIAGNOSTIC WP + one spec
+> sentence, not an enclave elaboration.** Route it to the **Architect** (he is
+> already in KTR-1 context); do **not** spin up an enclave Handoff Gate for it
+> until he rules otherwise.
+>
+> ### ▶ WAS: BOTH RINGS BUILDING. Nothing is blocked on me.
+>
+> | lane | state |
+> |---|---|
+> | **KTR-1** (Kernel) | **HOLD LIFTED, BUILDING.** Frame amended `d5c893ab` (§5–§7). |
+> | **LET-2b** (Language) | **REBUILDING to amendment 2** (5-oracle deletion). |
+> | **Lane 2** (enclave) | **NOT FRAMED — mine. Grounded below; needs Handoff Gate.** |
+>
+> ### ✅ CLOSED / RULED THIS SEGMENT
+> - **B2W-1 merged `fcbd7932`, retros in.**
+> - **@architect ruled (`evt_7rkd48rqwa8a7`): Lane 1 FOLDS into KTR-1** (§9a
+>   companion spillover). Kernel repairs the 4 `ken-interp` sites on its own
+>   branch. **Lane 2 = separate, non-blocking; KTR-1 lands FAIL-CLOSED.**
+> - **LET-2b amended TWICE by Pat** → D6 now deletes **all five** corpus-inventory
+>   oracles, each → `assert!(!is_empty())`. AC4 = prove a **restructure** (delete
+>   one catalog file + concat two) stays green with **no test edit**.
+>
+> ### ⚠ TWO ARCHITECT CORRECTIONS TO ME — do not let them be lost
+> 1. **"Green-vs-green makes a standalone WP unverifiable" is WRONG.** B2W-1
+>    disproves it (overlay against the held gate). The real distinction is
+>    **semantic**: B2W-1 had an independent normative claim + design content;
+>    the 4 fixtures have neither.
+> 2. **★ The carriers are NOT "sitting right there."** I said `Bool`/`Nat`/`Unit`
+>    were in-file and reusable. **`#23`/`#24` are in a DIFFERENT `GlobalEnv`;
+>    `#31` is a separate integration env; only `#27 Unit` is local to Console.**
+>    **A `GlobalId` must NEVER cross an environment.** *My framing would have
+>    produced four blind substitutions and a real bug.*
+>
+> ### 🔑 LANE 2 — GROUNDED AT THE PRODUCER (2026-07-14, by me, verified)
+> **`data.rs` never infers the family universe:**
+> - **legacy family `:79` — `level: Level::Zero` HARDCODED**; params all `Type 0` (`:46`).
+> - **explicit family `:158` — `level.map(level_from_nat).unwrap_or(Level::Zero)`.**
+> - surface `Type` → `Term::ty(Level::Zero)` at `:417`, `:490`.
+> - **★ THE GRAMMAR IS THE REAL CONSTRAINT** (`spec/30-surface/32-grammar.md`):
+>   `:34` explicit form HAS a `data_family` slot ⇒ **`data D : Type 1 where …` IS
+>   expressible.** `:33` sugar form `data D a = C A | …` **has NO family slot at
+>   all** ⇒ **legacy CANNOT express a lifted family. No escape, no inference.**
+>
+> **⇒ The fork for the enclave/Pat:** does Ken **INFER** the family universe from
+> its constructor args, or **REQUIRE** an annotation? If "require," the sugar form
+> **cannot say it** — so does it grow a slot, or get deprecated? And today the
+> author gets a **raw `ConstructorUniverseViolation`** — a diagnostic gap either way.
+>
+> **⚠ UNVERIFIED, DO NOT REPEAT AS FACT:** `data.rs:391` lowers an **unknown name**
+> to `Term::ty(Level::Zero)` — a silent type-level placeholder that would now trip
+> the same gate. **Probe reachability before framing it.**
+>
+> ### NEXT FOR ME
+> 1. **Frame Lane 2** → **enclave Handoff Gate REQUIRED** (spec-leader,
+>    spec-author, conformance-validator are idle+uncompacted).
+> 2. **KTR-1 + LET-2b → QA → Architect → publish** (both **FULL CI**, never doc-only).
+> 3. Then **LET-3** (Foundation; LET-2b's D5 overlays feed it).
+> 4. **Owed to Pat:** toolchain-axis proposal. **Resource campaign: RES-Σ first.**
+
+## (previous)
+
+> ### ⏭ 2026-07-14 (19:02 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 31311789`
+>
+> ## ▶ TWO LANES ACTIVE, ONE RULING PENDING. Nothing is blocked on me.
+>
+> | lane | state |
+> |---|---|
+> | **LET-2b** (Language) | **ACTIVE** — impl building. Frame merged `31311789`. |
+> | **KTR-1** (Kernel) | **HELD at `13e0ed53`** awaiting @architect Lane-1 ruling. |
+> | **Lane-1/Lane-2 ruling** (Architect) | **IN FLIGHT** — `evt_7cxamzn91sab1`. |
+>
+> ### ✅ CLOSED THIS SEGMENT
+> - **B2W-1 MERGED `fcbd7932`** — content-verified (params `[Type 0, Type 0]`;
+>   `temporal_at(depth)` → `Var(depth+1)`/`Var(depth)` per position; foil
+>   `Term::pi(temporal_at(0), temporal_at(1))` reaches exact
+>   `PositivityViolation`). **All 3 retros in.**
+> - **LET-2b FRAMED + MERGED `31311789`** — `docs/program/wp/let2b-teach-binding-groups.md`.
+>
+> ### 🔑 KTR-1's 91-SITE CLOSED-SET REPLAY IS DONE (`evt_244wdtm3q3e5d`) — read it
+> Closure re-proved: sole raw insertion `check.rs:953` inside `declare_inductive`.
+> **91 sites / 28 files; 10 production (3 files) / 81 test.** Two lanes found:
+>
+> - **Lane 1 — 4 test-fixture sites, 19 dynamic failures.** `#26` interp
+>   `lib.rs:1482` · `#28` `:2409` · **`#29` `:2426` (statically flagged,
+>   DYNAMICALLY MASKED — `#28` rejects first)** · `#31` `b3_acceptance.rs:34`.
+>   **`#29` is the case that justifies the static audit: no test run can reach it.**
+> - **Lane 2 — ★ PRODUCTION SURFACE FINDING.** `data.rs` **does not infer the
+>   family universe** (hardcodes/defaults `Level::Zero` at `:79`, `:158`). So
+>   `data D where C : (s : Type) -> D` is now **rejected** (correct — predicativity)
+>   with **no inference escape**, and legacy syntax **cannot** lift the family at
+>   all. **This is a SPEC/surface question → enclave + likely Pat.** Non-blocking.
+>
+> **MY RECOMMENDATION (pending @architect):** **fold Lane 1 into KTR-1** — without
+> the gate, a repaired and an unrepaired fixture **both pass**, so a standalone WP
+> is **green-vs-green and unverifiable**. Lane 2 = separate WP, does not block.
+>
+> ### ⚠ MY OWN ERROR, 4× TODAY — the enumeration lesson is NOT sticking
+> I claimed *"exactly two production files build constructors."* **Three** —
+> I missed `effects/state.rs`. **I built the candidate list by grepping the
+> SYMPTOM (the idiom) instead of the GATE (`declare_inductive`), so a file with
+> the gate but not the smell never entered my list.** Every one of the 4 was
+> caught by someone else. **The closed set must key on the gate, never the smell.**
+>
+> ### 📌 FILED, NOT YET FRAMED — the discharged oracle (Pat surfaced it)
+> `kenfmt_c_capstone.rs:14-66` `FRAME_LINE_COUNTS` is a **discharged one-shot
+> proof still wired as a live gate.** The capstone-C reformat it validated is
+> over; `32_594` is just the sum of the 39 rows (a checksum on the TABLE, not on
+> Ken). Live corpus has **66% slack**; closest file is `hello-world.ken` at 15/45.
+> The sibling **current-anchored fixed point** (`:69`) dominates it. **Retire it**
+> (keeping the `:145-152` path-existence check) — **its own small WP; do NOT grow
+> LET-2b.** LET-2b's "don't re-baseline" guardrail stays (right for an implementer).
+>
+> ### 🔒 INFRA
+> KTR-1's WIP was **never on the remote** (no push creds in agent worktrees).
+> **Pinned: `preserved/ktr-1-wip-54db124e`** (refs are repo-global ⇒ GC-proof).
+>
+> ### NEXT FOR ME
+> 1. **@architect's Lane-1 ruling** → route the fixture repair, unhold KTR-1.
+> 2. **Frame Lane 2** (family-universe inference) → enclave/Pat as a stated fork.
+> 3. **LET-2b QA→merge**, then **LET-3** (Foundation; D5 overlays feed it).
+> 4. **Owed to Pat:** the toolchain-axis proposal (no test framework; `export`
+>    specified-but-unparsed; no package manager). **Resource campaign: RES-Σ first**
+>    (Σ is effect NAMES, too coarse to state the obligations).
+
+> ### ⏭ 2026-07-14 (18:32 UTC) — `origin/main @ ad102bcd` (superseded)
 >
 > ## ▶ B2W-1 IN FULL CI RIGHT NOW — candidate `1676fe0f` (2 files, +130/−27)
 > **QA + Architect BOTH terminal-APPROVED.** `temporal.rs` + `b2_acceptance.rs` only;
