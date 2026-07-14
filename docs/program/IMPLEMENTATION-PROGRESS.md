@@ -14,13 +14,47 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (17:15 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ fcabc80a`
+> ### ⏭ 2026-07-14 (17:45 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ fcabc80a`
 >
-> ## ▶ LET-4 AT THE ARCHITECT'S TERMINAL GATE — candidate `935681e0`
-> Parent `origin/main @ 26e9baed`. **language-qa APPROVED, incl. AC-DERIVE and the
-> manual AC-READER rendering.** Zero kernel/runtime/Cargo/trusted-base delta.
-> **NEXT FOR ME: Architect votes → I publish (FULL CI — it touches `catalog/`,
-> NEVER `--doc-only`) → retros → close → LET-2b unblocks → LET-3 → CC9 → PX1.**
+> ## ▶▶ KTR-1 RELEASED TO KERNEL — trust-root repair (`docs/program/wp/ktr1-constructor-universe-gate.md`)
+> **The gap is CONFIRMED and it is a CONFORMANCE DEFECT, not an open question.**
+> The Architect executed the decoder too (`evt_66d1p9bz1h621`): `data D : Type
+> where { C : (s : Type) → D }` **plus** `fn decode (d : D) : Type = match d { C s
+> ↦ s }` — **both exit 0.** That is a same-level Tarski universe: `D : Type 0`
+> injecting every `Type 0` (including `D`), with `decode (C A) ≡ A`. **Nobody has
+> derived `⊥` and we do not claim one** — but the checker is outside its
+> predicative contract, and that is enough.
+>
+> **`spec/10-kernel/14-inductive.md` ALREADY MANDATES THE GATE** (verified at the
+> producer): *"constructor argument types must live at `ℓ` or below"*; admission
+> requires *"(c) universe-level checks."* And §3: *"Predicativity keeps this sound;
+> **there is no special restriction beyond the universe-level checks.**"* **⇒ The
+> spec's whole soundness argument for large elimination RESTS on the check that was
+> never implemented.** `check.rs:945`'s comment — *"positivity is the sole
+> structural admission gate"* — **is the bug, written down.**
+> **Fix formation, NOT elimination. No `Prop`. No design fork.**
+>
+> **★ THE TRAP I PUT IN THE FRAME IN CAPITALS:** `Δ_p` (params) ≠ `Δ_k`
+> (constructor-local args). Sweep params into the level walk and you compute
+> `level(Type u) = suc u > u` and **reject `List`, `Maybe`, `Vec` — everything.**
+> That failure reads as *"the gate is wrong"* and invites weakening it. It isn't.
+> **AC4 also warns: grepping `data` in `.ken` sources MISSES the Rust-emitted
+> prelude** — enumerate BOTH, count at the producer.
+>
+> ## ⚖ OPERATOR: **NO PUBLICATION FREEZE** (Pat) — Architect's containment overruled
+> Architect called for freezing `main`. **Pat: *"no need… no one is using this
+> yet."*** Correct: **a release freeze protects USERS from a defective artifact,
+> and Ken has none.** Zero risk reduction, pure fleet cost. **Severity
+> (trust-root) stands; containment does not. All other lanes publish as normal.**
+>
+> ## ▶ LET-4 — **ARCHITECT BLOCKED** `935681e0` (`evt_6bk3nx5zm4xkg`). Real defect.
+> Formatter **duplicates comments at a nested-let shadow split with a distinct
+> prefix**, and moves one across the synthesized outer `in`. `collect_let_segment`
+> correctly moves the distinct prefix out, but recursive `print_let_bindings` scans
+> **back to the original nested `let`**, re-collecting comments the prefix already
+> owns. QA covered comments and shadowing *separately* (shadow at index 0) — **not
+> their combination.** language-leader already routed the repair + rebase onto
+> `fcabc80a`. **Lane is self-managing; no Steward action.**
 >
 > ## 🔴🔴 CONFIRMED — LARGE INDUCTIVE **ADMITTED** AT A PREDICATIVE LEVEL
 > **Escalation `evt_5d77tsdr2kyxz`; EXECUTED probe `evt_69kdc7t1rynw4`; my
