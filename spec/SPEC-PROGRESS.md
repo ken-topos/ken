@@ -108,6 +108,11 @@ sections; seeded opportunistically as core sections are written.)
 
 ## Next action
 
+**Incremental normative pins:** AX-1 specifies the additive `axiom N : T` sugar,
+the checking-mode `Axiom` intercept, stable names for every postulate producer,
+readable trust-base entries, and kernel-inert postulate labels across `11`, `18`,
+`32`, `39`, and `64`. AX-2 is the corresponding implementation work.
+
 **DRAFT v0 of the full spec is complete** — every chapter in the outline is
 DRAFT, the open-decisions register (`90-open-decisions.md`) consolidates the
 forks, and the conformance corpus (`../conformance/`) is seeded with the

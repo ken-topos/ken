@@ -92,9 +92,9 @@ Some Ken-definable types must be present **before** the primitive layer, because
 a built-in primitive's **type signature references them**. `Bool` is the
 clearest case: the comparison primitives have type `Int → Int → Bool`, so `Bool`
 must exist at the primitive layer — yet `Bool` is `data Bool = True | False`,
-ordinary Ken (§6, F1). This is the surface analog of the kernel's `Top`/`Bottom`
-prelude (`64 §1`: Ken-vocabulary excluded from `trusted_base()` yet always
-present, the closed `is_prelude` set).
+ordinary Ken (§6, F1). This is the surface analog of the kernel's
+`Top`/`Bottom`/`tt` prelude (`64 §1`: Ken-vocabulary excluded from
+`trusted_base()` yet always present, the closed `is_prelude` set).
 
 > **Prelude membership rule (normative, checkable).** A type is in the prelude
 > **iff it is named in a built-in primitive's type signature, and is not already
@@ -105,7 +105,8 @@ present, the closed `is_prelude` set).
 > whose signature names a type **absent** from the prelude is a **gap**.
 
 The prelude is a **second minimality target** — the same TB-Sound discipline
-(`is_prelude` is exactly `{Top, Bottom}`, no catch-all) applied at the surface.
+(`is_prelude` is exactly `{Top, Bottom, tt}`, no catch-all) applied at the
+surface.
 By the rule, today's prelude is the closed set **`{Bool, Char, List}`** (CV's
 signature-grep): `Bool` (the comparison primitives `Int → Int → Bool`), and
 `Char` **and** `List` (the `String ↔ List Char` conversion primitive names

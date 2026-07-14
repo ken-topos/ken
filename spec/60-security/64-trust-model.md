@@ -56,19 +56,42 @@ K3-deferred.
 The kernel MUST enumerate items (2) and (3) on demand. The landed producer is
 `GlobalEnv::trusted_base() -> Vec<GlobalId>` (`crates/ken-kernel/src/env.rs`,
 `18 §5`), which returns **exactly** the `Decl::Opaque` and `Decl::Primitive`
-declarations in `Σ`, excluding the prelude `Top`/`Bottom` constants (fixed
-kernel vocabulary, `16 §1.3`, not user assumptions).
+declarations in `Σ`, excluding the prelude `Top`/`Bottom`/`tt` constants
+(fixed kernel vocabulary, `16 §1.3`, not user assumptions).
+
+Every postulate entry is readable: its `Decl::Opaque` stores the audit label
+supplied at the single `declare_postulate` choke point. A surface declaration
+body uses its declaration name; an instance field uses exactly
+`Class.HeadType.field`; and an elaborator- or Rust-minted postulate uses the
+producer's stable declared symbol. None of these labels may contain a term
+position, allocation index, counter, or gensym. Multiple occurrences in one
+declaration may share the enclosing label while retaining distinct `GlobalId`s;
+the contract is label derivation, not global label uniqueness. The ledger
+therefore remains stable when unrelated source is inserted, and it names
+internal producers as well as surface `Axiom` expressions.
+
+This completeness is enforced by the data and call shapes, not convention:
+`Decl::Opaque` has a required non-optional name field, and
+`declare_postulate` has a required name argument. There is no optional, default,
+or builder path that can admit an unnamed opaque declaration.
 
 > **Contract TB-Sound.** For any admitted program, `trusted_base()` (the
 > artifact-relative projection is `trusted_base_delta`, `25 §3`) is **empty iff
 > the artifact rests on no unchecked assumption** — fully verified and confined.
 > A term elaborated with no postulate, `foreign`, or hole yields an **empty**
 > delta; a term carrying one postulate yields a **non-empty** delta listing
-> **exactly** that `GlobalId`. The consumer reads the emptiness as the "fully
-> verified+confined" signal of §5.
+> **exactly** that `GlobalId`, whose opaque declaration carries the required
+> label. The consumer reads the emptiness as the "fully verified+confined"
+> signal of §5.
 
 There are no phantom entries: the enumeration is a filter over the real `Σ`, so
 it cannot report an assumption the program does not carry.
+
+The name is audit metadata only. The kernel may expose it through the ledger,
+but conversion, typing, admission, positivity, universe checking, and
+elimination MUST NOT inspect it or branch on it (`../10-kernel/11 §4`, `18
+§4.2`). This kernel-inertness is the structural reason that making the trust
+ledger readable does not enlarge the logical power of a postulate.
 
 ### 1.2 The completeness net (no hidden assumption) [by construction]
 
