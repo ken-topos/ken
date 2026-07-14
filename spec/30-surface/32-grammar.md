@@ -200,7 +200,7 @@ expr ::=
 let_expr ::= "let" let_binding (";" let_binding)* "in" expr
 let_binding ::= ident (":" type)? "=" expr
 match_expr ::= "match" expr ("eqn:" ident)? ("," expr)*
-               "{" arm (";" arm)* "}"
+               "{" arm (";" arm)* ";"? "}"
 arm  ::= pattern ("if" expr)? ("↦" | "|->") expr  -- guard optional
 proof_ref ::= "proof" ident "for" path
 field_assign ::= ident "=" expr | ident  -- punning allowed
@@ -223,19 +223,22 @@ body remains valid.
 **Semicolon-context derivation.** The grammar admits a binding separator only
 after a complete `let_binding`, in the list opened by `let` and closed by the
 mandatory `in`. It admits a match-arm separator only after a complete `arm`, in
-the list enclosed by `{` and `}`. These parser states are disjoint: the former
-expects either `;` followed by another `let_binding` or `in`, while the latter
-expects either `;` followed by another `arm` or `}`. In particular,
+the list enclosed by `{` and `}`; there `;` either separates two arms or is the
+existing optional final terminator before `}`. These parser states are
+disjoint: the binding-list state expects either `;` followed by another
+`let_binding` or `in`, while the arm-list state expects `;` followed by another
+`arm`, the optional final `;` followed by `}`, or `}` directly. In particular,
 
 ```ken ignore
-let x : A = match s { P ↦ p; Q ↦ q }; y : B = next x in finish y
+let x : A = match s { P ↦ p; Q ↦ q; }; y : B = next x in finish y
 ```
 
-first consumes the inner semicolon while parsing the brace-delimited arm list.
-The closing `}` completes the match-expression production, after which the
-following semicolon is read in the enclosing binding-list state. No grammar
-state can shift that token as both kinds of separator, so neither a shift/shift
-nor a shift/reduce choice exists. A grouped `let` used as an arm body is dual:
+first consumes one inner semicolon as an arm separator and the next as the
+match's final terminator. The closing `}` completes the match-expression
+production, after which the following semicolon is read in the enclosing
+binding-list state. No grammar state can shift that token as both kinds of
+separator. Therefore neither a shift/shift nor a shift/reduce choice exists. A
+grouped `let` used as an arm body is dual:
 its mandatory `in` closes the binding list before the surrounding arm can end.
 Nested-let and arrow RHS expressions likewise complete under their own
 productions before the enclosing binding-list separator is considered.
