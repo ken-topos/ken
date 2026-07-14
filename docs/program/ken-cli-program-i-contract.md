@@ -68,7 +68,7 @@ class ProcessInput {
   workingDirectory : Bytes
 }
 
-proc main (input : ProcessInput) (caps : ProgramCaps)
+proc main (input : ProcessInput) (caps : ProgramCaps a)
   : HostIO ExitCode
   visits [Console, FS, Environment, Process]
 ```
@@ -77,11 +77,9 @@ The exact record/capability *spelling* may be refined at build time (defer
 spelling, not concept), but these **semantic** choices are fixed:
 
 - **Named resolution, not positional.** The runner resolves the declaration
-  **named `main`**; missing or duplicate `main` is a hard, named error. (Fast-
-  follow: a program-header-declared entrypoint name, riding the N4 `program`
-  header I reviewed — `program App` already exists as surface; a
-  `program App { entry = run }` field is the natural home. v1 uses the fixed
-  name `main`.)
+  **named `main`**; missing or duplicate `main` is a hard, named error. The N4
+  `program` header is anonymous, does not designate the entry point, and rejects
+  `program App`. v1 uses the fixed name `main`.
 - **Raw `List Bytes` argv.** POSIX `argv`, environment values, and filenames are
   byte sequences and need not be valid UTF-8. Modeling them as `String` would
   silently normalize (NFC) or reject legitimate input. **UTF-8 decoding is an
@@ -114,11 +112,11 @@ result datatype again — the exact decoupling deliverable 4 mandates.
 
 1. Resolve `main` by name; type-check its signature against §1.1 (domains
    `ProcessInput`, `ProgramCaps`; codomain `HostIO ExitCode`; `visits` row ⊆
-   granted families).
+   families declared by the program's capability clause).
 2. Build `ProcessInput` from real argv-after-`--`, environment, and cwd (all
    `Bytes`).
-3. Mint `ProgramCaps` from the launch grants (§3), one capability per granted
-   family.
+3. Mint `ProgramCaps` from the program's declared capability clause (§3), one
+   capability per declared mediated family.
 4. `apply(main, input); apply(_, caps)`; drive the resulting `HostIO ExitCode`
    through `run_io` (§4).
 5. Map the returned `ExitCode` to process status (§1.1). Driver failures
@@ -152,23 +150,26 @@ which families it actually touches. The row and the tree stay decoupled exactly
 as today (`prelude.rs:1039-1042`): the row is the escape/capability annotation,
 the tree is the runtime realization.
 
-**Design tension to decide at build (named, not hidden): the FS family is
-`Auth`-indexed** (`FSOp : Auth -> Type0`), so the coproduct inherits that index.
-Two coherent v1 spellings, both faithful to the current `read_bytes` authority-
-polymorphism:
+**I-4 REV-2 §A.3 resolves the `Auth`-indexed FS choice to an
+authority-monomorphic program.** `FSOp : Auth -> Type0`, so the coproduct
+inherits that index. For each program, the anonymous header declares one
+concrete authority `a`; `main` is checked with `ProgramCaps a`, and the runner
+mints exactly that declared authority.
 
-- **(a) Authority-monomorphic program** — `main` is checked at the concrete
-  authority the launch grant mints (the current mint-exactly model,
-  `main.rs:142-153`); `HostOp` fixes that authority. Simplest; matches today.
-- **(b) Authority-polymorphic program** — `main` is polymorphic in `a` like
-  `read_bytes` is; the runner instantiates `a` at mint time.
+- **Selected (a), authority-monomorphic.** `HostOp` fixes the header-declared
+  authority. The header, `main`'s `ProgramCaps a`, and the body's demanded
+  authorities must agree; disagreement is an ill-typed program, not a runtime
+  grant comparison.
+- **Not selected (b), authority-polymorphic.** `main` could instead be
+  polymorphic in `a`, like `read_bytes`, with the runner instantiating it at
+  mint time. v1 does not choose this form; it remains a reversible alternative
+  only if a future need appears.
 
-I **recommend (a)** for v1 (it is exactly today's mint-exactly discipline, one
-concrete authority per run) and note that the scoped model (§3) replaces the
-scalar `Auth` index with a scoped capability *value*, at which point the index
-question dissolves. **Do not lift each family's authority to a separate type
-index** on the composed tree — carry each capability as a *value* in its op
-(as FS already does), keeping `HostOp` singly-indexed.
+The scoped model (§3) replaces the scalar `Auth` index with a scoped capability
+*value*, at which point the index question dissolves. **Do not lift each
+family's authority to a separate type index** on the composed tree — carry each
+capability as a *value* in its op (as FS already does), keeping `HostOp`
+singly-indexed.
 
 ### 2.2 Console — generalize `Write String` to streams of bytes
 
@@ -250,11 +251,14 @@ boundary, because the difference is a security property:
 ### 3.1 v1 — coarse, functional, honestly over-privileged
 
 The current model, unchanged in mechanism: scalar `Authority` {`None`,`Partial`,
-`Full`} + effect label, minted **exactly** from the launch grant
-(`main.rs:142-153`), carried in each op, checked `required ⊑ granted` by the
-driver **before** the syscall (`authorizes`/`check_authority_sufficient`,
-`eval.rs:1918-1932`). `ProgramCaps` is the record delivered to `main` carrying
-one such capability per granted family.
+`Full`} + effect label, declared in the anonymous `program` header's
+`capabilities` clause and minted **exactly** from that declaration, carried in
+each op, and checked `required ⊑ held` by the driver **before** the syscall
+(`authorizes`/`check_authority_sufficient`, `eval.rs:1918-1932`). `ProgramCaps`
+is the record delivered to `main` carrying one such capability per declared
+mediated family. This contract specifies what Ken accepts as a valid program.
+CLI grants, OS sandboxing, and other constraints on a running process are a
+separate concern and are out of scope.
 
 **The honest caveat, stated loudly:** coarse authority confines *nothing to a
 path*. `authorizes(cap, path)` still ignores `path`. So v1 read is acceptable
