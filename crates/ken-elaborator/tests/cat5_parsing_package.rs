@@ -12,9 +12,31 @@ use std::collections::HashSet;
 
 const PARSING_KEN_MD: &str =
     include_str!("../../../catalog/packages/Capability/Parsing/Parsing.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const COLLECTIONS_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+const LAWFUL_CLASSES_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Cursor.ken.md");
+const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Decoder.ken.md");
+
+fn dependency_env() -> ElabEnv {
+    let mut env = ElabEnv::new().expect("base env");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
+        .expect("Transport must elaborate first");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
+        .expect("Collections must elaborate second");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
+        .expect("LawfulClasses must elaborate third");
+    env.elaborate_ken_md_file(CURSOR_KEN_MD)
+        .expect("Parsing.Cursor must elaborate fourth");
+    env.elaborate_ken_md_file(DECODER_KEN_MD)
+        .expect("Parsing.Decoder must elaborate fifth");
+    env
+}
 
 fn mk_env() -> ElabEnv {
-    let mut env = ElabEnv::new().expect("base env");
+    let mut env = dependency_env();
     env.elaborate_ken_md_file(PARSING_KEN_MD)
         .expect("catalog/packages/Capability/Parsing/Parsing.ken.md must elaborate");
     env
@@ -150,7 +172,7 @@ fn neutralize_fixture_proofs(env: &ElabEnv, store: &mut EvalStore, names: &[&str
 
 #[test]
 fn cat5_d1_source_span_package_elaborates_zero_delta() {
-    let mut env = ElabEnv::new().expect("base env");
+    let mut env = dependency_env();
     let base_trusted: HashSet<GlobalId> = env.env.trusted_base().into_iter().collect();
     env.elaborate_ken_md_file(PARSING_KEN_MD)
         .expect("catalog/packages/Capability/Parsing/Parsing.ken.md must elaborate");
@@ -177,6 +199,13 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         "byte_unit_nat_to_int",
         "span_start",
         "span_end",
+        "byte_cursor_source",
+        "byte_cursor_position",
+        "byte_cursor_remaining",
+        "byte_cursor_peek",
+        "byte_cursor_advance",
+        "byte_cursor_locate",
+        "byte_cursor_ops",
         "nat_leq_bool",
         "LessEqNat",
         "LessEqNat::refl",
@@ -199,6 +228,8 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         "ParseResultSourceLocal",
         "ParserSourceLocal",
         "ParserLaws",
+        "decoder_parse_error",
+        "parser_from_decoder",
         "parser_pure",
         "parser_fail",
         "syntax_root",
@@ -208,22 +239,22 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         "ValidLocatedList",
         "ValidSyntax",
         "bool_expr_eq",
-        "nat_eq_bool",
-        "nat_add",
-        "nat_lt_bool",
-        "bool_and",
-        "source_byte_eq",
-        "source_byte_eq_at",
-        "starts_true_token",
-        "starts_false_token",
-        "starts_not_open_token",
-        "starts_and_open_token",
-        "skip_spaces_fuel",
-        "skip_spaces",
         "syntax_leaf",
         "syntax_node_unary",
         "syntax_node_binary",
-        "parse_bool_expr_at_fuel",
+        "byte_code_decoder",
+        "true_token_decoder",
+        "false_token_decoder",
+        "not_open_token_decoder",
+        "and_open_token_decoder",
+        "spaces_decoder",
+        "bool_true_decoder",
+        "bool_false_decoder",
+        "bool_not_decoder",
+        "bool_and_decoder",
+        "bool_decoder_layer",
+        "bool_expression_decoder",
+        "complete_bool_decoder",
         "parse_bool_expr",
         "print_bool_expr",
         "format_bool_expr",
@@ -302,11 +333,12 @@ fn cat5_d2_parser_result_surface_is_total_and_located() {
         "D2 laws must state success validity, failure validity, totality, and source locality"
     );
     assert!(
-        !PARSING_KEN_MD.contains("fn repeatWithFuel")
-            && !PARSING_KEN_MD.contains("fn parseResultNext")
-            && !PARSING_KEN_MD.contains("fn repeat (")
-            && !PARSING_KEN_MD.contains("fn many ("),
-        "D2 repetition is deferred; the package must not export broken repeat/many helpers"
+        compact.contains("fn parser_from_decoder")
+            && compact.contains("decoder_recursive ByteCursor UInt8 Span")
+            && compact.contains("decoder_many ByteCursor UInt8 Span UInt8")
+            && !PARSING_KEN_MD.contains("parse_bool_expr_at_fuel")
+            && !PARSING_KEN_MD.contains("skip_spaces_fuel"),
+        "D2 must specialize the shared Decoder and retire CAT-5's bespoke fuel recursion"
     );
     assert!(
         !PARSING_KEN_MD.contains("= Axiom"),
@@ -341,12 +373,14 @@ fn cat5_d3_bool_expression_surface_is_package_owned() {
         "D3 must export parser, printer, and formatter with the pinned types"
     );
     assert!(
-        compact.contains("bytes_at (source_bytes s)")
+        compact.contains("fn byte_cursor_peek")
+            && compact.contains("bytes_at (source_bytes (byte_cursor_source cur))")
+            && compact.contains("const bool_expression_decoder : Decoder ByteCursor Span")
             && compact.contains("bytes_encode \"true\"")
             && compact.contains("bytes_encode \"false\"")
             && compact.contains("bytes_encode \"(not \"")
             && compact.contains("bytes_encode \"(and \""),
-        "D3 must operate over Source bytes and canonical ASCII token bytes"
+        "D3 must operate through ByteCursor/Decoder over Source bytes and canonical ASCII tokens"
     );
     assert!(
         !PARSING_KEN_MD.contains("compiler")
@@ -840,7 +874,7 @@ fn cat5_d2_failure_with_invalid_span_rejected_by_law() {
 }
 
 #[test]
-fn cat5_d2_repetition_is_deferred_no_unguarded_many_or_repeat() {
+fn cat5_d2_legacy_unguarded_repeat_is_not_exported() {
     let mut env = mk_env();
     let err = env
         .elaborate_file(
@@ -852,7 +886,7 @@ fn cat5_d2_repetition_is_deferred_no_unguarded_many_or_repeat() {
               repeat Bool zero_width_parser
             "#,
         )
-        .expect_err("unguarded repetition must not be exported by the D2 package");
+        .expect_err("the legacy unguarded repetition entry point must stay absent");
     let msg = format!("{err}");
     assert!(
         msg.contains("unresolved type 'repeat'")
@@ -863,7 +897,7 @@ fn cat5_d2_repetition_is_deferred_no_unguarded_many_or_repeat() {
 }
 
 #[test]
-fn cat5_d2_broken_fuel_repetition_producer_path_is_not_exported() {
+fn cat5_d2_legacy_caller_budget_repetition_is_not_exported() {
     let mut env = mk_env();
     let err = env
         .elaborate_file(
@@ -876,7 +910,7 @@ fn cat5_d2_broken_fuel_repetition_producer_path_is_not_exported() {
               repeatWithFuel Bool (Suc (Suc Zero)) one_byte_parser
             "#,
         )
-        .expect_err("D2 must not export the broken fuel repetition helper");
+        .expect_err("CAT-5 must not retain the old caller-budget repetition helper");
     let msg = format!("{err}");
     assert!(
         msg.contains("unresolved type 'repeatWithFuel'")

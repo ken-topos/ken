@@ -14,7 +14,234 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (01:5x) — LIVE STATE (read this first) · `origin/main @ c11ed3de`
+> ### ⏭ 2026-07-14 (03:2x) — ★ NEWEST · LIVE STATE (read this first) · `origin/main @ e22f5688`
+> **OPERATOR AWAY until ~11:00–11:30 UTC (Pat, 03:04Z).** ~8h autonomous window → run
+> the DAG per §2b; do not yield while work is unblocked. Watchdog cron `7ec866fc`
+> (`8,23,38,53 * * * *`) carries live state + the land-together constraint.
+> **⚠ FLEET IS NOW ON THE gpt-5.6 FAMILY (Sol/Luna/Terra = T1/T2/T3, `MODELS.md`).**
+> Observed in panes: **implementers + spec-author + CV = `sol` (T1-class)**; **LEADERS
+> AND QA = `terra` (T3-class, the LIGHTWEIGHT tier)**. That **inverts** `MODELS.md`'s
+> own guidance ("Kernel and Verify QA are soundness-adjacent — the likeliest candidates
+> for a *higher* effort setting"): the **verification gates are now on the weakest
+> tier** while the code authors are on the strongest. NOT blocking (the fleet is
+> producing; frames are T1-authored and the Architect is T1-terminal), and model
+> assignment is the operator's (`moot.toml`) — **RAISE WITH PAT ON RETURN**, do not
+> re-seat unilaterally.
+> **⚠ CODEX/GPT SEATS END TURNS SILENTLY — CONFIRMED LIVE, NOT THEORETICAL.**
+> runtime-implementer worked **21m**, committed `a8379680`, and **went idle with a clean
+> tree and NO convo post**. Caught it by checking the **pane + branch**, not convo.
+> ⇒ **Never infer a ring is working from convo silence — check `git log
+> origin/main..HEAD` in its worktree + `capture-pane`.** Roused it.
+> **▶ THREE LANES LIVE:**
+> **(1) I-4 §B (Runtime) — CRITICAL PATH.** `wp/i4b-runtime-program-caps`: step-1 rebased
+> `c4801199` → step-2 mint `a8379680`. Steps 3–7 outstanding. Step 7 = Architect's
+> zero-TCB RESHAPE (polymorphic `readFile`, `writeFile` STAYS monomorphic at `AFull`,
+> `attenuate` DELETED).
+> **(2) I-4 §C erratum (enclave).** spec-leader Working; spec-author + CV compacted+idle
+> (not yet dispatched). ⛔ Guardrail: only the **Ken-callable wrapper in `38`** dies; the
+> **semantic monotone-downward op** (`62-authority §3` / Rust `capabilities.rs::attenuate`)
+> is the RUNNER's and **STAYS**.
+> **⚠ (1)+(2) LAND TOGETHER (§14.4):** enclave tip SHA → **Runtime assembles onto
+> `wp/i4b-runtime-program-caps`** → ONE squash, ONE Decision (diff-scope pulls the **Spec
+> vote**). Enclave opens NO Decision/git_request. No crates-only §B branch alone.
+> **(3) ✅ CC3 KICKED (Foundation) — the catalog lane is turning again.** Foundation had
+> been **idle since CC2 with the freeze already lifted** — a stall, not a rest state.
+> Handoff Gate run: **foundation-{leader,implementer,qa} compacted @ ctx-verified →
+> "Context compacted" ×3.** Kickoff `evt_2cy3c8g5mh52c`; frame committed
+> `docs/program/wp/cc3-parsing-cursor-decoder.md` @ **`wp/cc3-parsing-cursor-decoder`
+> (`4a148468`, off `e22f5688`)**. CC3 = `Parsing.Cursor` + progress-safe `Decoder` +
+> **refactor CAT-5 to consume them** (one parsing universe, not two); instances
+> `ByteCursor` (CAT-5 `Source`) + `ArgCursor` (`List Bytes`, arg index + byte range).
+> **★ THE CC3 DESIGN FORK I SETTLED (from the landed code, not from taste):** the report
+> left "progress proof **or** explicit fuel" open. **CAT-5 already answers it** — its own
+> prose (`Parsing.ken.md:324-329`) records that the real measure (unconsumed input) *"is
+> not syntactically a subterm of the fuel"*, so a well-founded descent on `remaining` is
+> **invisible to the termination checker**. ⇒ **Mechanism = fuel, but SEEDED FROM the
+> cursor's `remaining`** (CAT-5 seeds from `source_length s`), **plus a stated progress
+> law** (a successful step consumes ≥1) — which is exactly what makes the seeded fuel
+> **sufficient**: a repetition succeeds ≤ `remaining` times, so **fuel can never run out
+> before the input does.** Fuel stops being a *budget* and becomes a *derived bound*.
+> **The AC is the observable, not the mechanism: repetition NEVER fails for lack of fuel**
+> (AC3b: long input, whole-input consumption, exact end position — a short input passes a
+> broken impl either way).
+> **⚠ MY OWN STALE-READ, CAUGHT:** I read CAT-5 out of my worktree while `steward/work`
+> was **10 behind main** — the file had been reformatted by capstone C. Semantics held,
+> layout didn't. **Re-grounded every fact against `origin/main` and merged main into
+> `steward/work` (now behind=0).** Read the surface from `origin/main`, always.
+> **★ 03:3x UPDATE — §B IS DONE; THE CRITICAL PATH IS NOW THE ENCLAVE.**
+> **§B steps 2–7 are ALL in `a8379680`** (the commit message undersold it — I first
+> mis-read one commit as "step 2 only"). **Verified BY CONTENT, not prose:**
+> `MissingCapability` / `CapabilityDenied` / `readFile` / `writeFile` all present, and —
+> the hit I checked hardest — **all 33 `attenuate` hits are the RUST-SIDE SEMANTIC op**
+> (`capabilities.rs`, an `eval.rs` doc-comment, 2 runner tests) with **ZERO in
+> `prelude.rs`** ⇒ **no Ken-callable `attenuate`.** The Architect's ruling is honored
+> exactly and my don't-grep-and-nuke guardrail held. Runtime is **correctly holding** (no
+> crates-only release) for the erratum. ⇒ **Everything now waits on the §C erratum.**
+> **⚠ ENCLAVE STALL (the real one): spec-leader spent ~26min ORIENTING** (rg-ing for
+> playbooks) while spec-author + CV sat **idle and compacted**. Escalated as critical
+> path (`evt_3ynwra72eks6y`) + **roused both workers by pane** (a just-compacted seat does
+> not reliably wake on a posted mention).
+> **⚠ ONE FILE, ONE OWNER (assembly-collision averted).** Runtime had ALREADY edited
+> `docs/program/ken-cli-program-i-contract.md` (`HostIO a`/`ProgramCaps a` + Console-
+> ambient caveat) — and my §C kickoff had told the ENCLAVE to sweep that same file. Two
+> units reconciling one doc = the assembly trap my own enclave memory names. **RULED:
+> enclave scope = `spec/` + `conformance/` ONLY; the contract doc is RUNTIME's this land;
+> the enclave REPORTS residual staleness to Runtime instead of editing it.**
+> **⚠ MIGRATION-COMPLETENESS RISK (flagged to Runtime, `evt_499ckgx4f255d`).** §B's diff is
+> **33 files**, reaching `catalog/guide/*.ken.md` + much of `examples/rosetta/*.ken` — the
+> mint-from-real-declaration consequence (every runnable program must now declare). Local
+> validation is **targeted-only**, so **a missed Ken source root will NOT show locally —
+> it lands as RED CI at publish, after the Decision.** Told Runtime to enumerate EVERY
+> root (`catalog/**` .ken + .ken.md, `examples/**`, `conformance/**`, `.ken` fixtures under
+> `crates/*/tests/`, **and the Rust-emitted prelude** — a `.ken`-only grep misses it) and
+> to state whether the header is now **mandatory** or **optional-with-default** (materially
+> different posture; on the record either way).
+> **NOTE — catalog contention:** §B touches `catalog/guide/`, CC3 touches
+> `catalog/packages/Parsing/` + `Capability/Parsing/`. **Disjoint files**, so no textual
+> collision — but whichever merges second rebases. Sequencing is mine; neither ring blocks.
+> **★ 03:4x — ASSEMBLY UNDERWAY. ALL THREE §B PIECES EXIST.**
+> **spec erratum DONE: `wp/i4c-cap-wrapper-erratum-spec @ 5f675810`** (parent `e22f5688`,
+> +28/−29). **Verified BY CONTENT:** `readFile : (a:Auth) -> Cap a -> …` polymorphic ✓;
+> `writeFile : Cap AFull` still **monomorphic** ✓; Ken-callable `attenuate` sig +
+> justification **gone** ✓; worked example `readFile fullCap path` ✓; **`62-authority.md`
+> BYTE-UNTOUCHED** ⇒ the semantic monotone-downward op survives ✓ (the don't-grep-and-nuke
+> guardrail held on both sides — Runtime's prelude has zero Ken-callable `attenuate` too).
+> **CV conformance erratum in flight** on `wp/i4c-reshape-conformance`.
+> **Runtime `256b03dc`** (atop `a8379680`) = the migration audit I asked for, and the
+> answer is **better than expected**: 54 Ken roots enumerated across all 4 families; **all
+> 19 ABI-runnable roots carry an explicit declaration**; `tooling/highlight-js/sample.ken`
+> correctly excluded (non-elaborating). **POSTURE ANSWERED PRECISELY: headers stay OPTIONAL
+> for `ken check`, but `ken run` has NO AUTHORITY DEFAULT** — it *requires* declared FS
+> authority after resolving `main`, asserted on the **named** `MissingCapability { FS }`
+> (`runner_has_no_implicit_fs_authority_default`). Fail-closed, no implicit grant. **And a
+> new recursive `ken_fmt` gate fails any ABI-shaped root missing an explicit declaration +
+> forces inventory review if the 19-root count moves** — a one-time migration turned into a
+> STANDING guarantee. Contract-doc sweep: 3 `attenuate` refs, all semantic/runner-scoped →
+> no Runtime edit warranted.
+> **⚠ ASSEMBLY COLLISION — RULED (`evt_453a23k2dzwgn`): KEEP BOTH.** Runtime (+13/−6:
+> `HostIO a`/`ProgramCaps a`/Console-ambient) and spec-author (+13/−10: reshaped wrappers +
+> the v1 trade) **both** edited `docs/program/ken-cli-program-i-contract.md` from the same
+> base ⇒ textual conflict at assembly. They are **COMPLEMENTARY, not competing** — a
+> mechanical take-ours/take-theirs would **silently delete a true load-bearing claim**.
+> ⇒ **Runtime hand-reconciles** so the final text carries EVERY semantic claim from both,
+> then reads it end-to-end for coherence (two tests: nothing still calls the deleted
+> Ken-callable `attenuate` live; nothing contradicts `HostIO a`). Genuine contradiction ⇒
+> escalate, don't resolve by taste. **This is the enclave's own §C carry biting exactly as
+> predicted: assembly is a SEMANTIC RECONCILE GATE, not a merge.**
+> **NOT a discipline failure by spec-author** — my "enclave = spec/+conformance only" scope
+> correction went out AFTER it had already cut the commit. A race, not a violation; its
+> contract-doc content (the v1-trade honesty) is GOOD and dropping it would lose the record
+> of a deliberate trade. Told it not to re-cut.
+> **▶ NEXT:** Runtime assembles `5f675810` NOW (don't wait for CV) → folds CV's tip when it
+> lands → **ONE combined SHA** → honesty gate → publish → **verify on main by CONTENT** →
+> §B retros → **I-4 ARC COMPLETE**.
+>
+> ### ⏭ 2026-07-14 (04:1x) — ★★★ I-4 §B COMBINED CANDIDATE IN TERMINAL REVIEW · CC3 REPAIR
+> **★ THE I-4 LAND-TOGETHER CANDIDATE EXISTS: `wp/i4b-runtime-program-caps @ c699b530`**
+> (`c699b5308c0d0feb3783d3e0d0b73d71c234c199`). **Linear** from `origin/main @ e22f5688`;
+> **38 files, +1127/−235**; carries **crates + `spec/30-surface/38-ffi-io.md` + the
+> semantically-reconciled Program-I contract + 2 `conformance/` seeds** ⇒ the diff-scope
+> **correctly pulls the Spec vote**. That was the whole point of holding §B for six hours.
+> **✅ runtime-QA APPROVED** the exact SHA (`evt_5bazmx92wj40x`): zero kernel/Cargo/lock
+> delta; **`62-authority.md` BYTE-IDENTICAL**; `readFile` consuming/polymorphic; `writeFile`
+> AFull-only; **no Ken-callable attenuation, no `Cap` introduction, no primitive, no
+> postulate**; 19 ABI roots all declare; **28 RED conformance markers retained** (honest,
+> not hand-fed).
+> **✅ MY CAPSTONE PRE-FLIGHT WARNING PAID OFF — and passed.** runtime-implementer ran the
+> gate I flagged (`--test kenfmt_c_capstone`) on the exact candidate: **3/3 PASS**, no
+> candidate change needed (`evt_4wck93ymnwcjn`). The §B headers ARE canonical. Cost: one
+> targeted run. Alternative: a second red-CI publish AFTER the merge Decision.
+> **▶ OPEN: Decision `dec_2jw3b5jwfqen1`** — needs **Architect terminal** + **CV
+> Spec/Fidelity** votes on `c699b530`. **Both VERIFIED AWAKE and reviewing** (Architect
+> thinking high-effort; CV status = "reviewing I-4 §B/§C combined exact SHA c699b530").
+> **⚠ ON BOTH VOTES: honesty gate → tracker-sync → publish `--target
+> wp/i4b-runtime-program-caps` (the HEAD branch, NEVER main) → VERIFY ON origin/main BY
+> CONTENT → collect §B retros → I-4 ARC COMPLETE.** Do NOT resolve the terminal Decision on
+> the last cast vote before I have the merge signal (terminal-gate resolve race).
+>
+> ### ⏭ 2026-07-14 (04:0x) — CC3 CI RED (PR #620) → ORACLE RULING → REPAIR IN FLIGHT
+> **CC3 passed EVERY local gate + QA + Architect + my honesty gate, then went RED in CI** on
+> `crates/ken-elaborator/tests/kenfmt_c_capstone.rs:142` —
+> `canonical_reformat_has_no_pathological_line_expansion`, asserting *"line-count oracle
+> must cover the live corpus."* CC3's 2 new catalog files are in the live corpus, not in the
+> oracle's hardcoded table. **Everything else green** (CC3 3/3, CAT-5 19/19, conformance
+> suite, path-guard, clean-room, AND the live-anchored fixed-point test).
+> **MY FRAME'S MISS: AC6 named ONE catalog gate (`ken_fmt.rs`) and missed this SECOND one.**
+> Third frame miss today, same family: **enumerate EVERY corpus-wide oracle, not the one you
+> thought of.** ⇒ fleet memory written.
+> **⛔ THE OBVIOUS FIX IS WRONG — AND I ALMOST TOOK IT.** `FRAME_LINE_COUNTS` = a table of
+> **PRE-capstone** line counts; the per-file check is `canonical*2 <= frame*9` (today's file
+> vs **its own pre-reformat form**). **A file created AFTER the frame has NO pre-frame
+> form** — any number you invent compares the file to itself (ratio 1.0) ⇒ **the check is
+> VACUOUS FOREVER.** Adding 2 rows would be a **fabricated baseline**: a ledger entry
+> masquerading as a proof.
+> **★ AND IT HAS ALREADY HAPPENED TWICE, SILENTLY:** the table carries **CC1's and CC2's
+> post-capstone files** (`NonEmpty`, `Validation`, `Codec`, `Numeric`, `StringKeys`,
+> `StringBijection`) — **six fabricated baselines, six vacuous per-file checks.** The gate
+> has been converting itself from a proof into a rubber stamp one WP at a time.
+> **⇒ RULING (`evt_37trh8exbkn7b`): RE-SCOPE, NEVER RE-BASELINE.** A frame-pinned oracle is a
+> **DISCHARGED one-shot migration proof**. Fix = completeness assertion goes from
+> **set-EQUALITY** to a **COVERAGE/subset check** (every frame-era path must STILL EXIST —
+> still catches deletion/rename); **add NO rows**; comment the table as a discharged
+> historical baseline new files must never join; leave `frame_total`/ratios alone.
+> **NO COVERAGE IS LOST — I VERIFIED THAT BEFORE RULING, not after:**
+> `canonical_frozen_corpus_is_a_39_file_fixed_point` **ENUMERATES THE LIVE CORPUS** (it
+> `collect`s; it does NOT read the frozen table) ⇒ it already covers Cursor/Decoder and it
+> **PASSED** ⇒ both are genuine `ken fmt` fixed points. The live-anchored net is real and
+> green; only the historical one over-claimed. (Narrowing a frozen oracle WITHOUT first
+> confirming a live-anchored net exists would trade a rubber stamp for a HOLE.)
+> **BRANCH-HELD SNAG (mine):** my publisher scratch worktree still held
+> `wp/cc3-parsing-cursor-decoder` → Foundation couldn't check it out. **Released.** They
+> correctly **refused to reset/clone/fork a competing branch** and asked instead. Head is
+> **`d3e8a02f`** (CC3 + tracker-sync) — repair rides ON TOP; PR #620 updates in place.
+> **▶ FOLLOW-ON WP (mine to queue, → LANGUAGE, kenfmt's owner):** properly retire/re-anchor
+> this oracle, INCLUDING stripping the six already-vacuous CC1/CC2 rows. **Explicitly OUT of
+> CC3's scope.**
+> **⚠ WARNED RUNTIME (`evt_4ck9cyppy1404`):** §B modifies `catalog/guide/*` +
+> `examples/rosetta/*` — **files this oracle covers.** Adds no new catalog file (so the
+> completeness arm passes), but the **live fixed-point arm will fail outright if any added
+> `program … capabilities` header is not canonical `ken fmt` form** — invisible to
+> `-p ken-interp`/`-p ken-cli` targeted runs. Told them to run
+> `--test kenfmt_c_capstone` targeted BEFORE releasing the combined SHA, and to touch
+> `FRAME_LINE_COUNTS` for nothing.
+>
+> ### ⏭ 2026-07-14 (03:5x) — CC3 PUBLISHED (superseded by the CI-red block above)
+> **✅ CC3 (Foundation) — QA + ARCHITECT TERMINAL APPROVE → HONESTY GATE CLEAN → PUBLISHING.**
+> Candidate `wp/cc3-parsing-cursor-decoder @ b6380719` (off `e22f5688`); tracker-sync
+> bundled → publish head **`d3e8a02f`**. **My gate, run independently (not from the report):**
+> 0 merges ✓ · exactly the 6 declared files ✓ · **forbidden-path probe EMPTY** ✓ ·
+> `diff --check` clean ✓ · descends from current `main` ✓. Publisher running in background
+> (task `bdu1qjbta`). **ON MERGE:** verify on `origin/main` BY CONTENT → collect §10 retros
+> → close CC3 → **CC4 (`Diagnostic.Core`) is next in the catalog chain** (Foundation, needs
+> a frame; it subsumes CC3's parameterized locations — it now has its TWO consumers,
+> `Span` + `ArgLocation`, so the abstraction is finally earned).
+> **What CC3 landed:** explicit `CursorOps c el loc` record (no type class — Ken has no
+> associated types); `ArgBytes` = the ruled proof-carrying cached-`Nat` carrier; loc-generic
+> Decoder-owned result/error; fuel seeded ONLY from `remaining` (both repetition AND
+> recursion); **CAT-5 genuinely SUBSUMED** — `Parser` is now a thin Decoder view and
+> `parse_bool_expr_at_fuel`/`skip_spaces_fuel` are **retired, not wrapped** (the Architect
+> pressed exactly this point). Discriminators all non-degenerate: `many (pure True)` →
+> named `DecoderZeroProgress`; 96-byte repetition consumes all 96 + exact end (defeats any
+> fixed budget); ArgCursor failure at exact **(arg 2, byte 3)**. CAT-5's **19/19** retained.
+> Zero trust delta.
+> **★ SUBSTRATE SIGNAL — REPORTED AS ASKED, NOW MINE TO CARRY (operator-facing).** CC3 is
+> the **2nd** proof-carrying cached-`Nat`-length-over-opaque-`Bytes` carrier (`Source`, now
+> `ArgBytes`). Foundation correctly did **NOT** unify them and did **NOT** mint `int_to_nat`.
+> **The honest fix is a landed `Bytes`-length→`Nat` bridge with its own certificate = a TCB
+> question ⇒ PAT'S CALL, not mine and not a build WP's.** A 3rd occurrence makes it urgent.
+> **I-4 FINAL FOLD:** Runtime assembled spec `5f675810` (cherry-pick `3414b9f9` + semantic
+> reconcile `30c18584`) — it did NOT treat git's clean auto-apply as evidence, read the
+> contract end-to-end, and **added a missing bridge paragraph**. (Clean apply ≠ coherent
+> document — the exact reason that was a ruling, not a merge.) CV tip
+> **`557c1816`** (parent `e22f5688`) relayed for the final fold (`evt_5yenxrdc4w1tx`);
+> **verified by content:** conformance-only (2 seeds, +179/−49), zero `spec/` delta,
+> **30 RED markers ⇒ honestly failing, NOT hand-fed.** Then: combined SHA → QA → Architect
+> → **CV's six-file Spec/Fidelity vote** → my honesty gate → publish.
+> Then **I-5 (scoped capability model) needs an ARCHITECT DESIGN pass** — but he holds an
+> in-flight §B review obligation, and the Handoff Gate forbids compacting an agent that
+> has one, so **I-5 does not start until §B merges.** CC3 runs in parallel throughout.
+>
+> ### ⏭ 2026-07-14 (01:5x) — (superseded) · `origin/main @ c11ed3de`
 > **✅ CONVO RESTORED (01:39).** Pat did a full source redeploy of the mootup backend →
 > the 10k-event cap is lifted; appends 200 again (`evt_33jepzv3bmfg8`). Fleet reconnected.
 > **⚠ THREAD IDS ARE TRUNCATED IN EVENT DISPLAY** — `[thread:thr_45kf]` is really
@@ -48,7 +275,101 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **§B (Runtime) = HELD, not fragmented.** Runtime ring compacted (all 3 verified) +
 > told to stay idle (`evt_3rp6g9q5vnpww`); step 1 safe at `c3583fed` on
 > `wp/i4b-runtime-program-caps`. On §D merge → release §B steps 2–7 as ONE coherent unit.
-> **🚀 §D FULLY GATED → PUBLISHING (02:3x).** Candidate **`9198beff`** (`wp/i4d-boundary-
+> ### ⏭ 2026-07-14 (02:5x) — `origin/main @ e22f5688` · **§D MERGED · §B IN FLIGHT (step-7 FORK)**
+> **✅ §B STEP-7 FORK — ARCHITECT RULED: RESHAPE, ZERO TCB (`evt_3e9wy31y5k7sz`). Hold
+> LIFTED (`evt_4ptvtcaq4etsa`). NO primitive to Pat — the TCB delta is AVOIDABLE.**
+> **THE ASYMMETRY (keep this):** `attenuate` had to **PRODUCE** a `Cap` → an introduction
+> form for an opaque type in disguise → unrealizable. `readFile` only **CONSUMES** the Cap
+> the program already holds → consuming an opaque value at a type variable needs **no**
+> intro form. Raw producers were **already** authority-polymorphic (`read_bytes
+> (a:Auth)(cap:Cap a)`, `prelude.rs:1357`), so the wrappers are thin pass-throughs.
+> **NEW step 7:** `readFile : (a : Auth) -> Cap a -> …` (**polymorphic**) +
+> `writeFile : Cap AFull -> …` (**stays MONOMORPHIC** — the security gate, = Pat's Option
+> (ii) write guarantee, untouched); **`attenuate` DELETED**. `readFile (attenuate fullCap)`
+> → `readFile fullCap`. `Cap` stays opaque/unforgeable; the runner's mint at `main` remains
+> the sole entry. Architect ruled AGAINST any Ken intro form for `Cap`, general or special.
+> **⚠ THE ONE HONEST TRADE (ruled + flagged, do NOT "fix"):** polymorphic `readFile` admits
+> `Cap ANone` → the **read-authority floor degrades static → op-time** (I-3 driver
+> `authorizes` → named `CapabilityDenied`, i.e. step-5's backstop). Ruled non-blocking:
+> Option (ii) is about **writes**, preserved exactly. Static read-flooring needs bounded
+> quantification Ken lacks in v1 → **named v2 option** (authority-ordering constraint).
+> **⇒ §B step-5's named-`CapabilityDenied` assertion is now LOAD-BEARING for the read floor.**
+> **⚠ LAND-TOGETHER (§14.4) — the reshape CONTRADICTS the spec on `main`.** §C erratum
+> (`38-ffi-io`: polymorphic `readFile` @§1.3.1; DELETE `attenuate` :183 + justification
+> :197-202; worked example :195 → `readFile fullCap path`) **must ride the SAME branch**
+> `wp/i4b-runtime-program-caps` + ONE squash, so diff-scope touches `spec/`+`conformance/`
+> and pulls the **Spec vote**. Runtime told: do NOT publish a crates-only §B branch alone.
+> **✅ §C ERRATUM KICKED to the enclave (`evt_1jkdwj8mbtdrb`); spec-leader PICKED UP (verified
+> Working).** Handoff Gate complete — all 3 enclave seats `Context compacted` (verified).
+> Pre-compact hazard check: spec-author was **4 commits ahead** on `wp/i4c-program-header-caps`
+> — confirmed **already-merged squash leftovers** (blobs IDENTICAL to `main`), safe to reset;
+> spec-leader's 2 dirty files are **untracked** K2c/V0 elaboration plans and the gate script
+> does `reset --hard` but **no `git clean`**, so they survive (they are unlanded scratch —
+> worth a future cleanup pass).
+> **⛔ ERRATUM GUARDRAIL I HAD TO ADD (not in the Architect's edit list):** the blast radius is
+> WIDER than `38-ffi-io` (`attenuate` appears in `36-effects`, `62-authority`, Program-I
+> contract, 2 conformance seeds, + historical WP docs). **Only the Ken-callable wrapper in
+> `38` dies. The SEMANTIC monotone-downward operation (`62 §3` / Rust `capabilities.rs::
+> attenuate`) is the RUNNER's op and STAYS — load-bearing for the security model.** A
+> grep-and-nuke of every `attenuate` would break the authority story. Told them to
+> distinguish per-hit; historical `docs/program/wp/` docs are non-normative, leave them.
+> **DELIVERY: enclave authors on a branch off `e22f5688` → hands me the tip SHA → RUNTIME
+> assembles onto `wp/i4b-runtime-program-caps` → ONE squash, ONE Decision** (diff-scope then
+> touches `spec/`+`conformance/` → correctly pulls the **Spec vote**). Enclave told: do NOT
+> open its own Decision / git_request.
+> **▶ NEXT: both rings turning in parallel (Runtime §B steps 2–7 · enclave §C erratum).
+> Await enclave tip SHA → relay to Runtime for assembly → combined SHA → honesty-gate →
+> publish → verify on main by CONTENT. THEN THE I-4 ARC IS COMPLETE.**
+> _Prior (fork, now resolved):_ routed to ARCHITECT `evt_4bfj5f5s1ey3w`.
+> runtime-implementer hard-stopped on the frame's zero-TCB guardrail (correctly: grounded,
+> **no source edits**, branch clean). **I re-verified all 3 premises against landed code:**
+> (1) `Cap` = `declare_primitive(…, PrimReduction::OpaqueType)` (`prelude.rs:1026`) — **no
+> Ken introduction form**; (2) the only `attenuate` is Rust-side (`capabilities.rs:138`),
+> no kernel/interp reduction; (3) **§C's MERGED spec pins it Ken-callable** —
+> `spec/30-surface/38-ffi-io.md:183` `attenuate : Cap AFull -> Cap APartial`, monomorphic
+> `readFile : Cap APartial` (:178), worked example `readFile (attenuate fullCap) path` (:195).
+> **The bind:** the spec demands a Ken-callable **introduction form for an opaque type** →
+> impossible without a new trusted primitive (frame forbids) or a surface reshape.
+> **Constraints I supplied (his call, not mine):** `Cap`'s opacity is load-bearing
+> (unforgeability); `attenuate` is monotone-**downward** only, so a trusted primitive would
+> be weakening-only — but still **+1 TCB** vs the small-auditable-TCB charter; §C's rejected
+> alternative (authority-polymorphic `readFile`) is zero-TCB on its face but naive
+> `Cap a` would admit `Cap ANone` (a weakening) absent bounding machinery.
+> **⚠ IF THE RULING IS "TCB DELTA UNAVOIDABLE" → IT GOES TO PAT.** I will NOT quietly relax
+> a zero-TCB guardrail in a build WP.
+> **✅ SCOPE RULED (mine, already issued `evt_7cppn2cn5dtgd`): Runtime does steps 2–6 NOW**
+> (mint-from-declaration / static containment / I-3 lit path / op-time backstop / Console —
+> **none need `attenuate`**), **holds ONLY step 7.** Same branch, one merge — ordering
+> *within* §B, NOT fragmentation. Ring is turning, not idle. Step 1 rebased onto §D =
+> `c4801199`. Told Runtime: do NOT work around it (no primitive/postulate, no weakened
+> signature, no hand-rolled `Cap` intro form).
+> **If the ruling reshapes the surface → §C `38-ffi-io` needs an ERRATUM → enclave, AFTER
+> he rules** (do not pre-empt / do not loop them in now — thin-flow).
+> _Prior:_ **§D MERGED · §B RELEASED**
+> **✅ I-4 §D MERGED — `origin/main @ e22f5688` (PR #619, all checks green).** Landing
+> integrity verified **BY CONTENT on main** (not the exit code): `BoundaryHeader` (ast.rs),
+> `NamedBoundaryHeader` + `PackageCapabilitiesNotAllowed` (error.rs), `boundary_header()`
+> (lib.rs), lexer keywords `program`/`package`/`admits` — and **`AUTH_PARTIAL` still in
+> `ken-cli/main.rs`** (untouched, §B's to replace). **THE PARSER GAP IS CLOSED.** Kickoff→
+> merged in ~1h. **§D §10 RETROS IN → CLOSED** (`evt_4w7pj7v9f220c`). Shared carry: (1) re-derive
+> scope from the TREE, never forward a prose count (the "seven vs six files" catch); (2) encode
+> adjacent-clause orthogonality as **independent absent-vs-empty representation so coupling is
+> UNREPRESENTABLE** — the strongest form of "do not couple X and Y". Both node-internal.
+> **✅ I-4 §B RELEASED to Runtime (`evt_3vwwkchxqpgwq`); runtime-leader PICKED UP (verified
+> Working — assigning implementer to rebase + do steps 2–7 together).** Gate note: the
+> Runtime ring was already Handoff-Gate-compacted **for this exact kickoff** and did zero
+> work while held → gate satisfied, no re-compaction (re-compacting an untouched compacted
+> ring summarizes a summary for no gain).
+> **⚠ FRAME LINE SUPERSEDED — told runtime-leader explicitly:** §B step 2's "a v1 build may
+> read a **minimal declared authority** … while §C's full grammar lands" escape hatch is
+> **RETIRED** now that §D landed the real parser. Mint from the **real declared authority**
+> via `boundary_header()`; a minimal-read stub or hard-code is now a REGRESSION, not honest
+> v1 scaffolding. (Exactly the perishable-current-state trap the frame warned about — the
+> frame went stale in the *good* direction and had to be re-pinned at release.)
+> **▶ NEXT: (1) collect §D retros → close §D; (2) §B in flight — event-driven, watchdog
+> armed; on §B released SHA: honesty-gate → publisher → verify on main by CONTENT.**
+> **I-4 arc after §B: §A/§C/§D done; §B is the last piece.**
+> _Prior:_ **§D FULLY GATED → PUBLISHED (02:3x).** Candidate **`9198beff`** (`wp/i4d-boundary-
 > header-parser`), linear `c11ed3de → 2cdd372d (frame) → 9198beff`, branch free.
 > **All three gates APPROVE on the exact SHA:** QA `evt_19g30dd9w593n` · CV terminal
 > `evt_4hdnfkd8rpvrq` (conformance disposition) · **Architect TERMINAL** `evt_6kdxwt5se7sra`.
