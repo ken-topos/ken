@@ -58,7 +58,17 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > a test in is not a tool for real practical work.** **I bring a separate
 > toolchain proposal; it is NOT smuggled into PX.**
 >
-> ### ✅ PX0 MERGED — `origin/main @ f729c67e` · CI green · **retros OUTSTANDING**
+> ### ✅✅ PX0 MERGED + **CLOSED** — `origin/main @ f729c67e` · CI green · retros IN
+> **Runtime is FREE.** Next for Runtime is **PX1 — waits on CC9 → LET chain. Not
+> released.** **★ Fleet law changed on PX0's retros (`d323b2e3`):** the memory
+> `a-red-base-gate-is-not-your-bug` **ITSELF set a trap** — it guards *over-repair*
+> and thereby invited *over-disclaim*. The implementer reproduced the red hunks on
+> the parent, concluded "inherited," **and was wrong** (his own assertion added
+> one). **"The base is red" ⇏ "my delta is clean."** Fix = QA's **two-ref
+> ownership oracle**: `check(candidate) \ check(parent)` = YOURS (block these
+> only); `∩` = inherited (route, don't touch); **normalize line drift first** or
+> you re-attribute an inherited hunk to yourself and land back in over-repair from
+> the other side.
 > **Content-verified on `main`:** 54 `target_os = "linux"` gates; the only
 > surviving `cfg(unix)` pair is `os_string_bytes` (2324/2330); all **13 ABI facts
 > present, VALUES UNCHANGED** (we did not "fix" what we had not probed); **zero
