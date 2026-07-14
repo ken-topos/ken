@@ -14,7 +14,200 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (19:45 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 65d68cfc`
+> ### ⏭ 2026-07-14 (21:12 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 64566872`
+>
+> ## ✅ FIVE WPs MERGED **AND CLOSED**. **AX-1 ACTIVE in the enclave — and I already had to correct my own frame.**
+>
+> | WP | state |
+> |---|---|
+> | **KTR-1** | **MERGED `65d68cfc` · CLOSED** |
+> | **LET-2b** | **MERGED `ce6f0718` · CLOSED** |
+> | **LET-3** | **MERGED `7071f919` · CLOSED** (pilot passed my gate) |
+> | **KTR-2** | **MERGED `91e4374e` · CLOSED** — closes the KTR audit, BOTH lanes |
+> | **AX-1 frame** | **MERGED `64566872` (PR #683)** — kicked `evt_7ctxnexs6gxqr`; enclave **authoring now** |
+>
+> ### ★★★ AX-1 SCOPE CHECKPOINT — **MY OWN FRAME'S D3 WAS UNDER-SPECIFIED. RULING POSTED — IT IS A FIXED INPUT.**
+>
+> **The mechanism I under-read:** the `Axiom` intercept lives inside the
+> **generic `check()`** (`elab.rs:474`, arm at `:502`) — **not** a
+> declaration-body special case. So `Axiom` fires in **ANY checking-mode term
+> position**, and **one declaration can mint SEVERAL postulates**
+> (`lemma foo : T = f Axiom Axiom`). My frame enumerated a closed *corpus*
+> population (two shapes — true) and silently promoted it to a closed
+> **mechanism** (false). **The same error as the morning's: I enumerated from the
+> symptom, not from the gate.**
+>
+> **⛔ RULING (`evt_7ga79nfpafk87`; spec-leader relayed it as `evt_4egxmzz3sv3e9`):**
+> **THE NAME IS A LABEL, NOT A KEY. The spec MUST NOT require uniqueness.**
+> 1. **Name = the enclosing declaration path.** Top-level decl → its own name;
+>    instance field → `Class.HeadType.field`. **ALWAYS derivable** (every term
+>    position sits inside a named declaration) ⇒ no gensym, no "unnameable" case,
+>    **no fabricated placeholder.**
+> 2. **Non-uniqueness is LEGAL and HONEST.** Two postulates from one declaration
+>    share a label, keep distinct `GlobalId`s. A positional disambiguator would be
+>    **a lie dressed as precision — KTR-2's exact bug, one layer up again.**
+> 3. **§3.4's coherence argument is DEMOTED to an observation** (why today's two
+>    shapes *are* unique), **never a normative invariant.**
+> 4. **Narrows nothing** — `Axiom` stays legal in every term position; D5 intact.
+>
+> **★ AND THE AC THAT MUST LAND (the whole point of the change):**
+> `Opaque { name: String }` — **NOT `Option<String>`** — and
+> `declare_postulate(env, name: String, …)` with the name a **required
+> parameter**. **If it is optional or defaulted, "every postulate is named" lives
+> in CONVENTION, and a producer that skips it is INVISIBLE IN A GREEN DIFF** —
+> the missing thing was never a value, it was *a place to write a guarantee*.
+> **The required field/param makes the compiler force every producer** (surface
+> `Axiom`, `bytes.rs`, `conversions.rs`, `capabilities.rs`) **to supply one.**
+>
+> ### ⚠ TRANSPORT: THE MENTION WEDGE FIRED **TWICE MORE** (now 6× today)
+> - **CV** — my correction, then spec-leader's relay, **both stranded unsubmitted**
+>   in its composer. Repaired with a bare `Enter` each time.
+> - **spec-author** — spec-leader's relay **never reached its turn at all** (no
+>   paste, no queue) while it authored D3 against the **superseded** contract.
+>   Re-delivered by **pointing at `evt_4egxmzz3sv3e9`, NOT restating it** (the
+>   leader owns the content; I own the transport).
+> - **⚠ CV is at ~11% context left** and will autocompact — I directed it to POST
+>   its AC5 grounding **before** further reading. An unposted audit is eaten.
+>
+> ### ▶ NEXT FOR ME (in order)
+> 1. **AX-1: let the enclave land it** → verify the ruling is IN the spec (grep for
+>    any surviving uniqueness claim) → publish (spec/doc-only).
+> 2. **Frame AX-2** (the Language build: `axiom` parser production + elaborator
+>    **declaration-path threading** + the kernel `name` label). **FULL CI, never
+>    doc-only.** Guardrails: **the name is a LABEL the kernel MUST NEVER READ**;
+>    **required field + required param, no `Option`**; **no positional index.**
+> 3. **Frame LET-3 Phase 2** (`Map.ken.md`, by proof family). Exemplar:
+>    `union_from_list_acc_lookup_assoc_hit` (`:10218`, 238 lines, repeats
+>    `insert_with_fold_step` 13×).
+> 4. **Owed to Pat:** toolchain-axis proposal.
+> 5. **Kernel/Verify/Language/Foundation idle BY DESIGN — do NOT manufacture work.**
+>
+> ### ★★ AX-1 — PAT APPROVED: **"sugar plus named postulates… adding a label to kernel data is low risk. approved."**
+> Frame: `docs/program/wp/ax1-axiom-sugar-and-named-postulates.md`.
+> **Grounded facts (I read every link — do NOT re-derive from memory):**
+> - **`Axiom` has NO kernel support because no `Axiom` term exists.** Not in the
+>   grammar, not the prelude, **zero hits in `ken-kernel/src`.** It is a
+>   string-matched elaborator intercept (`resolve.rs:648` `SUGAR_AXIOM` →
+>   `elab.rs:508`) that calls `declare_postulate` to mint a **fresh `Decl::Opaque`
+>   of the *expected* type.** The kernel sees an ordinary typed constant.
+> - **⚠ THE TRUST BASE IS ANONYMOUS *AND WIDER THAN THE SURFACE*.**
+>   `Decl::Opaque` has **no name field**; `declare_postulate` uses `fresh_id()`.
+>   **`is_prelude` excludes EXACTLY THREE ids (`Top`/`Bottom`/`tt`) — it is NOT a
+>   prelude filter.** ⇒ **Rust-minted postulates are ALREADY COUNTED, anonymously**
+>   (`bytes.rs:136/260/275`, `conversions.rs:133`, `capabilities.rs:428/432/444`).
+>   **I first guessed these were prelude-excluded. WRONG — in the reassuring
+>   direction.** ⇒ **the name goes on `declare_postulate`, not on the sugar.**
+> - **Surface population is CLOSED, 2 shapes only:** top-level decl body, and
+>   instance field. Instance name = `Class.HeadType.field`. **Uniqueness is FREE
+>   from coherence** (one instance per class+head) ⇒ **NO positional index** (it
+>   would churn every DS `trusted_base_delta` assertion).
+> - **⛔ KERNEL BAR: the name is a LABEL the kernel must NEVER read.** No branch on
+>   it in conv/typing/admission/positivity/universes/elim. That is *why* it's safe.
+>
+> ### ⚖ LET-3 CALIBRATION — binding on Phase 2
+> **`False ↦` earns its bindings** (`sort_bool t` occurred **twice**). **`True ↦`
+> is the boundary** — one-use bindings; accepted ONLY for cross-arm parallel
+> structure. **⛔ NOT generalizable: a one-use binding does not earn its keep by
+> consistency alone.** *(Foundation's implementer reached the same carry itself.)*
+>
+> ### ⚠⚠ THE ARCHITECT SEAT WEDGED **4× TODAY** — a detector is now armed
+> Terminal-review requests land **unsubmitted** in its input buffer; the seat sits
+> idle looking correct. **A synchronized multi-ring stall IS a wedged shared gate.**
+> Repair = **a bare `Enter`** to that pane. I armed a persistent Monitor
+> (`bp808a7mu`) that fires when it's idle with a stranded paste ≥60s.
+>
+> ### ⚠ AND I WALKED INTO MY OWN `reset --hard` TRAP
+> Destroyed 2 unpublished tracker commits by resetting `steward/work` without
+> looking. **ALWAYS `git log --oneline origin/main..steward/work` FIRST.**
+> *(Recovered via reflog. Writing a warning down did not make me immune to it.)*
+>
+> ### WAS (20:30): three WPs closed; KTR-2 with the Architect.
+>
+> | WP | state |
+> |---|---|
+> | **KTR-1** | **MERGED `65d68cfc` · CLOSED** (retros in) |
+> | **LET-2b** | **MERGED `ce6f0718` · CLOSED** (retros in) |
+> | **LET-3** | **MERGED `7071f919` · CLOSED** (retros in) — pilot passed my gate |
+> | **KTR-2** | **QA-APPROVED `9eb0ffac`, with @architect.** ⇒ **publish on APPROVE (FULL CI, never doc-only).** |
+>
+> ### ▶ NEXT FOR ME
+> 1. **KTR-2 `9eb0ffac` → publish full CI → verify by CONTENT → chase Language retros.**
+> 2. **Frame LET-3 Phase 2** (`Map.ken.md`, by proof family). **Exemplar:
+>    `union_from_list_acc_lookup_assoc_hit` (`:10218`, 238 lines, repeats
+>    `insert_with_fold_step` 13×)** — the `False`-arm case at scale.
+> 3. **Owed to Pat:** toolchain-axis proposal (no test framework; `export`
+>    specified-but-unparsed; no package manager).
+> 4. **Kernel/Verify idle BY DESIGN — do NOT manufacture work.**
+>
+> ### ✅ I PRE-VERIFIED KTR-2's GUARDRAILS MYSELF (so the publish is safe)
+> - **0 `ken-kernel` files touched** ✅ · **6 discriminators** present ✅
+> - **NOT a mass-replace:** the whole *unchecked* `rtype_to_kernel` is **deleted**
+>   (only `rtype_to_kernel_checked` remains) — that is D1's single checked
+>   boundary. **The two CORRECT sites survive:** `Δ_p` params (`:54`) and genuine
+>   `Type` lowering (`:692`).
+> - New `ConstructorUniverseViolation` lives in the **elaborator**, with a comment
+>   stating **the kernel remains the authority** — the Architect's exact bar.
+>
+> ### ⚖ LET-3 CALIBRATION — binding on Phase 2
+> **`False ↦` earns its bindings** (`sort_bool t` occurred **twice** → names a
+> repeated state). **`True ↦` is the boundary** — one-use bindings replacing an
+> already-legible one-liner; **accepted ONLY for cross-arm parallel structure.**
+> **⛔ NOT generalizable: a one-use binding does NOT earn its keep by consistency
+> alone.** Across 14,723 lines, "it reads more uniformly" is exactly the argument
+> that would justify naming everything. *(Foundation's implementer independently
+> reached the same carry in its retro — good.)*
+>
+> ### ⚠⚠ I WALKED INTO MY OWN TRAP — read this before any `reset --hard`
+> **I `reset --hard`'d `steward/work` to main WITHOUT checking what it held**, and
+> it held **two unpublished tracker commits** — the exact hazard I had written into
+> this file one hour earlier. Recovered via `git reflog steward/work` (pinned at
+> `preserved/steward-tracker-20-20`).
+> **⇒ ALWAYS `git log --oneline origin/main..steward/work` BEFORE a
+> worktree-reverting op.** Writing a warning down does not make you immune to it.
+>
+> ### WAS (20:20): KTR-1+LET-2b closed; KTR-2 + LET-3 kicked.
+>
+> ## ✅ BOTH WPs MERGED **AND CLOSED**. Two rings kicked. Nothing blocked on me.
+>
+> | WP | state |
+> |---|---|
+> | **KTR-1** | **MERGED `65d68cfc` · CLOSED** (PR #675, full CI; retros in) |
+> | **LET-2b** | **MERGED `ce6f0718` · CLOSED** (PR #676, full CI; retros in) |
+> | **KTR-2** | **ACTIVE — Team Language.** Gate run, ring compacted, kicked `evt_3s3sxdhmfc97c`. |
+> | **LET-3** | **RELEASING — Team Foundation.** Frame made current (`35858b5d`); ring compacting now. |
+>
+> **Also landed:** fleet memory (`d16e82ac`), KTR-2 frame (`517b80de`), LET-3
+> currency amendment (`35858b5d`). **All content-verified on `origin/main`.**
+>
+> ### ▶ NEXT FOR ME (in order)
+>
+> 1. **Finish Foundation's gate → kick LET-3** (compaction was in flight at the
+>    seam; **verify the drops, then post the kickoff and confirm `Working`**).
+> 2. **KTR-2 → QA → Architect → publish** (**FULL CI**, never doc-only — Rust).
+> 3. **LET-3 → the pilot review is MY gate**, and a real one. **Read the diff for
+>    the control cases** (`char_at`, `eq`, `compare` must be UNTOUCHED) and for
+>    any one-binding `let` turned into a group.
+> 4. **Kernel is free — and that is CORRECT. Do NOT manufacture work for it.**
+>    KTR-1 closed its lane, Lane 2 went to Language as KTR-2, and **Kernel/Verify
+>    are idle BY DESIGN** (Verify by Pat's Z3/FO/Kripke deferral). *A quiet ring
+>    with no ready WP on the DAG is not a stall.*
+> 5. **Owed to Pat:** the **toolchain-axis proposal** (no test framework;
+>    `export` specified-but-unparsed; no package manager).
+>
+> ### ⚠ TWO STANDING TRAPS THIS SEGMENT PROVED REAL
+>
+> - **A synchronized multi-ring stall IS a wedged shared gate.** Both rings went
+>   QA-green and stopped; **both terminal-review requests sat UNSUBMITTED in the
+>   Architect's input buffer.** One bare `Enter` cleared it and both votes landed
+>   in 4 minutes. **`post_response` returning an event id proves the event
+>   EXISTS, not that any agent READ it.** ⇒ *When a ring goes green and the gate
+>   goes silent, `capture-pane` the GATE SEAT FIRST.* (Now fleet memory.)
+> - **`steward/work` had 2 UNPUBLISHED memory files** that a `reset --hard` would
+>   have destroyed. **Check `git log origin/main..steward/work` before any
+>   worktree-reverting op** — the tracker commits were superseded, but the memory
+>   edits were not.
+>
+> ### WAS (19:45): KTR-1 merged; LET-2b in CI; KTR-2 framed.
 >
 > ## ✅ KTR-1 **MERGED** `65d68cfc` (full CI, PR #675). LET-2b in CI. KTR-2 framed.
 >
