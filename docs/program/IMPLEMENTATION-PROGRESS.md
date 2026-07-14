@@ -136,7 +136,213 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > lands → **ONE combined SHA** → honesty gate → publish → **verify on main by CONTENT** →
 > §B retros → **I-4 ARC COMPLETE**.
 >
-> ### ⏭ 2026-07-14 (04:2x) — ★★★ BOTH CANDIDATES GATED CLEAN · SEQUENCED MERGE
+> ### ⏭ 2026-07-14 (05:1x) — ★ I-5 DESIGN IN: ZERO-TCB VERDICT + AN HONESTY DISCLOSURE
+> **✅ ARCHITECT I-5 DESIGN NOTE (`evt_7pxjbng6t0mqy`). TCB VERDICT: ZERO KERNEL-TCB — NO
+> operator decision, NO primitive to Pat.** He grounded it against the tree instead of
+> inheriting the contract's claim, and **found the contract WRONG**: `discharge_attenuation`
+> lives in the **UNTRUSTED ELABORATOR** (`capabilities.rs:159-189`), not the kernel; the
+> kernel is a **generic reflexivity oracle over opaque postulates — LATTICE-AGNOSTIC** (it
+> only checks `child`/`bound` are the same opaque constant; the *elaborator* decides
+> same-vs-distinct in Rust). ⇒ widening `w` scalar → `(rights × scope)` meet is
+> **elaborator-Rust-only**. The contract's "kernel `discharge_attenuation` machinery"
+> phrasing was imprecise. **This is the difference between a build WP and an operator
+> decision — and it is why I made him verify rather than inherit.**
+> **★★ THE DISCLOSURE THAT MATTERS MORE THAN THE VERDICT (he volunteered it against his own
+> interest):** *"the kernel's `Refl` re-check of the attenuation bound is **DEGENERATE** (it
+> mirrors the elaborator's own decision via wired postulates), so the real net for the bound
+> is the elaborator's meet/⊑ Rust + the runtime `authorizes` — **NOT an independent kernel
+> proof**. I-5 inherits that posture; it must not claim a stronger kernel guarantee than
+> exists."*
+> ⇒ **Ken's least-privilege path confinement — a SECURITY property — will be netted by
+> TRUSTED RUST + conformance discriminators, NOT by kernel-checked proof.** Defensible (same
+> trust class as the landed FS driver; I-5 grows the **trusted runtime driver**, which is
+> the normal build lane — NOT a kernel/logical-TCB expansion). But it is exactly the boundary
+> `PRINCIPLES.md` demands honesty about, and exactly the kind that **decays into an
+> over-claim once three WPs cite it secondhand.** **A green suite must NOT read as "the
+> kernel proves confinement."**
+> **⇒ ORDERED AN ADR** (`evt_43hewhna5wc2p`) — an in-thread ruling is NOT a durable
+> deliverable. Must carry: (1) the TCB verdict + grounding (incl. the contract correction);
+> (2) **the trust-boundary statement UNHEDGED** (degenerate kernel re-check; what is and is
+> NOT guaranteed); (3) the 2 load-bearing rulings — **`scope` stays in the opaque Cap VALUE,
+> NOT lifted into the surface type index** (preserves `Cap : Auth -> Type0`, zero
+> surface/kernel change, static write⇒`AFull` gate intact; path-indexed dependent caps named
+> as a DEFERRED future option) and **`root` is a directory HANDLE, not a path prefix**; (4)
+> the **check-and-use-share-the-fd** property (what makes it race-safe vs check-then-reopen).
+> **SEQUENCE: ADR (doc-only, fast) → I frame I-5 CITING it → Handoff-Gate Runtime → kick.**
+> Runtime must build from a **citable ADR**, not a quoted convo note.
+> **DISCRIMINATORS ADOPTED VERBATIM** — all **NON-DEGENERATE PAIRS** (deny-case AND
+> accept-case on the same shape; a path-string impl passes a lone deny-case — the PAIR is the
+> net): symlink escape; **`..` traversal** (`dir1/sub/../secret` DENIED while `dir1/sub/ok`
+> ACCEPTED — catches the unnormalized string-prefix bug); absolute-path target; right-absent;
+> attenuation monotonicity (C1↔C2 orientation pair); **TOCTOU proved STRUCTURALLY** (the op
+> consumes the check's fd — not a flaky timing test).
+> **▶ ADD TO PAT'S BRIEF (item 4, POSTURE not decision):** least-privilege FS confinement is
+> **trusted-Rust-netted-by-tests, not kernel-proved**. Not new (the scalar lattice already had
+> this posture) — but it becomes **load-bearing for a security property** at I-5, which raises
+> the stakes. No decision needed; he should simply know it, per the honesty charter.
+>
+> ### ⏭ 2026-07-14 (05:0x) — I-4 CLOSED · CC4 KICKED · I-5 DESIGN WITH ARCHITECT
+> **✅✅ I-4 ARC CLOSED.** §B merged `b91c9735` (verified by content); **ALL retros IN** —
+> Runtime ×3 + enclave ×3 (CV's `evt_3921kcmvf1hnt` was the last). **I-1…I-4 COMPLETE.**
+> **✅ CC4 KICKED (Foundation)** — `evt_4yy8a2pb4yqv4`; frame `wp/cc4-diagnostic-core @
+> e8722ab3` (off `b91c9735`). Handoff Gate: all 3 seats compacted + **drops verified**.
+> **★ I RAN MY OWN NEW PRE-PIN AUDITS (`51a3c39e`) ON THIS FRAME — AND (a) CAUGHT THE SAME
+> CYCLE AS CC3 BEFORE SHIPPING IT:** `SourceId` is declared INSIDE CAT-5 ⇒ a `Diagnostic.Core`
+> whose `SourceOrigin` carries it, with CAT-5 consuming `Diagnostic`, is a **CYCLE**. Pinned:
+> **Diagnostic.Core depends on NOTHING**; **`SourceId` MOVES DOWN** into it (it is
+> `MkSourceId Nat`, no CAT-5-dependent laws — a *diagnostic* concept, not a parsing one);
+> **`Span` does NOT move** (its `ValidSpan` laws are `Source`-relative); **every injection
+> lives with its CLIENT**. Load: `Diagnostic.Core → Cursor → Decoder → CAT-5 → Text.Numeric`.
+> **(b) Constructibility audit: CLEAN** — every location is `Nat`-built (`Span`,
+> `ArgLocation`, `NumericError` char index) ⇒ **no opaque-`Int` hop, no cached-`Nat` carrier
+> needed** (told them: reaching for `bytes_length`/`int_to_nat` ⇒ the shape drifted, ESCALATE).
+> **(c) Corpus oracles: BOTH named in AC7** (`ken_fmt.rs` + `kenfmt_c_capstone.rs`) — the CC3
+> miss, not repeated. **Add NO `FRAME_LINE_COUNTS` row** (CC3's coverage-check re-scope means
+> new files no longer force a fabricated baseline — keep it that way).
+> **★ CC3's PARAMETERIZATION PAYS OFF: `Decoder` needs ZERO change** — it is already
+> loc-generic (`DecoderError loc`), so clients just instantiate `loc = Origin`. Told them:
+> **if you're editing `Decoder.ken.md`, you've taken a wrong turn.**
+> **AC5 = the WP's real test: NO surviving second carrier** (`Text.Numeric` must expose no
+> standalone `NumericError`). A green suite with the old carrier alive underneath is a FAILED
+> CC4 — the CAT-5 lesson, applied up front.
+> **✅ I-5 DESIGN REQUEST → ARCHITECT** (`evt_4xqr5y8rs2qvt`; compacted, roused). Scoped
+> capability model per contract §3.2: rights × scope × symlink policy × attenuation ×
+> **`openat`-style TOCTOU-safe** enforcement (NOT path-string compare).
+> **★ THE I-4 DIVIDEND: I-5 is BUILT ON the semantic `attenuate` we refused to grep-and-nuke**
+> — contract §3.2.4 says reuse `attenuate → (Cap, AttenuationObligation)` +
+> `discharge_attenuation` and *"extend its `w` from a scalar to a (rights × scope) meet."*
+> Had anyone nuked it, we'd be rebuilding the authority lattice now.
+> **⚠ THE ONE QUESTION I PUT TO HIM — settle it NOW, not mid-build:** the contract ASSERTS
+> I-5 is zero-TCB, but **`discharge_attenuation` is described as KERNEL machinery** and
+> extending its lattice may touch the kernel. **Told him: verify the zero-TCB claim against
+> landed code; if it is FALSE, say so plainly with the exact kernel surface that must move —
+> I take that to PAT. Do NOT design around it; do NOT let a TCB delta ride into a build
+> frame.** This is the §C-unbuildable-spec failure, pre-empted one layer earlier.
+>
+> ### ⏭ 2026-07-14 (04:5x) — I-4 ARC COMPLETE · `origin/main @ b91c9735`
+> **✅✅ I-4 §B MERGED — `origin/main @ b91c9735`** (PR #621, CI green). **THE I-4 ARC IS DONE**
+> (§A/§C/§D/§B all landed) — pending retros only.
+> **VERIFIED ON MAIN BY CONTENT (not PR status, not SHA) — every security-critical claim:**
+> `attenuate` in `prelude.rs` = **0 hits** (Ken-callable form GONE) · `capabilities.rs::
+> attenuate` **PRESENT** (semantic runner op SURVIVES) · `62-authority.md` **byte-identical**
+> to pre-reshape main (authority story INTACT) · `readFile : (a : Auth) -> Cap a -> …`
+> polymorphic · `writeFile : Cap AFull` **still monomorphic** (Pat's Option (ii) write gate
+> holds) · **0 kernel files changed** (ZERO TCB) · runner fails closed on named
+> `MissingCapability` (no implicit FS authority default).
+> **★ CODE + SPEC + CONFORMANCE IN ONE SQUASH — `main` NEVER carried a spec contradicting its
+> own implementation at any commit.** That is what the 6-hour §B hold bought.
+> **★ THE ARC'S REAL LESSON:** §C merged an **unbuildable** spec (Ken-callable `attenuate`
+> had to *produce* an opaque `Cap` = an introduction form in disguise). **runtime-implementer
+> HARD-STOPPED** — grounded, no source edits, clean branch — instead of reaching for the
+> primitive that would have made it compile. **That single refusal kept a trusted primitive
+> out of Ken's TCB.** Architect's reshape then hit the goal at zero TCB. Standing danger
+> throughout: a grep-and-nuke of `attenuate` would have killed the runner's SEMANTIC op with
+> the dead wrapper and broken the authority model — **every unit distinguished the two on
+> every hit.**
+> **⚠ THE GATE HOLE TO FIX (§C retro prompt):** §C's spec was internally coherent, passed CV
+> + Architect + me — because we all checked **fidelity** and **soundness** and **NOBODY asked
+> "can this be written against the primitive it sits on?"** ⇒ **a REALIZABILITY/
+> constructibility check belongs in the enclave's own frame**, not left to an implementer's
+> hard-stop downstream. (Same family as the CC3 constructibility audit I just promoted into
+> my playbook, `51a3c39e`.)
+> **▶ RETROS: Runtime §B ALL 3 IN** (leader `evt_4ypb907bxp2s1`, QA `evt_6vtnebae1d0ah`, impl
+> `evt_4a8q54cv436wd`). Shared carry: **hard-stop opaque capability production BEFORE any TCB
+> workaround** · distinguish the deleted Ken wrapper from the preserved semantic runner op ·
+> force semantic reconciliation + end-to-end reread for **overlapping normative files** ·
+> require corpus-wide `kenfmt_c_capstone` on the **final assembled SHA** for ABI migrations.
+> **Enclave §C: spec-leader + spec-author IN; ⏳ CV's retro is the LAST ONE OUTSTANDING**
+> (nudged `evt_5m96gjjr4azm6` with the realizability-gate prompt). **Merged ≠ closed.**
+> **✅ HANDOFF GATE COMPLETE — DROPS VERIFIED (do NOT re-compact):**
+> foundation-leader / foundation-implementer / foundation-qa / **architect** all
+> **`Context compacted`** @ ctx-verified (architect ctx 0%). ⇒ **All four are KICK-READY.**
+> **NEXT ACTION IS THE KICKOFF ITSELF** — frame CC4, then post. (Gate steps 1–5 are DONE;
+> only step 6, the mention, remains.)
+> **NOTE — tier correction:** the **architect is on Opus 4.8 (1M)**, i.e. still **T1** on the
+> Anthropic pool. The `terra`/T3 inversion affects the **build-team leaders + QA** seats
+> (gpt-5.6), NOT the Architect. Sharpen this when raising it with Pat.
+> **▶ NEXT ACTIONS ON RESUME (in order):**
+> **(1)** Collect §B/§C retros → **CLOSE I-4**.
+> **(2)** **Handoff-Gate Foundation → frame + kick CC4 (`Diagnostic.Core`)** (retros already
+> in ✓; needs compact + kick). CC4 now has its **two real consumers** (CAT-5 `Span` +
+> ArgCursor loc) ⇒ abstraction EARNED.
+> **(3)** **Architect → I-5 DESIGN pass** (scoped capability model: rights × scope × symlink ×
+> attenuation × `openat`; gates least-privilege FS write/delete). **His §B obligation is now
+> CLEAR ⇒ he is Handoff-Gate eligible.** Then Runtime builds I-5.
+> **⚠ FRAME CC4 AND I-5 WITH MY OWN NEW PLAYBOOK CLAUSE (`51a3c39e`):** (a) dependency-DAG
+> check; (b) **constructibility audit for EVERY promised field** (opaque Int/Bytes/String are
+> constructible-NOT-destructible); (c) corpus-oracle enumeration. **I wrote 2 unbuildable pins
+> + 1 missing gate into CC3 by skipping these; §C's unbuildable spec is the SAME failure at
+> the enclave layer.**
+> **▶ OPERATOR-FACING (Pat back ~11:00–11:30Z) — 3 items, NONE blocking:** (1) **`Bytes`-length
+> → `Nat` bridge = a TCB QUESTION** (2nd cached-`Nat`-over-opaque-`Bytes` carrier landed;
+> Foundation's carry: a 3rd occurrence should force a substrate-unification decision; do NOT
+> let a build WP mint `int_to_nat`). (2) **MODEL-TIER INVERSION** — leaders + QA on `terra`
+> (T3), implementers/enclave on `sol` (T1); `MODELS.md` wants the opposite for
+> soundness-adjacent QA (symptom: a 26-min spec-leader stall on the critical path); Pat owns
+> `moot.toml`. (3) **`export` spec-ahead-of-parser** — specified but unparsed; deliberate or
+> drift? Don't queue unilaterally.
+>
+> ### ⏭ 2026-07-14 (04:4x) — (superseded) · `origin/main @ e6ed51db`
+> **✅ CC3 CLOSED** — merged `e6ed51db`, verified on main by CONTENT, **all 3 §10 retros IN**
+> (impl `evt_20ay36236nmjr`, QA `evt_56fage9403z6h`, leader coordination). Foundation is
+> **idle and HOLDING** (told: no new work until the Handoff Gate).
+> **▶ IMMEDIATE NEXT ACTIONS ON RESUME (in order):**
+> **(1) §B PUBLISH IN FLIGHT** — head `35317414` on `wp/i4b-runtime-program-caps`, background
+> task `bgayzte9q`, PR polling CI. **ON MERGE: verify on origin/main BY CONTENT** (grep the
+> landed tree: polymorphic `readFile` in `prelude.rs`; `writeFile` still `Cap AFull`; **ZERO
+> Ken-callable `attenuate`**; `62-authority.md` unchanged; `38-ffi-io` reshaped) → **collect
+> §B/§C §10 retros from Runtime + enclave** → **I-4 ARC COMPLETE.** If CI is RED: the likely
+> culprit is `kenfmt_c_capstone` (§B touches `catalog/guide/` + `examples/rosetta/`, both
+> oracle-covered) — but Runtime pre-flighted it 3/3 PASS on `c699b530`, and the re-anchor
+> only ADDED CC3 files, so it should hold.
+> **(2) THEN: Handoff-Gate Foundation → kick CC4 (`Diagnostic.Core`).** Frame it first. CC4
+> subsumes CC3's parameterized locations and now has its **two real consumers** (CAT-5 `Span`
+> + ArgCursor's arg-index/byte-range loc) ⇒ the abstraction is finally EARNED.
+> **⚠ APPLY MY OWN NEW PLAYBOOK CLAUSE WHEN FRAMING CC4** (`51a3c39e`, promoted from CC3):
+> (a) **dependency-DAG check** — no abstraction may depend on its clients; home each instance
+> WITH its carrier; the generic module owns parameterized carriers. (b) **constructibility
+> audit** for EVERY promised field — can the landed primitive PRODUCE it? (opaque
+> `Int`/`Bytes`/`String` are constructible-NOT-destructible). (c) **corpus-oracle
+> enumeration** — grep EVERY test globbing `catalog/`/`examples/`; name each in the ACs.
+> **I wrote 2 unbuildable pins + 1 missing gate into CC3 by skipping exactly these.**
+> **(3) THEN: I-5 (scoped capability model)** — needs an **ARCHITECT DESIGN pass first**. He
+> was on-call for §B; once §B merges his obligation clears and he becomes Handoff-Gate
+> eligible. I-5 gates least-privilege FS write/delete.
+> **▶ OPERATOR-FACING (Pat back ~11:00–11:30Z) — 3 items, NONE blocking:**
+> 1. **`Bytes`-length → `Nat` bridge = a TCB QUESTION.** 2nd cached-`Nat`-over-opaque-`Bytes`
+>    carrier landed (`Source`, `ArgBytes`). Foundation's carry: **a 3rd occurrence should
+>    trigger an explicit substrate-unification decision.** Do NOT let a build WP mint
+>    `int_to_nat` — that is +1 trusted primitive and it is Pat's call.
+> 2. **MODEL-TIER INVERSION** — leaders + QA on `terra` (**T3**), implementers/enclave on
+>    `sol` (**T1**). `MODELS.md` wants the opposite for soundness-adjacent QA. Symptom seen:
+>    a 26-min spec-leader orientation stall on the critical path. Pat owns `moot.toml`.
+> 3. **`export` spec-ahead-of-parser** — specified but unparsed (same state §D just fixed for
+>    `program`/`package`/`admits`). Deliberate or drift? Don't queue unilaterally.
+>
+> ### ⏭ 2026-07-14 (04:3x) — CC3 MERGED · I-4 §B PUBLISHING (the arc's last merge)
+> **✅ CC3 MERGED — `origin/main @ e6ed51db`** (PR #620, CI green after the oracle repair).
+> **VERIFIED ON MAIN BY CONTENT** (not by SHA/status): `Parsing/Cursor.ken.md` +
+> `Parsing/Decoder.ken.md` **present**; the oracle carries the **subset check** with **ZERO
+> fabricated rows**; and the one that mattered — **CAT-5's bespoke recursion is GONE**
+> (`parse_bool_expr_at_fuel`/`skip_spaces_fuel` = **0 hits** in the landed
+> `Capability/Parsing`) ⇒ **the subsumption is GENUINE, not a wrapper with the old universe
+> alive underneath.** That was the objective a WP can pass every test while quietly failing.
+> **CC3 retros REQUESTED** (`evt_4maad0g6hhnrv`) — merged ≠ closed. **Foundation told to STAY
+> PUT** (no new work until Handoff Gate). **NEXT: CC4 `Diagnostic.Core`** — CC3 earned it: it
+> subsumes CC3's parameterized locations and now has its **TWO real consumers** (`Span` +
+> ArgCursor location), so the abstraction is justified, not speculative.
+> **▶ I-4 §B PUBLISHING — head `35317414`** on `wp/i4b-runtime-program-caps`
+> (re-anchored `4b78fabc` + tracker-sync).
+> **★ THE RE-ANCHOR PROOF (re-run, NOT carried forward — a rebase is exactly where reviewed
+> content silently changes):** every file differing between the **voted** `c699b530` and the
+> **re-anchored** `4b78fabc` is **exactly a CC3 file that arrived from main** (verified
+> file-by-file against `e22f5688..origin/main`); and **every §B-reviewed file is BYTE-
+> UNCHANGED** — `main.rs`, `prelude.rs`, `38-ffi-io.md`, the reconciled contract. Both
+> authored subtrees still byte-identical to `5f675810` / `557c1816` **post-rebase**. ⇒ **the
+> three votes still cover exactly what lands.** Rebase clean (7 commits), 0 merges,
+> forbidden-path EMPTY, `diff --check` clean.
+>
+> ### ⏭ 2026-07-14 (04:2x) — BOTH CANDIDATES GATED CLEAN · SEQUENCED MERGE
 > **✅ I-4 §B `c699b530` — ALL THREE VOTES IN, Decision `dec_2jw3b5jwfqen1` RESOLVED APPROVE**
 > (runtime-QA + **Architect terminal** + **CV Spec/Fidelity**). **MY HONESTY GATE: CLEAN.**
 > Linear (0 merges) · forbidden-path EMPTY (no kernel/Cargo/lock/.github) · **`62-authority.md`
