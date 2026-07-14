@@ -107,6 +107,13 @@ pub struct NumericEnv {
     pub bool_id:    GlobalId,
     /// Derived (`18a §5.9`) — filled in by `decimal_char::register_decimal_char`.
     pub char_id:    GlobalId,
+    /// `uint8_int_retract`, SUB-1b's single conversion-layer postulate.
+    /// Filled by `conversions::register_conversions` after the two existing
+    /// `UInt8`/`Int` primitive operations have been registered.
+    pub uint8_int_retract_id: GlobalId,
+    /// The actual `trusted_base()` delta observed while installing SUB-1b.
+    /// Tests assert that this is exactly `{uint8_int_retract_id}`.
+    pub uint8_retract_trusted_delta: Vec<GlobalId>,
 
     // --- `+` dispatch table (keyed by the type's GlobalId) ---
     add_table: HashMap<GlobalId, AddEntry>,
@@ -491,6 +498,8 @@ pub fn register_numeric_env(
         int_id, int8_id, int16_id, int32_id, int64_id,
         uint8_id, uint16_id, uint32_id, uint64_id,
         decimal_id, decimalpair_id, float_id, float32_id, bool_id, char_id,
+        uint8_int_retract_id: GlobalId(0),
+        uint8_retract_trusted_delta: Vec::new(),
         add_table,
         eq_table,
         sub_table,

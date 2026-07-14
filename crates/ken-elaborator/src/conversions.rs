@@ -29,10 +29,10 @@
 //! (needs the 8 `IntN`/`UIntN` type ids) and after the prelude's `Option`
 //! inductive is declared.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use ken_kernel::env::PrimReduction;
-use ken_kernel::{declare_primitive, GlobalEnv, GlobalId, Term};
+use ken_kernel::{declare_postulate, declare_primitive, GlobalEnv, GlobalId, Term};
 
 use crate::error::ElabError;
 use crate::ElabEnv;
@@ -92,10 +92,67 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
 
         // ── native floor: widening (total) + narrowing raw cast (unchecked) ──
         let widen_name = format!("{}_to_int", spec.snake);
-        reg_unop(&mut elab.env, &mut elab.globals, &widen_name, ty_id, int_id)?;
+        let widen_id = reg_unop(
+            &mut elab.env,
+            &mut elab.globals,
+            &widen_name,
+            ty_id,
+            int_id,
+        )?;
 
         let narrow_raw_name = format!("int_to_{}_raw", spec.snake);
-        reg_unop(&mut elab.env, &mut elab.globals, &narrow_raw_name, int_id, ty_id)?;
+        let narrow_raw_id = reg_unop(
+            &mut elab.env,
+            &mut elab.globals,
+            &narrow_raw_name,
+            int_id,
+            ty_id,
+        )?;
+
+        // SUB-1b: `UInt8` is opaque, so its conversion retraction cannot be
+        // proved by structural elimination. Register exactly this one
+        // conversion-layer proposition; every lawful equality consumer is
+        // derived in ordinary Ken from it.
+        if spec.name == "UInt8" {
+            let trusted_before: BTreeSet<_> =
+                elab.env.trusted_base().into_iter().collect();
+            let uint8_t = Term::const_(ty_id, vec![]);
+            let widen = Term::const_(widen_id, vec![]);
+            let narrow = Term::const_(narrow_raw_id, vec![]);
+            let retract_ty = Term::pi(
+                uint8_t.clone(),
+                Term::Eq(
+                    Box::new(uint8_t),
+                    Box::new(Term::app(
+                        narrow,
+                        Term::app(widen, Term::var(0)),
+                    )),
+                    Box::new(Term::var(0)),
+                ),
+            );
+            let retract_id = declare_postulate(&mut elab.env, vec![], retract_ty)
+                .map_err(|e| {
+                    ElabError::Internal(format!("uint8_int_retract failed: {e}"))
+                })?;
+            elab.globals
+                .insert("uint8_int_retract".to_string(), retract_id);
+
+            let trusted_after: BTreeSet<_> =
+                elab.env.trusted_base().into_iter().collect();
+            let trusted_delta: Vec<_> = trusted_after
+                .difference(&trusted_before)
+                .copied()
+                .collect();
+            let actual_delta: BTreeSet<_> = trusted_delta.iter().copied().collect();
+            let expected_delta = BTreeSet::from([retract_id]);
+            if actual_delta != expected_delta {
+                return Err(ElabError::Internal(format!(
+                    "SUB-1b trusted-base delta must be exactly uint8_int_retract: expected {expected_delta:?}, got {actual_delta:?}"
+                )));
+            }
+            elab.numeric_env.uint8_int_retract_id = retract_id;
+            elab.numeric_env.uint8_retract_trusted_delta = trusted_delta;
+        }
 
         // ── neg_intN (signed only): NATIVE, checked, does not demote ────────
         if spec.signed {
