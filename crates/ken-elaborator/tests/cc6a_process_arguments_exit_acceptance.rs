@@ -347,6 +347,12 @@ fn exit_policy_is_total_explicit_and_keeps_uint8_payloads() {
             Nat
             cc6_problem_code
             (Err CC6Problem Nat CC6BadInput)
+        const cc6_result_okay_exit : ExitCode =
+          exit_from_result
+            CC6Problem
+            Nat
+            cc6_problem_code
+            (Ok CC6Problem Nat Zero)
         "#,
     )
     .expect("explicit total exit-policy probes must elaborate");
@@ -354,6 +360,10 @@ fn exit_policy_is_total_explicit_and_keeps_uint8_payloads() {
     let mut store = make_store(&env);
     assert!(matches!(
         eval_global(&env, &mut store, "cc6_okay_exit"),
+        EvalVal::Ctor { id, .. } if id == env.globals["Success"]
+    ));
+    assert!(matches!(
+        eval_global(&env, &mut store, "cc6_result_okay_exit"),
         EvalVal::Ctor { id, .. } if id == env.globals["Success"]
     ));
     for (name, code) in [
