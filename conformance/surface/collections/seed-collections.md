@@ -38,8 +38,11 @@ the `/spec` supersession in `37 §3.3` this WP lands.
 
 **Grounded (content-verified against the landed targets, not heading numbers —
 the `conformance-oracle-grounding-fallback` discipline):** `14 §5` (`String` is
-a primitive type — opaque constant, registered reductions compute over literals,
-trusted/audited `18 §5`); `41 §2`/`§4` (content-addressed append-mostly heap;
+a primitive type — an opaque constant, trusted/audited by `18 §5`); the landed
+`byte_length`/`char_length` `PrimReduction::Op` arms compute over literal values
+in `ken-interp`, but remain opaque to kernel conversion pending K3 (the landed
+`catalog/guide/proof-techniques.ken.md §1.1` primitive-`Op` `Refl` rejection is
+the current control); `41 §2`/`§4` (content-addressed append-mostly heap;
 O(1) structural equality = slot-id comparison); `41 §3a` +
 `docs/design/content-addressing.md §1.1` (kind tags **`String 0x04`,
 `Array 0x06`** — verified against the enumerated table; `String` =
@@ -59,8 +62,16 @@ infinitude demo is the L2 unfold, **not** `Lazy`); `c3a3f1d`
 lookup — cross-declaration combinator references resolve). Cross-ref fidelity
 verified at each target; no dangling forward-ref.
 
-**Two staging facts that gate how a case is tagged (verified against the code,
+**Three staging facts that gate how a case is tagged (verified against the code,
 not the frame):**
+- **Primitive `Op` evaluation is runtime-only today.** `byte_length` and
+  `char_length` are registered as `PrimReduction::Op` and have live
+  interpreter value behavior, but `ken-kernel::conv::whnf` has no
+  primitive-`Op` reduction arm. Therefore the byte/char **value discriminator is
+  LIVE** through the interpreter, while any claim that the same equations close
+  definitionally or by `Refl` is **DEFERRED/RED-UNTIL-K3**, conditional on K3
+  actually registering those operations for conversion. Runtime evaluation is
+  not evidence of kernel conversion.
 - **NFC normalization is currently STUBBED** (`content-addressing.md §1.4` K3
   note: "the F4 benchmark stubs NFC — strings are encoded as-is"). The spec pins
   NFC-aware O(1) equality as **normative** (`37 §2.1`), but the
@@ -81,9 +92,10 @@ not the frame):**
   elaboration is asserted.
 
 **Reading disciplines (what makes a case here load-bearing):**
-- **Structural, not "compiles."** AC1 asserts **both** view-lengths
-  (`byteLength` **and** `charLength`) and the elaborated type, not that it
-  type-checks; AC2 asserts the **sharing** (unchanged sub-structure = same
+- **Structural, not "compiles."** AC1 asserts **both** live interpreter values
+  (`byte_length` **and** `char_length`) and their elaborated `Int` result type,
+  not that an application type-checks and not that `Refl` closes; AC2 asserts
+  the **sharing** (unchanged sub-structure = same
   slot-id), not a correct result value; AC3/AC6 assert the **emitted
   obligation's shape**, not "it type-checks".
 - **Verdict-flip / structural-flip on the target bug**
@@ -117,8 +129,8 @@ admission-gate commitment) and the `sort` obligation **completeness** (a dropped
 `Perm` conjunct is a verification-soundness omission, the untrusted-layer
 lesson). `(property)` — an invariant over many inputs / a law, not a single
 trace. `(oracle)` — confirmed by the Spec enclave / at build time, safe as it is
-**not** kernel-normative: the prelude/op **spellings** (`byteLength`/
-`lengthBytes`, `get`/`index`, `map`/…), the `Array`/`Map`/`Set` **internal
+**not** kernel-normative: unsettled prelude/op **spellings** (`get`/`index`,
+`map`/…), the `Array`/`Map`/`Set` **internal
 representation** (RRB/HAMT/branching factor — `41 §5` X2 tuning), whether
 `Set a` is literally `Map a Unit`, and the **NFC-equality case** (pending real
 NFC, per the staging fact above). The **kind tags `0x04`/`0x06`/`0x07`/`0x08`,
@@ -136,29 +148,50 @@ kind `0x04`), NFC-normalized at construction (`41 §3a`); it is **not**
 `List Char` (a separate, convertible view, `37 §2.3`).
 
 ### surface/collections/string-byte-length-differs-from-char-length
-- spec: `37 §2.2`, `14 §5` (registered reductions over literals)
+- spec: `37 §2.2`; landed interpreter `prim_reduce` arms for `byte_length` and
+  `char_length`
 - given: an ASCII literal `"abc"` and a **single-code-point multi-byte** literal
   whose code point is **not combining and NFC-invariant** — a CJK scalar
   `U+4E16` (3 UTF-8 bytes, 1 code point), chosen so the byte/char gap is
   **independent of NFC normalization**.
-- expect: `byteLength "abc" ≡ 3` and `charLength "abc" ≡ 3` **coincide**
-  (ASCII); for the CJK literal `byteLength ≡ 3` while `charLength ≡ 1` — they
-  **differ**. Assert **both** view-lengths as definitional reductions (`14 §5`),
-  not "it compiles" and not a single "length".
+- expect: through the **real interpreter**, `byte_length "abc"` and
+  `char_length "abc"` both return `Int 3` (ASCII); for the CJK literal,
+  `byte_length "世"` returns `Int 3` while `char_length "世"` returns `Int 1` —
+  they **differ**. Assert both exact runtime values and the registered result
+  type `String → Int`, not "it compiles" and not a single "length". This is a
+  runtime/value oracle; it does **not** claim definitional equality or a proof by
+  `Refl`.
 - why: AC1's headline — treating `String` as packed UTF-8, not `List Char`,
-  makes `byteLength` (stored bytes) and `charLength` (scalar count)
+  makes `byte_length` (stored bytes) and `char_length` (scalar count)
   **distinct**. A bug that conflates them (one `length` meaning bytes-or-chars
-  ambiguously, or modeling `String` as `List Char` so `length ≡ charLength`
+  ambiguously, or modeling `String` as `List Char` so `length ≡ char_length`
   only) is caught by asserting **both** differ on the multi-byte witness. The
   witness is NFC-invariant so this case is **real now**, independent of the NFC
   stub. (structural; both-views.)
+
+### surface/collections/string-length-op-refl-deferred-k3
+- spec: `37 §2.2`; K3 registered primitive-`Op` conversion is deferred
+- given: proof declarations whose proposed bodies are `Refl` for
+  `Equal Int (byte_length "abc") 3` and
+  `Equal Int (char_length "世") 1`.
+- expect: **DEFERRED / RED-UNTIL-K3.** On the landed kernel these applications
+  remain neutral under conversion, so `Refl` does not close either declaration.
+  Do not count the interpreter values from the live sibling case as conversion
+  evidence. Activate the positive `Refl` oracle only if K3 lands registered
+  conversion rules for these exact `Op`s; until then, the honest proof route is
+  an explicit audited postulate/`Axiom`, not definitional computation.
+- why: this is the discriminating runtime-vs-conversion boundary. A harness that
+  evaluates with `ken-interp::prim_reduce` and then reports the proof accepted
+  would hand-feed the result and falsely turn a tested runtime value into a
+  kernel theorem. The live value case and this K3-gated proof case must remain
+  separate. (deferred K3; proof reachability precondition; no hand-fed green.)
 
 ### surface/collections/string-is-not-list-char-but-convertible
 - spec: `37 §2.3`, `35 §2.4` (`Char` = scalar value, surrogate-excluded)
 - given: a `String` `s` and the four conversions of `37 §2.3`.
 - expect: `String` and `List Char` are **distinct types** (a `String` is **not**
   accepted where a `List Char` is required without an explicit conversion).
-  `String → List Char` is **total** (decode the `charLength`-long view);
+  `String → List Char` is **total** (decode the `char_length`-long view);
   `List Char → String` is **total** (encode UTF-8 then NFC-normalize + intern —
   and cannot encode an invalid scalar, since `Char` excludes the surrogate block
   `U+D800–U+DFFF`, `35 §2.4`). The `String ↔ Bytes` pair (`String → Bytes`
@@ -180,8 +213,9 @@ kind `0x04`), NFC-normalized at construction (`41 §3a`); it is **not**
   decomposed `U+0065 U+0301` ("e" + combining acute).
 - expect: both intern to the **same slot** (NFC-normalized before interning,
   `41 §3a`), so `s == t` is **O(1)-true** (a slot-id comparison, `41 §4`) and
-  `byteLength s ≡ byteLength t` over the **stored normalized** bytes. Equality
-  is decided once at intern time, never by re-traversal.
+  the runtime results of `byte_length s` and `byte_length t` are equal over the
+  **stored normalized** bytes. This is a value assertion, not a `Refl` claim;
+  equality is decided once at intern time, never by re-traversal.
 - why: AC1's content-addressed-NFC face — the normative `37 §2.1` behavior.
   **`(oracle)`-staged:** NFC normalization is currently **stubbed**
   (`content-addressing.md §1.4` K3 note: strings encoded as-is), so this asserts
@@ -805,13 +839,15 @@ result **values** (`Lt`/`Eq`/`Gt`, not `Ordering`); the SCT check stays in its
 - spec: `37 §4.1` (totality), `37 §2.5` (`concat`/`slice` compose), `18a §3`
   (defining-law oracle)
 - given: `concat`/`slice`/`list_append` on a small scalar-clean corpus.
-- expect: `slice 0 (charLength a) (concat a b) ≡ a` for scalar-clean `a` (the
-  length-`charLength a` prefix of `concat a b` is `a`); `list_append` is
+- expect: interpreter evaluation of
+  `slice 0 (char_length a) (concat a b)` returns `a` for scalar-clean `a` (the
+  length-`char_length a` prefix of `concat a b` is `a`); `list_append` is
   **associative** on a small corpus
   (`list_append (list_append xs ys) zs ≡ list_append xs (list_append ys zs)`);
   every combinator is **total** — `natSub` saturates at `0`, `nth`/`take`/`drop`
   totalize out-of-range to `None`/`Nil`, and **no** well-typed application
-  reduces to `Neutral`/stuck. Assert the reduced values + non-`Neutral`.
+  reduces to `Neutral`/stuck. Assert the runtime values + non-`Neutral`; do not
+  reinterpret the `char_length` runtime result as kernel conversion evidence.
 - why: DS-AC7 — compositional sanity + totality. The `concat`/`slice` round-trip
   is a **defining-law oracle** (`18a §3`-style — non-circular, cannot alias the
   reduction it audits), exercising the ops end-to-end; `list_append`
@@ -823,6 +859,7 @@ result **values** (`Lt`/`Eq`/`Gt`, not `Ordering`); the SCT check stays in its
 
 - **AC1** (`String` UTF-8 primitive, not `List Char`):
   `string-byte-length-differs-from-char-length`,
+  `string-length-op-refl-deferred-k3` (deferred/RED-UNTIL-K3),
   `string-is-not-list-char-but-convertible`,
   `string-nfc-canonically-equal-shares-slot` (oracle).
 - **AC2** (persistent collections, sharing):
@@ -969,3 +1006,8 @@ synthetic literal or hand-fed obligation where a real elaboration is asserted
 is **delivered in L3b** (AC7, post-Lc `4aa36c7`) — the collection ops wire to
 the landed `instance_search` (`classes.rs:91`) for user types (net-new build).
 The NFC half stays `(oracle)`; the rest is normative.
+
+Primitive-`Op` conversion is a separate staging axis: runtime value cases for
+`byte_length`/`char_length` are live, while the `Refl` proof case remains
+DEFERRED/RED-UNTIL-K3 unless and until K3 makes those exact operations reduce in
+kernel conversion.

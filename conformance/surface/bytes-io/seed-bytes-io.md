@@ -3,7 +3,8 @@
 Format: `../../README.md`. These pin the **L6 deliverable** (`docs/program/wp/
 L6-bytes-io.md`, `spec/30-surface/38-ffi-io.md §1`): the **`Bytes` primitive**
 (`14 §5` opaque constant, `41 §3a` kind tag `0x05`, immutable), its **core ops**
-(registered reductions, `35 §3` partiality), **effect-tracked binary I/O** (each
+(interpreter-side primitive operations, `35 §3` partiality), **effect-tracked
+binary I/O** (each
 op `visits` its exact row, untracked = type error), the **explicit `encode`/
 `bytes_decode`** boundary (no hidden charset), and the **one-directional round-trip
 law**. They extend — and must not regress — the on-`main` surface/effects
@@ -32,8 +33,10 @@ The separate `append` name-hygiene fixture re-anchors on the real pure pair
 
 **Grounded (content-verified against the landed targets, not heading numbers —
 the `conformance-oracle-grounding-fallback` discipline):** `14 §5` (`Bytes` is
-named a primitive type; opaque constant, registered reductions compute over
-literals definitionally, trusted/audited — `18 §5`); `41 §3a` (`Bytes` =
+named a primitive type; opaque constant, trusted/audited — `18 §5`; checked
+`Bytes` literals are `PrimReduction::Literal` values, while operations such as
+`bytes_length` are `PrimReduction::Op` and compute in `ken-interp`, not kernel
+conversion, pending K3); `41 §3a` (`Bytes` =
 kind-tag `0x05` interned compound; **`String` is NFC-normalized UTF-8 at
 construction time** — the fact the round-trip law and its one-directionality
 both rest on); `36 §1.4` (the escape check `ρ_inf ⊆ ρ_decl` accept / `ρ_inf ⊄
@@ -146,21 +149,31 @@ A `b"…"`/`0x[…]` literal elaborates **directly** to the `Bytes` primitive
 
 ---
 
-## AC1-support (§1.2) — core ops: registered reductions + partiality
+## AC1-support (§1.2) — runtime primitive ops + safe partiality
 
-### surface/bytes-io/bytes-prim-reduces-over-literals (soundness)
-- spec: `38 §1.2`, `14 §5` (registered reductions), `18 §5` (trusted base)
-- given: `length 0x[deadbeef]`, and `length b` for an abstract `b : Bytes`.
-- expect: `length 0x[deadbeef] ≡ 4 : Int` **definitionally** — the registered
-  `prim` reduction computes the literal result **in the kernel's evaluator**, so
-  the equality closes by `refl` and proofs reduce over literals (same discipline
-  as `add 2 3 ≡ 5`, `35`). On the **stuck** argument `length b` is a **neutral**
-  term (no reduction fires).
-- why: pins the `Bytes` core ops as **registered reductions in the trusted
-  base** — `(soundness)` because a wrong primitive reduction (e.g. `length 0x[
-  deadbeef] ⇝ 3`) is a kernel soundness bug (`14 §5`/`18 §5`). The reduces-over-
-  literals / neutral-on-stuck pair is the primitive-reduction discipline made
-  executable. (reduces-to + neutral, trusted-base.)
+### surface/bytes-io/bytes-prim-runtime-value-k3-conversion-deferred (soundness)
+- spec: `38 §1.2`, `14 §5` (`Literal` value vs `Op` distinction), `18 §5`
+  (trusted base); K3 primitive-`Op` conversion deferred
+- given: `bytes_length 0x[deadbeef]`, `bytes_length b` for an abstract
+  `b : Bytes`, and a proposed `Refl` proof of
+  `Equal Int (bytes_length 0x[deadbeef]) 4`.
+- expect: the **real interpreter** evaluates the literal application to `Int 4`.
+  Under kernel conversion, however, `bytes_length` remains an opaque
+  `PrimReduction::Op`: even the literal application is neutral and the equality
+  does **not** close by `Refl`. A proof needs a visible audited
+  postulate/`Axiom` on the landed kernel. The abstract application remains
+  neutral as before. A positive conversion/`Refl` oracle is
+  **DEFERRED/RED-UNTIL-K3**, conditional on K3 registering this exact operation
+  for conversion.
+- why: the wrong-primitive-reduction obligation remains `(soundness)`, but it
+  binds the interpreter's real `prim_reduce` result: returning `Int 3` for
+  `0x[deadbeef]` violates the registered primitive semantics. It does **not**
+  license a claim that kernel conversion computes the operation. Checked
+  `Bytes` literals remain genuine `PrimReduction::Literal` values; the
+  `bytes_length` application is the distinct `Op` step that is opaque pending
+  K3. The runtime-value / neutral-in-conversion pair makes both layers
+  executable without hand-feeding one into the other. (runtime value + neutral
+  conversion; trusted-base; K3-gated proof.)
 
 ### surface/bytes-io/bytes-at-some-in-range-none-out-of-range
 - spec: CP0 Deliverable B/AC2, `38 §1.2`, `43 §2` (partiality)
@@ -318,8 +331,8 @@ gate (this case does not re-pin the gate — see the subsume note).
 - **AC1** (`Bytes` primitive + immutable): `bytes-literal-elaborates-to-
   primitive`, `bracketed-hex-is-bytes-bare-hex-is-int`, `bytes-immutable-concat-
   allocates-fresh`.
-- **§1.2 core ops** (registered reductions + safe partiality):
-  `bytes-prim-reduces-over-literals` (soundness),
+- **§1.2 core ops** (runtime primitive operations + safe partiality):
+  `bytes-prim-runtime-value-k3-conversion-deferred` (soundness),
   `bytes-at-some-in-range-none-out-of-range`,
   `bytes-slice-third-argument-is-length-invalid-is-none`.
 - **AC2** (`[FS]` tracked): `read-bytes-untracked-is-type-error`.
