@@ -78,6 +78,35 @@ fn arg_location_end (loc : ArgLocation) : Nat =
     MkArgLocation index start end ↦ end
   }
 
+fn arg_location_origin (loc : ArgLocation) : Origin =
+  match loc {
+    MkArgLocation index start end ↦ ArgumentOrigin index (MkByteRange start end)
+  }
+
+lemma arg_location_origin_index_faithful
+      (index : Nat) (start : Nat) (end : Nat)
+    : Equal
+        (Option Nat)
+        (origin_argument_index (arg_location_origin (MkArgLocation index start end)))
+        (Some Nat index) =
+  Refl
+
+lemma arg_location_origin_start_faithful
+      (index : Nat) (start : Nat) (end : Nat)
+    : Equal
+        (Option Nat)
+        (origin_range_start (arg_location_origin (MkArgLocation index start end)))
+        (Some Nat start) =
+  Refl
+
+lemma arg_location_origin_end_faithful
+      (index : Nat) (start : Nat) (end : Nat)
+    : Equal
+        (Option Nat)
+        (origin_range_end (arg_location_origin (MkArgLocation index start end)))
+        (Some Nat end) =
+  Refl
+
 data ArgCursor = MkArgCursor (List ArgBytes) Nat Nat
 
 fn arg_cursor_args (cur : ArgCursor) : List ArgBytes =
@@ -271,4 +300,5 @@ All declarations are transparent checked terms over landed `Bytes`, `List`,
 ## 7. Package  summary
 
 Public surface: `CursorOps`, its four selectors and laws, `ArgBytes`,
-`ArgLocation`, `ArgCursor`, `arg_cursor_start`, and `arg_cursor_ops`.
+`ArgLocation`, its faithful `arg_location_origin` injection, `ArgCursor`,
+`arg_cursor_start`, and `arg_cursor_ops`.

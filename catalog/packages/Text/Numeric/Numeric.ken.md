@@ -29,15 +29,53 @@ Locations count Unicode scalar values in the input `List Char`, never UTF-8
 bytes. `Int` is arbitrary-precision, so there is deliberately no overflow
 case.
 
-## 2. Located errors
+## 2. Located diagnostics
 
-This is the minimal pre-diagnostic carrier. A later diagnostic package can
-subsume it without changing the parsing semantics.
+Numeric failures now use the shared `Diagnostic` carrier directly. The caller
+supplies a position-to-origin injection, so parsing preserves the exact
+character index without inventing a source or argument identity. The two
+numeric kinds map to stable diagnostic codes owned by this client package.
 
 ```ken
 data NumericErrorKind = EmptyInput | InvalidDigit
 
-data NumericError = MkNumericError NumericErrorKind Nat
+fn numeric_error_code (kind : NumericErrorKind) : DiagnosticCode =
+  match kind {
+    EmptyInput ↦ MkDiagnosticCode "text.numeric.empty-input";
+    InvalidDigit ↦ MkDiagnosticCode "text.numeric.invalid-digit"
+  }
+
+fn numeric_diagnostic
+      (locate : Nat → Origin) (kind : NumericErrorKind) (position : Nat)
+    : Diagnostic =
+  MkDiagnostic (locate position) (numeric_error_code kind)
+
+fn numeric_argument_origin (argument : Nat) (position : Nat) : Origin =
+  ArgumentOrigin argument (MkByteRange position position)
+
+lemma numeric_argument_origin_index_faithful
+      (argument : Nat) (position : Nat)
+    : Equal
+        (Option Nat)
+        (origin_argument_index (numeric_argument_origin argument position))
+        (Some Nat argument) =
+  Refl
+
+lemma numeric_argument_origin_start_faithful
+      (argument : Nat) (position : Nat)
+    : Equal
+        (Option Nat)
+        (origin_range_start (numeric_argument_origin argument position))
+        (Some Nat position) =
+  Refl
+
+lemma numeric_argument_origin_end_faithful
+      (argument : Nat) (position : Nat)
+    : Equal
+        (Option Nat)
+        (origin_range_end (numeric_argument_origin argument position))
+        (Some Nat position) =
+  Refl
 ```
 
 ## 3. Decimal parsing
@@ -54,52 +92,53 @@ fn char_to_digit (c : Char) : Option Int =
   }
 
 fn parse_digits_at
-      (chars : List Char) (position : Nat) (accumulator : Int)
-    : Result NumericError Int =
+      (locate : Nat → Origin) (chars : List Char) (position : Nat) (accumulator : Int)
+    : Result Diagnostic Int =
   match chars {
-    Nil ↦ Ok NumericError Int accumulator;
+    Nil ↦ Ok Diagnostic Int accumulator;
     Cons c rest ↦
       match char_to_digit c {
-        None ↦ Err NumericError Int (MkNumericError InvalidDigit position);
+        None ↦ Err Diagnostic Int (numeric_diagnostic locate InvalidDigit position);
         Some digit ↦ parse_digits_at
+          locate
           rest
           (Suc position)
           (add_int (mul_int accumulator (10 : Int)) digit)
       }
   }
 
-fn parse_nat_chars (chars : List Char) : Result NumericError Int =
+fn parse_nat_chars (locate : Nat → Origin) (chars : List Char) : Result Diagnostic Int =
   match chars {
-    Nil ↦ Err NumericError Int (MkNumericError EmptyInput Zero);
-    Cons c rest ↦ parse_digits_at (Cons Char c rest) Zero (0 : Int)
+    Nil ↦ Err Diagnostic Int (numeric_diagnostic locate EmptyInput Zero);
+    Cons c rest ↦ parse_digits_at locate (Cons Char c rest) Zero (0 : Int)
   }
 
-fn negate_parsed (x : Result NumericError Int) : Result NumericError Int =
+fn negate_parsed (x : Result Diagnostic Int) : Result Diagnostic Int =
   match x {
-    Err problem ↦ Err NumericError Int problem;
-    Ok value ↦ Ok NumericError Int (sub_int (0 : Int) value)
+    Err problem ↦ Err Diagnostic Int problem;
+    Ok value ↦ Ok Diagnostic Int (sub_int (0 : Int) value)
   }
 
-fn parse_int_chars (chars : List Char) : Result NumericError Int =
+fn parse_int_chars (locate : Nat → Origin) (chars : List Char) : Result Diagnostic Int =
   match chars {
-    Nil ↦ Err NumericError Int (MkNumericError EmptyInput Zero);
+    Nil ↦ Err Diagnostic Int (numeric_diagnostic locate EmptyInput Zero);
     Cons c rest ↦
       match eq_int (charToInt c) (45 : Int) {
         True ↦
           match rest {
-            Nil ↦ Err NumericError Int (MkNumericError EmptyInput (Suc Zero));
+            Nil ↦ Err Diagnostic Int (numeric_diagnostic locate EmptyInput (Suc Zero));
             Cons d more ↦ negate_parsed
-              (parse_digits_at (Cons Char d more) (Suc Zero) (0 : Int))
+              (parse_digits_at locate (Cons Char d more) (Suc Zero) (0 : Int))
           };
-        False ↦ parse_digits_at (Cons Char c rest) Zero (0 : Int)
+        False ↦ parse_digits_at locate (Cons Char c rest) Zero (0 : Int)
       }
   }
 
-fn parse_nat (text : String) : Result NumericError Int =
-  parse_nat_chars (string_to_list_char text)
+fn parse_nat (locate : Nat → Origin) (text : String) : Result Diagnostic Int =
+  parse_nat_chars locate (string_to_list_char text)
 
-fn parse_int (text : String) : Result NumericError Int =
-  parse_int_chars (string_to_list_char text)
+fn parse_int (locate : Nat → Origin) (text : String) : Result Diagnostic Int =
+  parse_int_chars locate (string_to_list_char text)
 ```
 
 ## 4. Structural formatting
@@ -221,20 +260,24 @@ const digit_nine_result : Option Int = char_to_digit (57 : Int)
 
 const letter_digit_result : Option Int = char_to_digit (120 : Int)
 
-const parsed_decimal_result : Result NumericError Int = parse_nat "123"
+fn example_numeric_origin (position : Nat) : Origin =
+  numeric_argument_origin (Suc (Suc Zero)) position
 
-const empty_input_result : Result NumericError Int = parse_nat ""
+const parsed_decimal_result : Result Diagnostic Int = parse_nat example_numeric_origin "123"
 
-const bad_digit_result : Result NumericError Int = parse_nat "12x4"
+const empty_input_result : Result Diagnostic Int = parse_nat example_numeric_origin ""
 
-const parsed_negative_result : Result NumericError Int = parse_int "-42"
+const bad_digit_result : Result Diagnostic Int = parse_nat example_numeric_origin "12x4"
+
+const parsed_negative_result : Result Diagnostic Int = parse_int example_numeric_origin "-42"
 ```
 
 ## 6. Trust and derivation
 
-**Public API:** `NumericErrorKind`, `NumericError`, `char_to_digit`,
-`parse_digits_at`, `parse_nat_chars`, `parse_int_chars`, `parse_nat`,
-`parse_int`, `DecimalDigit`, `format_digits`, `parse_formatted_digits`,
+**Public API:** `NumericErrorKind`, `numeric_error_code`,
+`numeric_diagnostic`, `numeric_argument_origin`, `char_to_digit`,
+`parse_digits_at`, `parse_nat_chars`, `parse_int_chars`, `parse_nat`, `parse_int`,
+`DecimalDigit`, `format_digits`, `parse_formatted_digits`,
 `format_digits_roundtrip`, and `show_digits`.
 
 **Derivation.** Parsing uses structural recursion on `List Char`, positions use

@@ -11,6 +11,7 @@ const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Diagnostic/Core.ken.md");
 const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Cursor.ken.md");
 const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Decoder.ken.md");
 const PARSING_KEN_MD: &str =
@@ -24,6 +25,8 @@ fn dependency_env() -> ElabEnv {
         .expect("Collections must elaborate second");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
         .expect("LawfulClasses must elaborate third");
+    env.elaborate_ken_md_file(DIAGNOSTIC_KEN_MD)
+        .expect("Diagnostic.Core must elaborate fourth");
     env
 }
 
@@ -136,6 +139,10 @@ fn ordered_dependency_closure_elaborates_cursor_then_decoder() {
             "arg_cursor_advance",
             "arg_cursor_locate",
             "arg_cursor_ops",
+            "arg_location_origin",
+            "arg_location_origin_index_faithful",
+            "arg_location_origin_start_faithful",
+            "arg_location_origin_end_faithful",
             "CursorLaws",
         ],
     );

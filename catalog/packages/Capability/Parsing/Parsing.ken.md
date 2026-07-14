@@ -37,7 +37,8 @@ one concrete parser: a fully parenthesized Boolean-expression grammar.
 
 ## 2. Definition
 
-`Source` is a checked record carrying artifact identity, the original
+`SourceId` comes from the lower `Diagnostic.Core` package. `Source` is a
+checked record carrying artifact identity, the original
 `Bytes`, UTF-8 evidence, a `Nat` byte length, a non-empty byte-atomic
 length-unit witness for converting that `Nat` count to an `Int` offset, and
 a proof that the converted recorded length is the byte length of the
@@ -47,8 +48,6 @@ sidestepping UTF-8 boundary bugs entirely; `IsUtf8` is a proof the bytes
 *happen* to decode losslessly, not a requirement they must.
 
 ```ken
-data SourceId = MkSourceId Nat
-
 fn IsUtf8 (bs : Bytes) : Prop =
   match bytes_decode bs {
     Err _ ↦ Bottom;
@@ -160,6 +159,30 @@ fn span_start (sp : Span) : Nat =
 fn span_end (sp : Span) : Nat =
   match sp {
     MkSpan start end ↦ end
+  }
+
+fn span_to_byte_range (sp : Span) : ByteRange = MkByteRange (span_start sp) (span_end sp)
+
+fn span_origin (source : SourceId) (sp : Span) : Origin =
+  SourceOrigin source (span_to_byte_range sp)
+
+lemma span_to_byte_range_faithful
+      (sp : Span)
+    : And
+        (Equal Nat (byte_range_start (span_to_byte_range sp)) (span_start sp))
+        (Equal Nat (byte_range_end (span_to_byte_range sp)) (span_end sp)) =
+  match sp {
+    MkSpan start end ↦ and_intro (Equal Nat start start) (Equal Nat end end) Refl Refl
+  }
+
+lemma span_origin_source_faithful
+      (source : SourceId) (sp : Span)
+    : Equal
+        (Option SourceId)
+        (origin_source_id (span_origin source sp))
+        (Some SourceId source) =
+  match sp {
+    MkSpan start end ↦ Refl
   }
 
 data ByteCursor = MkByteCursor Source Nat
@@ -822,11 +845,12 @@ reference implementation.
 
 ## 7. Trust  derivation
 
-1. **Public API.** `SourceId`, `Source`, `IsUtf8`, `EmptyBytes`,
+1. **Public API.** `Source`, `IsUtf8`, `EmptyBytes`,
    `NonEmptyBytes`, `UnitByteLength`, `SourceLength`, `source_id`,
    `source_bytes`, `source_bytes::utf8`, `source_length`, `source_length_unit`,
    `source_length_unit::valid`, `source_length_valid`, `Span`, `span_start`,
-   `span_end`, `ByteCursor`, `byte_cursor_ops`, `LessEqNat`, `ValidSpan`,
+   `span_end`, `span_to_byte_range`, `span_origin`, `ByteCursor`,
+   `byte_cursor_ops`, `LessEqNat`, `ValidSpan`,
    `Located`, `located_source`,
    `located_span`, `located_value`, `ValidLocated`,
    `valid_zero_width_span`, `ParseError`, `error_source`, `error_span`,

@@ -136,7 +136,188 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > lands → **ONE combined SHA** → honesty gate → publish → **verify on main by CONTENT** →
 > §B retros → **I-4 ARC COMPLETE**.
 >
-> ### ⏭ 2026-07-14 (05:1x) — ★ I-5 DESIGN IN: ZERO-TCB VERDICT + AN HONESTY DISCLOSURE
+> ### ⏭ 2026-07-14 (06:0x) — ★ ADR §4a MERGED · I-5 RESUMED (XL) · CC4 QA-APPROVED
+> **✅ ADR-0017 §4a MERGED — `origin/main @ dff76dc7`** (PR #624, doc-only). Verified on main by
+> content: the **inode re-keying** and the **replace-not-coexist bypass** ruling are both in the
+> landed text.
+> **★★ THE CATCH OF THE DAY — the Architect found it himself, on the axis I asked him to press
+> but BEFORE anyone pressed it:** *"the re-keying is what makes fd-pinning REAL… a path-keyed
+> VFS **CANNOT** express this — the structural TOCTOU discriminator would be **UNFALSIFIABLE**."*
+> ⇒ **AN UNFALSIFIABLE DISCRIMINATOR IS A TEST THAT CANNOT FAIL = A GREEN LIGHT THAT MEANS
+> NOTHING.** Had I-5 shipped on a path-keyed VFS, **the TOCTOU test would have PASSED on a
+> path-string impl that reintroduces the race**, and we'd have called the WP done. **This is
+> the same shape as every other catch today** (the rubber-stamp oracle · the conformance seed
+> claiming a kernel guarantee that didn't exist · the coherent-but-unbuildable §C spec).
+> **⇒ ADOPTED AS THE BAR FOR EVERY I-5 DISCRIMINATOR: "if it cannot FAIL against a naive
+> path-string implementation, it is not a discriminator."**
+> **✅ I-5 RESUMED (`evt_7w142stqt8728`) — L→XL, STEP 0 = WIDEN THE SEAM.** Frame amendment
+> posted for Runtime to fold. §4a's four rulings: **handle-never-a-path** (operate methods take
+> ONLY the handle ⇒ *structurally* no byte-path to reopen) · **resolve/operate split**
+> (`fs_resolve` walks `openat2(RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS)` relative to the root
+> handle; `*_at` ops consume it ⇒ check and use share the handle **by construction**) ·
+> **REPLACE-not-coexist** (**a surviving `fs_*(&[u8])` is a BYPASS** — an unenforced entry to
+> the host skipping scope/symlink/openat; now **AC0**, a *security* AC) · **inode re-key + a
+> `Symlink` node** (NOT "just add a variant").
+> **✅ CC4 QA-APPROVED @ `ed4106be`** → Architect terminal (his item 3). My pre-gate was already
+> clean; AC5 genuinely satisfied.
+> **⏳ Sec2 honesty erratum still publishing** (full CI — it renames a conformance case id, so
+> `--doc-only` would have skipped the very gate that could catch a dangling ref).
+> **▶ ARCHITECT'S 3 ITEMS: (1) conformance extent ✅ DONE · (2) I-5 ABI ✅ DONE · (3) CC4 terminal
+> — NOW.** He cleared two blocking items and re-grounded the hard-stop against `main` himself
+> before ruling, which is why this was a 2-hour correction and not a shipped TOCTOU race.
+>
+> ### ⏭ 2026-07-14 (05:5x) — ★★ SEC2 HONESTY ERRATUM PUBLISHING (a false security claim, fixed)
+> **✅ THE FALSE KERNEL-GUARANTEE CLAIM IS BEING REMOVED FROM `main`.** Candidate
+> `wp/i5-sec2-honesty-erratum @ 9c0b010a` (conformance-only, +48/−45, parent `62cb7b3f`);
+> Architect ruled the extent (`evt_653ahxnmwdwrm`), CV transcribed + swept + voted APPROVE.
+> **PUBLISHING WITH FULL CI (NOT `--doc-only`)** — it touches `conformance/` **and renames a
+> case id**, so the conformance suite must actually run. (A `--doc-only` publish here would
+> have skipped the very gate that could catch a dangling id.)
+> **★ THE ARCHITECT'S EXTENT RULING IS THE MODEL FOR THIS KIND OF FIX — a SURGICAL SPLIT, not
+> a blanket delete. TWO claims were tangled under ONE word:**
+> **(a) Cap-PRESENCE *is* genuinely kernel-backed → KEEP.** `Cap E` is a real Π parameter; a
+> missing-cap `perform` references an **unbound variable the kernel rejects**. A real,
+> independent kernel net. **Untouched.**
+> **(b) The attenuation BOUND is NOT independently kernel-proved → CORRECT.** The kernel is a
+> **generic reflexivity oracle over opaque postulates** — it never computes the meet, never
+> sees the lattice; the **elaborator** picked the postulate identities (`capabilities.rs:174`).
+> Its discharge **mirrors** the elaborator's decision.
+> **★ HIS TWO GUARDS AGAINST OVER-CORRECTION (both directions — this is the craft):**
+> **1.** Do NOT swing to *"there is no kernel obligation"* — **there IS one** (`Eq`+`Refl`; a
+> too-strong child → distinct postulates → **undischargeable**). What is false is that it is an
+> **INDEPENDENT** net. **Keep the mechanism; correct its STRENGTH.**
+> **2.** The file **already half-knew** — its own `[Sec2-dual]` section (:61-74) **correctly**
+> said the bound is direction-degenerate and held only by the {C1,C2} pair. **It was
+> self-contradictory.** ⇒ **Reconcile the headline DOWN to :61-74, not the reverse.**
+> **⇒ MY GATE VERIFIED BOTH DIRECTIONS BY CONTENT (an over-correction would have been its own
+> failure):** false claim **GONE** (0 hits: bound "kernel-backed"/"kernel re-checks"/"kernel
+> nets") ✓ · **cap-presence claims SURVIVE** (4 `kernel-backed` mentions, all presence: real Π
+> binding, no-ambient-authority flip) ✓ · **obligation still described** (12 hits:
+> undischargeable/Unknown/obligation — no swing to "no obligation") ✓ · case-id rename
+> **self-consistent** (0 dangling refs to `attenuate-bound-is-kernel-rechecked`) ✓.
+> **★ WHY THIS MATTERED:** the artifact **whose job is to be the net** asserted a security
+> guarantee Ken does not have — and it predated ADR-0017. It was found ONLY because
+> runtime-implementer refused to accept a "the RED roots exist" pin it could not verify. **The
+> over-claim I said the ADR existed to prevent was ALREADY THERE.** Its author was *already*
+> being careful (an explicit "do not over-claim" carve-out for `declassify`) and still got the
+> **headline** wrong. That is how quietly this decays.
+>
+> ### ⏭ 2026-07-14 (05:4x) — CC4 RELEASED · ARCHITECT IS THE BOTTLENECK (3 items, sequenced)
+> **✅ CC4 CANDIDATE RELEASED: `wp/cc4-diagnostic-core @ ed4106be`** → Foundation QA now.
+> **My pre-gate: CLEAN** — 0 merges · 9 files · **forbidden-path EMPTY** · `Parsing/Decoder.ken.md`
+> **UNTOUCHED** ✓ (it was already loc-generic; clients instantiate at `Origin` — CC3's
+> parameterization paying off exactly as designed).
+> **AC5 (the real test) SATISFIED — but I nearly mis-called it.** My first grep
+> (`grep -c "data NumericError"`) returned **1** and I almost flagged a violation — it was a
+> **PREFIX FALSE-POSITIVE** on `data NumericErrorKind`. **Verified precisely: the standalone
+> carrier (`data NumericError =` / `MkNumericError`) is GONE CATALOG-WIDE (0 hits)**;
+> `parse_nat`/`parse_int` now return **`Result Diagnostic Int`**; the surviving
+> `NumericErrorKind` is the KIND enum mapping to `DiagnosticCode` — **exactly what the frame
+> required**. ⇒ **Genuine subsumption, not a rename.**
+> **★ DISCIPLINE (my own memory, nearly violated): GREP THE EMISSION, NOT THE NAME.** A
+> prefix-matching grep on a type name is not a structural check. Had I acted on it I'd have
+> BLOCKED a correct WP.
+> **⛔ THE ARCHITECT IS NOW THE FLEET BOTTLENECK — 3 items, SEQUENCED for him
+> (`evt_1aqhs9zpr50w9`):**
+> **(1) FIRST — conformance over-claim extent ruling.** CV is BLOCKED; **a false security claim
+> is on `main` NOW.** He must say precisely which Sec2 claims survive and which are false —
+> **and NOT over-correct** (parts of the framing ARE true: the kernel does see `Cap E` as a
+> real Π param and `authority c` as a real term).
+> **(2) SECOND — I-5 fd-passing ABI shape + ADR-0017 amendment.** Runtime HALTED on a clean
+> tree. Must rule: the owned resolved-handle abstraction; `VirtualFsNode` symlink expansion;
+> **and whether `fs_*(&[u8])` is REPLACED or COEXISTS — a surviving bytes path is a BYPASS.**
+> **(3) THIRD — CC4 terminal review** (not urgent; QA still on it). His question: **are the
+> three subsumptions genuine, or wrappers?** (I checked the mechanical part; the `Origin` sum's
+> honesty + injection faithfulness are his.)
+> **He was IDLE with 2 stale state-commits and had picked up NEITHER blocking ask** — the
+> Codex/GPT silent-turn-end pattern again (he is Opus, but the same "posted mention doesn't
+> wake a compacted seat" gap). **Roused by pane.**
+>
+> ### ⏭ 2026-07-14 (05:3x) — ⛔ I-5 HARD-STOP (4th) · A FALSE SECURITY CLAIM IS ON MAIN
+> **⛔ I-5 HALTED — runtime-implementer hard-stopped; BOTH anchors FALSE; I verified BOTH
+> against `main` myself.** Tree clean, no edits. **This is the 4th ring refusal to build
+> around a bad pin, and the most valuable yet.**
+> **(1) THE FS SEAM CANNOT CARRY A RESOLVED HANDLE.** `HostHandler` exposes only
+> `fs_*(&[u8])` (`eval.rs:2119`); `fs_dispatch` calls `authorizes(cap, path, …)` then hands
+> **the ORIGINAL PATH BYTES** to `handler.fs_read(path)` (`:3071-3078`) ⇒ **check and use do
+> NOT share an fd** (Posix default re-opens from bytes). `VirtualFsNode = File | Directory`
+> (`:2106-2111`) — **NO symlink variant** ⇒ the capture VFS **cannot even REPRESENT** the
+> symlink or fd-pinning discriminators. **⇒ ADR-0017's central security property ("check and
+> use share the resolved fd") is NOT EXPRESSIBLE through the landed seam.** The Architect
+> verified the seam AT `authorizes` was pre-cut (true) — but **the seam BELOW it speaks
+> bytes.**
+> **⇒ SCOPE RULED (mine, `evt_1jn0awke44ecp`): the HostHandler ABI expansion is AUTHORIZED and
+> RIDES I-5 — ONE WP (L→XL), step 0 = widen the seam.** I considered splitting and **rejected
+> it**: a widened fd-carrying ABI has **no value without its consumer** (speculative surface),
+> and **decisively — the security discriminators CANNOT BE WRITTEN until the VFS can model a
+> symlink and pin a handle**, so a split "I-5a" would **merge GREEN while proving NOTHING.**
+> I will not ship a security WP whose net does not exist yet.
+> **⇒ MECHANISM → ARCHITECT:** the fd-passing ABI shape is **TOCTOU-critical** (done wrong it
+> **silently reintroduces the exact race I-5 exists to close**). He rules: the owned
+> resolved-handle abstraction; the `VirtualFsNode` symlink expansion; and whether `fs_*(&[u8])`
+> is **replaced or coexists** (**a surviving bytes path is a BYPASS**). **He amends ADR-0017.**
+> Zero-kernel-TCB still holds (all trusted-runtime-driver, the class ADR §2 already discloses).
+> **(2) ★★ WORSE — A LANDED CONFORMANCE SEED CLAIMS A KERNEL GUARANTEE THAT DOES NOT EXIST.**
+> `conformance/security/capabilities/seed-capabilities.md:43-55`, **on `main` TODAY**:
+> *"attenuation's bound is **KERNEL-BACKED** … a refinement obligation **the kernel re-checks**
+> … **the kernel nets it**."* **ADR-0017 §2 (also on main) says the OPPOSITE** — the `Refl`
+> re-check is **DEGENERATE**, not an independent kernel proof. **BOTH CANNOT BE TRUE.**
+> `discharge_attenuation` postulates **fresh opaque constants** + `Eq`/`Refl`; the kernel
+> checks only that two opaque constants are the SAME ONE — the **elaborator** decides
+> same-vs-distinct in Rust (`capabilities.rs:174`). It never checks `⊑` over real authority
+> values. **⇒ THE CONFORMANCE ARTIFACT — THE THING WHOSE JOB IS TO BE THE NET — ASSERTS A
+> SECURITY GUARANTEE KEN DOES NOT HAVE.** This is the exact over-claim I said ADR-0017 existed
+> to prevent, and **it was already on main before the ADR landed.** (Its author was *already
+> being careful* — the seed carries an explicit "do not over-claim" carve-out for
+> `declassify` — and still got the MAIN claim wrong. That is how quietly this decays.)
+> **⇒ ROUTED (`evt_6zj2v1hpzb03z`): Architect confirms the EXTENT first** (soundness-adjacent —
+> CV must NOT re-derive it; **and do not OVER-correct: parts of the Sec2 framing ARE true**) →
+> **CV corrects the seed STANDALONE, conformance-only, publishes NOW** (main is
+> self-contradictory today; the false claim is the more dangerous half — it does NOT wait for
+> I-5) → **CV authors the I-5 RED roots** (none exist: no `openat`/`ScopeEscape`/`RightNotHeld`/
+> symlink/TOCTOU cases anywhere) as **non-degenerate deny/accept pairs**, riding I-5.
+> **▶ PLAYBOOK EXTENDED (audit b′): SEAM/ABI AUDIT — "can the landed INTERFACE *carry* the
+> value the design requires?"** (b) checks a primitive can **produce** a pinned TYPE; (b′)
+> checks the landed **interface** can **carry** it. A design note can pass (b) and still be
+> unbuildable. **THE TELL: a design that names ONE seam as "already pre-cut" — check the seams
+> it did NOT name.** 4th correction the fleet has made to my process today.
+> **▶ ADD TO PAT'S BRIEF (item 4, sharpened):** confinement is trusted-Rust-netted, not
+> kernel-proved — **AND a landed conformance seed currently over-claims it as kernel-backed;
+> being corrected now.**
+> **▶ CC4 (Foundation) still building** — unaffected, disjoint tree.
+>
+> ### ⏭ 2026-07-14 (05:2x) — ADR-0017 MERGED · I-5 KICKED · CC4 BUILDING · `main @ 62cb7b3f`
+> **✅ ADR-0017 MERGED — `origin/main @ 62cb7b3f`** (PR #622, doc-only). **VERIFIED ON MAIN BY
+> CONTENT: the degenerate-kernel-recheck disclosure is INTACT and UNHEDGED.** The honest trust
+> boundary is now a **citable artifact**, landed **BEFORE a line of I-5 is written** — which
+> was the entire point. Without it, "trusted Rust netted by tests" quietly becomes "the kernel
+> proves confinement" after 2–3 WPs cite it secondhand, and every suite stays green while it
+> happens.
+> **✅ I-5 KICKED (Runtime)** — `evt_sj4552fqfseq`; frame `wp/i5-scoped-capability-model @
+> 4d7fbe4b` (off `62cb7b3f`). **THE FRAME DELIBERATELY DOES NOT RESTATE THE DESIGN** — ADR-0017
+> is normative; the frame only scopes/sequences/accepts. **"Where they disagree, the ADR wins
+> and you tell me."** (I will not paraphrase a grounded mechanism into a second, drifting copy —
+> that is how a frame goes stale against its own ADR.)
+> **⚠ HANDOFF GATE — runtime-qa did NOT take the first compaction** (`/compact` is REFUSED while
+> a task is in progress; it was wedged on a WebSocket→HTTPS transport timeout). **I did NOT
+> grant an exemption** ("EACH means EACH"). Sent `Escape` to interrupt the wedged turn (its retro
+> was already posted ⇒ nothing lost), re-sent `/compact`, **re-verified: `Context compacted`.**
+> ⇒ **New failure mode for the gate: a wedged seat cannot be compacted at all — interrupt
+> first, then compact, then re-verify.** A "sent" report would have hidden this completely.
+> **▶ I-5's ACCEPTANCE IS A SECURITY GATE, NOT A TEST GATE.** Because confinement is
+> trusted-Rust-netted (ADR-0017 §2), **the discriminators ARE the net — weak ones are a SECURITY
+> gap, not a coverage gap.** Every discriminator is a **NON-DEGENERATE PAIR** (deny AND accept
+> on the same shape — a lone deny-case is passed by a path-string impl). The `..`-traversal pair
+> (`dir1/sub/../secret` DENIED **while** `dir1/sub/ok` ACCEPTED) is the one that catches an
+> unnormalized string-prefix check. **TOCTOU is proved STRUCTURALLY** (the op consumes the
+> check's fd — no flaky timing test). **AC7: no comment/doc/error/test-name may claim or imply
+> kernel-proved confinement.**
+> **▶ CC4 (Foundation) BUILDING** in parallel — `wp/cc4-diagnostic-core @ e8722ab3`, implementer
+> ~10min in, running the CC2 regression harness. Disjoint from I-5 (catalog vs crates).
+> **▶ PROGRAM I IS NOW ONE WP FROM DONE** (I-1…I-4 merged; **I-5 = the last**). Then I-6
+> (injectable handlers) + I-7 (Env/Process) remain in the CLI contract's §7 decomposition.
+>
+> ### ⏭ 2026-07-14 (05:1x) — I-5 DESIGN IN: ZERO-TCB VERDICT + AN HONESTY DISCLOSURE
 > **✅ ARCHITECT I-5 DESIGN NOTE (`evt_7pxjbng6t0mqy`). TCB VERDICT: ZERO KERNEL-TCB — NO
 > operator decision, NO primitive to Pat.** He grounded it against the tree instead of
 > inheriting the contract's claim, and **found the contract WRONG**: `discharge_attenuation`
