@@ -14,7 +14,59 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-15 (00:10 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 6aaf8c33`
+> ### ⏭ 2026-07-15 (00:40 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ cbaae5e7`
+>
+> ## AX-2 merge-blocker CLEARED. LET-5 ruled (Size S). Foundation parked. Nothing owed by me.
+>
+> | item | state |
+> |---|---|
+> | **AX-1 erratum** | ✅ **MERGED `bcaf1e03` (PR #690)** — CV-approved, 4 files +56/−37, `spec/30-surface/32` **byte-unchanged**, my false D3 absolute **gone from main**. ⇒ **AX-2's merge blocker is CLEARED.** |
+> | **AX-2** | ✅ **CANDIDATE HANDED OFF** — implementer committed **`61342b9d`** on local `wp/ax2-axiom-sugar-and-named-postulates-build` (NOT pushed; agents have no push creds), released the branch, returned home, posted **`evt_6ygga775zztey`**. Now flowing **QA → Architect → merge Decision → me.** **DO NOT RE-KICK; do not pre-check it — that duplicates a gate about to run.** |
+> | **LET-3 P2** | ⛔ **HELD** (correct). Foundation parked, **frozen table POSTED** (`evt_5cgdpwz5qs039`) so it survives compaction. |
+> | **LET-5** | 📋 **TO FRAME (me).** Architect ruled: **Size S**, Language, **AFTER AX-2**. |
+>
+> ### ★★ LET-5 — the Architect's ruling (`evt_5dhcdfsvnvebe`). MY HYPOTHESIS WAS WRONG.
+> **It is NOT a sort-from-binder bug and NOT a single-binding bug.** It is a
+> **bidirectional-elaboration MODE LEAK**:
+> - `check()` (`elab.rs:474`) has **NO `RExpr::RLet` arm** ⇒ a `let` in **checking**
+>   position falls through to `infer()` and **loses the expected goal**.
+> - `infer_match` then builds a constant `… → Type ℓ` motive and **falls back to
+>   `Type 0`** when the return classifier is `Ω` ⇒ the kernel *honestly* reports
+>   `expected: Type 0, found: Ω0`. **The diagnostic is a downstream witness, not the
+>   cause.**
+> - **A one-binding `let` and a group's outer node have the SAME resolved form**
+>   (`resolve.rs:1404`). **Binding count is IRRELEVANT.**
+>
+> **The repair (one rule, kernel + `infer_match` untouched):**
+> `Γ ⊢ rhs ⇐ A ; Γ,x:A ⊢ body ⇐ weaken(expected,1) ⟹ Γ ⊢ let x:A = rhs in body ⇐ expected`
+> Unannotated ⇒ infer RHS first. Emit the same `Term::Let`. **Do NOT special-case
+> `bindings.len()==1`.** AC: pre-fix-red/post-fix-green on (a) Foundation's Ω-match
+> shape, (b) a singleton let around `Refl`; keep a wrong-RHS rejection; **re-run
+> Foundation's exact harness as the integration witness**; zero kernel/grammar/
+> formatter/catalog delta.
+>
+> ### ★★★ AND MY COVERAGE MATRIX WAS ON THE WRONG AXIS (fixed: `cbaae5e7`, PR #691)
+> I published "single vs grouped × data vs proof" — **binding count separated pass
+> from fail PERFECTLY on the sample, and was a total red herring.** The real axis is
+> the **let body's ELABORATION MODE** (inferable vs checked): grouped bodies passed
+> because they were *inferable applications*; singletons failed because they put a
+> *checked-mode `match`* behind the `let`.
+> **⇒ Draw a coverage matrix's AXES on what the MECHANISM forks on, not on what the
+> SYNTAX makes salient. An axis that perfectly separates pass/fail on a small sample
+> is CORRELATION — make someone name the code path before trusting it.**
+>
+> ### ▶ NEXT FOR ME (in order)
+> 1. **AX-2 candidate gate** (imminent — implementer is on the final net): label
+>    **NON-OPTIONAL** (no `Option<String>`, no sentinel, **no ownerless overload**, no
+>    default/unnamed `declare_postulate`); **kernel never reads the name**; the 3
+>    formatter oracles run. An Option+placeholder = KTR-2's bug a 3rd time ⇒ **BLOCK**.
+> 2. **Frame LET-5** (Size S, Language) — **release only AFTER AX-2 merges** (same
+>    `elab.rs`; a concurrent WP collides).
+> 3. **Then LET-3 P2 resumes** with Foundation's frozen table.
+> 4. **Owed to Pat:** the toolchain-axis proposal.
+> 5. **Kernel/Verify/Ergo idle BY DESIGN.**
+>
+> ### ⏮ 2026-07-15 (00:10 UTC) — `origin/main @ 6aaf8c33`
 >
 > ## BOTH RINGS HIT EXPRESSIBILITY WALLS. AX-2 ruled + building. **LET-3 P2 HELD on a landed defect.**
 >
