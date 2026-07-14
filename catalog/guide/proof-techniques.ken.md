@@ -333,12 +333,22 @@ names and a non-obvious transported fact has a name that states its role. Keep
 the final combinator skeleton visible: local bindings should expose the
 `trans`/`cong`/`J` structure, not replace it with an opaque helper.
 
+When a proof needs at least two sequential local bindings, write one binding
+group and separate the bindings with `;`, with no trailing separator before
+`in`. A binding can use earlier names but not itself or later names, and a
+duplicate name in the same group is rejected. The formatter coalesces a maximal
+directly nested chain of at least two lets into this group form; a one-binding
+`let` remains the same one-binding production
+(`spec/30-surface/32-grammar.md:200-221`,
+`spec/30-surface/31-lexical.md:228-231`).
+
 The String certificate is a compact example. `left_chars` and `right_chars`
 name the representation-level endpoints; `left_round_trip` and
 `right_round_trip` name the String endpoints; the two evidence bindings say
-which bridge each proof crosses. The local aliases are definitionally equal to
-the original expressions, so `same_chars` is accepted directly by `cong`; no
-transport lemma is needed.
+which bridge each proof crosses. Their binding group follows the proof's
+dependency order, so each later right-hand side can use the earlier aliases.
+The local aliases are definitionally equal to the original expressions, so
+`same_chars` is accepted directly by `cong`; no transport lemma is needed.
 
 ```ken example
 lemma string_to_list_char_retraction
@@ -377,9 +387,10 @@ lemma string_to_list_char_injective_with_lets
 
 A reduced Map bridge has the same shape. The operation-specific proof supplies
 the three endpoints and two facts; the bridge names the facts by their roles and
-leaves the final `trans` visible. In a real Map proof, names such as
-`inserted`, `selected_branch`, and `ordered_result` are more useful than
-`step1`, `tmp`, and `value2` because they tell the reader what changed.
+leaves the final `trans` visible. Its two-binding group makes the dependency
+order explicit before `in`. In a real Map proof, names such as `inserted`,
+`selected_branch`, and `ordered_result` are more useful than `step1`, `tmp`,
+and `value2` because they tell the reader what changed.
 
 ```ken example
 data GuideMap k v = GuideLeaf | GuideNode k v

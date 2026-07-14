@@ -22,7 +22,7 @@ actually in use instead.
 5. [`class` and `instance`](#5-class-and-instance)
 6. [Effect rows (`visits`)](#6-effect-rows-visits)
 7. [Named proof claims: `prop`, `lemma`, `proof`](#7-named-proof-claims-prop-lemma-proof)
-8. [Local `let`: naming an intermediate](#8-local-let-naming-an-intermediate)
+8. [Local `let`: binding groups](#8-local-let-binding-groups)
 9. [The `.ken.md` literate format](#9-the-kenmd-literate-format)
 
 ## 1. Purity keywords: `const`/`fn`/`proc`
@@ -446,12 +446,22 @@ section with the motivation and the claim in Markdown, then give the
 definitions and proof bottom-up in the code blocks below. The document reads
 lede-first even though the code still elaborates dependencies-first.
 
-## 8. Local `let`: naming an intermediate
+## 8. Local `let`: binding groups
 
-`let name = rhs in body` gives an intermediate expression a local name. Add a
-type after the name when it improves the contract or guides elaboration:
-`let name : Type = rhs in body`. The binding is non-recursive: the name is in
-scope in `body`, but not in its own `rhs`.
+A local `let` introduces one or more bindings before its final body. Separate
+bindings in a group with `;`, as in
+`let first = start; second = finish first in second`; do not put a trailing
+`;` before `in`. Add a type after a name when it improves the contract or
+guides elaboration: `let name : Type = rhs in body`. A one-binding `let` is the
+same production with no separator.
+
+Bindings in a group are sequential and non-recursive. Each right-hand side can
+use earlier names, but not its own name or any later one; every name is in scope
+in the final body. Duplicate names in one group are rejected. The formatter
+coalesces a maximal directly nested chain of at least two sequential lets into
+one binding group, while leaving a one-binding `let` as a one-binding `let`
+(`spec/30-surface/32-grammar.md:200-221`,
+`spec/30-surface/31-lexical.md:228-231`).
 
 The first two examples deliberately keep the surrounding computation small so
 the inferred and annotated forms are easy to see. In ordinary code, use a
@@ -468,9 +478,11 @@ fn let_inferred (c : Color) : Bool = let selected_red = is_red c in selected_red
 fn let_annotated (c : Color) : Bool = let selected_red : Bool = is_red c in selected_red
 ```
 
-A short pipeline can name stages without hiding the final control flow. If the
-list of unrelated stages grows long, extract a helper rather than building a
-local namespace:
+A short pipeline can name stages without hiding the final control flow. The
+group below separates its two bindings with `;`; `confirmed_red` can use the
+earlier `selected_red`, and both names are available after `in`. If the list of
+unrelated stages grows long, extract a helper rather than building a local
+namespace:
 
 ```ken example
 fn let_staged_color (c : Color) : Bool =

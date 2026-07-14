@@ -89,9 +89,21 @@ fn keep_consistent (left : Bool) (right : Bool) : Bool =
   }
 ```
 
+When two or more sequential stages belong together, write one binding group
+with `;` between bindings and no trailing separator before `in`. Bindings are
+sequential and non-recursive: a right-hand side can use earlier names, but not
+its own name or a later one. Duplicate names in one group are rejected. For
+example, `let selected = choose input; confirmed = check selected in confirmed`
+is a two-binding group whose second stage uses the first. The formatter
+coalesces a maximal directly nested chain of at least two lets into this form;
+a one-binding `let`, including the checked example above, stays a one-binding
+`let`.
+
 The full language forms and scope/evaluation caveats are in
 `catalog/guide/surface-reference.ken.md §8`; proof-chain staging is in
-`catalog/guide/proof-techniques.ken.md §6`.
+`catalog/guide/proof-techniques.ken.md §6`. The normative group grammar and
+canonical coalescing rule are in `spec/30-surface/32-grammar.md:200-221` and
+`spec/30-surface/31-lexical.md:228-231`.
 
 After authoring, run `ken fmt <file>`, inspect the emitted binding layout, and
 re-run `ken check <file>`. Do not treat `ken fmt --check` as a readability

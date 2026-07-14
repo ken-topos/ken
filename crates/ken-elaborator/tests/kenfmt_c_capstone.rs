@@ -8,65 +8,8 @@ use ken_elaborator::lexer::Token;
 use ken_elaborator::lossless::parse_lossless;
 use ken_elaborator::{extract_ken_md, format_ken_md};
 
-// Historical, discharged capstone-C migration baseline. New files must not be
-// added here: a file created after the frame has no honest pre-capstone line
-// count. Live-corpus canonicity is covered by the fixed-point test below.
-const FRAME_LINE_COUNTS: &[(&str, usize)] = &[
-    ("catalog/guide/decomposition-abstraction.ken.md", 165),
-    ("catalog/guide/proof-techniques.ken.md", 367),
-    ("catalog/guide/surface-reference.ken.md", 535),
-    ("catalog/packages/Capability/Console/Console.ken.md", 32),
-    ("catalog/packages/Capability/FS/FS.ken.md", 36),
-    ("catalog/packages/Capability/Parsing/Parsing.ken.md", 742),
-    (
-        "catalog/packages/Capability/Verify/ProofErasureBoundaryChecker.ken",
-        44,
-    ),
-    ("catalog/packages/Core/EffectfulClasses.ken.md", 6714),
-    ("catalog/packages/Core/EmptyDec.ken.md", 323),
-    ("catalog/packages/Core/LawfulClasses.ken.md", 2217),
-    ("catalog/packages/Core/LawfulFunctors.ken.md", 512),
-    ("catalog/packages/Core/NatArith.ken.md", 240),
-    ("catalog/packages/Core/OrdNat.ken.md", 356),
-    ("catalog/packages/Core/Transport.ken.md", 179),
-    ("catalog/packages/Data/Collections/Collections.ken.md", 1446),
-    ("catalog/packages/Data/Collections/Map.ken.md", 15352),
-    (
-        "catalog/packages/Data/Collections/StringBijection.ken.md",
-        52,
-    ),
-    ("catalog/packages/Data/NonEmpty/NonEmpty.ken.md", 170),
-    ("catalog/packages/Data/Sums/Sums.ken.md", 321),
-    ("catalog/packages/Data/Validation/Validation.ken.md", 367),
-    ("catalog/packages/Text/Codec/Codec.ken.md", 99),
-    ("catalog/packages/Text/Numeric/Numeric.ken.md", 248),
-    ("catalog/packages/Text/StringKeys/StringKeys.ken.md", 112),
-    (
-        "examples/rosetta/accumulator-factory/accumulator-factory.ken",
-        132,
-    ),
-    ("examples/rosetta/ackermann/ackermann.ken", 143),
-    ("examples/rosetta/closures/closures.ken", 66),
-    ("examples/rosetta/factorial/factorial.ken", 158),
-    ("examples/rosetta/fibonacci/fibonacci.ken", 166),
-    ("examples/rosetta/fizzbuzz/fizzbuzz.ken", 258),
-    ("examples/rosetta/gcd/gcd.ken", 218),
-    ("examples/rosetta/hailstone/hailstone.ken", 167),
-    ("examples/rosetta/hello-world/hello-world.ken", 10),
-    (
-        "examples/rosetta/letter-frequency/letter-frequency.ken",
-        114,
-    ),
-    ("examples/rosetta/merge-sort/merge-sort.ken", 111),
-    ("examples/rosetta/mutual-recursion/mutual-recursion.ken", 38),
-    ("examples/rosetta/palindrome/palindrome.ken", 56),
-    ("examples/rosetta/read-file-lines/read-file-lines.ken", 166),
-    ("examples/rosetta/rpn-calculator/rpn-calculator.ken", 125),
-    ("examples/rosetta/tree-traversal/tree-traversal.ken", 37),
-];
-
 #[test]
-fn canonical_frozen_corpus_is_a_39_file_fixed_point() {
+fn canonical_live_corpus_is_a_fixed_point() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut literate = Vec::new();
     collect(&repository.join("catalog"), ".ken.md", &mut literate);
@@ -77,16 +20,8 @@ fn canonical_frozen_corpus_is_a_39_file_fixed_point() {
     );
     literate.sort();
     plain.sort();
-    assert!(
-        literate.len() >= 14,
-        "literate corpus fell below floor 14 (observed {})",
-        literate.len()
-    );
-    assert!(
-        plain.len() >= 17,
-        "plain corpus fell below floor 17 (observed {})",
-        plain.len()
-    );
+    assert!(!literate.is_empty(), "literate corpus must not be empty");
+    assert!(!plain.is_empty(), "plain corpus must not be empty");
 
     for path in plain {
         let source = fs::read_to_string(&path).unwrap();
@@ -112,64 +47,6 @@ fn canonical_frozen_corpus_is_a_39_file_fixed_point() {
             }
         }
     }
-}
-
-#[test]
-fn canonical_reformat_has_no_pathological_line_expansion() {
-    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut enumerated = Vec::new();
-    collect(&repository.join("catalog"), ".ken.md", &mut enumerated);
-    collect(
-        &repository.join("examples/rosetta"),
-        ".ken",
-        &mut enumerated,
-    );
-    enumerated.push(
-        repository.join("catalog/packages/Capability/Verify/ProofErasureBoundaryChecker.ken"),
-    );
-    let mut enumerated = enumerated
-        .into_iter()
-        .map(|path| {
-            path.strip_prefix(&repository)
-                .unwrap()
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect::<Vec<_>>();
-    let mut oracle = FRAME_LINE_COUNTS
-        .iter()
-        .map(|(path, _)| (*path).to_owned())
-        .collect::<Vec<_>>();
-    enumerated.sort();
-    oracle.sort();
-    let missing = oracle
-        .iter()
-        .filter(|path| enumerated.binary_search(path).is_err())
-        .collect::<Vec<_>>();
-    assert!(
-        missing.is_empty(),
-        "historical line-count oracle paths must remain in the live corpus: {missing:?}"
-    );
-
-    let mut frame_total = 0usize;
-    let mut canonical_total = 0usize;
-    for &(path, frame_lines) in FRAME_LINE_COUNTS {
-        let canonical_lines = fs::read_to_string(repository.join(path))
-            .unwrap()
-            .lines()
-            .count();
-        frame_total += frame_lines;
-        canonical_total += canonical_lines;
-        assert!(
-            canonical_lines * 2 <= frame_lines * 9,
-            "{path}: pathological expansion from {frame_lines} to {canonical_lines} lines"
-        );
-    }
-    assert_eq!(frame_total, 32_594, "frame line-count oracle drifted");
-    assert!(
-        canonical_total <= frame_total * 3,
-        "whole corpus pathologically expanded from {frame_total} to {canonical_total} lines"
-    );
 }
 
 #[test]

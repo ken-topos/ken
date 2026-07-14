@@ -15,6 +15,9 @@ roles such as `sorted_tail` or `left_round_trip`, never `tmp` or `value2`; split
 a helper or lemma when a long chain creates a local namespace. Do not prescribe
 or target a binding count.
 
+Write two or more sequential local bindings as one `;`-separated binding group;
+do not turn an already-canonical one-binding `let` into a group of one.
+
 Run `ken fmt` and the exact affected package checks, inspect the formatted
 source itself, and re-run `ken check`. A formatter fixed point is a syntax
 property, not a readability verdict.
