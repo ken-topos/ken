@@ -1046,7 +1046,9 @@ impl<'a> LayoutPrinter<'a> {
             arm.span.start,
             self.source.tokens()[indices[arrow_pos]].span.end,
         );
-        let compound = matches!(arm.body, Expr::EMatch { .. }) || is_compound_expr(&arm.body);
+        let compound = matches!(arm.body, Expr::EMatch { .. })
+            || is_let_chain(&arm.body)
+            || is_compound_expr(&arm.body);
         if compound {
             Doc::concat([
                 self.doc_from_tokens(&head, TokenLayout::Soft),
@@ -1063,24 +1065,45 @@ impl<'a> LayoutPrinter<'a> {
     }
 
     fn print_let(&self, span: &Span, value: &Expr, body: &Expr) -> Doc {
-        if is_compound_expr(value) || is_compound_expr(body) {
-            let indices = self.token_indices(span);
-            let Some(eq_pos) = indices.iter().position(|index| {
-                matches!(self.source.tokens()[*index].kind, Token::Eq)
-                    && self.source.tokens()[*index].span.end <= value.span().start
-            }) else {
-                return self.doc_from_tokens(span, TokenLayout::Let);
-            };
-            let head = Span::new(span.start, self.source.tokens()[indices[eq_pos]].span.end);
-            Doc::concat([
-                self.doc_from_tokens(&head, TokenLayout::Soft),
-                Doc::concat([Doc::hard_line(), self.print_expr(value)]).nest(INDENT_WIDTH),
-                Doc::hard_line(),
-                Doc::text("in"),
-                Doc::concat([Doc::hard_line(), self.print_expr(body)]).nest(INDENT_WIDTH),
-            ])
+        if is_compound_expr(value) || is_compound_expr(body) || matches!(body, Expr::ELet(..)) {
+            self.print_structural_let(span, value, body).group()
         } else {
             self.doc_from_tokens(span, TokenLayout::Soft)
+        }
+    }
+
+    fn print_structural_let(&self, span: &Span, value: &Expr, body: &Expr) -> Doc {
+        let indices = self.token_indices(span);
+        let Some(eq_pos) = indices.iter().position(|index| {
+            matches!(self.source.tokens()[*index].kind, Token::Eq)
+                && self.source.tokens()[*index].span.end <= value.span().start
+        }) else {
+            return self.doc_from_tokens(span, TokenLayout::Let);
+        };
+        let head = Span::new(span.start, self.source.tokens()[indices[eq_pos]].span.end);
+        let body_end = body.span().end;
+        let body_tokens = self.token_indices(body.span());
+        let body_doc = if let Expr::ELet(_, _, value, body, span) = body {
+            self.print_structural_let(span, value, body)
+        } else {
+            self.print_expr(body)
+        };
+        let core = Doc::concat([
+            self.doc_from_tokens(&head, TokenLayout::Soft),
+            Doc::concat([Doc::line(), self.print_expr(value)]).nest(INDENT_WIDTH),
+            Doc::line(),
+            Doc::text("in"),
+            Doc::concat([Doc::line(), body_doc]).nest(INDENT_WIDTH),
+        ]);
+        let suffix = Span::new(body_end, span.end);
+        let suffix = self.token_indices(&suffix);
+        if suffix.is_empty() {
+            core
+        } else {
+            let boundary = body_tokens.last().map_or(Doc::Nil, |body_end| {
+                self.token_boundary(*body_end, suffix[0], Doc::Nil)
+            });
+            Doc::concat([core, boundary, self.grouped_token_slice(&suffix)])
         }
     }
 
@@ -1823,6 +1846,10 @@ fn is_compound_expr(expr: &Expr) -> bool {
         Expr::ELet(_, _, value, body, _) => is_compound_expr(value) || is_compound_expr(body),
         _ => false,
     }
+}
+
+fn is_let_chain(expr: &Expr) -> bool {
+    matches!(expr, Expr::ELet(_, _, _, body, _) if matches!(body.as_ref(), Expr::ELet(..)))
 }
 
 fn flatten_application<'a>(expr: &'a Expr, arguments: &mut Vec<&'a Expr>) -> &'a Expr {

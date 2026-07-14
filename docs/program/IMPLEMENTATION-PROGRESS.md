@@ -14,7 +14,89 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (13:15 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 2c184550`
+> ### ⏭ 2026-07-14 (13:50 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 82cb8fd0`
+>
+> ## ▶ FOUR RINGS LIVE. Nothing blocked. Nothing idle-and-unblocked.
+>
+> | Ring | WP | State / next action |
+> |---|---|---|
+> | **Foundation** | **CC8** | 🟢 **ACTIVE** `wp/cc8-env-config-decoder @ a6b9dbf2` (rebased). Kicked `evt_4zwr9z8aj3xf2`. **⚠ Frame AMENDED — see below.** Gate: Foundation QA. |
+> | **Runtime** | **CC6b** `Path.Posix` | 🟢 **ACTIVE** `wp/cc6b-path-posix @ 467344a4`. Kicked `evt_6ysprjt1ezyn9`. Gate: Runtime QA. |
+> | **Ergo** | **LET-1** `kenfmt` | 🟡 **QA PASS `@ f64ec629`** (on `82cb8fd0`). **At CV for the 4-line `spec/30-surface/31-lexical.md` touch** (`evt_5a60dzvdkg18n`) → then **I PUBLISH**. |
+> | **Spec enclave** | **LET-2** + prover-prose sweep | 🟢 **ACTIVE.** CV blocker folded in (guide headers). Architect terminal on the prose branch. |
+> | Language | — | free. **3 × SUB-1b §10 retros OUTSTANDING** (`evt_jps4rd4y5een`). |
+> | **Foundation (queued)** | **LET-3** | 🔒 blocked on LET-1 **and** LET-2. After CC8. |
+> | Kernel · Verify | — | idle **by design** (Verify: Pat's Z3 deferral). **Do not manufacture work.** |
+>
+> ## ⛔ CC8 FRAME AMENDED — MY ERROR, caught by foundation-qa at preflight
+>
+> **I amended §3.2 when SUB-1b was in flight and never swept the rest of the
+> frame.** Two sections still contradicted the GO (`evt_cjww5bfxwxea`):
+>
+> - **§6 first bullet** — *"⛔ no `DecEq Bytes`… key matching goes through
+>   `ArgBytes` + `bytes_at` + `eq_int`"*. **Every clause false.** Pat ruled it,
+>   SUB-1b landed it, SUB-2 deleted `ArgBytes`. **⇒ Replaced.**
+> - **§3.2 item 2** — *"where CC3's `Cursor` ABI demands `ArgBytes`, pass it"*.
+>   **`ArgBytes` DOES NOT EXIST.** SUB-2 deleted it. **⇒ Replaced.** *(QA missed
+>   this one; the whole-doc sweep found it.)*
+>
+> **★ THE LESSON (now fleet memory): a frame's "what to build" gets re-reasoned;
+> its GUARDRAILS get OBEYED.** A stale guardrail doesn't merely fail to help — **it
+> actively FORBIDS the correct implementation, in the frame author's own voice,
+> with the frame author's authority.** **When the substrate moves under a held WP,
+> grep the WHOLE frame for every name the change touched.**
+>
+> *Amendment handed to foundation-implementer to ride THEIR commit — the branch is
+> checked out in their worktree and committing over it would desync them.*
+>
+> ## ✅ SUB-1b MERGED @ `82cb8fd0` — content-verified. **THE BYTE LINE IS COMPLETE.**
+>
+> ```
+> uint8_int_retract              conversions.rs:135    ← the ONE postulate
+> declare_postulate CALL SITES   125 → 126             ← EXACTLY ONE new
+> fail-closed guard              conversions.rs:150    ← set-equality, fails closed
+> instance DecEq UInt8/Bytes     BytesKeys.ken.md:52/109
+> ```
+>
+> **⚠ It was SQUASH-merged: `55cc3941` is NOT an ancestor of `main`.** An ancestry
+> check reports **"not merged"** while the content is fully there. **The SHA lied;
+> the content told the truth.** *(Do not "re-land" a squashed branch —
+> [[landing-integrity-verify-by-content-not-sha]].)*
+>
+> **⇒ SUB-1 (spine) + SUB-1b (law) + SUB-2 (retire the carriers) — all landed.**
+> Bytes now have a structural view, a lawful `DecEq`, and no cached-`Nat` scar
+> tissue. **That whole substrate arc is DONE.**
+>
+> **OUTSTANDING: 3 × Language §10 retros** (requested `evt_jps4rd4y5een`). Merged ≠
+> closed.
+>
+> ## ▶▶ BOTH BLOCKED RINGS FIRE — Handoff Gate RUNNING on all 6 seats
+>
+> | Ring | WP | Branch |
+> |---|---|---|
+> | **Foundation** | **CC8** · env/config decoder — plain `Bytes` keys, lawful `DecEq Bytes`, **NO cached-`Nat` carrier** | `wp/cc8-env-config-decoder @ 6c7ca45c` |
+> | **Runtime** | **CC6b** · `System.Path.Posix` — the held half of CC6, hold now discharged | `wp/cc6b-path-posix @ 467344a4` |
+>
+> **⛔ Do not kick until all 6 seats are compact-verified.** Gate started; verify
+> the drops (capture-pane **WIDE**, `tail -20`) then post BOTH GOs.
+>
+> ## ★ LET-2 SCOPE WIDENED — the guide corpus does not itself elaborate
+>
+> **CV ran the REAL producer (`ElabEnv::elaborate_ken_md_file`) and found all
+> THREE `catalog/guide/**` strands FAIL `ken check` today** — before any example
+> runs. Each carries `program capabilities FS APartial`, which `parse_decls`
+> rejects (`decomposition:163`, `proof-techniques:31`, `surface-reference:44`).
+>
+> **My AC1 ("every guide example elaborates") is the first thing that ever tried
+> to enforce that bar.** ⇒ **The corpus that teaches agents to write Ken has been
+> handing them a reference the elaborator would reject.** *Same shape as the `let`
+> finding: the guidance loop's own output was never checked.*
+>
+> **Folded into LET-2 as header-currency ONLY** (`evt_99stzp4t42f5`). **⛔ My added
+> boundary: find out what `program capabilities` was FOR before deleting it.** If
+> the guides genuinely need to declare capabilities and the grammar can't express
+> it, **that is a real surface gap → ESCALATE.** *Never edit a document until the
+> machine stops complaining.*
 >
 > ## ⚠ THE WATCHDOG PROMPT IS STALE — do not act on it
 >
