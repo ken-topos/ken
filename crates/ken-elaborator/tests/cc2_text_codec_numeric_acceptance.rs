@@ -16,6 +16,7 @@ const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Diagnostic/Core.ken.md");
 const STRING_BIJECTION_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/StringBijection.ken.md");
 const STRING_KEYS_KEN_MD: &str =
@@ -32,6 +33,8 @@ fn dependency_env() -> ElabEnv {
         .expect("Data/Collections/Collections.ken.md must elaborate second");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
         .expect("Core/LawfulClasses.ken.md must elaborate third");
+    env.elaborate_ken_md_file(DIAGNOSTIC_KEN_MD)
+        .expect("Diagnostic/Core.ken.md must elaborate fourth");
     env
 }
 
@@ -176,6 +179,12 @@ fn ordered_dependency_closure_elaborates_codec_then_numeric() {
         &env,
         &[
             "char_to_digit",
+            "numeric_error_code",
+            "numeric_diagnostic",
+            "numeric_argument_origin",
+            "numeric_argument_origin_index_faithful",
+            "numeric_argument_origin_start_faithful",
+            "numeric_argument_origin_end_faithful",
             "parse_digits_at",
             "parse_nat_chars",
             "parse_int_chars",
@@ -191,12 +200,16 @@ fn ordered_dependency_closure_elaborates_codec_then_numeric() {
             "show_digits",
         ],
     );
-    for name in ["NumericErrorKind", "NumericError", "DecimalDigit"] {
+    for name in ["NumericErrorKind", "Diagnostic", "DecimalDigit"] {
         assert!(
             env.globals.contains_key(name),
             "expected checked data `{name}`"
         );
     }
+    assert!(
+        !env.globals.contains_key("NumericError"),
+        "CC4 must remove the parallel NumericError carrier"
+    );
 }
 
 #[test]
@@ -351,15 +364,20 @@ fn located_numeric_discriminators_and_codec_boundary_are_checked() {
         -42
     );
 
-    for (name, expected_kind, expected_position) in [
-        ("empty_input_result", "EmptyInput", 0),
-        ("bad_digit_result", "InvalidDigit", 2),
+    for (name, expected_code, expected_position) in [
+        ("empty_input_result", "text.numeric.empty-input", 0),
+        ("bad_digit_result", "text.numeric.invalid-digit", 2),
     ] {
         let result = eval_global(&env, &mut store, name);
-        let error = ctor_args(&env, &result, "Err").last().unwrap();
-        let fields = ctor_args(&env, error, "MkNumericError");
-        ctor_args(&env, &fields[0], expected_kind);
-        assert_eq!(nat_count(&env, &fields[1]), expected_position);
+        let diagnostic = ctor_args(&env, &result, "Err").last().unwrap();
+        let fields = ctor_args(&env, diagnostic, "MkDiagnostic");
+        let origin = ctor_args(&env, &fields[0], "ArgumentOrigin");
+        assert_eq!(nat_count(&env, &origin[0]), 2);
+        let range = ctor_args(&env, &origin[1], "MkByteRange");
+        assert_eq!(nat_count(&env, &range[0]), expected_position);
+        assert_eq!(nat_count(&env, &range[1]), expected_position);
+        let code = ctor_args(&env, &fields[1], "MkDiagnosticCode");
+        assert_eq!(code.last(), Some(&EvalVal::Str(expected_code.into())));
     }
 
     let ascii = eval_global(&env, &mut store, "ascii_a_view");
