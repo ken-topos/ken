@@ -123,6 +123,44 @@ fn strict_frozen_corpus_gate_is_green() {
     );
 }
 
+#[test]
+fn every_checked_runnable_root_declares_its_fs_authority() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut roots = Vec::new();
+    for directory in ["catalog", "examples", "conformance", "crates"] {
+        let directory = repository.join(directory);
+        collect(&directory, ".ken", &mut roots);
+        collect(&directory, ".ken.md", &mut roots);
+    }
+    roots.sort();
+    roots.dedup();
+
+    let mut runnable = Vec::new();
+    for path in &roots {
+        let source = fs::read_to_string(path).unwrap();
+        let uses_program_abi = source.contains("ProgramCaps") || source.contains("HostIO");
+        if !uses_program_abi {
+            continue;
+        }
+        runnable.push(path);
+        assert!(
+            source
+                .lines()
+                .any(|line| line.trim() == "program capabilities FS APartial"
+                    || line.trim() == "program capabilities FS AFull"
+                    || line.trim() == "program capabilities FS ANone"),
+            "runnable Ken root lacks a declared FS authority: {}",
+            path.display(),
+        );
+    }
+
+    assert_eq!(
+        runnable.len(),
+        19,
+        "the checked runnable-root inventory changed; audit every new or removed root"
+    );
+}
+
 fn collect(directory: &Path, suffix: &str, out: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(directory).unwrap() {
         let path = entry.unwrap().path();

@@ -749,6 +749,17 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
     }
 
     #[test]
+    fn runner_has_no_implicit_fs_authority_default() {
+        let env = elaborate_program("program\n");
+        assert_eq!(
+            declared_fs_authority(&env),
+            Err(ProgramValidationError::MissingCapability {
+                effect: "FS".to_owned(),
+            })
+        );
+    }
+
+    #[test]
     fn apartial_write_returns_named_denial_before_capture_host_syscall() {
         let env = elaborate_program("program capabilities FS APartial\n");
         let declared = declared_fs_authority(&env).expect("FS APartial declared");
