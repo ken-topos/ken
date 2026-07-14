@@ -138,7 +138,12 @@ fn surface_and_render_package_add_zero_trusted_base_entries() {
     elab.elaborate_ken_md_file(FS_PACKAGE)
         .expect("ordinary FS render package elaborates");
     assert_eq!(before, elab.env.trusted_base());
-    assert!(!FS_PACKAGE.contains("Axiom"));
+    let extracted =
+        ken_elaborator::literate::extract_ken_md(FS_PACKAGE).expect("FS.ken.md must extract");
+    assert!(
+        !extracted.source.contains("Axiom"),
+        "FS.ken code must declare no Axiom"
+    );
 }
 
 #[test]
