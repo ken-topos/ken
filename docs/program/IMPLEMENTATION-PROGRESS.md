@@ -14,34 +14,101 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-13 (21:xx) — LIVE STATE (read this first) · `origin/main @ f811a93a`
-> **3 LANES IN FLIGHT (event-driven; heartbeat catches handbacks):**
-> **(1) Enclave #39/#36 spec+conformance — PUBLISHING.** Honesty-gate CLEAN on
-> `44f928f4` (frame+3 spec chapters+conf README+fixture; linear; CV Spec/Fidelity
-> + Conformance APPROVE). Tracker-synced → `1731c3e4`; **scripted publisher pid
-> 3334361, PR #614, CI-polling.** On merge → relay + close #39/#36.
-> **(2) Runtime I-4 (ProgramCaps) — REDIRECTED by Pat, Architect re-ruling.** Pat:
-> *Ken owns program-VALIDITY only, NOT runtime constraint (SELinux/CLI grant = out
-> of scope); capabilities declared IN the program declaration, with the `admits`
-> roster.* → the whole CLI launch-grant fork (§SURFACE Options 1/2/3 + default) is
-> MOOT. Relayed to Architect `evt_49zx3brvzn1fm` (NOT compacted — same lane, hot
-> context); **I-4 build-frame transcription HELD until revised ruling.** Memory:
+> ### ⏭ 2026-07-14 (00:2x) — LIVE STATE (read this first) · `origin/main @ c514eecb`
+> **⚠ SPACE EVENT-WRITE OUTAGE since 23:27:41 — ROOT-CAUSED (backend append-path wedge).**
+> `post_response` → soft body `{"error":"Space not active"}` for me AND CV (read CV's
+> pane directly). RULED OUT: wrong/stale space id (`list_spaces` → `spc_4q7g0se87rgje`
+> active, desc "Ken"); top-level paused flag (Pat toggled active→paused→active, no
+> effect; `get_space_status`=active); my MCP client (reconnect 00:04 v1.28.1 + /compact
+> + join_space; WS alive w/ ping-pong in `.moot/logs/channel-steward.log`); per-
+> participant (CV identical); stuck call (`list_calls`=none). It logs "completed
+> successfully" (NOT "Backend rejected 4xx") ⇒ soft error, decoupled from `status`.
+> Wedged at exactly 23:27:41 = CV's BLOCK evt_7yvt1bcvr9ca9 (last successful append).
+> Needs backend service restart / clear stuck append-lock on that space. Reads FROZEN
+> at 23:27:41 for me (can't see fleet past that) — TMUX capture-pane is my ground truth.
+> DEFERRED until writes recover: (a) batch-3 MERGE RELAY to language-leader; (b) §C
+> merge-relay + close #64 + relay to runtime-leader; (c) §B unblock post. **Do NOT
+> hammer post_response.** Build is NOT blocked — git/gh publisher is outage-independent.
+> **★ §C — CV VOTE = APPROVE (read from CV pane 00:1x). PUBLISHING NOW via git/gh.**
+> Combined candidate **`c1edf2e1`** (in shared object store; verified linear, 0 merges).
+> Chain: `66c6e15f→629972f9(frame)→c44e3f99(spec)→2c84a9f6→d3e7656b(Program-I settle)→
+> 874bafde(conf pin)→c1edf2e1(conf keyword align)`; spec subtree=d3e7656b,
+> conformance=cb93ae5c reconcile. CV: "Binary vote APPROVE on exact c1edf2e1, no
+> Spec/Fidelity or conformance blocker; re-anchor at publisher gate, preserve subtrees
+> byte-identical." **Steward honesty-gate CLEAN:** 9 files (spec×4 + ADR-0014 + Program-I
+> contract + §C frame + conformance×2), ALL enclave-allowed; ZERO kernel/Cargo/lock/
+> .github/crates/prelude delta; `diff --check` clean; grammar reserves `capabilities`
+> (justified vs caps/grants/requires); contract types main as `ProgramCaps a` (CV
+> blocker#2 fixed). NEXT: bundle tracker onto c1edf2e1 → publisher --target (CI-poll;
+> origin/main advanced to c514eecb via batch-3, DISJOINT files so 3-way merge clean) →
+> on merge close #64 + queue relays (flush on outage recovery) → §B steps 2-7 unblock.
+> §B step-1 `c3583fed` done/waiting on §C surface.
+> **✅ batch-3 kenfmt vertical balance (#63) — MERGED `origin/main @ c514eecb` (PR #616,
+> CI green) + CLOSED** (retros all in; layout.rs split-high fix + catalog re-sweep +
+> non-vacuous balance gate; CANONICAL_WIDTH=96 + OrdNat byte-identical; zero
+> kernel/spec/conformance delta). kenfmt vertical-balance arc COMPLETE.
+> **2 LANES IN FLIGHT (event-driven; heartbeat catches handbacks):**
+> **(1) batch-3 kenfmt vertical balance (#63) — STAGE-2 QA-APPROVED → ARCHITECT-TERMINAL
+> REVIEW IN FLIGHT.** Candidate `wp/kenfmt-vertical-balance @ 7b8c5d88` (linear
+> `66c6e15f → 93f5dc84 → 927c19ba → 7b8c5d88`; 14 files: frame + layout.rs + 2 elab
+> tests + 9 catalog + 1 Rosetta; forbidden-path EMPTY, CANONICAL_WIDTH=96 untouched,
+> OrdNat byte-identical; balance gate non-vacuous — old splay rejects on named
+> `mid-arrow` + `missing +2`). QA APPROVED (`evt_39t4dntqcqn6a`);
+> **Architect TERMINAL APPROVE `evt_7j4b19gkag7s3`** (identity/scope ✓, zero
+> kernel/Cargo/lock/.github/spec/conformance, zero trusted_base delta). **Steward
+> honesty-gate CLEAN** (0 merges, 14 files kenfmt-allowed, forbidden-path empty,
+> diff-check clean). **PUBLISHING — PR #616** (`wp/scripted-merge-97653c54 @ 97653c54`;
+> tracker bundled; code path, CI-polling ~384s then merge, pid 3375653). **Batch-3 §10
+> retros ALL IN** (leader `evt_7k2bgt8vdmagh`, QA `evt_rm796j424bq8`, impl
+> `evt_10tnv0pz2jmcf`). Only close-gate left = the merge. ON MERGE (monitor
+> `b031o6a3m` wakes me): relay merge + **close #63**. Language ring idle after
+> (Handoff-Gate before next kickoff).
+> _Prior stage-2 detail:_ Stage-1
+> rendering (consistent-break: split-high, inner arrow flat, +2 children, fitting
+> tail horizontal) **Pat-APPROVED**; honesty-gate CLEAN on `927c19ba` (4 files,
+> OrdNat byte-identical, CANONICAL_WIDTH untouched). **Stage-2 GREENLIT**
+> `evt_4m23stnj5szd`: catalog-wide sweep + regenerate frozen fixture + **automated
+> balance gate that provably fires on a pre-fix over-width sample** (corrected-AC5).
+> Language building (same warm WP, no re-compaction). → QA → Architect-terminal →
+> honesty-gate + publish + close #63.
+> **(2) Runtime I-4 (ProgramCaps) — REV-2 ACCEPTED + sub-fork RESOLVED; TRANSCRIBE
+> NEXT.** Architect REV-2 ruling `architect/work:docs/program/wp/i4-program-caps-ruling.md
+> @ be52d82b` (§A.5.1 now marked RESOLVED-(ii); transcribe from THIS sha, not 222320da)
+> reconciled to Pat's reframe (caps declared ON the anonymous `program`
+> header, sibling of `admits`/ADR-0014-MRES-4; static kernel-backed family
+> containment via cap-passing translation; ambient Console; zero-TCB). **Pat picked
+> §A.5.1 Option (ii) = STATIC authority-level via a typed capability-API wrapper**
+> (`writeFile : Cap AFull -> …` over the UNCHANGED polymorphic core; APartial-writes
+> ill-typed; does NOT reopen I-3). Architect acked + STOOD DOWN (clean seam). **BOTH I-4 FRAMES
+> PLACED, BOTH RINGS COMPACTING:**
+> **• §C (enclave lead, task #64) — IN INTERNAL REVIEW LOOP.** `wp/i4c-program-header-caps`.
+> spec-author released spec/contract `c44e3f99` (6 files: §31/§32/§33 grammar +
+> §38-ffi-io + ADR-0014 amendment folded + Program-I; keyword chosen = **`capabilities`**,
+> justified vs grants/requires/caps; typed API `readFile:Cap APartial`/`writeFile:Cap
+> AFull` + Ken-callable `attenuate : Cap AFull -> Cap APartial`). CV authored conformance
+> `b997d0f7` (4 named variants, EFF3 home, MissingCapability{FS} flip). spec-leader
+> assembled combined `98dd350f`. **CV BLOCKED it on 2 real fidelity nits:** (1) conf
+> used `caps` vs assembled `capabilities` — reconcile `cb93ae5c` READY; (2) Program-I
+> §1.1 line 71 `caps : ProgramCaps` → pinned `ProgramCaps a`, lines 80-84 stale
+> `program App` named-header claim (must be anonymous). CV asked spec-author for the
+> contract fix → then replays conf reconcile + casts binary vote. Enclave self-
+> correcting; no Steward hand. (If spec-author stalls on CV's threaded request, nudge
+> via spec-leader — but both alive/recent last-seen.) → combined SHA → I honesty-gate
+> (spec+conformance ALLOWED for enclave WP; docs/adr ALLOWED for the folded amendment).
+> **• §B (Runtime build, task #65, blocked-by #64) — STEP 1 DONE, awaiting §C surface.**
+> Step 1 released + leader-verified **`c3583fed`** (`ProgramCaps a` generalization via
+> `declare_inductive` telescope `[a:Auth]`, `Cap (Var 0)` ctor; zero trusted_base
+> delta proven; `main.rs:293-299` AUTH_PARTIAL deliberately untouched for §C-dep
+> continuation). Runtime waiting event-driven for §C's declared-cap + typed-wrapper
+> surface. **On §C merge: relay to runtime-leader → assign the atomic §B continuation
+> (steps 2-7).** Memory:
 > [[ken-owns-program-validity-not-runtime-constraint-caps-declared-in-program]].
-> **(3) batch-3 kenfmt vertical balance (#63) — ACTIVE.** Frame
-> `wp/kenfmt-vertical-balance @ dea3a5c2` (off f811a93a); Language ring
-> Handoff-Gate compacted (3/3 WIDE-verified) + KICKED `evt_3jn4d81r6ag2h` + leader
-> roused. Two-stage: stage-1 render one worst-case deep-proof file → me → Pat
-> approve → stage-2 sweep+re-arm+**automated balance gate** (must provably fire on
-> a pre-fix over-width sample — corrected AC5 lesson).
-> **#37 CLOSED ✅** (`f811a93a`, PR #613; all 3 Language retros in).
-> **✅ OPERATOR DIRECTIVE DONE — formatter budget 88→96 sweep:** code already
-> `CANONICAL_WIDTH = 96` (layout.rs:12); swept all owned docs (11 files, committed
-> `1363561e` on steward/work), preserved SHAs/event-IDs + dated transition records.
-> **PENDING (doc-only, low-pri, unblocks no one):** (a) publish the 8 budget-swept
-> kenfmt FRAMES to main (still say 88 there); (b) route Architect's ADR-0016
-> +1-keyword self-correct (committed on architect/work). **PARKED:** Foundation #60,
-> Kernel/Verify/Ergo idle. WORKFLOW RULE: local = TARGETED only, never
-> `--workspace`. *Detailed session log below (accretes downward).*
+> **✅ DONE THIS SESSION:** #37 CLOSED (`f811a93a`); Enclave #39/#36 MERGED (`09acda41`,
+> PR #614) + CLOSED; **doc-only PR #615 MERGED `66c6e15f`** = operator budget 88→96
+> sweep (code was already `CANONICAL_WIDTH=96` layout.rs:12; all owned docs+frames+
+> memory to main) + ADR-0016 `export`=net-+1-keyword fix. Budget directive FULLY done.
+> **PARKED:** Foundation #60 substrate, Kernel/Verify/Ergo idle (gated on designs).
+> WORKFLOW RULE: local = TARGETED only, never `--workspace`. *Log below (accretes).*
 >
 > **★ OPERATOR SEQUENCING (Pat, 2026-07-13, post-#58): spin up TWO lanes** —
 > **(A) kenfmt catalog-wide + re-arm gate #57** and **(B) unblock namespace
