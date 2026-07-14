@@ -19,29 +19,29 @@ lemma string_to_list_char_injective
       (right : String)
       (same_chars : Equal (List Char) (string_to_list_char left) (string_to_list_char right))
     : Equal String left right =
-  trans
-    String
-    left
-    (list_char_to_string (string_to_list_char left))
-    right
-    (sym
+  let
+    left_chars : List Char = string_to_list_char left;
+    right_chars : List Char = string_to_list_char right;
+    left_round_trip : String = list_char_to_string left_chars;
+    right_round_trip : String = list_char_to_string right_chars;
+    left_retracts : Equal String left left_round_trip =
+      sym String left_round_trip left (string_to_list_char_retraction left);
+    mapped_chars : Equal String left_round_trip right_round_trip =
+      cong (List Char) String left_chars right_chars list_char_to_string same_chars
+  in
+    trans
       String
-      (list_char_to_string (string_to_list_char left))
       left
-      (string_to_list_char_retraction left))
-    (trans
-      String
-      (list_char_to_string (string_to_list_char left))
-      (list_char_to_string (string_to_list_char right))
+      left_round_trip
       right
-      (cong
-        (List Char)
+      left_retracts
+      (trans
         String
-        (string_to_list_char left)
-        (string_to_list_char right)
-        list_char_to_string
-        same_chars)
-      (string_to_list_char_retraction right))
+        left_round_trip
+        right_round_trip
+        right
+        mapped_chars
+        (string_to_list_char_retraction right))
 ```
 
 ## 2. Trust and derivation
