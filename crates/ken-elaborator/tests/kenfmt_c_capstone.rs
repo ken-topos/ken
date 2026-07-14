@@ -8,6 +8,9 @@ use ken_elaborator::lexer::Token;
 use ken_elaborator::lossless::parse_lossless;
 use ken_elaborator::{extract_ken_md, format_ken_md};
 
+// Historical, discharged capstone-C migration baseline. New files must not be
+// added here: a file created after the frame has no honest pre-capstone line
+// count. Live-corpus canonicity is covered by the fixed-point test below.
 const FRAME_LINE_COUNTS: &[(&str, usize)] = &[
     ("catalog/guide/decomposition-abstraction.ken.md", 165),
     ("catalog/guide/proof-techniques.ken.md", 367),
@@ -139,9 +142,13 @@ fn canonical_reformat_has_no_pathological_line_expansion() {
         .collect::<Vec<_>>();
     enumerated.sort();
     oracle.sort();
-    assert_eq!(
-        oracle, enumerated,
-        "line-count oracle must cover the live corpus"
+    let missing = oracle
+        .iter()
+        .filter(|path| enumerated.binary_search(path).is_err())
+        .collect::<Vec<_>>();
+    assert!(
+        missing.is_empty(),
+        "historical line-count oracle paths must remain in the live corpus: {missing:?}"
     );
 
     let mut frame_total = 0usize;
