@@ -127,9 +127,10 @@ heading: **"Use local `let` to name meaning, not merely length."** Point to §2.
 and §2.3. **One small checked example.**
 
 **It must also tell authors to run `ken fmt`, LOOK at the emitted binding layout,
-and re-run `ken check`** — and **until LET-1 lands, it must NAME the known
-long-chain layout defect**, so an agent does not accept an ugly fixed point as
-good style. *(`ken fmt --check` will call the mangled output canonical. Say so.)*
+and re-run `ken check`.** A canonical result from `ken fmt --check` is not a
+readability verdict. *(The shredded-chain defect was fixed in LET-1 at
+`ec980d76`; `kenfmt_let_layout.rs` asserts exact emitted text, and inspection
+remains the rule.)*
 
 ### 2.5 `agent/teams/foundation/{implementer,qa,leader}.md`
 ← **create the directory**
@@ -162,9 +163,10 @@ convention into `ken-build-*` — that is exactly how the two drift.**
 - **AC3** — `agent/teams/foundation/` exists with all three overlays, and the
   routing in `moot.toml` / `CLAUDE.md` **actually resolves to them.** *Verify by
   loading, not by `ls`.*
-- **AC4** — `write-ken` names the LET-1 layout defect **as a live caveat**, with a
-  note to delete it when LET-1 lands. **Cross-reference LET-1 by name so the
-  removal is findable.**
+- **AC4** — `write-ken` requires authors to run `ken fmt`, inspect the emitted
+  binding layout, and re-run `ken check`; it contains **no live-defect caveat**.
+  Assert the caveat text is absent by file content, not by requiring the
+  legitimate historical name `LET-1` to be absent.
 - **AC5** — the counter-rule (§1, "some terms should stay direct") appears in
   **every** artifact that states the rule. **A convention shipped without its
   brake becomes a quota in practice.**

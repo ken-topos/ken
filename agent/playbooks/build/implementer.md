@@ -12,6 +12,9 @@ your team's ring. Read `../../COORDINATION.md`, `../../MODELS.md`, and
 **`../../../docs/PRINCIPLES.md`** (the reasoning charter — especially the small-
 TCB / de Bruijn and reflect-don't-extend invariants that bound implementation).
 
+A team overlay may add source-language authoring rules for that team's scope;
+load and follow it after this generic archetype.
+
 ## Your loop
 
 You work in **your own worktree** in the shared clone and do **local git only**

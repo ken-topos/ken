@@ -342,3 +342,53 @@ decidable level equality (`12 §1,§2,§4`; `17 §3.6`).
 - why: V0 is the first concrete elaborator; it must **satisfy** the pre-existing
   elaboration invariants, not redefine them. The K1/K2/K2c regression-anchor
   pattern, carried to the surface.
+
+---
+
+## LET-2 — local bindings as checked exposition
+
+These cases pin the executable part of the local-binding authoring convention
+(`docs/program/wp/let2-local-binding-convention.md`). The convention is a
+judgment rule, not a count or an AST-depth metric. Its language-facing roots are
+the existing non-recursive scope rule (`39 §5.3`) and strict evaluation
+(`42 §3.2`; `36 §2.4` for effectful terms). The runtime sequencing behavior is
+already homed in `../../runtime/evaluation/seed-evaluation.md` and
+`../../runtime/effects/seed-effects.md`; LET-2 references those homes rather
+than duplicating them here.
+
+### surface/elaboration/guide-ken-examples-elaborate (property)
+- spec: `39 §5.3`, `§5.4`, `§5.5`; `catalog/guide/README.md` "The three
+  strands"; LET-2 AC1
+- given: every tracked `catalog/guide/**/*.ken.md` document, enumerated from the
+  repository rather than a fixed filename list
+- expect: a fresh elaboration environment runs the real literate pipeline on
+  each document. Every tangled `` ```ken `` fence parses and elaborates; every
+  `` ```ken example `` fence elaborates; every `` ```ken reject `` fence
+  rejects. The property fails with the document and fence location on the first
+  stale example.
+- why: the guide is executable teaching material. Checking only the new `let`
+  examples would leave older examples free to rot, while a hard-coded path list
+  would silently omit a newly added guide strand. The producer is the same
+  literate elaboration path used by `ken check`, not a Markdown-text scan.
+
+### surface/elaboration/let-rhs-binder-is-out-of-scope
+- spec: `39 §5.3` property 2 and `§5.6`; LET-2 AC2
+- given: `const let_rhs_self : Nat = let self_rhs_probe : Nat = self_rhs_probe in self_rhs_probe`
+- expect: **rejected** with the specific
+  `UnresolvedCon { name = "self_rhs_probe" }` diagnostic at the occurrence in
+  the right-hand side. The harness matches the variant and name; a generic
+  failure or bare `is_err` does not satisfy this case.
+- why: resolution visits the right-hand side before adding the local binder to
+  scope. The unique name prevents an earlier guide declaration from satisfying
+  the reference as a global. This pins the stated non-recursive/out-of-scope
+  reason rather than accepting coincidental rejection later in elaboration.
+
+### surface/elaboration/let-body-binder-is-in-scope
+- spec: `39 §5.3` property 2, `§5.4`; LET-2 AC2
+- given: `const let_rhs_zero : Nat = let bound_value : Nat = Zero in bound_value`
+- expect: **accepted**; the body occurrence resolves to the local binder while
+  the right-hand side elaborates without it.
+- why: the positive arm distinguishes the intended asymmetric scope boundary
+  from an implementation that rejects local names everywhere. Together with
+  `let-rhs-binder-is-out-of-scope`, changing only where the occurrence appears
+  flips the verdict.

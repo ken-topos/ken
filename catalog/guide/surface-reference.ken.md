@@ -22,7 +22,8 @@ actually in use instead.
 5. [`class` and `instance`](#5-class-and-instance)
 6. [Effect rows (`visits`)](#6-effect-rows-visits)
 7. [Named proof claims: `prop`, `lemma`, `proof`](#7-named-proof-claims-prop-lemma-proof)
-8. [The `.ken.md` literate format](#8-the-kenmd-literate-format)
+8. [Local `let`: naming an intermediate](#8-local-let-naming-an-intermediate)
+9. [The `.ken.md` literate format](#9-the-kenmd-literate-format)
 
 ## 1. Purity keywords: `const`/`fn`/`proc`
 
@@ -37,7 +38,7 @@ the signature and the body, not a comment
 
 All three keywords in one runnable block. A literate entry's compiled fences
 tangle into one module, and `ken run` executes its named `main` — so this
-block, being runnable, ends in an ABI-shaped `proc main` (§8 covers why a
+block, being runnable, ends in an ABI-shaped `proc main` (§9 covers why a
 catalog *package* entry, a library rather than a runnable file, carries none):
 
 ```ken
@@ -323,7 +324,7 @@ prop Trivial (a : Type) (x : a) : Ω where {
 
 const sample_int : Int = 42
 
-const trivial_sample : Trivial Int sample_int = Trivial.triv Int sample_int
+lemma trivial_sample : Trivial Int sample_int = Trivial.triv Int sample_int
 ```
 
 Outside the seed shape: below, `nil`'s conclusion applies `AppendsTo` to
@@ -338,16 +339,18 @@ prop AppendsTo (a : Type) (xs : List a) (ys : List a) (zs : List a) : Ω where {
 ```
 
 `proof <name> for <subject>` attaches a checked proof to a subject that is
-already resolved — the proof's own telescope must repeat the subject's
-public call telescope exactly, and the canonical path to use it is
-`subject::proof_name`:
+already resolved. The subject must occur applied somewhere in the claim, in a
+hypothesis or conclusion; attachment records membership, not a required
+telescope shape. The canonical path to use it is `subject::proof_name`:
 
 ```ken example
 fn double_it (x : Int) : Int = add_int x x
 
-proof trivial for double_it (x : Int) : Trivial Int x = Trivial.triv Int x
+proof trivial for double_it (x : Int) : Trivial Int (double_it x) =
+  Trivial.triv Int (double_it x)
 
-const attached_sample : Trivial Int sample_int = double_it::trivial sample_int
+lemma attached_sample : Trivial Int (double_it sample_int) =
+  double_it::trivial sample_int
 ```
 
 `lemma` is the standalone form — parameterized like a function, instantiated
@@ -356,24 +359,22 @@ by ordinary application, no attachment to a subject:
 ```ken example
 lemma trivial_any (a : Type) (x : a) : Trivial a x = Trivial.triv a x
 
-const lemma_sample : Trivial Int sample_int = trivial_any Int sample_int
+lemma lemma_sample : Trivial Int sample_int = trivial_any Int sample_int
 ```
 
-**A `lemma` body cannot call itself.** `lemma`'s elaboration resolves its
-body against a fresh scope, not the enclosing recursive group, so a
-self-recursive `lemma` fails with an unresolved reference to its own name.
-The working idiom is the same shape catalog code already uses for a proof
-that needs induction: prove it as an ordinary recursive `fn` (or the
-proof-techniques strand's induction pattern), then expose a **thin,
-non-recursive `lemma` wrapper** that applies it. Below, the recursion
-(structurally descending on `ys`) lives in an ordinary `fn`, gated by the
-same SCT check any recursive `fn` goes through (the proof-techniques
-strand's non-termination-hazards section covers the gate itself); the
-`lemma` wrapper is not recursive itself — it just applies the `fn` that did
-the recursion, so it resolves cleanly:
+**A `lemma` or attached `proof` may recurse, including mutual recursion with
+other proof declarations, only when the shared size-change termination gate
+accepts the proof component** (`33 §8.3–8.4`). A recursive proof component is
+signatures-first, kernel-checked, and committed only after SCT accepts; a
+non-decreasing proof loop fails closed. A recursive cycle that mixes a proof
+declaration with a computational `const`/`fn` is rejected in this round.
+
+Below, recursion is structurally descending on `ys`, so the recursive `lemma`
+is admitted. The second lemma is an optional non-recursive wrapper showing
+ordinary reuse, not a workaround required by the surface:
 
 ```ken example
-fn trivial_by_list (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
+lemma trivial_by_list (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
   match ys {
     Nil ↦ Trivial.triv a x;
     Cons _ t ↦ trivial_by_list a x b t
@@ -394,7 +395,7 @@ for the right keyword line by line. The rule of thumb:
 | the *statement* of a proposition family to reason about | `prop`             | `Omega`         |
 | a reusable, module-level checked theorem                | `lemma`            | `Omega`         |
 | a checked proof that belongs to one subject             | `proof … for`      | `Omega`         |
-| a value or computation (incl. a proof-relevant witness) | `const`/`fn` (§1)  | `Type` or `Omega` |
+| a value or computation (incl. a proof-relevant witness) | `const`/`fn` (§1)  | `Type`          |
 | a goal to hand the prover, no inline proof              | `prove` (`21 §3`)  | `Omega`         |
 
 **The load-bearing rule: `lemma` and `proof` require an `Omega` statement.**
@@ -422,36 +423,122 @@ line on purpose.
 **`lemma` vs `proof … for <subject>`.** Same checked-theorem elaboration; the
 difference is *ownership*. A `lemma` lives in the ordinary module namespace
 and is applied by name. A `proof p for s` is exported only as `s::p`, its
-telescope must repeat the subject's public telescope exactly (above), and it
-**may not depend on another proof attached to the same subject** — a sibling
-`s::q` is out of scope inside `s::p`, so each attached proof stands alone.
+telescope follows the theorem being stated, and its claim must mention `s`
+applied. Same-subject attached proofs are ordinary dependencies: an acyclic
+sibling reference resolves in dependency order, and a recursive sibling group
+is admitted only when SCT accepts it.
 Reach for `proof … for` when the fact is *about* one definition and should
 travel with it; reach for `lemma` when it is a reusable stepping-stone in its
 own right.
 
-**Declaration order is bottom-up, with mutual recursion the one exception —
+**Declaration order is dependency-driven, with recursive groups checked
+together —
 lede-first reads come from the prose, not the code order.** The elaborator
-processes a file top to bottom, and each declaration resolves only against
-names *already elaborated above it*, so in general a definition's dependencies
-must appear before it (a forward reference fails with `UnresolvedCon`). The one
-exception is a genuinely **mutually-recursive `fn`/`const` group**: a
-call-graph *cycle* is auto-detected and elaborated together (`33 §1`, under one
-`SCT` termination check over the whole group), so its members may reference
-each other in any internal order. That exception does **not** cover an
-*acyclic* forward reference — a `fn` calling a `fn` written below it when they
-do not form a cycle still fails — and it never covers `lemma`/`prop`/`proof`,
-which are never part of the recursive grouping. So a proof decl must sit
-*below* everything its statement and its body mention: the recursive helper
-`fn` goes **above** the thin non-recursive `lemma`/`proof` wrapper that exposes
-it (the induction idiom above; a `lemma` body also cannot call *itself*).
+forms a call graph and processes strongly connected components in dependency
+order (`33 §1`, §8.4), so an acyclic dependency may appear later in source and a
+recursive component is checked signatures-first. Recursive `const`/`fn` groups
+and recursive `lemma`/`proof` groups are SCT-gated; mixed computational/proof
+cycles reject. Prose should still introduce the result before the code when
+that gives the reader a clearer top-down path.
 
 The top-down, statement-first reading a math document wants comes from the
-**prose**, not from reordering the code: in the `.ken.md` format (§8) open a
+**prose**, not from reordering the code: in the `.ken.md` format (§9) open a
 section with the motivation and the claim in Markdown, then give the
 definitions and proof bottom-up in the code blocks below. The document reads
 lede-first even though the code still elaborates dependencies-first.
 
-## 8. The `.ken.md` literate format
+## 8. Local `let`: naming an intermediate
+
+`let name = rhs in body` gives an intermediate expression a local name. Add a
+type after the name when it improves the contract or guides elaboration:
+`let name : Type = rhs in body`. The binding is non-recursive: the name is in
+scope in `body`, but not in its own `rhs`.
+
+The first two examples deliberately keep the surrounding computation small so
+the inferred and annotated forms are easy to see. In ordinary code, use a
+binding when the name states a domain concept, proof endpoint, invariant, or
+stage that would otherwise be visible only as nested syntax. Expression length
+is evidence, never the decision. Keep a familiar one-step expression, a small
+exhaustive match, direct recursion, or a single constructor assembly inline
+when a local name would merely repeat its syntax. There is no binding quota,
+depth threshold, or minimum count.
+
+```ken example
+fn let_inferred (c : Color) : Bool =
+  let selected_red = is_red c in
+  selected_red
+
+fn let_annotated (c : Color) : Bool =
+  let selected_red : Bool = is_red c in
+  selected_red
+```
+
+A short pipeline can name stages without hiding the final control flow. If the
+list of unrelated stages grows long, extract a helper rather than building a
+local namespace:
+
+```ken example
+fn let_staged_color (c : Color) : Bool =
+  let selected_red = is_red c in
+  let confirmed_red =
+    match selected_red {
+      True ↦ True;
+      False ↦ False
+    }
+  in
+  confirmed_red
+```
+
+Proofs are values too. A proof-valued binding makes the evidence role explicit,
+and the rest of the body checks against its stated type:
+
+```ken example
+lemma return_self_evidence
+      (x : Bool) (evidence : Equal Bool x x)
+    : Equal Bool x x =
+  evidence
+
+lemma let_proof_value (x : Bool) : Equal Bool x x =
+  let self_evidence : Equal Bool x x = Refl in
+  return_self_evidence x self_evidence
+```
+
+Bind at the narrowest scope containing every use. A branch-specific stage stays
+inside that branch rather than being hoisted before the `match`:
+
+```ken example
+fn let_inside_branch (c : Color) : Bool =
+  match c {
+    Red ↦
+      let branch_is_red = is_red c in
+      branch_is_red;
+    Green ↦ False;
+    Blue ↦ False
+  }
+```
+
+The asymmetric scope rule is observable. This accepted declaration uses the
+binder in the body:
+
+```ken example
+const let_rhs_zero : Nat = let bound_value : Nat = Zero in bound_value
+```
+
+This declaration is rejected with
+`UnresolvedCon { name = "self_rhs_probe" }` at the right-hand-side occurrence;
+the binder is not recursive and does not scope over its own definition:
+
+```ken reject
+const let_rhs_self : Nat =
+  let self_rhs_probe : Nat = self_rhs_probe in self_rhs_probe
+```
+
+Ken is call-by-value. An effectful `let` evaluates its right-hand side before
+its body, so it sequences effects as well as naming a value. Never hoist an
+effectful computation out of a branch, or across another effect, merely to name
+or share it. A style refactor must preserve branch placement and effect order.
+
+## 9. The `.ken.md` literate format
 
 This guide (and every catalog package) is itself written in `.ken.md`: an
 ordinary Markdown file whose fenced code blocks carry a checked role. Only
