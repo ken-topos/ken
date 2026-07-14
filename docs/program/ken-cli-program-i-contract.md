@@ -267,6 +267,14 @@ mediated family. This contract specifies what Ken accepts as a valid program.
 CLI grants, OS sandboxing, and other constraints on a running process are a
 separate concern and are out of scope.
 
+The program-facing FS wrappers only consume that capability. `readFile` is
+authority-polymorphic:
+`(a : Auth) -> Cap a -> Bytes -> FS a (Result FileError Bytes)`.
+`writeFile` remains monomorphic at `Cap AFull`, preserving the static write
+gate. v1 exposes neither a public capability constructor nor a Ken-callable
+attenuation function; the attenuation operation in §3.2 is runner-side
+semantic machinery.
+
 **The honest caveat, stated loudly:** coarse authority confines *nothing to a
 path*. `authorizes(cap, path)` still ignores `path`. The v1 read wrapper accepts
 any declared authority; insufficient read authority, including `ANone`, is
