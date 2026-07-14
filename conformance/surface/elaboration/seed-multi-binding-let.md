@@ -23,12 +23,14 @@ The mandatory mechanical sweep on exact base `6d6504d6` produced:
 | D3 long group | does not reach | does not reach |
 | D4 compound match RHS | does not reach | does not reach |
 | D5 group in match arm | does not reach | does not reach |
-| D6 comments | does not reach | does not reach |
+| D6 grouped comments | does not reach | does not reach |
 | D7 nested-to-group | reaches | does not reach |
-| D8 literate body | does not reach | does not reach |
+| D8 shadow segment | reaches | does not reach |
+| D9 commented nested-to-group | reaches | does not reach |
+| D10 literate body | does not reach | does not reach |
 
-The sweep called the real `parse_lossless` on all sixteen strings. This is why
-D1 is live, why D7's input is a live compatibility control, and why every
+The sweep called the real `parse_lossless` on all twenty strings. This is why
+D1 is live, why the D7–D9 inputs are live compatibility controls, and why every
 grouped expected block names the surface precondition as well as the formatter.
 
 Expected text in section D is derived from S6 and the general `31 §1d` physical
@@ -463,6 +465,64 @@ tokens into the grouped spelling.
 - why: this is S6's explicit canonicalization direction. The reverse input is
   already the fixed point, and both lower to the same ordered core nest.
 
+### surface/formatting/let4-shadow-starts-new-coalescing-segment
+
+- spec: S5/S6; `31 §1d`; LET-4 AC5
+- given:
+  `const shadow : Nat = let stage = Zero in let next = Suc stage in let stage =
+  Suc next in stage`
+- expect: **RED-UNTIL (LET-4 surface + formatter)** — canonical bytes:
+
+  ```ken ignore
+  const shadow : Nat =
+    let
+      stage = Zero;
+      next = Suc stage
+    in
+      let stage = Suc next in stage
+  ```
+
+  The noncanonical input formats to these exact bytes, these bytes format to
+  themselves, and both forms have identical lowered AST/core terms modulo
+  spans.
+- why: `stage; next` is the longest outer pairwise-distinct segment. The second
+  `stage` begins a new one-binding nested segment, so formatting preserves
+  legal lexical shadowing rather than emitting one rejected duplicate-name
+  group. The outer group is block-form because its body is compound; the
+  simple fitting inner let remains horizontal.
+
+### surface/formatting/let4-comments-preserve-nested-chain-maximality
+
+- spec: S6; `31 §1d` comments; LET-4 AC5/AC6
+- given:
+
+  ```ken ignore
+  const commented_nested : Nat =
+    let first = Zero in
+      -- keep the second stage
+      let second = Suc first in second
+  ```
+
+- expect: **RED-UNTIL (LET-4 surface + formatter)** — canonical bytes:
+
+  ```ken ignore
+  const commented_nested : Nat =
+    let
+      first = Zero;
+      -- keep the second stage
+      second = Suc first
+    in
+      second
+  ```
+
+  The noncanonical input formats to these exact bytes, these bytes format to
+  themselves, and both forms have identical lowered AST/core terms modulo
+  spans. The harness additionally asserts that the comment remains owned by
+  the `second` binding with the same token interval.
+- why: the comment forces block form but does not break the directly nested
+  chain's maximality. The pair still coalesces, while the comment crosses
+  neither the binding boundary nor the final `in` boundary.
+
 ### surface/formatting/let4-literate-fence-changes-only-group-body
 
 - spec: S6; `31 §1d` literate source; LET-4 AC6
@@ -501,10 +561,10 @@ tokens into the grouped spelling.
 ### surface/formatting/let4-cli-covers-plain-and-literate-groups
 
 - spec: S6; `31 §1d` physical and literate source; LET-4 AC6
-- given: temporary `.ken` and `.ken.md` files containing the D2 and D8 inputs,
+- given: temporary `.ken` and `.ken.md` files containing the D2 and D10 inputs,
   respectively
 - expect: **RED-UNTIL (LET-4 surface + formatter)** — `ken fmt` produces the
-  exact D2 and D8 canonical bytes; `ken fmt --check` then succeeds without a
+  exact D2 and D10 canonical bytes; `ken fmt --check` then succeeds without a
   byte change; and `ken check` accepts each formatted file through its real
   plain-source or literate pipeline.
 - why: direct library formatting can be green while CLI routing omits a file
@@ -537,7 +597,7 @@ does **not** discharge this section.
 | AC2 sequential dependent scope | B1–B8 |
 | AC3 identical lowering / zero trust | C1, C3 |
 | AC4 strict evaluation and effects | C2, C4, A5 |
-| AC5 exact canonical formatter output | D1–D8 |
+| AC5 exact canonical formatter output | D1–D10 |
 | AC-DERIVE | section D derivation preamble and per-case `why` |
 | AC-READER | section E; never machine-discharged |
-| AC6 lossless/literate boundaries | D6, D8, D9, and existing B1/B4 corpus gates |
+| AC6 lossless/literate boundaries | D6, D9–D11, and existing B1/B4 corpus gates |
