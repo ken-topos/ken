@@ -1069,13 +1069,27 @@ impl<'a> LayoutPrinter<'a> {
     }
 
     fn print_let_bindings(&self, bindings: &[LetBinding], body: &Expr) -> Doc {
+        self.print_let_bindings_from(bindings, body, None)
+    }
+
+    fn print_let_bindings_from(
+        &self,
+        bindings: &[LetBinding],
+        body: &Expr,
+        synthetic_start: Option<usize>,
+    ) -> Doc {
         let (segment, tail) = collect_let_segment(bindings, body);
-        let let_start = segment.first().and_then(|first| {
-            self.source.tokens().iter().rev().find_map(|token| {
-                (token.span.end <= first.name_span.start && matches!(token.kind, Token::KwLet))
-                    .then_some(token.span.start)
+        let source_let_span = if synthetic_start.is_none() {
+            segment.first().and_then(|first| {
+                self.source.tokens().iter().rev().find_map(|token| {
+                    (token.span.end <= first.name_span.start && matches!(token.kind, Token::KwLet))
+                        .then_some(token.span.clone())
+                })
             })
-        });
+        } else {
+            None
+        };
+        let let_start = synthetic_start.or_else(|| source_let_span.as_ref().map(|span| span.start));
         let has_comments = let_start.is_some_and(|start| {
             self.source.comment_attachments().iter().any(|attachment| {
                 start <= attachment.comment_span.start
@@ -1101,15 +1115,9 @@ impl<'a> LayoutPrinter<'a> {
         }
         let mut binding_docs = Vec::with_capacity(segment.len());
         if let Some(first) = segment.first() {
-            let let_end = self
-                .source
-                .tokens()
-                .iter()
-                .rev()
-                .find(|token| {
-                    token.span.end <= first.name_span.start && matches!(token.kind, Token::KwLet)
-                })
-                .map_or(first.name_span.start, |token| token.span.end);
+            let let_end = synthetic_start
+                .or_else(|| source_let_span.as_ref().map(|span| span.end))
+                .unwrap_or(first.name_span.start);
             binding_docs.extend(self.let_comment_docs(
                 let_end,
                 first.name_span.start,
@@ -1153,7 +1161,9 @@ impl<'a> LayoutPrinter<'a> {
         );
         let body_doc = match tail {
             LetTail::Expr(expr) => self.print_expr(expr),
-            LetTail::Group(rest, tail_body) => self.print_let_bindings(rest, tail_body),
+            LetTail::Group(rest, tail_body) => {
+                self.print_let_bindings_from(rest, tail_body, Some(rest[0].name_span.start))
+            }
         };
         let body_boundary = match tail {
             LetTail::Expr(expr) if !is_compound_expr(expr) => Doc::line(),

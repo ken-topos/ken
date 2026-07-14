@@ -244,4 +244,26 @@ fn let4_comments_stay_owned_and_shadowing_starts_a_new_segment() {
             "    let x = Suc y in x\n"
         ),
     );
+
+    let comment_shadow_probe = r#"const comment_shadow_probe : Nat =
+  let x = Zero
+  in
+    let
+      -- distinct prefix
+      y = x;
+      -- shadow boundary
+      x = Suc y
+    in
+      x
+"#;
+    let comment_shadow_expected = r#"const comment_shadow_probe : Nat =
+  let
+    x = Zero;
+    -- distinct prefix
+    y = x
+  in
+    -- shadow boundary
+    let x = Suc y in x
+"#;
+    check(comment_shadow_probe, comment_shadow_expected);
 }
