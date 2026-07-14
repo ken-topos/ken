@@ -14,21 +14,108 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (00:2x) — LIVE STATE (read this first) · `origin/main @ c514eecb`
-> **⚠ SPACE EVENT-WRITE OUTAGE since 23:27:41 — ROOT-CAUSED (backend append-path wedge).**
-> `post_response` → soft body `{"error":"Space not active"}` for me AND CV (read CV's
-> pane directly). RULED OUT: wrong/stale space id (`list_spaces` → `spc_4q7g0se87rgje`
-> active, desc "Ken"); top-level paused flag (Pat toggled active→paused→active, no
-> effect; `get_space_status`=active); my MCP client (reconnect 00:04 v1.28.1 + /compact
-> + join_space; WS alive w/ ping-pong in `.moot/logs/channel-steward.log`); per-
-> participant (CV identical); stuck call (`list_calls`=none). It logs "completed
-> successfully" (NOT "Backend rejected 4xx") ⇒ soft error, decoupled from `status`.
-> Wedged at exactly 23:27:41 = CV's BLOCK evt_7yvt1bcvr9ca9 (last successful append).
-> Needs backend service restart / clear stuck append-lock on that space. Reads FROZEN
-> at 23:27:41 for me (can't see fleet past that) — TMUX capture-pane is my ground truth.
-> DEFERRED until writes recover: (a) batch-3 MERGE RELAY to language-leader; (b) §C
-> merge-relay + close #64 + relay to runtime-leader; (c) §B unblock post. **Do NOT
-> hammer post_response.** Build is NOT blocked — git/gh publisher is outage-independent.
+> ### ⏭ 2026-07-14 (01:5x) — LIVE STATE (read this first) · `origin/main @ c11ed3de`
+> **✅ CONVO RESTORED (01:39).** Pat did a full source redeploy of the mootup backend →
+> the 10k-event cap is lifted; appends 200 again (`evt_33jepzv3bmfg8`). Fleet reconnected.
+> **⚠ THREAD IDS ARE TRUNCATED IN EVENT DISPLAY** — `[thread:thr_45kf]` is really
+> `thr_45kf17kycavgg`; posting to the short form 404s "Thread not found". Get full ids from
+> `GET /api/spaces/<id>/threads`. Live: §C=`thr_45kf17kycavgg`, §B=`thr_2b2edr78nhm9s`,
+> batch-3=`thr_gdz6crvm7aep`.
+> **✅ I-4 §C CLOSED (#64).** Merged `c11ed3de`; all 3 enclave §10 retros in (spec-author
+> `evt_26p6scq38c01g`, CV `evt_4ph8szfatvhd3`, spec-leader `evt_3cvqp41jyzrr`). Shared
+> carry (all 3 independently): **assembly is a semantic reconcile gate** — sweep
+> spelling-currency + decision-state currency across ALL independently-authored artifacts
+> and every coupled contract surface, not just the frame's named lines; a publisher
+> re-anchor must prove reviewed subtrees **byte-identical**. Ratchet-guard verdict:
+> **node-internal** (sharpens the existing assembly + publisher-gate nodes; adds no party/
+> relay/hop) → promotable WITHOUT operator consent. Enclave idle, standing by.
+> **🔎 MAJOR FINDING — THE SURFACE SPEC IS RUNNING AHEAD OF THE PARSER.** Grounded at
+> `c11ed3de`: the lexer keyword table has `import`/`module` but **NOT `program`,
+> `package`, `admits`, `export`**. So the whole `boundary_hdr` production is
+> **unimplemented**, and §C's conformance fixtures sit honestly RED on "parser dependency"
+> (CV labelled them correctly). Three merged spec WPs now have ZERO crates delta
+> (#37 use-retire, #39/#36 namespace/export `09acda41`, I-4 §C `c11ed3de`).
+> **⇒ RULING (mine, cross-team sequencing §2): the header parser is NOT a fold into §B
+> step 2 — it is Language's own WP.** The §B frame explicitly delegated this call to me.
+> **NEW WP: I-4 §D — boundary-header surface parser (Language).** Frame committed
+> `docs/program/wp/i4d-boundary-header-parser.md` @ **`wp/i4d-boundary-header-parser`
+> (2cdd372d, off `c11ed3de`)**. Scope: lexer keywords → boundary AST → parser (named
+> surface-error variants) → loader/reader wiring, so `admits` reaches the elaborator
+> admission gate and declared caps reach the runner. **Ends where §B begins** (forbids
+> touching `main.rs:293-299`); `export` explicitly OUT of scope (its own future WP).
+> AC includes the **four-combination orthogonality discriminator** (admits-only /
+> caps-only / both / neither — the non-degenerate pair, not one positive case).
+> **§B (Runtime) = HELD, not fragmented.** Runtime ring compacted (all 3 verified) +
+> told to stay idle (`evt_3rp6g9q5vnpww`); step 1 safe at `c3583fed` on
+> `wp/i4b-runtime-program-caps`. On §D merge → release §B steps 2–7 as ONE coherent unit.
+> **🚀 §D FULLY GATED → PUBLISHING (02:3x).** Candidate **`9198beff`** (`wp/i4d-boundary-
+> header-parser`), linear `c11ed3de → 2cdd372d (frame) → 9198beff`, branch free.
+> **All three gates APPROVE on the exact SHA:** QA `evt_19g30dd9w593n` · CV terminal
+> `evt_4hdnfkd8rpvrq` (conformance disposition) · **Architect TERMINAL** `evt_6kdxwt5se7sra`.
+> **Steward honesty gate CLEAN:** 0 merges; scope exactly **10 paths** (frame + conformance
+> seed + **6** `ken-elaborator` production files + 2 elaborator tests); forbidden-path probe
+> **EMPTY** — zero `spec/`/kernel/`.github`/`Cargo*`/lock, and **zero `main.rs`** (§B's mint
+> site untouched, as the frame mandated); `diff --check` clean. CV's "six not seven
+> production files" correction verified by content — a prose typo, no hidden path.
+> **What landed:** `program`/`package`/`admits` keywords; `BoundaryHeader` with `admits` and
+> `capabilities` as **independent `Option`s** (`None` ≠ empty — orthogonality is structural);
+> 5 distinct named surface diagnostics (`NamedBoundaryHeader`, `PackageCapabilitiesNotAllowed`,
+> `UnknownCapabilityFamily`, `DuplicateCapabilityFamily`, `InvalidCapabilityAuthority`);
+> parser-before-import; `admits` drives the MRES-4 admission gate from the **declaration**;
+> `ElabEnv::boundary_header()` = pure read, **no mint** — §B still mints. `trusted_base()`
+> unchanged. Only §C's parser-dependent fixtures flipped REALIZED; §B-gated ones stay
+> honestly RED. Architect non-blocking note: FS-only family whitelist is a *parser* edit for
+> a future 2nd family (Net/Console) — fine for v1.
+> **▶ ON MERGE: verify on `origin/main` by CONTENT → then RELEASE §B steps 2–7 to Runtime as
+> ONE unit** (ring is compacted + idle; step 1 safe at `c3583fed`).
+> _Prior:_ **§D KICKED + RING TURNING (02:0x).** Handoff Gate complete — all 3 Language
+> seats `Context compacted` (verified, not just "sent"). Kickoff `evt_7b3283gawz3n0` →
+> **§D thread = `thr_6egqvhh42p3kt`**. language-leader acked in-thread + framed the team WP
+> (`evt_49t7nme3jr2h1`); **language-implementer engaged and BUILDING** (`evt_1bggrf7jt7aqj`)
+> — pickup verified on the pane, not inferred from the mention. language-qa compacted,
+> idle, awaiting the candidate. Architect **self-compacted 25%→9%** (rouse worked), on-call.
+> **▶ NEXT ACTION: wait event-driven for §D's released SHA** → honesty-gate → scripted
+> publisher (`--target` = the HEAD branch, NEVER main) → verify on `origin/main` by
+> CONTENT → **then release §B steps 2–7 to Runtime as ONE unit.**
+> **⚠ OPEN FOR OPERATOR (non-blocking):** is **spec-ahead-of-parser** deliberate or drift?
+> `export` sits in the same specified-but-unparsed state as the boundary header did.
+> _Superseded below: the outage narrative (resolved) — kept for the root-cause lesson._
+> **🛑 [RESOLVED 01:39] FEDERATION COORDINATION FROZEN — THE SPACE WAS FULL.**
+> **TRUE ROOT CAUSE (proven, 01:20; supersedes TWO earlier wrong theories):** the convo
+> space `spc_4q7g0se87rgje` has hit a **hard 10,000-event cap**. Direct API probe:
+> `POST /api/spaces/{id}/response` → **HTTP 409** `{"code":"http_409","message":"Space
+> has reached the maximum of 10000 events"}`. `get_space_status` = `active | 10087
+> events`. **NO participant can append** — verified fleet-wide in `.moot/logs/mcp-*.log`
+> (409s for steward, CV, spec-author, spec-leader, runtime-qa; last successful append
+> fleet-wide = CV's 23:27:41 BLOCK, i.e. event #10000).
+> **⚠ THE ADAPTER LIES:** it renders that 409 as `{"error":"Space not active"}`, which is
+> what sent me down two dead ends — (a) "backend stuck append-lock, needs a service
+> restart" and (b) "my adapter cached `space_active=false`, reconnect my MCP." **Both
+> WRONG.** Reads/`update_status` keep working (different endpoints), the space *is*
+> `active`, and a client reconnect CANNOT fix a server-side cap. **Diagnose convo write
+> failures from the HTTP status in `.moot/logs/mcp-<role>.log`, never the error string.**
+> **I CANNOT FIX THIS** — no exposed tool reduces the count (`archive_session` archives a
+> *transcript*, not space events; `update_space` only sets status/description/links; no
+> create-space tool). **Needs Pat:** raise/clear the cap on mootup.io (preserves space +
+> all `thr_*`/`evt_*` ids — strongly preferred), **or** provision a new space and re-point
+> `CONVO_SPACE_ID` for all 27 seats (costs a full fleet restart + every live thread id).
+> **FLEET POSTURE: quiescent by design.** Rings cannot turn (a leader can't mention its
+> implementer), so I am **NOT** kicking off new work into a dead channel — idle is cheap.
+> **Do NOT hammer `post_response`;** do NOT hand-relay the fleet over tmux (that makes the
+> Steward a manual message bus). **Build is NOT blocked** — git/gh/publisher are
+> convo-independent, and §C already landed through the outage.
+> **TICK 01:26 — still 409 (cap not yet cleared). Fleet quiescent; nothing nudged.**
+> Enclave panes all idle. **Architect was at 25% ctx at a clean seam → roused to
+> SELF-COMPACT** (tmux; convo-independent) so it returns fresh for the §B soundness
+> review. **ADR-0016 `007a7de2` "queued for publish" is a STALE Architect status — the
+> correction IS on `main`:** blob at `origin/main` == `007a7de2` and != its parent, so the
+> net-+1 keyword-cost fix rode `66c6e15f`. **No PR needed** (squash-merge trap: the branch
+> commit dangles ahead of `main` while its content is merged — verify by CONTENT/blob,
+> never by SHA or a status line). Nothing else is publishable during the freeze.
+> **QUEUED, fires the instant convo recovers:** (a) §C merge relay + **enclave §10 retro
+> call → close #64**; (b) Handoff-Gate the Runtime ring → kick **§B continuation steps
+> 2–7** (now unblocked); (c) courtesy batch-3 merge relay to language-leader (#63 already
+> closed). Draft §B kickoff is ready — see the §B entry below.
 > **★ §C — CV VOTE = APPROVE (read from CV pane 00:1x). PUBLISHING NOW via git/gh.**
 > Combined candidate **`c1edf2e1`** (in shared object store; verified linear, 0 merges).
 > Chain: `66c6e15f→629972f9(frame)→c44e3f99(spec)→2c84a9f6→d3e7656b(Program-I settle)→
@@ -39,10 +126,23 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > contract + §C frame + conformance×2), ALL enclave-allowed; ZERO kernel/Cargo/lock/
 > .github/crates/prelude delta; `diff --check` clean; grammar reserves `capabilities`
 > (justified vs caps/grants/requires); contract types main as `ProgramCaps a` (CV
-> blocker#2 fixed). NEXT: bundle tracker onto c1edf2e1 → publisher --target (CI-poll;
-> origin/main advanced to c514eecb via batch-3, DISJOINT files so 3-way merge clean) →
-> on merge close #64 + queue relays (flush on outage recovery) → §B steps 2-7 unblock.
-> §B step-1 `c3583fed` done/waiting on §C surface.
+> **✅ §C MERGED — `origin/main @ c11ed3de` (PR #618, all 4 CI checks green).** First
+> bundle (PR #617, c1edf2e1-rooted) was CONFLICTING on the tracker (batch-3 already
+> bundled it into c514eecb) → RE-ANCHORED as direct child of c514eecb (§C blobs byte-
+> identical to CV-approved c1edf2e1; re-gated clean) → PR #618 squash-merged as c11ed3de
+> (capabilities_clause + `ProgramCaps a` verified present on main). §C surface is LANDED;
+> §B steps 2-7 now UNBLOCKED. TASK #64 (§C) = merged, retro pending (enclave §10).
+> **QUEUED relays (blocked on my write path — see below):** (a) batch-3 merge→language-
+> leader (courtesy; #63 already closed); (b) §C merge→runtime-leader: Handoff-Gate
+> compact Runtime ring → kick §B continuation steps 2-7 (mint from declaration / static
+> containment / I-3 lit path / op-time backstop / typed wrapper), Architect on-call.
+> §B step-1 `c3583fed` done.
+> **⚠ MY WRITE PATH STILL WEDGED post-EC2-restart:** space recovered (reads live, events
+> flow, `update_status` works) but MY `post_response` alone still returns "Space not
+> active" — adapter-side cached `space_active=false` (set when my adapter reconnected
+> 00:04 mid-outage; join_space doesn't clear it). FIX = reconnect the *steward* convo MCP
+> now (healthy backend). Asked Pat. Until then: tmux-relay if fleet needs to move; do NOT
+> hammer post_response.
 > **✅ batch-3 kenfmt vertical balance (#63) — MERGED `origin/main @ c514eecb` (PR #616,
 > CI green) + CLOSED** (retros all in; layout.rs split-high fix + catalog re-sweep +
 > non-vacuous balance gate; CANONICAL_WIDTH=96 + OrdNat byte-identical; zero

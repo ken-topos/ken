@@ -9,9 +9,9 @@
 //! was `type`); `T a b` type app.
 
 use crate::ast::{
-    Binder, BoundaryKind, ClassField, ConstructorSignature, ConstructorSignatureArg, CtorDecl,
-    Decl, DefKeyword, EffectRowSyntax, ExplicitDataCtor, Expr, MatchArm, PatKind, Pattern,
-    PropIntro, Type,
+    Binder, BoundaryKind, CapabilityDecl, ClassField, ConstructorSignature,
+    ConstructorSignatureArg, CtorDecl, Decl, DefKeyword, EffectRowSyntax,
+    ExplicitDataCtor, Expr, MatchArm, PatKind, Pattern, PropIntro, Type,
 };
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
@@ -168,7 +168,18 @@ impl Parser {
     pub fn parse_decls(&mut self) -> Result<Vec<Decl>, ElabError> {
         let mut decls = Vec::new();
         while !self.at_eof() {
-            decls.push(self.parse_decl()?);
+            let decl = self.parse_decl()?;
+            if let Decl::BoundaryDecl { span, .. } = &decl {
+                if !decls.is_empty() {
+                    return Err(ElabError::ParseError {
+                        msg: "an anonymous program/package boundary must be \
+                              the first unit header"
+                            .to_string(),
+                        span: span.clone(),
+                    });
+                }
+            }
+            decls.push(decl);
         }
         Ok(decls)
     }
@@ -226,37 +237,84 @@ impl Parser {
 
     fn parse_boundary_decl(&mut self, start: usize, kind: BoundaryKind) -> Result<Decl, ElabError> {
         self.advance(); // consume `program` / `package`
+        let mut end = self.tokens[self.pos.saturating_sub(1)].1.end;
 
-        let requires_admits = kind == BoundaryKind::Program;
-        if !matches!(self.peek(), Token::KwAdmits) {
-            if requires_admits || matches!(self.peek(), Token::Ident(_) | Token::ConId(_)) {
-                return Err(ElabError::ParseError {
-                    msg: "anonymous boundary header accepts no name; expected `admits`".to_string(),
-                    span: self.peek_span().clone(),
-                });
-            }
-            return Ok(Decl::BoundaryDecl {
-                kind,
-                admits: Vec::new(),
-                span: Span::new(start, self.tokens[self.pos.saturating_sub(1)].1.end),
+        if let Token::Ident(name) | Token::ConId(name) = self.peek().clone() {
+            return Err(ElabError::NamedBoundaryHeader {
+                name,
+                span: self.peek_span().clone(),
             });
         }
 
-        self.advance(); // consume `admits`
-        let mut admits = Vec::new();
-        let mut end;
-        loop {
-            let (path, span) = self.parse_dotted_module_path()?;
-            admits.push(path);
-            end = span.end;
-            if !matches!(self.peek(), Token::Comma) {
-                break;
+        let admits = if matches!(self.peek(), Token::KwAdmits) {
+            self.advance();
+            let mut paths = Vec::new();
+            loop {
+                let (path, span) = self.parse_dotted_module_path()?;
+                paths.push(path);
+                end = span.end;
+                if !matches!(self.peek(), Token::Comma) {
+                    break;
+                }
+                self.advance();
+            }
+            Some(paths)
+        } else {
+            None
+        };
+
+        let capabilities = if matches!(self.peek(), Token::KwCapabilities) {
+            if kind == BoundaryKind::Package {
+                return Err(ElabError::PackageCapabilitiesNotAllowed {
+                    span: self.peek_span().clone(),
+                });
             }
             self.advance();
-        }
+            let mut declarations = Vec::new();
+            loop {
+                let (family, family_span) = self.expect_con()?;
+                if family != "FS" {
+                    return Err(ElabError::UnknownCapabilityFamily {
+                        family,
+                        span: family_span,
+                    });
+                }
+                if declarations
+                    .iter()
+                    .any(|decl: &CapabilityDecl| decl.family == family)
+                {
+                    return Err(ElabError::DuplicateCapabilityFamily {
+                        family,
+                        span: family_span,
+                    });
+                }
+                let (authority, authority_span) = self.expect_con()?;
+                if !matches!(
+                    authority.as_str(),
+                    "ANone" | "APartial" | "AFull"
+                ) {
+                    return Err(ElabError::InvalidCapabilityAuthority {
+                        family,
+                        authority,
+                        span: authority_span,
+                    });
+                }
+                end = authority_span.end;
+                declarations.push(CapabilityDecl { family, authority });
+                if !matches!(self.peek(), Token::Comma) {
+                    break;
+                }
+                self.advance();
+            }
+            Some(declarations)
+        } else {
+            None
+        };
+
         Ok(Decl::BoundaryDecl {
             kind,
             admits,
+            capabilities,
             span: Span::new(start, end),
         })
     }

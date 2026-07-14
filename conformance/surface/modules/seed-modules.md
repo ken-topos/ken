@@ -551,10 +551,11 @@ supplies effect-family authorities to the runner's capability mint. Harness
 field names for the two manifest projections are not pinned, but their values,
 separation, and consumers are.
 
-The source parser dependency and I-4 §B are not landed on this seed's base.
-Each gate below therefore names its exact reachability precondition. A harness
-that directly constructs a boundary record, inserts a capability into an
-`ElabEnv`, or calls the raw I-3 producer does not satisfy any gate.
+I-4 §D lands the source parser, boundary AST, loader projection, and separate
+reader seams. I-4 §B is not landed on this seed's base. Each gate below names
+the remaining reachability precondition. A harness that directly constructs a
+boundary record, inserts a capability into an `ElabEnv`, or calls the raw I-3
+producer does not satisfy any gate.
 
 ### surface/modules/program-capabilities-clause-carries-declared-authority
 
@@ -583,9 +584,9 @@ that directly constructs a boundary record, inserts a capability into an
   Once I-4 §B consumes that parsed manifest, the runner reads the `FS` entry
   and produces `ProgramCaps AFull`; it does not derive the authority from `P`,
   a CLI option, or a default.
-- gate: the parser/manifest assertion is **RED UNTIL the program-header
-  capability-clause parser dependency**. The runner assertion is **RED UNTIL
-  I-4 §B** and additionally requires that parser dependency. Reachability is
+- gate: the parser/manifest assertion is **REALIZED by I-4 §D** through the
+  source parser, boundary AST, loader projection, and separate reader seams.
+  The runner assertion remains **RED UNTIL I-4 §B**. Its reachability is
   parser → boundary AST → loader manifest → runner manifest read →
   `ProgramCaps AFull`. A hand-built manifest or a directly minted `Cap AFull`
   is not evidence.
@@ -615,12 +616,11 @@ that directly constructs a boundary record, inserts a capability into an
   elaborator's named presentation of the kernel-backed ill-typedness;
   it is not `ParseError`, `UnboundName`, `UnadmittedInstance`,
   `CapabilityDenied`, or a bare error result.
-- gate: **RED UNTIL I-4 §B plus the program-header capability-clause parser
-  dependency.** Reachability requires the source parser to accept both headers,
-  the loader to resolve the typed API and package imports, and elaboration to
-  reach the capability-binding step for the otherwise-identical `FS` call.
-  Failure to parse the clause, failure to load `readFile`, calling the raw I-3
-  producer, or observing only an op-time denial does not satisfy this oracle.
+- gate: **RED UNTIL I-4 §B.** I-4 §D realizes the parser and boundary-reader
+  dependency, but the loader must still resolve the typed API and elaboration
+  must reach §B's capability-binding step for the otherwise-identical `FS`
+  call. Failure to load `readFile`, calling the raw I-3 producer, or observing
+  only an op-time denial does not satisfy this oracle.
 - why: correct and buggy paths have opposite verdicts. With the one declared
   family the binding exists and the read is well typed; without it the binding
   is absent and the named static gate rejects. A runner-only check would accept
@@ -642,11 +642,10 @@ that directly constructs a boundary record, inserts a capability into an
   as in the N4 admitted control. The separately projected capability manifest
   is empty. The program boundary does not infer `FS`, `APartial`, or `AFull`
   from the admitted package, its imports, or the presence of `program`.
-- gate: the admission half retains the existing **RED UNTIL N4 LANE B** gate;
-  the separate empty-capability projection is **RED UNTIL the program-header
-  capability-clause parser dependency**. If I-4 §B observes the program, its
-  no-`FS` behavior is **RED UNTIL I-4 §B** and must be read from that parsed
-  empty projection, not from a constructed runner input.
+- gate: the admission half is **REALIZED by N4 Lane B**, and the separate empty
+  capability projection is **REALIZED by I-4 §D**. If I-4 §B observes the
+  program, its no-`FS` behavior remains **RED UNTIL I-4 §B** and must be read
+  from that parsed empty projection, not from a constructed runner input.
 - why: a shared manifest or `admits`-implies-authority coupling spuriously
   populates the capability projection. Removing only `admits P` changes the
   dictionary verdict to `UnadmittedInstance`; it must not change the already
@@ -674,12 +673,11 @@ that directly constructs a boundary record, inserts a capability into an
   instance-use arm rejects independently with the existing structured
   `UnadmittedInstance` diagnostic carrying `defining_package = P`; the valid
   capability declaration does not admit `P` or alter that diagnostic.
-- gate: header parsing is **RED UNTIL the program-header capability-clause
-  parser dependency**. The mint and typed-operation assertions are **RED UNTIL
-  I-4 §B**; the controlled instance reject retains **RED UNTIL N4 LANE B**.
-  The mint must be reached from the parsed header, and the instance diagnostic
-  must be reached through the ordinary loader and admission gate. Hand-feeding
-  either map is not evidence.
+- gate: header parsing and its two independent projections are **REALIZED by
+  I-4 §D**. The controlled instance reject is **REALIZED by N4 Lane B** through
+  the ordinary loader and admission gate. The mint and typed-operation
+  assertions remain **RED UNTIL I-4 §B** and must be reached from the parsed
+  header. Hand-feeding either map is not evidence.
 - why: this is the converse controlled experiment to the admits-only case.
   Adding only `admits P` flips the instance-use arm to acceptance and leaves
   `ProgramCaps AFull` unchanged. Treating `FS` as a package path, `AFull` as an
