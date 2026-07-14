@@ -172,14 +172,21 @@ prose.
   UInt8) …`), and test it on **invalid UTF-8** — a byte sequence that is not
   valid text must survive a parse/render round-trip **unchanged**. *This is the
   "POSIX bytes, not `String`" guarantee and it is the package's reason to exist.*
-- **AC2 — normalization is IDEMPOTENT.** `normalize (normalize p) = normalize p`.
-  **A proof, not a test.** *(This is the law that needs `DecEq (List UInt8)`'s
+- **AC2 — normalization is IDEMPOTENT.** `normalize (normalize p) = normalize p`
+  using native kernel `Eq`. **A proof, not a test.** *(This is the law that
+  needs `DecEq (List UInt8)`'s
   `sound`/`complete`; if you find you cannot discharge it, STOP AND REPORT —
   that means §1's ledger is wrong and I want to know.)*
 - **AC3 — no `.` survives normalization**, and **no `..` survives on an absolute
   path.** Proofs.
-- **AC4 — round-trip on normalized paths:** `parse (render p) = p` for normalized
-  `p`.
+- **AC4 — round-trip on valid paths:** `path_valid p = True → parse
+  (render p) = p`, with the result stated using native kernel `Eq`, where
+  validity means every segment is nonempty and contains no slash byte. Also
+  prove the unconditional parser-image corollary `parse (render (parse raw)) =
+  parse raw` using native kernel `Eq`. Normalization is not the validity
+  precondition: a valid path containing `..` still round-trips, while the raw
+  public `MkPath` carrier can also express invalid empty or slash-bearing
+  segments that deliberately fail `path_valid`.
 - **AC5 — `..` cancellation is correct at the edges:** `/..` → `/`; `../a` keeps
   its `..`; `a/../../b` → `../b`; `../..` → `../..`.
 - **AC6 — ZERO `trusted_base()` delta.** No postulate, no primitive, no `Axiom`.
