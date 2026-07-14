@@ -141,28 +141,68 @@ for one is a **scope fork → escalate to the Architect**, not a judgment call.
 
 ---
 
-## 3. The three forks that need a decision before release
+## 3. The forks — ✅ ALL THREE RULED
 
-These are genuine and I will not pre-empt them by sequencing.
+> ### ★★★ THE OPERATOR'S INTENT — the sentence every PX frame is measured against
+>
+> > **"The intention is to make Ken a software engineering language. Not a toy,
+> > not a research project, but a tool for doing real practical work in the
+> > safest way possible."** *(Pat, 2026-07-14)*
+>
+> **Read all three clauses; they constrain in different directions.** *"Real
+> practical work"* forbids stopping at a demo. *"Not a research project"* forbids
+> chasing affine types to get there. *"In the safest way possible"* forbids
+> buying reach with a **silent** guarantee.
+>
+> **They pull against each other, and they do it at PX7.** The tie-break:
+> **SHIP THE CAPABILITY · ENFORCE IT IN THE RUNTIME · SAY PLAINLY WHAT IS NOT
+> PROVED — in the SOURCE.** Never a comment. Never a frame-only disclosure.
+> **Never an unearned `proved`.** *"Safest possible" is not "safe"; it is the
+> best available guarantee plus an honest statement of its edge. A language that
+> overstates its safety is more dangerous than one that understates it.*
 
-### FORK 1 — how far does this campaign commit? *(operator)*
+### FORK 1 — scope · ✅ **RULED: COMMIT THROUGH PX-E** *(operator, 2026-07-14)*
 
-The report describes Phases A–G. **That is a program that could swallow the
-project.** My recommendation:
+- **COMMITTED: PX-A → PX-E.** Audited boundary → **native effect execution** →
+  descriptor streaming and resources → **processes and sockets** → **nonblocking
+  and the event loop.**
+- **STILL OUT OF SCOPE** *(named so nobody builds them)*: Linux control APIs
+  (netlink, seccomp/Landlock, `io_uring`, cgroups, typed `ioctl`), the public C
+  ABI and generated headers, a thread-safe runtime, affine/unique types, raw
+  pointers/atomics/MMIO. **ADR-0012 stands. The kernel does not grow.**
 
-- **COMMITTED: PX-A → PX-C.** Audited boundary → native effect execution →
-  descriptor streaming and resources.
-- **BOOKED, not committed: PX-D (processes/sockets), PX-E (event loop).**
-- **OUT OF SCOPE: Linux control APIs (netlink, seccomp, io_uring, cgroups), the
-  public C ABI, threads, affine types.** Named here so nobody builds them.
+**Campaign exit criterion:**
 
-**Exit criterion I propose — the direct extension of the one Pat already set:**
+> **Ken builds and ships a real CLI tool AND a real network service as NATIVE
+> BINARIES** — under scoped capabilities, over files larger than memory,
+> observationally identical to their interpreter runs, with the exact target-ABI
+> manifest hash bound into each artifact — **and the dangerous logic (binary
+> parsers, path policy, protocol state machines, capability attenuation) is
+> PROVED, not merely tested.**
 
-> Pat's CLI exit criterion was *"a real, if simple, CLI tool built in Ken."*
-> **This campaign's exit criterion is that the same tool is a NATIVE EXECUTABLE**
-> — compiled, running under scoped capabilities, observationally identical to
-> the interpreter run, over files larger than memory, with its exact target-ABI
-> manifest hash bound into the artifact.
+**That last clause is not decoration.** **A verified `cat` is a toy.** A *proved*
+path-confinement layer and a *proved* protocol state machine, sitting on a small
+audited syscall boundary, **is the entire pitch** — and it is the only reading of
+this campaign that serves *"the safest way possible"* rather than merely
+*"reaches the OS."* **CC6b is the existence proof** that we can already do this
+(a proved `path_parse ∘ path_render` round-trip with its reaching lemma, at zero
+trusted-base delta). **PX-D/PX-E exist to give that capability something
+dangerous to be pointed at.**
+
+### FORK 3 — native early or late? · ✅ **RULED: NATIVE EARLY** *(operator)*
+
+**PX-B runs BEFORE PX-C.** The weak argument for this was *porting 16 ops is
+cheaper than porting 60*. **The real one:**
+
+> **If the interpreter is the only implementation, it will teach us the wrong
+> lessons — and we will not find out until the design is load-bearing.** The
+> interpreter's `EvalStore` is `Rc`-based, single-threaded, and mutable.
+> **PX7 designs resource handles.** Design them against the interpreter alone and
+> we may design something that **cannot lower to native at all** — discovered
+> *after* the semantics are public and the catalog depends on them.
+
+**⇒ PX6's differential harness must exist BEFORE the things it is meant to
+guard.** Build the guard, then build what it guards.
 
 ### FORK 2 — whose `unsafe`? · ✅ **RULED (Architect, `evt_7qqf827rr1jxk`)**
 
@@ -211,11 +251,22 @@ ownership claimed by (a).
   let a broad `cfg(unix)` imply a contract we never established.** *That widened
   gate was the bug.*
 
-**⚠ STILL OPEN — and it is Pat's, not the Architect's: DEPENDENCY-RISK
-ACCEPTANCE.** This puts a third-party crate inside the **runtime trust
-boundary**, which is a **Sec3 supply-chain** commitment. The Architect owns the
-component call; **the risk acceptance is the operator's.** PX1 does not start
-until Pat takes it.
+**✅ DEPENDENCY-RISK ACCEPTED (operator, 2026-07-14).** `rustix` goes inside the
+**runtime** trust boundary. **`ken-kernel` is untouched and keeps
+`forbid(unsafe_code)`** — the logical TCB does not move. **PX1 is unblocked.**
+
+> **What we declined was never "no `unsafe`."** It was **6 hand-written FFI
+> declarations and 13 unprobed ABI facts** — the status quo, and the thing that
+> just failed (PX0). *There was no zero-risk option on this fork; there was only
+> a choice of whose competence to trust.*
+
+**⛔ PX1 PRECONDITION — enumerate the closure BEFORE you add the line to
+`Cargo.toml`.** The **complete transitive dependency closure**, every license,
+the exact feature set, and the **exercised upstream `unsafe` surface** go into
+`docs/program/dependency-deltas.md` **as a deliverable, not a footnote.** *The
+Steward has not counted it and will not assert it — that is precisely the error
+PX0 exists to correct.* **If the closure is larger than the boundary it replaces,
+that is a finding: say so and escalate.**
 
 ### FORK 3 — does native go early or late? *(operator)*
 
@@ -327,7 +378,7 @@ usefully, **no use-after-close bug is currently possible.** PX7 is the WP that
 **Phase C exit:** *`cat`, `cp`, and `wc` run natively over a file larger than
 memory, under scoped capabilities, matching the interpreter's external deltas.*
 
-### Phase PX-D — processes and sockets · **BOOKED, not committed**
+### Phase PX-D — processes and sockets · ✅ **COMMITTED**
 
 - **PX10** — spawn/exec/wait, pipes, **deny-by-default fd inheritance**, `pidfd`
   where available. **Prefer `posix_spawn` semantics; raw `fork` is a restricted
@@ -335,10 +386,43 @@ memory, under scoped capabilities, matching the interpreter's external deltas.*
 - **PX11** — sockets + typed address families; **an injected resolver
   capability** (DNS is **not** a syscall — its trust source must be visible).
 
-### Phase PX-E — nonblocking and the event loop · **BOOKED, not committed**
+### Phase PX-E — nonblocking and the event loop · ✅ **COMMITTED**
 
 - **PX12** — nonblocking descriptors, `epoll`/`eventfd`/`timerfd`/`signalfd`,
   cancellation and timeout contracts in the **operation type**, not in prose.
+
+**Phase D/E exit:** *a Ken **network service** and a **process supervisor** run
+as native binaries, single-threaded and event-driven, with **no unsafe pointers
+in application Ken** — and their **protocol state machines and path policy are
+PROVED**, per the campaign exit criterion.*
+
+---
+
+## 4a. ★★ The honesty gap the operator's own ruling creates — read before PX7
+
+**"Through PX-E" + "the safest way possible" collide at exactly one place, and I
+want it visible now rather than discovered at PX7.**
+
+Sockets, epoll handles, timers, pipes, child processes, mapped regions — **PX-D
+and PX-E are a resource explosion.** And **Ken cannot state "exactly-once
+release."** It has no affine or linear types. The runtime can *enforce* the
+invariant with a generation-checked handle table; **the type system cannot
+express it**, and **no test will ever show you the gap** — because tests exercise
+**values**, and the hole is in the **type surface**.
+
+**Today this is harmless: there is no `open`/`close` at all** (every FS op is
+whole-file), **so no use-after-close is possible.** **PX7 introduces the hazard.
+PX-D and PX-E multiply it.**
+
+| | |
+|---|---|
+| **The rule (from the operator's tie-break)** | Ship it. Enforce it in the runtime. Report it **`tested`, never `proved`**. Put the disclosure **in the `System/Resource` SOURCE**, not only in the frame. *(A frame is read once. The source is read forever.)* |
+| **⛔ The forbidden move** | Smuggling affinity into PX7. **R2 (linear/affine types) is research, and the operator said "not a research project."** |
+| **★ The decision point** | **At PX7's frame, the Steward re-opens R2 as an explicit fork — with the real resource surface of PX-D/PX-E in hand.** Not before (we would be guessing), and **not after** (retrofitting affinity onto a public, catalog-depended-upon resource API is a far worse deal than deciding at the seam). |
+
+**This is booked as a NAMED obligation on the Steward, not a vague research
+item.** *The one thing that would betray the operator's intent is to ship a
+resource API whose safety we cannot state and then not say so.*
 
 ### Explicitly OUT OF SCOPE
 
@@ -375,9 +459,14 @@ not campaign work: it does not wait behind CC9, and it does not need the campaig
 forks resolved. It quarantines the wrong-target path *now*; PX1/PX2 delete the
 code it fixes.
 
+**★ NATIVE EARLY (operator ruling).** PX-B (`PX4`→`PX5`→`PX6`) lands **before**
+PX-C (`PX7`→`PX8`→`PX9`). **The differential harness exists before the resources
+it has to guard** — so no resource design can become load-bearing on
+interpreter-only assumptions.
+
 ```mermaid
 flowchart LR
-    PX0[PX0 erratum - Linux not unix - RELEASED NOW]
+    PX0[PX0 erratum - Linux not unix - MERGING]
     LET4[LET-4 multi-binding let] --> LET2b[LET-2b refresh guides]
     LET2b --> LET3[LET-3 catalog let pilot]
     LET3 --> CC9[CC9 Resource/Bracket + Test.Property]
@@ -387,13 +476,33 @@ flowchart LR
     PX2 --> PX3[PX3 USize/ISize/CInt]
     PX2 --> PX4[PX4 native entrypoint ABI]
     PX4 --> PX5[PX5 native effect lowering]
-    PX5 --> PX6[PX6 interp/native differential]
-    PX6 --> PX7[PX7 resource handles + bracket]
+    PX5 --> PX6[PX6 interp/native differential harness]
+    PX6 --> PX7[PX7 resource handles + bracket - R2 FORK RE-OPENS HERE]
     PX7 --> PX8[PX8 partial IO + buffers]
     PX8 --> PX9[PX9 structured errno]
-    PX9 --> PXD[PX-D processes + sockets - booked]
-    PXD --> PXE[PX-E event loop - booked]
+    PX9 --> PX10[PX10 processes - spawn/wait/pipes]
+    PX9 --> PX11[PX11 sockets + resolver capability]
+    PX10 --> PX12[PX12 nonblocking + epoll event loop]
+    PX11 --> PX12
 ```
+
+### ⚠ What this campaign does NOT deliver — and *"not a toy"* implies it
+
+**The POSIX campaign buys REACH — can Ken talk to the operating system.** A
+*software engineering language* also needs a **TOOLCHAIN**, and that is a
+**separate axis this campaign does not touch.** Verified against `main`:
+
+| | Status |
+|---|---|
+| Diagnostics | ✅ landed (CC4 `Diagnostic.Core`) |
+| Modules / namespaces | ⚠ **partial** — ADR-0014/15/16 landed, but **`export` is SPECIFIED AND NOT PARSED** (zero hits in `parser.rs`) |
+| Test / property framework | ⛔ **nothing** — no `catalog/packages/Test`; CC9 is unbuilt |
+| Package manager (L4) | ⛔ not started |
+
+**⇒ Flagged for the operator, not assumed.** *"Not a toy" is not purchased by
+syscalls alone — a language you cannot write a test in is not a tool for real
+practical work.* **The Steward will bring a toolchain-axis proposal separately;
+it is not smuggled into PX.**
 
 **★ CC9 is a real dependency, not a courtesy.** CC9 is already framed as
 `Resource`/`Bracket` + `Test.Property`. **PX7 is its consumer** — if CC9 lands a
