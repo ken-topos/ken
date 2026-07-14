@@ -31,21 +31,32 @@ struct ITreeEnv {
 }
 
 fn mk_itree(env: &mut GlobalEnv) -> ITreeEnv {
+    // This integration test owns a distinct GlobalEnv, so its carrier must be
+    // declared here rather than borrowing an ID from a sibling test module.
+    let carrier =
+        declare_postulate(env, vec![], Term::Type(Level::zero())).expect("ITree test carrier");
+    let carrier_t = Term::const_(carrier, vec![]);
     let itree = declare_inductive(env, |ind_id| InductiveSpec {
         level_params: vec![],
         params: vec![],
         indices: vec![],
         level: Level::zero(),
         constructors: vec![
-            // Ret (r : Type 0) — k=0, 1 ctor-specific arg
-            CtorSpec { args: vec![Term::Type(Level::zero())], target_indices: vec![] },
-            // Vis (e : Type 0) (k : Type 0 → ITree) — k=1, 2 ctor-specific args
+            // Ret (r : Carrier) — k=0, 1 ctor-specific arg
+            CtorSpec {
+                args: vec![carrier_t.clone()],
+                target_indices: vec![],
+            },
+            // Vis (e : Carrier) (k : Carrier → ITree) — k=1, 2 ctor-specific args
             CtorSpec {
                 args: vec![
-                    Term::Type(Level::zero()),
+                    carrier_t.clone(),
                     Term::Pi(
-                        Box::new(Term::Type(Level::zero())),
-                        Box::new(Term::IndFormer { id: ind_id, level_args: vec![] }),
+                        Box::new(carrier_t),
+                        Box::new(Term::IndFormer {
+                            id: ind_id,
+                            level_args: vec![],
+                        }),
                     ),
                 ],
                 target_indices: vec![],
