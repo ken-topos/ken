@@ -89,6 +89,7 @@ pub fn run_program<H: ken_interp::HostHandler>(
     let console_ids =
         ken_interp::ConsoleIds::from_elab(&elab_env).ok_or(RunError::ConsoleAbiUnavailable)?;
     let fs_ids = ken_interp::FSIds::from_elab(&elab_env);
+    let clock_ids = ken_interp::ClockIds::from_elab(&elab_env);
     let cap = ken_interp::EvalVal::Cap(host.mint_fs_cap(declared_fs.authority));
     let mut store = build_eval_store(&elab_env);
     let tree = apply_entrypoint(
@@ -110,6 +111,7 @@ pub fn run_program<H: ken_interp::HostHandler>(
         host,
         &console_ids,
         fs_ids.as_ref(),
+        clock_ids.as_ref(),
         Some(&coproduct_ids),
         &elab_env.env,
         &mut store,
@@ -194,6 +196,7 @@ fn entrypoint_has_abi(
     if let Some(row) = elab_env.effect_rows.get("main") {
         let granted = ken_elaborator::effects::EffectRow::from_effects([
             "Console".to_string(),
+            "Clock".to_string(),
             "FS".to_string(),
         ]);
         if !row.row_vars().is_empty() || !row.concrete_effects().is_subset_of(&granted) {
@@ -432,10 +435,10 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
   : HostIO AFull ExitCode visits [FS] =
   match caps {
     MkProgramCaps cap |->
-      bind (Coproduct (FSOp AFull) ConsoleOp)
-           (resp_coproduct (FSOp AFull) ConsoleOp (fs_resp AFull) console_resp)
+      bind (Coproduct (FSOp AFull) AmbientOp)
+           (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
            (Result FileError Unit) ExitCode
-        (inject_l (FSOp AFull) ConsoleOp (fs_resp AFull) console_resp
+        (inject_l (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp
           (Result FileError Unit)
           (writeFile cap (bytes_encode "root/out") CreateNew (bytes_encode "lit")))
         (\_. host_exit AFull Success)
@@ -466,6 +469,7 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
             &mut host,
             &console,
             Some(&fs),
+            None,
             Some(&coproduct_ids(&env)),
             &env.env,
             &mut store,
@@ -496,10 +500,10 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
   : HostIO APartial ExitCode visits [FS] =
   match caps {
     MkProgramCaps cap |->
-      bind (Coproduct (FSOp APartial) ConsoleOp)
-           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+      bind (Coproduct (FSOp APartial) AmbientOp)
+           (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
            (Result FileError Bytes) ExitCode
-        (inject_l (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp
+        (inject_l (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp
           (Result FileError Bytes)
           (readFile APartial cap (bytes_encode "missing")))
         (\_. host_exit APartial Success)
@@ -559,6 +563,7 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
             &console,
             Some(&fs),
             None,
+            None,
             &env.env,
             &mut store,
         )
@@ -616,6 +621,7 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
             &mut host,
             &console,
             Some(&fs),
+            None,
             None,
             &env.env,
             &mut store,

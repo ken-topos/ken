@@ -8,7 +8,7 @@
 //!
 //! **effect-composition update (AC6 asterisk retirement):** `main` now
 //! genuinely composes `[FS]` and `[Console]` in ONE `bind`-sequenced,
-//! `inject_l`/`inject_r`-tagged `ITree (Coproduct (FSOp a) ConsoleOp) …` — the
+//! tagged `HostIO` coproduct — the
 //! program itself prints each line via `[Console]` (`printLines`). Also no
 //! test in this file hand-constructs a `Coproduct`/
 //! `InL`/`InR` value (AC7's producer-grep, `effect-composition-conformance.md`
@@ -74,42 +74,40 @@ fn lines (s : String) : List String =
   mapListCharToString (dropTrailingEmpty (splitNL (string_to_list_char s)))
 
 const Compose (r : Type) : Type =
-  ITree (Coproduct (FSOp {auth}) ConsoleOp)
-        (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
-        r
+  HostIO {auth} r
 
 proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Console] =
   match xs {{
     Nil |->
-      Ret (Coproduct (FSOp {auth}) ConsoleOp)
-          (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+      Ret (Coproduct (FSOp {auth}) AmbientOp)
+          (resp_coproduct (FSOp {auth}) AmbientOp (fs_resp {auth}) ambient_resp)
           (Result IOError Unit) (Ok IOError Unit MkUnit) ;
     Cons x xs' |->
-      bind (Coproduct (FSOp {auth}) ConsoleOp)
-           (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+      bind (Coproduct (FSOp {auth}) AmbientOp)
+           (resp_coproduct (FSOp {auth}) AmbientOp (fs_resp {auth}) ambient_resp)
            Unit (Result IOError Unit)
-        (inject_r (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp Unit (print_line x))
+        (host_console {auth} Unit (print_line x))
         (\_ . printLines xs')
   }}
 
 proc app (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console] =
-  bind (Coproduct (FSOp {auth}) ConsoleOp)
-       (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+  bind (Coproduct (FSOp {auth}) AmbientOp)
+       (resp_coproduct (FSOp {auth}) AmbientOp (fs_resp {auth}) ambient_resp)
        (Result FileError Bytes) (Result IOError Unit)
-    (inject_l (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp (Result FileError Bytes)
+    (inject_l (FSOp {auth}) AmbientOp (fs_resp {auth}) ambient_resp (Result FileError Bytes)
       (read_bytes {auth} cap (bytes_encode "{path}")))
     (\r .
       match r {{
         Err e    |-> match e {{
           MkFileError operation path kind |->
-            Ret (Coproduct (FSOp {auth}) ConsoleOp)
-                (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+            Ret (Coproduct (FSOp {auth}) AmbientOp)
+                (resp_coproduct (FSOp {auth}) AmbientOp (fs_resp {auth}) ambient_resp)
                 (Result IOError Unit) (Err IOError Unit kind)
         }} ;
         Ok bytes |->
           match bytes_decode bytes {{
-            Err _ |-> Ret (Coproduct (FSOp {auth}) ConsoleOp)
-                         (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+            Err _ |-> Ret (Coproduct (FSOp {auth}) AmbientOp)
+                         (resp_coproduct (FSOp {auth}) AmbientOp (fs_resp {auth}) ambient_resp)
                          (Result IOError Unit) (Err IOError Unit (Other 0)) ;
             Ok text |-> printLines (lines text)
           }}
@@ -119,8 +117,8 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
   : HostIO APartial ExitCode visits [FS, Console] =
   match caps {{
     MkProgramCaps cap |->
-      bind (Coproduct (FSOp APartial) ConsoleOp)
-           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+      bind (Coproduct (FSOp APartial) AmbientOp)
+           (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
            (Result IOError Unit) ExitCode
         (app cap)
         (\r .

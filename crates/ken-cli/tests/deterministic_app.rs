@@ -20,22 +20,20 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
                 MkProd _ value |->
                   match caps {
                     MkProgramCaps cap |->
-                      bind (Coproduct (FSOp AFull) ConsoleOp)
-                           (resp_coproduct (FSOp AFull) ConsoleOp
-                             (fs_resp AFull) console_resp)
+                      bind (Coproduct (FSOp AFull) AmbientOp)
+                           (resp_coproduct (FSOp AFull) AmbientOp
+                             (fs_resp AFull) ambient_resp)
                            (Result FileError Unit) ExitCode
-                        (inject_l (FSOp AFull) ConsoleOp
-                          (fs_resp AFull) console_resp
+                        (inject_l (FSOp AFull) AmbientOp
+                          (fs_resp AFull) ambient_resp
                           (Result FileError Unit)
                           (writeFile cap cwd CreateNew value))
                         (\_ .
-                          bind (Coproduct (FSOp AFull) ConsoleOp)
-                               (resp_coproduct (FSOp AFull) ConsoleOp
-                                 (fs_resp AFull) console_resp)
+                          bind (Coproduct (FSOp AFull) AmbientOp)
+                               (resp_coproduct (FSOp AFull) AmbientOp
+                                 (fs_resp AFull) ambient_resp)
                                (Result IOError Unit) ExitCode
-                            (inject_r (FSOp AFull) ConsoleOp
-                              (fs_resp AFull) console_resp
-                              (Result IOError Unit)
+                            (host_console AFull (Result IOError Unit)
                               (write Stdout argument))
                             (\_ . host_exit AFull Success))
                   }

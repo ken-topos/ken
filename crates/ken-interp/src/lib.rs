@@ -8,8 +8,8 @@ pub mod proof_erasure_checker;
 
 pub use eval::{
     apply, check_fs_capability, decimal_value, drive_h, drive_h_instrumented, eval,
-    fs_target_components, run_io, CapabilityDenied, CaptureHost, ConsoleIds, ConsoleStream,
-    ConsoleTrace, CoproductIds, Env, EvalStore, EvalVal, FSIds, FsOpKind, FsTrace,
+    fs_target_components, run_io, CapabilityDenied, CaptureHost, ClockIds, ClockTrace, ConsoleIds,
+    ConsoleStream, ConsoleTrace, CoproductIds, Env, EvalStore, EvalVal, FSIds, FsOpKind, FsTrace,
     HostCreatePolicy, HostDirEntry, HostFileKind, HostFileMetadata, HostHandler, HostRead,
     ITreeIds, PosixHost, Resolution, ResolveError, RunIoError, SlotId, VfsNodeId, VirtualFsNode,
 };
@@ -2529,7 +2529,7 @@ mod console_io_tests {
         );
         let tree = eval(&[], &tree_term, &env, &mut store);
         let mut host = CaptureHost::new(Vec::new());
-        let result = run_io(tree, &mut host, &ce.ids, None, None, &env, &mut store);
+        let result = run_io(tree, &mut host, &ce.ids, None, None, None, &env, &mut store);
 
         assert!(
             matches!(result, Ok(EvalVal::Ctor { id, .. }) if id == ce.unit_id),
@@ -2588,7 +2588,9 @@ mod console_io_tests {
         };
 
         let mut host = CaptureHost::new(Vec::new());
-        let result = run_io(vis_val, &mut host, &ce.ids, None, None, &env, &mut store);
+        let result = run_io(
+            vis_val, &mut host, &ce.ids, None, None, None, &env, &mut store,
+        );
 
         assert!(
             matches!(result, Ok(EvalVal::Ctor { id, .. }) if id == ce.unit_id),
@@ -2641,7 +2643,9 @@ mod console_io_tests {
         };
 
         let mut host = CaptureHost::new(Vec::new());
-        let result = run_io(vis_val, &mut host, &ce.ids, None, None, &env, &mut store);
+        let result = run_io(
+            vis_val, &mut host, &ce.ids, None, None, None, &env, &mut store,
+        );
 
         assert!(
             matches!(result, Err(RunIoError::UnknownEffect(_))),

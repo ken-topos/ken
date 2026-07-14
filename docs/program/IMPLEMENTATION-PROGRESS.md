@@ -14,7 +14,97 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (11:40 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 9ae7acd1`
+> ### ⏭ 2026-07-14 (12:30 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 6e415f23`
+>
+> ## ▶ THREE RINGS, ALL HEALTHY — nothing blocked, nothing mid-flight for me
+>
+> | Ring | State | Exact next action |
+> |---|---|---|
+> | **Runtime — I-8** | **candidate RELEASED** `wp/i8-clock-effect @ c87fa3cc` (handoff `evt_g5n5xhwzn6em`; implementer home clean) | Runtime QA → **Architect terminal** (host-ABI + effect op) → **I publish**. Step 0 (both raw-grep oracles) already landed. |
+> | **Language — SUB-1b** | **ACTIVE** `wp/sub1b-uint8-deceq @ 8d95fdb3` (kicked `evt_7ybnhhqqv4ce2`; ring compact-verified) | Build → Language QA + **Architect terminal** (grows `trusted_base()` by 1). |
+> | **Foundation — CC8** | **HELD, re-framed and READY** `wp/cc8-env-config-decoder @ 6c7ca45c` | **Kick the INSTANT SUB-1b merges.** Frame is current: deps = I-7 ✅ + SUB-1b. |
+>
+> **CC8's re-frame carries two corrections you must not lose:**
+> 1. **Its unblock is SUB-1b, NOT SUB-1** (the `UInt8` wall — see below).
+> 2. **⛔ Its keys are PLAIN `Bytes` with lawful `DecEq Bytes`. NO cached-`Nat`
+>    carrier.** The old §3.2 told Foundation to reuse the `ArgBytes` idiom — **that
+>    advice was written for the old substrate and is now WRONG.** A cached-`Nat`
+>    carrier existed *only* because you couldn't reason about `Bytes` structurally;
+>    **SUB-1 removed that need at the length layer and SUB-1b removes it at the key
+>    layer.** **SUB-2 exists to RETIRE the carriers we already have — do not add to
+>    the pile it must clear.** (Frame says: if you want a cached length for a NEW
+>    type, **STOP AND REPORT** — that is how a fifth carrier gets quietly born.)
+>
+> **Idle by design: Kernel · Verify · Ergo · Spec enclave.** No ready WP; the critical
+> path is the byte/`DecEq` line. **The next kernel-sized question is K3, and K3 is PAT'S
+> CALL.** *Do not manufacture work for an idle ring — a seat burning credits on invented
+> work is worse than an idle one.*
+>
+> **@architect is drafting Pat's one-paragraph fork brief** (propositional vs definitional
+> — see the 12:10 block below). It does not block anything.
+
+> ### ⏭ 2026-07-14 (12:10 UTC) — `origin/main @ 6e415f23`
+>
+> ## ✅ SUB-1 MERGED (`6e415f23`) — content-verified on `main`, all retros in, WP CLOSED
+> ```
+> bytes.rs on main:  +2 declare_primitive (bytes_to_list · list_to_bytes)
+>                    +2 declare_postulate (bytes_list_roundtrip · list_bytes_roundtrip)
+>                    fail-closed set-equality guard: PRESENT
+> Collections.ken.md on main:  Axiom declarations = 0
+> ds4 oracle on main:          extract_ken_md(…) FIRST   ← the fixed one
+> ```
+> **PRINCIPLES #15 ruled by Pat this morning, paid in full and three-lane audited the same day.**
+> **And the prose that documents it is still in the file — we fixed the oracle, not the sentence.**
+> *(PR #633, the stale-base duplicate, is CLOSED — zero open PRs.)*
+>
+> ## ⛔ THE FIND OF THE SESSION — CC8 was NOT unblocked, and everything was green
+>
+> I ran the **expressibility audit (b‴)** before re-kicking CC8 — *tried to WRITE `DecEq Bytes` in
+> the vocabulary SUB-1 gives us* — **and my pen had nowhere to land:**
+> ```
+> DecEq Bytes  needs  DecEq (List UInt8)   ✓ landed (LawfulClasses:2022)
+>              needs  bytes_to_list injectivity  ✓ derivable from SUB-1, zero TCB
+>              needs  DecEq UInt8          ✗ UNWRITABLE — UInt8 is PrimReduction::OpaqueType
+> ```
+> **SUB-1 moved the wall from `Bytes` to `UInt8`.** Invisible because **SUB-1's own consumer
+> (`bytes_nat_length`) is SPINE-only — a fold never touches an element; a key comparison does.**
+> **Nothing green could have caught it: SUB-1's tests pass, three lanes approved, CI is green, and
+> they are all CORRECT. The gap is not in any VALUE — it is in what the SHAPE CAN SAY.**
+> **Had I re-kicked CC8, Foundation would have built the decoder, hit `DecEq Bytes`, and the only
+> escape in the language would have been an `Axiom` — the exact disease this line of work cures.**
+>
+> ## ▶ SUB-1b FRAMED — `wp/sub1b-uint8-deceq @ 8d95fdb3` (Architect ruled **Route B**)
+>
+> **ONE** new trusted entry: `uint8_int_retract : (x : UInt8) → Equal UInt8 (int_to_uint8_raw
+> (uint8_to_int x)) x`. Both prims **already in the TCB** (`conversions.rs:94,97`). From it:
+> injectivity → `DecEq UInt8` **transported from the already-lawful `DecEq Int`** (kernel
+> `DecEqCert`, genuine proofs) → `DecEq (List UInt8)` (landed) → **`DecEq Bytes`, at ZERO further
+> trust.** S-sized. **Language, kicking now.** ⇒ **CC8 unblocks on SUB-1b, NOT SUB-1.**
+>
+> **★ Route A (kernel `DecEqCert` + `eq_uint8`) was REJECTED — and the reason is the headline:
+> ROUTE A *IS* THE K3 FORK, AND K3 IS PAT'S CALL.** Deciding it for `UInt8` alone would spend
+> kernel-decidability trust ahead of the operator's ruling on the whole family. *(I had framed A and
+> B as two routes for one WP. They are not: B is a WP; A is a decision.)*
+>
+> ## ★★ THE UNIFYING FORK FOR PAT (Architect drafting the one-paragraph brief)
+>
+> **Three walls in one day — `byteLength`/K3, `Bytes → Nat`, `DecEq UInt8` — are ONE FORK:**
+> **an opaque primitive computes at RUNTIME but cannot be reasoned about in CONVERSION.**
+> Two escapes, always:
+> - **propositional** — a fixed audited postulate/cert; runtime-decidable; **one entry per
+>   builtin**; `Refl` cannot discharge it. *(Everything we shipped today: wall-only `Clock`, the
+>   `byteLength` erratum, SUB-1, Route B.)*
+> - **definitional** — register the reduction/decidability **in the kernel**; conversion-level;
+>   **`Refl` computes**; **larger, permanent KERNEL-TCB cost.**
+>
+> **Pat's question is NOT "K3 yes/no". It is: do we pay the definitional cost ONCE for the WHOLE
+> opaque-primitive family — retiring the growing pile of per-builtin postulates and making byte/uint
+> literals compute under `Refl` — or keep paying propositionally, one fixed entry at a time?**
+>
+> **▶ I-8 (Runtime) ACTIVE** — Step 0 landed (both raw-grep oracles repaired), ambient wall-clock
+> effect building (`c87fa3cc`).
+
+> ### ⏭ 2026-07-14 (11:40 UTC) — `origin/main @ 9ae7acd1`
 >
 > **▶ SUB-1 — PUBLISHING. `wp/sub1-bytes-structural-view @ 29e63a9a`, ALL THREE LANES RE-APPROVED**
 > (Architect terminal `evt_6decjbcct5fcb` · CV `evt_7w2qb100znvns` · QA `evt_16yfg8200jknh`) — **one
@@ -16205,7 +16295,68 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > (post-compact misread; QA did verify `ca6c177` then returned home). A **real**
 > blocker was surfaced — see Blockers below.
 
-## Active frontier
+## Active frontier — CURRENT (2026-07-14 12:00 UTC, `origin/main @ 9ae7acd1`)
+
+**Read this table, not the append-only log below it.**
+
+| Ring | State | What it is doing / waiting on |
+|---|---|---|
+| **Runtime** | 🟢 **ACTIVE** | **I-8** (the `Clock` effect) — `wp/i8-clock-effect @ ea1f26e7`. **Step 0 already landed** (`19c37720`, the two raw-grep oracles repaired). |
+| **Language** | 🟡 **in-review** | **SUB-1** (`Bytes` structural view) — **all 3 lanes approved @ `29e63a9a`**, PR #635 in CI. Free after it lands ⇒ **SUB-2**. |
+| **Foundation** | 🔴 **HELD (blocker MOVED, not lifted)** | **CC8** — ⛔ **NOT unblocked by SUB-1.** See the `DecEq UInt8` gap below. **Do not kick.** |
+| **Spec enclave** | ⚪ idle | Awaiting the Architect's `DecEq UInt8` route ruling + the **K3 trade paragraph he owes Pat**. |
+| **Kernel / Verify / Ergo** | ⚪ idle | **No ready WP.** The critical path is the byte/`DecEq` line, which is Language's. *Not a stall to fill with make-work — see below.* |
+
+### ⛔ THE LIVE BLOCKER — `DecEq UInt8` has no home (escalated `evt_p04bfchxaqh0`)
+
+```
+CC8's env lookup  needs  DecEq Bytes             (a lookup COMPARES KEYS)
+  ├─ instance DecEq (List a) where DecEq a   ✓ LANDED (LawfulClasses.ken.md:2022)
+  ├─ injectivity of bytes_to_list            ✓ DERIVABLE from SUB-1, zero further TCB
+  └─ DecEq UInt8                             ✗ DOES NOT EXIST — AND IS NOT WRITABLE
+        UInt8 is PrimReduction::OpaqueType (numbers.rs:290) ⇒ cannot be cased on.
+        No eq_uint8. No DecEqCert for UInt8. No injectivity/retraction law for
+        uint8_to_int anywhere in crates/ | catalog/ | spec/.  (All grepped.)
+```
+
+**SUB-1 MOVED the wall from `Bytes` to `UInt8`; it did not remove it.** Invisible
+because **SUB-1's own consumer (`bytes_nat_length`) is SPINE-only** — a fold never
+looks at an element. **Key comparison is an ELEMENT operation.**
+
+**Awaiting @architect's ruling between two routes** (both #15-shaped):
+- **(A) kernel `DecEqCert` for `UInt8`** — mirrors `Int`/ADR-0013 Layer 1;
+  `declare_deceq_certificate` + `GlobalEnv::deceq_cert` **already exist**
+  (`env.rs:436`, `obs.rs:89`). Needs an `eq_uint8` prim + the cert. **Buys
+  conversion-level decidability.**
+- **(B) ONE postulate** — `uint8_int_retract : (x : UInt8) → Equal UInt8
+  (int_to_uint8_raw (uint8_to_int x)) x`; both prims are **already in the TCB**
+  (`conversions.rs:94,97`); `DecEq UInt8` then derives from the **already-lawful**
+  `DecEq Int` at zero further TCB. **Cost: exactly ONE entry.** Propositional only.
+
+⇒ **SUB-1b** is framed the moment the route is ruled. **CC8 follows SUB-1b, not SUB-1.**
+
+### On the three idle rings
+
+**Kernel / Verify / Ergo have no ready WP, and that is a real state, not an
+oversight.** The critical path runs through the byte/`DecEq` line (Language), and
+the next kernel-adjacent question — **K3, registered reductions** — is **Pat's
+call, not mine**: it would dissolve the `Axiom` tax outright but grows the
+**kernel's** TCB. *I will not manufacture work for an idle ring to look busy;
+a seat burning credits on invented work is worse than an idle one.* **If Pat rules
+K3 in, Kernel has a large WP immediately.**
+
+---
+
+## Active frontier — HISTORICAL LOG (append-only; superseded by the table above)
+
+⚠ **The `Work-package status` and `Gate progress` tables further down are STALE**
+(last truly maintained ~2026-06-29). They track the **original** F/K/V/L/X/Sec/B/S/T
+DAG; execution actually proceeded through the **CAT-\* / CC\* / DS\* / I-\* / SUB-\* / NC\***
+series, and the tables were never re-keyed. **They say `K1 ready-held`, `V0 not-ready`,
+`G1 not-started` — all three are false**: the kernel (conv/NbE/SCT/observational Eq/
+`DecEqCert`/GADTs), the elaborator, and the interpreter are all landed and in daily use,
+and **Milestone C is MET**. **Re-keying them is real Steward debt and I am naming it
+rather than fabricating an update I have not grounded.**
 
 Current frontier addendum (2026-07-06 21:04 UTC): CAT-5 D3,
 `SURF-gadt-parser-ast`, and `SURF-gadt-elaboration` are closed.

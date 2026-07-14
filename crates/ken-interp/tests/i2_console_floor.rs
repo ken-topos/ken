@@ -86,7 +86,7 @@ fn drive(
     tree: EvalVal,
     store: &mut EvalStore,
 ) -> EvalVal {
-    ken_interp::run_io(tree, host, &env.ids, None, None, &env.elab.env, store)
+    ken_interp::run_io(tree, host, &env.ids, None, None, None, &env.elab.env, store)
         .expect("Console tree drives")
 }
 
@@ -129,7 +129,12 @@ fn console_surface_and_package_are_zero_trust_definitions() {
         before, after,
         "Console helpers must add zero trusted-base entries"
     );
-    assert!(!CONSOLE_PACKAGE.contains("Axiom"));
+    let extracted = ken_elaborator::literate::extract_ken_md(CONSOLE_PACKAGE)
+        .expect("Console.ken.md must extract");
+    assert!(
+        !extracted.source.contains("Axiom"),
+        "Console.ken code must declare no Axiom"
+    );
 }
 
 #[test]

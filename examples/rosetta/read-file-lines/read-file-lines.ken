@@ -73,15 +73,11 @@ fn mapListCharToString (segs : List (List Char)) : List String =
 fn lines (s : String) : List String =
   mapListCharToString (dropTrailingEmpty (splitNL (string_to_list_char s)))
 
--- `Compose r` -- the composed FS+Console tree, abbreviating the coproduct
--- `ITree (Coproduct (FSOp APartial) ConsoleOp) (resp_coproduct ...) r` for readability
+-- `Compose r` -- the composed host tree, abbreviating `HostIO APartial r` for
+-- readability. Its ambient summand contains both Console and Clock.
 -- (a plain `view` alias, reduces transparently -- same pattern `FS`/`IO`
 -- already use).
-const Compose (r : Type) : Type =
-  ITree
-    (Coproduct (FSOp APartial) ConsoleOp)
-    (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
-    r
+const Compose (r : Type) : Type = HostIO APartial r
 
 -- prints each line via `[Console]`, sequenced through the continuation one
 -- line at a time (the AC4 totality-face multi-step case: read once, then
@@ -89,16 +85,16 @@ const Compose (r : Type) : Type =
 proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Console] =
   match xs {
     Nil ↦ Ret
-      (Coproduct (FSOp APartial) ConsoleOp)
-      (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+      (Coproduct (FSOp APartial) AmbientOp)
+      (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
       (Result IOError Unit)
       (Ok IOError Unit MkUnit);
     Cons x xs' ↦ bind
-      (Coproduct (FSOp APartial) ConsoleOp)
-      (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+      (Coproduct (FSOp APartial) AmbientOp)
+      (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
       Unit
       (Result IOError Unit)
-      (inject_r (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp Unit (print_line x))
+      (host_console APartial Unit (print_line x))
       (λ_. printLines xs')
   }
 
@@ -106,15 +102,15 @@ proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Conso
 -- each parsed line via `inject_r (print_line ...)` in one composed tree.
 proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Console] =
   bind
-    (Coproduct (FSOp APartial) ConsoleOp)
-    (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+    (Coproduct (FSOp APartial) AmbientOp)
+    (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
     (Result FileError Bytes)
     (Result IOError Unit)
     (inject_l
       (FSOp APartial)
-      ConsoleOp
+      AmbientOp
       (fs_resp APartial)
-      console_resp
+      ambient_resp
       (Result FileError Bytes)
       (read_bytes APartial cap (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
     (λr.
@@ -122,16 +118,16 @@ proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Consol
         Err e ↦
           match e {
             MkFileError operation path kind ↦ Ret
-              (Coproduct (FSOp APartial) ConsoleOp)
-              (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+              (Coproduct (FSOp APartial) AmbientOp)
+              (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
               (Result IOError Unit)
               (Err IOError Unit kind)
           };
         Ok bytes ↦
           match bytes_decode bytes {
             Err _ ↦ Ret
-              (Coproduct (FSOp APartial) ConsoleOp)
-              (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+              (Coproduct (FSOp APartial) AmbientOp)
+              (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
               (Result IOError Unit)
               (Err IOError Unit (Other 0));
             Ok text ↦ printLines (lines text)
@@ -144,8 +140,8 @@ proc main
     visits [FS, Console] =
   match caps {
     MkProgramCaps cap ↦ bind
-      (Coproduct (FSOp APartial) ConsoleOp)
-      (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+      (Coproduct (FSOp APartial) AmbientOp)
+      (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
       (Result IOError Unit)
       ExitCode
       (app cap)

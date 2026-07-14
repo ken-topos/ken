@@ -2040,6 +2040,24 @@ pub struct CoproductIds {
     pub inr_id: GlobalId,
 }
 
+/// IDs for the ambient `Clock` effect driver.
+#[derive(Clone)]
+pub struct ClockIds {
+    pub wall_now_id: GlobalId,
+    pub mkinstant_id: GlobalId,
+}
+
+impl ClockIds {
+    /// Harvest the complete Clock ABI table from an elaboration environment.
+    pub fn from_elab(elab: &ken_elaborator::ElabEnv) -> Option<Self> {
+        let get = |name: &str| elab.globals.get(name).copied();
+        Some(Self {
+            wall_now_id: get("WallNow")?,
+            mkinstant_id: get("MkInstant")?,
+        })
+    }
+}
+
 /// The three process-owned streams exposed by the Console ABI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConsoleStream {
@@ -2072,6 +2090,12 @@ pub enum ConsoleTrace {
     IsTerminal {
         stream: ConsoleStream,
     },
+}
+
+/// Exact wall-clock reads observed by the injectable host seam.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClockTrace {
+    WallNow { nanoseconds: BigInt },
 }
 
 /// Create policy carried by `WriteFile` after decoding its Ken constructor.
@@ -2234,6 +2258,10 @@ pub trait HostHandler {
     fn console_write(&mut self, stream: ConsoleStream, bytes: &[u8]) -> io::Result<()>;
     fn console_flush(&mut self, stream: ConsoleStream) -> io::Result<()>;
     fn console_is_terminal(&mut self, stream: ConsoleStream) -> bool;
+
+    /// Read wall-clock nanoseconds. This is ambient process context, carries
+    /// no capability, and intentionally promises no ordering law.
+    fn clock_wall_now(&mut self) -> BigInt;
 
     /// Observation hook for an exact pre-operation capability denial.
     fn fs_denied(&mut self, _denial: CapabilityDenied) {}
@@ -2609,6 +2637,13 @@ impl HostHandler for PosixHost {
             ConsoleStream::Stdin => io::stdin().is_terminal(),
             ConsoleStream::Stdout => io::stdout().is_terminal(),
             ConsoleStream::Stderr => io::stderr().is_terminal(),
+        }
+    }
+
+    fn clock_wall_now(&mut self) -> BigInt {
+        match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            Ok(duration) => BigInt::from(duration.as_nanos()),
+            Err(error) => -BigInt::from(error.duration().as_nanos()),
         }
     }
 
@@ -2990,6 +3025,9 @@ pub struct CaptureHost {
     terminals: [bool; 3],
     closed: [bool; 3],
     trace: Vec<ConsoleTrace>,
+    clock_script: Vec<BigInt>,
+    clock_cursor: usize,
+    clock_trace: Vec<ClockTrace>,
     fs_nodes: BTreeMap<VfsNodeId, VirtualFsNode>,
     fs_entries: BTreeMap<(VfsNodeId, Vec<u8>), VfsNodeId>,
     fs_parents: BTreeMap<VfsNodeId, (VfsNodeId, Vec<u8>)>,
@@ -3017,6 +3055,9 @@ impl CaptureHost {
             terminals: [false; 3],
             closed: [false; 3],
             trace: Vec::new(),
+            clock_script: vec![BigInt::from(0)],
+            clock_cursor: 0,
+            clock_trace: Vec::new(),
             fs_nodes: [(0, VirtualFsNode::Directory)].into_iter().collect(),
             fs_entries: BTreeMap::new(),
             fs_parents: BTreeMap::new(),
@@ -3046,6 +3087,26 @@ impl CaptureHost {
 
     pub fn trace(&self) -> &[ConsoleTrace] {
         &self.trace
+    }
+
+    /// Replace the deterministic wall-clock script. After the script is
+    /// exhausted, reads remain fixed at its final value.
+    pub fn set_clock_script(&mut self, nanoseconds: impl IntoIterator<Item = i128>) {
+        self.clock_script = nanoseconds.into_iter().map(BigInt::from).collect();
+        if self.clock_script.is_empty() {
+            self.clock_script.push(BigInt::from(0));
+        }
+        self.clock_cursor = 0;
+        self.clock_trace.clear();
+    }
+
+    /// Configure one fixed wall-clock value for every read.
+    pub fn set_fixed_clock(&mut self, nanoseconds: i128) {
+        self.set_clock_script([nanoseconds]);
+    }
+
+    pub fn clock_trace(&self) -> &[ClockTrace] {
+        &self.clock_trace
     }
 
     pub fn insert_file(&mut self, path: impl Into<Vec<u8>>, bytes: impl Into<Vec<u8>>) {
@@ -3269,6 +3330,16 @@ impl HostHandler for CaptureHost {
     fn console_is_terminal(&mut self, stream: ConsoleStream) -> bool {
         self.trace.push(ConsoleTrace::IsTerminal { stream });
         self.terminals[stream_index(stream)]
+    }
+
+    fn clock_wall_now(&mut self) -> BigInt {
+        let index = self.clock_cursor.min(self.clock_script.len() - 1);
+        let nanoseconds = self.clock_script[index].clone();
+        self.clock_cursor = self.clock_cursor.saturating_add(1);
+        self.clock_trace.push(ClockTrace::WallNow {
+            nanoseconds: nanoseconds.clone(),
+        });
+        nanoseconds
     }
 
     fn fs_denied(&mut self, denial: CapabilityDenied) {
@@ -4272,14 +4343,14 @@ fn fs_dispatch<H: HostHandler>(
     Some(Ok(response))
 }
 
-/// Console-effect driver (`42 §6.2`, `§6.3`): runs an `ITree` value to
-/// completion, dispatching `Vis` nodes to the Console algebra and,
-/// when `fs_ids` is supplied, the FS `ReadFile` arm (FS-driver-build D2) —
-/// one driver, two arms, not a second dispatcher (shares `ids`'s
+/// Host-effect driver (`42 §6.2`, `§6.3`): runs an `ITree` value to
+/// completion, dispatching `Vis` nodes to Console, Clock, and, when `fs_ids`
+/// is supplied, FS — one driver with exhaustive arms, not parallel dispatchers
+/// (all share `ids`'s
 /// `ret_id`/`vis_id`/`params_len`, the same `ITree`).
 ///
 /// Dispatches exhaustively — no catch-all (`42 §6.5`): any op-tag that
-/// matches neither Console nor (if `fs_ids` is `Some`) `ReadFile` is
+/// matches none of the supplied Console, Clock, or FS algebras is
 /// `Err(UnknownEffect)`, never silently skipped.
 ///
 /// `ids.params_len` must equal the number of type-level params on `ITree`
@@ -4290,6 +4361,7 @@ pub fn run_io<H: HostHandler>(
     handler: &mut H,
     ids: &ConsoleIds,
     fs_ids: Option<&FSIds>,
+    clock_ids: Option<&ClockIds>,
     coproduct_ids: Option<&CoproductIds>,
     globals: &GlobalEnv,
     store: &mut EvalStore,
@@ -4328,8 +4400,8 @@ pub fn run_io<H: HostHandler>(
                     // base tag BEFORE dispatch — effect-blind, a no-op when
                     // `coproduct_ids` is absent or the op carries no wrapper.
                     let op = peel_coproduct(op, coproduct_ids);
-                    // Dispatch on every constructor in the sealed Console/FS
-                    // floor. Unknown tags fail loudly below.
+                    // Dispatch on every constructor in the sealed host floor.
+                    // Unknown tags fail loudly below.
                     let resp = match &op {
                         EvalVal::Ctor {
                             id: op_id,
@@ -4435,14 +4507,26 @@ pub fn run_io<H: HostHandler>(
                             id: op_id,
                             args: op_args,
                             ..
-                        } => match fs_ids
-                            .and_then(|fs| fs_dispatch(*op_id, op_args, handler, fs, ids, store))
-                        {
-                            Some(Ok(response)) => response,
-                            Some(Err(())) | None => {
-                                return Err(RunIoError::UnknownEffect(op));
+                        } => {
+                            if let Some(clock) = clock_ids.filter(|clock| {
+                                *op_id == clock.wall_now_id && op_args.is_empty()
+                            }) {
+                                make_ctor(
+                                    clock.mkinstant_id,
+                                    vec![bigint_to_int_val(handler.clock_wall_now())],
+                                    store,
+                                )
+                            } else {
+                                match fs_ids.and_then(|fs| {
+                                    fs_dispatch(*op_id, op_args, handler, fs, ids, store)
+                                }) {
+                                    Some(Ok(response)) => response,
+                                    Some(Err(())) | None => {
+                                        return Err(RunIoError::UnknownEffect(op));
+                                    }
+                                }
                             }
-                        },
+                        }
                         _ => return Err(RunIoError::UnknownEffect(op)),
                     };
                     apply(k, resp, globals, store)
