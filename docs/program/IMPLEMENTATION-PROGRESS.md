@@ -14,7 +14,301 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (10:4x UTC) — ★★★ NEWEST · LIVE STATE · `origin/main @ 7b4adf5b`
+> ### ⏭ 2026-07-14 (11:40 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 9ae7acd1`
+>
+> **▶ SUB-1 — PUBLISHING. `wp/sub1-bytes-structural-view @ 29e63a9a`, ALL THREE LANES RE-APPROVED**
+> (Architect terminal `evt_6decjbcct5fcb` · CV `evt_7w2qb100znvns` · QA `evt_16yfg8200jknh`) — **one
+> covering re-vote for the oracle fix AND the rebase.** My gate: base `9ae7acd1` ✓ · 0 merges ✓ ·
+> `diff --check` clean ✓ · **the arithmetic closes EXACTLY**:
+> ```
+> reviewed at 4808832e:  10 files, +867/−28
+> oracle repair:        + 1 file,   +6/ −4
+> final at 29e63a9a:     11 files, +873/−32   ← ACTUAL. Not one line more.
+> ```
+> **No `catalog/packages/Process/*` — I-7 did NOT leak in through the rebase** (the specific thing a
+> stale-base rebase gets wrong). `Collections.ken.md`, `bytes.rs`, `spec/`, `conformance/` are
+> **byte-identical to `4808832e`.** *(`7d115883` is VOID — stale base.)*
+>
+> **▶ I-8 KICKED to Runtime** — `wp/i8-clock-effect @ ea1f26e7` (`evt_4g4928ayye0rg`). Handoff Gate
+> run in full: I-7 retros in · `dec_assfrqmgvzyt` resolved · **all three seats compact-verified
+> ("Context compacted", worktrees at `9ae7acd1`).** Frame amended with **Step 0** (below) + AC4/AC5
+> hardened to assert on the **emission**, not tokens.
+>
+> **▶ CC8 (Foundation, HELD) — unblocks the moment SUB-1 lands.** Both its deps are then met (I-7 ✓,
+> SUB-1). **Re-frame in progress:** the headline is that **lawful `DecEq Bytes` is now DERIVABLE at
+> ZERO further TCB** — `bytes_list_roundtrip : (b : Bytes) → Equal Bytes (list_to_bytes
+> (bytes_to_list b)) b` **gives injectivity of `bytes_to_list`** (`cong list_to_bytes` on the
+> hypothesis, then rewrite both sides by the retraction), and `instance DecEq (List a) where DecEq a`
+> is **landed** (`LawfulClasses.ken.md:2022`). ⚠ **STILL TO GREP: `DecEq UInt8`** — if it is absent,
+> that is CC8's real gap and must be named, not `Axiom`ed around.
+>
+> ### ⚠ THE ORACLE-CENSUS — two LATENT siblings, and why I-8 carries their repair
+>
+> | Shape | Sites | Verdict |
+> |---|---|---|
+> | `extract_ken_md(…).source.contains("Axiom")` | CC1–CC7, DS-2/3/7/8, most of the corpus | ✅ correct |
+> | `RAW.contains("Axiom")` | `ds4_list_combinators_acceptance.rs:56` | 🔴 **fired** (SUB-1) — fixed |
+> | `RAW.contains("Axiom")` | **`i2_console_floor.rs:132`**, **`i3_fs_floor.rs:141`** | ⏳ **LATENT — ARMED** |
+>
+> **The latent pair passes today only because no prose in `Console.ken.md` / `FS.ken.md` has YET
+> happened to use the word.** And they are **the nearest neighbours to I-8** — *the exact files an
+> implementer opens to crib the zero-`Axiom` idiom from.* **That is how a bad oracle idiom
+> propagates: not by being written twice, but by being COPIED FROM THE FILE NEXT DOOR.** ⇒ **I-8
+> Step 0 repairs both, before Runtime writes a line of clock code.**
+> **When you fix one instance of a bad oracle idiom, sweep for its siblings in the same breath** —
+> otherwise you have fixed the symptom and shelved the disease next to the cure.
+
+> ### ⏭ 2026-07-14 (11:15 UTC) — `origin/main @ 9ae7acd1`
+>
+> ## ✅ I-7 MERGED — `origin/main @ 9ae7acd1`. **Verified BY CONTENT, never by SHA or exit code.**
+>
+> ```
+> git ls-tree origin/main catalog/packages/Process/
+>   → Arguments.ken.md   (CC6a)
+>   → Environment.ken.md        ← NEW   ┐ zero Axiom/postulate/primitive
+>   → WorkingDirectory.ken.md   ← NEW   ┘ declarations (emission-counted)
+> ```
+> `ProcessInput`'s env + cwd fields are now **nameable in Ken, byte-faithfully, at ZERO trusted-base
+> cost.** Retros pending from Runtime (required before the I-8 Handoff Gate).
+>
+> **⚠ PUBLISHER-TASK NOTE:** the background task appeared to die in my compaction and the task list
+> came back EMPTY — **but the PR was alive and merged on its own once CI went green.** *A dead task
+> is not a dead PR.* I re-launched a **duplicate** publisher against the same branch before checking;
+> it was harmless (the script finds the existing PR) but it was avoidable. **CHECK `gh pr list`
+> FIRST** — the memory says exactly this and I skipped it.
+>
+> **▶ NEXT: I-8 (Clock) — frame REBASED onto current main: `wp/i8-clock-effect @ 581cc5b4`.**
+> Gated on Runtime's I-7 retros → then the **Handoff Gate** (compact Runtime ring) → kick.
+>
+> ---
+>
+> ## ⛔⛔ I COUNTERMANDED A FIX IN FLIGHT — the near-miss that matters more than the merge
+>
+> **@language-leader had queued this into the implementer's composer:**
+> > *"**Rephrase the added Collections.ken prose so `rg -n Axiom … ` is empty**."*
+>
+> **That reworks the DOCUMENT to make a BROKEN TEST pass.** I cleared the composer and countermanded
+> it (`evt_3nyvj9n3q3pqe`); the implementer is now on the correct fix. **Three reasons, each
+> sufficient:**
+> 1. **It deletes the record of the property SUB-1 exists to establish** — and that exact sentence is
+>    **what @architect's AC3 approval keyed on** (*"my AC3 audit read those exact two prose lines and
+>    verified them as a true zero-Axiom assertion"*). **We'd be editing out the text the approval was
+>    granted on.** CV called the same shot independently.
+> 2. **It leaves the trap armed** — the oracle would still fire on the *next* author who documents a
+>    zero-`Axiom` property. **We'd have taught the corpus that the word is unsayable** — an absurd
+>    position for a project whose thesis is *say the guarantee out loud*.
+> 3. **The oracle's false comment survives** (*"a plain `.ken` source"* — it is literate `.ken.md`).
+>
+> **★ THE LAW: fix the oracle, never the truth.** A "zero-X" gate must check what the artifact
+> **DECLARES**, never whether the string `X` occurs in it. **Prohibitions, negative assertions, doc
+> comments and WP frames all NAME the thing they forbid — that is what forbidding looks like.**
+> **A grep SELECTS candidates; it never DECIDES. When a guard fires, verify the guard before obeying
+> it.** *(I have no high ground: my own honesty gate false-positived on I-7 90 minutes earlier, on my
+> own frame's prohibition prose. Mine cost five minutes of embarrassment; this one was baked into CI,
+> where the reflex it provokes is to quietly change the document until the machine stops complaining.
+> **That reflex is how a codebase ends up unable to state what it has achieved.**)*
+> Memory: `fleet/an-oracle-that-greps-a-name-fires-on-prose-that-denies-it.md`.
+
+> ### ⏭ 2026-07-14 (11:0x UTC) — `origin/main @ bf2ba0cf`
+>
+> **⛔ SUB-1 CI IS RED. PR #633 did NOT merge — the publisher stopped correctly. IT IS NOT A BUG IN
+> SUB-1; IT IS A BUG IN A TEST ORACLE, AND THE FIX IS ONE LINE.** Diagnosis posted
+> (`evt_31x53064q6r7x`) → Language.
+>
+> **THE FAILURE:** `-p ken-elaborator --test ds4_list_combinators_acceptance` →
+> **`zero_axiom_in_collections_ken`** → *"Collections.ken must contain zero Axiom literals"*
+> (`ds4_list_combinators_acceptance.rs:55`).
+>
+> ```rust
+> // "a plain `.ken` source — no literate extractor; the entire file is checked code."   ← FALSE
+> assert!(!COLLECTIONS_KEN_MD.contains("Axiom"), …);
+> ```
+> **SUB-1 added two lines of PROSE** — *"an ordinary fold through `bytes_to_list` with **no** cached
+> length or local `Axiom`"* — **prose asserting the ABSENCE of an `Axiom`. The oracle read it as an
+> `Axiom`.** **CI went red on the WP whose entire achievement was REMOVING the `Axiom` tax.**
+> **Two defects:** (1) **it greps a NAME, not an EMISSION** — the question it wants is *"does the
+> checked Ken code DECLARE an `Axiom`?"*, which the word appearing in a sentence does not answer;
+> (2) **its own comment is factually wrong about its own file** — the constant is
+> `COLLECTIONS_KEN_MD` and the file is `Collections.ken.MD`, **literate: prose + fences.** It passed
+> for months only because no prose in it had *happened* to use the word.
+> **FIX (ruled):** `extract_ken_md` **first**, then assert on the **extracted code** — exactly what
+> I-7's test already does. **This STRENGTHENS the gate.** **⛔ Do NOT delete the assertion, and do
+> NOT reword the prose to dodge the grep** — the prose is correct and documents the zero-TCB
+> property; **the oracle is the thing that is wrong.**
+>
+> **★ AND I MADE THE IDENTICAL MISTAKE 40 MINUTES EARLIER** — my own I-7 honesty gate screamed
+> `!!! TCB GROWTH !!!` because the diff contained **my frame** (two pages *forbidding* those tokens)
+> and **an acceptance test with a negative-assertion list.** **A grep SELECTS candidates; it NEVER
+> DECIDES.** Memory: `fleet/an-oracle-that-greps-a-name-fires-on-prose-that-denies-it.md`.
+>
+> **★ META — THIS IS THE TARGETED-TESTS RULE WORKING, NOT FAILING.** Three lanes approved SUB-1
+> (QA + CV + Architect terminal) and **every one was right about everything they checked.** None ran
+> DS-4 — **they couldn't** (targeted-only, `COORDINATION.md §12`; DS-4 is not in SUB-1's blast radius
+> by any obvious reading). **CI's full gate exists precisely so a corpus change trips every oracle
+> that reads it — including one nobody remembered existed.**
+>
+> **▶ I-7 (`4fc3926e`) — PUBLISHING NOW (PR open, CI polling).** Unaffected by SUB-1's red; base
+> `bf2ba0cf` still current because SUB-1 did **not** merge. **Fully approved** (Runtime QA
+> `evt_1j4x4g8d3spym` + Architect terminal `evt_3584w8vqc29pj`, vote on `dec_assfrqmgvzyt`). **No CV
+> lane** (no `spec/`, no `conformance/`). **Sequenced, not raced** — whichever lands second gets
+> rebased first.
+>
+> **▶ SUB-1 — awaiting Language's one-line oracle fix, then re-release + fast re-vote** (no change to
+> the four `trusted_base()` entries, the spec text, or the registration) → re-publish.
+> **The WP itself is SOUND and fully audited:** `trusted_base()` delta **EXACTLY 4** (the
+> registration **fails closed** on a set-equality check — CV verified), **ZERO consumer `Axiom`s**,
+> both postulates **necessary** (Architect: *"a retraction `g∘f = id` does not yield the reverse
+> `f∘g = id`, and SUB-1 INTRODUCES the only `Bytes↔List UInt8` relationship — before it there is
+> nothing for either roundtrip to derive from"*), erratum **survives**.
+
+> ### ⏭ 2026-07-14 (11:1x UTC) — `origin/main @ bf2ba0cf`
+>
+> **BOTH LIVE WPs ARE IN REVIEW. Nothing is mid-flight for me — this is a clean seam.**
+>
+> **▶ I-7 (Runtime) — `wp/i7-env-process-projectors @ 4fc3926e`. QA APPROVED. Awaiting ARCHITECT
+> TERMINAL, then I publish.** My gate: base current ✓ · 0 merges ✓ · **4 files, +601/−0** ✓ · no
+> `spec/`, no `conformance/`, no kernel ✓ ⇒ **NO CV LANE** · `diff --check` clean ✓.
+> **runtime-qa verified AT THE MECHANISM** (not on my word): invalid UTF-8 is **genuinely invalid**
+> (key `ff 80 4b`, value `fe c0 56`) · field-order checked against the **actual `ProcessInput`
+> declaration** (env=field 1, cwd=field 2) · `trusted_base()` compared **before/after** · all six
+> globals **transparent** · round-trips are **genuine ι-reduced `Refl`**. **ZERO TCB.**
+>
+> **▶ SUB-1 (Language) — `wp/sub1-bytes-structural-view @ 4808832e`. Cleaned + rebased. GATES
+> RUNNING: @architect (terminal soundness) + @conformance-validator (Spec/Fidelity) + language-qa.**
+> **★ I RULED THE GATE SET MYSELF** (`evt_2f674gwvj8wej`) — **SUB-1 does NOT merge on Language QA
+> alone**: it **grows `trusted_base()`** and rewrites **`18a-primitive-registry`** + **`37 §2.6`**
+> (the trust surface we corrected 40 min earlier).
+> **MY EMISSION COUNT @ `4808832e` (counted, not read):**
+> `declare_primitive × 2` (`bytes_to_list`, `list_to_bytes`) + `declare_postulate × 2`
+> (`bytes_list_roundtrip`, `list_bytes_roundtrip`) = **trusted_base() delta EXACTLY 4** ✓ ·
+> **consumer `Axiom` declarations added: 0** ✓ · kernel untouched ✓.
+> **⚠ I get `PrimReduction::Op` × 3, not × 2 — flagged to @architect to count** (likely the interp
+> reduce arm, but I did not assume).
+> **★ THIS IS #15 WORKING EXACTLY AS PAT RULED IT** — a **fixed, bounded, per-builtin** TCB
+> extension; consumers reason **FROM** it at **zero further cost**, replacing the unbounded
+> per-call-site `Axiom` tax four packages were paying.
+> **★ @architect's AC2 method is the one that matters and I'd not have specified it as precisely:**
+> *"**neither roundtrip may be derivable from the other plus the existing base** — if it is, we
+> postulated something provable, which is **trust spent for nothing** (#5). I verify by trying to
+> DERIVE each from the rest before accepting it as necessary."* **#15 says prefer a fixed extension
+> over unbounded `Axiom`s; it does NOT say the fixed extension gets a free pass.**
+> **⚠ COORDINATION STALL I CAUGHT:** the implementer **finished the cleanup and never announced it**
+> — two reviewers sat blocked on completed work. *A released candidate nobody is told about is not
+> released.* Roused.
+>
+> ### ★★★ THE GENERAL FORM — PROMOTED AS AUDIT (b‴), SUPERSEDING (b″)
+> **"NEVER PIN A SHAPE THAT CANNOT STATE ITS OWN CONTRACT."** (Architect, `evt_6ry6x3r0kqr1w`;
+> playbook + `agent/memory/fleet/never-pin-a-shape-that-cannot-state-its-own-contract.md`.)
+> **Three consecutive saves were ONE failure.** A shape is pinned (trait / type / effect op / spec
+> claim) that must carry an obligation. The obligation is **not false** and **not expensive to
+> prove** — it is **UNSAYABLE in the shape as pinned**: I-6 (the trait had nowhere to say *"any host
+> mints its own-identity cap"*) · the erratum (conversion had nowhere to say `byteLength "abc" ≡ 3`
+> — **so the spec said it anyway, in prose the kernel cannot check**) · I-8 (`{Clock} → Int` had
+> nowhere to say *"this read ≥ the last"* — two `Int`s, **no handle relating them**).
+> **★ WHY IT'S INVISIBLE IN A GREEN DIFF:** **tests exercise VALUES; the gap is in the
+> TYPE/ABI/RELATION surface.** The values compile and pass **because the missing thing was never a
+> value — it was a place to write a guarantee.** ⇒ **the audit is NOT "run the suite"; it is "try to
+> WRITE each obligation in the shape's own vocabulary and see if your pen has anywhere to land."**
+> **⇒ It is PRINCIPLES #14, widened** from *"comment"* to **any reach outside the shape's checked
+> vocabulary** (comment · per-consumer `Axiom` · new trusted primitive · caller-fabricated value ·
+> concrete-only method). **And it is structurally the DESIGN pass's catch: implementers build values
+> (they compile), QA tests values (they pass), only design review asks whether the SHAPE can express
+> its CONTRACT.**
+>
+> ### ⚠ MY OWN GATE FALSE-POSITIVED ON I-7 — and it is the trap I promoted THIS MORNING
+> My probe screamed `!!! TCB GROWTH !!!` / `!!! FORBIDDEN !!!` on `Axiom`/`Clock`/`lookup_env`.
+> **All three were MY OWN PROHIBITIONS read back to me:** the **frame doc is IN the diff** (its §1 is
+> two pages forbidding exactly those words), and the **acceptance test** contains
+> `for forbidden in ["Axiom","lookup_env","Clock", …]` — **a NEGATIVE-ASSERTION LIST.** *The token is
+> there because the test asserts it must NOT appear.* **I'd have blocked a clean WP on a guardrail I
+> authored.** ⇒ **A grep SELECTS candidates; it NEVER DECIDES. Check the EMISSION** (what do the
+> packages *declare*? → 2 `fn` + 2 `replace_` + 2 `proof`, **zero `Axiom` decls**).
+> **★ And the implementer turned my prose guardrails into a MACHINE-CHECKED forbidden-token test.
+> Strictly better than I asked for — the next person who adds a `Clock` fails a TEST, not a review.
+> Make that the idiom.**
+>
+> **▶ NEXT:** I-7 Architect terminal → **publish** → Handoff Gate → **I-8** (`wp/i8-clock-effect @
+> eece8a5e`, QUEUED not released) · SUB-1 gates → **publish** → **re-kick CC8** (needs **BOTH**
+> SUB-1 + I-7) → **SUB-2** → **CC9**.
+> **FOR PAT (back ≈11:45Z) — see the brief:** **K3** (dissolves the `Axiom` tax; grows kernel TCB —
+> Architect owes the one-paragraph trade) · **SUB-1 = the FIRST deliberate TCB growth under #15** ·
+> **7 seats on `sol`/T1 doing T2 work** · `export` specified-but-unparsed · **offer: a PRINCIPLES
+> #14 "in practice" note** stating the widened form.
+
+> ### ⏭ 2026-07-14 (10:5x UTC) — `origin/main @ bf2ba0cf`
+>
+> **TWO MERGES SINCE THE LAST ENTRY, BOTH CONTENT-VERIFIED:**
+> - **`7d3f4834` — the PRIMITIVE-`Op` HONESTY SWEEP** (PR #631, CI green — I did **NOT** pass
+>   `--doc-only`, see below). Verified **both directions**: 19 files byte-identical to approved
+>   `b93b8f9b` ✓ · `tested-not-trusted` now in `18a` ✓ · **`"holds definitionally"` GONE from
+>   `37 §2.4`** ✓ · **`crates/ken-cli/src/lib.rs` STILL PRESENT — I-6 NOT reverted** ✓ (that was
+>   the live failure mode; it did not happen). **Retros in; WP CLOSED.**
+> - **`bf2ba0cf` — PRINCIPLES #15 + the session's operational corpus** (PR #632, doc-only).
+>   Verified 4 ways: #15 heading ✓ · citation-closure memory ✓ · MODELS Sol=T1 ✓ · playbook
+>   audit (b″) ✓. **Pat's ruling is now law the whole fleet reads.**
+>
+> **⚠ GATE CALL TO REMEMBER — I did NOT pass `--doc-only` on the honesty sweep.** All 19 files
+> were markdown, so `--doc-only` *looked* right — **and it merges IMMEDIATELY, without polling CI.**
+> But 4 were **`conformance/` seeds = EXECUTABLE CORPUS**, and the change **re-tagged a
+> `(soundness)` assertion**. **"All-markdown" is not the test; "does anything EXECUTE it?" is.**
+> (The #632 docs PR *was* genuinely doc-only — `docs/`+`agent/` only — so `--doc-only` was correct
+> there. The distinction is the point.)
+>
+> **⚠ AND MY ONE-ROUTE RULING WAS MECHANICALLY IMPOSSIBLE — CV CAUGHT IT.** I ordered a
+> **fast-forward** of the official branch to `b93b8f9b`. But CV's re-anchor **REPLAYED** the commits
+> onto post-I-6 main → **new SHAs** → the old tip was **not an ancestor**. **There is no
+> fast-forward, only a REPOINT.** Fix: I pinned **my own** route branch
+> (`…-honesty-publish @ b93b8f9b`, tree-verified `7a346083…`), owned by nobody else — **passing the
+> bare SHA would have resolved to CV's checked-out branch, a ref he could move mid-publish.**
+>
+> ### ★★ LIVE BUILDS (both healthy, both targeted-not-`--workspace`)
+> - **I-7 (Runtime)** — `wp/i7-env-process-projectors @ 2716a347`. **KICKED** (`evt_6h1jrfxvngm7s`);
+>   ring compacted+verified first. Implementer building, running `ken-cargo test -p ken-elaborator`.
+> - **SUB-1 (Language)** — `wp/sub1-bytes-structural-view`, implementer 2 ahead. **⚠ I caught them
+>   grounding against the PRE-SWEEP `18a`** — the version with the FALSE claim — and made them
+>   rebase (`evt_6v45x5vzb11n2`). **Had they built SUB-1's laws on the old spec, every proof would
+>   have failed at the kernel and the only escape is `Axiom` — the exact disease SUB-1 exists to
+>   cure. They'd have built the cure out of the disease.** language-qa confirmed rebased to
+>   `7d3f4834`.
+>
+> ### ★ I-7 RE-SCOPED · CLOCK SPLIT TO I-8 · CC8 OWNERSHIP ERROR FIXED (all three are mine)
+> - **I-7 = env + cwd PURE PROJECTORS.** `ProcessInput` already carries them (fields 1–2); CC6a's
+>   `match` already binds and passes them through — it just never *named* them. I-6 already made
+>   them injectable. **Zero effects, zero TCB.**
+> - **I-8 = the CLOCK effect** — frame `wp/i8-clock-effect @ eece8a5e`, off the **Architect's
+>   ruling** (`evt_50605dwhdbb7a`). **QUEUED, NOT RELEASED** (Handoff Gate after I-7 closes).
+>   **AMBIENT (Console-class), NOT cap-gated** — *"you cannot scope which time"*; the **effect ROW
+>   already gives the confinement a cap would** (AC3 asserts it). **Carrier `data Instant =
+>   MkInstant Int` — STRUCTURAL, not opaque** (an opaque `Instant` walks straight into the SUB-1
+>   wall). **WALL-CLOCK ONLY, zero law** — a wall clock legitimately jumps, so claiming monotonicity
+>   would be a *lie* (#8); the absence of a law is the truthful statement.
+>   **★ THE ARCHITECT'S CATCH: a bare `monotonic_now : {Clock} → Int` CANNOT EVEN STATE ITS OWN
+>   LAW** — two `Int`s, **no handle relating them**. Monotonicity needs a **session** carrying the
+>   prior instant. **I asked a COST question ("another `Axiom` wall?"); he answered an
+>   EXPRESSIBILITY question ("the law is UNSAYABLE in the shape you were about to ship").**
+>   ⇒ **`I-8b`** = monotonic + its ONE audited trusted-base postulate + the session. Named, deferred.
+> - **CC8**: my frame claimed `Process.Environment` as a **CC8** deliverable. **It is I-7's** (the
+>   `ProcessInput` ABI is Runtime's boundary). Had both stood, **Foundation and Runtime would each
+>   have built it and collided.** Withdrawn (`wp/cc8-env-config-decoder @ fc8a0513`, rebased).
+>   **CC8 dep set = SUB-1 (bridge) AND I-7 (projector).** The seam: **I-7 PROJECTS** (no key
+>   comparison → no `Axiom`); **CC8 LOOKS UP** (needs `DecEq Bytes` ← SUB-1). *That is exactly why
+>   I-7 is unblocked and CC8 is held.*
+>
+> ### ★ THE PATTERN I'M NOW TRACKING (posted to @architect, `evt_4ad35d6zv4egj`)
+> **Three WPs running, and the expensive failures are ALL EXPRESSIBILITY failures** — *"can this
+> shape even SAY the thing it needs to say?"* — and **none is visible in a green diff**: I-6
+> (`mint_fs_cap` inherent → the generic path couldn't mint), the erratum (`Literal` vs `Op` → `Refl`
+> can't discharge), I-8 (monotonicity → unsayable without a session). Audit **(b″)** covers the
+> generic-path case. **I do not yet have the general form of the question. I think there is one.**
+>
+> **▶ NEXT:** I-7 lands → Handoff Gate → **I-8** · SUB-1 lands → **re-kick CC8** (needs BOTH) →
+> **SUB-2** (retire cached-`Nat` carriers; unblock `Path.Posix`) → **CC9**.
+> **FOR PAT (back ≈11:45Z):** **K3 registered reductions** (dissolves the `Axiom` tax outright;
+> grows kernel TCB — Architect to state the trade) · **7 seats on `sol`/T1 doing T2 work**
+> (confirmed: `runtime-implementer` and `language-implementer` are both on `gpt-5.6-sol`) ·
+> `export` specified-but-unparsed.
+
+> ### ⏭ 2026-07-14 (10:4x UTC) — `origin/main @ 7b4adf5b`
 >
 > **★ HONESTY SWEEP: PUBLISHING NOW. Both terminal votes are on `b93b8f9b`.**
 > @architect **re-cast** (`evt_2p19ekr20qne7`) + confirmed (`evt_6ze6hxhp84tdc`); `91ecff78` is
