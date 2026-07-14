@@ -23,11 +23,12 @@
 //!   programs never reach this per canonicity).
 
 use std::collections::{BTreeMap, HashMap};
-use std::ffi::OsString;
-use std::io::{self, IsTerminal, Read, Write};
-use std::path::{Path, PathBuf};
+use std::ffi::{CString, OsString};
+use std::io::{self, IsTerminal, Read, Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Once;
 
 use ken_elaborator::capabilities;
@@ -2108,115 +2109,147 @@ pub enum FsTrace {
 pub enum VirtualFsNode {
     File(Vec<u8>),
     Directory,
+    Symlink(Vec<u8>),
+}
+
+pub type VfsNodeId = u64;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FsOpKind {
+    Read,
+    Write,
+    Append,
+    Metadata,
+    Enumerate,
+    CreateDirectory,
+    RemoveFile,
+    RemoveDirectory,
+    RenameSource,
+    RenameDestination,
+}
+
+impl FsOpKind {
+    fn required_right(self) -> capabilities::RightSet {
+        use capabilities::RightSet as R;
+        match self {
+            Self::Read => R::READ,
+            Self::Write | Self::Append => R::WRITE.union(R::CREATE),
+            Self::Metadata => R::METADATA,
+            Self::Enumerate => R::ENUMERATE,
+            Self::CreateDirectory => R::CREATE,
+            Self::RemoveFile | Self::RemoveDirectory => R::DELETE,
+            Self::RenameSource | Self::RenameDestination => R::WRITE.union(R::DELETE),
+        }
+    }
+
+    fn resolves_parent(self) -> bool {
+        matches!(
+            self,
+            Self::CreateDirectory
+                | Self::RemoveFile
+                | Self::RemoveDirectory
+                | Self::RenameSource
+                | Self::RenameDestination
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CapabilityDenied {
+    RightNotHeld { op: FsOpKind, held_rights: u8 },
+    ScopeEscape,
+    SymlinkDenied,
+    AuthorityInsufficient,
+    MalformedCapability,
+}
+
+#[derive(Debug)]
+pub enum ResolveError {
+    Denied(CapabilityDenied),
+    Io(io::Error),
+}
+
+impl From<io::Error> for ResolveError {
+    fn from(error: io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+#[derive(Debug)]
+pub enum Resolution<H> {
+    Existing(H),
+    Parent(H, Vec<u8>),
 }
 
 /// Provides host effects to `run_io`.
 ///
-/// SECURITY: the current authority gate is coarse and deliberately ignores
-/// the path. An `AFull` token authorizes writes/deletes anywhere the process
-/// itself can access. This floor is functional, but not path-confined; scoped
-/// rights, symlink policy, and openat-style TOCTOU resistance belong to CA4/I-5.
+/// SECURITY: paths enter only through `fs_resolve`. Every operation below
+/// consumes a host-owned descriptor/node id, so the trait has no byte-path
+/// bypass that can re-resolve after authorization.
 pub trait HostHandler {
+    type Handle: Clone + std::fmt::Debug;
+
     fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead>;
     fn console_write(&mut self, stream: ConsoleStream, bytes: &[u8]) -> io::Result<()>;
     fn console_flush(&mut self, stream: ConsoleStream) -> io::Result<()>;
     fn console_is_terminal(&mut self, stream: ConsoleStream) -> bool;
 
-    fn fs_read(&mut self, path: &[u8]) -> io::Result<Vec<u8>> {
-        std::fs::read(host_path(path)?)
-    }
+    /// Observation hook for an exact pre-operation capability denial.
+    fn fs_denied(&mut self, _denial: CapabilityDenied) {}
 
-    fn fs_write(&mut self, path: &[u8], policy: HostCreatePolicy, bytes: &[u8]) -> io::Result<()> {
-        let path = host_path(path)?;
-        match policy {
-            HostCreatePolicy::CreateNew => {
-                let mut file = std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(path)?;
-                file.write_all(bytes)?;
-                file.sync_all()
-            }
-            HostCreatePolicy::CreateOrTruncate => atomic_replace(&path, bytes),
-            HostCreatePolicy::CreateOrKeep => {
-                match std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(path)
-                {
-                    Ok(file) => file.sync_all(),
-                    Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
-                    Err(error) => Err(error),
-                }
-            }
-        }
-    }
+    /// Deterministic test seam after resolution and before handle operation.
+    fn fs_after_resolve(&mut self) {}
 
-    fn fs_append(&mut self, path: &[u8], bytes: &[u8]) -> io::Result<()> {
-        let mut file = std::fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(host_path(path)?)?;
-        file.write_all(bytes)
-    }
-
-    fn fs_metadata(&mut self, path: &[u8]) -> io::Result<HostFileMetadata> {
-        let metadata = std::fs::symlink_metadata(host_path(path)?)?;
-        Ok(HostFileMetadata {
-            size: metadata.len(),
-            kind: metadata_kind(&metadata),
-        })
-    }
-
-    fn fs_read_directory(&mut self, path: &[u8]) -> io::Result<Vec<HostDirEntry>> {
-        let mut entries = Vec::new();
-        for entry in std::fs::read_dir(host_path(path)?)? {
-            let entry = entry?;
-            entries.push(HostDirEntry {
-                name: os_string_bytes(entry.file_name())?,
-                kind: file_type_kind(&entry.file_type()?),
-            });
-        }
-        entries.sort_by(|left, right| left.name.cmp(&right.name));
-        Ok(entries)
-    }
-
-    fn fs_create_directory(&mut self, path: &[u8], recursive: bool) -> io::Result<()> {
-        if recursive {
-            std::fs::create_dir_all(host_path(path)?)
-        } else {
-            std::fs::create_dir(host_path(path)?)
-        }
-    }
-
-    fn fs_remove_file(&mut self, path: &[u8]) -> io::Result<()> {
-        std::fs::remove_file(host_path(path)?)
-    }
-
-    fn fs_remove_directory(&mut self, path: &[u8], recursive: bool) -> io::Result<()> {
-        if recursive {
-            std::fs::remove_dir_all(host_path(path)?)
-        } else {
-            std::fs::remove_dir(host_path(path)?)
-        }
-    }
-
-    fn fs_rename(&mut self, from: &[u8], to: &[u8]) -> io::Result<()> {
-        std::fs::rename(host_path(from)?, host_path(to)?)
-    }
-}
-
-#[cfg(unix)]
-fn host_path(path: &[u8]) -> io::Result<PathBuf> {
-    use std::os::unix::ffi::OsStrExt;
-    Ok(PathBuf::from(std::ffi::OsStr::from_bytes(path)))
-}
-
-#[cfg(not(unix))]
-fn host_path(path: &[u8]) -> io::Result<PathBuf> {
-    String::from_utf8(path.to_vec())
-        .map(PathBuf::from)
-        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
+    fn fs_resolve(
+        &mut self,
+        root: &capabilities::FsHandle,
+        components: &[Vec<u8>],
+        op: FsOpKind,
+        symlink: capabilities::SymlinkPolicy,
+    ) -> Result<Resolution<Self::Handle>, ResolveError>;
+    fn fs_read_at(&mut self, handle: &Self::Handle) -> io::Result<Vec<u8>>;
+    fn fs_write_at(
+        &mut self,
+        handle: &Self::Handle,
+        policy: HostCreatePolicy,
+        bytes: &[u8],
+    ) -> io::Result<()>;
+    fn fs_create_file_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        policy: HostCreatePolicy,
+        bytes: &[u8],
+    ) -> io::Result<()>;
+    fn fs_append_at(&mut self, handle: &Self::Handle, bytes: &[u8]) -> io::Result<()>;
+    fn fs_create_append_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        bytes: &[u8],
+    ) -> io::Result<()>;
+    fn fs_metadata_at(&mut self, handle: &Self::Handle) -> io::Result<HostFileMetadata>;
+    fn fs_read_directory_at(&mut self, handle: &Self::Handle) -> io::Result<Vec<HostDirEntry>>;
+    fn fs_create_directory_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        recursive: bool,
+    ) -> io::Result<()>;
+    fn fs_remove_file_at(&mut self, parent: &Self::Handle, leaf: &[u8]) -> io::Result<()>;
+    fn fs_remove_directory_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        recursive: bool,
+    ) -> io::Result<()>;
+    fn fs_rename_at(
+        &mut self,
+        from_parent: &Self::Handle,
+        from_leaf: &[u8],
+        to_parent: &Self::Handle,
+        to_leaf: &[u8],
+    ) -> io::Result<()>;
 }
 
 #[cfg(unix)]
@@ -2249,48 +2282,228 @@ fn file_type_kind(file_type: &std::fs::FileType) -> HostFileKind {
     }
 }
 
-fn atomic_replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let basename = path
-        .file_name()
-        .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
-    let mut temp_name = OsString::from(".");
-    temp_name.push(basename);
-    temp_name.push(format!(
-        ".ken-tmp-{}-{}",
-        std::process::id(),
-        NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
-    ));
-    let temp = parent.join(temp_name);
-    let result = (|| {
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        std::fs::rename(&temp, path)?;
-        if let Ok(directory) = std::fs::File::open(parent) {
-            let _ = directory.sync_all();
-        }
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_file(&temp);
+#[cfg(unix)]
+const O_RDONLY_KEN: i32 = 0;
+#[cfg(unix)]
+const O_WRONLY_KEN: i32 = 1;
+#[cfg(unix)]
+const O_RDWR_KEN: i32 = 2;
+#[cfg(unix)]
+const O_CREAT_KEN: i32 = 0o100;
+#[cfg(unix)]
+const O_EXCL_KEN: i32 = 0o200;
+#[cfg(unix)]
+const O_TRUNC_KEN: i32 = 0o1000;
+#[cfg(unix)]
+const O_APPEND_KEN: i32 = 0o2000;
+#[cfg(unix)]
+const O_DIRECTORY_KEN: i32 = 0o200000;
+#[cfg(unix)]
+const O_NOFOLLOW_KEN: i32 = 0o400000;
+#[cfg(unix)]
+const O_CLOEXEC_KEN: i32 = 0o2000000;
+#[cfg(unix)]
+const AT_REMOVEDIR_KEN: i32 = 0x200;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn openat(dirfd: i32, pathname: *const std::os::raw::c_char, flags: i32, mode: u32) -> i32;
+    fn mkdirat(dirfd: i32, pathname: *const std::os::raw::c_char, mode: u32) -> i32;
+    fn unlinkat(dirfd: i32, pathname: *const std::os::raw::c_char, flags: i32) -> i32;
+    fn renameat(
+        olddirfd: i32,
+        oldpath: *const std::os::raw::c_char,
+        newdirfd: i32,
+        newpath: *const std::os::raw::c_char,
+    ) -> i32;
+    fn readlinkat(
+        dirfd: i32,
+        pathname: *const std::os::raw::c_char,
+        buf: *mut std::os::raw::c_char,
+        bufsiz: usize,
+    ) -> isize;
+}
+
+#[cfg(unix)]
+fn c_component(component: &[u8]) -> io::Result<CString> {
+    if component.is_empty() || component == b"." || component == b".." || component.contains(&b'/')
+    {
+        return Err(io::Error::from(io::ErrorKind::InvalidInput));
     }
-    result
+    CString::new(component).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
+}
+
+#[cfg(unix)]
+fn openat_handle(
+    parent: &std::sync::Arc<OwnedFd>,
+    leaf: &[u8],
+    flags: i32,
+) -> io::Result<std::sync::Arc<OwnedFd>> {
+    let leaf = c_component(leaf)?;
+    // SAFETY: `leaf` is NUL-terminated, `parent` owns a live descriptor, and
+    // successful `openat` transfers a new owned descriptor to Rust.
+    let fd = unsafe {
+        openat(
+            parent.as_raw_fd(),
+            leaf.as_ptr(),
+            flags | O_CLOEXEC_KEN,
+            0o666,
+        )
+    };
+    if fd < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        // SAFETY: `fd` is newly returned by `openat` and uniquely owned here.
+        Ok(std::sync::Arc::new(unsafe { OwnedFd::from_raw_fd(fd) }))
+    }
+}
+
+#[cfg(unix)]
+fn readlinkat_bytes(parent: &std::sync::Arc<OwnedFd>, leaf: &[u8]) -> io::Result<Vec<u8>> {
+    let leaf = c_component(leaf)?;
+    let mut bytes = vec![0u8; 4096];
+    // SAFETY: buffers are live for the call and `leaf` is NUL-terminated.
+    let count = unsafe {
+        readlinkat(
+            parent.as_raw_fd(),
+            leaf.as_ptr(),
+            bytes.as_mut_ptr().cast(),
+            bytes.len(),
+        )
+    };
+    if count < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        bytes.truncate(count as usize);
+        Ok(bytes)
+    }
+}
+
+#[cfg(unix)]
+fn posix_file(handle: &std::sync::Arc<OwnedFd>) -> io::Result<std::fs::File> {
+    Ok(std::fs::File::from(handle.as_ref().try_clone()?))
 }
 
 /// Real process stdio handler. Rust binaries already avoid terminating on a
 /// broken pipe on supported platforms; the explicit mask pins the ABI rule at
 /// the driver boundary as well.
-pub struct PosixHost;
+pub struct PosixHost {
+    #[cfg(unix)]
+    root: std::sync::Arc<OwnedFd>,
+}
 
 impl PosixHost {
     pub fn new() -> Self {
+        Self::new_at(".")
+    }
+
+    pub fn new_at(path: impl AsRef<std::path::Path>) -> Self {
         mask_sigpipe();
-        Self
+        #[cfg(unix)]
+        {
+            let file = std::fs::File::open(path).expect("open filesystem capability root");
+            Self {
+                root: std::sync::Arc::new(file.into()),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = path;
+            Self {}
+        }
+    }
+
+    pub fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let metadata = posix_file(&self.root)
+                .and_then(|file| file.metadata())
+                .expect("stat process working directory");
+            let identity = capabilities::FsIdentity::Posix {
+                device: metadata.dev(),
+                inode: metadata.ino(),
+            };
+            let rights = if authority == capabilities::AUTH_FULL {
+                capabilities::RightSet::ALL
+            } else if authority == capabilities::AUTH_PARTIAL {
+                capabilities::RightSet::READ
+                    .union(capabilities::RightSet::ENUMERATE)
+                    .union(capabilities::RightSet::METADATA)
+            } else {
+                capabilities::RightSet::NONE
+            };
+            capabilities::Cap::mint_scoped(
+                authority,
+                "FS",
+                capabilities::FsScope::root(
+                    rights,
+                    capabilities::FsHandle::Posix(self.root.clone()),
+                    identity,
+                    capabilities::SymlinkPolicy::NoFollow,
+                ),
+            )
+        }
+        #[cfg(not(unix))]
+        {
+            capabilities::Cap::mint(authority, "FS")
+        }
+    }
+
+    pub fn mint_scoped_fs_cap(
+        &self,
+        authority: capabilities::Authority,
+        relative_root: &[u8],
+        rights: capabilities::RightSet,
+        symlink: capabilities::SymlinkPolicy,
+    ) -> io::Result<capabilities::Cap> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if relative_root.starts_with(b"/") {
+                return Err(io::Error::from(io::ErrorKind::InvalidInput));
+            }
+            let root_metadata = posix_file(&self.root)?.metadata()?;
+            let mut handle = self.root.clone();
+            let mut lineage = vec![capabilities::FsIdentity::Posix {
+                device: root_metadata.dev(),
+                inode: root_metadata.ino(),
+            }];
+            for component in relative_root.split(|byte| *byte == b'/') {
+                if component.is_empty() || component == b"." {
+                    continue;
+                }
+                if component == b".." {
+                    return Err(io::Error::from(io::ErrorKind::InvalidInput));
+                }
+                handle = openat_handle(
+                    &handle,
+                    component,
+                    O_RDONLY_KEN | O_DIRECTORY_KEN | O_NOFOLLOW_KEN,
+                )?;
+                let metadata = posix_file(&handle)?.metadata()?;
+                lineage.push(capabilities::FsIdentity::Posix {
+                    device: metadata.dev(),
+                    inode: metadata.ino(),
+                });
+            }
+            Ok(capabilities::Cap::mint_scoped(
+                authority,
+                "FS",
+                capabilities::FsScope {
+                    rights,
+                    root: capabilities::FsHandle::Posix(handle),
+                    lineage,
+                    symlink,
+                    empty: false,
+                },
+            ))
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (relative_root, rights, symlink);
+            Ok(capabilities::Cap::mint(authority, "FS"))
+        }
     }
 }
 
@@ -2301,6 +2514,11 @@ impl Default for PosixHost {
 }
 
 impl HostHandler for PosixHost {
+    #[cfg(unix)]
+    type Handle = std::sync::Arc<OwnedFd>;
+    #[cfg(not(unix))]
+    type Handle = u64;
+
     fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead> {
         if stream != ConsoleStream::Stdin {
             return Err(io::Error::new(
@@ -2348,6 +2566,374 @@ impl HostHandler for PosixHost {
             ConsoleStream::Stderr => io::stderr().is_terminal(),
         }
     }
+
+    fn fs_resolve(
+        &mut self,
+        root: &capabilities::FsHandle,
+        components: &[Vec<u8>],
+        op: FsOpKind,
+        symlink: capabilities::SymlinkPolicy,
+    ) -> Result<Resolution<Self::Handle>, ResolveError> {
+        #[cfg(unix)]
+        {
+            let capabilities::FsHandle::Posix(root) = root else {
+                return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
+            };
+            if components.is_empty() {
+                return Ok(Resolution::Existing(root.clone()));
+            }
+            let mut stack = vec![root.clone()];
+            let mut pending = components.to_vec();
+            let mut index = 0;
+            let mut symlink_hops = 0usize;
+            while index < pending.len() {
+                let component = pending[index].clone();
+                if component.is_empty() || component == b"." {
+                    index += 1;
+                    continue;
+                }
+                if component == b".." {
+                    return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
+                }
+                let last = index + 1 == pending.len();
+                let current = stack.last().expect("root handle").clone();
+                if last && op.resolves_parent() {
+                    if readlinkat_bytes(&current, &component).is_ok() {
+                        if symlink == capabilities::SymlinkPolicy::NoFollow {
+                            return Err(ResolveError::Denied(CapabilityDenied::SymlinkDenied));
+                        }
+                    }
+                    return Ok(Resolution::Parent(current, component));
+                }
+                let flags = if !last || op == FsOpKind::Enumerate {
+                    O_RDONLY_KEN | O_DIRECTORY_KEN | O_NOFOLLOW_KEN
+                } else if matches!(op, FsOpKind::Write | FsOpKind::Append) {
+                    O_RDWR_KEN | O_NOFOLLOW_KEN
+                } else {
+                    O_RDONLY_KEN | O_NOFOLLOW_KEN
+                };
+                match openat_handle(&current, &component, flags) {
+                    Ok(handle) => {
+                        if last {
+                            return Ok(Resolution::Existing(handle));
+                        }
+                        stack.push(handle);
+                        index += 1;
+                    }
+                    Err(error) => match readlinkat_bytes(&current, &component) {
+                        Ok(target) => {
+                            if symlink == capabilities::SymlinkPolicy::NoFollow {
+                                return Err(ResolveError::Denied(CapabilityDenied::SymlinkDenied));
+                            }
+                            symlink_hops += 1;
+                            if symlink_hops > 40 {
+                                return Err(ResolveError::Denied(
+                                    CapabilityDenied::SymlinkDenied,
+                                ));
+                            }
+                            if target.starts_with(b"/") {
+                                return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
+                            }
+                            let mut replacement = Vec::new();
+                            for part in target.split(|byte| *byte == b'/') {
+                                if part.is_empty() || part == b"." {
+                                    continue;
+                                }
+                                if part == b".." {
+                                    if stack.len() == 1 {
+                                        return Err(ResolveError::Denied(
+                                            CapabilityDenied::ScopeEscape,
+                                        ));
+                                    }
+                                    stack.pop();
+                                } else {
+                                    replacement.push(part.to_vec());
+                                }
+                            }
+                            replacement.extend_from_slice(&pending[index + 1..]);
+                            pending = replacement;
+                            index = 0;
+                        }
+                        Err(_)
+                            if error.kind() == io::ErrorKind::NotFound
+                                && last
+                                && matches!(op, FsOpKind::Write | FsOpKind::Append) =>
+                        {
+                            return Ok(Resolution::Parent(current, component));
+                        }
+                        Err(_) => return Err(ResolveError::Io(error)),
+                    },
+                }
+            }
+            Ok(Resolution::Existing(
+                stack.last().expect("root handle").clone(),
+            ))
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (root, components, op, symlink);
+            Err(ResolveError::Io(io::Error::from(
+                io::ErrorKind::Unsupported,
+            )))
+        }
+    }
+
+    fn fs_read_at(&mut self, handle: &Self::Handle) -> io::Result<Vec<u8>> {
+        #[cfg(unix)]
+        {
+            let mut file = posix_file(handle)?;
+            file.seek(SeekFrom::Start(0))?;
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)?;
+            Ok(bytes)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = handle;
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
+    fn fs_write_at(
+        &mut self,
+        handle: &Self::Handle,
+        policy: HostCreatePolicy,
+        bytes: &[u8],
+    ) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            if policy == HostCreatePolicy::CreateNew {
+                return Err(io::Error::from(io::ErrorKind::AlreadyExists));
+            }
+            if policy == HostCreatePolicy::CreateOrKeep {
+                return Ok(());
+            }
+            let mut file = posix_file(handle)?;
+            file.set_len(0)?;
+            file.seek(SeekFrom::Start(0))?;
+            file.write_all(bytes)?;
+            file.sync_all()
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (handle, policy, bytes);
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
+    fn fs_create_file_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        policy: HostCreatePolicy,
+        bytes: &[u8],
+    ) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            let flags = match policy {
+                HostCreatePolicy::CreateNew => O_WRONLY_KEN | O_CREAT_KEN | O_EXCL_KEN,
+                HostCreatePolicy::CreateOrTruncate => O_WRONLY_KEN | O_CREAT_KEN | O_TRUNC_KEN,
+                HostCreatePolicy::CreateOrKeep => O_WRONLY_KEN | O_CREAT_KEN | O_EXCL_KEN,
+            } | O_NOFOLLOW_KEN;
+            match openat_handle(parent, leaf, flags) {
+                Ok(handle) => {
+                    let mut file = posix_file(&handle)?;
+                    file.write_all(bytes)?;
+                    file.sync_all()
+                }
+                Err(error)
+                    if policy == HostCreatePolicy::CreateOrKeep
+                        && error.kind() == io::ErrorKind::AlreadyExists =>
+                {
+                    Ok(())
+                }
+                Err(error) => Err(error),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (parent, leaf, policy, bytes);
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
+    fn fs_append_at(&mut self, handle: &Self::Handle, bytes: &[u8]) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            let mut file = posix_file(handle)?;
+            file.seek(SeekFrom::End(0))?;
+            file.write_all(bytes)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (handle, bytes);
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
+    fn fs_create_append_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        bytes: &[u8],
+    ) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            let h = openat_handle(
+                parent,
+                leaf,
+                O_WRONLY_KEN | O_CREAT_KEN | O_APPEND_KEN | O_NOFOLLOW_KEN,
+            )?;
+            let mut file = posix_file(&h)?;
+            file.write_all(bytes)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (parent, leaf, bytes);
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
+    fn fs_metadata_at(&mut self, handle: &Self::Handle) -> io::Result<HostFileMetadata> {
+        #[cfg(unix)]
+        {
+            let metadata = posix_file(handle)?.metadata()?;
+            Ok(HostFileMetadata {
+                size: metadata.len(),
+                kind: metadata_kind(&metadata),
+            })
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = handle;
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
+    fn fs_read_directory_at(&mut self, handle: &Self::Handle) -> io::Result<Vec<HostDirEntry>> {
+        #[cfg(unix)]
+        {
+            let path = PathBuf::from(format!("/proc/self/fd/{}", handle.as_raw_fd()));
+            let mut entries = Vec::new();
+            for entry in std::fs::read_dir(path)? {
+                let entry = entry?;
+                entries.push(HostDirEntry {
+                    name: os_string_bytes(entry.file_name())?,
+                    kind: file_type_kind(&entry.file_type()?),
+                });
+            }
+            entries.sort_by(|left, right| left.name.cmp(&right.name));
+            Ok(entries)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = handle;
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
+    fn fs_create_directory_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        _recursive: bool,
+    ) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            let leaf = c_component(leaf)?;
+            let rc = unsafe { mkdirat(parent.as_raw_fd(), leaf.as_ptr(), 0o777) };
+            if rc == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (parent, leaf);
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
+    fn fs_remove_file_at(&mut self, parent: &Self::Handle, leaf: &[u8]) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            let leaf = c_component(leaf)?;
+            let rc = unsafe { unlinkat(parent.as_raw_fd(), leaf.as_ptr(), 0) };
+            if rc == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (parent, leaf);
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
+    fn fs_remove_directory_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        recursive: bool,
+    ) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            if recursive {
+                use std::os::unix::ffi::OsStrExt;
+
+                let mut target = PathBuf::from(format!("/proc/self/fd/{}", parent.as_raw_fd()));
+                target.push(std::ffi::OsStr::from_bytes(leaf));
+                return std::fs::remove_dir_all(target);
+            }
+            let leaf = c_component(leaf)?;
+            let rc = unsafe { unlinkat(parent.as_raw_fd(), leaf.as_ptr(), AT_REMOVEDIR_KEN) };
+            if rc == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (parent, leaf, recursive);
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
+    fn fs_rename_at(
+        &mut self,
+        from_parent: &Self::Handle,
+        from_leaf: &[u8],
+        to_parent: &Self::Handle,
+        to_leaf: &[u8],
+    ) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            let from = c_component(from_leaf)?;
+            let to = c_component(to_leaf)?;
+            let rc = unsafe {
+                renameat(
+                    from_parent.as_raw_fd(),
+                    from.as_ptr(),
+                    to_parent.as_raw_fd(),
+                    to.as_ptr(),
+                )
+            };
+            if rc == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (from_parent, from_leaf, to_parent, to_leaf);
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
 }
 
 /// Deterministic in-memory Console provider used by tests and embedding.
@@ -2359,8 +2945,21 @@ pub struct CaptureHost {
     terminals: [bool; 3],
     closed: [bool; 3],
     trace: Vec<ConsoleTrace>,
-    fs: BTreeMap<Vec<u8>, VirtualFsNode>,
+    fs_nodes: BTreeMap<VfsNodeId, VirtualFsNode>,
+    fs_entries: BTreeMap<(VfsNodeId, Vec<u8>), VfsNodeId>,
+    fs_parents: BTreeMap<VfsNodeId, (VfsNodeId, Vec<u8>)>,
+    next_fs_node: VfsNodeId,
     fs_trace: Vec<FsTrace>,
+    fs_denials: Vec<CapabilityDenied>,
+    fs_resolve_count: usize,
+    after_resolve_replace: Option<CaptureAfterResolveReplace>,
+}
+
+struct CaptureAfterResolveReplace {
+    from: Vec<u8>,
+    to: Vec<u8>,
+    replacement_file: Vec<u8>,
+    replacement_bytes: Vec<u8>,
 }
 
 impl CaptureHost {
@@ -2373,8 +2972,14 @@ impl CaptureHost {
             terminals: [false; 3],
             closed: [false; 3],
             trace: Vec::new(),
-            fs: BTreeMap::new(),
+            fs_nodes: [(0, VirtualFsNode::Directory)].into_iter().collect(),
+            fs_entries: BTreeMap::new(),
+            fs_parents: BTreeMap::new(),
+            next_fs_node: 1,
             fs_trace: Vec::new(),
+            fs_denials: Vec::new(),
+            fs_resolve_count: 0,
+            after_resolve_replace: None,
         }
     }
 
@@ -2399,24 +3004,169 @@ impl CaptureHost {
     }
 
     pub fn insert_file(&mut self, path: impl Into<Vec<u8>>, bytes: impl Into<Vec<u8>>) {
-        self.fs
-            .insert(path.into(), VirtualFsNode::File(bytes.into()));
+        self.insert_virtual(path.into(), VirtualFsNode::File(bytes.into()));
     }
 
     pub fn insert_directory(&mut self, path: impl Into<Vec<u8>>) {
-        self.fs.insert(path.into(), VirtualFsNode::Directory);
+        self.insert_virtual(path.into(), VirtualFsNode::Directory);
     }
 
-    pub fn fs_nodes(&self) -> &BTreeMap<Vec<u8>, VirtualFsNode> {
-        &self.fs
+    pub fn insert_symlink(&mut self, path: impl Into<Vec<u8>>, target: impl Into<Vec<u8>>) {
+        self.insert_virtual(path.into(), VirtualFsNode::Symlink(target.into()));
+    }
+
+    pub fn fs_nodes(&self) -> BTreeMap<Vec<u8>, VirtualFsNode> {
+        self.fs_nodes
+            .iter()
+            .filter_map(|(id, node)| {
+                if *id == 0 {
+                    None
+                } else {
+                    Some((self.virtual_path(*id), node.clone()))
+                }
+            })
+            .collect()
     }
 
     pub fn fs_trace(&self) -> &[FsTrace] {
         &self.fs_trace
     }
+
+    pub fn fs_denials(&self) -> &[CapabilityDenied] {
+        &self.fs_denials
+    }
+
+    pub fn fs_resolve_count(&self) -> usize {
+        self.fs_resolve_count
+    }
+
+    pub fn replace_subtree_after_next_resolve(
+        &mut self,
+        from: impl Into<Vec<u8>>,
+        to: impl Into<Vec<u8>>,
+        replacement_file: impl Into<Vec<u8>>,
+        replacement_bytes: impl Into<Vec<u8>>,
+    ) {
+        self.after_resolve_replace = Some(CaptureAfterResolveReplace {
+            from: from.into(),
+            to: to.into(),
+            replacement_file: replacement_file.into(),
+            replacement_bytes: replacement_bytes.into(),
+        });
+    }
+
+    pub fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap {
+        self.mint_scoped_fs_cap(
+            authority,
+            b"",
+            if authority == capabilities::AUTH_FULL {
+                capabilities::RightSet::ALL
+            } else if authority == capabilities::AUTH_PARTIAL {
+                capabilities::RightSet::READ
+                    .union(capabilities::RightSet::ENUMERATE)
+                    .union(capabilities::RightSet::METADATA)
+            } else {
+                capabilities::RightSet::NONE
+            },
+            capabilities::SymlinkPolicy::NoFollow,
+        )
+        .expect("capture root exists")
+    }
+
+    pub fn mint_scoped_fs_cap(
+        &self,
+        authority: capabilities::Authority,
+        path: &[u8],
+        rights: capabilities::RightSet,
+        symlink: capabilities::SymlinkPolicy,
+    ) -> io::Result<capabilities::Cap> {
+        let mut node = 0;
+        let mut lineage = vec![capabilities::FsIdentity::Virtual(0)];
+        for component in path
+            .split(|byte| *byte == b'/')
+            .filter(|part| !part.is_empty())
+        {
+            node = *self
+                .fs_entries
+                .get(&(node, component.to_vec()))
+                .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+            lineage.push(capabilities::FsIdentity::Virtual(node));
+        }
+        Ok(capabilities::Cap::mint_scoped(
+            authority,
+            "FS",
+            capabilities::FsScope {
+                rights,
+                root: capabilities::FsHandle::Virtual(node),
+                lineage,
+                symlink,
+                empty: false,
+            },
+        ))
+    }
+
+    fn insert_virtual(&mut self, path: Vec<u8>, node: VirtualFsNode) -> VfsNodeId {
+        let mut parent = 0;
+        let components: Vec<_> = path
+            .split(|byte| *byte == b'/')
+            .filter(|part| !part.is_empty())
+            .map(<[u8]>::to_vec)
+            .collect();
+        let (leaf, ancestors) = components.split_last().expect("virtual path is non-empty");
+        for component in ancestors {
+            parent = if let Some(id) = self.fs_entries.get(&(parent, component.clone())) {
+                *id
+            } else {
+                let id = self.next_fs_node;
+                self.next_fs_node += 1;
+                self.fs_nodes.insert(id, VirtualFsNode::Directory);
+                self.fs_entries.insert((parent, component.clone()), id);
+                self.fs_parents.insert(id, (parent, component.clone()));
+                id
+            };
+        }
+        if let Some(id) = self.fs_entries.get(&(parent, leaf.clone())).copied() {
+            self.fs_nodes.insert(id, node);
+            id
+        } else {
+            let id = self.next_fs_node;
+            self.next_fs_node += 1;
+            self.fs_nodes.insert(id, node);
+            self.fs_entries.insert((parent, leaf.clone()), id);
+            self.fs_parents.insert(id, (parent, leaf.clone()));
+            id
+        }
+    }
+
+    fn virtual_path(&self, mut node: VfsNodeId) -> Vec<u8> {
+        let mut parts = Vec::new();
+        while let Some((parent, name)) = self.fs_parents.get(&node) {
+            parts.push(name.clone());
+            node = *parent;
+        }
+        parts.reverse();
+        parts.join(&b'/')
+    }
+
+    fn parent_and_leaf(&self, path: &[u8]) -> Option<(VfsNodeId, Vec<u8>)> {
+        let mut parts = path
+            .split(|byte| *byte == b'/')
+            .filter(|part| !part.is_empty())
+            .peekable();
+        let mut parent = 0;
+        while let Some(part) = parts.next() {
+            if parts.peek().is_none() {
+                return Some((parent, part.to_vec()));
+            }
+            parent = *self.fs_entries.get(&(parent, part.to_vec()))?;
+        }
+        None
+    }
 }
 
 impl HostHandler for CaptureHost {
+    type Handle = VfsNodeId;
+
     fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead> {
         self.trace.push(ConsoleTrace::Read { stream, limit });
         if stream != ConsoleStream::Stdin {
@@ -2472,64 +3222,218 @@ impl HostHandler for CaptureHost {
         self.terminals[stream_index(stream)]
     }
 
-    fn fs_read(&mut self, path: &[u8]) -> io::Result<Vec<u8>> {
+    fn fs_denied(&mut self, denial: CapabilityDenied) {
+        self.fs_denials.push(denial);
+    }
+
+    fn fs_after_resolve(&mut self) {
+        let Some(replacement) = self.after_resolve_replace.take() else {
+            return;
+        };
+        let (from_parent, from_leaf) = self
+            .parent_and_leaf(&replacement.from)
+            .expect("hook source parent exists");
+        let (to_parent, to_leaf) = self
+            .parent_and_leaf(&replacement.to)
+            .expect("hook destination parent exists");
+        let node = self
+            .fs_entries
+            .remove(&(from_parent, from_leaf))
+            .expect("hook source exists");
+        self.fs_entries.insert((to_parent, to_leaf.clone()), node);
+        self.fs_parents.insert(node, (to_parent, to_leaf));
+        self.insert_directory(replacement.from);
+        self.insert_file(replacement.replacement_file, replacement.replacement_bytes);
+    }
+
+    fn fs_resolve(
+        &mut self,
+        root: &capabilities::FsHandle,
+        components: &[Vec<u8>],
+        op: FsOpKind,
+        symlink: capabilities::SymlinkPolicy,
+    ) -> Result<Resolution<Self::Handle>, ResolveError> {
+        self.fs_resolve_count += 1;
+        let capabilities::FsHandle::Virtual(root) = root else {
+            return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
+        };
+        let mut stack = vec![*root];
+        let mut pending = components.to_vec();
+        let mut index = 0;
+        let mut symlink_hops = 0usize;
+        while index < pending.len() {
+            let part = pending[index].clone();
+            if part.is_empty() || part == b"." {
+                index += 1;
+                continue;
+            }
+            if part == b".." {
+                return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
+            }
+            let current = *stack.last().expect("root node");
+            let last = index + 1 == pending.len();
+            if last && op.resolves_parent() {
+                if let Some(id) = self.fs_entries.get(&(current, part.clone())) {
+                    if matches!(self.fs_nodes.get(id), Some(VirtualFsNode::Symlink(_)))
+                        && symlink == capabilities::SymlinkPolicy::NoFollow
+                    {
+                        return Err(ResolveError::Denied(CapabilityDenied::SymlinkDenied));
+                    }
+                }
+                return Ok(Resolution::Parent(current, part));
+            }
+            let Some(child) = self.fs_entries.get(&(current, part.clone())).copied() else {
+                if last && matches!(op, FsOpKind::Write | FsOpKind::Append) {
+                    return Ok(Resolution::Parent(current, part));
+                }
+                return Err(ResolveError::Io(io::Error::from(io::ErrorKind::NotFound)));
+            };
+            match self.fs_nodes.get(&child) {
+                Some(VirtualFsNode::Symlink(target)) => {
+                    if symlink == capabilities::SymlinkPolicy::NoFollow {
+                        return Err(ResolveError::Denied(CapabilityDenied::SymlinkDenied));
+                    }
+                    symlink_hops += 1;
+                    if symlink_hops > 40 {
+                        return Err(ResolveError::Denied(CapabilityDenied::SymlinkDenied));
+                    }
+                    if target.starts_with(b"/") {
+                        return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
+                    }
+                    let mut replacement = Vec::new();
+                    for target_part in target.split(|byte| *byte == b'/') {
+                        if target_part.is_empty() || target_part == b"." {
+                            continue;
+                        }
+                        if target_part == b".." {
+                            if stack.len() == 1 {
+                                return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
+                            }
+                            stack.pop();
+                        } else {
+                            replacement.push(target_part.to_vec());
+                        }
+                    }
+                    replacement.extend_from_slice(&pending[index + 1..]);
+                    pending = replacement;
+                    index = 0;
+                }
+                Some(VirtualFsNode::Directory) if !last => {
+                    stack.push(child);
+                    index += 1;
+                }
+                Some(_) if last => return Ok(Resolution::Existing(child)),
+                Some(_) => {
+                    return Err(ResolveError::Io(io::Error::from(
+                        io::ErrorKind::NotADirectory,
+                    )))
+                }
+                None => return Err(ResolveError::Io(io::Error::from(io::ErrorKind::NotFound))),
+            }
+        }
+        Ok(Resolution::Existing(*stack.last().expect("root node")))
+    }
+
+    fn fs_read_at(&mut self, handle: &Self::Handle) -> io::Result<Vec<u8>> {
         self.fs_trace.push(FsTrace::ReadFile {
-            path: path.to_vec(),
+            path: self.virtual_path(*handle),
         });
-        match self.fs.get(path) {
+        match self.fs_nodes.get(handle) {
             Some(VirtualFsNode::File(bytes)) => Ok(bytes.clone()),
             Some(VirtualFsNode::Directory) => Err(io::Error::from(io::ErrorKind::IsADirectory)),
-            None => Err(io::Error::from(io::ErrorKind::NotFound)),
+            _ => Err(io::Error::from(io::ErrorKind::NotFound)),
         }
     }
 
-    fn fs_write(&mut self, path: &[u8], policy: HostCreatePolicy, bytes: &[u8]) -> io::Result<()> {
+    fn fs_write_at(
+        &mut self,
+        handle: &Self::Handle,
+        policy: HostCreatePolicy,
+        bytes: &[u8],
+    ) -> io::Result<()> {
+        let path = self.virtual_path(*handle);
         self.fs_trace.push(FsTrace::WriteFile {
-            path: path.to_vec(),
+            path,
             policy,
             bytes: bytes.to_vec(),
         });
-        if matches!(self.fs.get(path), Some(VirtualFsNode::Directory)) {
-            return Err(io::Error::from(io::ErrorKind::IsADirectory));
-        }
-        match policy {
-            HostCreatePolicy::CreateNew if self.fs.contains_key(path) => {
-                Err(io::Error::from(io::ErrorKind::AlreadyExists))
-            }
-            HostCreatePolicy::CreateOrKeep if self.fs.contains_key(path) => Ok(()),
-            _ => {
-                self.fs
-                    .insert(path.to_vec(), VirtualFsNode::File(bytes.to_vec()));
+        match self.fs_nodes.get_mut(handle) {
+            Some(VirtualFsNode::File(contents)) => match policy {
+                HostCreatePolicy::CreateNew => Err(io::Error::from(io::ErrorKind::AlreadyExists)),
+                HostCreatePolicy::CreateOrKeep => Ok(()),
+                HostCreatePolicy::CreateOrTruncate => {
+                    *contents = bytes.to_vec();
                 Ok(())
             }
+            },
+            Some(VirtualFsNode::Directory) => Err(io::Error::from(io::ErrorKind::IsADirectory)),
+            _ => Err(io::Error::from(io::ErrorKind::NotFound)),
         }
     }
 
-    fn fs_append(&mut self, path: &[u8], bytes: &[u8]) -> io::Result<()> {
-        self.fs_trace.push(FsTrace::AppendFile {
-            path: path.to_vec(),
+    fn fs_create_file_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        policy: HostCreatePolicy,
+        bytes: &[u8],
+    ) -> io::Result<()> {
+        let mut path = self.virtual_path(*parent);
+        if !path.is_empty() {
+            path.push(b'/');
+        }
+        path.extend_from_slice(leaf);
+        self.fs_trace.push(FsTrace::WriteFile {
+            path,
+            policy,
             bytes: bytes.to_vec(),
         });
-        match self.fs.entry(path.to_vec()) {
-            std::collections::btree_map::Entry::Vacant(entry) => {
-                entry.insert(VirtualFsNode::File(bytes.to_vec()));
+        if self.fs_entries.contains_key(&(*parent, leaf.to_vec())) {
+            return if policy == HostCreatePolicy::CreateOrKeep {
+                Ok(())
+            } else {
+                Err(io::Error::from(io::ErrorKind::AlreadyExists))
+            };
+        }
+        let id = self.next_fs_node;
+        self.next_fs_node += 1;
+        self.fs_nodes
+            .insert(id, VirtualFsNode::File(bytes.to_vec()));
+        self.fs_entries.insert((*parent, leaf.to_vec()), id);
+        self.fs_parents.insert(id, (*parent, leaf.to_vec()));
                 Ok(())
             }
-            std::collections::btree_map::Entry::Occupied(mut entry) => match entry.get_mut() {
-                VirtualFsNode::File(contents) => {
+
+    fn fs_append_at(&mut self, handle: &Self::Handle, bytes: &[u8]) -> io::Result<()> {
+        let path = self.virtual_path(*handle);
+        self.fs_trace.push(FsTrace::AppendFile {
+            path,
+            bytes: bytes.to_vec(),
+        });
+        match self.fs_nodes.get_mut(handle) {
+            Some(VirtualFsNode::File(contents)) => {
                     contents.extend_from_slice(bytes);
                     Ok(())
                 }
-                VirtualFsNode::Directory => Err(io::Error::from(io::ErrorKind::IsADirectory)),
-            },
+            Some(VirtualFsNode::Directory) => Err(io::Error::from(io::ErrorKind::IsADirectory)),
+            _ => Err(io::Error::from(io::ErrorKind::NotFound)),
         }
     }
 
-    fn fs_metadata(&mut self, path: &[u8]) -> io::Result<HostFileMetadata> {
+    fn fs_create_append_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        bytes: &[u8],
+    ) -> io::Result<()> {
+        self.fs_create_file_at(parent, leaf, HostCreatePolicy::CreateOrTruncate, bytes)
+    }
+
+    fn fs_metadata_at(&mut self, handle: &Self::Handle) -> io::Result<HostFileMetadata> {
         self.fs_trace.push(FsTrace::Metadata {
-            path: path.to_vec(),
+            path: self.virtual_path(*handle),
         });
-        match self.fs.get(path) {
+        match self.fs_nodes.get(handle) {
             Some(VirtualFsNode::File(bytes)) => Ok(HostFileMetadata {
                 size: bytes.len() as u64,
                 kind: HostFileKind::File,
@@ -2538,124 +3442,135 @@ impl HostHandler for CaptureHost {
                 size: 0,
                 kind: HostFileKind::Directory,
             }),
+            Some(VirtualFsNode::Symlink(target)) => Ok(HostFileMetadata {
+                size: target.len() as u64,
+                kind: HostFileKind::Symlink,
+            }),
             None => Err(io::Error::from(io::ErrorKind::NotFound)),
         }
     }
 
-    fn fs_read_directory(&mut self, path: &[u8]) -> io::Result<Vec<HostDirEntry>> {
+    fn fs_read_directory_at(&mut self, handle: &Self::Handle) -> io::Result<Vec<HostDirEntry>> {
         self.fs_trace.push(FsTrace::ReadDirectory {
-            path: path.to_vec(),
+            path: self.virtual_path(*handle),
         });
-        match self.fs.get(path) {
-            Some(VirtualFsNode::File(_)) => {
+        if !matches!(self.fs_nodes.get(handle), Some(VirtualFsNode::Directory)) {
                 return Err(io::Error::from(io::ErrorKind::NotADirectory));
             }
-            None => return Err(io::Error::from(io::ErrorKind::NotFound)),
-            Some(VirtualFsNode::Directory) => {}
-        }
-        let prefix = child_prefix(path);
-        let mut entries = Vec::new();
-        for (candidate, node) in &self.fs {
-            let Some(rest) = candidate.as_slice().strip_prefix(prefix.as_slice()) else {
-                continue;
-            };
-            if rest.is_empty() || rest.contains(&b'/') {
-                continue;
-            }
-            entries.push(HostDirEntry {
-                name: rest.to_vec(),
-                kind: virtual_kind(node),
-            });
-        }
-        Ok(entries)
+        Ok(self
+            .fs_entries
+            .iter()
+            .filter_map(|((parent, name), id)| {
+                (*parent == *handle).then(|| HostDirEntry {
+                    name: name.clone(),
+                    kind: virtual_kind(self.fs_nodes.get(id).expect("entry node")),
+                })
+            })
+            .collect())
     }
 
-    fn fs_create_directory(&mut self, path: &[u8], recursive: bool) -> io::Result<()> {
-        self.fs_trace.push(FsTrace::CreateDirectory {
-            path: path.to_vec(),
-            recursive,
-        });
-        if self.fs.contains_key(path) {
+    fn fs_create_directory_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        recursive: bool,
+    ) -> io::Result<()> {
+        let mut path = self.virtual_path(*parent);
+        if !path.is_empty() {
+            path.push(b'/');
+        }
+        path.extend_from_slice(leaf);
+        self.fs_trace
+            .push(FsTrace::CreateDirectory { path, recursive });
+        if self.fs_entries.contains_key(&(*parent, leaf.to_vec())) {
             return Err(io::Error::from(io::ErrorKind::AlreadyExists));
         }
-        if !recursive {
-            let parent = parent_path(path);
-            if !parent.is_empty() && !matches!(self.fs.get(parent), Some(VirtualFsNode::Directory))
-            {
-                return Err(io::Error::from(io::ErrorKind::NotFound));
-            }
-        }
-        self.fs.insert(path.to_vec(), VirtualFsNode::Directory);
+        let id = self.next_fs_node;
+        self.next_fs_node += 1;
+        self.fs_nodes.insert(id, VirtualFsNode::Directory);
+        self.fs_entries.insert((*parent, leaf.to_vec()), id);
+        self.fs_parents.insert(id, (*parent, leaf.to_vec()));
         Ok(())
     }
 
-    fn fs_remove_file(&mut self, path: &[u8]) -> io::Result<()> {
-        self.fs_trace.push(FsTrace::RemoveFile {
-            path: path.to_vec(),
-        });
-        match self.fs.get(path) {
-            Some(VirtualFsNode::Directory) => Err(io::Error::from(io::ErrorKind::IsADirectory)),
-            Some(VirtualFsNode::File(_)) => {
-                self.fs.remove(path);
-                Ok(())
-            }
-            None => Err(io::Error::from(io::ErrorKind::NotFound)),
-        }
-    }
-
-    fn fs_remove_directory(&mut self, path: &[u8], recursive: bool) -> io::Result<()> {
-        self.fs_trace.push(FsTrace::RemoveDirectory {
-            path: path.to_vec(),
-            recursive,
-        });
-        match self.fs.get(path) {
-            Some(VirtualFsNode::File(_)) => {
-                return Err(io::Error::from(io::ErrorKind::NotADirectory));
-            }
-            None => return Err(io::Error::from(io::ErrorKind::NotFound)),
-            Some(VirtualFsNode::Directory) => {}
-        }
-        let prefix = child_prefix(path);
-        let descendants: Vec<_> = self
-            .fs
-            .keys()
-            .filter(|candidate| candidate.starts_with(&prefix))
-            .cloned()
-            .collect();
-        if !recursive && !descendants.is_empty() {
-            return Err(io::Error::from(io::ErrorKind::DirectoryNotEmpty));
-        }
-        for descendant in descendants {
-            self.fs.remove(&descendant);
-        }
-        self.fs.remove(path);
-        Ok(())
-    }
-
-    fn fs_rename(&mut self, from: &[u8], to: &[u8]) -> io::Result<()> {
-        self.fs_trace.push(FsTrace::Rename {
-            from: from.to_vec(),
-            to: to.to_vec(),
-        });
-        let Some(node) = self.fs.remove(from) else {
+    fn fs_remove_file_at(&mut self, parent: &Self::Handle, leaf: &[u8]) -> io::Result<()> {
+        let Some(id) = self.fs_entries.get(&(*parent, leaf.to_vec())).copied() else {
             return Err(io::Error::from(io::ErrorKind::NotFound));
         };
-        self.fs.insert(to.to_vec(), node);
-        let prefix = child_prefix(from);
-        let moved: Vec<_> = self
-            .fs
-            .keys()
-            .filter(|candidate| candidate.starts_with(&prefix))
-            .cloned()
-            .collect();
-        for old in moved {
-            if let Some(node) = self.fs.remove(&old) {
-                let suffix = &old[prefix.len()..];
-                let mut new = child_prefix(to);
-                new.extend_from_slice(suffix);
-                self.fs.insert(new, node);
-            }
+        let path = self.virtual_path(id);
+        self.fs_trace.push(FsTrace::RemoveFile { path });
+        if matches!(self.fs_nodes.get(&id), Some(VirtualFsNode::Directory)) {
+            return Err(io::Error::from(io::ErrorKind::IsADirectory));
         }
+        self.fs_entries.remove(&(*parent, leaf.to_vec()));
+        self.fs_parents.remove(&id);
+        self.fs_nodes.remove(&id);
+        Ok(())
+    }
+
+    fn fs_remove_directory_at(
+        &mut self,
+        parent: &Self::Handle,
+        leaf: &[u8],
+        recursive: bool,
+    ) -> io::Result<()> {
+        let Some(id) = self.fs_entries.get(&(*parent, leaf.to_vec())).copied() else {
+            return Err(io::Error::from(io::ErrorKind::NotFound));
+        };
+        let path = self.virtual_path(id);
+        self.fs_trace
+            .push(FsTrace::RemoveDirectory { path, recursive });
+        if !matches!(self.fs_nodes.get(&id), Some(VirtualFsNode::Directory)) {
+                return Err(io::Error::from(io::ErrorKind::NotADirectory));
+            }
+        let children: Vec<_> = self
+            .fs_entries
+            .iter()
+            .filter_map(|((p, n), child)| (*p == id).then_some((n.clone(), *child)))
+            .collect();
+        if !recursive && !children.is_empty() {
+            return Err(io::Error::from(io::ErrorKind::DirectoryNotEmpty));
+        }
+        fn remove_tree(host: &mut CaptureHost, id: VfsNodeId) {
+            let children: Vec<_> = host
+                .fs_entries
+                .iter()
+                .filter_map(|((p, n), child)| (*p == id).then_some((n.clone(), *child)))
+                .collect();
+            for (name, child) in children {
+                host.fs_entries.remove(&(id, name));
+                remove_tree(host, child);
+            }
+            host.fs_parents.remove(&id);
+            host.fs_nodes.remove(&id);
+        }
+        self.fs_entries.remove(&(*parent, leaf.to_vec()));
+        remove_tree(self, id);
+        Ok(())
+    }
+
+    fn fs_rename_at(
+        &mut self,
+        from_parent: &Self::Handle,
+        from_leaf: &[u8],
+        to_parent: &Self::Handle,
+        to_leaf: &[u8],
+    ) -> io::Result<()> {
+        let Some(id) = self.fs_entries.remove(&(*from_parent, from_leaf.to_vec())) else {
+            return Err(io::Error::from(io::ErrorKind::NotFound));
+        };
+        let mut from = self.virtual_path(id); // parent map still names the old entry
+        let mut to = self.virtual_path(*to_parent);
+        if !to.is_empty() {
+            to.push(b'/');
+        }
+        to.extend_from_slice(to_leaf);
+        self.fs_trace.push(FsTrace::Rename {
+            from: std::mem::take(&mut from),
+            to,
+        });
+        self.fs_entries.insert((*to_parent, to_leaf.to_vec()), id);
+        self.fs_parents.insert(id, (*to_parent, to_leaf.to_vec()));
         Ok(())
     }
 }
@@ -2664,22 +3579,8 @@ fn virtual_kind(node: &VirtualFsNode) -> HostFileKind {
     match node {
         VirtualFsNode::File(_) => HostFileKind::File,
         VirtualFsNode::Directory => HostFileKind::Directory,
+        VirtualFsNode::Symlink(_) => HostFileKind::Symlink,
     }
-}
-
-fn child_prefix(path: &[u8]) -> Vec<u8> {
-    let mut prefix = path.to_vec();
-    if !prefix.ends_with(b"/") {
-        prefix.push(b'/');
-    }
-    prefix
-}
-
-fn parent_path(path: &[u8]) -> &[u8] {
-    path.iter()
-        .rposition(|byte| *byte == b'/')
-        .map(|index| &path[..index])
-        .unwrap_or_default()
 }
 
 fn stream_index(stream: ConsoleStream) -> usize {
@@ -2844,32 +3745,65 @@ const WRITE_BYTES_REQUIRED_AUTHORITY: capabilities::Authority = capabilities::AU
 /// **Representation (fs-read-file-lines-flip D3, Architect ruling
 /// `evt_35knjqv2k941h`): a real opaque `EvalVal::Cap(capabilities::Cap)`,
 /// NOT the earlier `EvalVal::Int(level)` positional-scalar projection.**
-/// Structural self-evidence over a non-local type-gate+reachability
-/// argument for the sole runtime net — reads the `Authority` off the REAL
-/// minted struct, no re-mint from a bare scalar. Path-scope (R2′, excluding
-/// `dir2` under a `dir1` cap) stays Phase-2-deferred per
-/// `FS-driver-conformance.md` §2b; `path` is accepted for that future
-/// extension but not yet consulted.
+/// Structural self-evidence over a non-local type-gate+reachability argument
+/// for the runtime net — reads the authority, rights, and scoped root off the
+/// REAL minted struct, with no re-mint from a bare scalar. Scope and symlink
+/// confinement are then enforced by the handle-only resolver/operate seam.
 ///
 /// **Trust level (AC8): trusted Rust, conformance-netted, NOT kernel-backed**
 /// — this calls `capabilities::check_authority_sufficient`, a plain Rust
 /// `bool`-returning check, zero `declare_postulate`/`Obligation` emission.
-/// Distinct from `attenuate`'s *static* refinement obligation (kernel-
-/// re-checked via `discharge_attenuation`) — do not conflate the two.
-fn authorizes(
-    cap: &EvalVal,
-    _path: &[u8],
+/// Distinct from `attenuate`'s static refinement obligation: that emitted
+/// `Eq`+`Refl` discharge mirrors the elaborator-selected product meet and is
+/// not an independent kernel proof of the attenuation bound.
+pub fn check_fs_capability<'a>(
+    cap: &'a EvalVal,
+    op: FsOpKind,
     required: capabilities::Authority,
     operation: &str,
-) -> bool {
+) -> Result<&'a capabilities::FsScope, CapabilityDenied> {
     let cap = match cap {
         EvalVal::Cap(cap) => cap,
         // Malformed/non-Cap value carries no recognizable authority — fail
         // closed (BV3: a wrong `op_args` index lands here, over-rejects,
         // never a soundness hole).
-        _ => return false,
+        _ => return Err(CapabilityDenied::MalformedCapability),
     };
-    capabilities::check_authority_sufficient(cap, required, operation).is_ok()
+    let scope = cap.scope();
+    let right = op.required_right();
+    if !scope.rights.contains(right) {
+        return Err(CapabilityDenied::RightNotHeld {
+            op,
+            held_rights: scope.rights.bits(),
+        });
+    }
+    if capabilities::check_authority_sufficient(cap, required, operation).is_err() {
+        return Err(CapabilityDenied::AuthorityInsufficient);
+    }
+    if scope.empty {
+        return Err(CapabilityDenied::ScopeEscape);
+    }
+    Ok(scope)
+}
+
+pub fn fs_target_components(path: &[u8]) -> Result<Vec<Vec<u8>>, CapabilityDenied> {
+    if path.starts_with(b"/") {
+        return Err(CapabilityDenied::ScopeEscape);
+    }
+    let mut components = Vec::new();
+    for component in path.split(|byte| *byte == b'/') {
+        if component.is_empty() || component == b"." {
+            continue;
+        }
+        if component == b".." {
+            return Err(CapabilityDenied::ScopeEscape);
+        }
+        if component.contains(&0) {
+            return Err(CapabilityDenied::ScopeEscape);
+        }
+        components.push(component.to_vec());
+    }
+    Ok(components)
 }
 
 /// Map a `std::io::ErrorKind` to Ken's in-language `IOError` sum (D2, D5:
@@ -3001,12 +3935,13 @@ fn fs_dispatch<H: HostHandler>(
     };
     let unit = |store: &mut EvalStore| make_ctor(ids.unit_id, vec![], store);
 
-    let (path, operation, required, operation_name) = if op_id == fs.readfile_id {
+    let (path, operation, required, operation_name, op_kind) = if op_id == fs.readfile_id {
         (
             bytes_at(2)?,
             fs.op_read_file_id,
             READ_BYTES_REQUIRED_AUTHORITY,
             "fs_driver::read_file",
+            FsOpKind::Read,
         )
     } else if op_id == fs.writefile_id {
         (
@@ -3014,6 +3949,7 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_write_file_id,
             WRITE_BYTES_REQUIRED_AUTHORITY,
             "fs_driver::write_file",
+            FsOpKind::Write,
         )
     } else if op_id == fs.appendfile_id {
         (
@@ -3021,6 +3957,7 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_append_file_id,
             WRITE_BYTES_REQUIRED_AUTHORITY,
             "fs_driver::append_file",
+            FsOpKind::Append,
         )
     } else if op_id == fs.metadata_id {
         (
@@ -3028,6 +3965,7 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_metadata_id,
             READ_BYTES_REQUIRED_AUTHORITY,
             "fs_driver::metadata",
+            FsOpKind::Metadata,
         )
     } else if op_id == fs.readdirectory_id {
         (
@@ -3035,6 +3973,7 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_read_directory_id,
             READ_BYTES_REQUIRED_AUTHORITY,
             "fs_driver::read_directory",
+            FsOpKind::Enumerate,
         )
     } else if op_id == fs.createdirectory_id {
         (
@@ -3042,6 +3981,7 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_create_directory_id,
             WRITE_BYTES_REQUIRED_AUTHORITY,
             "fs_driver::create_directory",
+            FsOpKind::CreateDirectory,
         )
     } else if op_id == fs.removefile_id {
         (
@@ -3049,6 +3989,7 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_remove_file_id,
             WRITE_BYTES_REQUIRED_AUTHORITY,
             "fs_driver::remove_file",
+            FsOpKind::RemoveFile,
         )
     } else if op_id == fs.removedirectory_id {
         (
@@ -3056,6 +3997,7 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_remove_directory_id,
             WRITE_BYTES_REQUIRED_AUTHORITY,
             "fs_driver::remove_directory",
+            FsOpKind::RemoveDirectory,
         )
     } else if op_id == fs.rename_id {
         (
@@ -3063,18 +4005,44 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_rename_id,
             WRITE_BYTES_REQUIRED_AUTHORITY,
             "fs_driver::rename",
+            FsOpKind::RenameSource,
         )
     } else {
         return None;
     };
 
-    if !authorizes(cap, path, required, operation_name) {
-        return Some(Ok(fs_denied(operation, path, fs, ids, store)));
-    }
+    let scope = match check_fs_capability(cap, op_kind, required, operation_name) {
+        Ok(scope) => scope,
+        Err(denial) => {
+            handler.fs_denied(denial);
+            return Some(Ok(fs_denied(operation, path, fs, ids, store)));
+        }
+    };
+    let components = match fs_target_components(path) {
+        Ok(components) => components,
+        Err(denial) => {
+            handler.fs_denied(denial);
+            return Some(Ok(fs_denied(operation, path, fs, ids, store)));
+        }
+    };
+    let resolved = match handler.fs_resolve(&scope.root, &components, op_kind, scope.symlink) {
+        Ok(resolved) => resolved,
+        Err(ResolveError::Denied(denial)) => {
+            handler.fs_denied(denial);
+            return Some(Ok(fs_denied(operation, path, fs, ids, store)))
+        }
+        Err(ResolveError::Io(error)) => {
+            return Some(Ok(file_result(Err(error), operation, path, fs, ids, store)))
+        }
+    };
+    handler.fs_after_resolve();
 
     let response = if op_id == fs.readfile_id {
+        let Resolution::Existing(handle) = resolved else {
+            return Some(Err(()));
+        };
         file_result(
-            handler.fs_read(path).map(EvalVal::Bytes),
+            handler.fs_read_at(&handle).map(EvalVal::Bytes),
             operation,
             path,
             fs,
@@ -3097,10 +4065,14 @@ fn fs_dispatch<H: HostHandler>(
         let Some(contents) = bytes_at(4) else {
             return Some(Err(()));
         };
+        let result = match resolved {
+            Resolution::Existing(handle) => handler.fs_write_at(&handle, policy, contents),
+            Resolution::Parent(parent, leaf) => {
+                handler.fs_create_file_at(&parent, &leaf, policy, contents)
+            }
+        };
         file_result(
-            handler
-                .fs_write(path, policy, contents)
-                .map(|()| unit(store)),
+            result.map(|()| unit(store)),
             operation,
             path,
             fs,
@@ -3111,8 +4083,14 @@ fn fs_dispatch<H: HostHandler>(
         let Some(contents) = bytes_at(3) else {
             return Some(Err(()));
         };
+        let result = match resolved {
+            Resolution::Existing(handle) => handler.fs_append_at(&handle, contents),
+            Resolution::Parent(parent, leaf) => {
+                handler.fs_create_append_at(&parent, &leaf, contents)
+            }
+        };
         file_result(
-            handler.fs_append(path, contents).map(|()| unit(store)),
+            result.map(|()| unit(store)),
             operation,
             path,
             fs,
@@ -3120,7 +4098,10 @@ fn fs_dispatch<H: HostHandler>(
             store,
         )
     } else if op_id == fs.metadata_id {
-        let result = handler.fs_metadata(path).map(|metadata| {
+        let Resolution::Existing(handle) = resolved else {
+            return Some(Err(()));
+        };
+        let result = handler.fs_metadata_at(&handle).map(|metadata| {
             let kind = fs_kind_value(metadata.kind, fs, store);
             make_ctor(
                 fs.mk_file_metadata_id,
@@ -3130,7 +4111,10 @@ fn fs_dispatch<H: HostHandler>(
         });
         file_result(result, operation, path, fs, ids, store)
     } else if op_id == fs.readdirectory_id {
-        let result = handler.fs_read_directory(path).map(|entries| {
+        let Resolution::Existing(handle) = resolved else {
+            return Some(Err(()));
+        };
+        let result = handler.fs_read_directory_at(&handle).map(|entries| {
             entries.into_iter().rev().fold(
                 make_ctor(fs.nil_id, vec![EvalVal::Unknown], store),
                 |tail, entry| {
@@ -3151,9 +4135,12 @@ fn fs_dispatch<H: HostHandler>(
             Some(EvalVal::Ctor { id, .. }) if *id == ids.false_id => false,
             _ => return Some(Err(())),
         };
+        let Resolution::Parent(parent, leaf) = resolved else {
+            return Some(Err(()));
+        };
         file_result(
             handler
-                .fs_create_directory(path, recursive)
+                .fs_create_directory_at(&parent, &leaf, recursive)
                 .map(|()| unit(store)),
             operation,
             path,
@@ -3162,8 +4149,13 @@ fn fs_dispatch<H: HostHandler>(
             store,
         )
     } else if op_id == fs.removefile_id {
+        let Resolution::Parent(parent, leaf) = resolved else {
+            return Some(Err(()));
+        };
         file_result(
-            handler.fs_remove_file(path).map(|()| unit(store)),
+            handler
+                .fs_remove_file_at(&parent, &leaf)
+                .map(|()| unit(store)),
             operation,
             path,
             fs,
@@ -3176,9 +4168,12 @@ fn fs_dispatch<H: HostHandler>(
             Some(EvalVal::Ctor { id, .. }) if *id == ids.false_id => false,
             _ => return Some(Err(())),
         };
+        let Resolution::Parent(parent, leaf) = resolved else {
+            return Some(Err(()));
+        };
         file_result(
             handler
-                .fs_remove_directory(path, recursive)
+                .fs_remove_directory_at(&parent, &leaf, recursive)
                 .map(|()| unit(store)),
             operation,
             path,
@@ -3190,8 +4185,34 @@ fn fs_dispatch<H: HostHandler>(
         let Some(to) = bytes_at(3) else {
             return Some(Err(()));
         };
+        let Resolution::Parent(from_parent, from_leaf) = resolved else {
+            return Some(Err(()));
+        };
+        let to_components = match fs_target_components(to) {
+            Ok(components) => components,
+            Err(_) => return Some(Ok(fs_denied(operation, path, fs, ids, store))),
+        };
+        let to_resolution = match handler.fs_resolve(
+            &scope.root,
+            &to_components,
+            FsOpKind::RenameDestination,
+            scope.symlink,
+        ) {
+            Ok(resolution) => resolution,
+            Err(ResolveError::Denied(_)) => {
+                return Some(Ok(fs_denied(operation, path, fs, ids, store)))
+            }
+            Err(ResolveError::Io(error)) => {
+                return Some(Ok(file_result(Err(error), operation, path, fs, ids, store)))
+            }
+        };
+        let Resolution::Parent(to_parent, to_leaf) = to_resolution else {
+            return Some(Err(()));
+        };
         file_result(
-            handler.fs_rename(path, to).map(|()| unit(store)),
+            handler
+                .fs_rename_at(&from_parent, &from_leaf, &to_parent, &to_leaf)
+                .map(|()| unit(store)),
             operation,
             path,
             fs,

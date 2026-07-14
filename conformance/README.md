@@ -323,12 +323,14 @@ claim with no conformance case is a claim no one can rely on
 - `security/capabilities/seed-capabilities.md` — Sec2 authority discipline
   (`62`): no ambient authority (a no-cap/no-row `view` is inert), least by
   default, **monotone-downward attenuation** (the order-dual non-degenerate pair
-  — weaker-accepts/stronger-rejects — over a **kernel-backed** refinement bound,
-  unlike Sec1's erased labels; plus the enumerated absence of any amplifying
-  operation), transitive revocation (static contract; runtime membrane
-  `(oracle)`-deferred), statically-known audit points + declassify-in-delta, and
-  authority+flow composition (a `Net` write needs the capability **and** the
-  clearance — dropping either rejects).
+  — weaker-accepts/stronger-rejects — over a trusted-Rust + conformance-netted
+  refinement bound; plus the enumerated absence of any amplifying operation),
+  transitive revocation (static contract; runtime membrane `(oracle)`-deferred),
+  statically-known audit points + declassify-in-delta, authority+flow
+  composition, and I-5's **RED-UNTIL-I-5** least-privilege FS roots: named
+  pre-syscall denials, paired scope/right/symlink discriminators, product-meet
+  narrowing, byte-path-bypass absence, and the inode-pinned structural TOCTOU
+  oracle.
 - `security/trust-model/seed-trust-model.md` — Sec4 trust model & TCB (`64`):
   the **enumerable TCB** (empty ⟺ verified — the no-phantom `[landed producer]`
   `trusted_base()` pair, plus the completeness omission-net `[by construction]`:

@@ -136,6 +136,147 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > lands → **ONE combined SHA** → honesty gate → publish → **verify on main by CONTENT** →
 > §B retros → **I-4 ARC COMPLETE**.
 >
+> ### ⏭ 2026-07-14 (07:0x) — ⛔ CV BLOCKS I-5: THE DENIAL ORACLE DIDN'T ASSERT THE DENIAL
+> **⛔ CV BLOCK (narrow, CORRECT, endorsed `evt_6d4aw4987av7y`) on `c4d5f039`.**
+> **THE HOLE:** every deny path in `i5_scoped_capability.rs` **DISCARDS `drive(...)`'s returned
+> Ken `Result`** (lines 127/148/161/165/180/185/207). The tests assert the internal `fs_denied`
+> **observation hook** + an empty host trace — **but NEVER that the Ken program is told the op
+> failed.**
+> **⇒ A REGRESSION THAT RECORDS THE NAMED DENIAL, PERFORMS NO SYSCALL, AND RETURNS `Ok` TO KEN
+> LEAVES ALL 7 I-5 SECURITY TESTS GREEN.** The program would be told its write succeeded; the
+> file would not be written; the suite would be green. **The denial would be invisible to the
+> only party that matters — the Ken program.** `fs_denied` is an *observation hook*, NOT the
+> semantic result; the seed's contract says "denies/rejects".
+> **★ SAME SHAPE AS EVERY CATCH TODAY: a test that cannot fail on the axis that matters.** And
+> it landed on the **security net** — where it is least affordable, because confinement is
+> trusted-Rust-netted ⇒ **these tests ARE the guarantee.**
+> **FIX (narrow, CV-specified):** KEEP every named-variant + empty-trace assertion; **ADD: each
+> denied `drive(...)` result carries the `Err` constructor** (real prelude `Err` id — no
+> synthetic boolean, no stringly check). Accept arms already assert `Ok` ⇒ closes the pair:
+> **deny ⇒ `Err`, accept ⇒ `Ok`, same shape.** Rerun → fresh SHA → CV binary re-review.
+> **EVERYTHING ELSE ON THIS SHA IS CLEAN (CV verified, and it's a lot):** current-main ancestry
+> · 0 merges · **no kernel/Cargo/spec/catalog delta** · **conformance blobs BYTE-IDENTICAL to
+> `9a06d2a8`** (⇒ the cherry-pick worked — **no CC4 revert**) · **handle-only seam** · real
+> `run_io → fs_dispatch → check → resolve → *_at` reachability · **inode-pinned TOCTOU node-7
+> discriminator** · Cap-presence wording retained while the attenuation bound reads
+> emitted-but-degenerate. **The BUILD is right; the ORACLE was one assertion short of proving
+> it.** QA's APPROVE stands on every other axis; no mechanism re-review needed.
+> **★ CV BLOCKED ITS OWN WP's SECURITY TESTS** — the ones it authored the roots for — rather
+> than let a weak net pass. **Second time today CV refused an oracle that looked green and
+> asserted less than it claimed** (the first: the false "kernel-backed" bound, which was on
+> MAIN). That is exactly what the seat is for.
+> **▶ CC5 (Foundation): BLOCKED-ON-ARCHITECT** on a proof, not a bug — a recursive-eliminator
+> flip in `render_content_mode_preserves`. Impl checkpoint `d07b81a5`; **computation layer is
+> GREEN and the discriminator is real** (Group+Alt flat `ab cd` at width 5 AND 6, **broken at
+> width 4**, byte-identical repeat ⇒ the non-degenerate fit-flip pair I demanded). Architect is
+> in the proof-technique lane; the implementer **pushed back with exact source** (the flipping
+> arm is the **non-recursive `Text`** arm — no IH to apply — so the "apply the IH" diagnosis
+> doesn't fit). **Healthy technical dialogue; let it run. Watch for a stall, not a disagreement.**
+>
+> ### ⏭ 2026-07-14 (06:4x) — CC5 KICKED · I-5 CANDIDATE UP (the last Program-I WP)
+> **✅ CC5 KICKED (Foundation)** — `evt_3gt82v20k84hm`; frame `wp/cc5-pretty-doc @ f8196d9b`
+> (off `edb99c1e`). Handoff Gate: all 3 seats **`Context compacted`** (verified).
+> **★ THE CONSTRUCTIBILITY AUDIT PAID OFF AGAIN — AND IT AVOIDED SPENDING PAT'S DECISION.**
+> Grounded: **there is NO `string_length` primitive** (only `string_to_list_char` /
+> `list_char_to_string`); `String` is **opaque = constructible-NOT-destructible**. A renderer
+> **must measure width** (`group`/`alt` fit decisions) ⇒ **on an opaque `String` there is no
+> width to read.**
+> **TWO options existed:** (i) **cached-`Nat` width** — the CAT-5 `Source` / CC3 `ArgBytes`
+> idiom = **the THIRD occurrence**, which **Foundation's own CC3 carry says must trigger an
+> operator-facing substrate-unification decision**; or (ii) **`List Char`** — genuinely
+> destructible, structural `Nat` length, **laws provable**, **no cache, no certificate, NO TCB
+> QUESTION.**
+> **⇒ PINNED (ii).** We take the option that does **NOT spend the operator's decision.** (A law
+> over `∀ (s : String)` wouldn't reduce anyway — a neutral var is stuck; the exact wall CC2 hit
+> and confined.)
+> **★ AC2 IS THE WP: THE LAWS ARE PROOFS, NOT TESTS.** *"A test that renders two examples and
+> compares strings is NOT a law — it is a sample."* Architect will press exactly this. AC3/AC4
+> non-degenerate: the SAME `Doc` flat at width `w`, **broken at `w−1`** (a renderer that ALWAYS
+> or NEVER breaks passes a single-width test), and test **at the fit-flip boundary ±1**.
+> **▶ I-5 CANDIDATE UP: `wp/i5-scoped-capability-model @ c4d5f039`** — **base CURRENT** (they
+> rebased ✓) and **land-together achieved**: `conformance/` (CV's roots, cherry-picked — no
+> revert) + `crates/` (ken-cli, capabilities.rs, ken-interp eval/lib, `i5_scoped_capability.rs`)
+> in ONE branch. **ZERO kernel files ✓.** Now: QA → Architect terminal → CV → my honesty gate.
+> **My gate will check the SECURITY ACs specifically:** AC0 (**no surviving byte-path
+> `fs_*(&[u8])` on the trait — a survivor is a BYPASS**) · inode-keyed VFS + `Symlink` node ·
+> **structural TOCTOU** (resolve → rename parent entry → op still hits the pinned node) ·
+> non-degenerate deny/accept pairs · AC7 (no kernel-proved-confinement claims).
+>
+> ### ⏭ 2026-07-14 (06:3x) — CC4 CLOSED · ⚠ STALE-BASE HAZARD CAUGHT ON CV's I-5 ROOTS
+> **✅ CC4 CLOSED** — merged `edb99c1e`, verified by content, **all 3 §10 retros IN**
+> (impl `evt_1pejk1qx9z4w0`, QA `evt_5x8bg9xargh0`, leader `evt_4yng036wnkf35`).
+> **⏳ Foundation Handoff-Gate compaction RUNNING** (bg) → then **frame + kick CC5
+> (`Pretty.Doc`)**. **VERIFY THE DROPS before kicking; do NOT re-compact.**
+> **⚠⚠ STALE-BASE HAZARD — CAUGHT BEFORE ASSEMBLY (`evt_2jfgq6mt9c5fj`).** CV's I-5 conformance
+> roots `wp/i5-scoped-capability-conformance @ 9a06d2a8` are **content-clean** (exactly 2 files:
+> `seed-capabilities.md` + `conformance/README.md`, +202/−7) — **but its BASE is `92a1d3da`
+> (PRE-CC4)** while main is now `edb99c1e`. **`git merge-base --is-ancestor origin/main
+> 9a06d2a8` = NO.**
+> ⇒ **`git diff origin/main 9a06d2a8` LISTS CC4's FILES** (`Diagnostic/Core.ken.md`,
+> `Parsing/Cursor.ken.md`, `Text/Numeric.ken.md`, the CC4 harness) — **NOT because CV touched
+> them, but because CV's tree PREDATES them.** ⇒ **MERGING that branch (or trusting a naive
+> diff-vs-main) would REVERT CC4 — and the suite would very likely still be GREEN, because
+> CC4's own tests would revert with it.**
+> **⇒ RULED: assemble by `git cherry-pick 9a06d2a8`, NEVER `git merge` the branch.** Runtime
+> rebases onto `edb99c1e` FIRST, then picks, then **PROVES THE SCOPE** (`git show --stat` must
+> show exactly the 2 conformance files). **Any `catalog/`/`crates/` file appearing in the
+> assembled diff that they did not author ⇒ STOP: they picked up a revert.**
+> **★ THIS IS THE SHAPE OF EVERY CATCH TODAY: the wrong operation produces a PLAUSIBLE, GREEN,
+> CATASTROPHIC result.** (Rubber-stamp oracle · conformance seed claiming a kernel guarantee ·
+> coherent-but-unbuildable spec · unfalsifiable TOCTOU discriminator · and now a revert wearing
+> a merge's clothes.) **A stale base is a loaded gun even when the commit is right.**
+> **▶ I-5 (last Program-I WP): Runtime on step 0 (10 dirty files); CV's RED roots authored and
+> awaiting assembly.** Land-together: ONE branch, ONE squash, ONE Decision.
+>
+> ### ⏭ 2026-07-14 (06:2x) — ★★ CC4 MERGED · CATALOG 4/9 · `origin/main @ edb99c1e`
+> **✅ CC4 MERGED — `origin/main @ edb99c1e`** (PR #625, CI green). **VERIFIED BY CONTENT:**
+> `Diagnostic/Core.ken.md` present ✓ · **AC5: standalone `NumericError` carrier GONE
+> catalog-wide** ✓ · `parse_nat`/`parse_int` → **`Result Diagnostic Int`** ✓ ·
+> **`Parsing/Decoder.ken.md` UNTOUCHED** ✓.
+> **★ THE QUIET WIN: `Decoder` needed ZERO changes** — CC3 made it `loc`-generic, so CC4's
+> clients just instantiate at `Origin`. **A design decision from the PREVIOUS WP paid for
+> itself in the NEXT one, with no rework.** That is "reflect, don't extend" actually working.
+> **⚠ MY NEAR-MISS (recorded so I don't repeat it):** my first AC5 check
+> (`grep -c "data NumericError"`) returned **1** and I nearly **BLOCKED A CORRECT WP** — it was
+> a **PREFIX FALSE-POSITIVE** on `data NumericErrorKind`, which the frame *requires* to survive.
+> Re-checked structurally instead of acting on the grep. **GREP THE EMISSION, NOT THE NAME** —
+> I nearly violated my own rule while enforcing everyone else's rigor.
+> **▶ CC4 RETROS REQUESTED** (`evt_7m4dgf5etvb78`). Merged ≠ closed. Foundation HOLDING.
+> **I explicitly asked whether my new pre-pin audits' fixed inputs held against the tree, or
+> whether they had to correct them** — I would rather learn the audit is insufficient than
+> believe it worked.
+> **▶ NEXT: Handoff-Gate Foundation → CC5 (`Pretty.Doc`).** A small document algebra
+> (text/line/concat/nest/group/alt) + deterministic width-parameterized renderer with laws.
+> **CC4 deliberately left `Diagnostic` RENDER-FREE precisely so CC5 has something to do.**
+> **CATALOG CHAIN: CC1 ✅ CC2 ✅ CC3 ✅ CC4 ✅ → CC5 → CC6 → CC7 (`ArgParse` = the Milestone-C
+> exit criterion) → CC8 → CC9. FOUR OF NINE DONE.**
+> **▶ I-5 (the LAST Program-I WP) building** — Runtime on step 0 (widen the seam); CV authoring
+> the RED security discriminators against landed ADR §4a.
+>
+> ### ⏭ 2026-07-14 (06:1x) — ★★ THE FALSE SECURITY CLAIM IS OFF MAIN · CC4 PUBLISHING
+> **✅✅ SEC2 HONESTY ERRATUM MERGED — `origin/main @ 92a1d3da`** (PR #623; full CI, conformance
+> suite GREEN — the case-id rename broke nothing).
+> **VERIFIED ON MAIN BY CONTENT, BOTH DIRECTIONS** (an over-correction would have been its own
+> failure): false claim **GONE** (0 hits: bound "kernel-backed"/"kernel re-checks"/"kernel
+> nets") ✓ · **cap-PRESENCE claims PRESERVED** (4 — real Π binding / no-ambient-authority flip;
+> genuinely kernel-backed, correctly untouched) ✓ · **kernel obligation still described** (12 —
+> no swing to "there is no obligation"; the mechanism is kept, only its STRENGTH corrected) ✓.
+> **⇒ Ken's conformance corpus no longer asserts a security guarantee it does not have.**
+> **▶ PUBLISHER NOTE (caught it):** the first publish task **died silently with an empty log**
+> while **PR #623 was already open and CI running.** Found it by listing PRs, not by trusting
+> the task. Re-ran the publisher (idempotent — "created or found") → merged. **A dead publisher
+> task ≠ a dead PR — check GitHub, not the task file.**
+> **▶ CC4 PUBLISHING — head `5ab1b50d`** (`wp/cc4-diagnostic-core`). Architect TERMINAL APPROVE
+> + Foundation QA on `ed4106be`.
+> **RE-ANCHOR PROOF RE-RUN TWICE** (main moved twice under it: ADR §4a, then the erratum):
+> **the ONLY files differing from the Architect-approved SHA are the ones ARRIVING FROM MAIN**
+> (`docs/adr/`, `conformance/`) — **CC4's own reviewed tree is byte-untouched**, AC5 re-verified
+> on the re-anchored tree (standalone `NumericError` carrier still gone catalog-wide). ⇒ the
+> approvals still cover exactly what lands. **The proof is RE-RUN on every rebase, never carried
+> forward.**
+> **▶ ALL FOUR ARCHITECT ITEMS CLEARED** (conformance extent · I-5 ABI · CC4 terminal). **CV
+> unblocked** and authoring the I-5 RED roots against landed §4a. **Runtime building I-5 step 0.**
+>
 > ### ⏭ 2026-07-14 (06:0x) — ★ ADR §4a MERGED · I-5 RESUMED (XL) · CC4 QA-APPROVED
 > **✅ ADR-0017 §4a MERGED — `origin/main @ dff76dc7`** (PR #624, doc-only). Verified on main by
 > content: the **inode re-keying** and the **replace-not-coexist bypass** ruling are both in the

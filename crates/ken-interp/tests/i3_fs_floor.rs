@@ -238,7 +238,7 @@ fn full_authority_drives_every_fs_arm_with_exact_state_and_trace() {
 
     assert_eq!(
         host.fs_nodes(),
-        &[(b"root".to_vec(), ken_interp::VirtualFsNode::Directory)]
+        [(b"root".to_vec(), ken_interp::VirtualFsNode::Directory)]
             .into_iter()
             .collect()
     );

@@ -8,15 +8,14 @@
 //! `attenuate` + `check_authority_sufficient` BEFORE counting green.
 
 use ken_elaborator::capabilities::{
-    attenuate, authority, authority_flows_to, authority_meet,
-    check_audit_boundary, check_authority_and_flow, check_authority_sufficient,
-    check_revocation_transitive, discharge_attenuation,
-    AttenuationObligation, AuthAndFlowResult,
-    Cap, CapError, RevocationHandle, AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
+    attenuate, authority, authority_flows_to, authority_meet, check_audit_boundary,
+    check_authority_and_flow, check_authority_sufficient, check_revocation_transitive,
+    discharge_attenuation, AuthAndFlowResult, Cap, CapError, RevocationHandle, AUTH_FULL,
+    AUTH_NONE, AUTH_PARTIAL,
 };
 use ken_elaborator::effects::{
-    check_capabilities_no_handler, check_escape, CapParam, EffectDecl, EffectError,
-    EffectName, EffectRow, WitnessMap,
+    check_capabilities_no_handler, check_escape, CapParam, EffectDecl, EffectError, EffectName,
+    EffectRow, WitnessMap,
 };
 use ken_elaborator::ifc::{check_declassify_in_delta, FlowCtx, PUBLIC, SECRET};
 use ken_elaborator::prover::Verdict;
@@ -32,8 +31,7 @@ use ken_kernel::GlobalEnv;
 /// kernel rejects (`36 §2.5`/`§7.3`).
 #[test]
 fn world_action_without_capability_rejected() {
-    let decl_no_cap = EffectDecl::new("write_secret")
-        .with_direct_effect("FS");
+    let decl_no_cap = EffectDecl::new("write_secret").with_direct_effect("FS");
     let performed = EffectRow::singleton("FS".to_owned());
 
     let result = check_capabilities_no_handler(&decl_no_cap, &performed);
@@ -68,15 +66,18 @@ fn no_row_view_is_inert_rejected() {
     assert!(result.is_err());
     match result.unwrap_err() {
         EffectError::EffectEscapes { witnesses: ws, .. } => {
-            assert!(ws.iter().any(|(e, _)| e.as_str() == "FS"),
-                "expected FS in witnesses, got {:?}", ws);
+            assert!(
+                ws.iter().any(|(e, _)| e.as_str() == "FS"),
+                "expected FS in witnesses, got {:?}",
+                ws
+            );
         }
         e => panic!("wrong error: {:?}", e),
     }
 
     // Flip: declaring row accepts
-    let decl_with_row = EffectDecl::new("classify_row")
-        .with_declared_row(EffectRow::singleton("FS".to_owned()));
+    let decl_with_row =
+        EffectDecl::new("classify_row").with_declared_row(EffectRow::singleton("FS".to_owned()));
     assert!(check_escape(&decl_with_row, &inferred, &witnesses).is_ok());
 }
 
@@ -89,8 +90,7 @@ fn no_row_view_is_inert_rejected() {
 /// Default authority = ∅; a function holds exactly the caps it is passed.
 #[test]
 fn uses_unpassed_capability_rejected() {
-    let decl_no_cap = EffectDecl::new("send_msg")
-        .with_direct_effect("Net");
+    let decl_no_cap = EffectDecl::new("send_msg").with_direct_effect("Net");
     let performed = EffectRow::singleton("Net".to_owned());
 
     let result = check_capabilities_no_handler(&decl_no_cap, &performed);
@@ -122,7 +122,11 @@ fn attenuated_cap_at_weak_sink_accepts() {
     let parent = Cap::mint(AUTH_FULL, "FS");
     let (c_tmp, obl) = attenuate(&parent, AUTH_PARTIAL);
 
-    assert_eq!(authority(&c_tmp), AUTH_PARTIAL, "attenuated authority must equal parent ⊓ window");
+    assert_eq!(
+        authority(&c_tmp),
+        AUTH_PARTIAL,
+        "attenuated authority must equal parent ⊓ window"
+    );
 
     // Weak sink demands AUTH_NONE(0): 0 ⊑ 1 → accepts
     assert!(check_authority_sufficient(&c_tmp, AUTH_NONE, "weak_sink").is_ok());
@@ -145,21 +149,22 @@ fn attenuated_cap_at_strong_sink_rejects() {
     let result = check_authority_sufficient(&c_tmp, AUTH_FULL, "strong_sink");
     assert!(result.is_err());
     match result.unwrap_err() {
-        CapError::AuthorityInsufficient { required, available, .. } => {
+        CapError::AuthorityInsufficient {
+            required,
+            available,
+            ..
+        } => {
             assert_eq!(required, AUTH_FULL);
             assert_eq!(available, AUTH_PARTIAL);
         }
     }
 }
 
-/// C3: the attenuation bound is KERNEL-BACKED — the elaborator emits the
-/// refinement obligation `authority c' ⊑ authority c ⊓ w` (`62 §3.1`/`22
-/// §2.1`) and the kernel re-checks it via `discharge_attenuation`. Canonical
-/// child: kernel `Proves`. Over-strong child: kernel returns `Unknown` (the
-/// deviant obligation is undischargeable — `Refl` fails on distinct
-/// postulates).
+/// C3: the elaborator emits the attenuation obligation, then chooses whether
+/// its opaque postulates are identical. The kernel's `Refl` check mirrors that
+/// Rust decision; it is not an independent proof of the product lattice.
 #[test]
-fn attenuate_bound_is_kernel_rechecked() {
+fn attenuate_bound_discharge_mirrors_elaborator() {
     // Canonical: authority(c') = bound = 1 → same postulate both sides
     // → Eq(T, v, v), cert = Refl(v) → Proved
     let parent = Cap::mint(AUTH_FULL, "FS");
@@ -168,22 +173,18 @@ fn attenuate_bound_is_kernel_rechecked() {
     let result = discharge_attenuation(&mut env, &obl, "c3_canonical");
     assert!(
         matches!(result.verdict, Verdict::Proved { .. }),
-        "canonical attenuate obligation must be Proved by kernel re-check (Refl on same postulate)"
+        "canonical attenuation must discharge with Refl on the same postulate"
     );
 
     // Over-strong: authority(c') = AUTH_FULL(2) > bound = AUTH_PARTIAL(1)
     // → distinct postulates → Refl(child) cannot prove Eq(T, c, b) → Unknown
-    let over_strong_obl = AttenuationObligation {
-        child_authority:  AUTH_FULL,    // 2 ⊐ bound=1 — too strong
-        parent_authority: AUTH_FULL,
-        window:           AUTH_PARTIAL,
-        bound:            AUTH_PARTIAL, // parent ⊓ window = 1
-    };
+    let mut over_strong_obl = obl.clone();
+    over_strong_obl.child_authority = AUTH_FULL;
     let mut env2 = GlobalEnv::new();
     let result2 = discharge_attenuation(&mut env2, &over_strong_obl, "c3_over_strong");
     assert!(
         matches!(result2.verdict, Verdict::Unknown { .. }),
-        "over-strong child obligation must be Unknown (kernel rejects Refl on distinct postulates)"
+        "the elaborator's distinct postulates must make the deviant child Unknown"
     );
 }
 
@@ -197,15 +198,21 @@ fn no_amplifying_operation_exists() {
     // attenuate at ⊤ (AUTH_FULL) still cannot exceed the parent
     let (c_at_top, obl) = attenuate(&parent, AUTH_FULL);
     // parent ⊓ AUTH_FULL = min(1, 2) = 1 — cannot exceed parent
-    assert!(authority_flows_to(authority(&c_at_top), authority(&parent)),
-        "attenuate c ⊤ must still satisfy authority(c') ⊑ authority(c)");
+    assert!(
+        authority_flows_to(authority(&c_at_top), authority(&parent)),
+        "attenuate c ⊤ must still satisfy authority(c') ⊑ authority(c)"
+    );
     assert!(obl.is_satisfied());
 
     // `attenuate` is the only derivation from a held cap — monotone-downward.
     // The surface language's elaboration discipline prevents user-code forgery.
     let c2 = Cap::mint(AUTH_PARTIAL, "Net");
     let (c_weak, _) = attenuate(&c2, AUTH_NONE);
-    assert_eq!(authority(&c_weak), AUTH_NONE, "attenuate to ⊥ yields minimal authority");
+    assert_eq!(
+        authority(&c_weak),
+        AUTH_NONE,
+        "attenuate to ⊥ yields minimal authority"
+    );
     // No path from c_weak back to AUTH_PARTIAL or above exists in the public API
 }
 
@@ -221,20 +228,28 @@ fn revoke_is_transitive_static_contract() {
     let mut handle = RevocationHandle::new();
 
     // Parent + derived cap both live: check returns true
-    assert!(check_revocation_transitive(&handle),
-        "before revocation, handle must report live");
+    assert!(
+        check_revocation_transitive(&handle),
+        "before revocation, handle must report live"
+    );
 
     // Revoke the parent — transitivity: child is also revoked
     handle.revoke();
-    assert!(!check_revocation_transitive(&handle),
-        "after revocation, parent AND all derived caps are closed");
+    assert!(
+        !check_revocation_transitive(&handle),
+        "after revocation, parent AND all derived caps are closed"
+    );
 
     // Discriminator for non-transitive impl: revoking only the parent but
     // leaving a child's separate handle live would pass a parent-only check
     // but fail the child check.
-    let child_handle = RevocationHandle { revoked: handle.revoked };
-    assert!(!check_revocation_transitive(&child_handle),
-        "child handle inherits revocation from parent (transitivity)");
+    let child_handle = RevocationHandle {
+        revoked: handle.revoked,
+    };
+    assert!(
+        !check_revocation_transitive(&child_handle),
+        "child handle inherits revocation from parent (transitivity)"
+    );
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -249,13 +264,17 @@ fn unaudited_boundary_effect_is_impossible() {
 
     // Effect not in declared row → impossible / not auditable
     let no_row = EffectRow::empty();
-    assert!(!check_audit_boundary(&no_row, &boundary),
-        "un-declared boundary effect must be impossible");
+    assert!(
+        !check_audit_boundary(&no_row, &boundary),
+        "un-declared boundary effect must be impossible"
+    );
 
     // Flip: boundary effect declared in row → auditable (statically known)
     let with_row = EffectRow::singleton(boundary.clone());
-    assert!(check_audit_boundary(&with_row, &boundary),
-        "declared boundary effect must be auditable");
+    assert!(
+        check_audit_boundary(&with_row, &boundary),
+        "declared boundary effect must be auditable"
+    );
 }
 
 /// E2: declassification is a capability whose every use is audited — the
@@ -267,10 +286,14 @@ fn declassify_every_use_audited_and_in_delta() {
     let delta_present = vec![authority_id.to_owned()];
     let delta_absent: Vec<String> = vec![];
 
-    assert!(check_declassify_in_delta(authority_id, &delta_present),
-        "declared declassify authority must be in delta");
-    assert!(!check_declassify_in_delta(authority_id, &delta_absent),
-        "missing authority omits delta → honesty violation");
+    assert!(
+        check_declassify_in_delta(authority_id, &delta_present),
+        "declared declassify authority must be in delta"
+    );
+    assert!(
+        !check_declassify_in_delta(authority_id, &delta_absent),
+        "missing authority omits delta → honesty violation"
+    );
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -290,30 +313,51 @@ fn file_write_needs_capability_and_clearance() {
     let flow_ctx = FlowCtx::new(); // pc = BOTTOM
 
     // (i) cap present, data PUBLIC → both pass
-    let decl_cap =
-        EffectDecl::new("write_file").with_cap_param(CapParam::new("fs", "FS"));
+    let decl_cap = EffectDecl::new("write_file").with_cap_param(CapParam::new("fs", "FS"));
     let r1 = check_authority_and_flow(
-        &decl_cap, &fs_row, &EffectRow::empty(),
-        &flow_ctx, PUBLIC, PUBLIC, "file_sink",
+        &decl_cap,
+        &fs_row,
+        &EffectRow::empty(),
+        &flow_ctx,
+        PUBLIC,
+        PUBLIC,
+        "file_sink",
     );
-    assert!(matches!(r1, AuthAndFlowResult::Accept), "(i) both concessions → Accept");
+    assert!(
+        matches!(r1, AuthAndFlowResult::Accept),
+        "(i) both concessions → Accept"
+    );
 
     // (ii) cap present, data SECRET → flow rejects despite holding Cap_Net
     let r2 = check_authority_and_flow(
-        &decl_cap, &fs_row, &EffectRow::empty(),
-        &flow_ctx, SECRET, PUBLIC, "file_sink",
+        &decl_cap,
+        &fs_row,
+        &EffectRow::empty(),
+        &flow_ctx,
+        SECRET,
+        PUBLIC,
+        "file_sink",
     );
-    assert!(matches!(r2, AuthAndFlowResult::FlowRejected(_)),
-        "(ii) Secret to Public sink → FlowRejected despite cap");
+    assert!(
+        matches!(r2, AuthAndFlowResult::FlowRejected(_)),
+        "(ii) Secret to Public sink → FlowRejected despite cap"
+    );
 
     // (iii) cap absent, data PUBLIC → cap rejects despite clean flow
     let decl_no_cap = EffectDecl::new("write_file_no_cap");
     let r3 = check_authority_and_flow(
-        &decl_no_cap, &fs_row, &EffectRow::empty(),
-        &flow_ctx, PUBLIC, PUBLIC, "file_sink",
+        &decl_no_cap,
+        &fs_row,
+        &EffectRow::empty(),
+        &flow_ctx,
+        PUBLIC,
+        PUBLIC,
+        "file_sink",
     );
-    assert!(matches!(r3, AuthAndFlowResult::CapRejected(_)),
-        "(iii) no cap → CapRejected despite clean flow");
+    assert!(
+        matches!(r3, AuthAndFlowResult::CapRejected(_)),
+        "(iii) no cap → CapRejected despite clean flow"
+    );
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -361,19 +405,28 @@ fn capabilities_cross_case_sweep() {
     {
         let net_row = EffectRow::singleton("Net".to_owned());
         let flow_ctx = FlowCtx::new();
-        let decl_cap = EffectDecl::new("sweep_F1")
-            .with_cap_param(CapParam::new("net", "Net"));
+        let decl_cap = EffectDecl::new("sweep_F1").with_cap_param(CapParam::new("net", "Net"));
         // cap only — flow fails → FlowRejected (not CapRejected)
         let r = check_authority_and_flow(
-            &decl_cap, &net_row, &EffectRow::empty(),
-            &flow_ctx, SECRET, PUBLIC, "sweep_net",
+            &decl_cap,
+            &net_row,
+            &EffectRow::empty(),
+            &flow_ctx,
+            SECRET,
+            PUBLIC,
+            "sweep_net",
         );
         assert!(matches!(r, AuthAndFlowResult::FlowRejected(_)));
         // flow only — cap fails → CapRejected (not FlowRejected)
         let decl_no_cap = EffectDecl::new("sweep_F1_nocap");
         let r2 = check_authority_and_flow(
-            &decl_no_cap, &net_row, &EffectRow::empty(),
-            &flow_ctx, PUBLIC, PUBLIC, "sweep_net",
+            &decl_no_cap,
+            &net_row,
+            &EffectRow::empty(),
+            &flow_ctx,
+            PUBLIC,
+            PUBLIC,
+            "sweep_net",
         );
         assert!(matches!(r2, AuthAndFlowResult::CapRejected(_)));
     }

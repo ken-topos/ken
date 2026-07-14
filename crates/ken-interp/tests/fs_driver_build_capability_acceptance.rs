@@ -14,12 +14,12 @@ use std::path::PathBuf;
 
 use ken_elaborator::capabilities::{attenuate, Cap, AUTH_FULL, AUTH_NONE, AUTH_PARTIAL};
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+fn fixture_path(name: &str) -> PathBuf {
+    PathBuf::from("conformance/fs/fixtures").join(name)
 }
 
-fn fixture_path(name: &str) -> PathBuf {
-    repo_root().join("conformance/fs/fixtures").join(name)
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 struct FsEnv {
@@ -102,7 +102,7 @@ fn read_via_real_driver(
     let step1 = ken_interp::apply(step0, cap_evalval(cap), &env.elab_env.env, &mut store);
     let path_val = ken_interp::EvalVal::Bytes(path.as_bytes().to_vec());
     let tree = ken_interp::apply(step1, path_val, &env.elab_env.env, &mut store);
-    let mut host = ken_interp::PosixHost::new();
+    let mut host = ken_interp::PosixHost::new_at(repo_root());
     ken_interp::run_io(
         tree,
         &mut host,
@@ -120,9 +120,9 @@ fn read_via_real_driver(
 fn r1_sufficient_cap_reads_fixture() {
     let mut env = mk_env();
     let path = fixture_path("three-lines.txt");
-    let expected = std::fs::read(&path).expect("fixture file exists");
+    let expected = std::fs::read(repo_root().join(&path)).expect("fixture file exists");
 
-    let parent = Cap::mint(AUTH_FULL, "FS");
+    let parent = ken_interp::PosixHost::new_at(repo_root()).mint_fs_cap(AUTH_FULL);
     let (cap, _obl) = attenuate(&parent, AUTH_PARTIAL);
 
     let result = read_via_real_driver(&mut env, &cap, path.to_str().unwrap());
@@ -149,11 +149,11 @@ fn r2_insufficient_cap_denied_before_read() {
     let mut env = mk_env();
     let path = fixture_path("three-lines.txt");
     assert!(
-        path.exists(),
+        repo_root().join(&path).exists(),
         "fixture harness precondition: path must exist (isolates capability denial from NotFound)"
     );
 
-    let parent = Cap::mint(AUTH_FULL, "FS");
+    let parent = ken_interp::PosixHost::new_at(repo_root()).mint_fs_cap(AUTH_FULL);
     let (cap, _obl) = attenuate(&parent, AUTH_NONE);
 
     let result = read_via_real_driver(&mut env, &cap, path.to_str().unwrap());

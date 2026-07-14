@@ -294,15 +294,16 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
     });
     let fs_ids = ken_interp::FSIds::from_elab(&elab_env);
 
+    let mut host = ken_interp::PosixHost::new();
+    let cap = ken_interp::EvalVal::Cap(host.mint_fs_cap(declared_fs.authority));
     let mut store = build_eval_store(&elab_env);
-    let tree = apply_entrypoint(&elab_env, main_id, arguments, declared_fs, &mut store);
+    let tree = apply_entrypoint(&elab_env, main_id, arguments, declared_fs, cap, &mut store);
 
     let coproduct_ids = ken_interp::CoproductIds {
         inl_id: elab_env.prelude_env.inl_id,
         inr_id: elab_env.prelude_env.inr_id,
     };
 
-    let mut host = ken_interp::PosixHost::new();
     match ken_interp::run_io(
         tree,
         &mut host,
@@ -448,6 +449,7 @@ fn apply_entrypoint(
     main_id: ken_kernel::GlobalId,
     arguments: &[Vec<u8>],
     declared_fs: DeclaredFsAuthority,
+    cap: ken_interp::EvalVal,
     store: &mut ken_interp::EvalStore,
 ) -> ken_interp::EvalVal {
     let get = |name: &str| {
@@ -473,7 +475,6 @@ fn apply_entrypoint(
     // AFull remains coarse and is not path-confined until CA4/I-5. Console is
     // ambient process context (stdio), so ProgramCaps deliberately has no
     // Console field and the runner mints no Console capability.
-    let cap = mint_declared_fs_cap(declared_fs);
     let mut caps = ken_interp::eval(
         &[],
         &ken_kernel::Term::constructor(get("MkProgramCaps"), vec![]),
@@ -488,13 +489,6 @@ fn apply_entrypoint(
     );
     caps = ken_interp::apply(caps, cap, &elab_env.env, store);
     ken_interp::apply(tree, caps, &elab_env.env, store)
-}
-
-fn mint_declared_fs_cap(declared_fs: DeclaredFsAuthority) -> ken_interp::EvalVal {
-    ken_interp::EvalVal::Cap(ken_elaborator::capabilities::Cap::mint(
-        declared_fs.authority,
-        "FS",
-    ))
 }
 
 fn list_value(
@@ -691,10 +685,11 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 
         let console = ken_interp::ConsoleIds::from_elab(&env).expect("Console ABI");
         let fs = ken_interp::FSIds::from_elab(&env).expect("FS ABI");
-        let mut store = build_eval_store(&env);
-        let tree = apply_entrypoint(&env, main_id, &[], declared, &mut store);
         let mut host = ken_interp::CaptureHost::new(Vec::new());
         host.insert_directory(b"root".to_vec());
+        let cap = ken_interp::EvalVal::Cap(host.mint_fs_cap(declared.authority));
+        let mut store = build_eval_store(&env);
+        let tree = apply_entrypoint(&env, main_id, &[], declared, cap, &mut store);
         let result = ken_interp::run_io(
             tree,
             &mut host,
@@ -765,6 +760,9 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
         let declared = declared_fs_authority(&env).expect("FS APartial declared");
         let console = ken_interp::ConsoleIds::from_elab(&env).expect("Console ABI");
         let fs = ken_interp::FSIds::from_elab(&env).expect("FS ABI");
+        let mut host = ken_interp::CaptureHost::new(Vec::new());
+        host.insert_directory(b"root".to_vec());
+        let cap = ken_interp::EvalVal::Cap(host.mint_fs_cap(declared.authority));
         let mut store = build_eval_store(&env);
         let mut tree = ken_interp::eval(
             &[],
@@ -777,15 +775,13 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
         );
         for argument in [
             constructor_value(declared.constructor_id, vec![]),
-            mint_declared_fs_cap(declared),
+            cap,
             ken_interp::EvalVal::Bytes(b"root/denied".to_vec()),
             constructor_value(fs.create_new_id, vec![]),
             ken_interp::EvalVal::Bytes(b"no".to_vec()),
         ] {
             tree = ken_interp::apply(tree, argument, &env.env, &mut store);
         }
-        let mut host = ken_interp::CaptureHost::new(Vec::new());
-        host.insert_directory(b"root".to_vec());
         let result = ken_interp::run_io(
             tree,
             &mut host,
@@ -823,6 +819,10 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
         let declared = declared_fs_authority(&env).expect("FS ANone declared");
         let console = ken_interp::ConsoleIds::from_elab(&env).expect("Console ABI");
         let fs = ken_interp::FSIds::from_elab(&env).expect("FS ABI");
+        let mut host = ken_interp::CaptureHost::new(Vec::new());
+        host.insert_directory(b"root".to_vec());
+        host.insert_file(b"root/input".to_vec(), b"secret".to_vec());
+        let cap = ken_interp::EvalVal::Cap(host.mint_fs_cap(declared.authority));
         let mut store = build_eval_store(&env);
         let mut tree = ken_interp::eval(
             &[],
@@ -835,14 +835,11 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
         );
         for argument in [
             constructor_value(declared.constructor_id, vec![]),
-            mint_declared_fs_cap(declared),
+            cap,
             ken_interp::EvalVal::Bytes(b"root/input".to_vec()),
         ] {
             tree = ken_interp::apply(tree, argument, &env.env, &mut store);
         }
-        let mut host = ken_interp::CaptureHost::new(Vec::new());
-        host.insert_directory(b"root".to_vec());
-        host.insert_file(b"root/input".to_vec(), b"secret".to_vec());
         let result = ken_interp::run_io(
             tree,
             &mut host,
