@@ -58,11 +58,29 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > a test in is not a tool for real practical work.** **I bring a separate
 > toolchain proposal; it is NOT smuggled into PX.**
 >
-> ### ⚡ PX0 — publishing through FULL CI (code, `crates/`; NOT doc-only)
-> `wp/px0-target-classification-erratum @ 54a6e428`. QA APPROVE + **Architect
-> terminal APPROVE** (`dec_2bx3jxx5yxggj` resolved). One file, +225/−67, zero
-> kernel/Cargo/runtime delta. **13 ABI facts + 6 FFI decls now `target_os =
-> "linux"`; non-Linux fails closed to Ken's named `Unsupported` BEFORE host I/O.**
+> ### ✅ PX0 MERGED — `origin/main @ f729c67e` · CI green · **retros OUTSTANDING**
+> **Content-verified on `main`:** 54 `target_os = "linux"` gates; the only
+> surviving `cfg(unix)` pair is `os_string_bytes` (2324/2330); all **13 ABI facts
+> present, VALUES UNCHANGED** (we did not "fix" what we had not probed); **zero
+> kernel/`Cargo.lock` delta.** `main` no longer claims a confinement guarantee it
+> cannot deliver. **⏳ Chasing the three Runtime §10 retros — merged ≠ closed.**
+>
+> **★★ MY ERROR, AND WHAT CAUGHT IT.** I pinned *"3 constants, 5 FFI decls"* in
+> the frame. **It was 11 and 6** — off 3.6×, **in a document whose thesis is "the
+> artifact cannot state its own contract."** *I indicted the thing I failed to
+> enumerate.* **Caught THREE times** — Architect, leader's D0, QA's independent
+> count at the producer. **Not by a test. Not by a gate. By three people who
+> counted instead of trusting me.** Standing law in every PX frame now: a handoff
+> says ***"there are N; here are all N"*** — **N counted, never inherited from a
+> citation.** *A line number tells you where something IS, never where its KIND
+> begins and ends: I read from `:2370` because an audit cited `AT_REMOVEDIR` at
+> `:2375`; the inventory began at `:2355`.*
+>
+> **★ The leader's D0 also caught a scope error I authored:** my frame said
+> *"re-gate every `cfg(unix)` carrying a Linux ABI value"* — but `os_string_bytes`
+> is `cfg(unix)` and **portability-only, NOT an ABI carrier.** Re-gating it would
+> have broken non-Linux builds for an unrelated reason. **My guard was wider than
+> the fact it guarded — the exact defect PX0 exists to fix.**
 >
 > ---
 >
