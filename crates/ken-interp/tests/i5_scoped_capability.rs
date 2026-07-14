@@ -140,6 +140,7 @@ fn symlink_policy_pairs_reach_the_real_dispatch_and_resolver() {
     host.insert_file(b"dir1/real/x".to_vec(), b"x".to_vec());
     host.insert_symlink(b"dir1/link".to_vec(), b"/etc".to_vec());
     host.insert_symlink(b"dir1/inside".to_vec(), b"real/x".to_vec());
+    host.insert_symlink(b"dir1/loop".to_vec(), b"loop".to_vec());
 
     let no_follow = host
         .mint_scoped_fs_cap(AUTH_FULL, b"dir1", RightSet::READ, SymlinkPolicy::NoFollow)
@@ -160,6 +161,10 @@ fn symlink_policy_pairs_reach_the_real_dispatch_and_resolver() {
     drive(&env, &mut host, &follow, b"link/passwd", DriverOp::Read);
     assert_eq!(host.fs_denials().last(), Some(&CapabilityDenied::ScopeEscape));
     assert_ok(&env, &drive(&env, &mut host, &follow, b"inside", DriverOp::Read));
+    let before = host.fs_trace().len();
+    drive(&env, &mut host, &follow, b"loop", DriverOp::Read);
+    assert_eq!(host.fs_denials().last(), Some(&CapabilityDenied::SymlinkDenied));
+    assert_eq!(host.fs_trace().len(), before);
 }
 
 #[test]

@@ -2585,6 +2585,7 @@ impl HostHandler for PosixHost {
             let mut stack = vec![root.clone()];
             let mut pending = components.to_vec();
             let mut index = 0;
+            let mut symlink_hops = 0usize;
             while index < pending.len() {
                 let component = pending[index].clone();
                 if component.is_empty() || component == b"." {
@@ -2623,6 +2624,12 @@ impl HostHandler for PosixHost {
                         Ok(target) => {
                             if symlink == capabilities::SymlinkPolicy::NoFollow {
                                 return Err(ResolveError::Denied(CapabilityDenied::SymlinkDenied));
+                            }
+                            symlink_hops += 1;
+                            if symlink_hops > 40 {
+                                return Err(ResolveError::Denied(
+                                    CapabilityDenied::SymlinkDenied,
+                                ));
                             }
                             if target.starts_with(b"/") {
                                 return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
@@ -3253,6 +3260,7 @@ impl HostHandler for CaptureHost {
         let mut stack = vec![*root];
         let mut pending = components.to_vec();
         let mut index = 0;
+        let mut symlink_hops = 0usize;
         while index < pending.len() {
             let part = pending[index].clone();
             if part.is_empty() || part == b"." {
@@ -3283,6 +3291,10 @@ impl HostHandler for CaptureHost {
             match self.fs_nodes.get(&child) {
                 Some(VirtualFsNode::Symlink(target)) => {
                     if symlink == capabilities::SymlinkPolicy::NoFollow {
+                        return Err(ResolveError::Denied(CapabilityDenied::SymlinkDenied));
+                    }
+                    symlink_hops += 1;
+                    if symlink_hops > 40 {
                         return Err(ResolveError::Denied(CapabilityDenied::SymlinkDenied));
                     }
                     if target.starts_with(b"/") {
