@@ -199,6 +199,77 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > Rousted via `send-keys`; confirmed Working. **A Codex singleton can silently drop
 > a mention — capture-pane it, don't assume delivery = pickup.**
 >
+> ## ⚖⚖ OPERATOR RULINGS — RESOURCE MANAGEMENT + THE RESIDUAL-GAP LEDGER (Pat, 2026-07-14)
+>
+> ### 1 · Ken's surface will NOT claim resource safety — and will not pretend to
+> **No clear theory unifies affine types with OTT** (QTT/Idris-2 has the quantities
+> and no observational equality; cubical/observational systems have the equality and
+> no substructural layer; **nobody has both**). ⇒ **Linear/affine tracking is NOT on
+> the roadmap** (*"not a research project"*). **DESIGN:** opaque **generation-checked
+> handles** + a **sealed bracket**, **enforced in the RUNTIME**; residual emitted
+> honestly across the Ward seam, **never as `Q`.**
+> **The export's kernel-side discriminator makes over-claiming STRUCTURALLY
+> IMPOSSIBLE** (`71-assumption-boundary.md:118-127`): a claim is `Q` **iff** its
+> certificate `check`s **and** its goal is not a postulate in `trusted_base()`.
+> *The honesty is mechanical, not a discipline we maintain by vigilance.*
+> ⇒ `ken-cli-program-i-contract.md` CORRECTED (`ac55eefc`): streaming handles are
+> **NOT** gated on linearity. That gate was **a prerequisite that is never coming** —
+> a permanent silent veto.
+>
+> ### 2 · Ward stays SPEC-ONLY until Ken matures — but do NOT design around that
+> **Pat, verbatim: *"it's not a question of whether ward is spec only. we are
+> building for the future where ward and ken are complete."*** **⇒ Ownership
+> boundaries are decided on the MATURE END-STATE. A scheduling fact must never be
+> baked into an architectural boundary.** *(I answered "Ken owns the ledger because
+> Ken is the only thing that runs." **That was a scheduling answer to an
+> architecture question, and Pat rejected it. Correctly.**)*
+>
+> ### 3 · ★★★ THE RESIDUAL-GAP LEDGER IS **TWO** ARTIFACTS, NOT ONE
+> **The ruling principle: OWNERSHIP FOLLOWS EPISTEMIC ACCESS. Each side owns the
+> gap it is the ONLY party that can SEE.** *(Not convenience. Not schedule.)*
+>
+> | gap | question | owner | why ONLY they can see it | status |
+> |---|---|---|---|---|
+> | **STATEMENT** | *what did Ken never SAY?* | **KEN** | **absence from the export is INVISIBLE to a consumer.** Ward cannot enumerate what it was never handed. | ⛔ **DOES NOT EXIST — this is the work** |
+> | **DISCHARGE** | *how PARTIAL is the evidence?* | **WARD** | only the discharger knows its engines' limits — depth `k`, sampling coverage, monitor window, abstraction gap | ✅ **RATIFIED** — `bound` + 4-way outcome (`ward 12-discharge-attestation.md:96-102`) |
+> | **THE JOIN** | *is the total assurance SUFFICIENT?* | **GOVERNANCE POLICY GATE** (ken §64/§65) | the only place both halves are visible | Ward's spec already says it: *"the gate reads the outcomes, the policy decides sufficiency"* |
+>
+> > ### ★★ AND THE CLAUSE THAT SETTLES THE SEQUENCING
+> > **The JOIN CANNOT CATCH THE DANGEROUS GAP.** The policy gate iterates over
+> > obligations that **EXIST**. **A property nobody ever stated HAS NO ROW.** ⇒ **No
+> > downstream consumer — however complete Ward becomes — can EVER detect it.**
+> >
+> > **⇒ Ken's statement-gap gate cannot be deferred to "when Ward is ready," and the
+> > reason is NOT that Ward is unbuilt. It is that WARD COULD NEVER DO IT.**
+> > *The one gap invisible to every consumer is the one the PRODUCER must gate at
+> > emission.*
+>
+> **★ WHAT MAKES IT A GATE AND NOT A WISH-LIST — `Σ` IS CLOSED BY CONSTRUCTION.**
+> `Σ` is not a list someone maintains; **it IS the denotation's interaction-tree
+> perform-node signatures.** ⇒ **GATE: every symbol in `Σ` must be either (a) carried
+> by ≥1 `T`/`P` obligation, or (b) EXPLICITLY declared un-stated, with a reason.
+> Build fails otherwise.** *You cannot silently fail to state a property, because the
+> alphabet is closed and the gate demands coverage of every symbol.*
+> **This is `add_decl`'s bypass-grep, applied to obligations** — the same closure
+> lesson that cost me the AC4 inventory today. *(See
+> `an-enumeration-needs-a-proven-closure-not-a-better-grep`.)*
+>
+> ### 4 · THE RESOURCE WP PATH (framed, not yet released — LET/KTR chain first)
+> **RES-0** B2W-1 witness repair *(RELEASED)* → **RES-1** runtime floor (opaque
+> gen-checked handle + sealed bracket + structural `close`; **design against the
+> NATIVE backend from day one** — the interp's `Rc` store will accept a design that
+> cannot lower to Cranelift) → **RES-2** the **closure gate** *(build the guard
+> FIRST — same logic as PX6-before-PX7)* → **RES-3** state the `T` obligations
+> (`no use-after-close`; `every open is eventually closed`), **forced complete by
+> RES-2.**
+> **⚠ TWO UNVERIFIED PREREQS — probe before framing, do NOT pin:** (a) **`emit_export`
+> has NO production call sites** (only `b1`/`b2`/`b3` acceptance tests + its own
+> definition) — nothing in the CLI emits an export today; (b) **I have NOT confirmed
+> FS ops flow through the ITree `Vis`/perform-node path** rather than direct host
+> calls. FS effect names DO exist (`fs`, `fs_cap`, `fs_resp`, `file`, `io_read`), but
+> *names ≠ perform nodes.* **If FS ops are not perform nodes, RES-1 must MAKE them
+> so, and that is much bigger than "add a handle."**
+>
 > ## ★★ RESOURCE DESIGN — the scope-indexed report (`local/ken-scope-indexed-resource-middle-path-report.md`)
 > **It CORRECTS ME, and it is right:** a phantom `Handle scope File` is NOT enough
 > — **index the OPERATION'S EFFECT** (`Eff (FileOps scope) A`), and let **only the
