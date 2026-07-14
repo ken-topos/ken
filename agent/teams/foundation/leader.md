@@ -13,3 +13,6 @@ small direct matches, and direct recursion may be clearer inline. Never
 prescribe a binding count, depth threshold, quota, or minimum. Require narrow
 scope and unchanged branch/effect order, and treat a long binding chain as a
 possible missing helper or lemma.
+
+For two or more sequential local bindings, require one `;`-separated binding
+group; keep a one-binding `let` in its already-canonical single-binding form.

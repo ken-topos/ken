@@ -204,6 +204,16 @@ the mechanism: `tmp`, `value2`, `intermediate`, and `step_result` merely replace
 visible syntax with indirection. A long preamble of unrelated bindings is a
 signal to split a helper or lemma, not to build a local namespace.
 
+When two or more sequential bindings are warranted, write one binding group
+with `;` between bindings and no trailing separator before `in`. Order the
+bindings by dependency: each right-hand side may use earlier names, but not its
+own name or later names, and duplicate names in one group are rejected. The
+formatter coalesces a maximal directly nested chain of at least two lets into
+this group form. A one-binding `let` is already canonical and remains the same
+production; do not manufacture a group of one
+(`spec/30-surface/32-grammar.md:200-221`,
+`spec/30-surface/31-lexical.md:228-231`).
+
 For proof code, name the middle endpoints and evidence that make a multi-step
 chain readable, while leaving the final `trans`/`cong`/`J` skeleton visible.
 This refines the proof-family organization above; it does not hide the proof

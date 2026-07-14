@@ -13,6 +13,9 @@ one-step proof combinators often read better inline. A long chain is a
 helper-or-lemma review signal, never a reason to demand more bindings; there is
 no quota or minimum count.
 
+Confirm that two or more sequential local bindings use one `;`-separated
+binding group, while an already-canonical one-binding `let` remains singular.
+
 Run positive formatter-layout checks for the local-binding forms in scope,
 inspect the emitted source, and re-run the exact package and `ken check` gates.
 `ken fmt --check` alone is not a readability approval.
