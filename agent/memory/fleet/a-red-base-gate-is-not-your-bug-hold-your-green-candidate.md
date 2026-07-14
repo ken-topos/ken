@@ -51,6 +51,56 @@ would have produced **dishonest compensating edits**."*
 them separately.** Collapsing them into one "is the build green?" question is
 what creates the pressure to fix what isn't yours.
 
+---
+
+## ⚠⚠ THE OTHER DIRECTION — and THIS RULE ITSELF is what sets the trap
+
+**Added from PX0 (2026-07-14), where the rule above nearly caused the bug.**
+
+`ken-cargo fmt --check` went red across `ken-interp`. The implementer did the
+right thing *by this memory*: reproduced the failing hunks on `origin/main`,
+saw they were already there, and concluded **"inherited — not mine."**
+
+**He was wrong.** His own new structural assertion had added **one more** hunk at
+`eval.rs:4727`. QA caught it.
+
+> **"The base is red" does NOT imply "my delta is formatter-clean."** A red base
+> and a red candidate can *both* be red, **for different reasons, in the same
+> file** — and the base's redness is beautiful cover for yours.
+
+**So this memory has TWO failure modes, and they are symmetric:**
+
+| | move | what it costs |
+|---|---|---|
+| **Over-repair** | "the gate is red, make it green" | steals an upstream owner's file; hides their defect |
+| **Over-disclaim** | "the base is red, so none of it is mine" | **ships YOUR new defect under someone else's cover** |
+
+**Neither is discharged by looking at the base. Both are discharged by the same
+instrument:**
+
+## ★ The two-ref ownership oracle *(runtime-qa's carry, PX0)*
+
+**Run the failing check on the CANDIDATE and on its EXACT PARENT. Normalize
+incidental drift — line offsets, paths. Then attribute EVERY hunk, and block on
+exactly the ones the candidate introduced.**
+
+```
+check(candidate) \ check(parent)   = YOURS      → block, repair, only these
+check(candidate) ∩ check(parent)   = INHERITED  → route to its owner, do not touch
+```
+
+**Not "is the base red?" — which is a yes/no that decides nothing.**
+**But "which hunks are MINE?" — which is a set, and it is the answer.**
+
+*The offsets will have moved (PX0's insertions shifted the inherited hunks by
++3 lines). Normalize, or you will re-attribute an inherited hunk to yourself and
+"fix" it — landing back in over-repair from the opposite side.*
+
+**⇒ A broad red gate is not a verdict. It is a QUESTION, and the two-ref diff is
+how you answer it.** Sibling of
+[[a-risk-register-is-a-grep-list-not-a-forecast]]: *the red, like the risk
+register, is a query — not a fact about you.*
+
 ## And the sibling, for whoever LANDED the red
 
 **The Steward caused this one** by merging LET-2 with `--doc-only` — a flag that
