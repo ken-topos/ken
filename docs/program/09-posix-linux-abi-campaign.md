@@ -37,34 +37,29 @@ The report's §16 lists *"ABI facts drift silently"* as a **risk**. It is not a
 risk. **It has already happened, in the security-enforcement path, and it is on
 `main` right now.**
 
-`crates/ken-interp/src/eval.rs:2371-2394`:
+**The inventory, corrected** — the Architect enumerated it after I under-counted
+it by a factor of 3.6 (see §0a):
 
-```rust
-#[cfg(unix)]
-const O_NOFOLLOW_KEN: i32 = 0o400000;
-#[cfg(unix)]
-const O_CLOEXEC_KEN: i32 = 0o2000000;
-#[cfg(unix)]
-const AT_REMOVEDIR_KEN: i32 = 0x200;
+| What | Where | Count |
+|---|---|---|
+| `*_KEN` flag constants (`O_RDONLY` … `AT_REMOVEDIR`), **all hand-asserted** | `eval.rs:2355-2375` | **11** |
+| `unsafe extern "C"` — `openat`, `mkdirat`, `unlinkat`, `renameat`, `readlinkat` | `eval.rs:2378-2394` | **5 fns** |
+| `unsafe extern "C" { fn signal }` + `SIGPIPE = 13` + `SIG_IGN = 1`, **nested inside `mask_sigpipe()`** | `eval.rs:3714-3730` | **1 fn, 2 facts** |
 
-#[cfg(unix)]
-unsafe extern "C" {
-    fn openat(dirfd: i32, pathname: *const c_char, flags: i32, mode: u32) -> i32;
-    fn mkdirat(...);  fn unlinkat(...);  fn renameat(...);  fn readlinkat(...);
-}
-```
+**⇒ 6 FFI declarations. 13 hand-asserted ABI facts. All `#[cfg(unix)]`-gated.**
 
 Read what that actually says:
 
-1. **Five raw syscalls are hand-declared `unsafe extern "C"` INLINE in the
-   4,600-line pure evaluator.** There is no boundary crate. **Only `ken-kernel`
-   forbids `unsafe`** (`ken-kernel/src/lib.rs:42` — the sole hit in the
-   repository). `ken-interp` does not.
-2. **Three target-ABI constants are asserted from memory.** No probe, no
-   manifest, no target binding. Nothing in the tree can check them.
+1. **Six raw syscall boundaries are hand-declared `unsafe extern "C"` INLINE in
+   the 4,600-line pure evaluator** — and one of them hides *inside a function
+   body*. There is no boundary crate. **Only `ken-kernel` forbids `unsafe`**
+   (`ken-kernel/src/lib.rs:42` — the sole hit in the repository). `ken-interp`
+   does not.
+2. **Thirteen target-ABI facts are asserted from memory.** No probe, no manifest,
+   no target binding. Nothing in the tree can check them.
 3. **The `cfg` gate is `unix`. The values are `linux`.** `#[cfg(unix)]` compiles
-   on macOS and every BSD. These three numbers are not the same on those
-   targets. The code compiles, links, and passes those bits to real syscalls.
+   on macOS and every BSD. These numbers are not the same there. The code
+   compiles, links, and passes those bits to real syscalls.
 4. **`O_NOFOLLOW` is the enforcement mechanism for `SymlinkPolicy::NoFollow`**
    (`capabilities.rs:89-92`) — an **ADR-0017 security property**. If that bit is
    wrong on a target, the symlink-escape defense **silently does not apply**, and
@@ -82,7 +77,27 @@ invariant living in a `--` comment, and LET-1's *readability* having no gate.
 green diff.** The difference is that those two were caught because someone tried
 to *write the guarantee down* and found the pen had nowhere to land.
 
-**Nobody has tried here yet. PX1 and PX2 are that attempt.**
+**Nobody has tried here yet. PX0, PX1 and PX2 are that attempt.**
+
+### §0a — and the first draft of this charter made the same mistake
+
+**I wrote "three constants, five FFI declarations." It is eleven and six.** In a
+document whose entire thesis is *"the artifact cannot state its own contract,"*
+**I under-counted the very inventory I was indicting.** The Architect found it by
+**enumerating**; I had **sampled**. The mechanism, exactly:
+
+- I read the file from **`:2370`**, because a prior audit cited `AT_REMOVEDIR` at
+  **`:2375`**. **The inventory begins at `:2355`.** I picked my window from *a
+  citation of one instance* rather than from *the extent of the kind*. **A line
+  number tells you where something IS; it does not tell you where its KIND begins
+  and ends.**
+- I grepped `unsafe extern`, got **two** hits, and **read one**. The second is
+  **indented, inside a function body**, and does not look like a boundary.
+
+> **⇒ A grep SELECTS candidates. It never DECIDES, and it never COUNTS.**
+> **Enumerate, count, and state the count.** Every PX frame's handoff must say
+> ***"there are N; here are all N"*** — with N a number the author counted, never
+> one inherited from a citation.
 
 ---
 
@@ -149,21 +164,58 @@ project.** My recommendation:
 > the interpreter run, over files larger than memory, with its exact target-ABI
 > manifest hash bound into the artifact.
 
-### FORK 2 — whose `unsafe`? *(Architect + operator; ADR-worthy; Sec3 dimension)*
+### FORK 2 — whose `unsafe`? · ✅ **RULED (Architect, `evt_7qqf827rr1jxk`)**
 
-We currently hand-declare POSIX symbols ourselves (§0). Three options:
+**RULING: (b) — an exact-pinned, checksum-locked `rustix`, private behind a
+first-party `ken-host` policy shell. Ken-authored raw declarations are
+retired.** Component design is the Architect's lane; this stands.
 
-| | Approach | Cost |
-|---|---|---|
-| **(a)** | **Keep hand-declared**, but move to `ken-host`, probe every constant, bind to a manifest | Max control, max audit surface. **Our** `unsafe`, our TCB. |
-| **(b)** | Take **`rustix`** | No `unsafe` in *our* code, well-audited upstream — but a **third-party crate inside the runtime trust boundary**, and a supply-chain surface (**Sec3**). |
-| **(c)** | **`libc` for constants only**, our own `unsafe` for the calls | Splits the difference; still a dependency, but a much smaller claim. |
+**I had leaned (a) — keep the declarations, probe the constants — and the
+Architect's counter is better than my argument:**
 
-**I lean (a).** The campaign's entire thesis is that **ABI facts must be ours,
-probed, and checkable** — and (a) is the only option where the manifest is the
-source of truth rather than a second opinion. But this puts real `unsafe` in our
-runtime permanently, and that is the Architect's call and Pat's risk tolerance,
-not mine.
+> **A probe checks NUMBERS. It does not check SIGNATURES.** It cannot validate a
+> handwritten function signature, the calling convention, pointer/length
+> coupling, the errno convention, per-target `cfg`, or ownership transfer. **So
+> (a)'s "our manifest is the source of truth" buys the CHEAP half of the ABI
+> surface while retaining ALL of the `unsafe`** — and the 13-fact/6-declaration
+> defect in §0 is the existence proof that handwritten ABI facts widen silently.
+> **Keeping the declarations maximizes precisely the audit surface Phase A exists
+> to remove.**
+
+**And ADR-0009 already settles the shape of the question — *curate a mature
+component before constructing one*. I should have cited it myself.** (c) is
+strictly dominated: it takes on a dependency **and** keeps our raw-call
+`unsafe`, buying neither the small boundary of (b) nor the single-source
+ownership claimed by (a).
+
+**The required shape (binding on PX1/PX2):**
+
+- **`ken-host` is the ONLY public callable boundary; `rustix` is a private
+  implementation detail.** Expose owned/borrowed handle types and validated path
+  components — **no `RawFd`, no raw pointer, no integer flag, no unrooted path
+  operation** escapes it. This is exactly ADR-0017's handle-not-path boundary.
+- **Exact-pin the crate and every enabled feature; checksum-lock it.** Enable
+  only the APIs PX1 actually uses. **Record** the selected backend, the
+  transitive closure, licenses, and the **exercised upstream `unsafe` surface**
+  in `docs/program/dependency-deltas.md`. *The third-party code is in the runtime
+  trust boundary — but as a named, pinned, re-audited dependency, not invisible
+  trust.*
+- **PX2 SURVIVES.** The manifest records `TargetAbi`, the selected binding
+  backend, exact dependency/version/checksum/features, the **complete** ABI-fact
+  inventory, a schema version, and an output hash. **A system-header probe is an
+  INDEPENDENT CROSS-CHECK, not a replacement set of handwritten constants** — and
+  **any disagreement fails the build closed.** Bind the manifest hash into both
+  interpreter and native artifacts.
+- **★ V1 support is `linux`, NOT `unix`.** Every other Unix gets an **explicit
+  unavailable backend** until it has its own manifested implementation. **Do not
+  let a broad `cfg(unix)` imply a contract we never established.** *That widened
+  gate was the bug.*
+
+**⚠ STILL OPEN — and it is Pat's, not the Architect's: DEPENDENCY-RISK
+ACCEPTANCE.** This puts a third-party crate inside the **runtime trust
+boundary**, which is a **Sec3 supply-chain** commitment. The Architect owns the
+component call; **the risk acceptance is the operator's.** PX1 does not start
+until Pat takes it.
 
 ### FORK 3 — does native go early or late? *(operator)*
 
@@ -191,8 +243,9 @@ it is the cheapest thing in the campaign.*
 
 | ID | Objective | Owner | Size |
 |---|---|---|---|
-| **PX1** | **`ken-host`: extract the unsafe POSIX boundary into an audited crate.** Move the five `unsafe extern "C"` decls + all call sites (`eval.rs:2378-2394`, `:2414/:2426/:2435/:2924/:2942/:2972/:2997`, `:3720-3726`) out of the evaluator. Deny-by-default API: **no raw fd escapes** — every entry point takes and returns owned handles. Per-syscall tests. **Then `#![forbid(unsafe_code)]` on `ken-interp`.** | Runtime | **M** |
-| **PX2** | **Target ABI identity + a generated, probed ABI manifest.** A `TargetAbi` record (arch/os/env/endian/pointer-width/data-model/calling-convention) + content hash. A **build probe** emits a canonical manifest of every constant the boundary uses — **starting with the three that are currently asserted from memory.** `ken-host` binds the manifest hash and **fails closed on mismatch, before any syscall.** **`O_NOFOLLOW_KEN` / `O_CLOEXEC_KEN` / `AT_REMOVEDIR_KEN` are DELETED.** | Runtime | **M** |
+| **PX0** | ⚡ **ERRATUM, RELEASED AHEAD OF THE CAMPAIGN** — *the host ABI is Linux, not `unix`.* Re-gate all **11** constants and both `unsafe extern "C"` blocks from `#[cfg(unix)]` to `#[cfg(target_os = "linux")]`; every non-Linux target returns a **named unavailable lane BEFORE any host call.** No value changes, no crate moves. Frame: `wp/px0-target-classification-erratum.md`. | **Runtime** | **S** |
+| **PX1** | **`ken-host`: the first-party policy shell over an exact-pinned `rustix`.** Retire all 6 hand-declared FFI boundaries + call sites (`eval.rs:2378-2394`, `:2414/:2426/:2435/:2924/:2942/:2972/:2997`, `:3714-3730`). **`ken-host` is the only public callable boundary; `rustix` is private.** No `RawFd`, raw pointer, integer flag, or unrooted path escapes it. **Then `#![forbid(unsafe_code)]` on `ken-interp`.** **Gated on Pat's dependency-risk acceptance (§3, FORK 2).** | Runtime | **M** |
+| **PX2** | **Target ABI identity + a generated manifest, with the probe as an INDEPENDENT CROSS-CHECK.** `TargetAbi` + selected backend + exact dep/version/checksum/features + **the complete 13-fact ABI inventory** + schema version + output hash. A system-header probe **cross-checks** `rustix`'s facts; **any disagreement fails the build CLOSED.** Manifest hash binds into interpreter **and** native artifacts. **All 11 `*_KEN` constants and both `SIG*` facts are DELETED.** | Runtime | **M** |
 | **PX3** | **Machine/ABI scalar types in Ken** — `USize`/`ISize` and the `CInt` family, **bound to the manifest**, with **explicit, partial** conversions to/from arbitrary-precision `Int`. A narrowing conversion is a `Result`, never a silent truncation. | Language | **S** |
 
 **★ PX2 carries a clean-room gate.** A build probe that `#include`s the system
@@ -201,9 +254,26 @@ GPL'd source into the tree**. That distinction is load-bearing and it is
 **not mine to assert** — **PX2's frame routes through the Spec enclave's leakage
 recheck before a line is written.** Report §4.2 agrees; `CLEAN-ROOM.md` decides.
 
-**Phase A exit:** *No `unsafe` outside `ken-host`. Every ABI constant Ken uses is
-probed and manifest-bound. The artifact reports its exact target identity and
-manifest hash. A wrong-target manifest fails closed **before** any syscall runs.*
+> ### ★ Phase A exit — CORRECTED (Architect, `evt_7qqf827rr1jxk`)
+>
+> **My first draft said "No `unsafe` outside `ken-host`." That is FALSE on
+> current `main` and it is a DANGEROUS acceptance criterion.**
+> `cranelift_backend.rs:1059` holds the JIT entry `mem::transmute` — **a
+> native-code-execution boundary, not a POSIX host-call boundary.** A
+> literal-minded implementer could "satisfy" my AC by **moving the JIT trampoline
+> into `ken-host`**, which would be actively wrong: it would merge two unrelated
+> trust boundaries to make a checkbox go green.
+>
+> **Corrected exit:** ***No OS/host-ABI `unsafe` outside `ken-host`, and
+> `ken-interp` forbids `unsafe`.*** Every ABI fact is manifest-bound and
+> cross-checked; the artifact reports its exact target identity and manifest hash;
+> a wrong-target manifest **fails closed before any syscall runs**.
+>
+> **If we ever want repository-wide `unsafe` confinement, the JIT trampoline gets
+> its OWN named boundary and its OWN WP. Do not launder it into `ken-host`.**
+>
+> *An AC that can be satisfied by doing the wrong thing is worse than no AC — it
+> **directs** the wrong thing, with authority.*
 
 ### Phase PX-B — native effect execution · **P0**
 
@@ -300,13 +370,20 @@ ADR-0017 landed most of what the report asked for. **Two gaps are real:**
 
 ## 6. Sequencing
 
+**★ PX0 is OUT OF BAND and already released.** It is an erratum on landed code,
+not campaign work: it does not wait behind CC9, and it does not need the campaign
+forks resolved. It quarantines the wrong-target path *now*; PX1/PX2 delete the
+code it fixes.
+
 ```mermaid
 flowchart LR
+    PX0[PX0 erratum - Linux not unix - RELEASED NOW]
     LET4[LET-4 multi-binding let] --> LET2b[LET-2b refresh guides]
     LET2b --> LET3[LET-3 catalog let pilot]
     LET3 --> CC9[CC9 Resource/Bracket + Test.Property]
-    CC9 --> PX1[PX1 ken-host boundary crate]
-    PX1 --> PX2[PX2 target ABI + probed manifest]
+    CC9 --> PX1[PX1 ken-host over pinned rustix]
+    PX0 --> PX1
+    PX1 --> PX2[PX2 target ABI + manifest + probe cross-check]
     PX2 --> PX3[PX3 USize/ISize/CInt]
     PX2 --> PX4[PX4 native entrypoint ABI]
     PX4 --> PX5[PX5 native effect lowering]
