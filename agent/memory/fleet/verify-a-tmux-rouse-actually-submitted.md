@@ -195,3 +195,40 @@ most likely and most expensive** — one stranded paste on the Architect stalls
 simultaneously."* Independent lanes do not stall in unison for independent
 reasons. **A synchronized multi-ring stall IS a wedged shared gate until proven
 otherwise.**
+
+---
+
+## ★★★ STOP READING THIS MEMORY AND RUN THE SCRIPT — `scripts/sweep-wedged-panes.sh`
+
+**Look at the revision history of this file.** It has been extended three times,
+and **every extension said the same thing in a louder voice: *verify harder*.**
+Then it fired **twice more the same day** (conformance-validator ×2, plus a
+spec-author mention that never reached its turn at all) — **while I was actively
+holding this lesson in context.** Six times in one day.
+
+> **That is the tell. A rule whose only enforcement is "remember to look" is not
+> a rule — it is a recurring bug with documentation.** Each rewrite of this memory
+> was me treating a *systemic transport failure* as a *personal attention
+> failure*, and the fix for an attention failure is always more attention, which
+> is why it never worked.
+
+**So it is now a check, not a discipline:**
+
+```sh
+scripts/sweep-wedged-panes.sh            # detect + repair + verify the repair landed
+scripts/sweep-wedged-panes.sh --dry-run  # report only
+```
+
+It sweeps every `moot-*` pane, submits any paste still stranded on the `›`
+composer line, **re-reads each pane to confirm the paste actually cleared**, and
+names any that did not take the `Enter`. It correctly **skips** a paste already
+marked *"Messages to be submitted after next tool call"* (queued and healthy —
+re-sending double-delivers) and never touches `moot-steward`. It is the
+**mandatory first step of every Steward watchdog tick.** It caught a live wedge
+on its very first dry-run.
+
+**The general lesson, which is bigger than tmux:** when you catch yourself
+writing *"be more careful about X"* into a playbook **for the second time**, X is
+not a discipline problem. **Convert it into a check, or accept that it will keep
+happening.** Everything above this line is still true — it is just no longer the
+*mechanism*. It is the explanation of why the script exists.
