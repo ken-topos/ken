@@ -81,17 +81,64 @@ Bytes)`) is delivered by I-7** (Team Runtime,
 `docs/program/wp/i7-env-process-projectors.md`). **CC8 depends on I-7 and must
 not duplicate it.**
 
-**⇒ CC8's dependency set is now: SUB-1 (the `Bytes` structural bridge) AND
-I-7 (the env projector).** Both are in flight. **The seam is clean and it is
+**⇒ CC8's dependency set is: I-7 (the env projector) ✅ MERGED (`9ae7acd1`) AND
+SUB-1b (lawful `DecEq Bytes`) — in flight.** **The seam is clean and it is
 worth stating, because it is exactly why the split works:**
 
 - **I-7 gives you the environment as a `List (Prod Bytes Bytes)`.** Pure
   projection. No key comparison, so **no `DecEq Bytes`, no `Axiom`, no TCB.**
 - **CC8 does the LOOKUP** — and a lookup compares keys, so it needs
-  **`DecEq Bytes`**, which is precisely what **SUB-1** makes provable. *That
-  is the whole reason CC8 is held and I-7 is not.*
+  **`DecEq Bytes`**. *That is the whole reason CC8 is held and I-7 is not.*
 
-### 3.2 Reuse the landed byte carrier — do NOT mint a fifth
+> **★ AMENDED 2026-07-14: your unblock is SUB-1b, NOT SUB-1.** SUB-1 (merged,
+> `6e415f23`) gives the **spine** — `bytes_to_list : Bytes → List UInt8` — which is
+> all a *fold* needs. **But `UInt8` is itself an opaque type you cannot case on**,
+> so `DecEq UInt8` — and therefore `DecEq Bytes` — **was still unwritable.**
+> **SUB-1 moved the wall from `Bytes` to `UInt8`; it did not remove it.** *A fold
+> never looks at an element; a key comparison does.* **SUB-1b** (`wp/sub1b-uint8-deceq`)
+> adds the one retraction certificate that closes the chain and hands you a
+> **lawful, decidable `DecEq Bytes` at zero further trust.** **Wait for it.**
+
+### 3.2 ★★ AMENDED 2026-07-14 — YOUR KEYS ARE PLAIN `Bytes`. NO CARRIER.
+
+> **★ THIS SECTION WAS WRITTEN FOR THE OLD SUBSTRATE AND ITS ADVICE IS NOW
+> WRONG. Read the amendment; the struck-through text below is kept only so you
+> can see what changed and why.**
+
+**A cached-`Nat` carrier existed for exactly one reason: you could not reason
+about `Bytes` structurally.** `bytes_length : Bytes → Int` is a `PrimReduction::Op`
+— **opaque to kernel conversion** — so you could not *prove* anything about a
+length; you cached a `Nat` alongside the bytes and carried an agreement proof to
+get a fact you could actually use. **That wall is being torn down:**
+
+- **SUB-1 (landed, `origin/main @ 6e415f23`)** — `bytes_to_list : Bytes → List
+  UInt8` + the round-trip postulates. `bytes_nat_length = length ∘ bytes_to_list`
+  is now a **real structural fold**: it computes *and* you can reason about it,
+  **with no cached carrier and no `Axiom`.**
+- **SUB-1b (in flight, `wp/sub1b-uint8-deceq`)** — **lawful `DecEq Bytes`**, at
+  one audited trusted entry. **This is your unblock**: a lookup compares keys, and
+  now the comparison is *decidable and provably correct*.
+
+**⇒ An environment key is a plain `Bytes`, compared with `DecEq Bytes`.**
+
+1. **⛔ DO NOT mint a cached-`Nat` carrier for env or config keys.** Not a new
+   one, and **do not extend the `ArgBytes` idiom to a new key type.** The idiom is
+   a **workaround for a wall that no longer stands at the key layer**, and
+   **SUB-2 exists to retire the ones we already have** — do not add to the pile it
+   has to clear.
+2. **Where CC3's `Cursor` ABI already demands `ArgBytes`, pass it** — that is
+   CC3's existing interface and **you are not refactoring CC3 in this WP.** Consume
+   it as-is; **do not pre-empt SUB-2, and do not block on it.**
+3. **If you find yourself wanting a cached length for a NEW type, STOP AND REPORT.**
+   That is the signal the substrate is still short somewhere, and I want to see it
+   rather than have another carrier quietly minted. *(That is precisely how the
+   fifth carrier would have been born.)*
+
+---
+
+<details><summary>SUPERSEDED — the original §3.2 (old substrate). Do not follow.</summary>
+
+### ~~Reuse the landed byte carrier — do NOT mint a fifth~~
 
 `ArgBytes` (`Parsing/Cursor.ken.md:51–62`) is **arg-*named* but structurally
 generic**:
@@ -117,6 +164,8 @@ warranted, **propose it to me — do not fork.** A rename is an exported-name
 migration and needs a **whole-harness consumer inventory** (`ArgParse`, the CC7
 acceptance harness, the Cursor tests), which is a scope call, not an
 implementation detail.
+
+</details>
 
 ### 3.3 `Schema` must not depend on its clients (the CC3 cycle, again)
 
