@@ -1,16 +1,35 @@
 # LET-3 · The catalog rewrites — a PILOT, reviewed, then family by family
 
 **Owner:** Team Foundation · **Size:** M (pilot) → L (staged rollout)
-**Branch:** `wp/let3-catalog-let-pilot` · **Base:** `origin/main @ 2c184550`
+**Branch:** `wp/let3-catalog-let-pilot` · **Base:** current `origin/main`
 **Gate:** Foundation QA + **Steward** (the pilot review is a real gate, not a
 formality)
 
-**⛔ BLOCKED ON BOTH LET-1 AND LET-2. Do not start before the Steward's GO.**
+## ▶ DEPENDENCIES ARE MET — this WP is RELEASED (Steward, 2026-07-14)
 
-| Dep | Why it is hard |
-|---|---|
-| **LET-1** (`kenfmt` layout) | Without it the formatter **shreds a `let` chain into one token per line** — and `ken fmt --check` calls that **canonical**. You would land mangled code and every gate would pass. |
-| **LET-2** (the convention) | Without it there is **no rule to apply and no checked example to imitate.** You would be inventing the style you were asked to follow. |
+**Both blockers have landed.** The original frame named them "LET-1" and
+"LET-2"; both were **subsumed and delivered under different IDs**, so read this
+table, not the old names:
+
+| Original dep | What actually landed | Where |
+|---|---|---|
+| **LET-1** — `kenfmt` layout | **LET-4** (`26527c5a`) — multi-binding `let` grammar, scope, desugaring, effects, **and canonical layout**. LET-1b was explicitly **subsumed** by it. | merged |
+| **LET-2** — the convention | **LET-2b** (`ce6f0718`) — the guides, `write-ken`, the catalog style guide, and all three Foundation overlays now **teach the rule and carry a checked example**. | merged |
+
+**⇒ The hazard each dep guarded against is closed:** the formatter no longer
+shreds a binding group (LET-4 fixed the layout), and there **is** now a rule to
+apply and an example to imitate (LET-2b wrote it, and the three Foundation
+overlays you work from carry it).
+
+### ⚠ The syntax you are applying is LET-4's, not the old frame's prose
+
+The landed form is a **`;`-separated binding group** — sequential and
+non-recursive, earlier names visible to later right-hand sides, duplicates
+rejected. **Maximal coalescing applies at two or more bindings; a single binding
+stays a plain `let`.** That last clause is load-bearing here: **do not turn a
+one-binding `let` into a group.** Read `catalog/guide/surface-reference.ken.md`
+and your own team overlay before the first edit — they are current as of
+`ce6f0718`.
 
 ## 0. ★ What this WP is, and what it must NOT become
 
