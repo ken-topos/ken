@@ -38,11 +38,10 @@ const prog : ITree ConsoleOp console_resp (Pair Unit Nat) =
 
 proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
   : HostIO APartial ExitCode visits [Console] =
-  bind (Coproduct (FSOp APartial) ConsoleOp)
-       (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+  bind (Coproduct (FSOp APartial) AmbientOp)
+       (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
        (Pair Unit Nat) ExitCode
-    (inject_r (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp
-      (Pair Unit Nat) prog)
+    (host_console APartial (Pair Unit Nat) prog)
     (\_ . host_exit APartial Success)
 "#;
 

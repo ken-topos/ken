@@ -72,6 +72,10 @@ pub fn empty_prelude_env() -> PreludeEnv {
         write_id: z,
         flush_id: z,
         is_terminal_id: z,
+        instant_id: z,
+        mkinstant_id: z,
+        clock_op_id: z,
+        wall_now_id: z,
         read_result_id: z,
         chunk_id: z,
         eof_id: z,
@@ -152,6 +156,12 @@ pub struct PreludeEnv {
     pub write_id: GlobalId,
     pub flush_id: GlobalId,
     pub is_terminal_id: GlobalId,
+    /// `Instant` — a structural wall-clock timestamp in nanoseconds.
+    pub instant_id: GlobalId,
+    pub mkinstant_id: GlobalId,
+    /// `ClockOp` — the ambient wall-clock effect algebra.
+    pub clock_op_id: GlobalId,
+    pub wall_now_id: GlobalId,
     /// Total response carrier for Console reads.
     pub read_result_id: GlobalId,
     pub chunk_id: GlobalId,
@@ -228,6 +238,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "data ConsoleOp = Read Stream Int | Write Stream Bytes | Flush Stream | IsTerminal Stream",
     )
     .map_err(|e| ElabError::Internal(format!("prelude ConsoleOp failed: {}", e)))?;
+    elab.elaborate_decl("data Instant = MkInstant Int")
+        .map_err(|e| ElabError::Internal(format!("prelude Instant failed: {}", e)))?;
+    elab.elaborate_decl("data ClockOp = WallNow")
+        .map_err(|e| ElabError::Internal(format!("prelude ClockOp failed: {}", e)))?;
     elab.elaborate_decl("data ReadResult = Chunk Bytes | Eof")
         .map_err(|e| ElabError::Internal(format!("prelude ReadResult failed: {}", e)))?;
     elab.elaborate_decl(
@@ -300,6 +314,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let write_id = lookup("Write")?;
     let flush_id = lookup("Flush")?;
     let is_terminal_id = lookup("IsTerminal")?;
+    let instant_id = lookup("Instant")?;
+    let mkinstant_id = lookup("MkInstant")?;
+    let clock_op_id = lookup("ClockOp")?;
+    let wall_now_id = lookup("WallNow")?;
     let read_result_id = lookup("ReadResult")?;
     let chunk_id = lookup("Chunk")?;
     let eof_id = lookup("Eof")?;
@@ -1136,6 +1154,19 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .copied()
         .ok_or_else(|| ElabError::Internal("prelude: 'IO' not registered".into()))?;
 
+    // Clock is an ambient host effect, parallel to Console rather than an FS
+    // capability. Its structural Instant response adds no primitive or trust.
+    elab.elaborate_decl("fn clock_resp (op : ClockOp) : Type = match op { WallNow |-> Instant }")
+        .map_err(|e| ElabError::Internal(format!("prelude clock_resp failed: {}", e)))?;
+    elab.elaborate_decl("const ClockIO (a : Type) : Type = ITree ClockOp clock_resp a")
+        .map_err(|e| ElabError::Internal(format!("prelude ClockIO failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc wall_now : ClockIO Instant visits [Clock] = \
+         Vis ClockOp clock_resp Instant WallNow \
+           (\\r. Ret ClockOp clock_resp Instant r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude wall_now failed: {}", e)))?;
+
     elab.elaborate_decl(
         "proc read (stream : Stream) (limit : Int) : IO (Result IOError ReadResult) visits [Console] = \
          Vis ConsoleOp console_resp (Result IOError ReadResult) (Read stream limit) \
@@ -1443,26 +1474,47 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.globals
         .insert("MkProgramCaps".into(), program_caps_ctor);
 
+    elab.elaborate_decl("const AmbientOp : Type = Coproduct ConsoleOp ClockOp")
+        .map_err(|e| ElabError::Internal(format!("prelude AmbientOp failed: {}", e)))?;
+    elab.elaborate_decl(
+        "fn ambient_resp (op : AmbientOp) : Type = \
+         resp_coproduct ConsoleOp ClockOp console_resp clock_resp op",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude ambient_resp failed: {}", e)))?;
     elab.elaborate_decl(
         "fn HostIO (a : Auth) (r : Type) : Type = \
-         ITree (Coproduct (FSOp a) ConsoleOp) \
-           (resp_coproduct (FSOp a) ConsoleOp (fs_resp a) console_resp) r",
+         ITree (Coproduct (FSOp a) AmbientOp) \
+           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) r",
     )
     .map_err(|e| ElabError::Internal(format!("prelude HostIO failed: {}", e)))?;
     elab.elaborate_decl(
         "fn host_exit (a : Auth) (code : ExitCode) : HostIO a ExitCode = \
-         Ret (Coproduct (FSOp a) ConsoleOp) \
-           (resp_coproduct (FSOp a) ConsoleOp (fs_resp a) console_resp) \
+         Ret (Coproduct (FSOp a) AmbientOp) \
+           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
            ExitCode code",
     )
     .map_err(|e| ElabError::Internal(format!("prelude host_exit failed: {}", e)))?;
     elab.elaborate_decl(
+        "proc host_console (a : Auth) (r : Type) (action : IO r) \
+         : HostIO a r visits [Console] = \
+         inject_r (FSOp a) AmbientOp (fs_resp a) ambient_resp r \
+           (inject_l ConsoleOp ClockOp console_resp clock_resp r action)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude host_console failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc host_clock (a : Auth) (r : Type) (action : ClockIO r) \
+         : HostIO a r visits [Clock] = \
+         inject_r (FSOp a) AmbientOp (fs_resp a) ambient_resp r \
+           (inject_r ConsoleOp ClockOp console_resp clock_resp r action)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude host_clock failed: {}", e)))?;
+    elab.elaborate_decl(
         "proc host_program_then (a : Auth) (action : IO Unit) (code : ExitCode) \
          : HostIO a ExitCode visits [Console] = \
-         bind (Coproduct (FSOp a) ConsoleOp) \
-           (resp_coproduct (FSOp a) ConsoleOp (fs_resp a) console_resp) \
+         bind (Coproduct (FSOp a) AmbientOp) \
+           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
            Unit ExitCode \
-           (inject_r (FSOp a) ConsoleOp (fs_resp a) console_resp Unit action) \
+           (host_console a Unit action) \
            (\\_. host_exit a code)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude host_program_then failed: {}", e)))?;
@@ -1525,6 +1577,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         write_id,
         flush_id,
         is_terminal_id,
+        instant_id,
+        mkinstant_id,
+        clock_op_id,
+        wall_now_id,
         read_result_id,
         chunk_id,
         eof_id,

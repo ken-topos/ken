@@ -86,7 +86,7 @@ fn drive(
     tree: EvalVal,
     store: &mut EvalStore,
 ) -> EvalVal {
-    ken_interp::run_io(tree, host, &env.ids, None, None, &env.elab.env, store)
+    ken_interp::run_io(tree, host, &env.ids, None, None, None, &env.elab.env, store)
         .expect("Console tree drives")
 }
 

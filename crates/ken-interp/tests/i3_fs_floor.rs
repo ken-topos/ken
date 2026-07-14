@@ -81,6 +81,7 @@ fn drive(
         &env.console,
         Some(&env.fs),
         None,
+        None,
         &env.elab.env,
         &mut store,
     )
