@@ -14,7 +14,89 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (16:40 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ f8096072`
+> ### ⏭ 2026-07-14 (18:15 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 23a7eb31`
+>
+> ## ✅ CC6b MERGED+CLOSED · ✅ LET-4 PIN MERGED+CLOSED @ `23a7eb31` · ▶ LANGUAGE BUILDING
+>
+> **LET-4's spec+conformance pin is on `main`** (4 × `spec/30-surface/` chapters +
+> the conformance seed). **Language released; running its D0 grounding audit.**
+> **It is the ONLY thing on the critical path.**
+>
+> ## ✅✅ THE BYTE-SUBSTRATE ARC IS COMPLETE — THE CLI IS UNBLOCKED
+> **SUB-1** (structural view) → **SUB-1b** (lawful `DecEq`) → **SUB-2** (retire the
+> cached-`Nat` carriers) → **CC6b** (`Path.Posix`), with **CC7** (ArgParse) +
+> **CC8** (env/config on a shared `Schema`) alongside. **Ken can now parse argv,
+> read the environment, decode config, and manipulate filesystem paths —
+> structurally, at ZERO trusted-base delta.** *Exactly the substrate Pat named as
+> the objective: a real, if simple, CLI tool built in Ken.*
+>
+> ## ★★ CC6b was ONE LEMMA from being HOLLOW — a VACUOUS law has ZERO trust delta
+> The frame's AC4 (`parse (render p) = p` for normalized `p`) was **proved FALSE**
+> by Runtime's implementer, who hard-stopped rather than weaken it. **My frame put
+> the segment invariant in a `--` COMMENT** (`cc6b-path-posix.md:118`), where the
+> carrier `List (List UInt8)` cannot state it. Architect ruled → **segment-valid**.
+> Shipped: `path_valid` (the invariant **in Ken**), the conditional round-trip, and
+> **`path_parse_valid : ∀ raw. path_valid (path_parse raw) ≡ True` — THE REACHING
+> LEMMA, PROVED by structural induction, not postulated.**
+>
+> **runtime-leader argued *"zero trust movement ⇒ no Architect review."* Conclusion
+> right, REASON WRONG:** a hollow conditional law **type-checks, adds no `Axiom`,
+> and has ZERO `trusted_base()` delta** — the gate's trigger **never fires on the
+> vacuous WP**, because adding nothing is what it's looking for. **I published
+> because I verified the reaching lemma is proved**, not because the delta was
+> zero. → memory `a-vacuous-law-has-zero-trust-delta`.
+>
+> ## ★★ The `;` DERIVATION found a spec bug with NOTHING to do with LET-4
+> The spec said `match_expr ::= "{" arm (";" arm)* "}"`. **The landed parser accepts
+> a trailing `;` before `}`** (`parser.rs:1843-1861`) — `match x { P ↦ p; }`
+> compiles today. It surfaced only because **@architect refused to let the draft's
+> *"confirm the `;` is unambiguous"* mean *"check"*.** You cannot derive disjointness
+> from a grammar that **misdescribes one of the two contexts**.
+> > **The conclusion was TRUE. The spec was WRONG ABOUT WHY** — and a derivation
+> > from a false premise looks exactly as rigorous as a real one.
+> **Ruled IN SCOPE:** fix the spec, **preserve the landed acceptance**.
+>
+> **★ THIRD TIME TODAY a defect surfaced ONLY when someone tried to WRITE a
+> guarantee and found the vocabulary didn't hold it:** CC6b's invariant in a
+> comment · LET-1's *readability* with no gate · `match`'s grammar. **Stop
+> asserting; write the proof; see if your pen has anywhere to land.**
+>
+> ## ▶ LET-4 BUILD (Language) — the two ACs that decide it
+> - **AC-DERIVE** — expected text from the **amended spec**, never pasted from the
+>   formatter. Two admissible texts ⇒ **STOP, spec gap.**
+> - **AC-READER** — paste rendered output **verbatim**; state the property in a
+>   reader's terms. **NO passing test discharges it.** *LET-1 shipped six green
+>   gates and staircased; not one asked whether the output was readable — the
+>   property in its own title.*
+>
+> **⚠ LET-4 frame citations are STALE (flagged in-frame):** it calls the *shred*
+> defect and `is_compound_expr` live — **both fixed by LET-1**. Live defect = the
+> **STAIRCASE**.
+>
+> ## Booked behind LET-4
+> **LET-2b** — guides / `write-ken.md` / Foundation overlays teach the
+> **single-binding** spelling; LET-4 makes the **GROUP** canonical. **Rides LET-4.**
+> → then **LET-3** (catalog pilot).
+>
+> ## ⚠ TWO STEWARD FOOTGUNS HIT TODAY — both silent
+> 1. **`--doc-only` MERGES WITHOUT CI**, and `catalog/**/*.ken.md` is **CODE** (a
+>    corpus test formats it). LET-2 landed two guide strands unformatted → red
+>    frozen-corpus gate on `main` → **blocked the publisher for every subsequent
+>    non-doc merge.** ⇒ **`catalog/` · `examples/` · `conformance/` = FULL CI,
+>    always, whatever the extension.**
+> 2. **`git checkout <branch> -- <path>` OVERWRITES your uncommitted edit** with
+>    that branch's committed version. It silently ate a tracker block AND the
+>    memory-index repair. ⇒ **Edit directly on a branch cut from `origin/main`;
+>    never cross-branch-checkout a file you just edited.**
+>
+> ## Rings
+> **Language** = LET-4 build (D0 audit) · **Spec enclave** = free,
+> Handoff-Gate-ready · **Runtime** = free · **Foundation** = parked for LET-3 ·
+> **Ergo** = stood down · Kernel/Verify idle by design.
+>
+> ---
+>
+> ### ⏭ 2026-07-14 (16:40 UTC) — `origin/main @ f8096072`
 >
 > ## ✅ CC8 MERGED @ `f8096072` · ✅ LET-2 CLOSED · ✅ LET-1 CLOSED · ✅ SUB-1b/SUB-2 CLOSED
 >
