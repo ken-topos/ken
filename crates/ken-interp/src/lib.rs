@@ -7,10 +7,11 @@ pub mod eval;
 pub mod proof_erasure_checker;
 
 pub use eval::{
-    apply, decimal_value, drive_h, drive_h_instrumented, eval, run_io, CaptureHost, ConsoleIds,
-    ConsoleStream, ConsoleTrace, CoproductIds, Env, EvalStore, EvalVal, FSIds, FsTrace,
+    apply, check_fs_capability, decimal_value, drive_h, drive_h_instrumented, eval,
+    fs_target_components, run_io, CapabilityDenied, CaptureHost, ConsoleIds, ConsoleStream,
+    ConsoleTrace, CoproductIds, Env, EvalStore, EvalVal, FSIds, FsOpKind, FsTrace,
     HostCreatePolicy, HostDirEntry, HostFileKind, HostFileMetadata, HostHandler, HostRead,
-    ITreeIds, PosixHost, RunIoError, SlotId, VirtualFsNode,
+    ITreeIds, PosixHost, Resolution, ResolveError, RunIoError, SlotId, VfsNodeId, VirtualFsNode,
 };
 pub use proof_erasure_checker::{
     ken_check_proof_erasure_boundary_witness, KenProofErasureBoundaryCheckError,

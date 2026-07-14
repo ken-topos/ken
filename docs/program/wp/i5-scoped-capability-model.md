@@ -7,8 +7,30 @@ fast-follow** that closes that, and until it lands Ken must not advertise
 confinement.
 
 **Program I, I-5.** Owner: **Runtime**. Reviewer: **Architect** (terminal;
-he authored the design) + **CV** (conformance seeds). Size: **L**.
-Base: `origin/main @ 62cb7b3f`. Branch: `wp/i5-scoped-capability-model`.
+he authored the design) + **CV** (conformance seeds). Size: **XL**.
+Base: `origin/main @ dff76dc7`. Branch: `wp/i5-scoped-capability-model`.
+
+## Step 0 — widen the host-handler seam
+
+ADR-0017 §4a supersedes the original frame's false assumption that the landed
+host-handler seam could already carry a resolved handle. The seam widening and
+its scoped consumer land together; an unused ABI cannot establish confinement.
+
+1. A resolved handle carries only an owned OS descriptor or a virtual node id,
+   never path bytes. Dispatch threads it verbatim and cannot derive a path from
+   it. Operate methods accept only handles.
+2. Resolution walks relative to the capability's root handle and returns either
+   a pinned existing handle or a pinned parent handle plus one validated leaf.
+   Operations consume that result without reopening the original path.
+3. The byte-path `HostHandler::fs_*(&[u8])` operate surface is replaced, not
+   retained alongside the handle API. A surviving path entry point is a bypass.
+4. `CaptureHost` is re-keyed from paths to inode-style node identity plus
+   directory entries, and `VirtualFsNode` gains symlinks. Renaming an entry does
+   not change an already-resolved node handle; this makes the TOCTOU
+   discriminator falsifiable rather than simulated.
+
+Only after this step lands does the rights × scope × symlink model below use the
+widened seam.
 
 ## ★ THE DESIGN IS ALREADY WRITTEN — BUILD FROM THE ADR, NOT FROM THIS FRAME
 
@@ -84,6 +106,9 @@ last day. It is not decoration.)
 
 ## Acceptance criteria (testable)
 
+- **AC0 — no byte-path host bypass.** No byte-path FS operate method survives on
+  the `HostHandler` trait surface. Resolution is the sole path-consuming entry;
+  all filesystem operations consume its owned handle or pinned-parent result.
 - **AC1 — every denial precedes the syscall.** Assert `host.fs_trace()` is
   **EMPTY** on every deny path (the §B discipline). A denial that happens *after*
   the host touched the filesystem is a **failed** denial.
@@ -107,10 +132,10 @@ last day. It is not decoration.)
     {Read,Write}→{Read} and `dir1/`→`dir1/sub/` **DISCHARGES**; a deviant child
     claiming {Read,Write} from a {Read} parent, or `dir1/`→`dir1/../dir2/`, is
     **UNDISCHARGEABLE**.
-  - **TOCTOU — proved STRUCTURALLY, not by a flaky timing test.** Prove the op
-    consumes the **check's fd** rather than a re-resolved path: a VFS test where
-    renaming a path component between check and use **does not change which inode
-    the op hits** (the fd is pinned).
+  - **TOCTOU — proved STRUCTURALLY, not by a flaky timing test.** Resolve a
+    target, rename its parent directory entry, then operate through the resolved
+    handle; the operation must still hit the pinned inode. A naive path-string
+    implementation must fail this discriminator.
 - **AC4 — zero kernel delta.** `crates/ken-kernel/` untouched; `trusted_base()`
   before == after; no new primitive/postulate. (Fixed input 1. If this AC cannot
   be met, the verdict is falsified — **escalate, do not work around.**)

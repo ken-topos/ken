@@ -25,12 +25,12 @@ fn cap_evalval(cap: &Cap) -> ken_interp::EvalVal {
     ken_interp::EvalVal::Cap(cap.clone())
 }
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+fn fixture_path(name: &str) -> PathBuf {
+    PathBuf::from("conformance/fs/fixtures").join(name)
 }
 
-fn fixture_path(name: &str) -> PathBuf {
-    repo_root().join("conformance/fs/fixtures").join(name)
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 struct FsEnv {
@@ -87,11 +87,11 @@ fn read_via_real_driver(
     };
     let a_val = ken_interp::eval(&[], &a_term, &env.elab_env.env, &mut store);
     let step0 = ken_interp::apply(f, a_val, &env.elab_env.env, &mut store);
-    let cap = Cap::mint(AUTH_FULL, "FS");
+    let cap = ken_interp::PosixHost::new_at(repo_root()).mint_fs_cap(AUTH_FULL);
     let step1 = ken_interp::apply(step0, cap_evalval(&cap), &env.elab_env.env, &mut store);
     let path_val = ken_interp::EvalVal::Bytes(path.as_bytes().to_vec());
     let tree = ken_interp::apply(step1, path_val, &env.elab_env.env, &mut store);
-    let mut host = ken_interp::PosixHost::new();
+    let mut host = ken_interp::PosixHost::new_at(repo_root());
     ken_interp::run_io(
         tree,
         &mut host,
@@ -109,7 +109,7 @@ fn read_via_real_driver(
 fn positive_read_returns_exact_fixture_bytes() {
     let mut env = mk_env();
     let path = fixture_path("three-lines.txt");
-    let expected = std::fs::read(&path).expect("fixture file exists");
+    let expected = std::fs::read(repo_root().join(&path)).expect("fixture file exists");
     assert_eq!(expected, b"alpha\nbeta\ngamma\n");
 
     let result = read_via_real_driver(&mut env, path.to_str().unwrap());
@@ -141,7 +141,7 @@ fn absent_path_surfaces_total_not_found_result() {
     let mut env = mk_env();
     let path = fixture_path("does-not-exist.txt");
     assert!(
-        !path.exists(),
+        !repo_root().join(&path).exists(),
         "fixture harness precondition: path must be absent"
     );
 
