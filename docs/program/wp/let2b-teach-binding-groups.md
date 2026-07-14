@@ -4,7 +4,8 @@
 **Stream/gate:** WS-L / surface pedagogy · **Rides:** LET-4 (`26527c5a`)
 **Unblocks:** LET-3 (catalog `let` pilot — Foundation)
 
-**Status:** RELEASED.
+**Status:** RELEASED · **AMENDED MID-FLIGHT (operator, 2026-07-14): D6 added,
+AC4 REVERSED — the `FRAME_LINE_COUNTS` oracle is now DELETED, not preserved.**
 
 > **Chain:** LET-4 made the multi-binding **group** the canonical `let`. It
 > migrated the two `catalog/guide/*.ken.md` **fences** — because it *had to*, or
@@ -81,30 +82,37 @@ formatter only coalesces chains of **≥ 2** (`31-lexical.md:228`).
 LET-4 already migrated the only two (`proof-techniques.ken.md:353-375`, `:396-407`;
 `surface-reference.ken.md:476-486`). **Your job is the PROSE, not the code.**
 
-### ★★ TRAP 2 — THE FROZEN ORACLE WILL TEMPT YOU TO RE-BASELINE IT
+### ★★ TRAP 2 — SUPERSEDED BY OPERATOR RULING. **The oracle is being DELETED.**
 
-`crates/ken-elaborator/tests/kenfmt_c_capstone.rs:14-66` holds
-`FRAME_LINE_COUNTS`, a **frozen** table that names your exact files:
+> **⚠ AMENDMENT (Pat, 2026-07-14, mid-flight).** This section previously said
+> *"⛔ DO NOT EDIT `FRAME_LINE_COUNTS` — if Gate C trips, STOP and route."*
+> **That guardrail is WITHDRAWN and REVERSED. Pat ruled: remove the checks.**
+> **See D6. The correct action is now to DELETE the table, not tiptoe around it.**
 
-```rust
-("catalog/guide/proof-techniques.ken.md",  367),
-("catalog/guide/surface-reference.ken.md", 535),
-```
+**Why it goes** (and the fleet already half-knew this — **ten existing WP frames
+carry a standing *"Add NO row to `FRAME_LINE_COUNTS`, it is a discharged
+historical baseline"*** — everyone has been routing around a gate nobody
+believed in):
 
-Your prose edits **grow** these files. The guard at `:163-166` is
-`canonical_lines * 2 <= frame_lines * 9` — a **4.5× ceiling** (so
-`surface-reference.ken.md` may reach **2407** lines; it is at 535). **Normal
-prose expansion will not trip it.**
+`FRAME_LINE_COUNTS` records each corpus file's line count **as it was BEFORE the
+capstone-C reformat**, and asserts the reformat did not pathologically expand it
+(≤4.5× per file, ≤3× corpus-wide). **The file says so itself at `:11`:
+*"Historical, discharged capstone-C migration baseline."***
 
-**But `:168` is `assert_eq!(frame_total, 32_594, "frame line-count oracle
-drifted")` — and that assertion exists for exactly one reason: to catch someone
-"fixing" the table.**
+**That migration is over.** What remains is:
 
-> **⛔ DO NOT EDIT `FRAME_LINE_COUNTS`. It is a frozen oracle, not a ledger to
-> keep current.** *Re-baselining an oracle to match the artifact it is supposed
-> to constrain converts a gate into a rubber stamp — it will then pass forever
-> and mean nothing.* **If Gate C trips, STOP and route to the Steward.** That is
-> a finding, not a chore.
+- a **4.5× growth cap anchored to a finished migration**, which now accidentally
+  caps *content authoring* — a job it never had — with **66% slack** (the closest
+  file to firing is `hello-world.ken` at **15 lines against a 45-line cap**);
+- **`assert_eq!(frame_total, 32_594)`**, which is **just the sum of the 39 rows**
+  — *a checksum on the TABLE, asserting nothing whatsoever about Ken.* Its only
+  function is to fail if someone edits the table.
+
+**And the sibling test 50 lines below it — `canonical_frozen_corpus_is_a_39_file_fixed_point()`
+(`:68`) — re-formats every LIVE file and asserts byte-identity.** *That is a
+current-anchored fixed point, and it is doing all the real work.* **A discharged
+one-shot proof left wired as a live gate is how you get a test everyone routes
+around — which is exactly what happened.**
 
 ---
 
@@ -139,6 +147,46 @@ which is the exact reason LET-3 was blocked behind LET-4 in the first place.*
 **One clear line each is enough. Do not skip this because it is the smallest
 item; it is the one with a consumer waiting.**
 
+**D6 · ★ RETIRE THE DISCHARGED ORACLE — `crates/ken-elaborator/tests/kenfmt_c_capstone.rs`.**
+*(Operator ruling, mid-flight. This is the one code change in an otherwise
+prose-only WP — and it is a DELETION.)*
+
+**Delete:**
+- the `FRAME_LINE_COUNTS` const (`:14-66`), **and its comment block `:11-13`**;
+- the whole test `canonical_reformat_has_no_pathological_line_expansion()`
+  (`:117-173`) — it is the table's only consumer.
+
+**Keep, untouched:** `canonical_frozen_corpus_is_a_39_file_fixed_point()`,
+`balanced_corpus_rejects_the_known_over_width_splay_shape()`, and every helper.
+
+### ⛔ AND YOU MUST REPAIR THE HOLE THE DELETION WIDENS — do not skip this
+
+**The dead test carried ONE live property** (`:145-152`): *the 39 named paths
+must still exist in the live corpus* — a **corpus-shrink guard.** Deleting the
+table deletes that guard.
+
+**The only remaining shrink guard is the fixed-point test's floors — and they
+are ALREADY STALE:**
+
+| | floor today | live corpus | silently deletable |
+|---|---|---|---|
+| literate (`catalog/**/*.ken.md`) | `>= 14` | **38** | **24 files** |
+| plain (`examples/rosetta/**/*.ken` +1) | `>= 17` | **17** | 0 |
+
+> **⇒ Twenty-four guide/package files could be deleted TODAY and every gate would
+> stay green.** *That hole is not created by this WP — it is merely EXPOSED by it.
+> Removing the table without fixing it would make a real regression.*
+
+**Repair:** raise the two floors in `canonical_frozen_corpus_is_a_39_file_fixed_point()`
+to the live counts — **`literate >= 38`, `plain >= 17`.** *Two numbers,
+current-anchored, strictly stronger than both the stale floors and the frozen
+table. Additions still pass; any deletion fails.*
+
+**Stated loss, accepted by the operator:** we give up **per-path identity** (a
+delete-one-add-one *swap* now passes a count floor) and the expansion caps
+(which guarded a discharged migration with 66% slack). **A file deletion is
+visible in the diff; that is where it should be caught.**
+
 ---
 
 ## 4 · Acceptance criteria
@@ -156,9 +204,19 @@ route: that means LET-4 left something non-canonical and it is a finding.*
 your diff touches and show each was a **≥2 chain**. *If that list is empty, that
 is the correct and expected answer.*
 
-**AC4 — the frozen oracle is UNTOUCHED.** `git diff` does **not** include
-`crates/ken-elaborator/tests/kenfmt_c_capstone.rs`. **`FRAME_LINE_COUNTS` is not
-edited. `32_594` is not edited.**
+**AC4 — ★ REVERSED BY OPERATOR RULING. The frozen oracle is DELETED, not
+preserved.** *(The original AC4 said `git diff` must NOT include
+`kenfmt_c_capstone.rs`. It now MUST.)*
+
+- **`FRAME_LINE_COUNTS` and `canonical_reformat_has_no_pathological_line_expansion()`
+  are GONE.** `git grep -n 'FRAME_LINE_COUNTS\|32_594'` over `crates/` returns
+  **zero hits.**
+- **The floors are raised** to `literate >= 38`, `plain >= 17` (D6).
+- **★ PROVE THE NEW FLOOR IS NOT VACUOUS:** delete one `catalog/**/*.ken.md` in a
+  **disposable** tree and show `canonical_frozen_corpus_is_a_39_file_fixed_point`
+  **FAILS**; restore it and show it passes. *A floor you never saw reject
+  anything is a floor you have not tested.* **Report both runs.**
+- **The other two tests in the file still pass, unmodified.**
 
 **AC5 — the Foundation overlays teach the group** (D5), so LET-3 is authored
 canonically the first time.
@@ -180,7 +238,13 @@ every WP behind it. That does not happen twice.*
 
 - **The spec is settled and landed.** Do not edit `spec/`. Cite it.
 - **Do not touch the Ken fences.** LET-4 owns them; they are canonical.
-- **Do not re-baseline `FRAME_LINE_COUNTS`.**
+- **~~Do not re-baseline `FRAME_LINE_COUNTS`.~~ WITHDRAWN — delete it (D6).**
+  *The distinction still matters and is why the original guardrail existed:
+  **re-baselining** an oracle to match the artifact it constrains is always
+  wrong (it becomes a rubber stamp). **Retiring** a proof that has been
+  discharged is right. Pat ruled this is the second, not the first.*
 - **Do not convert single-binding lets to groups.** (§2. This is the failure mode.)
+- **Do not touch `kenfmt_c_capstone.rs` beyond D6** — the two surviving tests and
+  every helper stay exactly as they are.
 - **`agent/`, `docs/`, `spec/`, `tooling/` are swept by no formatter gate** — only
   `catalog/**` and `examples/rosetta/**` are. Know which of your files is code.
