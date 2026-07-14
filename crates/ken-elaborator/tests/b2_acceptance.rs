@@ -38,8 +38,8 @@ use ken_elaborator::{
     ElabEnv, Pred, TEntry, Temporal, TemporalExpr, Var,
 };
 use ken_kernel::{
-    inductive::{check_positivity, method_type, recursive_args},
-    declare_inductive, GlobalEnv, GlobalId, KernelError, Level, Term,
+    inductive::{check_positivity, method_type, peel_app, peel_pi, recursive_args},
+    declare_inductive, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, KernelError, Level, Term,
 };
 
 // ─── TE-A. `Temporal` is ordinary inert data — admitted by K1 (AC1) ──────────
@@ -56,6 +56,29 @@ use ken_kernel::{
 #[test]
 fn ordinary_inductive_admitted_by_k1() {
     let mut env = GlobalEnv::new();
+
+    // Two distinct concrete small types instantiate the deferred `Pred Σ`
+    // and `Var` carriers at the ordinary eliminator use site.
+    let pred_id = declare_inductive(&mut env, |_| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![],
+        level: Level::zero(),
+        constructors: vec![CtorSpec {
+            args: vec![],
+            target_indices: vec![],
+        }],
+    })
+    .expect("concrete small predicate carrier");
+    let var_id = declare_inductive(&mut env, |_| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![],
+        level: Level::zero(),
+        constructors: vec![],
+    })
+    .expect("concrete small variable carrier");
+
     let d_id = declare_inductive(&mut env, temporal_inductive_spec)
         .expect("first-order Temporal is admitted by K1");
 
@@ -64,6 +87,35 @@ fn ordinary_inductive_admitted_by_k1() {
         .expect("Temporal family is in the env after admission");
     // The LTL/μ core: atom/not/and/or/next/until/mu/nu/var.
     assert_eq!(ind.constructors.len(), 9, "the §3 constructor set");
+    assert_eq!(
+        ind.params,
+        vec![Term::ty(Level::zero()), Term::ty(Level::zero())],
+        "the witness former has exactly the two small type parameters P and V"
+    );
+    let (former_params, former_result) = peel_pi(&ind.former_type);
+    assert_eq!(former_params.len(), 2, "Temporal's former has two parameters");
+    assert_eq!(
+        former_result,
+        Term::ty(Level::zero()),
+        "Temporal P V remains in Type 0"
+    );
+    assert_eq!(
+        ind.constructors[0].args,
+        vec![Term::var(1)],
+        "atom takes P from the two-parameter telescope"
+    );
+    for k in [6, 7] {
+        assert_eq!(
+            ind.constructors[k].args[0],
+            Term::var(0),
+            "mu/nu take V before their recursive body"
+        );
+    }
+    assert_eq!(
+        ind.constructors[8].args,
+        vec![Term::var(0)],
+        "var takes V from the two-parameter telescope"
+    );
 
     // Re-run the real strict-positivity check on the admitted family — the
     // spec's "admitted by K1" grounded against the kernel that exists now.
@@ -75,12 +127,43 @@ fn ordinary_inductive_admitted_by_k1() {
     // No K1.5 W-style admission path: every recursive arg is **direct** (an
     // empty branching telescope). `recursive_args` returns the Π-bound
     // (branching) telescope per recursive arg; empty ⇒ plain K1, not K1.5.
-    for c in &ind.constructors {
-        for (_pos, branching_tel, _idxs) in recursive_args(c, d_id, 0) {
+    let expected_recursive_positions: &[&[usize]] = &[
+        &[],
+        &[0],
+        &[0, 1],
+        &[0, 1],
+        &[0],
+        &[0, 1],
+        &[1],
+        &[1],
+        &[],
+    ];
+    for (c, expected_positions) in ind
+        .constructors
+        .iter()
+        .zip(expected_recursive_positions)
+    {
+        let recursive = recursive_args(c, d_id, 2);
+        assert_eq!(
+            recursive.iter().map(|(pos, _, _)| *pos).collect::<Vec<_>>(),
+            *expected_positions,
+            "recursive positions for constructor {:?}",
+            c.id
+        );
+        for (pos, branching_tel, idxs) in recursive {
             assert!(
                 branching_tel.is_empty(),
                 "no K1.5 W-style path: {:?}'s recursive arg is direct (empty branching telescope)",
                 c.id
+            );
+            assert!(idxs.is_empty(), "Temporal remains non-indexed");
+
+            let (head, args) = peel_app(&c.args[pos]);
+            assert_eq!(head, Term::indformer(d_id, vec![]));
+            assert_eq!(
+                args,
+                vec![Term::var(pos + 1), Term::var(pos)],
+                "recursive D P V is fully applied at constructor depth {pos}"
             );
         }
     }
@@ -88,9 +171,14 @@ fn ordinary_inductive_admitted_by_k1() {
     // The eliminator is the **ordinary generated** `elim_Temporal` — the real
     // `method_type` machinery produces a method type for `Temporal`'s
     // constructors (no special form, no kernel extension). Motive `λφ. Type 0`.
-    let temporal_ty = Term::indformer(d_id, vec![]);
+    let pred_ty = Term::indformer(pred_id, vec![]);
+    let var_ty = Term::indformer(var_id, vec![]);
+    let temporal_ty = Term::app(
+        Term::app(Term::indformer(d_id, vec![]), pred_ty.clone()),
+        var_ty.clone(),
+    );
     let motive = Term::lam(temporal_ty, Term::ty(Level::zero()));
-    let m0 = method_type(&ind, 0, &motive, &[], &[]);
+    let m0 = method_type(&ind, 0, &motive, &[pred_ty, var_ty], &[]);
     assert!(
         matches!(m0, Term::Pi(..)),
         "the ordinary eliminator generates a method type for `atom` (got {:?})",
@@ -98,7 +186,8 @@ fn ordinary_inductive_admitted_by_k1() {
     );
 }
 
-/// TE-A2: temporal/hoas-fixpoint-breaks-positivity-rejected (AC1, soundness)
+/// TE-A2: temporal/hoas-foil-reaches-positivity-not-universe-gate (AC1,
+/// soundness)
 ///
 /// The HOAS variant of the fixpoint binder — `mu : (Temporal → Temporal) →
 /// Temporal` — places `Temporal` in a **negative** position (the domain of the
@@ -107,7 +196,7 @@ fn ordinary_inductive_admitted_by_k1() {
 /// two binder encodings, opposite verdicts) is the sole net for "first-order
 /// binding is load-bearing"; the verdict flips on the structural discriminator.
 #[test]
-fn hoas_fixpoint_breaks_positivity_rejected() {
+fn hoas_foil_reaches_positivity_violation_not_universe_gate() {
     let mut env = GlobalEnv::new();
     let err = declare_inductive(&mut env, temporal_hoas_inductive_spec)
         .expect_err("HOAS mu must be rejected by strict positivity");
