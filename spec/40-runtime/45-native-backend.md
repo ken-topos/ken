@@ -49,12 +49,13 @@ plainly and defended, because "we added a native code generator" is exactly the
 kind of change a reviewer expects to enlarge the trusted base — and here it does
 not.
 
-**The TCB is unchanged.** Soundness rests on **exactly three things** (`64 §1`,
-`../10-kernel/18 §5`): the kernel, its primitive reductions, and its postulates.
-The native backend is **none of them**. Like the elaborator, the prover, and the
-interpreter, it is an **outer-ring** component: it produces an artifact (a
-value) downstream of the kernel, and it earns trust the same way they do — not
-by inspection, but by a re-checkable discipline.
+**The TCB is unchanged.** Proof soundness rests on the kernel, trusted primitive
+declarations/signatures, and visible postulates (`64 §1`, `../10-kernel/18
+§5`). Landed `PrimReduction::Op` execution itself lives in the
+tested-not-trusted interpreter ring and never feeds conversion. The native
+backend is likewise an **outer-ring** component: it produces a value downstream
+of the kernel and earns confidence by a re-checkable differential discipline,
+not by becoming proof-producing trust.
 
 > **Contract BE-NotInTCB (`AC1`).** The native backend runs **already-
 > kernel-checked** core terms and **decides no typing**. A backend bug is a
@@ -69,8 +70,9 @@ by inspection, but by a re-checkable discipline.
 
 - **Kernel** — decides well-typedness. In the TCB. Kernel-certified (`Q`).
 - **Interpreter (`X1`)** — the **oracle**: it defines the reference value of a
-  closed computation, by agreement with the kernel's reductions and the
-  canonicity/determinism corpus (`42 §5`, `§1`). It is **not** in the
+  closed computation, by agreement with the kernel on shared reductions and
+  with independent value oracles for registered operations
+  (`42 §5`, `§1`). It is **not** in the
   type-soundness TCB (it runs kernel-checked terms), but it **is** the
   correctness *reference* for every other evaluator. Its own trust level is
   `tested` (a correctness-critical evaluator, `X1` ★★).
@@ -106,10 +108,11 @@ without the model changing.
 > - **Functions lower to closures with sharing** — application is
 >   **call-by-value, strict, left-to-right** (`42 §2`, `OQ-eval-order`), results
 >   shared via the content-addressed heap (equal subcomputations deduplicated).
-> - **Primitives lower to the audited reductions** (`14 §5`): each
->   `Decl::Primitive` computes the value its registered reduction defines on
->   literals — the backend must compute the **same** partial function, not a
->   platform-native approximation (e.g. `Int` is the arbitrary-precision /
+> - **Primitives lower to the audited runtime semantics** (`14 §5`, `18a`):
+>   each `Decl::Primitive` operation computes the value its registered
+>   interpreter dispatch defines — the backend must compute the **same** partial
+>   function, not a platform-native approximation (e.g. `Int` is the
+>   arbitrary-precision /
 >   fixed-width semantics `35 §3` fixes, never silent machine-word wraparound
 >   unless `Wrapping[T]` was written).
 > - **Eliminators lower to constructor dispatch** (`14 §3`): `elim_D` forces the
@@ -243,8 +246,7 @@ Once `OQ-backend-target` is ratified, `X3-build` (Team Runtime) delivers:
   differential-equivalence discipline (§4) plus the observable-vs-internal
   discriminating pair, extended with target-specific value cases.
 
-The permanent TCB at the end of `X3` is the **same three things** it was before:
-the backend is a `tested` execution path netted by the interpreter oracle, and
-the kernel-soundness story (`64`, `docs/program/g5-soundness-story.md`) is
-unchanged by its addition.
-
+The audited boundary at the end of `X3` has the **same three categories** it had
+before, and the proof-soundness TCB is unchanged: the backend is a `tested`
+execution path netted by the interpreter oracle. The kernel-soundness story
+(`64`, `docs/program/g5-soundness-story.md`) is unchanged by its addition.

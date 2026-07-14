@@ -59,7 +59,7 @@ is stored"). Two consequences are normative and load-bearing:
   because both were NFC-normalized before interning, two strings that are
   canonically-equivalent under NFC **share a slot** and compare equal in O(1).
   Equality is decided once, at intern time, never by re-traversal.
-- **`byteLength` is over the *stored* (normalized) bytes.** Length-in-bytes
+- **`byte_length` is over the *stored* (normalized) bytes.** Length-in-bytes
   reports the NFC byte buffer's length, not the pre-normalization source. This
   is the only length a program can observe, and it is deterministic.
 
@@ -68,12 +68,12 @@ is stored"). Two consequences are normative and load-bearing:
 The API **distinguishes** two lengths, and they differ on any string with a
 multi-byte code point:
 
-- **`byteLength s`** — the number of bytes in the stored UTF-8 buffer.
-- **`charLength s`** — the number of **Unicode scalar values** (code points);
+- **`byte_length s`** — the number of bytes in the stored UTF-8 buffer.
+- **`char_length s`** — the number of **Unicode scalar values** (code points);
   equal to the length of the `List Char` view (`§2.3`).
 
 For an ASCII string the two coincide; for `"é"` (one code point, NFC `U+00E9`,
-two UTF-8 bytes) `byteLength = 2` while `charLength = 1`. Indexing is **by code
+two UTF-8 bytes) `byte_length = 2` while `char_length = 1`. Indexing is **by code
 point** or by an **explicit byte view** — never an ambiguous "length"/"index"
 that silently means one or the other. This is the headline correctness property
 of treating `String` as packed UTF-8 rather than `List Char` (AC1).
@@ -86,9 +86,9 @@ the literal method names are `(oracle)`-tagged (`§8`):
 
 | Conversion | Totality | Meaning |
 |---|---|---|
-| `String → List Char` | total | decode code points (the `charLength`-long view) |
+| `String → List Char` | total | decode code points (the `char_length`-long view) |
 | `List Char → String` | total | encode UTF-8, **then NFC-normalize** + intern |
-| `String → Bytes` | total | the stored NFC UTF-8 buffer (`byteLength`-long) |
+| `String → Bytes` | total | the stored NFC UTF-8 buffer (`byte_length`-long) |
 | `Bytes → String` | **partial → `Result`** | validate UTF-8, NFC-normalize, intern |
 
 `Bytes → String` is the one partial direction: arbitrary bytes need not be valid
@@ -104,10 +104,28 @@ whose inhabitants are **string literals** and the results of a **small,
 audited** set of registered primitive ops. That primitive core is deliberately
 minimal — the type constant, literals, the native `String ↔ List Char`
 round-trip (`string_to_list_char` / `list_char_to_string`, landed in slice 1
-`L3-strings-roundtrip`, `§2.3`), and the byte-buffer reads (`byteLength` over
-the packed NFC buffer). A primitive op carries a **registered reduction**
-(`41`), so e.g. `byteLength "abc" ≡ 3` holds definitionally and proofs can
-compute over string literals.
+`L3-strings-roundtrip`, `§2.3`), and the two length reads (`byte_length` over
+the packed NFC buffer and `char_length` over its Unicode scalar values).
+
+Registration does **not** currently give those operations a kernel conversion
+rule. Each is recorded as `PrimReduction::Op`, which is opaque to the landed
+conversion checker: weak-head reduction unfolds transparent definitions and
+performs β/ι reduction, but does not evaluate an `Op`. The interpreter evaluates
+the operations at runtime, so `byte_length "abc"` produces `3` as a value; the
+kernel nevertheless does **not** judge `byte_length "abc" ≡ 3`
+definitionally, and `Refl` cannot discharge that equation. This differs from a
+registered `PrimReduction::Literal`: the literal is a value, while applying an
+`Op` is the missing reduction step.
+
+Kernel conversion for registered operations is a **K3-deferred gap**, not a
+landed facility. Adding it would require a separate kernel-TCB decision about
+which computations conversion may trust. Until that decision lands, a proof
+by normalization cannot depend on the result of a primitive string operation:
+the direct literal equation needs the landed explicit, audited
+postulate/`Axiom` posture rather than an implied computation-by-`Refl`. A future
+independently checked certificate would be a separate design, not something
+registration provides today. Runtime evaluation remains fully specified; only
+its promotion into kernel definitional equality is deferred.
 
 **The string *surface* — `concat` / `slice` / `char_at` / `eq` / the ordering op
 — is `derived`, not primitive (`§2.5`).** These lower to ordinary prelude
@@ -120,19 +138,26 @@ prim would grow the audited reduction surface for no benefit
 primitive set stays small and audited (`18 §5`), and `String` adds **no**
 inductive declaration and **no** conversion rule.
 
-Non-definitional string laws (e.g. `byteLength (s ++ t) ≡ byteLength s +
-byteLength t`) are **prelude propositions** (`14 §5`, `35 §6.2`), not kernel
-reductions.
+String laws such as `byte_length (s ++ t) ≡ byte_length s + byte_length t` are
+**prelude propositions** (`14 §5`, `35 §6.2`), not kernel reductions. Merely
+stating the proposition does not make it proof-by-computation: while its
+primitive operations remain conversion-opaque, the current postulate/`Axiom`
+bridge is visible in `trusted_base()` rather than laundered as a `Refl` proof.
 
 ### 2.5 The derived string surface (`concat` / `slice` / `char_at` / `eq` / …)
 
 The everyday string operations are **derived** — ordinary prelude `view`s over
 the `List Char` view (`§2.3`), routed through the native `string_to_list_char`
 (`s2l`) / `list_char_to_string` (`l2s`) round-trip (slice 1, landed). They add
-**zero** native primitives and **zero** `trusted_base()` delta; each reduces by
-unfolding to the `§4.1` `List Char` combinator floor over the real `elim_List` /
-`elim_Nat` (`34 §3`). The mandated bodies (Approach A, `evt_4k1yqah3yvpds` — do
-**not** native-ize):
+**zero** native primitives and **zero** `trusted_base()` delta; each is a
+transparent checked definition that unfolds to the `§4.1` `List Char`
+combinator floor over the real `elim_List` / `elim_Nat` (`34 §3`). Kernel
+conversion may unfold these checked wrappers, but
+then stops at the conversion-opaque `s2l`/`l2s` primitive operations (§2.4);
+the interpreter evaluates the complete operation at runtime. Thus the derived
+definitions add no trust, while equations over concrete `String` values do not
+become `Refl` proofs. The mandated bodies (Approach A,
+`evt_4k1yqah3yvpds` — do **not** native-ize):
 
 ```
 concat a b   =  l2s (list_append (s2l a) (s2l b))
@@ -140,6 +165,10 @@ slice  i j s =  l2s (take (nat_sub j i) (drop i (s2l s)))
 char_at i s   =  nth i (s2l s)                        -- : Option Char
 eq     a b   =  list_eq eqChar (s2l a) (s2l b)       -- : Bool
 ```
+
+The equations in this subsection specify runtime/value behavior. They are not
+claims that an application containing `s2l`, `l2s`, `eqChar`, or another
+primitive `Op` normalizes under kernel conversion (§2.4).
 
 - **`char_at` is total and honest about absence.** `nth` returns `None` on an
   out-of-range index and on the empty string — `char_at i "" ≡ None` and
@@ -661,8 +690,17 @@ combinator law set (`§4`); the fuel-bounded unfold as the buildable-now
 infinitude demonstration; `sort`'s **`is_sorted ∧ Perm`** refinement; the
 no-coinduction absence; the L-classes staging boundary.
 
+**K3-deferred kernel/TCB gap (not an API deferral).** Registered
+`PrimReduction::Op` computations are opaque to kernel conversion today (§2.4).
+The interpreter behavior and operation signatures are pinned; only a future,
+operator-approved conversion mechanism could make their literal applications
+definitionally reduce. This chapter does not anticipate that decision with
+`Refl` examples or invented reduction rules.
+
 **`(oracle)`-deferred to the build team / X2 (spelling, not concept).** The
-exact **method names** (`byteLength` vs `lengthBytes`, `get` vs `index`, …); the
+exact **method names** other than the landed primitive-core names
+(`byte_length`, `char_length`, `string_to_list_char`, and
+`list_char_to_string`) — for example `get` vs `index`; the
 **`Array`/`Map`/`Set` internal representation** (RRB-tree / HAMT / bitmap,
 branching factor — `41 §5` tiny-aggregate tuning is X2); whether `Set a` is
 literally `Map a Unit`; the `DecodeError` payload of `Bytes → String`; the
@@ -683,9 +721,9 @@ to the full lawful stdlib; L3 **unblocks T3** (the test/property framework).
 
 - **AC1 (`String` UTF-8 primitive, structural).** A `String` is
   content-addressed (NFC-equal strings O(1)-equal, **same slot**) and
-  `byteLength ≠ charLength` on a multi-byte string (assert **both**
-  view-lengths, not "compiles"); `String` is **not** `List Char` (the
-  convertible view is a separate value).
+  `byte_length ≠ char_length` on a multi-byte string (assert **both** runtime
+  view values, not "compiles" and not a `Refl` proof); `String` is **not**
+  `List Char` (the convertible view is a separate value).
 - **AC2 (persistent collections, structural).** `List` pattern-matches (real
   `elim_List`, `34`); an `Array`/`Map` update **returns a new value sharing the
   unchanged structure** — assert the **sharing** (shared sub-structure = same
@@ -722,10 +760,11 @@ impl-ready).** The floor + 5 string ops, mapping the WP frame's AC1–AC7:
   origin/main -- crates/ken-kernel/` is **empty**; `trusted_base()` unchanged.
 - **DS-AC2 (SCT sound-zone).** Each combinator's recursive call is an applied
   call on a strict subterm (`§4.1`) — not leaning on the SCT's over-accept zone.
-- **DS-AC3 (5 ops reduce correct).** `concat` / `slice` / `char_at` / `eq` /
-  `compare` reduce to the **correct value** on a multi-byte corpus (reuse slice
-  1's boundary corpus, through the real `s2l`/`l2s`): `char_at` → `None` on
-  out-of-range **and** empty; `slice` clamps, incl. `j < i → ""`.
+- **DS-AC3 (5 ops evaluate correctly).** `concat` / `slice` / `char_at` / `eq`
+  / `compare` runtime-evaluate to the **correct value** on a multi-byte corpus
+  (reuse slice 1's boundary corpus, through the real `s2l`/`l2s`): `char_at` →
+  `None` on out-of-range **and** empty; `slice` clamps, incl. `j < i → ""`.
+  This is interpreter behavior, not a kernel-conversion or `Refl` claim.
 - **DS-AC4 (`eq`/`compare` codepoint-wise, discriminating PAIR).** A
   **non-degenerate pair**: `eq` **accepts** two equal scalar sequences **and
   rejects** a differing pair (incl. a same-length, single-codepoint-differing
@@ -733,7 +772,7 @@ impl-ready).** The floor + 5 string ops, mapping the WP frame's AC1–AC7:
   `"a" < "ab" < "b"`. Assert the **result value**. **NFC-blindness is pinned at
   the `List Char` layer** — `list_eq eqChar` on a precomposed vs decomposed
   scalar sequence (NFC vs NFD of one grapheme, built directly as `List Char`)
-  reduces **unequal** *unconditionally*, pinning that NFC-eq was **not**
+  runtime-evaluates **unequal** *unconditionally*, pinning that NFC-eq was **not**
   smuggled in (ADR 0010 §3). Do **not** pin this on `String` *literals*:
   `String` is NFC-normalized at construction (`§2.1`, a deferred behavior —
   currently stubbed), so once real NFC lands the two literals merge to one value
@@ -742,9 +781,11 @@ impl-ready).** The floor + 5 string ops, mapping the WP frame's AC1–AC7:
   `==` and codepoint-wise `eq` **agree** on `String` values.
 - **DS-AC6 (name hygiene).** `list_append` does not shadow the `Bytes` `append`
   (`§4.1`); both resolve to their intended op.
-- **DS-AC7 (round-trip / totality).** `concat`+`slice` compose sanely (e.g.
-  `slice 0 (charLength a) (concat a b) ≡ a` on scalar-clean `a`); `list_append`
-  associativity on a small corpus; every combinator total (no `Neutral`/stuck).
+- **DS-AC7 (round-trip / totality).** `concat`+`slice` compose sanely at runtime
+  (e.g. `slice 0 (char_length a) (concat a b) ≡ a` on scalar-clean `a`);
+  `list_append` associativity on a small corpus; every combinator total (no
+  runtime `Neutral`/stuck). This does not assert definitional equality for the
+  primitive operations under kernel conversion.
 
 **Conformance:** `../../conformance/surface/collections/` — UTF-8
 byte/char-length edge cases + the `Bytes → String` partial decode;

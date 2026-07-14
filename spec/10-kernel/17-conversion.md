@@ -33,17 +33,22 @@ the following reductions and the η rules (§2):
 | **Σ-β** | `(a,b).1 → a`, `(a,b).2 → b` | `13 §2` |
 | **ι** | `elim_D M m̄ … (cₖ ā) → mₖ …` (structural) | `14 §3` |
 | **δ** | `c → t` for `(c : A := t) ∈ Σ` (transparent) | `11 §4` |
-| **prim** | `op lit̄ → lit` (registered primitive reduction) | `14 §5` |
 | **obs** | `Eq`-by-type; `cast A A refl a → a` + `cast`-by-type; quotient elim | `16` |
 
 - δ (constant unfolding) is **controlled**: the conversion algorithm unfolds a
   definition only when needed to make progress (§3), never eagerly. Opaque
   constants (`11 §4`) never δ-reduce.
-- **prim** reductions are the trusted boundary (`14 §5`): `add 2 3 → 5` lets
-  proofs compute over literals.
+- A `PrimReduction::Op` registration is **not** a rule in the landed conversion
+  relation. Even `add_int 2 3` remains a neutral application; its runtime value
+  is computed by `ken-interp`. Kernel conversion for registered operations is
+  K3-deferred, so an equation with an `Op` result does not close by `Refl`.
+- Checked literals themselves are values (`PrimReduction::Literal`). The
+  registered decidable-equality gate may compare two literal values (`16 §2.2`,
+  ADR 0013); that distinct value case does not reduce an enclosing `Op`.
 - A term with no applicable reduction at its head is **neutral** (a variable, an
-  opaque constant, a primitive on non-literals, an `elim`/`cast`/quotient-elim
-  on a neutral target). Conversion compares neutrals structurally (§3).
+  opaque constant, any primitive `Op` application, or an
+  `elim`/`cast`/quotient-elim on a neutral target). Conversion compares neutrals
+  structurally (§3).
 
 **Confluence.** The reduction system is confluent (Church–Rosser); normal forms
 are unique up to α (de Bruijn identity) and Ω proof-irrelevance. This is a
@@ -151,11 +156,6 @@ function whnf(env, ctx, t):
 
       // J — derived; reduces via cast  (15 §4, 16 §4)
       J(M, d, e):        return whnfJ(env, ctx, J(M, d, e))   // J-β to d on refl; non-refl via cast
-
-      // prim — only on literals  (14 §5)
-      Prim(op, args):
-        if all args are literals: t := primReduce(op, args); continue
-        else: return Prim(op, args)      // neutral primitive
 
       // let  (11 §1) — definitional unfolding of a local binding
       Let(x, ty, rhs, body): t := subst(body, rhs); continue

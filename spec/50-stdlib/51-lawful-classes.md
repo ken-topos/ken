@@ -321,10 +321,10 @@ only the gate states and build-time availability move.
 
 **Primitive carriers (`Int`/`Float`/`String`/`Char`) fail the carrier axis — so
 their lawful instances are NOT zero-delta.** A K1 primitive is **opaque to δ**
-(`int_leq x x` on a *variable* `x` does not reduce — primitive reductions fire
-on literals) and has **no induction principle**, so its total-order laws are
-**not
-kernel-provable**; the only inhabitant of a law field is a **`postulate`** → an
+(`int_leq x x` does not reduce under conversion, even at literal arguments;
+the corresponding `Op` evaluates only at runtime) and has **no induction
+principle**, so its total-order laws are **not kernel-provable**; the only
+inhabitant of a law field is a **`postulate`** → an
 `Opaque` entry → a **non-empty `trusted_base_delta`**. The **operation** half is
 still fine (wrapping the audited `Int` comparison, `30 §6` F2, adds no new
 entry); the **law** half cannot be zero-delta. Two honest options, and the
