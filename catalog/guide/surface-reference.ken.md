@@ -349,8 +349,7 @@ fn double_it (x : Int) : Int = add_int x x
 proof trivial for double_it (x : Int) : Trivial Int (double_it x) =
   Trivial.triv Int (double_it x)
 
-lemma attached_sample : Trivial Int (double_it sample_int) =
-  double_it::trivial sample_int
+lemma attached_sample : Trivial Int (double_it sample_int) = double_it::trivial sample_int
 ```
 
 `lemma` is the standalone form — parameterized like a function, instantiated
@@ -464,13 +463,9 @@ when a local name would merely repeat its syntax. There is no binding quota,
 depth threshold, or minimum count.
 
 ```ken example
-fn let_inferred (c : Color) : Bool =
-  let selected_red = is_red c in
-  selected_red
+fn let_inferred (c : Color) : Bool = let selected_red = is_red c in selected_red
 
-fn let_annotated (c : Color) : Bool =
-  let selected_red : Bool = is_red c in
-  selected_red
+fn let_annotated (c : Color) : Bool = let selected_red : Bool = is_red c in selected_red
 ```
 
 A short pipeline can name stages without hiding the final control flow. If the
@@ -479,28 +474,26 @@ local namespace:
 
 ```ken example
 fn let_staged_color (c : Color) : Bool =
-  let selected_red = is_red c in
-  let confirmed_red =
-    match selected_red {
-      True ↦ True;
-      False ↦ False
-    }
+  let selected_red =
+    is_red c
   in
-  confirmed_red
+    let confirmed_red =
+      match selected_red {
+        True ↦ True;
+        False ↦ False
+      }
+    in
+      confirmed_red
 ```
 
 Proofs are values too. A proof-valued binding makes the evidence role explicit,
 and the rest of the body checks against its stated type:
 
 ```ken example
-lemma return_self_evidence
-      (x : Bool) (evidence : Equal Bool x x)
-    : Equal Bool x x =
-  evidence
+lemma return_self_evidence (x : Bool) (evidence : Equal Bool x x) : Equal Bool x x = evidence
 
 lemma let_proof_value (x : Bool) : Equal Bool x x =
-  let self_evidence : Equal Bool x x = Refl in
-  return_self_evidence x self_evidence
+  let self_evidence : Equal Bool x x = Refl in return_self_evidence x self_evidence
 ```
 
 Bind at the narrowest scope containing every use. A branch-specific stage stays
@@ -509,9 +502,7 @@ inside that branch rather than being hoisted before the `match`:
 ```ken example
 fn let_inside_branch (c : Color) : Bool =
   match c {
-    Red ↦
-      let branch_is_red = is_red c in
-      branch_is_red;
+    Red ↦ let branch_is_red = is_red c in branch_is_red;
     Green ↦ False;
     Blue ↦ False
   }
@@ -529,8 +520,7 @@ This declaration is rejected with
 the binder is not recursive and does not scope over its own definition:
 
 ```ken reject
-const let_rhs_self : Nat =
-  let self_rhs_probe : Nat = self_rhs_probe in self_rhs_probe
+const let_rhs_self : Nat = let self_rhs_probe : Nat = self_rhs_probe in self_rhs_probe
 ```
 
 Ken is call-by-value. An effectful `let` evaluates its right-hand side before
