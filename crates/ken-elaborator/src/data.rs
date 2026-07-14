@@ -15,7 +15,10 @@
 use std::collections::{HashMap, HashSet};
 
 use ken_kernel::subst::weaken;
-use ken_kernel::{declare_inductive, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, Level, Term};
+use ken_kernel::{
+    declare_inductive, infer, level_eq, whnf, Context, CtorSpec, GlobalEnv, GlobalId,
+    InductiveSpec, KernelError, Level, Term,
+};
 
 use crate::error::{ElabError, Span};
 use crate::resolve::{RCtorDecl, RExplicitCtorDecl, RTelescopeEntry, RType};
@@ -41,6 +44,11 @@ pub fn elab_data_decl(
         .copied()
         .filter(|&id| env.inductive(id).is_some())
         .collect();
+    let ctor_id_set: HashSet<GlobalId> = globals
+        .values()
+        .copied()
+        .filter(|&id| env.constructor(id).is_some())
+        .collect();
 
     // Params: m params each of type `Type 0` (left-to-right, innermost-last in the Π-chain).
     let params: Vec<Term> = (0..m).map(|_| Term::ty(Level::Zero)).collect();
@@ -48,42 +56,43 @@ pub fn elab_data_decl(
     // Clone ctors so the closure can take ownership.
     let ctors_owned = ctors.to_vec();
     let d_name_owned = d_name.to_string();
+    let mut build_error: Option<ElabError> = None;
 
     let d_id = declare_inductive(env, |d_id| {
-        let ctor_specs = ctors_owned
-            .iter()
-            .map(|c| {
-                let args = c
-                    .args
-                    .iter()
-                    .enumerate()
-                    .map(|(j, rty)| {
-                        // rtype_to_kernel gives the type in context [Δ_p] only.
-                        // Arg j is in context [Δ_p, arg₀…argⱼ₋₁], so weaken by j.
-                        let raw =
-                            rtype_to_kernel(rty, &d_name_owned, d_id, &global_info, &ind_id_set);
-                        weaken(&raw, j as i64)
-                    })
-                    .collect();
-                CtorSpec {
-                    args,
-                    // Non-indexed families: all constructors target the empty index.
-                    target_indices: vec![],
-                }
-            })
-            .collect();
-        InductiveSpec {
-            level_params: vec![],
-            params,
-            indices: vec![],
-            level: Level::Zero,
-            constructors: ctor_specs,
+        match build_legacy_inductive_spec(
+            d_id,
+            &d_name_owned,
+            &params,
+            &ctors_owned,
+            &global_info,
+            &ind_id_set,
+            &ctor_id_set,
+        ) {
+            Ok(spec) => spec,
+            Err(err) => {
+                build_error = Some(err);
+                empty_inductive_spec()
+            }
         }
     })
-    .map_err(|e| ElabError::KernelRejected {
-        error: e,
-        span: span.clone(),
+    .map_err(|error| {
+        translate_legacy_kernel_error(
+            env,
+            error,
+            d_name,
+            &params,
+            ctors,
+            &global_info,
+            &ind_id_set,
+            &ctor_id_set,
+            span,
+        )
     })?;
+
+    if let Some(err) = build_error {
+        env.remove_last();
+        return Err(err);
+    }
 
     // Register the type former.
     globals.insert(d_name.to_string(), d_id);
@@ -103,6 +112,55 @@ pub fn elab_data_decl(
     }
 
     Ok(d_id)
+}
+
+fn build_legacy_inductive_spec(
+    d_id: GlobalId,
+    d_name: &str,
+    params: &[Term],
+    ctors: &[RCtorDecl],
+    globals: &HashMap<String, GlobalId>,
+    ind_ids: &HashSet<GlobalId>,
+    ctor_ids: &HashSet<GlobalId>,
+) -> Result<InductiveSpec, ElabError> {
+    let constructors = ctors
+        .iter()
+        .map(|ctor| {
+            let args = ctor
+                .args
+                .iter()
+                .enumerate()
+                .map(|(j, rty)| {
+                    // The resolved legacy type is based in [Δ_p]. Argument j
+                    // is checked in [Δ_p, arg₀…argⱼ₋₁], so weaken it by j.
+                    rtype_to_kernel_checked(rty, d_name, d_id, globals, ind_ids, ctor_ids)
+                        .map(|raw| weaken(&raw, j as i64))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(CtorSpec {
+                args,
+                target_indices: vec![],
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(InductiveSpec {
+        level_params: vec![],
+        params: params.to_vec(),
+        indices: vec![],
+        level: Level::Zero,
+        constructors,
+    })
+}
+
+fn empty_inductive_spec() -> InductiveSpec {
+    InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![],
+        level: Level::Zero,
+        constructors: vec![],
+    }
 }
 
 /// Elaborate `data D (Δp) : (Δi) -> Type where { C : (Δk) -> D Δp t̄ }`
@@ -180,19 +238,24 @@ pub fn elab_explicit_data_decl(
             Ok(spec) => spec,
             Err(err) => {
                 build_error = Some(err);
-                InductiveSpec {
-                    level_params: vec![],
-                    params: vec![],
-                    indices: vec![],
-                    level: Level::Zero,
-                    constructors: vec![],
-                }
+                empty_inductive_spec()
             }
         }
     })
-    .map_err(|e| ElabError::KernelRejected {
-        error: e,
-        span: span.clone(),
+    .map_err(|error| {
+        translate_explicit_kernel_error(
+            env,
+            error,
+            d_name,
+            &param_terms,
+            &index_terms,
+            &level,
+            ctors,
+            &global_info,
+            &ind_id_set,
+            &ctor_id_set,
+            span,
+        )
     })?;
 
     if let Some(err) = build_error {
@@ -359,74 +422,216 @@ fn level_from_nat(n: u32) -> Level {
     level
 }
 
-/// Convert a resolved type to a kernel `Term` for use inside `declare_inductive`.
-///
-/// `d_name` / `d_id`: the type being declared — self-references become `IndFormer(d_id)`.
-/// `globals` / `ind_id_set`: snapshot of the environment before declaration.
-fn rtype_to_kernel(
-    rty: &RType,
+#[derive(Clone)]
+struct UniverseArgument {
+    constructor: String,
+    name: Option<String>,
+    index: usize,
+    span: Span,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn translate_legacy_kernel_error(
+    env: &GlobalEnv,
+    error: KernelError,
     d_name: &str,
-    d_id: GlobalId,
+    params: &[Term],
+    ctors: &[RCtorDecl],
     globals: &HashMap<String, GlobalId>,
-    ind_id_set: &HashSet<GlobalId>,
-) -> Term {
-    match rty {
-        RType::RCon(name, _) => {
-            if name == d_name {
-                Term::IndFormer {
-                    id: d_id,
-                    level_args: vec![],
+    ind_ids: &HashSet<GlobalId>,
+    ctor_ids: &HashSet<GlobalId>,
+    decl_span: &Span,
+) -> ElabError {
+    match error {
+        KernelError::ConstructorUniverseViolation { argument, family } => {
+            let located = locate_legacy_universe_argument(
+                env, d_name, params, ctors, globals, ind_ids, ctor_ids, &argument,
+            );
+            surface_universe_error(d_name, located, argument, family, decl_span)
+        }
+        error => ElabError::KernelRejected {
+            error,
+            span: decl_span.clone(),
+        },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn translate_explicit_kernel_error(
+    env: &GlobalEnv,
+    error: KernelError,
+    d_name: &str,
+    params: &[Term],
+    indices: &[Term],
+    family_level: &Level,
+    ctors: &[RExplicitCtorDecl],
+    globals: &HashMap<String, GlobalId>,
+    ind_ids: &HashSet<GlobalId>,
+    ctor_ids: &HashSet<GlobalId>,
+    decl_span: &Span,
+) -> ElabError {
+    match error {
+        KernelError::ConstructorUniverseViolation { argument, family } => {
+            let located = locate_explicit_universe_argument(
+                env,
+                d_name,
+                params,
+                indices,
+                family_level,
+                ctors,
+                globals,
+                ind_ids,
+                ctor_ids,
+                &argument,
+            );
+            surface_universe_error(d_name, located, argument, family, decl_span)
+        }
+        error => ElabError::KernelRejected {
+            error,
+            span: decl_span.clone(),
+        },
+    }
+}
+
+fn surface_universe_error(
+    d_name: &str,
+    located: Option<UniverseArgument>,
+    argument_level: Level,
+    family_level: Level,
+    decl_span: &Span,
+) -> ElabError {
+    match located {
+        Some(located) => ElabError::ConstructorUniverseViolation {
+            data: d_name.to_string(),
+            constructor: located.constructor,
+            argument_name: located.name,
+            argument_index: located.index,
+            argument_level,
+            family_level,
+            span: located.span,
+        },
+        None => ElabError::KernelRejected {
+            error: KernelError::ConstructorUniverseViolation {
+                argument: argument_level,
+                family: family_level,
+            },
+            span: decl_span.clone(),
+        },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn locate_legacy_universe_argument(
+    env: &GlobalEnv,
+    d_name: &str,
+    params: &[Term],
+    ctors: &[RCtorDecl],
+    globals: &HashMap<String, GlobalId>,
+    ind_ids: &HashSet<GlobalId>,
+    ctor_ids: &HashSet<GlobalId>,
+    target_level: &Level,
+) -> Option<UniverseArgument> {
+    let (probe_env, d_id) = family_probe(env, params, &[], Level::Zero)?;
+    let mut fallback = None;
+    for ctor in ctors {
+        let mut ctx = Context::new();
+        ctx.extend_tel(params);
+        for (index, rty) in ctor.args.iter().enumerate() {
+            let located = UniverseArgument {
+                constructor: ctor.name.clone(),
+                name: ctor
+                    .field_labels
+                    .as_ref()
+                    .and_then(|names| names.get(index).cloned()),
+                index,
+                span: rty.span().clone(),
+            };
+            fallback.get_or_insert_with(|| located.clone());
+            let term = rtype_to_kernel_checked(rty, d_name, d_id, globals, ind_ids, ctor_ids)
+                .ok()
+                .map(|raw| weaken(&raw, index as i64));
+            if let Some(term) = term {
+                if inferred_sort_level(&probe_env, &ctx, &term)
+                    .is_some_and(|level| level_eq(&level, target_level))
+                {
+                    return Some(located);
                 }
-            } else if let Some(&id) = globals.get(name) {
-                if ind_id_set.contains(&id) {
-                    Term::IndFormer {
-                        id,
-                        level_args: vec![],
-                    }
-                } else {
-                    Term::const_(id, vec![])
-                }
-            } else {
-                // Unknown name — produce a type-level placeholder.
-                Term::ty(Level::Zero)
+                ctx.push(term);
             }
         }
+    }
+    fallback
+}
 
-        RType::RVarTy(i, _, _) => Term::var(*i),
-
-        RType::RArr(a, b, _) | RType::REffectArr(a, _, b, _) => {
-            let a_k = rtype_to_kernel(a, d_name, d_id, globals, ind_id_set);
-            let b_k = rtype_to_kernel(b, d_name, d_id, globals, ind_id_set);
-            // Non-dependent arrow A → B: in kernel Π representation, B lives
-            // under one binder, so weaken b_k by 1.
-            Term::pi(a_k, weaken(&b_k, 1))
-        }
-
-        RType::RPi(_, a, b, _) => {
-            let a_k = rtype_to_kernel(a, d_name, d_id, globals, ind_id_set);
-            let b_k = rtype_to_kernel(b, d_name, d_id, globals, ind_id_set);
-            Term::pi(a_k, b_k)
-        }
-
-        RType::RApp(f, a, _) => {
-            let f_k = rtype_to_kernel(f, d_name, d_id, globals, ind_id_set);
-            let a_k = rtype_to_kernel(a, d_name, d_id, globals, ind_id_set);
-            Term::app(f_k, a_k)
-        }
-
-        RType::RUniv(None, _) => Term::ty(Level::Zero),
-        RType::RUniv(Some(n), _) => {
-            let mut l = Level::Zero;
-            for _ in 0..*n {
-                l = Level::Suc(Box::new(l));
+#[allow(clippy::too_many_arguments)]
+fn locate_explicit_universe_argument(
+    env: &GlobalEnv,
+    d_name: &str,
+    params: &[Term],
+    indices: &[Term],
+    family_level: &Level,
+    ctors: &[RExplicitCtorDecl],
+    globals: &HashMap<String, GlobalId>,
+    ind_ids: &HashSet<GlobalId>,
+    ctor_ids: &HashSet<GlobalId>,
+    target_level: &Level,
+) -> Option<UniverseArgument> {
+    let (probe_env, d_id) = family_probe(env, params, indices, family_level.clone())?;
+    let mut fallback = None;
+    for ctor in ctors {
+        let mut ctx = Context::new();
+        ctx.extend_tel(params);
+        for (index, arg) in ctor.args.iter().enumerate() {
+            let located = UniverseArgument {
+                constructor: ctor.name.clone(),
+                name: arg.name.clone(),
+                index,
+                span: arg.span.clone(),
+            };
+            fallback.get_or_insert_with(|| located.clone());
+            if let Ok(term) =
+                rtype_to_kernel_checked(&arg.ty, d_name, d_id, globals, ind_ids, ctor_ids)
+            {
+                if inferred_sort_level(&probe_env, &ctx, &term)
+                    .is_some_and(|level| level_eq(&level, target_level))
+                {
+                    return Some(located);
+                }
+                ctx.push(term);
             }
-            Term::ty(l)
         }
+    }
+    fallback
+}
 
-        // Refinement in a ctor arg position: lower to carrier (`34 §7`).
-        RType::RRefine(_, carrier, _, _) => {
-            rtype_to_kernel(carrier, d_name, d_id, globals, ind_id_set)
-        }
+/// Recreate only the already-accepted family head in a cloned environment so
+/// diagnostic attribution can classify each surface argument in the same
+/// context as the kernel gate. This runs only after the real admission has
+/// rejected and rolled back; it neither decides acceptance nor mutates `env`.
+fn family_probe(
+    env: &GlobalEnv,
+    params: &[Term],
+    indices: &[Term],
+    level: Level,
+) -> Option<(GlobalEnv, GlobalId)> {
+    let mut probe = env.clone();
+    let params = params.to_vec();
+    let indices = indices.to_vec();
+    let id = declare_inductive(&mut probe, |_| InductiveSpec {
+        level_params: vec![],
+        params,
+        indices,
+        level,
+        constructors: vec![],
+    })
+    .ok()?;
+    Some((probe, id))
+}
+
+fn inferred_sort_level(env: &GlobalEnv, ctx: &Context, term: &Term) -> Option<Level> {
+    match whnf(env, ctx, &infer(env, ctx, term).ok()?) {
+        Term::Type(level) | Term::Omega(level) => Some(level),
+        _ => None,
     }
 }
 
