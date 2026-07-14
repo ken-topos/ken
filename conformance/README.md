@@ -223,6 +223,13 @@ claim with no conformance case is a claim no one can rely on
   roles, `l`/level, `in`/membership, every protected literal form, and all four
   literate fence roles. Formatter-output cases are red until B3–C; the narrow
   unparseable `ignore`/`reject` exemption remains token-aware.
+- `surface/elaboration/seed-multi-binding-let.md` — LET-4 sequential local
+  binding groups: separator/match-boundary parses, left-to-right dependent
+  scope with specific self/later/duplicate negatives, grouped-versus-nested
+  core and effect-tree identity, independently S6-derived exact formatter
+  bytes in both orientations, and a separate human AC-READER gate. Grouped
+  inputs are red until the LET-4 surface lands; formatter bytes additionally
+  require its formatter arm.
 - `surface/modules/seed-modules.md` — ES3 minimal modules/imports (`33 §3-4`,
   the bounded L4 slice): `module`/`import`/`pub`/abstract-export **elaborate
   away** to the kernel's single flat append-only `Σ` (`11 §4`) — **zero new
