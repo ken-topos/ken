@@ -14,7 +14,111 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (17:45 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ fcabc80a`
+> ### ⏭ 2026-07-14 (18:00 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 26527c5a`
+>
+> ## ✅ LET-4 MERGED — `26527c5a`, FULL CI green, content-verified
+> `LetBinding` in `parser.rs`; `let4_multi_binding` present. **AWAITING 3 RETROS**
+> (chased `evt_16spbds40b1g1`). **Merged ≠ closed — I cannot run LET-2b's Handoff
+> Gate until they are in, because compaction EATS an un-posted retro.**
+> **Then: LET-2b → LET-3 → CC9 → PX1.** *(Language must NOT start LET-2b — gate first.)*
+>
+> **The lesson (for LET-2b's QA plan):** the first candidate `935681e0` was
+> **QA-APPROVED and DEFECTIVE.** QA tested comments ✓ and shadowing ✓ — **never
+> their COMBINATION with a distinct prefix** (its shadow cases put the shadow at
+> index 0, where there is no prefix to move, so the buggy backward-scan had nothing
+> to re-collect and looked correct). **Both axes green, product red. A matrix that
+> walks each axis separately is not a matrix — it is two lines.** Architect found it
+> with **ONE focused diagnostic**, not a broad rerun.
+>
+> ## 🔴🔴 KTR-1 — **AC4 STOP: THE GATE FOUND A REAL VIOLATION, IN `Temporal`**
+> **Kernel HOLDING at `wp/ktr-1-constructor-universe-gate @ 54db124e`** (7/7 KTR
+> matrix + surface-rejection green *before* the sweep stopped it). **No caller
+> repair, no gate weakening — they did it exactly right.**
+>
+> **`temporal.rs::temporal_inductive_spec` declares `Temporal : Type 0` but stubs
+> `Pred`/`Var` as `Term::ty(Level::Zero)` — the SORT `Type 0` used as a
+> constructor-local PAYLOAD type.** ⇒ `atom : Type 0 → Temporal` synthesizes to
+> `Type 1` against a `Type 0` family. `ConstructorUniverseViolation { argument: suc
+> 0, family: 0 }`, reproduced via `b2_acceptance`.
+>
+> ### ⛔⛔ I OVERCLAIMED THIS AND THE ARCHITECT CORRECTED ME (`evt_2a5p6fp42e5xp`)
+> **I wrote: *"THIS IS THE WARD-SEAM CARRIER — it has been over-level its entire
+> life."* **THAT IS FALSE. Do not repeat it.**
+>
+> **Grounded call graph (I re-verified it myself, did not just accept the
+> correction):** `temporal_inductive_spec` is called **ONLY from
+> `crates/ken-elaborator/tests/b2_acceptance.rs`.** The **production** `Temporal` is
+> a plain **Rust `enum`** (`temporal.rs:71-90`); production obligations flow
+> `TemporalObligation → TEntry → T/delegated` and **never pass through
+> `declare_inductive`, `Q`, or the trusted base.** `temporal.rs:22` says so in
+> prose: *"**The kernel admission** — `temporal_inductive_spec`"* — **it is the
+> ADMISSION WITNESS, not the carrier.**
+>
+> **⇒ NO production kernel declaration, checked-core proof, persisted export, `Q`
+> certificate, or `T` carrier was contaminated.** One in-memory
+> admissibility-**test** environment was.
+>
+> **★ BUT IT IS STILL A REAL DEFECT, AND AN INTERESTING ONE:** the witness's whole
+> JOB is to demonstrate §72's claim that `Temporal` is admissible as an *ordinary*
+> inductive with **"no kernel enlargement"** — **and it demonstrated that with a
+> declaration the CORRECT kernel REJECTS.** The claim is probably TRUE (it admits
+> fine with real `P`,`V` parameters) — **but it was never actually demonstrated.**
+> ***The witness that proves the datatype is safe was itself unsafe.*** That is
+> **vacuous evidence**, not unsoundness — a much smaller thing, and I inflated it.
+>
+> **★ MY ERROR:** `temporal.rs` holds **both** the production Rust `enum` (`:71`)
+> **and** the kernel-admission witness (`:252`). **I read the witness and called it
+> the carrier.** *Same file ⇏ same artifact.* **I did to the Architect's finding
+> exactly what I keep catching others doing to mine: I took a true local fact and
+> inflated its blast radius without tracing the call graph.**
+>
+> ## ⚖ ARCHITECT RULING — gate STANDS; repair the B2 admission witness (separate WP)
+> **Do NOT lift the family. Do NOT weaken the gate.** Repair contract: give the
+> **witness** two real type params `P V : Type 0` (abstracting the deferred `Pred
+> Σ`/`Var` spellings) — **`atom : P`; `mu`/`nu` : `V` then `D P V`; `var : V`**;
+> every recursive occurrence fully applied `D P V` with de Bruijn shifts; HOAS foil
+> gets the same params and **must still fail with `PositivityViolation`, NOT a
+> universe error**; TE-A1 instantiates concrete small `P`,`V`. **Public `Temporal
+> Σ`, the Rust enum, `TemporalObligation`, `TEntry`, the export schema, and §72 are
+> ALL UNCHANGED — this is not a public redesign.**
+> **⇒ I OWN FRAMING IT. Then Kernel rebases KTR-1 and reruns the 89-site sweep.**
+> **The full 89-site replay is STILL MANDATORY — this ruling closes only
+> Temporal-specific dependence, not the repo-wide AC4 question.**
+>
+> ## ★★★ MY AC4 WAS WRONG AND WOULD HAVE MISSED IT ENTIRELY (`8061d1f1` corrects it)
+> **I wrote AC4 to enumerate surface `data` + "the Rust prelude emitter."**
+> **`temporal.rs` is an INDIRECT `InductiveSpec` builder — NEITHER CLASS.** The sweep
+> would have come back **CLEAN**, the gate would have shipped green, and **the one
+> real violation in the repo would have survived behind a passing inventory.**
+>
+> **@architect caught it. The real producer boundary:**
+> ```
+> git grep '[^[:alnum:]_]declare_inductive(' -- '*.rs'  →  89 sites, 28 files
+> git grep 'add_decl(Decl::Inductive'       -- '*.rs'  →  ONE hit: check.rs:953
+>                                                          …INSIDE declare_inductive
+> ```
+> **The 2nd grep finds NO declarations. It proves nothing can get in another way.**
+> Production producers I missed: `ken-interp/src/lib.rs` (**8** — the largest!),
+> `effects/state.rs` (3), `data.rs` (2). I named `prelude.rs` (5) and stopped.
+>
+> > **★ I corrected for the wrong LANGUAGE and then inherited the wrong CATEGORY** —
+> > one example of a Rust producer stood in for the extent of the kind. **Same error
+> > as PX0's `:2370`-vs-`:2355`, which that same frame cites as a warning, in
+> > capitals, two paragraphs above the mistake. KNOWING THE LESSON DID NOT PREVENT
+> > IT.** ⇒ **"a grep never COUNTS" was never the whole lesson. Find the STRUCTURAL
+> > CLOSURE and PROVE it. Grep the BYPASS, not the instances — that is what makes N
+> > mean anything.** *I named a place; he found the closure; the closure found the
+> > bug.* Fleet memory: `an-enumeration-needs-a-proven-closure-not-a-better-grep`.
+>
+> ## ⚙ INFRA — the convo transport is UNRELIABLE, treat "posted" as meaning NOTHING
+> **A mention can be (a) stranded as an unsubmitted paste, or (b) NEVER DELIVERED AT
+> ALL** (no paste — the pane just sits, and a `no-polling` seat can never notice).
+> **Failed ~8× today** (architect ×4, kernel-leader, kernel-implementer,
+> language-leader…). **Handoff Gate step 7 now REQUIRES `capture-pane` → confirm
+> `Working` after every mention** (`f0c09b53`). **Repairs differ: (a) bare `Enter`;
+> (b) re-deliver a POINTER to the `evt_…` — never rewrite the owner's message.**
+>
+> ---
 >
 > ## ▶▶ KTR-1 RELEASED TO KERNEL — trust-root repair (`docs/program/wp/ktr1-constructor-universe-gate.md`)
 > **The gap is CONFIRMED and it is a CONFORMANCE DEFECT, not an open question.**
