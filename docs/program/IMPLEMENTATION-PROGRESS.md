@@ -14,7 +14,59 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (20:35 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ bc6cb40b`
+> ### ⏭ 2026-07-14 (21:20 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 86c0b96c`
+>
+> ## ✅✅ ALL THREE CAMPAIGN FORKS RULED BY PAT. THE POSIX CAMPAIGN IS FULLY COMMITTED.
+>
+> > ### ★★★ PAT'S INTENT — the sentence every PX frame is measured against
+> > **"The intention is to make Ken a software engineering language. Not a toy,
+> > not a research project, but a tool for doing real practical work in the safest
+> > way possible."** *(2026-07-14)*
+>
+> **RULINGS:** **(1) scope = COMMIT THROUGH PX-E** (boundary → native effects →
+> resources → processes/sockets → event loop). **(2) `rustix` ACCEPTED** in the
+> **runtime** trust boundary — `ken-kernel` untouched, keeps `forbid(unsafe_code)`.
+> **PX1 is UNBLOCKED.** **(3) NATIVE EARLY** — **PX-B runs BEFORE PX-C.**
+>
+> **Campaign exit:** *a real CLI tool **and** a real network service, as **native
+> binaries**, scoped-capability-confined, over files larger than memory,
+> observationally identical to interpreter runs — **and the dangerous logic
+> (parsers, path policy, protocol state machines, attenuation) PROVED, not merely
+> tested.*** **A verified `cat` is a toy; a proved path-confinement layer over a
+> small audited syscall boundary is the pitch.**
+>
+> **Order:** `PX0`(merging) → LET-4 → LET-2b → LET-3 → CC9 → **PX1 → PX2 →
+> PX3/PX4 → PX5 → PX6 → PX7 → PX8 → PX9 → PX10/PX11 → PX12.**
+>
+> ### ★★ TWO THINGS I OWE, BOOKED AS NAMED OBLIGATIONS — NOT vague research items
+> **(a) The R2 fork RE-OPENS AT PX7's FRAME.** *"Through PX-E"* + *"safest way
+> possible"* **collide at exactly one place.** PX-D/PX-E are a **resource
+> explosion** (sockets, epoll, timers, pipes, children, mappings) — and **Ken
+> cannot state "exactly-once release."** No affine types. Runtime *enforces* it;
+> the **type system cannot express it**, and **no test shows the gap** (tests
+> exercise VALUES; the hole is in the TYPE SURFACE). Today it's harmless — **there
+> is no `open`/`close` at all.** **PX7 INTRODUCES the hazard.** Tie-break: **ship
+> it, enforce in runtime, report `tested` NEVER `proved`, disclosure IN THE
+> SOURCE.** ⛔ **Do not smuggle affinity into PX7** (Pat: *"not a research
+> project"*). **Decide at the seam — retrofitting affinity onto a public,
+> catalog-depended resource API is far worse.**
+> **(b) THE TOOLCHAIN AXIS — verified against `main`, and PX buys NONE of it.**
+> Diagnostics ✅ (CC4). Modules ⚠ **`export` is SPECIFIED AND NOT PARSED** (zero
+> hits in `parser.rs`). Test/property framework ⛔ **nothing** (no
+> `catalog/packages/Test`; CC9 unbuilt). Package manager ⛔ not started.
+> **⇒ "Not a toy" is NOT purchased by syscalls alone — a language you cannot write
+> a test in is not a tool for real practical work.** **I bring a separate
+> toolchain proposal; it is NOT smuggled into PX.**
+>
+> ### ⚡ PX0 — publishing through FULL CI (code, `crates/`; NOT doc-only)
+> `wp/px0-target-classification-erratum @ 54a6e428`. QA APPROVE + **Architect
+> terminal APPROVE** (`dec_2bx3jxx5yxggj` resolved). One file, +225/−67, zero
+> kernel/Cargo/runtime delta. **13 ABI facts + 6 FFI decls now `target_os =
+> "linux"`; non-Linux fails closed to Ken's named `Unsupported` BEFORE host I/O.**
+>
+> ---
+>
+> ### ⏭ 2026-07-14 (20:35 UTC) — `origin/main @ bc6cb40b`
 >
 > ## ▶ TWO LANES LIVE: Language = LET-4 · Runtime = **PX0** (released, Handoff Gate complete)
 >
