@@ -225,6 +225,31 @@ brief** — the implementer should execute mostly mechanically, not design
 >    post the kickoff/handoff until every required pane is compacted, compacting,
 >    or queued.
 > 6. **ONLY NOW** post the kickoff/handoff mention (§2 mention discipline).
+> 7. **⚠ CONFIRM THE MENTION ACTUALLY REACHED THE RECIPIENT'S TURN.**
+>    **A kickoff is NOT complete when you post it. It is complete when you have
+>    SEEN the recipient go `Working`.** `capture-pane` **WIDE** on every seat you
+>    mentioned:
+>
+>    | pane shows | meaning | repair |
+>    |---|---|---|
+>    | `Working (Ns…)` | ✅ delivered | none |
+>    | `› [Pasted Content …]`, no `Working` | delivered to the buffer, **never submitted** | send a bare **`Enter`** to that pane |
+>    | **empty prompt, no paste, no `Working`** | **never delivered at all** | **re-deliver the CONTENT**: `send-keys` a pointer to the original `evt_…`/thread and say "read and execute it" |
+>    | `Working` + `Queued follow-up inputs` | busy, message queued | **nothing — DO NOT RESEND** |
+>
+>    **`post_response` returning an `event_id` proves the EVENT exists. It does
+>    NOT prove any agent read it.** This transport failed **four times on
+>    2026-07-14** (architect ×3; kernel-implementer once, on a leader's kickoff
+>    that produced *no paste at all* — the seat sat at *"awaiting the leader's
+>    kickoff without polling"* and, being a no-polling seat, **had no way to ever
+>    notice**). Treat it as an **expected** failure of the transport and build the
+>    check into the gate, not into your vigilance.
+>
+>    **When re-delivering someone else's message: point at it, do not rewrite
+>    it.** The owner's kickoff is authoritative; your job is the *transport*.
+>    Restating it substitutes the backstop's words for the owner's and quietly
+>    makes the Steward the de-facto leader. See
+>    [[verify-a-tmux-rouse-actually-submitted]].
 >
 > **★ Helper script — the CANONICAL way to run the compaction start step (gate
 > step 4). Prefer it; do NOT hand-drive `tmux send-keys /compact` pane-by-pane**

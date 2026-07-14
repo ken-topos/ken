@@ -132,3 +132,34 @@ bare `Enter` to that pane.**
 NOT prove an agent ever read it.** A blocking mention needs the same
 `capture-pane` confirmation as a `send-keys` rouse — **treat delivery-to-space
 and delivery-to-turn as two different things, because they are.**
+
+### ⚠ There are TWO failure shapes, and they need DIFFERENT repairs
+
+**Same day, KTR-1 kickoff: `kernel-leader` posted a complete, correct
+implementation kickoff to `kernel-implementer`. It never arrived — and there was
+NO stranded paste. The pane was simply empty**, still reading *"awaiting the
+leader's kickoff without polling."* It would have sat there forever: a
+**no-polling seat has no way to notice a message that never came.**
+
+| what `capture-pane` shows | what happened | the repair |
+|---|---|---|
+| `› [Pasted Content …]`, **no** `Working` | delivered to the buffer, **never submitted** | **send a bare `Enter`** to that pane |
+| **empty prompt, no paste, no `Working`** | **never delivered at all** | **re-deliver the CONTENT** — `send-keys` a pointer to the original `event_id`/thread and tell the agent to read and execute it |
+| `Working` + `Queued follow-up inputs` | busy, your message **is** queued | **nothing. DO NOT RESEND.** |
+
+> **Do not "fix" an empty pane by pressing Enter** — there is nothing in the
+> buffer to submit, and you will learn nothing. **And do not re-author the
+> message you are re-delivering.** The leader's kickoff was complete and
+> authoritative; the Steward's job was to repair the *transport* (point at
+> `evt_…`, say "read and execute it"), **not** to restate the assignment — which
+> would silently substitute the backstop's words for the owner's and make the
+> Steward the de-facto leader.
+
+**This failed FOUR times in one day** (architect ×3, kernel-implementer ×1). It
+is not a fluke — **treat it as an expected failure of the transport, and build
+the check into the handoff, not into your vigilance.**
+
+**⇒ THE KICKOFF IS NOT COMPLETE WHEN YOU POST IT. It is complete when you have
+SEEN the recipient go `Working`.** Add that to the Handoff Gate, right after the
+mention: **post → `capture-pane` → confirm `Working` → only then is it
+delivered.**
