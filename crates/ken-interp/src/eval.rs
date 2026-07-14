@@ -59,12 +59,10 @@ pub struct EvalStore {
     /// Propagates a `CapacityExhausted` error from the intern helper (`44 §2`).
     /// Set when the store's soft limit is hit; callers must not silently drop it.
     pub capacity_error: Option<(u64, u64)>,
-    /// `List Char` constructor IDs needed by `string_to_list_char`/
-    /// `list_char_to_string` (`37 §2.3`, wp/L3-strings-roundtrip) — same
-    /// `apply` needs `store`/GlobalIds to build/inspect `Ctor` values, which
-    /// the pure `prim_reduce(symbol,args)` fn cannot access. Set by the
-    /// Language driver / test setup from
-    /// `ElabEnv.prelude_env.{nil_id,cons_id}`.
+    /// Generic `List` constructor IDs needed by the `String ↔ List Char`
+    /// and `Bytes ↔ List UInt8` primitive views (`37 §2.3/§2.6`). The
+    /// historical field/type name is retained for API compatibility; `Nil` and
+    /// `Cons` are polymorphic, so the same ids construct both element types.
     pub list_char_ids: Option<ListCharIds>,
 }
 
@@ -1313,15 +1311,13 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         ("byte_length", [EvalVal::Str(s)]) => EvalVal::Int(s.len() as i64),
         // `char_length s` — the Unicode scalar-value count (`37 §2.2`).
         ("char_length", [EvalVal::Str(s)]) => EvalVal::Int(s.chars().count() as i64),
-        // `string_to_list_char` / `list_char_to_string` (`37 §2.3`,
-        // wp/L3-strings-roundtrip): the real reduction needs `store` + the
-        // `List Char` ctor ids (`Nil`/`Cons`), unavailable to this pure fn —
-        // intercepted in `apply` before this generic path fires (see
-        // `store.list_char_ids` there). These arms are only reached when
-        // `list_char_ids` is unwired (or via a direct `prim_reduce` call,
-        // bypassing `apply`) — stay Neutral (stuck), never silently wrong.
+        // Structural `String`/`Bytes` views need `store` + polymorphic `List`
+        // constructor ids, unavailable to this pure fn. They are intercepted
+        // in `apply`; direct calls stay Neutral (stuck), never silently wrong.
         ("string_to_list_char", [EvalVal::Str(_)]) => EvalVal::Neutral,
         ("list_char_to_string", [EvalVal::Ctor { .. }]) => EvalVal::Neutral,
+        ("bytes_to_list", [EvalVal::Bytes(_)]) => EvalVal::Neutral,
+        ("list_to_bytes", [EvalVal::Ctor { .. }]) => EvalVal::Neutral,
 
         // Partial or unrecognised primitive: neutral (stuck on non-literals).
         _ => EvalVal::Neutral,
@@ -1550,13 +1546,11 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
                 // Saturated — check if this is a prim or a data constructor.
                 if let Some(Decl::Primitive { reduction, .. }) = globals.lookup(id) {
                     if let PrimReduction::Op { symbol } = reduction {
-                        // `string_to_list_char`/`list_char_to_string` (`37 §2.3`,
-                        // wp/L3-strings-roundtrip): intercepted here before the
-                        // generic prim path for the same reason as `print_line`
-                        // above — need `store` (make_ctor) and `list_char_ids`
-                        // (Nil/Cons GlobalIds), neither available to the pure
-                        // `prim_reduce(symbol, args)` fn. Falls through to the
-                        // generic path's `Neutral` catch-all when unwired.
+                        // Structural String/Bytes views are intercepted here:
+                        // they need `store` (make_ctor) and the polymorphic
+                        // `Nil`/`Cons` ids, neither available to the pure
+                        // `prim_reduce(symbol, args)` helper. They fall through
+                        // to Neutral when the constructor ids are unwired.
                         if let Some(ids) = store.list_char_ids.clone() {
                             if *symbol == "string_to_list_char" {
                                 if let [EvalVal::Str(s)] = args.as_slice() {
@@ -1566,6 +1560,16 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
                                 if let [v] = args.as_slice() {
                                     return list_char_to_evalval_string(v, &ids)
                                         .map(EvalVal::Str)
+                                        .unwrap_or(EvalVal::Neutral);
+                                }
+                            } else if *symbol == "bytes_to_list" {
+                                if let [EvalVal::Bytes(bytes)] = args.as_slice() {
+                                    return build_list_uint8(bytes, &ids, store);
+                                }
+                            } else if *symbol == "list_to_bytes" {
+                                if let [v] = args.as_slice() {
+                                    return list_uint8_to_bytes(v, &ids)
+                                        .map(EvalVal::Bytes)
                                         .unwrap_or(EvalVal::Neutral);
                                 }
                             }
@@ -1987,6 +1991,39 @@ fn list_char_to_evalval_string(v: &EvalVal, ids: &ListCharIds) -> Option<String>
                 out.push(char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER));
                 let tail = args.get(2)?.clone();
                 cur = tail;
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// Expose an immutable byte buffer as its structural `List UInt8` view.
+fn build_list_uint8(bytes: &[u8], ids: &ListCharIds, store: &mut EvalStore) -> EvalVal {
+    let mut acc = make_ctor(ids.nil_id, vec![EvalVal::Unknown], store);
+    for byte in bytes.iter().rev() {
+        acc = make_ctor(
+            ids.cons_id,
+            vec![EvalVal::Unknown, EvalVal::Int(i64::from(*byte)), acc],
+            store,
+        );
+    }
+    acc
+}
+
+/// Rebuild a byte buffer from a well-typed `List UInt8`. The elaborator's
+/// `UInt8` type guarantees every head is in range; the checked conversion is a
+/// defensive fail-closed guard for malformed runtime values.
+fn list_uint8_to_bytes(v: &EvalVal, ids: &ListCharIds) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut cur = v.clone();
+    loop {
+        match &cur {
+            EvalVal::Ctor { id, .. } if *id == ids.nil_id => return Some(out),
+            EvalVal::Ctor { id, args, .. } if *id == ids.cons_id => {
+                let head = args.get(1)?;
+                let byte = eval_to_bigint(head)?.to_u8()?;
+                out.push(byte);
+                cur = args.get(2)?.clone();
             }
             _ => return None,
         }
@@ -4514,7 +4551,12 @@ fn prim_arity(symbol: &str) -> usize {
         "bytes_at" | "bytes_concat" => 2,
         "bytes_slice" => 3,
         // ── L3a String surface ops (`37 §2`) ──────────────────────────────
-        "byte_length" | "char_length" | "string_to_list_char" | "list_char_to_string" => 1,
+        "byte_length"
+        | "char_length"
+        | "string_to_list_char"
+        | "list_char_to_string"
+        | "bytes_to_list"
+        | "list_to_bytes" => 1,
         _ => 1,
     }
 }

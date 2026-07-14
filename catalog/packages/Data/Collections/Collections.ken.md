@@ -1,12 +1,13 @@
-# `Collections` — the derived `List`/`Nat` combinator floor + string surface
+# `Collections` — derived collection, string, and byte views
 
 The derived `List`/`Nat` combinator floor (`spec/30-surface/37-strings-collections.md
 §2.4/§2.5/§2.5.1/§4.1), the CAT-3 structural/verified-sort/projection-abstraction
-slices, and the 5 derived `String` ops built on top of the real
+slices, the 5 derived `String` ops built on top of the real
 `string_to_list_char`/`list_char_to_string` round trip. Every combinator here
 is a termination-checked recursive derived definition over the real generic
 eliminator — zero new kernel feature, zero `trusted_base()` delta anywhere in
-this file.
+this file. The `Bytes` structural view also supplies `bytes_nat_length`, an
+ordinary fold through `bytes_to_list` with no cached length or local `Axiom`.
 
 ## Index
 
@@ -1328,6 +1329,18 @@ fn eq (a : String) (b : String) : Bool =
 
 fn compare (a : String) (b : String) : OrdResult =
   list_compare Char compare_char (string_to_list_char a) (string_to_list_char b)
+```
+
+### 4.7 The derived `Bytes` structural fold
+
+`bytes_nat_length` is ordinary checked Ken over the `List UInt8` view. It
+reuses the already-termination-checked generic `length` fold above; the only
+trusted cost is the fixed `Bytes ↔ List UInt8` primitive pair and its two
+registered round-trip propositions. This definition adds no primitive,
+postulate, cached-`Nat` carrier, or `Axiom`.
+
+```ken
+fn bytes_nat_length (bs : Bytes) : Nat = length UInt8 (bytes_to_list bs)
 ```
 
 ## 5. Design notes

@@ -158,6 +158,11 @@ claim with no conformance case is a claim no one can rely on
   referenced not duplicated), explicit `encode`/`decode` (no hidden charset),
   and the one-directional round-trip law (`decode (encode s) == Ok s` provable;
   the reverse is **not** a law).
+- `surface/bytes-structural-view/seed-bytes-structural-view.md` — SUB-1's
+  bounded `Bytes ↔ List UInt8` view (`37 §2.6`): both runtime inverse
+  directions, the exact four-name `trusted_base()` delta, the registered-
+  postulate-vs-`Refl` honesty discriminator, and a real structural byte fold
+  with no cached length or consumer `Axiom`.
 - `surface/ffi-io/seed-ffi-io.md` — L7 `foreign` FFI + the trust boundary
   (`38 §2–§4`): a `foreign` is a typed, effect-rowed, capability-gated **listed
   postulate** (`declare_postulate` → `trusted_base()`); foreign-as-listed-

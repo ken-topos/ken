@@ -183,7 +183,7 @@ impl ElabEnv {
         elab.prelude_env = prelude::register_prelude(&mut elab)?;
         // Safe Bytes ops return the prelude's `Option`/`Result` sums, so their
         // primitive signatures are installed only after those sums exist.
-        bytes::register_safe_bytes_ops(&mut elab.env, &mut elab.globals)?;
+        bytes::register_safe_bytes_ops(&mut elab.env, &mut elab.globals, &mut elab.bytes_env)?;
         // Lc typeclass env: pre-declare RecordNil + record_nil_val (`33 §5`).
         elab.class_env =
             elab::init_class_env(&mut elab.env, &mut elab.globals)?;
