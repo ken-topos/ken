@@ -19,6 +19,7 @@ struct FsEnv {
     afull: ken_kernel::GlobalId,
     create_or_truncate: ken_kernel::GlobalId,
     ok: ken_kernel::GlobalId,
+    err: ken_kernel::GlobalId,
     console: ken_interp::ConsoleIds,
     fs: ken_interp::FSIds,
 }
@@ -34,6 +35,7 @@ fn fs_env() -> FsEnv {
         afull: get("AFull"),
         create_or_truncate: get("CreateOrTruncate"),
         ok: console.ok_id,
+        err: console.err_id,
         console,
         fs,
         elab,
@@ -113,6 +115,10 @@ fn assert_ok(env: &FsEnv, value: &EvalVal) {
     assert!(matches!(value, EvalVal::Ctor { id, .. } if *id == env.ok));
 }
 
+fn assert_err(env: &FsEnv, value: &EvalVal) {
+    assert!(matches!(value, EvalVal::Ctor { id, .. } if *id == env.err));
+}
+
 #[test]
 fn traversal_denies_while_sibling_accepts_through_real_dispatch() {
     let env = fs_env();
@@ -124,7 +130,8 @@ fn traversal_denies_while_sibling_accepts_through_real_dispatch() {
         .mint_scoped_fs_cap(AUTH_FULL, b"dir1/sub", RightSet::READ, SymlinkPolicy::NoFollow)
         .unwrap();
 
-    drive(&env, &mut host, &cap, b"../secret", DriverOp::Read);
+    let denied = drive(&env, &mut host, &cap, b"../secret", DriverOp::Read);
+    assert_err(&env, &denied);
     assert_eq!(host.fs_denials(), &[CapabilityDenied::ScopeEscape]);
     assert!(host.fs_trace().is_empty());
     let accepted = drive(&env, &mut host, &cap, b"ok", DriverOp::Read);
@@ -145,7 +152,8 @@ fn symlink_policy_pairs_reach_the_real_dispatch_and_resolver() {
     let no_follow = host
         .mint_scoped_fs_cap(AUTH_FULL, b"dir1", RightSet::READ, SymlinkPolicy::NoFollow)
         .unwrap();
-    drive(&env, &mut host, &no_follow, b"link/passwd", DriverOp::Read);
+    let denied = drive(&env, &mut host, &no_follow, b"link/passwd", DriverOp::Read);
+    assert_err(&env, &denied);
     assert_eq!(host.fs_denials(), &[CapabilityDenied::SymlinkDenied]);
     assert!(host.fs_trace().is_empty());
     assert_ok(&env, &drive(&env, &mut host, &no_follow, b"real/x", DriverOp::Read));
@@ -158,11 +166,13 @@ fn symlink_policy_pairs_reach_the_real_dispatch_and_resolver() {
             SymlinkPolicy::FollowWithinScope,
         )
         .unwrap();
-    drive(&env, &mut host, &follow, b"link/passwd", DriverOp::Read);
+    let denied = drive(&env, &mut host, &follow, b"link/passwd", DriverOp::Read);
+    assert_err(&env, &denied);
     assert_eq!(host.fs_denials().last(), Some(&CapabilityDenied::ScopeEscape));
     assert_ok(&env, &drive(&env, &mut host, &follow, b"inside", DriverOp::Read));
     let before = host.fs_trace().len();
-    drive(&env, &mut host, &follow, b"loop", DriverOp::Read);
+    let denied = drive(&env, &mut host, &follow, b"loop", DriverOp::Read);
+    assert_err(&env, &denied);
     assert_eq!(host.fs_denials().last(), Some(&CapabilityDenied::SymlinkDenied));
     assert_eq!(host.fs_trace().len(), before);
 }
@@ -177,12 +187,14 @@ fn absolute_and_right_pairs_have_exact_pre_operation_denials() {
         .mint_scoped_fs_cap(AUTH_FULL, b"dir1", RightSet::READ, SymlinkPolicy::NoFollow)
         .unwrap();
 
-    drive(&env, &mut host, &cap, b"/dir1/x", DriverOp::Read);
+    let denied = drive(&env, &mut host, &cap, b"/dir1/x", DriverOp::Read);
+    assert_err(&env, &denied);
     assert_eq!(host.fs_denials(), &[CapabilityDenied::ScopeEscape]);
     assert!(host.fs_trace().is_empty());
     assert_ok(&env, &drive(&env, &mut host, &cap, b"x", DriverOp::Read));
     let before = host.fs_trace().len();
-    drive(&env, &mut host, &cap, b"x", DriverOp::Write(b"denied"));
+    let denied = drive(&env, &mut host, &cap, b"x", DriverOp::Write(b"denied"));
+    assert_err(&env, &denied);
     assert!(matches!(
         host.fs_denials().last(),
         Some(CapabilityDenied::RightNotHeld { op: FsOpKind::Write, .. })
@@ -204,7 +216,8 @@ fn coarse_authority_is_a_named_real_dispatch_backstop() {
             SymlinkPolicy::NoFollow,
         )
         .unwrap();
-    drive(&env, &mut host, &cap, b"x", DriverOp::Write(b"denied"));
+    let denied = drive(&env, &mut host, &cap, b"x", DriverOp::Write(b"denied"));
+    assert_err(&env, &denied);
     assert_eq!(host.fs_denials(), &[CapabilityDenied::AuthorityInsufficient]);
     assert!(host.fs_trace().is_empty());
 }
