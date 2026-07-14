@@ -245,33 +245,42 @@ pub struct TemporalObligation {
 /// every recursive occurrence of `Temporal` is **direct** (strictly positive),
 /// so K1 admits it **without** the K1.5 W-style path (`72 §3.1`).
 ///
-/// `Pred Σ` and `Var` are non-recursive parameters; their exact spelling is
-/// `(oracle)`-tagged, so the arg type is a placeholder non-recursive type
-/// (`Type 0`). The strict-positivity property is independent of that spelling —
-/// it hinges on `Temporal` occurring only in direct (positive) positions.
+/// `Pred Σ` and `Var` are represented by genuine non-recursive type
+/// parameters `P V : Type 0`; their exact spelling remains `(oracle)`-tagged.
+/// The strict-positivity property is independent of that spelling — it hinges
+/// on `Temporal P V` occurring only in direct (positive) positions.
 pub fn temporal_inductive_spec(d_id: GlobalId) -> InductiveSpec {
-    let d = Term::indformer(d_id, vec![]);
-    let pred = Term::ty(Level::Zero); // (oracle): `Pred Σ` spelling deferred
-    let var = Term::ty(Level::Zero); // (oracle): `Var` spelling deferred
+    // Constructor argument types are relative to `[P, V, args_before]`.
+    // At argument depth `depth`, `V = Var(depth)` and `P = Var(depth + 1)`.
+    // Build every recursive occurrence at its actual telescope depth rather
+    // than cloning a parameter-bearing term across binders.
+    let temporal_at = |depth: usize| {
+        Term::app(
+            Term::app(Term::indformer(d_id, vec![]), Term::var(depth + 1)),
+            Term::var(depth),
+        )
+    };
+    let pred_at = |depth: usize| Term::var(depth + 1);
+    let var_at = |depth: usize| Term::var(depth);
     let ctor = |args: Vec<Term>| CtorSpec {
         args,
         target_indices: vec![],
     };
     InductiveSpec {
         level_params: vec![],
-        params: vec![],
+        params: vec![Term::ty(Level::Zero), Term::ty(Level::Zero)],
         indices: vec![],
         level: Level::Zero,
         constructors: vec![
-            ctor(vec![pred.clone()]),         // atom : Pred → Temporal
-            ctor(vec![d.clone()]),            // not  : Temporal → Temporal
-            ctor(vec![d.clone(), d.clone()]), // and  : Temporal → Temporal → Temporal
-            ctor(vec![d.clone(), d.clone()]), // or
-            ctor(vec![d.clone()]),            // next : Temporal → Temporal
-            ctor(vec![d.clone(), d.clone()]), // until : Temporal → Temporal → Temporal
-            ctor(vec![var.clone(), d.clone()]), // mu  : Var → Temporal → Temporal
-            ctor(vec![var.clone(), d.clone()]), // nu  : Var → Temporal → Temporal
-            ctor(vec![var]),                   // var : Var → Temporal
+            ctor(vec![pred_at(0)]),                     // atom : P → D P V
+            ctor(vec![temporal_at(0)]),                 // not  : D P V → D P V
+            ctor(vec![temporal_at(0), temporal_at(1)]), // and  : D P V → D P V → D P V
+            ctor(vec![temporal_at(0), temporal_at(1)]), // or
+            ctor(vec![temporal_at(0)]),                 // next : D P V → D P V
+            ctor(vec![temporal_at(0), temporal_at(1)]), // until : D P V → D P V → D P V
+            ctor(vec![var_at(0), temporal_at(1)]),      // mu  : V → D P V → D P V
+            ctor(vec![var_at(0), temporal_at(1)]),      // nu  : V → D P V → D P V
+            ctor(vec![var_at(0)]),                      // var : V → D P V
         ],
     }
 }
@@ -283,12 +292,17 @@ pub fn temporal_inductive_spec(d_id: GlobalId) -> InductiveSpec {
 /// verdict flips on the structural discriminator (`72 §3.1`).
 pub fn temporal_hoas_inductive_spec(d_id: GlobalId) -> InductiveSpec {
     let mut spec = temporal_inductive_spec(d_id);
-    let d = Term::indformer(d_id, vec![]);
+    let temporal_at = |depth: usize| {
+        Term::app(
+            Term::app(Term::indformer(d_id, vec![]), Term::var(depth + 1)),
+            Term::var(depth),
+        )
+    };
     // Replace the first-order `mu`/`nu` (`Var → Temporal → Temporal`) with the
     // HOAS shape `(Temporal → Temporal) → Temporal`: a single Pi(Pi(D, D), D)? —
     // no: the constructor arg is the HOAS function space `(Temporal → Temporal)`,
     // i.e. one arg of type `Pi(D, D)`.
-    let hoas_arg = Term::pi(d.clone(), d);
+    let hoas_arg = Term::pi(temporal_at(0), temporal_at(1));
     // mu is constructor index 6, nu is 7 in `temporal_inductive_spec`.
     spec.constructors[6] = CtorSpec {
         args: vec![hoas_arg.clone()],
