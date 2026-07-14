@@ -121,7 +121,7 @@ lex to the same tokens.
 ## 1d. Canonical form and layout
 
 The mandated formatter emits one deterministic canonical form. Its soft width
-is **88 Unicode display columns**: a breakable syntactic group stays flat if it
+is **96 Unicode display columns**: a breakable syntactic group stays flat if it
 fits and otherwise takes its prescribed broken form. Only an indivisible
 identifier or literal, or a verbatim region, may exceed that width. This is a
 deterministic fit decision, not formatting latitude. There is no configuration,
@@ -168,7 +168,8 @@ There is one space on each side of infix operators, binding `=`, type `:`, the
 match arrow, `as`, guard `if`, and row-tail `|`. There is no space just inside
 parentheses, brackets, or record/refinement braces. A comma has one following
 space and no preceding space. A semicolon has no preceding space and separates
-sibling arms, fields, or assignments; it is omitted after the last sibling.
+sibling arms, fields, assignments, or local bindings; it is omitted after the
+last sibling.
 Projection `.`, qualified-path `.`, and attached-proof `::` have no surrounding
 spaces. Sibling arrows, colons, equals signs, and bodies are **never** vertically
 aligned; indentation alone expresses structure.
@@ -213,7 +214,9 @@ no comment intervenes. A lambda remains flat when its body is simple and the
 whole expression fits; otherwise its body begins on the next line, indented one
 level.
 
-A `let` with a compound value or body has this structure:
+A one-binding `let` remains horizontal when its complete expression fits and
+its value and body are simple. With a compound value or body it has this
+structure:
 
 ```ken ignore
 let x : A =
@@ -222,9 +225,54 @@ in
   body
 ```
 
-A `let` body that is itself a `let` is compound for this layout decision. The
-complete binding chain remains flat only when it fits; otherwise every nested
-binding follows the structural `let`/`in` form above.
+A directly nested sequential chain of at least two local lets has one canonical
+surface form: the formatter coalesces the maximal chain into a binding group.
+It does not retain the repeated `in let` spelling. A short group remains
+horizontal only when the complete expression fits:
+
+```ken ignore
+let x = first; y = second x in finish y
+```
+
+Semicolons occur between bindings, with no trailing semicolon before `in`. If
+the complete group does not fit, or any binding, body, or attached comment
+requires a break, the formatter emits this block form:
+
+```ken ignore
+let
+  x : A = first;
+  y : B = second x
+in
+  finish y
+```
+
+Every binding is indented one level from `let`. The closing `in` aligns with
+`let`, and the body is indented one level from `in`; consequently the first
+binding and final body have the same indentation. A compound RHS begins on the
+line after its binding `=` and nests one further level relative to that
+binding. A fitting type or application subgroup, including `List Char`, stays
+intact rather than breaking one token per line.
+
+Maximality is syntactic. Coalescing follows only a body whose expression node
+is directly another sequential local `let`; it never crosses a lambda, match
+arm, handler, or other expression boundary. The grouped and explicitly nested
+inputs lower to the same ordered local-let chain, so coalescing introduces,
+removes, reorders, duplicates, and renames no binding.
+
+The duplicate-name rule (`32 §3`) also bounds coalescing. Starting from the
+outermost binding, the formatter takes the longest consecutive segment whose
+names are pairwise distinct. A nested binding that shadows a name already in
+that segment begins a new nested segment rather than producing an invalid
+group; a one-binding segment retains the ordinary one-binding spelling. Thus
+legal nested shadowing remains legal after formatting.
+
+Comments do not break the chain's maximality, but any comment within the chain
+forces the block form. A leading comment stays immediately above its binding at
+the binding indentation; an end-of-line comment remains attached to the
+preceding binding under the general comment rule below; and interstitial or
+trailing comments retain their parsed trivia owner. Neither coalescing nor
+breaking moves a comment across a binding boundary or across the final `in`
+boundary.
 
 An `if` that does not fit, or that has a compound branch, has this structure:
 
@@ -281,7 +329,7 @@ containing construct, but its internal bytes are unchanged.
 Every comment is retained. A doc comment stays attached to the following
 declaration. A leading comment remains immediately above the node it precedes,
 at that node's indentation. An end-of-line comment remains inline only when the
-code, two separating spaces, and comment fit within 88 columns; otherwise it is
+code, two separating spaces, and comment fit within 96 columns; otherwise it is
 placed immediately above the node it annotates. A comment between tokens forces
 the surrounding group to break and is never moved across a syntactic boundary.
 
@@ -417,8 +465,8 @@ none of the rest (no literals, no operators, no layout, no annotations).
   `conid` — it is the universe former, `../10-kernel/12`. The landed V0 lexer
   still spells `view`/`let` until the D4 migration; the surface here is the
   target.)
-- **Punctuation:** `(`, `)`, `:`, `=`, `.`, and the arrow `->` (canonical `→`;
-  the two are the same token, §1b).
+- **Punctuation:** `(`, `)`, `:`, `=`, `.`, `;`, and the arrow `->` (canonical
+  `→`; the two arrows are the same token, §1b).
 - **Lambda:** ASCII `\` (canonical `λ`; same token, §1b).
 - **Identifiers:** the §2 case distinction is load-bearing in V0 —
   **lowercase-initial** `ident` is a term variable; **uppercase-initial**
