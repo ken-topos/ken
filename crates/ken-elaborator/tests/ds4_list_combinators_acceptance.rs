@@ -48,13 +48,15 @@ fn all_five_combinators_and_their_laws_are_real_globals() {
     }
 }
 
-// Zero-Axiom acceptance bar over the whole file (a plain `.ken` source —
-// no literate extractor; the entire file is checked code).
+// Zero-Axiom acceptance bar over the Ken code extracted from this literate
+// `.ken.md` source. Prose may discuss the boundary without becoming Ken code.
 #[test]
 fn zero_axiom_in_collections_ken() {
+    let extracted = ken_elaborator::literate::extract_ken_md(COLLECTIONS_KEN_MD)
+        .expect("Collections.ken.md must extract");
     assert!(
-        !COLLECTIONS_KEN_MD.contains("Axiom"),
-        "Collections.ken must contain zero Axiom literals"
+        !extracted.source.contains("Axiom"),
+        "Collections.ken.md code must contain zero Axiom literals"
     );
 }
 
