@@ -19,9 +19,70 @@ outside the `ken` binary**.
 I re-verified each of these against `origin/main @ c5f73b9c` myself. **Treat
 them as perishable anyway** (§6).
 
+### 2.0 ★ ERRATUM — §2.1's "complete" was FALSE. Read this first.
+
+**The implementer hard-stopped this frame pre-edit and was right.** The original
+§2.1 claimed the injectable seam was "public and complete." **It is not, for the
+generic runner this WP mandates:**
+
+- **`HostHandler` (`eval.rs:2189+`) has NO capability-mint operation.** It
+  declares console ops, `fs_resolve`, and the handle-only `fs_*_at` family —
+  and nothing else.
+- **The runner mints through the CONCRETE type**: `run_file:297` calls
+  `host.mint_fs_cap(declared_fs.authority)`, an **inherent** method on
+  `PosixHost` (`eval.rs:2416`). `CaptureHost` carries its **own separate
+  inherent** `mint_fs_cap` (`eval.rs:3058`).
+- **⇒ A generic `run_program<H: HostHandler>` cannot mint the `ProgramCaps` at
+  all.** The trait cannot express the one step the concrete path performs.
+
+**RULING (Steward, on the Architect's soundness ruling `evt_7v76zwacxxn2q`):
+`mint_fs_cap` MOVES ONTO THE `HostHandler` TRAIT. That is I-6's STEP 0.**
+
+```rust
+fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap;
+```
+
+- **Required method, no default** — every host must consciously bind its own
+  identity into the cap; a default risks an identity-less/unbounded cap. Both
+  impls already provide it, so `required` is clean.
+- **`&self`, not `&mut self`** — both mint read-only; the tighter borrow is
+  correct.
+- **`CaptureHost::mint_scoped_fs_cap` stays INHERENT (test-only).** The trait
+  needs only the declaration-derived `mint_fs_cap`.
+- **Write this invariant at the method**, so a future third impl inherits it:
+  *"`mint_fs_cap` mints a cap rooted at the host's own resolved identity,
+  bounded by the declared authority; it is runner-only and never reachable from
+  Ken."*
+
+**Why this grants no new authority:** a `HostHandler` impl already implements
+`fs_resolve` (the `openat` walk) and the whole `fs_*_at` syscall family — **it
+can already perform any FS operation directly.** A `Cap` is a strictly *weaker,
+gating* token: it constrains what Ken's **program** may request and grants the
+**host** nothing, because the host is the code doing the syscalls. **Authority
+to mint a gating token is subsumed by authority to perform the ops it gates.**
+Both mints are `&self` and root the cap in the host's own identity (`PosixHost`
+→ `FsIdentity::Posix{device, inode}`; `CaptureHost` → `FsIdentity::Virtual`
+node-0), and `fs_resolve` later resolves relative to that host-owned root —
+**which is exactly why a caller-supplied cap, or a free-function `Cap::mint`
+with no `&self`, would be a real bypass of the I-5 scoped ABI.**
+
+**ADR-0017's unforgeability invariant is untouched:** Ken's surface cannot call
+a Rust trait method; the cap enters Ken only as the `EvalVal::Cap` the runner
+constructs. **Inherent-vs-trait is invisible to Ken.** Zero kernel-TCB.
+
+**This is the I-5 precedent completed** — ADR-0017 §4a step 0 already moved
+`fs_resolve`/`fs_*_at` onto the trait to parameterize the driver; `mint_fs_cap`
+is the **one** host op it left concrete, because the mint call was not
+parameterized yet. §5's "no semantics change" means *do not change what the
+interpreter does* — and this does not. It changes only **where the operation is
+declared.**
+
 ### 2.1 Already landed — DO NOT BUILD THESE
 
-- **The injectable seam is public and complete.** `crates/ken-interp/src/lib.rs`
+*(Everything below is true — but read §2.0: the seam is complete for **effects**,
+and was **not** complete for the **mint**.)*
+
+- **The injectable seam is public for effects.** `crates/ken-interp/src/lib.rs`
   (lines 9–15) re-exports `HostHandler`, `run_io`, `apply`, `CaptureHost`,
   `PosixHost`, `ConsoleIds`, `ConsoleStream`, `ConsoleTrace`, `CoproductIds`,
   `FSIds`, `FsTrace`, `FsOpKind`, `HostCreatePolicy`, `HostFileKind`,
@@ -76,6 +137,12 @@ environment; the only reason the binary uses the real one is that it calls
 `std::env` directly.
 
 ## 3. Mandated deliverable
+
+### 3.0 STEP 0 — lift `mint_fs_cap` onto the `HostHandler` trait
+
+Per §2.0. Both impls already have it inherently; this is a **move to the trait**,
+carrying the stated invariant as a doc comment. Do this **first** — the generic
+runner in §3.2 is not expressible until it lands.
 
 ### 3.1 Give `ken-cli` a library
 
