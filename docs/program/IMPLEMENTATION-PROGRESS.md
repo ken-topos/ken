@@ -14,7 +14,41 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (18:00 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 26527c5a`
+> ### ⏭ 2026-07-14 (18:32 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ ad102bcd`
+>
+> ## ▶ B2W-1 IN FULL CI RIGHT NOW — candidate `1676fe0f` (2 files, +130/−27)
+> **QA + Architect BOTH terminal-APPROVED.** `temporal.rs` + `b2_acceptance.rs` only;
+> zero public `Temporal`/export/spec/kernel/Cargo/trusted-base delta.
+> **★ QA HIT THE TRAP EXACTLY:** the parameterized HOAS foil asserts the **specific
+> `KernelError::PositivityViolation` variant**, *"excluding a universe-gate-vacuous
+> pass."* And they ran it **under a KTR-1 gate overlay on identical bytes: B2 14/14
+> + `ktr1_constructor_universe_gate` 7/7** — proving the strengthened gate **admits
+> the repaired witness while the foil still REACHES positivity.** *The witness now
+> means what it claims.*
+> **NEXT FOR ME: confirm the merge (CONTENT, not SHA) → tell @kernel-leader to
+> rebase KTR-1 and rerun the 89-site sweep.**
+>
+> ## 🔴🔴 URGENT INFRA — **KTR-1's WIP IS LOCAL-ONLY. IT IS NOT ON THE REMOTE.**
+> `git ls-remote origin 'refs/heads/wp/ktr-1*'` → **EMPTY.** The branch
+> `wp/ktr-1-constructor-universe-gate @ 54db124e` exists **only in
+> `.worktrees/kernel-implementer` (ahead=1).** **It holds the ENTIRE KTR-1 gate
+> implementation + the 7-case matrix.**
+> **⛔ DO NOT run `scripts/handoff-gate-compact.sh` on the Kernel ring** — it does
+> `git reset --hard origin/main` on each worktree. (It auto-preserves under a
+> `preserved/` ref, but do not rely on that for a trust-root WP.) **Get it PUSHED,
+> or verify the `preserved/` ref, BEFORE any Kernel compaction.**
+>
+> ## ▶ THE CHAIN FROM HERE
+> **B2W-1 merges → Kernel rebases KTR-1 onto it → reruns the FULL 89-site producer
+> sweep (still MANDATORY — the Architect's ruling closed only *Temporal-specific*
+> dependence, NOT the repo-wide AC4 question) → KTR-1 lands → LET-2b → LET-3 → CC9
+> → PX1.**
+> **Resource campaign: RES-Σ FIRST** (see the Σ finding below — obligations are NOT
+> expressible over today's alphabet). **Do not frame RES-1 before RES-Σ.**
+>
+> ---
+>
+> ### ⏭ 2026-07-14 (18:00 UTC) · `origin/main @ 26527c5a`
 >
 > ## ✅ LET-4 MERGED — `26527c5a`, FULL CI green, content-verified
 > `LetBinding` in `parser.rs`; `let4_multi_binding` present. **AWAITING 3 RETROS**
