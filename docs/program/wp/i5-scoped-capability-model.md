@@ -8,7 +8,7 @@ confinement.
 
 **Program I, I-5.** Owner: **Runtime**. Reviewer: **Architect** (terminal;
 he authored the design) + **CV** (conformance seeds). Size: **XL**.
-Base: `origin/main @ dff76dc7`. Branch: `wp/i5-scoped-capability-model`.
+Base: `origin/main @ edb99c1e`. Branch: `wp/i5-scoped-capability-model`.
 
 ## Step 0 — widen the host-handler seam
 

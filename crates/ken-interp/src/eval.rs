@@ -2194,6 +2194,12 @@ pub trait HostHandler {
     fn console_flush(&mut self, stream: ConsoleStream) -> io::Result<()>;
     fn console_is_terminal(&mut self, stream: ConsoleStream) -> bool;
 
+    /// Observation hook for an exact pre-operation capability denial.
+    fn fs_denied(&mut self, _denial: CapabilityDenied) {}
+
+    /// Deterministic test seam after resolution and before handle operation.
+    fn fs_after_resolve(&mut self) {}
+
     fn fs_resolve(
         &mut self,
         root: &capabilities::FsHandle,
@@ -2937,6 +2943,16 @@ pub struct CaptureHost {
     fs_parents: BTreeMap<VfsNodeId, (VfsNodeId, Vec<u8>)>,
     next_fs_node: VfsNodeId,
     fs_trace: Vec<FsTrace>,
+    fs_denials: Vec<CapabilityDenied>,
+    fs_resolve_count: usize,
+    after_resolve_replace: Option<CaptureAfterResolveReplace>,
+}
+
+struct CaptureAfterResolveReplace {
+    from: Vec<u8>,
+    to: Vec<u8>,
+    replacement_file: Vec<u8>,
+    replacement_bytes: Vec<u8>,
 }
 
 impl CaptureHost {
@@ -2954,6 +2970,9 @@ impl CaptureHost {
             fs_parents: BTreeMap::new(),
             next_fs_node: 1,
             fs_trace: Vec::new(),
+            fs_denials: Vec::new(),
+            fs_resolve_count: 0,
+            after_resolve_replace: None,
         }
     }
 
@@ -3004,6 +3023,29 @@ impl CaptureHost {
 
     pub fn fs_trace(&self) -> &[FsTrace] {
         &self.fs_trace
+    }
+
+    pub fn fs_denials(&self) -> &[CapabilityDenied] {
+        &self.fs_denials
+    }
+
+    pub fn fs_resolve_count(&self) -> usize {
+        self.fs_resolve_count
+    }
+
+    pub fn replace_subtree_after_next_resolve(
+        &mut self,
+        from: impl Into<Vec<u8>>,
+        to: impl Into<Vec<u8>>,
+        replacement_file: impl Into<Vec<u8>>,
+        replacement_bytes: impl Into<Vec<u8>>,
+    ) {
+        self.after_resolve_replace = Some(CaptureAfterResolveReplace {
+            from: from.into(),
+            to: to.into(),
+            replacement_file: replacement_file.into(),
+            replacement_bytes: replacement_bytes.into(),
+        });
     }
 
     pub fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap {
@@ -3098,6 +3140,21 @@ impl CaptureHost {
         parts.reverse();
         parts.join(&b'/')
     }
+
+    fn parent_and_leaf(&self, path: &[u8]) -> Option<(VfsNodeId, Vec<u8>)> {
+        let mut parts = path
+            .split(|byte| *byte == b'/')
+            .filter(|part| !part.is_empty())
+            .peekable();
+        let mut parent = 0;
+        while let Some(part) = parts.next() {
+            if parts.peek().is_none() {
+                return Some((parent, part.to_vec()));
+            }
+            parent = *self.fs_entries.get(&(parent, part.to_vec()))?;
+        }
+        None
+    }
 }
 
 impl HostHandler for CaptureHost {
@@ -3158,6 +3215,30 @@ impl HostHandler for CaptureHost {
         self.terminals[stream_index(stream)]
     }
 
+    fn fs_denied(&mut self, denial: CapabilityDenied) {
+        self.fs_denials.push(denial);
+    }
+
+    fn fs_after_resolve(&mut self) {
+        let Some(replacement) = self.after_resolve_replace.take() else {
+            return;
+        };
+        let (from_parent, from_leaf) = self
+            .parent_and_leaf(&replacement.from)
+            .expect("hook source parent exists");
+        let (to_parent, to_leaf) = self
+            .parent_and_leaf(&replacement.to)
+            .expect("hook destination parent exists");
+        let node = self
+            .fs_entries
+            .remove(&(from_parent, from_leaf))
+            .expect("hook source exists");
+        self.fs_entries.insert((to_parent, to_leaf.clone()), node);
+        self.fs_parents.insert(node, (to_parent, to_leaf));
+        self.insert_directory(replacement.from);
+        self.insert_file(replacement.replacement_file, replacement.replacement_bytes);
+    }
+
     fn fs_resolve(
         &mut self,
         root: &capabilities::FsHandle,
@@ -3165,6 +3246,7 @@ impl HostHandler for CaptureHost {
         op: FsOpKind,
         symlink: capabilities::SymlinkPolicy,
     ) -> Result<Resolution<Self::Handle>, ResolveError> {
+        self.fs_resolve_count += 1;
         let capabilities::FsHandle::Virtual(root) = root else {
             return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
         };
@@ -3919,21 +4001,29 @@ fn fs_dispatch<H: HostHandler>(
 
     let scope = match check_fs_capability(cap, op_kind, required, operation_name) {
         Ok(scope) => scope,
-        Err(_) => return Some(Ok(fs_denied(operation, path, fs, ids, store))),
+        Err(denial) => {
+            handler.fs_denied(denial);
+            return Some(Ok(fs_denied(operation, path, fs, ids, store)));
+        }
     };
     let components = match fs_target_components(path) {
         Ok(components) => components,
-        Err(_) => return Some(Ok(fs_denied(operation, path, fs, ids, store))),
+        Err(denial) => {
+            handler.fs_denied(denial);
+            return Some(Ok(fs_denied(operation, path, fs, ids, store)));
+        }
     };
     let resolved = match handler.fs_resolve(&scope.root, &components, op_kind, scope.symlink) {
         Ok(resolved) => resolved,
-        Err(ResolveError::Denied(_)) => {
+        Err(ResolveError::Denied(denial)) => {
+            handler.fs_denied(denial);
             return Some(Ok(fs_denied(operation, path, fs, ids, store)))
         }
         Err(ResolveError::Io(error)) => {
             return Some(Ok(file_result(Err(error), operation, path, fs, ids, store)))
-    }
+        }
     };
+    handler.fs_after_resolve();
 
     let response = if op_id == fs.readfile_id {
         let Resolution::Existing(handle) = resolved else {
