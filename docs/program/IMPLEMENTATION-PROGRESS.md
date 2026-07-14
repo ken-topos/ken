@@ -14,26 +14,86 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (17:00 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 26e9baed`
+> ### ⏭ 2026-07-14 (17:45 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ fcabc80a`
 >
-> ## ▶ LET-4 AT THE ARCHITECT'S TERMINAL GATE — candidate `935681e0`
-> Parent `origin/main @ 26e9baed`. **language-qa APPROVED, incl. AC-DERIVE and the
-> manual AC-READER rendering.** Zero kernel/runtime/Cargo/trusted-base delta.
-> **NEXT FOR ME: Architect votes → I publish (FULL CI — it touches `catalog/`,
-> NEVER `--doc-only`) → retros → close → LET-2b unblocks → LET-3 → CC9 → PX1.**
+> ## ▶▶ KTR-1 RELEASED TO KERNEL — trust-root repair (`docs/program/wp/ktr1-constructor-universe-gate.md`)
+> **The gap is CONFIRMED and it is a CONFORMANCE DEFECT, not an open question.**
+> The Architect executed the decoder too (`evt_66d1p9bz1h621`): `data D : Type
+> where { C : (s : Type) → D }` **plus** `fn decode (d : D) : Type = match d { C s
+> ↦ s }` — **both exit 0.** That is a same-level Tarski universe: `D : Type 0`
+> injecting every `Type 0` (including `D`), with `decode (C A) ≡ A`. **Nobody has
+> derived `⊥` and we do not claim one** — but the checker is outside its
+> predicative contract, and that is enough.
 >
-> ## 🔴🔴 ESCALATED — POSSIBLE KERNEL SOUNDNESS GAP (`evt_5d77tsdr2kyxz`)
-> **Independent of every campaign. Do not let it wait behind CC9/LET-4.**
-> `check.rs:918-966` `declare_inductive` appears to enforce **ONLY** strict
-> positivity (`:945` — *"the sole structural admission gate"*) + `synth_type`.
-> **I can find NO check that constructor ARGUMENT SORTS fit under the declared
-> family level.** If so, `data D : Type where { C : (s : Type) -> D }` — **a LARGE
-> inductive at a predicative level** — is admitted ⇒ **road to Girard's paradox.**
-> Universes ARE predicative (`sort_pi`/`sort_sigma` = `max`, `check.rs:183-202`);
-> there is **no impredicative sort**, so no `Prop`-style escape story.
-> **⚠ I READ THE PATH; I DID NOT RUN THE CHECKER. Not finding the gate ≠ the gate
-> being absent.** **Asked kernel-leader for an EXECUTED probe (one file) and the
-> Architect for adjudication.** kernel-leader picked it up 16:57.
+> **`spec/10-kernel/14-inductive.md` ALREADY MANDATES THE GATE** (verified at the
+> producer): *"constructor argument types must live at `ℓ` or below"*; admission
+> requires *"(c) universe-level checks."* And §3: *"Predicativity keeps this sound;
+> **there is no special restriction beyond the universe-level checks.**"* **⇒ The
+> spec's whole soundness argument for large elimination RESTS on the check that was
+> never implemented.** `check.rs:945`'s comment — *"positivity is the sole
+> structural admission gate"* — **is the bug, written down.**
+> **Fix formation, NOT elimination. No `Prop`. No design fork.**
+>
+> **★ THE TRAP I PUT IN THE FRAME IN CAPITALS:** `Δ_p` (params) ≠ `Δ_k`
+> (constructor-local args). Sweep params into the level walk and you compute
+> `level(Type u) = suc u > u` and **reject `List`, `Maybe`, `Vec` — everything.**
+> That failure reads as *"the gate is wrong"* and invites weakening it. It isn't.
+> **AC4 also warns: grepping `data` in `.ken` sources MISSES the Rust-emitted
+> prelude** — enumerate BOTH, count at the producer.
+>
+> ## ⚖ OPERATOR: **NO PUBLICATION FREEZE** (Pat) — Architect's containment overruled
+> Architect called for freezing `main`. **Pat: *"no need… no one is using this
+> yet."*** Correct: **a release freeze protects USERS from a defective artifact,
+> and Ken has none.** Zero risk reduction, pure fleet cost. **Severity
+> (trust-root) stands; containment does not. All other lanes publish as normal.**
+>
+> ## ▶ LET-4 — **ARCHITECT BLOCKED** `935681e0` (`evt_6bk3nx5zm4xkg`). Real defect.
+> Formatter **duplicates comments at a nested-let shadow split with a distinct
+> prefix**, and moves one across the synthesized outer `in`. `collect_let_segment`
+> correctly moves the distinct prefix out, but recursive `print_let_bindings` scans
+> **back to the original nested `let`**, re-collecting comments the prefix already
+> owns. QA covered comments and shadowing *separately* (shadow at index 0) — **not
+> their combination.** language-leader already routed the repair + rebase onto
+> `fcabc80a`. **Lane is self-managing; no Steward action.**
+>
+> ## 🔴🔴 CONFIRMED — LARGE INDUCTIVE **ADMITTED** AT A PREDICATIVE LEVEL
+> **Escalation `evt_5d77tsdr2kyxz`; EXECUTED probe `evt_69kdc7t1rynw4`; my
+> confirmation + sequencing `evt_75m9sykg0m1b2`. Independent of every campaign.**
+>
+> **kernel-leader RAN IT.** `data D : Type where { C : (s : Type) → D }` →
+> `ken check` **exit 0** on `origin/main @ 26e9baed`. (He also verified the legacy
+> `=` spelling was *parser*-rejected — i.e. he checked his negative wasn't a false
+> negative before trusting his positive. That clause is why I believe the result.)
+>
+> `check.rs:918-966` `declare_inductive` enforces **ONLY** strict positivity
+> (`:945` — *"the sole structural admission gate"*) + `synth_type`. **There is NO
+> check that constructor ARGUMENT SORTS fit under the declared family level.**
+> **The gate I could not find is NOT THERE.**
+>
+> **⚠ WHAT IS *NOT* ESTABLISHED — hold this line:** admitting a large inductive is
+> the **PRECONDITION** for Girard's paradox, **not the paradox**. The open question
+> is whether **ELIMINATION is unrestricted** over such a family. **Nobody has
+> derived `⊥`.** Do not let anyone (me included) round this up.
+>
+> **Why it's serious anyway: there is NO `Prop`.** Coq admits large inductives too
+> and contains them with an impredicative sort + **singleton elimination**. Ken has
+> neither — `sort_pi`/`sort_sigma` = `max` (`check.rs:183-202`), `Type ℓ : Type
+> (suc ℓ)`, `Omega` predicative + level-indexed. **So there is no containment story
+> already in the design for this to be leaning on.** Either one exists undocumented,
+> or the gate is missing.
+>
+> **STATE: with the @architect for adjudication (posture vs trust-root gap; and
+> containment if a gap). Kernel ring HELD — remediation NOT started, by my
+> direction:** `declare_inductive` is a **TCB admission gate**, the one place a
+> well-intentioned patch can cost more than the bug.
+> **I SEQUENCED THE ARCHITECT: LET-4 terminal review FIRST** (bounded, zero kernel
+> delta, gates four WPs — minutes), **THEN this with full attention.** *A confirmed
+> gap doesn't worsen in 30 min; it does worsen if adjudicated in a hurry.*
+>
+> **⚠ Architect was found IDLE at 17:14 with all three messages queued UNSUBMITTED
+> in its input buffer** (Codex seat: the paste lands, the turn never starts).
+> Rousted via `send-keys`; confirmed Working. **A Codex singleton can silently drop
+> a mention — capture-pane it, don't assume delivery = pickup.**
 >
 > ## ★★ RESOURCE DESIGN — the scope-indexed report (`local/ken-scope-indexed-resource-middle-path-report.md`)
 > **It CORRECTS ME, and it is right:** a phantom `Handle scope File` is NOT enough

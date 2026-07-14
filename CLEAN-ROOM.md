@@ -60,6 +60,26 @@ never in this repo). They fall in two tiers:
   identifiers, comments, ordering). **Never vendored, never read by
   implementers.** Because a copyleft transcription into the spec would taint the
   whole MIT channel, these are subject to the **leakage recheck** below.
+- **★ FIRST-PARTY SIBLINGS — `ward/` and `keep/` — are NOT references at all,
+  and are freely readable by every role.** `local/refs/ward` (and its sibling
+  `keep`) are **Ken's own projects**: same operator, same author, **MIT**, part of
+  the same program (`ken-topos/ward`, `ken-topos/keep`; Ken's `G-Ward-seam` gate
+  is *their* seam). They live under `local/refs/` **only because that is where
+  sibling checkouts are mounted** — a **directory accident, not a policy
+  classification.**
+
+  > **Read them. You must, to build the seam.** Ken's `spec/70-behavioral/`
+  > specifies *Ken's half* of an interface whose *other half* is written down in
+  > `ward/spec/10-seam/`. An agent building the export emitter, a resource
+  > obligation, or a trace contract **cannot do the job from Ken's side alone.**
+  >
+  > **Why this line exists (added 2026-07-14):** the standing rule is *"when
+  > unsure whether you may look at something under `local/refs/`, the answer is
+  > no."* That rule is right, and it was **about to mis-fire** — an agent asked to
+  > build the Ken↔Ward seam would have correctly refused to read Ward, and been
+  > unable to do its work. **A quarantine that silently swallows a first-party
+  > sibling is a quarantine with a bug.** There is no license question here: it is
+  > our own MIT code.
 
 ## The copyleft-leakage recheck (the originality gate)
 
