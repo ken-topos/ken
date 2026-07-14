@@ -3,7 +3,16 @@
 **Owner:** Team Kernel · **Size:** M · **Risk:** ★★★ (TCB) ·
 **Stream/gate:** trust root (G0)
 
-**Status:** RELEASED.
+**Status:** RELEASED · **SCOPE AMENDED 2026-07-14 (Architect `evt_7rkd48rqwa8a7`):
++§5 — the four `ken-interp` companion migrations FOLD INTO THIS WP. HOLD LIFTED.**
+
+> ### ▶▶ READ §5 FIRST IF YOU ARE RESUMING KTR-1
+>
+> The AC4 closed-set replay (`evt_244wdtm3q3e5d`) **found four callers the new
+> gate correctly rejects.** The Architect has ruled they are **companion
+> migrations that land ON THIS BRANCH** — not a separate WP, not a Runtime WP,
+> not a second branch (`COORDINATION §9a`). **§5 is the contract. The hold is
+> lifted.**
 
 > **Escalation** `evt_5d77tsdr2kyxz` (Steward) → **executed probe**
 > `evt_69kdc7t1rynw4` (kernel-leader) → **ARCHITECT RULING: TRUST-ROOT SOUNDNESS
@@ -278,3 +287,110 @@ whole corpus rebuilding against it — that is precisely what CI is for.
   time pressure.**
 </content>
 </invoke>
+
+---
+
+## 5 · ★ COMPANION MIGRATIONS — the four rejected callers (Architect `evt_7rkd48rqwa8a7`)
+
+**KTR-1's own AC4 replay found four `ken-interp` producers that the repaired gate
+correctly rejects.** They are **test-only**. **No production interpreter path is
+implicated.** They land **on this branch, in this WP.**
+
+**Why here and not a separate WP** *(and the Steward's argument for it was wrong
+— worth knowing, because the correct reason is narrower)*:
+
+> The Steward argued *"a standalone WP is unverifiable — without the gate a
+> repaired and an unrepaired fixture both pass."* **The Architect rejected that
+> reasoning:** B2W-1 **disproves** it — a caller-only branch **can** be tested
+> against the held gate in a disposable overlay, and B2W-1's QA did exactly that.
+>
+> **The real distinction is semantic, not evidential:** B2W-1 repaired an
+> **independent normative witness** for §72 and carried **genuine design content**
+> (two parameters, binder-depth-correct application). **These four carry no
+> independent kernel-admission claim** — their claims are the existing
+> evaluator/driver/trace tests. They are **mechanical compatibility migrations
+> inside KTR-1's own closed AC4 replay**, and **KTR-1 cannot reach its own
+> repository-wide green gate while they are unrepaired.** *Splitting them buys
+> overlay-and-rebase ceremony and no distinct contract.* **`COORDINATION §9a`:
+> companion spillover required by the same PR stays with the WP owner.**
+
+### The four sites — all `Δₖ` sort-as-value placeholders in `Type 0` families
+
+| # | site | family |
+|---|---|---|
+| **#26** | `crates/ken-interp/src/lib.rs:1482` | `ITree` (`Ret`/`Vis`) |
+| **#28** | `crates/ken-interp/src/lib.rs:2409` | `Console.Op` (`Write`) |
+| **#29** | `crates/ken-interp/src/lib.rs:2426` | `ITree` — **statically flagged, DYNAMICALLY MASKED** (#28 rejects first) |
+| **#31** | `crates/ken-interp/tests/b3_acceptance.rs:34` | `ITree` |
+
+> **★ #29 IS WHY THE STATIC AUDIT WAS MANDATORY.** *No test run can reach it —
+> #28 rejects before it. A purely dynamic replay would have repaired three sites,
+> gone green, and left the fourth to detonate on the next unrelated edit.*
+> **Repair all four. "The suite is green" is not evidence that #29 is fixed.**
+
+### ⛔⛔ THE TRAP — AND THE STEWARD WALKED INTO IT IN THE SPACE
+
+**The Steward told the fleet the replacement carriers were *"already declared in
+the same file — sitting right there"* (#23 `Bool`, #24 `Nat`, #27 `Unit`).**
+**That is WRONG, and building on it produces a real bug.** *(Architect's grounding
+correction.)*
+
+- **#23 / #24 (`Bool`, `Nat`) live in a DIFFERENT sibling test module. Their
+  `GlobalId`s belong to a DIFFERENT `GlobalEnv`.**
+- **#31 is a SEPARATE integration-test environment entirely.**
+- **Only #27 `Unit` is local to the Console environment that contains #28/#29.**
+
+> **⇒ They are examples of the RIGHT SHAPE. They are NOT reusable IDs.**
+> **Create or use a carrier IN EACH ACTUAL ENVIRONMENT. NEVER move a `GlobalId`
+> across environments.** ***This is bounded work, but it is NOT four blind textual
+> substitutions*** — and the Steward's framing would have led you to make exactly
+> those four substitutions.
+
+### The two implementation bars
+
+**BAR 1 — DO NOT weaken the gate, and DO NOT lift a family, merely to preserve a
+placeholder.** Replace each constructor-local **sort-as-value** placeholder with a
+**genuine local small carrier type**, holding **constructor order, arity,
+recursive-position shape, zero production behavior, and the evaluator metadata the
+tests consume** unchanged.
+
+**BAR 2 — repair ALL FOUR, including masked #29; then RE-RUN the 91-site `Δₖ`
+audit.** The **exact 19 affected tests** must go green under KTR-1 (13 in
+`ken-interp --lib`: ten EFF at #26, three Console at #28; plus `b3_acceptance` 6/6
+at #31). **Full CI remains the repository gate.**
+
+## 6 · Acceptance criteria — companion migrations
+
+**AC7 — all four sites repaired**, #29 included, each with a carrier **created in
+its own environment**. **No `GlobalId` crosses an environment boundary.**
+
+**AC8 — the gate is UNCHANGED.** `git diff` shows **zero** weakening of
+`check.rs`'s universe predicate and **no family lifted** to accommodate a
+placeholder. *The gate is correct. It found these.*
+
+**AC9 — the 19 tests are green**, and the **`Δₖ` audit is re-run over the closed
+91-site set after repair** — reported as a **fresh** inventory, not a diff against
+the old one.
+
+**AC10 — production behavior is untouched.** These are `#[cfg(test)]` fixtures;
+the evaluator's observable behavior and metadata are byte-identical.
+
+**AC11 — targeted gates only** locally (`COORDINATION §12`): `-p ken-kernel`,
+`-p ken-interp` (`--lib`, `--test b3_acceptance`). **Never `--workspace`.** CI owns
+the whole-repo gate.
+
+## 7 · What is NOT in this WP — Lane 2 (`data.rs` family-universe inference)
+
+**The replay also found a PRODUCTION surface gap: `data.rs` does not infer a
+family universe** — it hardcodes/defaults `Level::Zero` (`:79`, `:158`). So
+`data D where C : (s : Type) -> D` is now **rejected**, and **legacy syntax has no
+annotation escape at all.**
+
+> **The rejection is CORRECT — predicativity (`14-inductive.md §1`). KTR-1 LANDS
+> FAIL-CLOSED and does NOT wait for this.** **No in-repo producer depends on the
+> old (unsound) acceptance.**
+>
+> **⛔ DO NOT "fix" `data.rs` in this WP.** Family-universe **inference vs.
+> mandatory annotation**, **legacy-syntax expressibility/deprecation**, and the
+> **surface diagnostic** are **Language/spec decisions, not trust-root gate work.**
+> **The Steward frames Lane 2 separately through the enclave.**
