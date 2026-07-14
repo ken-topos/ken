@@ -136,6 +136,147 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > lands → **ONE combined SHA** → honesty gate → publish → **verify on main by CONTENT** →
 > §B retros → **I-4 ARC COMPLETE**.
 >
+> ### ⏭ 2026-07-14 (07:3x UTC) — ★ FINAL RESUME POINT · I-6 RE-SCOPED (clock → I-7)
+> **STATE: `origin/main @ 576d223f` · PROGRAM I COMPLETE (I-1…I-5) · CATALOG 6/9 (CC1–CC6a) ·
+> CC7 (MILESTONE C) BUILDING** (foundation-implementer working; frame `wp/cc7-argparse @
+> cd1a7a72`).
+> **✅ I-6 RE-SCOPED — GROUNDED, NOT ASSUMED (`evt_3svjsjdpj5849`).**
+> **★ THE CLOCK QUESTION IS SETTLED: THERE IS NO CLOCK EFFECT.** I verified it MYSELF (0
+> registered clock/time/now ops in the prelude; 0 in the interpreter) rather than taking it from
+> the report. **A deterministic clock cannot be "injected" into an effect that does not exist.**
+> ⇒ **"fixed clock" is I-7's (Env/Process owns clocks), NOT I-6's.** **The contract's I-6
+> checklist was WRONG. Do not build a clock to satisfy it.**
+> **★ I-6 IS LARGELY ALREADY LANDED — as a side effect of I-2 and I-5:**
+> virtual FS ✅ (I-5 step 0: inode-keyed `CaptureHost` + `Symlink` node) · captured streams ✅
+> (I-2 Console floor) · **the injectable seam itself ✅ ALREADY PUBLIC** (`HostHandler` public
+> non-test trait w/ public `Handle`, `fs_resolve`, handle-only `*_at`; **`run_io<H>` = the
+> public injection point**; `lib.rs` re-exports it). **I-5's step 0 BUILT I-6's seam.**
+> **✅ RUNTIME ANSWERED (`evt_5e9k50fkx6wnd`): "YES — a real but NARROW application-author gap;
+> SCRIPTED STDIN ITSELF IS ALREADY LANDED."**
+> `CaptureHost::new(stdin: Vec<u8>)` supplies deterministic stdin; `console_read` consumes
+> limit-bounded chunks then returns a **named EOF** (`eval.rs:2966-2984, 3170-3188`); **I-2
+> already drives `abcde → abc, de, Eof` through REAL `run_io`** (`i2_console_floor.rs:180-217`).
+> **⇒ NO stdin implementation work is needed.**
+> **⇒ ALL FOUR contract items are settled: virtual FS ✅ (I-5) · captured streams ✅ (I-2) ·
+> scripted stdin ✅ (I-2/CaptureHost) · fixed clock → MOVED TO I-7 (no clock effect exists).**
+> **⇒ I-6 IS SMALL — it is the NARROW APP-AUTHOR GAP ONLY, not a build.** Read the full answer
+> next session for the exact gap, then frame it (expect **S**, likely a documented public
+> surface + one worked app-level deterministic test an author can copy). **DO NOT inflate it.**
+> **▶ WHY I STOPPED: context exhausted. I did NOT author the I-6 frame on fumes — that is
+> exactly how the 5 bad pins of this session got written.** Runtime idles briefly **by design**;
+> a short idle is cheaper than a bad frame. Runtime told: **stay put, do not start an unframed
+> WP.**
+> **▶▶ NEXT SESSION, IN ORDER:** (1) read Runtime's answer → **frame I-6 from it** (expect small
+> or doc-only). (2) **CC7 gate + publish** when Foundation releases (press **AC6: is it a
+> SPECIALIZATION, or has a second universe grown inside it?**). (3) **MILESTONE C IS MET on
+> CC7's merge.** (4) Then CC8 (env/config decoder — **the 2nd description-driven decoder, which
+> is what finally justifies extracting a shared `Schema` — AND NOT BEFORE**), CC9, I-7.
+>
+> ### ⏭ 2026-07-14 (07:2x UTC) — ★ RESUME POINT · CC7 BUILDING · I-6 REPORT AWAITING READ
+> **STATE: `origin/main @ 576d223f`. PROGRAM I COMPLETE (I-1…I-5). CATALOG 6/9 (CC1–CC6a).**
+> **▶ CC7 (`ArgParse`, MILESTONE-C EXIT CRITERION) IS BUILDING** — frame `wp/cc7-argparse @
+> cd1a7a72`; foundation-leader dispatched it correctly (all pins relayed intact: byte-wise
+> `ArgBytes` matching, `Diagnostic.Render` as its own package, no second universe, no
+> `bytes_eq`/`DecEq Bytes`). **Foundation ring compacted + verified before the kick.**
+> **▶ I-6 GROUNDING REPORT POSTED by runtime-implementer — NOT YET READ BY ME (context
+> exhausted).** **NEXT SESSION: READ IT FIRST**, then frame I-6 **ONLY from its facts.**
+> **The 3 questions I asked:** (1) of virtual-FS / captured-streams / scripted-stdin /
+> fixed-clock, **which are genuinely MISSING?** (2) **★ Does a CLOCK EFFECT even exist? If not,
+> "fixed clock" is I-7's, NOT I-6's — do not build a clock to satisfy a checklist.** (3) **Is
+> there a real gap between "our tests can inject a handler" and "an app author can write a
+> deterministic test"? THAT gap IS I-6** — if none, I-6 honestly reduces to a documented public
+> surface + a worked example. **A mostly-done WP is GOOD NEWS; do not manufacture scope.**
+> **Known from the partial report: the seam is ALREADY PUBLIC** (`HostHandler` public non-test
+> trait w/ public `Handle`, `fs_resolve`, handle-only `*_at`; `run_io<H>` the public injection
+> point; `lib.rs` re-exports `HostHandler`/`run_io`/`CaptureHost`/`Posix…`). **I-5's step 0
+> built I-6's seam.**
+> **▶ WHY I STOPPED HERE:** context exhausted. **I will not author an L frame on fumes — that
+> is exactly how the 5 bad pins got written.** CC7 is turning; Runtime idles briefly. **A short
+> idle beats a bad milestone frame.**
+>
+> ### ⏭ 2026-07-14 (07:4x UTC) — ★★★ CC7 KICKED — THE MILESTONE-C EXIT CRITERION
+> **✅ CC6a CLOSED** (retros in). **✅ CC7 KICKED** — `evt_6xyzspwbyqhk0`; frame
+> `wp/cc7-argparse @ cd1a7a72` (off `576d223f`). Handoff Gate: all 3 seats **verified
+> `Context compacted`**. Size **L**.
+> **★★ TWO AUDIT PINS — BOTH WOULD HAVE COST A WRONG TURN:**
+> **(1) THERE IS NO `Bytes` EQUALITY.** No `DecEq Bytes`, no `Ord Bytes`, **no `bytes_eq`
+> primitive** — **CC2 explicitly DESCOPED `Bytes` keys.** ⇒ **`ArgParse` CANNOT compare an argv
+> `Bytes` to an option name with a landed equality.** Matching `--verbose` = **comparing bytes
+> ONE AT A TIME**, via **CC3's `ArgBytes`** (recurse on the cached `Nat`, `bytes_at`,
+> `uint8_to_int`+`eq_int`) — **which CC6a already consumes.** **No new primitive needed.**
+> **⛔ Told them: do NOT mint `bytes_eq`/`DecEq Bytes` — the `Bytes → Nat` bridge is an OPEN
+> OPERATOR DECISION and a build WP does not get to settle it.** *(This is the 3rd WP in a row
+> where the audit kept a build from quietly pre-empting Pat's call.)*
+> **(2) THE `Diagnostic → Doc` RENDERER IS A NEW SEPARATE MODULE — a DAG pin, not taste.** It
+> doesn't exist, and **CC5 forbade it in BOTH base modules**: not in `Diagnostic.Core` (would
+> destroy CC4's render-free property — landed ON PURPOSE so CC5 had something to do) and not in
+> `Pretty.Doc` (abstraction depending on its client = the cycle Foundation caught in my CC3
+> frame). ⇒ **`catalog/packages/Diagnostic/Render.ken.md`**, depending on both. **A CC7
+> deliverable but a SEPARATE package — CC8 will want it too.**
+> **★ AC6 IS THE REAL TEST: NO SECOND UNIVERSE.** No new parser / error carrier / renderer /
+> carrier. `ArgParse` = a **SPECIALIZATION** of CC1–CC6a (tokenize on `Decoder` over
+> `ArgCursor` · fail as `Diagnostic`s with `ArgumentOrigin` · **ACCUMULATE** via `Validation`,
+> not short-circuit · derive help as a `Doc`). **Architect told to press exactly this: is it a
+> specialization, or has a second universe grown inside it? — THE DIFFERENCE BETWEEN THE
+> CATALOG COMPOUNDING AND FRAGMENTING.**
+> **AC2 = THE OPERATOR'S NORTH STAR:** *"a multi-file subcommand tool with options, help, and
+> diagnostics."* **If the example isn't convincing, CC7 isn't done.**
+> **AC5: help is DERIVED from the spec** (add an option → it appears in help with NO other
+> edit). **Hand-written help drifts; derived help cannot.**
+> **▶ ON CC7's MERGE: MILESTONE C IS MET.** Then CC8 (env/config decoder — **the SECOND
+> description-driven decoder, which is what finally justifies extracting a shared `Schema` —
+> AND NOT BEFORE**) and CC9.
+> **▶ I-6 still awaiting Runtime's grounding report** (does a CLOCK EFFECT exist? if not,
+> "fixed clock" is I-7's, not I-6's).
+>
+> ### ⏭ 2026-07-14 (07:3x UTC) — ✅ CC6a MERGED · CATALOG 6/9 · CC7 = MILESTONE C IS NEXT
+> **✅ CC6a MERGED — `origin/main @ 576d223f`** (PR #628). **VERIFIED BY CONTENT:**
+> `Process/Arguments.ken.md` + `System/Exit.ken.md` present ✓ · **14 refs consuming CC3's
+> `ArgBytes`/`ArgLocation`** ✓ · **ZERO `Path.Posix` on main** ✓.
+> **★★ CATALOG 6/9 — AND EVERYTHING CC7 CONSUMES NOW EXISTS**, every piece from a prior
+> Foundation WP: `Process.Arguments` (CC6a) · `Decoder`/`Cursor` (CC3) · `Diagnostic` (CC4) ·
+> `Pretty.Doc` (CC5) · `Validation`/`NonEmpty` (CC1) · `Text.Codec`/`Numeric` (CC2).
+> **Six WPs of substrate, each earning the next.**
+> **▶▶ CC7 = `ArgParse` = THE MILESTONE-C EXIT CRITERION** — the operator's north star:
+> *"a multi-file subcommand tool with options / help / diagnostics."* **This is the payoff the
+> whole catalog chain was built for.** Size **L**.
+> **★ TWO THINGS CC6a PROVED (the pattern working, not luck):**
+> **(1) ZERO new carriers — BY REUSE.** It consumed CC3's `ArgBytes` instead of minting a 4th.
+> **Foundation's OWN CC3 carry made that the obvious move** ⇒ the substrate decision stayed
+> **with the operator**, not quietly settled inside a build WP.
+> **(2) AC2 was PROVEN, not asserted.** Real invalid-UTF-8 argv round-tripping byte-identically
+> — and **the Architect read EVERY HELPER rather than trusting the fence scan.** A quiet
+> `String` decode passes every UTF-8 test and breaks only on real non-UTF-8 argv. **That
+> guarantee fails SILENTLY. A fence scan alone would not have caught it.**
+> **▶ CC6a RETROS REQUESTED** (`evt_cwpcy33rs8k0`). Merged ≠ closed. Asked the CHEAPEST-MOMENT
+> question: **"CC7 is an L and it is the milestone — what in `Doc`/`Diagnostic`/`Decoder` will
+> `ArgParse` strain against FIRST?"** Frame CC7 from their answers.
+> **▶ HANDOFF GATE before CC7** (retros → compact ×3 → verify drops → kick).
+> **▶ I-6: still awaiting Runtime's 3-question grounding report.**
+>
+> ### ⏭ 2026-07-14 (07:2x UTC) — CC6a PUBLISHING · CC7 (MILESTONE C) IS NEXT
+> **✅ CC6a GATED CLEAN + PUBLISHING.** Architect TERMINAL APPROVE @ `0c3211c3` (decision
+> `dec_4v9ba0w2dt8ch`; **he correctly did NOT resolve it — the merge signal rides it**).
+> **MY GATE:** 0 merges · exactly the 4 declared files · forbidden-path EMPTY · `diff --check`
+> clean · **NO `Path.Posix`** ✓ · **14 refs CONSUMING CC3's `ArgBytes`/`ArgLocation` and ZERO
+> new cached-`Nat` carrier declarations** ✓. Re-anchor proof re-run: CC6a's own reviewed files
+> byte-UNCHANGED.
+> **★ THE ARCHITECT DID THE THING I ASKED FOR: he read EVERY HELPER, not just the fence scan.**
+> All accessors return raw `Bytes`/`ArgBytes` — **no `String` hop anywhere.** ⇒ **argv is
+> genuinely byte-preserving.** This is the guarantee that **fails SILENTLY** (a quiet decode
+> passes every UTF-8 test and breaks only on real non-UTF-8 argv) — so a fence scan alone would
+> NOT have been enough, and he knew it.
+> **▶▶ NEXT: CC7 = `ArgParse` = THE MILESTONE-C EXIT CRITERION.** On CC6a's merge, **EVERYTHING
+> CC7 CONSUMES EXISTS**: `Process.Arguments` (CC6a) · `Parsing.Decoder`/`Cursor` (CC3) ·
+> `Diagnostic` (CC4) · `Pretty.Doc` (CC5) · `Validation`/`NonEmpty` (CC1) · `Text.Codec`/
+> `Numeric` (CC2). **The whole catalog chain was built FOR this.**
+> **CC7 = the operator's north-star acceptance:** *"a multi-file subcommand tool with options /
+> help / diagnostics."* Frame it with the pre-pin audits; it is an **L** and it is the payoff.
+> **▶ I-6: awaiting Runtime's 3-question report** (what's genuinely missing · does a CLOCK
+> EFFECT exist (if not, "fixed clock" is I-7's, NOT I-6's) · is there a real gap between "our
+> tests inject a handler" and "an app author writes a deterministic test"). **Frame ONLY from
+> their facts.**
+>
 > ### ⏭ 2026-07-14 (07:1x UTC) — CC6a QA-APPROVED · I-6 GROUNDED (the seam is ALREADY PUBLIC)
 > **✅ CC6a QA-APPROVED @ `0c3211c3`** (3 linear commits on `3c7d6ce5`) → **routed to Architect
 > terminal** (`evt_141jq2aw4angw`). Then my gate → publish.
