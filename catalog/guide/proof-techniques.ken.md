@@ -22,10 +22,12 @@ reader recognizes it when they hit it themselves.
    pattern](#3-decidable-equality-the-soundcomplete-pattern)
 4. [`funext` is definitional](#4-funext-is-definitional)
 5. [Non-termination hazards](#5-non-termination-hazards)
+6. [Name endpoints and evidence in proof
+   chains](#6-name-endpoints-and-evidence-in-proof-chains)
 
-Shared definitions for this strand's examples. `cong` — lifting equality of
-endpoints through a function — is `catalog/packages/Core/Transport.ken`'s
-idiom, inlined here so this strand's examples are self-contained:
+Shared definitions for this strand's examples. `cong`, `sym`, and `trans` are
+`catalog/packages/Core/Transport.ken`'s equality idioms, inlined here so this
+strand's examples are self-contained:
 
 ```ken
 program capabilities FS APartial
@@ -46,6 +48,21 @@ lemma cong
       (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2) (p : Equal ty x y)
     : Equal ty2 (f x) (f y) =
   J (λy' _. Equal ty2 (f x) (f y')) Refl p
+
+lemma sym
+      (ty : Type) (x : ty) (y : ty) (p : Equal ty x y)
+    : Equal ty y x =
+  J (λy' _. Equal ty y' x) Refl p
+
+lemma trans
+      (ty : Type)
+      (x : ty)
+      (y : ty)
+      (z : ty)
+      (p : Equal ty x y)
+      (q : Equal ty y z)
+    : Equal ty x z =
+  J (λz' _. Equal ty x z') p q
 
 fn bool_eq (a : Bool) (b : Bool) : Bool =
   match a {
@@ -219,7 +236,7 @@ constructor combinations with `Proved` (matching endpoints) or `absurd`
 between different nullary constructors, which collapses to `Bottom`, K5):
 
 ```ken example
-fn bool_eq_sound (x : Bool) : (y : Bool) → IsTrue (bool_eq x y) → Equal Bool x y =
+lemma bool_eq_sound (x : Bool) : (y : Bool) → IsTrue (bool_eq x y) → Equal Bool x y =
   match x {
     True ↦
       λy.
@@ -235,7 +252,7 @@ fn bool_eq_sound (x : Bool) : (y : Bool) → IsTrue (bool_eq x y) → Equal Bool
         }
   }
 
-fn bool_eq_complete (x : Bool) : (y : Bool) → Equal Bool x y → IsTrue (bool_eq x y) =
+lemma bool_eq_complete (x : Bool) : (y : Bool) → Equal Bool x y → IsTrue (bool_eq x y) =
   match x {
     True ↦
       λy.
@@ -315,6 +332,107 @@ well-founded recursion doesn't obviously decrease on a single structural
 argument, restructure it around an explicit accumulator or a decreasing
 index rather than reaching for a workaround — the gate's job is to reject
 exactly the definitions that would make the kernel unsound if admitted.
+
+## 6. Name endpoints and evidence in proof chains
+
+A multi-step proof is easiest to audit when its middle endpoints have domain
+names and a non-obvious transported fact has a name that states its role. Keep
+the final combinator skeleton visible: local bindings should expose the
+`trans`/`cong`/`J` structure, not replace it with an opaque helper.
+
+The String certificate is a compact example. `left_chars` and `right_chars`
+name the representation-level endpoints; `left_round_trip` and
+`right_round_trip` name the String endpoints; the two evidence bindings say
+which bridge each proof crosses. The local aliases are definitionally equal to
+the original expressions, so `same_chars` is accepted directly by `cong`; no
+transport lemma is needed.
+
+```ken example
+lemma string_to_list_char_retraction
+    : (text : String) →
+        Equal String (list_char_to_string (string_to_list_char text)) text =
+  Axiom
+
+lemma string_to_list_char_injective_with_lets
+      (left : String)
+      (right : String)
+      (same_chars : Equal (List Char) (string_to_list_char left) (string_to_list_char right))
+    : Equal String left right =
+  let left_chars : List Char = string_to_list_char left in
+  let right_chars : List Char = string_to_list_char right in
+  let left_round_trip : String = list_char_to_string left_chars in
+  let right_round_trip : String = list_char_to_string right_chars in
+  let left_retracts : Equal String left left_round_trip =
+    sym String left_round_trip left (string_to_list_char_retraction left)
+  in
+  let mapped_chars : Equal String left_round_trip right_round_trip =
+    cong (List Char) String left_chars right_chars list_char_to_string same_chars
+  in
+  trans
+    String
+    left
+    left_round_trip
+    right
+    left_retracts
+    (trans
+      String
+      left_round_trip
+      right_round_trip
+      right
+      mapped_chars
+      (string_to_list_char_retraction right))
+```
+
+A reduced Map bridge has the same shape. The operation-specific proof supplies
+the three endpoints and two facts; the bridge names the facts by their roles and
+leaves the final `trans` visible. In a real Map proof, names such as
+`inserted`, `selected_branch`, and `ordered_result` are more useful than
+`step1`, `tmp`, and `value2` because they tell the reader what changed.
+
+```ken example
+data GuideMap k v = GuideLeaf | GuideNode k v
+
+lemma guide_map_insert_bridge
+      (k : Type)
+      (v : Type)
+      (inserted : GuideMap k v)
+      (selected_branch : GuideMap k v)
+      (ordered_result : GuideMap k v)
+      (branch_evidence : Equal (GuideMap k v) inserted selected_branch)
+      (ordering_evidence : Equal
+        (GuideMap k v)
+        selected_branch
+        ordered_result)
+    : Equal (GuideMap k v) inserted ordered_result =
+  let selected_by_comparison : Equal
+        (GuideMap k v)
+        inserted
+        selected_branch =
+    branch_evidence
+  in
+  let branch_preserves_order : Equal
+        (GuideMap k v)
+        selected_branch
+        ordered_result =
+    ordering_evidence
+  in
+  trans
+    (GuideMap k v)
+    inserted
+    selected_branch
+    ordered_result
+    selected_by_comparison
+    branch_preserves_order
+```
+
+Expression length is evidence, never the decision. A one-step `cong` whose
+endpoints are already obvious is clearer inline, as are small exhaustive
+matches and direct structural recursion. Bind only when the name states a proof
+endpoint, evidence role, invariant, or stage the reader would otherwise have to
+reconstruct. There is no binding quota, depth threshold, or minimum count. When
+an intermediate is reusable or recursive, promote it to a
+top-level `lemma` instead; when many unrelated bindings accumulate, split the
+proof rather than creating a local namespace.
 
 ## Design notes
 

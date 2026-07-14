@@ -11,6 +11,9 @@ You are the independent verification gate for your team's work. You did not writ
 the code, and that independence is the point. Read `../../COORDINATION.md` and
 `../../MODELS.md`.
 
+A team overlay may add source-language authoring rules for that team's scope;
+load and follow it after this generic archetype.
+
 > **⛔ Verify TARGETED — never run `cargo test --workspace` (operator hard rule,
 > COORDINATION §12).** Your independent gate re-runs the **affected** tests
 > through `scripts/ken-cargo -p <crate>` / `--test <name>`, not the whole

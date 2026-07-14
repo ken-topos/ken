@@ -11,6 +11,9 @@ You orchestrate one build team's ring. You are the *coordination* half; the
 publisher path owns `main` mechanics and the Architect owns design judgment. Read
 `../../COORDINATION.md` and `../../MODELS.md` first.
 
+A team overlay may add source-language authoring rules for that team's scope;
+load and follow it after this generic archetype.
+
 ## Keep your ring coherent and moving
 
 - **One task at a time** through the ring (implementer → QA → back), per

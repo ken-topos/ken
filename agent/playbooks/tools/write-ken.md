@@ -54,6 +54,49 @@ law proof; the full discriminator, with the mismatched-arity gotcha
 (`Refl` where a non-nullary head has one neutral component), is
 `catalog/guide/proof-techniques.ken.md §1`.
 
+## Use local `let` to name meaning, not merely length
+
+Use `let` when a local name states a domain concept, proof endpoint, invariant,
+or stage that would otherwise be visible only as nested syntax. Prefer it for a
+repeated non-atomic expression, an important middle endpoint or item of proof
+evidence, or a single-use stage with a real domain role. Bind at the narrowest
+scope containing every use; never hoist branch-specific work before a `match`
+or move an effectful computation across a branch or another effect. Local `let`
+is non-recursive, so genuine recursion or reuse belongs in a top-level helper.
+
+Name the role (`sorted_tail`, `left_round_trip`, `lookup_after_insert`), not the
+mechanism (`tmp`, `value2`, `intermediate`). Expression length is evidence,
+never the decision: keep a familiar one-step expression, small exhaustive
+match, direct recursion, constructor assembly, or obvious one-step `cong`
+inline when a binding would merely hide its syntax. A long preamble of unrelated
+bindings is a signal to split a helper or lemma. There is no binding quota,
+depth threshold, or minimum count.
+
+This checked example names a repeated semantic state and leaves the final
+control flow visible:
+
+```ken example
+fn keep_consistent (left : Bool) (right : Bool) : Bool =
+  let joint_decision =
+    match left {
+      True ↦ right;
+      False ↦ False
+    }
+  in
+  match joint_decision {
+    True ↦ joint_decision;
+    False ↦ False
+  }
+```
+
+The full language forms and scope/evaluation caveats are in
+`catalog/guide/surface-reference.ken.md §8`; proof-chain staging is in
+`catalog/guide/proof-techniques.ken.md §6`.
+
+After authoring, run `ken fmt <file>`, inspect the emitted binding layout, and
+re-run `ken check <file>`. Do not treat `ken fmt --check` as a readability
+verdict.
+
 ## A brief's pinned syntax is intent, not a spelling — probe it first
 
 A design brief (an enclave pin, a WP frame) states *what* to build in Ken

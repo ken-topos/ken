@@ -179,6 +179,42 @@ interaction. Reuse is orthogonal to membership: citing a subject-owned law from
 another proof does not demote it to `lemma`. This convention refines which proof
 keyword to use; it does not change the existing `fn` versus Ω-proof partition.
 
+### 6.1 Local bindings as exposition
+
+Use `let` to give an intermediate term a local name when that name states a
+domain concept, proof endpoint, invariant, or stage that would otherwise be
+visible only as nested syntax. A useful local name lets the reader describe the
+remaining body at a higher level than the right-hand side. Prefer a binding for
+a repeated non-atomic expression, for an important middle endpoint or item of
+evidence in a proof chain, or for a single-use stage with a real domain role.
+
+Expression length is evidence, never the decision. Keep a familiar one-step
+expression inline when a binding would only rename its syntax. Small exhaustive
+matches, direct structural recursion, one constructor assembly, and a one-step
+`cong` are often clearer with their structure visible. A binding earns its place
+only when its name states a concept the reader would otherwise have to infer.
+There is no binding quota, depth threshold, or minimum count.
+
+Bind at the narrowest scope that contains every use. Do not hoist a
+branch-specific computation before a `match`, and do not move an effectful
+computation across a branch or another effect. A local `let` is non-recursive;
+use a top-level helper for recursion or genuine reuse. Name the role, such as
+`sorted_tail`, `updated_acc`, `left_round_trip`, or `lookup_after_insert`, not
+the mechanism: `tmp`, `value2`, `intermediate`, and `step_result` merely replace
+visible syntax with indirection. A long preamble of unrelated bindings is a
+signal to split a helper or lemma, not to build a local namespace.
+
+For proof code, name the middle endpoints and evidence that make a multi-step
+chain readable, while leaving the final `trans`/`cong`/`J` skeleton visible.
+This refines the proof-family organization above; it does not hide the proof
+term or change its trust posture. Naming conventions in §9 apply equally to
+local bindings.
+
+A style-only `let` refactor preserves public names, result types, proof claims,
+and the `trusted_base()` delta. It is still an AST change, not whitespace, and
+therefore takes the normal elaboration and behavioral gates. In effectful code,
+the gate must also confirm that branch placement and effect order did not move.
+
 ## 7. Trust, derivation & navigation
 
 The Trust & derivation section carries what the old `MANIFEST.md` did:
@@ -260,7 +296,9 @@ fn list_right_unit ...
 ## 9. Naming
 
 Names tell a reviewer the abstraction, property, and role. Do not encode WP
-history into durable names.
+history into durable names. Local names follow the same rule: use `let` when the
+name exposes meaning hidden by nested syntax, with the counter-rule and narrow
+scoping requirements in §6.1.
 
 **Casing (operator-ruled, `ds-campaign-judgment-log.md` §L6, effective now for
 all NEW authoring).** Ken adopts the Python convention — class-like →
@@ -376,15 +414,23 @@ matter has index + reading paths · required sections present and in order ·
 canonical code in `` ```ken ``, negatives in `` ```ken reject ``/`` ```ken
 ignore `` · References section present (Wikipedia/papers/books as they exist) ·
 Findings section present (empty allowed) · Trust/derivation and source map
-current · pilot rule respected unless a prior pilot landed · tests and
-trust-drift greps recorded.
+current · repeated non-atomic terms are named once where the name carries
+meaning · multi-step proof chains name important endpoints or evidence · local
+bindings preserve branch and effect order by staying at the narrowest scope ·
+every local name improves the vocabulary rather than hiding syntax · a long
+binding chain is reconsidered as a missing helper or lemma · pilot rule
+respected unless a prior pilot landed · tests and trust-drift greps recorded.
 
 **Review checklist.** Diff is docs/style/organization only for the stated scope ·
 tests cover behavior preservation · no new `Axiom`/postulate/primitive/trusted
 entry · any file split preserves imports and consumers · the entry connects
 source order to spec chapters and acceptance criteria · a reviewer can find
 operations, laws, helpers, proofs, trust posture, references, and findings
-without reading the WP thread.
+without reading the WP thread · repeated non-atomic terms carry meaningful local
+names · proof-chain endpoints and evidence are reconstructable without expanding
+every nested term · bindings stay narrow enough to preserve branch and effect
+order · names add vocabulary rather than hiding syntax · long binding chains
+trigger a helper-or-lemma review.
 
 ## 13. Path ⇔ import — the normative rule
 
