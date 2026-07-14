@@ -1,6 +1,6 @@
 # SUB-2 — Retire the cached-`Nat` carriers
 
-**Owner:** Team Language · **Size:** M · **Depends on:** SUB-1 (merged,
+**Owner:** Team Runtime · **Size:** M · **Depends on:** SUB-1 (merged,
 `origin/main @ 6e415f23`) · **Does NOT depend on SUB-1b**
 
 > **Verify every "current state" claim in this frame against the landed code, not
