@@ -202,7 +202,7 @@ fn absurd_discharges_operation_wrapped_contradictory_hypothesis() {
         Box::new(bool_leq_app(&b, true_c(&b), false_c(&b))),
         Box::new(true_c(&b)),
     );
-    let p = declare_postulate(&mut env, vec![], hyp_ty)
+    let p = declare_postulate(&mut env, "test postulate".to_string(), vec![], hyp_ty)
         .expect("p : Eq Bool (bool_leq true false) true (an impossible, operation-wrapped hypothesis)");
     let p_const = Term::Const {
         id: p,

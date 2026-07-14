@@ -34,7 +34,7 @@ fn mk_itree(env: &mut GlobalEnv) -> ITreeEnv {
     // This integration test owns a distinct GlobalEnv, so its carrier must be
     // declared here rather than borrowing an ID from a sibling test module.
     let carrier =
-        declare_postulate(env, vec![], Term::Type(Level::zero())).expect("ITree test carrier");
+        declare_postulate(env, "test postulate".to_string(), vec![], Term::Type(Level::zero())).expect("ITree test carrier");
     let carrier_t = Term::const_(carrier, vec![]);
     let itree = declare_inductive(env, |ind_id| InductiveSpec {
         level_params: vec![],
@@ -404,12 +404,12 @@ fn q_p_assertion_points_project_from_export() {
     let phi = Term::pi(Term::Omega(Level::zero()), Term::Omega(Level::zero()));
 
     // Q hole: declare, then discharge (absent from trusted_base after upgrade)
-    let q_hole = declare_postulate(&mut env, vec![], phi.clone()).expect("Q hole");
+    let q_hole = declare_postulate(&mut env, "test postulate".to_string(), vec![], phi.clone()).expect("Q hole");
     let q_cert = Term::lam(Term::Omega(Level::zero()), Term::var(0));
     env.upgrade_to_transparent(q_hole, q_cert.clone());
 
     // P hole: undischarged (still in trusted_base)
-    let p_hole = declare_postulate(&mut env, vec![], phi.clone()).expect("P hole");
+    let p_hole = declare_postulate(&mut env, "test postulate".to_string(), vec![], phi.clone()).expect("P hole");
 
     let q_triple = closed_triple(q_hole, "f.ensures.0", phi.clone(), ProvKind::Ensures { index: 0 });
     let p_triple = closed_triple(p_hole, "f.ensures.1", phi.clone(), ProvKind::Ensures { index: 1 });

@@ -220,6 +220,13 @@ pub enum Decl {
         body: Expr,
         span: Span,
     },
+    /// `axiom name : T` — mechanical sugar for
+    /// `lemma name : T = Axiom`.
+    AxiomDecl {
+        name: String,
+        theorem: Type,
+        span: Span,
+    },
     /// `proof p for subject ... : φ = proof` — attached checked proof theorem
     /// (`33 §8.2`), exported only through `subject::p`.
     AttachedProofDecl {
@@ -411,6 +418,7 @@ impl Decl {
             | Decl::ProveDecl { name, .. }
             | Decl::PropDecl { name, .. }
             | Decl::LemmaDecl { name, .. }
+            | Decl::AxiomDecl { name, .. }
             | Decl::LawDecl { name, .. }
             | Decl::DataDecl { name, .. }
             | Decl::ExplicitDataDecl { name, .. }
@@ -432,6 +440,7 @@ impl Decl {
             | Decl::ProveDecl { span, .. }
             | Decl::PropDecl { span, .. }
             | Decl::LemmaDecl { span, .. }
+            | Decl::AxiomDecl { span, .. }
             | Decl::AttachedProofDecl { span, .. }
             | Decl::LawDecl { span, .. }
             | Decl::DataDecl { span, .. }

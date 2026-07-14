@@ -126,7 +126,7 @@ fn mk_env() -> (GlobalEnv, B) {
 
     // leq : Bool -> Bool -> Bool  (abstract, opaque -- mirrors the real
     // `leq` being a universally-quantified parameter, never δ-unfoldable).
-    let leq = declare_postulate(&mut env, vec![], Term::pi(bool_t.clone(), Term::pi(bool_t.clone(), bool_t.clone())))
+    let leq = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::pi(bool_t.clone(), Term::pi(bool_t.clone(), bool_t.clone())))
         .expect("leq : Bool -> Bool -> Bool");
 
     // allKeys(p : Bool -> Prop)(m : Tree) : Prop :=

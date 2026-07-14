@@ -172,6 +172,9 @@ pub enum Decl {
     /// `c : A` — opaque constant / postulate; blocks δ (`11 §4`).
     Opaque {
         id: GlobalId,
+        /// Required human-readable audit label. This is provenance metadata,
+        /// not declaration identity, and no kernel judgment may inspect it.
+        name: String,
         level_params: Vec<LevelVar>,
         ty: Term,
     },
@@ -257,8 +260,9 @@ impl GlobalEnv {
         // constants (`16 §1.3`; the unsound general `Up : Type → Ω` coercion is
         // dropped, so these are standalone declarations, not wrappings). They
         // are kernel vocabulary (like `Type`/`Ω`), kept out of `trusted_base`.
-        env.bottom_id = Some(env.declare_prelude_const(Term::Omega(Level::zero())));
-        env.top_id = Some(env.declare_prelude_const(Term::Omega(Level::zero())));
+        env.bottom_id =
+            Some(env.declare_prelude_const("Bottom", Term::Omega(Level::zero())));
+        env.top_id = Some(env.declare_prelude_const("Top", Term::Omega(Level::zero())));
         // K5: `tt : Top` — `Top`'s sole inhabitant, a genuine sub-singleton
         // admissible in Ω (`16 §1.1`). Typed at `Top` itself (not `Ω_0`), so
         // this must come after `top_id` is set.
@@ -266,7 +270,7 @@ impl GlobalEnv {
             id: env.top_id.expect("top_id just set"),
             level_args: Vec::new(),
         };
-        env.tt_id = Some(env.declare_prelude_const(top));
+        env.tt_id = Some(env.declare_prelude_const("tt", top));
         env
     }
 
@@ -275,10 +279,11 @@ impl GlobalEnv {
     /// caller is responsible for `ty` being well-formed without running the
     /// check pipeline (both uses here are, by the `Omega`-formation and
     /// sub-singleton-in-Ω rules, `16 §1.1`).
-    fn declare_prelude_const(&mut self, ty: Term) -> GlobalId {
+    fn declare_prelude_const(&mut self, name: &str, ty: Term) -> GlobalId {
         let id = self.fresh_id();
         self.add_decl(Decl::Opaque {
             id,
+            name: name.to_string(),
             level_params: Vec::new(),
             ty,
         });

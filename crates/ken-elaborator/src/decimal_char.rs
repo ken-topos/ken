@@ -119,7 +119,12 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
         .ok_or_else(|| ElabError::Internal("Int not registered".into()))?;
     let int_t = Term::const_(int_id, vec![]);
     let unbounded_ty = Term::pi(int_t.clone(), int_t.clone());
-    let unbounded_id = declare_postulate(&mut elab.env, vec![], unbounded_ty)
+    let unbounded_id = declare_postulate(
+        &mut elab.env,
+        "decimalPow10Unbounded".to_string(),
+        vec![],
+        unbounded_ty,
+    )
         .map_err(|e| ElabError::Internal(format!("decimalPow10Unbounded failed: {}", e)))?;
     elab.globals
         .insert("decimalPow10Unbounded".to_string(), unbounded_id);

@@ -1041,6 +1041,7 @@ fn ac2_indexed_wstyle_method_type_agreement() {
     // use `w2_node f` as the scrutinee.
     let f_id = ken_kernel::declare_postulate(
         &mut env,
+        "test postulate".to_string(),
         vec![],
         Term::pi(fmr(bool_id), Term::app(fmr(w2), Term::var(0))),
     )

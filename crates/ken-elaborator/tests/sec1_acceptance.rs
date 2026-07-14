@@ -30,9 +30,9 @@ use ken_kernel::{declare_postulate, GlobalEnv, Level, Term};
 
 fn make_env_pq() -> (GlobalEnv, Term, Term) {
     let mut env = GlobalEnv::new();
-    let p_id = declare_postulate(&mut env, vec![], Term::omega(Level::zero()))
+    let p_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
         .expect("P : Omega_0");
-    let q_id = declare_postulate(&mut env, vec![], Term::omega(Level::zero()))
+    let q_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
         .expect("Q : Omega_0");
     (env, Term::const_(p_id, vec![]), Term::const_(q_id, vec![]))
 }
@@ -589,7 +589,7 @@ fn deferred_machinery_carries_reify_trigger() {
     // Not silently omitted: a claim WITHOUT a trigger that CANNOT be proved would
     // be an honesty-guard violation (the N2-analog for G1).
     let fresh_phi = {
-        let id = declare_postulate(&mut env, vec![], Term::omega(Level::zero()))
+        let id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
             .expect("fresh Omega postulate");
         Term::const_(id, vec![])
     };

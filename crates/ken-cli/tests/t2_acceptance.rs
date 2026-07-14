@@ -78,7 +78,7 @@ fn ac1_ill_typed_def_rejected_not_registered() {
 #[test]
 fn ac2_provable_goal_yields_proved() {
     let mut env = fresh();
-    let x_id = declare_postulate(&mut env.env, vec![], Term::ty(Level::zero()))
+    let x_id = declare_postulate(&mut env.env, "test postulate".to_string(), vec![], Term::ty(Level::zero()))
         .expect("X : Type 0");
     let x = Term::const_(x_id, vec![]);
     let phi = Term::pi(x.clone(), x);
@@ -124,7 +124,7 @@ fn ac2_open_goal_yields_unknown() {
 fn ac2_verdict_flip_provable_vs_open() {
     // Provable branch: Pi(X, X)
     let mut env_p = fresh();
-    let x_id = declare_postulate(&mut env_p.env, vec![], Term::ty(Level::zero()))
+    let x_id = declare_postulate(&mut env_p.env, "test postulate".to_string(), vec![], Term::ty(Level::zero()))
         .expect("X");
     let x = Term::const_(x_id, vec![]);
     let phi_p = Term::pi(x.clone(), x);
@@ -169,7 +169,10 @@ fn ac3_eval_goes_through_real_interpreter() {
     let mut store = EvalStore::new();
     // `(\x . x) : Nat -> Nat` — identity on Nat with type ascription.
     let (term, _ty) = env
-        .elaborate_expr("(\\x . x) : Nat -> Nat")
+        .elaborate_expr(
+            "ac3_eval_goes_through_real_interpreter",
+            "(\\x . x) : Nat -> Nat",
+        )
         .expect("elaborate identity");
     let val = eval(&[], &term, &env.env, &mut store);
     assert!(
@@ -184,7 +187,9 @@ fn ac3_eval_goes_through_real_interpreter() {
 fn ac3_eval_type_universe() {
     let mut env = fresh();
     let mut store = EvalStore::new();
-    let (term, _ty) = env.elaborate_expr("Type").expect("elaborate Type");
+    let (term, _ty) = env
+        .elaborate_expr("ac3_eval_type_universe", "Type")
+        .expect("elaborate Type");
     let val = eval(&[], &term, &env.env, &mut store);
     assert!(
         matches!(val, EvalVal::TypeUniverse(_)),
@@ -207,7 +212,7 @@ fn ac4_malformed_input_no_panic() {
 #[test]
 fn ac4_unbound_name_no_panic() {
     let mut env = fresh();
-    let result = env.elaborate_expr("nonexistent_name_xyz");
+    let result = env.elaborate_expr("ac4_unbound_name_no_panic", "nonexistent_name_xyz");
     assert!(result.is_err(), "unbound name must return Err");
 }
 
@@ -216,7 +221,7 @@ fn ac4_unbound_name_no_panic() {
 fn ac4_type_error_no_panic() {
     let mut env = fresh();
     // `Nat Nat` — applying Nat (a type, not a function) to Nat → type error.
-    let result = env.elaborate_expr("Nat Nat");
+    let result = env.elaborate_expr("ac4_type_error_no_panic", "Nat Nat");
     assert!(result.is_err(), "type error must return Err");
 }
 
@@ -232,7 +237,7 @@ fn ac5_session_state_persists() {
     let mut env = fresh();
     env.elaborate_decl("fn Myid (x : Nat) : Nat = x")
         .expect("define Myid");
-    let result = env.elaborate_expr("Myid");
+    let result = env.elaborate_expr("ac5_session_state_persists", "Myid");
     assert!(
         result.is_ok(),
         "name defined earlier must be in scope for later elaboration; got: {:?}",
@@ -271,7 +276,7 @@ fn ac5_definition_usable_in_check() {
 #[test]
 fn ac6_verify_path_is_real_prover() {
     let mut env = fresh();
-    let x_id = declare_postulate(&mut env.env, vec![], Term::ty(Level::zero()))
+    let x_id = declare_postulate(&mut env.env, "test postulate".to_string(), vec![], Term::ty(Level::zero()))
         .expect("X : Type 0");
     let x = Term::const_(x_id, vec![]);
     let phi = Term::pi(x.clone(), x);
@@ -286,7 +291,10 @@ fn ac6_eval_path_is_real_interpreter() {
     let mut env = fresh();
     let mut store = EvalStore::new();
     let (term, _ty) = env
-        .elaborate_expr("(\\x . x) : Nat -> Nat")
+        .elaborate_expr(
+            "ac6_eval_path_is_real_interpreter",
+            "(\\x . x) : Nat -> Nat",
+        )
         .expect("elaborate");
     let val = eval(&[], &term, &env.env, &mut store);
     assert!(matches!(val, EvalVal::Closure { .. }));

@@ -114,7 +114,7 @@ fn apply_elaborates_checks() {
 fn let_ascription_roundtrip() {
     let mut env = mk_env();
     let (core, ty) = env
-        .elaborate_expr("let x : Type = Type in x")
+        .elaborate_expr("let_ascription_roundtrip", "let x : Type = Type in x")
         .expect("let-ascription should elaborate");
 
     // Expected: Let(Univ 1, Univ 0, Var 0) at type Univ 1
@@ -132,7 +132,10 @@ fn let_ascription_roundtrip() {
 fn ascription_on_lambda() {
     let mut env = mk_env();
     let (core, _ty) = env
-        .elaborate_expr("(\\A . \\x . x) : (A : Type) -> (x : A) -> A")
+        .elaborate_expr(
+            "ascription_on_lambda",
+            "(\\A . \\x . x) : (A : Type) -> (x : A) -> A",
+        )
         .expect("ascription-on-lambda should elaborate");
 
     // Same image as id's body: Lam(Univ 0, Lam(Var 0, Var 0))
@@ -205,7 +208,10 @@ fn wrong_arity_rejected() {
 #[test]
 fn under_applied_lambda_rejected() {
     let mut env = mk_env();
-    let result = env.elaborate_expr("(\\x . x) : (A : Type) -> (x : A) -> A");
+    let result = env.elaborate_expr(
+        "under_applied_lambda_rejected",
+        "(\\x . x) : (A : Type) -> (x : A) -> A",
+    );
     assert!(
         matches!(result, Err(ElabError::KernelRejected { .. })),
         "under-applied-lambda-rejected: expected KernelRejected, got {:?}",
@@ -571,7 +577,10 @@ fn existing_invariants_still_green() {
     let mut env = mk_env();
     // `Type` without an annotation gives meta → default 0 → Type 0.
     let (core, ty) = env
-        .elaborate_expr("(\\A . \\x . x) : (A : Type) -> (x : A) -> A")
+        .elaborate_expr(
+            "existing_invariants_still_green",
+            "(\\A . \\x . x) : (A : Type) -> (x : A) -> A",
+        )
         .expect("should accept");
     // core is Lam(Univ 0, Lam(Var 0, Var 0)) — no metas.
     let expected = Term::lam(Term::ty(lv(0)), Term::lam(Term::var(0), Term::var(0)));

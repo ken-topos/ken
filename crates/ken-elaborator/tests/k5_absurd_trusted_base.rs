@@ -25,7 +25,7 @@ use ken_kernel::{declare_postulate, Decl, GlobalEnv, Level, Term};
 #[test]
 fn absurd_proof_position_counted_in_trusted_base_delta() {
     let mut env = GlobalEnv::new();
-    let p = declare_postulate(&mut env, vec![], Term::Omega(Level::zero())).expect("postulate p");
+    let p = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::Omega(Level::zero())).expect("postulate p");
 
     let def_id = env.fresh_id();
     env.add_decl(Decl::Transparent {
@@ -50,7 +50,7 @@ fn absurd_proof_position_counted_in_trusted_base_delta() {
 #[test]
 fn absurd_motive_position_counted_in_trusted_base_delta() {
     let mut env = GlobalEnv::new();
-    let p = declare_postulate(&mut env, vec![], Term::Omega(Level::zero())).expect("postulate p");
+    let p = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::Omega(Level::zero())).expect("postulate p");
 
     let def_id = env.fresh_id();
     env.add_decl(Decl::Transparent {
@@ -76,7 +76,7 @@ fn absurd_motive_position_counted_in_trusted_base_delta() {
 #[test]
 fn absurd_with_no_postulate_reference_has_empty_delta() {
     let mut env = GlobalEnv::new();
-    let p = declare_postulate(&mut env, vec![], Term::Omega(Level::zero())).expect("postulate p");
+    let p = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::Omega(Level::zero())).expect("postulate p");
 
     let def_id = env.fresh_id();
     env.add_decl(Decl::Transparent {

@@ -60,14 +60,14 @@ fn mk_env() -> (GlobalEnv, B) {
     let true_c = Term::constructor(true_, vec![]);
     let false_c = Term::constructor(false_, vec![]);
 
-    let p = declare_postulate(&mut env, vec![], Term::pi(bool_t.clone(), Term::Omega(Level::zero())))
+    let p = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::pi(bool_t.clone(), Term::Omega(Level::zero())))
         .expect("P : Bool -> Ω_0");
     let p_app = |x: Term| Term::app(Term::Const { id: p, level_args: vec![] }, x);
-    let p_true = declare_postulate(&mut env, vec![], p_app(true_c.clone()))
+    let p_true = declare_postulate(&mut env, "test postulate".to_string(), vec![], p_app(true_c.clone()))
         .expect("p_true : P true");
-    let p_true_alt = declare_postulate(&mut env, vec![], p_app(true_c))
+    let p_true_alt = declare_postulate(&mut env, "test postulate".to_string(), vec![], p_app(true_c))
         .expect("p_true_alt : P true (a second, distinct proof)");
-    let p_false = declare_postulate(&mut env, vec![], p_app(false_c)).expect("p_false : P false");
+    let p_false = declare_postulate(&mut env, "test postulate".to_string(), vec![], p_app(false_c)).expect("p_false : P false");
 
     (
         env,

@@ -31,9 +31,9 @@ struct ProofEnv {
 
 fn make_proof_env() -> ProofEnv {
     let mut env = GlobalEnv::new();
-    let p_id = declare_postulate(&mut env, vec![], Term::omega(Level::zero()))
+    let p_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
         .expect("P postulate");
-    let q_id = declare_postulate(&mut env, vec![], Term::omega(Level::zero()))
+    let q_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
         .expect("Q postulate");
     ProofEnv {
         p: Term::const_(p_id, vec![]),
@@ -62,7 +62,7 @@ fn synthetic_disproved(id: &str, env: &mut GlobalEnv) -> (ProverResult, Obligati
     // We synthesize a Disproved by constructing the ProverResult directly.
     // (No real backend yet — this tests the diagnostic projection, not V3.)
     let mut env2 = GlobalEnv::new();
-    let p_id = declare_postulate(&mut env2, vec![], Term::omega(Level::zero())).unwrap();
+    let p_id = declare_postulate(&mut env2, "test postulate".to_string(), vec![], Term::omega(Level::zero())).unwrap();
     let phi = Term::const_(p_id, vec![]);
     let placeholder_hole = env.fresh_id();
     let triple = ObligationTriple {

@@ -215,6 +215,10 @@ claim with no conformance case is a claim no one can rely on
   re-export-site collision, MRES-4d instance carry, and abstract-constructor
   hiding. All producer-dependent arms are red until the Language
   namespace/export follow-on.
+- `surface/declarations/seed-axiom-named-postulates.md` — additive `axiom N : T`
+  mechanical sugar for `lemma N : T = Axiom`, with readable derived
+  provenance, plus the repeated-`Axiom` discriminator: one semantic owner label
+  shared by distinct `GlobalId` identities.
 - `surface/formatting/seed-canonical-format.md` — WP S canonical formatter
   acceptance oracle (`31 §1`): the eight semantic gates (byte idempotence,
   parse and elaboration preservation, whole-catalog posture, literate prose

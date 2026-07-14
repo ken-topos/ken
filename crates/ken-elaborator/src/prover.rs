@@ -369,7 +369,12 @@ fn ipc_search(ctx: &Context, phi: &Term, depth: usize) -> Option<Term> {
 /// `unknown` **kernel-structural** and **`trusted_base()`-distinct from `proved`**
 /// (which retires the postulate on discharge).
 fn emit_unknown_hole(env: &mut GlobalEnv, phi_closed: &Term) -> Verdict {
-    let hole_id = declare_postulate(env, vec![], phi_closed.clone())
+    let hole_id = declare_postulate(
+        env,
+        "prover unknown goal".to_string(),
+        vec![],
+        phi_closed.clone(),
+    )
         .expect("declare_postulate for unknown hole must succeed");
     Verdict::Unknown { hole_id }
 }

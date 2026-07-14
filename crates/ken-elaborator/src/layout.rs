@@ -387,7 +387,9 @@ impl<'a> LayoutPrinter<'a> {
             | Decl::AttachedProofDecl { body, span, .. } => {
                 self.print_decl_with_body(decl, span, body)
             }
-            Decl::DataDecl { span, .. } => self.print_decl_signature(decl, span),
+            Decl::DataDecl { span, .. } | Decl::AxiomDecl { span, .. } => {
+                self.print_decl_signature(decl, span)
+            }
             _ => self.print_span(decl.span()),
         };
         self.with_comments(decl.span(), core)
@@ -1681,6 +1683,7 @@ fn decl_owns_non_block_braces(decl: &Decl) -> bool {
         | Decl::LetDecl { .. }
         | Decl::ProveDecl { .. }
         | Decl::LemmaDecl { .. }
+        | Decl::AxiomDecl { .. }
         | Decl::AttachedProofDecl { .. }
         | Decl::DataDecl { .. }
         | Decl::TypeAlias { .. }

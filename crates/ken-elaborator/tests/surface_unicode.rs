@@ -65,10 +65,17 @@ fn surf1_d3_rejects_unbounded_unicode_identifiers() {
 #[test]
 fn surf1_d3_membership_glyph_is_not_let_delimiter() {
     let mut env = ElabEnv::new().expect("base env");
-    env.elaborate_expr("let x = 1 in x")
+    env.elaborate_expr(
+        "surf1_d3_membership_glyph_is_not_let_delimiter",
+        "let x = 1 in x",
+    )
         .expect("ASCII keyword in remains the let delimiter");
     assert!(
-        env.elaborate_expr("let x = 1 ∈ x").is_err(),
+        env.elaborate_expr(
+            "surf1_d3_membership_glyph_is_not_let_delimiter",
+            "let x = 1 ∈ x",
+        )
+        .is_err(),
         "membership glyph must not parse as keyword `in`"
     );
 }
