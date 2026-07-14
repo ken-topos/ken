@@ -228,10 +228,36 @@ class IOError { operation : FileOperation; path : Option Bytes; kind : IOErrorKi
 
 Each op returns a structured `Result IOError _`. **Error *rendering* is a
 package**, not the driver — the driver only *constructs* the structured value.
-For v1 prefer **whole-file and atomic-replace** operations; **do not** add
-streaming file handles until affine/linear resource tracking exists — if handles
-come first, expose a `withFile` that makes close structural and reports
-close failure (never rely on comments or GC for a required close). Path stays
+For v1 prefer **whole-file and atomic-replace** operations.
+
+> ### ⚠ CORRECTED 2026-07-14 — streaming handles are **NOT** gated on linearity
+>
+> **This paragraph used to read: *"do not add streaming file handles until
+> affine/linear resource tracking exists."* That is now WRONG, and leaving it
+> would have blocked PX7 on a prerequisite that is never coming.**
+>
+> **Operator ruling (Pat, 2026-07-14):** there is **no clear theory unifying
+> affine types with observational type theory**, so **Ken's surface will not claim
+> resource safety — and will not pretend to.** Linear/affine tracking is **not on
+> the roadmap** (*"not a research project"*). A gate on a prerequisite that will
+> never arrive is not caution; it is a permanent, silent veto.
+>
+> **The ruled design instead:** **opaque generation-checked handles + a sealed
+> bracket, enforced in the RUNTIME**, with the residual — what the runtime cannot
+> enforce and the type system cannot state — **emitted honestly across the Ward
+> seam**, never as a `Q` guarantee. Ken's assumption-boundary export makes this
+> **structural rather than aspirational**: the guarantee/assumption discriminator
+> is kernel-side, so an unproved resource property **cannot** be exported as
+> proved (`spec/70-behavioral/71-assumption-boundary.md §…` — the no-over-claim
+> invariant). *We ship it, we enforce what we can, and we say exactly what we did
+> not prove.*
+>
+> **What survives from the old text, and is now MANDATORY rather than
+> conditional:** a `withFile`-style bracket that **makes close structural and
+> reports close failure. Never rely on comments or GC for a required close.**
+> *(That was the right instinct; it was merely attached to the wrong gate.)*
+
+Path stays
 `Bytes` in the op; a POSIX `Path` package (lexical join/parent/extension,
 *non*-canonicalizing normalization; `canonicalize` is a distinct FS op) is
 ordinary Ken.
