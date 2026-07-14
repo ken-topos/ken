@@ -259,6 +259,15 @@ fn add_argument_fixtures(env: &mut ElabEnv) {
           arg_length_valid_field = cc7_build_length
         }
 
+        data CC7Inspect = MkCC7Inspect
+        const cc7_inspect_bytes : Bytes = bytes_encode "inspect"
+        lemma cc7_inspect_length : ArgByteLength cc7_inspect_bytes (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))) = Axiom
+        instance ArgBytes CC7Inspect {
+          arg_bytes_field = cc7_inspect_bytes;
+          arg_length_field = Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))));
+          arg_length_valid_field = cc7_inspect_length
+        }
+
         data CC7Verbose = MkCC7Verbose
         const cc7_verbose_bytes : Bytes = bytes_encode "--verbose"
         lemma cc7_verbose_length : ArgByteLength cc7_verbose_bytes (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))))) = Axiom
@@ -334,6 +343,7 @@ fn neutralize_fixture_proofs(env: &ElabEnv, store: &mut EvalStore) {
     for name in [
         "record_nil_val",
         "cc7_build_length",
+        "cc7_inspect_length",
         "cc7_verbose_length",
         "cc7_output_length",
         "cc7_output_value_length",
@@ -430,6 +440,19 @@ fn forge_parses_flags_raw_values_and_positionals_and_renders_derived_help() {
         positional.last(),
         Some(&EvalVal::Bytes(b"input.ken".to_vec()))
     );
+
+    let inspect = fixture(&env, &mut store, "ArgBytes_instance_CC7Inspect");
+    let inspect_input = fixture(&env, &mut store, "ArgBytes_instance_CC7Input");
+    let inspect_arguments = list_value(&env, &mut store, vec![inspect, inspect_input]);
+    let inspect_parsed = call_global(&env, &mut store, "forge_parse", [inspect_arguments]);
+    let inspect_command = ctor_args(
+        &env,
+        ctor_args(&env, &inspect_parsed, "Valid")
+            .last()
+            .expect("Valid payload"),
+        "MkParsedCommand",
+    );
+    assert_eq!(inspect_command[0], EvalVal::Str("inspect".to_owned()));
 
     let width = nat_value(&env, &mut store, 0);
     let root_help = eval_global(&env, &mut store, "forge_help");
