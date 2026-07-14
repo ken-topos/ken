@@ -147,45 +147,79 @@ which is the exact reason LET-3 was blocked behind LET-4 in the first place.*
 **One clear line each is enough. Do not skip this because it is the smallest
 item; it is the one with a consumer waiting.**
 
-**D6 · ★ RETIRE THE DISCHARGED ORACLE — `crates/ken-elaborator/tests/kenfmt_c_capstone.rs`.**
-*(Operator ruling, mid-flight. This is the one code change in an otherwise
-prose-only WP — and it is a DELETION.)*
+**D6 · ★ DELETE EVERY CORPUS-INVENTORY ORACLE.**
+*(Operator ruling, mid-flight, **twice**. This is the one code change in an
+otherwise prose-only WP — and it is a DELETION.)*
 
-**Delete:**
-- the `FRAME_LINE_COUNTS` const (`:14-66`), **and its comment block `:11-13`**;
-- the whole test `canonical_reformat_has_no_pathological_line_expansion()`
-  (`:117-173`) — it is the table's only consumer.
+> ### The operator's principle — this is the whole of D6, and it decides every case
+>
+> > *"We have full history in git. These counts are unnecessary. **We should be
+> > free to split, concat, delete, etc. catalog files without having to make a
+> > coordinated change to a test.**"*
+>
+> **⇒ THE TEST: does restructuring the corpus force a coordinated edit to this
+> assertion?** **If YES, it dies.** *No exceptions, and no "but I'll just raise
+> the number" — **raising the number IS the coordinated change**, and my first
+> amendment made exactly that mistake.*
 
-**Keep, untouched:** `canonical_frozen_corpus_is_a_39_file_fixed_point()`,
-`balanced_corpus_rejects_the_known_over_width_splay_shape()`, and every helper.
+### Delete these FIVE — they are the complete set
 
-### ⛔ AND YOU MUST REPAIR THE HOLE THE DELETION WIDENS — do not skip this
+**In `crates/ken-elaborator/tests/kenfmt_c_capstone.rs`:**
+1. the `FRAME_LINE_COUNTS` const (`:14-66`) **+ its comment block (`:11-13`)**;
+2. the whole test `canonical_reformat_has_no_pathological_line_expansion()`
+   (`:117-173`) — the table's only consumer;
+3. the floors in `canonical_frozen_corpus_is_a_39_file_fixed_point()` (`:80-89`)
+   — `literate.len() >= 14`, `plain.len() >= 17`.
 
-**The dead test carried ONE live property** (`:145-152`): *the 39 named paths
-must still exist in the live corpus* — a **corpus-shrink guard.** Deleting the
-table deletes that guard.
+**In `crates/ken-cli/tests/ken_fmt.rs`:**
+4. the floors in `strict_frozen_corpus_gate_is_green()` (`:98`, `:103`) —
+   `catalog.len() >= 14`, `rosetta.len() >= 16`.
+5. **★ `assert_eq!(runnable.len(), 19, …)` (`:158`)** in
+   `every_checked_runnable_root_declares_its_fs_authority()`. *The Steward did not
+   flag this one; it fell out of the sweep. It is an **exact-equality** inventory
+   oracle — **the most coordination-forcing of the five.** Add one runnable root
+   and it demands a test edit. **It dies by the same principle.***
 
-**The only remaining shrink guard is the fixed-point test's floors — and they
-are ALREADY STALE:**
+### ⛔ REPLACE EACH WITH A NON-VACUITY GUARD — `assert!(!xs.is_empty())`
 
-| | floor today | live corpus | silently deletable |
-|---|---|---|---|
-| literate (`catalog/**/*.ken.md`) | `>= 14` | **38** | **24 files** |
-| plain (`examples/rosetta/**/*.ken` +1) | `>= 17` | **17** | 0 |
+**A count floor and a non-vacuity guard are NOT the same thing, and only one of
+them costs coordination.**
 
-> **⇒ Twenty-four guide/package files could be deleted TODAY and every gate would
-> stay green.** *That hole is not created by this WP — it is merely EXPOSED by it.
-> Removing the table without fixing it would make a real regression.*
+| | split / concat / delete a file | broken glob (zero files) |
+|---|---|---|
+| `len() >= 14` | **FAILS — coordinated edit** ⛔ | fails |
+| `assert_eq!(len(), 19)` | **FAILS — coordinated edit** ⛔ | fails |
+| **`assert!(!is_empty())`** | **passes** ✅ | **FAILS** ✅ |
 
-**Repair:** raise the two floors in `canonical_frozen_corpus_is_a_39_file_fixed_point()`
-to the live counts — **`literate >= 38`, `plain >= 17`.** *Two numbers,
-current-anchored, strictly stronger than both the stale floors and the frozen
-table. Additions still pass; any deletion fails.*
+> **`!is_empty()` satisfies the operator's principle EXACTLY — it can never force
+> a coordinated change under any legitimate restructure — while still refusing to
+> let the loop go vacuous.**
+>
+> **★ Why this is not me smuggling the count back in:** every one of these tests
+> is a `for path in <glob> { assert!(…) }`. **If the glob ever resolves to zero
+> files, the loop body never runs and the test passes — GREEN, having checked
+> nothing.** *That is the exact failure this whole WP exists to delete: a gate
+> that cannot fail.* **Replacing a count with `> 0` removes the ledger and keeps
+> the floor under the vacuum.** *If the operator wants even that gone, say so and
+> it goes — but it is not what the principle asks for.*
 
-**Stated loss, accepted by the operator:** we give up **per-path identity** (a
-delete-one-add-one *swap* now passes a count floor) and the expansion caps
-(which guarded a discharged migration with 66% slack). **A file deletion is
-visible in the diff; that is where it should be caught.**
+### Keep, UNTOUCHED
+
+- **`canonical_frozen_corpus_is_a_39_file_fixed_point()`'s actual body** — format
+  every **live** file, assert **byte-identity**. *This is the real canonicity
+  gate, it globs whatever is there, and **it needs no coordination when you split,
+  concat, or delete** — so the principle does not touch it.* **Only its two floors
+  go.** *(Its NAME says "39_file" and is now a lie — **rename it**
+  `canonical_live_corpus_is_a_fixed_point`.)*
+- `balanced_corpus_rejects_the_known_over_width_splay_shape()`, the per-file
+  FS-authority assertion inside `every_checked_runnable_root_…`, and every helper.
+- **Every `.len()` assertion about SEMANTIC content** (`result.guarantees.len() == 1`,
+  `ind.constructors.len() == 9`, …). **Those are not corpus inventories. Do not
+  touch them.** *Only the assertions that count FILES IN A GLOB die.*
+
+**Accepted loss, stated plainly:** we give up corpus-shrink detection entirely.
+**A file deletion is a line in `git log` and a line in the diff. That is where it
+belongs — not in a test that must be renegotiated every time the catalog moves.**
 
 ---
 
@@ -204,19 +238,27 @@ route: that means LET-4 left something non-canonical and it is a finding.*
 your diff touches and show each was a **≥2 chain**. *If that list is empty, that
 is the correct and expected answer.*
 
-**AC4 — ★ REVERSED BY OPERATOR RULING. The frozen oracle is DELETED, not
-preserved.** *(The original AC4 said `git diff` must NOT include
-`kenfmt_c_capstone.rs`. It now MUST.)*
+**AC4 — ★ REVERSED TWICE BY OPERATOR RULING. Every corpus-inventory oracle is
+DELETED.** *(The ORIGINAL AC4 said `git diff` must NOT include
+`kenfmt_c_capstone.rs`. **It now MUST** — and `ken_fmt.rs` too. My first
+amendment then said "raise the floors to 38/17"; **that was wrong — raising a
+number IS the coordinated change the operator is eliminating.**)*
 
-- **`FRAME_LINE_COUNTS` and `canonical_reformat_has_no_pathological_line_expansion()`
-  are GONE.** `git grep -n 'FRAME_LINE_COUNTS\|32_594'` over `crates/` returns
-  **zero hits.**
-- **The floors are raised** to `literate >= 38`, `plain >= 17` (D6).
-- **★ PROVE THE NEW FLOOR IS NOT VACUOUS:** delete one `catalog/**/*.ken.md` in a
-  **disposable** tree and show `canonical_frozen_corpus_is_a_39_file_fixed_point`
-  **FAILS**; restore it and show it passes. *A floor you never saw reject
-  anything is a floor you have not tested.* **Report both runs.**
-- **The other two tests in the file still pass, unmodified.**
+- **ZERO corpus-inventory assertions remain.** These greps over `crates/` return
+  **no hits**: `FRAME_LINE_COUNTS` · `32_594` · `pathological` ·
+  `literate.len() >=` · `plain.len() >=` · `catalog.len() >=` ·
+  `rosetta.len() >=` · `runnable.len(), 19`.
+- **★ THE ACCEPTANCE PROOF — it is a RESTRUCTURE, not a test run.** In a
+  **disposable** tree: **delete one `catalog/**/*.ken.md`, and concatenate two
+  others into one file.** Then run all three named suites. **They must be GREEN
+  with no test edit whatsoever.** *That is the property the operator bought;
+  demonstrate it, do not assert it.* **Report the restructure and the runs.**
+- **★ AND PROVE THE NON-VACUITY GUARD STILL BITES:** point a glob at an empty
+  directory (or otherwise make one resolve to zero files) and show the test
+  **FAILS** on `!is_empty()`. *We are deleting gates that could not fail. Do not
+  ship a replacement that cannot fail.* **Report it.**
+- **Every other test in both files still passes, unmodified.** The `39_file`
+  fixed-point test is **renamed**, and its **body is untouched**.
 
 **AC5 — the Foundation overlays teach the group** (D5), so LET-3 is authored
 canonically the first time.
@@ -238,13 +280,20 @@ every WP behind it. That does not happen twice.*
 
 - **The spec is settled and landed.** Do not edit `spec/`. Cite it.
 - **Do not touch the Ken fences.** LET-4 owns them; they are canonical.
-- **~~Do not re-baseline `FRAME_LINE_COUNTS`.~~ WITHDRAWN — delete it (D6).**
-  *The distinction still matters and is why the original guardrail existed:
-  **re-baselining** an oracle to match the artifact it constrains is always
-  wrong (it becomes a rubber stamp). **Retiring** a proof that has been
-  discharged is right. Pat ruled this is the second, not the first.*
+- **~~Do not re-baseline `FRAME_LINE_COUNTS`.~~ WITHDRAWN — DELETE it, and every
+  other corpus-inventory count (D6).** *Three positions in one day, so here is the
+  final one and its reasoning:* **re-baselining** an oracle to match the artifact
+  it constrains is a rubber stamp (my first guard, and still true in general);
+  **retiring** a discharged proof is right (Pat's first ruling); **but a count
+  floor of ANY value is itself the disease** — *every legitimate corpus
+  restructure renegotiates it* (Pat's second, and the one that generalizes).
+  **Git history records deletions. A test must not.**
 - **Do not convert single-binding lets to groups.** (§2. This is the failure mode.)
-- **Do not touch `kenfmt_c_capstone.rs` beyond D6** — the two surviving tests and
-  every helper stay exactly as they are.
+- **Do not touch `kenfmt_c_capstone.rs` or `ken_fmt.rs` beyond D6** — the
+  surviving tests, the per-file FS-authority assertion, and every helper stay
+  exactly as they are.
+- **⛔ Do NOT delete a `.len()` assertion about SEMANTIC content** (`Q` has one
+  entry; `Temporal` has nine constructors). **Only assertions that COUNT FILES IN
+  A GLOB die.** *Over-applying this ruling is the way D6 goes wrong.*
 - **`agent/`, `docs/`, `spec/`, `tooling/` are swept by no formatter gate** — only
   `catalog/**` and `examples/rosetta/**` are. Know which of your files is code.
