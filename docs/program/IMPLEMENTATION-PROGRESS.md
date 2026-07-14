@@ -14,7 +14,87 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-15 (00:40 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ cbaae5e7`
+> ### ⏭ 2026-07-14 (22:30 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ ae042faa`
+>
+> ## AX-2 in its gate loop (CV narrow block — conformance-only). **LET-5 FRAMED + on main.**
+>
+> > **⚠ TIMESTAMP CORRECTION (2026-07-14 22:30 UTC, clock-read).** The six block
+> > headers above/below were **fabricated, not clock-read** — I wrote plausible
+> > times without running `date`, and they drifted forward by 45 min to 2h37m
+> > (three even claimed **2026-07-15**, a day that had not started). **All of it
+> > happened on 2026-07-14 between 21:36 and 22:30 UTC.** Corrected against convo
+> > event timestamps, which are ground truth. **⇒ Anchor on SHAs and `evt_` ids —
+> > those are verifiable. Do NOT trust a wall-clock time in this file unless it
+> > says clock-read.** (Same family as `silence-duration-anchor-on-actual-clock`:
+> > a fabricated time corrupts exactly the stall-duration reasoning it exists to
+> > support.)
+>
+> | item | state |
+> |---|---|
+> | **AX-2** | 🔎 **IN GATE — TWO BLOCKS, ring iterating correctly. NOT mine; do not intervene.** **CV: narrow block (conformance-publication only)** — fixed, released `46395774`. **★ ARCHITECT: REAL BLOCK — the candidate SILENTLY CHANGED A FROZEN KERNEL API.** |
+> | **LET-5** | ✅ **FRAMED + MERGED `ae042faa` (PR #692).** ⛔ **DO NOT RELEASE until AX-2 MERGES** (same `elab.rs`). |
+> | **LET-3 P2** | ⛔ HELD on LET-5. Foundation parked, frozen table posted. |
+>
+> ### ★★ THE ARCHITECT'S AX-2 BLOCK — *"preserving `len`/`contains`/iteration is NOT signature compatibility"*
+> The candidate changed **`GlobalEnv::trusted_base(&self) -> Vec<GlobalId>`** — a
+> signature **pinned normative/stable by `spec/10-kernel/18 §4`** — into a new
+> `TrustedBase` type. It kept `len`/`contains`/owned-ID iteration, **so every
+> existing assertion still passed.** But downstream type annotations and ordinary
+> `Vec` ops break; `TrustedBase` equality now includes **labels**; and its owned
+> iteration has a different element view from `entries()`.
+> **Required close (no AX-1 reopening):** retain `trusted_base() -> Vec<GlobalId>`
+> exactly, and read each label through the already-required `Decl::Opaque.name` via
+> `env.lookup(id)` — **which is precisely the landed §18 contract.** Any convenience
+> projection must be **additive under a distinct name**, never an implicit
+> replacement of a frozen method.
+>
+> **★ AND QA APPROVED THIS — the lesson is why.** QA verified **behavioral**
+> compatibility (*"historical ID iteration/contains/len semantics remain
+> available"*) and that is **TRUE**. The spec pins the **SIGNATURE**. **A frozen API
+> is frozen at its TYPE, not at its behavior** — and a green suite cannot see the
+> difference, because every caller in-repo was migrated in the same diff. **This is
+> the expressibility/frozen-surface family: the break is in the TYPE surface, where
+> no value-level test looks.** My own AX-1 frame said *"`trusted_base()` must become
+> readable **without churning existing count assertions**"* — the implementer
+> satisfied **my assertion-level wording** and broke **the spec's type-level pin.**
+> **My wording invited it.**
+>
+> ### ★ MY D3 GATE — QA's evidence says it is MET (verify by CONTENT at merge, not on their word)
+> `ElabCtx.owner_label: String` **non-optional** · both standalone APIs require a
+> caller-supplied `Into<String>` · **no ownerless overload** · `Decl::Opaque { name:
+> String }` + positional `declare_postulate(env, name: String, …)` · **and
+> `declare_postulate_raw` requires `name: &str`** (the back door I had not named —
+> QA closed it) · kernel reads confined to `trusted_base()` audit projection
+> (`TrustedBaseEntry { id, name }`), **zero** reads in conversion/typing/admission/
+> positivity/universe/elimination · 3 formatter oracles green.
+> **⇒ At the merge Decision: re-verify these BY CONTENT on the diff. Adds
+> `conformance/**` ⇒ ⛔ FULL CI, NEVER `--doc-only`.**
+>
+> ### ★★ LET-5 — the frame's two additions beyond the Architect's ruling
+> 1. **Binding count is a RED HERRING and the frame forbids building to it.** A
+>    one-binding `let` and a group's outer node have the **same resolved form**.
+>    Grouped bodies passed because they were *inferable applications*; singletons
+>    failed because they put a *checked-mode `match`* behind the `let`. **⛔ no
+>    `bindings.len()==1` special case.**
+> 2. **THE FALLTHROUGH IS A CLASS.** `check()` spans 474..646 and has arms for only
+>    **6 of 16** `RExpr` variants (`RApp/RCon/RLam/RMatch/RNumLit/RStr`); the `_ =>`
+>    arm dumps the rest to `infer`+`unify`. That is **correct and lossless for
+>    INFERABLE variants** (`RVar/RUniv/RAsc/RArrow/RPi/RProj/RBinOp`) and **wrong
+>    only for GOAL-PROPAGATING ones**: **`RLet`** (confirmed) and **`ROld`** — a
+>    transparent wrapper whose subterm should inherit the goal, **structurally the
+>    same leak, UNVERIFIED.** AC5 makes the ring settle `ROld` +
+>    `RAttachedProofRef`: fix by the same rule, or record why the goal cannot matter.
+>
+> ### ▶ NEXT FOR ME (in order)
+> 1. **AX-2 merge Decision** → gate on D3 **by content**, then publish **FULL CI**.
+> 2. **Release LET-5** to Language (Handoff Gate) **the moment AX-2 is on main**.
+>    Build branch `wp/let5-checking-mode-let` is **cut fresh by the team** — my frame
+>    branch was `wp/let5-frame` and is gone (never reuse a merged frame branch).
+> 3. **Then LET-3 P2 resumes** with Foundation's frozen table.
+> 4. **Owed to Pat:** the toolchain-axis proposal.
+> 5. **Kernel/Verify/Ergo idle BY DESIGN.**
+>
+> ### ⏮ 2026-07-14 (~22:15 UTC) — `origin/main @ cbaae5e7`
 >
 > ## AX-2 merge-blocker CLEARED. LET-5 ruled (Size S). Foundation parked. Nothing owed by me.
 >
@@ -66,7 +146,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > 4. **Owed to Pat:** the toolchain-axis proposal.
 > 5. **Kernel/Verify/Ergo idle BY DESIGN.**
 >
-> ### ⏮ 2026-07-15 (00:10 UTC) — `origin/main @ 6aaf8c33`
+> ### ⏮ 2026-07-14 (~22:05 UTC) — `origin/main @ 6aaf8c33`
 >
 > ## BOTH RINGS HIT EXPRESSIBILITY WALLS. AX-2 ruled + building. **LET-3 P2 HELD on a landed defect.**
 >
@@ -139,7 +219,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > 4. **Owed to Pat:** toolchain-axis proposal.
 > 5. **Kernel/Verify/Ergo idle BY DESIGN.**
 >
-> ### ⏮ 2026-07-14 (23:45 UTC) — `origin/main @ 6aaf8c33`
+> ### ⏮ 2026-07-14 (~21:58 UTC) — `origin/main @ 6aaf8c33`
 >
 > ## BOTH RINGS BUILDING. Architect ruling an AX-2 fork. Nothing owed by me.
 >
@@ -170,7 +250,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > path, cleared automatically, zero diagnosis cost. **This is the whole argument
 > for converting a discipline into a check.** Run the sweep FIRST, every tick.
 >
-> ### ⏮ 2026-07-14 (23:20 UTC) — `origin/main @ 2739c30c`
+> ### ⏮ 2026-07-14 (~21:52 UTC) — `origin/main @ 2739c30c`
 >
 > ## TWO RINGS BUILDING. AX-2 (Language) + **LET-3 P2 (Foundation — kicked, `Working`-confirmed)**.
 >
@@ -228,7 +308,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > wrong in the other direction. `map_build_acceptance.rs` already asserts
 > `trusted_base_delta` ⇒ AC2 has a landed home.
 >
-> ### ⏮ 2026-07-14 (22:25 UTC) — `origin/main @ 179efdc6`
+> ### ⏮ 2026-07-14 (~21:40 UTC) — `origin/main @ 179efdc6`
 >
 > ## ✅ AX-1 **CLOSED** (retros in). **AX-2 FRAMED + ON MAIN — Handoff Gate running on Team Language.**
 >
