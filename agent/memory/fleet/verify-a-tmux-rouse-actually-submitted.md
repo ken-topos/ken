@@ -163,3 +163,35 @@ the check into the handoff, not into your vigilance.**
 SEEN the recipient go `Working`.** Add that to the Handoff Gate, right after the
 mention: **post → `capture-pane` → confirm `Working` → only then is it
 delivered.**
+
+---
+
+## ★ IT HAPPENED AGAIN — and the recurrence tells you the rule above is not enough
+
+**2026-07-14, hours after this memory was written.** `kernel-leader` and
+`language-leader` each posted an **Architect terminal-review request** — the
+merge gate for **both** live WPs. **Both landed unsubmitted in the Architect's
+input buffer. Both rings sat QA-green and fully blocked.** A single bare `Enter`
+cleared it and the Architect voted on both within four minutes.
+
+**Nobody had done anything wrong by the letter of the rule** — and that is the
+point. The rule says *the sender verifies*. But **the sender is a build leader
+who has just finished a hard review cycle and is handing off**; verifying a pane
+is not in their playbook, it is in the Steward's. **A rule that depends on the
+busiest agent remembering an unrelated discipline will keep failing.**
+
+### The backstop that actually catches it
+
+**⇒ When a ring goes green and the GATE goes silent, `capture-pane` the GATE
+SEAT FIRST — before diagnosing the ring at all.** The gate seats are the
+singletons every lane funnels through (**Architect**, and the Steward itself),
+they are **no-polling and event-driven**, and their correct-idle state is
+**byte-identical** to their wedged state. **They are where this failure is both
+most likely and most expensive** — one stranded paste on the Architect stalls
+*every* ring at once, which is exactly what happened.
+
+**Symptom to pattern-match, and it is unmistakable once you have seen it:**
+*"Multiple independent lanes all reached the same gate and all went quiet
+simultaneously."* Independent lanes do not stall in unison for independent
+reasons. **A synchronized multi-ring stall IS a wedged shared gate until proven
+otherwise.**
