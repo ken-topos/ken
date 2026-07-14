@@ -10,9 +10,11 @@
 ```
 unit   ::= boundary_hdr? import* decl*
 boundary_hdr ::= program_hdr | package_hdr
-program_hdr ::= "program" admits_clause
+program_hdr ::= "program" admits_clause? capabilities_clause?
 package_hdr ::= "package" admits_clause?
 admits_clause ::= "admits" ModPath ("," ModPath)*
+capabilities_clause ::= "capabilities" capability_decl ("," capability_decl)*
+capability_decl ::= ConId ConId
 import ::= "import" ModPath ("as" ConId)?
                           ("(" import_item ("," import_item)* ")")?
 import_item ::= name | name "as" rename
@@ -81,10 +83,22 @@ surface; `pub import` and per-item `pub` are not productions.
 
 `program` and `package` are anonymous file-role markers. Neither production
 accepts a name token: the enclosing file path is the boundary's identity. A
-`program` is the admission root for a multi-package build. A `package` marks a
-package boundary and may omit `admits` when it has no instance-providing
-dependencies. The headers introduce no runtime entry declaration; any entry
-declaration is separate from this grammar (`33 §3.2.1`, §5.5.1).
+`program` is the admission root for a multi-package build and may also declare
+the capabilities from which its runtime authority is minted. A `package` marks
+a package boundary and may omit `admits` when it has no instance-providing
+dependencies; it has no `capabilities` clause in this round. The headers
+introduce no runtime entry declaration; any entry declaration is separate from
+this grammar (`33 §3.2.1`, §5.5.1).
+
+Each optional clause may occur at most once. Their absence is independent: a
+program may carry `admits` without `capabilities`, `capabilities` without
+`admits`, both, or neither. A `capability_decl` resolves its first `ConId` as an
+effect family and its second as an authority for that family; an unknown family,
+an invalid authority, or a second declaration for one family is a surface
+error. The v1 declaration is `FS AFull` (or another member of `Auth`). The
+keyword is `capabilities`: unlike `grants`, it does not imply that a program
+grants authority to itself; unlike `requires`, it cannot be confused with a
+logical precondition; and unlike `caps`, it is not abbreviated.
 
 **Proof-claim declarations are ordinary checked terms.** `prop`, `lemma`, and
 attached `proof` all elaborate to existing checked terms only. `prop` requires

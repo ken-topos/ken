@@ -165,14 +165,53 @@ the admission boundary alters either rule.
 
 An anonymous **`program`** header marks its file as the admission root for a
 multi-package build. An anonymous **`package`** header marks its file as a
-package admission boundary. The only payload either header may carry in this
-round is an `admits` section listing dotted package paths using the same
-role-blind path identity as `import`:
+package admission boundary. Either header may carry an `admits` section listing
+dotted package paths using the same role-blind path identity as `import`. A
+`program` may independently carry a `capabilities` section listing an effect
+family and its authority:
 
 ```ken
 program
 admits Core.LawfulClasses, Data.Collections.Map
+capabilities FS AFull
 ```
+
+`capabilities` is chosen because it names the manifest directly. `grants` would
+suggest that a program grants authority to itself, `requires` is already the
+logical-precondition keyword, and `caps` would abbreviate a security-relevant
+boundary. The exact production is in `32 §1`; the v1 authority family is
+`Auth = ANone | APartial | AFull`. At most one authority may be declared for a
+given effect family.
+
+The two sections are orthogonal manifests with one home:
+
+- `admits` names packages whose instance dictionaries may resolve ambiently.
+  It is a coherence and dispatch channel, carries no authority, and is read by
+  the elaborator's admission gate (§5.5.1).
+- `capabilities` names effect families and authority levels. It is a security
+  channel, affects no instance search, and is read by the runner when it mints
+  `ProgramCaps`.
+
+The clauses have separate namespaces and separate checks. Either may be absent
+while the other is present. An `admits` change cannot authorize an effect, and a
+`capabilities` change cannot make an instance eligible for dispatch.
+
+For `capabilities FS a`, the runner mints exactly
+`ProgramCaps a = MkProgramCaps (Cap a)` from the declaration. There is no
+external launch grant to compare. The entry point has the authority-monomorphic
+shape
+
+```ken
+proc main (input : ProcessInput) (caps : ProgramCaps a) : HostIO ExitCode
+```
+
+where `a` is the header-declared authority. A program whose body performs an FS
+effect without declaring FS has no corresponding capability value in scope.
+The capability-passing translation (`36 §2.5`) therefore produces an unbound
+capability reference, which is ill-typed; `62 §1` specifies the earlier
+missing-capability surface diagnostic. Opaque `Cap`, driver-only minting, and
+downward-only attenuation bound reachable authority by the declaration. This
+is ordinary Π/λ checking, not a new kernel rule or trusted primitive.
 
 Neither header takes a name token. The file path is the single identity of the
 program or package boundary; a spelling such as `program App` or `package Lib`
@@ -180,9 +219,10 @@ is a syntax error. The header's presence is the signal, and an ordinary comment
 may carry documentary intent without creating a second identity.
 
 `program` and `package` establish elaboration-time instance-admission
-boundaries only. They neither designate nor declare a runtime entry point. An
-entry declaration is a separate construct that a program file may eventually
-co-host; this section defines no entry syntax (MRES-4a/4e).
+boundaries. A `program` additionally declares the authority manifest read by
+the runner. Neither header designates nor declares a runtime entry point. An
+entry declaration is a separate construct that a program file may co-host;
+this section defines no entry syntax (MRES-4a/4e).
 
 ### 3.3 Name resolution (surface-only; never reaches the kernel)
 

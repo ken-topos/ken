@@ -534,6 +534,158 @@ does not preclude a genuine cross-package collision here.
   fails this case. The kernel's later dictionary re-check cannot restore
   coherence, so this remains a required package-manager diagnostic.
 
+## G. Program-header capability manifest (I-4 §C)
+
+These fixtures extend N4's anonymous `program` boundary with the capability
+manifest settled by the I-4 ruling. The selected source spelling is
+`capabilities`, with one family and authority per item:
+`capabilities FS AFull`. It declares source-owned authority and does not
+suggest an external grant counterparty; it is also distinct from
+expression-level `requires`. The grammar and spec artifact remain the authority
+for the production.
+
+The `admits` and `capabilities` clauses share a header but not a namespace or
+reader.
+The former supplies package paths to the instance-admission gate; the latter
+supplies effect-family authorities to the runner's capability mint. Harness
+field names for the two manifest projections are not pinned, but their values,
+separation, and consumers are.
+
+The source parser dependency and I-4 §B are not landed on this seed's base.
+Each gate below therefore names its exact reachability precondition. A harness
+that directly constructs a boundary record, inserts a capability into an
+`ElabEnv`, or calls the raw I-3 producer does not satisfy any gate.
+
+### surface/modules/program-capabilities-clause-carries-declared-authority
+
+- spec: I-4 §C frame deliverable 1 and the accepted I-4 ruling §C/A.2
+- fixture: elaborate this boundary and import prefix through the real unit
+  parser and loader:
+
+  ```ken
+  program
+  admits P
+  capabilities FS AFull
+
+  import P (Render, PItem)
+  ```
+
+  Package `P` is the same valid, acyclic provider used by
+  `two-explicit-admits-resolve-ambient-with-provenance`. The unit contains an
+  ordinary declaration that requires `Render PItem`, so the `admits P` half is
+  observed rather than decorative. It also contains I-4 §B's canonical valid
+  Program-I entry, which uses an `AFull` operation through the typed API, so
+  the capability half reaches the real runner rather than stopping at a parsed
+  record.
+- expect: the parser accepts the anonymous header and the boundary manifest
+  records exactly `P` in its admitted-package set and exactly `(FS, AFull)` in
+  its declared-capability map. The two entries remain separately addressable.
+  Once I-4 §B consumes that parsed manifest, the runner reads the `FS` entry
+  and produces `ProgramCaps AFull`; it does not derive the authority from `P`,
+  a CLI option, or a default.
+- gate: the parser/manifest assertion is **RED UNTIL the program-header
+  capability-clause parser dependency**. The runner assertion is **RED UNTIL
+  I-4 §B** and additionally requires that parser dependency. Reachability is
+  parser → boundary AST → loader manifest → runner manifest read →
+  `ProgramCaps AFull`. A hand-built manifest or a directly minted `Cap AFull`
+  is not evidence.
+- why: changing only `AFull` to `APartial` must change the recorded authority
+  and resulting `ProgramCaps` index while leaving the admitted package and
+  dictionary identity unchanged. A parser that drops the new clause, a runner
+  that keeps the old fixed `APartial`, or a shared-list implementation cannot
+  satisfy that controlled flip.
+
+### surface/modules/fs-effect-without-capability-clause-is-ill-typed
+
+- spec: I-4 §C frame deliverable 5 and the accepted I-4 ruling §A.5
+- fixture: use the same program unit, imports, entry signature, and a real
+  call through the I-4 typed `readFile` API as the accepted `FS APartial`
+  control. The negative removes only this header line:
+
+  ```ken
+  capabilities FS APartial
+  ```
+
+  It leaves `program`, `admits P`, the resolved typed wrapper, and the body
+  performing the `FS` effect unchanged. The control and negative are compiled
+  from source; the harness does not inject a capability binding.
+- expect: the control elaborates through capability passing. The no-clause arm
+  rejects before execution with the specific structured
+  **`MissingCapability`** diagnostic carrying `effect = FS`. The error is the
+  elaborator's named presentation of the kernel-backed ill-typedness;
+  it is not `ParseError`, `UnboundName`, `UnadmittedInstance`,
+  `CapabilityDenied`, or a bare error result.
+- gate: **RED UNTIL I-4 §B plus the program-header capability-clause parser
+  dependency.** Reachability requires the source parser to accept both headers,
+  the loader to resolve the typed API and package imports, and elaboration to
+  reach the capability-binding step for the otherwise-identical `FS` call.
+  Failure to parse the clause, failure to load `readFile`, calling the raw I-3
+  producer, or observing only an op-time denial does not satisfy this oracle.
+- why: correct and buggy paths have opposite verdicts. With the one declared
+  family the binding exists and the read is well typed; without it the binding
+  is absent and the named static gate rejects. A runner-only check would accept
+  both source units and defer the negative to execution, so it fails the flip.
+
+### surface/modules/admits-only-does-not-mint-capability
+
+- spec: I-4 §C frame deliverable 5(c) and the accepted ruling §C
+- fixture: an acyclic program imports the valid `P` provider and dispatches its
+  canonical instance, with this complete boundary header:
+
+  ```ken
+  program
+  admits P
+  ```
+
+  The unit performs no `FS` effect and contains no `capabilities` clause.
+- expect: instance search accepts and records `defining_package = P`, exactly
+  as in the N4 admitted control. The separately projected capability manifest
+  is empty. The program boundary does not infer `FS`, `APartial`, or `AFull`
+  from the admitted package, its imports, or the presence of `program`.
+- gate: the admission half retains the existing **RED UNTIL N4 LANE B** gate;
+  the separate empty-capability projection is **RED UNTIL the program-header
+  capability-clause parser dependency**. If I-4 §B observes the program, its
+  no-`FS` behavior is **RED UNTIL I-4 §B** and must be read from that parsed
+  empty projection, not from a constructed runner input.
+- why: a shared manifest or `admits`-implies-authority coupling spuriously
+  populates the capability projection. Removing only `admits P` changes the
+  dictionary verdict to `UnadmittedInstance`; it must not change the already
+  empty capability projection.
+
+### surface/modules/capability-only-does-not-admit-instances
+
+- spec: I-4 §C frame deliverable 5(c), ADR 0014 MRES-4, and the accepted
+  I-4 ruling §C
+- fixture: parse this capability-only boundary, with no synthetic or empty
+  `admits` line:
+
+  ```ken
+  program
+  capabilities FS AFull
+  ```
+
+  The positive body performs an `AFull` operation through the typed I-4 API and
+  uses no ambient instance. A controlled negative adds only an ordinary import
+  of `P (Render, PItem)` and a declaration requiring `Render PItem`; it still
+  has no `admits P`.
+- expect: the positive header is accepted, its admitted-package set is empty,
+  and its declared-capability map is exactly `(FS, AFull)`. At I-4 §B the
+  runner reads that entry and supplies `ProgramCaps AFull`. The controlled
+  instance-use arm rejects independently with the existing structured
+  `UnadmittedInstance` diagnostic carrying `defining_package = P`; the valid
+  capability declaration does not admit `P` or alter that diagnostic.
+- gate: header parsing is **RED UNTIL the program-header capability-clause
+  parser dependency**. The mint and typed-operation assertions are **RED UNTIL
+  I-4 §B**; the controlled instance reject retains **RED UNTIL N4 LANE B**.
+  The mint must be reached from the parsed header, and the instance diagnostic
+  must be reached through the ordinary loader and admission gate. Hand-feeding
+  either map is not evidence.
+- why: this is the converse controlled experiment to the admits-only case.
+  Adding only `admits P` flips the instance-use arm to acceptance and leaves
+  `ProgramCaps AFull` unchanged. Treating `FS` as a package path, `AFull` as an
+  admitted identity, or one clause as enabling the other's reader fails one of
+  the two orientations.
+
 ## Coverage map (AC → cases)
 
 - **AC1** (modules add zero to the TCB):
@@ -569,6 +721,12 @@ does not preclude a genuine cross-package collision here.
 - **N4 forward / package-manager gate** (compiled collision + both-package
   provenance): `compiled-manifest-collision-names-both-packages` (**RED UNTIL
   the compiled-manifest/package-manager round**).
+- **I-4 §C** (program-header capability manifest, static family gate, and
+  orthogonality): `program-capabilities-clause-carries-declared-authority`,
+  `fs-effect-without-capability-clause-is-ill-typed`,
+  `admits-only-does-not-mint-capability`, and
+  `capability-only-does-not-admit-instances` (parser / N4 / I-4 §B gates are
+  labeled per assertion).
 
 ## Cross-case consistency sweep
 
@@ -623,9 +781,27 @@ does not preclude a genuine cross-package collision here.
   before a cross-package duplicate can register; the same package still reaches
   `OverlappingInstances`. Independently compiled manifests have no shared N2
   graph, so their both-package collision remains a required deferred check.
+- **I-4 keeps admission and authority as orthogonal header projections.** The
+  admits-only and capability-only cases are converse controls. Adding or
+  removing `admits P` changes only the instance verdict; adding or removing
+  `capabilities FS a` changes only the capability binding and `ProgramCaps a`.
+  A
+  package import never mints authority, and a capability family never admits a
+  package. The combined-header case observes both readers in one source unit.
+- **Static absence and op-time insufficiency are different gates.** No `FS`
+  clause reaches `MissingCapability { effect = FS }` during elaboration. A
+  declared but
+  insufficient capability may reach the separately specified
+  `CapabilityDenied` driver backstop. Neither error can substitute for the
+  other, and a parse or loader error satisfies neither.
 
 ## Subsumed / not-duplicated (one home per property)
 
+- **Generic effect capability presence** remains EFF3's
+  (`../effects/seed-effects.md`, `36 §2.5/§7.3.2`). Section G does not re-pin
+  the general `Cap E` rule; it pins the new program-header clause as the source
+  of that existing binding. Its controlled pair changes only the header line
+  and must reach the same landed `MissingCapability { effect = FS }` gate.
 - **`§5` constraints / typeclasses-as-subobjects** are **Lc's**
   (`../classes/seed-classes.md`, `33 §5`, landed) — ES3 touches `§3`/`§4`
   only; the orphan check's **per-module** predicate (`§5.3`) references
@@ -644,7 +820,9 @@ does not preclude a genuine cross-package collision here.
   uses `pub use` or treats a transitive provider as direct through re-export;
   adding that case before the syntax exists would be a vacuous red.
 - **Runtime entry selection** is separate from admission (MRES-4a). No fixture
-  invents an entry declaration or treats a `program` header as one.
+  invents an entry declaration or treats a `program` header as one. I-4's
+  §B-dependent cases consume the Program-I entry contract only after its real
+  source path lands; this seed does not invent entry syntax.
 - **The N3 clash/rename suite does not re-pin the loader.** Its fixtures use
   loaded module interfaces but assert only binding-time diagnostics and target
   identities. The N2 pair remains the sole home for root/path traversal and
@@ -685,3 +863,13 @@ surface/elaboration diagnostics and add nothing to the flat `Σ` or
 manifests meet at the package-manager admission boundary. Registries, lockfiles,
 content addressing, re-export instance surfaces, and test-scoped admission stay
 unbuilt.
+
+## Build-forward (I-4 §B + parser dependency)
+
+The parser dependency must populate both header projections from source before
+§B consumes them. I-4 §B then reads only the capability projection to construct
+`ProgramCaps a`, resolves the typed capability API, and emits
+`MissingCapability` when an otherwise-reachable effect family has no
+declared binding. The N4 admission reader remains unchanged. Tests that insert
+either projection directly, mint a `Cap` outside the runner path, or exercise a
+raw authority-polymorphic I-3 producer do not discharge §G.

@@ -349,7 +349,7 @@ determine the numeric story (`35`):
 ## 4. Keywords (proposal)
 
 ```
-const fn proc let def data record module import export space
+const fn proc let def data record module import export space capabilities
 match if then else where requires ensures prop proof lemma prove law
 visits foreign forall exists in as mut class instance
 becomes declassify policy temporal assume test

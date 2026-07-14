@@ -237,8 +237,14 @@ claim with no conformance case is a claim no one can rely on
   self-admission, defining-package provenance, intra-package overlap, and
   MRES-4f's source `ImportCycle` construction. A both-package collision oracle
   is explicitly red until compiled manifests meet at the package-manager
-  boundary; re-export-carried instance surfaces and multi-root precedence
-  remain out.
+  boundary. I-4 §C adds the program-header capability manifest: the
+  `capabilities` parser and runner carry the declared per-family authority, a
+  source program using `FS`
+  without that clause reaches the named `MissingCapability` static reject, and
+  admits-only / capability-only controls keep instance dispatch and authority
+  minting orthogonal. Each assertion names its parser, N4, or
+  I-4 §B reachability gate; re-export-carried instance surfaces and multi-root
+  precedence remain out.
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
 - `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware
