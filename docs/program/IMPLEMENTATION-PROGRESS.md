@@ -135,6 +135,108 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **▶ NEXT:** Runtime assembles `5f675810` NOW (don't wait for CV) → folds CV's tip when it
 > lands → **ONE combined SHA** → honesty gate → publish → **verify on main by CONTENT** →
 > §B retros → **I-4 ARC COMPLETE**.
+>
+> ### ⏭ 2026-07-14 (04:1x) — ★★★ I-4 §B COMBINED CANDIDATE IN TERMINAL REVIEW · CC3 REPAIR
+> **★ THE I-4 LAND-TOGETHER CANDIDATE EXISTS: `wp/i4b-runtime-program-caps @ c699b530`**
+> (`c699b5308c0d0feb3783d3e0d0b73d71c234c199`). **Linear** from `origin/main @ e22f5688`;
+> **38 files, +1127/−235**; carries **crates + `spec/30-surface/38-ffi-io.md` + the
+> semantically-reconciled Program-I contract + 2 `conformance/` seeds** ⇒ the diff-scope
+> **correctly pulls the Spec vote**. That was the whole point of holding §B for six hours.
+> **✅ runtime-QA APPROVED** the exact SHA (`evt_5bazmx92wj40x`): zero kernel/Cargo/lock
+> delta; **`62-authority.md` BYTE-IDENTICAL**; `readFile` consuming/polymorphic; `writeFile`
+> AFull-only; **no Ken-callable attenuation, no `Cap` introduction, no primitive, no
+> postulate**; 19 ABI roots all declare; **28 RED conformance markers retained** (honest,
+> not hand-fed).
+> **✅ MY CAPSTONE PRE-FLIGHT WARNING PAID OFF — and passed.** runtime-implementer ran the
+> gate I flagged (`--test kenfmt_c_capstone`) on the exact candidate: **3/3 PASS**, no
+> candidate change needed (`evt_4wck93ymnwcjn`). The §B headers ARE canonical. Cost: one
+> targeted run. Alternative: a second red-CI publish AFTER the merge Decision.
+> **▶ OPEN: Decision `dec_2jw3b5jwfqen1`** — needs **Architect terminal** + **CV
+> Spec/Fidelity** votes on `c699b530`. **Both VERIFIED AWAKE and reviewing** (Architect
+> thinking high-effort; CV status = "reviewing I-4 §B/§C combined exact SHA c699b530").
+> **⚠ ON BOTH VOTES: honesty gate → tracker-sync → publish `--target
+> wp/i4b-runtime-program-caps` (the HEAD branch, NEVER main) → VERIFY ON origin/main BY
+> CONTENT → collect §B retros → I-4 ARC COMPLETE.** Do NOT resolve the terminal Decision on
+> the last cast vote before I have the merge signal (terminal-gate resolve race).
+>
+> ### ⏭ 2026-07-14 (04:0x) — CC3 CI RED (PR #620) → ORACLE RULING → REPAIR IN FLIGHT
+> **CC3 passed EVERY local gate + QA + Architect + my honesty gate, then went RED in CI** on
+> `crates/ken-elaborator/tests/kenfmt_c_capstone.rs:142` —
+> `canonical_reformat_has_no_pathological_line_expansion`, asserting *"line-count oracle
+> must cover the live corpus."* CC3's 2 new catalog files are in the live corpus, not in the
+> oracle's hardcoded table. **Everything else green** (CC3 3/3, CAT-5 19/19, conformance
+> suite, path-guard, clean-room, AND the live-anchored fixed-point test).
+> **MY FRAME'S MISS: AC6 named ONE catalog gate (`ken_fmt.rs`) and missed this SECOND one.**
+> Third frame miss today, same family: **enumerate EVERY corpus-wide oracle, not the one you
+> thought of.** ⇒ fleet memory written.
+> **⛔ THE OBVIOUS FIX IS WRONG — AND I ALMOST TOOK IT.** `FRAME_LINE_COUNTS` = a table of
+> **PRE-capstone** line counts; the per-file check is `canonical*2 <= frame*9` (today's file
+> vs **its own pre-reformat form**). **A file created AFTER the frame has NO pre-frame
+> form** — any number you invent compares the file to itself (ratio 1.0) ⇒ **the check is
+> VACUOUS FOREVER.** Adding 2 rows would be a **fabricated baseline**: a ledger entry
+> masquerading as a proof.
+> **★ AND IT HAS ALREADY HAPPENED TWICE, SILENTLY:** the table carries **CC1's and CC2's
+> post-capstone files** (`NonEmpty`, `Validation`, `Codec`, `Numeric`, `StringKeys`,
+> `StringBijection`) — **six fabricated baselines, six vacuous per-file checks.** The gate
+> has been converting itself from a proof into a rubber stamp one WP at a time.
+> **⇒ RULING (`evt_37trh8exbkn7b`): RE-SCOPE, NEVER RE-BASELINE.** A frame-pinned oracle is a
+> **DISCHARGED one-shot migration proof**. Fix = completeness assertion goes from
+> **set-EQUALITY** to a **COVERAGE/subset check** (every frame-era path must STILL EXIST —
+> still catches deletion/rename); **add NO rows**; comment the table as a discharged
+> historical baseline new files must never join; leave `frame_total`/ratios alone.
+> **NO COVERAGE IS LOST — I VERIFIED THAT BEFORE RULING, not after:**
+> `canonical_frozen_corpus_is_a_39_file_fixed_point` **ENUMERATES THE LIVE CORPUS** (it
+> `collect`s; it does NOT read the frozen table) ⇒ it already covers Cursor/Decoder and it
+> **PASSED** ⇒ both are genuine `ken fmt` fixed points. The live-anchored net is real and
+> green; only the historical one over-claimed. (Narrowing a frozen oracle WITHOUT first
+> confirming a live-anchored net exists would trade a rubber stamp for a HOLE.)
+> **BRANCH-HELD SNAG (mine):** my publisher scratch worktree still held
+> `wp/cc3-parsing-cursor-decoder` → Foundation couldn't check it out. **Released.** They
+> correctly **refused to reset/clone/fork a competing branch** and asked instead. Head is
+> **`d3e8a02f`** (CC3 + tracker-sync) — repair rides ON TOP; PR #620 updates in place.
+> **▶ FOLLOW-ON WP (mine to queue, → LANGUAGE, kenfmt's owner):** properly retire/re-anchor
+> this oracle, INCLUDING stripping the six already-vacuous CC1/CC2 rows. **Explicitly OUT of
+> CC3's scope.**
+> **⚠ WARNED RUNTIME (`evt_4ck9cyppy1404`):** §B modifies `catalog/guide/*` +
+> `examples/rosetta/*` — **files this oracle covers.** Adds no new catalog file (so the
+> completeness arm passes), but the **live fixed-point arm will fail outright if any added
+> `program … capabilities` header is not canonical `ken fmt` form** — invisible to
+> `-p ken-interp`/`-p ken-cli` targeted runs. Told them to run
+> `--test kenfmt_c_capstone` targeted BEFORE releasing the combined SHA, and to touch
+> `FRAME_LINE_COUNTS` for nothing.
+>
+> ### ⏭ 2026-07-14 (03:5x) — CC3 PUBLISHED (superseded by the CI-red block above)
+> **✅ CC3 (Foundation) — QA + ARCHITECT TERMINAL APPROVE → HONESTY GATE CLEAN → PUBLISHING.**
+> Candidate `wp/cc3-parsing-cursor-decoder @ b6380719` (off `e22f5688`); tracker-sync
+> bundled → publish head **`d3e8a02f`**. **My gate, run independently (not from the report):**
+> 0 merges ✓ · exactly the 6 declared files ✓ · **forbidden-path probe EMPTY** ✓ ·
+> `diff --check` clean ✓ · descends from current `main` ✓. Publisher running in background
+> (task `bdu1qjbta`). **ON MERGE:** verify on `origin/main` BY CONTENT → collect §10 retros
+> → close CC3 → **CC4 (`Diagnostic.Core`) is next in the catalog chain** (Foundation, needs
+> a frame; it subsumes CC3's parameterized locations — it now has its TWO consumers,
+> `Span` + `ArgLocation`, so the abstraction is finally earned).
+> **What CC3 landed:** explicit `CursorOps c el loc` record (no type class — Ken has no
+> associated types); `ArgBytes` = the ruled proof-carrying cached-`Nat` carrier; loc-generic
+> Decoder-owned result/error; fuel seeded ONLY from `remaining` (both repetition AND
+> recursion); **CAT-5 genuinely SUBSUMED** — `Parser` is now a thin Decoder view and
+> `parse_bool_expr_at_fuel`/`skip_spaces_fuel` are **retired, not wrapped** (the Architect
+> pressed exactly this point). Discriminators all non-degenerate: `many (pure True)` →
+> named `DecoderZeroProgress`; 96-byte repetition consumes all 96 + exact end (defeats any
+> fixed budget); ArgCursor failure at exact **(arg 2, byte 3)**. CAT-5's **19/19** retained.
+> Zero trust delta.
+> **★ SUBSTRATE SIGNAL — REPORTED AS ASKED, NOW MINE TO CARRY (operator-facing).** CC3 is
+> the **2nd** proof-carrying cached-`Nat`-length-over-opaque-`Bytes` carrier (`Source`, now
+> `ArgBytes`). Foundation correctly did **NOT** unify them and did **NOT** mint `int_to_nat`.
+> **The honest fix is a landed `Bytes`-length→`Nat` bridge with its own certificate = a TCB
+> question ⇒ PAT'S CALL, not mine and not a build WP's.** A 3rd occurrence makes it urgent.
+> **I-4 FINAL FOLD:** Runtime assembled spec `5f675810` (cherry-pick `3414b9f9` + semantic
+> reconcile `30c18584`) — it did NOT treat git's clean auto-apply as evidence, read the
+> contract end-to-end, and **added a missing bridge paragraph**. (Clean apply ≠ coherent
+> document — the exact reason that was a ruling, not a merge.) CV tip
+> **`557c1816`** (parent `e22f5688`) relayed for the final fold (`evt_5yenxrdc4w1tx`);
+> **verified by content:** conformance-only (2 seeds, +179/−49), zero `spec/` delta,
+> **30 RED markers ⇒ honestly failing, NOT hand-fed.** Then: combined SHA → QA → Architect
+> → **CV's six-file Spec/Fidelity vote** → my honesty gate → publish.
 > Then **I-5 (scoped capability model) needs an ARCHITECT DESIGN pass** — but he holds an
 > in-flight §B review obligation, and the Handoff Gate forbids compacting an agent that
 > has one, so **I-5 does not start until §B merges.** CC3 runs in parallel throughout.
