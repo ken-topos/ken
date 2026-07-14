@@ -14,9 +14,118 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (21:12 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 64566872`
+> ### ⏭ 2026-07-14 (23:05 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 179efdc6`
 >
-> ## ✅ FIVE WPs MERGED **AND CLOSED**. **AX-1 ACTIVE in the enclave — and I already had to correct my own frame.**
+> ## AX-2 building (Language). **LET-3 Phase 2 FRAMED** → next: Handoff Gate on Foundation.
+>
+> | WP | state |
+> |---|---|
+> | **AX-2** | **🔨 ACTIVE — Language.** Implementer `Working`; leader confirmed the re-derived inventory. **Do NOT re-kick.** ⛔ FULL CI. |
+> | **LET-3 P2** | **📋 FRAMED** — `wp/let3-p2-map-acc-lookup @ edc8177b`, publishing now. **Foundation is idle + quiescent + 0-ahead** → Handoff Gate next. ⛔ FULL CI (`catalog/`). |
+>
+> ### ▶ NEXT FOR ME (in order)
+> 1. **Publish the LET-3 P2 frame**, then run the **Handoff Gate on Foundation**
+>    (leader + implementer + QA — all three verified quiescent/clean/0-ahead at
+>    23:00) and kick the leader. **Confirm `Working` — the kickoff is not
+>    complete until I have SEEN it.**
+> 2. **AX-2 backstop only.** Gate the candidate on the **D3 non-optional label**
+>    (an `Option<String>` + `"<unknown>"` fallback = **KTR-2's bug, third time**).
+> 3. **Owed to Pat:** toolchain-axis proposal (no test framework; `export`
+>    specified-but-unparsed; no package manager).
+> 4. **Kernel/Verify/Ergo idle BY DESIGN — do NOT manufacture work.**
+>
+> ### ★ LET-3 PHASE 2 — what I framed, and the one rule that matters
+> **Scope is a PROOF FAMILY, not a file.** The pilot frame said "family by
+> family" then named `Map.ken.md` — which is not a scope (15,352 lines, 403
+> decls) and invites the very sweep the pilot existed to prevent. **Enumerated
+> the real population: the `*_from_list_acc_lookup_*` family — 34 lemmas, 3,442
+> lines, 22% of the file**, in four structurally parallel sub-families
+> (delete 11 · union 5 · intersection 9 · difference 9). Exemplar confirmed:
+> `union_from_list_acc_lookup_assoc_hit` (`:10218`, **237** lines — the pilot
+> frame said 238/13×; the true repeats are `insert_with_fold_step` **14×**,
+> `lookup … acc` 9×, `assoc … xs2` 5×).
+>
+> **The deliverable is a SHARED VOCABULARY, not 34 nicer proofs.** The four
+> sub-families ARE the same proof with four dispatches. 34 locally-improved
+> proofs that each invented their own names = **FAILED**, gates green or not.
+>
+> **★★ THE PARALLELISM LICENSE IS BOUNDED — and it is my own door.** The pilot
+> review let a **one-use** binding stand in a `True ↦` arm *solely* for parallel
+> structure with a `False ↦` arm that had earned its names. At 34 lemmas × 4
+> parallel families, that reasoning would justify **every binding anywhere** —
+> the pilot's own "a blind sweep answers yes everywhere" failure, arriving
+> through the one door I left open. **So: a name must be EARNED by repetition or
+> semantic weight in ≥1 member; once earned it may be MIRRORED into a sibling
+> one-use position. Parallelism PROPAGATES an earned name — it can never
+> ORIGINATE one.** The tell: a binding justified by *"the other three have it"*
+> whose chain never terminates in a member that earned it. **Delete the whole set.**
+>
+> **Oracles GROUNDED, not guessed** (the corpus-oracle audit — this is the exact
+> thing that has surfaced as red CI *after* review): `kenfmt_c_capstone.rs` and
+> `kenfmt_b4_splicing.rs` **both glob `catalog/`** ⇒ both read `Map.ken.md`.
+> **`ken_fmt.rs` is fixture-based and does NOT** — naming it would have been
+> wrong in the other direction. `map_build_acceptance.rs` already asserts
+> `trusted_base_delta` ⇒ AC2 has a landed home.
+>
+> ### ⏮ 2026-07-14 (22:25 UTC) — `origin/main @ 179efdc6`
+>
+> ## ✅ AX-1 **CLOSED** (retros in). **AX-2 FRAMED + ON MAIN — Handoff Gate running on Team Language.**
+>
+> | WP | state |
+> |---|---|
+> | **KTR-1 / LET-2b / LET-3 / KTR-2** | **MERGED · CLOSED** (`65d68cfc` / `ce6f0718` / `7071f919` / `91e4374e`) |
+> | **AX-1** | **MERGED `2b0a05a5` (PR #684) · CLOSED — retros in** |
+> | **AX-2** | **🔨 ACTIVE — Language.** Frame merged `179efdc6` (PR #686); kicked `evt_41x67kbk9gn3p`; gate complete (all 3 compact-verified); **language-leader confirmed `Working`.** ⛔ **FULL CI.** |
+> | **sweep** | **MERGED `73cbbd38` (PR #685)** — `scripts/sweep-wedged-panes.sh` |
+>
+> ### ▶ NEXT FOR ME (in order)
+> 1. **AX-2 is AWAY — do not re-kick.** Backstop only: watch for the Architect
+>    terminal-review wedge, and gate the candidate on the **D3 non-optional label**
+>    (an `Option<String>` + `"<unknown>"` fallback = **KTR-2's bug, third time**).
+> 2. **Frame LET-3 Phase 2** (`Map.ken.md`, by proof family) — **Foundation is idle
+>    and this is its next work.** Exemplar:
+>    `union_from_list_acc_lookup_assoc_hit` (`:10218`, 238 lines, repeats
+>    `insert_with_fold_step` 13×).
+> 3. **Owed to Pat:** toolchain-axis proposal (no test framework; `export`
+>    specified-but-unparsed; no package manager).
+> 4. **Kernel/Verify/Foundation/Ergo idle BY DESIGN — do NOT manufacture work.**
+>
+> ### ★★ AX-2 — THE ONE THING THAT MUST NOT GO WRONG
+> **127 sites · 27 files · 4 crates** — **Language RE-DERIVED: 34 src (elab 24/10 files · interp 8 · kernel 2) + 93 tests. THEIR count is authoritative; my 17/8/95 sub-counts were STALE.** Incl. **2 inside
+> `ken-kernel/src/check.rs`: the kernel mints its own postulates.** Derived FROM
+> THE GATE. Size **L**, owner **Language**, Architect terminal-reviews inertness.
+> **⛔ D3 guardrail:** if the enclosing-declaration label is `Option<String>` with a
+> `"<unknown>"` fallback, **that is KTR-2's bug for the THIRD time.** The label is
+> **non-optional on the context** ⇒ **there is no `None` branch to fabricate into.**
+>
+> ### ⚠⚠ THREE TIMES IN ONE DAY I ENUMERATED FROM THE WRONG UNIVERSE
+> KTR-1's population came from the **symptom**; KTR-2's tests came from the
+> **frame**; **AX-1's producer list came from my reading notes** (I named 3 files;
+> there are **12 in `src` alone**). **Each time the reasoning was sound, ran on the
+> wrong universe, and CAME BACK CLEAN.** ⇒ **A population is defined by the
+> NARROWEST GATE EVERY MEMBER MUST PASS THROUGH.** For postulates that gate is
+> `declare_postulate`. **Derive from the gate; never from what you happened to read.**
+>
+> ### 🔧 TWO INFRA THINGS CLOSED TODAY
+> - **The mention wedge is now a CHECK, not a discipline** —
+>   `scripts/sweep-wedged-panes.sh` (on main). **Mandatory FIRST step of every
+>   watchdog tick.** Fired **6×** today; the fleet memory had been extended **3×**
+>   saying *"verify harder"* — which is the tell that vigilance was the wrong fix.
+> - **The "stale public timer": SOLVED — it was CV self-polling, not an orphan.**
+>   Three one-shot `get_mentions`/`get_recent_context` self-wake timers broadcasting
+>   **stale** reads into the space as System events. **And the `[TIMER:…]` id in the
+>   text is TRUNCATED** (`tmr_37v2fden` vs the real `tmr_37v2fdenj6400`) so a cancel
+>   404s — and the client maps **every** 404 to *"Timer not found or not owned by
+>   you"*, conflating *doesn't exist* with *isn't yours*. **That one string sent the
+>   Architect and me hunting a phantom owner.** ⇒ **Reported to Pat.**
+>
+> ### ⚠ TRACKER HAZARD I HIT TODAY (do not repeat)
+> **PR #686 (`checkout steward/work -- <tracker>`) OVERWROTE `main`'s newer tracker
+> with `steward/work`'s STALE copy.** The §2a tracker-sync step assumes
+> `steward/work` is fresh. **RESET `steward/work` TO `origin/main` AND RE-DERIVE THE
+> BLOCK before any tracker-sync commit** — never blind-carry a stale copy forward.
+>
+> ## (previous) ✅ FIVE WPs MERGED — AX-1 was active in the enclave
 >
 > | WP | state |
 > |---|---|
