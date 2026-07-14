@@ -14,25 +14,30 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (23:05 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 179efdc6`
+> ### ⏭ 2026-07-14 (23:20 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 2739c30c`
 >
-> ## AX-2 building (Language). **LET-3 Phase 2 FRAMED** → next: Handoff Gate on Foundation.
+> ## TWO RINGS BUILDING. AX-2 (Language) + **LET-3 P2 (Foundation — kicked, `Working`-confirmed)**.
 >
 > | WP | state |
 > |---|---|
 > | **AX-2** | **🔨 ACTIVE — Language.** Implementer `Working`; leader confirmed the re-derived inventory. **Do NOT re-kick.** ⛔ FULL CI. |
-> | **LET-3 P2** | **📋 FRAMED** — `wp/let3-p2-map-acc-lookup @ edc8177b`, publishing now. **Foundation is idle + quiescent + 0-ahead** → Handoff Gate next. ⛔ FULL CI (`catalog/`). |
+> | **LET-3 P2** | **🔨 ACTIVE — Foundation.** Frame merged `2739c30c` (PR #687, content-verified). Handoff Gate COMPLETE: all 3 panes `Context compacted`; kicked `evt_6t1fp28es8fa3`; **foundation-leader confirmed `Working`.** ⛔ FULL CI (`catalog/`). |
+>
+> **Decision hygiene:** the 5 stale `proposed` Decisions (LET-4/B2W-1/KTR-1/LET-2b/KTR-2)
+> are **RESOLVED** — each content-verified merged first (`26527c5a` / `fcbd7932` /
+> `65d68cfc` / `ce6f0718` / `91e4374e`). `list_decisions` no longer misreports
+> merged work as open — that was live bait for the false-stall trap.
 >
 > ### ▶ NEXT FOR ME (in order)
-> 1. **Publish the LET-3 P2 frame**, then run the **Handoff Gate on Foundation**
->    (leader + implementer + QA — all three verified quiescent/clean/0-ahead at
->    23:00) and kick the leader. **Confirm `Working` — the kickoff is not
->    complete until I have SEEN it.**
-> 2. **AX-2 backstop only.** Gate the candidate on the **D3 non-optional label**
+> 1. **BOTH RINGS ARE AWAY — do NOT re-kick either.** Backstop only.
+> 2. **AX-2 gate:** the candidate must pass the **D3 non-optional label** check
 >    (an `Option<String>` + `"<unknown>"` fallback = **KTR-2's bug, third time**).
-> 3. **Owed to Pat:** toolchain-axis proposal (no test framework; `export`
+> 3. **LET-3 P2 gate:** the pilot review was a REAL gate and this one is too.
+>    Read the diff for **invented-per-sub-family names** (the failure mode) and for
+>    **bindings justified only by "the other three have it"** (§2 below).
+> 4. **Owed to Pat:** toolchain-axis proposal (no test framework; `export`
 >    specified-but-unparsed; no package manager).
-> 4. **Kernel/Verify/Ergo idle BY DESIGN — do NOT manufacture work.**
+> 5. **Kernel/Verify/Ergo idle BY DESIGN — do NOT manufacture work.**
 >
 > ### ★ LET-3 PHASE 2 — what I framed, and the one rule that matters
 > **Scope is a PROOF FAMILY, not a file.** The pilot frame said "family by
