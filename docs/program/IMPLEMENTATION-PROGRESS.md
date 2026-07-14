@@ -14,25 +14,77 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (22:48 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ cbb513e1`
+> ### ⏭ 2026-07-14 (23:16 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ cf741d3b`
 >
-> ## ✅ AX-2 MERGED. Retros in flight → LET-5 releases next (Language) → unblocks LET-3 P2.
+> ## ✅ AX-2 CLOSED. ✅ LET-5 CLOSED (cf741d3b, retros in). 🔨 LET-3 P2 ACTIVE (Foundation, Working-confirmed).
+>
+> **🔨 2026-07-14 23:27 UTC — LET-3 P2 KICKED + LIVE.** Foundation Handoff Gate
+> complete: all 3 seats compact-verified ("Context compacted"), compaction bg
+> `byw9pez7a` returned exit 0. Kicked `evt_4c3hhrbzwka03` (leader-led, mention
+> `agt_37reqsbs5b000`); **foundation-leader confirmed `Working`** (re-orienting +
+> picking up the frame). Stale frame ref cleared, build-branch name free. Size L,
+> FULL CI (catalog/). **Backstop only — do NOT re-kick.** Gate at Foundation-QA
+> terminal + Steward co-gate: enforce ONE shared vocabulary (not 34 nicer proofs),
+> family-only scope (34 `*_from_list_acc_lookup_*` lemmas, not the whole file),
+> bounded parallelism license. **NEXT FOR ME: the toolchain-axis proposal owed to
+> Pat is now the front task** (critical path is running on its own).
+>
+> **✅ LET-5 MERGED `origin/main @ cf741d3b` (PR #696, FULL CI green), retros in**
+> (leader `evt_7ectdb1rzw9g3`, qa `evt_177ctg4ptzarw`, impl `evt_3s3b2dztwp9wm`).
+> Content-verified on main: `prepare_let_rhs` + `check(RLet)` weaken-and-pop +
+> `check(ROld)` goal-preserving (elab.rs:614); zero delta in `infer_match`/kernel/
+> grammar/formatter/catalog. Decision `dec_78q39spsk0xys` resolved. Shared carry:
+> diagnose bidirectional failures by goal-propagation/body mode not binding count;
+> base-red/candidate-green per shape; classify sibling fallthrough variants.
+>
+> **🔨 2026-07-14 23:16 UTC — LET-3 P2 HANDOFF GATE IN FLIGHT.** Foundation
+> compaction running (bg `byw9pez7a`, `handoff-gate-compact.sh foundation-{leader,
+> implementer,qa}` — reset to post-LET-5 `origin/main`). Pre-checks all clean:
+> quiescent, 0-ahead, retros-in. **Stale frame ref `wp/let3-p2-map-acc-lookup ->
+> 2739c30c` DELETED** (squash-merged leftover, frame content already on main) —
+> build-branch name now FREE for Foundation to cut fresh. ⇒ **ON RESUME: if
+> compaction done, VERIFY DROPS then KICK** with frame `docs/program/wp/let3-p2-
+> map-acc-lookup-family.md` (scope = the `*_from_list_acc_lookup_*` family, 34
+> lemmas / 3,442 lines; deliverable = ONE shared vocabulary, not 34 nicer proofs;
+> bounded parallelism license; FULL CI — catalog/). Foundation's frozen table +
+> integration witness `union_from_list_acc_lookup_assoc_inner` (now elaborates,
+> LET-5 AC4) carry forward. Then confirm each seat goes `Working`.
+> **Owed to Pat after Foundation is running: the toolchain-axis proposal.**
+>
+> **↻ 2026-07-14 23:05 UTC (clock-read), post-compaction re-orient.** LET-5 ran
+> its whole ring loop while I was compacting: built `8adeb645` (elab.rs +
+> new `let5_checking_mode_let.rs`, +120/−9, clean two-file scope), **QA APPROVE
+> on exact SHA** (`evt_1654wbssj24q2`), leader requested **Architect terminal
+> review** (`evt_2cbesse3jc0yc`). **★ The terminal-review mention WEDGED in the
+> Architect's composer** (`› [Pasted Content 1729 chars]`, never submitted — the
+> known transport failure, architect-seat). I sent a bare Enter; pane flipped to
+> `Working`. Review now live. **This is the mention wedge firing again — the
+> first-action sweep earns its keep.**
 >
 > | item | state |
 > |---|---|
 > | **AX-2** | ✅ **CLOSED — merged `cbb513e1` (PR #694), Decision resolved, RETROS IN** (leader `evt_5w0any52187ws`, qa `evt_46kqgv018rfx3`, impl `evt_2eqb4vtz13arq`). Shared carry maps onto 3 fleet memories I wrote: gate-derived membership · ownerless API = expressibility finding not sentinel · frozen membership API read through ID→decl lookup. |
-> | **LET-5** | 📋 **READY — releases to LANGUAGE the moment AX-2 retros land.** Frame `docs/program/wp/let5-checking-mode-let.md` on main. Build branch `wp/let5-checking-mode-let` FREE (team cuts fresh). Size S. |
+> | **LET-5** | 🔎 **IN ARCHITECT TERMINAL REVIEW** — exact `wp/let5-checking-mode-let @ 8adeb645` on `origin/main @ 82edc0c0`. QA approved. Mechanism per frame: shared RHS prep; `check(RLet)` checks body under `weaken(expected,1)`, symmetric pop; **`check(ROld)` goal-preserving arm added**; `RAttachedProofRef` recorded infer-then-unify (leaf lookup, no child goal); **no binding-count branch**; AC4 Foundation witness `union_from_list_acc_lookup_assoc_inner` elaborates via `map_build_acceptance`. ⛔ FULL CI. **Backstop only — do NOT intervene in the review.** |
 > | **LET-3 P2** | ⛔ HELD on LET-5. Foundation parked clean, frozen table posted. Resumes after LET-5 merges. |
 >
 > ### ▶ NEXT FOR ME (in order)
-> 1. **Collect AX-2 retros** (drive to completion — nudge if a seat goes quiet), then **CLOSE AX-2**.
-> 2. **LET-5 Handoff Gate IN PROGRESS** — retros in ✅, ring quiescent/0-ahead ✅, **compaction
->    running (bg `bpk80btyn`)**. NEXT: verify 3 drops → kick language-leader at on-main frame
->    `docs/program/wp/let5-checking-mode-let.md` → confirm `Working`. Build branch
->    `wp/let5-checking-mode-let` FREE, team cuts fresh.
-> 3. **LET-3 P2 resumes** with Foundation's frozen table once LET-5 merges.
-> 4. **Owed to Pat:** the toolchain-axis proposal.
-> 5. **Kernel/Verify/Ergo idle BY DESIGN.**
+> 1. **LET-5 — CONTENT-GATE ALREADY PRE-CLEARED @ 23:06 UTC on exact `8adeb645`.**
+>    I verified the diff myself (worktrees share the object store): base = current
+>    `origin/main @ 82edc0c0`; exactly 2 files (`elab.rs` + new
+>    `let5_checking_mode_let.rs`), +120/−9, `diff --check` clean. **All guardrails
+>    pass:** `check(RLet)` factors `prepare_let_rhs`, pushes binder, checks body
+>    under `weaken(expected,1)`, **pops before `body_result?`** (symmetric on
+>    success+error), emits same `Term::Let`; **`check(ROld)` = `check(cx,inner,
+>    expected,span)`** goal-preserving; `RAttachedProofRef` left infer-then-unify
+>    with recorded leaf-lookup rationale (AC5 ✓); **no `bindings.len()==1`**;
+>    **`infer_match`/kernel/grammar/formatter/`catalog/**` ZERO delta** (AC6 ✓).
+>    **⇒ The moment the Architect votes APPROVE, PUBLISH `8adeb645` FULL CI** with a
+>    tracker-sync commit — no further content check needed. If Architect BLOCKS,
+>    route it, do not intervene in the loop.
+> 2. **LET-3 P2 resumes** with Foundation's frozen table once LET-5 merges.
+> 3. **Owed to Pat:** the toolchain-axis proposal (grounded: `export` in spec but
+>    unparsed; no test framework; no package manager). The one unblocked ME-task.
+> 4. **Kernel/Verify/Ergo idle BY DESIGN.**
 >
 > ### ★ AX-2 RETRO SEED (five wrong pins of mine, all caught by perishability)
 > 1. producer sub-counts 17/8/95 → true 34src+93test (leader re-derived from the gate)
