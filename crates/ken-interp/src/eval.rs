@@ -25,7 +25,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::{CString, OsString};
 use std::io::{self, IsTerminal, Read, Seek, SeekFrom, Write};
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -2351,30 +2351,35 @@ fn file_type_kind(file_type: &std::fs::FileType) -> HostFileKind {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(test, not(target_os = "linux")))]
+fn host_abi_unsupported() -> io::Error {
+    io::Error::from(io::ErrorKind::Unsupported)
+}
+
+#[cfg(target_os = "linux")]
 const O_RDONLY_KEN: i32 = 0;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const O_WRONLY_KEN: i32 = 1;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const O_RDWR_KEN: i32 = 2;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const O_CREAT_KEN: i32 = 0o100;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const O_EXCL_KEN: i32 = 0o200;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const O_TRUNC_KEN: i32 = 0o1000;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const O_APPEND_KEN: i32 = 0o2000;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const O_DIRECTORY_KEN: i32 = 0o200000;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const O_NOFOLLOW_KEN: i32 = 0o400000;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const O_CLOEXEC_KEN: i32 = 0o2000000;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const AT_REMOVEDIR_KEN: i32 = 0x200;
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 unsafe extern "C" {
     fn openat(dirfd: i32, pathname: *const std::os::raw::c_char, flags: i32, mode: u32) -> i32;
     fn mkdirat(dirfd: i32, pathname: *const std::os::raw::c_char, mode: u32) -> i32;
@@ -2393,7 +2398,7 @@ unsafe extern "C" {
     ) -> isize;
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn c_component(component: &[u8]) -> io::Result<CString> {
     if component.is_empty() || component == b"." || component == b".." || component.contains(&b'/')
     {
@@ -2402,7 +2407,7 @@ fn c_component(component: &[u8]) -> io::Result<CString> {
     CString::new(component).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn openat_handle(
     parent: &std::sync::Arc<OwnedFd>,
     leaf: &[u8],
@@ -2427,7 +2432,7 @@ fn openat_handle(
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn readlinkat_bytes(parent: &std::sync::Arc<OwnedFd>, leaf: &[u8]) -> io::Result<Vec<u8>> {
     let leaf = c_component(leaf)?;
     let mut bytes = vec![0u8; 4096];
@@ -2448,7 +2453,7 @@ fn readlinkat_bytes(parent: &std::sync::Arc<OwnedFd>, leaf: &[u8]) -> io::Result
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn posix_file(handle: &std::sync::Arc<OwnedFd>) -> io::Result<std::fs::File> {
     Ok(std::fs::File::from(handle.as_ref().try_clone()?))
 }
@@ -2457,7 +2462,7 @@ fn posix_file(handle: &std::sync::Arc<OwnedFd>) -> io::Result<std::fs::File> {
 /// broken pipe on supported platforms; the explicit mask pins the ABI rule at
 /// the driver boundary as well.
 pub struct PosixHost {
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     root: std::sync::Arc<OwnedFd>,
 }
 
@@ -2468,14 +2473,14 @@ impl PosixHost {
 
     pub fn new_at(path: impl AsRef<std::path::Path>) -> Self {
         mask_sigpipe();
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let file = std::fs::File::open(path).expect("open filesystem capability root");
             Self {
                 root: std::sync::Arc::new(file.into()),
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = path;
             Self {}
@@ -2483,7 +2488,7 @@ impl PosixHost {
     }
 
     pub fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             use std::os::unix::fs::MetadataExt;
             let metadata = posix_file(&self.root)
@@ -2513,7 +2518,7 @@ impl PosixHost {
                 ),
             )
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             capabilities::Cap::mint(authority, "FS")
         }
@@ -2526,7 +2531,7 @@ impl PosixHost {
         rights: capabilities::RightSet,
         symlink: capabilities::SymlinkPolicy,
     ) -> io::Result<capabilities::Cap> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             use std::os::unix::fs::MetadataExt;
             if relative_root.starts_with(b"/") {
@@ -2568,10 +2573,10 @@ impl PosixHost {
                 },
             ))
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = (relative_root, rights, symlink);
-            Ok(capabilities::Cap::mint(authority, "FS"))
+            Err(host_abi_unsupported())
         }
     }
 }
@@ -2583,9 +2588,9 @@ impl Default for PosixHost {
 }
 
 impl HostHandler for PosixHost {
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     type Handle = std::sync::Arc<OwnedFd>;
-    #[cfg(not(unix))]
+    #[cfg(not(target_os = "linux"))]
     type Handle = u64;
 
     fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap {
@@ -2654,7 +2659,7 @@ impl HostHandler for PosixHost {
         op: FsOpKind,
         symlink: capabilities::SymlinkPolicy,
     ) -> Result<Resolution<Self::Handle>, ResolveError> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let capabilities::FsHandle::Posix(root) = root else {
                 return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
@@ -2749,17 +2754,15 @@ impl HostHandler for PosixHost {
                 stack.last().expect("root handle").clone(),
             ))
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = (root, components, op, symlink);
-            Err(ResolveError::Io(io::Error::from(
-                io::ErrorKind::Unsupported,
-            )))
+            Err(ResolveError::Io(host_abi_unsupported()))
         }
     }
 
     fn fs_read_at(&mut self, handle: &Self::Handle) -> io::Result<Vec<u8>> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let mut file = posix_file(handle)?;
             file.seek(SeekFrom::Start(0))?;
@@ -2767,10 +2770,10 @@ impl HostHandler for PosixHost {
             file.read_to_end(&mut bytes)?;
             Ok(bytes)
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = handle;
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 
@@ -2780,7 +2783,7 @@ impl HostHandler for PosixHost {
         policy: HostCreatePolicy,
         bytes: &[u8],
     ) -> io::Result<()> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             if policy == HostCreatePolicy::CreateNew {
                 return Err(io::Error::from(io::ErrorKind::AlreadyExists));
@@ -2794,10 +2797,10 @@ impl HostHandler for PosixHost {
             file.write_all(bytes)?;
             file.sync_all()
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = (handle, policy, bytes);
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 
@@ -2808,7 +2811,7 @@ impl HostHandler for PosixHost {
         policy: HostCreatePolicy,
         bytes: &[u8],
     ) -> io::Result<()> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let flags = match policy {
                 HostCreatePolicy::CreateNew => O_WRONLY_KEN | O_CREAT_KEN | O_EXCL_KEN,
@@ -2830,24 +2833,24 @@ impl HostHandler for PosixHost {
                 Err(error) => Err(error),
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = (parent, leaf, policy, bytes);
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 
     fn fs_append_at(&mut self, handle: &Self::Handle, bytes: &[u8]) -> io::Result<()> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let mut file = posix_file(handle)?;
             file.seek(SeekFrom::End(0))?;
             file.write_all(bytes)
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = (handle, bytes);
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 
@@ -2857,7 +2860,7 @@ impl HostHandler for PosixHost {
         leaf: &[u8],
         bytes: &[u8],
     ) -> io::Result<()> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let h = openat_handle(
                 parent,
@@ -2867,15 +2870,15 @@ impl HostHandler for PosixHost {
             let mut file = posix_file(&h)?;
             file.write_all(bytes)
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = (parent, leaf, bytes);
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 
     fn fs_metadata_at(&mut self, handle: &Self::Handle) -> io::Result<HostFileMetadata> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let metadata = posix_file(handle)?.metadata()?;
             Ok(HostFileMetadata {
@@ -2883,15 +2886,15 @@ impl HostHandler for PosixHost {
                 kind: metadata_kind(&metadata),
             })
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = handle;
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 
     fn fs_read_directory_at(&mut self, handle: &Self::Handle) -> io::Result<Vec<HostDirEntry>> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let path = PathBuf::from(format!("/proc/self/fd/{}", handle.as_raw_fd()));
             let mut entries = Vec::new();
@@ -2905,10 +2908,10 @@ impl HostHandler for PosixHost {
             entries.sort_by(|left, right| left.name.cmp(&right.name));
             Ok(entries)
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = handle;
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 
@@ -2918,7 +2921,7 @@ impl HostHandler for PosixHost {
         leaf: &[u8],
         _recursive: bool,
     ) -> io::Result<()> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let leaf = c_component(leaf)?;
             let rc = unsafe { mkdirat(parent.as_raw_fd(), leaf.as_ptr(), 0o777) };
@@ -2928,15 +2931,15 @@ impl HostHandler for PosixHost {
                 Err(io::Error::last_os_error())
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = (parent, leaf);
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 
     fn fs_remove_file_at(&mut self, parent: &Self::Handle, leaf: &[u8]) -> io::Result<()> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let leaf = c_component(leaf)?;
             let rc = unsafe { unlinkat(parent.as_raw_fd(), leaf.as_ptr(), 0) };
@@ -2946,10 +2949,10 @@ impl HostHandler for PosixHost {
                 Err(io::Error::last_os_error())
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = (parent, leaf);
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 
@@ -2959,7 +2962,7 @@ impl HostHandler for PosixHost {
         leaf: &[u8],
         recursive: bool,
     ) -> io::Result<()> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             if recursive {
                 use std::os::unix::ffi::OsStrExt;
@@ -2976,10 +2979,10 @@ impl HostHandler for PosixHost {
                 Err(io::Error::last_os_error())
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = (parent, leaf, recursive);
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 
@@ -2990,7 +2993,7 @@ impl HostHandler for PosixHost {
         to_parent: &Self::Handle,
         to_leaf: &[u8],
     ) -> io::Result<()> {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             let from = c_component(from_leaf)?;
             let to = c_component(to_leaf)?;
@@ -3008,10 +3011,10 @@ impl HostHandler for PosixHost {
                 Err(io::Error::last_os_error())
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         {
             let _ = (from_parent, from_leaf, to_parent, to_leaf);
-            Err(io::Error::from(io::ErrorKind::Unsupported))
+            Err(host_abi_unsupported())
         }
     }
 }
@@ -3711,7 +3714,7 @@ fn stream_index(stream: ConsoleStream) -> usize {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn mask_sigpipe() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
@@ -3728,7 +3731,7 @@ fn mask_sigpipe() {
     });
 }
 
-#[cfg(not(unix))]
+#[cfg(not(target_os = "linux"))]
 fn mask_sigpipe() {}
 
 /// Recursively strip `InL`/`InR` wrappers off an op value, returning the
@@ -4646,6 +4649,161 @@ fn prim_arity(symbol: &str) -> usize {
 }
 
 // ── capacity conformance tests ────────────────────────────────────────────────
+
+#[cfg(test)]
+mod px0_target_classification_tests {
+    use super::*;
+
+    fn console_ids(unsupported_id: GlobalId) -> ConsoleIds {
+        let unused = GlobalId(0);
+        ConsoleIds {
+            itree_id: unused,
+            ret_id: unused,
+            vis_id: unused,
+            read_id: unused,
+            write_id: unused,
+            flush_id: unused,
+            is_terminal_id: unused,
+            stdin_id: unused,
+            stdout_id: unused,
+            stderr_id: unused,
+            chunk_id: unused,
+            eof_id: unused,
+            true_id: unused,
+            false_id: unused,
+            ok_id: unused,
+            err_id: unused,
+            notfound_id: unused,
+            permissiondenied_id: unused,
+            capabilitydenied_id: unused,
+            brokenpipe_id: unused,
+            interrupted_id: unused,
+            alreadyexists_id: unused,
+            invalidinput_id: unused,
+            isdirectory_id: unused,
+            notdirectory_id: unused,
+            notempty_id: unused,
+            unsupported_id,
+            other_id: GlobalId(1),
+            unit_id: unused,
+            params_len: 3,
+        }
+    }
+
+    #[test]
+    fn px0_linux_abi_facts_are_linux_gated() {
+        let source = include_str!("eval.rs");
+        let linux_gate = "#[cfg(target_os = \"linux\")]";
+        let facts = [
+            "O_RDONLY_KEN",
+            "O_WRONLY_KEN",
+            "O_RDWR_KEN",
+            "O_CREAT_KEN",
+            "O_EXCL_KEN",
+            "O_TRUNC_KEN",
+            "O_APPEND_KEN",
+            "O_DIRECTORY_KEN",
+            "O_NOFOLLOW_KEN",
+            "O_CLOEXEC_KEN",
+            "AT_REMOVEDIR_KEN",
+        ];
+        for fact in facts {
+            let declaration = format!("{linux_gate}\nconst {fact}");
+            assert!(
+                source.contains(&declaration),
+                "Linux ABI fact {fact} must be target_os=linux gated"
+            );
+        }
+
+        let unix_gate = ["#[cfg(", "unix", ")]"].concat();
+        let non_unix_gate = ["#[cfg(not(", "unix", "))]"].concat();
+        assert_eq!(
+            source.matches(&unix_gate).count(),
+            1,
+            "only the unrelated OsString byte-preserving helper stays cfg(unix)"
+        );
+        assert_eq!(
+            source.matches(&non_unix_gate).count(),
+            1,
+            "only the unrelated OsString fallback stays cfg(not(unix))"
+        );
+        assert!(source.contains(&format!("{linux_gate}\nunsafe extern \"C\"")));
+        assert_eq!(source.matches("unsafe extern \"C\"").count(), 2);
+        assert!(source.contains("fn openat("));
+        assert!(source.contains("fn mkdirat("));
+        assert!(source.contains("fn unlinkat("));
+        assert!(source.contains("fn renameat("));
+        assert!(source.contains("fn readlinkat("));
+        assert!(source.contains("fn signal("));
+        let mask_start = source
+            .find(&format!("{linux_gate}\nfn mask_sigpipe()"))
+            .expect("mask_sigpipe must be Linux-gated");
+        let mask_body = &source[mask_start..];
+        let mask_end = mask_body
+            .find("#[cfg(not(target_os = \"linux\"))]")
+            .expect("mask_sigpipe must have a non-Linux absence lane");
+        let linux_mask = &mask_body[..mask_end];
+        assert!(linux_mask.contains("const SIGPIPE: i32 = 13;"));
+        assert!(linux_mask.contains("const SIG_IGN: usize = 1;"));
+        assert!(linux_mask.contains("fn signal("));
+    }
+
+    #[test]
+    fn px0_named_unavailable_lane_maps_to_ken_unsupported() {
+        let unsupported_id = GlobalId(91);
+        let ids = console_ids(unsupported_id);
+        let mut store = EvalStore::new();
+        let value = io_error_value(&host_abi_unsupported(), &ids, &mut store);
+        assert!(matches!(
+            value,
+            EvalVal::Ctor { id, args, .. } if id == unsupported_id && args.is_empty()
+        ));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn px0_non_linux_fs_driver_fails_before_host_io() {
+        fn assert_unsupported<T: std::fmt::Debug>(result: io::Result<T>) {
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Unsupported);
+        }
+
+        let mut host = PosixHost::new();
+        let handle = 0;
+        assert_unsupported(host.mint_scoped_fs_cap(
+            capabilities::AUTH_FULL,
+            b".",
+            capabilities::RightSet::ALL,
+            capabilities::SymlinkPolicy::NoFollow,
+        ));
+        match host.fs_resolve(
+            &capabilities::FsHandle::Virtual(0),
+            &[],
+            FsOpKind::Read,
+            capabilities::SymlinkPolicy::NoFollow,
+        ) {
+            Err(ResolveError::Io(error)) => {
+                assert_eq!(error.kind(), io::ErrorKind::Unsupported)
+            }
+            other => panic!("expected named non-Linux unavailable lane, got {other:?}"),
+        }
+        assert_unsupported(host.fs_read_at(&handle));
+        assert_unsupported(host.fs_write_at(&handle, HostCreatePolicy::CreateOrTruncate, b"bytes"));
+        assert_unsupported(host.fs_create_file_at(
+            &handle,
+            b"file",
+            HostCreatePolicy::CreateNew,
+            b"bytes",
+        ));
+        assert_unsupported(host.fs_append_at(&handle, b"bytes"));
+        assert_unsupported(host.fs_create_append_at(&handle, b"file", b"bytes"));
+        assert_unsupported(host.fs_metadata_at(&handle));
+        assert_unsupported(host.fs_read_directory_at(&handle));
+        assert_unsupported(host.fs_create_directory_at(&handle, b"dir", false));
+        assert_unsupported(host.fs_remove_file_at(&handle, b"file"));
+        assert_unsupported(host.fs_remove_directory_at(&handle, b"dir", false));
+        assert_unsupported(host.fs_rename_at(&handle, b"from", &handle, b"to"));
+    }
+}
 
 #[cfg(test)]
 mod capacity_tests {
