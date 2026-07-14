@@ -150,23 +150,26 @@ which families it actually touches. The row and the tree stay decoupled exactly
 as today (`prelude.rs:1039-1042`): the row is the escape/capability annotation,
 the tree is the runtime realization.
 
-**Design tension to decide at build (named, not hidden): the FS family is
-`Auth`-indexed** (`FSOp : Auth -> Type0`), so the coproduct inherits that index.
-Two coherent v1 spellings, both faithful to the current `read_bytes` authority-
-polymorphism:
+**I-4 REV-2 §A.3 resolves the `Auth`-indexed FS choice to an
+authority-monomorphic program.** `FSOp : Auth -> Type0`, so the coproduct
+inherits that index. For each program, the anonymous header declares one
+concrete authority `a`; `main` is checked with `ProgramCaps a`, and the runner
+mints exactly that declared authority.
 
-- **(a) Authority-monomorphic program** — `main` is checked at the concrete
-  authority the program header declares (the current mint-exactly model,
-  `main.rs:142-153`); `HostOp` fixes that authority. Simplest; matches today.
-- **(b) Authority-polymorphic program** — `main` is polymorphic in `a` like
-  `read_bytes` is; the runner instantiates `a` at mint time.
+- **Selected (a), authority-monomorphic.** `HostOp` fixes the header-declared
+  authority. The header, `main`'s `ProgramCaps a`, and the body's demanded
+  authorities must agree; disagreement is an ill-typed program, not a runtime
+  grant comparison.
+- **Not selected (b), authority-polymorphic.** `main` could instead be
+  polymorphic in `a`, like `read_bytes`, with the runner instantiating it at
+  mint time. v1 does not choose this form; it remains a reversible alternative
+  only if a future need appears.
 
-I **recommend (a)** for v1 (it is exactly today's mint-exactly discipline, one
-concrete authority per run) and note that the scoped model (§3) replaces the
-scalar `Auth` index with a scoped capability *value*, at which point the index
-question dissolves. **Do not lift each family's authority to a separate type
-index** on the composed tree — carry each capability as a *value* in its op
-(as FS already does), keeping `HostOp` singly-indexed.
+The scoped model (§3) replaces the scalar `Auth` index with a scoped capability
+*value*, at which point the index question dissolves. **Do not lift each
+family's authority to a separate type index** on the composed tree — carry each
+capability as a *value* in its op (as FS already does), keeping `HostOp`
+singly-indexed.
 
 ### 2.2 Console — generalize `Write String` to streams of bytes
 
