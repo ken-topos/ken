@@ -1,5 +1,5 @@
 use ken_elaborator::{ElabEnv, ElabError};
-use ken_kernel::{GlobalId, KernelError, Term};
+use ken_kernel::{GlobalId, KernelError, Level, Term};
 
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")
@@ -235,6 +235,41 @@ fn negative_recursive_occurrence_rejects_through_kernel_gate() {
     assert!(
         err.contains("kernel rejected") && err.contains("non-strictly-positive occurrence"),
         "unexpected diagnostic: {err}"
+    );
+}
+
+#[test]
+fn same_level_universe_constructor_rejects_before_decoder_can_form() {
+    let mut env = mk_env();
+    let error = env
+        .elaborate_file(
+            r#"
+            data D : Type where {
+              C : (s : Type) -> D
+            }
+
+            fn decode (d : D) : Type =
+              match d { C s ↦ s }
+            "#,
+        )
+        .expect_err("same-level universe family must be rejected");
+
+    assert!(
+        matches!(
+            &error,
+            ElabError::KernelRejected {
+                error: KernelError::ConstructorUniverseViolation {
+                    argument,
+                    family,
+                },
+                ..
+            } if *argument == Level::zero().suc() && *family == Level::zero()
+        ),
+        "expected the constructor-universe gate, got {error:?}"
+    );
+    assert_eq!(
+        error.to_string(),
+        "kernel rejected at 13-82: constructor argument universe suc 0 exceeds family universe 0"
     );
 }
 

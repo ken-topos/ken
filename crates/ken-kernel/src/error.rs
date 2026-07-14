@@ -39,6 +39,10 @@ pub enum KernelError {
     /// Strict-positivity violation at admission (`14 §2`, §8).
     PositivityViolation(String),
 
+    /// A constructor-local argument lives above its family's universe
+    /// (`14 §1`).
+    ConstructorUniverseViolation { argument: Level, family: Level },
+
     /// A declaration signature or arity is ill-formed (`14 §1`).
     IllFormedDecl(String),
 
@@ -89,6 +93,11 @@ impl std::fmt::Display for KernelError {
             KernelError::PositivityViolation(s) => {
                 write!(f, "strict-positivity violation: {s}")
             }
+            KernelError::ConstructorUniverseViolation { argument, family } => write!(
+                f,
+                "constructor argument universe {:?} exceeds family universe {:?}",
+                argument, family
+            ),
             KernelError::IllFormedDecl(s) => write!(f, "ill-formed declaration: {s}"),
             KernelError::LevelArityMismatch { expected, found } => write!(
                 f,

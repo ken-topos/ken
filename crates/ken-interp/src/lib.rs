@@ -1479,24 +1479,30 @@ mod eff_tests {
     }
 
     fn mk_itree(env: &mut GlobalEnv) -> ITreeEnv {
+        // A genuine small carrier local to this test environment. The runtime
+        // tests only depend on the constructor arities; using a type in Type 0
+        // keeps those shapes without treating the Type 0 sort as a value type.
+        let carrier =
+            declare_postulate(env, vec![], Term::Type(Level::zero())).expect("ITree test carrier");
+        let carrier_t = Term::const_(carrier, vec![]);
         let itree = declare_inductive(env, |ind_id| InductiveSpec {
             level_params: vec![],
             params: vec![],
             indices: vec![],
             level: Level::zero(),
             constructors: vec![
-                // Ret (r : Type 0) — k=0, 1 ctor-specific arg
+                // Ret (r : Carrier) — k=0, 1 ctor-specific arg
                 CtorSpec {
-                    args: vec![Term::Type(Level::zero())],
+                    args: vec![carrier_t.clone()],
                     target_indices: vec![],
                 },
-                // Vis (e : Type 0) (k : Type 0 → ITree) — k=1, 2 ctor-specific args
+                // Vis (e : Carrier) (k : Carrier → ITree) — k=1, 2 ctor-specific args
                 // k is a Π-bound recursive position (K1.5-style).
                 CtorSpec {
                     args: vec![
-                        Term::Type(Level::zero()),
+                        carrier_t.clone(),
                         Term::Pi(
-                            Box::new(Term::Type(Level::zero())),
+                            Box::new(carrier_t),
                             Box::new(Term::IndFormer {
                                 id: ind_id,
                                 level_args: vec![],
@@ -2402,19 +2408,21 @@ mod console_io_tests {
         })
         .expect("Unit");
         let unit_id = env.inductive(unit_ind).unwrap().constructors[0].id;
+        let unit_t = Term::indformer(unit_ind, vec![]);
 
         // Console.Op: one constructor `Write (s : String)`.
-        // We represent the String arg as a Type 0 placeholder in the kernel;
-        // at runtime it carries an `EvalVal::Str`.
+        // The kernel fixture uses its local small `Unit` carrier; at runtime
+        // the argument still carries an `EvalVal::Str`, and only the preserved
+        // constructor arity is observed.
         let op_ind = declare_inductive(env, |_| InductiveSpec {
             level_params: vec![],
             params: vec![],
             indices: vec![],
             level: Level::zero(),
             constructors: vec![
-                // Write (s : Type 0) — 1 ctor-specific arg (the string)
+                // Write (s : Unit) — 1 ctor-specific arg (the string at runtime)
                 CtorSpec {
-                    args: vec![Term::Type(Level::zero())],
+                    args: vec![unit_t.clone()],
                     target_indices: vec![],
                 },
             ],
@@ -2430,14 +2438,14 @@ mod console_io_tests {
             level: Level::zero(),
             constructors: vec![
                 CtorSpec {
-                    args: vec![Term::Type(Level::zero())],
+                    args: vec![unit_t.clone()],
                     target_indices: vec![],
                 },
                 CtorSpec {
                     args: vec![
-                        Term::Type(Level::zero()),
+                        unit_t.clone(),
                         Term::Pi(
-                            Box::new(Term::Type(Level::zero())),
+                            Box::new(unit_t),
                             Box::new(Term::IndFormer {
                                 id: ind_id,
                                 level_args: vec![],

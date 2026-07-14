@@ -11,7 +11,7 @@
 //! Admission ([`declare_def`] … [`declare_primitive`]) re-checks every input and
 //! gates inductives on strict positivity (`14 §8`).
 
-use crate::conv::{convert, convert_type, whnf};
+use crate::conv::{convert, convert_type, level_eq, whnf};
 use crate::env::{telescope_to_pi, Context, Decl, GlobalEnv, InductiveDecl};
 use crate::error::{KernelError, KernelResult};
 use crate::inductive::{check_positivity, method_type};
@@ -223,9 +223,9 @@ pub fn infer(env: &GlobalEnv, ctx: &Context, t: &Term) -> KernelResult<Term> {
             Ok(subst_levels(&ty, params, level_args))
         }
         Term::IntLit(_) => {
-            let id = env.int_lit_type().ok_or_else(|| {
-                KernelError::Msg("Int-literal type not registered".into())
-            })?;
+            let id = env
+                .int_lit_type()
+                .ok_or_else(|| KernelError::Msg("Int-literal type not registered".into()))?;
             Ok(Term::const_(id, Vec::new()))
         }
         Term::IndFormer { id, level_args } => {
@@ -907,7 +907,8 @@ pub struct InductiveSpec {
 }
 
 /// `declare_inductive` — admit `data D (Δ_p) : (Δ_i) → Type ℓ where …` after
-/// re-checking signatures and strict positivity (`14 §8`, `14 §8.4`). W-style
+/// re-checking signatures, strict positivity, and constructor universes
+/// (`14 §1`, `14 §8`, `14 §8.4`). W-style
 /// (Π-bound) recursive arguments are admitted (K1.5, `14 §2.1`) — the
 /// blanket `check_no_pi_bound_recursive` gate is retired. Generates the type
 /// former, constructors, and (on use) the dependent eliminator with
@@ -942,15 +943,50 @@ where
         former_type: Term::Type(Level::zero()), // placeholder; build_types fills it
     };
 
-    // Strict-positivity is the sole structural admission gate (`14 §8`, `14 §8.4`).
-    check_positivity(&ind)?;
-
     // Generate former + constructor types (`Π Δ_p. Π Δ_i. Type ℓ`, etc.).
     ind.build_types();
 
-    // Provisionally admit so signature checking can reference D / its
-    // constructors; withdraw on any failure.
+    // Provisionally admit so every admission clause can roll back both the
+    // declaration and its allocated ids on failure.
     env.add_decl(Decl::Inductive(ind.clone()));
+
+    // Admission has three independent clauses (`14 §1`): (a) ordinary
+    // signature type-checking, (b) strict positivity, and (c) constructor
+    // universe checks.
+    if let Err(error) = check_positivity(&ind) {
+        env.remove_last();
+        return Err(error);
+    }
+
+    // Check only each constructor-local telescope Δₖ. Family parameters Δ_p
+    // establish the base context but are not themselves constructor fields.
+    // Constructor arguments may be Type- or Ω-sorted, so use `classify` and
+    // compare the resulting sort level with the family's level.
+    let mut params = Context::new();
+    params.extend_tel(&ind.params);
+    for constructor in &ind.constructors {
+        let mut ctor_ctx = params.clone();
+        for argument in &constructor.args {
+            let argument_level = match classify(env, &ctor_ctx, argument) {
+                Ok(sort) => sort.level().clone(),
+                Err(error) => {
+                    env.remove_last();
+                    return Err(KernelError::IllFormedDecl(format!(
+                        "constructor argument failed to type-check: {error}"
+                    )));
+                }
+            };
+            if !level_eq(&argument_level.clone().max(ind.level.clone()), &ind.level) {
+                env.remove_last();
+                return Err(KernelError::ConstructorUniverseViolation {
+                    argument: argument_level,
+                    family: ind.level.clone(),
+                });
+            }
+            ctor_ctx.push(argument.clone());
+        }
+    }
+
     let empty = Context::new();
     let sig_ok = synth_type(env, &empty, &ind.former_type).is_ok()
         && ind
@@ -1173,7 +1209,11 @@ pub fn declare_deceq_certificate(
         Box::new(eq_call_d3),
         Box::new(true_const),
     );
-    let prim_eq_d3 = Term::Eq(Box::new(ty_const.clone()), Box::new(Term::var(2)), Box::new(Term::var(1)));
+    let prim_eq_d3 = Term::Eq(
+        Box::new(ty_const.clone()),
+        Box::new(Term::var(2)),
+        Box::new(Term::var(1)),
+    );
 
     let sound_ty = Term::pi(
         ty_const.clone(),

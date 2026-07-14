@@ -108,7 +108,7 @@ pub enum PrimReduction {
 /// [`crate::check::declare_postulate`] (so their types are kernel-checked
 /// before being trusted); this struct is only the registry record tying them
 /// to the primitive and its equality op.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DecEqCert {
     pub eq_op: GlobalId,
     pub sound: GlobalId,
@@ -121,7 +121,7 @@ pub struct DecEqCert {
 /// `t̄ₖ` are stored relative to `Δ_p` (and `t̄ₖ` may additionally reference the
 /// args, e.g. `Vec`'s `suc n` index). [`ConstructorDecl::type_`] is the fully
 /// expanded `Π Δ_p. Π Δₖ. D Δ_p t̄ₖ`, generated at admission for O(1) `infer`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConstructorDecl {
     pub id: GlobalId,
     /// `Δₖ` — constructor argument telescope, relative to `Δ_p`.
@@ -140,7 +140,7 @@ pub struct ConstructorDecl {
 /// An inductive family declaration (`14 §1`).
 ///
 /// `data D (Δ_p) : (Δ_i) → Type ℓ where cₖ : (Δₖ) → D Δ_p t̄ₖ`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InductiveDecl {
     pub id: GlobalId,
     /// Level parameters abstracted by the family (`12 §4`); empty if mono-level.
@@ -159,7 +159,7 @@ pub struct InductiveDecl {
 }
 
 /// A top-level declaration in `Σ` (`11 §4`).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Decl {
     /// `c : A := t` — transparent definition, δ-unfoldable. Non-recursive in
     /// K1 (acyclic env); general recursive δ is K2c (`11 §4`).
@@ -215,7 +215,7 @@ impl Decl {
 }
 
 /// The global environment `Σ` — append-only, acyclic (`11 §4`).
-#[derive(Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GlobalEnv {
     decls: Vec<Decl>,
     by_id: HashMap<GlobalId, usize>,
@@ -302,7 +302,8 @@ impl GlobalEnv {
     /// The prelude `tt : Top` constant id (`16 §1.3`, K5); always present
     /// after [`GlobalEnv::new`].
     pub fn tt_id(&self) -> GlobalId {
-        self.tt_id.expect("prelude tt is declared in GlobalEnv::new")
+        self.tt_id
+            .expect("prelude tt is declared in GlobalEnv::new")
     }
 
     /// Is `id` one of the prelude `Top`/`Bottom`/`tt` constants?
@@ -349,6 +350,11 @@ impl GlobalEnv {
                 self.ctor_index.remove(&c.id);
             }
         }
+        // Declarations receive consecutive ids, and an inductive's family id
+        // precedes all of its constructor ids. Rewind to the declaration's id
+        // so provisional admission rollback restores the allocator as well as
+        // the lookup tables.
+        self.next_id = self.next_id.min(decl.id().0);
         Some(decl)
     }
 
