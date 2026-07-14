@@ -20,6 +20,8 @@ const PURE_LIBRARY_KEN_MD: &str = r#"A pure-library entry, no IO `main`.
 
 ```ken
 fn notBool (b : Bool) : Bool = match b { True |-> False ; False |-> True }
+
+fn stagedBool (b : Bool) : Bool = let first = notBool b; second = notBool first in second
 ```
 
 ```ken example

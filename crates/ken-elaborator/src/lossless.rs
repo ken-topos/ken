@@ -532,11 +532,18 @@ fn collect_expr_spans(expr: &Expr, out: &mut Vec<Span>) {
         Expr::ELam(_, body, _) | Expr::EOld(body, _) | Expr::EProj(body, _, _) => {
             collect_expr_spans(body, out)
         }
-        Expr::ELet(_, ty, value, body, _) => {
-            if let Some(ty) = ty {
-                collect_type_spans(ty, out);
+        Expr::ELet(bindings, body, _) => {
+            for binding in bindings {
+                out.push(binding.span.clone());
+                out.push(binding.name_span.clone());
+                if let Some(annotation_span) = &binding.annotation_span {
+                    out.push(annotation_span.clone());
+                }
+                if let Some(ty) = &binding.annotation {
+                    collect_type_spans(ty, out);
+                }
+                collect_expr_spans(&binding.value, out);
             }
-            collect_expr_spans(value, out);
             collect_expr_spans(body, out);
         }
         Expr::EAsc(value, ty, _) => {

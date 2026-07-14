@@ -2,6 +2,7 @@
 
 use ken_elaborator::layout::{display_width, format_ken, CANONICAL_WIDTH};
 use ken_elaborator::lossless::parse_lossless;
+use ken_elaborator::resolve::resolve_decls;
 use ken_elaborator::ElabEnv;
 
 fn ast_shape(source: &str) -> String {
@@ -18,6 +19,12 @@ fn token_shape(source: &str) -> Vec<String> {
         .collect()
 }
 
+fn resolved_shape(source: &str) -> String {
+    let parsed = parse_lossless(source).expect("fixture must parse");
+    let resolved = resolve_decls(parsed.typed_decls()).expect("fixture must resolve");
+    erase_debug_spans(format!("{resolved:?}"))
+}
+
 fn erase_debug_spans(mut debug: String) -> String {
     const PREFIX: &str = "Span { start: ";
     while let Some(start) = debug.find(PREFIX) {
@@ -32,8 +39,11 @@ fn erase_debug_spans(mut debug: String) -> String {
 fn check(source: &str, expected: &str) {
     let formatted = format_ken(source).expect("fixture must format");
     assert_eq!(formatted, expected);
-    assert_eq!(ast_shape(source), ast_shape(&formatted));
-    assert_eq!(token_shape(source), token_shape(&formatted));
+    if token_shape(source) == token_shape(&formatted) {
+        assert_eq!(ast_shape(source), ast_shape(&formatted));
+    } else {
+        assert_eq!(resolved_shape(source), resolved_shape(&formatted));
+    }
     assert_eq!(format_ken(&formatted).unwrap(), formatted);
     assert!(
         formatted
@@ -72,11 +82,11 @@ fn ac1_ac2_single_let_fit_and_structural_break_are_exact() {
 fn ac3_ac4_nested_simple_bindings_fit_or_break_as_one_typed_chain() {
     check(
         "const tiny_chain : Nat = let first = Zero in let second = first in second",
-        "const tiny_chain : Nat = let first = Zero in let second = first in second\n",
+        "const tiny_chain : Nat = let first = Zero; second = first in second\n",
     );
     check(
         "const grouped : Nat = let first = Zero in (let second = first in second)",
-        "const grouped : Nat = let first = Zero in (let second = first in second)\n",
+        "const grouped : Nat = let first = Zero; second = first in second\n",
     );
 
     let source = concat!(
@@ -88,16 +98,12 @@ fn ac3_ac4_nested_simple_bindings_fit_or_break_as_one_typed_chain() {
     );
     let expected = concat!(
         "const chars : List Char =\n",
-        "  let left_chars : List Char =\n",
-        "    string_to_list_char left\n",
+        "  let\n",
+        "    left_chars : List Char = string_to_list_char left;\n",
+        "    right_chars : List Char = string_to_list_char right;\n",
+        "    joined_chars : List Char = append Char left_chars right_chars\n",
         "  in\n",
-        "    let right_chars : List Char =\n",
-        "      string_to_list_char right\n",
-        "    in\n",
-        "      let joined_chars : List Char =\n",
-        "        append Char left_chars right_chars\n",
-        "      in\n",
-        "        joined_chars\n"
+        "    joined_chars\n"
     );
     check(source, expected);
     assert!(!expected.contains("List\n"));
@@ -116,13 +122,11 @@ fn ac5_nested_bindings_in_a_match_arm_are_structurally_indented() {
         "fn choose (choice : Choice) : Nat =\n",
         "  match choice {\n",
         "    Left ↦\n",
-        "      let first_stage =\n",
-        "        transform_first initial_value\n",
+        "      let\n",
+        "        first_stage = transform_first initial_value;\n",
+        "        second_stage = transform_second first_stage\n",
         "      in\n",
-        "        let second_stage =\n",
-        "          transform_second first_stage\n",
-        "        in\n",
-        "          second_stage;\n",
+        "        second_stage;\n",
         "    Right ↦ fallback\n",
         "  }\n"
     );
@@ -166,37 +170,78 @@ fn ac6_ac7_worked_six_binding_proof_has_an_exact_readable_fixed_point() {
         "      (right : String)\n",
         "      (same_chars : Equal (List Char) (string_to_list_char left) (string_to_list_char right))\n",
         "    : Equal String left right =\n",
-        "  let left_chars : List Char =\n",
-        "    string_to_list_char left\n",
+        "  let\n",
+        "    left_chars : List Char = string_to_list_char left;\n",
+        "    right_chars : List Char = string_to_list_char right;\n",
+        "    left_round_trip : String = list_char_to_string left_chars;\n",
+        "    right_round_trip : String = list_char_to_string right_chars;\n",
+        "    left_retracts : Equal String left left_round_trip =\n",
+        "      sym String left_round_trip left (string_to_list_char_retraction left);\n",
+        "    mapped_chars : Equal String left_round_trip right_round_trip =\n",
+        "      cong (List Char) String left_chars right_chars list_char_to_string same_chars\n",
         "  in\n",
-        "    let right_chars : List Char =\n",
-        "      string_to_list_char right\n",
-        "    in\n",
-        "      let left_round_trip : String =\n",
-        "        list_char_to_string left_chars\n",
-        "      in\n",
-        "        let right_round_trip : String =\n",
-        "          list_char_to_string right_chars\n",
-        "        in\n",
-        "          let left_retracts : Equal String left left_round_trip =\n",
-        "            sym String left_round_trip left (string_to_list_char_retraction left)\n",
-        "          in\n",
-        "            let mapped_chars : Equal String left_round_trip right_round_trip =\n",
-        "              cong (List Char) String left_chars right_chars list_char_to_string same_chars\n",
-        "            in\n",
-        "              trans\n",
-        "                String\n",
-        "                left\n",
-        "                left_round_trip\n",
-        "                right\n",
-        "                left_retracts\n",
-        "                (trans\n",
-        "                  String\n",
-        "                  left_round_trip\n",
-        "                  right_round_trip\n",
-        "                  right\n",
-        "                  mapped_chars\n",
-        "                  (string_to_list_char_retraction right))\n"
+        "    trans\n",
+        "      String\n",
+        "      left\n",
+        "      left_round_trip\n",
+        "      right\n",
+        "      left_retracts\n",
+        "      (trans\n",
+        "        String\n",
+        "        left_round_trip\n",
+        "        right_round_trip\n",
+        "        right\n",
+        "        mapped_chars\n",
+        "        (string_to_list_char_retraction right))\n"
     );
     check(source, expected);
+}
+
+#[test]
+fn let4_comments_stay_owned_and_shadowing_starts_a_new_segment() {
+    let single = r#"const single_comment : Nat =
+  let
+    -- bound value
+    x = Zero
+  in
+    -- returned value
+    x
+"#;
+    check(single, single);
+
+    let commented = r#"const commented : Nat =
+  let
+    -- first binding
+    x = Zero
+  in
+    let
+      -- second binding
+      y = x
+    in
+      -- final body
+      y
+"#;
+    let expected = r#"const commented : Nat =
+  let
+    -- first binding
+    x = Zero;
+    -- second binding
+    y = x
+  in
+    -- final body
+    y
+"#;
+    check(commented, expected);
+
+    check(
+        "const shadowed : Nat = let x = Zero in let y = x in let x = Suc y in x",
+        concat!(
+            "const shadowed : Nat =\n",
+            "  let\n",
+            "    x = Zero;\n",
+            "    y = x\n",
+            "  in\n",
+            "    let x = Suc y in x\n"
+        ),
+    );
 }

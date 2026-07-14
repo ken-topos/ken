@@ -16,11 +16,11 @@ fn fixture(name: &str, contents: &str) -> PathBuf {
 fn fmt_rewrites_plain_and_literate_sources_through_landed_entry_points() {
     let plain = fixture(
         "fmt_rewrite.ken",
-        "fn id (f : Nat -> Nat) (x : Nat) : Nat = f   (x)\n",
+        "fn id (f : Nat -> Nat) (x : Nat) : Nat = f   (x)\nconst staged : Nat = let first = Zero in let second = first in second\n",
     );
     let literate = fixture(
         "fmt_rewrite.ken.md",
-        "Prose -> unchanged.\n```ken\nfn id (f : Nat -> Nat) (x : Nat) : Nat = f   (x)\n```\n",
+        "Prose -> unchanged.\n```ken\nfn id (f : Nat -> Nat) (x : Nat) : Nat = f   (x)\nconst staged : Nat = let first = Zero in let second = first in second\n```\n",
     );
     let output = Command::new(ken_bin())
         .arg("fmt")
@@ -35,11 +35,11 @@ fn fmt_rewrites_plain_and_literate_sources_through_landed_entry_points() {
     );
     assert_eq!(
         fs::read_to_string(plain).unwrap(),
-        "fn id (f : Nat → Nat) (x : Nat) : Nat = f (x)\n"
+        "fn id (f : Nat → Nat) (x : Nat) : Nat = f (x)\n\nconst staged : Nat = let first = Zero; second = first in second\n"
     );
     assert_eq!(
         fs::read_to_string(literate).unwrap(),
-        "Prose -> unchanged.\n```ken\nfn id (f : Nat → Nat) (x : Nat) : Nat = f (x)\n```\n"
+        "Prose -> unchanged.\n```ken\nfn id (f : Nat → Nat) (x : Nat) : Nat = f (x)\n\nconst staged : Nat = let first = Zero; second = first in second\n```\n"
     );
 }
 

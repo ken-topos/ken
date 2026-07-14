@@ -474,16 +474,15 @@ local namespace:
 
 ```ken example
 fn let_staged_color (c : Color) : Bool =
-  let selected_red =
-    is_red c
-  in
-    let confirmed_red =
+  let
+    selected_red = is_red c;
+    confirmed_red =
       match selected_red {
         True ↦ True;
         False ↦ False
       }
-    in
-      confirmed_red
+  in
+    confirmed_red
 ```
 
 Proofs are values too. A proof-valued binding makes the evidence role explicit,

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use ken_elaborator::layout::{display_width, format_ken, CANONICAL_WIDTH};
 use ken_elaborator::lossless::parse_lossless;
+use ken_elaborator::resolve::resolve_decls;
 use ken_elaborator::ElabEnv;
 
 fn ast_shape(source: &str) -> String {
@@ -19,6 +20,12 @@ fn token_shape(source: &str) -> Vec<String> {
         .iter()
         .map(|token| format!("{:?}", token.kind))
         .collect()
+}
+
+fn resolved_shape(source: &str) -> String {
+    let parsed = parse_lossless(source).expect("source must parse");
+    let resolved = resolve_decls(parsed.typed_decls()).expect("source must resolve");
+    erase_debug_spans(format!("{resolved:?}"))
 }
 
 fn erase_debug_spans(mut debug: String) -> String {
@@ -259,16 +266,19 @@ fn check_unit(label: &str, source: &str) {
     parse_lossless(&formatted).unwrap_or_else(|error| {
         panic!("{label}: formatted output does not parse: {error:?}\n{formatted}")
     });
-    assert_eq!(
-        ast_shape(source),
-        ast_shape(&formatted),
-        "{label}: AST drift"
-    );
-    assert_eq!(
-        token_shape(source),
-        token_shape(&formatted),
-        "{label}: token-stream drift"
-    );
+    if ast_shape(source) != ast_shape(&formatted) {
+        assert_eq!(
+            resolved_shape(source),
+            resolved_shape(&formatted),
+            "{label}: lowered AST drift"
+        );
+    } else {
+        assert_eq!(
+            token_shape(source),
+            token_shape(&formatted),
+            "{label}: token-stream drift"
+        );
+    }
     assert_eq!(
         format_ken(&formatted).unwrap(),
         formatted,
