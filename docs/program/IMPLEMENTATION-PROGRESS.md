@@ -14,7 +14,72 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (21:20 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 86c0b96c`
+> ### ⏭ 2026-07-14 (17:00 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 26e9baed`
+>
+> ## ▶ LET-4 AT THE ARCHITECT'S TERMINAL GATE — candidate `935681e0`
+> Parent `origin/main @ 26e9baed`. **language-qa APPROVED, incl. AC-DERIVE and the
+> manual AC-READER rendering.** Zero kernel/runtime/Cargo/trusted-base delta.
+> **NEXT FOR ME: Architect votes → I publish (FULL CI — it touches `catalog/`,
+> NEVER `--doc-only`) → retros → close → LET-2b unblocks → LET-3 → CC9 → PX1.**
+>
+> ## 🔴🔴 ESCALATED — POSSIBLE KERNEL SOUNDNESS GAP (`evt_5d77tsdr2kyxz`)
+> **Independent of every campaign. Do not let it wait behind CC9/LET-4.**
+> `check.rs:918-966` `declare_inductive` appears to enforce **ONLY** strict
+> positivity (`:945` — *"the sole structural admission gate"*) + `synth_type`.
+> **I can find NO check that constructor ARGUMENT SORTS fit under the declared
+> family level.** If so, `data D : Type where { C : (s : Type) -> D }` — **a LARGE
+> inductive at a predicative level** — is admitted ⇒ **road to Girard's paradox.**
+> Universes ARE predicative (`sort_pi`/`sort_sigma` = `max`, `check.rs:183-202`);
+> there is **no impredicative sort**, so no `Prop`-style escape story.
+> **⚠ I READ THE PATH; I DID NOT RUN THE CHECKER. Not finding the gate ≠ the gate
+> being absent.** **Asked kernel-leader for an EXECUTED probe (one file) and the
+> Architect for adjudication.** kernel-leader picked it up 16:57.
+>
+> ## ★★ RESOURCE DESIGN — the scope-indexed report (`local/ken-scope-indexed-resource-middle-path-report.md`)
+> **It CORRECTS ME, and it is right:** a phantom `Handle scope File` is NOT enough
+> — **index the OPERATION'S EFFECT** (`Eff (FileOps scope) A`), and let **only the
+> bracket discharge it.** The guarantee lives in **the ABSENCE OF A RUNNER for an
+> escaped thread**, not in a field on the reference. *That is the real runST lesson;
+> I had it half-right.*
+>
+> **BUT ITS MECHANISM DOES NOT PARSE, and that breaks its most important gate.**
+> Its attack is `(scope : Type 0) × Handle scope File`. **Ken has NO SURFACE Σ** —
+> kernel has it (`term.rs:294`), surface does not: no Σ syntax, no pair literal,
+> no `.1`/`.2`; **`×` is LEXED AND NEVER PARSED** (only the formatter consumes the
+> token); prelude `Pair` is **non-dependent, `Type 0`-only.** ⇒ **Probe D.3
+> (existential escape) — which the report itself calls "the most important
+> discriminator" — is specified against SYNTAX THAT DOES NOT EXIST and would
+> PASS TRIVIALLY FOR THE WRONG REASON.** **A vacuity trap in the one gate that
+> matters.** **RE-SPECIFY IT AGAINST GADT EXISTENTIALS** (`data … where { Pack :
+> (s : Type) -> Handle s File -> … }` — these DO parse, `parser.rs:1094-1177`).
+> ***Third time this month: conclusion TRUE, reason WRONG.***
+>
+> **AND THE MIDDLE PATH IS NOT CHEAP — I was optimistic.** It needs three things
+> that DO NOT EXIST: **(1) type-indexed effects** — an effect is *literally a
+> `String`* (`EffectName = String`; rows are name-sets), so `Eff (FileOps scope) A`
+> is a **real effect-system feature, not a near-miss**; **(2) a scoped/delimited
+> handler** — none exists, handlers are **tail-resumptive folds** and
+> non-tail-resumptive is a **HARD elaboration error** (`36-effects.md:1187`), which
+> is exactly the bracket shape; **(3) type-indexed capabilities** — `Cap` carries an
+> `EffectName` string. Also **`opaque` is NOT a keyword** (use abstract export,
+> `33-declarations.md §4.2`).
+>
+> ### ⇒ THREE LAYERS. The floor is MANDATORY regardless of the fork.
+> **(1) RUNTIME FLOOR — build it; it is NOT scaffolding.** Opaque
+> generation-checked handles + sealed bracket. **★ v1 EXPOSES NO `close` AT ALL —
+> the bracket owns release.** That does not *fail* to enforce exactly-once; **it
+> REMOVES THE OBLIGATION** — which is how *"safest possible"* and *"not a research
+> project"* stop fighting. **(2) THIS UNBLOCKS STREAMING NOW:**
+> `ken-cli-program-i-contract.md §2.3` says **verbatim** *"do not add streaming file
+> handles until affine/linear resource tracking exists"* — **TOO STRONG; correct
+> it.** **(3) The middle path = a real FEASIBILITY WP** with the probe re-specified,
+> **gating the API freeze** (once the first resource package ships, files/sockets/
+> processes/timers/epoll all depend on it; retrofit is brutal). **R2/linear stays
+> research.**
+>
+> ---
+>
+> ### ⏭ 2026-07-14 (21:20 UTC) — `origin/main @ 86c0b96c`
 >
 > ## ✅✅ ALL THREE CAMPAIGN FORKS RULED BY PAT. THE POSIX CAMPAIGN IS FULLY COMMITTED.
 >
