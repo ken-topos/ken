@@ -14,15 +14,139 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (12:30 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 6e415f23`
+> ### ⏭ 2026-07-14 (13:15 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 2c184550`
 >
-> ## ▶ THREE RINGS, ALL HEALTHY — nothing blocked, nothing mid-flight for me
+> ## ⚠ THE WATCHDOG PROMPT IS STALE — do not act on it
+>
+> It cites baseline **`c5f73b9c`** and lists **SUB-1 / I-6 / CC8** as live rings.
+> **All false.** Main is `2c184550` (~9 merges on); SUB-1 and I-6 merged hours ago;
+> CC8 was re-framed and re-armed. **Its "▶ NEXT" list is a plan already executed.**
+> *(Fourth firing of this same stale prompt today. It is not agent state — same
+> class as `pane-suggestion-text-is-not-agent-state`.)*
+>
+> ## ★ SPEC-HONESTY SCOPE WIDENED — the D fragment is over-claimed IDENTICALLY
+>
+> **I scoped the prover-prose fix to the FO row. @architect swept `spec/` and I was
+> wrong** (`evt_1sm4k6egx51hx`; my correction `evt_3fnsekepn9wd7`):
+>
+> **`attempt_d`, `attempt_fo`, AND `attempt_ho` ALL THREE delegate to `attempt_ipc`**
+> (`prover.rs:209/236/253`). **There is exactly ONE discharge mechanism wired in the
+> entire prover — the shared IPC intro-only skeleton — and it serves D, FO, and HO
+> alike.** §3.1's *"Reflective decision (preferred)"* + Z3-search path is **itself**
+> marked `[placeholder — reifies in V4]` at `:213`. **⇒ The gap is not FO-specific.
+> `23-prover.md §4` ("the Kripke embedding — the headline", `:166-210`) is the
+> LARGEST over-advertisement, not the FO table cell I named.**
+>
+> **⛔ The binding partition on that WP (Architect's, adopted):**
+> **"advertises a DELIVERED capability"** (mermaid label, table method-cells, G3,
+> present-tense mechanism prose) **→ gets the deferral marker.**
+> **"describes the DESIGNED-BUT-DEFERRED mechanism + its soundness rationale"**
+> (topos=Kripke justification, why a classical solver embeds soundly, the
+> adequacy-theorem-**must-be-proved** row `:240`, the `check_cert` discipline)
+> **→ PRESERVE, marked deferred. Do NOT delete.** *Deleting it trades a false
+> promise for a lost plan.* And the soundness argument (`§1.5`, `:83-85`) is **TRUE
+> TODAY and STAYS** — it is what makes the deferral honest.
+>
+> ## ▶▶ PAT RULED TWICE. Both change the plan. Read these first.
+>
+> ### 1. Milestone D's back half — **DEFERRED**, and the CLI objective is RESTATED
+>
+> **Pat, verbatim:** *"subprocess, signals, tempfiles, etc can wait (we're going to
+> have a big effort for POSIX/Linux ABI soon). **The key for the CLI enablement is
+> just to be able to build a real, if simple, cli tool in ken. That is the entire
+> objective.** It's the stepping stone to the larger POSIX/Linux ABI work."*
+>
+> **⇒ My open question is CLOSED. Do NOT frame I-9…I-12.** Subprocess / signals /
+> temp / terminal are **not debt** — they are **absorbed into a future POSIX/Linux
+> ABI program.** Milestone D is **not half-done; it is correctly scoped.**
+>
+> **⇒ And the CLI program's exit criterion is now explicit and much sharper than my
+> WP list was:** ***a real, if simple, CLI tool, built in Ken.*** Every remaining
+> CC WP is justified only insofar as it serves that. **Read the frontier against
+> that sentence, not against a checklist.**
+>
+> ### 2. NEW PRIORITY — the `let` authoring problem. **Three WPs, all framed.**
+>
+> **Pat:** *"We currently underuse `let` in ken code, and suffer readability loss
+> due to it… prepare a few WPs: one for the doc/agent guidance, one for kenfmt
+> changes, and one for the catalog rewrites."* Report:
+> `local/ken-let-authoring-style-report.md` (sol agent, 2026-07-14). **I verified
+> every load-bearing claim at the emission before framing.**
+>
+> **★ THE FINDING: there are ZERO local `let` bindings in the entire catalog** —
+> 27,404 tangled Ken lines, 32 files, exact ` ```ken ` fences, **0 uses.** And it is
+> a **GUIDANCE bug, not an authoring bug.** All three links verified:
+> `write-ken` (the skill read immediately before authoring) **mentions `let` zero
+> times** · `agent/teams/foundation/` (the overlay `moot.toml` already loads "if
+> present") — **`agent/teams/` DOES NOT EXIST AT ALL** · `catalog/guide/` + the
+> landed catalog — **not one `let` to imitate.** *The agents are faithfully
+> imitating what they were given. The corpus is the guidance's own reflection.*
+>
+> | WP | Owner | State |
+> |---|---|---|
+> | **LET-1** · `kenfmt` `let`-chain layout + an **exact-emitted-text oracle** | **Ergo** | **KICKING** — `wp/let1-kenfmt-binding-layout @ 85c349fe`. Handoff Gate running. |
+> | **LET-2** · the convention + **the guidance loop that lost it** | **Spec enclave** | ✅ **KICKED** `evt_6dgf4rn7gq9x5` — `wp/let2-local-binding-convention @ 2b35af2c`. Gate complete (all 3 compact-verified). |
+> | **LET-3** · catalog **pilot** (StringBijection + `slice`) — ⛔ **NOT a sweep** | **Foundation** | 🔒 **BLOCKED on LET-1 AND LET-2.** `wp/let3-catalog-let-pilot @ 0cefa82c`. After CC8. |
+>
+> **★ The bug (verified) — `crates/ken-elaborator/src/layout.rs:1823`:**
+> `Expr::ELet(..) => is_compound_expr(value) || is_compound_expr(body)` — **a
+> nested `ELet` is never compound in its own right**, so a chain of *simple* `let`s
+> reports `false` and takes the generic **soft-token** layout, shredding into one
+> token per line. **And `ken fmt --check` calls that CANONICAL.** *AST-preservation,
+> idempotence, and the width ceiling all pass — the mangled output IS a fixed
+> point. Nothing we have looks at readability.* **⇒ LET-1's real deliverable is the
+> ORACLE (assert the exact emitted text), not the one-line fix.**
+>
+> **⇒ LET-1 must land before LET-3**, or we teach the whole fleet that `let` looks
+> bad.
+>
+> ---
+>
+> ## ▶ SUB-2 MERGED. One ring building, one armed. Nothing blocked.
 >
 > | Ring | State | Exact next action |
 > |---|---|---|
-> | **Runtime — I-8** | **candidate RELEASED** `wp/i8-clock-effect @ c87fa3cc` (handoff `evt_g5n5xhwzn6em`; implementer home clean) | Runtime QA → **Architect terminal** (host-ABI + effect op) → **I publish**. Step 0 (both raw-grep oracles) already landed. |
-> | **Language — SUB-1b** | **ACTIVE** `wp/sub1b-uint8-deceq @ 8d95fdb3` (kicked `evt_7ybnhhqqv4ce2`; ring compact-verified) | Build → Language QA + **Architect terminal** (grows `trusted_base()` by 1). |
-> | **Foundation — CC8** | **HELD, re-framed and READY** `wp/cc8-env-config-decoder @ 6c7ca45c` | **Kick the INSTANT SUB-1b merges.** Frame is current: deps = I-7 ✅ + SUB-1b. |
+> | **Runtime — SUB-2** | ✅ **MERGED `origin/main @ 2c184550`** — content-verified (carriers/fossil **NONE DECLARED**; every residual name-hit is a *negative assertion* in a gate; `declare_postulate` **213 → 213**; catalog `Axiom` **1 → 1**). Net **−231 lines**. | **NOT CLOSED — 3 × §10 retros outstanding** (requested `evt_7gmxk5xg2gv0x`). Chase → close. Then Runtime is free. |
+> | **Language — SUB-1b** | **ACTIVE**, candidate `wp/sub1b-uint8-deceq @ bce2e05d`. **⚠ BASE IS STALE** — built on `9812b59c`; SUB-2 landed under it. **Rebase demanded `evt_c4rsgsz2bkjs`.** | Rebase → **2c184550** → re-run targeted gates on the REBASED tree → release SHA. Gate: **Language QA + Architect terminal** (grows `trusted_base()` by exactly 1 = `uint8_int_retract`). |
+> | **Foundation — CC8** | 🟡 **ARMED** `wp/cc8-env-config-decoder @ 6c7ca45c` | **KICK THE INSTANT SUB-1b MERGES.** Run the Handoff Gate first. |
+> | **Runtime — CC6b (`Path.Posix`)** | 🟡 **FRAMED + ARMED** `wp/cc6b-path-posix @ 467344a4` (base `2c184550`) | **KICK ON THE SAME SUB-1b MERGE.** Runtime + Foundation then run **in parallel**. |
+>
+> **⚠ The SUB-1b rebase is NOT cosmetic this time.** SUB-2 rewrote
+> `crates/ken-elaborator/tests/{cat5,cc3,cc6a,cc7}*.rs` **and deleted `ArgBytes` /
+> `ArgByteLength` / the cached fields / `byte_unit_zero_int` from the parsing
+> packages.** A SUB-1b gate green against `9812b59c` proves **nothing** about
+> `2c184550`. *(SUB-1's overlap was theoretical; this one is real.)*
+>
+> ### ★ CC6b = Path.Posix. Its hold is DISCHARGED — and I corrected my own tracker
+>
+> CC6a's frame held `Path.Posix` *"pending an operator decision"* on exactly one
+> question: **you could not write a terminating structural fold over a `Bytes`**
+> (opaque `Int`, no `Int → Nat`), so the only route that built was a **fourth
+> cached-`Nat` carrier**. **SUB-1 killed that premise; SUB-2 deleted the existing
+> carriers; SUB-1b supplies the law.** ⇒ **Frame it, and I have** —
+> `docs/program/wp/cc6b-path-posix.md`.
+>
+> **★ MY EARLIER ENTRY HERE WAS WRONG, and I caught it by trying to write the
+> obligation instead of trusting my own summary of it.** I had recorded:
+> *"split a path on `/` → SPINE op ← SUB-2 ✅."* **It is not a spine op.**
+>
+> ```
+> iterate the bytes at all      → SPINE                                 ← SUB-1  ✅
+> split on '/'                  → ELEMENT — you compare each byte to '/' ← SUB-1b ⛔
+> drop "." / resolve ".."       → ELEMENT                                ← SUB-1b ⛔
+> render segments back to Bytes → SPINE                                 ← SUB-1  ✅
+> ```
+>
+> **A fold that walks a list *and asks a question about each element* is
+> element-wise, no matter how spine-shaped its recursion looks.**
+>
+> **⇒ And the precise reason the WP is gated, which is subtle:** every element
+> operation **BUILDS TODAY** — `eq_int (uint8_to_int b) (charToInt c)` is what
+> `argparse_byte_matches_char` already does on `main`. **You could write all of
+> `Path.Posix` this afternoon and it would run. What you could not do is PROVE
+> anything about it** — a bare `Bool` fold has no `sound`/`complete`, so no law
+> quantifying over segment equality is dischargeable, and *every* CC package
+> carries laws. **The gap was never the decision procedure. It was the LAW.**
 >
 > **CC8's re-frame carries two corrections you must not lose:**
 > 1. **Its unblock is SUB-1b, NOT SUB-1** (the `UInt8` wall — see below).
@@ -16295,17 +16419,77 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > (post-compact misread; QA did verify `ca6c177` then returned home). A **real**
 > blocker was surfaced — see Blockers below.
 
-## Active frontier — CURRENT (2026-07-14 12:00 UTC, `origin/main @ 9ae7acd1`)
+## Active frontier — CURRENT (2026-07-14 12:35 UTC, `origin/main @ 9812b59c`)
 
-**Read this table, not the append-only log below it.**
+**RESUME POINT — read this table first.**
 
-| Ring | State | What it is doing / waiting on |
-|---|---|---|
-| **Runtime** | 🟢 **ACTIVE** | **I-8** (the `Clock` effect) — `wp/i8-clock-effect @ ea1f26e7`. **Step 0 already landed** (`19c37720`, the two raw-grep oracles repaired). |
-| **Language** | 🟡 **in-review** | **SUB-1** (`Bytes` structural view) — **all 3 lanes approved @ `29e63a9a`**, PR #635 in CI. Free after it lands ⇒ **SUB-2**. |
-| **Foundation** | 🔴 **HELD (blocker MOVED, not lifted)** | **CC8** — ⛔ **NOT unblocked by SUB-1.** See the `DecEq UInt8` gap below. **Do not kick.** |
-| **Spec enclave** | ⚪ idle | Awaiting the Architect's `DecEq UInt8` route ruling + the **K3 trade paragraph he owes Pat**. |
-| **Kernel / Verify / Ergo** | ⚪ idle | **No ready WP.** The critical path is the byte/`DecEq` line, which is Language's. *Not a stall to fill with make-work — see below.* |
+| Item | State / next action |
+|---|---|
+| **SUB-2** | ✅ QA-approved `@ 4abda39a` · **PR #637 IN CI, publisher polling.** On merge: **content-verify on `origin/main`** (ArgBytes/ArgByteLength/`byte_unit_zero_int` all ABSENT from extracted Ken; zero trust delta) → chase 3 Runtime retros → close. **+384/−615 — it DELETED more than it added.** |
+| **SUB-1b** | 🟢 Language finishing. Candidate `wp/sub1b-uint8-deceq @ bce2e05d` — **rebased onto `9812b59c` ✅**, **exactly ONE `declare_postulate` (`uint8_int_retract`)**, fail-closed guard present, **zero `Axiom` in extracted Ken**. Gate: **Language QA + Architect terminal** (trust grows by 1). |
+| **CC8** | 🟡 **ARMED.** `wp/cc8-env-config-decoder @ 6c7ca45c`. **KICK THE INSTANT SUB-1b MERGES.** |
+| **Path.Posix** | 🟡 **NOT yet unblocked — needs SUB-1b *AND* SUB-2. NOT framed.** No `Path` package on main (bundled in CC6; only CC6a shipped). **See the dependency note below — do NOT kick it on SUB-2 alone.** |
+| **CC9** | ⚪ Resource + Test.Property. Last in the CC chain. Not framed. |
+
+### ⚠ Path.Posix needs BOTH SUB-1b and SUB-2 — do not kick it on SUB-2 alone
+
+**I nearly repeated the CC8 mistake.** SUB-2 unblocks the *splitting*; it does
+**not** unblock the *comparing*.
+
+Program scope (`ken-cli-tooling-work-program.md` §CC6): *"byte-preserving POSIX
+path construction/views/**lexical-normalization** that does **not** claim
+filesystem canonicalization."*
+
+**Write the obligation and the dependency falls out:**
+
+```
+split a path on '/'            → SPINE op   (take/drop/nth on List UInt8)   ← SUB-2 ✅
+resolve "." and ".." segments  → compare a COMPONENT to a literal
+                               → ELEMENT-WISE EQUALITY on List UInt8         ← SUB-1b
+prove normalization's LAWS     → needs a LAWFUL DecEq (sound/complete),
+                                 not merely a Bool fold                      ← SUB-1b
+```
+
+**A `Bool` fold over `eq_int (uint8_to_int b) …` would BUILD it** (that is exactly
+what `argparse_byte_matches_char` does today) — **but it cannot PROVE anything**,
+and every other CC package carries laws. **Lawful `DecEq Bytes` is SUB-1b's
+deliverable, not SUB-2's.**
+
+**⇒ Path.Posix is ready only when BOTH land.** Both are in flight; this is a
+short wait, not a new blocker. *Same instrument as the CC8 catch: a bridge to a
+structure gives you the SPINE, never the ELEMENTS —
+[[a-dependency-is-met-when-you-can-write-the-obligation]].*
+
+### ★ CLI-enablement program — what is actually left (grounded 2026-07-14)
+
+**Program I (host ABI + effect drivers): COMPLETE.** CA1–CA3 + **I-1…I-8** all merged.
+
+**Program II (catalog closure):** CC1–CC7 merged. **Remaining: CC8 · Path.Posix · CC9.**
+
+**⚠ Milestone D (process toolkit) is HALF-DONE AND THE REMAINDER IS UNOWNED.**
+Scope = *env / clocks / subprocess / signals / temp / terminal*. **env = I-7 ✅ ·
+clocks = I-8 ✅.** **subprocess · signals · temp · terminal have NO WPs.**
+**→ Raised to Pat 2026-07-14: frame these as an I-9…I-12 block, or is CC9 the
+program's exit criterion with the rest of the toolkit deferred?** *Do not invent
+these four WPs without his ruling.*
+
+**Program III (native parity / Milestone E): OUT OF SCOPE** (operator ruling, in
+the program doc).
+
+### ★★ Z3 / FO verifier — SETTLED, do not reopen
+
+**Pat ruled DEFERRED (2026-07-14):** *Z3 is a **performance hypothesis**, not a
+known fact; revisit only on **measured** slowness on large files.* **And it can
+never bind here: ZERO of 31 catalog packages use `requires`/`ensures`** — so the
+CLI program generates **no verification obligations at all** and cannot produce
+the workload that would make a solver relevant.
+
+*(Steward correction: I first reported "2 of 31." That was my own **name-grep
+firing on English prose** — both hits were the word "requires" in a sentence. The
+true figure is **zero**. Fourth false-positive of that shape in one day.)*
+
+**OPEN (@spec-leader):** the spec still advertises an FO capability the code does
+not have. **A deferral is honest; a deferral that reads as a delivery is not.**
 
 ### ⛔ THE LIVE BLOCKER — `DecEq UInt8` has no home (escalated `evt_p04bfchxaqh0`)
 
@@ -16417,74 +16601,159 @@ early) once K1's API is stable; **K3** once F4 lands; **L5**
 (effects/interaction-tree — the hub WS-Sec *and* WS-B both hang off) pulled
 forward once K1's API is stable.
 
-## Work-package status (vs. the DAG)
+## Work-package status (vs. the DAG) — RE-KEYED 2026-07-14 (`origin/main @ 9812b59c`)
+
+> **Evidence standard:** a WP is `merged` only when its frame is on `origin/main`
+> **AND** the code/spec/conformance it promised exists. **A frame alone is not
+> enough.** Cells I could not settle from evidence say **UNKNOWN** — a
+> confidently-wrong table is the debt this pass exists to repay.
 
 | WP | Status | Team | Feeds gate |
 |---|---|---|---|
-| F1 repo / MIT / workspace / IP hygiene | active (skeleton landed) | F | G0 |
-| F2 spec + conformance corpus | **merged** (spec written) | Spec | G0 |
-| F3 ADRs 0001–0008 | **merged** | F/Architect | G0 |
-| F4 content-addressing + value-model design | **spec-leader elaborating** (frame done 2026-06-29; Foundation held) | F (via Spec) | G0 |
-| K1 Π/Σ/inductive/universes | **ready — held** until F4 in-review (2026-06-29) | K | G1 |
-| K2 observational Eq/cast/Ω/quotient/truncation | not-ready (K1) | K | G1 |
-| K2c conversion NbE + SCT | not-ready (K2) | K | G1 |
-| K-api judgment + kernel API | not-ready (K2c) | K | G1 |
-| K3 content-addressed value model | not-ready (F4) | K | G1 |
-| X1 interpreter (strict CBV) | not-ready (K1,K3) | X | G1 |
-| V0 minimal elaborator | not-ready (K1) | V | G1 |
-| V1 spec syntax + four-way status | not-ready (V0) | V | G2–4 |
-| V2 obligation generation | not-ready (K-api,V1) | V | G2–4 |
-| V3 prover: Kripke + reflective cert | not-ready (V2) | V | G2–4 |
-| V4 diagnostics | not-ready (V2,T1) | V | G2–4 |
-| T1 diagnostic protocol | not-ready (V2) | V/T | G2–4 |
-| L1 Int/Decimal/overflow | not-ready (K1) | L | G6 |
-| L2 sum/match | not-ready (L1) | L | G6 |
-| SURF-GADT syntax | merged (`origin/main @ e026e72`; retros in `evt_1cg5x6qaky4rs`) | L/Spec | G6 |
-| KM index-impossible branch synthesis | merged (`origin/main @ a4dabbb`; retros in `evt_1ppb3vkv2k948`) | Kernel/Spec | G6 |
-| KM target-index positivity | merged (`origin/main @ ed991ed`; retros in `evt_6hq6zdrz0mx2d`) | Kernel | G6 |
-| SURF target-index kernel authority | merged (`origin/main @ fcb0f75`; retros in `evt_6svq29naevqes`) | Language | G6 |
-| L3 strings/collections | not-ready (K1) | L | G6 |
-| L4 modules/pkg | not-ready (K1) | L | G6 |
-| L5 effects (interaction-tree) — **hub** | not-ready (K1) | L | G6 |
-| L6 Bytes/IO | not-ready (K1) | L | G6 |
-| L7 FFI | not-ready (L6) | L | G6 |
-| L8 stdlib | not-ready (L1–L3,L-classes) | L | G6 |
-| L-classes typeclass coherence | not-ready (K1,V0) | L | G6 |
-| L-fmt formatter + TR39 lexer | not-ready (V0) | L/T | G6 |
-| X2 runtime hardening | not-ready (K3) | X | G6 |
-| X3/NC Rust bootstrap compiler | in-review (NC23 active with Runtime) | Spec/Language/Runtime/Verify | G7 |
-| Sec1 IFC by-typing | not-ready (L5) | Sec | G-Sec |
-| Sec1ct @ct constant-time | not-ready (Sec1) | Sec | G-Sec |
-| Sec2 capabilities | not-ready (L5) | Sec | G-Sec |
-| Sec3 supply-chain re-check | not-ready (L4,K-api) | Sec | G-Sec |
-| Sec4 trust-model + kernel audit | not-ready (K-api) | Sec | G5 |
-| Sec5 policy-as-code | not-ready (Sec1,L4) | Sec | G-Sec |
-| B1 export emitter | not-ready (V1,L5) | B | G-Ward-seam |
-| B2 Temporal-as-data | not-ready (L2,B1) | B | G-Ward-seam |
-| B3 trace/instrumentation contract | not-ready (B1,X1) | B | G-Ward-seam |
-| B4 agentic boundary | not-ready (Sec1,Sec2,B3) | B | G-Ward-seam |
-| X4 scale/limits | not-ready (X2,X3) | X | G5-perf |
-| S1 subset compiler | not-ready (L-complete, NC boundary) | S | G8 |
-| S2 full self-host | not-ready (S1) | S | G8 |
-| T2 REPL | not-ready (V4,X1) | T | G5/G7 |
-| T3 test framework | not-ready (L2) | T | G5/G7 |
-| T4 pedagogy/docs | not-ready (G2) | T | G5/G7 |
-| T5 ecosystem seeding | not-ready (L4,T3) | T | G5/G7 |
+| F1 repo / licence / workspace / IP hygiene | **merged** (`LICENSE`, `CLEAN-ROOM.md`, 6-crate workspace) | F | G0 |
+| F2 spec + conformance corpus | **merged** (`spec/` 8 chapter groups; `conformance/` 10 areas + `challenge/C1–C8`) | Spec | G0 |
+| F3 ADRs | **merged** (`docs/adr/0001`–`0017`) | F/Architect | G0 |
+| F4 content-addressing + value model | **merged** (`ken-foundation/src/{canonical,hash,store,values}.rs`) | F | G0 |
+| K1 Π/Σ/inductive/universes | **merged** (`ken-kernel/src/{term,check,env,inductive}.rs`; K1p5 W-style follow-on merged) | K | G1 |
+| K2 observational Eq/cast/Ω/quotient | **merged** (`ken-kernel/src/obs.rs`; `conformance/kernel/observational`) | K | G1 |
+| K2c conversion NbE + SCT | **merged** (`ken-kernel/src/{conv,sct}.rs`) | K | G1 |
+| K-api judgment + kernel API | **merged** (`ken-kernel/src/lib.rs` is the consumed TCB boundary) | K | G1 |
+| K3 content-addressed value model | **merged** (whole `ken-foundation` crate) | K | G1 |
+| X1 interpreter (strict CBV) | **merged** (`ken-interp/src/eval.rs`) | X | G1 |
+| V0 minimal elaborator | **merged** (`crates/ken-elaborator` parse→resolve→elab) | V | G1 |
+| V1 spec syntax + four-way status | **merged** (`v1_acceptance.rs`) | V | G2–4 |
+| V2 obligation generation | **merged** (`extract.rs` obligation triples) | V | G2–4 |
+| **V3 prover: Kripke + reflective cert** | **⚠ merged, INCOMPLETE AT ITS HEADLINE.** The IPC backend, the route classifier and the kernel-recheck discipline are **real**. But `attempt_fo` (`prover.rs:226-236`) is **a direct call to `attempt_ipc`** — no Kripke translation, no solver, no reflective-cert path. IPC search has only Π-intro, Σ-intro, assumption lookup, Σ-projection (`:312-358`). ⇒ **FO obligations BEYOND that propositional/intro skeleton end as `unknown`** (structural quantified goals — Π-intro, matching assumption — DO still prove). **Zero SMT dep in any `Cargo.toml`.** *Fails closed; never a false `proved`.* **See G3.** | V | G2–4 |
+| V4 diagnostics | **merged** (`diagnostics.rs`, `v4_acceptance.rs`, `ken-runtime/src/unknown.rs`). **V4 only PROJECTS V3's already-chosen verdict and cannot repair it**; its `V4-backend` placeholders concern **countermodel/slice diagnostic structure**. ⇒ **documentation/diagnostic debt, NOT the execution path that causes the FO `unknown`.** *(Steward correction: my first read blamed a "V3→V4→V4-backend" chain. Wrong — the gap is V3's FO backend. Corrected by @verify-leader.)* | V | G2–4 |
+| T1 diagnostic protocol | **merged** (`protocol.rs`; `spec/20-verification/25-protocol.md`) | V/T | G2–4 |
+| L1 Int/Decimal/overflow | **merged** (`numbers.rs`; bignum via F1) | L | G6 |
+| L2 sum/match | **merged** (`data.rs`; dependent-match + GADT follow-ons) | L | G6 |
+| L3 strings/collections | **merged** (`l3a`/`l3b`/roundtrip suites) | L | G6 |
+| L4 modules/pkg | **⚠ SPLIT — modules merged, PACKAGE MANAGER NOT STARTED.** `modules.rs` + N1–N4 + ADRs 0014/0015/0016 landed. **No registry / content-addressed lockfile code anywhere in `crates/`** (deferred behind Ward + Sec3). | L | G6 |
+| L5 effects (interaction-tree) — **hub** | **merged** (`elaborator/src/effects/` — 9 modules incl. `itree.rs`, `row_poly.rs`) | L | G6 |
+| L6 Bytes/IO | **merged** (`bytes.rs`) | L | G6 |
+| L7 FFI | **merged** (`foreign.rs`) | L | G6 |
+| L8 curated lawful stdlib | **superseded → merged in substance** by the **catalog program** (CAT-1…5, CC1–CC7, DS-1…8): **31 `.ken.md` modules across 11 packages**. No `L8` WP was ever framed. | L | G6 |
+| L-classes typeclass coherence | **merged** (`classes.rs`; ADR-0008) | L | G6 |
+| L-fmt formatter + TR39 lexer | **⚠ SPLIT — formatter merged, TR39 LEXER NOT LANDED.** `kenfmt-B1…B4` + capstone, `ken fmt`, ASCII↔Unicode canonicalization all landed. **But `lexer.rs` has ZERO confusable / TR39 / mixed-script machinery** (verified: the only `skeleton` hits in the tree are the prover's *"propositional skeleton"*). TR39 appears **only** in `spec/30-surface/31-lexical.md`. | L/T | G6 |
+| X2 runtime hardening | **UNKNOWN — needs Steward confirmation.** Frame + spec + conformance merged as an *elaboration*; **no `x2_*` acceptance suite exists** and no distinguishable module. Either built inside K3's store without its own suite, or the build never ran. | X | G6 |
+| X3/NC Rust bootstrap compiler | **merged — the largest executed series.** **NC1–NC27** frames all on main; `ken-runtime/src/{cranelift_backend,ir,object_linker_packaging,executable_artifact_contract,…}.rs`; `conformance/runtime/backend`. | Runtime/Language/Verify | G5-perf/G7 |
+| X4 scale/limits | **not-started.** No frame, no suite. `conformance/runtime/capacity/` is seed-only. | X | G5-perf |
+| Sec1 IFC by-typing | **merged** (`ifc.rs`; `conformance/security/ifc`) | Sec | G-Sec |
+| Sec1ct @ct constant-time | **merged** (`conformance/security/ct`) | Sec | G-Sec |
+| Sec2 capabilities | **merged** (`capabilities.rs`; extended by the whole I-series + ADR-0017) | Sec | G-Sec |
+| Sec3 supply-chain re-check | **NOT STARTED.** **No frame on main.** Verified: the only `re-check` hits in `crates/` are the **kernel's `declare_def` re-check** (the untrusted-generation backstop — a *different, good* thing). No `.keni`, no re-check-on-consume, no `trusted_base_delta` emission. | Sec | G-Sec |
+| Sec4 trust-model + kernel audit | **⚠ doc half only.** `spec/60-security/64-trust-model.md` + `docs/security/internal-kernel-audit.md` landed — **but that audit's own header says it is the INTERNAL first pass and explicitly NOT the external published report the gate names.** | Sec | G5 |
+| Sec5 policy-as-code | **⚠ spec+conformance merged; ENFORCEMENT NOT LANDED.** Verified: the only `policy` hit in `crates/` is `HostCreatePolicy::CreateNew` — a **file-creation enum**, unrelated to policy-as-code. No `sec5_*` suite. | Sec | G-Sec |
+| B1 export emitter | **merged** (`export.rs`; `conformance/behavioral/export`) | B | G-Ward-seam |
+| B2 Temporal-as-data | **merged** (`temporal.rs`) | B | G-Ward-seam |
+| B3 trace/instrumentation contract | **merged** (`trace.rs`) | B | G-Ward-seam |
+| B4 agentic boundary | **merged** as the DAG scopes it (doc + conformance, no new mechanism) | B | G-Ward-seam |
+| S1 subset compiler | **not-ready.** No frame. Nearest artifact: **NC9's `ProofErasureBoundaryChecker.ken` — the first Ken-owned compiler pass.** A real toe-hold, not S1. | S | G8 |
+| S2 full self-host | **not-ready** (S1) | S | G8 |
+| T2 REPL | **merged** (`ken-cli/src/repl.rs`; `ken repl`) | T | G5/G7 |
+| T3 test/property framework | **not-started.** Verified: **zero `proptest`/`quickcheck`/`arbitrary` dependency in ANY `Cargo.toml`.** | T | G5/G7 |
+| T4 pedagogy/docs | **UNKNOWN as a discrete WP.** `ken-authoring-guide` + `catalog/guide/` landed; T4's broader scope was never framed (Librarian-continuous). | T | G5/G7 |
+| T5 ecosystem seeding | **not-started.** Catalog is in-repo only; no registry/publish path (deferred with Sec3). | T | G5/G7 |
 
-## Gate progress
+### ★ Why this table drifted so far
+
+**The DAG predates ~200 of the ~210 WP frames now on `origin/main`.** Entire
+executed series have **no DAG home at all**: **NC1–NC27** (the native-compiler
+campaign, folded into one `X3/NC` line), the **catalog program**
+(CAT/CC/DS/Map/Either — which is what actually built `L8`), **kenfmt-B1…B4**,
+**SURF-\*** and **KM-\*** (surface + kernel metatheory), and the live frontier
+**I-1…I-8 / N1–N4 / ES1–4 / SUB-1…2**.
+
+**⇒ Treat the DAG's WP names as a HISTORICAL index — "did the original promise
+land?" — not as a work register.** The **Active frontier — CURRENT** table above
+is the only place to look for what is actually in flight.
+
+## Gate progress — RE-KEYED 2026-07-14
+
+> Grounded in the DAG's **own gate text**, cross-referenced against what landed —
+> deliberately **not** in WP status. *V3 is `merged` and G3 is **not met**; a
+> WP-level roll-up would have hidden exactly that.*
 
 | Gate | State | Note |
 |---|---|---|
-| **G0** clean-room foundations | **met (pending F4 sign-off)** | repo + spec + ADRs in place |
-| **G1** vertical slice | not-started | K1→K-api + K3 + X1 + V0 |
-| **G2+G3+G4** verification thesis | not-started | the differentiator |
-| **G6** commercial reach | not-started | one verified component |
-| **G-Sec** security tier-1 | not-started | IFC-by-typing, caps, re-check, policy |
-| **G-Ward-seam** | not-started | export + trace contract a stub consumer reads |
-| **G5-perf** native & scale | not-started | |
-| **G5** soundness (incl. Sec4 audit) | not-started | |
-| **G8** self-hosting | not-started | |
-| **G7** agent loop | not-started | |
+| **G0** clean-room foundations | ✅ **MET** | Licence + workspace + `CLEAN-ROOM.md`; spec v0 across all 8 chapter groups with a conformance corpus; ADRs 0001–0017. All three clauses discharged. |
+| **G1** vertical slice | ✅ **MET** (one restatement) | `ken check` / `ken run` drive parse→elaborate→kernel-check→interpret. Universe checking + dependent Σ in `check.rs`; kernel behind `ken-kernel/src/lib.rs`. **Restatement:** the gate's literal *"`J` reduces over a non-`refl` path"* was superseded by **ADR-0005**; the OTT equivalent (`cast`/`Eq` computing at a non-`refl` path) is covered by `obs.rs` + `k7_eq_at_inductive_whnf.rs`. |
+| **G2+G3+G4** verification thesis | 🟡 **G2 ✅, G4 ✅ · G3 NOT MET — DEFERRED BY OPERATOR RULING (Pat, 2026-07-14)** | **G2 met:** `v3_acceptance.rs` — a discharged cert is kernel-accepted, a corrupted cert is kernel-rejected as `unknown`. **G4 met:** `diagnostics.rs` + schema-valid `protocol.rs` + Kleene/Heyting `unknown` propagation. **G3 NOT met:** the gate wants FO-intuitionistic obligations discharged **via a sound certificate bridge with kernel-checked certificates**. `attempt_fo` is a **direct call to `attempt_ipc`**; the embedding + adequacy are self-declared `[placeholder]`. **FO obligations beyond the propositional/intro skeleton return `unknown`.** ⚠ **COMPLETENESS gap, NOT a soundness gap — it fails closed.** **★ PRICE TODAY ≈ ZERO: only 2 of 31 catalog packages use `requires`/`ensures` at all** — and `proved` **RETIRES** the unknown-hole postulate on discharge, so accrued entries are **recoverable, not permanent**. The gap bites when catalog contract-density rises. |
+| **G5** soundness (incl. Sec4 audit) | 🔴 **NOT MET** | The gate's named input is the **published** kernel audit. The internal audit is substantive but **its own header says it is not the external report.** |
+| **G5-perf** native & scale | 🟡 **HALF MET** | **Differential ✅** — NC24 + NC7 + `conformance/runtime/backend`: native and interpreter are differential-tested. **Scale ❌** — X4 never started; capacity conformance is seed-only. |
+| **G6** commercial reach | 🟡 **MET IN SUBSTANCE — one clause UNKNOWN** | Expressiveness is not in doubt: 31 catalog modules, verified packages, end-to-end effectful CLI apps, and **NC9 shipped a Ken-written compiler pass**. **UNKNOWN:** which single component is *the* showcase, and whether it makes the required **≥1 FFI call** (`foreign.rs` landed; no test binds it into a showcase). |
+| **G7** agent loop | 🔴 **NOT MET** (ingredients present, loop unevidenced) | T1 protocol, T2 REPL, V4 diagnostics all landed — the three named ingredients. **But nothing records an unattended write→spec→verify→repair run landing a verified result**, and G7 is gated on **G3**, which is placeholdered. |
+| **G8** self-hosting | 🔴 **NOT STARTED** | S1/S2 unframed. NC9's single Ken-owned pass is the only Ken-in-Ken compiler code. |
+| **G-Sec** security tier-1 | 🔴 **NOT MET — 2 of 4 clauses open** | ✅ IFC non-interference by typing; ✅ capability attenuation/revocation. ❌ **"a dependency is re-checked on consume with its `trusted_base_delta` surfaced"** — Sec3 not started. ❌ **"one policy is compiler-enforced"** — Sec5 has spec + seed, **zero enforcement code**. |
+| **G-Ward-seam** | 🟡 **MET, pending one confirmation** | B1/B2/B3 landed with code + acceptance + conformance; B4 fixes the "no Ward result recorded as `proved`" posture. **Unconfirmed:** that a **stub consumer** has actually read the emitted export+trace — the gate's operative demonstration. |
+
+### ⚠ The five cells I could NOT settle — do not let these rot
+
+1. **X2 runtime-hardening build** — frame/spec/conformance merged; **no acceptance suite.** Built silently inside K3, or never built?
+2. **G6's named showcase + its ≥1-FFI-call clause.**
+3. **G-Ward-seam's stub consumer** — emitters proven; *consumption* not demonstrated in-tree.
+4. **T4** as a discrete WP — never framed.
+5. **V3's depth** — I am confident the FO route is a placeholder (**the code says so, and there is no SMT dep**), but a Z3 integration living outside the workspace (a script, a CI job) would not have been visible to this pass.
+
+### ★★ THE HEADLINE OF THIS RE-KEY
+
+**The old table said `V3 not-ready`. The truth is `V3 merged` — AND `G3 still not
+met`, because V3 merged with its headline deliverable explicitly deferred in its
+own source comments.** *A WP-level "merged" roll-up would have reported the
+verification thesis as done.* **That is precisely why the gate table is grounded
+in the DAG's gate text and not in WP status.**
+
+**Escalated to Pat (2026-07-14, `evt_3mx49sfeenxac`).** Pat's standing position —
+**Z3 is an optional accelerator, never an authority; `proved` always requires a
+kernel-checked certificate** — is **correct and unchanged.**
+
+**⚠ THREE STEWARD OVER-CLAIMS, corrected by @verify-leader / @spec-leader — the
+corrections stand:**
+1. *"Quantified FO goals return `unknown`"* was **too broad** — structural
+   quantified goals (Π-intro, matching assumption) **do** still prove.
+2. The *"V3 → V4 → V4-backend"* chain was **wrong as a causal story** — **V4
+   cannot repair V3's verdict**; the gap is **V3's FO backend**.
+3. *"Embedding before any solver"* was **too absolute**. Exact form: **"a sound
+   certificate bridge must exist before solver results can close G3."** The
+   Kripke embedding is *our selected* bridge; kernel-checked proof
+   reconstruction would be another.
+
+**★ The `unknown` mechanism is BETTER than first read.** An undischarged goal is
+`declare_postulate`d into `trusted_base()` — **it shows up as an assumption you
+are visibly trusting and cannot silently pass** — and **`proved` RETIRES the
+postulate on discharge.** *Not a leak: the ledger that makes the gap auditable.*
+
+**★★ PAT RULED (2026-07-14) — DEFERRED. Option (B). DO NOT REOPEN.**
+
+> *"z3 is fundamentally a potential optimization. If we observe that the kernel
+> is too slow to process large files, it may be that integrating Kripke embedding
+> into Z3 is the way to improve performance. **That is a hypothesis, not a known
+> fact.** That is why the effort is deferred and will remain so **until we have
+> reason to try to optimize the kernel.**"*
+
+**⇒ Verify does NOT frame an FO WP. Verify idle is the CORRECT state, not a
+stall.** **Revisit trigger: MEASURED evidence that verification is too slow on
+large files.** Not a gate label, not a tracker cell.
+
+**This is a CHOSEN SCOPE, not outstanding debt.** Read it that way on a cold
+resume.
+
+**⛔ The one obligation the deferral does NOT discharge (@spec-leader, OPEN):**
+the spec still advertises an FO/solver capability the code does not have. **A
+deferral is honest; a deferral that reads as a delivery is not.** The verifier
+chapters must state the actual scope: *IPC/propositional + structurally-provable
+FO (Π-intro, Σ-intro, assumption lookup, Σ-projection) with kernel-checked
+certificates; everything beyond returns an honest `unknown`, registered as a
+typed hole in `trusted_base()` and **retired on discharge**; Kripke embedding and
+any solver path deferred pending measured performance need.*
+
+**★ Why the deferral is right, not merely accepted:** the FO gap costs ~nothing
+today (**only 2 of 31 catalog packages use `requires`/`ensures`**) and starts to
+bite exactly when the catalog carries real contracts at scale — **which is the
+same workload that would produce the performance evidence Pat is waiting for.
+The two triggers are the same trigger, so there is no window in which we regret
+deferring.**
 
 ## Blockers / escalations
 
