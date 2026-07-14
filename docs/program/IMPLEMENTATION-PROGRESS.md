@@ -14,7 +14,59 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (19:40 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 26d5255e`
+> ### ⏭ 2026-07-14 (20:35 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ bc6cb40b`
+>
+> ## ▶ TWO LANES LIVE: Language = LET-4 · Runtime = **PX0** (released, Handoff Gate complete)
+>
+> **PX0 — target-classification erratum** (`wp/px0-target-classification-erratum.md`,
+> merged `bc6cb40b`; kickoff `evt_a76fvxyjqrgf`). **Out of band — it does NOT wait
+> behind CC9.** Re-gate the POSIX boundary from `#[cfg(unix)]` to
+> `#[cfg(target_os = "linux")]`; every other Unix returns a **named unavailable
+> lane BEFORE any host call**. **No value changes** — *correcting an unprobed
+> constant would repeat the defect with a fresher number.* **Why it's urgent:**
+> `O_NOFOLLOW_KEN` (`eval.rs:2371`) enforces `SymlinkPolicy::NoFollow` — an
+> **ADR-0017 confinement property** resting on an unprobed constant under a `cfg`
+> that also selects macOS and BSD. **A wrong flag there does not fail; it silently
+> does not confine.**
+>
+> ### ✅ FORK 2 RULED (Architect, `evt_7qqf827rr1jxk`) — `rustix`, not our bindings
+> **Exact-pinned, checksum-locked `rustix`, private behind a first-party `ken-host`
+> policy shell.** I had leaned the other way; **the Architect's counter is better
+> than my argument: a probe checks NUMBERS, not SIGNATURES** — it cannot validate a
+> handwritten signature, calling convention, pointer/length coupling, errno, or
+> ownership transfer. **So "keep our bindings + probe the constants" buys the CHEAP
+> half of the ABI surface and retains ALL the `unsafe`.** ADR-0009 (*curate before
+> construct*) settles the shape. **PX2 survives** — the manifest is now an
+> **independent cross-check** that fails the build closed on disagreement.
+>
+> ### ★★ THE ARCHITECT CORRECTED MY CHARTER ON THREE COUNTS. ALL THREE WERE RIGHT.
+> **(1) The inventory is ELEVEN constants and SIX FFI declarations — I wrote three
+> and five.** Off by 3.6×, **in a document whose thesis is "the artifact cannot
+> state its own contract."** *I indicted the very thing I failed to enumerate.*
+> **How:** I read from `:2370` because an audit cited `AT_REMOVEDIR` at `:2375` —
+> **the inventory begins at `:2355`.** I took my window from *a citation of one
+> instance* instead of *the extent of the kind*. **A line number tells you where
+> something IS, never where its KIND begins and ends.** And I grepped
+> `unsafe extern`, got two hits, **and read one** — the second is *indented, inside
+> a function body* (`mask_sigpipe()`, `:3720`, carrying `SIGPIPE=13`/`SIG_IGN=1`).
+> **(2) Phase-A's exit "no `unsafe` outside `ken-host`" was FALSE and DANGEROUS** —
+> the JIT `mem::transmute` (`cranelift_backend.rs:1059`) is a **native-execution**
+> boundary, not a host-ABI one, and an implementer could have **"satisfied" my AC by
+> moving the trampoline into `ken-host`** — merging two unrelated trust boundaries
+> to green a checkbox. **An AC satisfiable by doing the wrong thing DIRECTS the
+> wrong thing, with authority.** **(3) V1 support is `linux`, not `unix`.**
+>
+> ### 🔴 THREE THINGS OWED BY PAT — PX1 does not start without the first
+> **(a) DEPENDENCY-RISK ACCEPTANCE:** `rustix` inside the **runtime** trust boundary
+> (Sec3 supply chain; `ken-kernel` stays `forbid(unsafe_code)`, untouched). *The
+> alternative he'd be declining is not "no unsafe" — it's 6 hand-written FFI
+> boundaries and 13 unprobed ABI facts.* **(b)** campaign ambition + exit criterion
+> (I recommend PX-A→PX-C, exit = **the CLI tool as a NATIVE EXECUTABLE**).
+> **(c)** native early vs late (**the gap is WIDENING**: +16 ops interp, +0 native).
+>
+> ---
+>
+> ### ⏭ 2026-07-14 (19:40 UTC) — `origin/main @ 26d5255e`
 >
 > ## ▶ LANGUAGE BUILDING LET-4 (only thing on the critical path) · ✅ POSIX/LINUX ABI CAMPAIGN FRAMED
 >
