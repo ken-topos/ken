@@ -15,6 +15,7 @@ into the federation.
 | [my-own-tracker-capability-landed-line-can-be-stale](my-own-tracker-capability-landed-line-can-be-stale.md) | Your own tracker's 'capability X landed' line can be stale |
 | [orphan-watchdog-timer-record-id](orphan-watchdog-timer-record-id.md) | Watchdogs use a private CronCreate timer, not the convo schedule_call |
 | [playbooks-state-mechanism-not-intent](playbooks-state-mechanism-not-intent.md) | Playbooks must state the mechanism explicitly, not just the intent |
+| [publisher-exit-code-is-the-launchers-not-the-scripts](publisher-exit-code-is-the-launchers-not-the-scripts.md) | The publisher takes `--description-file` (not `--body-file`), and a `nohup … &` exit-0 is the LAUNCHER's, not the script's — verify a merge by CONTENT on `origin/main` |
 | [representative-file-review-only-covers-constructs-that-file-has](representative-file-review-only-covers-constructs-that-file-has.md) | A one-file tool review certifies only that file's constructs; spot-check distinct constructs before a catalog sweep arms a gate |
 | [splay-gate-only-as-good-as-its-detector-verify-the-check](splay-gate-only-as-good-as-its-detector-verify-the-check.md) | A style spot-check is worthless unless the detector provably fires on a known-bad and targets the over-width failure mode; awk `\s` is non-portable — use `[[:space:]]`; prefer an automated CI gate |
 | [steward-coldstart-infra-checks](steward-coldstart-infra-checks.md) | On a Steward cold-start, check fleet-wide infra before concluding stalled |
