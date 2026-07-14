@@ -4,7 +4,7 @@
 //! construction valid UTF-8), and their core ops. The real `read_bytes`
 //! surface operation and its effect row are registered later by the prelude.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use ken_kernel::env::PrimReduction;
 use ken_kernel::{declare_postulate, declare_primitive, GlobalEnv, GlobalId, Level, Term};
@@ -22,6 +22,19 @@ pub struct BytesEnv {
     /// (`38 §1.5`). AC5's `prove` obligation anchors here; the inductive
     /// proof is the L8 stdlib follow-on.
     pub bytes_round_trip_law_id: GlobalId,
+    /// `bytes_to_list : Bytes → List UInt8` (`37 §2.6`, SUB-1).
+    pub bytes_to_list_id: GlobalId,
+    /// `list_to_bytes : List UInt8 → Bytes` (`37 §2.6`, SUB-1).
+    pub list_to_bytes_id: GlobalId,
+    /// `bytes_list_roundtrip : (bs : Bytes) →
+    /// Equal Bytes (list_to_bytes (bytes_to_list bs)) bs`.
+    pub bytes_list_roundtrip_id: GlobalId,
+    /// `list_bytes_roundtrip : (xs : List UInt8) →
+    /// Equal (List UInt8) (bytes_to_list (list_to_bytes xs)) xs`.
+    pub list_bytes_roundtrip_id: GlobalId,
+    /// The actual `trusted_base()` delta observed while installing SUB-1.
+    /// Tests assert that this is exactly the four named ids above.
+    pub structural_view_trusted_delta: Vec<GlobalId>,
     /// Legacy Bytes-layer effect-row registry (`36`/L5), intentionally empty.
     /// Real producers are registered only from their elaborated declarations
     /// in `ElabEnv.effect_rows`; this map cannot hand-feed an oracle.
@@ -130,6 +143,11 @@ pub fn register_bytes_env(
         bytes_id,
         string_id,
         bytes_round_trip_law_id,
+        bytes_to_list_id: GlobalId(0),
+        list_to_bytes_id: GlobalId(0),
+        bytes_list_roundtrip_id: GlobalId(0),
+        list_bytes_roundtrip_id: GlobalId(0),
+        structural_view_trusted_delta: Vec::new(),
         io_effect_rows,
     })
 }
@@ -139,6 +157,7 @@ pub fn register_bytes_env(
 pub fn register_safe_bytes_ops(
     env: &mut GlobalEnv,
     globals: &mut HashMap<String, GlobalId>,
+    bytes_env: &mut BytesEnv,
 ) -> Result<(), ElabError> {
     let lookup = |name: &str| {
         globals
@@ -150,10 +169,11 @@ pub fn register_safe_bytes_ops(
     let string_t = Term::const_(lookup("String")?, vec![]);
     let int_t = Term::const_(lookup("Int")?, vec![]);
     let uint8_t = Term::const_(lookup("UInt8")?, vec![]);
+    let list_id = lookup("List")?;
     let utf8_error_t = Term::indformer(lookup("Utf8Error")?, vec![]);
     let option = Term::indformer(lookup("Option")?, vec![]);
     let result = Term::indformer(lookup("Result")?, vec![]);
-    let option_uint8 = Term::app(option.clone(), uint8_t);
+    let option_uint8 = Term::app(option.clone(), uint8_t.clone());
     let option_bytes = Term::app(option, bytes_t.clone());
     let result_string = Term::app(Term::app(result, utf8_error_t), string_t);
 
@@ -187,7 +207,95 @@ pub fn register_safe_bytes_ops(
         env,
         globals,
         "bytes_decode",
-        Term::pi(bytes_t, result_string),
+        Term::pi(bytes_t.clone(), result_string),
     )?;
+
+    // SUB-1's bounded structural view is installed only after `List` and
+    // `UInt8` are both reachable here. Keep the trust accounting around this
+    // block deliberately narrow: the older safe Bytes primitives above are the
+    // baseline, and exactly this pair plus its two reasoning propositions may
+    // enter the delta.
+    let trusted_before: BTreeSet<_> = env.trusted_base().into_iter().collect();
+    let list_uint8_t = Term::app(Term::indformer(list_id, vec![]), uint8_t);
+
+    let bytes_to_list_id = declare_primitive(
+        env,
+        vec![],
+        Term::pi(bytes_t.clone(), list_uint8_t.clone()),
+        PrimReduction::Op {
+            symbol: "bytes_to_list",
+        },
+    )
+    .map_err(|e| ElabError::Internal(format!("prim bytes_to_list failed: {e}")))?;
+    globals.insert("bytes_to_list".to_string(), bytes_to_list_id);
+
+    let list_to_bytes_id = declare_primitive(
+        env,
+        vec![],
+        Term::pi(list_uint8_t.clone(), bytes_t.clone()),
+        PrimReduction::Op {
+            symbol: "list_to_bytes",
+        },
+    )
+    .map_err(|e| ElabError::Internal(format!("prim list_to_bytes failed: {e}")))?;
+    globals.insert("list_to_bytes".to_string(), list_to_bytes_id);
+
+    // Primitive operations are deliberately opaque to kernel conversion.
+    // The inverse guarantees therefore live as explicit, named postulates:
+    // one fixed trust cost per direction instead of an unbounded Axiom at each
+    // consumer.
+    let bytes_to_list = Term::const_(bytes_to_list_id, vec![]);
+    let list_to_bytes = Term::const_(list_to_bytes_id, vec![]);
+    let bytes_roundtrip_ty = Term::pi(
+        bytes_t.clone(),
+        Term::Eq(
+            Box::new(bytes_t.clone()),
+            Box::new(Term::app(
+                list_to_bytes.clone(),
+                Term::app(bytes_to_list.clone(), Term::var(0)),
+            )),
+            Box::new(Term::var(0)),
+        ),
+    );
+    let bytes_list_roundtrip_id = declare_postulate(env, vec![], bytes_roundtrip_ty)
+        .map_err(|e| ElabError::Internal(format!("bytes_list_roundtrip failed: {e}")))?;
+    globals.insert("bytes_list_roundtrip".to_string(), bytes_list_roundtrip_id);
+
+    let list_roundtrip_ty = Term::pi(
+        list_uint8_t.clone(),
+        Term::Eq(
+            Box::new(list_uint8_t),
+            Box::new(Term::app(
+                bytes_to_list,
+                Term::app(list_to_bytes, Term::var(0)),
+            )),
+            Box::new(Term::var(0)),
+        ),
+    );
+    let list_bytes_roundtrip_id = declare_postulate(env, vec![], list_roundtrip_ty)
+        .map_err(|e| ElabError::Internal(format!("list_bytes_roundtrip failed: {e}")))?;
+    globals.insert("list_bytes_roundtrip".to_string(), list_bytes_roundtrip_id);
+
+    let trusted_after: BTreeSet<_> = env.trusted_base().into_iter().collect();
+    let structural_view_trusted_delta: Vec<_> =
+        trusted_after.difference(&trusted_before).copied().collect();
+    let expected_delta = BTreeSet::from([
+        bytes_to_list_id,
+        list_to_bytes_id,
+        bytes_list_roundtrip_id,
+        list_bytes_roundtrip_id,
+    ]);
+    let actual_delta: BTreeSet<_> = structural_view_trusted_delta.iter().copied().collect();
+    if actual_delta != expected_delta {
+        return Err(ElabError::Internal(format!(
+            "SUB-1 trusted-base delta must be exactly the primitive pair and propositions: expected {expected_delta:?}, got {actual_delta:?}"
+        )));
+    }
+
+    bytes_env.bytes_to_list_id = bytes_to_list_id;
+    bytes_env.list_to_bytes_id = list_to_bytes_id;
+    bytes_env.bytes_list_roundtrip_id = bytes_list_roundtrip_id;
+    bytes_env.list_bytes_roundtrip_id = list_bytes_roundtrip_id;
+    bytes_env.structural_view_trusted_delta = structural_view_trusted_delta;
     Ok(())
 }

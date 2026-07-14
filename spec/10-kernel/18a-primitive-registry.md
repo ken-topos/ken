@@ -619,6 +619,22 @@ already face-(c)-compliant:
 - `decode` invalid UTF-8 ⇒ **neutral** / `Result … DecodeError`; round-trip
   `decode ∘ encode ≡ Ok` provable (`38 §1.5`).
 
+SUB-1 adds the bounded structural view required to reason about opaque byte
+buffers:
+
+| symbol | signature | runtime semantics | conversion posture |
+|---|---|---|---|
+| `bytes_to_list` | `Bytes → List UInt8` | construct `Nil`/`Cons` in byte order | `PrimReduction::Op`; opaque to kernel conversion |
+| `list_to_bytes` | `List UInt8 → Bytes` | rebuild the identical packed buffer | `PrimReduction::Op`; opaque to kernel conversion |
+
+The two operations are the complete new native surface. Their inverse
+guarantees are the named postulates `bytes_list_roundtrip` and
+`list_bytes_roundtrip`; those propositions are trusted declarations, not
+additional primitive reductions. Thus the fixed `trusted_base()` delta is
+exactly four entries: the pair plus the two propositions. Structural consumers
+such as `bytes_nat_length = length UInt8 ∘ bytes_to_list` are ordinary checked
+Ken and add zero further trust. No other byte combinator is native-ized.
+
 **★ Pin: `String` equality is NFC-equality, not byte-equality** — the row must
 state it (`"é"`-composed `≡` `"é"`-decomposed), the semantic-pin discipline of
 truncated-`mod`. `DecEq String` is **postulate-only** (opaque buffer, like
