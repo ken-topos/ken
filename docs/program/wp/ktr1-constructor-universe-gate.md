@@ -179,22 +179,70 @@ types of the family's parameters.
   `≤`, it rejects. An admission gate that admits on "can't tell" is not a gate.*
 
 **AC4 — ⚠ EVERY in-repo inductive declaration is run against the repaired
-kernel, and they are ENUMERATED AT THE PRODUCER.**
+kernel, and they are ENUMERATED AT THE STRUCTURAL PRODUCER BOUNDARY.**
 
-> **★ I have NOT counted them, and I am NOT asserting a number. You must — and
-> here is the trap that will make your count wrong:**
+> ### ⚠⚠ AC4 WAS WRONG IN THE FIRST CUT OF THIS FRAME. CORRECTED 2026-07-14.
 >
-> **⛔ GREPPING `data ` IN `.ken` / `.ken.md` SOURCES WILL MISS THE PRELUDE.**
-> **The prelude's inductives are EMITTED FROM RUST, not written in Ken.** A
-> catalog/example sweep looks exhaustive, comes back clean, and has silently
-> skipped the most load-bearing declarations in the entire system.
+> **It said: enumerate surface `data` + "the Rust prelude emitter."** That is
+> **two of at least four production producer classes.** Caught by the Architect
+> before the implementation report froze a knowingly incomplete count. **The
+> corrected boundary is below; the post-mortem on how I got it wrong is §3a,
+> because it is the more useful half.**
+
+**The producer boundary — and WHY it is exhaustive:**
+
+```
+git grep '[^[:alnum:]_]declare_inductive(' -- '*.rs'   →  89 call sites, 28 files
+git grep 'add_decl(Decl::Inductive'        -- '*.rs'   →  ONE hit: check.rs:953
+                                                          …INSIDE declare_inductive
+```
+
+> **★ There is exactly ONE raw insertion path into the environment, and it lives
+> inside `declare_inductive`.** Therefore **every** inductive that reaches the
+> kernel passes through the gate you are building, and the call-site grep is a
+> **complete enumeration of what your gate will see.** *This is a structural
+> closure argument, not a grep guess — and that difference is the entire content
+> of AC4.*
+
+**Production producers (do not miss these — I did):**
+
+| producer | sites |
+|---|---|
+| `crates/ken-interp/src/lib.rs` | **8** ← the largest, and it was missing from AC4 |
+| `crates/ken-elaborator/src/prelude.rs` | 5 |
+| `crates/ken-elaborator/src/effects/state.rs` | **3** — `ITree`, `StateOp`, `Coproduct` |
+| `crates/ken-elaborator/src/data.rs` | 2 — the surface `data` path |
+| `crates/ken-kernel/src/check.rs` | 2 — internal |
+
+Plus **~66 test-fixture sites** across kernel/elaborator/interp, **and
+`temporal.rs` `InductiveSpec` builders (exercised by B2) whose specs flow into a
+`declare_inductive` elsewhere — trace them; a spec builder is a producer even
+when it does not call the gate itself.**
+
+- **Enumerate all 89. Classify each PRODUCTION vs TEST-ONLY. Report "there are N;
+  here are all N"** — with **N a number you counted.**
+- **Test fixtures are IN SCOPE.** If one declares an over-level inductive, your
+  gate will break that test. **That is a FINDING, not an accident. Do not repair
+  it — route it to the Steward.**
+
+### §3a · ★★ How the author of this frame got AC4 wrong — the reusable lesson
+
+**The original AC4 warned, in capitals:** *"grepping `data` in `.ken` sources
+will MISS THE PRELUDE — the prelude's inductives are EMITTED FROM RUST."*
+
+**And then it named the prelude as *the* Rust producer, and stopped.**
+
+> **I corrected for the wrong LANGUAGE and then inherited the wrong CATEGORY.** I
+> knew the enumeration had to move from `.ken` to Rust — and I let **one example
+> of a Rust producer stand in for the extent of the kind.** That is *exactly* the
+> `:2370`-vs-`:2355` error from PX0 — **which this same frame cites as a warning,
+> in capitals, two paragraphs above the mistake.**
 >
-> **Enumerate BOTH:** (a) every `data` in `.ken`/`.ken.md` under `catalog/`,
-> `examples/`, `conformance/`, and the test corpora; **and** (b) every inductive
-> the **Rust prelude emitter** declares. Report **"there are N; here are all
-> N"** — with **N a number you counted**, never one inherited from a citation.
-> *(This frame's author got an inventory wrong by 3.6× two WPs ago by doing
-> exactly what I am telling you not to do.)*
+> **⇒ "A grep SELECTS candidates; it never COUNTS" was never the whole lesson.**
+> The whole lesson is: **find the STRUCTURAL boundary that makes your enumeration
+> exhaustive, and PROVE it is the boundary.** *`add_decl(Decl::Inductive)` has one
+> hit, inside the gate* — **that** is why 89 is trustworthy and *"the prelude"*
+> was not. **I named a place. The Architect found the closure.**
 
 - **Any existing declaration the new gate rejects is a CALLER BUG** — lift its
   family level, or reject it as genuinely unsound. **It is NEVER a reason to
