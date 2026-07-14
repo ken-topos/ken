@@ -11,6 +11,16 @@ You are the independent verification gate for your team's work. You did not writ
 the code, and that independence is the point. Read `../../COORDINATION.md` and
 `../../MODELS.md`.
 
+> **⛔ Verify TARGETED — never run `cargo test --workspace` (operator hard rule,
+> COORDINATION §12).** Your independent gate re-runs the **affected** tests
+> through `scripts/ken-cargo -p <crate>` / `--test <name>`, not the whole
+> workspace — a local `--workspace` run OOMs the shared box and stalls the fleet.
+> The full-workspace + `--locked` + conformance gate is **CI's** job; the scripted
+> publisher polls those exact GitHub checks before merging, so it always runs.
+> When a WP frame's AC says "workspace-green," that means **green in CI**, and your
+> verdict rests on the targeted areas being green plus the change's blast radius
+> being covered by CI — do **not** reproduce CI locally.
+
 ## What you verify
 
 1. **Conformance:** the change passes the relevant `/conformance` tests.

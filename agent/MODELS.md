@@ -17,9 +17,15 @@ downstream doc goes stale:
 - **T2** — high-throughput build/coordination class (Sonnet-class).
 - **T3** — lightweight class (Haiku-class). Not currently seated (Ken runs T1+T2).
 
-A new T1/T2/T3 family (e.g. GPT 5.6 → **Sol** / **Luna** / **Terra**) is expected;
+A new T1/T2/T3 family (e.g. GPT 5.6 → **Sol** / **Terra** / **Luna**) is expected;
 when a family swaps in, **only this table changes** — every tier reference
 downstream is already correct.
+
+> **The GPT 5.6 names are ordered by MASS, not by mnemonic (operator,
+> 2026-07-14):** **Sol** (star) > **Terra** (planet) > **Luna** (moon) ⇒
+> **Sol = T1, Terra = T2, Luna = T3.** This doc previously had Luna and Terra
+> **transposed**. If you are ever unsure, re-derive it from the mass ordering —
+> do not trust a downstream doc's spelling.
 
 | Tier | Model (current mapping) | Roles | Why |
 |---|---|---|---|
@@ -38,7 +44,8 @@ integration). Capability mapping for that backend (operator-stated):
 
 - **GPT 5.5** (current strongest GPT) **≈ Sonnet-class ≈ T2.**
 - **Opus-class (T1) is stronger than any current GPT** — there is **no T1 on the
-  GPT backend** until the GPT 5.6 family (Sol/Luna/Terra = T1/T2/T3) ships.
+  GPT backend** until the GPT 5.6 family (Sol/Terra/Luna = T1/T2/T3 — by mass)
+  ships.
 
 **Operating rule while Anthropic/Opus credits remain:** the Opus enclave is the
 **irreplaceable capability** — reserve the remaining credits for **T1-critical

@@ -516,10 +516,18 @@ configuration: `../docs/ops/compute-budget.md`.
   `cargo test`. It holds a machine-wide lock (`KEN_BUILD_SLOTS`, default 1) so
   only one build runs at a time across all agents. Bypassing it is the fastest
   way to swap-death the box.
-- **Scope to the touched crate** (`-p <crate>`), not `--workspace`.
-  Full-workspace builds, the conformance suite, and any `--release`/LTO build
-  run **in CI**, not on the laptop. Lean on CI green (the publisher path does),
-  don't reproduce it locally.
+- **⛔ Scope to the touched crate** (`-p <crate>`, or `--test <name>` for one
+  suite), **NEVER `--workspace` (operator hard rule).** Full-workspace builds,
+  the `--locked` gate, the conformance suite, and any `--release`/LTO build run
+  **in CI on GitHub**, not on the laptop — a local `--workspace` run is what OOMs
+  the box and stalls everyone. Lean on CI green (the publisher path polls those
+  exact checks before merging), don't reproduce it locally. **Every local agent
+  is responsible only for the affected areas** — implementer, QA, leader, enclave,
+  Steward alike. A WP frame's "no-regression" / "workspace-green" acceptance
+  criterion therefore means **green in CI**, *never* a local `cargo test
+  --workspace`; authors write frame ACs that way and readers execute them that
+  way. (Operator, 2026-07-13 — a kenfmt implementer burned ~1h on a local locked
+  workspace run the frame wrongly mandated; the venue is CI, full stop.)
 - **`source scripts/ken-env.sh`** at session start for the shared `sccache` +
   `CARGO_HOME`, so you don't recompile dependencies other agents already built.
 - **Idle = paused.** A resident agent costs RAM even when not building. If your

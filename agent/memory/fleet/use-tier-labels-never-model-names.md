@@ -24,9 +24,16 @@ Operator correction (Pat, 2026-07-04). Two parts:
    and every downstream tier reference stays correct.
 
 **Why:** the model roster changes fast (a new T1/T2/T3 family — GPT 5.6 →
-**Sol** / **Luna** / **Terra** — is expected soon), so any doc that hardcodes a
-model name or a "N-behind" characteristic goes stale/wrong the moment the seat
-changes. Tier is the stable abstraction; the mapping is centralized.
+**Sol** / **Terra** / **Luna**, ordered by *mass*: star > planet > moon — is
+expected soon), so any doc that hardcodes a model name or a "N-behind"
+characteristic goes stale/wrong the moment the seat changes. Tier is the stable
+abstraction; the mapping is centralized.
+
+**This lesson's own example was wrong until 2026-07-14** — it had Luna and Terra
+transposed, propagated from `MODELS.md`. That is the point, sharpened: a model
+*name* is a fact you can get wrong and never notice, because nothing type-checks
+it. `agent/MODELS.md` is the **single** place the mapping lives; cite the tier
+(`T2`), never the name.
 
 **How to apply:**
 - Writing a WP frame / tracker entry / convo kickoff: say "T2 build team" / "the

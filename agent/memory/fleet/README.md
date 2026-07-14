@@ -8,12 +8,14 @@ some roles need belongs in a narrower scope.
 | Lesson | One-line |
 |---|---|
 | [check-main-via-git-object-store-not-find](check-main-via-git-object-store-not-find.md) | Check main via the git object store, not `find` |
+| [citation-closure-a-consistent-corpus-can-be-collectively-wrong](citation-closure-a-consistent-corpus-can-be-collectively-wrong.md) | A corpus can be internally consistent and collectively wrong; run the producer-to-posture gate |
 | [cleanroom-is-role-discipline-not-host](cleanroom-is-role-discipline-not-host.md) | Clean-room protection is a role discipline, not a model-host property |
 | [compact-verify-survey-can-eat-the-compact-command](compact-verify-survey-can-eat-the-compact-command.md) | A Claude Code survey prompt can eat a `/compact` command |
 | [compact-wiped-memory-reflog-first](compact-wiped-memory-reflog-first.md) | After a `/compact`, check git reflog before concluding you're stalled |
 | [compaction-is-manual-no-clean-seam](compaction-is-manual-no-clean-seam.md) | Team compaction follows the playbook as-is; the manual-seam problem is singleton-specific |
 | [compaction-render-delay-escape-aborts](compaction-render-delay-escape-aborts.md) | `/compact` has a render delay; Escape aborts it, don't send it |
 | [correcting-scope-must-sweep-whole-doc](correcting-scope-must-sweep-whole-doc.md) | Correcting a false claim in a doc must sweep the whole document |
+| [formatter-soundness-gates-are-blind-to-layout-conformance](formatter-soundness-gates-are-blind-to-layout-conformance.md) | A formatter's meaning-preservation gates can't see bad layout; gate what it emits against the layout spec |
 | [git-author-not-per-agent](git-author-not-per-agent.md) | Git author is shared, not per-agent |
 | [grep-rust-prelude-emission-for-landedness](grep-rust-prelude-emission-for-landedness.md) | A landedness grep must also check the Rust-emitted prelude, not just `.ken` sources |
 | [grep-the-producer-not-the-cited-proxy](grep-the-producer-not-the-cited-proxy.md) | Verify against the real producer, not a cited proxy |
@@ -27,6 +29,7 @@ some roles need belongs in a narrower scope.
 | [multi-worktree-cwd-drift-phantom-diff](multi-worktree-cwd-drift-phantom-diff.md) | Multi-worktree cwd drift produces a phantom diff |
 | [orphaned-background-task-loops-leak-cpu](orphaned-background-task-loops-leak-cpu.md) | Hand-rolled background bash loops can orphan and leak CPU |
 | [pane-suggestion-text-is-not-agent-state](pane-suggestion-text-is-not-agent-state.md) | The tmux pane's gray suggestion text is not agent state |
+| [publisher-app-cannot-push-workflow-file-changes](publisher-app-cannot-push-workflow-file-changes.md) | The publisher App can't push `.github/workflows/` edits; enforce CI gates as workspace tests |
 | [re-read-latest-events-immediately-before-a-stall-nudge](re-read-latest-events-immediately-before-a-stall-nudge.md) | Re-read latest events immediately before a stall-nudge |
 | [reason-in-agent-team-hours-not-human-days](reason-in-agent-team-hours-not-human-days.md) | Reason in agent-team wall-clock hours, never human work-days |
 | [reviewers-review-branches-not-prs](reviewers-review-branches-not-prs.md) | Federation reviewers review branches, not PRs |

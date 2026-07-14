@@ -95,6 +95,19 @@ is no — ask the operator or the Spec enclave.
   humans-read, decide on intrinsic merits not effort, small auditable TCB,
   reflect-don't-extend, subsume-don't-proliferate, honesty about the boundary).
   When the spec does not settle a choice, reason from it.
+- **⛔ LOCAL BUILDS/TESTS ARE TARGETED ONLY — NEVER `--workspace` (operator, hard
+  rule).** This box has limited CPU/RAM; a full `cargo build`/`cargo test
+  --workspace` OOMs or wedges it and stalls the whole fleet. Build and test
+  **only through `scripts/ken-cargo`, scoped to the crate you touched** (`-p
+  <crate>`, or `--test <name>` for one suite) — the affected areas, nothing more.
+  **The full-workspace build, the `--locked` gate, and the conformance suite run
+  in CI on GitHub — NOT on the laptop.** The scripted publisher polls those exact
+  CI checks before it merges, so the whole-repo gate always runs; reproducing it
+  locally is redundant and is *the* resource sink. This binds **every local
+  agent — implementer, QA, leader, enclave, Steward — no exceptions.** A WP
+  frame's "no-regression" / "workspace-green" acceptance criterion means
+  **green in CI**, never a local `--workspace` run; author and read frame ACs
+  that way. Canonical statement + rationale: **`agent/COORDINATION.md §12`**.
 - **Wrap markdown at 80 columns** — target 80 *display* columns / codepoints (a
   multi-byte `—`, `→`, `Ω` is one column); lines of 81–85 are acceptable slack,
   so only reflow what exceeds **85**. Don't spend your own tokens hand-reflowing

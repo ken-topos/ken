@@ -51,8 +51,33 @@ build). Frame docs are Steward-owned; their correctness on `main` is my lane.
   acceptance is durable, mechanism is perishable — and the perishable half must
   be re-synced at the gate.
 
+**Second trigger — a Steward frame amendment made AFTER the ring branched does
+not propagate to their candidate** (CC2, 2026-07-13). The Architect ruled a
+mid-build scope refinement (`show_int : Int → String` un-buildable on opaque
+`Int` → defer as a named substrate gap); I amended the frame doc accordingly.
+But the receiving ring had already branched, and **its worktree had the WP
+branch checked out**, so `git branch -f wp/<id> <new>` fails
+(`cannot force update the branch … used by worktree`) — the amendment landed on
+**`steward/work` only**, and the implementer's released candidate carried the
+**pre-amendment** frame doc. The **code was correct** (it followed the ruling
+relayed in-thread, not the stale doc); only the frame *doc* text lagged. **QA
+caught it** ("authoritative frame still has superseded wording"), a review round
+I could have saved. How to apply, in addition to the merge-gate diff above:
+- **When you amend a frame after handoff, do NOT assume the WP-branch ref
+  moved.** If the ring holds it checked out, the ref is locked and your amend is
+  stranded on `steward/work`. **Immediately hand the ring the amended frame to
+  fold into its next candidate** — reachable across worktrees via the shared
+  `.git`: `git show steward/work:docs/program/wp/<id>.md > docs/program/wp/<id>.md`
+  (no fetch — linked worktrees share refs). Verify `git diff` shows only the
+  frame doc.
+- Better still, **fold a known-pending ruling into the frame BEFORE the ring
+  branches**; a post-branch amendment always risks this propagation gap.
+
 Sibling of correcting scope must sweep whole doc (sweep the WHOLE doc, not one
 section) and trust level prose vs locked adr crosscheck (shipped prose gains
-false authority on `main`). Distinct from both: the trigger is a
-**mechanism-flip mid-build**, and the stale artifact is a **frame doc bundled in
-the code candidate**, caught at the **merge gate**.
+false authority on `main`). The common core across both triggers: the stale
+artifact is a **frame doc bundled in the code candidate** and attention is on the
+code diff, so the doc rides stale — whether it went stale by a **mechanism-flip
+mid-build** (caught at the merge gate) or by a **post-branch Steward amendment
+that couldn't propagate** (caught at QA). Re-sync the frame from `steward/work`
+via the shared `.git` in both cases.
