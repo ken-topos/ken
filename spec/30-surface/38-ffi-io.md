@@ -175,31 +175,27 @@ Programs use a typed capability API over the unchanged, authority-polymorphic
 FS producers. The coarse-v1 signatures are:
 
 ```ken
-readFile : Cap APartial -> Bytes -> FS APartial (Result FileError Bytes)
+readFile : (a : Auth) -> Cap a -> Bytes -> FS a (Result FileError Bytes)
 
 writeFile : Cap AFull -> Bytes -> CreatePolicy -> Bytes
   -> FS AFull (Result FileError Unit)
-
-attenuate : Cap AFull -> Cap APartial
 ```
 
 `readFile` wraps `read_bytes`; `writeFile` wraps `write_file`. The wrappers do
-not re-type or replace those raw producers. They make authority-level
-sufficiency static at the program-facing API: a program holding only
-`Cap APartial` cannot apply `writeFile`, so the attempt is ill-typed before the
-driver runs. The driver's `CapabilityDenied` result remains a defense-in-depth
-backstop rather than the primary program-validity gate.
+not re-type or replace those raw producers. A read-and-write program calls
+`readFile fullCap path` directly: the read wrapper accepts the authority carried
+by any `Cap a`, including `ANone`, `APartial`, and `AFull`. The driver checks
+read sufficiency at operation time; insufficient authority returns the named
+`CapabilityDenied` result before host I/O. A static lower bound on `a` would
+require bounded authority quantification, which v1 does not provide; that is a
+v2 option rather than an implied v1 guarantee.
 
-The coarse-v1 `attenuate` is the Ken-callable `AFull`-to-`APartial`
-specialization of the monotone-downward operation in `62 §3`. A read-and-write
-program calls `readFile (attenuate fullCap) path`; it never passes its stronger
-token directly to the read wrapper. This adds one explicit step but preserves
-the fixed authority requirement in each operation's type and makes the
-least-authority transition visible to a reader. There is no inverse operation
-and no public capability constructor. The wrapper and attenuation function are
-not new trusted machinery: the wrappers are ordinary checked Ken definitions,
-and the exposed attenuation operation retains `62 §3`'s kernel-re-checked
-downward-bound obligation. Neither adds a kernel rule or trusted primitive.
+The write boundary remains static: a program holding only `Cap APartial` cannot
+apply `writeFile`, so the attempt is ill-typed before the driver runs. The
+driver's `CapabilityDenied` result remains defense in depth for writes and is
+the primary authority floor for reads. User code has no public capability
+constructor or Ken-callable attenuation function. The wrappers are ordinary
+checked Ken definitions and add neither a kernel rule nor a trusted primitive.
 
 ### 1.4 Text is explicit `bytes_encode` / `bytes_decode` — no hidden charset
 

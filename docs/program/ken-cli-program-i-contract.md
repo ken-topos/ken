@@ -268,14 +268,16 @@ CLI grants, OS sandboxing, and other constraints on a running process are a
 separate concern and are out of scope.
 
 **The honest caveat, stated loudly:** coarse authority confines *nothing to a
-path*. `authorizes(cap, path)` still ignores `path`. So v1 read is acceptable
-(read is already gated at `APartial`), but **v1 write/delete are functional yet
-over-privileged** — a write-granted program can write *anywhere* the process
-can. Therefore, on v1-coarse, **write/delete ship gated behind `AFull` with an
-explicit "coarse authority — not path-confined" caveat in the runner/docs**, and
-are **not** advertised as least-privilege until §3.2 lands. This keeps the
-green-means-safe honesty the project requires: no silent over-claim of
-confinement.
+path*. `authorizes(cap, path)` still ignores `path`. The v1 read wrapper accepts
+any declared authority; insufficient read authority, including `ANone`, is
+rejected at operation time with `CapabilityDenied` before host I/O. A static
+read floor would require bounded authority quantification, which v1 does not
+provide. Meanwhile, **v1 write/delete are functional yet over-privileged** — a
+write-granted program can write *anywhere* the process can. Therefore, on
+v1-coarse, **write/delete ship gated behind `AFull` with an explicit "coarse
+authority — not path-confined" caveat in the runner/docs**, and are **not**
+advertised as least-privilege until §3.2 lands. This keeps the green-means-safe
+honesty the project requires: no silent over-claim of confinement.
 
 ### 3.2 Scoped model — what the fast-follow must add (the gate)
 
@@ -289,8 +291,9 @@ driver must enforce:
 3. **Symlink policy** — whether traversal is allowed and **how it is checked**
    (a symlink out of scope must not escape).
 4. **Attenuation** — narrowing to a smaller scope/right set only; **never
-   widening**. Reuse the existing `attenuate → (Cap, AttenuationObligation)` +
-   kernel `discharge_attenuation` machinery (`capabilities.rs:138-189`) — the
+   widening**. Reuse the existing runner-side
+   `attenuate → (Cap, AttenuationObligation)` + kernel
+   `discharge_attenuation` machinery (`capabilities.rs:138-189`) — the
    monotone-narrowing law is already there; extend its `w` from a scalar to a
    (rights × scope) meet.
 5. **TOCTOU-safe enforcement** — resolve via `openat`-style **directory-relative
