@@ -7,7 +7,7 @@ the identity.
 ## surface/declarations/axiom-mechanical-sugar
 
 - spec: `spec/30-surface/32-grammar.md §1`,
-  `spec/30-surface/39-elaboration.md`
+  `spec/30-surface/39-elaboration.md §5.4`
 - given:
 
   ```ken
@@ -22,8 +22,8 @@ the identity.
 
 ## surface/declarations/repeated-axiom-shares-owner-not-identity
 
-- spec: `spec/30-surface/39-elaboration.md`,
-  `spec/60-security/64-trust-model.md`
+- spec: `spec/30-surface/39-elaboration.md §5.4`,
+  `spec/60-security/64-trust-model.md §1.1`
 - given:
 
   ```ken
