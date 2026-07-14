@@ -14,7 +14,111 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (23:20 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 2739c30c`
+> ### ⏭ 2026-07-15 (00:10 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 6aaf8c33`
+>
+> ## BOTH RINGS HIT EXPRESSIBILITY WALLS. AX-2 ruled + building. **LET-3 P2 HELD on a landed defect.**
+>
+> | ring | state |
+> |---|---|
+> | **Language / AX-2** | 🔨 **BUILDING on Option (A).** Ownerless-`Axiom` fork RULED by **@architect** (`evt_7z51m1gms7ttd`). **I ruled (B); our messages CROSSED; I RETRACTED — (A) stands.** |
+> | **Foundation / LET-3 P2** | ⛔ **HELD** on a **landed single-binding-`let`-in-Ω defect**. NOT their bug, NOT to be worked around. |
+>
+> ### ★★ AX-2 — I WAS WRONG, THE ARCHITECT WAS RIGHT (`evt_54xcxy0h8t2dd` = my retraction)
+> **The fork:** `ElabEnv::elaborate_expr` can check `Axiom : Top` **outside any
+> declaration** → no owner label derivable. **My D3 pin — *"every `Axiom` sits
+> inside some named declaration, so the label is ALWAYS derivable"* — is FALSE.**
+> (5th wrong population claim of the day: I enumerated *declaration-position
+> producers* and never enumerated the **API entry points**.)
+> **I ruled (B) reject. Architect ruled (A) require-a-caller-supplied-label. (A) WINS:**
+> 1. **(B) makes a term's legality depend on WHICH API you called** — an
+>    entrypoint-dependent carve-out of a *universal* rule. Non-compositional; rots.
+> 2. **My "caller-supplied label = fabrication" objection was wrong on its own
+>    terms** — a declaration name is *also* just an unvalidatable string. **The
+>    invariant AX-1 buys is "the COMPILER never invents it"**, and a **required
+>    parameter** delivers exactly that: a missing owner is a **Rust arity error**,
+>    not a `None` branch. No Option, no default, no ownerless overload.
+> 3. **At an API boundary the CALLER IS THE HOME** (REPL / test fixture). Provenance,
+>    not fabrication.
+> 4. **The Architect found a sentinel I'd have shipped** — an `"instance resolution"`
+>    `ElabCtx` on the branch. That's the tell their grounding was deeper.
+>
+> **⇒ OWED BY ME: the AX-1 wording erratum (spec-leader), landing BEFORE OR WITH the
+> AX-2 merge.** `39 §5.4` + `18 §4.2` + `64`: the label comes from the enclosing
+> declaration **OR is supplied by the caller of a public standalone-expression API**;
+> never inferred from the expression; ownerless call **unrepresentable**.
+> **`32` UNCHANGED** (`Axiom` legal wherever a term is checked). **AX-2 does not merge
+> against a spec sentence it contradicts.**
+>
+> ### ★★ LET-3 P2 — HELD. AND THE PILOT'S GREEN GATE NEVER COVERED THIS SHAPE.
+> Foundation hit `KernelRejected { TypeMismatch { expected: Type 0, found: Ω0 } }` on a
+> **single-binding plain `let` whose body is a PROOF (Ω)**. Their bisection is
+> discriminating: delete the `let` → the identical failure **walks to the next
+> single-binding sibling**. Grouped (≥2) bodies pass. **⇒ the single-binding `let` is
+> the variable.**
+>
+> **I checked what my pilot actually emitted — it produced ONLY GROUPS:**
+>
+> | | Type-0 (`fn`) | **Ω (proof)** |
+> |---|---|---|
+> | **grouped `let`** | ✅ pilot (`slice`, 4 bindings) | ✅ pilot (injectivity, 4+) |
+> | **single `let`** | (pre-existing paths) | ❌ **NEVER EXERCISED — and it's broken** |
+>
+> **The one cell neither pilot site touched is the cell Phase 2 lives in.** I reviewed
+> that pilot, passed it, and called the approach calibrated — then pinned *"a single
+> binding stays a plain `let`"* as a fixed input and walked Foundation into it.
+> **A green pilot is NOT evidence for a shape the pilot never produced.**
+>
+> ### ▶ SEQUENCING (my call — recorded so a compaction can't lose it)
+> **The `let`-sort fix must NOT ride with AX-2**: it lives in the elaborator's `let`
+> sort computation — **the same `elab.rs` AX-2 is threading a required owner label
+> through across ~34 sites.** A concurrent WP there collides head-on with the
+> critical path.
+> **⇒ AX-2 lands → LET-5 (single-binding-`let` sort fix, Language) → LET-3 P2 resumes
+> with Foundation's frozen table.** Foundation stands down (table posted, not lost).
+>
+> ### ▶ NEXT FOR ME (in order)
+> 1. **Route the AX-1 wording erratum to @spec-leader** (Handoff Gate: compact the
+>    enclave first). Must land **before/with** AX-2 merge.
+> 2. **Frame LET-5** — the single-binding-`let`-in-Ω sort fix. **Await @architect's
+>    technical ruling first** (narrow sort bug vs. deeper design question — it decides
+>    the size).
+> 3. **AX-2 gate at candidate:** no `Option<String>`, no default/ownerless
+>    `declare_postulate`, kernel never reads the name, the 3 formatter oracles run.
+> 4. **Owed to Pat:** toolchain-axis proposal.
+> 5. **Kernel/Verify/Ergo idle BY DESIGN.**
+>
+> ### ⏮ 2026-07-14 (23:45 UTC) — `origin/main @ 6aaf8c33`
+>
+> ## BOTH RINGS BUILDING. Architect ruling an AX-2 fork. Nothing owed by me.
+>
+> | ring | state |
+> |---|---|
+> | **Language / AX-2** | 🔨 implementer `Working` (~20m). **Escalated an A-vs-B design fork to the Architect** (`elaborate_expr` contract + owner semantics) — Architect `Working` on the ruling. |
+> | **Foundation / LET-3 P2** | 🔨 implementer `Working` on `wp/let3-p2-map-acc-lookup` (cut fresh from `2739c30c`), iterating against `map_build_acceptance`. |
+>
+> ### ★★ THE FRAME/BUILD BRANCH COLLISION — fixed in the playbook (`6aaf8c33`, PR #688)
+> **I blocked my own ring.** I published the LET-3 P2 frame from
+> `wp/let3-p2-map-acc-lookup`, it squash-merged as `2739c30c`, **my worktree
+> stayed parked on it**, and `foundation-leader` physically could not check the
+> branch out. It **held the kickoff and asked** rather than forking or resetting —
+> the right escalation. Root cause was in **my playbook**: step 1 said author the
+> frame ON `wp/<ID>-<slug>`, step 3 squash-merges it, step 4 said the team
+> *"continues"* it — **impossible after a squash-merge** (remote deleted; local ref
+> dangles AHEAD of main with its content already in).
+> **⇒ TWO NAMES, ALWAYS: `wp/<ID>-frame` (mine, merges and dies) ·
+> `wp/<ID>-<slug>` (theirs, cut fresh from `origin/main`). And switch OFF the
+> frame branch the moment you publish it.** AX-2 escaped this **only by luck**
+> (I happened to name its branches `-frame` / `-build`). *A rule that only works
+> when you happen to do what it never told you to do is a latent bug with good
+> luck.* Fleet memory: `a-squash-merged-branch-cannot-be-continued.md`.
+>
+> ### ⚠ THE MENTION WEDGE FIRED A 7th TIME — and the CHECK caught it, not me
+> `sweep-wedged-panes.sh` repaired a stranded paste on **`moot-architect`** that
+> was holding **Language's AX-2 design escalation**. A live block on the critical
+> path, cleared automatically, zero diagnosis cost. **This is the whole argument
+> for converting a discipline into a check.** Run the sweep FIRST, every tick.
+>
+> ### ⏮ 2026-07-14 (23:20 UTC) — `origin/main @ 2739c30c`
 >
 > ## TWO RINGS BUILDING. AX-2 (Language) + **LET-3 P2 (Foundation — kicked, `Working`-confirmed)**.
 >
