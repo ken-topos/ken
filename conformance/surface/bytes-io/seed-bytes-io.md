@@ -86,18 +86,21 @@ cross-reference the L5 home rather than copy it.
   invalid indices/spans return `None`. The cases assert the result constructors
   and types, not merely the weaker "no silent out-of-bounds read" property.
 
-**Tags.** `(soundness)` — a kernel **trusted-base** commitment: a registered
-`Bytes` primitive reduction whose wrongness is a soundness bug (`14 §5`/`18 §5`,
-the same class as the L1 `add 2 3 ⇓ 5` reductions). `(property)` — an invariant
-over many inputs / an end-to-end law, not a single trace. `(oracle)` — confirmed
-by the Spec enclave / at build time, safe as it is **not** kernel-normative:
+**Tags.** `(soundness)` — a runtime semantic-correctness obligation: a wrong
+`ken-interp::prim_reduce` value for a registered `Bytes` `PrimReduction::Op`
+violates the specified operation semantics. The primitive declaration/signature
+remains listed in `trusted_base()`, but operation execution is tested-not-trusted,
+opaque to conversion, and cannot produce a false kernel proof (`14 §5`/`18 §5`).
+`(property)` — an invariant over many inputs / an end-to-end law, not a single
+trace. `(oracle)` — confirmed by the Spec enclave / at build time, safe as it is
+**not** kernel-normative:
 the remaining pure-op spelling (`++`/`concat`), the `visits ρ` surface syntax
 (L5 `OQ-syntax`), and error-kind strings. The producer names `read_bytes` and
 `print_line` are landed declarations, not invented oracle stand-ins. CP0 fixes
 `bytes_decode`, `bytes_at`, and `bytes_slice` by name and shape. The **`0x05`
 encoding, the literal forms `b"…"`/`0x[…]`, the safe signatures, the registered
-reductions, the partiality treatment, and every verdict** are **normative**, not
-`(oracle)`.
+runtime semantics, the partiality treatment, and every verdict** are
+**normative**, not `(oracle)`.
 
 ---
 
