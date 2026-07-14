@@ -14,7 +14,147 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (03:2x) — ★ NEWEST · LIVE STATE (read this first) · `origin/main @ e22f5688`
+> ### ⏭ 2026-07-14 (09:5x UTC) — ★★ NEWEST · LIVE STATE · `origin/main @ c5f73b9c`
+> **★★★ PAT RULED THE `Bytes → Nat` SUBSTRATE DECISION: LAND THE BRIDGE (Option B).**
+> **His reasoning is now `docs/PRINCIPLES.md` #15** (committed `0f14b873`), verbatim:
+> *"`String → List Char` is an essential reasoning tool that needs to be part of the trusted
+> base; `Bytes` is parallel. Features of the implementation which we guarantee by our
+> implementation should have the corresponding propositions which enable reasoning from those
+> guarantees. **It is preferable to extend the trusted base by a fixed number (per built-in) in
+> order to prevent unbounded `Axiom`s added by consumers of Ken.**"*
+> **THE KEY INSIGHT I HAD MISSED AND HE SUPPLIED:** those `Axiom`s are **not arbitrary trust** —
+> they are **consumers re-asserting a guarantee the implementation already makes.** And a surface
+> `Axiom` IS `declare_postulate` → `Decl::Opaque` → **a real `trusted_base()` entry** ⇒ the
+> "zero-TCB" cached-`Nat` workaround was **never zero-TCB. It was UNBOUNDED TCB, per call site,
+> reviewed by nobody.** Bounded-and-reviewed beats unbounded-and-invisible.
+>
+> **★ THREE RINGS ARE LIVE — ALL KICKED THIS HOUR. `main` is UNCHANGED at `c5f73b9c`.**
+> - **SUB-1 → Team LANGUAGE** (`wp/sub1-bytes-structural-view @ e8321140`, kicked
+>   `evt_4v28p7csc1bxw`). `bytes_to_list : Bytes → List UInt8` + inverse + the round-trip
+>   **propositions** + a derived byte surface at **zero further TCB** (the `37 §2.5`
+>   do-not-native-ize precedent). **AC2 is the bargain: `trusted_base()` grows by EXACTLY the
+>   registered set, each NAMED in the test.** AC1 discriminator: **one structural fold over a
+>   `Bytes` that terminates with NO `Axiom`** — the thing that was impossible. **Carrier
+>   retirement is deliberately SUB-2**, so SUB-1 stays a clean reviewable delta.
+> - **I-6 → Team RUNTIME** (`wp/i6-deterministic-app-testing @ 77f776b4`, unblocked
+>   `evt_4p39jem0d4sq6`). See the erratum below.
+> - **CC8 → Team FOUNDATION: ⛔ HELD** (`evt_7s0bzrq1nxsqn`), frame at
+>   `wp/cc8-env-config-decoder @ 44771ffc`. **Held ON PURPOSE:** on the old substrate its env-key
+>   matching would have built a **FIFTH cached-`Nat` carrier + fresh `Axiom`s** — exactly the
+>   unbounded cost the ruling just eliminated. **Re-frame CC8 on the bridge once SUB-1 lands.**
+>   **Its `Schema` boundary — pinned from Foundation's own CC7 retros — is UNAFFECTED and stands.**
+>
+> **★ TWO FALSE PINS OF MINE, BOTH CAUGHT PRE-EDIT BY IMPLEMENTERS, BOTH IN ONE HOUR:**
+> - **I-6 (the big one): `HostHandler` has NO capability-mint op.** I verified `run_io<H>`,
+>   `HostHandler`, `CaptureHost` were all public — **all true** — and framed a generic
+>   `run_program<H>` anyway. But the runner mints via **`PosixHost::mint_fs_cap`, an INHERENT
+>   method** (`eval.rs:2416`); `CaptureHost` has its **own separate inherent** copy (`:3058`).
+>   **⇒ a generic runner cannot mint at all.** **RESOLVED:** Architect ruled route (a) SOUND
+>   (`evt_7v76zwacxxn2q`) — **lift `mint_fs_cap` onto the trait** (`&self`, required, no default;
+>   keep `mint_scoped_fs_cap` inherent/test-only). **No new authority:** a `HostHandler` impl
+>   already performs the syscalls, so it already IS the trusted boundary; a `Cap` is a strictly
+>   **weaker gating token** over what the *program* may request. Both mints are `&self` and root
+>   the cap in the **host's own identity** — which is exactly why a caller-supplied cap, or a
+>   free-function `Cap::mint`, **would be a real bypass of the I-5 scoped ABI.** **This is
+>   ADR-0017 §4a step 0 COMPLETED.** Zero kernel-TCB. ⇒ **promoted audit (b″)**, below.
+> - **MY WORKTREE WAS 10 COMMITS BEHIND `main`** (merge-base I-4 §D). **CC3–CC7 were absent from
+>   my filesystem, which silently invalidated EVERY file read this session — including the brief I
+>   gave Pat.** I caught it, re-derived everything with `git show origin/main:<file>`; the
+>   *findings* held, the *anchors* did not. **Merged `main` into `steward/work` (`c9be989c`); now
+>   0 behind.** **This is the Architect's own carry — "read the ref, never the worktree" — which I
+>   promoted THIS MORNING and then violated.**
+>
+> **★ NEW LAW PROMOTED — audit (b″) GENERICIZATION** (playbook, this commit): when a WP makes an
+> **existing concrete path generic over a trait**, *"is the trait public?"* is the **WRONG
+> question**. Ask: **can the generic version perform EVERY step the concrete one performs?**
+> **The tell is greppable — the concrete type's INHERENT methods used by the call path that the
+> trait does NOT declare.** That is **(b′) failing a SECOND time**, which is why it now has its
+> own mechanical check. Memories: `fleet/making-a-concrete-path-generic-…`,
+> `fleet/primitive-ops-do-not-reduce-under-conversion`.
+>
+> **★★ ADJUDICATED (`evt_71h1vsyjyybmw`) — I WAS RIGHT, AND IT PRODUCED A NEW OPERATOR DECISION.**
+> **(a) Architect: prim ops have NO registered reductions in the landed kernel. `byte_length "abc"
+> ≡ 3` does NOT hold definitionally.** `whnf` (`conv.rs:49–160`) reduces only transparent-δ, β, ι
+> — **there is no `Op`/`prim_reduce` arm**; `prim_reduce` lives only in `ken-interp`. **The
+> discriminating subtlety spec-leader missed:** `14 §5`'s "registered reductions are definitional"
+> governs `PrimReduction::**Literal**` — but `byte_length` is `PrimReduction::**Op**`. **`"abc"`
+> and `3` are both literals, yet `byte_length "abc"` is still NEUTRAL, because the reduction STEP
+> is an `Op` step the kernel does not perform.** `Literal` (a value) ≠ `Op` (an operation,
+> "awaiting K3"). **⇒ SUB-1's conservative postulate posture is CORRECT and unaffected.**
+> **(b) → spec-leader: `37 §2.4` OVER-CLAIMS (PRINCIPLES #8); erratum warranted** — keep the
+> definitional claim for `Literal`, drop it for `Op`s. **His lane; adjudication settles that it
+> needs one.**
+> **(c) ★ NEW OPERATOR-FACING DECISION — K3 REGISTERED REDUCTIONS.** Architect: a **real,
+> high-leverage, named gap** (`env.rs:96`) — **registering `Op` reductions would make
+> `byte_length "abc" ≡ 3` hold by `Refl`, DISSOLVING the cached-`Nat`/`Axiom` tax outright** for
+> CAT-5, CC3, and every future length/index consumer. **But it GROWS THE KERNEL TCB** (conv would
+> gain trusted reduction semantics for every `Op`), so it is a genuine fork: *which ops earn
+> definitional reduction · the TCB cost · or a certificate/reflection middle ground where the
+> elaborator computes and the kernel cheaply checks.* **His recommendation: it is the SAME
+> substrate/TCB family as `Bytes → Nat`, and a general "opaque-`Op` computes at runtime but not
+> definitionally" resolution SUBSUMES BOTH — sequence them together, not as one-offs.**
+> **⇒ ADD TO PAT'S BRIEF. Does NOT block SUB-1.** (Note the tension worth surfacing to him:
+> **K3 would make SUB-1's postulates provable** — so if K3 is likely, SUB-1's laws are a
+> way-station, not a terminus. SUB-1 still lands: it is bounded, and it unblocks four consumers
+> now.)
+>
+> **★★ THE FALSE CLAIM IS ON `main` IN FOUR MORE PLACES — AND ONE IS A `(soundness)` ASSERTION.**
+> **CV found it on a routine currency sweep (`evt_4pjtwaz0pv2fx`) and STOPPED AT THE SCOPE LINE
+> rather than ignoring it or quietly broadening. I RULED (b) — fold the whole primitive-`Op`
+> honesty sweep ATOMICALLY** (`evt_2xszqzrxq72g6`; §14.4 land-together — **one** false claim,
+> four files, ONE branch/squash/Decision).
+> **★ I GROUNDED `numbers` MYSELF BEFORE RULING, because "same-shaped" ≠ "same"** (DS-6b/DS-6c
+> landed, so Int literals *could* have folded): **`add_int` is `PrimReduction::Op`**
+> (`checked_core.rs:5188`), **not** `Literal`, and the guide says prim ops are **"stuck, whatever
+> the arguments."** ⇒ **`2 + 3 ≡ 5 : Int` is NOT definitional either.** Same root cause. Sweep
+> together.
+> **CV's lane (conformance):** `strings-collections` (done) · **`bytes-io/seed-bytes-io.md:149–161`
+> — a `(soundness)`-TAGGED ASSERTION that `length 0x[deadbeef] ≡ 4` holds definitionally "in the
+> kernel's evaluator … closes by `refl`". THE KERNEL DOES NOT DO THIS.** Same disease as the Sec2
+> erratum, one layer deeper. Plus `:6`, `:35–36`, `:321–322` · `numbers/seed-numbers.md:229–235` ·
+> `conformance/README.md:153`.
+> **spec-leader's lane (spec):** `37 §2.4` + almost certainly the same wording in **`35`/`38`**.
+> **⛔ SURGICAL, BOTH LANES: KILL the definitional/`refl`/proofs-compute-over-literals claim for
+> `Op`s — but KEEP it for `Literal` reductions where `14 §5` is genuinely TRUE. Erasing that
+> distinction swaps one false statement for another; THE DISTINCTION *IS* THE BUG.** Keep
+> neutral-on-stuck, partiality, trusted-base membership. **The wrong-reduction-is-a-soundness-bug
+> obligation STILL STANDS but binds the INTERPRETER's `prim_reduce`, not kernel conv — RE-HOME it,
+> do not delete it** (an obligation that changes layers must not evaporate in transit).
+> **Neither blocks SUB-1** — the sweep and Language's build say the same true thing from two
+> directions.
+>
+> **(the escalation as originally raised — kept for the reasoning trail)**
+> **⚠ ESCALATED, NOT ASSERTED — A SUSPECTED SPEC OVER-CLAIM (`evt_1chdn8t7s3hnv`, → Architect +
+> spec-leader).** `spec/30-surface/37-strings-collections.md §2.4` says *"a primitive op carries a
+> registered reduction … so `byteLength "abc" ≡ 3` holds **definitionally** and proofs can compute
+> over string literals."* **I believe that is FALSE of the landed kernel:** `conv.rs::unfold_const`
+> unfolds **only transparent** constants (`Decl::Primitive` has no body; `conv.rs` has **zero**
+> `Decl::` refs); `env.rs:94` calls `PrimReduction::Op` *"awaiting its registered reduction (K3)"*;
+> `prim_reduce` lives in **`ken_interp`** (the interpreter); and the guide **ships
+> `eq_int five five = Refl` as a REJECT**. **⇒ prim ops compute at RUNTIME and are OPAQUE to
+> conversion ⇒ `Refl` cannot discharge a prim-op equation — which is exactly WHY CAT-5/CC3 reached
+> for `Axiom`. It was the only route.** **I did NOT assert it** (haven't traced
+> `prim_reduce_elaborated`; four false-positive greps already). **SUB-1 is pinned to the
+> conservative postulate posture; the adjudication can only improve it.** Open Q(c) for the
+> Architect: **is K3's registered-reduction work a real open gap worth its own WP?** If reductions
+> had landed, **the entire cached-`Nat`/`Axiom` idiom would have been unnecessary.**
+>
+> **▶ NEXT (in order):** (1) **SUB-1 lands** → (2) **re-frame CC8 on the bridge + re-kick
+> Foundation** (Schema boundary unchanged; byte-matching becomes ordinary `List UInt8` recursion)
+> → (3) **SUB-2** — retire the cached-`Nat` carriers (`Source`, `ArgBytes`) + **unblock
+> `Path.Posix`** → (4) **CC9** (`Resource`/`Bracket` + `Test.Property`) · **I-7** (Env/Process,
+> now owns the clock). **I-6 runs concurrently in Runtime.**
+> **▶ PAT'S BRIEF IS NOW ONE ITEM SHORTER AND ONE ITEM CORRECTED:** the `Bytes → Nat` DECISION is
+> **RULED** (above). **The "model-tier inversion" note was WRONG and is WITHDRAWN** — the table had
+> **Luna and Terra transposed**; corrected to **Sol/Terra/Luna = T1/T2/T3, ordered by MASS**
+> (`dbb48675`). Leaders + QA on **terra = T2** is **correct**; there was never an inversion.
+> **THE REAL anomaly the fix exposed: all six implementers + the librarian sit on `sol` = T1**
+> (`MODELS.md` assigns them T2), and **nobody is on `luna`/T3.** Seven seats on the top tier doing
+> mechanical build work — **policy or seating should move; Pat's call.**
+> Remaining notes: `export` specified-but-unparsed · confinement posture is trusted-Rust-netted,
+> **now honest in the ADR, conformance, AND the code.**
+
+> ### ⏭ 2026-07-14 (03:2x) — LIVE STATE (superseded) · `origin/main @ e22f5688`
 > **OPERATOR AWAY until ~11:00–11:30 UTC (Pat, 03:04Z).** ~8h autonomous window → run
 > the DAG per §2b; do not yield while work is unblocked. Watchdog cron `7ec866fc`
 > (`8,23,38,53 * * * *`) carries live state + the land-together constraint.
@@ -135,6 +275,108 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **▶ NEXT:** Runtime assembles `5f675810` NOW (don't wait for CV) → folds CV's tip when it
 > lands → **ONE combined SHA** → honesty gate → publish → **verify on main by CONTENT** →
 > §B retros → **I-4 ARC COMPLETE**.
+>
+> ### ⏭ 2026-07-14 (08:2x UTC) — ★ ARCHITECT'S REVIEWER CARRY: READ THE REF, NOT THE WORKTREE
+> **★ "Read the candidate AT THE REF, never the worktree."** (`evt_7jf2gtkwspmff`) Reviewing I-5
+> he **nearly flagged a phantom byte-path BYPASS** — because `Read` hit his **`architect/work`
+> tree (pre-I-5)**, not the branch under review. **He would have blocked a correct security WP
+> on a file that wasn't the one being merged.**
+> **⇒ THIS IS THE SAME FAILURE I MADE, FROM THE OTHER SIDE OF THE GATE.** Early this session I
+> read CAT-5 out of my own worktree while `steward/work` was **10 commits behind main** (the
+> file had been reformatted by capstone C). **And it is the same family as my FOUR
+> false-positive greps** — including grepping `prelude.rs` when `bytes_*` lives in `bytes.rs`.
+> **⇒ THE UNIFIED RULE (reviewer + gate + author): NEVER READ THE SURFACE FROM YOUR OWN
+> WORKTREE. Read it from the REF you are actually judging** — `git show <sha>:<path>`,
+> `git grep <pattern> <sha> -- <path>`. **A worktree is not the artifact; it is a stale opinion
+> about the artifact.**
+> **★ AND THE DEEPER SYMMETRY OF THIS WHOLE SESSION:** every gate failure ran in **BOTH**
+> directions —
+> **FALSE NEGATIVE** (the thing that looked green and wasn't): rubber-stamp oracle · seed
+> claiming a kernel guarantee that didn't exist · unbuildable-but-coherent spec · unfalsifiable
+> TOCTOU discriminator · denial suite that never checked the denial · loaded-but-unused
+> dependency.
+> **FALSE POSITIVE** (the guard that fired on correct work): prose `Axiom` · prefix-matched type
+> name · too-crude re-anchor regex · wrong-file grep · **the Architect's phantom bypass.**
+> **⇒ BOTH ARE THE SAME DISEASE: acting on a signal you did not verify.** *"Grep the emission,
+> not the name. Read the ref, not the worktree. And when a guard fires — VERIFY THE GUARD
+> BEFORE ACTING ON IT."*
+>
+> ### ⏭ 2026-07-14 (08:1x UTC) — ★ CC7's CARRY: REUSE MUST BE PROVED *BEHAVIORALLY*
+> **★★ THE SESSION'S SHARPEST CARRY, and CC7's implementer named it UNPROMPTED:**
+> *"A package can appear to reuse a substrate **merely because the ordered shared environment
+> loads it**. The non-vacuous test was **behavioral**: ArgParse had to **DRIVE** CC3's `Decoder`
+> over `ArgCursor`, **not declare it and shadow it with a private byte loop**."*
+> **⇒ LOADING A DEPENDENCY IS NOT USING IT.** The DS-7/8 ordered shared-`ElabEnv` harness —
+> **the very AC I mandate on every catalog WP** — makes reuse **LOOK true even when it is
+> false**: the substrate appears in the closure, every import check passes, **and a private
+> reimplementation hides underneath. A GREEN SUITE HIDES THIS PERFECTLY.**
+> **⇒ PROMOTED TO THE PLAYBOOK as pre-pin audit (d): REUSE MUST BE PROVED BEHAVIORALLY, NOT
+> STRUCTURALLY.** When a WP is framed as a *specialization*, the AC must require the landed
+> abstraction be **DRIVEN**. **The Architect's phrase is the test: "genuinely DRIVEN, not
+> DECLARED-THEN-SHADOWED." Press the mechanism, not the imports.**
+> **★ ALSO IN THE RETRO — an honest kernel-constraint correction:** the initially **nested
+> recursive** command description was **flattened to a one-level `ProgramSpec` when STRICT
+> POSITIVITY rejected it.** They hit a real kernel rule and **reshaped rather than worked
+> around it** — no postulate, no escape hatch. That is the hard-stop reflex applied to a *type*
+> constraint instead of a *seam*.
+> **⇒ THIS IS THE SAME FAILURE FAMILY AS EVERY OTHER CATCH TONIGHT: the wrong thing produces a
+> PLAUSIBLE, GREEN result.** Rubber-stamp oracle · seed claiming a kernel guarantee that didn't
+> exist · coherent-but-unbuildable spec · unfalsifiable TOCTOU discriminator · denial suite that
+> never checked the denial · stale base whose merge would revert a package · **and now: a
+> dependency that is loaded but not used.**
+>
+> ### ⏭ 2026-07-14 (08:0x UTC) — ★★★★★★ MILESTONE C IS MET · `origin/main @ c5f73b9c`
+> **✅✅✅ CC7 MERGED — `origin/main @ c5f73b9c`** (PR #629). **★ MILESTONE C IS MET.**
+> **VERIFIED BY CONTENT:** `ArgParse/ArgParse.ken.md` ✓ · **`ArgParse/Example.ken.md` = THE
+> WORKED MULTI-FILE SUBCOMMAND TOOL** ✓ · `Diagnostic/Render.ken.md` as its **OWN package** ✓ ·
+> **ZERO `bytes_eq`/`DecEq Bytes` anywhere in the catalog** ✓.
+> **⇒ THE OPERATOR'S NORTH STAR IS REAL:** *"a multi-file subcommand tool with options, help,
+> and diagnostics."* **Written in Ken. Kernel-checked.**
+> **★★ SEVEN WPs BUILT ONE THING, AND THE CATALOG COMPOUNDED INSTEAD OF FRAGMENTING:**
+> `Validation` (CC1) → codecs (CC2) → `Cursor`/`Decoder` (CC3) → `Diagnostic` (CC4) → `Doc`
+> (CC5) → `Process.Arguments` (CC6a) → **`ArgParse` (CC7)**. **`ArgParse` added ONLY the CLI
+> domain model — everything else it CONSUMED.**
+> **★ THE ARCHITECT'S AC6 VERDICT — THE PHRASE TO KEEP:** *"CC3's `Decoder` is genuinely
+> **DRIVEN**, not **declared-then-shadowed**."* **A WP can import every landed abstraction, list
+> them all in its closure, pass every test — and still have quietly rebuilt a second parser
+> underneath. A GREEN SUITE HIDES THAT PERFECTLY.** He checked the **mechanism, not the
+> imports.** **That is the difference between a catalog that compounds and one that fragments.**
+> **★ THE PIN THAT PROTECTED THE OPERATOR: no `bytes_eq`, no `DecEq Bytes`** — byte-wise over
+> CC3's `ArgBytes` instead. **THREE WPs IN A ROW the constructibility audit stopped a build from
+> quietly settling PAT'S OPEN TCB DECISION.** The rings escalated instead of inventing, every
+> time.
+> **▶ CC7 RETROS REQUESTED** (`evt_6x5f39wzcf797`). Merged ≠ closed. **Asked the CC8 question at
+> its cheapest moment: "You've now built ONE description-driven decoder. CC8 is the SECOND —
+> which the report says is EXACTLY when a shared `Schema` becomes justified, AND NOT BEFORE.
+> What would you extract, and what would you leave alone?"**
+> **▶▶ CATALOG 7/9. REMAINING: CC8** (env/config decoder + the `Schema` extraction question) ·
+> **CC9** (`Resource`/`Bracket` + `Test.Property`) · **`Path.Posix`** (HELD on Pat's substrate
+> decision) · **Runtime: I-6 (S) → I-7** (Env/Process, now owns the clock).
+>
+> ### ⏭ 2026-07-14 (07:5x UTC) — ★★★★★ CC7 PUBLISHING — MILESTONE C
+> **✅ CC7 GATED CLEAN + PUBLISHING** — `wp/cc7-argparse @ 458300ce`. Foundation QA + **Architect
+> TERMINAL APPROVE** (`dec_71w64zc73zq4`; he correctly did NOT resolve it).
+> **MY GATE, BY CONTENT:** 0 merges · 5 files · forbidden-path EMPTY · `diff --check` clean ·
+> re-anchor proof re-run (reviewed files byte-UNCHANGED).
+> **★ PIN 1 HELD — ZERO `bytes_eq` / `DecEq Bytes` MINTED.** Option matching is **byte-wise over
+> CC3's `ArgBytes`** (`bytes_at` + `uint8_to_int` + `eq_int`). **⇒ CC7 did NOT quietly settle
+> PAT'S OPEN DECISION inside a build WP.** That is now **THREE WPs IN A ROW** where the
+> constructibility audit kept a build from pre-empting the operator's TCB call. **The mechanism
+> is working.**
+> **★ PIN 2 HELD — `catalog/packages/Diagnostic/Render.ken.md` IS ITS OWN PACKAGE.** Not in
+> `Diagnostic.Core` (would destroy CC4's render-free property — landed ON PURPOSE so CC5 had
+> something to do) and not in `Pretty.Doc` (abstraction depending on its client = the cycle
+> Foundation caught in my CC3 frame). **CC8 will consume it.**
+> **★ AC6 — THE REAL TEST — VERIFIED BY THE ARCHITECT:** *"genuine specialization, not a second
+> universe: CC3's `Decoder` is genuinely DRIVEN (not declared-then-shadowed); result/error/render
+> carriers are the landed `Validation`/`Diagnostic`/`Doc`; only the CLI domain model is new."*
+> **"Declared-then-shadowed" is exactly the failure a green suite hides** — he checked the
+> mechanism, not the imports.
+> **★★ ON MERGE: MILESTONE C IS MET** — the operator's north star: *"a multi-file subcommand tool
+> with options, help, and diagnostics."* `ArgParse/Example.ken.md` is the worked tool.
+> **▶ AFTER: CC8** (env/config decoder — **the 2nd description-driven decoder = what finally
+> justifies extracting a shared `Schema`, AND NOT BEFORE**) → CC9. **Runtime: I-6 (S — the narrow
+> app-author gap) → I-7 (Env/Process, now owns the clock).**
 >
 > ### ⏭ 2026-07-14 (07:3x UTC) — ★ FINAL RESUME POINT · I-6 RE-SCOPED (clock → I-7)
 > **STATE: `origin/main @ 576d223f` · PROGRAM I COMPLETE (I-1…I-5) · CATALOG 6/9 (CC1–CC6a) ·
