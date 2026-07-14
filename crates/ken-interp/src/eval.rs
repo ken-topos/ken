@@ -2189,6 +2189,10 @@ pub enum Resolution<H> {
 pub trait HostHandler {
     type Handle: Clone + std::fmt::Debug;
 
+    /// Mints a cap rooted at the host's own resolved identity, bounded by the
+    /// declared authority. This is runner-only and never reachable from Ken.
+    fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap;
+
     fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead>;
     fn console_write(&mut self, stream: ConsoleStream, bytes: &[u8]) -> io::Result<()>;
     fn console_flush(&mut self, stream: ConsoleStream) -> io::Result<()>;
@@ -2518,6 +2522,10 @@ impl HostHandler for PosixHost {
     type Handle = std::sync::Arc<OwnedFd>;
     #[cfg(not(unix))]
     type Handle = u64;
+
+    fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap {
+        PosixHost::mint_fs_cap(self, authority)
+    }
 
     fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead> {
         if stream != ConsoleStream::Stdin {
@@ -3166,6 +3174,10 @@ impl CaptureHost {
 
 impl HostHandler for CaptureHost {
     type Handle = VfsNodeId;
+
+    fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap {
+        CaptureHost::mint_fs_cap(self, authority)
+    }
 
     fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead> {
         self.trace.push(ConsoleTrace::Read { stream, limit });

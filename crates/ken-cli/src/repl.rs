@@ -39,7 +39,7 @@ impl Session {
         // Shared with `run_file` (`crate::build_eval_store`) so a store field
         // wired in tests can't be forgotten in one production entry point but
         // not the other (VAL2 #7, CLI-string-wiring-fix).
-        let store = crate::build_eval_store(&env);
+        let store = ken_cli::build_eval_store(&env);
         Ok(Session {
             env,
             store,
