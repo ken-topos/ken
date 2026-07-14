@@ -136,6 +136,193 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > lands → **ONE combined SHA** → honesty gate → publish → **verify on main by CONTENT** →
 > §B retros → **I-4 ARC COMPLETE**.
 >
+> ### ⏭ 2026-07-14 (07:1x UTC) — CC6a QA-APPROVED · I-6 GROUNDED (the seam is ALREADY PUBLIC)
+> **✅ CC6a QA-APPROVED @ `0c3211c3`** (3 linear commits on `3c7d6ce5`) → **routed to Architect
+> terminal** (`evt_141jq2aw4angw`). Then my gate → publish.
+> **★ AC2 PASSED WITH REAL TEETH:** a **genuinely invalid UTF-8** argv value **`[ff fe 80 61]`**
+> round-trips **byte-identically** through replacement, projection, and positional lookup, with
+> a **production-fence scan** confirming **no `String`/decode/slice/opaque-Bytes traversal**.
+> ⇒ **argv is genuinely byte-preserving; there is no quiet `String` hop.** (That guarantee fails
+> SILENTLY — a decode passes every UTF-8 test and breaks only on real non-UTF-8 argv. Architect
+> is the last gate on it.)
+> **★ AC5 HELD: ZERO new cached-`Nat` carriers** — it CONSUMES CC3's landed
+> `ArgBytes`/`ArgLocation`. **The 4th hand-payment was avoided BY REUSE.** `Path.Posix`
+> correctly absent (held on Pat's decision). Certified lookup returns exactly `(2,3,5)`;
+> out-of-range → `None`. `trusted_base()` equal.
+> **✅ I-6 GROUNDING BACK (`evt_2ragnthb6w9v1`) — AND IT CONFIRMS I-6 IS NOT WHAT THE CONTRACT
+> SAYS.** **The injectable seam is ALREADY PUBLIC:** `ken_interp::HostHandler` is a **public,
+> non-test trait** with a public `Handle`, Console methods, `fs_resolve`, and handle-only
+> `fs_*_at` ops (`eval.rs:2189-2253`); **`run_io<H: HostHandler>` is the public injection
+> point** (`:4239-4247`); `lib.rs:9-15` re-exports `HostHandler`/`run_io`/`CaptureHost`/`Posix…`.
+> **⇒ I-5's step 0 ALREADY BUILT I-6's seam.** I-6 is **NOT** "build the injectable handler."
+> **▶ ASKED RUNTIME 3 SHARP QUESTIONS BEFORE FRAMING** (I will NOT frame from a stale contract
+> line item): (1) of virtual-FS / captured-streams / scripted-stdin / fixed-clock, **which are
+> genuinely MISSING?** (my read: FS ✅ I-5, streams ✅ I-2, stdin ?, clock ?). (2) **★ Does a
+> CLOCK EFFECT even exist? A fixed clock needs one, and clocks are I-7's — if none exists,
+> "fixed clock" is NOT I-6's to build.** (3) **Is there a real gap between "our tests can inject
+> a handler" and "an app author can write a deterministic test"? THAT gap IS I-6.** If none,
+> **I-6 honestly reduces to a documented public surface + a worked example.**
+> **⇒ TOLD THEM: "A WP that turns out mostly-done is GOOD NEWS, not a failure to justify."**
+> **Do NOT manufacture scope to fill a contract checkbox.**
+>
+> ### ⏭ 2026-07-14 (07:0x UTC) — CC6a KICKED · I-5 CLOSED · RUNTIME COMPACTED FOR I-6
+> **✅ I-5 CLOSED** — all retros in (Runtime ×3 + CV + **Architect**). **★ PROGRAM I COMPLETE.**
+> **✅ CC5 CLOSED.** **CATALOG 5/9.**
+> **✅ HANDOFF GATE COMPLETE — all 6 seats verified `Context compacted`** (foundation ×3 +
+> runtime ×3). foundation-qa needed the **Escape-then-`/compact`** wedged-seat procedure again.
+> **✅ CC6a KICKED (Foundation)** — `evt_2byrbh94yr56f`; frame `wp/cc6a-process-arguments-exit @
+> b6075945` (off `3c7d6ce5`). **`Path.Posix` HELD** on Pat's substrate decision.
+> **★ THE AUDITS MADE CC6a CHEAP — both pins verified against the tree:**
+> **(1) The ABI values are ALREADY LANDED**: `data ExitCode = Success | Failure UInt8` +
+> `data ProcessInput = MkProcessInput (List Bytes) (List (Prod Bytes Bytes)) Bytes` ⇒ CC6a adds
+> **NO new ABI type**; it builds pure values **over** them.
+> **(2) `Process.Arguments` CONSUMES CC3's LANDED `ArgBytes`/`ArgLocation`** — which **already
+> ARE** "raw argv bytes + index + byte range" ⇒ **ZERO new cached-`Nat` carriers** (AC5,
+> grep-able). **A 4th hand-payment is avoided *by reuse*, not by a workaround.**
+> **★ AC2 IS THE DISCRIMINATOR: argv must be BYTE-PRESERVING.** A **genuinely invalid UTF-8**
+> argv value must round-trip **byte-identically**. **A quiet `String` hop would pass every
+> UTF-8 test and silently break non-UTF-8 argv** — the exact "POSIX bytes, not `String`"
+> guarantee the work program pins. **A UTF-8-only test CANNOT catch it.** Architect told to
+> press exactly this.
+> **▶ RUNTIME IS COMPACTED AND IDLE — I-6 IS NEXT AND IT IS CHEAP.** I-6 = injectable host
+> handlers (virtual FS / captured streams / scripted stdin / fixed clock). **ITS SEAM IS
+> ALREADY BUILT — I-5's step 0 delivered the `HostHandler` resolve/operate ABI + the
+> inode-keyed VFS.** I-6 is now mostly *exposing* what exists. **Frame it with the pre-pin
+> audits; it needs no new substrate.** Then **I-7** (Env/Process — note `ProcessInput` already
+> carries the env as `List (Prod Bytes Bytes)`).
+> **▶▶ PAT'S BRIEF — ONE REAL DECISION + 3 NOTES (see the 06:5x block for the grounded
+> substrate decision).**
+>
+> ### ⏭ 2026-07-14 (06:5x UTC) — ★ THE SUBSTRATE DECISION IS NOW GROUNDED AND DECISION-READY
+> **✅ ARCHITECT GROUNDED IT (`evt_77qr668dyd4xc`) — and MY GREP WAS THE FALSE POSITIVE (my 4th
+> tonight):** the `bytes_*` destructors live in **`crates/ken-elaborator/src/bytes.rs::
+> register_safe_bytes_ops`**, NOT `prelude.rs`. **I grepped one file shallow.** CC2's frame and
+> my grep were both "right" — I just searched the wrong layer. **THIS IS EXACTLY WHY I REFUSED
+> TO ESCALATE A HALF-VERIFIED CLAIM TO PAT.**
+> **THE FACTS:**
+> - **Byte-preserving destructuring EXISTS**: `bytes_at : Bytes → Int → Option UInt8`,
+>   `bytes_slice`, + `uint8_to_int`/`eq_int` to test a byte against `/`. **No `String`
+>   crossing, non-lossy** ⇒ the **"POSIX bytes, not `String`" guardrail is INTACT.**
+> - **BUT there is NO `Int → Nat` ANYWHERE**, and `bytes_at`/`bytes_length` traffic in **opaque
+>   `Int`** ⇒ **you CANNOT write a terminating structural fold over a bare `Bytes`.** The only
+>   route that builds is the **cached-`Nat` carrier** (CC3 `ArgBytes` / CAT-5 `Source`).
+> - **⇒ CC6 `Path.Posix` is BUILDABLE with ZERO new primitives — but as the FOURTH hand-paid
+>   carrier.**
+> **★ MY RULING (`evt_3peran9189ps1`) — CC6 SPLITS. I honor Foundation's carry rather than
+> quietly overriding it:**
+> - **CC6a = `Process.Arguments` + `System.Exit` → PROCEEDS.** Neither splits a `Bytes` (argv
+>   threads as `List Bytes`; Exit is a policy layer over the **landed** `ExitCode = Success |
+>   Failure UInt8`). **No cached-`Nat` needed. This is the part CC7 (`ArgParse`) ACTUALLY
+>   DEPENDS ON.**
+> - **`System.Path.Posix` → HELD** on the operator decision. It is the ONLY piece needing the
+>   byte-split, and **CC7 does NOT need it** (argv tokenization ≠ path parsing) ⇒ **holding it
+>   costs the critical path NOTHING.**
+> **⇒ I will NOT build a 4th hand-paid carrier while Foundation's own promoted carry — which I
+> endorsed — says the 3rd must force the decision. And I will NOT stall a ring 4h over a
+> decision that blocks only one sub-package.**
+> **▶▶ PAT'S BRIEF — ITEM 1 IS NOW A GROUNDED DECISION, NOT A NOTE:**
+> **"Keep paying the cached-`Nat` tax per consumer — CAT-5 `Source`, CC3 `ArgBytes`, CC5's
+> avoided one, now CC6 `Path.Posix` — or land the bridge (`bytes_length : Bytes → Nat`, or a
+> certified `Int → Nat`) and let all four collapse?"** It is a **TCB question ⇒ HIS CALL.**
+> **Four named consumers. Zero build-WP workarounds smuggled in. CC6a does not wait on it.**
+> **★ THE SYMMETRY WORTH KEEPING:** the Architect **stopped one layer shallow on the SEAM**;
+> I **grepped one file shallow on the SUBSTRATE**. **Same failure, same night — both caught
+> because someone refused to take our word for it.**
+>
+> ### ⏭ 2026-07-14 (06:4x UTC) — CC5 CLOSED · ⚠ POSSIBLE SUBSTRATE WALL BLOCKING CC6
+> **✅ CC5 CLOSED** — merged `3c7d6ce5`, verified by content, **all 3 §10 retros IN** (impl
+> `evt_4za59mmzkaahr`, QA `evt_d0g26pz09bra`, leader `evt_3rqsmp0c21cpb`). **CATALOG 5/9.**
+> **✅ I-5 retros: Runtime ×3 + CV + Architect ALL IN** ⇒ **I-5 CLOSEABLE; PROGRAM I DONE.**
+> **⚠⚠ POSSIBLE SUBSTRATE WALL — BLOCKING THE CC6 FRAME. NOT ASSERTED; SENT TO ARCHITECT TO
+> VERIFY OR KILL (`evt_6kjx9t9ctapj6`).**
+> **THE QUESTION: can Ken destructure a raw `Bytes` value AT ALL?**
+> **Why it matters:** CC6 = `Process.Arguments` + `System.Exit` + **`Path.Posix`**; argv arrives
+> as **`List Bytes`** (the work program's explicit "POSIX bytes, not `String`" guardrail).
+> `Path.Posix` **must split on `/`** ⇒ must iterate a `Bytes` ⇒ needs an index/length in `Nat`
+> or a bridge to a destructible structure.
+> **What my grep showed** (prelude.rs @ main): the ONLY registered names matching
+> `bytes_*`/`string_to_list_char`/`list_char_to_string` were **`string_to_list_char` +
+> `list_char_to_string`** — **no `bytes_at`, no `bytes_decode`, no `bytes_length`.**
+> **BUT CC2's landed `Text.Codec` was FRAMED around `bytes_decode`/`bytes_at` and it MERGED.**
+> **⇒ BOTH CANNOT BE TRUE.** Either my read is wrong, or **CC2's surface is thinner than its
+> frame claimed.**
+> **★ I DID NOT ESCALATE THIS TO PAT.** I have had **THREE false-positive greps tonight** and a
+> half-verified substrate claim is exactly the kind of thing that wastes an operator decision.
+> **Architect grounds it; I frame CC6 around whatever is genuinely there.**
+> **IF the honest answer is "Ken can only do UTF-8-decodable path manipulation, not
+> byte-preserving":** that is a **REAL GAP in the "POSIX bytes, not String" guarantee**, it is
+> the **SAME `Bytes`/`String` → `Nat`-or-list bridge CC3 and CC5 both routed around**, and CC6
+> makes it the **THIRD consumer** ⇒ **Foundation's own carry says a third occurrence MUST force
+> the substrate decision.** **That goes to PAT as a decision, never into a build WP.**
+> **▶ ARCHITECT'S I-5 RETRO TRAP — ADOPTED INTO THE PLAYBOOK VERBATIM:** *"I grounded the axis I
+> was focused on… but I stopped one layer shallow."* Same failure as my constructibility audit
+> asking whether a primitive can PRODUCE a type while never asking whether the landed INTERFACE
+> can CARRY it ⇒ audit **(b′) SEAM/ABI**, with his tell: **a design that names ONE seam as
+> "already pre-cut" — check the seams it did NOT name.**
+> **▶ NEXT: Handoff-Gate Foundation → CC6 (BLOCKED on the grounding above) · Handoff-Gate
+> Runtime → I-6 (UNBLOCKED — its seam IS I-5's step 0) + I-7.**
+>
+> ### ⏭ 2026-07-14 (07:4x) — ✅ CC5 MERGED · CATALOG 5/9 · `origin/main @ 3c7d6ce5`
+> **✅ CC5 MERGED — `origin/main @ 3c7d6ce5`** (PR #627). **VERIFIED BY CONTENT:**
+> `Pretty/Doc.ken.md` present ✓ · **the 3 laws are `proof`s** (`preserves_text_tokens` /
+> `width_independent` / `fixed_point`) ✓ · `Text : List Char` ✓ · **0 `string_length`** ✓ ·
+> **no `Diagnostic` dependency** ✓.
+> **★ THE `List Char` PIN WAS THE WHOLE SUBSTRATE QUESTION, disguised as a typing detail.**
+> `String` is opaque with **no `string_length`** ⇒ a `String`-carrying `Doc` could neither
+> compute a width NOR have provable laws; the fix would have been a cached-`Nat` width = **the
+> THIRD occurrence**, which **Foundation's own CC3 carry says must go to PAT as a substrate
+> decision.** ⇒ **`List Char` bought provable laws AND did not spend the operator's decision.**
+> **A ring's carry shaped a Steward frame two WPs later** — the promotion ladder working.
+> **⚠⚠⚠ THIRD FALSE ALARM FROM MY OWN GATE — caught by verifying the guard, not the code.**
+> "`Diagnostic` dependency (must be 0): 1" → it was **PROSE**: the package's own disclaimer
+> *"it has no dependency on `Diagnostic`."* **Same class as the `Axiom`-in-prose and the
+> too-crude re-anchor regex.**
+> **★★ FOUR TIMES TODAY A NAME-MATCH NEARLY MADE ME BLOCK CORRECT WORK.** I demand structural
+> verification from every ring and keep nearly skipping it on my own gate. **STANDING RULE:
+> GREP THE EMISSION, NOT THE NAME — and WHEN A GUARD FIRES, VERIFY THE GUARD BEFORE ACTING ON
+> IT.** **A false-positive gate is NOT the "safe" failure**: it destroys correct work, burns a
+> ring's cycle, and trains rings to distrust the gate. Told Foundation explicitly: **if one of
+> my gates blocks you on something you believe is right, say so with tree anchors — you have
+> earned that standing.**
+> **▶ CC5 RETROS REQUESTED** (`evt_2bysmfrff19ry`). Merged ≠ closed. Asked: what unstuck the
+> **proof** (the recursive-eliminator flip — the computation was never the hard part)? And
+> **what made challenging a T1 Architect ruling feel like the expected move?** (The implementer
+> was RIGHT: the flipping arm was the non-recursive `Text` arm.)
+> **▶ NEXT: Handoff-Gate Foundation → CC6** (`Process.Arguments` + `System.Exit` +
+> `System.Path.Posix`) → **CC7 (`ArgParse`) = the MILESTONE-C EXIT CRITERION.**
+> **▶ CATALOG: CC1–CC5 ✅ (5/9). PROGRAM I: COMPLETE. Remaining: I-6 (cheap now — its seam IS
+> I-5's step 0) + I-7.**
+>
+> ### ⏭ 2026-07-14 (07:3x) — CC5 PUBLISHING (PR #627) · I-5 RETROS COMING IN
+> **✅ CC5 GATED CLEAN + PUBLISHING** — `wp/cc5-pretty-doc`, publish head **`371eeed5`**
+> (reviewed `40f29f57` + tracker-sync), PR **#627** open, conformance/path-guard/clean-room
+> GREEN, build+test running.
+> **★ AC2 HELD — THE LAWS ARE PROOFS, NOT SAMPLES:** `proof preserves_text_tokens` ·
+> `proof width_independent` · `proof fixed_point` — kernel-checked in the package's own fences,
+> not Rust tests comparing two rendered strings. **The `List Char` pin held** (`Text : List Char
+> → Doc`; **zero `string_length`**) ⇒ **no 3rd cached-`Nat` carrier, no manufactured TCB
+> question.** Non-degenerate fit-flip verified (flat @ w=5,6 · **broken @ w=4** · byte-identical
+> repeat).
+> **⚠⚠ TWO FALSE ALARMS FROM MY OWN GATE — BOTH NEARLY BLOCKED A CORRECT WP. RECORD BOTH.**
+> **(1) "1 `Axiom` in CC5's fences"** (AC6 forbids any) — it was **PROSE**: a *disclaimer* line
+> reading *"The package adds no primitive, postulate, `Axiom`, or trusted-base entry."* **A
+> name-match, not a mint.**
+> **(2) "⚠ REVIEWED FILE CHANGED"** on the re-anchor proof — **my own exclusion regex was too
+> crude** (excluded `crates/ken-elaborator/src/` but NOT `crates/ken-elaborator/tests/`), so
+> **I-5's `sec2_acceptance.rs`, arriving FROM MAIN, tripped it.** Verified file-by-file:
+> **all three of CC5's OWN reviewed files are byte-UNCHANGED** ✓.
+> **★ THIS IS THE THIRD+FOURTH TIME TODAY A NAME-MATCH NEARLY MADE ME BLOCK CORRECT WORK**
+> (CC4's `data NumericErrorKind` ~ `data NumericError` was the first pair). **GREP THE EMISSION,
+> NOT THE NAME — and when a guard fires, VERIFY THE GUARD BEFORE ACTING ON IT.** I enforce
+> structural verification on every ring's work and keep nearly skipping it on my own gate. **A
+> false-positive gate is not "safe" — it destroys correct work and trains rings to distrust the
+> gate.**
+> **▶ PUBLISHER NOTE (2nd occurrence): the task's log ended early while PR #627 was OPEN and CI
+> RUNNING.** Same as the Sec2 erratum. **A dead publisher task ≠ a dead PR — check `gh pr list`,
+> never the task file.** Re-ran the publisher (idempotent).
+> **▶ I-5 RETROS ARRIVING** — CV posted; runtime-leader recording CV's carry (*"require
+> observable [denial]"*). Merged ≠ closed.
+>
 > ### ⏭ 2026-07-14 (07:2x) — ★★★★★ PROGRAM I IS COMPLETE · `origin/main @ f2450fcc`
 > **✅✅✅ I-5 MERGED — `origin/main @ f2450fcc`** (PR #626, CI green). **★ PROGRAM I COMPLETE:
 > I-1 ✅ I-2 ✅ I-3 ✅ I-4 ✅ I-5 ✅.**
