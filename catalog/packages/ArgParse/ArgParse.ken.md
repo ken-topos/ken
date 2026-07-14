@@ -97,9 +97,9 @@ fn program_commands (spec : ProgramSpec) : List CommandSpec =
 
 ## 2. Decoder-backed byte matching
 
-Expected names come from the explicit spec. The actual side stays `ArgBytes`:
-the decoder walks `arg_cursor_ops`, `bytes_at` supplies each byte, and equality
-is `uint8_to_int` followed by `eq_int`.
+Expected names come from the explicit spec. The actual side stays raw `Bytes`:
+the decoder walks `arg_cursor_ops`, the structural list view supplies each byte,
+and equality is `uint8_to_int` followed by `eq_int`.
 
 ```ken
 fn argparse_byte_matches_char (actual : UInt8) (expected : Char) : Bool =
@@ -122,10 +122,10 @@ fn argparse_name_decoder (expected : List Char) : Decoder ArgCursor ArgLocation 
       (λignored. argparse_name_decoder rest)
   }
 
-fn argparse_single_cursor (argument : ArgBytes) : ArgCursor =
-  arg_cursor_start (Cons ArgBytes argument (Nil ArgBytes))
+fn argparse_single_cursor (argument : Bytes) : ArgCursor =
+  arg_cursor_start (Cons Bytes argument (Nil Bytes))
 
-fn argparse_matches_chars (argument : ArgBytes) (expected : List Char) : Bool =
+fn argparse_matches_chars (argument : Bytes) (expected : List Char) : Bool =
   match argparse_name_decoder expected (argparse_single_cursor argument) {
     DecoderFailed err ↦ False;
     Decoded matched rest ↦
@@ -135,7 +135,7 @@ fn argparse_matches_chars (argument : ArgBytes) (expected : List Char) : Bool =
       }
   }
 
-fn argparse_has_prefix_chars (argument : ArgBytes) (expected : List Char) : Bool =
+fn argparse_has_prefix_chars (argument : Bytes) (expected : List Char) : Bool =
   match argparse_name_decoder expected (argparse_single_cursor argument) {
     DecoderFailed err ↦ False;
     Decoded matched rest ↦ True
@@ -147,7 +147,7 @@ fn argparse_long_chars (name : String) : List Char =
 fn argparse_short_chars (name : String) : List Char =
   list_append Char (string_to_list_char "-") (string_to_list_char name)
 
-fn argparse_option_matches (argument : ArgBytes) (spec : OptionSpec) : Bool =
+fn argparse_option_matches (argument : Bytes) (spec : OptionSpec) : Bool =
   match argparse_matches_chars argument (argparse_long_chars (option_name spec)) {
     True ↦ True;
     False ↦
@@ -157,7 +157,7 @@ fn argparse_option_matches (argument : ArgBytes) (spec : OptionSpec) : Bool =
       }
   }
 
-fn argparse_find_option (argument : ArgBytes) (specs : List OptionSpec) : Option OptionSpec =
+fn argparse_find_option (argument : Bytes) (specs : List OptionSpec) : Option OptionSpec =
   match specs {
     Nil ↦ None OptionSpec;
     Cons spec rest ↦
@@ -167,7 +167,7 @@ fn argparse_find_option (argument : ArgBytes) (specs : List OptionSpec) : Option
       }
   }
 
-fn argparse_find_command (argument : ArgBytes) (specs : List CommandSpec) : Option CommandSpec =
+fn argparse_find_command (argument : Bytes) (specs : List CommandSpec) : Option CommandSpec =
   match specs {
     Nil ↦ None CommandSpec;
     Cons spec rest ↦
@@ -235,7 +235,7 @@ fn argparse_missing_positionals
 fn argparse_parse_tokens
       (options : List OptionSpec)
       (positionals : List PositionalSpec)
-      (arguments : List ArgBytes)
+      (arguments : List Bytes)
       (index : Nat)
     : Validation (NonEmpty Diagnostic) (List ParsedArgument) =
   match arguments {
@@ -258,7 +258,7 @@ fn argparse_parse_tokens
                     "missing-option-value")
                   (argparse_missing_positionals positionals (Suc index));
                 Cons value more ↦ argparse_cons_validations
-                  (argparse_valid_argument (ParsedOption (option_name spec) (arg_bytes value)))
+                  (argparse_valid_argument (ParsedOption (option_name spec) value))
                   (argparse_parse_tokens options positionals more (Suc (Suc index)))
               };
           };
@@ -284,7 +284,7 @@ fn argparse_parse_tokens
                   (argparse_parse_tokens options positionals rest (Suc index));
                 Cons positional more ↦ argparse_cons_validations
                   (argparse_valid_argument
-                    (ParsedPositional (positional_name positional) (arg_bytes argument)))
+                    (ParsedPositional (positional_name positional) argument))
                   (argparse_parse_tokens options more rest (Suc index))
               }
           }
@@ -302,7 +302,7 @@ fn argparse_parsed_command
     parsed)
 
 fn argparse_run
-      (specification : ProgramSpec) (arguments : List ArgBytes)
+      (specification : ProgramSpec) (arguments : List Bytes)
     : Validation (NonEmpty Diagnostic) ParsedCommand =
   match arguments {
     Nil ↦ argparse_error ParsedCommand Zero Zero Zero "missing-subcommand";
@@ -456,4 +456,4 @@ fn program_help (spec : ProgramSpec) : Doc =
 All declarations are transparent structural terms over CC1–CC6a. The package
 adds no parser carrier, error carrier, renderer, cached-length carrier, byte
 equality primitive, postulate, `Axiom`, or trusted-base entry. Raw argv values
-cross the parser only as `Bytes` obtained from the existing `ArgBytes` carrier.
+cross the parser directly as `Bytes`; lengths and elements are structural.

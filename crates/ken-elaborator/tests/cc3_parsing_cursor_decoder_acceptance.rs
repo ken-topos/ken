@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::{ElabEnv, NumericLitVal};
-use ken_interp::eval::{eval, EvalStore, EvalVal};
+use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
 const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
@@ -63,6 +63,10 @@ fn make_store(env: &ElabEnv) -> EvalStore {
             .num_values
             .insert(*id, lit_to_eval(value, mkdecimalpair_id));
     }
+    store.list_char_ids = Some(ListCharIds {
+        nil_id: env.prelude_env.nil_id,
+        cons_id: env.prelude_env.cons_id,
+    });
     store
 }
 
@@ -102,14 +106,6 @@ fn list_count(env: &ElabEnv, value: &EvalVal) -> u64 {
     }
 }
 
-fn nat_expr(n: usize) -> String {
-    let mut result = "Zero".to_string();
-    for _ in 0..n {
-        result = format!("Suc ({result})");
-    }
-    result
-}
-
 fn neutralize_fixture_proofs(env: &ElabEnv, store: &mut EvalStore, names: &[&str]) {
     for name in names {
         let id = env
@@ -133,7 +129,7 @@ fn ordered_dependency_closure_elaborates_cursor_then_decoder() {
             "cursor_peek",
             "cursor_advance",
             "cursor_locate",
-            "arg_length::valid",
+            "arg_length",
             "arg_cursor_remaining",
             "arg_cursor_peek",
             "arg_cursor_advance",
@@ -208,6 +204,33 @@ fn cc3_checked_code_has_zero_axiom_and_zero_trusted_base_delta() {
             !extracted.source.contains("Axiom"),
             "{name}'s checked code must contain no Axiom"
         );
+        if name != "Decoder.ken.md" {
+            let emitted_names: BTreeSet<_> = extracted
+                .source
+                .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+                .filter(|token| !token.is_empty())
+                .collect();
+            for forbidden in ["bytes_length", "bytes_slice", "bytes_at"] {
+                assert!(
+                    !emitted_names.contains(forbidden),
+                    "{name}'s structural consumer path must not name `{forbidden}`"
+                );
+            }
+        }
+    }
+
+    let cursor = ken_elaborator::literate::extract_ken_md(CURSOR_KEN_MD)
+        .expect("Cursor source must extract");
+    for forbidden in [
+        "ArgByteLength",
+        "ArgBytes",
+        "arg_length_field",
+        "arg_length_valid_field",
+    ] {
+        assert!(
+            !cursor.source.contains(forbidden),
+            "Cursor emission must retire `{forbidden}`"
+        );
     }
 
     let mut env = dependency_env();
@@ -236,24 +259,11 @@ fn repetition_progress_and_arg_locations_are_discriminating() {
 fn repetition_progress_and_arg_locations_impl() {
     let mut env = full_env();
     let long_len = 96;
-    let long_nat = nat_expr(long_len);
     let long_bytes = "x".repeat(long_len);
     env.elaborate_file(&format!(
         r#"
-        data LongArg = MkLongArg
-        data ArgZero = MkArgZero
-        data ArgOne = MkArgOne
-        data ArgTwo = MkArgTwo
-
         const long_arg_bytes : Bytes = bytes_encode "{long_bytes}"
-        lemma long_arg_length_valid : ArgByteLength long_arg_bytes ({long_nat}) = Axiom
-        instance ArgBytes LongArg {{
-          arg_bytes_field = long_arg_bytes ;
-          arg_length_field = ({long_nat}) ;
-          arg_length_valid_field = long_arg_length_valid
-        }}
-        const long_arg : ArgBytes = ArgBytes_instance_LongArg
-        const long_args : List ArgBytes = Cons ArgBytes long_arg (Nil ArgBytes)
+        const long_args : List Bytes = Cons Bytes long_arg_bytes (Nil Bytes)
         const long_start : ArgCursor = arg_cursor_start long_args
 
         fn arg_code_decoder (code : Int) : Decoder ArgCursor ArgLocation UInt8 =
@@ -282,38 +292,16 @@ fn repetition_progress_and_arg_locations_impl() {
           zero_progress_many long_start
 
         const arg_zero_bytes : Bytes = bytes_encode "a"
-        lemma arg_zero_length_valid : ArgByteLength arg_zero_bytes (Suc Zero) = Axiom
-        instance ArgBytes ArgZero {{
-          arg_bytes_field = arg_zero_bytes ;
-          arg_length_field = Suc Zero ;
-          arg_length_valid_field = arg_zero_length_valid
-        }}
-
         const arg_one_bytes : Bytes = bytes_encode "bb"
-        lemma arg_one_length_valid : ArgByteLength arg_one_bytes (Suc (Suc Zero)) = Axiom
-        instance ArgBytes ArgOne {{
-          arg_bytes_field = arg_one_bytes ;
-          arg_length_field = Suc (Suc Zero) ;
-          arg_length_valid_field = arg_one_length_valid
-        }}
-
         const arg_two_bytes : Bytes = bytes_encode "cccX"
-        lemma arg_two_length_valid
-          : ArgByteLength arg_two_bytes (Suc (Suc (Suc (Suc Zero)))) = Axiom
-        instance ArgBytes ArgTwo {{
-          arg_bytes_field = arg_two_bytes ;
-          arg_length_field = Suc (Suc (Suc (Suc Zero))) ;
-          arg_length_valid_field = arg_two_length_valid
-        }}
-
-        const multi_args : List ArgBytes =
+        const multi_args : List Bytes =
           Cons
-            ArgBytes
-            ArgBytes_instance_ArgZero
+            Bytes
+            arg_zero_bytes
             (Cons
-              ArgBytes
-              ArgBytes_instance_ArgOne
-              (Cons ArgBytes ArgBytes_instance_ArgTwo (Nil ArgBytes)))
+              Bytes
+              arg_one_bytes
+              (Cons Bytes arg_two_bytes (Nil Bytes)))
 
         const location_probe : Decoder ArgCursor ArgLocation UInt8 =
           decoder_seq
@@ -361,17 +349,7 @@ fn repetition_progress_and_arg_locations_impl() {
     .expect("CC3 progress and ArgCursor fixtures must elaborate");
 
     let mut store = make_store(&env);
-    neutralize_fixture_proofs(
-        &env,
-        &mut store,
-        &[
-            "record_nil_val",
-            "long_arg_length_valid",
-            "arg_zero_length_valid",
-            "arg_one_length_valid",
-            "arg_two_length_valid",
-        ],
-    );
+    neutralize_fixture_proofs(&env, &mut store, &["record_nil_val"]);
 
     let long_result = eval_global(&env, &mut store, "long_many_result");
     let long_args = ctor_args(&env, &long_result, "Decoded");

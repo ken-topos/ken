@@ -38,14 +38,11 @@ one concrete parser: a fully parenthesized Boolean-expression grammar.
 ## 2. Definition
 
 `SourceId` comes from the lower `Diagnostic.Core` package. `Source` is a
-checked record carrying artifact identity, the original
-`Bytes`, UTF-8 evidence, a `Nat` byte length, a non-empty byte-atomic
-length-unit witness for converting that `Nat` count to an `Int` offset, and
-a proof that the converted recorded length is the byte length of the
-source's own bytes. `String` is deliberately not the offset basis anywhere
-in this package — every length and position is a `Bytes`/`Int` quantity,
-sidestepping UTF-8 boundary bugs entirely; `IsUtf8` is a proof the bytes
-*happen* to decode losslessly, not a requirement they must.
+checked record carrying artifact identity, the original `Bytes`, and UTF-8
+evidence. Lengths and positions are structural `Nat` quantities computed from
+the total `List UInt8` view. `String` is deliberately not the offset basis;
+`IsUtf8` is a proof the bytes *happen* to decode losslessly, not a requirement
+they must.
 
 ```ken
 fn IsUtf8 (bs : Bytes) : Prop =
@@ -54,75 +51,25 @@ fn IsUtf8 (bs : Bytes) : Prop =
     Ok text ↦ Equal Bytes (bytes_encode text) bs
   }
 
-fn byte_unit_zero_int (unit : Bytes) : Int = bytes_length unit - bytes_length unit
-
-fn byte_unit_nat_to_int (unit : Bytes) (n : Nat) : Int =
-  match n {
-    Zero ↦ byte_unit_zero_int unit;
-    Suc n2 ↦ bytes_length unit + byte_unit_nat_to_int unit n2
-  }
-
-fn EmptyBytes (bs : Bytes) : Prop =
-  Equal
-    (Option Bytes)
-    (Some Bytes bs)
-    (bytes_slice bs (bytes_length bs) (byte_unit_zero_int bs))
-
-fn NonEmptyBytes (bs : Bytes) : Prop = EmptyBytes bs → Bottom
-
-fn UnitByteLength (unit : Bytes) : Prop =
-  And
-    (NonEmptyBytes unit)
-    ((left : Bytes)
-      → (right : Bytes)
-      → Equal
-      Bytes
-      unit
-      (bytes_concat left right)
-      → NonEmptyBytes
-      left
-      → EmptyBytes
-      right)
-
-fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =
-  Equal Int (bytes_length bs) (byte_unit_nat_to_int unit n)
-
 class Source {
   source_id_field : SourceId;
   source_bytes_field : Bytes;
-  source_length_field : Nat;
-  source_length_unit_field : Bytes;
-  source_length_unit_valid_field : UnitByteLength source_length_unit_field;
-  source_utf8_field : IsUtf8 source_bytes_field;
-  source_length_valid_field :
-    SourceLength source_length_unit_field source_bytes_field source_length_field
+  source_utf8_field : IsUtf8 source_bytes_field
 }
 
 fn source_id (s : Source) : SourceId = s.source_id_field
 
 fn source_bytes (s : Source) : Bytes = s.source_bytes_field
 
-fn source_length (s : Source) : Nat = s.source_length_field
+fn source_length (s : Source) : Nat = bytes_nat_length s.source_bytes_field
 
 proof utf8 for source_bytes (s : Source) : IsUtf8 (source_bytes s) = s.source_utf8_field
-
-fn source_length_unit (s : Source) : Bytes = s.source_length_unit_field
-
-proof valid for source_length_unit (s : Source) : UnitByteLength (source_length_unit s) =
-  s.source_length_unit_valid_field
-
-lemma source_length_valid
-      (s : Source)
-    : SourceLength (source_length_unit s) (source_bytes s) (source_length s) =
-  s.source_length_valid_field
 ```
 
 ## 3. Using it
 
-A caller builds a `Source` once per artifact (supplying its own
-`source_length_unit`, `source_length_unit::valid`, `source_bytes::utf8`, and
-`source_length_valid` evidence — this package states the record shape, not a
-constructor helper, so every field is honest at the call site), then drives
+A caller builds a `Source` once per artifact (supplying its artifact identity,
+bytes, and `source_bytes::utf8` evidence; length is computed), then drives
 `§4.3`'s `parse_bool_expr : Parser (Syntax BoolExpr)` over it. `format_bool_expr`
 is the single-call entry point: it parses a `Source` end to end and, on
 success, prints the erased (span-free) tree back out — the worked round
@@ -201,11 +148,7 @@ fn byte_cursor_remaining (cur : ByteCursor) : Nat =
   cursor_nat_sub (source_length (byte_cursor_source cur)) (byte_cursor_position cur)
 
 fn byte_cursor_peek (cur : ByteCursor) : Option UInt8 =
-  bytes_at
-    (source_bytes (byte_cursor_source cur))
-    (byte_unit_nat_to_int
-      (source_length_unit (byte_cursor_source cur))
-      (byte_cursor_position cur))
+  nth UInt8 (byte_cursor_position cur) (bytes_to_list (source_bytes (byte_cursor_source cur)))
 
 fn byte_cursor_advance (cur : ByteCursor) : ByteCursor =
   MkByteCursor (byte_cursor_source cur) (Suc (byte_cursor_position cur))
@@ -845,10 +788,8 @@ reference implementation.
 
 ## 7. Trust  derivation
 
-1. **Public API.** `Source`, `IsUtf8`, `EmptyBytes`,
-   `NonEmptyBytes`, `UnitByteLength`, `SourceLength`, `source_id`,
-   `source_bytes`, `source_bytes::utf8`, `source_length`, `source_length_unit`,
-   `source_length_unit::valid`, `source_length_valid`, `Span`, `span_start`,
+1. **Public API.** `Source`, `IsUtf8`, `source_id`, `source_bytes`,
+   `source_bytes::utf8`, `source_length`, `Span`, `span_start`,
    `span_end`, `span_to_byte_range`, `span_origin`, `ByteCursor`,
    `byte_cursor_ops`, `LessEqNat`, `ValidSpan`,
    `Located`, `located_source`,

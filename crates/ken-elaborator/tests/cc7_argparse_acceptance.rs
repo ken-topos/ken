@@ -1,7 +1,6 @@
 //! CC7 (`ArgParse`) ordered shared-environment acceptance.
 
 use std::collections::BTreeSet;
-use std::rc::Rc;
 
 use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{apply, eval, EvalStore, EvalVal, ListCharIds};
@@ -203,136 +202,21 @@ fn list_char_text(env: &ElabEnv, value: &EvalVal) -> String {
         .collect()
 }
 
-fn replace_first_bytes(value: EvalVal, bytes: &[u8]) -> (EvalVal, bool) {
-    match value {
-        EvalVal::Bytes(_) => (EvalVal::Bytes(bytes.to_vec()), true),
-        EvalVal::Ctor { id, args, slot } => {
-            let mut replaced = false;
-            let mut new_args = Vec::with_capacity(args.len());
-            for argument in args.iter().cloned() {
-                if replaced {
-                    new_args.push(argument);
-                } else {
-                    let (next, did_replace) = replace_first_bytes(argument, bytes);
-                    replaced = did_replace;
-                    new_args.push(next);
-                }
-            }
-            (
-                EvalVal::Ctor {
-                    id,
-                    args: Rc::new(new_args),
-                    slot,
-                },
-                replaced,
-            )
-        }
-        EvalVal::Pair { fst, snd, slot } => {
-            let (next_fst, replaced_fst) = replace_first_bytes((*fst).clone(), bytes);
-            let (next_snd, replaced_snd) = if replaced_fst {
-                ((*snd).clone(), false)
-            } else {
-                replace_first_bytes((*snd).clone(), bytes)
-            };
-            (
-                EvalVal::Pair {
-                    fst: Rc::new(next_fst),
-                    snd: Rc::new(next_snd),
-                    slot,
-                },
-                replaced_fst || replaced_snd,
-            )
-        }
-        other => (other, false),
-    }
-}
-
 fn add_argument_fixtures(env: &mut ElabEnv) {
     env.elaborate_file(
         r#"
-        data CC7Build = MkCC7Build
         const cc7_build_bytes : Bytes = bytes_encode "build"
-        lemma cc7_build_length : ArgByteLength cc7_build_bytes (Suc (Suc (Suc (Suc (Suc Zero))))) = Axiom
-        instance ArgBytes CC7Build {
-          arg_bytes_field = cc7_build_bytes;
-          arg_length_field = Suc (Suc (Suc (Suc (Suc Zero))));
-          arg_length_valid_field = cc7_build_length
-        }
-
-        data CC7Inspect = MkCC7Inspect
         const cc7_inspect_bytes : Bytes = bytes_encode "inspect"
-        lemma cc7_inspect_length : ArgByteLength cc7_inspect_bytes (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))) = Axiom
-        instance ArgBytes CC7Inspect {
-          arg_bytes_field = cc7_inspect_bytes;
-          arg_length_field = Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))));
-          arg_length_valid_field = cc7_inspect_length
-        }
-
-        data CC7Verbose = MkCC7Verbose
         const cc7_verbose_bytes : Bytes = bytes_encode "--verbose"
-        lemma cc7_verbose_length : ArgByteLength cc7_verbose_bytes (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))))) = Axiom
-        instance ArgBytes CC7Verbose {
-          arg_bytes_field = cc7_verbose_bytes;
-          arg_length_field = Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))));
-          arg_length_valid_field = cc7_verbose_length
-        }
-
-        data CC7Output = MkCC7Output
         const cc7_output_bytes : Bytes = bytes_encode "--output"
-        lemma cc7_output_length : ArgByteLength cc7_output_bytes (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero)))))))) = Axiom
-        instance ArgBytes CC7Output {
-          arg_bytes_field = cc7_output_bytes;
-          arg_length_field = Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero)))))));
-          arg_length_valid_field = cc7_output_length
-        }
-
-        data CC7OutputValue = MkCC7OutputValue
         const cc7_output_value_bytes : Bytes = bytes_encode "out.bin"
-        lemma cc7_output_value_length : ArgByteLength cc7_output_value_bytes (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))) = Axiom
-        instance ArgBytes CC7OutputValue {
-          arg_bytes_field = cc7_output_value_bytes;
-          arg_length_field = Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))));
-          arg_length_valid_field = cc7_output_value_length
-        }
-
-        data CC7Input = MkCC7Input
         const cc7_input_bytes : Bytes = bytes_encode "input.ken"
-        lemma cc7_input_length : ArgByteLength cc7_input_bytes (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))))) = Axiom
-        instance ArgBytes CC7Input {
-          arg_bytes_field = cc7_input_bytes;
-          arg_length_field = Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))));
-          arg_length_valid_field = cc7_input_length
-        }
-
-        data CC7Bogus = MkCC7Bogus
         const cc7_bogus_bytes : Bytes = bytes_encode "--bogus"
-        lemma cc7_bogus_length : ArgByteLength cc7_bogus_bytes (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))) = Axiom
-        instance ArgBytes CC7Bogus {
-          arg_bytes_field = cc7_bogus_bytes;
-          arg_length_field = Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))));
-          arg_length_valid_field = cc7_bogus_length
-        }
-
-        data CC7Wrong = MkCC7Wrong
         const cc7_wrong_bytes : Bytes = bytes_encode "--wrong"
-        lemma cc7_wrong_length : ArgByteLength cc7_wrong_bytes (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))))) = Axiom
-        instance ArgBytes CC7Wrong {
-          arg_bytes_field = cc7_wrong_bytes;
-          arg_length_field = Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero))))));
-          arg_length_valid_field = cc7_wrong_length
-        }
-
-        data CC7Invalid = MkCC7Invalid
         const cc7_invalid_seed_bytes : Bytes = bytes_encode "wxyz"
-        lemma cc7_invalid_length : ArgByteLength cc7_invalid_seed_bytes (Suc (Suc (Suc (Suc Zero)))) = Axiom
-        instance ArgBytes CC7Invalid {
-          arg_bytes_field = cc7_invalid_seed_bytes;
-          arg_length_field = Suc (Suc (Suc (Suc Zero)));
-          arg_length_valid_field = cc7_invalid_length
-        }
         "#,
     )
-    .expect("certified ArgBytes fixtures must elaborate at the package boundary");
+    .expect("raw Bytes fixtures must elaborate at the package boundary");
 }
 
 fn fixture(env: &ElabEnv, store: &mut EvalStore, name: &str) -> EvalVal {
@@ -340,20 +224,9 @@ fn fixture(env: &ElabEnv, store: &mut EvalStore, name: &str) -> EvalVal {
 }
 
 fn neutralize_fixture_proofs(env: &ElabEnv, store: &mut EvalStore) {
-    for name in [
-        "record_nil_val",
-        "cc7_build_length",
-        "cc7_inspect_length",
-        "cc7_verbose_length",
-        "cc7_output_length",
-        "cc7_output_value_length",
-        "cc7_input_length",
-        "cc7_bogus_length",
-        "cc7_wrong_length",
-        "cc7_invalid_length",
-    ] {
-        store.num_values.insert(env.globals[name], EvalVal::Neutral);
-    }
+    store
+        .num_values
+        .insert(env.globals["record_nil_val"], EvalVal::Neutral);
 }
 
 fn parsed_arguments<'a>(env: &ElabEnv, result: &'a EvalVal) -> Vec<&'a EvalVal> {
@@ -419,11 +292,11 @@ fn forge_parses_flags_raw_values_and_positionals_and_renders_derived_help() {
     let mut store = make_store(&env);
     neutralize_fixture_proofs(&env, &mut store);
     let arguments = [
-        "ArgBytes_instance_CC7Build",
-        "ArgBytes_instance_CC7Verbose",
-        "ArgBytes_instance_CC7Output",
-        "ArgBytes_instance_CC7OutputValue",
-        "ArgBytes_instance_CC7Input",
+        "cc7_build_bytes",
+        "cc7_verbose_bytes",
+        "cc7_output_bytes",
+        "cc7_output_value_bytes",
+        "cc7_input_bytes",
     ]
     .into_iter()
     .map(|name| fixture(&env, &mut store, name))
@@ -441,8 +314,8 @@ fn forge_parses_flags_raw_values_and_positionals_and_renders_derived_help() {
         Some(&EvalVal::Bytes(b"input.ken".to_vec()))
     );
 
-    let inspect = fixture(&env, &mut store, "ArgBytes_instance_CC7Inspect");
-    let inspect_input = fixture(&env, &mut store, "ArgBytes_instance_CC7Input");
+    let inspect = fixture(&env, &mut store, "cc7_inspect_bytes");
+    let inspect_input = fixture(&env, &mut store, "cc7_input_bytes");
     let inspect_arguments = list_value(&env, &mut store, vec![inspect, inspect_input]);
     let inspect_parsed = call_global(&env, &mut store, "forge_parse", [inspect_arguments]);
     let inspect_command = ctor_args(
@@ -476,10 +349,10 @@ fn two_independent_bad_arguments_accumulate_exact_nonzero_locations() {
     let mut store = make_store(&env);
     neutralize_fixture_proofs(&env, &mut store);
     let arguments = [
-        "ArgBytes_instance_CC7Build",
-        "ArgBytes_instance_CC7Bogus",
-        "ArgBytes_instance_CC7Input",
-        "ArgBytes_instance_CC7Wrong",
+        "cc7_build_bytes",
+        "cc7_bogus_bytes",
+        "cc7_input_bytes",
+        "cc7_wrong_bytes",
     ]
     .into_iter()
     .map(|name| fixture(&env, &mut store, name))
@@ -511,17 +384,12 @@ fn invalid_utf8_option_value_survives_byte_identically() {
     let mut store = make_store(&env);
     neutralize_fixture_proofs(&env, &mut store);
     let invalid = vec![0xff, 0xfe, 0x80, 0x61];
-    let seed = fixture(&env, &mut store, "ArgBytes_instance_CC7Invalid");
-    let (invalid_argument, replaced) = replace_first_bytes(seed.clone(), &invalid);
-    assert!(
-        replaced,
-        "fixture dictionary must expose its raw Bytes field, got {seed:?}"
-    );
+    let invalid_argument = EvalVal::Bytes(invalid.clone());
     let values = vec![
-        fixture(&env, &mut store, "ArgBytes_instance_CC7Build"),
-        fixture(&env, &mut store, "ArgBytes_instance_CC7Output"),
+        fixture(&env, &mut store, "cc7_build_bytes"),
+        fixture(&env, &mut store, "cc7_output_bytes"),
         invalid_argument,
-        fixture(&env, &mut store, "ArgBytes_instance_CC7Input"),
+        fixture(&env, &mut store, "cc7_input_bytes"),
     ];
     let arguments = list_value(&env, &mut store, values);
     let parsed = call_global(&env, &mut store, "forge_parse", [arguments]);
@@ -577,14 +445,32 @@ fn cc7_is_a_zero_trust_specialization_with_no_second_universe() {
         assert!(!extracted.source.contains("DecEq Bytes"));
         assert!(!extracted.source.contains("bytes_decode"));
         assert!(!extracted.source.contains("class ArgBytes"));
+        assert!(!extracted.source.contains("ArgByteLength"));
         assert!(!extracted.source.contains("data ArgCursor"));
         assert!(!extracted.source.contains("data DecoderError"));
+        let emitted_names: BTreeSet<_> = extracted
+            .source
+            .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+            .filter(|token| !token.is_empty())
+            .collect();
+        for forbidden in ["bytes_length", "bytes_slice", "bytes_at"] {
+            assert!(
+                !emitted_names.contains(forbidden),
+                "CC7 structural consumer path must not name `{forbidden}`"
+            );
+        }
     }
     let after: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(before, after, "CC7 must add zero trusted-base entries");
 
     let argparse =
         ken_elaborator::literate::extract_ken_md(ARGPARSE_KEN_MD).expect("ArgParse must extract");
+    assert!(
+        argparse.source.contains(
+            "fn argparse_byte_matches_char (actual : UInt8) (expected : Char) : Bool =\n  eq_int (uint8_to_int actual) (charToInt expected)"
+        ),
+        "SUB-2 must leave the byte-comparison path unchanged"
+    );
     for required in [
         "Decoder ArgCursor ArgLocation",
         "arg_cursor_ops",

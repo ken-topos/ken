@@ -38,24 +38,22 @@ fn process_argument_at (index : Nat) (input : ProcessInput) : Option Bytes =
   nth Bytes index (process_arguments input)
 ```
 
-## 2. Certified arguments and locations
+## 2. Arguments and locations
 
-Parsing consumes CC3's existing `ArgBytes` dictionaries. Positional lookup
-therefore exposes the same raw bytes and cached length already used by
-`arg_cursor_ops`; this package introduces no second byte-length carrier.
+Parsing consumes raw argument `Bytes`. Positional lookup exposes those bytes
+directly, and bounds are checked against their structural `Nat` length.
 
 `argument_slice_location` accepts only a range whose argument exists, whose
-start does not exceed its end, and whose end does not exceed the certified byte
+start does not exceed its end, and whose end does not exceed the computed byte
 length. The resulting location is CC3's existing `ArgLocation`.
 
 ```ken
-fn argument_at (index : Nat) (arguments : List ArgBytes) : Option ArgBytes =
-  nth ArgBytes index arguments
+fn argument_at (index : Nat) (arguments : List Bytes) : Option Bytes = nth Bytes index arguments
 
-fn argument_bytes_at (index : Nat) (arguments : List ArgBytes) : Option Bytes =
+fn argument_bytes_at (index : Nat) (arguments : List Bytes) : Option Bytes =
   match argument_at index arguments {
     None ↦ None Bytes;
-    Some argument ↦ Some Bytes (arg_bytes argument)
+    Some argument ↦ Some Bytes argument
   }
 
 fn argument_nat_leq (left : Nat) (right : Nat) : Bool =
@@ -69,7 +67,7 @@ fn argument_nat_leq (left : Nat) (right : Nat) : Bool =
   }
 
 fn argument_slice_location
-      (index : Nat) (start : Nat) (end : Nat) (arguments : List ArgBytes)
+      (index : Nat) (start : Nat) (end : Nat) (arguments : List Bytes)
     : Option ArgLocation =
   match argument_at index arguments {
     None ↦ None ArgLocation;
@@ -77,7 +75,7 @@ fn argument_slice_location
       match argument_nat_leq start end {
         False ↦ None ArgLocation;
         True ↦
-          match argument_nat_leq end (arg_length argument) {
+          match argument_nat_leq end (bytes_nat_length argument) {
             False ↦ None ArgLocation;
             True ↦ Some ArgLocation (MkArgLocation index start end)
           }
@@ -87,14 +85,13 @@ fn argument_slice_location
 
 ## 3. Design notes
 
-The raw ABI projection and the certified parsing view deliberately meet at
-`Bytes`, not `String`. `ArgBytes` remains the sole cached-`Nat` boundary for
-argv parsing, and `ArgLocation` remains the sole argument byte-range carrier.
-Nothing here iterates or splits an opaque `Bytes` value.
+The raw ABI projection and parsing view meet at `Bytes`, not `String`.
+`ArgLocation` remains the sole argument byte-range carrier, while lengths are
+computed from the total structural byte view.
 
 ## 4. Trust & derivation
 
 All declarations are transparent checked terms over landed `ProcessInput`,
-`List`, `Bytes`, `ArgBytes`, and `ArgLocation`. The package declares no
+`List`, `Bytes`, and `ArgLocation`. The package declares no
 primitive, postulate, opaque constant, or `Axiom`; its `trusted_base()` delta is
 zero.
