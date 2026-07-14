@@ -511,9 +511,11 @@ names) and emits core terms (`11 §1`). V0's minimal forms keep it small: `infer
 for variables, applications, and ascriptions; `check` for λ and `let`; a single
 `infer`-then-convert fallback everywhere else.
 
-Both judgments below carry an implicit `owner_label: String` supplied by the
-enclosing named declaration; every recursive `infer`/`check` call preserves that
-context. The label is not derived from the expression being checked.
+Both judgments below carry an implicit `owner_label: String`. An enclosing
+named declaration supplies its derived label; a public standalone-expression
+API requires its caller to supply a stable semantic audit owner explicitly.
+Every recursive `infer`/`check` call preserves that context. The label is never
+derived from the expression being checked.
 
 ```
 infer(Γ, e) → (Term, Type):
@@ -586,13 +588,18 @@ emitted into core syntax and no kernel judgment recognizes one.
 
 Because the rule depends only on checking mode, `Axiom` is legal in every term
 position that has an expected type, including an instance field or a nested
-operand checked against a known parameter type. Its
-postulate label comes from the enclosing semantic owner (`18 §4.2`); position,
-allocation order, and a generated counter do not participate. The declaration
-sugar `axiom N : T` is only `lemma N : T = Axiom` (`32 §1`): it does not
-deprecate, remove, hoist, or otherwise restrict expression-position `Axiom`.
-Multiple `Axiom` occurrences within one named declaration legitimately receive
-the same owner label while `declare_postulate` gives each a distinct `GlobalId`.
+operand checked against a known parameter type. Its postulate label comes from
+the current semantic owner (`18 §4.2`): either the enclosing named declaration
+or the explicit caller of a public standalone-expression API. The public API's
+owner argument is required and non-optional, so an ownerless call is
+unrepresentable. The label is never inferred from the expression, source
+position, module, allocation order, session counter, gensym, or a generic
+sentinel such as `"standalone expression"` or `"test"`. The declaration sugar
+`axiom N : T` is only
+`lemma N : T = Axiom` (`32 §1`): it does not deprecate, remove, hoist, or
+otherwise restrict expression-position `Axiom`. Multiple `Axiom` occurrences
+within one semantic owner legitimately receive the same owner label while
+`declare_postulate` gives each a distinct `GlobalId`.
 
 Notes tying each clause to the kernel:
 

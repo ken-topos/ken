@@ -288,12 +288,16 @@ point.
 
 A surface `Axiom` in a top-level declaration uses that declaration's canonical
 name. An `Axiom` in an instance field uses exactly
-`Class.HeadType.field`. A non-surface elaborator or Rust producer supplies its
-stable declared symbol at the same entry point. No producer may derive a label
-from a term position, `GlobalId`, allocation order, generated counter, gensym,
-or occurrence index. Multiple `Axiom` occurrences in one declaration therefore
-legitimately share the same owner label while retaining distinct `GlobalId`s;
-both entries remain visible in `trusted_base()`. Labels identify semantic
+`Class.HeadType.field`. The caller of a public standalone-expression API
+supplies a stable semantic audit owner through a required, non-optional
+argument; an ownerless call is unrepresentable. Another non-surface elaborator
+or Rust producer supplies its stable declared symbol at the same entry point.
+No producer may derive a label from an expression, source position, module
+fallback, `GlobalId`, allocation order, session counter, generated counter,
+gensym, occurrence index, or generic sentinel. Multiple `Axiom` occurrences in
+one semantic owner therefore legitimately share the same owner label while
+retaining distinct `GlobalId`s; both entries remain visible in
+`trusted_base()`. Labels identify semantic
 owners, not individual occurrences. Inserting an unrelated declaration or field
 cannot rename an existing postulate. The current corpus has at most one
 canonical structure instance per class/head pair by coherence

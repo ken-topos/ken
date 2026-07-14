@@ -107,31 +107,35 @@ setter or a builder.**
 > do it in exactly the place nobody looks. **95 test call sites will not compile
 > until each supplies a name. That is the feature.**
 
-### D3 — Elaborator: thread the declaration path
+### D3 — Elaborator: thread the semantic owner
 
 The `SUGAR_AXIOM` intercept lives in the **generic `check()`**
 (`crates/ken-elaborator/src/elab.rs:474`, arm at `:502`), which today has **no
-idea which declaration it is inside**. Thread it: the elaboration context carries
-the **enclosing declaration label** — a declaration body uses its own name; an
-instance field uses `Class.HeadType.field`.
+idea which semantic owner it is serving**. Thread it: the elaboration context
+carries a required owner label. A declaration body uses its own name; an
+instance field uses `Class.HeadType.field`; and both public standalone-expression
+entrypoints require their callers to supply a stable semantic audit owner.
 
 > ### ★★★ THE GUARDRAIL THAT MATTERS MOST — AND IT HAS ALREADY BITTEN US TWICE
 >
-> **If the enclosing label is `Option<String>` and you fall back to `"<unknown>"`
+> **If the owner label is `Option<String>` and you fall back to `"<unknown>"`
 > / `""` / `"axiom"` / `"?"` when it is `None` — YOU HAVE REBUILT KTR-2's BUG,
 > FOR THE THIRD TIME.** KTR-2 existed to stop the elaborator fabricating a
 > placeholder **sort**; its own first diagnostic fabricated a placeholder
 > **attribution** (`"<unknown>"`, `index: 0` → rendered as `#1`). **The Architect
 > blocked it. A sentinel is a fabricated placeholder wearing different clothes.**
 >
-> **⇒ The honest fallback is STRUCTURAL: give the context a NON-OPTIONAL label,
-> established when elaboration enters a declaration, so THERE IS NO `None` BRANCH
-> TO FABRICATE INTO.** Then the type system enforces the honesty, not your care.
+> **⇒ The honest shape is STRUCTURAL: give the context a NON-OPTIONAL label,
+> established when elaboration enters a declaration or supplied through a
+> required public standalone-expression API argument, so THERE IS NO `None`
+> BRANCH TO FABRICATE INTO.** Then the type system enforces the honesty, not your
+> care.
 >
-> **Every `Axiom` sits inside some named declaration, so the label is ALWAYS
-> derivable.** If you find a path where it genuinely is not, **that is an
-> expressibility gap: ESCALATE IT.** Do not gensym. Do not placeholder. Do not
-> "just use the module name."
+> **Every `Axiom` receives its label from a semantic owner:** either its
+> enclosing named declaration or the explicit caller of a public standalone-
+> expression API. The label is never inferred from the expression. There is no
+> ownerless overload, optional/default owner, source/module fallback, session
+> counter, gensym, or generic sentinel.
 
 ### D4 — Every producer supplies an honest name
 
@@ -169,10 +173,10 @@ and hold **distinct `GlobalId`s** (§2).
   **ZERO reads in conversion, typing, admission, positivity, universe checking, or
   elimination.** *Grep the emission, not the name.*
 - **AC3 — The negative-attribution AC** (KTR-2's carry; mandatory in every frame
-  I write now). Show that when a declaration path cannot be derived, the
-  elaborator **cannot state one**. Because D3 makes the label non-optional this is
-  **structural**: demonstrate there is no `None`/default/sentinel branch, because
-  the type has no room for one. **A named-variant assertion, never `is_err()`.**
+  I write now). Show structurally that every `Axiom`-capable entrypoint obtains
+  its owner from an enclosing declaration or a required public API argument.
+  Demonstrate there is no ownerless overload and no `None`/default/sentinel
+  branch; compile-time call-site closure is the discriminator.
 - **AC4 — No positional discriminator.** Grep the naming code for
   index/counter/gensym/allocation-order. **Zero.**
 - **AC5 — Label sharing is legal.** The `f Axiom Axiom` test (D6) passes: same

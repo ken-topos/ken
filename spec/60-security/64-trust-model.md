@@ -62,11 +62,15 @@ declarations in `Σ`, excluding the prelude `Top`/`Bottom`/`tt` constants
 Every postulate entry is readable: its `Decl::Opaque` stores the audit label
 supplied at the single `declare_postulate` choke point. A surface declaration
 body uses its declaration name; an instance field uses exactly
-`Class.HeadType.field`; and an elaborator- or Rust-minted postulate uses the
-producer's stable declared symbol. None of these labels may contain a term
-position, allocation index, counter, or gensym. Multiple occurrences in one
-declaration may share the enclosing label while retaining distinct `GlobalId`s;
-the contract is label derivation, not global label uniqueness. The ledger
+`Class.HeadType.field`; a public standalone-expression API requires its caller
+to supply a stable semantic audit owner; and another elaborator- or Rust-minted
+postulate uses the producer's stable declared symbol. The public owner argument
+is required and non-optional, so an ownerless call is unrepresentable. None of
+these labels may be inferred from an expression, source position, module
+fallback, allocation index, session counter, generated counter, gensym, or
+generic sentinel. Multiple occurrences under one semantic owner may share its
+label while retaining distinct `GlobalId`s; the contract is label derivation,
+not global label uniqueness. The ledger
 therefore remains stable when unrelated source is inserted, and it names
 internal producers as well as surface `Axiom` expressions.
 
