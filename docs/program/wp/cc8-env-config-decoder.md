@@ -59,20 +59,37 @@ extraction; it is a new package with an aspirational name.
 Verified via `git show origin/main:<file>`, **not** a worktree read. Treat them
 as perishable anyway (§7).
 
-### 3.1 The environment is NOT reachable yet — you must expose it
+### 3.1 The environment is reachable — **I-7 delivers it. CC8 CONSUMES it.**
+
+> **★ AMENDED 2026-07-14 (Steward). This section previously said "a
+> `Process.Environment` accessor is a CC8 deliverable." THAT WAS AN
+> OWNERSHIP ERROR AND IT IS WITHDRAWN.** The projector sits on the
+> **`ProcessInput` runtime ABI**, which is **Team Runtime's** boundary, and it
+> is already scoped to them by the CLI contract §7 (*"I-7 Env/Process families:
+> env read/enumerate, cwd, clocks"*). Had both frames stood, **Foundation and
+> Runtime would each have built `process_environment`**, on two branches, and
+> whichever landed second would have collided. **Do not build it.**
 
 `ProcessInput` is landed as
 `MkProcessInput (List Bytes) (List (Prod Bytes Bytes)) Bytes` — argv,
-**environment pairs**, cwd (`prelude.rs:1417`).
+**environment pairs**, cwd (`prelude.rs:1417`). CC6a's `Process.Arguments`
+projects field 0 only; the environment is *matched and preserved* but never
+named.
 
-**But CC6a's `Process.Arguments` exposes only argv.** `process_arguments`
-projects field 1; the environment is *matched and preserved* but **never
-projected** (`Arguments.ken.md:14–16`). **There is no `process_environment`.**
+**`Process.Environment` (`process_environment : ProcessInput → List (Prod Bytes
+Bytes)`) is delivered by I-7** (Team Runtime,
+`docs/program/wp/i7-env-process-projectors.md`). **CC8 depends on I-7 and must
+not duplicate it.**
 
-⇒ **A `Process.Environment` accessor is a CC8 deliverable.** Mirror CC6a's
-landed shape exactly — projector, `replace_*`, and the `round_trip` proof
-(`Arguments.ken.md:19–34`). Do not invent a different idiom for the sibling
-field.
+**⇒ CC8's dependency set is now: SUB-1 (the `Bytes` structural bridge) AND
+I-7 (the env projector).** Both are in flight. **The seam is clean and it is
+worth stating, because it is exactly why the split works:**
+
+- **I-7 gives you the environment as a `List (Prod Bytes Bytes)`.** Pure
+  projection. No key comparison, so **no `DecEq Bytes`, no `Axiom`, no TCB.**
+- **CC8 does the LOOKUP** — and a lookup compares keys, so it needs
+  **`DecEq Bytes`**, which is precisely what **SUB-1** makes provable. *That
+  is the whole reason CC8 is held and I-7 is not.*
 
 ### 3.2 Reuse the landed byte carrier — do NOT mint a fifth
 
@@ -118,8 +135,9 @@ parallel universe. **An extraction nobody refactors onto is not an extraction.**
 
 ## 4. Mandated deliverable
 
-1. **`Process.Environment`** — the missing projector for `ProcessInput`'s second
-   field, in CC6a's landed idiom (project / replace / `round_trip`).
+1. ~~**`Process.Environment`** — the missing projector.~~ **WITHDRAWN — this is
+   I-7's (Team Runtime), not CC8's.** See §3.1. **CC8 consumes
+   `process_environment`; it does not build it.**
 2. **The shared `Schema` package** — vocabulary + generic traversals per §2.1,
    parameterized, client-independent (§3.3).
 3. **The env/config decoder** — consuming `Schema`, `Cursor`/`Decoder` (CC3),
