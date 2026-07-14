@@ -477,6 +477,22 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
 
 // ----- bidirectional elaboration -----
 
+fn prepare_let_rhs(
+    cx: &mut ElabCtx,
+    ty_opt: &Option<RType>,
+    rhs: &RExpr,
+    span: &Span,
+) -> Result<(Term, Term), ElabError> {
+    match ty_opt {
+        Some(ty) => {
+            let ty_core = elab_type(cx, ty)?;
+            let rhs_core = check(cx, rhs, &ty_core, span)?;
+            Ok((rhs_core, ty_core))
+        }
+        None => infer(cx, rhs),
+    }
+}
+
 fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Result<Term, ElabError> {
     match expr {
         RExpr::RNumLit(lit, num_span) => elab_num_lit_checked(cx, lit, expected, num_span),
@@ -581,6 +597,21 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
                 }),
             }
         }
+        RExpr::RLet(_name, ty_opt, rhs, body, span) => {
+            let (rhs_core, rhs_ty) = prepare_let_rhs(cx, ty_opt, rhs, span)?;
+            cx.ctx.push(rhs_ty.clone());
+            let body_result = check(cx, body, &weaken(expected, 1), span);
+            cx.ctx.pop();
+            let body_core = body_result?;
+            Ok(Term::Let {
+                ty: Box::new(rhs_ty),
+                val: Box::new(rhs_core),
+                body: Box::new(body_core),
+            })
+        }
+        // `old` is transparent in the V1 model, so checking must preserve the
+        // goal for checked-only children such as `Refl` and `Axiom`.
+        RExpr::ROld(inner, span) => check(cx, inner, expected, span),
         // `match` against a KNOWN expected type: build the motive from the
         // ascribed goal (`λd. expected[d/scrut]`), not inferred from the
         // first arm's body (ES4-lawproofs AC4). This is what lets a
@@ -2143,17 +2174,11 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
         }),
 
         RExpr::RLet(_x, ty_opt, rhs, body, span) => {
-            let (rhs_core, rhs_ty) = match ty_opt {
-                Some(ty) => {
-                    let ty_core = elab_type(cx, ty)?;
-                    let rhs_c = check(cx, rhs, &ty_core, span)?;
-                    (rhs_c, ty_core)
-                }
-                None => infer(cx, rhs)?,
-            };
+            let (rhs_core, rhs_ty) = prepare_let_rhs(cx, ty_opt, rhs, span)?;
             cx.ctx.push(rhs_ty.clone());
-            let (body_core, body_ty) = infer(cx, body)?;
+            let body_result = infer(cx, body);
             cx.ctx.pop();
+            let (body_core, body_ty) = body_result?;
             let result_ty = subst0(&body_ty, &rhs_core);
             Ok((
                 Term::Let {
@@ -2203,6 +2228,10 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
             subject,
             proof_name,
             span,
+            // This variant has no expression child to receive a checking
+            // goal: it is a leaf lookup for the qualified proof name. The
+            // ordinary infer-then-unify checking fallback therefore loses no
+            // bidirectional information here.
         } => infer(
             cx,
             &RExpr::RCon(format!("{subject}::{proof_name}"), span.clone()),
