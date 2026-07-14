@@ -126,9 +126,9 @@ get a fact you could actually use. **That wall is being torn down:**
    a **workaround for a wall that no longer stands at the key layer**, and
    **SUB-2 exists to retire the ones we already have** — do not add to the pile it
    has to clear.
-2. **Where CC3's `Cursor` ABI already demands `ArgBytes`, pass it** — that is
-   CC3's existing interface and **you are not refactoring CC3 in this WP.** Consume
-   it as-is; **do not pre-empt SUB-2, and do not block on it.**
+2. **CC3's `Cursor` ABI takes plain `Bytes`.** `ArgBytes` and its cached-length
+   carrier were **retired by SUB-2** and no longer exist anywhere in the catalog.
+   **Consume `Bytes` directly. There is no carrier to pass and none to build.**
 3. **If you find yourself wanting a cached length for a NEW type, STOP AND REPORT.**
    That is the signal the substrate is still short somewhere, and I want to see it
    rather than have another carrier quietly minted. *(That is precisely how the
@@ -226,13 +226,15 @@ parallel universe. **An extraction nobody refactors onto is not an extraction.**
 
 ## 6. Guardrails — do not reopen
 
-- **⛔ Do NOT settle the `Bytes → Nat` question.** No `bytes_eq`, no
-  `DecEq Bytes`, no `Ord Bytes`, no `Int → Nat`. **It is an open operator
-  decision, and a build WP does not get to pre-empt it.** Byte-wise key matching
-  goes through the landed route: `ArgBytes` + `bytes_at` + `uint8_to_int` +
-  `eq_int` — exactly as CC7 did. **If you think you need one, STOP and
-  escalate.** Three WPs in a row have escalated instead of inventing. Be the
-  fourth.
+- **✅ `DecEq Bytes` is LANDED and LAWFUL** (`BytesKeys.ken.md:109`,
+  `origin/main @ 82cb8fd0`) — `sound` + `complete`, transported from the
+  kernel's `DecEq Int` certificate at exactly one audited trusted-base entry
+  (`uint8_int_retract`). **An environment/config key is a plain `Bytes`,
+  compared with `DecEq Bytes`. USE IT.**
+- **⛔ Still forbidden: no NEW primitive, no NEW postulate, no `Axiom`, no
+  `Ord Bytes`, no `Int → Nat`, no kernel change. ZERO `trusted_base()` delta**
+  — you **consume** the law, you do not add to it. **The family-wide
+  opaque-primitive fork remains PAT'S and is untouched by this WP.**
 - **No reflection, no macros, no derivation in v1.** Explicit schemas.
 - **No `import`/`pub` smuggling.** No new primitive. Zero trust delta.
 - **Do not read a config file.** CC8 decodes `Bytes` that are *handed to it*

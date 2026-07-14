@@ -33,6 +33,7 @@ const ARGUMENTS_KEN_MD: &str = include_str!("../../../catalog/packages/Process/A
 const EXIT_KEN_MD: &str = include_str!("../../../catalog/packages/System/Exit.ken.md");
 const DIAGNOSTIC_RENDER_KEN_MD: &str =
     include_str!("../../../catalog/packages/Diagnostic/Render.ken.md");
+const SCHEMA_KEN_MD: &str = include_str!("../../../catalog/packages/Schema/Schema.ken.md");
 const ARGPARSE_KEN_MD: &str = include_str!("../../../catalog/packages/ArgParse/ArgParse.ken.md");
 const EXAMPLE_KEN_MD: &str = include_str!("../../../catalog/packages/ArgParse/Example.ken.md");
 
@@ -67,6 +68,8 @@ fn full_env() -> ElabEnv {
     let mut env = dependency_env();
     env.elaborate_ken_md_file(DIAGNOSTIC_RENDER_KEN_MD)
         .expect("Diagnostic.Render must elaborate after Diagnostic.Core and Pretty.Doc");
+    env.elaborate_ken_md_file(SCHEMA_KEN_MD)
+        .expect("Schema must elaborate before either decoder client");
     env.elaborate_ken_md_file(ARGPARSE_KEN_MD)
         .expect("ArgParse must elaborate after the complete substrate");
     env.elaborate_ken_md_file(EXAMPLE_KEN_MD)
@@ -435,7 +438,12 @@ fn adding_one_option_to_the_spec_changes_help_without_a_second_help_edit() {
 fn cc7_is_a_zero_trust_specialization_with_no_second_universe() {
     let mut env = dependency_env();
     let before: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
-    for source in [DIAGNOSTIC_RENDER_KEN_MD, ARGPARSE_KEN_MD, EXAMPLE_KEN_MD] {
+    for source in [
+        DIAGNOSTIC_RENDER_KEN_MD,
+        SCHEMA_KEN_MD,
+        ARGPARSE_KEN_MD,
+        EXAMPLE_KEN_MD,
+    ] {
         env.elaborate_ken_md_file(source)
             .expect("each CC7 file must elaborate in the ordered environment");
         let extracted = ken_elaborator::literate::extract_ken_md(source)
