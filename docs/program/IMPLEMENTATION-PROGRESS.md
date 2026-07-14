@@ -14,9 +14,9 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (21:12 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 64566872`
+> ### ⏭ 2026-07-14 (21:45 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 2b0a05a5`
 >
-> ## ✅ FIVE WPs MERGED **AND CLOSED**. **AX-1 ACTIVE in the enclave — and I already had to correct my own frame.**
+> ## ✅ SIX WPs MERGED. **AX-1 SPEC IS ON MAIN — AX-2 (the build) IS THE NEXT THING I OWE.**
 >
 > | WP | state |
 > |---|---|
@@ -24,7 +24,12 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > | **LET-2b** | **MERGED `ce6f0718` · CLOSED** |
 > | **LET-3** | **MERGED `7071f919` · CLOSED** (pilot passed my gate) |
 > | **KTR-2** | **MERGED `91e4374e` · CLOSED** — closes the KTR audit, BOTH lanes |
-> | **AX-1 frame** | **MERGED `64566872` (PR #683)** — kicked `evt_7ctxnexs6gxqr`; enclave **authoring now** |
+> | **AX-1 frame** | **MERGED `64566872` (PR #683)** |
+> | **AX-1 spec** | **MERGED `2b0a05a5` (PR #684)** — content-verified; **retros outstanding** |
+>
+> **AX-1 content-verified on main:** `axiom` grammar production ✅ · required
+> **non-optional** `name` field + required `declare_postulate` arg ✅ ·
+> **kernel-inert** normative ✅ · **zero** surviving normative uniqueness claim ✅
 >
 > ### ★★★ AX-1 SCOPE CHECKPOINT — **MY OWN FRAME'S D3 WAS UNDER-SPECIFIED. RULING POSTED — IT IS A FIXED INPUT.**
 >

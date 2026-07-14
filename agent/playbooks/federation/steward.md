@@ -215,9 +215,10 @@ brief** — the implementer should execute mostly mechanically, not design
 >    rationalization — so there is none.** Each of those five unit-boundaries was
 >    itself a compaction trigger I skipped by treating the enclave's flow as
 >    continuous; it is not — **each new work unit = compact first.** Sibling of
->    [[playbooks-state-mechanism-not-intent]] and [[spec-enclave-always-compact-before-new-work]]:
->    compact **mechanically at the seam**, never on a story about ctx level or
->    when/whether the agent will engage.
+>    [[playbooks-state-mechanism-not-intent]] and
+>    [[spec-enclave-always-compact-before-new-work]]: compact **mechanically at
+>    the seam**, never on a story about ctx level or when/whether the agent
+>    will engage.
 > 5. **VERIFY EVERY DROP AFTER THE BATCH START.** `capture-pane` each
 >    receiving-unit member: ctx **actually fell**
 >    (→ ~0–low %) or a `Compacting…` / queued `❯ /compact`. A "sent" report
@@ -550,7 +551,9 @@ brief** — the implementer should execute mostly mechanically, not design
    hard AC** — at minimum termination (`collect_calls`) **and** trust-accounting
    (`collect_consts_in_tb`), plus subst/conv/children (mechanical), each with the
    arm and (for the soundness-relevant ones) a neuter-the-arm flip test — so the
-   coverage is designed in, not discovered by CI. Same family as [[soundness-AC-static-vs-runtime-face]]: don't let "additive, obviously fine" hide a skipped walker.
+   coverage is designed in, not discovered by CI. Same family as
+   [[soundness-AC-static-vs-runtime-face]]: don't let "additive, obviously
+   fine" hide a skipped walker.
    **A frame for a kernel REDUCTION / completeness change (whnf, ι-reduction,
    `eq_reduce` — not only a new `Term` variant) must require
    *full-workspace-green* validation and must NOT assert a "kernel-only diff"
@@ -615,8 +618,9 @@ brief** — the implementer should execute mostly mechanically, not design
    enclave (clean-room authority, T1) then brings the brief + the relevant
    `/spec` and `/conformance` to **full, team-ready rigor** on that branch — the
    deep technical/behavioral detail a T2 build team is better handed than
-   left to invent (the T1 enclave front-loads the hardest design judgment). You mention **only the spec-leader** (the §9 edge to the
-   spec enclave); the spec-leader assigns spec-author / conformance-validator
+   left to invent (the T1 enclave front-loads the hardest design judgment).
+   You mention **only the spec-leader** (the §9 edge to the spec enclave);
+   the spec-leader assigns spec-author / conformance-validator
    internally. This elaboration step sits **between** you and the build team —
    the team never receives a brief that the spec enclave has not elaborated.
 3. **On elaboration-complete, the elaborated brief + spec merges to `main`** via
@@ -783,7 +787,8 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   keeps an enclave agent oscillating in a tight, cheap low band well clear of the
   costly high end. Aggressive compaction is safe here because enclave work is
   discrete review/authoring tasks that resume cleanly from `/spec` + the tracker,
-  not long stateful threads.) (The live miss: spec-author + CV carried **K2c → ES3 back-to-back
+  not long stateful threads.) (The live miss: spec-author + CV carried
+  **K2c → ES3 back-to-back
   uncompacted to 92%** because K2c was assist-work, not an enclave-WP boundary. A
   `moot compact` before *releasing ES3 to them* — the existing "compact before you
   deliver a WP" rule — would also have caught it; I skipped it. Do both: honor the
@@ -805,7 +810,8 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   never the one to cut; **(2)** a **self-authored enclave cascade** (errata →
   task-#N reconciles → un-stages, back-to-back — the ES4→K4 run was ~8 of them) is
   the **peak-risk window**: none of them hits the Steward-delivery boundary compact
-  (they route author→spec-leader→publisher path, bypassing your hook entirely), so the
+  (they route author→spec-leader→publisher path, bypassing your hook entirely),
+  so the
   %-scan is the **only** trigger that can catch it — *escalate* the scan during a
   cascade, never relax it. Operationally: **scan the T1 enclave's ctx% (`for r in
   spec-author conformance-validator architect; do tmux capture-pane -t moot-$r -p |
@@ -1199,6 +1205,30 @@ after any kickoff/handoff mention — yours or a leader's you are backstopping �
 posts) before treating the work as in-flight; if it parked, re-rouse. Never carry
 a "producing X" belief on the strength of the mention merely having been posted.
 This binds the kicking leader too (build/leader `## Own the watchdog`).
+
+**★★ THE STRANDED-PASTE SWEEP — run `scripts/sweep-wedged-panes.sh` as the
+FIRST action of EVERY tick. It is a CHECK; do not re-derive it as vigilance.**
+The single most common transport failure in this federation is a convo mention
+that lands in a seat's composer as `› [Pasted Content NNNN chars]` and is **never
+submitted**. The event exists, the seat looks healthy, and its ring blocks —
+silently. **On 2026-07-14 it fired SIX times in one day** (architect ×3,
+kernel-implementer, conformance-validator ×2), each costing a premium-model tick
+to notice. The repair has always been "send a bare `Enter` to that pane", which
+is worthless if nobody looks — so it is now a script:
+
+```sh
+scripts/sweep-wedged-panes.sh            # detect + repair + VERIFY the repair landed
+scripts/sweep-wedged-panes.sh --dry-run  # report only
+```
+
+It sweeps every `moot-*` session, submits any paste still sitting on the `›`
+composer line, re-reads each pane to confirm the paste actually cleared, and
+reports any that did **not** take the `Enter` (those need a human). It **skips**
+a paste already marked *"Messages to be submitted after next tool call"* — that
+one is **queued and healthy**, and re-sending would double-deliver — and it never
+touches `moot-steward`, whose composer is your own. **A tick that has not run the
+sweep is an incomplete tick.** This is the same lesson as the ctx%-scan: *where a
+backstop depends on you remembering to look, convert it into a check.*
 
 **The comms-drop backstop — `capture-pane` → `git`-verify → relay.** The
 federation's recurring defect is dropped notifications: a handoff / retro /
