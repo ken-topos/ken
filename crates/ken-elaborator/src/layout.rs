@@ -4,7 +4,7 @@
 //! production boundaries and the token stream supplies protected lexemes; the
 //! source is never re-lexed and notation spelling remains B2's responsibility.
 
-use crate::ast::{BinOp, Decl, Expr, MatchArm, Type};
+use crate::ast::{BinOp, Decl, Expr, LetBinding, MatchArm, Type};
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
 use crate::lossless::{parse_lossless, CommentPlacement, FormattableSource};
@@ -400,14 +400,14 @@ impl<'a> LayoutPrinter<'a> {
             expr,
             Expr::EMatch { .. }
                 | Expr::ELam(_, _, _)
-                | Expr::ELet(_, _, _, _, _)
+                | Expr::ELet(_, _, _)
                 | Expr::EApp(_, _, _)
                 | Expr::EArrow(_, _, _)
         );
         let doc = match expr {
             Expr::EMatch { span, arms, .. } => self.print_match(span, arms),
             Expr::ELam(_, body, span) => self.print_lambda(span, body),
-            Expr::ELet(_, _, value, body, span) => self.print_let(span, value, body),
+            Expr::ELet(bindings, body, span) => self.print_let(span, bindings, body),
             Expr::EApp(_, _, _) => self.print_application(expr, false),
             Expr::EArrow(left, right, _) => self.print_arrow(left, right),
             Expr::EAsc(_, _, span)
@@ -1064,47 +1064,166 @@ impl<'a> LayoutPrinter<'a> {
         }
     }
 
-    fn print_let(&self, span: &Span, value: &Expr, body: &Expr) -> Doc {
-        if is_compound_expr(value) || is_compound_expr(body) || matches!(body, Expr::ELet(..)) {
-            self.print_structural_let(span, value, body).group()
+    fn print_let(&self, _span: &Span, bindings: &[LetBinding], body: &Expr) -> Doc {
+        self.print_let_bindings(bindings, body)
+    }
+
+    fn print_let_bindings(&self, bindings: &[LetBinding], body: &Expr) -> Doc {
+        self.print_let_bindings_from(bindings, body, None)
+    }
+
+    fn print_let_bindings_from(
+        &self,
+        bindings: &[LetBinding],
+        body: &Expr,
+        synthetic_start: Option<usize>,
+    ) -> Doc {
+        let (segment, tail) = collect_let_segment(bindings, body);
+        let source_let_span = if synthetic_start.is_none() {
+            segment.first().and_then(|first| {
+                self.source.tokens().iter().rev().find_map(|token| {
+                    (token.span.end <= first.name_span.start && matches!(token.kind, Token::KwLet))
+                        .then_some(token.span.clone())
+                })
+            })
         } else {
-            self.doc_from_tokens(span, TokenLayout::Soft)
+            None
+        };
+        let let_start = synthetic_start.or_else(|| source_let_span.as_ref().map(|span| span.start));
+        let has_comments = let_start.is_some_and(|start| {
+            self.source.comment_attachments().iter().any(|attachment| {
+                start <= attachment.comment_span.start
+                    && attachment.comment_span.end <= body.span().end
+            })
+        });
+        if segment.len() == 1 && matches!(tail, LetTail::Expr(_)) && !has_comments {
+            let binding = segment[0];
+            let body_doc = match tail {
+                LetTail::Expr(expr) => self.print_expr(expr),
+                LetTail::Group(..) => unreachable!(),
+            };
+            let head = Span::new(binding.span.start, binding.value.span().start);
+            return Doc::concat([
+                Doc::text("let "),
+                self.doc_from_tokens(&head, TokenLayout::Soft),
+                Doc::concat([Doc::line(), self.print_expr(&binding.value)]).nest(INDENT_WIDTH),
+                Doc::line(),
+                Doc::text("in"),
+                Doc::concat([Doc::line(), body_doc]).nest(INDENT_WIDTH),
+            ])
+            .group();
+        }
+        let mut binding_docs = Vec::with_capacity(segment.len());
+        if let Some(first) = segment.first() {
+            let let_end = synthetic_start
+                .or_else(|| source_let_span.as_ref().map(|span| span.end))
+                .unwrap_or(first.name_span.start);
+            binding_docs.extend(self.let_comment_docs(
+                let_end,
+                first.name_span.start,
+                &[CommentPlacement::Leading, CommentPlacement::Interstitial],
+            ));
+        }
+        for (index, binding) in segment.iter().enumerate() {
+            binding_docs.push(self.print_let_binding(binding));
+            if index + 1 < segment.len() {
+                binding_docs.push(Doc::text(";"));
+                let next = segment[index + 1];
+                let trailing = self.let_comment_docs(
+                    binding.value.span().end,
+                    next.name_span.start,
+                    &[CommentPlacement::Trailing],
+                );
+                if trailing.is_empty() {
+                    binding_docs.push(Doc::line());
+                } else {
+                    binding_docs.push(Doc::text("  "));
+                    binding_docs.extend(trailing);
+                }
+                binding_docs.extend(self.let_comment_docs(
+                    binding.value.span().end,
+                    next.name_span.start,
+                    &[CommentPlacement::Leading, CommentPlacement::Interstitial],
+                ));
+            }
+        }
+        let tail_start = match tail {
+            LetTail::Expr(expr) => expr.span().start,
+            LetTail::Group(rest, _) => rest[0].name_span.start,
+        };
+        let last_value_end = segment.last().unwrap().value.span().end;
+        let trailing_binding_comments =
+            self.let_comment_docs(last_value_end, tail_start, &[CommentPlacement::Trailing]);
+        let leading_body_comments = self.let_comment_docs(
+            last_value_end,
+            tail_start,
+            &[CommentPlacement::Leading, CommentPlacement::Interstitial],
+        );
+        let body_doc = match tail {
+            LetTail::Expr(expr) => self.print_expr(expr),
+            LetTail::Group(rest, tail_body) => {
+                self.print_let_bindings_from(rest, tail_body, Some(rest[0].name_span.start))
+            }
+        };
+        let body_boundary = match tail {
+            LetTail::Expr(expr) if !is_compound_expr(expr) => Doc::line(),
+            LetTail::Expr(_) | LetTail::Group(..) => Doc::hard_line(),
+        };
+        Doc::concat([
+            Doc::text("let"),
+            Doc::concat([Doc::line(), Doc::concat(binding_docs)]).nest(INDENT_WIDTH),
+            if trailing_binding_comments.is_empty() {
+                Doc::Nil
+            } else {
+                Doc::concat([Doc::text("  "), Doc::concat(trailing_binding_comments)])
+            },
+            Doc::line(),
+            Doc::text("in"),
+            Doc::concat([body_boundary, Doc::concat(leading_body_comments), body_doc])
+                .nest(INDENT_WIDTH),
+        ])
+        .group()
+    }
+
+    fn print_let_binding(&self, binding: &LetBinding) -> Doc {
+        let head = Span::new(binding.span.start, binding.value.span().start);
+        let head_doc = self.doc_from_tokens(&head, TokenLayout::Soft);
+        if is_compound_expr(&binding.value) || self.has_comment_within(&binding.span) {
+            Doc::concat([
+                head_doc,
+                Doc::concat([Doc::hard_line(), self.print_expr(&binding.value)]).nest(INDENT_WIDTH),
+            ])
+        } else {
+            Doc::concat([
+                head_doc,
+                Doc::concat([Doc::line(), self.print_expr(&binding.value)]).nest(INDENT_WIDTH),
+            ])
+            .fit_group()
         }
     }
 
-    fn print_structural_let(&self, span: &Span, value: &Expr, body: &Expr) -> Doc {
-        let indices = self.token_indices(span);
-        let Some(eq_pos) = indices.iter().position(|index| {
-            matches!(self.source.tokens()[*index].kind, Token::Eq)
-                && self.source.tokens()[*index].span.end <= value.span().start
-        }) else {
-            return self.doc_from_tokens(span, TokenLayout::Let);
-        };
-        let head = Span::new(span.start, self.source.tokens()[indices[eq_pos]].span.end);
-        let body_end = body.span().end;
-        let body_tokens = self.token_indices(body.span());
-        let body_doc = if let Expr::ELet(_, _, value, body, span) = body {
-            self.print_structural_let(span, value, body)
-        } else {
-            self.print_expr(body)
-        };
-        let core = Doc::concat([
-            self.doc_from_tokens(&head, TokenLayout::Soft),
-            Doc::concat([Doc::line(), self.print_expr(value)]).nest(INDENT_WIDTH),
-            Doc::line(),
-            Doc::text("in"),
-            Doc::concat([Doc::line(), body_doc]).nest(INDENT_WIDTH),
-        ]);
-        let suffix = Span::new(body_end, span.end);
-        let suffix = self.token_indices(&suffix);
-        if suffix.is_empty() {
-            core
-        } else {
-            let boundary = body_tokens.last().map_or(Doc::Nil, |body_end| {
-                self.token_boundary(*body_end, suffix[0], Doc::Nil)
-            });
-            Doc::concat([core, boundary, self.grouped_token_slice(&suffix)])
-        }
+    fn let_comment_docs(
+        &self,
+        start: usize,
+        end: usize,
+        placements: &[CommentPlacement],
+    ) -> Vec<Doc> {
+        self.source
+            .comment_attachments()
+            .iter()
+            .filter(|attachment| {
+                start <= attachment.comment_span.start
+                    && attachment.comment_span.end <= end
+                    && placements.contains(&attachment.placement)
+            })
+            .flat_map(|attachment| {
+                let text = self.source.source()
+                    [attachment.comment_span.start..attachment.comment_span.end]
+                    .trim_end_matches([' ', '\t'])
+                    .to_owned();
+                [Doc::text(text), Doc::hard_line()]
+            })
+            .collect()
     }
 
     fn print_lambda(&self, span: &Span, body: &Expr) -> Doc {
@@ -1587,7 +1706,7 @@ enum ExprContext {
 
 fn expr_precedence(expr: &Expr) -> u8 {
     match expr {
-        Expr::ELam(_, _, _) | Expr::ELet(_, _, _, _, _) | Expr::EMatch { .. } => 0,
+        Expr::ELam(_, _, _) | Expr::ELet(_, _, _) | Expr::EMatch { .. } => 0,
         Expr::EPi(_, _, _, _) | Expr::EArrow(_, _, _) => 1,
         Expr::EAsc(_, _, _) => 2,
         Expr::EBinOp(op, _, _, _) => binop_precedence(*op),
@@ -1843,13 +1962,50 @@ fn is_compound_expr(expr: &Expr) -> bool {
             arms.len() >= 2 || arms.iter().any(|arm| is_compound_expr(&arm.body))
         }
         Expr::ELam(_, body, _) => is_compound_expr(body),
-        Expr::ELet(_, _, value, body, _) => is_compound_expr(value) || is_compound_expr(body),
+        Expr::ELet(bindings, body, _) => {
+            bindings
+                .iter()
+                .any(|binding| is_compound_expr(&binding.value))
+                || is_compound_expr(body)
+        }
         _ => false,
     }
 }
 
 fn is_let_chain(expr: &Expr) -> bool {
-    matches!(expr, Expr::ELet(_, _, _, body, _) if matches!(body.as_ref(), Expr::ELet(..)))
+    matches!(expr, Expr::ELet(bindings, body, _)
+        if bindings.len() >= 2 || matches!(body.as_ref(), Expr::ELet(..)))
+}
+
+#[derive(Clone, Copy)]
+enum LetTail<'a> {
+    Expr(&'a Expr),
+    Group(&'a [LetBinding], &'a Expr),
+}
+
+fn collect_let_segment<'a>(
+    bindings: &'a [LetBinding],
+    body: &'a Expr,
+) -> (Vec<&'a LetBinding>, LetTail<'a>) {
+    let mut segment = Vec::new();
+    let mut names = std::collections::HashSet::new();
+    for binding in bindings {
+        debug_assert!(names.insert(binding.name.as_str()));
+        segment.push(binding);
+    }
+    let mut tail = body;
+    loop {
+        let Expr::ELet(next, next_body, _) = tail else {
+            return (segment, LetTail::Expr(tail));
+        };
+        for (index, binding) in next.iter().enumerate() {
+            if !names.insert(binding.name.as_str()) {
+                return (segment, LetTail::Group(&next[index..], next_body));
+            }
+            segment.push(binding);
+        }
+        tail = next_body;
+    }
 }
 
 fn flatten_application<'a>(expr: &'a Expr, arguments: &mut Vec<&'a Expr>) -> &'a Expr {

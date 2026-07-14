@@ -1401,22 +1401,45 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
             Ok(rexpr)
         }
 
-        Expr::ELet(x, ty, rhs, body, span) => {
-            let resolved_rhs = resolve_expr_ctx(scope, rhs, ctx)?;
-            let resolved_ty = match ty {
-                Some(t) => Some(resolve_type(scope, t)?),
-                None => None,
-            };
-            scope.push(x);
-            let resolved_body = resolve_expr_ctx(scope, body, ctx)?;
-            scope.pop();
-            Ok(RExpr::RLet(
-                x.clone(),
-                resolved_ty,
-                Box::new(resolved_rhs),
-                Box::new(resolved_body),
-                span.clone(),
-            ))
+        Expr::ELet(bindings, body, _) => {
+            let depth_before = scope.depth();
+            let result = (|| {
+                let mut seen = std::collections::HashSet::new();
+                let mut resolved = Vec::with_capacity(bindings.len());
+                for binding in bindings {
+                    if !seen.insert(binding.name.as_str()) {
+                        return Err(ElabError::ParseError {
+                            msg: format!("duplicate local binding '{}' in let group", binding.name),
+                            span: binding.name_span.clone(),
+                        });
+                    }
+                    let resolved_ty = binding
+                        .annotation
+                        .as_ref()
+                        .map(|ty| resolve_type(scope, ty))
+                        .transpose()?;
+                    let resolved_value = resolve_expr_ctx(scope, &binding.value, ctx)?;
+                    resolved.push((
+                        binding.name.clone(),
+                        resolved_ty,
+                        resolved_value,
+                        binding.span.clone(),
+                    ));
+                    scope.push(&binding.name);
+                }
+                let mut resolved_body = resolve_expr_ctx(scope, body, ctx)?;
+                for (name, ty, value, binding_span) in resolved.into_iter().rev() {
+                    let let_span = Span::new(binding_span.start, resolved_body.span().end);
+                    resolved_body =
+                        RExpr::RLet(name, ty, Box::new(value), Box::new(resolved_body), let_span);
+                }
+                Ok(resolved_body)
+            })();
+            while scope.depth() > depth_before {
+                scope.pop();
+            }
+            assert_eq!(scope.depth(), depth_before);
+            result
         }
 
         Expr::EAsc(e, ty, span) => {

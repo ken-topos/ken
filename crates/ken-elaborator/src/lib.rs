@@ -51,7 +51,7 @@ pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, Obligat
 pub use error::{ElabError, Span};
 pub use ast::{
     BinOp, BoundaryHeader, BoundaryKind, CapabilityDecl, ConstructorSignature,
-    ConstructorSignatureArg, Decl, ExplicitDataCtor, Expr, ImportKind, Type,
+    ConstructorSignatureArg, Decl, ExplicitDataCtor, Expr, ImportKind, LetBinding, Type,
 };
 pub use extract::{
     v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,

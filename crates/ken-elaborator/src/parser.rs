@@ -10,8 +10,8 @@
 
 use crate::ast::{
     Binder, BoundaryKind, CapabilityDecl, ClassField, ConstructorSignature,
-    ConstructorSignatureArg, CtorDecl, Decl, DefKeyword, EffectRowSyntax,
-    ExplicitDataCtor, Expr, MatchArm, PatKind, Pattern, PropIntro, Type,
+    ConstructorSignatureArg, CtorDecl, Decl, DefKeyword, EffectRowSyntax, ExplicitDataCtor, Expr,
+    LetBinding, MatchArm, PatKind, Pattern, PropIntro, Type,
 };
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
@@ -1804,28 +1804,53 @@ impl Parser {
     fn parse_let_expr(&mut self) -> Result<Expr, ElabError> {
         let start = self.peek_span().start;
         self.advance(); // consume 'let'
-        let (x, _) = self.expect_ident()?;
-        let ty = if matches!(self.peek(), Token::Colon) {
+        let mut bindings = Vec::new();
+        let mut names = std::collections::HashSet::new();
+        loop {
+            let (name, name_span) = self.expect_ident()?;
+            if !names.insert(name.clone()) {
+                return Err(ElabError::ParseError {
+                    msg: format!("duplicate local binding '{}' in let group", name),
+                    span: name_span,
+                });
+            }
+            let annotation = if matches!(self.peek(), Token::Colon) {
+                self.advance();
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+            let annotation_span = annotation.as_ref().map(|ty| ty.span().clone());
+            self.expect(&Token::Eq)?;
+            // VAL2 #4: an arrow-type value must be reachable in `let`-bound
+            // position too, not just annotations — `parse_arrow_expr`, not the
+            // narrower `parse_infix_expr` this called before.
+            let value = self.parse_arrow_expr()?;
+            let binding_span = Span::new(name_span.start, value.span().end);
+            bindings.push(LetBinding {
+                name,
+                name_span,
+                annotation,
+                annotation_span,
+                value: Box::new(value),
+                span: binding_span,
+            });
+            if !matches!(self.peek(), Token::Semicolon) {
+                break;
+            }
+            let separator_span = self.peek_span().clone();
             self.advance();
-            Some(self.parse_type()?)
-        } else {
-            None
-        };
-        self.expect(&Token::Eq)?;
-        // VAL2 #4: an arrow-type value must be reachable in `let`-bound
-        // position too, not just annotations — `parse_arrow_expr`, not the
-        // narrower `parse_infix_expr` this called before.
-        let rhs = self.parse_arrow_expr()?;
+            if matches!(self.peek(), Token::KwIn) {
+                return Err(ElabError::ParseError {
+                    msg: "trailing ';' is not allowed before 'in' in a let group".to_string(),
+                    span: separator_span,
+                });
+            }
+        }
         self.expect(&Token::KwIn)?;
         let body = self.parse_expr()?;
         let end = body.span().end;
-        Ok(Expr::ELet(
-            x,
-            ty,
-            Box::new(rhs),
-            Box::new(body),
-            Span::new(start, end),
-        ))
+        Ok(Expr::ELet(bindings, Box::new(body), Span::new(start, end)))
     }
 
     /// `match scrut [eqn: h] { P₁ => body₁ ; P₂ => body₂ }`.
@@ -2100,7 +2125,7 @@ impl Parser {
                         Expr::EUniv(l, _) => Expr::EUniv(l, span),
                         Expr::EApp(f, a, _) => Expr::EApp(f, a, span),
                         Expr::ELam(ns, b, _) => Expr::ELam(ns, b, span),
-                        Expr::ELet(x, ty, r, body, _) => Expr::ELet(x, ty, r, body, span),
+                        Expr::ELet(bindings, body, _) => Expr::ELet(bindings, body, span),
                         Expr::EAsc(e, t, _) => Expr::EAsc(e, t, span),
                         Expr::EOld(e, _) => Expr::EOld(e, span),
                         Expr::ENumLit(lit, _) => Expr::ENumLit(lit, span),

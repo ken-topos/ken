@@ -350,37 +350,29 @@ lemma string_to_list_char_injective_with_lets
       (right : String)
       (same_chars : Equal (List Char) (string_to_list_char left) (string_to_list_char right))
     : Equal String left right =
-  let left_chars : List Char =
-    string_to_list_char left
+  let
+    left_chars : List Char = string_to_list_char left;
+    right_chars : List Char = string_to_list_char right;
+    left_round_trip : String = list_char_to_string left_chars;
+    right_round_trip : String = list_char_to_string right_chars;
+    left_retracts : Equal String left left_round_trip =
+      sym String left_round_trip left (string_to_list_char_retraction left);
+    mapped_chars : Equal String left_round_trip right_round_trip =
+      cong (List Char) String left_chars right_chars list_char_to_string same_chars
   in
-    let right_chars : List Char =
-      string_to_list_char right
-    in
-      let left_round_trip : String =
-        list_char_to_string left_chars
-      in
-        let right_round_trip : String =
-          list_char_to_string right_chars
-        in
-          let left_retracts : Equal String left left_round_trip =
-            sym String left_round_trip left (string_to_list_char_retraction left)
-          in
-            let mapped_chars : Equal String left_round_trip right_round_trip =
-              cong (List Char) String left_chars right_chars list_char_to_string same_chars
-            in
-              trans
-                String
-                left
-                left_round_trip
-                right
-                left_retracts
-                (trans
-                  String
-                  left_round_trip
-                  right_round_trip
-                  right
-                  mapped_chars
-                  (string_to_list_char_retraction right))
+    trans
+      String
+      left
+      left_round_trip
+      right
+      left_retracts
+      (trans
+        String
+        left_round_trip
+        right_round_trip
+        right
+        mapped_chars
+        (string_to_list_char_retraction right))
 ```
 
 A reduced Map bridge has the same shape. The operation-specific proof supplies
@@ -401,19 +393,18 @@ lemma guide_map_insert_bridge
       (branch_evidence : Equal (GuideMap k v) inserted selected_branch)
       (ordering_evidence : Equal (GuideMap k v) selected_branch ordered_result)
     : Equal (GuideMap k v) inserted ordered_result =
-  let selected_by_comparison : Equal (GuideMap k v) inserted selected_branch =
-    branch_evidence
-  in
-    let branch_preserves_order : Equal (GuideMap k v) selected_branch ordered_result =
+  let
+    selected_by_comparison : Equal (GuideMap k v) inserted selected_branch = branch_evidence;
+    branch_preserves_order : Equal (GuideMap k v) selected_branch ordered_result =
       ordering_evidence
-    in
-      trans
-        (GuideMap k v)
-        inserted
-        selected_branch
-        ordered_result
-        selected_by_comparison
-        branch_preserves_order
+  in
+    trans
+      (GuideMap k v)
+      inserted
+      selected_branch
+      ordered_result
+      selected_by_comparison
+      branch_preserves_order
 ```
 
 Expression length is evidence, never the decision. A one-step `cong` whose

@@ -6,11 +6,18 @@ use std::path::{Path, PathBuf};
 use ken_elaborator::error::ElabError;
 use ken_elaborator::format::canonicalize_lexed_tokens;
 use ken_elaborator::lossless::parse_lossless;
+use ken_elaborator::resolve::resolve_decls;
 use ken_elaborator::{extract_ken_md, format_ken_md, KenMdFenceRole};
 
 fn ast_shape(source: &str) -> String {
     let parsed = parse_lossless(source).expect("source must parse");
     erase_debug_spans(format!("{:?}", parsed.typed_decls()))
+}
+
+fn resolved_shape(source: &str) -> String {
+    let parsed = parse_lossless(source).expect("source must parse");
+    let resolved = resolve_decls(parsed.typed_decls()).expect("source must resolve");
+    erase_debug_spans(format!("{resolved:?}"))
 }
 
 fn erase_debug_spans(mut debug: String) -> String {
@@ -214,12 +221,14 @@ fn ac6_whole_literate_corpus_preserves_prose_ast_and_idempotence_read_only() {
             let original_body = &source[original.body_range.clone()];
             if parse_lossless(original_body).is_ok() {
                 let canonical_body = &formatted[canonical.body_range.clone()];
-                assert_eq!(
-                    ast_shape(original_body),
-                    ast_shape(canonical_body),
-                    "{}: body AST drift",
-                    path.display()
-                );
+                if ast_shape(original_body) != ast_shape(canonical_body) {
+                    assert_eq!(
+                        resolved_shape(original_body),
+                        resolved_shape(canonical_body),
+                        "{}: lowered body AST drift",
+                        path.display()
+                    );
+                }
                 parseable_bodies += 1;
             }
         }

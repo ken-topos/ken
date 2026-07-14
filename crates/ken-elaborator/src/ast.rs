@@ -490,6 +490,17 @@ pub enum BinOp {
     EqEq,
 }
 
+/// One source binding in a sequential local `let` group.
+#[derive(Clone, Debug)]
+pub struct LetBinding {
+    pub name: String,
+    pub name_span: Span,
+    pub annotation: Option<Type>,
+    pub annotation_span: Option<Span>,
+    pub value: Box<Expr>,
+    pub span: Span,
+}
+
 /// A surface expression (`39 §5.2`, `21 §6.1`).
 #[derive(Clone, Debug)]
 pub enum Expr {
@@ -503,8 +514,8 @@ pub enum Expr {
     EApp(Box<Expr>, Box<Expr>, Span),
     /// `\ x y z . body` — lambda (multiple names desugared by resolver).
     ELam(Vec<String>, Box<Expr>, Span),
-    /// `let x : A = e in body` — local binding.
-    ELet(String, Option<Type>, Box<Expr>, Box<Expr>, Span),
+    /// `let x : A = e; y = f x in body` — sequential local binding group.
+    ELet(Vec<LetBinding>, Box<Expr>, Span),
     /// `e : A` — type ascription (checking hint).
     EAsc(Box<Expr>, Box<Type>, Span),
     /// `old e` — pre-state reference in `space`-op `ensures` (`21 §6.4`).
@@ -556,7 +567,7 @@ impl Expr {
             | Expr::EUniv(_, s)
             | Expr::EApp(_, _, s)
             | Expr::ELam(_, _, s)
-            | Expr::ELet(_, _, _, _, s)
+            | Expr::ELet(_, _, s)
             | Expr::EAsc(_, _, s)
             | Expr::EOld(_, s)
             | Expr::ENumLit(_, s)
