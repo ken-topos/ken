@@ -93,6 +93,61 @@ fn program_commands (spec : ProgramSpec) : List CommandSpec =
   match spec {
     MkProgramSpec name description commands ↦ commands
   }
+
+fn argparse_option_schema_field (spec : OptionSpec) : SchemaField =
+  MkSchemaField
+    (list_char_to_string
+      (list_append Char (string_to_list_char "--") (string_to_list_char (option_name spec))))
+    SchemaOptional
+    (match option_mode spec {
+      FlagOption ↦ SchemaFlag;
+      ValueOption ↦ SchemaBytes
+    })
+    (option_description spec)
+
+fn argparse_option_schema_fields (specs : List OptionSpec) : List SchemaField =
+  match specs {
+    Nil ↦ Nil SchemaField;
+    Cons spec rest ↦ Cons
+      SchemaField
+      (argparse_option_schema_field spec)
+      (argparse_option_schema_fields rest)
+  }
+
+fn argparse_positional_schema_field (spec : PositionalSpec) : SchemaField =
+  MkSchemaField
+    (list_char_to_string
+      (list_append
+        Char
+        (string_to_list_char "<")
+        (list_append
+          Char
+          (string_to_list_char (positional_name spec))
+          (string_to_list_char ">"))))
+    (match positional_required spec {
+      True ↦ SchemaRequired;
+      False ↦ SchemaOptional
+    })
+    SchemaBytes
+    "positional argument"
+
+fn argparse_positional_schema_fields (specs : List PositionalSpec) : List SchemaField =
+  match specs {
+    Nil ↦ Nil SchemaField;
+    Cons spec rest ↦ Cons
+      SchemaField
+      (argparse_positional_schema_field spec)
+      (argparse_positional_schema_fields rest)
+  }
+
+fn command_schema (spec : CommandSpec) : Schema =
+  MkSchema
+    (command_name spec)
+    (command_description spec)
+    (list_append
+      SchemaField
+      (argparse_option_schema_fields (command_options spec))
+      (argparse_positional_schema_fields (command_positionals spec)))
 ```
 
 ## 2. Decoder-backed byte matching
@@ -218,18 +273,31 @@ fn argparse_cons_validations
       head)
     tail
 
+fn argparse_missing_field_check
+      (index : Nat) (field : SchemaField)
+    : SchemaFieldCheck Nat Bool =
+  match schema_field_presence field {
+    SchemaRequired ↦ SchemaFieldRejected
+      Nat
+      Bool
+      (MkSchemaIssue Nat index "missing-positional");
+    SchemaOptional ↦ SchemaFieldAccepted Nat Bool True
+  }
+
+fn argparse_schema_issue_diagnostic (issue : SchemaIssue Nat) : Diagnostic =
+  argparse_diagnostic (schema_issue_origin Nat issue) Zero Zero (schema_issue_code Nat issue)
+
 fn argparse_missing_positionals
       (positionals : List PositionalSpec) (index : Nat)
     : Validation (NonEmpty Diagnostic) (List ParsedArgument) =
-  match positionals {
-    Nil ↦ Valid (NonEmpty Diagnostic) (List ParsedArgument) (Nil ParsedArgument);
-    Cons spec rest ↦
-      match positional_required spec {
-        False ↦ argparse_missing_positionals rest index;
-        True ↦ argparse_cons_validations
-          (argparse_error ParsedArgument index Zero Zero "missing-positional")
-          (argparse_missing_positionals rest index)
-      }
+  match schema_validate_fields Nat Bool
+    (argparse_missing_field_check index)
+    (argparse_positional_schema_fields positionals) {
+    Valid checked ↦ Valid (NonEmpty Diagnostic) (List ParsedArgument) (Nil ParsedArgument);
+    Invalid issues ↦ Invalid
+      (NonEmpty Diagnostic)
+      (List ParsedArgument)
+      (nonempty_map (SchemaIssue Nat) Diagnostic argparse_schema_issue_diagnostic issues)
   }
 
 fn argparse_parse_tokens
@@ -412,27 +480,7 @@ fn argparse_subcommands_chars (specs : List CommandSpec) : List Char =
       (argparse_subcommands_chars rest)
   }
 
-fn command_help (spec : CommandSpec) : Doc =
-  Text
-    (list_append
-      Char
-      (string_to_list_char (command_name spec))
-      (list_append
-        Char
-        (string_to_list_char " ")
-        (list_append
-          Char
-          (string_to_list_char (command_description spec))
-          (list_append
-            Char
-            (string_to_list_char "\nOptions:\n")
-            (list_append
-              Char
-              (argparse_options_chars (command_options spec))
-              (list_append
-                Char
-                (string_to_list_char "Positionals:\n")
-                (argparse_positionals_chars (command_positionals spec))))))))
+fn command_help (spec : CommandSpec) : Doc = schema_help (command_schema spec)
 
 fn program_help (spec : ProgramSpec) : Doc =
   Text
