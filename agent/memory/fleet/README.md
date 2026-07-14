@@ -9,6 +9,7 @@ some roles need belongs in a narrower scope.
 |---|---|
 | [a-deferral-is-honest-a-deferral-that-reads-as-delivery-is-not](a-deferral-is-honest-a-deferral-that-reads-as-delivery-is-not.md) | A WP can merge with its headline deferred and no test fails — ground GATE status in the gate's own text, never roll it up from WP status |
 | [a-dependency-is-met-when-you-can-write-the-obligation](a-dependency-is-met-when-you-can-write-the-obligation.md) | "Merged" ≠ "unblocked": a bridge gives you the SPINE, not the ELEMENTS — try to WRITE the obligation before you kick the dependent |
+| [amending-a-frame-mid-flight-must-sweep-its-guardrails-section](amending-a-frame-mid-flight-must-sweep-its-guardrails-section.md) | When the substrate moves under a held WP, sweep the WHOLE frame — the guardrails section is obeyed without re-derivation, so a stale one FORBIDS the correct build in your own voice |
 | [an-oracle-that-greps-a-name-fires-on-prose-that-denies-it](an-oracle-that-greps-a-name-fires-on-prose-that-denies-it.md) | A "zero-X" oracle that greps the NAME fires on the prose that DENIES it — check declarations, not substrings |
 | [check-main-via-git-object-store-not-find](check-main-via-git-object-store-not-find.md) | Check main via the git object store, not `find` |
 | [cleanroom-is-role-discipline-not-host](cleanroom-is-role-discipline-not-host.md) | Clean-room protection is a role discipline, not a model-host property |
