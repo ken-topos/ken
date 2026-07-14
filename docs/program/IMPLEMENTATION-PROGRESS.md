@@ -262,7 +262,52 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > FIRST — same logic as PX6-before-PX7)* → **RES-3** state the `T` obligations
 > (`no use-after-close`; `every open is eventually closed`), **forced complete by
 > RES-2.**
-> **⚠ TWO UNVERIFIED PREREQS — probe before framing, do NOT pin:** (a) **`emit_export`
+> ### 🔴🔴 PROBED — AND I WAS WRONG. **`Σ` IS TOO COARSE TO STATE THE OBLIGATIONS.**
+> **I told Pat: *"`Σ` is literally the interaction-tree perform-node signatures, so
+> `open`/`read`/`close` ARE perform nodes ⇒ 'no use-after-close' IS expressible as a
+> `Temporal Σ` formula."* **THAT IS FALSE.** *(Probed 2026-07-14 before framing
+> RES-1 — which is the only reason it is not now a three-WP-deep discovery.)*
+>
+> **What is TRUE (verified at the emission, not the doc):**
+> - **FS ops ARE effects** — capability-gated, dispatched through `run_io`'s effect
+>   path (`eval.rs:4362` → `fs_dispatch:4046`, `args.get(1)` = the capability;
+>   unknown ops → `RunIoError::UnknownEffect`). **✅ RES-1 does NOT have to invent
+>   perform nodes. That risk is dead.**
+> - **BUT `Σ` = `EffectRow::effects()` = a set of `EffectName`** (`export.rs:307-310`;
+>   `row.rs:65`), and **`EffectName = String`**, documented `row.rs:14` as *"A named
+>   effect: **`FS`**, `Clock`, `Console`, `Net`, `Rand`."*
+>
+> **⇒ `Σ` TODAY = `{"FS", "Console", …}` — ONE SYMBOL FOR ALL OF FS.**
+> **NOT `{fs.open, fs.read, fs.close}`.**
+>
+> **⇒ `G(close(h) → ¬F use(h))` IS NOT EXPRESSIBLE.** It needs `close` and `use` as
+> **distinct alphabet symbols.** *The property has nowhere to be said.*
+>
+> > **★ HOW I GOT IT WRONG — `grep-the-emission-not-the-name`, my OWN memory, 3rd
+> > time today.** `export.rs:29` and `:163` both say ***"Σ = L5 perform-node
+> > signatures."*** **Three lines below, `:310` collects EFFECT NAMES.** **The doc
+> > comment is aspirational; the emission is coarse.** I trusted a survey that
+> > trusted the comment. **A doc comment is a CLAIM about the code, not the code.**
+>
+> ### ★★ AND IT BREAKS THE CLOSURE GATE TOO — this is the load-bearing consequence
+> My proposed gate — *"every symbol in `Σ` is covered by an obligation or explicitly
+> declared un-stated"* — **is VACUOUSLY SATISFIABLE at effect-name granularity:**
+> `"FS"` appears in *some* obligation ⇒ **gate passes, and you have said NOTHING
+> about `close`.** **The gate only has teeth at OPERATION granularity.**
+>
+> **⇒ BOTH halves of the resource plan — stating the obligations AND the gate that
+> forces them complete — depend on the SAME missing thing:**
+>
+> > ## ▶ **RES-Σ (NEW, and it is the TRUE FIRST WP of the campaign): refine `Σ` from
+> > ## effect NAMES to operation SIGNATURES.**
+> > Touches `EffectRow`/`EffectName`, the export emitter's alphabet derivation, and
+> > **invariant I3 (alphabet closure)**. **It sits AHEAD of the runtime floor, not
+> > behind it.** *Build the alphabet you must speak in, before you build the thing
+> > you must describe.* **Same shape as the native-early and PX6-before-PX7 rulings:
+> > if you design against the coarse alphabet you will design something you cannot
+> > say — and find out only after the semantics are public.**
+>
+> **⚠ REMAINING UNVERIFIED PREREQ — probe before framing, do NOT pin:** (a) **`emit_export`
 > has NO production call sites** (only `b1`/`b2`/`b3` acceptance tests + its own
 > definition) — nothing in the CLI emits an export today; (b) **I have NOT confirmed
 > FS ops flow through the ITree `Vis`/perform-node path** rather than direct host
