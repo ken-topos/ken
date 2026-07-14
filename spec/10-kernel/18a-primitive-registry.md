@@ -9,10 +9,15 @@
 > on its correctness-AC** — Pat ratifies "`X` NATIVE **iff** [AC]", never
 > as-currently-built where the build diverges from the seal.
 
-The trusted base (`18 §5`) rests on the primitive reductions being **correct
-partial functions on literals**. This registry makes that surface auditable:
-what is native, why it *earns* native status, what class laws it forecloses, and
-the single external net (the differential oracle) that checks it.
+The trusted-base ledger (`18 §5`) enumerates primitive declarations and their
+operation symbols. In the landed system their `PrimReduction::Op` semantics run
+in `ken-interp`, remain opaque to kernel conversion, and are therefore
+tested-not-trusted value semantics rather than proof-producing reductions.
+This registry makes that surface auditable: what is native, why it *earns*
+native status, what class laws opacity forecloses, and the single external net
+(the differential oracle) that checks it. Unless a paragraph explicitly says
+K3, “reduces” in this chapter means **interpreter runtime evaluation**, never
+kernel conversion.
 
 ## 1. Schema
 

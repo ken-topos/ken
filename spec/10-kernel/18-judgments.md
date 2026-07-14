@@ -265,7 +265,7 @@ entry may return.
 | `declare_recursive_group` | one `(level_params, ty)` per member; `bodies_fn` returns one body per member, in order | each `ty` checked; all members pre-admitted opaque; each body checked; **SCT on the whole group**; accept ⇒ all transparent; **reject ⇒ the whole group rolled back** | as `declare_def`; `NotTerminating` rolls back every member |
 | `declare_inductive` | `build(id)` yields a well-formed `InductiveSpec` self-referencing `id` | signatures checked; **strict positivity** (`14 §8`) and the **W-style admission boundary** (`14 §8.4`: W-style admitted, negative / non-`D`-free-domain rejected) hold; type former + constructors admitted; the **dependent eliminator** (Π-abstracted IH + W-ι, `14 §3.1`/`§7.7`) generated on use | `PositivityViolation`, `IllFormedDecl`, `LevelArityMismatch` |
 | `declare_postulate` | `ty` raw-well-formed over `·` | `· ⊢ ty type`; `id` admitted **opaque**; **recorded in the trusted base** (appears in `trusted_base()`). A postulate of an empty type is admitted but **visible** as an assumption | `TypeMismatch`, `UniverseInconsistency` |
-| `declare_primitive` | `ty` raw-well-formed; `reduction` the registered computation | `· ⊢ ty type`; `id` admitted opaque + `reduction` **registered in the trusted base**. The reduction must be a correct partial function on literals (assumed; §5) | `TypeMismatch`, `UniverseInconsistency` |
+| `declare_primitive` | `ty` raw-well-formed; `reduction` the registered operation descriptor | `· ⊢ ty type`; `id` admitted opaque + descriptor **registered in the trusted-base ledger**. `Literal` records a value class; `Op` is opaque to landed conversion and names interpreter dispatch (§5) | `TypeMismatch`, `UniverseInconsistency` |
 | `infer` | `ctx` well-formed; `t` raw-well-formed | returns the **unique** `A` with `ctx ⊢ t ⇒ A` (§3.1) | `VarOutOfScope`, `NotAFunction`, `NotASigma`, `LevelArityMismatch`, `TypeMismatch`; a non-inferable head ⇒ error |
 | `check` | `ctx` well-formed; `t` raw-well-formed; **`ty` a well-formed type** | `ctx ⊢ t ⇐ ty` (§3.2); the single conversion call is the mode switch | `TypeMismatch` (the two non-converting types), plus any from `infer` |
 | `convert` | `a`, `b` both check at `ty` | `true` ⇔ `ctx ⊢ a ≡ b : ty` (`17`); **total + decidable**. Threads `ty` for η + the Ω-PI shortcut (`16 §8.2`) | none — returns `bool`; the caller manufactures the error |
@@ -359,19 +359,27 @@ note).
 
 ## 5. The trusted base (what soundness actually rests on)
 
-Soundness of any Ken program rests on exactly:
+Ken's audited boundary has three categories. Kernel proof soundness rests on
+the declarations/signatures in all three; runtime value correctness additionally
+relies on the interpreter semantics named by (2):
 
 1. **The kernel code** implementing §1–§4 and `11`–`17` (the Rust core) — this
    includes the admission gates (§4.3: positivity, W-style, SCT, quotient
    respect), which are *trusted-as-code* but **re-run on every input**: nothing
    is admitted without passing, so the gates add no per-program assumption.
-2. **The primitive reductions** registered via `declare_primitive` (`14 §5`) —
-   each must be a correct partial function on literals.
+2. **The primitive declarations and operation registrations** admitted via
+   `declare_primitive` (`14 §5`) — opaque constants enumerated for audit. Their
+   declared types are part of the proof-soundness TCB. In the landed system an
+   `Op` symbol dispatches the interpreter's `prim_reduce`; that implementation
+   is not executed by kernel conversion. Its specified partial function must be
+   correct for runtime semantic correctness, but a wrong result is a wrong
+   runtime value rather than an inhabitant of a false proposition.
 3. **Any postulates** admitted via `declare_postulate` — each is an *assumed*
    axiom; a postulate of an empty type would make the system inconsistent.
 
-Nothing else is trusted: not the elaborator, the prover, Z3, the surface
-compiler, or the runtime. The kernel MUST be able to **enumerate (2) and (3)**
+Nothing else is trusted for proof soundness: not the elaborator, the prover,
+Z3, the surface compiler, or the runtime. The kernel MUST be able to
+**enumerate (2) and (3)**
 on request via the method `GlobalEnv::trusted_base() -> Vec<GlobalId>` (§4.1),
 which returns **exactly** the registered primitives + admitted postulates —
 excluding the prelude (`Top`/`Bottom`) and excluding definitions/inductives,
@@ -380,6 +388,12 @@ complete set of unchecked assumptions a given program depends on. Idiomatic Ken
 adds **no** postulates; classical axioms, if used, appear here and are visible
 (`16 §1.3` — Ω is intuitionistic, excluded middle is not assumed).
 
+The enumeration records the trusted primitive declarations/signatures while
+current `Op` execution remains in the tested-not-trusted interpreter ring. It
+does not imply that the kernel executes the registered operation. Promoting
+those operations into conversion would enlarge the kernel TCB and is the
+separate K3 decision.
+
 The concrete enumeration of clause (2) — every native (`declare_primitive`)
 operation, **adversarially** re-adjudicated against the surface chapters
 (`35`/`37`/`38`), each with its verdict (`NATIVE` / `DEMOTE→derived` /
@@ -387,11 +401,12 @@ operation, **adversarially** re-adjudicated against the surface chapters
 **postulate-only**, and its
 differential-oracle net — is the **primitive-operation registry**
 (`18a-primitive-registry.md`, BUILTINS Phase 1). It is the auditable surface
-behind clause (2)'s "correct partial functions on literals": `trusted_base()`
-enumerates exactly the ops it ratifies `NATIVE`, plus the admitted postulates.
-Where a native op met an input outside its total domain the registry pins an
-**obligation-emitting / error-surfacing** reduction — never a silent wrong value
-(the partiality discipline, `18a §2`).
+behind clause (2)'s runtime semantic contract: `trusted_base()` enumerates
+exactly the ops it ratifies `NATIVE`, plus the admitted postulates. Where a
+native op meets an input outside its total domain the registry pins an
+**obligation-emitting / error-surfacing** interpreter result — never a silent
+wrong value (the partiality discipline, `18a §2`). This oracle checks runtime
+values; it is not evidence of kernel conversion.
 
 ## 6. Metatheory status (honest accounting)
 

@@ -356,24 +356,33 @@ They attach as **primitives** (`11 §4`):
 
 ```
 Σ, (Int : Type 0 := prim …)               -- an opaque primitive type
-Σ, (add : Int → Int → Int := prim …)      -- a primitive op + reduction rule
+Σ, (add : Int → Int → Int := prim …)      -- an opaque primitive operation
 ```
 
 - A primitive type is an **opaque type constant**; it has no kernel-level
   constructors or eliminator. Its inhabitants are **literals** (introduced by
   the elaborator as opaque primitive values) and the results of primitive
   operations.
-- A primitive operation carries a **registered reduction** `prim` (`41`):
-  applied to literal arguments it computes a literal result *in the kernel's
-  evaluator*, so `add 2 3 ≡ 5` holds definitionally and proofs can compute over
-  literals. On non-literal (stuck) arguments it is a neutral term.
-- Primitives are **trusted**: a wrong primitive reduction is a soundness bug, so
-  the set of primitives is small, audited, and part of the kernel's trusted base
-  (listed in `18 §5`). This is the one place computation enters the kernel from
-  outside the term language; everything else is β/ι/δ/obs.
-- Equational properties of primitives that are *not* definitional (e.g.
-  commutativity of `add`) are **propositions to prove**, provided as a small
-  axiomatized interface or proved against a reference model, not assumed.
+- A primitive operation carries a registered `PrimReduction::Op` symbol (`41`).
+  In the landed system that registration is an **interpreter dispatch
+  descriptor**, not a kernel-conversion rule: `ken-interp` computes `add 2 3`
+  to `5` at runtime, while the kernel leaves the application neutral even when
+  every argument is a literal. Thus `add 2 3 ≡ 5` does not hold definitionally
+  and `Refl` cannot prove that equation.
+- `PrimReduction::Literal` is a different case. A checked surface literal is
+  already a value, not an operation application; registered literal equality
+  may compare two such values as specified in `16 §2.2` and ADR 0013. This does
+  not make an enclosing `Op` application reduce.
+- Primitive declarations and operation symbols are small, audited, and listed
+  by `trusted_base()` (`18 §5`). Correct `Op` results remain a semantic
+  correctness obligation on the interpreter's `prim_reduce`; a wrong result is
+  a wrong runtime value, not a false kernel proof, because conversion never
+  consumes that result. Kernel execution of registered operations is the
+  **K3-deferred** trusted-reduction design fork.
+- Equational properties of primitive operations, including equations on
+  concrete literals, are **propositions to prove**. Until K3 provides a
+  proof-relevant conversion or certificate mechanism, a direct law needs a
+  visible postulate/`Axiom` or a proof over an independent model, not `Refl`.
 
 ## 6. What the kernel checks here
 
@@ -392,13 +401,16 @@ A conforming kernel MUST:
    ensure it terminates (structural decrease, §9).
 4. Permit **large elimination** under the predicative universe rules (§3).
 5. Treat **primitive** types/operations as opaque constants with registered,
-   audited reductions (§5), never as inductives. K1 defines only the interface;
-   the value model (`../40-runtime/41-values.md`, K3) and the kernel API
-   (`18-judgments.md`, K-api) elaborate the registration mechanism.
+   audited operation descriptors (§5), never as inductives. K1 defines only the
+   interface; the runtime value model (`../40-runtime/41-values.md`) and
+   interpreter elaborate the current operation semantics. Kernel conversion for
+   registered operations remains K3-deferred.
 
 Conformance: `../../conformance/kernel/inductive/` — positivity acceptance and
 rejection, `elim_Nat`/`elim_Vec` ι-computation, large elimination (`elim_Bool`
-into `Type`), and primitive-literal reduction (`add 2 3 ⇓ 5`).
+into `Type`), checked literal values, and primitive-`Op` opacity under
+conversion (`add_int 2 3` does not convert to `5`). Runtime primitive values are
+covered by the surface/runtime corpora, not this kernel-conversion corpus.
 
 ## 7. Algorithmic ι-reduction for conversion
 

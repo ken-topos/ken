@@ -425,18 +425,20 @@ connectives of par. 1.3.
 ---
 
 **Primitive type.** `A` reduces to a primitive type (e.g. `Int`, `Float`,
-`String`).
+`String`). A primitive type with a registered decidable-equality certificate
+may compare **checked literal values** by the ADR 0013 gate:
 
 ```
-Eq Int m n  ⇝  primEqInt m n
+Eq Int (literal m) (literal n)  ⇝  Top    when m = n
+Eq Int (literal m) (literal n)  ⇝  Bottom when m ≠ n
 ```
 
-Where `primEqInt` is the kernel's built-in integer equality, returning a
-WHNF boolean in Omega (or `Top`/`Bottom`). Analogous for each primitive
-type (`14-inductive.md` par. 5).
-
-**Neutral case.** When `m` or `n` is neutral, `Eq` reduces to a neutral
-`primEqInt m n` -- which the convertibility checker treats as stuck.
+This is a `PrimReduction::Literal` value comparison, not execution of an
+operation registered as `PrimReduction::Op`. An `Op` application such as
+`eq_int 5 5` remains neutral under conversion even though its arguments are
+literals; it computes only in the interpreter today. An unregistered primitive
+type, or a registered type with either operand non-literal, likewise leaves
+`Eq` neutral. Kernel conversion of registered operations is K3-deferred.
 
 ---
 

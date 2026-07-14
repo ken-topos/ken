@@ -69,9 +69,11 @@ primitive Ken to define it from):
   primitive ops compute on.
 - **Audited primitive operations** (`../10-kernel/14 §5`) — machine
   arithmetic/comparison and the `String`/`Bytes` primitives, each a
-  `Decl::Primitive` whose registered reduction computes on literals. These
-  bottom out in the kernel's audited `prim` reductions and are **not**
-  Ken-definable.
+  `Decl::Primitive` whose registered `Op` symbol dispatches runtime evaluation
+  on values. These bottom out in the interpreter's audited `prim_reduce`
+  surface and are **not** Ken-definable. They remain opaque to kernel conversion
+  until K3; an operation equation over literals therefore needs a visible proof
+  assumption rather than `Refl` today.
 - **The effect / FFI boundary** — `foreign` and the base `IO`/effect primitive
   (`[Console]`/`[FS]` etc., `38`, L5/L7). I/O cannot be pure Ken; the boundary
   is a listed assumption.

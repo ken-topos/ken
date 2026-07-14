@@ -138,8 +138,10 @@ claim with no conformance case is a claim no one can rely on
   `isScalar := IsTrue(inRangeBool)` Ω-encoding (**sort-not-token**) and
   extraction **computing** the scalar proof (runtime face deferred).
 - `surface/collections/seed-collections.md` — L3 strings & collections (`37`):
-  `String` as a content-addressed **NFC UTF-8 primitive** (byte-length ≠
-  char-length, **not** `List Char`); `List`/`Option`/`Result` transparent
+  `String` as a content-addressed **NFC UTF-8 primitive**: byte-length ≠
+  char-length through live interpreter values; primitive-`Op` conversion and
+  `Refl` explicitly deferred to K3; **not** `List Char`;
+  `List`/`Option`/`Result` transparent
   inductive (L2) and `Array` abstract over the `41` heap (kind `0x06`) with
   **persistence observable as slot-id** (the heap `Map`/`Set` `0x07`/`0x08`
   model is **superseded** by the proved BST, `stdlib/map/seed-map.md`); the
@@ -150,7 +152,8 @@ claim with no conformance case is a claim no one can rely on
   the `Perm` conjunct present**.
 - `surface/bytes-io/seed-bytes-io.md` — L6 `Bytes` + binary I/O (`38 §1`):
   `Bytes` as a `14 §5` primitive (`0x05`, immutable, `b"…"`/`0x[…]` literals),
-  registered reductions + no-silent-OOB partiality, effect-tracked I/O
+  interpreter-side primitive-operation behavior + no-silent-OOB partiality,
+  effect-tracked I/O
   (`read_bytes`/`send` carry their `[FS]`/`[Net]` rows — the L5 `36 §1.4` gate,
   referenced not duplicated), explicit `encode`/`decode` (no hidden charset),
   and the one-directional round-trip law (`decode (encode s) == Ok s` provable;

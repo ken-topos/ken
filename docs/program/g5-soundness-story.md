@@ -20,11 +20,12 @@
 ## 0. The one thing to take away
 
 Ken's soundness rests on **exactly three trusted things** — a small permanent
-Rust kernel, its primitive reductions, and its postulates — and on **one
-structural property**: the kernel's verdict depends on the term and its type,
-**never on who wrote them**. Everything else in the system — the elaborator, the
-prover, the SMT solvers, the surface compiler, the runtime, the information-flow
-labels, the typeclass machinery, the policy engine, the package tooling —
+Rust kernel, its primitive declarations/signatures, and its postulates — and on
+**one structural property**: the kernel's verdict depends on the term and its
+type, **never on who wrote them**. Everything else in the system — the
+elaborator, the prover, the SMT solvers, the surface compiler, the runtime, the
+information-flow labels, the typeclass machinery, the policy engine, the
+package tooling —
 produces artifacts the kernel **re-checks from scratch**. A bug or active malice
 anywhere in that outer ring can cause a **failure to prove** or a **rejected
 certificate**; it can **never** manufacture a false `proved`.
@@ -87,10 +88,13 @@ where soundness is delicate**, and the kernel gets two adjacent traps right:
 ### 1.3 Meaning-preserving evaluation
 
 Reduction (whnf / normalization) preserves typing: a well-typed term stays
-well-typed and inhabits the same type under reduction (subject reduction), and
-the primitive reductions on literals (`14 §5`) compute the values the types
-promise. Evaluation cannot turn a proof of `A` into a proof of something else.
-This is the "meaning-preserving evaluation" clause of G5.
+well-typed and inhabits the same type under kernel reduction (subject
+reduction). Registered `PrimReduction::Op` semantics are a separate interpreter
+path: they compute runtime values, remain opaque to conversion, and are tested
+against independent value oracles. A wrong `prim_reduce` result is a wrong
+value, not a false kernel proof. Evaluation cannot turn a proof of `A` into a
+proof of something else. This is the "meaning-preserving evaluation" clause of
+G5; kernel execution of registered operations remains K3-deferred.
 
 ### 1.4 The de Bruijn criterion — soundness read as a *security* property
 
@@ -133,8 +137,10 @@ on **exactly three things** (`64 §1`, `18 §5`):
    quotient respect). The gates are trusted-as-code but **re-run on every
    input** — nothing is admitted without passing — so they add **no per-program
    assumption**. They are part of item 1, never a per-program trusted axiom.
-2. **The primitive reductions** — audited operations on literals, each
-   registered via `declare_primitive` as a `Decl::Primitive`.
+2. **The primitive declarations and operation registrations** — each admitted
+   via `declare_primitive` as a `Decl::Primitive`. The declaration/signature is
+   trusted and enumerable; the landed `Op` implementation is interpreter
+   runtime semantics, not kernel conversion.
 3. **The postulates** — every assumed axiom and `foreign`/FFI signature, each
    admitted via `declare_postulate` as a `Decl::Opaque`.
 
@@ -302,7 +308,8 @@ would *fail loudly* if the property broke.
 | Functional correctness (`ensures`, refinements) | `Q` kernel-certified | kernel re-checks the certificate, goal ∉ `trusted_base()` |
 | No `Type:Type` / universe consistency | `Q` (kernel behavior; metatheorem trusted-as-code) | `sort_pi`/`sort_sigma`, run on every input |
 | Proof-irrelevance at `Omega`, Sigma-sort discipline | `Q` (kernel behavior; metatheorem trusted-as-code) | both-keyed `sort_sigma`, type-directed Ω-PI |
-| Subject reduction / meaning-preserving eval | `Q` (kernel behavior; metatheorem trusted-as-code) | kernel reduction + typing, every input |
+| Subject reduction | `Q` (kernel behavior; metatheorem trusted-as-code) | kernel β/ι/δ/obs reduction + typing, every input |
+| Primitive runtime value semantics | `tested` | `ken-interp::prim_reduce` + independent value oracle; opaque to kernel conversion |
 | Never a false `proved`, any author | structural | `check` has no provenance channel (AI-Indep) |
 | The TCB (kernel + primitives + postulates) | trusted-as-code | audit (§64 §3) + this document's companion audit |
 | IFC / `@ct` / policy admission | `P` trusted-by-typing | elaborator flow rules; labels erased before kernel; conformance |

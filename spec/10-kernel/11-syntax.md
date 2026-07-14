@@ -111,7 +111,7 @@ local context Γ) recording top-level declarations in dependency order:
     | Σ, c : A := t          -- transparent definition (δ-unfoldable)
     | Σ, c : A               -- opaque constant / postulate (no unfolding)
     | Σ, data D …            -- inductive family declaration (14-inductive.md)
-    | Σ, c : A := prim p     -- primitive: opaque const + reduction (41)
+    | Σ, c : A := prim p     -- primitive: opaque const + operation descriptor (41)
 ```
 
 - A **transparent definition** `c : A := t` requires `· ⊢ t : A` in the

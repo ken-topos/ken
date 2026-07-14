@@ -53,7 +53,7 @@ kernel rule** (guardrail). Its inhabitants are **literals** (introduced by the
 elaborator as opaque primitive values) and the results of the primitive
 operations (`§1.2`). This is the same discipline as the L1 numeric primitives
 (`35`): the kernel gains an opaque constant plus a small, **audited** set of
-registered reductions, listed in the trusted base (`18 §5`).
+registered operation symbols, listed in the trusted-base ledger (`18 §5`).
 
 - **Immutable and finite.** A `Bytes` value never changes after construction;
   there is **no mutating operation** in the surface (the AC1 structural
@@ -87,11 +87,14 @@ types and must not be conflated. A `b"…"` literal elaborates **directly** to t
 
 ### 1.2 Core `Bytes` operations (primitive / prelude)
 
-The core operations are primitive operations with **registered reductions**
-(`14 §5`) — they compute over literal `Bytes` **in the kernel's evaluator** (so
-`length 0x[deadbeef] ≡ 4 : Int` holds definitionally and proofs reduce over
-literals), and are neutral on stuck (non-literal) arguments. They introduce **no
-new kernel rule** — only registered `prim` reductions, like `add` on `Int`.
+The core operations are primitive operations with registered
+`PrimReduction::Op` symbols (`14 §5`). The interpreter evaluates them over
+`Bytes` values at runtime, so `bytes_length 0x[deadbeef]` produces `4` as a
+value. The landed kernel does not execute an `Op` during conversion:
+`bytes_length 0x[deadbeef] ≡ 4 : Int` is **not** definitional and the equation
+does not close by `Refl`. An `Op` remains neutral to conversion even when its
+arguments are literals. Kernel conversion of registered operations is
+K3-deferred; these declarations add no landed kernel reduction rule.
 
 | Op | Type | Notes |
 |---|---|---|
@@ -122,7 +125,7 @@ new kernel rule** — only registered `prim` reductions, like `add` on `Int`.
   `20-verification/`), not baked into the kernel.
 - **Exact surface spellings.** The primitive names `bytes_at` and
   `bytes_slice`, their signatures, their total failure behavior, and their
-  registered reductions over literals are fixed here. Spellings of the
+  registered runtime semantics over values are fixed here. Spellings of the
   remaining prelude conveniences (`++` vs `concat`, for example) remain a
   **`31`/prelude naming** detail (oracle-tagged for the build team).
 
@@ -157,8 +160,8 @@ one merely to preserve an old oracle.
   interface Sec/B (`60-`/`70-`) read labels and capabilities off of — L6 must
   not perforate it (no effectful I/O that bypasses a `Vis` node).
 - **I/O operations are not kernel primitives.** Unlike the **pure** `Bytes` ops
-  (`§1.2`, which carry `14 §5` registered reductions and compute in the kernel),
-  an I/O operation is an **effect-performing surface operation** whose
+  (`§1.2`, which carry registered interpreter dispatch), an I/O operation is an
+  **effect-performing surface operation** whose
   denotation is an `ITree` `Vis` node (`36 §2`), **not** a kernel reduction — it
   computes no literal in the kernel and adds **nothing** to the TCB. The kernel
   admission this denotation needs (W-style recursive inductives) **landed in

@@ -222,17 +222,27 @@ not depend on the spelling.
 
 ## §6 — kernel-primitive / prelude-law boundary (no kernel enlargement)
 
-### surface/numbers/literal-reduces-in-kernel
-- spec: `35 §6.1`, `14 §5`
-- given: `2 + 3 : Int`
-- expect: **reduces-to** `5` *in the kernel's evaluator* — the registered,
-  audited `prim` reduction on literals (`14 §5`). On a non-literal / stuck
-  argument the primitive op is a **neutral** term (no reduction fires).
-- why: numeric ops are kernel **primitives** with registered reductions, so
-  `2 + 3 ≡ 5 : Int` is **definitional** (holds by computation). The trusted-
-  primitive obligation (`35 §6.2`, `35 §7`): the registered reduction must match
-  the reference model — a wrong primitive reduction is a soundness bug (`14 §5`,
-  `18 §5`).
+### surface/numbers/primitive-op-runtime-value-k3-conversion-deferred
+- spec: `35 §6.1`, `14 §5` (`Literal` value vs `Op` distinction), `18 §5`;
+  K3 primitive-`Op` conversion deferred
+- given: `2 + 3 : Int`, a proposed `Refl` proof of
+  `Equal Int (add_int 2 3) 5`, and `a + b` for abstract `a b : Int`.
+- expect: the **real interpreter** evaluates `add_int 2 3` to `Int 5`. Kernel
+  conversion does not: `2` and `3` are checked `PrimReduction::Literal` values,
+  but `add_int` is a distinct `PrimReduction::Op`, so the application remains
+  neutral and the equality does **not** close by `Refl`. A proof over the
+  literal application needs a visible audited postulate/`Axiom` today. The
+  abstract application remains neutral as before. A positive conversion/`Refl`
+  oracle is **DEFERRED/RED-UNTIL-K3**, conditional on K3 registering `add_int`
+  for conversion.
+- why: the trusted-primitive obligation (`35 §6.2`, `35 §7`) still requires the
+  interpreter's registered `prim_reduce` result to match the independent
+  reference model — a wrong value remains a soundness bug (`14 §5`, `18 §5`).
+  The obligation is re-homed to the runtime producer; it does not imply a kernel
+  conversion rule. Keeping `Literal` values distinct from the opaque `Op` step
+  preserves the genuine `14 §5` literal claim while removing only the false
+  operation-reduction claim. (runtime value + neutral conversion; trusted-base;
+  K3-gated proof.)
 
 ### surface/numbers/algebraic-law-is-proposition-not-reduction  (soundness)
 - spec: `35 §6.2`, `14 §5`
@@ -289,7 +299,7 @@ not depend on the spelling.
   `decimal-exact-while-float-honest`
 - **§3.1** (`Int` div-by-zero obligation) — `int-div-by-zero-emits-obligation`
 - **§6.1/§6.2** (primitive reduction vs prelude law) —
-  `literal-reduces-in-kernel`,
+  `primitive-op-runtime-value-k3-conversion-deferred`,
   `algebraic-law-is-proposition-not-reduction`
 - **§2.4** (`Char` surrogate exclusion) — `char-excludes-surrogates`
 

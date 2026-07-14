@@ -18,17 +18,22 @@ properties are trusted-as-code, held by audit (§3), never by self-certification
 
 ## 1. The trusted computing base (TCB), precisely
 
-Soundness — and therefore every security guarantee that rests on a proof —
-depends on **exactly** three things (`../10-kernel/18 §5`):
+Ken's audited boundary has **exactly** three categories
+(`../10-kernel/18 §5`). Proof soundness depends on the declarations/signatures
+in all three; runtime value correctness additionally relies on item 2's
+interpreter semantics:
 
 1. **The kernel** — the small, permanent Rust core (type theory + conversion +
    proof checker), including the admission gates (positivity, W-style, SCT,
    quotient respect, `18 §4.3`). The gates are trusted-as-code but **re-run on
    every input** — nothing is admitted without passing — so they add **no
    per-program assumption**; they are part of item 1, never item 3.
-2. **The primitive reductions** — the audited operations on literals
-   (`../10-kernel/14 §5`), each registered via `declare_primitive` as a
-   `Decl::Primitive`.
+2. **The primitive declarations and operation registrations** — the irreducible
+   primitive surface (`../10-kernel/14 §5`), each registered via
+   `declare_primitive` as a `Decl::Primitive` and enumerated for audit. The
+   declaration and its type are trusted. Landed `PrimReduction::Op` execution
+   is in `ken-interp`, not kernel conversion; that implementation is tested
+   runtime semantics, not a proof-producing TCB path.
 3. **The postulates** — every assumed axiom and `foreign`/FFI signature, each
    admitted via `declare_postulate` as a `Decl::Opaque` and listed in
    `trusted_base_delta` (`../20-verification/25 §3`).
@@ -38,6 +43,13 @@ surface compiler, the runtime, the IFC label discipline, or the package tooling.
 They all produce artifacts (core terms, certificates) that the kernel re-checks.
 Definitions and inductives are **re-checked, not trusted**, so they are excluded
 from the trusted base.
+
+The kernel's `trusted_base()` ledger includes item 2 because the primitive
+declaration/signature is trusted. This does not claim that the kernel executes
+its registered `Op`. A wrong interpreter reduction is a wrong value and a
+semantic correctness defect; it cannot manufacture a false `proved`. Moving
+registered operations into conversion would change that boundary and is
+K3-deferred.
 
 ### 1.1 The enumeration contract (soundness) [landed producer]
 
