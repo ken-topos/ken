@@ -369,6 +369,65 @@ brief** — the implementer should execute mostly mechanically, not design
    >   has no mint operation at all.** One line; the whole WP was unbuildable as
    >   framed. **I checked the seam the design named and never enumerated the ones
    >   it didn't** — the identical error as (b′), one level up.)
+   >
+   > - **★ (b‴) THE GENERAL FORM — EXPRESSIBILITY. "Never pin a shape that cannot
+   >   state its own contract."** (Architect synthesis, 2026-07-14; **this SUBSUMES
+   >   (b″)**, which is only its trait-shaped special case. Full statement:
+   >   `agent/memory/fleet/never-pin-a-shape-that-cannot-state-its-own-contract.md`.)
+   >
+   >   > **Every obligation this shape must carry — where does it get WRITTEN, and
+   >   > is that place inside the shape's own checked vocabulary, or a reach
+   >   > outside it?**
+   >
+   >   **Three consecutive expensive near-misses were ONE failure.** A shape is
+   >   pinned — a **trait**, a **type**, an **effect op**, a **spec claim** — that
+   >   must carry an obligation. The obligation is **not false** and **not expensive
+   >   to prove**. It is **UNSAYABLE in the shape as pinned**:
+   >   - **I-6** — the trait had nowhere to say *"any host mints its own-identity
+   >     cap"* → the obligation lived on the **concrete** type.
+   >   - **The primitive-`Op` erratum** — conversion had nowhere to say
+   >     `byteLength "abc" ≡ 3` → **the spec said it anyway, in prose the kernel
+   >     cannot check.**
+   >   - **I-8** — `monotonic_now : {Clock} → Int` had nowhere to say *"this read ≥
+   >     the last"* → two `Int`s, **no handle relating them.**
+   >
+   >   **★ WHY IT IS INVISIBLE IN A GREEN DIFF — the load-bearing part.** **Tests
+   >   exercise VALUES; the gap is in the TYPE / ABI / RELATION surface.** The
+   >   values compile and pass **because the missing thing was never a value** — it
+   >   was **a place to write a guarantee**. **No amount of green touches it.** The
+   >   gap surfaces *only* when someone **tries to WRITE the obligation** and finds
+   >   nowhere to put it. **⇒ The audit is NOT "run the suite." It is: "try to write
+   >   each obligation in the shape's own vocabulary, and see if your pen has
+   >   anywhere to land."**
+   >
+   >   **The escape hatches are the doors it arrives through** — a **comment**
+   >   (#14, the narrowest form) · a **per-consumer `Axiom`** (unbounded TCB) · a
+   >   **new trusted primitive** (TCB growth) · a **caller-fabricated value** that
+   >   manufactures the missing binding · a **concrete-only method** the generic
+   >   path can't reach. **All say the same thing: the shape had no home for the
+   >   obligation, so we put it somewhere nothing checks, or somewhere that costs
+   >   trust.** ⇒ **This is PRINCIPLES #14, widened from "comment" to "any reach
+   >   outside the shape's checked vocabulary."**
+   >
+   >   **The audit:** enumerate the shape's contract obligations; for **each**,
+   >   **name the in-shape checkable home** (term / type / handle / method) where it
+   >   is written **and checked**. Any obligation whose *only* discharge is a
+   >   reach-outside is an **expressibility gap** → **extend the shape to give it a
+   >   home** (*and if that home grows the TCB, it is the **OPERATOR's** call, not
+   >   the build's*) **or descope it honestly** (I-8 shipping wall-clock-only, with
+   >   **no** ordering law, because a wall clock genuinely has none — *the absence
+   >   of a law is the truthful statement, not a gap*).
+   >
+   >   **★ AND THIS IS WHY IT IS STRUCTURALLY THE DESIGN PASS'S CATCH, NOT QA's.**
+   >   The **implementer builds values** (they compile). **QA tests values** (they
+   >   pass). **Only the design pass asks whether the SHAPE can express its
+   >   CONTRACT** — a question about the type/ABI/relation surface that neither
+   >   value-construction nor value-testing ever touches. **That is not a
+   >   coincidence about these three WPs; it is why the design-review edge exists at
+   >   all.** Expressibility is the one property living entirely **above the value
+   >   layer**, where the only instrument that reaches it is someone trying to write
+   >   the guarantee down. **Spend the audit there.**
+   >
    > - **(d) REUSE MUST BE PROVED BEHAVIORALLY, NOT STRUCTURALLY** (promoted CC7).
    >   When a WP is framed as a **specialization** of landed substrate ("consume
    >   CC1–CC6, do not rebuild them"), **the ordered shared-`ElabEnv` harness makes

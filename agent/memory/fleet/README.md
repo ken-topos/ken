@@ -18,7 +18,10 @@ some roles need belongs in a narrower scope.
 | [compaction-is-manual-no-clean-seam](compaction-is-manual-no-clean-seam.md) | Team compaction follows the playbook as-is; the manual-seam problem is singleton-specific |
 | [compaction-render-delay-escape-aborts](compaction-render-delay-escape-aborts.md) | `/compact` has a render delay; Escape aborts it, don't send it |
 | [correcting-scope-must-sweep-whole-doc](correcting-scope-must-sweep-whole-doc.md) | Correcting a false claim in a doc must sweep the whole document |
+| [definitional-equality-does-not-imply-executability-under-cbv](definitional-equality-does-not-imply-executability-under-cbv.md) | A lawful class dict carries proof fields; CBV forces them and the interpreter returns `Unknown` — route the executable path through the runtime field |
+| [deriving-from-the-contract-cannot-detect-a-defective-contract](deriving-from-the-contract-cannot-detect-a-defective-contract.md) | A faithful derivation transmits a bad spec with full authority and freezes it in an oracle; a human-visible deliverable needs one AC only a READER can discharge |
 | [formatter-soundness-gates-are-blind-to-layout-conformance](formatter-soundness-gates-are-blind-to-layout-conformance.md) | A formatter's meaning-preservation gates can't see bad layout; gate what it emits against the layout spec |
+| [freezing-a-canonical-form-name-the-ambiguity-that-would-have-stopped-you](freezing-a-canonical-form-name-the-ambiguity-that-would-have-stopped-you.md) | Derive a canonical form from the contract, and name the ambiguity that would have made you escalate — a laundered preference and a derived rule look identical in the diff |
 | [git-author-not-per-agent](git-author-not-per-agent.md) | Git author is shared, not per-agent |
 | [grep-rust-prelude-emission-for-landedness](grep-rust-prelude-emission-for-landedness.md) | A landedness grep must also check the Rust-emitted prelude, not just `.ken` sources |
 | [grep-the-producer-not-the-cited-proxy](grep-the-producer-not-the-cited-proxy.md) | Verify against the real producer, not a cited proxy |
@@ -45,3 +48,4 @@ some roles need belongs in a narrower scope.
 | [thin-flow-directive-dont-cc-the-room](thin-flow-directive-dont-cc-the-room.md) | Thin-flow directive: one reviewer per lane, don't cc the room |
 | [use-tier-labels-never-model-names](use-tier-labels-never-model-names.md) | Use tier labels, never model names |
 | [verify-field-order-arity-against-declaration-not-prose](verify-field-order-arity-against-declaration-not-prose.md) | Verify field order/arity against the declaration, not prose |
+| [verify-the-report-is-real-before-explaining-it](verify-the-report-is-real-before-explaining-it.md) | A confident explanation of a MEASUREMENT ERROR launders it into a finding — check the report reproduces before you build a mechanism for it |

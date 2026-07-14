@@ -14,7 +14,167 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (13:50 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 82cb8fd0`
+> ### ⏭ 2026-07-14 (15:20 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ 62205675`
+>
+> ## ✅ LET-2 **CLOSED** @ `8853b475` (all 3 retros in) · ✅ LET-1 CLOSED · ✅ SUB-1b CLOSED
+>
+> ## ⛔⛔ THE HEADLINE: **§31 MANDATES A STAIRCASE.** LET-1 was FAITHFUL; the SPEC is wrong.
+>
+> **LET-1's own frozen oracle asserts this** for a *flat* 3-binding chain — each
+> RHS forced onto its own line (the binding is **58 cols**; it fits), and each
+> `in` indenting its body one more level, so a **sequence** renders as a
+> right-nested **staircase**:
+>
+> ```
+> const chars : List Char =
+>   let left_chars : List Char =
+>     string_to_list_char left
+>   in
+>     let right_chars : List Char =
+>       string_to_list_char right
+>     in
+>       let joined_chars : List Char =
+>         append Char left_chars right_chars
+>       in
+>         joined_chars      ← 8 cols right of the binding it belongs to
+> ```
+>
+> **`spec/30-surface/31-lexical.md:216-227` SAYS SO.** Ergo derived it correctly.
+> **⇒ Deriving from the contract protects you from laundering your PREFERENCE.
+> It does NOT protect you from a DEFECTIVE CONTRACT** — and a faithful derivation
+> transmits the defect **with full authority**, then freezes it in an exact-text
+> oracle, making the bug **evidence for itself**.
+>
+> **★ The tell was in the WP's own title.** LET-1 = *"**readable** let-chain
+> layout."* Its ACs asserted exact-text · AST · tokens · idempotence · ≤80 cols ·
+> zero-trust. **Six gates, all green, NOT ONE asked whether the output was
+> READABLE.** The exact-text oracle *feels* like it closes that gap — it doesn't;
+> its expected value came from the same defective production, so **it agrees with
+> the defect by construction.** *We replaced a stability gate with a different
+> stability gate and called it a quality gate.* → fleet memory
+> `deriving-from-the-contract-cannot-detect-a-defective-contract.md`.
+>
+> ## ▶ LET-1b — FRAMED, branch `wp/let1b-flat-let-chains`. **BLOCKS LET-3.**
+> Owner **Ergo** (+ CV/Architect at merge; it touches `spec/`). Amend §31 (a
+> fitting binding stays on one line with its `in`; a chain is a **FLAT
+> SEQUENCE**), fix `layout.rs` emission (**not** the `:1068` predicate — that's
+> right), **re-derive** the oracle from the amended production (**do NOT paste
+> the formatter's output** — that's the rubber stamp), reformat the two guide
+> strands. **AC4 = A READER LOOKED** — paste the rendered output verbatim; no
+> mechanical test can discharge it.
+>
+> **⛔ LET-3 (catalog `let` pilot) is BLOCKED on LET-1b.** If it runs first, the
+> pilot writes `let` chains into the catalog, `ken fmt` staircases every one, and
+> the frozen corpus gate makes that layout **canonical catalog-wide**.
+>
+> ## ⚠ MY ERROR: `--doc-only` merges WITHOUT CI. `catalog/**/*.ken.md` is CODE.
+> LET-2 landed the two guide strands **unformatted** → `ken_fmt::strict_frozen_
+> corpus_gate_is_green` RED on main → **blocked the publisher for every
+> subsequent non-doc merge.** Fixed at `62205675` (layout-only: token stream
+> byte-identical, all 3 strands `ken check`, gate 5/5). **The `.md` extension is
+> literate packaging, not a statement about what the file IS. Anything touching
+> `catalog/` · `examples/` · `conformance/` goes through FULL CI, always.**
+>
+> ## ▶ CC6b — hard-stopped and RULED. Runtime building.
+> **runtime-implementer proved AC4 FALSE against the carrier I mandated.** `Path
+> = MkPath Bool (List (List UInt8))` cannot express *"each segment is nonempty
+> and contains no `/`"* — **my frame put that invariant in a `--` COMMENT**
+> (`cc6b-path-posix.md:118`). Counterexamples: `MkPath False [[]]` and `MkPath
+> False [[47]]` are both normalize-fixed but fail `parse (render p) = p`.
+> **PRINCIPLES #14 / the (b‴) expressibility audit — from my own playbook, one
+> day later.** Ruling: carrier frozen, law NOT weakened, obligation gets an
+> **in-shape checkable home**; **Architect ruled → segment-valid qualification**.
+> ⚠ **The reaching lemma is mandatory** (`∀ b. path_valid (path_parse b)`) or the
+> law is true-but-**VACUOUS**.
+>
+> ## Rings
+> **Foundation** = CC8 (re-run corpus gate on `62205675`, then proceed) ·
+> **Runtime** = CC6b (has the law shape) · **Ergo** = LET-1b (kicking) ·
+> **Spec enclave** = retros in, free · Kernel/Verify idle by design.
+>
+> **★ LET-1's implementer retro is the best artifact of the day** (`evt_7xfepa589vyy9`).
+> They had to freeze an EXACT canonical output for a construct with **zero
+> precedent in 27,404 lines**. Instead of inventing a pretty layout (which would
+> have passed every gate and made one implementer's taste normative forever), they
+> **treated the spec production as a recursive equation over the AST** — *"the
+> oracle RECORDED that derivation; it did not CREATE it."* **And they named a STOP
+> CONDITION: *if two texts had been equally compatible with the rules, I would have
+> frozen NEITHER — that is a spec gap, because an implementer's aesthetic preference
+> is not a canonicalization rule.*** ⇒ Promoted to fleet memory
+> (`freezing-a-canonical-form-…`). **A laundered preference and a derived rule are
+> both green, both stable, and INDISTINGUISHABLE IN THE DIFF — forever.**
+>
+> ## ✅ LET-1 MERGED @ `ec980d76` · ✅ SUB-1b CLOSED (retros in)
+>
+> **LET-1 content-verified:** `matches!(body, Expr::ELet(..))` at `layout.rs:1068`
+> · `kenfmt_let_layout.rs` present (the **exact-emitted-text** oracle — the first
+> in the repo) · 4-line §31 clarification landed. **OUTSTANDING: 3 × Ergo §10
+> retros** (`evt_506cz6q93qxzw`).
+>
+> ## ⛔ TWO OF MY FRAMES WENT STALE UNDER A LANDING — TODAY, BOTH CAUGHT BY QA/CV
+>
+> 1. **CC8 §6** — still banned `DecEq Bytes` and routed to the deleted `ArgBytes`.
+>    Caught by **foundation-qa** at preflight. Amended `evt_cjww5bfxwxea`.
+> 2. **LET-2 §2.4 + AC4** — mandate a caveat about a **live LET-1 defect** and say
+>    to delete it when LET-1 lands. **LET-1 has landed.** Caught by **CV**.
+>    Amended `evt_506cz6q93qxzw`.
+>
+> **★ I wrote the memory about this between the two occurrences and then did it
+> again.** The lesson is NOT "be careful": **a frame citing an in-flight dependency
+> is a SCHEDULED failure.** The only real defense is to make the staleness
+> **findable** — LET-2's AC4 said *"cross-reference LET-1 by name so the removal is
+> findable,"* and **CV found it by name.** *That is why it cost five minutes and not
+> a merged contradiction.* **Write frames so they announce their own expiry.**
+>
+> ## ✅ RESOLVED — the AC1 question is ANSWERED. My mechanism is WITHDRAWN.
+>
+> **CV ran the one file, at the ref, with `pwd` + `HEAD` printed at the point of
+> invocation:** `catalog/guide/decomposition-abstraction.ken.md` **parses and
+> elaborates UNMODIFIED on `82cb8fd0`, exit 0** (`evt_2pk6874eymj63`).
+>
+> **⇒ The `ParseError: found Ident("program")` NEVER EXISTED against a real tree.**
+> It was the wrong-worktree artifact, start to finish. **There was no unterminated
+> declaration. My mechanism (below) is DEAD — do not resurrect it.**
+>
+> **⇒ LET-2's AC1 is MET, not vacuous.** Correctly scoped to the two strands
+> spec-author actually repaired (`proof-techniques`, `surface-reference` — the
+> `fn` → `lemma` fix for Ω-valued decls, a REAL currency defect and a REAL repair).
+> **`decomposition-abstraction.ken.md` needed nothing and correctly received
+> nothing.** *(Kept below as the record of how I got it wrong.)*
+>
+> ## ⚠ THE OVER-REACH ITSELF — keep this; it is the lesson (`evt_78x55z64a4j0s`)
+>
+> CV reported all 3 `catalog/guide/**` strands failing `ParseError: found
+> Ident("program")`. **I built a confident mechanism** (lexer keywordizes
+> `program` unconditionally → an `Ident` token means the parser was mid-expression
+> → an unterminated declaration upstream → *"the header is the crime scene, not the
+> crime"*).
+>
+> **CV then retracted: they had run `ken-cargo` from the WRONG WORKTREE and measured
+> pre-LET-2 content.** ⇒ **The observation may never have been real.** And
+> `decomposition-abstraction.ken.md` — reported failing at `:163` — **was never
+> touched by the fix**, so it cannot have been repaired. And spec-author's real
+> repair (`fn bool_eq_sound` → `lemma`, an Ω-valued decl wrongly declared `fn`) is
+> an **ELABORATION** error that **cannot** produce a **ParseError**. *Two faults,
+> welded into one story by me.*
+>
+> **⇒ THE GREPS WERE ALL TRUE AND THE CONCLUSION WAS UNSUPPORTED. I should have
+> questioned the OBSERVATION, not explained it.** *When a report and a mechanism
+> disagree, verify the report is real before building a mechanism that reconciles
+> them.*
+>
+> **⛔ BLOCKING LET-2's AC1 — the one question:** does
+> `catalog/guide/decomposition-abstraction.ken.md` parse+elaborate on current main,
+> **unmodified**? **YES** ⇒ artifact, my mechanism withdrawn, AC1 correctly scoped
+> to the 2 repaired strands. **NO** ⇒ **LET-2 would merge with AC1 UNMET on a strand
+> nobody fixed.** *Do not infer it from the aggregate green.*
+>
+> ## ★ WHAT STANDS: the guide headers are LEGAL and LOAD-BEARING
+>
+> `lexer.rs:451` keywordizes `program`; `parser.rs:223` dispatches `KwProgram` from
+> **inside `parse_decls`** to `parse_boundary_decl`. **Deleting the headers was
+> ALWAYS wrong** — they mint the runnable `ProgramCaps APartial` and the guide
+> runner needs them. **spec-author left them byte-identical. ✅ Verified.**
 >
 > ## ▶ FOUR RINGS LIVE. Nothing blocked. Nothing idle-and-unblocked.
 >
