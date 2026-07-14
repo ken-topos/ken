@@ -9,6 +9,10 @@
   build WP is framed; the build itself lands the Rust.
 - **Date:** 2026-07-14 (design round I-5; Architect design pass, Steward-accepted
   same day).
+- **Amended:** 2026-07-14 (same day) — §4a added: the landed host-handler seam
+  speaks bytes and cannot share an fd, so §4's central property needs a step-0
+  ABI widening (Runtime ring's grounded hard-stop; Steward ruled it rides I-5).
+  The Architect ruled the ABI shape; zero kernel-TCB is unchanged.
 - **Deciders:** the Architect (component design + TCB verdict, grounded against
   `crates/ken-kernel`, `crates/ken-elaborator/src/capabilities.rs`, and
   `crates/ken-interp/src/eval.rs`); the Steward (accepted, framing the build WP
@@ -207,6 +211,8 @@ re-resolution window between check and use, so the classic TOCTOU race
 (check a path, then reopen it after an adversary swaps a component) cannot
 occur. Via the injectable host-handler interface (contract §4.2) the in-memory
 VFS models the same beneath-root / no-escape semantics for deterministic tests.
+**This property is not expressible through the *landed* host-handler seam — see
+§4a; realizing it requires widening that ABI (I-5 step 0).**
 
 **Fail-closed on named variants** — extend the runtime `CapabilityDenied` value
 with one reason per failure class (exhaustive, no catch-all success):
@@ -217,6 +223,103 @@ syscall** (the existing fail-closed posture); an unknown op stays the loud
 `_ => UnknownEffect`. **Every denial precedes the host syscall** — the existing
 `host.fs_trace().is_empty()` "denial before syscall" discipline from the I-4 §B
 tests carries forward.
+
+### 4a. Host-handler ABI prerequisite (I-5 step 0) — the landed seam speaks bytes
+
+*Amendment (2026-07-14): §4 above describes the target mechanism but assumed a
+capability the landed tree does not have. The Runtime ring's grounded hard-stop
+surfaced it, verified against `main`; this subsection corrects the seam. The
+Steward has ruled (scope) that this ABI widening **rides I-5 as one WP, step 0**,
+because a widened fd-carrying ABI has no value without its consumer and — the
+decisive reason — the security discriminators (§5) **cannot be written** until
+the capture VFS can model a symlink and pin a handle; a split "widen the ABI"
+WP would merge green while proving nothing.*
+
+**The gap.** The landed `HostHandler` trait
+(`crates/ken-interp/src/eval.rs:2119-2207`) is a **byte-path ABI**: every FS
+method takes `path: &[u8]` and independently
+re-resolves it via `host_path` → `std::fs::*`. `fs_dispatch` (`:3071-3103`) calls
+`authorizes(cap, path, …) -> bool` and then hands **the same path bytes** to
+`handler.fs_read(path)` / `fs_write(path, …)` — so check and use do **not** share
+an fd; the Posix default re-opens from the string. `VirtualFsNode` is
+`File | Directory` (`:2108-2111`) with **no symlink variant**, and the capture VFS
+is **path-keyed** (`fs: BTreeMap<Vec<u8>, VirtualFsNode>`, `:2362`). Through this
+seam the §4 "check and use share the fd" property is unrealizable, and the
+symlink-escape and fd-pinning discriminators cannot even be represented. Three
+rulings fix it; all three are in `ken-interp` — **zero kernel-TCB still holds**
+(§1), this is the trusted-runtime-driver growth §2 already discloses.
+
+**(i) The owned resolved-handle abstraction.** Introduce a host-owned handle
+that `fs_resolve` mints and the operate methods consume. Its **load-bearing
+representational invariant: the handle carries an OS fd or a virtual node-id —
+NEVER a path string — and the operate methods take *only* the handle, no path
+parameter.** That is what structurally forbids a re-resolution: there is no
+byte-path an operate method could re-open. Preferred form is an **associated
+type** `type Handle;` on the trait (each impl picks its own — Posix an owned
+`OwnedFd` from `openat2`, the capture host a `VfsNodeId`), so the handle is
+opaque to `fs_dispatch` by construction; if `fs_dispatch` must remain
+`dyn`-dispatched, the fallback is a concrete `enum ResolvedHandle { Posix(OwnedFd),
+Virtual(VfsNodeId) }` — acceptable **only** because neither variant stores a path,
+so the invariant holds regardless. `fs_dispatch` threads the handle verbatim from
+resolve to operate and MUST NOT inspect it or derive a path from it. Ownership:
+the handler mints the handle in `fs_resolve` and owns its lifecycle; the fd stays
+open from resolve through operate (the handle owns the `OwnedFd`) and is dropped
+after. The Cap's `scope.root` (§3b) is itself such a handle, minted when the cap
+is minted; `fs_resolve` walks relative to it.
+
+**(ii) Split the ABI into resolve + operate-at-handle.** Replace the byte-path
+operate methods with:
+- `fs_resolve(&mut self, root: &Handle, rel_components: &[&[u8]], op: FsOpKind,
+  symlink: SymlinkPolicy) -> Result<Resolution<Handle>, ResolveDenied>` — walks
+  the target **relative to the root handle**, component by component, enforcing
+  beneath-root and the symlink policy, and (real handler) using
+  `openat2(RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS)` where available, per-component
+  `openat(O_NOFOLLOW)` fallback otherwise. It returns
+  **`Resolution::Existing(Handle)`** (read / write-existing / delete / metadata /
+  enumerate) or
+  **`Resolution::Parent(Handle, leaf: Vec<u8>)`** — a pinned *parent-dir* handle
+  plus one validated leaf component (no `/`, not `..`) — for create / write-new /
+  rename-dest, since a not-yet-existing leaf cannot be pre-opened. Denials are the
+  named `ScopeEscape` / `SymlinkDenied`.
+- `fs_read_at(&mut self, h: &Handle) -> io::Result<Vec<u8>>`,
+  `fs_write_at(&mut self, h: &Handle, policy, bytes)`, `fs_metadata_at`,
+  `fs_read_directory_at`, and for creation
+  `fs_create_at(&mut self, parent: &Handle, leaf: &[u8], …)` (real handler:
+  `openat(parent_fd, leaf, O_CREAT|O_EXCL|O_NOFOLLOW)`) — each operates on the
+  already-resolved handle, never a path. Rename resolves **both** endpoints under
+  the cap's scope before acting.
+`authorizes` becomes the cap-side gate (rights + coarse authority, §4 steps 1-3)
+returning the root handle and op kind; `fs_dispatch` then calls `fs_resolve`,
+maps `ResolveDenied → CapabilityDenied`, and passes the resulting handle to the
+matching `*_at` op. Check and use now share the handle by construction.
+
+**(iii) Replace, do not coexist — a surviving `fs_*(&[u8])` is a bypass.**
+Stated explicitly per the Steward's ask: the byte-path operate methods
+(`fs_read`/`fs_write`/`fs_append`/`fs_metadata`/`fs_read_directory`/
+`fs_create_directory`/`fs_remove_file`/`fs_remove_directory`/`fs_rename` over
+`&[u8]`) are **removed from the trait surface**, not kept alongside the new API.
+A surviving byte-path operate method is a code path that reaches the host without
+scope/symlink/openat enforcement — an unenforced entry a wrong op-id or future
+call could fall into. `host_path` / `std::fs::*` survive **only inside**
+`fs_resolve`'s per-component `openat` walk and the `*_at` fd-operations, never as
+a public byte-path the dispatch layer can reach with an unresolved string.
+
+**(iv) `VirtualFsNode` must gain a symlink variant AND inode identity — or the
+discriminators are simulated, not real.** Two changes, the second load-bearing:
+add `Symlink(Vec<u8>)` (the link target, which may point out of scope) alongside
+`File`/`Directory`; and **re-key the capture VFS from path to node identity** —
+an inode-style store `NodeId -> VirtualFsNode` plus a directory map
+`(dir NodeId, name) -> NodeId`, with `Handle = VfsNodeId`. Beneath-root/no-escape
+is then a walk from the root `NodeId` that refuses to ascend past it and resolves
+`Symlink` targets under the policy, re-verifying the result stays within the
+root's subtree. **The inode re-keying is what makes fd-pinning real:** resolve
+`dir1/sub/file → Virtual(7)`; rename `dir1/sub → dir1/other` between resolve and
+op (this rewrites a *directory-entry* mapping, not node 7's identity);
+`fs_write_at(Virtual(7))` still lands on node 7. A path-keyed VFS **cannot**
+express this — a rename would move the entry and there would be no pinned inode to
+witness — so the structural TOCTOU discriminator (§5) would be unfalsifiable. This
+is why the VFS change is a representation change to inode identity, not merely a
+new enum variant.
 
 ### 5. Discriminators the build WP must prove
 
@@ -268,3 +371,13 @@ operator grants one.
   product meet, discharge unchanged. Had it been grep-and-nuked with the dead
   Ken-callable wrapper, I-5 would be rebuilding the authority lattice from
   scratch. The I-4 hard-stop discipline paid a direct dividend here.
+- **I-5 is L → XL: it carries a step-0 host-handler ABI widening (§4a)** — the
+  landed FS seam speaks bytes and cannot share an fd, so the scoped model's
+  central security property is not realizable on top of it as-is. The widening is
+  trusted-runtime-driver work (zero kernel-TCB); it rides I-5 rather than
+  splitting out, because its discriminators — the actual security net — cannot be
+  written until the capture VFS models a symlink and pins a handle. This is the
+  same failure family as the I-4 realizability gap, one layer down: an internally
+  coherent design whose realization needs a change the landed *interface* cannot
+  yet carry. The mechanism above is TOCTOU-critical — an fd-passing ABI done
+  wrong silently reintroduces the exact race I-5 exists to close.
