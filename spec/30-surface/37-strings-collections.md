@@ -256,6 +256,51 @@ Three normative points (Architect ruling `evt_1stp9sspm6ag8`):
   (kernel-admitted by positivity, not a postulate/primitive), and `compare_char`
   / `list_compare` are `declare_def`s.
 
+### 2.6 The structural byte view — `Bytes ↔ List UInt8`
+
+`Bytes` has a total structural view parallel to `String ↔ List Char`:
+
+```
+bytes_to_list : Bytes → List UInt8
+list_to_bytes : List UInt8 → Bytes
+```
+
+The pair is native because `Bytes` is an opaque packed buffer: ordinary Ken
+cannot inspect or construct its representation. Interpreter evaluation maps
+each byte to the corresponding `UInt8` element in source order and rebuilds
+the identical byte buffer in the inverse direction. Both operations are total.
+
+The representation guarantee is available to proofs through two named
+propositions:
+
+```
+bytes_list_roundtrip : (bs : Bytes) →
+  Equal Bytes (list_to_bytes (bytes_to_list bs)) bs
+
+list_bytes_roundtrip : (xs : List UInt8) →
+  Equal (List UInt8) (bytes_to_list (list_to_bytes xs)) xs
+```
+
+The propositions are registered postulates. This is a deliberate fixed trust
+cost: primitive operations compute in the interpreter but remain opaque to
+kernel conversion, so `Refl` cannot prove either equation. Registering the two
+guarantees once prevents each consumer from adding its own cached length and
+`Axiom`. The exact `trusted_base()` growth is therefore the two primitive
+operations plus these two propositions, all four named and audited.
+
+Every other byte traversal is derived. The initial surface operation is the
+ordinary structural fold
+
+```
+bytes_nat_length bs = length UInt8 (bytes_to_list bs)
+```
+
+which reuses the termination-checked generic `List` length and adds nothing to
+`trusted_base()`. Further byte algorithms compose ordinary `List UInt8`
+functions with the view and inverse; they are not additional native byte
+operations. Existing cached-`Nat` carriers remain source-compatible but are no
+longer required for new folds.
+
 ## 3. The core collection types
 
 | Type | Kind | Lowering | Equality |
@@ -786,6 +831,14 @@ impl-ready).** The floor + 5 string ops, mapping the WP frame's AC1–AC7:
   `list_append` associativity on a small corpus; every combinator total (no
   runtime `Neutral`/stuck). This does not assert definitional equality for the
   primitive operations under kernel conversion.
+
+**Bytes structural-view acceptance (`§2.6`).** Both primitive directions are
+total at runtime; both registered propositions have the exact stated dependent
+types; `Refl` does not close either conversion-opaque equation. The named
+`trusted_base()` delta is exactly `bytes_to_list`, `list_to_bytes`,
+`bytes_list_roundtrip`, and `list_bytes_roundtrip`. The derived
+`bytes_nat_length` drives a real termination-checked `List UInt8` fold, runs on
+a non-empty byte buffer, and adds no consumer `Axiom` or cached-`Nat` carrier.
 
 **Conformance:** `../../conformance/surface/collections/` — UTF-8
 byte/char-length edge cases + the `Bytes → String` partial decode;
