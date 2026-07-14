@@ -5,7 +5,7 @@
 //! located values, total parse results, and zero trusted-base delta.
 
 use ken_elaborator::{foreign::trusted_base_delta, ElabEnv, NumericLitVal};
-use ken_interp::eval::{eval, EvalStore, EvalVal};
+use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::Decl;
 use ken_kernel::GlobalId;
 use std::collections::HashSet;
@@ -65,6 +65,10 @@ fn make_store(env: &ElabEnv) -> EvalStore {
             .num_values
             .insert(*id, lit_to_eval(v, mkdecimalpair_id));
     }
+    store.list_char_ids = Some(ListCharIds {
+        nil_id: env.prelude_env.nil_id,
+        cons_id: env.prelude_env.cons_id,
+    });
     store
 }
 
@@ -154,14 +158,6 @@ fn syntax_spans(env: &ElabEnv, v: &EvalVal) -> Vec<(u64, u64)> {
     out
 }
 
-fn nat_expr(n: usize) -> String {
-    let mut s = "Zero".to_string();
-    for _ in 0..n {
-        s = format!("Suc ({s})");
-    }
-    s
-}
-
 fn neutralize_fixture_proofs(env: &ElabEnv, store: &mut EvalStore, names: &[&str]) {
     for name in names {
         let id = env
@@ -180,10 +176,9 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
     env.elaborate_ken_md_file(PARSING_KEN_MD)
         .expect("catalog/packages/Capability/Parsing/Parsing.ken.md must elaborate");
     let after_trusted: HashSet<GlobalId> = env.env.trusted_base().into_iter().collect();
-    let new_trusted: HashSet<_> = after_trusted.difference(&base_trusted).copied().collect();
-    assert!(
-        new_trusted.is_empty(),
-        "parsing.ken must add no new trusted_base entries, got {new_trusted:?}"
+    assert_eq!(
+        base_trusted, after_trusted,
+        "parsing.ken must preserve the trusted-base set exactly"
     );
 
     for name in [
@@ -191,15 +186,6 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         "source_bytes",
         "source_bytes::utf8",
         "source_length",
-        "source_length_unit",
-        "source_length_unit::valid",
-        "source_length_valid",
-        "SourceLength",
-        "UnitByteLength",
-        "EmptyBytes",
-        "NonEmptyBytes",
-        "byte_unit_zero_int",
-        "byte_unit_nat_to_int",
         "span_start",
         "span_end",
         "byte_cursor_source",
@@ -377,7 +363,8 @@ fn cat5_d3_bool_expression_surface_is_package_owned() {
     );
     assert!(
         compact.contains("fn byte_cursor_peek")
-            && compact.contains("bytes_at (source_bytes (byte_cursor_source cur))")
+            && compact.contains("nth UInt8 (byte_cursor_position cur)")
+            && compact.contains("bytes_to_list (source_bytes (byte_cursor_source cur))")
             && compact.contains("const bool_expression_decoder : Decoder ByteCursor Span")
             && compact.contains("bytes_encode \"true\"")
             && compact.contains("bytes_encode \"false\"")
@@ -407,26 +394,19 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
         "IsUtf8 must be round-trip evidence over the source bytes, not reflexive equality"
     );
     assert!(
-        compact.contains("fn byte_unit_nat_to_int (unit : Bytes) (n : Nat) : Int =")
-            && compact.contains("fn EmptyBytes (bs : Bytes) : Prop =")
-            && compact.contains("fn NonEmptyBytes (bs : Bytes) : Prop =")
-            && compact.contains("fn UnitByteLength (unit : Bytes) : Prop =")
-            && compact.contains("fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =")
-            && compact.contains("bytes_concat left right")
-            && compact.contains("NonEmptyBytes unit")
-            && compact.contains("bytes_length bs")
-            && compact.contains("byte_unit_nat_to_int unit n"),
-        "SourceLength must tie source_length to source_bytes through a non-empty byte-atomic unit witness"
+        compact.contains(
+            "fn source_length (s : Source) : Nat = bytes_nat_length s.source_bytes_field"
+        ),
+        "source_length must compute from the structural byte view"
     );
     assert!(
         compact.contains("class Source {")
             && compact.contains("source_bytes_field : Bytes")
-            && compact.contains("source_length_field : Nat")
-            && compact.contains("source_length_unit_field : Bytes")
-            && compact.contains("source_length_unit_valid_field : UnitByteLength source_length_unit_field")
             && compact.contains("source_utf8_field : IsUtf8 source_bytes_field")
-            && compact.contains("source_length_valid_field : SourceLength source_length_unit_field source_bytes_field source_length_field"),
-        "Source must be a dependent record carrying bytes, length, and both proof fields"
+            && !compact.contains("source_length_field")
+            && !compact.contains("source_length_valid_field")
+            && !compact.contains("source_length_unit_field"),
+        "Source must carry bytes and UTF-8 evidence without a cached length carrier"
     );
     assert!(
         !PARSING_KEN_MD.contains("data Source = MkSource"),
@@ -462,6 +442,24 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
         !PARSING_KEN_MD.contains("= Axiom"),
         "CAT-5 D1 package must not use Axiom"
     );
+    let extracted = ken_elaborator::literate::extract_ken_md(PARSING_KEN_MD)
+        .expect("Capability.Parsing must extract");
+    for forbidden in [
+        "byte_unit_zero_int",
+        "SourceLength",
+        "UnitByteLength",
+        "bytes_length",
+        "bytes_slice",
+        "bytes_at",
+    ] {
+        assert!(
+            !extracted
+                .source
+                .split_whitespace()
+                .any(|token| token == forbidden),
+            "structural parsing emission must not name `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -487,10 +485,6 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
         lemma source_utf8_projects (s : Source) : IsUtf8 (source_bytes s) =
           source_bytes::utf8 s
 
-        lemma source_length_valid_projects (s : Source)
-          : SourceLength (source_length_unit s) (source_bytes s) (source_length s) =
-          source_length_valid s
-
         fn located_true_value (s : Source) : Located Bool =
           MkLocated Bool (source_id s) (zero_width_span_at_start s) True
 
@@ -512,34 +506,21 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
         r#"
         data ConcreteByteSource = MkConcreteByteSource
 
-        const source_unit_byte : Bytes = bytes_encode "x"
         const sample_abc_bytes : Bytes = bytes_encode "abc"
-        lemma source_unit_valid : UnitByteLength source_unit_byte = Axiom
         lemma sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
-        lemma sample_length3_valid
-          : SourceLength source_unit_byte sample_abc_bytes (Suc (Suc (Suc Zero))) =
-          Axiom
 
         instance Source ConcreteByteSource {
           source_id_field = MkSourceId Zero ;
           source_bytes_field = sample_abc_bytes ;
-          source_length_field = Suc (Suc (Suc Zero)) ;
-          source_length_unit_field = source_unit_byte ;
-          source_length_unit_valid_field = source_unit_valid ;
-          source_utf8_field = sample_utf8_valid ;
-          source_length_valid_field = sample_length3_valid
+          source_utf8_field = sample_utf8_valid
         }
 
         const sample_source : Source = Source_instance_ConcreteByteSource
 
         const projected_bytes : Bytes = source_bytes sample_source
-        const projected_length : Nat = source_length sample_source
+        const projected_length : Nat = bytes_nat_length sample_abc_bytes
         lemma projected_utf8 : IsUtf8 (source_bytes sample_source) =
           source_bytes::utf8 sample_source
-        lemma projected_length_valid
-          : SourceLength (source_length_unit sample_source) (source_bytes sample_source) (source_length sample_source) =
-          source_length_valid sample_source
-
         const full_source_span : Span = MkSpan Zero (source_length sample_source)
         lemma full_source_span_valid : ValidSpan sample_source full_source_span =
           and_intro
@@ -549,9 +530,10 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
             (LessEqNat::refl (source_length sample_source))
         "#,
     )
-    .expect("a concrete non-empty Source must construct and project with real length evidence");
+    .expect("a concrete non-empty Source must compute its structural length");
 
     let mut store = make_store(&env);
+    neutralize_fixture_proofs(&env, &mut store, &["sample_utf8_valid"]);
     let projected_bytes = eval_def(&env, &mut store, "projected_bytes");
     assert_eq!(
         projected_bytes,
@@ -559,7 +541,9 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
         "source_bytes must execute through a concrete class-backed Source instance"
     );
 
-    let projected_length = eval_def(&env, &mut store, "projected_length");
+    let mut length_store = make_store(&env);
+    neutralize_fixture_proofs(&env, &mut length_store, &["sample_utf8_valid"]);
+    let projected_length = eval_def(&env, &mut length_store, "projected_length");
     assert_eq!(
         nat_count(&env, &projected_length),
         3,
@@ -569,85 +553,8 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
     let projected_utf8 = eval_def(&env, &mut store, "projected_utf8");
     assert_eq!(
         projected_utf8,
-        EvalVal::Unknown,
+        EvalVal::Neutral,
         "projecting a noncomputational proof field must not manufacture evidence"
-    );
-}
-
-#[test]
-fn cat5_d1_concrete_mismatched_source_length_rejected() {
-    let mut env = mk_env();
-    let err = env
-        .elaborate_file(
-            r#"
-            data MismatchedLengthSource = MkMismatchedLengthSource
-
-            const source_unit_byte : Bytes = bytes_encode "x"
-            const sample_abc_bytes : Bytes = bytes_encode "abc"
-            lemma source_unit_valid : UnitByteLength source_unit_byte = Axiom
-            lemma sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
-            lemma sample_length3_valid
-              : SourceLength source_unit_byte sample_abc_bytes (Suc (Suc (Suc Zero))) =
-              Axiom
-
-            instance Source MismatchedLengthSource {
-              source_id_field = MkSourceId Zero ;
-              source_bytes_field = sample_abc_bytes ;
-              source_length_field = Suc (Suc Zero) ;
-              source_length_unit_field = source_unit_byte ;
-              source_length_unit_valid_field = source_unit_valid ;
-              source_utf8_field = sample_utf8_valid ;
-              source_length_valid_field = sample_length3_valid
-            }
-            "#,
-        )
-        .expect_err("three-byte source must reject a recorded length of two");
-    let msg = format!("{err}");
-    assert!(
-        msg.contains("Refl")
-            || msg.contains("not convertible")
-            || msg.contains("Type mismatch")
-            || msg.contains("type mismatch")
-            || msg.contains("Kernel rejected"),
-        "mismatched source length should reject during proof checking, got {msg}"
-    );
-}
-
-#[test]
-fn cat5_d1_multibyte_unit_cannot_make_three_bytes_report_one() {
-    let mut env = mk_env();
-    let err = env
-        .elaborate_file(
-            r#"
-            data MultiByteUnitSource = MkMultiByteUnitSource
-
-            const sample_abc_bytes : Bytes = bytes_encode "abc"
-            lemma invalid_unit_valid : UnitByteLength sample_abc_bytes = Refl
-            lemma sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
-            lemma invalid_length_valid
-              : SourceLength sample_abc_bytes sample_abc_bytes (Suc Zero) =
-              Refl
-
-            instance Source MultiByteUnitSource {
-              source_id_field = MkSourceId Zero ;
-              source_bytes_field = sample_abc_bytes ;
-              source_length_field = Suc Zero ;
-              source_length_unit_field = sample_abc_bytes ;
-              source_length_unit_valid_field = invalid_unit_valid ;
-              source_utf8_field = sample_utf8_valid ;
-              source_length_valid_field = invalid_length_valid
-            }
-            "#,
-        )
-        .expect_err("a multi-byte unit must not let three source bytes report length one");
-    let msg = format!("{err}");
-    assert!(
-        msg.contains("Refl")
-            || msg.contains("not convertible")
-            || msg.contains("Type mismatch")
-            || msg.contains("type mismatch")
-            || msg.contains("Kernel rejected"),
-        "multi-byte unit counterexample should reject during proof checking, got {msg}"
     );
 }
 
@@ -723,7 +630,7 @@ fn cat5_d1_old_unconstrained_source_constructor_rejected() {
 }
 
 #[test]
-fn cat5_d1_reflexive_utf8_and_length_proofs_rejected() {
+fn cat5_d1_reflexive_utf8_proof_rejected() {
     let mut env = mk_env();
     let err = env
         .elaborate_file(
@@ -740,27 +647,6 @@ fn cat5_d1_reflexive_utf8_and_length_proofs_rejected() {
             || msg.contains("Type mismatch")
             || msg.contains("Kernel rejected"),
         "fake UTF-8 Refl proof should reject by proof checking, got {msg}"
-    );
-
-    let mut env = mk_env();
-    let err = env
-        .elaborate_file(
-            r#"
-            const sample_bytes : Bytes = bytes_encode "abc"
-            const sample_unit : Bytes = bytes_encode "x"
-            lemma fake_length : SourceLength sample_unit sample_bytes Zero = Refl
-            "#,
-        )
-        .expect_err(
-            "SourceLength must not be provable by reflexive equality for arbitrary bytes/length",
-        );
-    let msg = format!("{err}");
-    assert!(
-        msg.contains("Refl")
-            || msg.contains("not convertible")
-            || msg.contains("Type mismatch")
-            || msg.contains("Kernel rejected"),
-        "fake SourceLength Refl proof should reject by proof checking, got {msg}"
     );
 }
 
@@ -938,16 +824,11 @@ fn cat5_d2_legacy_caller_budget_repetition_is_not_exported() {
 #[test]
 fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
     let mut env = mk_env();
-    let printed_len = nat_expr(22);
-    let bad_len = nat_expr(14);
-    env.elaborate_file(&format!(
+    env.elaborate_file(
         r#"
         data PrintedBoolExprSource = MkPrintedBoolExprSource
         data FormattedBoolExprSource = MkFormattedBoolExprSource
         data InfixBoolExprSource = MkInfixBoolExprSource
-
-        const bool_expr_source_unit : Bytes = bytes_encode "x"
-        lemma bool_expr_unit_valid : UnitByteLength bool_expr_source_unit = Axiom
 
         const representative_bool_expr : BoolExpr =
           BAnd BTrue (BNot BFalse)
@@ -956,19 +837,11 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
           print_bool_expr representative_bool_expr
 
         lemma printed_bool_expr_utf8 : IsUtf8 printed_bool_expr_bytes = Axiom
-        lemma printed_bool_expr_length_valid
-          : SourceLength bool_expr_source_unit printed_bool_expr_bytes ({printed_len}) =
-          Axiom
-
-        instance Source PrintedBoolExprSource {{
+        instance Source PrintedBoolExprSource {
           source_id_field = MkSourceId (Suc (Suc Zero)) ;
           source_bytes_field = printed_bool_expr_bytes ;
-          source_length_field = ({printed_len}) ;
-          source_length_unit_field = bool_expr_source_unit ;
-          source_length_unit_valid_field = bool_expr_unit_valid ;
-          source_utf8_field = printed_bool_expr_utf8 ;
-          source_length_valid_field = printed_bool_expr_length_valid
-        }}
+          source_utf8_field = printed_bool_expr_utf8
+        }
 
         const printed_bool_expr_source : Source = Source_instance_PrintedBoolExprSource
 
@@ -976,40 +849,32 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
           parse_bool_expr printed_bool_expr_source Zero (LessEqNat::zero_left (source_length printed_bool_expr_source))
 
         const parse_printed_bool_expr_erases : Bool =
-          match parse_printed_bool_expr {{
+          match parse_printed_bool_expr {
             Parsed syntax consumed next |-> bool_expr_eq (erase_spans syntax) representative_bool_expr ;
             Failed err |-> False
-          }}
+          }
 
         const parsed_bool_expr_syntax : Syntax BoolExpr =
-          match parse_printed_bool_expr {{
+          match parse_printed_bool_expr {
             Parsed syntax consumed next |-> syntax ;
             Failed err |-> syntax_leaf printed_bool_expr_source Zero Zero BFalse
-          }}
+          }
 
         const format_printed_bool_expr : Result ParseError Bytes =
           format_bool_expr printed_bool_expr_source
 
         const formatted_bool_expr_bytes : Bytes =
-          match format_printed_bool_expr {{
+          match format_printed_bool_expr {
             Ok bs |-> bs ;
             Err err |-> bytes_encode "ERR"
-          }}
+          }
 
         lemma formatted_bool_expr_utf8 : IsUtf8 formatted_bool_expr_bytes = Axiom
-        lemma formatted_bool_expr_length_valid
-          : SourceLength bool_expr_source_unit formatted_bool_expr_bytes ({printed_len}) =
-          Axiom
-
-        instance Source FormattedBoolExprSource {{
+        instance Source FormattedBoolExprSource {
           source_id_field = MkSourceId (Suc (Suc (Suc Zero))) ;
           source_bytes_field = formatted_bool_expr_bytes ;
-          source_length_field = ({printed_len}) ;
-          source_length_unit_field = bool_expr_source_unit ;
-          source_length_unit_valid_field = bool_expr_unit_valid ;
-          source_utf8_field = formatted_bool_expr_utf8 ;
-          source_length_valid_field = formatted_bool_expr_length_valid
-        }}
+          source_utf8_field = formatted_bool_expr_utf8
+        }
 
         const formatted_bool_expr_source : Source = Source_instance_FormattedBoolExprSource
 
@@ -1017,33 +882,25 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
           format_bool_expr formatted_bool_expr_source
 
         const reformatted_bool_expr_bytes : Bytes =
-          match reformat_bool_expr {{
+          match reformat_bool_expr {
             Ok bs |-> bs ;
             Err err |-> bytes_encode "ERR"
-          }}
+          }
 
         const infix_bool_expr_bytes : Bytes = bytes_encode "true and false"
         lemma infix_bool_expr_utf8 : IsUtf8 infix_bool_expr_bytes = Axiom
-        lemma infix_bool_expr_length_valid
-          : SourceLength bool_expr_source_unit infix_bool_expr_bytes ({bad_len}) =
-          Axiom
-
-        instance Source InfixBoolExprSource {{
+        instance Source InfixBoolExprSource {
           source_id_field = MkSourceId (Suc (Suc (Suc (Suc Zero)))) ;
           source_bytes_field = infix_bool_expr_bytes ;
-          source_length_field = ({bad_len}) ;
-          source_length_unit_field = bool_expr_source_unit ;
-          source_length_unit_valid_field = bool_expr_unit_valid ;
-          source_utf8_field = infix_bool_expr_utf8 ;
-          source_length_valid_field = infix_bool_expr_length_valid
-        }}
+          source_utf8_field = infix_bool_expr_utf8
+        }
 
         const infix_bool_expr_source : Source = Source_instance_InfixBoolExprSource
 
         const parse_infix_bool_expr : ParseResult (Syntax BoolExpr) =
           parse_bool_expr infix_bool_expr_source Zero (LessEqNat::zero_left (source_length infix_bool_expr_source))
         "#,
-    ))
+    )
     .expect("D3 Boolean parser/printer/formatter producer path must elaborate");
 
     let mut store = make_store(&env);
@@ -1052,13 +909,9 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         &mut store,
         &[
             "record_nil_val",
-            "bool_expr_unit_valid",
             "printed_bool_expr_utf8",
-            "printed_bool_expr_length_valid",
             "formatted_bool_expr_utf8",
-            "formatted_bool_expr_length_valid",
             "infix_bool_expr_utf8",
-            "infix_bool_expr_length_valid",
         ],
     );
     let printed = eval_def(&env, &mut store, "printed_bool_expr_bytes");

@@ -42,7 +42,7 @@ const forge_spec : ProgramSpec =
     "build and inspect artifacts"
     (Cons CommandSpec forge_build_spec (Cons CommandSpec forge_inspect_spec (Nil CommandSpec)))
 
-fn forge_parse (arguments : List ArgBytes) : Validation (NonEmpty Diagnostic) ParsedCommand =
+fn forge_parse (arguments : List Bytes) : Validation (NonEmpty Diagnostic) ParsedCommand =
   argparse_run forge_spec arguments
 
 const forge_help : Doc = program_help forge_spec
@@ -50,6 +50,6 @@ const forge_help : Doc = program_help forge_spec
 fn forge_diagnostic_doc (diagnostic : Diagnostic) : Doc = diagnostic_to_doc diagnostic
 ```
 
-The caller constructs certified `ArgBytes` at the process boundary. Parsing
+The caller passes raw `Bytes` from the process boundary. Parsing
 never converts their payloads to `String`; callers may explicitly choose
 `Text.Codec` after a raw `ParsedOption` or `ParsedPositional` is returned.

@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::{ElabEnv, NumericLitVal};
-use ken_interp::eval::{apply, eval, EvalStore, EvalVal};
+use ken_interp::eval::{apply, eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId, Term};
 
 const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
@@ -73,6 +73,10 @@ fn make_store(env: &ElabEnv) -> EvalStore {
             .num_values
             .insert(*id, lit_to_eval(value, mkdecimalpair_id));
     }
+    store.list_char_ids = Some(ListCharIds {
+        nil_id: env.prelude_env.nil_id,
+        cons_id: env.prelude_env.cons_id,
+    });
     store
 }
 
@@ -239,45 +243,17 @@ fn process_arguments_round_trips_genuinely_invalid_utf8_byte_identically() {
 }
 
 #[test]
-fn certified_slice_location_keeps_nonzero_argument_and_range() {
+fn structural_slice_location_keeps_nonzero_argument_and_range() {
     let mut env = full_env();
     env.elaborate_file(
         r#"
-        data CC6ArgZero = MkCC6ArgZero
-        data CC6ArgOne = MkCC6ArgOne
-        data CC6ArgTwo = MkCC6ArgTwo
-
         const cc6_arg_zero_bytes : Bytes = bytes_encode "a"
-        lemma cc6_arg_zero_length : ArgByteLength cc6_arg_zero_bytes (Suc Zero) = Axiom
-        instance ArgBytes CC6ArgZero {
-          arg_bytes_field = cc6_arg_zero_bytes;
-          arg_length_field = Suc Zero;
-          arg_length_valid_field = cc6_arg_zero_length
-        }
-
         const cc6_arg_one_bytes : Bytes = bytes_encode "bb"
-        lemma cc6_arg_one_length : ArgByteLength cc6_arg_one_bytes (Suc (Suc Zero)) = Axiom
-        instance ArgBytes CC6ArgOne {
-          arg_bytes_field = cc6_arg_one_bytes;
-          arg_length_field = Suc (Suc Zero);
-          arg_length_valid_field = cc6_arg_one_length
-        }
-
         const cc6_arg_two_bytes : Bytes = bytes_encode "abcdef"
-        lemma cc6_arg_two_length
-          : ArgByteLength
-              cc6_arg_two_bytes
-              (Suc (Suc (Suc (Suc (Suc (Suc Zero)))))) = Axiom
-        instance ArgBytes CC6ArgTwo {
-          arg_bytes_field = cc6_arg_two_bytes;
-          arg_length_field = Suc (Suc (Suc (Suc (Suc (Suc Zero)))));
-          arg_length_valid_field = cc6_arg_two_length
-        }
-
-        const cc6_arguments : List ArgBytes =
-          Cons ArgBytes ArgBytes_instance_CC6ArgZero
-            (Cons ArgBytes ArgBytes_instance_CC6ArgOne
-              (Cons ArgBytes ArgBytes_instance_CC6ArgTwo (Nil ArgBytes)))
+        const cc6_arguments : List Bytes =
+          Cons Bytes cc6_arg_zero_bytes
+            (Cons Bytes cc6_arg_one_bytes
+              (Cons Bytes cc6_arg_two_bytes (Nil Bytes)))
 
         const cc6_location : Option ArgLocation =
           argument_slice_location
@@ -294,15 +270,10 @@ fn certified_slice_location_keeps_nonzero_argument_and_range() {
             cc6_arguments
         "#,
     )
-    .expect("certified argv location probes must elaborate");
+    .expect("structural argv location probes must elaborate");
 
     let mut store = make_store(&env);
-    for name in [
-        "record_nil_val",
-        "cc6_arg_zero_length",
-        "cc6_arg_one_length",
-        "cc6_arg_two_length",
-    ] {
+    for name in ["record_nil_val"] {
         store.num_values.insert(env.globals[name], EvalVal::Neutral);
     }
     let location = eval_global(&env, &mut store, "cc6_location");
@@ -395,13 +366,23 @@ fn cc6a_has_zero_trust_delta_and_no_new_carrier_or_string_hop() {
         assert!(!source.contains("data ExitCode"));
         assert!(!source.contains("data ProcessInput"));
     }
-    assert!(arguments.source.contains("List ArgBytes"));
+    assert!(arguments.source.contains("List Bytes"));
     assert!(arguments.source.contains("Option ArgLocation"));
     assert!(!arguments.source.contains("class ArgBytes"));
+    assert!(!arguments.source.contains("ArgByteLength"));
+    assert!(!arguments.source.contains("arg_length_field"));
+    assert!(!arguments.source.contains("arg_length_valid_field"));
     assert!(!arguments.source.contains("data ArgLocation"));
     assert!(!arguments.source.contains("String"));
     assert!(!arguments.source.contains("bytes_decode"));
     assert!(!arguments.source.contains("bytes_slice"));
+    let emitted_names: BTreeSet<_> = arguments
+        .source
+        .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+        .filter(|token| !token.is_empty())
+        .collect();
+    assert!(!emitted_names.contains("bytes_length"));
+    assert!(!emitted_names.contains("bytes_at"));
 
     let mut env = dependency_env();
     let before: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
