@@ -17,14 +17,14 @@ fn ken_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_ken"))
 }
 
-const FIXTURE: &str = r#"
+const FIXTURE: &str = r#"program capabilities FS APartial
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs { Nil |-> ys ; Cons x xs2 |-> Cons a x (list_append a xs2 ys) }
 
 fn shout (s : String) : String =
   list_char_to_string (list_append Char (string_to_list_char s) (string_to_list_char "!"))
 
-proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] = host_program (print_line (shout "hi"))
+proc main (_input : ProcessInput) (_caps : ProgramCaps APartial) : HostIO APartial ExitCode visits [Console] = host_program APartial (print_line (shout "hi"))
 "#;
 
 #[test]

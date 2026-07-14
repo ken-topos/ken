@@ -136,7 +136,36 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > lands → **ONE combined SHA** → honesty gate → publish → **verify on main by CONTENT** →
 > §B retros → **I-4 ARC COMPLETE**.
 >
-> ### ⏭ 2026-07-14 (04:1x) — ★★★ I-4 §B COMBINED CANDIDATE IN TERMINAL REVIEW · CC3 REPAIR
+> ### ⏭ 2026-07-14 (04:2x) — ★★★ BOTH CANDIDATES GATED CLEAN · SEQUENCED MERGE
+> **✅ I-4 §B `c699b530` — ALL THREE VOTES IN, Decision `dec_2jw3b5jwfqen1` RESOLVED APPROVE**
+> (runtime-QA + **Architect terminal** + **CV Spec/Fidelity**). **MY HONESTY GATE: CLEAN.**
+> Linear (0 merges) · forbidden-path EMPTY (no kernel/Cargo/lock/.github) · **`62-authority.md`
+> byte-untouched**.
+> **★ THE CHECK THAT DECIDES WHETHER A REASSEMBLY CAN BE TRUSTED — I RAN IT MYSELF, not just
+> asked CV:** `git diff 5f675810 c699b530 -- spec/30-surface/38-ffi-io.md` = **EMPTY**;
+> `git diff 557c1816 c699b530 -- conformance/` = **EMPTY**. ⇒ **The spec + conformance
+> subtrees inside the combined candidate are BYTE-IDENTICAL to what the enclave actually
+> authored.** The fold preserved the reviewed artifact exactly, so the three votes cover the
+> thing that will really land. That is the §C retro's carry ("a publisher re-anchor must
+> prove byte-identity per subtree") **discharged against the real candidate**, not asserted.
+> **⚠ CAUGHT: THE ENCLAVE BUILT A SECOND MERGE ROUTE.** spec-leader assembled its own
+> `wp/i4c-cap-wrapper-erratum @ 0e964ab7` and solicited CV's **terminal vote on IT** — the
+> exact standalone route land-together (§14.4) exists to prevent. Had it merged, `main` would
+> carry a spec describing a `readFile` the code doesn't have. **STOPPED** (`evt_70z2y9z9dv783`);
+> CV withdrew it cleanly — kept as **non-merge assembly evidence** (its subtree-identity
+> verification was genuinely useful), voted on the integrated `c699b530` instead. **Lesson:
+> "hand me the tip SHA, open no Decision" is not self-enforcing — a diligent enclave will
+> helpfully assemble and solicit votes. Watch for the SECOND candidate.**
+> **▶ SEQUENCING (not a hold):** CC3 (PR #620, head `99405d0e`) is in the merge queue FIRST.
+> When it lands, **`origin/main` moves off `e22f5688`** — the base every §B approval is
+> anchored to. So: CC3 merges → **re-anchor §B** → **RE-RUN the honesty gate AND the
+> byte-identity checks on the re-anchored SHA** (a rebase is precisely where a reviewed
+> subtree can silently change — the proof is re-run, never carried forward) → tracker-sync →
+> publish. **The two candidates share NO file** (verified by `comm`), so a clean re-anchor is
+> expected — but **if any reviewed subtree differs post-rebase, STOP and go back to the
+> voters** rather than publish a SHA nobody voted on.
+>
+> ### ⏭ 2026-07-14 (04:1x) — I-4 §B COMBINED CANDIDATE IN TERMINAL REVIEW · CC3 REPAIR
 > **★ THE I-4 LAND-TOGETHER CANDIDATE EXISTS: `wp/i4b-runtime-program-caps @ c699b530`**
 > (`c699b5308c0d0feb3783d3e0d0b73d71c234c199`). **Linear** from `origin/main @ e22f5688`;
 > **38 files, +1127/−235**; carries **crates + `spec/30-surface/38-ffi-io.md` + the

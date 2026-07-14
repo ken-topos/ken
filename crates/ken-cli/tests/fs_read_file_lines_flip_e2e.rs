@@ -1,9 +1,9 @@
 //! fs-read-file-lines-flip D5 — end-to-end acceptance driving the REAL
 //! `ken` CLI binary (subprocess) against a real ABI-shaped program. No test in
 //! this file hand-constructs a cap value at any `EvalVal`/`apply` site — the
-//! cap originates inside `ken-cli`'s `ProgramCaps` mint-and-bind path.
+//! cap originates inside `ken-cli`'s `ProgramCaps APartial` mint-and-bind path.
 //!
-//! The fixed `ProgramCaps` grant carries `Cap APartial`; a missing-file arm
+//! The declared `ProgramCaps APartial` carries `Cap APartial`; a missing-file arm
 //! surfaces a total `Err(NotFound)`, never a panic.
 //!
 //! **effect-composition update (AC6 asterisk retirement):** `main` now
@@ -28,10 +28,10 @@ fn workspace_root() -> PathBuf {
 }
 
 /// The D1 `lines` helper + an ABI-shaped `main` reading `path` through the
-/// fixed `ProgramCaps` grant.
+/// declaration-minted `ProgramCaps APartial`.
 fn program_src(path: &str) -> String {
     format!(
-        r#"
+        r#"program capabilities FS APartial
 fn isNewline (c : Char) : Bool = eq_int (charToInt c) 10
 
 fn consFirst (c : Char) (acc : List (List Char)) : List (List Char) =
@@ -115,8 +115,8 @@ proc app (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console]
           }}
       }})
 
-proc main (_input : ProcessInput) (caps : ProgramCaps)
-  : HostIO ExitCode visits [FS, Console] =
+proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [FS, Console] =
   match caps {{
     MkProgramCaps cap |->
       bind (Coproduct (FSOp APartial) ConsoleOp)
@@ -127,20 +127,20 @@ proc main (_input : ProcessInput) (caps : ProgramCaps)
           match r {{
             Err e |->
               match e {{
-                NotFound |-> host_program_then (print_line "NotFound") (Failure 1) ;
-                PermissionDenied |-> host_program_then (print_line "PermissionDenied") (Failure 1) ;
-                CapabilityDenied |-> host_program_then (print_line "CapabilityDenied") (Failure 1) ;
-                BrokenPipe |-> host_program_then (print_line "BrokenPipe") (Failure 1) ;
-                Interrupted |-> host_program_then (print_line "Interrupted") (Failure 1) ;
-                AlreadyExists |-> host_program_then (print_line "AlreadyExists") (Failure 1) ;
-                InvalidInput |-> host_program_then (print_line "InvalidInput") (Failure 1) ;
-                IsDirectory |-> host_program_then (print_line "IsDirectory") (Failure 1) ;
-                NotDirectory |-> host_program_then (print_line "NotDirectory") (Failure 1) ;
-                NotEmpty |-> host_program_then (print_line "NotEmpty") (Failure 1) ;
-                Unsupported |-> host_program_then (print_line "Unsupported") (Failure 1) ;
-                Other errno |-> host_program_then (print_line "Other") (Failure 1)
+                NotFound |-> host_program_then APartial (print_line "NotFound") (Failure 1) ;
+                PermissionDenied |-> host_program_then APartial (print_line "PermissionDenied") (Failure 1) ;
+                CapabilityDenied |-> host_program_then APartial (print_line "CapabilityDenied") (Failure 1) ;
+                BrokenPipe |-> host_program_then APartial (print_line "BrokenPipe") (Failure 1) ;
+                Interrupted |-> host_program_then APartial (print_line "Interrupted") (Failure 1) ;
+                AlreadyExists |-> host_program_then APartial (print_line "AlreadyExists") (Failure 1) ;
+                InvalidInput |-> host_program_then APartial (print_line "InvalidInput") (Failure 1) ;
+                IsDirectory |-> host_program_then APartial (print_line "IsDirectory") (Failure 1) ;
+                NotDirectory |-> host_program_then APartial (print_line "NotDirectory") (Failure 1) ;
+                NotEmpty |-> host_program_then APartial (print_line "NotEmpty") (Failure 1) ;
+                Unsupported |-> host_program_then APartial (print_line "Unsupported") (Failure 1) ;
+                Other errno |-> host_program_then APartial (print_line "Other") (Failure 1)
               }} ;
-            Ok _ |-> host_exit Success
+            Ok _ |-> host_exit APartial Success
           }})
   }}
 "#,
@@ -172,7 +172,7 @@ fn run(name: &str, src: &str) -> (String, String, bool) {
     )
 }
 
-/// The fixed `ProgramCaps` grant is sufficient for `ReadFile`, so the driver
+/// The declared `ProgramCaps APartial` is sufficient for `ReadFile`, so the driver
 /// reaches the fixture and the application prints its lines.
 #[test]
 fn m_suff_apartial_reads_fixture() {

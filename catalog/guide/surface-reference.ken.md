@@ -41,6 +41,8 @@ block, being runnable, ends in an ABI-shaped `proc main` (§8 covers why a
 catalog *package* entry, a library rather than a runnable file, carries none):
 
 ```ken
+program capabilities FS APartial
+
 data Color = Red | Green | Blue
 
 const favorite : Color = Blue
@@ -59,8 +61,11 @@ proc announce (c : Color) : IO Unit visits [Console] =
     Blue ↦ print_line "it's blue"
   }
 
-proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
-  host_program (announce favorite)
+proc main
+      (_input : ProcessInput) (_caps : ProgramCaps APartial)
+    : HostIO APartial ExitCode
+    visits [Console] =
+  host_program APartial (announce favorite)
 ```
 
 **Every landed catalog type parameter is explicit**, `(a : Type)`, never the

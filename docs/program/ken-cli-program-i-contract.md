@@ -69,7 +69,7 @@ class ProcessInput {
 }
 
 proc main (input : ProcessInput) (caps : ProgramCaps a)
-  : HostIO ExitCode
+  : HostIO a ExitCode
   visits [Console, FS, Environment, Process]
 ```
 
@@ -111,14 +111,14 @@ result datatype again — the exact decoupling deliverable 4 mandates.
 ### 1.3 Runner sequence
 
 1. Resolve `main` by name; type-check its signature against §1.1 (domains
-   `ProcessInput`, `ProgramCaps`; codomain `HostIO ExitCode`; `visits` row ⊆
+   `ProcessInput`, `ProgramCaps a`; codomain `HostIO a ExitCode`; `visits` row ⊆
    families declared by the program's capability clause).
 2. Build `ProcessInput` from real argv-after-`--`, environment, and cwd (all
    `Bytes`).
 3. Mint `ProgramCaps` from the program's declared capability clause (§3), one
    capability per declared mediated family.
-4. `apply(main, input); apply(_, caps)`; drive the resulting `HostIO ExitCode`
-   through `run_io` (§4).
+4. `apply(main, input); apply(_, caps)`; drive the resulting
+   `HostIO a ExitCode` through `run_io` (§4).
 5. Map the returned `ExitCode` to process status (§1.1). Driver failures
    (`UnknownEffect`/`UnknownTree`/`NotAnIOTree`) remain loud non-zero exits.
 
@@ -140,12 +140,12 @@ combinator**. Canonically right-nested:
 HostOp  =  ConsoleOp  +  FSOp  +  EnvOp  +  ProcessOp
                           |
                           v
-HostIO R = ITree HostOp (resp_sum … chain …) R
+HostIO a R = ITree (HostOp a) (resp_sum … chain …) R
 ```
 
 Each family's ops are lifted into `HostIO` by `injectL`/`injectR` (library-side
 helpers, kernel-checked). A program that uses only Console + FS still has type
-`HostIO ExitCode`; its **`visits` row** (`[Console, FS]`) is the record of
+`HostIO a ExitCode`; its **`visits` row** (`[Console, FS]`) is the record of
 which families it actually touches. The row and the tree stay decoupled exactly
 as today (`prelude.rs:1039-1042`): the row is the escape/capability annotation,
 the tree is the runtime realization.
@@ -155,6 +155,13 @@ authority-monomorphic program.** `FSOp : Auth -> Type0`, so the coproduct
 inherits that index. For each program, the anonymous header declares one
 concrete authority `a`; `main` is checked with `ProgramCaps a`, and the runner
 mints exactly that declared authority.
+
+**v1 Console remains ambient process context.** A launched Ken program may
+read stdin and write stdout/stderr as any process holding file descriptors
+0/1/2 may do. `ProgramCaps` therefore has no Console field and the runner mints
+no Console capability. This is not per-stream capability confinement; when
+that model lands, Console joins the declared capability roster with a real
+value that gates its operations.
 
 - **Selected (a), authority-monomorphic.** `HostOp` fixes the header-declared
   authority. The header, `main`'s `ProgramCaps a`, and the body's demanded
@@ -260,15 +267,25 @@ mediated family. This contract specifies what Ken accepts as a valid program.
 CLI grants, OS sandboxing, and other constraints on a running process are a
 separate concern and are out of scope.
 
+The program-facing FS wrappers only consume that capability. `readFile` is
+authority-polymorphic:
+`(a : Auth) -> Cap a -> Bytes -> FS a (Result FileError Bytes)`.
+`writeFile` remains monomorphic at `Cap AFull`, preserving the static write
+gate. v1 exposes neither a public capability constructor nor a Ken-callable
+attenuation function; the attenuation operation in §3.2 is runner-side
+semantic machinery.
+
 **The honest caveat, stated loudly:** coarse authority confines *nothing to a
-path*. `authorizes(cap, path)` still ignores `path`. So v1 read is acceptable
-(read is already gated at `APartial`), but **v1 write/delete are functional yet
-over-privileged** — a write-granted program can write *anywhere* the process
-can. Therefore, on v1-coarse, **write/delete ship gated behind `AFull` with an
-explicit "coarse authority — not path-confined" caveat in the runner/docs**, and
-are **not** advertised as least-privilege until §3.2 lands. This keeps the
-green-means-safe honesty the project requires: no silent over-claim of
-confinement.
+path*. `authorizes(cap, path)` still ignores `path`. The v1 read wrapper accepts
+any declared authority; insufficient read authority, including `ANone`, is
+rejected at operation time with `CapabilityDenied` before host I/O. A static
+read floor would require bounded authority quantification, which v1 does not
+provide. Meanwhile, **v1 write/delete are functional yet over-privileged** — a
+write-granted program can write *anywhere* the process can. Therefore, on
+v1-coarse, **write/delete ship gated behind `AFull` with an explicit "coarse
+authority — not path-confined" caveat in the runner/docs**, and are **not**
+advertised as least-privilege until §3.2 lands. This keeps the green-means-safe
+honesty the project requires: no silent over-claim of confinement.
 
 ### 3.2 Scoped model — what the fast-follow must add (the gate)
 
@@ -282,8 +299,9 @@ driver must enforce:
 3. **Symlink policy** — whether traversal is allowed and **how it is checked**
    (a symlink out of scope must not escape).
 4. **Attenuation** — narrowing to a smaller scope/right set only; **never
-   widening**. Reuse the existing `attenuate → (Cap, AttenuationObligation)` +
-   kernel `discharge_attenuation` machinery (`capabilities.rs:138-189`) — the
+   widening**. Reuse the existing runner-side
+   `attenuate → (Cap, AttenuationObligation)` + kernel
+   `discharge_attenuation` machinery (`capabilities.rs:138-189`) — the
    monotone-narrowing law is already there; extend its `w` from a scalar to a
    (rights × scope) meet.
 5. **TOCTOU-safe enforcement** — resolve via `openat`-style **directory-relative

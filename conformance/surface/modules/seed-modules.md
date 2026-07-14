@@ -557,6 +557,12 @@ the remaining reachability precondition. A harness that directly constructs a
 boundary record, inserts a capability into an `ElabEnv`, or calls the raw I-3
 producer does not satisfy any gate.
 
+The I-4 §C RESHAPE keeps `readFile` authority-polymorphic and `writeFile`
+monomorphic at `AFull`. Both wrappers only consume the opaque capability minted
+from the parsed header. Ken source has no capability constructor and no
+capability-producing `attenuate`; the separate monotone-downward semantic
+operation remains runner-internal (`62 §3`).
+
 ### surface/modules/program-capabilities-clause-carries-declared-authority
 
 - spec: I-4 §C frame deliverable 1 and the accepted I-4 ruling §C/A.2
@@ -575,9 +581,10 @@ producer does not satisfy any gate.
   `two-explicit-admits-resolve-ambient-with-provenance`. The unit contains an
   ordinary declaration that requires `Render PItem`, so the `admits P` half is
   observed rather than decorative. It also contains I-4 §B's canonical valid
-  Program-I entry, which uses an `AFull` operation through the typed API, so
-  the capability half reaches the real runner rather than stopping at a parsed
-  record.
+  Program-I entry, which passes its minted `fullCap : Cap AFull` directly to
+  `readFile AFull fullCap path`. No user-level attenuation or capability
+  construction intervenes, so the capability half reaches the real runner
+  rather than stopping at a parsed record.
 - expect: the parser accepts the anonymous header and the boundary manifest
   records exactly `P` in its admitted-package set and exactly `(FS, AFull)` in
   its declared-capability map. The two entries remain separately addressable.
@@ -600,7 +607,7 @@ producer does not satisfy any gate.
 
 - spec: I-4 §C frame deliverable 5 and the accepted I-4 ruling §A.5
 - fixture: use the same program unit, imports, entry signature, and a real
-  call through the I-4 typed `readFile` API as the accepted `FS APartial`
+  `readFile APartial partialCap path` call as the accepted `FS APartial`
   control. The negative removes only this header line:
 
   ```ken
@@ -625,6 +632,101 @@ producer does not satisfy any gate.
   family the binding exists and the read is well typed; without it the binding
   is absent and the named static gate rejects. A runner-only check would accept
   both source units and defer the negative to execution, so it fails the flip.
+
+### surface/modules/readfile-is-authority-polymorphic
+
+- spec: `38 §1.3.1` and the I-4 §C RESHAPE ruling
+- fixture: compile two source programs through the parsed-header-to-runner path.
+  They have identical entry bodies modulo the authority index and header item:
+
+  ```ken
+  program capabilities FS APartial
+  -- partialCap comes only from ProgramCaps APartial
+  readFile APartial partialCap path
+  ```
+
+  ```ken
+  program capabilities FS AFull
+  -- fullCap comes only from ProgramCaps AFull
+  readFile AFull fullCap path
+  ```
+
+  Neither program names `attenuate`, constructs `Cap`, or calls the raw I-3
+  producer.
+- expect: both calls elaborate against the one authority-polymorphic signature
+  `readFile : (a : Auth) -> Cap a -> Bytes -> FS a (Result FileError Bytes)`.
+  With readable files in the capture host, both execute through the wrapper and
+  return the file bytes. A fixed `Cap APartial` wrapper rejects the `AFull` arm;
+  a fixed `Cap AFull` wrapper rejects the `APartial` arm.
+- gate: **RED UNTIL I-4 §B.** Reachability is source header → I-4 §D boundary
+  projection → §B runner mint → `ProgramCaps a` pattern → the actual `readFile`
+  wrapper → unchanged I-3 `read_bytes` producer → driver. A hand-created `Cap`,
+  a direct `read_bytes` call, or a host-side attenuation call is not evidence.
+- why: the two authorities are a controlled signature discriminator. The
+  direct `AFull` read also rejects the deleted coarse-v1 surface: an
+  implementation that still requires `readFile (attenuate fullCap) path`
+  cannot satisfy the case.
+
+### surface/modules/anone-readfile-is-typed-but-denied-at-operation
+
+- spec: `38 §1.3.1`, the I-4 §C RESHAPE ruling, and the I-3 FS driver contract
+- fixture: a source program declares `capabilities FS ANone`, obtains only the
+  resulting `noneCap : Cap ANone` from `ProgramCaps ANone`, and calls
+  `readFile ANone noneCap path` through the actual wrapper. The capture host
+  contains a readable file at `path`.
+- expect: the call is **well typed** and reaches the driver. The driver returns
+  the named `Err (MkFileError ... CapabilityDenied)` result before any host
+  read; the FS trace remains empty. It is not a static `TypeMismatch`,
+  `MissingCapability`, parse error, or successful read.
+- gate: **RED UNTIL I-4 §B.** The parser/reader prerequisites are REALIZED by
+  I-4 §D, but the oracle requires §B's real polymorphic wrapper, header-derived
+  `Cap ANone`, driver authority check, named error payload, and pre-host trace.
+  A directly invoked authority predicate or hand-fed error is not evidence.
+- why: authority polymorphism deliberately moves the read floor from the type
+  signature to operation time. A stale static `APartial` floor rejects before
+  the driver; a missing driver check reads the file. The named result and empty
+  trace distinguish both bugs.
+
+### surface/modules/writefile-requires-afull-statically
+
+- spec: `38 §1.3.1` and the I-4 §C RESHAPE ruling
+- fixture: compile a pair differing only in the declared authority and the
+  resulting `ProgramCaps` index. The `AFull` arm passes its minted
+  `fullCap : Cap AFull` to `writeFile`; the `APartial` arm passes its minted
+  `partialCap : Cap APartial` to the same wrapper call. Both name the same path,
+  policy, contents, and `FS` row.
+- expect: the `AFull` arm elaborates and writes through the capture host. The
+  `APartial` arm rejects before execution with the named kernel-backed
+  `TypeMismatch` diagnostic: actual capability type `Cap APartial`, required
+  type `Cap AFull`. It does not reach `CapabilityDenied`, and its host trace is
+  empty.
+- gate: **RED UNTIL I-4 §B.** Reachability requires the actual checked
+  `writeFile : Cap AFull -> ...` wrapper and both capabilities minted from their
+  parsed headers. Calling raw `write_file`, constructing either capability, or
+  asserting only an op-time denial does not satisfy the oracle.
+- why: this is the non-degenerate static pair for the write guarantee.
+  Accidentally making `writeFile` authority-polymorphic accepts the `APartial`
+  arm; retaining the ruled monomorphic signature makes only `AFull` type-check.
+
+### surface/modules/no-ken-callable-capability-introduction
+
+- spec: `38 §1.3.1`, `62 §2.2`/`§3`, and the I-4 §C RESHAPE ruling
+- fixture: after §B registers `readFile` and `writeFile`, inspect the real Ken
+  source environment and separately attempt to resolve `attenuate`. Enumerate
+  the opaque `Cap` declaration's constructor surface rather than guessing a
+  constructor spelling.
+- expect: the two consuming wrappers are present, `attenuate` resolution fails
+  with the named `UnboundName { name = attenuate }` surface diagnostic, and
+  `Cap` exposes no constructor. No other Ken-callable global has a result headed
+  by `Cap`. The runner's internal mint and semantic attenuation remain outside
+  this source environment.
+- gate: **RED UNTIL I-4 §B.** Before the positive wrappers land, an absent
+  `attenuate` alone is vacuous. The gate is reachable only when the same real
+  environment contains both wrapper consumers while still exposing no
+  capability producer or constructor.
+- why: the positive-and-absence conjunction prevents green-vs-green. A build
+  that drops all three names, or exposes a differently named capability
+  constructor, fails the structural enumeration.
 
 ### surface/modules/admits-only-does-not-mint-capability
 
@@ -722,6 +824,10 @@ producer does not satisfy any gate.
 - **I-4 §C** (program-header capability manifest, static family gate, and
   orthogonality): `program-capabilities-clause-carries-declared-authority`,
   `fs-effect-without-capability-clause-is-ill-typed`,
+  `readfile-is-authority-polymorphic`,
+  `anone-readfile-is-typed-but-denied-at-operation`,
+  `writefile-requires-afull-statically`,
+  `no-ken-callable-capability-introduction`,
   `admits-only-does-not-mint-capability`, and
   `capability-only-does-not-admit-instances` (parser / N4 / I-4 §B gates are
   labeled per assertion).
@@ -788,10 +894,15 @@ producer does not satisfy any gate.
   package. The combined-header case observes both readers in one source unit.
 - **Static absence and op-time insufficiency are different gates.** No `FS`
   clause reaches `MissingCapability { effect = FS }` during elaboration. A
-  declared but
-  insufficient capability may reach the separately specified
-  `CapabilityDenied` driver backstop. Neither error can substitute for the
-  other, and a parse or loader error satisfies neither.
+  declared `ANone` read is well typed but reaches the separately specified
+  `CapabilityDenied` driver backstop. An `APartial` write instead fails the
+  monomorphic `Cap AFull` type gate before execution. These three outcomes are
+  distinct; a parse or loader error satisfies none.
+- **Capability introduction is runner-only.** The polymorphic read pair and
+  monomorphic write pair consume only header-derived `ProgramCaps` fields. The
+  adjacent surface-enumeration case requires those consumers to exist while
+  `attenuate` and every `Cap` constructor remain absent. Semantic attenuation
+  in `62 §3` is preserved at the runner boundary, never re-exported to Ken.
 
 ## Subsumed / not-duplicated (one home per property)
 

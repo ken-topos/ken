@@ -160,6 +160,11 @@ fold the next validated move in here (retro-action wiring, `README.md`).
   no separate kind of declaration) is `spec/50-stdlib/51-lawful-classes.md`.
 
 ```ken
-proc main (_input : ProcessInput) (_caps : ProgramCaps) : HostIO ExitCode visits [Console] =
-  host_program (print_line "decomposition guide ok")
+program capabilities FS APartial
+
+proc main
+      (_input : ProcessInput) (_caps : ProgramCaps APartial)
+    : HostIO APartial ExitCode
+    visits [Console] =
+  host_program APartial (print_line "decomposition guide ok")
 ```

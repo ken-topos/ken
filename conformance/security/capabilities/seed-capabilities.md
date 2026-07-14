@@ -29,6 +29,15 @@ row `view` is inert); `34 §5`/`21 §2` (refinement = carrier + emitted obligati
 the monotone-downward, validity-checked, delta-audited capability Sec2
 generalizes.
 
+**I-4 §C RESHAPE boundary.** This seed's attenuation cases name the semantic
+runner/host operation realized by `capabilities.rs::attenuate`; they do **not**
+place `attenuate` in Ken's source environment. The program-facing I-4 wrappers
+only consume opaque capabilities minted from the parsed program header:
+`readFile` is authority-polymorphic and `writeFile` requires `Cap AFull`. Ken
+source exposes neither an opaque-`Cap` constructor nor any capability-producing
+attenuation function. Section C therefore observes host-derived capability
+values and their real authority checks; a Ken source call is not its fixture.
+
 ## Reading these cases — the Sec2-specific disciplines
 
 **Capabilities are REAL Π values — attenuation's bound is KERNEL-BACKED, unlike
@@ -65,18 +74,17 @@ green-vs-green and nets nothing — the same lesson as the taint-axis orientatio
 pair and the cast-direction non-degenerate-endpoints rule.
 
 **Route REAL `Cap` values through the REAL `authority`-`⊑` check (the QA gate,
-`62 §9`).** The AC3 pair must use real capability values and the real authority
-order with non-degenerate authorities; never a boolean flag. A degenerate
-(meet-equal) instance collapses the direction and passes green-vs-green under a
-flipped order.
+`62 §9`).** The AC3 pair must use real runner/host capability values and the
+real authority order with non-degenerate authorities; never a boolean flag or a
+Ken-callable constructor. A degenerate (meet-equal) instance collapses the
+direction and passes green-vs-green under a flipped order.
 
 **No amplification is an ABSENCE — assert no operation exists (`62 §3.2`).**
-"Downward-only" rests on three facts: the kernel-backed bound (above), the
-**enumerated absence** of any `strengthen`/`amplify`/public-`Cap`-constructor
-(nothing to call — the kernel cannot witness a non-existent op), and
-**unforgeability** (`62 §2.2`: `Cap E` is opaque). An absence case asserts the
-operation is **not in the surface** and that `attenuate`'s codomain is
-`⊑`-bounded even at `w = ⊤` (`attenuate c ⊤ ⊑ authority c`).
+"Downward-only" rests on three facts: the kernel-backed semantic bound (above),
+the **enumerated absence** of any Ken-callable capability producer
+(`attenuate`/`strengthen`/`amplify`/public-`Cap` constructor), and
+**unforgeability** (`62 §2.2`: `Cap E` is opaque). The semantic host operation
+still satisfies the `⊑` bound at `w = ⊤`; that does not expose it to Ken source.
 
 **Static contract vs runtime face — the deferred runtime is `(oracle)`-tagged,
 named not omitted (`62 §4`/`§5`/`§H`).** Revocation and audit each have a STATIC
@@ -89,10 +97,12 @@ guarantee as if delivered (that would over-claim past Sec2's locked scope).
 **Tags.** `(soundness)` = a real authority commitment that must never regress
 (AC1, AC3, AC6, and the static contracts of AC4/AC5). `(oracle)` = confirm
 against Ken's reference elaborator once it exists, and (defer-spelling-not-
-concept) the literal token spellings — `Cap_FS`/`attenuate`/`using`/`revoke` —
-stay `OQ-syntax`-deferred: cases pin the **value-set + invariants** (a typed
-unforgeable token; the `⊑`-bounded codomain; the audited boundary), not the
-surface token; the deferred runtime mechanisms are `(oracle)` likewise.
+concept) the literal source spellings `Cap_FS`/`using`/`revoke` stay
+`OQ-syntax`-deferred. `attenuate` is only the semantic host-operation name, not
+a deferred Ken token. Cases pin the **value-set + invariants** (a typed
+unforgeable token; the `⊑`-bounded semantic derivation; the audited boundary),
+not a capability-producing surface spelling; deferred runtime mechanisms remain
+`(oracle)` likewise.
 
 ---
 
@@ -143,9 +153,10 @@ surface token; the deferred runtime mechanisms are `(oracle)` likewise.
 
 ### security/capabilities/attenuated-cap-at-weak-sink-accepts
 - spec: `62 §3`/`§3.1`
-- given: `c_tmp = attenuate c (dir "/tmp")` (so `authority c_tmp = authority
-  c ⊓ "/tmp" ⊏ authority c`), used at a sink demanding only `authority c_tmp`'s
-  scope (`a_weak ⊑ authority c_tmp`)
+- given: the runner/host derives `c_tmp` from `c` and window `dir "/tmp"` via
+  its semantic attenuation operation (so `authority c_tmp = authority c ⊓
+  "/tmp" ⊏ authority c`), then uses it at a sink demanding only
+  `authority c_tmp`'s scope (`a_weak ⊑ authority c_tmp`)
 - expect: **accepts** — the child's reduced demand is met (`a_weak ⊑ authority
   c_tmp`)
 - why: (soundness) the **accept** half of the order-dual pair. **Necessary but
@@ -170,8 +181,9 @@ surface token; the deferred runtime mechanisms are `(oracle)` likewise.
 
 ### security/capabilities/attenuate-bound-is-kernel-rechecked
 - spec: `62 §3.1`/`§H`, `34 §5`, `21 §2`, `23 §1`, `18 §4`
-- given: `attenuate c w` elaborated; observe the **emitted core** (the
-  refinement `{c' | authority c' ⊑ authority c ⊓ w}` introduces an obligation)
+- given: the runner/host semantic `capabilities.rs::attenuate(c, w)` derives a
+  child and its **emitted obligation**; observe the discharge core for
+  `authority c' ⊑ authority c ⊓ w`. No Ken source expression constructs `c'`.
 - expect: the elaborator **emits the obligation** `authority c' ⊑ authority c ⊓
   w` (`22 §2.1`), discharged (canonical body: `authority c' = authority c ⊓ w` →
   `⊑-refl`) and **re-checked by the kernel**; a witness with `authority c' ⊐
@@ -188,22 +200,24 @@ surface token; the deferred runtime mechanisms are `(oracle)` likewise.
 ### security/capabilities/no-amplifying-operation-exists
 - spec: `62 §3.2`/`§2.2`
 - given: a holder of `c : Cap E` seeking a `c'' : Cap E` with `authority c'' ⊐
-  authority c` — searching the surface for `strengthen`/`amplify`/a public `Cap`
-  constructor
-- expect: **no such operation exists** (the surface offers none; `Cap E` is
-  opaque, `62 §2.2`), and `attenuate c ⊤` still yields `authority ⊑ authority c`
-  (cannot exceed the parent even at `w = ⊤`)
+  authority c` — enumerate Ken's source environment for `attenuate`/
+  `strengthen`/`amplify`/a public `Cap` constructor, while separately applying
+  the runner/host semantic attenuation at `w = ⊤`
+- expect: **no Ken-callable capability producer exists** and `Cap E` exposes no
+  constructor (`62 §2.2`). The separate semantic host derivation still yields
+  `authority c' ⊑ authority c` and cannot exceed the parent even at `w = ⊤`.
 - why: (soundness) **assert absence** — "downward-only" is the conjunction of
-  the kernel-backed bound (C3), this enumerated absence (nothing to call), and
-  unforgeability (`62 §2.2`). The kernel cannot witness a missing op, so the
-  **absence** is the guard. (Absorbs `../seed-security.md`'s
+  the kernel-backed semantic bound (C3), this enumerated Ken-surface absence,
+  and unforgeability (`62 §2.2`). The kernel cannot witness a missing source
+  operation, so the **absence** is the guard. (Absorbs `../seed-security.md`'s
   `attenuation-cannot-amplify` — a child cannot exceed `w`.)
 
 ## D. Revocation — transitive (AC4, static contract)
 
 ### security/capabilities/revoke-is-transitive-static-contract
 - spec: `62 §4`/`§H`, `36 §4`/`§4.4` (`(oracle)` runtime)
-- given: `c_child = attenuate c w`; `c_child` delegated; then `revoke c`
+- given: the runner/host derives `c_child` from `c` and `w`, delegates the
+  child, then applies the semantic `revoke c` operation
 - expect: **(static face — delivered)** the typed contract holds: `c_child`'s
   validity is **derived from** `c`'s, so "`c` revoked ⇒ `c_child` (and its
   descendants) revoked" follows from the delegation tree — transitive, fail-
@@ -297,6 +311,11 @@ surface token; the deferred runtime mechanisms are `(oracle)` likewise.
   meet). A reading that claimed the kernel nets the orientation, or that the
   orientation case is redundant given C3, is the bug this pair forecloses
   (`62 §3.2`/`§H`).
+- **Semantic operation vs Ken surface {C1–C4}** — all four attenuation cases
+  observe the runner/host operation and real `Cap` values. C4 independently
+  requires the Ken source environment to expose neither `attenuate` nor any
+  other `Cap` producer. A reading that turns the semantic operation into a
+  source wrapper contradicts the I-4 §C RESHAPE and fails this class.
 - **Static-vs-runtime faces {D1, E1, E2}** — agree on scope: Sec2 delivers the
   **static** contract (typed interface, transitivity, type-determined boundary
   set, delta-completeness); the **runtime** faces (revocation membrane fail-
@@ -318,16 +337,16 @@ in this WP to avoid a stale-sibling contradiction; the `supply-chain/` and
 
 ## Build-sequencing note
 
-All AC1–AC3 + AC5-static + AC6 cases exercise the elaborator's
-capability-passing + refinement-obligation passes (`36 §2.5`, `34 §5`/`21 §2`)
-and the landed `CapParam`/`DeclassifyCap` machinery — they need **no** kernel
-feature beyond landed K1.5 (capabilities are ordinary Π values; the attenuation
-obligation rides V-series, already landed). The **deferred runtime faces** — the
-revocation membrane (D1) and the audit-record emission (E1) — land in the
-`40-runtime`/`OQ-Space` WP and carry `(oracle)` reify-tags, **not** Sec2. The
-authority lattice `⊑` rides `Ω` (`16 §1`, level 0 for finite carriers);
-the refinement `{c' | …}` lands at `level(Cap E) = ℓ_op` (predicative, same as
-the carrier, `21 §2`/`62 §9`). Literal token spellings
-(`Cap_FS`/`attenuate`/`revoke`) stay `OQ-syntax`-deferred; cases pin
-value-sets + invariants, not surface tokens. Sec2 **unblocks B4** (the agentic
-boundary = Sec1 + Sec2 envelope) and contributes to **G-Sec**.
+AC1–AC3 + AC5-static + AC6 exercise the landed capability-passing,
+authority-check, and refinement-obligation machinery (`36 §2.5`, `34 §5`/
+`21 §2`). Section C reaches `capabilities.rs::attenuate` and its discharge
+directly at the semantic host boundary; it deliberately has no Ken-callable
+attenuation fixture. The **deferred runtime faces** — the revocation membrane
+(D1) and audit-record emission (E1) — land in `40-runtime`/`OQ-Space` and carry
+`(oracle)` reify-tags, **not** Sec2. The authority lattice `⊑` rides `Ω`
+(`16 §1`, level 0 for finite carriers); the semantic refinement `{c' | …}`
+lands at `level(Cap E) = ℓ_op` (predicative, same as the carrier, `21 §2`/
+`62 §9`). Literal source spellings `Cap_FS`/`revoke` stay
+`OQ-syntax`-deferred; cases pin value-sets + invariants, never a Ken-callable
+`attenuate` token. Sec2 **unblocks B4** (the agentic boundary = Sec1 + Sec2
+envelope) and contributes to **G-Sec**.

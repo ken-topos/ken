@@ -120,6 +120,6 @@ fn refuteTrueFalse (p : Equal Bool True False) : Empty = absurd p
 
 -- ── Oracle ────────────────────────────────────────────────────────────────
 
-proc main (_input : ProcessInput) (_caps : ProgramCaps)
-  : HostIO ExitCode visits [Console] =
-  host_program (announce Blue)
+proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [Console] =
+  host_program APartial (announce Blue)

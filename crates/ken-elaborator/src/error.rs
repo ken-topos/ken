@@ -45,6 +45,9 @@ pub enum ElabError {
     DuplicateCapabilityFamily { family: String, span: Span },
     /// Package boundaries do not carry runtime capabilities in this round.
     PackageCapabilitiesNotAllowed { span: Span },
+    /// A program's reachable effect row names a family absent from its
+    /// boundary capability declaration.
+    MissingCapability { effect: String, span: Span },
     /// An unresolved name at the name-resolution stage (`39 §5.3`).
     UnboundName { name: String, span: Span },
     /// A `ConId` with no global declaration.
@@ -161,6 +164,11 @@ impl fmt::Display for ElabError {
                 "package capability clause at {}-{}: only program headers may \
                  declare capabilities",
                 span.start, span.end,
+            ),
+            ElabError::MissingCapability { effect, span } => write!(
+                f,
+                "missing capability '{}' at {}-{}",
+                effect, span.start, span.end,
             ),
             ElabError::UnboundName { name, span } => {
                 write!(f, "unbound name '{}' at {}-{}", name, span.start, span.end)

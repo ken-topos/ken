@@ -1,10 +1,12 @@
+program capabilities FS APartial
+
 -- Rosetta Code: Read a file line by line
 -- https://rosettacode.org/wiki/Read_a_file_line_by_line
 --
 -- Task: read a text file and process it line by line.
 --
 -- fs-read-file-lines-flip (VAL2 #9/OQ-B closure) + effect-composition.
--- `ProgramCaps` carries the fixed I-1 `Cap APartial` grant; `main` unwraps
+-- `ProgramCaps APartial` carries the declaration-minted `Cap APartial`; `main` unwraps
 -- that value and passes it to the application tree.
 -- `read_bytes` carries the cap into a real `[FS]` effect computation, gated
 -- by the runtime `authorizes` check (`ken-interp/src/eval.rs`) before any
@@ -136,7 +138,10 @@ proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Consol
           }
       })
 
-proc main (_input : ProcessInput) (caps : ProgramCaps) : HostIO ExitCode visits [FS, Console] =
+proc main
+      (_input : ProcessInput) (caps : ProgramCaps APartial)
+    : HostIO APartial ExitCode
+    visits [FS, Console] =
   match caps {
     MkProgramCaps cap ↦ bind
       (Coproduct (FSOp APartial) ConsoleOp)
@@ -148,19 +153,28 @@ proc main (_input : ProcessInput) (caps : ProgramCaps) : HostIO ExitCode visits 
         match r {
           Err e ↦
             match e {
-              NotFound ↦ host_program_then (print_line "NotFound") (Failure 1);
-              PermissionDenied ↦ host_program_then (print_line "PermissionDenied") (Failure 1);
-              CapabilityDenied ↦ host_program_then (print_line "CapabilityDenied") (Failure 1);
-              BrokenPipe ↦ host_program_then (print_line "BrokenPipe") (Failure 1);
-              Interrupted ↦ host_program_then (print_line "Interrupted") (Failure 1);
-              AlreadyExists ↦ host_program_then (print_line "AlreadyExists") (Failure 1);
-              InvalidInput ↦ host_program_then (print_line "InvalidInput") (Failure 1);
-              IsDirectory ↦ host_program_then (print_line "IsDirectory") (Failure 1);
-              NotDirectory ↦ host_program_then (print_line "NotDirectory") (Failure 1);
-              NotEmpty ↦ host_program_then (print_line "NotEmpty") (Failure 1);
-              Unsupported ↦ host_program_then (print_line "Unsupported") (Failure 1);
-              Other errno ↦ host_program_then (print_line "Other") (Failure 1)
+              NotFound ↦ host_program_then APartial (print_line "NotFound") (Failure 1);
+              PermissionDenied ↦ host_program_then
+                APartial
+                (print_line "PermissionDenied")
+                (Failure 1);
+              CapabilityDenied ↦ host_program_then
+                APartial
+                (print_line "CapabilityDenied")
+                (Failure 1);
+              BrokenPipe ↦ host_program_then APartial (print_line "BrokenPipe") (Failure 1);
+              Interrupted ↦ host_program_then APartial (print_line "Interrupted") (Failure 1);
+              AlreadyExists ↦ host_program_then
+                APartial
+                (print_line "AlreadyExists")
+                (Failure 1);
+              InvalidInput ↦ host_program_then APartial (print_line "InvalidInput") (Failure 1);
+              IsDirectory ↦ host_program_then APartial (print_line "IsDirectory") (Failure 1);
+              NotDirectory ↦ host_program_then APartial (print_line "NotDirectory") (Failure 1);
+              NotEmpty ↦ host_program_then APartial (print_line "NotEmpty") (Failure 1);
+              Unsupported ↦ host_program_then APartial (print_line "Unsupported") (Failure 1);
+              Other errno ↦ host_program_then APartial (print_line "Other") (Failure 1)
             };
-          Ok _ ↦ host_exit Success
+          Ok _ ↦ host_exit APartial Success
         })
   }

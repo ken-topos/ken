@@ -1422,21 +1422,13 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // field because `Cap` is indexed by the value-level `Auth` family. Use
     // the ordinary kernel inductive API, exactly as `FSOp` above does; this is
     // still a checked inductive and adds no primitive or trusted rule.
-    let apartial_id = elab
-        .globals
-        .get("APartial")
-        .copied()
-        .ok_or_else(|| ElabError::Internal("prelude: APartial missing".into()))?;
     let program_caps_id = declare_inductive(&mut elab.env, |_id| InductiveSpec {
         level_params: vec![],
-        params: vec![],
+        params: vec![auth_t.clone()],
         indices: vec![],
         level: Level::Zero,
         constructors: vec![CtorSpec {
-            args: vec![Term::app(
-                Term::const_(cap_id, vec![]),
-                Term::constructor(apartial_id, vec![]),
-            )],
+            args: vec![Term::app(Term::const_(cap_id, vec![]), Term::var(0))],
             target_indices: vec![],
         }],
     })
@@ -1452,33 +1444,52 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .insert("MkProgramCaps".into(), program_caps_ctor);
 
     elab.elaborate_decl(
-        "const HostIO (r : Type) : Type = \
-         ITree (Coproduct (FSOp APartial) ConsoleOp) \
-           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp) r",
+        "fn HostIO (a : Auth) (r : Type) : Type = \
+         ITree (Coproduct (FSOp a) ConsoleOp) \
+           (resp_coproduct (FSOp a) ConsoleOp (fs_resp a) console_resp) r",
     )
     .map_err(|e| ElabError::Internal(format!("prelude HostIO failed: {}", e)))?;
     elab.elaborate_decl(
-        "fn host_exit (code : ExitCode) : HostIO ExitCode = \
-         Ret (Coproduct (FSOp APartial) ConsoleOp) \
-           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp) \
+        "fn host_exit (a : Auth) (code : ExitCode) : HostIO a ExitCode = \
+         Ret (Coproduct (FSOp a) ConsoleOp) \
+           (resp_coproduct (FSOp a) ConsoleOp (fs_resp a) console_resp) \
            ExitCode code",
     )
     .map_err(|e| ElabError::Internal(format!("prelude host_exit failed: {}", e)))?;
     elab.elaborate_decl(
-        "proc host_program_then (action : IO Unit) (code : ExitCode) \
-         : HostIO ExitCode visits [Console] = \
-         bind (Coproduct (FSOp APartial) ConsoleOp) \
-           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp) \
+        "proc host_program_then (a : Auth) (action : IO Unit) (code : ExitCode) \
+         : HostIO a ExitCode visits [Console] = \
+         bind (Coproduct (FSOp a) ConsoleOp) \
+           (resp_coproduct (FSOp a) ConsoleOp (fs_resp a) console_resp) \
            Unit ExitCode \
-           (inject_r (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp Unit action) \
-           (\\_. host_exit code)",
+           (inject_r (FSOp a) ConsoleOp (fs_resp a) console_resp Unit action) \
+           (\\_. host_exit a code)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude host_program_then failed: {}", e)))?;
     elab.elaborate_decl(
-        "proc host_program (action : IO Unit) : HostIO ExitCode visits [Console] = \
-         host_program_then action Success",
+        "proc host_program (a : Auth) (action : IO Unit) : HostIO a ExitCode visits [Console] = \
+         host_program_then a action Success",
     )
     .map_err(|e| ElabError::Internal(format!("prelude host_program failed: {}", e)))?;
+
+    // I-4 Option-(ii) program-facing wrappers. These are ordinary checked Ken
+    // definitions over the unchanged authority-polymorphic I-3 producers.
+    // Both only consume opaque capabilities. readFile remains polymorphic;
+    // writeFile's AFull argument is the security-critical static write gate.
+    // There is deliberately no capability-producing attenuation operation.
+    elab.elaborate_decl(
+        "proc readFile (a : Auth) (cap : Cap a) (path : Bytes) \
+         : FS a (Result FileError Bytes) visits [FS] = \
+         read_bytes a cap path",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude readFile failed: {e}")))?;
+    elab.elaborate_decl(
+        "proc writeFile (cap : Cap AFull) (path : Bytes) \
+         (policy : CreatePolicy) (contents : Bytes) \
+         : FS AFull (Result FileError Unit) visits [FS] = \
+         write_file AFull cap path policy contents",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude writeFile failed: {e}")))?;
 
     Ok(PreludeEnv {
         nat_id,

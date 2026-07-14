@@ -29,21 +29,21 @@ fn workspace_root() -> PathBuf {
 /// `Coproduct (StateOp Nat) ConsoleOp`, run through `run_state` then `run_io`.
 /// `Pair Unit Nat` is a surface-nameable alias for `run_state`'s real return
 /// type `Sigma Unit Nat` (`prelude.rs`'s `Pair := \a b. Sigma a b`).
-const PROG: &str = r#"
+const PROG: &str = r#"program capabilities FS APartial
 const prog : ITree ConsoleOp console_resp (Pair Unit Nat) =
   run_state Nat ConsoleOp console_resp Unit Zero
     (bind (Coproduct (StateOp Nat) ConsoleOp) (resp_coproduct (StateOp Nat) ConsoleOp (resp_state Nat) console_resp) Nat Unit
       (get Nat ConsoleOp console_resp MkUnit)
       (\n . inject_r (StateOp Nat) ConsoleOp (resp_state Nat) console_resp Unit (print_line "state-console-pairing")))
 
-proc main (_input : ProcessInput) (_caps : ProgramCaps)
-  : HostIO ExitCode visits [Console] =
+proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [Console] =
   bind (Coproduct (FSOp APartial) ConsoleOp)
        (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
        (Pair Unit Nat) ExitCode
     (inject_r (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp
       (Pair Unit Nat) prog)
-    (\_ . host_exit Success)
+    (\_ . host_exit APartial Success)
 "#;
 
 #[test]
