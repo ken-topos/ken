@@ -130,7 +130,12 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
                     Box::new(Term::var(0)),
                 ),
             );
-            let retract_id = declare_postulate(&mut elab.env, vec![], retract_ty)
+            let retract_id = declare_postulate(
+                &mut elab.env,
+                "uint8_int_retract".to_string(),
+                vec![],
+                retract_ty,
+            )
                 .map_err(|e| {
                     ElabError::Internal(format!("uint8_int_retract failed: {e}"))
                 })?;

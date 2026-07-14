@@ -231,6 +231,7 @@ mod tests {
         // tests don't need), then upgrade to transparent so δ-reduction works.
         let add_id = declare_postulate(
             &mut env,
+            "interp_test_add".to_string(),
             vec![],
             Term::pi(nat_ty(), Term::pi(nat_ty(), nat_ty())),
         )
@@ -865,7 +866,8 @@ mod tests {
         };
         let mut store = mk_store();
 
-        let p_id = declare_postulate(&mut env, vec![], nat_ty).expect("p");
+        let p_id =
+            declare_postulate(&mut env, "interp_test_p".to_string(), vec![], nat_ty).expect("p");
         let result = eval(
             &[],
             &Term::Const {
@@ -901,7 +903,13 @@ mod tests {
         };
         let mut store = mk_store();
 
-        let h_id = declare_postulate(&mut env, vec![], nat_ty.clone()).expect("h");
+        let h_id = declare_postulate(
+            &mut env,
+            "interp_test_h".to_string(),
+            vec![],
+            nat_ty.clone(),
+        )
+        .expect("h");
         let hole = Term::Const {
             id: h_id,
             level_args: vec![],
@@ -980,8 +988,13 @@ mod tests {
             "fst(snd(pair zero (pair (suc zero) unknown))) must demand only the selected field"
         );
 
-        let record_id =
-            declare_postulate(&mut env, vec![], nat_ty.clone()).expect("transparent record");
+        let record_id = declare_postulate(
+            &mut env,
+            "interp_test_record".to_string(),
+            vec![],
+            nat_ty.clone(),
+        )
+        .expect("transparent record");
         env.upgrade_to_transparent(record_id, pair_with_unknown_tail.clone());
         let r = eval(
             &[],
@@ -1157,7 +1170,13 @@ mod tests {
         };
         let mut store = mk_store();
 
-        let h_id = declare_postulate(&mut env, vec![], nat_ty.clone()).expect("h");
+        let h_id = declare_postulate(
+            &mut env,
+            "interp_test_h".to_string(),
+            vec![],
+            nat_ty.clone(),
+        )
+        .expect("h");
         let hole = Term::Const {
             id: h_id,
             level_args: vec![],
@@ -1392,7 +1411,13 @@ mod tests {
         assert_eq!(nat_val(&v, zero, suc), Some(2));
 
         // unknown-propagates: postulate → Unknown
-        let h = declare_postulate(&mut env, vec![], nat_ty.clone()).expect("h");
+        let h = declare_postulate(
+            &mut env,
+            "interp_test_h".to_string(),
+            vec![],
+            nat_ty.clone(),
+        )
+        .expect("h");
         let r = eval(
             &[],
             &Term::Const {
@@ -1482,8 +1507,13 @@ mod eff_tests {
         // A genuine small carrier local to this test environment. The runtime
         // tests only depend on the constructor arities; using a type in Type 0
         // keeps those shapes without treating the Type 0 sort as a value type.
-        let carrier =
-            declare_postulate(env, vec![], Term::Type(Level::zero())).expect("ITree test carrier");
+        let carrier = declare_postulate(
+            env,
+            "interp_test_itree_carrier".to_string(),
+            vec![],
+            Term::Type(Level::zero()),
+        )
+        .expect("ITree test carrier");
         let carrier_t = Term::const_(carrier, vec![]);
         let itree = declare_inductive(env, |ind_id| InductiveSpec {
             level_params: vec![],
@@ -2130,8 +2160,13 @@ mod eff_tests {
         // (a) op depends on an open hole → EvalVal::Unknown → drive_h returns Unknown
         {
             let mut store = mk_store();
-            let hole_id =
-                declare_postulate(&mut env, vec![], Term::Type(Level::zero())).expect("hole");
+            let hole_id = declare_postulate(
+                &mut env,
+                "interp_test_hole".to_string(),
+                vec![],
+                Term::Type(Level::zero()),
+            )
+            .expect("hole");
             let hole_term = Term::Const {
                 id: hole_id,
                 level_args: vec![],

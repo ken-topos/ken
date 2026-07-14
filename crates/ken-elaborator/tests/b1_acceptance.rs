@@ -45,9 +45,9 @@ struct KernEnv {
 
 fn make_kern_env() -> KernEnv {
     let mut env = GlobalEnv::new();
-    let p_id = declare_postulate(&mut env, vec![], Term::omega(Level::zero()))
+    let p_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
         .expect("P postulate");
-    let q_id = declare_postulate(&mut env, vec![], Term::omega(Level::zero()))
+    let q_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
         .expect("Q postulate");
     KernEnv {
         p_term: Term::const_(p_id, vec![]),
@@ -101,7 +101,7 @@ fn proved_postcondition_projects_to_q() {
     let phi = Term::pi(ke.p_term.clone(), ke.p_term.clone()); // P → P
 
     // V1 elaboration registers the goal as a hole postulate.
-    let hole_id = declare_postulate(&mut ke.env, vec![], phi.clone())
+    let hole_id = declare_postulate(&mut ke.env, "test postulate".to_string(), vec![], phi.clone())
         .expect("V1 hole postulate");
 
     // The hole is now in trusted_base.
@@ -165,7 +165,7 @@ fn open_hole_postcondition_rides_p_as_unknown() {
     let phi = Term::pi(ke.p_term.clone(), ke.p_term.clone());
 
     // V1 elaboration registers the hole.
-    let hole_id = declare_postulate(&mut ke.env, vec![], phi.clone())
+    let hole_id = declare_postulate(&mut ke.env, "test postulate".to_string(), vec![], phi.clone())
         .expect("V1 hole postulate");
 
     // Build the V2 triple — same id structure as EX-A1 to reinforce same-postcondition.
@@ -217,7 +217,7 @@ fn removing_assume_shrinks_p_and_changes_hash() {
     let phi = Term::pi(ke.p_term.clone(), ke.p_term.clone()); // P → P
 
     // Register as a Prove-kind hole (explicit statement — models `assume P → P`).
-    let hole_id = declare_postulate(&mut ke.env, vec![], phi.clone())
+    let hole_id = declare_postulate(&mut ke.env, "test postulate".to_string(), vec![], phi.clone())
         .expect("assume-like hole");
 
     let triple = closed_triple(hole_id, "f.prove", phi.clone(), ProvKind::Prove);
@@ -435,7 +435,7 @@ fn disproved_claim_never_exported() {
 
     // An unprovable goal — force a Disproved verdict synthetically.
     let phi = ke.p_term.clone();
-    let hole_id = declare_postulate(&mut ke.env, vec![], phi.clone())
+    let hole_id = declare_postulate(&mut ke.env, "test postulate".to_string(), vec![], phi.clone())
         .expect("hole");
 
     let triple = closed_triple(hole_id, "f.ensures.0", phi.clone(), ProvKind::Ensures { index: 0 });
@@ -481,7 +481,7 @@ fn same_program_same_export_hash() {
     let mut ke = make_kern_env();
 
     let phi = Term::pi(ke.p_term.clone(), ke.p_term.clone()); // P → P
-    let hole_id = declare_postulate(&mut ke.env, vec![], phi.clone())
+    let hole_id = declare_postulate(&mut ke.env, "test postulate".to_string(), vec![], phi.clone())
         .expect("hole");
 
     let triple = closed_triple(hole_id, "f.ensures.0", phi.clone(), ProvKind::Ensures { index: 0 });

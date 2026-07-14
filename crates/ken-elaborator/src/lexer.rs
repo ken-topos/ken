@@ -57,6 +57,7 @@ pub enum Token {
     // SURF-named-proof-claims keywords (`33 §8`)
     KwProp,  // "prop"   — proposition-family claim shape
     KwLemma, // "lemma"  — standalone checked theorem
+    KwAxiom, // "axiom"  — named postulate declaration sugar
     KwProof, // "proof"  — attached checked theorem / selector
     // V0 punctuation
     LParen,
@@ -454,6 +455,7 @@ impl<'s> Lexer<'s> {
                 "capabilities" => Token::KwCapabilities,
                 "prop" => Token::KwProp,
                 "lemma" => Token::KwLemma,
+                "axiom" => Token::KwAxiom,
                 "proof" => Token::KwProof,
                 "l" => Token::Ident("level".to_string()),
                 _ => {

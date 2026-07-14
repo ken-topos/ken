@@ -680,6 +680,15 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
             body: body.clone(),
             span: span.clone(),
         },
+        Decl::AxiomDecl {
+            name,
+            theorem,
+            span,
+        } => Decl::AxiomDecl {
+            name: qualify(prefix, name),
+            theorem: theorem.clone(),
+            span: span.clone(),
+        },
         Decl::AttachedProofDecl {
             proof_name,
             subject,
@@ -1071,6 +1080,7 @@ fn is_qualifiable(decl: &Decl) -> bool {
             | Decl::LetDecl { .. }
             | Decl::PropDecl { .. }
             | Decl::LemmaDecl { .. }
+            | Decl::AxiomDecl { .. }
             | Decl::AttachedProofDecl { .. }
             | Decl::DataDecl { .. }
             | Decl::ExplicitDataDecl { .. }
@@ -1084,6 +1094,7 @@ fn is_recursive_candidate(decl: &Decl) -> bool {
         Decl::ViewDecl { .. }
             | Decl::LetDecl { .. }
             | Decl::LemmaDecl { .. }
+            | Decl::AxiomDecl { .. }
             | Decl::AttachedProofDecl { .. }
     )
 }
@@ -1467,12 +1478,16 @@ fn expand_scope(
                             Some(unit_definitions),
                         )?;
                         let ty = ken_kernel::Term::ty(ken_kernel::Level::Zero);
-                        let id = ken_kernel::declare_postulate(&mut elab.env, vec![], ty).map_err(
-                            |e| ElabError::KernelRejected {
-                                error: e,
-                                span: span.clone(),
-                            },
-                        )?;
+                        let id = ken_kernel::declare_postulate(
+                            &mut elab.env,
+                            qualified.clone(),
+                            vec![],
+                            ty,
+                        )
+                        .map_err(|e| ElabError::KernelRejected {
+                            error: e,
+                            span: span.clone(),
+                        })?;
                         elab.globals.insert(qualified.clone(), id);
                         exports_here.insert(name.clone(), qualified.clone());
                         ids.push(crate::elab::ElabResult {

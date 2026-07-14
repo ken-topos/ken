@@ -133,7 +133,12 @@ pub fn register_bytes_env(
     // Registered as a postulate proposition; the L8 stdlib provides the
     // inductive proof. AC5 elaborates `prove roundtrip : BytesRoundTripLaw`
     // and asserts the hole is dischargeable.
-    let bytes_round_trip_law_id = declare_postulate(env, vec![], omega0)
+    let bytes_round_trip_law_id = declare_postulate(
+        env,
+        "BytesRoundTripLaw".to_string(),
+        vec![],
+        omega0,
+    )
         .map_err(|e| ElabError::Internal(format!("BytesRoundTripLaw failed: {}", e)))?;
     globals.insert("BytesRoundTripLaw".to_string(), bytes_round_trip_law_id);
 
@@ -257,7 +262,12 @@ pub fn register_safe_bytes_ops(
             Box::new(Term::var(0)),
         ),
     );
-    let bytes_list_roundtrip_id = declare_postulate(env, vec![], bytes_roundtrip_ty)
+    let bytes_list_roundtrip_id = declare_postulate(
+        env,
+        "bytes_list_roundtrip".to_string(),
+        vec![],
+        bytes_roundtrip_ty,
+    )
         .map_err(|e| ElabError::Internal(format!("bytes_list_roundtrip failed: {e}")))?;
     globals.insert("bytes_list_roundtrip".to_string(), bytes_list_roundtrip_id);
 
@@ -272,7 +282,12 @@ pub fn register_safe_bytes_ops(
             Box::new(Term::var(0)),
         ),
     );
-    let list_bytes_roundtrip_id = declare_postulate(env, vec![], list_roundtrip_ty)
+    let list_bytes_roundtrip_id = declare_postulate(
+        env,
+        "list_bytes_roundtrip".to_string(),
+        vec![],
+        list_roundtrip_ty,
+    )
         .map_err(|e| ElabError::Internal(format!("list_bytes_roundtrip failed: {e}")))?;
     globals.insert("list_bytes_roundtrip".to_string(), list_bytes_roundtrip_id);
 

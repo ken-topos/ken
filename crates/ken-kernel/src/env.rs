@@ -172,6 +172,9 @@ pub enum Decl {
     /// `c : A` — opaque constant / postulate; blocks δ (`11 §4`).
     Opaque {
         id: GlobalId,
+        /// Required human-readable audit label. This is provenance metadata,
+        /// not declaration identity, and no kernel judgment may inspect it.
+        name: String,
         level_params: Vec<LevelVar>,
         ty: Term,
     },
@@ -186,6 +189,60 @@ pub enum Decl {
         ty: Term,
         reduction: PrimReduction,
     },
+}
+
+/// One readable entry in the unchecked-assumption ledger (`18 §4.2`).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TrustedBaseEntry {
+    pub id: GlobalId,
+    pub name: String,
+}
+
+/// The readable trusted-base ledger.
+///
+/// Owned iteration intentionally yields the historical `GlobalId` stream so
+/// existing trust-delta set/count checks keep their exact semantics. Audit
+/// clients use [`TrustedBase::entries`] to read the required labels.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TrustedBase {
+    entries: Vec<TrustedBaseEntry>,
+}
+
+impl TrustedBase {
+    pub fn entries(&self) -> &[TrustedBaseEntry] {
+        &self.entries
+    }
+
+    /// Iterate over opaque ids for compatibility with the historical
+    /// set-shaped trust audit API. Use [`Self::entries`] when labels matter.
+    pub fn iter(&self) -> impl Iterator<Item = &GlobalId> {
+        self.entries.iter().map(|entry| &entry.id)
+    }
+
+    pub fn contains(&self, id: &GlobalId) -> bool {
+        self.entries.iter().any(|entry| entry.id == *id)
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+impl IntoIterator for TrustedBase {
+    type Item = GlobalId;
+    type IntoIter = std::vec::IntoIter<GlobalId>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries
+            .into_iter()
+            .map(|entry| entry.id)
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
 }
 
 impl Decl {
@@ -257,8 +314,9 @@ impl GlobalEnv {
         // constants (`16 §1.3`; the unsound general `Up : Type → Ω` coercion is
         // dropped, so these are standalone declarations, not wrappings). They
         // are kernel vocabulary (like `Type`/`Ω`), kept out of `trusted_base`.
-        env.bottom_id = Some(env.declare_prelude_const(Term::Omega(Level::zero())));
-        env.top_id = Some(env.declare_prelude_const(Term::Omega(Level::zero())));
+        env.bottom_id =
+            Some(env.declare_prelude_const("Bottom", Term::Omega(Level::zero())));
+        env.top_id = Some(env.declare_prelude_const("Top", Term::Omega(Level::zero())));
         // K5: `tt : Top` — `Top`'s sole inhabitant, a genuine sub-singleton
         // admissible in Ω (`16 §1.1`). Typed at `Top` itself (not `Ω_0`), so
         // this must come after `top_id` is set.
@@ -266,7 +324,7 @@ impl GlobalEnv {
             id: env.top_id.expect("top_id just set"),
             level_args: Vec::new(),
         };
-        env.tt_id = Some(env.declare_prelude_const(top));
+        env.tt_id = Some(env.declare_prelude_const("tt", top));
         env
     }
 
@@ -275,10 +333,11 @@ impl GlobalEnv {
     /// caller is responsible for `ty` being well-formed without running the
     /// check pipeline (both uses here are, by the `Omega`-formation and
     /// sub-singleton-in-Ω rules, `16 §1.1`).
-    fn declare_prelude_const(&mut self, ty: Term) -> GlobalId {
+    fn declare_prelude_const(&mut self, name: &str, ty: Term) -> GlobalId {
         let id = self.fresh_id();
         self.add_decl(Decl::Opaque {
             id,
+            name: name.to_string(),
             level_params: Vec::new(),
             ty,
         });
@@ -469,8 +528,9 @@ impl GlobalEnv {
     /// excluded: they are fixed kernel vocabulary (`16 §1.3`), not user
     /// assumptions. Checked surface literals are also excluded: their values
     /// are stored as syntax-derived data, not as primitive operations.
-    pub fn trusted_base(&self) -> Vec<GlobalId> {
-        self.decls
+    pub fn trusted_base(&self) -> TrustedBase {
+        let entries = self
+            .decls
             .iter()
             .filter(|d| match d {
                 Decl::Opaque { .. } => true,
@@ -478,8 +538,36 @@ impl GlobalEnv {
                 _ => false,
             })
             .filter(|d| !self.is_prelude(d.id()))
-            .map(|d| d.id())
-            .collect()
+            .map(|d| match d {
+                Decl::Opaque { id, name, .. } => TrustedBaseEntry {
+                    id: *id,
+                    name: name.clone(),
+                },
+                Decl::Primitive {
+                    id,
+                    reduction: PrimReduction::OpaqueType,
+                    ..
+                } => TrustedBaseEntry {
+                    id: *id,
+                    name: "opaque primitive type".to_string(),
+                },
+                Decl::Primitive {
+                    id,
+                    reduction: PrimReduction::Op { symbol },
+                    ..
+                } => TrustedBaseEntry {
+                    id: *id,
+                    name: (*symbol).to_string(),
+                },
+                Decl::Primitive {
+                    reduction: PrimReduction::Literal,
+                    ..
+                }
+                | Decl::Transparent { .. }
+                | Decl::Inductive(_) => unreachable!("trusted-base filter mismatch"),
+            })
+            .collect();
+        TrustedBase { entries }
     }
 }
 

@@ -42,9 +42,9 @@ struct ProofEnv {
 fn make_proof_env() -> ProofEnv {
     let mut env = GlobalEnv::new();
     let p_id =
-        declare_postulate(&mut env, vec![], Term::omega(Level::zero())).expect("P postulate");
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero())).expect("P postulate");
     let q_id =
-        declare_postulate(&mut env, vec![], Term::omega(Level::zero())).expect("Q postulate");
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero())).expect("Q postulate");
     ProofEnv {
         p: Term::const_(p_id, vec![]),
         q: Term::const_(q_id, vec![]),
@@ -187,7 +187,7 @@ fn proved_result_empty_diagnostics_and_delta() {
 fn countermodel_kind_round_trips_lossless() {
     let mut env = GlobalEnv::new();
     let p_id =
-        declare_postulate(&mut env, vec![], Term::omega(Level::zero())).unwrap();
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero())).unwrap();
     let p = Term::const_(p_id, vec![]);
 
     let cm = concrete_countermodel_false();
@@ -337,7 +337,7 @@ fn decomposition_and_slice_kinds_round_trip() {
 #[test]
 fn refuted_goal_false_tag_forcing_world() {
     let mut env = GlobalEnv::new();
-    let _p_id = declare_postulate(&mut env, vec![], Term::omega(Level::zero())).unwrap();
+    let _p_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero())).unwrap();
 
     let cm = concrete_countermodel_false();
     let actions = vec![SuggestedAction::FixCounterexample {
@@ -412,7 +412,7 @@ fn unknown_goal_unknown_tag_no_forcing_world() {
 #[test]
 fn false_unknown_non_confusable_roundtrip() {
     let mut env = GlobalEnv::new();
-    let p_id = declare_postulate(&mut env, vec![], Term::omega(Level::zero())).unwrap();
+    let p_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero())).unwrap();
     let p = Term::const_(p_id, vec![]);
 
     // "false" side: synthetic disproved (p ∧ ¬p)

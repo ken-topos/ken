@@ -184,6 +184,7 @@ fn fuel_bounded_unfold_produces_finite_prefix() {
     // with step = \s. Some (MkProd Nat Nat s (Suc s)) ⇝ [Zero] (a 1-element List).
     let (term, _ty) = env
         .elaborate_expr(
+            "fuel_bounded_unfold_produces_finite_prefix",
             "unfoldUpTo Nat Nat (\\s. Some (Prod Nat Nat) (MkProd Nat Nat s (Suc s))) (Suc Zero) Zero",
         )
         .expect("unfoldUpTo application elaborates");
@@ -374,10 +375,16 @@ fn structurally_equal_lists_share_slot() {
         .expect("IntList elaborates");
     // `[1, 2]` and `[2, 1]` as elaborated core terms (monomorphic — no type arg).
     let (t12, _) = env
-        .elaborate_expr("ICons 1 (ICons 2 INil)")
+        .elaborate_expr(
+            "structurally_equal_lists_share_slot",
+            "ICons 1 (ICons 2 INil)",
+        )
         .expect("[1,2] elaborates");
     let (t21, _) = env
-        .elaborate_expr("ICons 2 (ICons 1 INil)")
+        .elaborate_expr(
+            "structurally_equal_lists_share_slot",
+            "ICons 2 (ICons 1 INil)",
+        )
         .expect("[2,1] elaborates");
 
     let mut store = EvalStore::new();

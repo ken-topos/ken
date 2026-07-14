@@ -173,7 +173,7 @@ fn do_check(session: &mut Session, goal_src: &str) {
 
 /// Evaluate an expression through `ken-interp` (X1).
 fn do_eval(session: &mut Session, expr_src: &str) {
-    match session.env.elaborate_expr(expr_src.trim()) {
+    match session.env.elaborate_expr("ken repl eval", expr_src.trim()) {
         Ok((term, ty)) => {
             let val = eval(&[], &term, &session.env.env, &mut session.store);
             println!("  {} : {}", show_val(&val), show_term(&ty));
@@ -184,7 +184,7 @@ fn do_eval(session: &mut Session, expr_src: &str) {
 
 /// Infer and print the type of an expression.
 fn do_type(session: &mut Session, expr_src: &str) {
-    match session.env.elaborate_expr(expr_src.trim()) {
+    match session.env.elaborate_expr("ken repl type query", expr_src.trim()) {
         Ok((_term, ty)) => println!("  : {}", show_term(&ty)),
         Err(e) => println!("  error: {}", e),
     }

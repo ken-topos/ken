@@ -1020,6 +1020,7 @@ pub fn declare_def(
     let id = env.fresh_id();
     env.add_decl(Decl::Opaque {
         id,
+        name: "provisional definition".to_string(),
         level_params: level_params.clone(),
         ty: ty.clone(),
     });
@@ -1072,6 +1073,7 @@ where
         let id = env.fresh_id();
         env.add_decl(Decl::Opaque {
             id,
+            name: "provisional recursive definition".to_string(),
             level_params: level_params.clone(),
             ty: ty.clone(),
         });
@@ -1121,6 +1123,7 @@ where
 /// `· ⊢ A type` (`11 §4`). Recorded in the trusted base (`18 §5`).
 pub fn declare_postulate(
     env: &mut GlobalEnv,
+    name: String,
     level_params: Vec<LevelVar>,
     ty: Term,
 ) -> KernelResult<GlobalId> {
@@ -1129,6 +1132,7 @@ pub fn declare_postulate(
     let id = env.fresh_id();
     env.add_decl(Decl::Opaque {
         id,
+        name,
         level_params,
         ty,
     });
@@ -1224,8 +1228,18 @@ pub fn declare_deceq_certificate(
         Term::pi(ty_const, Term::pi(prim_eq_d2, bool_eq_true_d3)),
     );
 
-    let sound = declare_postulate(env, vec![], sound_ty)?;
-    let complete = declare_postulate(env, vec![], complete_ty)?;
+    let sound = declare_postulate(
+        env,
+        "decidable equality sound".to_string(),
+        vec![],
+        sound_ty,
+    )?;
+    let complete = declare_postulate(
+        env,
+        "decidable equality complete".to_string(),
+        vec![],
+        complete_ty,
+    )?;
 
     let cert = crate::env::DecEqCert {
         eq_op,

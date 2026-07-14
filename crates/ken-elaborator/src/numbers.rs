@@ -281,7 +281,7 @@ pub fn register_numeric_env(
                 Term::pi(ty_const.clone(), omega0.clone()),
             );
             // Opaque proposition — the prover (V3) discharges it statically.
-            let id = declare_postulate(env, vec![], novf_ty)
+            let id = declare_postulate(env, $name.to_string(), vec![], novf_ty)
                 .map_err(|e| ElabError::Internal(format!("no-ovf {} failed: {}", $name, e)))?;
             globals.insert($name.to_string(), id);
             id

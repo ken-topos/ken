@@ -205,7 +205,7 @@ impl ElabEnv {
         name: &str,
         ty: Term,
     ) -> Result<GlobalId, ElabError> {
-        let id = declare_postulate(&mut self.env, vec![], ty)
+        let id = declare_postulate(&mut self.env, name.to_string(), vec![], ty)
             .map_err(|e| ElabError::Internal(format!("declare_postulate failed: {}", e)))?;
         self.globals.insert(name.to_string(), id);
         Ok(id)
@@ -353,7 +353,11 @@ impl ElabEnv {
     }
 
     /// Elaborate a standalone expression from source.
-    pub fn elaborate_expr(&mut self, src: &str) -> Result<(Term, Term), ElabError> {
+    pub fn elaborate_expr(
+        &mut self,
+        owner_label: impl Into<String>,
+        src: &str,
+    ) -> Result<(Term, Term), ElabError> {
         let expr = parser::parse_expr(src)?;
         let rexpr = resolve::resolve_expr_standalone(&expr)?;
         elaborate_rexpr(
@@ -361,6 +365,7 @@ impl ElabEnv {
             &self.globals,
             &mut self.num_values,
             &self.numeric_env,
+            owner_label,
             &rexpr,
         )
     }

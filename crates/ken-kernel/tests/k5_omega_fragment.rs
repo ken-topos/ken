@@ -145,7 +145,7 @@ fn tt_proves_reduced_top_goal() {
 fn absurd_discharges_goal_from_impossible_hypothesis() {
     let (mut env, b) = mk_env();
     let p_false_ty = eq_bool(&b, true_c(&b), false_c(&b)); // whnf's to Bottom
-    let p_false = declare_postulate(&mut env, vec![], p_false_ty)
+    let p_false = declare_postulate(&mut env, "test postulate".to_string(), vec![], p_false_ty)
         .expect("p_false : Eq Bool true false (an impossible hypothesis)");
     let p_false_const = Term::Const {
         id: p_false,
@@ -168,14 +168,14 @@ fn absurd_discharges_goal_from_impossible_hypothesis() {
 #[test]
 fn absurd_discharges_type_motive_from_constructor_disjoint_hypothesis() {
     let (mut env, b) = mk_env();
-    let n = declare_postulate(&mut env, vec![], nat_t(&b)).expect("n : Nat");
+    let n = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&b)).expect("n : Nat");
     let n_const = Term::Const {
         id: n,
         level_args: vec![],
     };
     let p_zero_suc_ty = eq_nat(&b, zero_c(&b), suc_c(&b, n_const));
     let p_zero_suc =
-        declare_postulate(&mut env, vec![], p_zero_suc_ty).expect("p : Eq Nat Zero (Suc n)");
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], p_zero_suc_ty).expect("p : Eq Nat Zero (Suc n)");
     let p_zero_suc_const = Term::Const {
         id: p_zero_suc,
         level_args: vec![],
@@ -218,8 +218,8 @@ fn refl_does_not_inhabit_constructor_disjoint_equality() {
 #[test]
 fn neutral_index_equality_cannot_feed_type_absurd() {
     let (mut env, b) = mk_env();
-    let x = declare_postulate(&mut env, vec![], nat_t(&b)).expect("x : Nat");
-    let y = declare_postulate(&mut env, vec![], nat_t(&b)).expect("y : Nat");
+    let x = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&b)).expect("x : Nat");
+    let y = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&b)).expect("y : Nat");
     let x_const = Term::Const {
         id: x,
         level_args: vec![],
@@ -229,7 +229,7 @@ fn neutral_index_equality_cannot_feed_type_absurd() {
         level_args: vec![],
     };
     let p_neutral_ty = eq_nat(&b, x_const, y_const);
-    let p_neutral = declare_postulate(&mut env, vec![], p_neutral_ty).expect("p : Eq Nat x y");
+    let p_neutral = declare_postulate(&mut env, "test postulate".to_string(), vec![], p_neutral_ty).expect("p : Eq Nat x y");
     let p_neutral_const = Term::Const {
         id: p_neutral,
         level_args: vec![],
@@ -271,7 +271,7 @@ fn absurd_type_motive_proof_must_actually_be_bottom() {
 fn absurd_motive_must_still_classify_as_a_sort() {
     let (mut env, b) = mk_env();
     let p_false_ty = eq_bool(&b, true_c(&b), false_c(&b));
-    let p_false = declare_postulate(&mut env, vec![], p_false_ty).expect("p_false");
+    let p_false = declare_postulate(&mut env, "test postulate".to_string(), vec![], p_false_ty).expect("p_false");
     let p_false_const = Term::Const {
         id: p_false,
         level_args: vec![],
@@ -352,7 +352,7 @@ fn sct_rejects_self_reference_laundered_through_type_absurd_motive() {
     let mut env = GlobalEnv::new();
     let bottom_ty = bottom_term(&env);
     let impossible =
-        declare_postulate(&mut env, vec![], bottom_ty).expect("p : Bottom for unreachable code");
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], bottom_ty).expect("p : Bottom for unreachable code");
     let result =
         declare_recursive_group(&mut env, vec![(vec![], Term::Type(Level::zero()))], |ids| {
             let loop_id = ids[0];
@@ -399,7 +399,7 @@ fn antisym_shaped_case_split_both_branches() {
 
     // "contradictory hypothesis" branch: an impossible hypothesis, absurd proves anything.
     let p_false_ty = eq_bool(&b, true_c(&b), false_c(&b));
-    let p_false = declare_postulate(&mut env, vec![], p_false_ty).expect("p_false");
+    let p_false = declare_postulate(&mut env, "test postulate".to_string(), vec![], p_false_ty).expect("p_false");
     let p_false_const = Term::Const {
         id: p_false,
         level_args: vec![],

@@ -30,10 +30,10 @@ struct ProofEnv {
 fn make_proof_env() -> ProofEnv {
     let mut env = GlobalEnv::new();
     let p_id =
-        declare_postulate(&mut env, vec![], Term::omega(Level::zero()))
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
             .expect("P postulate");
     let q_id =
-        declare_postulate(&mut env, vec![], Term::omega(Level::zero()))
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
             .expect("Q postulate");
     ProofEnv {
         p: Term::const_(p_id, vec![]),

@@ -424,12 +424,22 @@ pub fn discharge_attenuation(
     id: &str,
 ) -> ProverResult {
     // Opaque carrier type for the authority scalar.
-    let auth_type_id =
-        declare_postulate(env, vec![], Term::ty(Level::Zero)).expect("authority type postulate");
+    let auth_type_id = declare_postulate(
+        env,
+        format!("{id}.authority_type"),
+        vec![],
+        Term::ty(Level::Zero),
+    )
+    .expect("authority type postulate");
     let auth_type = Term::const_(auth_type_id, vec![]);
     // Postulate child authority value : Authority_type.
-    let child_id =
-        declare_postulate(env, vec![], auth_type.clone()).expect("child authority postulate");
+    let child_id = declare_postulate(
+        env,
+        format!("{id}.child_authority"),
+        vec![],
+        auth_type.clone(),
+    )
+    .expect("child authority postulate");
     let child_term = Term::const_(child_id, vec![]);
     // Canonical: child_authority == bound → same postulate both sides of Eq.
     // Over-strong: child_authority != bound → distinct postulates, Refl fails.
@@ -440,8 +450,13 @@ pub fn discharge_attenuation(
     let bound_term = if canonical {
         child_term.clone()
     } else {
-        let bound_id =
-            declare_postulate(env, vec![], auth_type.clone()).expect("bound authority postulate");
+        let bound_id = declare_postulate(
+            env,
+            format!("{id}.bound_authority"),
+            vec![],
+            auth_type.clone(),
+        )
+        .expect("bound authority postulate");
         Term::const_(bound_id, vec![])
     };
     let phi = Term::Eq(

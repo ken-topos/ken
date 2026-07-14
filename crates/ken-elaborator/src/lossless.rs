@@ -422,6 +422,7 @@ fn collect_decl_spans(decl: &Decl, out: &mut Vec<Span>) {
             collect_type_spans(theorem, out);
             collect_expr_spans(body, out);
         }
+        Decl::AxiomDecl { theorem, .. } => collect_type_spans(theorem, out),
         Decl::LawDecl { fields, .. } | Decl::InstanceDecl { fields, .. } => {
             if let Decl::InstanceDecl {
                 head_type,

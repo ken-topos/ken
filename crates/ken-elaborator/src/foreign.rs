@@ -168,7 +168,7 @@ pub fn elaborate_foreign(
     let marshal_sig = compute_marshal_sig(&ty_core, bytes_id);
 
     // Declare the postulate — the foreign type is ASSUMED, not verified.
-    let postulate_id = declare_postulate(env, vec![], ty_core)
+    let postulate_id = declare_postulate(env, name.to_string(), vec![], ty_core)
         .map_err(|e| ElabError::KernelRejected {
             error: e,
             span: span.clone(),
@@ -182,8 +182,15 @@ pub fn elaborate_foreign(
     for clause in ensures_clauses {
         // Each runtime check gets its own postulate slot in trusted_base.
         let rc_ty = ken_kernel::Term::omega(ken_kernel::Level::Zero);
-        let hole_id = declare_postulate(env, vec![], rc_ty).map_err(|e| {
-            ElabError::KernelRejected { error: e, span: span.clone() }
+        let hole_id = declare_postulate(
+            env,
+            format!("{name}.runtime_check"),
+            vec![],
+            rc_ty,
+        )
+        .map_err(|e| ElabError::KernelRejected {
+            error: e,
+            span: span.clone(),
         })?;
         runtime_checks.push(FfiRuntimeCheck {
             hole_id,

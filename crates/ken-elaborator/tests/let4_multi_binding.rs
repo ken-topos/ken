@@ -81,7 +81,9 @@ fn ac1_ac2_rejections_are_specific() {
         ("let x = y; y = Zero in x", "y"),
     ] {
         let mut env = ElabEnv::new().unwrap();
-        let error = env.elaborate_expr(source).unwrap_err();
+        let error = env
+            .elaborate_expr("ac1_ac2_rejections_are_specific", source)
+            .unwrap_err();
         assert!(matches!(
             error,
             ElabError::UnresolvedCon { ref name, .. } if name == missing
@@ -111,8 +113,12 @@ fn ac2_ac3_group_and_nested_forms_resolve_and_lower_identically() {
 
     let mut grouped_env = ElabEnv::new().unwrap();
     let mut nested_env = ElabEnv::new().unwrap();
-    let (grouped_core, grouped_ty) = grouped_env.elaborate_expr(grouped).unwrap();
-    let (nested_core, nested_ty) = nested_env.elaborate_expr(nested).unwrap();
+    let (grouped_core, grouped_ty) = grouped_env
+        .elaborate_expr("ac2_ac3_group_and_nested_forms", grouped)
+        .unwrap();
+    let (nested_core, nested_ty) = nested_env
+        .elaborate_expr("ac2_ac3_group_and_nested_forms", nested)
+        .unwrap();
     assert_eq!(grouped_core, nested_core);
     assert_eq!(grouped_ty, nested_ty);
 }
@@ -123,8 +129,12 @@ fn ac4_strict_evaluation_and_effectful_lowering_keep_source_order() {
     let nested = "let x : Nat = Zero in let y : Nat = Suc x in Suc y";
     let mut grouped_env = ElabEnv::new().unwrap();
     let mut nested_env = ElabEnv::new().unwrap();
-    let (grouped_core, _) = grouped_env.elaborate_expr(grouped).unwrap();
-    let (nested_core, _) = nested_env.elaborate_expr(nested).unwrap();
+    let (grouped_core, _) = grouped_env
+        .elaborate_expr("ac4_strict_evaluation_source_order", grouped)
+        .unwrap();
+    let (nested_core, _) = nested_env
+        .elaborate_expr("ac4_strict_evaluation_source_order", nested)
+        .unwrap();
     assert_eq!(grouped_core, nested_core);
     assert!(matches!(
         grouped_core,
@@ -150,9 +160,13 @@ fn ac4_strict_evaluation_and_effectful_lowering_keep_source_order() {
     let mut effect_grouped_env = ElabEnv::new().unwrap();
     let mut effect_nested_env = ElabEnv::new().unwrap();
     let (effect_grouped_core, effect_grouped_ty) =
-        effect_grouped_env.elaborate_expr(effect_grouped).unwrap();
+        effect_grouped_env
+            .elaborate_expr("ac4_effectful_lowering_source_order", effect_grouped)
+            .unwrap();
     let (effect_nested_core, effect_nested_ty) =
-        effect_nested_env.elaborate_expr(effect_nested).unwrap();
+        effect_nested_env
+            .elaborate_expr("ac4_effectful_lowering_source_order", effect_nested)
+            .unwrap();
     assert_eq!(effect_grouped_core, effect_nested_core);
     assert_eq!(effect_grouped_ty, effect_nested_ty);
     let Term::Let {
@@ -174,6 +188,6 @@ fn ac4_strict_evaluation_and_effectful_lowering_keep_source_order() {
 fn ac2_separate_nested_body_may_shadow_a_group_name() {
     let source = "let x : Nat = Zero; y : Nat = x in let x : Nat = Suc y in x";
     let mut env = ElabEnv::new().unwrap();
-    env.elaborate_expr(source)
+    env.elaborate_expr("ac2_separate_nested_body_shadow", source)
         .expect("ordinary shadowing in a separately nested body remains legal");
 }

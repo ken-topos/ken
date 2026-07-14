@@ -2133,11 +2133,13 @@ fn encode_decl(
         }
         Decl::Opaque {
             id,
+            name,
             level_params,
             ty,
         } => {
             out.tag("opaque");
             encode_global(*id, symbols, out)?;
+            out.str(name);
             encode_level_params(level_params, out);
             encode_term(ty, symbols, out)?;
         }
@@ -5657,6 +5659,7 @@ mod tests {
         let opaque_id = GlobalId(3);
         let opaque_decl = Decl::Opaque {
             id: opaque_id,
+            name: "opaque_test".to_string(),
             level_params: Vec::new(),
             ty: Term::Type(Level::zero()),
         };

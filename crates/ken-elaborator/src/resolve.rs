@@ -974,6 +974,26 @@ pub(crate) fn resolve_decl_in_unit(
             })
         }
 
+        Decl::AxiomDecl {
+            name,
+            theorem,
+            span,
+        } => {
+            let mut scope = Scope::new();
+            let body = Expr::ECon(SUGAR_AXIOM.to_string(), span.clone());
+            let (full_ty, full_body) =
+                resolve_checked_proof_decl(&[], theorem, &body, &mut scope)?;
+            Ok(RDecl {
+                name: name.clone(),
+                ty: Some(full_ty),
+                body: full_body,
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::Lemma,
+            })
+        }
+
         Decl::AttachedProofDecl {
             proof_name,
             subject,

@@ -196,6 +196,7 @@ impl Parser {
             Token::KwProve => self.parse_prove_decl(start),
             Token::KwProp => self.parse_prop_decl(start),
             Token::KwLemma => self.parse_lemma_decl(start),
+            Token::KwAxiom => self.parse_axiom_decl(start),
             Token::KwProof => self.parse_attached_proof_decl(start),
             Token::KwLaw => self.parse_law_decl(start),
             Token::KwData => self.parse_data_decl(start),
@@ -582,6 +583,20 @@ impl Parser {
             params,
             theorem,
             body,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `axiom name : theorem`
+    fn parse_axiom_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'axiom'
+        let (name, _) = self.expect_ident()?;
+        self.expect(&Token::Colon)?;
+        let theorem = self.parse_type()?;
+        let end = theorem.span().end;
+        Ok(Decl::AxiomDecl {
+            name,
+            theorem,
             span: Span::new(start, end),
         })
     }
