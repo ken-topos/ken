@@ -14,7 +14,35 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (22:30 UTC) — ★★★ NEWEST · RESUME HERE · `origin/main @ ae042faa`
+> ### ⏭ 2026-07-14 (22:48 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ cbb513e1`
+>
+> ## ✅ AX-2 MERGED. Retros in flight → LET-5 releases next (Language) → unblocks LET-3 P2.
+>
+> | item | state |
+> |---|---|
+> | **AX-2** | ✅ **CLOSED — merged `cbb513e1` (PR #694), Decision resolved, RETROS IN** (leader `evt_5w0any52187ws`, qa `evt_46kqgv018rfx3`, impl `evt_2eqb4vtz13arq`). Shared carry maps onto 3 fleet memories I wrote: gate-derived membership · ownerless API = expressibility finding not sentinel · frozen membership API read through ID→decl lookup. |
+> | **LET-5** | 📋 **READY — releases to LANGUAGE the moment AX-2 retros land.** Frame `docs/program/wp/let5-checking-mode-let.md` on main. Build branch `wp/let5-checking-mode-let` FREE (team cuts fresh). Size S. |
+> | **LET-3 P2** | ⛔ HELD on LET-5. Foundation parked clean, frozen table posted. Resumes after LET-5 merges. |
+>
+> ### ▶ NEXT FOR ME (in order)
+> 1. **Collect AX-2 retros** (drive to completion — nudge if a seat goes quiet), then **CLOSE AX-2**.
+> 2. **LET-5 Handoff Gate IN PROGRESS** — retros in ✅, ring quiescent/0-ahead ✅, **compaction
+>    running (bg `bpk80btyn`)**. NEXT: verify 3 drops → kick language-leader at on-main frame
+>    `docs/program/wp/let5-checking-mode-let.md` → confirm `Working`. Build branch
+>    `wp/let5-checking-mode-let` FREE, team cuts fresh.
+> 3. **LET-3 P2 resumes** with Foundation's frozen table once LET-5 merges.
+> 4. **Owed to Pat:** the toolchain-axis proposal.
+> 5. **Kernel/Verify/Ergo idle BY DESIGN.**
+>
+> ### ★ AX-2 RETRO SEED (five wrong pins of mine, all caught by perishability)
+> 1. producer sub-counts 17/8/95 → true 34src+93test (leader re-derived from the gate)
+> 2. "every `Axiom` is inside a named declaration" D3 absolute → FALSE (`elaborate_expr`
+>    is ownerless) → Architect ruled (A) caller-supplied label; I ruled (B) and retracted
+> 3. AX-1 frame's "without churning existing assertions" = assertion-level bar → invited the
+>    frozen-`trusted_base()`-signature change QA's behavioral pass could not see; Architect
+>    blocked it. **⇒ frame a frozen surface by its TYPE, not its tests.**
+>
+> ### ⏮ 2026-07-14 (22:30 UTC) — earlier state · `origin/main @ ae042faa`
 >
 > ## AX-2 in its gate loop (CV narrow block — conformance-only). **LET-5 FRAMED + on main.**
 >
