@@ -112,10 +112,15 @@ fn env_config_validation
     : Validation (NonEmpty Diagnostic) (List Bytes) =
   match checked {
     Valid values ↦ Valid (NonEmpty Diagnostic) (List Bytes) (env_config_values fields entries);
-    Invalid issues ↦ Invalid
-      (NonEmpty Diagnostic)
-      (List Bytes)
-      (nonempty_map (SchemaIssue EnvConfigOrigin) Diagnostic env_config_issue_diagnostic issues)
+    Invalid issues ↦
+      Invalid
+        (NonEmpty Diagnostic)
+        (List Bytes)
+        (nonempty_map
+          (SchemaIssue EnvConfigOrigin)
+          Diagnostic
+          env_config_issue_diagnostic
+          issues)
   }
 
 fn decode_environment_entries

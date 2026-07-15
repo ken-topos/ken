@@ -84,18 +84,20 @@ const Compose (r : Type) : Type = HostIO APartial r
 -- resume N times through `print_line`'s continuation).
 proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Console] =
   match xs {
-    Nil ↦ Ret
-      (Coproduct (FSOp APartial) AmbientOp)
-      (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-      (Result IOError Unit)
-      (Ok IOError Unit MkUnit);
-    Cons x xs' ↦ bind
-      (Coproduct (FSOp APartial) AmbientOp)
-      (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-      Unit
-      (Result IOError Unit)
-      (host_console APartial Unit (print_line x))
-      (λ_. printLines xs')
+    Nil ↦
+      Ret
+        (Coproduct (FSOp APartial) AmbientOp)
+        (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
+        (Result IOError Unit)
+        (Ok IOError Unit MkUnit);
+    Cons x xs' ↦
+      bind
+        (Coproduct (FSOp APartial) AmbientOp)
+        (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
+        Unit
+        (Result IOError Unit)
+        (host_console APartial Unit (print_line x))
+        (λ_. printLines xs')
   }
 
 -- Reads the fixture via `inject_l (read_bytes ...)`, and on success prints
@@ -117,19 +119,21 @@ proc app (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Consol
       match r {
         Err e ↦
           match e {
-            MkFileError operation path kind ↦ Ret
-              (Coproduct (FSOp APartial) AmbientOp)
-              (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-              (Result IOError Unit)
-              (Err IOError Unit kind)
+            MkFileError operation path kind ↦
+              Ret
+                (Coproduct (FSOp APartial) AmbientOp)
+                (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
+                (Result IOError Unit)
+                (Err IOError Unit kind)
           };
         Ok bytes ↦
           match bytes_decode bytes {
-            Err _ ↦ Ret
-              (Coproduct (FSOp APartial) AmbientOp)
-              (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-              (Result IOError Unit)
-              (Err IOError Unit (Other 0));
+            Err _ ↦
+              Ret
+                (Coproduct (FSOp APartial) AmbientOp)
+                (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
+                (Result IOError Unit)
+                (Err IOError Unit (Other 0));
             Ok text ↦ printLines (lines text)
           }
       })
@@ -139,38 +143,35 @@ proc main
     : HostIO APartial ExitCode
     visits [FS, Console] =
   match caps {
-    MkProgramCaps cap ↦ bind
-      (Coproduct (FSOp APartial) AmbientOp)
-      (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-      (Result IOError Unit)
-      ExitCode
-      (app cap)
-      (λr.
-        match r {
-          Err e ↦
-            match e {
-              NotFound ↦ host_program_then APartial (print_line "NotFound") (Failure 1);
-              PermissionDenied ↦ host_program_then
-                APartial
-                (print_line "PermissionDenied")
-                (Failure 1);
-              CapabilityDenied ↦ host_program_then
-                APartial
-                (print_line "CapabilityDenied")
-                (Failure 1);
-              BrokenPipe ↦ host_program_then APartial (print_line "BrokenPipe") (Failure 1);
-              Interrupted ↦ host_program_then APartial (print_line "Interrupted") (Failure 1);
-              AlreadyExists ↦ host_program_then
-                APartial
-                (print_line "AlreadyExists")
-                (Failure 1);
-              InvalidInput ↦ host_program_then APartial (print_line "InvalidInput") (Failure 1);
-              IsDirectory ↦ host_program_then APartial (print_line "IsDirectory") (Failure 1);
-              NotDirectory ↦ host_program_then APartial (print_line "NotDirectory") (Failure 1);
-              NotEmpty ↦ host_program_then APartial (print_line "NotEmpty") (Failure 1);
-              Unsupported ↦ host_program_then APartial (print_line "Unsupported") (Failure 1);
-              Other errno ↦ host_program_then APartial (print_line "Other") (Failure 1)
-            };
-          Ok _ ↦ host_exit APartial Success
-        })
+    MkProgramCaps cap ↦
+      bind
+        (Coproduct (FSOp APartial) AmbientOp)
+        (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
+        (Result IOError Unit)
+        ExitCode
+        (app cap)
+        (λr.
+          match r {
+            Err e ↦
+              match e {
+                NotFound ↦ host_program_then APartial (print_line "NotFound") (Failure 1);
+                PermissionDenied ↦
+                  host_program_then APartial (print_line "PermissionDenied") (Failure 1);
+                CapabilityDenied ↦
+                  host_program_then APartial (print_line "CapabilityDenied") (Failure 1);
+                BrokenPipe ↦ host_program_then APartial (print_line "BrokenPipe") (Failure 1);
+                Interrupted ↦ host_program_then APartial (print_line "Interrupted") (Failure 1);
+                AlreadyExists ↦
+                  host_program_then APartial (print_line "AlreadyExists") (Failure 1);
+                InvalidInput ↦
+                  host_program_then APartial (print_line "InvalidInput") (Failure 1);
+                IsDirectory ↦ host_program_then APartial (print_line "IsDirectory") (Failure 1);
+                NotDirectory ↦
+                  host_program_then APartial (print_line "NotDirectory") (Failure 1);
+                NotEmpty ↦ host_program_then APartial (print_line "NotEmpty") (Failure 1);
+                Unsupported ↦ host_program_then APartial (print_line "Unsupported") (Failure 1);
+                Other errno ↦ host_program_then APartial (print_line "Other") (Failure 1)
+              };
+            Ok _ ↦ host_exit APartial Success
+          })
   }

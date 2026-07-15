@@ -177,6 +177,16 @@ fn ac6_independent_oracle_mandatory_forms_are_exact_fixed_points() {
 }
 
 #[test]
+fn match_arms_break_after_mapsto_only_when_the_whole_arm_wraps() {
+    let source = "fn format_arms (x : Shape) : Proof = match x { Zero |-> Refl; AnExtremelyLongApplicationPattern n |-> congruence_for_a_deliberately_wide_match_arm Proof Proof predicate witness n; AnExtremelyLongLambdaPattern a b |-> \\x. prove_a_deliberately_wide_lambda_match_arm_body x a b witness evidence }";
+    let expected = "fn format_arms (x : Shape) : Proof =\n  match x {\n    Zero ↦ Refl;\n    AnExtremelyLongApplicationPattern n ↦\n      congruence_for_a_deliberately_wide_match_arm Proof Proof predicate witness n;\n    AnExtremelyLongLambdaPattern a b ↦\n      λx. prove_a_deliberately_wide_lambda_match_arm_body x a b witness evidence\n  }\n";
+
+    assert_eq!(format_ken(source).unwrap(), expected);
+    assert_eq!(format_ken(expected).unwrap(), expected);
+    assert_eq!(ast_shape(source), ast_shape(expected));
+}
+
+#[test]
 fn ac6_representable_declaration_blocks_break_in_both_orientations() {
     let source = "law metrics (m) { x           : Nat ; longer_name : Int }\nclass Metrics a { x           : Nat ; longer_name : Int }\ninstance Metrics Nat { x           = 0 ; longer_name = 1 ; }";
     let expected = "law metrics (m) {\n  x : Nat;\n  longer_name : Int\n}\n\nclass Metrics a {\n  x : Nat;\n  longer_name : Int\n}\n\ninstance Metrics Nat {\n  x = 0;\n  longer_name = 1;\n}\n";

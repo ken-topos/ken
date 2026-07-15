@@ -269,44 +269,46 @@ fn pair_compare_lt_cases
           (Equal OrdResult (cmpb (pair_snd a b x) (pair_snd a b y)) ord_lt)) =
   match cmpa (pair_fst a b x) (pair_fst a b y) eqn : ha {
     Lt ↦ pair_compare_lt_cases_lt_at b cmpb (pair_snd a b x) (pair_snd a b y) Lt Proved;
-    Eq ↦ pair_compare_lt_cases_eq_at
-      b
-      cmpb
-      (pair_snd a b x)
-      (pair_snd a b y)
-      Eq
-      Proved
-      (J
-        (λr _.
-          Equal
-            OrdResult
-            (match r {
-              Lt ↦ Lt;
-              Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
-              Gt ↦ Gt
-            })
-            ord_lt)
-        h
-        ha);
-    Gt ↦ pair_compare_lt_cases_gt_at
-      b
-      cmpb
-      (pair_snd a b x)
-      (pair_snd a b y)
-      Gt
-      Proved
-      (J
-        (λr _.
-          Equal
-            OrdResult
-            (match r {
-              Lt ↦ Lt;
-              Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
-              Gt ↦ Gt
-            })
-            ord_lt)
-        h
-        ha)
+    Eq ↦
+      pair_compare_lt_cases_eq_at
+        b
+        cmpb
+        (pair_snd a b x)
+        (pair_snd a b y)
+        Eq
+        Proved
+        (J
+          (λr _.
+            Equal
+              OrdResult
+              (match r {
+                Lt ↦ Lt;
+                Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
+                Gt ↦ Gt
+              })
+              ord_lt)
+          h
+          ha);
+    Gt ↦
+      pair_compare_lt_cases_gt_at
+        b
+        cmpb
+        (pair_snd a b x)
+        (pair_snd a b y)
+        Gt
+        Proved
+        (J
+          (λr _.
+            Equal
+              OrdResult
+              (match r {
+                Lt ↦ Lt;
+                Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
+                Gt ↦ Gt
+              })
+              ord_lt)
+          h
+          ha)
   }
 
 fn pair_compare_gt_cases_eq_at
@@ -367,44 +369,46 @@ fn pair_compare_gt_cases
           (Equal OrdResult (cmpa (pair_fst a b x) (pair_fst a b y)) ord_eq)
           (Equal OrdResult (cmpb (pair_snd a b x) (pair_snd a b y)) ord_gt)) =
   match cmpa (pair_fst a b x) (pair_fst a b y) eqn : ha {
-    Lt ↦ pair_compare_gt_cases_lt_at
-      b
-      cmpb
-      (pair_snd a b x)
-      (pair_snd a b y)
-      Lt
-      Proved
-      (J
-        (λr _.
-          Equal
-            OrdResult
-            (match r {
-              Lt ↦ Lt;
-              Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
-              Gt ↦ Gt
-            })
-            ord_gt)
-        h
-        ha);
-    Eq ↦ pair_compare_gt_cases_eq_at
-      b
-      cmpb
-      (pair_snd a b x)
-      (pair_snd a b y)
-      Eq
-      Proved
-      (J
-        (λr _.
-          Equal
-            OrdResult
-            (match r {
-              Lt ↦ Lt;
-              Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
-              Gt ↦ Gt
-            })
-            ord_gt)
-        h
-        ha);
+    Lt ↦
+      pair_compare_gt_cases_lt_at
+        b
+        cmpb
+        (pair_snd a b x)
+        (pair_snd a b y)
+        Lt
+        Proved
+        (J
+          (λr _.
+            Equal
+              OrdResult
+              (match r {
+                Lt ↦ Lt;
+                Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
+                Gt ↦ Gt
+              })
+              ord_gt)
+          h
+          ha);
+    Eq ↦
+      pair_compare_gt_cases_eq_at
+        b
+        cmpb
+        (pair_snd a b x)
+        (pair_snd a b y)
+        Eq
+        Proved
+        (J
+          (λr _.
+            Equal
+              OrdResult
+              (match r {
+                Lt ↦ Lt;
+                Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
+                Gt ↦ Gt
+              })
+              ord_gt)
+          h
+          ha);
     Gt ↦ pair_compare_gt_cases_gt_at b cmpb (pair_snd a b x) (pair_snd a b y) Gt Proved
   }
 
@@ -453,63 +457,66 @@ proof eq_cases for pair_compare
         (Equal OrdResult (cmpa (pair_fst a b x) (pair_fst a b y)) ord_eq)
         (Equal OrdResult (cmpb (pair_snd a b x) (pair_snd a b y)) ord_eq) =
   match cmpa (pair_fst a b x) (pair_fst a b y) eqn : ha {
-    Lt ↦ pair_compare_eq_cases_lt_at
-      b
-      cmpb
-      (pair_snd a b x)
-      (pair_snd a b y)
-      Lt
-      Proved
-      (J
-        (λr _.
-          Equal
-            OrdResult
-            (match r {
-              Lt ↦ Lt;
-              Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
-              Gt ↦ Gt
-            })
-            ord_eq)
-        h
-        ha);
-    Eq ↦ pair_compare_eq_cases_eq_at
-      b
-      cmpb
-      (pair_snd a b x)
-      (pair_snd a b y)
-      Eq
-      Proved
-      (J
-        (λr _.
-          Equal
-            OrdResult
-            (match r {
-              Lt ↦ Lt;
-              Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
-              Gt ↦ Gt
-            })
-            ord_eq)
-        h
-        ha);
-    Gt ↦ pair_compare_eq_cases_gt_at
-      b
-      cmpb
-      (pair_snd a b x)
-      (pair_snd a b y)
-      Gt
-      Proved
-      (J
-        (λr _.
-          Equal
-            OrdResult
-            (match r {
-              Lt ↦ Lt;
-              Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
-              Gt ↦ Gt
-            })
-            ord_eq)
-        h
-        ha)
+    Lt ↦
+      pair_compare_eq_cases_lt_at
+        b
+        cmpb
+        (pair_snd a b x)
+        (pair_snd a b y)
+        Lt
+        Proved
+        (J
+          (λr _.
+            Equal
+              OrdResult
+              (match r {
+                Lt ↦ Lt;
+                Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
+                Gt ↦ Gt
+              })
+              ord_eq)
+          h
+          ha);
+    Eq ↦
+      pair_compare_eq_cases_eq_at
+        b
+        cmpb
+        (pair_snd a b x)
+        (pair_snd a b y)
+        Eq
+        Proved
+        (J
+          (λr _.
+            Equal
+              OrdResult
+              (match r {
+                Lt ↦ Lt;
+                Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
+                Gt ↦ Gt
+              })
+              ord_eq)
+          h
+          ha);
+    Gt ↦
+      pair_compare_eq_cases_gt_at
+        b
+        cmpb
+        (pair_snd a b x)
+        (pair_snd a b y)
+        Gt
+        Proved
+        (J
+          (λr _.
+            Equal
+              OrdResult
+              (match r {
+                Lt ↦ Lt;
+                Eq ↦ cmpb (pair_snd a b x) (pair_snd a b y);
+                Gt ↦ Gt
+              })
+              ord_eq)
+          h
+          ha)
   }
 
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
@@ -624,13 +631,14 @@ lemma take_drop_decomposition
     Suc m ↦
       match xs {
         Nil ↦ Proved;
-        Cons h t ↦ cong
-          (List a)
-          (List a)
-          (list_append a (take a m t) (drop a m t))
-          t
-          (Cons a h)
-          (take_drop_decomposition a m t)
+        Cons h t ↦
+          cong
+            (List a)
+            (List a)
+            (list_append a (take a m t) (drop a m t))
+            t
+            (Cons a h)
+            (take_drop_decomposition a m t)
       }
   }
 
@@ -650,13 +658,8 @@ lemma length_take_min
     Suc m ↦
       match xs {
         Nil ↦ Proved;
-        Cons h t ↦ cong
-          Nat
-          Nat
-          (length a (take a m t))
-          (min m (length a t))
-          Suc
-          (length_take_min a m t)
+        Cons h t ↦
+          cong Nat Nat (length a (take a m t)) (min m (length a t)) Suc (length_take_min a m t)
       }
   }
 ```
@@ -703,13 +706,14 @@ lemma reverse_snoc
         (Cons a y (reverse a xs)) =
   match xs {
     Nil ↦ cong (List a) (List a) (Nil a) (Nil a) (Cons a y) Proved;
-    Cons h t ↦ cong
-      (List a)
-      (List a)
-      (reverse a (list_append a t (Cons a y (Nil a))))
-      (Cons a y (reverse a t))
-      (λw. list_append a w (Cons a h (Nil a)))
-      (reverse_snoc a t y)
+    Cons h t ↦
+      cong
+        (List a)
+        (List a)
+        (reverse a (list_append a t (Cons a y (Nil a))))
+        (Cons a y (reverse a t))
+        (λw. list_append a w (Cons a h (Nil a)))
+        (reverse_snoc a t y)
   }
 
 proof involutive for reverse
@@ -717,19 +721,20 @@ proof involutive for reverse
     : Equal (List a) (reverse a (reverse a xs)) xs =
   match xs {
     Nil ↦ Proved;
-    Cons h t ↦ trans
-      (List a)
-      (reverse a (reverse a (Cons a h t)))
-      (Cons a h (reverse a (reverse a t)))
-      (Cons a h t)
-      (reverse_snoc a (reverse a t) h)
-      (cong
+    Cons h t ↦
+      trans
         (List a)
-        (List a)
-        (reverse a (reverse a t))
-        t
-        (Cons a h)
-        ((proof involutive for reverse) a t))
+        (reverse a (reverse a (Cons a h t)))
+        (Cons a h (reverse a (reverse a t)))
+        (Cons a h t)
+        (reverse_snoc a (reverse a t) h)
+        (cong
+          (List a)
+          (List a)
+          (reverse a (reverse a t))
+          t
+          (Cons a h)
+          ((proof involutive for reverse) a t))
   }
 
 lemma append_length_snoc
@@ -737,13 +742,14 @@ lemma append_length_snoc
     : Equal Nat (length a (list_append a xs (Cons a y (Nil a)))) (Suc (length a xs)) =
   match xs {
     Nil ↦ Proved;
-    Cons h t ↦ cong
-      Nat
-      Nat
-      (length a (list_append a t (Cons a y (Nil a))))
-      (Suc (length a t))
-      Suc
-      (append_length_snoc a t y)
+    Cons h t ↦
+      cong
+        Nat
+        Nat
+        (length a (list_append a t (Cons a y (Nil a))))
+        (Suc (length a t))
+        Suc
+        (append_length_snoc a t y)
   }
 
 lemma reverse_length
@@ -751,13 +757,14 @@ lemma reverse_length
     : Equal Nat (length a (reverse a xs)) (length a xs) =
   match xs {
     Nil ↦ Proved;
-    Cons h t ↦ trans
-      Nat
-      (length a (list_append a (reverse a t) (Cons a h (Nil a))))
-      (Suc (length a (reverse a t)))
-      (Suc (length a t))
-      (append_length_snoc a (reverse a t) h)
-      (cong Nat Nat (length a (reverse a t)) (length a t) Suc (reverse_length a t))
+    Cons h t ↦
+      trans
+        Nat
+        (length a (list_append a (reverse a t) (Cons a h (Nil a))))
+        (Suc (length a (reverse a t)))
+        (Suc (length a t))
+        (append_length_snoc a (reverse a t) h)
+        (cong Nat Nat (length a (reverse a t)) (length a t) Suc (reverse_length a t))
   }
 
 fn zip (a : Type) (b : Type) (xs : List a) (ys : List b) : List (Pair a b) =
@@ -778,13 +785,14 @@ lemma zip_length
     Cons h t ↦
       match ys {
         Nil ↦ Proved;
-        Cons h2 t2 ↦ cong
-          Nat
-          Nat
-          (length (Pair a b) (zip a b t t2))
-          (min (length a t) (length b t2))
-          Suc
-          (zip_length a b t t2)
+        Cons h2 t2 ↦
+          cong
+            Nat
+            Nat
+            (length (Pair a b) (zip a b t t2))
+            (min (length a t) (length b t2))
+            Suc
+            (zip_length a b t t2)
       }
   }
 
@@ -807,13 +815,14 @@ lemma range_from_length
     : Equal Nat (length Nat (range_from start n)) n =
   match n {
     Zero ↦ Proved;
-    Suc m ↦ cong
-      Nat
-      Nat
-      (length Nat (range_from (Suc start) m))
-      m
-      Suc
-      (range_from_length (Suc start) m)
+    Suc m ↦
+      cong
+        Nat
+        Nat
+        (length Nat (range_from (Suc start) m))
+        m
+        Suc
+        (range_from_length (Suc start) m)
   }
 
 lemma range_length (n : Nat) : Equal Nat (length Nat (range n)) n = range_from_length Zero n
@@ -903,13 +912,14 @@ lemma bool_cons_sorted
       → is_sorted Bool bool_leq (Cons Bool x xs) =
   match xs {
     Nil ↦ λh. λhb. Proved;
-    Cons h t ↦ λhxs.
-      λhb.
-        and_intro
-          (Equal Bool (bool_leq x h) True)
-          (is_sorted Bool bool_leq (Cons Bool h t))
-          hb
-          hxs
+    Cons h t ↦
+      λhxs.
+        λhb.
+          and_intro
+            (Equal Bool (bool_leq x h) True)
+            (is_sorted Bool bool_leq (Cons Bool h t))
+            hb
+            hxs
   }
 
 proof tail for is_sorted
@@ -917,8 +927,9 @@ proof tail for is_sorted
     : is_sorted Bool bool_leq (Cons Bool x xs) → is_sorted Bool bool_leq xs =
   match xs {
     Nil ↦ λh. Proved;
-    Cons h t ↦ λhCons.
-      and_snd (Equal Bool (bool_leq x h) True) (is_sorted Bool bool_leq (Cons Bool h t)) hCons
+    Cons h t ↦
+      λhCons.
+        and_snd (Equal Bool (bool_leq x h) True) (is_sorted Bool bool_leq (Cons Bool h t)) hCons
   }
 
 fn insert_true_bool (xs : List Bool) : List Bool =
@@ -949,12 +960,13 @@ lemma sorted_insert_true_bool
     Cons h t ↦
       match h {
         True ↦ λhxs. bool_cons_sorted True (Cons Bool True t) hxs Proved;
-        False ↦ λhxs.
-          bool_cons_sorted
-            False
-            (insert_true_bool t)
-            (sorted_insert_true_bool t ((proof tail for is_sorted) False t hxs))
-            ((proof false for bool_head_leq) (insert_true_bool t))
+        False ↦
+          λhxs.
+            bool_cons_sorted
+              False
+              (insert_true_bool t)
+              (sorted_insert_true_bool t ((proof tail for is_sorted) False t hxs))
+              ((proof false for bool_head_leq) (insert_true_bool t))
       }
   }
 
@@ -989,13 +1001,14 @@ lemma insert_true_bool_count_false
     Cons h t ↦
       match h {
         True ↦ Refl;
-        False ↦ cong
-          Nat
-          Nat
-          (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool t))
-          (count Bool (eq_from_ord Bool bool_leq) False t)
-          Suc
-          (insert_true_bool_count_false t)
+        False ↦
+          cong
+            Nat
+            Nat
+            (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool t))
+            (count Bool (eq_from_ord Bool bool_leq) False t)
+            Suc
+            (insert_true_bool_count_false t)
       }
   }
 
@@ -1022,24 +1035,26 @@ lemma sort_bool_count_false
     Nil ↦ Proved;
     Cons h t ↦
       match h {
-        False ↦ cong
-          Nat
-          Nat
-          (count Bool (eq_from_ord Bool bool_leq) False t)
-          (count Bool (eq_from_ord Bool bool_leq) False (sort_bool t))
-          Suc
-          (sort_bool_count_false t);
-        True ↦ trans
-          Nat
-          (count Bool (eq_from_ord Bool bool_leq) False t)
-          (count Bool (eq_from_ord Bool bool_leq) False (sort_bool t))
-          (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool (sort_bool t)))
-          (sort_bool_count_false t)
-          (sym
+        False ↦
+          cong
             Nat
-            (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool (sort_bool t)))
+            Nat
+            (count Bool (eq_from_ord Bool bool_leq) False t)
             (count Bool (eq_from_ord Bool bool_leq) False (sort_bool t))
-            (insert_true_bool_count_false (sort_bool t)))
+            Suc
+            (sort_bool_count_false t);
+        True ↦
+          trans
+            Nat
+            (count Bool (eq_from_ord Bool bool_leq) False t)
+            (count Bool (eq_from_ord Bool bool_leq) False (sort_bool t))
+            (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool (sort_bool t)))
+            (sort_bool_count_false t)
+            (sym
+              Nat
+              (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool (sort_bool t)))
+              (count Bool (eq_from_ord Bool bool_leq) False (sort_bool t))
+              (insert_true_bool_count_false (sort_bool t)))
       }
   }
 
@@ -1053,23 +1068,24 @@ lemma sort_bool_count_true
     Cons h t ↦
       match h {
         False ↦ sort_bool_count_true t;
-        True ↦ trans
-          Nat
-          (Suc (count Bool (eq_from_ord Bool bool_leq) True t))
-          (Suc (count Bool (eq_from_ord Bool bool_leq) True (sort_bool t)))
-          (count Bool (eq_from_ord Bool bool_leq) True (insert_true_bool (sort_bool t)))
-          (cong
+        True ↦
+          trans
             Nat
-            Nat
-            (count Bool (eq_from_ord Bool bool_leq) True t)
-            (count Bool (eq_from_ord Bool bool_leq) True (sort_bool t))
-            Suc
-            (sort_bool_count_true t))
-          (sym
-            Nat
-            (count Bool (eq_from_ord Bool bool_leq) True (insert_true_bool (sort_bool t)))
+            (Suc (count Bool (eq_from_ord Bool bool_leq) True t))
             (Suc (count Bool (eq_from_ord Bool bool_leq) True (sort_bool t)))
-            (insert_true_bool_count_true (sort_bool t)))
+            (count Bool (eq_from_ord Bool bool_leq) True (insert_true_bool (sort_bool t)))
+            (cong
+              Nat
+              Nat
+              (count Bool (eq_from_ord Bool bool_leq) True t)
+              (count Bool (eq_from_ord Bool bool_leq) True (sort_bool t))
+              Suc
+              (sort_bool_count_true t))
+            (sym
+              Nat
+              (count Bool (eq_from_ord Bool bool_leq) True (insert_true_bool (sort_bool t)))
+              (Suc (count Bool (eq_from_ord Bool bool_leq) True (sort_bool t)))
+              (insert_true_bool_count_true (sort_bool t)))
       }
   }
 

@@ -117,13 +117,14 @@ proof assoc for list_append
         (list_append a xs (list_append a ys zs)) =
   match xs {
     Nil ↦ Refl;
-    Cons h t ↦ cong
-      (List a)
-      (List a)
-      (list_append a (list_append a t ys) zs)
-      (list_append a t (list_append a ys zs))
-      (Cons a h)
-      ((proof assoc for list_append) a t ys zs)
+    Cons h t ↦
+      cong
+        (List a)
+        (List a)
+        (list_append a (list_append a t ys) zs)
+        (list_append a t (list_append a ys zs))
+        (Cons a h)
+        ((proof assoc for list_append) a t ys zs)
   }
 
 proof right_unit for list_append
@@ -131,13 +132,14 @@ proof right_unit for list_append
     : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
     Nil ↦ Proved;
-    Cons h t ↦ cong
-      (List a)
-      (List a)
-      (list_append a t (Nil a))
-      t
-      (Cons a h)
-      ((proof right_unit for list_append) a t)
+    Cons h t ↦
+      cong
+        (List a)
+        (List a)
+        (list_append a t (Nil a))
+        t
+        (Cons a h)
+        ((proof right_unit for list_append) a t)
   }
 
 instance Semigroup (List Nat) {
@@ -266,13 +268,8 @@ fn list_map (a : Type) (b : Type) (g : a → b) (xs : List a) : List b =
 proof id for list_map (a : Type) (xs : List a) : Equal (List a) (list_map a a (idf a) xs) xs =
   match xs {
     Nil ↦ Proved;
-    Cons h t ↦ cong
-      (List a)
-      (List a)
-      (list_map a a (idf a) t)
-      t
-      (Cons a h)
-      ((proof id for list_map) a t)
+    Cons h t ↦
+      cong (List a) (List a) (list_map a a (idf a) t) t (Cons a h) ((proof id for list_map) a t)
   }
 
 proof fusion for list_map
@@ -280,13 +277,14 @@ proof fusion for list_map
     : Equal (List c) (list_map a c (comp a b c g h) xs) (list_map b c g (list_map a b h xs)) =
   match xs {
     Nil ↦ Proved;
-    Cons x rest ↦ cong
-      (List c)
-      (List c)
-      (list_map a c (comp a b c g h) rest)
-      (list_map b c g (list_map a b h rest))
-      (Cons c (g (h x)))
-      ((proof fusion for list_map) a b c g h rest)
+    Cons x rest ↦
+      cong
+        (List c)
+        (List c)
+        (list_map a c (comp a b c g h) rest)
+        (list_map b c g (list_map a b h rest))
+        (Cons c (g (h x)))
+        ((proof fusion for list_map) a b c g h rest)
   }
 
 fn option_map (a : Type) (b : Type) (g : a → b) (x : Option a) : Option b =
@@ -377,13 +375,14 @@ lemma list_foldr_to_list
     : Equal (List a) (list_foldr a (List a) (Cons a) (Nil a) xs) (list_to_list a xs) =
   match xs {
     Nil ↦ Proved;
-    Cons h t ↦ cong
-      (List a)
-      (List a)
-      (list_foldr a (List a) (Cons a) (Nil a) t)
-      (list_to_list a t)
-      (Cons a h)
-      (list_foldr_to_list a t)
+    Cons h t ↦
+      cong
+        (List a)
+        (List a)
+        (list_foldr a (List a) (Cons a) (Nil a) t)
+        (list_to_list a t)
+        (Cons a h)
+        (list_foldr_to_list a t)
   }
 
 lemma list_fold_map_coherence
@@ -393,13 +392,14 @@ lemma list_fold_map_coherence
         (list_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) xs) =
   match xs {
     Nil ↦ Refl;
-    Cons h t ↦ cong
-      m
-      m
-      (list_fold_map a m mon g t)
-      (list_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) t)
-      (mon.op (g h))
-      (list_fold_map_coherence a m mon g t)
+    Cons h t ↦
+      cong
+        m
+        m
+        (list_fold_map a m mon g t)
+        (list_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) t)
+        (mon.op (g h))
+        (list_fold_map_coherence a m mon g t)
   }
 
 fn option_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (x : Option a) : b =

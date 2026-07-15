@@ -99,11 +99,12 @@ fn parse_digits_at
     Cons c rest ↦
       match char_to_digit c {
         None ↦ Err Diagnostic Int (numeric_diagnostic locate InvalidDigit position);
-        Some digit ↦ parse_digits_at
-          locate
-          rest
-          (Suc position)
-          (add_int (mul_int accumulator (10 : Int)) digit)
+        Some digit ↦
+          parse_digits_at
+            locate
+            rest
+            (Suc position)
+            (add_int (mul_int accumulator (10 : Int)) digit)
       }
   }
 
@@ -127,8 +128,8 @@ fn parse_int_chars (locate : Nat → Origin) (chars : List Char) : Result Diagno
         True ↦
           match rest {
             Nil ↦ Err Diagnostic Int (numeric_diagnostic locate EmptyInput (Suc Zero));
-            Cons d more ↦ negate_parsed
-              (parse_digits_at locate (Cons Char d more) (Suc Zero) (0 : Int))
+            Cons d more ↦
+              negate_parsed (parse_digits_at locate (Cons Char d more) (Suc Zero) (0 : Int))
           };
         False ↦ parse_digits_at locate (Cons Char c rest) Zero (0 : Int)
       }
@@ -223,29 +224,30 @@ lemma format_digits_roundtrip
         (Some (List Int) (decimal_digit_values digits)) =
   match digits {
     Nil ↦ Proved;
-    Cons digit rest ↦ trans
-      (Option (List Int))
-      (parse_digit_result
-        (parse_formatted_digits (format_digits rest))
-        (char_to_digit (decimal_digit_to_char digit)))
-      (parsed_int_prepend
-        (decimal_digit_value digit)
-        (parse_formatted_digits (format_digits rest)))
-      (Some (List Int) (Cons Int (decimal_digit_value digit) (decimal_digit_values rest)))
-      (cong
-        (Option Int)
+    Cons digit rest ↦
+      trans
         (Option (List Int))
-        (char_to_digit (decimal_digit_to_char digit))
-        (Some Int (decimal_digit_value digit))
-        (parse_digit_result (parse_formatted_digits (format_digits rest)))
-        ((proof valid for decimal_digit_to_char) digit))
-      (cong
-        (Option (List Int))
-        (Option (List Int))
-        (parse_formatted_digits (format_digits rest))
-        (Some (List Int) (decimal_digit_values rest))
-        (parsed_int_prepend (decimal_digit_value digit))
-        (format_digits_roundtrip rest))
+        (parse_digit_result
+          (parse_formatted_digits (format_digits rest))
+          (char_to_digit (decimal_digit_to_char digit)))
+        (parsed_int_prepend
+          (decimal_digit_value digit)
+          (parse_formatted_digits (format_digits rest)))
+        (Some (List Int) (Cons Int (decimal_digit_value digit) (decimal_digit_values rest)))
+        (cong
+          (Option Int)
+          (Option (List Int))
+          (char_to_digit (decimal_digit_to_char digit))
+          (Some Int (decimal_digit_value digit))
+          (parse_digit_result (parse_formatted_digits (format_digits rest)))
+          ((proof valid for decimal_digit_to_char) digit))
+        (cong
+          (Option (List Int))
+          (Option (List Int))
+          (parse_formatted_digits (format_digits rest))
+          (Some (List Int) (decimal_digit_values rest))
+          (parsed_int_prepend (decimal_digit_value digit))
+          (format_digits_roundtrip rest))
   }
 ```
 

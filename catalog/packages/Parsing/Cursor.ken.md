@@ -146,9 +146,8 @@ fn arg_remaining_from (args : List Bytes) (index : Nat) (offset : Nat) : Nat =
     Zero ↦
       match args {
         Nil ↦ Zero;
-        Cons arg rest ↦ cursor_nat_add
-          (cursor_nat_sub (arg_length arg) offset)
-          (arg_lengths_sum rest)
+        Cons arg rest ↦
+          cursor_nat_add (cursor_nat_sub (arg_length arg) offset) (arg_lengths_sum rest)
       };
     Suc index2 ↦
       match args {

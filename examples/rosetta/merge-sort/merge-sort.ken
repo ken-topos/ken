@@ -68,11 +68,8 @@ fn mergeSortFueled (a : Type) (leqf : a → a → Bool) (fuel : Nat) (xs : List 
             Nil ↦ xs;
             Cons y xs3 ↦
               match splitAlt a xs {
-                MkProd left right ↦ merge
-                  a
-                  leqf
-                  (mergeSortFueled a leqf f left)
-                  (mergeSortFueled a leqf f right)
+                MkProd left right ↦
+                  merge a leqf (mergeSortFueled a leqf f left) (mergeSortFueled a leqf f right)
               }
           }
       }

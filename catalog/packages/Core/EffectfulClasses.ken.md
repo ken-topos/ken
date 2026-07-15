@@ -510,13 +510,8 @@ lemma list_bind_lid
 lemma list_bind_rid (a : Type) (m : List a) : Equal (List a) (list_bind a a m (list_pure a)) m =
   match m {
     Nil ↦ Proved;
-    Cons h t ↦ cong
-      (List a)
-      (List a)
-      (list_bind a a t (list_pure a))
-      t
-      (Cons a h)
-      (list_bind_rid a t)
+    Cons h t ↦
+      cong (List a) (List a) (list_bind a a t (list_pure a)) t (Cons a h) (list_bind_rid a t)
   }
 
 lemma concat_map_append_distrib
@@ -527,23 +522,24 @@ lemma concat_map_append_distrib
         (list_append b (concat_map a b f xs) (concat_map a b f ys)) =
   match xs {
     Nil ↦ Refl;
-    Cons h t ↦ trans
-      (List b)
-      (list_append b (f h) (concat_map a b f (list_append a t ys)))
-      (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys)))
-      (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys))
-      (cong
+    Cons h t ↦
+      trans
         (List b)
-        (List b)
-        (concat_map a b f (list_append a t ys))
-        (list_append b (concat_map a b f t) (concat_map a b f ys))
-        (list_append b (f h))
-        (concat_map_append_distrib a b f t ys))
-      (sym
-        (List b)
-        (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys))
+        (list_append b (f h) (concat_map a b f (list_append a t ys)))
         (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys)))
-        ((proof assoc for list_append) b (f h) (concat_map a b f t) (concat_map a b f ys)))
+        (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys))
+        (cong
+          (List b)
+          (List b)
+          (concat_map a b f (list_append a t ys))
+          (list_append b (concat_map a b f t) (concat_map a b f ys))
+          (list_append b (f h))
+          (concat_map_append_distrib a b f t ys))
+        (sym
+          (List b)
+          (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys))
+          (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys)))
+          ((proof assoc for list_append) b (f h) (concat_map a b f t) (concat_map a b f ys)))
   }
 
 proof assoc for list_bind
@@ -554,22 +550,23 @@ proof assoc for list_bind
         (list_bind a c m (compose_kleisli List list_bind a b c k h)) =
   match m {
     Nil ↦ Proved;
-    Cons h0 t ↦ trans
-      (List c)
-      (concat_map b c h (list_append b (k h0) (concat_map a b k t)))
-      (list_append c (concat_map b c h (k h0)) (concat_map b c h (concat_map a b k t)))
-      (list_append
-        c
-        (compose_kleisli List list_bind a b c k h h0)
-        (list_bind a c t (compose_kleisli List list_bind a b c k h)))
-      (concat_map_append_distrib b c h (k h0) (concat_map a b k t))
-      (cong
+    Cons h0 t ↦
+      trans
         (List c)
-        (List c)
-        (concat_map b c h (concat_map a b k t))
-        (list_bind a c t (compose_kleisli List list_bind a b c k h))
-        (list_append c (concat_map b c h (k h0)))
-        ((proof assoc for list_bind) a b c t k h))
+        (concat_map b c h (list_append b (k h0) (concat_map a b k t)))
+        (list_append c (concat_map b c h (k h0)) (concat_map b c h (concat_map a b k t)))
+        (list_append
+          c
+          (compose_kleisli List list_bind a b c k h h0)
+          (list_bind a c t (compose_kleisli List list_bind a b c k h)))
+        (concat_map_append_distrib b c h (k h0) (concat_map a b k t))
+        (cong
+          (List c)
+          (List c)
+          (concat_map b c h (concat_map a b k t))
+          (list_bind a c t (compose_kleisli List list_bind a b c k h))
+          (list_append c (concat_map b c h (k h0)))
+          ((proof assoc for list_bind) a b c t k h))
   }
 ```
 
@@ -627,13 +624,14 @@ lemma list_ap_ich_general
         (list_map (a → b) b (apply_to a b y) u) =
   match u {
     Nil ↦ Proved;
-    Cons g0 t ↦ cong
-      (List b)
-      (List b)
-      (concat_map (a → b) b (list_ap_inner a b y) t)
-      (list_map (a → b) b (apply_to a b y) t)
-      (Cons b (g0 y))
-      (list_ap_ich_general a b t y)
+    Cons g0 t ↦
+      cong
+        (List b)
+        (List b)
+        (concat_map (a → b) b (list_ap_inner a b y) t)
+        (list_map (a → b) b (apply_to a b y) t)
+        (Cons b (g0 y))
+        (list_ap_ich_general a b t y)
   }
 
 lemma list_ap_ich
@@ -677,13 +675,14 @@ lemma list_map_append_distrib
         (list_append b (list_map a b g xs) (list_map a b g ys)) =
   match xs {
     Nil ↦ Refl;
-    Cons h t ↦ cong
-      (List b)
-      (List b)
-      (list_map a b g (list_append a t ys))
-      (list_append b (list_map a b g t) (list_map a b g ys))
-      (Cons b (g h))
-      (list_map_append_distrib a b g t ys)
+    Cons h t ↦
+      cong
+        (List b)
+        (List b)
+        (list_map a b g (list_append a t ys))
+        (list_append b (list_map a b g t) (list_map a b g ys))
+        (Cons b (g h))
+        (list_map_append_distrib a b g t ys)
   }
 
 fn compose_f_g (a : Type) (b : Type) (c : Type) (f : b → List c) (g : a → b) (x : a) : List c =
@@ -697,13 +696,14 @@ lemma concat_map_map_fusion
         (concat_map a c (compose_f_g a b c f g) xs) =
   match xs {
     Nil ↦ Proved;
-    Cons h t ↦ cong
-      (List c)
-      (List c)
-      (concat_map b c f (list_map a b g t))
-      (concat_map a c (compose_f_g a b c f g) t)
-      (list_append c (f (g h)))
-      (concat_map_map_fusion a b c f g t)
+    Cons h t ↦
+      cong
+        (List c)
+        (List c)
+        (concat_map b c f (list_map a b g t))
+        (concat_map a c (compose_f_g a b c f g) t)
+        (list_append c (f (g h)))
+        (concat_map_map_fusion a b c f g t)
   }
 
 fn map_after (a : Type) (b : Type) (c : Type) (g : b → c) (f : a → List b) (x : a) : List c =
@@ -717,19 +717,20 @@ lemma list_map_concat_map_fusion
         (concat_map a c (map_after a b c g f) xs) =
   match xs {
     Nil ↦ Proved;
-    Cons h t ↦ trans
-      (List c)
-      (list_map b c g (list_append b (f h) (concat_map a b f t)))
-      (list_append c (list_map b c g (f h)) (list_map b c g (concat_map a b f t)))
-      (list_append c (map_after a b c g f h) (concat_map a c (map_after a b c g f) t))
-      (list_map_append_distrib b c g (f h) (concat_map a b f t))
-      (cong
+    Cons h t ↦
+      trans
         (List c)
-        (List c)
-        (list_map b c g (concat_map a b f t))
-        (concat_map a c (map_after a b c g f) t)
-        (list_append c (list_map b c g (f h)))
-        (list_map_concat_map_fusion a b c g f t))
+        (list_map b c g (list_append b (f h) (concat_map a b f t)))
+        (list_append c (list_map b c g (f h)) (list_map b c g (concat_map a b f t)))
+        (list_append c (map_after a b c g f h) (concat_map a c (map_after a b c g f) t))
+        (list_map_append_distrib b c g (f h) (concat_map a b f t))
+        (cong
+          (List c)
+          (List c)
+          (list_map b c g (concat_map a b f t))
+          (concat_map a c (map_after a b c g f) t)
+          (list_append c (list_map b c g (f h)))
+          (list_map_concat_map_fusion a b c g f t))
   }
 
 proof pointwise_eq for concat_map
@@ -742,19 +743,20 @@ proof pointwise_eq for concat_map
     : Equal (List b) (concat_map a b f xs) (concat_map a b g xs) =
   match xs {
     Nil ↦ Proved;
-    Cons h t ↦ trans
-      (List b)
-      (list_append b (f h) (concat_map a b f t))
-      (list_append b (g h) (concat_map a b f t))
-      (list_append b (g h) (concat_map a b g t))
-      (cong (List b) (List b) (f h) (g h) (λz. list_append b z (concat_map a b f t)) (pf h))
-      (cong
+    Cons h t ↦
+      trans
         (List b)
-        (List b)
-        (concat_map a b f t)
-        (concat_map a b g t)
-        (list_append b (g h))
-        ((proof pointwise_eq for concat_map) a b f g pf t))
+        (list_append b (f h) (concat_map a b f t))
+        (list_append b (g h) (concat_map a b f t))
+        (list_append b (g h) (concat_map a b g t))
+        (cong (List b) (List b) (f h) (g h) (λz. list_append b z (concat_map a b f t)) (pf h))
+        (cong
+          (List b)
+          (List b)
+          (concat_map a b f t)
+          (concat_map a b g t)
+          (list_append b (g h))
+          ((proof pointwise_eq for concat_map) a b f g pf t))
   }
 ```
 
@@ -839,51 +841,55 @@ lemma pf_probe
     : Equal (List c) (ap_comp_h1 a b c v w g1) (ap_then_bind a b c v w g1) =
   match v {
     Nil ↦ Proved;
-    Cons h0 t ↦ trans
-      (List c)
-      (list_append c (list_map a c (compose a b c g1 h0) w) (ap_comp_h1 a b c t w g1))
-      (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_then_bind a b c t w g1))
-      (list_map
-        b
-        c
-        g1
-        (list_append b (list_map a b h0 w) (concat_map (a → b) b (λh1. list_map a b h1 w) t)))
-      (trans
+    Cons h0 t ↦
+      trans
         (List c)
         (list_append c (list_map a c (compose a b c g1 h0) w) (ap_comp_h1 a b c t w g1))
-        (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_comp_h1 a b c t w g1))
         (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_then_bind a b c t w g1))
-        (cong
-          (List c)
-          (List c)
-          (list_map a c (compose a b c g1 h0) w)
-          (list_map b c g1 (list_map a b h0 w))
-          (λz. list_append c z (ap_comp_h1 a b c t w g1))
-          ((proof fusion for list_map) a b c g1 h0 w))
-        (cong
-          (List c)
-          (List c)
-          (ap_comp_h1 a b c t w g1)
-          (ap_then_bind a b c t w g1)
-          (list_append c (list_map b c g1 (list_map a b h0 w)))
-          (pf_probe a b c t w g1)))
-      (sym
-        (List c)
         (list_map
           b
           c
           g1
           (list_append b (list_map a b h0 w) (concat_map (a → b) b (λh1. list_map a b h1 w) t)))
-        (list_append
-          c
-          (list_map b c g1 (list_map a b h0 w))
-          (list_map b c g1 (concat_map (a → b) b (λh1. list_map a b h1 w) t)))
-        (list_map_append_distrib
-          b
-          c
-          g1
-          (list_map a b h0 w)
-          (concat_map (a → b) b (λh1. list_map a b h1 w) t)))
+        (trans
+          (List c)
+          (list_append c (list_map a c (compose a b c g1 h0) w) (ap_comp_h1 a b c t w g1))
+          (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_comp_h1 a b c t w g1))
+          (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_then_bind a b c t w g1))
+          (cong
+            (List c)
+            (List c)
+            (list_map a c (compose a b c g1 h0) w)
+            (list_map b c g1 (list_map a b h0 w))
+            (λz. list_append c z (ap_comp_h1 a b c t w g1))
+            ((proof fusion for list_map) a b c g1 h0 w))
+          (cong
+            (List c)
+            (List c)
+            (ap_comp_h1 a b c t w g1)
+            (ap_then_bind a b c t w g1)
+            (list_append c (list_map b c g1 (list_map a b h0 w)))
+            (pf_probe a b c t w g1)))
+        (sym
+          (List c)
+          (list_map
+            b
+            c
+            g1
+            (list_append
+              b
+              (list_map a b h0 w)
+              (concat_map (a → b) b (λh1. list_map a b h1 w) t)))
+          (list_append
+            c
+            (list_map b c g1 (list_map a b h0 w))
+            (list_map b c g1 (concat_map (a → b) b (λh1. list_map a b h1 w) t)))
+          (list_map_append_distrib
+            b
+            c
+            g1
+            (list_map a b h0 w)
+            (concat_map (a → b) b (λh1. list_map a b h1 w) t)))
   }
 
 lemma list_ap_cmp_mid1
@@ -1291,11 +1297,12 @@ fn list_traverse
     : g (List b) =
   match xs {
     Nil ↦ apg.pure (List b) (Nil b);
-    Cons h u ↦ apg.ap
-      (List b)
-      (List b)
-      (apg.functor.map b (List b → List b) (Cons b) (t h))
-      (list_traverse g apg a b t u)
+    Cons h u ↦
+      apg.ap
+        (List b)
+        (List b)
+        (apg.functor.map b (List b → List b) (Cons b) (t h))
+        (list_traverse g apg a b t u)
   }
 
 instance Traversable List {
@@ -1475,13 +1482,14 @@ lemma list_traverse_identity_law
         (identity_pure (List a) xs) =
   match xs {
     Nil ↦ Proved;
-    Cons h u ↦ cong
-      (Identity (List a))
-      (Identity (List a))
-      (list_traverse Identity Applicative_instance_Identity a a (identity_pure a) u)
-      (identity_pure (List a) u)
-      (identity_map (List a) (List a) (Cons a h))
-      (list_traverse_identity_law a u)
+    Cons h u ↦
+      cong
+        (Identity (List a))
+        (Identity (List a))
+        (list_traverse Identity Applicative_instance_Identity a a (identity_pure a) u)
+        (identity_pure (List a) u)
+        (identity_map (List a) (List a) (Cons a h))
+        (list_traverse_identity_law a u)
   }
 
 lemma option_traverse_identity_law
@@ -1669,63 +1677,64 @@ lemma list_traverse_naturality
         (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) xs) =
   match xs {
     Nil ↦ eta_pure (List b) (Nil b);
-    Cons hd u ↦ trans
-      (h (List b))
-      (eta_map (List b) (list_traverse g apg a b t (Cons a hd u)))
-      (aph.ap
-        (List b)
-        (List b)
-        (eta_map (List b → List b) (apg.functor.map b (List b → List b) (Cons b) (t hd)))
-        (eta_map (List b) (list_traverse g apg a b t u)))
-      (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) (Cons a hd u))
-      (eta_ap
-        (List b)
-        (List b)
-        (apg.functor.map b (List b → List b) (Cons b) (t hd))
-        (list_traverse g apg a b t u))
-      (trans
+    Cons hd u ↦
+      trans
         (h (List b))
+        (eta_map (List b) (list_traverse g apg a b t (Cons a hd u)))
         (aph.ap
           (List b)
           (List b)
           (eta_map (List b → List b) (apg.functor.map b (List b → List b) (Cons b) (t hd)))
-          (eta_map (List b) (list_traverse g apg a b t u)))
-        (aph.ap
-          (List b)
-          (List b)
-          (aph.functor.map b (List b → List b) (Cons b) (eta_map b (t hd)))
           (eta_map (List b) (list_traverse g apg a b t u)))
         (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) (Cons a hd u))
-        (cong
-          (h (List b → List b))
+        (eta_ap
+          (List b)
+          (List b)
+          (apg.functor.map b (List b → List b) (Cons b) (t hd))
+          (list_traverse g apg a b t u))
+        (trans
           (h (List b))
-          (eta_map (List b → List b) (apg.functor.map b (List b → List b) (Cons b) (t hd)))
-          (aph.functor.map b (List b → List b) (Cons b) (eta_map b (t hd)))
-          (λw. aph.ap (List b) (List b) w (eta_map (List b) (list_traverse g apg a b t u)))
-          (eta_natural_map
-            g
-            h
-            apg
-            aph
-            eta_map
-            eta_pure
-            eta_ap
-            b
-            (List b → List b)
-            (Cons b)
-            (t hd)))
-        (cong
-          (h (List b))
-          (h (List b))
-          (eta_map (List b) (list_traverse g apg a b t u))
-          (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) u)
-          (λw.
-            aph.ap
-              (List b)
-              (List b)
-              (aph.functor.map b (List b → List b) (Cons b) (eta_map b (t hd)))
-              w)
-          (list_traverse_naturality g h apg aph eta_map eta_pure eta_ap a b t u)))
+          (aph.ap
+            (List b)
+            (List b)
+            (eta_map (List b → List b) (apg.functor.map b (List b → List b) (Cons b) (t hd)))
+            (eta_map (List b) (list_traverse g apg a b t u)))
+          (aph.ap
+            (List b)
+            (List b)
+            (aph.functor.map b (List b → List b) (Cons b) (eta_map b (t hd)))
+            (eta_map (List b) (list_traverse g apg a b t u)))
+          (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) (Cons a hd u))
+          (cong
+            (h (List b → List b))
+            (h (List b))
+            (eta_map (List b → List b) (apg.functor.map b (List b → List b) (Cons b) (t hd)))
+            (aph.functor.map b (List b → List b) (Cons b) (eta_map b (t hd)))
+            (λw. aph.ap (List b) (List b) w (eta_map (List b) (list_traverse g apg a b t u)))
+            (eta_natural_map
+              g
+              h
+              apg
+              aph
+              eta_map
+              eta_pure
+              eta_ap
+              b
+              (List b → List b)
+              (Cons b)
+              (t hd)))
+          (cong
+            (h (List b))
+            (h (List b))
+            (eta_map (List b) (list_traverse g apg a b t u))
+            (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) u)
+            (λw.
+              aph.ap
+                (List b)
+                (List b)
+                (aph.functor.map b (List b → List b) (Cons b) (eta_map b (t hd)))
+                w)
+            (list_traverse_naturality g h apg aph eta_map eta_pure eta_ap a b t u)))
   }
 
 fn option_traverse_nat_action
@@ -1769,23 +1778,24 @@ lemma option_traverse_naturality
         (option_traverse h aph a b (option_traverse_nat_action g h eta_map a b t) mx) =
   match mx {
     None ↦ eta_pure (Option b) (None b);
-    Some x ↦ trans
-      (h (Option b))
-      (eta_map (Option b) (option_traverse g apg a b t (Some a x)))
-      (aph.ap
-        b
-        (Option b)
-        (eta_map (b → Option b) (apg.pure (b → Option b) (Some b)))
-        (eta_map b (t x)))
-      (option_traverse h aph a b (option_traverse_nat_action g h eta_map a b t) (Some a x))
-      (eta_ap b (Option b) (apg.pure (b → Option b) (Some b)) (t x))
-      (cong
-        (h (b → Option b))
+    Some x ↦
+      trans
         (h (Option b))
-        (eta_map (b → Option b) (apg.pure (b → Option b) (Some b)))
-        (aph.pure (b → Option b) (Some b))
-        (λw. aph.ap b (Option b) w (eta_map b (t x)))
-        (eta_pure (b → Option b) (Some b)))
+        (eta_map (Option b) (option_traverse g apg a b t (Some a x)))
+        (aph.ap
+          b
+          (Option b)
+          (eta_map (b → Option b) (apg.pure (b → Option b) (Some b)))
+          (eta_map b (t x)))
+        (option_traverse h aph a b (option_traverse_nat_action g h eta_map a b t) (Some a x))
+        (eta_ap b (Option b) (apg.pure (b → Option b) (Some b)) (t x))
+        (cong
+          (h (b → Option b))
+          (h (Option b))
+          (eta_map (b → Option b) (apg.pure (b → Option b) (Some b)))
+          (aph.pure (b → Option b) (Some b))
+          (λw. aph.ap b (Option b) w (eta_map b (t x)))
+          (eta_pure (b → Option b) (Some b)))
   }
 ```
 
@@ -5135,15 +5145,16 @@ fn option_traverse_composed
     : Compose g h (Option c) =
   match mx {
     None ↦ compose_pure g h apg aph (Option c) (None c);
-    Some x ↦ compose_ap
-      g
-      h
-      apg
-      aph
-      c
-      (Option c)
-      (compose_pure g h apg aph (c → Option c) (Some c))
-      (cmp_traverse_action g h apg a b c t1 t2 x)
+    Some x ↦
+      compose_ap
+        g
+        h
+        apg
+        aph
+        c
+        (Option c)
+        (compose_pure g h apg aph (c → Option c) (Some c))
+        (cmp_traverse_action g h apg a b c t1 t2 x)
   }
 
 fn option_traverse_composed_rhs
@@ -5647,23 +5658,24 @@ fn list_traverse_composed
     : Compose g h (List c) =
   match xs {
     Nil ↦ compose_pure g h apg aph (List c) (Nil c);
-    Cons hd u ↦ compose_ap
-      g
-      h
-      apg
-      aph
-      (List c)
-      (List c)
-      (compose_map
+    Cons hd u ↦
+      compose_ap
         g
         h
         apg
         aph
-        c
-        (List c → List c)
-        (Cons c)
-        (cmp_traverse_action g h apg a b c t1 t2 hd))
-      (list_traverse_composed g h apg aph a b c t1 t2 u)
+        (List c)
+        (List c)
+        (compose_map
+          g
+          h
+          apg
+          aph
+          c
+          (List c → List c)
+          (Cons c)
+          (cmp_traverse_action g h apg a b c t1 t2 hd))
+        (list_traverse_composed g h apg aph a b c t1 t2 u)
   }
 
 fn list_traverse_composed_rhs
@@ -6685,19 +6697,20 @@ lemma list_traverse_composition
         (list_traverse_composed_rhs g h apg aph a b c t1 t2 xs) =
   match xs {
     Nil ↦ list_traverse_composition_nil g h apg aph a b c t1 t2;
-    Cons hd u ↦ list_traverse_composition_cons
-      g
-      h
-      apg
-      aph
-      a
-      b
-      c
-      t1
-      t2
-      hd
-      u
-      (list_traverse_composition g h apg aph a b c t1 t2 u)
+    Cons hd u ↦
+      list_traverse_composition_cons
+        g
+        h
+        apg
+        aph
+        a
+        b
+        c
+        t1
+        t2
+        hd
+        u
+        (list_traverse_composition g h apg aph a b c t1 t2 u)
   }
 ```
 
