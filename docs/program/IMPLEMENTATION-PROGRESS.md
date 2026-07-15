@@ -14,7 +14,15 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⚡ 2026-07-15 (07:50 UTC, clock-read) — PX2 FRAMED (probe half clean-room-held) · L4-export held for Pat · `origin/main @ 609dd600`
+> ### ⚡ 2026-07-15 (09:31 UTC, clock-read) — ✅ PX2 MERGED (`origin/main @ 626b38dd`) · retros pending · L4-export held for Pat
+>
+> ## ✅ PX2 (`TargetAbi` manifest) **MERGED** — PR #713 → `origin/main @ 626b38dd` (FULL locked CI green). Content-verified: `ken-host/build.rs` generates `TargetAbi` + `TARGET_ABI_MANIFEST_HASH` + target-honest probe; `build_support.rs::verify_inventory_closure` = bidirectional exact-set closure (both `unmanifested producer ABI fact` + `manifested ABI fact lacks producer` arms); `OFlags::SYNC` 3-arm regression in `lib.rs`; dependency record has cc/sha2 delta; `cranelift_backend.rs` untouched; forbid-unsafe trio intact. Gate trail: QA `evt_33kfxsjwczek2` + Architect §14 `dec_518zcqxtf5asb` (resolved_by architect, verified fresh) + Steward content-verify. **2-round WP:** round-1 `583302c3` §14-BLOCKED (inventory gate presence-only; SYNC evaded) → narrow respin `0d816221` (bidirectional closure, 4 ken-host files) → APPROVE. Retro call `evt_6d4gqbprx9xj6` (mention runtime-leader).
+> >
+> > **⇒ NEXT (do in order):** (1) **tracker-sync to main** (doc-only) — main tracker stale since dc0711b0. (2) **AWAIT §10 retros** in `thr_4frygmnb2mx2p` (leader/impl/QA) → **close PX2**; fold the **completeness-gate carry** (bidirectional exact-set closure, not presence+count — 2nd occurrence, PROMOTE candidate → write memory). (3) Runtime → standby; **PX3** (Language: `USize`/`ISize`/`CInt` bound to the manifest) becomes READY. (4) **L4-export** held for Pat's Decision 2. (5) Pat back ~11:00–11:30 UTC — consolidated update (PX1 **and** PX2 both landed during his absence — each with a real §14 soundness block caught + resolved; PX3 ready; L4-export pending Decision 2). Do NOT re-ask rustix (SETTLED).
+> >
+> > ---
+> > **PX2 framing history (compact):**
+> ### ⚡ 2026-07-15 (07:50 UTC) — PX2 FRAMED (probe half clean-room-held)
 >
 > ## ✅ PX1 (`ken-host`) **CLOSED** — merged PR #710 → `origin/main @ 609dd600` (FULL CI, content-verified: `ken-host` landed, both `ken-host`+`ken-interp` forbid-unsafe, zero `kernel_sigaction`/`*_KEN` refs, rustix only in ken-host manifest). §10 retros in: leader `evt_6xskzr4rya6z1`, QA `evt_535qf1spews8v`, impl `evt_3t867w60qhstt`. Close post `evt_26ab7bfa07wwe`. Gate trail: QA `evt_7gaxnrpf8t0sj` + Architect §14 `dec_703r48na2v1v2` (resolved) + Steward content-verify.
 > >
@@ -35,19 +43,91 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > > facts). **Folded into the frame** as fixed input 9 + AC8; RELEASE box flipped
 > > to ✅. PX2 is now fully releasable.
 > >
-> > **⇒ NEXT (executing now):**
-> > 1. **Re-publish the updated PX2 frame doc-only** (clearance + constraints
-> >    folded) + tracker-sync.
-> > 2. **Handoff-Gate the Runtime ring + kick PX2** — compact runtime-leader +
-> >    runtime-implementer + runtime-qa unconditionally (they're on standby, PX1
-> >    retros in), verify drops, post kickoff, rouse GPT seats, confirm Working.
-> > 3. **L4-export** — frame authored + committed (`d8a89915`, steward/work, NOT
+> > **⇒ ✅ PX2 KICKED to the Runtime ring (08:12 UTC).** Frame re-published to
+> > `origin/main @ dc0711b0` (PR #712, doc-only, clearance + 5 constraints folded).
+> > Handoff Gate complete (all 7 steps): PX1 retros in → quiescent → compacted (all
+> > 3 "Context compacted") → drops verified → kickoff `evt_1nazr2q8q042t` (roots the
+> > PX2 thread) → runtime-leader rouse'd + confirmed **Working**. Runtime seats:
+> > leader/qa = gpt-5.6-terra, implementer = gpt-5.6-sol (all GPT/no-poll).
+> >
+> > **⇒ PX2 IN BUILD (thread `thr_4frygmnb2mx2p`):** leader cut
+> > `wp/px2-target-abi-manifest` @ dc0711b0, grounded inventory from landed
+> > `ken-host` (20 facts, SIG absent, N=3), handed to implementer + pre-staged QA
+> > ledger. **08:30 — implementer reports implementation COMPLETE, in final
+> > audit:** generated `TargetAbi` (20 source-derived facts), C observer emits
+> > fixed `FACT=INTEGER`, tamper build hard-fails (`O_RDONLY` 0-vs-1 = AC2 pair),
+> > interp+native hash-mismatch aborts before host entry, `cranelift_backend.rs`
+> > byte-untouched; targeted green (host 5/5, runtime 156/156, interp 40/40, FS
+> > 3/3+2/2, I-5 7/7, CLI 2/2). Next in-ring: exact-SHA handoff → QA gate.
+> >
+> > **⇒ PX2 AT TERMINAL GATE (08:46):** implementer released exact SHA
+> > **`583302c3`** (merge_ready `evt_7efr5c3mgjw84`; 13 paths +697/−0, zero
+> > kernel/spec/conformance delta, `cranelift_backend.rs` byte-identical, 20-fact
+> > inventory, AC8-honoring observer, tamper hard-fail + interp/native mismatch
+> > discriminators, targeted green, build-tool delta cc/sha2 recorded). **STALL
+> > CAUGHT + CLEARED:** runtime-leader hit GPT `model-at-capacity` and ended its
+> > turn silently mid-handoff ([[codex-seat-model-at-capacity-ends-turn-silently]],
+> > 2nd occurrence); one retry-rouse recovered it → it routed QA (`evt_59fss3aytnakg`)
+> > → **runtime-qa now gating `583302c3`** (Working). Next: QA verdict → leader opens
+> > merge Decision + Architect §14 → I publish. ⚠ watch for a repeat capacity stall
+> > when the leader opens the Decision.
+> >
+> > **⇒ ⛔ PX2 §14 BLOCKED (08:59) — respin in flight; DO NOT publish `583302c3`.**
+> > Round-1 flow: QA APPROVE `evt_7wm33zf5ntvc9` → leader Decision
+> > `dec_13n0m28we17nt` + §14 → **Architect BLOCK `evt_2fjsvwm0n34h7`** (Decision
+> > REJECTED on cast). **One narrow, well-specified defect — NOT a Steward fork:**
+> > `ken-host/build.rs::verify_boundary_inventory` (74–115) is **presence-only**
+> > (checks 18 known spellings present + a `18+2` count), not an **exact-set
+> > closure** → an ADDED producer fact evades the gate. Architect proved it on a
+> > detached copy: adding `OFlags::SYNC` at `lib.rs:131` still built green, manifest
+> > stuck at 20 (green-vs-green; violates fixed input 4 + "no ABI fact without a
+> > probe"). **Disposition fully specified by Architect** (bidirectional exact-set
+> > closure over producer/consumer categories: full OFlags set, AtFlags uses incl.
+> > nonnumeric `empty`, Mode values, rustix `fs::*` set, std-backed dir facilities,
+> > errno discriminants; missing OR additional member hard-fails; + a `SYNC` drift
+> > regression proving both directions). Everything else on the SHA held (values,
+> > AC8 observer, hash binding, unavailable lanes, JIT, forbid-unsafe). Architect
+> > routed the respin to `@runtime-leader`; **leader is respinning** (status
+> > "inventory-closure respin active", Working). Carry candidate for PX2 retro:
+> > completeness gate must be exact-set closure, not presence+count
+> > ([[green-vs-green-does-not-confirm-a-fix]]; COORD §7 exhaustive-by-construction).
+> >
+> > **⇒ PX2 RESPIN AT §14 RE-REVIEW (09:14):** respin released fresh SHA
+> > **`0d81622150443dc07d26a45edcc3a63d5e01c458`** (parent `583302c3`; 4 `ken-host`
+> > files, +309/−38 — gate only; values/observer/binding/lanes/JIT/lockfile
+> > unchanged). Gate now a **bidirectional exact-set closure** (producer-minus-registry
+> > AND registry-minus-producer both hard-fail). ✅ Runtime QA **re-APPROVE**
+> > `evt_33kfxsjwczek2` — pressed all 4 arms with real edits: baseline 20 green;
+> > production `OFlags::SYNC` → `unmanifested producer ABI fact: OFlags::SYNC`;
+> > registry-only O_SYNC → reverse `manifested ABI fact lacks producer`;
+> > producer+registry+observer → green; committed regression, no prod O_SYNC left.
+> > Leader opened fresh **Decision `dec_518zcqxtf5asb`** + §14 (`evt_74cxx2qz09pys`).
+> > **Architect re-reviewing** (`evt_5f0cgsbhym174`, pressing the SYNC counterexample;
+> > will cast + resolve). Sweep cleared a stranded architect paste at 09:14.
+> >
+> > **⇒ ✅ PX2 §14 RESOLVED — PUBLISHING (09:18).** `dec_518zcqxtf5asb`
+> > **status:resolved**, `resolved_by`=architect (`agt_37reqftfe6g00`),
+> > resolved_at 09:18:42 — verified FRESH from the decision object (not prose).
+> > Architect APPROVE `evt_3f9s3ke0ygt4t` (pressed all 4 arms on a detached copy:
+> > SYNC producer-only + registry-only both hard-fail, restore green); QA APPROVE
+> > `evt_33kfxsjwczek2`. Publishing exact **`0d81622150443dc07d26a45edcc3a63d5e01c458`**
+> > (FULL CI, NOT --doc-only). **⚠ EXACT-SHA rule: NO tracker commit on the WP branch**
+> > (would void §14) — tracker-syncs to main SEPARATELY after merge (doc-only).
+> >
+> > **⇒ POST-MERGE checklist (for compact-resume):** (1) verify merge by CONTENT on
+> > origin/main (`ken-host/build.rs` `verify_inventory_closure`; plain phrase not
+> > spanning bold/code). (2) tracker-sync to main (doc-only). (3) call §10 retros in
+> > `thr_4frygmnb2mx2p` — fold the **completeness-gate carry** (a completeness gate
+> > must be a bidirectional exact-set closure, not presence+count — 2nd occurrence,
+> > promote candidate). (4) close PX2 in tracker once retros in. Then Runtime →
+> > standby; PX3 (Language, manifest-bound scalars) becomes ready.
+> > 2. **L4-export** — frame authored + committed (`d8a89915`, steward/work, NOT
 > >    published). Release **HELD for Pat's Decision 2** (still unanswered). When Pat
 > >    greenlights → publish frame + Handoff-Gate the Language ring + kick.
-> > 4. Pat back ~11:00–11:30 UTC — consolidated update (PX1 landed w/ the soundness
+> > 3. Pat back ~11:00–11:30 UTC — consolidated update (PX1 landed w/ the soundness
 > >    block caught+resolved during his absence; PX2 framed + published + clean-room
-> >    cleared + kicked to Runtime; L4-export ready pending his Decision 2). Do NOT
-> >    re-ask rustix (SETTLED).
+> >    cleared + **kicked to Runtime**; L4-export ready pending his Decision 2). Do
+> >    NOT re-ask rustix (SETTLED).
 > >
 > > **2 carries lifted (candidates — promote on 2nd occurrence, watch PX2):**
 > > (i) a host-boundary safe wrapper inherits the upstream unsafe API's *complete*
