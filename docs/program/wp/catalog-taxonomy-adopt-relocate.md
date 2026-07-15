@@ -3,13 +3,20 @@
 - **ID:** CAT-TAX · **Owner:** Team Foundation · **Size:** L · **Risk:** Medium
   (import-identity migration across the whole catalog; behavior must NOT change).
 - **Objective:** Adopt the controlled 7-section catalog taxonomy and mechanically
-  relocate all 36 current `catalog/packages/` entries to their canonical homes,
+  relocate all 37 current `catalog/packages/` entries to their canonical homes,
   rewriting every path reference + dotted import identity — **filing only, zero
   Ken behavior change** — and add the allowlist lint that prevents future drift.
 - **Source of truth:** the research proposal
   `research/catalog-package-taxonomy-proposal.md` (committed on this branch), which
-  reviewed all 36 entries and cross-checked the shape against Python/Hackage/Cargo.
+  reviewed all 37 entries and cross-checked the shape against Python/Hackage/Cargo.
   This frame transcribes its Phase-1/Phase-2 into deliverables + ACs.
+- **⚠ Inventory currency (37, not 36):** the live catalog base is **37 entries /
+  14 top-level dirs** on `origin/main @ 513955fe` — the report's first draft said
+  36/13 before CC9's `catalog/packages/Test/Property.ken.md` (landed `cc2bf2ad`,
+  an ancestor of main) was folded in. The report on this branch is the corrected
+  37-entry version: the new entry maps `Test/Property.ken.md →
+  Tooling/Testing/Property.ken.md` (Tooling now has **Verification + Testing**
+  active). Inventory against the live base, not a memory of 36.
 - **Depends on:** the landed path/import rule (identity = path spelling, arbitrary
   depth). **Feeds:** the catalog campaign (`06-catalog-campaign.md`),
   `07-catalog-style-guide.md`. **Gate:** catalog structural gate.
@@ -39,15 +46,14 @@
 
 ## ⚠ Enclave-pin supersession (pin + route)
 
-One relocation **supersedes an enclave-pinned classification** in
+One relocation **superseded an enclave-pinned classification** in
 `docs/program/wp/catalog-taxonomy-paths-imports.md`:
 `Capability/Verify/ProofErasureBoundaryChecker.ken` →
 `Tooling/Verification/ProofErasureBoundaryChecker.ken` (a development-time artifact
-checker belongs in `Tooling`, not as an end-user `Capability`). The taxonomy
-DIRECTION is operator-ratified, but because this specific move overrides an
-enclave pin, **the Steward routes it to the enclave/Architect for concurrence in
-parallel**; Foundation may proceed on the allowlist + the other 34 relocations
-immediately and land this one entry's move once concurrence is posted. The
+checker belongs in `Tooling`, not as an end-user `Capability`). **Enclave
+concurrence is POSTED — APPROVED** (spec-leader `evt_13mrsd0ef7af`: pure taxonomy
+filing, no behavior/kernel/soundness/spec change). This move is therefore **no
+longer gated — land it together with the other 36 relocations.** The
 `Core` → `Core.Logic`/`Core.Classes` moves are subdivision (not supersession) and
 need no separate concurrence.
 
@@ -57,7 +63,7 @@ need no separate concurrence.
 extend the campaign charter's "Sections and Domains" text with Subdomains + the
 definitions; add a **catalog lint rejecting any new top-level dir outside the
 allowlist**; keep future sections/domains documentation-only; mechanically
-relocate all 36 entries per the report's "Proposed homes for every current entry"
+relocate all 37 entries per the report's "Proposed homes for every current entry"
 table; rewrite every path/import identity; move the `ArgParse` worked example out
 of the importable package corpus.
 
@@ -82,7 +88,7 @@ no-right-dependency) — a separate hardening WP. No new empty section/domain di
 2. **Allowlist lint.** Add a catalog check that FAILS on any top-level
    `catalog/packages/` directory outside the 7-section allowlist. Wire it into the
    catalog gate. (Phase-4 checks are NOT in this WP.)
-3. **Mechanical relocation (the 34 non-superseded entries + ArgParse example).**
+3. **Mechanical relocation (the 35 non-superseded entries + ArgParse example).**
    Execute the report's "Proposed homes" table exactly: move each file to its
    canonical home, Ken contents byte-unchanged; for "Split" rows, relocate the
    combined file to its **provisional** home only (no split). Move
@@ -93,17 +99,17 @@ no-right-dependency) — a separate hardening WP. No new empty section/domain di
    moved entry — enumerate every Ken-source root (packages, examples, tests,
    prelude/Rust-emitted references, conformance fixtures) so no consumer is
    missed. No duplicate files; redirects in docs/tooling metadata only.
-5. **The superseded entry (gated on enclave concurrence).** Land
-   `Capability/Verify/…` → `Tooling/Verification/…` once the Steward posts the
-   enclave/Architect concurrence; until then leave it in place and note the
-   pending move.
+5. **The superseded entry (enclave concurrence POSTED — approved).** Land
+   `Capability/Verify/…` → `Tooling/Verification/…` with the other 36 relocations;
+   the Steward has posted enclave concurrence (spec-leader `evt_13mrsd0ef7af`,
+   approved as pure taxonomy filing). No longer gated.
 
 ## Acceptance criteria (testable)
 
 - **AC1 — allowlist enforced.** The lint rejects a probe top-level dir outside the
   7 sections and passes the post-relocation tree; only mapped sections exist as
   dirs (`Algorithm`/`Protocol` absent — reserved).
-- **AC2 — every entry relocated + import-identity updated.** Each of the 36 entries
+- **AC2 — every entry relocated + import-identity updated.** Each of the 37 entries
   is at its canonical home (or the superseded one pending, AC5); every dotted
   import identity resolves to the new path; a full-corpus grep finds **no dangling
   reference** to an old path/identity. (Migration-inventory discipline: enumerate
@@ -114,9 +120,9 @@ no-right-dependency) — a separate hardening WP. No new empty section/domain di
 - **AC4 — example demoted.** `ArgParse/Example.ken.md` is no longer an importable
   package; the importable corpus contains no `Example` package without an explicit
   library rationale.
-- **AC5 — superseded move gated.** `Capability/Verify → Tooling/Verification` lands
-  only after the Steward-posted enclave/Architect concurrence; the frame's other
-  35 outcomes do not block on it.
+- **AC5 — superseded move (concurrence posted).** `Capability/Verify →
+  Tooling/Verification` lands with the rest; enclave concurrence is posted
+  (spec-leader `evt_13mrsd0ef7af`, approved). No outcome blocks on it.
 - **AC6 — CI green.** Full catalog/workspace gate green in CI (targeted local only
   via `scripts/ken-cargo`); no behavior regression.
 
@@ -133,7 +139,7 @@ no-right-dependency) — a separate hardening WP. No new empty section/domain di
 ## Grounding
 
 Report `research/catalog-package-taxonomy-proposal.md` (this branch): §"Proposed
-homes for every current entry" (the 36-row relocation map), §"Proposed section and
+homes for every current entry" (the 37-row relocation map), §"Proposed section and
 domain catalog" (allowlist + domains), §"Classification rules", §"Migration plan"
 (Phase 1–4). Charter `docs/program/06-catalog-campaign.md`; style guide
 `07-catalog-style-guide.md`; enclave path/import pin
