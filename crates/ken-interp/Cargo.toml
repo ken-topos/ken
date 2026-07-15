@@ -11,6 +11,7 @@ rust-version.workspace = true
 [dependencies]
 ken-kernel = { path = "../ken-kernel" }
 ken-runtime = { path = "../ken-runtime" }
+ken-host = { path = "../ken-host" }
 # fs-driver-build D3: reuse capabilities.rs's authority arithmetic in the
 # runtime FS gate (authorizes) rather than reimplementing it here. elaborator's
 # own ken-interp dependency is dev-only (tests), so this is not circular.

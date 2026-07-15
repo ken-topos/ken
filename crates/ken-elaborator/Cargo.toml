@@ -9,6 +9,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+ken-host = { path = "../ken-host" }
 ken-kernel = { path = "../ken-kernel" }
 ken-runtime = { path = "../ken-runtime" }
 serde_json = "1"
