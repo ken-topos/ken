@@ -9,20 +9,19 @@
 use std::collections::BTreeSet;
 use std::fmt;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::platform_runtime_support::validate_entrypoint_metadata_payload;
 use crate::{
     emit_runtime_ir_object_with_cranelift, fnv1a_64, platform_runtime_support_report_hash,
     run_runtime_ir_report_with_cranelift, runtime_executable_entrypoint_package_hash,
-    CraneliftObjectArtifact, ExecutableRuntimeSupport, NativeDifferentialStage,
-    NativeRuntimeIrComparisonVerdict, NativeSeedEnvironment, PlatformRuntimeEvidenceFact,
-    PlatformRuntimeEvidenceLane, PlatformRuntimeSupportReport, RuntimeArtifactIdentity,
-    RuntimeExecutableEntrypointPackage, RuntimeGroundValue, RuntimeIrRunReport, RuntimeObservation,
-    RuntimeProgram, RuntimeSymbol, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND,
-    EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION, PLATFORM_RUNTIME_SUPPORT_KIND,
-    PLATFORM_RUNTIME_SUPPORT_VERSION,
+    CraneliftObjectArtifact, NativeDifferentialStage, NativeRuntimeIrComparisonVerdict,
+    NativeSeedEnvironment, PlatformRuntimeEvidenceFact, PlatformRuntimeEvidenceLane,
+    PlatformRuntimeSupportReport, RuntimeArtifactIdentity, RuntimeExecutableEntrypointPackage,
+    RuntimeExpr, RuntimeGroundValue, RuntimeIrRunReport, RuntimeObservation, RuntimeProgram,
+    RuntimeSymbol, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND, EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION,
+    PLATFORM_RUNTIME_SUPPORT_KIND, PLATFORM_RUNTIME_SUPPORT_VERSION,
 };
 
 pub const OBJECT_LINKER_PACKAGE_KIND: &str = "KenObjectLinkerExecutablePackage";
@@ -329,6 +328,59 @@ pub fn package_starter_executable_artifact_with_options(
     package.header.package_hash = object_linker_executable_package_hash(&package);
     validate_package_hash(&package)?;
     Ok(package)
+}
+
+/// Build the tested process-shaped native starter used by PX4 and later native
+/// lowering stages.
+///
+/// The produced artifact receives fresh OS argv, environment, and cwd on every
+/// invocation. It is a validated runtime artifact, never a proof surface.
+pub fn build_process_starter_executable_artifact(
+    entrypoint: &RuntimeExpr,
+    output_dir: impl AsRef<Path>,
+) -> Result<PathBuf, ObjectLinkerPackagingError> {
+    let options = ObjectLinkerPackagingOptions::starter_host();
+    let output_dir = output_dir.as_ref();
+    fs::create_dir_all(output_dir).map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::LinkerOrFinalizer,
+            "output_dir",
+            format!("could not create process starter output directory: {err}"),
+        )
+    })?;
+    let object =
+        crate::emit_process_entrypoint_object_with_cranelift(entrypoint, STARTER_ENTRY_SYMBOL)
+            .map_err(|err| {
+                packaging_error(
+                    ObjectLinkerPackagingStage::ObjectEmission,
+                    "process_cranelift_object",
+                    err.to_string(),
+                )
+            })?;
+    let object_path = output_dir.join(&options.object_relative_path);
+    fs::write(&object_path, object.object_bytes).map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::ObjectEmission,
+            "object_path",
+            format!("could not write process object artifact: {err}"),
+        )
+    })?;
+    let stub_path = output_dir.join(&options.stub_relative_path);
+    fs::write(&stub_path, process_starter_c_stub()).map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::LinkerOrFinalizer,
+            "stub_path",
+            format!("could not write process starter source: {err}"),
+        )
+    })?;
+    let executable_path = output_dir.join(&options.executable_relative_path);
+    link_starter_executable(
+        &options.linker_command,
+        &object_path,
+        &stub_path,
+        &executable_path,
+    )?;
+    Ok(executable_path)
 }
 
 pub fn object_linker_executable_package_hash(package: &ObjectLinkerExecutablePackage) -> u64 {
@@ -1099,7 +1151,133 @@ fn runtime_trap_code_tag(code: &crate::RuntimeTrapCode) -> &'static str {
 }
 
 fn starter_c_stub() -> &'static str {
-    "#include <stdio.h>\nextern long long ken_nc23_entrypoint(long long process_context_token);\nint main(void) {\n    long long value = ken_nc23_entrypoint(0);\n    printf(\"%lld\\n\", value);\n    return 0;\n}\n"
+    r#"#include <stdio.h>
+
+extern long long ken_nc23_entrypoint(const void *input);
+
+int main(void) {
+    long long value = ken_nc23_entrypoint(NULL);
+    printf("%lld\n", value);
+    return 0;
+}
+"#
+}
+
+fn process_starter_c_stub() -> &'static str {
+    r#"#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+struct KenByteSpan {
+    const unsigned char *bytes;
+    size_t len;
+};
+
+struct KenEnvironmentPair {
+    struct KenByteSpan key;
+    struct KenByteSpan value;
+};
+
+struct KenProcessInput {
+    int64_t discriminator;
+    const struct KenByteSpan *arguments;
+    size_t argument_count;
+    const struct KenEnvironmentPair *environment;
+    size_t environment_count;
+    struct KenByteSpan working_directory;
+};
+
+extern long long ken_nc23_entrypoint(const struct KenProcessInput *input);
+
+static uint64_t fnv_byte(uint64_t hash, unsigned char byte) {
+    return (hash ^ byte) * UINT64_C(0x100000001b3);
+}
+
+static uint64_t fnv_u64_le(uint64_t hash, uint64_t value) {
+    for (unsigned shift = 0; shift < 64; shift += 8) {
+        hash = fnv_byte(hash, (unsigned char)(value >> shift));
+    }
+    return hash;
+}
+
+static uint64_t fnv_span(uint64_t hash, struct KenByteSpan span) {
+    hash = fnv_u64_le(hash, (uint64_t)span.len);
+    for (size_t index = 0; index < span.len; ++index) {
+        hash = fnv_byte(hash, span.bytes[index]);
+    }
+    return hash;
+}
+
+int main(int argc, char **argv, char **envp) {
+    size_t argument_count = argc < 0 ? 0 : (size_t)argc;
+    struct KenByteSpan *arguments = calloc(argument_count, sizeof(*arguments));
+    if (argument_count != 0 && arguments == NULL) return 1;
+    for (size_t index = 0; index < argument_count; ++index) {
+        arguments[index].bytes = (const unsigned char *)argv[index];
+        arguments[index].len = strlen(argv[index]);
+    }
+
+    size_t environment_count = 0;
+    while (envp[environment_count] != NULL) ++environment_count;
+    struct KenEnvironmentPair *environment =
+        calloc(environment_count, sizeof(*environment));
+    if (environment_count != 0 && environment == NULL) {
+        free(arguments);
+        return 1;
+    }
+    for (size_t index = 0; index < environment_count; ++index) {
+        char *separator = strchr(envp[index], '=');
+        if (separator == NULL) {
+            free(environment);
+            free(arguments);
+            return 1;
+        }
+        environment[index].key.bytes = (const unsigned char *)envp[index];
+        environment[index].key.len = (size_t)(separator - envp[index]);
+        environment[index].value.bytes = (const unsigned char *)(separator + 1);
+        environment[index].value.len = strlen(separator + 1);
+    }
+
+    char *cwd = getcwd(NULL, 0);
+    if (cwd == NULL) {
+        free(environment);
+        free(arguments);
+        return 1;
+    }
+    struct KenByteSpan cwd_span = {
+        .bytes = (const unsigned char *)cwd,
+        .len = strlen(cwd),
+    };
+
+    uint64_t hash = UINT64_C(0xcbf29ce484222325);
+    hash = fnv_u64_le(hash, (uint64_t)argument_count);
+    for (size_t index = 0; index < argument_count; ++index) {
+        hash = fnv_span(hash, arguments[index]);
+    }
+    hash = fnv_u64_le(hash, (uint64_t)environment_count);
+    for (size_t index = 0; index < environment_count; ++index) {
+        hash = fnv_span(hash, environment[index].key);
+        hash = fnv_span(hash, environment[index].value);
+    }
+    hash = fnv_span(hash, cwd_span);
+
+    struct KenProcessInput input = {
+        .discriminator = (int64_t)(hash % 125 + 1),
+        .arguments = arguments,
+        .argument_count = argument_count,
+        .environment = environment,
+        .environment_count = environment_count,
+        .working_directory = cwd_span,
+    };
+    long long value = ken_nc23_entrypoint(&input);
+    free(cwd);
+    free(environment);
+    free(arguments);
+    return (int)value;
+}
+"#
 }
 
 fn executable_name(stem: &str) -> String {
@@ -1138,9 +1316,9 @@ mod tests {
         ErasedExecutableCore, ExecutableArgumentPackaging, ExecutableArgumentShape,
         ExecutableDependencyClosure, ExecutableEntrypointPackageMetadata,
         ExecutableEntrypointTargetKind, ExecutableEntrypointVerdict, ExecutableReportContract,
-        ExecutableResultObservation, ExecutableResultShape, ExecutableTrapContract,
-        ExecutableTrapShape, RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr,
-        RuntimeIrProgramReport, RuntimeIrSeedEnvironment, RuntimeLowerabilityStatus,
+        ExecutableResultObservation, ExecutableResultShape, ExecutableRuntimeSupport,
+        ExecutableTrapContract, ExecutableTrapShape, RuntimeDeclaration, RuntimeDeclarationKind,
+        RuntimeExpr, RuntimeIrProgramReport, RuntimeIrSeedEnvironment, RuntimeLowerabilityStatus,
         RuntimeMetadata, RuntimePartiality, RuntimePrimitive, RuntimeSymbolMetadata, RuntimeTrap,
         RuntimeTrapCode, RuntimeValue,
     };
@@ -1331,6 +1509,70 @@ mod tests {
             package.toolchain.whole_compiler_proof,
             ObjectLinkerEvidenceFact::Unavailable { .. }
         ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn same_process_artifact_observes_fresh_byte_exact_os_input() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+        use std::process::Command;
+
+        let output_dir = temp_output_dir("px4-process-input");
+        let executable =
+            build_process_starter_executable_artifact(&RuntimeExpr::Var(0), &output_dir)
+                .expect("process starter links");
+        let cwd_one = output_dir.join(OsString::from_vec(vec![b'c', b'w', b'd', 0xfe]));
+        let cwd_two = output_dir.join("cwd-two");
+        fs::create_dir_all(&cwd_one).expect("first cwd exists");
+        fs::create_dir_all(&cwd_two).expect("second cwd exists");
+
+        let argument_one = OsString::from_vec(vec![b'a', 0xff, b'1']);
+        let key_one = OsString::from_vec(vec![b'K', 0xfd]);
+        let value_one = OsString::from_vec(vec![0xfc, b'V']);
+        let output_one = Command::new(&executable)
+            .arg(&argument_one)
+            .env_clear()
+            .env(&key_one, &value_one)
+            .current_dir(&cwd_one)
+            .output()
+            .expect("first process invocation runs");
+        let input_one = crate::NativeProcessInput {
+            arguments: vec![
+                executable.as_os_str().as_bytes().to_vec(),
+                argument_one.as_os_str().as_bytes().to_vec(),
+            ],
+            environment: vec![(
+                key_one.as_os_str().as_bytes().to_vec(),
+                value_one.as_os_str().as_bytes().to_vec(),
+            )],
+            working_directory: cwd_one.as_os_str().as_bytes().to_vec(),
+        };
+
+        let argument_two = OsString::from("second");
+        let output_two = Command::new(&executable)
+            .arg(&argument_two)
+            .env_clear()
+            .env("OTHER", "value")
+            .current_dir(&cwd_two)
+            .output()
+            .expect("second process invocation runs");
+        let input_two = crate::NativeProcessInput {
+            arguments: vec![
+                executable.as_os_str().as_bytes().to_vec(),
+                argument_two.as_os_str().as_bytes().to_vec(),
+            ],
+            environment: vec![(b"OTHER".to_vec(), b"value".to_vec())],
+            working_directory: cwd_two.as_os_str().as_bytes().to_vec(),
+        };
+
+        let expected_one = crate::process_discriminator(&input_one) as i32;
+        let expected_two = crate::process_discriminator(&input_two) as i32;
+        assert_ne!(expected_one, expected_two, "fixtures must discriminate");
+        assert_eq!(output_one.status.code(), Some(expected_one));
+        assert_eq!(output_two.status.code(), Some(expected_two));
+
+        fs::remove_dir_all(output_dir).expect("process fixture is removed");
     }
 
     #[test]
