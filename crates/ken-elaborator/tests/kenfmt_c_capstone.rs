@@ -207,7 +207,7 @@ fn assert_no_zero_indent_continuation(label: &str, source: &str) {
     const TOP_LEVEL_PREFIXES: &[&str] = &[
         "program", "package", "view", "const", "fn", "proc", "space", "prove", "prop", "lemma",
         "proof", "axiom", "law", "data", "def", "foreign", "temporal", "class", "instance",
-        "derive", "module", "import", "use", "pub", "--", "}",
+        "derive", "module", "import", "export", "let", "pub", "--", "}",
     ];
     for (index, line) in source.lines().enumerate() {
         if line.is_empty() || line.starts_with(' ') {

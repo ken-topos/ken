@@ -346,6 +346,10 @@ pub enum Decl {
         kind: ImportKind,
         span: Span,
     },
+    /// `export M (foo, Bar as baz)` / `export foo, Bar as baz`
+    /// (`33 §3.2`) — republishes existing canonical identities through this
+    /// module's interface without allocating a kernel declaration.
+    ExportDecl { form: ExportForm, span: Span },
     /// `pub <decl>` — marks the wrapped top-level decl's name as exported
     /// from its enclosing module (`33 §4.1`). Top-level (non-module) decls
     /// may also be wrapped; the marker is simply inert there (nothing to
@@ -374,6 +378,19 @@ pub enum ImportKind {
 pub struct ImportItem {
     pub name: String,
     pub rename: Option<String>,
+}
+
+/// The two re-export forms (`33 §3.2`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ExportForm {
+    /// A direct loader edge whose selected names are published but are not
+    /// installed in the facade module's body scope.
+    Facade {
+        module: String,
+        items: Vec<ImportItem>,
+    },
+    /// Republishes names already available in the current body scope.
+    InScope { items: Vec<ImportItem> },
 }
 
 /// The two hosts of the N4 instance-admission boundary.
@@ -413,6 +430,8 @@ impl Decl {
             // need a per-decl name must special-case it (it's never
             // registered as a global).
             Decl::ImportDecl { module, .. } => module,
+            // An export declaration has no declaration-level name.
+            Decl::ExportDecl { .. } => "",
             Decl::ViewDecl { name, .. }
             | Decl::LetDecl { name, .. }
             | Decl::ProveDecl { name, .. }
@@ -452,7 +471,8 @@ impl Decl {
             | Decl::InstanceDecl { span, .. }
             | Decl::DeriveDecl { span, .. }
             | Decl::ModuleDecl { span, .. }
-            | Decl::ImportDecl { span, .. } => span,
+            | Decl::ImportDecl { span, .. }
+            | Decl::ExportDecl { span, .. } => span,
         }
     }
 

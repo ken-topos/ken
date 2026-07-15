@@ -51,7 +51,8 @@ pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, Obligat
 pub use error::{ElabError, Span};
 pub use ast::{
     BinOp, BoundaryHeader, BoundaryKind, CapabilityDecl, ConstructorSignature,
-    ConstructorSignatureArg, Decl, ExplicitDataCtor, Expr, ImportKind, LetBinding, Type,
+    ConstructorSignatureArg, Decl, ExplicitDataCtor, ExportForm, Expr, ImportItem, ImportKind,
+    LetBinding, Type,
 };
 pub use extract::{
     v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,
@@ -250,7 +251,7 @@ impl ElabEnv {
     ///
     /// Each declaration is elaborated and registered in `self.env` before the
     /// next is processed, so later declarations may refer to earlier ones.
-    /// `module`/`import`/`use`/`pub` (`33 §3-4`) are resolved away here —
+    /// `module`/`import`/`export`/`pub` (`33 §3-4`) are resolved away here —
     /// they contribute zero or more `GlobalId`s (a bare `import` contributes
     /// none; a `module { … }` block contributes one per inner decl) but
     /// never a kernel-visible module concept. Returns the `GlobalId` of
