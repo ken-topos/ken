@@ -156,7 +156,7 @@ The honest closer is a VISIBLE postulate, the same audited-delta shape
 kernel-reducible at this layer:
 
 ```ken example
-lemma prim_eq_axiom : Equal Bool (eq_int five five) True = Axiom
+axiom prim_eq_axiom : Equal Bool (eq_int five five) True
 ```
 
 This is not a corner case to memorize and forget: **any law whose operation
@@ -346,9 +346,8 @@ The local aliases are definitionally equal to the original expressions, so
 `same_chars` is accepted directly by `cong`; no transport lemma is needed.
 
 ```ken example
-lemma string_to_list_char_retraction
-    : (text : String) → Equal String (list_char_to_string (string_to_list_char text)) text =
-  Axiom
+axiom string_to_list_char_retraction
+    : (text : String) → Equal String (list_char_to_string (string_to_list_char text)) text
 
 lemma string_to_list_char_injective_with_lets
       (left : String)
