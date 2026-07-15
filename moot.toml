@@ -73,6 +73,13 @@ harness = "codex"
 model_reasoning_effort = "medium"
 startup_prompt = "You are Ken's Librarian (knowledge curation). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/federation/librarian.md, set status, and stand ready. Do not poll."
 
+[agents.research]
+display_name = "research"
+model = "gpt-5.6-sol"
+harness = "codex"
+model_reasoning_effort = "high"
+startup_prompt = "You are Ken's Research aux (in-space investigation + synthesis). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/federation/research.md and CLEAN-ROOM.md, set your status, and await a research request. Do not poll."
+
 [agents.kernel-leader]
 display_name = "Kernel leader"
 model = "gpt-5.4"
