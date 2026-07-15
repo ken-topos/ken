@@ -2,7 +2,7 @@
 //! REAL certificate registration (`crates/ken-elaborator/src/numbers.rs`)
 //! and the catalog rewiring's conformance bar (`docs/program/wp/
 //! DS-6a-int-deceq-certificate.md`), against the REAL
-//! `catalog/packages/Core/LawfulClasses.ken.md` source. The general
+//! `catalog/packages/Core/Classes/LawfulClasses.ken.md` source. The general
 //! mechanism + its registration-time hardening (negative arms) are covered
 //! kernel-side in `ken-kernel/tests/ds6a_int_deceq_certificate.rs`; the
 //! zero-Axiom-delta / real-proof discriminators for `Eq Int`/`DecEq Int`
@@ -15,19 +15,19 @@ use ken_kernel::term::Term;
 use ken_kernel::{check, whnf, KernelError};
 
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 
 fn mk_env_with_package() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("catalog/packages/Core/Transport.ken must elaborate");
+        .expect("catalog/packages/Core/Logic/Transport.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
+        .expect("catalog/packages/Data/Collections/Derived.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("catalog/packages/Core/LawfulClasses.ken must elaborate");
+        .expect("catalog/packages/Core/Classes/LawfulClasses.ken must elaborate");
     env
 }
 

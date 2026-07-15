@@ -18,7 +18,7 @@ Ergo serial lane (Track B: case_eq cleanup → **this** → DS-8c). Independent 
   decision; laws-as-lemmas sidesteps it entirely and is honest about the trust
   level.
 - **`Nat = Zero | Suc` and `sub` (saturating monus) already exist** (OrdNat /
-  Collections). `Ord Nat` + `min`/`max`/`compare` landed (`OrdNat.ken.md`). This
+  Collections). `Ord Nat` + `min`/`max`/`compare` landed (`Order.ken.md`). This
   WP adds the **additive/multiplicative** layer they don't cover.
 - **`nat_add` exists only locally** in `Capability/Parsing/Parsing.ken.md:379`
   (`match n { Zero ⇒ m ; Suc n2 ⇒ Suc (nat_add m n2) }` — recursion on the
@@ -44,7 +44,7 @@ Ergo serial lane (Track B: case_eq cleanup → **this** → DS-8c). Independent 
 ## Design seams — Architect fidelity gate (flag at pickup, don't guess)
 
 1. **Placement + Parsing's local `nat_add`.** New Core file (e.g.
-   `Core/NatArith.ken.md`) vs extending `Core/OrdNat.ken.md`. And Parsing's local
+   `Data/Numeric/Nat/Arithmetic.ken.md`) vs extending `Data/Numeric/Nat/Order.ken.md`. And Parsing's local
    `nat_add` (`Parsing.ken.md:379`) is a duplicate of the canonical `add` — decide
    whether to **unify Parsing onto the canonical `add`** in this WP (behavior-
    identical, one definition) or leave it and flag a follow-on. Recommend: define

@@ -12,14 +12,14 @@ use std::collections::HashSet;
 
 const PARSING_KEN_MD: &str =
     include_str!("../../../catalog/packages/Capability/Parsing/Parsing.ken.md");
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
-const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Diagnostic/Core.ken.md");
-const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Cursor.ken.md");
-const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Decoder.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
+const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
+const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Cursor.ken.md");
+const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Decoder.ken.md");
 
 fn dependency_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
@@ -30,11 +30,11 @@ fn dependency_env() -> ElabEnv {
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
         .expect("LawfulClasses must elaborate third");
     env.elaborate_ken_md_file(DIAGNOSTIC_KEN_MD)
-        .expect("Diagnostic.Core must elaborate fourth");
+        .expect("Capability.Diagnostics.Core must elaborate fourth");
     env.elaborate_ken_md_file(CURSOR_KEN_MD)
-        .expect("Parsing.Cursor must elaborate fifth");
+        .expect("Capability.Parsing.Cursor must elaborate fifth");
     env.elaborate_ken_md_file(DECODER_KEN_MD)
-        .expect("Parsing.Decoder must elaborate sixth");
+        .expect("Capability.Parsing.Decoder must elaborate sixth");
     env
 }
 
@@ -424,7 +424,7 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
     assert!(
         DIAGNOSTIC_KEN_MD.contains("data SourceId = MkSourceId Nat")
             && !PARSING_KEN_MD.contains("data SourceId ="),
-        "SourceId must move to Diagnostic.Core while Span remains CAT-5-local"
+        "SourceId must move to Capability.Diagnostics.Core while Span remains CAT-5-local"
     );
     assert!(
         compact.contains("fn span_to_byte_range")

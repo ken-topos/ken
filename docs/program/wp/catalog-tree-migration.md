@@ -140,7 +140,7 @@ All ten use one of two literal-path shapes, both rewritten by a straight
 
 **★ The single load-bearing point:**
 `crates/ken-interp/src/proof_erasure_checker.rs` (production crate, not a
-test) embeds `catalog/packages/verify/proof_erasure_boundary_checker.ken` via
+test) embeds `catalog/packages/Tooling/Verification/ProofErasureBoundaryChecker.ken` via
 `include_str!` at line 15 and cites the same path in an error string at line
 69. This is the **only** `catalog/packages/` reference in a crate that ships in the
 built `ken` binary — every other Rust hit is test-only. Get this file right

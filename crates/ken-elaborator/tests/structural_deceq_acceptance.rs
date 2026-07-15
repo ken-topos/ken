@@ -5,20 +5,20 @@
 use ken_elaborator::{trusted_base_delta, ElabEnv};
 use ken_kernel::env::Decl;
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("Core/Transport.ken must elaborate");
+        .expect("Core/Logic/Transport.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("Data/Collections/Collections.ken must elaborate");
+        .expect("Data/Collections/Derived.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("Core/LawfulClasses.ken must elaborate after its declared dependencies");
+        .expect("Core/Classes/LawfulClasses.ken must elaborate after its declared dependencies");
     env
 }
 

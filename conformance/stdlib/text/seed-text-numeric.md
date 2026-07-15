@@ -1,4 +1,4 @@
-# Text.Numeric conformance seed
+# Capability.Parsing.Numeric conformance seed
 
 Format: `../../README.md`. These cases pin the black-box semantics of the CC2
 decimal parser. Locations are Unicode-scalar (`List Char`) indexes, not byte

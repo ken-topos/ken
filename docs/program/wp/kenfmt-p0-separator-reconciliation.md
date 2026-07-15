@@ -32,7 +32,7 @@ prose — this is the ground truth):
   - `parse_instance_decl` L766–768: identical semicolon handling.
   - Docstrings L690/L752/L662 all show `{ field … ; … }`.
 - **The corpus already uses SEMICOLONS**, no trailing `;` (e.g.
-  `catalog/packages/Core/EmptyDec.ken.md`: `eq : a → a → Bool ;` … last field no
+  `catalog/packages/Core/Logic/EmptyDec.ken.md`: `eq : a → a → Bool ;` … last field no
   `;`; `instance DecEq Bool { eq = bool_eq ; … }`).
 - **The grammar is already internally split:** `data_block` (L47) and
   `prop_block` (L61) use `(";" …)*`. So the record/class/instance comma is the

@@ -70,7 +70,7 @@ emphatic and so am I: **the survey does NOT support "nested application implies
 matches like `list_eq`/`list_compare` expose the recursion directly; a single
 constructor assembly reads better inline; a one-step `cong` is clearer with all
 endpoints visible. **`char_at`, `eq`, and `compare` sit right below `slice` in
-`Collections.ken.md` and need NO bindings.**
+`Derived.ken.md` and need NO bindings.**
 
 **⇒ Expression length is EVIDENCE, never the DECISION.** The question is always:
 ***does this binding name a concept the reader would otherwise have to infer?***

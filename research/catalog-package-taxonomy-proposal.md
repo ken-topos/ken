@@ -177,7 +177,7 @@ follow-up package edits, not mixed into the first mechanical relocation.
 | `ArgParse/Example.ken.md` | leave `packages/`; move to `catalog/examples/CommandLine/Forge.ken.md` or embed in the ArgParse entry | A worked client is evidence and documentation, not a peer library package |
 | `Capability/Console/Console.ken.md` | `Capability/Console/Text.ken.md` | Text-output policy over the byte Console ABI |
 | `Capability/FS/FS.ken.md` | `Capability/Filesystem/Errors.ken.md` | The file contains filesystem-error rendering, not the FS algebra itself |
-| `Capability/Parsing/Parsing.ken.md` | split into `Capability/Parsing/Source.ken.md` and `Capability/Parsing/Language/Boolean.ken.md` | Separates reusable source/span carriers from one concrete grammar |
+| `Capability/Parsing/Parsing.ken.md` | **Phase-2 provisional:** stays at `Capability/Parsing/Parsing.ken.md` (already an allowlisted home, no move); **Phase-3** split into `Capability/Parsing/Source.ken.md` and `Capability/Parsing/Language/Boolean.ken.md` | Separates reusable source/span carriers from one concrete grammar |
 | `Capability/Verify/ProofErasureBoundaryChecker.ken` | `Tooling/Verification/ProofErasureBoundaryChecker.ken` | A development-time artifact checker |
 | `Config/Decoder.ken.md` | `Application/Configuration/Decoder.ken.md` | Environment/config application input decoder |
 | `Core/EffectfulClasses.ken.md` | `Core/Classes/EffectfulClasses.ken.md` | `Applicative`, `Monad`, and `Traversable` class vocabulary |
@@ -207,7 +207,7 @@ follow-up package edits, not mixed into the first mechanical relocation.
 | `System/Path/Posix.ken.md` | `Capability/Filesystem/Path/Posix.ken.md` | Platform-specific lexical filesystem paths |
 | `Test/Property.ken.md` | `Tooling/Testing/Property.ken.md` | Deterministic property-test runner for developers and agents |
 | `Text/Codec/Codec.ken.md` | `Data/Text/Codec.ken.md` | Pure byte/text views and classifiers |
-| `Text/Numeric/Numeric.ken.md` | split into `Capability/Parsing/Decimal.ken.md` and `Capability/Formatting/Decimal.ken.md` | The current file crosses parsing, diagnostics, and formatting |
+| `Text/Numeric/Numeric.ken.md` | **Phase-2 provisional:** `Capability/Parsing/Numeric.ken.md` (combined file relocated intact out of non-allowlisted `Text/`); **Phase-3** split into `Capability/Parsing/Decimal.ken.md` and `Capability/Formatting/Decimal.ken.md` | The current file crosses parsing, diagnostics, and formatting |
 | `Text/StringKeys/StringKeys.ken.md` | `Data/Text/StringKeys.ken.md` | Lawful `String` equality and order |
 | `Time/Clock.ken.md` | `Capability/Time/WallClock.ken.md` | Ambient wall-clock interaction; leaves room for monotonic clocks and timers |
 

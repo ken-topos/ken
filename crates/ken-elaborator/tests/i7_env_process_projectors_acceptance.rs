@@ -8,16 +8,16 @@ use ken_interp::eval::{apply, eval, EvalStore, EvalVal};
 use ken_kernel::{Decl, GlobalId};
 
 const ENVIRONMENT_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Process/Environment.ken.md");
+    include_str!("../../../catalog/packages/Capability/Process/Environment.ken.md");
 const WORKING_DIRECTORY_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Process/WorkingDirectory.ken.md");
+    include_str!("../../../catalog/packages/Capability/Process/WorkingDirectory.ken.md");
 
 fn full_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(ENVIRONMENT_KEN_MD)
-        .expect("Process.Environment must elaborate over the prelude");
+        .expect("Capability.Process.Environment must elaborate over the prelude");
     env.elaborate_ken_md_file(WORKING_DIRECTORY_KEN_MD)
-        .expect("Process.WorkingDirectory must elaborate over the prelude");
+        .expect("Capability.Process.WorkingDirectory must elaborate over the prelude");
     env
 }
 
@@ -273,8 +273,8 @@ fn working_directory_round_trip_preserves_argv_and_environment() {
 #[test]
 fn i7_adds_zero_trusted_base_and_no_forbidden_mechanism() {
     for (name, source) in [
-        ("Process.Environment", ENVIRONMENT_KEN_MD),
-        ("Process.WorkingDirectory", WORKING_DIRECTORY_KEN_MD),
+        ("Capability.Process.Environment", ENVIRONMENT_KEN_MD),
+        ("Capability.Process.WorkingDirectory", WORKING_DIRECTORY_KEN_MD),
     ] {
         let extracted = ken_elaborator::literate::extract_ken_md(source)
             .unwrap_or_else(|error| panic!("{name} must extract: {error}"));
@@ -301,9 +301,9 @@ fn i7_adds_zero_trusted_base_and_no_forbidden_mechanism() {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     let before: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     env.elaborate_ken_md_file(ENVIRONMENT_KEN_MD)
-        .expect("Process.Environment must elaborate");
+        .expect("Capability.Process.Environment must elaborate");
     env.elaborate_ken_md_file(WORKING_DIRECTORY_KEN_MD)
-        .expect("Process.WorkingDirectory must elaborate");
+        .expect("Capability.Process.WorkingDirectory must elaborate");
     let after: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(before, after, "I-7 must add zero trusted-base entries");
 }

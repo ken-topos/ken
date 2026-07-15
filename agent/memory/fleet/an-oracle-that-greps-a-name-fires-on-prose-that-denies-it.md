@@ -14,11 +14,11 @@ DS-4 shipped this gate:
 #[test]
 fn zero_axiom_in_collections_ken() {
     assert!(!COLLECTIONS_KEN_MD.contains("Axiom"),
-            "Collections.ken must contain zero Axiom literals");
+            "Derived.ken must contain zero Axiom literals");
 }
 ```
 
-**SUB-1 added two lines of PROSE to `Collections.ken.md`:**
+**SUB-1 added two lines of PROSE to `Derived.ken.md`:**
 
 > *"…an ordinary fold through `bytes_to_list` with no cached length or local
 > **`Axiom`**."*
@@ -35,7 +35,7 @@ went red on a WP whose entire achievement was *removing* the `Axiom` tax.
 2. **It reads a literate file as if it were plain code.** The comment says *"a
    plain `.ken` source — no literate extractor; the entire file is checked
    code."* **The constant is `COLLECTIONS_KEN_MD`; the file is
-   `Collections.ken.MD`.** It is **prose + code fences**
+   `Derived.ken.MD`.** It is **prose + code fences**
    ([[catalog-sources-are-literate-ken-md-not-ken]]). **The oracle's own comment
    is factually wrong about the file it reads** — and it passed for months only
    because no prose in that file had *happened* to use the word.
@@ -98,7 +98,7 @@ A sweep of `crates/*/tests/*.rs` for `contains("Axiom")` (2026-07-14):
 |---|---|---|
 | `extract_ken_md(…).source.contains("Axiom")` | CC1–CC7, DS-2/3/7/8, … (most) | ✅ **correct** — asserts on extracted Ken |
 | `RAW_INCLUDE_STR.contains("Axiom")` | `ds4_list_combinators_acceptance.rs:56` | 🔴 **fired** (SUB-1) |
-| `RAW_INCLUDE_STR.contains("Axiom")` | `i2_console_floor.rs:132`, `i3_fs_floor.rs:141` | ⏳ **latent** — pass only because no prose in `Console.ken.md` / `FS.ken.md` has *yet* used the word |
+| `RAW_INCLUDE_STR.contains("Axiom")` | `i2_console_floor.rs:132`, `i3_fs_floor.rs:141` | ⏳ **latent** — pass only because no prose in `Text.ken.md` / `Errors.ken.md` has *yet* used the word |
 
 **The latent pair is the lesson.** They are the tests **nearest** to the next
 effect WP (I-8's clock) — **the ones an implementer would naturally crib the

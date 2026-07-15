@@ -3,7 +3,7 @@
 **Owner:** Language (kenfmt owner) · **Reviewer:** QA · **Architect:**
 informational (layout = tool/style, not kernel semantics) · **Size:** M ·
 **Base:** `origin/main @ 431e36ea` (batch-1 landed: horizontal-first `layout.rs`
-+ R1a, `Core/OrdNat.ken.md` reformatted, PR #610). **Status: READY** —
++ R1a, `Data/Numeric/Nat/Order.ken.md` reformatted, PR #610). **Status: READY** —
 operator-approved 2026-07-13 (Pat green-lit "catalog-wide + re-arm gate #57"
 after reviewing and approving the batch-1 `OrdNat` diff).
 

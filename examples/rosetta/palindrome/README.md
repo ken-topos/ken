@@ -14,7 +14,7 @@ is pinned from the in-process evaluation result, not yet runner-confirmed.
 
 ## Implementation notes
 
-- Reuses the landed `catalog/packages/collections` string surface: `eq`,
+- Reuses the landed `catalog/packages/Data/Collections/Derived.ken.md` string surface: `eq`,
   `string_to_list_char` / `list_char_to_string`. No string op is re-derived.
 - `reverse` over `List Char` is not in the landed 7-combinator floor, so it's
   defined locally (`reverseListChar`) — a one-off local helper, not promoted

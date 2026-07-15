@@ -11,16 +11,16 @@ block this.
 
 1. **Literate transformation** `.ken → .ken.md` for the **8 remaining plain
    files** (the 6 already-`.ken.md` files skip this step):
-   - `catalog/packages/Core/LawfulClasses.ken`
-   - `catalog/packages/Core/LawfulFunctors.ken`
-   - `catalog/packages/Core/Transport.ken`
-   - `catalog/packages/Data/Sums/Sums.ken`
-   - `catalog/packages/Data/Collections/Collections.ken`
+   - `catalog/packages/Core/Classes/LawfulClasses.ken`
+   - `catalog/packages/Core/Classes/LawfulFunctors.ken`
+   - `catalog/packages/Core/Logic/Transport.ken`
+   - `catalog/packages/Data/Sums/Combinators.ken`
+   - `catalog/packages/Data/Collections/Derived.ken`
    - `catalog/packages/Data/Collections/Map.ken`
    - `catalog/packages/Capability/Parsing/Parsing.ken`
-   - `catalog/packages/Capability/Verify/ProofErasureBoundaryChecker.ken`
+   - `catalog/packages/Tooling/Verification/ProofErasureBoundaryChecker.ken`
    Encode per the standard (07 §8, `write-ken`, and the landed `.ken.md`
-   exemplars — `EffectfulClasses.ken.md`, `OrdNat.ken.md`, `EmptyDec.ken.md`).
+   exemplars — `EffectfulClasses.ken.md`, `Order.ken.md`, `EmptyDec.ken.md`).
    The tangled code must be **identical** (modulo the casing rename below) — this
    is a re-encoding, not a rewrite.
 

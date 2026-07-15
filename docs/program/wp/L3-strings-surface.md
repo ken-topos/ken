@@ -25,9 +25,9 @@ conformance seed (`conformance/surface/collections/seed-collections.md`
 DS-AC1-7), not this file's §3/§4: the floor is **7** combinators (`natSub` is
 the 7th — no landed `sub`), and `compare` is 3-way over a **local, exported
 `data OrdResult = Lt | Eq | Gt`** (no `Ordering` type exists; `Ord Char` is
-`leq`-only). Delivered in `catalog/packages/collections/collections.ken` +
+`leq`-only). Delivered in `catalog/packages/Data/Collections/Derived.ken.md` +
 `crates/ken-elaborator/tests/l3_strings_surface_acceptance.rs`; see
-`catalog/packages/collections/MANIFEST.md` for the full derivation-path + delta
+`catalog/packages/Data/Collections/Derived.MANIFEST.md` for the full derivation-path + delta
 declaration. One additional, non-blocking finding: evaluating the pinned
 `slice 0 99 "abc"` conformance case (DS-AC3) surfaced a real
 `ken-interp`-side performance characteristic (near-quartic cost in the
@@ -96,7 +96,7 @@ Architect's capability confirm):
   other clash you hit.
 - **`Ordering`** — reuse whatever comparison-result type `Ord Char` already
   yields on `main` (grep `Ord Char` / the `compare` method's codomain in
-  `crates/ken-elaborator/src/classes.rs` / `catalog/packages/lawful-classes/`); do not
+  `crates/ken-elaborator/src/classes.rs` / `catalog/packages/Core/Classes/`); do not
   introduce a second one.
 
 ## 4. The 5 string derivations — mandated bodies

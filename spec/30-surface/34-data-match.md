@@ -62,7 +62,7 @@ be built **and** taken apart, and the eliminator reduces.
   Ken `data`/defs over the built-ins, not prelude primitives), NOT a prelude
   `data` decl: an ordinary non-dependent sum needs zero kernel/elaborator/
   effects support, so it is declared at the user level
-  (`catalog/packages/Data/Sums/Sums.ken.md`), matching the spec's own model.
+  (`catalog/packages/Data/Sums/Combinators.ken.md`), matching the spec's own model.
   `Result` remains the distinct, error-biased sum wired into the effect system
   (`fs_resp : … = Result IOError Bytes`); `Either` is the neutral,
   non-error-biased sibling — the two coexist, neither subsumes the other

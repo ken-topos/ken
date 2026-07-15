@@ -10,7 +10,7 @@ frame points at it, it does not restate it.
 ## Prerequisites — all landed (verified), plus one law-instrument question
 
 - **DS-7 `Applicative`/`Monad`** — ✅ landed `origin/main @ 88dce79`
-  (`Core/EffectfulClasses.ken.md`). The wired chain and `Applicative` are in.
+  (`Core/Classes/EffectfulClasses.ken.md`). The wired chain and `Applicative` are in.
 - **`class Functor` + `class Foldable`** — landed (`LawfulFunctors.ken:188`,
   `:274`); **instances `Functor List`/`Functor Option` and `Foldable List`/
   `Foldable Option`** all landed (`LawfulFunctors.ken:358`/`:366`) — these are
@@ -26,7 +26,7 @@ frame points at it, it does not restate it.
 
 ## Scope
 
-Append to the existing **`catalog/packages/Core/EffectfulClasses.ken.md`** (the
+Append to the existing **`catalog/packages/Core/Classes/EffectfulClasses.ken.md`** (the
 effectful-class family entry — per judgment call `L1`; keep the family in one
 entry), reusing everything DS-7 landed there.
 

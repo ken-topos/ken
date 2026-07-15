@@ -48,7 +48,7 @@ WIRE over restate is this proof reuse — do not duplicate the Functor/Applicati
 law proofs at the deeper instance.
 
 Landed dep: **`class Functor (f : Type → Type)`** at
-`catalog/packages/Core/LawfulFunctors.ken:188` (`map`/`id_law`/`fusion_law`).
+`catalog/packages/Core/Classes/LawfulFunctors.ken:188` (`map`/`id_law`/`fusion_law`).
 Its instances `Functor List`/`Functor Option` are the wired `functor` fields —
 **probe they are landed and reusable first** (grep the emission, not a `.ken`
 view); if a needed `Functor` instance or a needed collections op
@@ -90,12 +90,12 @@ before designing around it — do not silently re-derive it.
 
 ## Home / package (judgment call — logged)
 
-New entry **`catalog/packages/Core/EffectfulClasses.ken.md`** for the CAT-2
+New entry **`catalog/packages/Core/Classes/EffectfulClasses.ken.md`** for the CAT-2
 effectful-class family: `Applicative` + `Monad` + their instances now; DS-8
 appends `Traversable` to the same entry (or a sibling) once SURF-2 lands. It sits
 alongside `LawfulFunctors.ken`/`LawfulClasses.ken` in `Core`, reusing
 `class Functor` from `LawfulFunctors`. (Chapter §6's perishable build-note names
-`catalog/packages/lawful-functors/`; the Steward homes catalog authoring at
+`catalog/packages/Core/Classes/`; the Steward homes catalog authoring at
 Foundation per program-doc `P3`, and the family is `Core`-resident — the
 Foundation build may pick the final basename, this is the frame's suggestion, not
 a hard pin. Flag the final name in the handback.)

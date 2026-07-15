@@ -14,7 +14,7 @@ Steward spot-check spanning **distinct constructs the representative lacked** â€
 not a re-look at the same shape.
 
 **Live (2026-07-13, kenfmt batch-2).** The horizontal-first formatter was
-operator-approved on `Core/OrdNat.ken.md` (shallow `leq_nat`-on-`Nat` proofs).
+operator-approved on `Data/Numeric/Nat/Order.ken.md` (shallow `leq_nat`-on-`Nat` proofs).
 The catalog-wide sweep candidate came back scope-clean (forbidden-path empty,
 token/AST preserved, `#[ignore]` removed) and `ken fmt --check` was **green
 across every source** â€” i.e. the formatter's splayed output was **idempotent**,

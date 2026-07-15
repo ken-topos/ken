@@ -16,7 +16,7 @@ Findings/forks → **Steward**.
 
 ## What it is
 
-Extend the landed `catalog/packages/lawful-classes` pattern (`Eq`/`DecEq`/`Ord`, over a
+Extend the landed `catalog/packages/Core/Classes/LawfulClasses.ken.md` pattern (`Eq`/`DecEq`/`Ord`, over a
 **value type** `a : Type`) to the workhorse **constructor classes** and their
 value-level algebra companions:
 
@@ -40,7 +40,7 @@ Cite `spec/50-stdlib/51-lawful-classes.md`, the kernel record/Σ + Ω vocabulary
   Bool b True`. No new kernel former, no new `Term`/`Decl`.
 - **Same package discipline** as `lawful-classes` (`catalog/packages/README.md`):
   MANIFEST, Ken source, derivation path, declared `trusted_base()` delta. New
-  package `catalog/packages/lawful-functors/` (or extend the catalog namespace per the
+  package `catalog/packages/Core/Classes/` (or extend the catalog namespace per the
   enclave's naming — coordinate with `06`'s `ken.*` shape).
 - **Laws PROVED over inductive carriers, not postulated.** The instances land
   over **inductive** carriers (`List`, `Option`) whose laws are **provable by
@@ -143,7 +143,7 @@ pickup, do not trust this line):
 Design front-loaded by the enclave (spec-author holds the pen; Architect
 fidelity-gates the soundness pins; CV authors the discriminating conformance).
 The durable contract is `spec/50-stdlib/55-lawful-functors.md`; the value-level
-source + MANIFEST are `catalog/packages/lawful-functors/`. This section is the design
+source + MANIFEST are `catalog/packages/Core/Classes/`. This section is the design
 record + the load-bearing pins the build transcribes from.
 
 ### E1. Value-level algebra (`Semigroup`/`Monoid`) — spec-author, build-verified

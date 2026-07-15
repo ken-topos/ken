@@ -304,7 +304,7 @@ blocker on any instance. (`Eq`'s `refl` was always zero-delta — its goal route
 through an unresolved `bool_eq x x`, keeping the `Eq` live so `Refl` fires.)
 
 **Realization status.** The **real, kernel-checked, zero-delta** law-carrying
-instances are **on main** (Team Language, `catalog/packages/lawful-classes/`):
+instances are **on main** (Team Language, `catalog/packages/Core/Classes/`):
 `Ord Bool` `refl`/`trans`/`total` + `Eq Bool` `refl` (`72e38a5`), and now
 `Ord Bool`'s `antisym` + `DecEq Bool`'s `sound`/`complete` (`9a82745`,
 ES4-lawproofs-remainder) — so `Ord Bool` and `DecEq Bool` are **complete

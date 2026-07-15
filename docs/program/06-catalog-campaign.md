@@ -68,27 +68,36 @@ The per-entry standard format that carries these layers is the subject of
 `07-catalog-style-guide.md`. This charter fixes the *purpose, home, and layout*;
 the style guide fixes the *shape of each entry*.
 
-## Sections and Domains — the catalog's subject-matter architecture
+## Sections, Domains, Subdomains, and Packages
 
-The catalog's first-level division is the **Section**. Sections are dependency-
-ordered: each is built from the ones before it, and the essential toolkit at the
-base is the most depended-upon. A Section may be subdivided, along clear
-subject-area lines, into **Domains** (e.g. the Capability Section holds a
-Cryptography Domain, a Parsing Domain, …). This is the *subject-matter* spine —
-orthogonal to the trust "rings" (kernel TCB vs. outer ring) and to the per-entry
-format. Which Sections exist, and which package sits where, will see
-**rearrangement, inclusions, and exclusions** as the catalog grows; what is
-stable is the shape: a small essential core, widening toward applications.
+The catalog's first-level division is the **Section**: a broad, durable
+dependency stratum expected to contain several unrelated domains. The controlled
+allowlist is `Core`, `Data`, `Algorithm`, `Capability`, `Protocol`,
+`Application`, and `Tooling`. A reserved Section remains documentation-only
+until it owns a package, so the tree never carries empty horizon directories.
 
-**For now there are four Sections** — Core, Data, Algorithm, Capability. That is
-deliberately enough to keep the campaign busy; later subject areas (encodings and
-protocols, application frameworks) become their own Sections when we reach them.
+Within a Section, a **Domain** names stable subject vocabulary such as
+`Collections`, `Parsing`, or `CommandLine`. An optional **Subdomain** partitions
+a mature Domain only when at least two coherent sibling families exist or the
+roadmap names credible siblings. A **Package** is one cohesive importable leaf;
+its name describes the component rather than merely repeating its parent. The
+resulting hierarchy is:
+
+> **Section > Domain > optional Subdomain > Package**
+
+This is the *subject-matter* spine, orthogonal to the trust rings (kernel TCB
+versus outer ring) and to the per-entry format. A package's canonical home is
+determined by what it does and its dependency position, not by purity alone.
+Secondary classification belongs in controlled metadata facets—`platform`,
+`effects`, `assurance`, `maturity`, `audience`, `security`, and
+`artifact-kind`—rather than new top-level directories or duplicate packages.
+
+Sections are dependency-ordered, and packages must not depend on a Section to
+their right:
 
 ```mermaid
-flowchart TB
-  Core[Core Section - essential dependent-programming toolkit] --> Data[Data Section - standard datatypes and operations]
-  Data --> Algorithm[Algorithm Section - general algorithms over the data]
-  Algorithm --> Capability[Capability Section - focused Domains: parsing, cryptography, ...]
+flowchart LR
+  Core --> Data --> Algorithm --> Capability --> Protocol --> Application --> Tooling
 ```
 
 - **Core Section — the essential dependent/functional-programming toolkit.** The
@@ -111,6 +120,16 @@ flowchart TB
   content (equality transport, not a capability), and the Capability "transport"
   name is reserved for a future wire/serialization (encodings Domain) package
   distinct from it (`docs/program/wp/catalog-taxonomy-paths-imports.md` P4).
+- **Protocol Section — externally specified interchange.** Encodings, data
+  formats, compression, network protocols, authentication, and other rules whose
+  identity comes from an external protocol. It is reserved until its first
+  package lands.
+- **Application Section — reusable application-facing facilities.** Input
+  schemas, command-line policy, configuration, and frameworks assembled from
+  lower Sections.
+- **Tooling Section — development and artifact tooling.** Verification,
+  testing, documentation, packaging, and transformations used to build or
+  inspect programs rather than serve an application's end users.
 
 **Demand-pull (the operator's design principle).** The deeper Sections are
 *clarified by building the things that ought to sit on them*. Rather than
@@ -139,9 +158,10 @@ catalog/
   guide/               the authoring guide — "writing Ken" (see below)
   packages/            light container: a README + the Section/Domain tree
     README.md          package index / navigation
-    <Section>/[<Domain>/]<Pkg>.ken[.md]  the leaf package (identity-mapped
-                                          to `import <Section>.[<Domain>.]<Pkg>`,
-                                          `07-catalog-style-guide.md`)
+    <Section>/<Domain>/[<Subdomain>/]<Pkg>.ken[.md]
+                                        the leaf package (identity-mapped to
+                                        `import <Section>.<Domain>.[<Subdomain>.]<Pkg>`,
+                                        `07-catalog-style-guide.md`)
 ```
 
 - `catalog/` root holds any *whole-catalog* detail (index, cross-package

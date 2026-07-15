@@ -9,17 +9,17 @@
 
 use ken_elaborator::ElabEnv;
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/Classes/LawfulClasses.ken must elaborate");
     env
 }
 
@@ -42,7 +42,7 @@ fn all_five_combinators_and_their_laws_are_real_globals() {
     ] {
         assert!(
             env.globals.contains_key(name),
-            "`{}` must be a real registered global after elaborating Collections.ken",
+            "`{}` must be a real registered global after elaborating Derived.ken",
             name
         );
     }
@@ -53,10 +53,10 @@ fn all_five_combinators_and_their_laws_are_real_globals() {
 #[test]
 fn zero_axiom_in_collections_ken() {
     let extracted = ken_elaborator::literate::extract_ken_md(COLLECTIONS_KEN_MD)
-        .expect("Collections.ken.md must extract");
+        .expect("Derived.ken.md must extract");
     assert!(
         !extracted.source.contains("Axiom"),
-        "Collections.ken.md code must contain zero Axiom literals"
+        "Derived.ken.md code must contain zero Axiom literals"
     );
 }
 
@@ -65,13 +65,13 @@ fn zero_axiom_in_collections_ken() {
 #[test]
 fn trusted_base_delta_is_empty_across_the_file() {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
     let before: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
     let after: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(
         before, after,
-        "Collections.ken must introduce ZERO new trusted_base() entries (zero-Axiom acceptance bar)"
+        "Derived.ken must introduce ZERO new trusted_base() entries (zero-Axiom acceptance bar)"
     );
 }
 

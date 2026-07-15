@@ -7,22 +7,22 @@
 
 use ken_elaborator::ElabEnv;
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_FUNCTORS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
-const SUMS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Sums/Sums.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
+const SUMS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Sums/Combinators.ken.md");
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/LawfulFunctors.ken.md must elaborate");
-    env.elaborate_ken_md_file(SUMS_KEN_MD).expect("Data/Sums/Sums.ken.md must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/Classes/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/Classes/LawfulFunctors.ken.md must elaborate");
+    env.elaborate_ken_md_file(SUMS_KEN_MD).expect("Data/Sums/Combinators.ken.md must elaborate");
     env
 }
 
@@ -47,7 +47,7 @@ fn either_and_combinators_are_real_globals() {
     ] {
         assert!(
             env.globals.contains_key(name),
-            "`{}` must be a real registered global after elaborating Sums.ken.md",
+            "`{}` must be a real registered global after elaborating Combinators.ken.md",
             name
         );
     }
@@ -60,24 +60,24 @@ fn zero_axiom_in_sums_ken() {
     // "Axiom" without that being a code-level regression; this must stay
     // false only if the checked/tangled fence itself contains one.
     let tangled = ken_elaborator::literate::extract_ken_md(SUMS_KEN_MD)
-        .expect("Data/Sums/Sums.ken.md must extract")
+        .expect("Data/Sums/Combinators.ken.md must extract")
         .source;
-    assert!(!tangled.contains("Axiom"), "Sums.ken.md's tangled code must contain zero Axiom literals");
+    assert!(!tangled.contains("Axiom"), "Combinators.ken.md's tangled code must contain zero Axiom literals");
 }
 
 #[test]
 fn trusted_base_delta_is_empty_across_the_file() {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/LawfulFunctors.ken.md must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/Classes/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/Classes/LawfulFunctors.ken.md must elaborate");
     let before: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
-    env.elaborate_ken_md_file(SUMS_KEN_MD).expect("Data/Sums/Sums.ken.md must elaborate");
+    env.elaborate_ken_md_file(SUMS_KEN_MD).expect("Data/Sums/Combinators.ken.md must elaborate");
     let after: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(
         before, after,
-        "Sums.ken.md must introduce ZERO new trusted_base() entries (zero-Axiom acceptance bar)"
+        "Combinators.ken.md must introduce ZERO new trusted_base() entries (zero-Axiom acceptance bar)"
     );
 }
 

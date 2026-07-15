@@ -90,7 +90,7 @@ flowchart TB
   `leqNat`/`totalLeqNat`/`transLeqNat`/`antisymLeqNat`/`reflLeqNat` family out
   of `map.ken` (where it is duplicated, `map.ken` grep) into a real **exported
   lawful `Ord Nat` instance**, and collect `min`/`max`/`sub`/`compare` (today
-  split across `collections.ken`) into one entry. Removes duplication; unblocks
+  split across `Derived.ken`) into one entry. Removes duplication; unblocks
   reuse. Mostly mechanical (proofs exist inside `map.ken`); enclave confirms the
   lift is zero-new-`Axiom`. Home: Foundation.
 - **DS-3 · `Either` + `Option`/`Result` combinators.** Resolve the `Either`
@@ -102,7 +102,7 @@ flowchart TB
   driver's error path. Home: Foundation + enclave (the Either ruling).
 - **DS-4 · `List` combinator completion.** Add `reverse`/`zip`/`concatMap`/
   `range`/`foldl` with their laws (`reverse` involutive, length laws) — absent
-  today (`collections.ken` grep). Extends the existing 7-combinator floor.
+  today (`Derived.ken` grep). Extends the existing 7-combinator floor.
   Home: Foundation.
 - **DS-5 · length-indexed `Vector` (spec-gated).** `Vec n a` with total
   `head`/`index`/`zip` — the canonical dependent-types showcase, high teaching

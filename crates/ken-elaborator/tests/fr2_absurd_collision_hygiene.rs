@@ -68,7 +68,7 @@ fn declaring_lower_arity_j_or_eq_elaborates_fine_not_a_collision() {
 }
 
 // THE regression-guard test: the actual landed `class Eq a` shape (arity-1,
-// `catalog/packages/Core/LawfulClasses.ken`) must elaborate cleanly with the
+// `catalog/packages/Core/Classes/LawfulClasses.ken`) must elaborate cleanly with the
 // collision guard active — this is the exact case the original (wrong) pin
 // would have broken, and the corrected ruling exists specifically to keep
 // working. Mirrors the real landed shape, not just any arity-1 stand-in.

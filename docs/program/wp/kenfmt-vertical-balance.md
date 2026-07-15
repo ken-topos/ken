@@ -129,7 +129,7 @@ implement it only if it falls out cleanly; do not block on it.
   **do not touch the constant**; regenerate the fixture against the landed
   `CANONICAL_WIDTH = 96`.
 - **Batch-1 R1/R1a signature ladder + R2 atomic proof selectors are frozen.**
-  `Core/OrdNat.ken.md` must stay **byte-identical** to its `431e36ea`-approved
+  `Data/Numeric/Nat/Order.ken.md` must stay **byte-identical** to its `431e36ea`-approved
   rendering (R1 horizontal-first ladder + R1a inline arrow-returns), and R2
   proof selectors stay atomic. Batch-3 only changes what happens **after** a
   group is decided over-width; it must not alter any rendering that already fits
@@ -222,8 +222,8 @@ implement it only if it falls out cleanly; do not block on it.
 
 - **STAGE 1 — fix + one representative worst-case file.** Land the `layout.rs`
   consistent-break fix and apply the fixed formatter to **one** representative
-  deep-proof file — recommend **`Core/LawfulFunctors.ken.md`** or
-  **`Core/EffectfulClasses.ken.md`** (they carry the arrow-chain `fusion_law`
+  deep-proof file — recommend **`Core/Classes/LawfulFunctors.ken.md`** or
+  **`Core/Classes/EffectfulClasses.ken.md`** (they carry the arrow-chain `fusion_law`
   case *and* the `Equal`-splay return case). Hand the diff to the **Steward**,
   who presents the balanced rendering to the operator. **Do not** re-sweep the
   catalog or touch the fixture/gates until the operator approves.
@@ -244,7 +244,7 @@ implement it only if it falls out cleanly; do not block on it.
   gate (AC7) enforces this corpus-wide.
 - **AC3 — +2 indentation.** Every broken top-level child is indented exactly +2
   from its parent group (`INDENT_WIDTH`), per the operator's rule.
-- **AC4 — batch-1 no regression.** `Core/OrdNat.ken.md` is **byte-identical** to
+- **AC4 — batch-1 no regression.** `Data/Numeric/Nat/Order.ken.md` is **byte-identical** to
   its `431e36ea`-approved rendering (R1 ladder + R1a inline returns); R2 proof
   selectors stay atomic. Batch-1/2a goldens in
   `crates/ken-elaborator/tests/kenfmt_b3_layout.rs` /`b1_acceptance.rs` /

@@ -113,15 +113,15 @@ bar.
   rather it had waited for review, it reverts cleanly and DS-5 still ships
   head-only with the rest spec'd-and-gated.
 
-### L1 · DS-7 package home + basename — new `Core/EffectfulClasses.ken.md`
+### L1 · DS-7 package home + basename — new `Core/Classes/EffectfulClasses.ken.md`
 - **Call:** Home the CAT-2 effectful-class family (`Applicative`+`Monad` now,
   `Traversable` appended at DS-8) in **one new entry
-  `catalog/packages/Core/EffectfulClasses.ken.md`**, alongside
+  `catalog/packages/Core/Classes/EffectfulClasses.ken.md`**, alongside
   `LawfulFunctors.ken`/`LawfulClasses.ken` in `Core`, reusing the landed
   `class Functor`.
-- **Options:** (a) new `Core/EffectfulClasses.ken.md` [chosen, suggested]; (b)
+- **Options:** (a) new `Core/Classes/EffectfulClasses.ken.md` [chosen, suggested]; (b)
   append to the existing `LawfulFunctors.ken`; (c) the chapter-56 build-note's
-  `catalog/packages/lawful-functors/` path.
+  `catalog/packages/Core/Classes/` path.
 - **Why:** subsume-don't-proliferate keeps the effectful classes together in one
   entry (they share the wired-superclass story); `Core` is where the
   class/instance vocabulary lives; a fresh entry mirrors DS-2's one-entry-per-WP
@@ -203,7 +203,7 @@ bar.
   four sites. Correcting only one leaves the two `34-data-match` claims false
   (correcting-scope-must-sweep-whole-doc — validated: the over-claim WAS restated).
 - **Coupled package-home call:** recommend one entry
-  `catalog/packages/Data/Sums/Sums.ken` for both L2-sum combinator families
+  `catalog/packages/Data/Sums/Combinators.ken` for both L2-sum combinator families
   (Option + Result), not two — subsume-don't-proliferate on package count.
 - **Named deferred (NOT this window):** whether to bless `Sum a b` as the
   *user-facing* neutral coproduct (it's presently effect-framed only) is a
@@ -215,7 +215,7 @@ bar.
 ### L5 · ⚠ PROMINENT — coproduct family: `Either` (catalog package), rename effect `Sum`→`Coproduct` [OPERATOR-RULED]
 > **STATUS (2026-07-10 ~14:05): ✅ COMPLETE end-to-end.** WP (1)
 > `Either` catalog package **✅ LANDED** (PR #458, `main @ a78f3b7`;
-> `Data/Sums/Sums.ken`, Either verified absent from prelude — ruling
+> `Data/Sums/Combinators.ken`, Either verified absent from prelude — ruling
 > B honored). WP (2) `Sum`→`Coproduct` rename **✅ LANDED** (PR
 > #455, zero kernel delta, `declare_sum` gone). WP (3) `Sum` name now
 > **freed** for `Data.Functor.Sum`.
@@ -450,7 +450,7 @@ corrected.)
 **✅ L5 `Either`/coproduct thread — COMPLETE end-to-end** (operator-driven,
 PROMINENT). All three arms landed: (1) **`Either a b = Left a | Right b` as a
 CATALOG PACKAGE, NOT prelude** (ruling B) → **✅ LANDED PR #458,
-`main @ a78f3b7`** (`Data/Sums/Sums.ken` — `either`/`mapLeft`/`mapRight`/`swap`
+`main @ a78f3b7`** (`Data/Sums/Combinators.ken` — `either`/`mapLeft`/`mapRight`/`swap`
 + laws; spec reconcile
 honestly frames it package-not-prelude; foundation-qa caught+fixed a real
 Coproduct-reachability defect; Either verified absent from prelude); (2) **rename
@@ -484,7 +484,7 @@ discipline on Ken code today); mechanical, so it does NOT gate the literate
 transformation; on the discuss-list.
 
 **DS-3 (Option/Result combinators) — ✅ LANDED PR #454, `main @ dd5dc51`.** New
-package `catalog/packages/Data/Sums/Sums.ken` (Option getOrElse/isSome/orElse;
+package `catalog/packages/Data/Sums/Combinators.ken` (Option getOrElse/isSome/orElse;
 Result mapErr/andThen/unwrapOr + laws), outer-ring, zero kernel/Axiom/trusted_base
 delta, foundation-qa (Err-first hand-trace + tt-vs-Refl cross-check) + Architect
 gate. Retros closed. Real-kicked ~13:07 after my appended kick sat missed (idle
@@ -514,7 +514,7 @@ naturality laws (proved) + `Compose` applicative (3/4 laws: `ap_id`/`ap_hom`/
 `ap_ich` + `map_coh` + Functor laws) + `ap_naturality` aux + `ap_cmp` LHS
 reductions (partial, honestly marked). **`ap_cmp` (Compose's 4th law) + the
 traverse composition law both deferred to DS-8c.** Foundation
-transcribing into `Core/EffectfulClasses.ken.md` now → foundation-qa →
+transcribing into `Core/Classes/EffectfulClasses.ken.md` now → foundation-qa →
 Architect gate → git_request.
   - **Architect's 5 honesty pins bind DS-8 Core's entry + his gate**
     (`evt_7an7q5pbztdr0`): (1) deferral is **SIZE not capability** — say
@@ -554,10 +554,10 @@ Architect gate → git_request.
   Architect dual gate (fidelity vs chapter 56 char-for-char + soundness). WIRE
   chain consistent; ITree bridge prose-only (no 2nd `bind`). 3 Ergo Findings
   (dot-projection/`λ` in type position; `concatMap` inlined; arg-order). Retros in.
-  Entry `Core/EffectfulClasses.ken.md`.
+  Entry `Core/Classes/EffectfulClasses.ken.md`.
 - **DS-8 Core** (`Traversable`) — ✅ **LANDED** `main @ 709c55d` (PR #440,
   CI-green). **Completes Core** (Functor→Applicative→Monad→Traversable). Entry
-  `Core/EffectfulClasses.ken.md §9`, design contract chapter 56 §5. **VALVE-SPLIT**
+  `Core/Classes/EffectfulClasses.ken.md §9`, design contract chapter 56 §5. **VALVE-SPLIT**
   (not whole): `class Traversable` + `List`/`Option` instances (identity +
   naturality proved) + `Compose g h` (`fn`-synonym) Functor instance + 3/4
   Applicative laws (`ap_id`/`ap_hom`/`ap_ich` + `map_coh`) + `ap_naturality` aux
@@ -571,14 +571,14 @@ Architect gate → git_request.
   CI-green). Near-mechanical: `reverse` (+ involutive law via `reverse_snoc` —
   the one real induction), `zip` (non-dependent — verified NOT the DS-5c-gated
   Vector zip), `concatMap`/`foldl` (structural-only, dropped laws documented per
-  subsume-don't-proliferate), `range` appended to `Collections.ken`. Outer-ring,
+  subsume-don't-proliferate), `range` appended to `Derived.ken`. Outer-ring,
   zero Axiom, zero-`trusted_base` delta, foundation-qa + Architect gate. One
   non-blocking nit (AC8 #1 reject also accepts `|| ParseError`) recorded for
   next-touch, not folded (Architect ruling). Retros in. Proof-technique finding:
   `Cons`-vs-`Cons` abstract-element base needs `cong` not bare `tt`/`Refl`
   (memory saved).
 - **DS-3** (`Option`/`Result` combinators) — ✅ **LANDED** `main @ dd5dc51`
-  (PR #454, CI-green). New package `catalog/packages/Data/Sums/Sums.ken` (Option
+  (PR #454, CI-green). New package `catalog/packages/Data/Sums/Combinators.ken` (Option
   getOrElse/isSome/orElse; Result mapErr/andThen/unwrapOr + laws; reuses
   `option_map`/`Functor Option`, neither type re-declared). Outer-ring, zero
   kernel/`Axiom`/`trusted_base()` delta, foundation-qa APPROVE (Err-first field-
@@ -881,12 +881,12 @@ no modifier/kernel work for Map.
   **all three §10 retros IN** (leader `evt_kqb95k8m9t7j` / qa `evt_20trnmaps63mf` /
   implementer `evt_2cx4ynftx916j`) — WP done. Kicked after the full Handoff Gate
   (ergo ring compacted + drops verified); honesty gate clean (2-file outer-ring:
-  `Core/NatArith.ken.md` + acceptance test; ancestry no-drift on `1082ef89`;
+  `Data/Numeric/Nat/Arithmetic.ken.md` + acceptance test; ancestry no-drift on `1082ef89`;
   trust-surface hits all benign test guards).
   QA (`evt_74gcd6am9pnk3`) + Architect fidelity (`evt_2j0f33gh09f64`) green —
   Architect walked every law (definitional Refl bases vs real-induction hard laws
   correctly discriminated; `mul_add_distrib_l`/`mul_one_r` honestly derived; zero
-  papering, nothing size-deferred). Placement = **new `Core/NatArith.ken.md`**
+  papering, nothing size-deferred). Placement = **new `Data/Numeric/Nat/Arithmetic.ken.md`**
   (separated from OrdNat export). **Parsing `nat_add` unification DEFERRED** to a
   follow-up de-dup seam —
   ergo-implementer's grounded finding: **catalog entries have no import/load
@@ -1114,7 +1114,7 @@ product). State:
   LawfulClasses+Collections, small-files-first, harvest-before-strip. On delivery:
   bundle rule+swept files → Architect fidelity gate → doc-only merge. Task #10.
 - **(2) Keyword adoption — PILOT.** ~2.5% adoption (fn 1032/const 50 vs lemma
-  13/proof 10/def 2/prop 2). Pilot = `Core/NatArith.ken.md` (small, all law
+  13/proof 10/def 2/prop 2). Pilot = `Data/Numeric/Nat/Arithmetic.ken.md` (small, all law
   lemmas, stable). Prereq: pin def/lemma/proof/prop semantics (Architect/spec-author
   consult). Folds into write-ken #9. Task #12.
 - **(1) Presentation-order independence — SEQUENCED, NOT HANDED.** Operator: send

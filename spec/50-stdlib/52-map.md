@@ -180,7 +180,7 @@ of the correctness-now / perf-later split (flagged in §7, not hidden). The
 is stable across the rep change — only the bodies and the invariant's balance
 conjunct change.
 
-Package home: the `collections` package (`catalog/packages/collections/`, alongside the
+Package home: the `collections` package (`catalog/packages/Data/Collections/`, alongside the
 landed `List`/`Nat` floor); exact file path is Foundation's to fix.
 
 ## 4. Core API
@@ -221,7 +221,7 @@ an unproved op under the "proved map" banner. `letter-frequency`'s critical path
 
 - `to_list` is the **in-order** traversal: `to_list Leaf = Nil`,
   `to_list (Node l k v r) = append (to_list l) (Cons (k, v) (to_list r))` (reusing
-  the landed `list_append`, `catalog/packages/collections`). Over an `Ordered` tree its
+  the landed `list_append`, `catalog/packages/Data/Collections/Derived.ken.md`). Over an `Ordered` tree its
   output keys are **ascending** (§5.3, the load-bearing law).
 - `from_list` folds `insert` over the list (`from_list = foldr (λ (k,v) m. insert
   k v m) empty`); the result is `Ordered` (invariant preserved, §5.1) and
@@ -272,7 +272,7 @@ one `Map` correctness law that stays deferred (§7c).
   variables, not the concrete constructors `Ord Bool` case-splits on) needs a
   **propositional-rewrite / transport (`J`/`cast`) step** to fire the internal
   `if`. `surface-transport` (`19955d8`) **surfaced** the `J` former + the
-  derived `catalog/packages/transport/transport.ken` combinators (`53-transport.md`),
+  derived `catalog/packages/Core/Logic/Transport.ken.md` combinators (`53-transport.md`),
   reducing to the kernel's **existing** `Term::J`/`Cast` (`Refl` still checks
   only pre-existing convertibility; `J` is the reachable transport).
 
@@ -471,7 +471,7 @@ gap — AC3):
   → **Gap B** (dependent-motive recovery, the widened non-indexed gate `elab.rs`
   `dependent_eligible` at `:535-553`, realizing `../30-surface/34-data-match.md
   §3.2`). Four of the five *additionally* must **align a stuck `leq k k'`** →
-  **Gap A** (the `J` former + `catalog/packages/transport/transport.ken`, surfacing the
+  **Gap A** (the `J` former + `catalog/packages/Core/Logic/Transport.ken.md`, surfacing the
   kernel's *existing* `Term::J`/`Cast`, `53-transport.md` — the same frontier
   `lawful_classes.ken`'s relational laws need). `to_list`-ordered is
   **Gap-B-only**. **Both capability WPs are now landed** (Gap A `19955d8`, Gap B

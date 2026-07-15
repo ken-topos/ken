@@ -47,7 +47,7 @@ once in the elaborator, removed everywhere in the catalog.
 
 ## The two sites (grounded on `b7c0de73` — re-verify at pickup)
 
-1. **`catalog/packages/Core/EmptyDec.ken.md`** — `dec_eq_decides` (~:172–190):
+1. **`catalog/packages/Core/Logic/EmptyDec.ken.md`** — `dec_eq_decides` (~:172–190):
    `match bool_dichotomy (d.eq x y) { Inl p ⇒ … ; Inr q ⇒ … }`. 4 `bool_dichotomy`
    uses; the inlined `bool_dichotomy` helper (~:140) is a candidate for removal
    once no site references it.
@@ -58,7 +58,7 @@ once in the elaborator, removed everywhere in the catalog.
    (`set_intersection_member`: over-transport → reject). **Leave them on their
    existing form** — not migrated, not a regression, no modifier work. NOT in this
    WP.
-3. **`catalog/packages/Core/LawfulClasses.ken.md`** — `list_deceq_sound_cons_true`
+3. **`catalog/packages/Core/Classes/LawfulClasses.ken.md`** — `list_deceq_sound_cons_true`
    /`_false` (~:551–566) with the **explicit fresh-`Bool` `J` motive**
    `J (λb _. IsTrue (match b { True ⇒ list_eq a da.eq xs ys ; False ⇒ False })) h
    peq` (:560), plus the inlined `bool_dichotomy` (:488, 2 uses). This is the

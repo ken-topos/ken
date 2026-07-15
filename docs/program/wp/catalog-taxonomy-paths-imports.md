@@ -105,7 +105,7 @@ level to force fixed depth.
 
 - **Constraint — leaf-or-namespace, never both:** a dotted path resolves to
   exactly one of {a `.ken`/`.ken.md` file, a directory}, never ambiguous — no
-  `Data/Collections.ken` beside a `Data/Collections/` directory. A name at a
+  `Data/Sequence.ken` beside a `Data/Sequence/` directory. A name at a
   level is either a package (leaf) or a Domain (dir), so the bijection is total
   (Rust `mod.rs` / Lean discipline).
 
@@ -131,8 +131,8 @@ level to force fixed depth.
   dirs (`lawful-classes`) are **not** valid identifiers (hyphens aren't ident
   chars), so an identity map **forces** PascalCase directory/file names — this is
   structural, not merely cleanest. The move renames e.g.
-  `lawful-classes/lawful_classes.ken → Core/LawfulClasses.ken` ⇔
-  `import Core.LawfulClasses`. The leaf filename minus its extension is **exactly**
+  `lawful-classes/lawful_classes.ken → Core/Classes/LawfulClasses.ken` ⇔
+  `import Core.Classes.LawfulClasses`. The leaf filename minus its extension is **exactly**
   the final import component — zero transform.
 
 ### P3 — Resolution scope: bounded (addressing now, loader deferred)
@@ -160,10 +160,10 @@ Resolved homes, by **content** (`06 §Sections`):
 
 | Package (today) | Content | Home (pinned) | Import (representative leaf) |
 |---|---|---|---|
-| `core/empty-dec` | `Empty`/`Dec`/`absurd` | **Core** | `Core.EmptyDec` |
-| `lawful-classes` | `Eq`/`Ord`/`DecEq` | **Core** | `Core.LawfulClasses` |
-| `lawful-functors` | `Semigroup`/`Monoid`/`Functor` | **Core** | `Core.LawfulFunctors` |
-| `transport` | `subst`/`cong`/`cast`/`sym`/`trans` over `J` | **Core** | `Core.Transport` |
+| `core/empty-dec` | `Empty`/`Dec`/`absurd` | **Core** | `Core.Logic.EmptyDec` |
+| `lawful-classes` | `Eq`/`Ord`/`DecEq` | **Core** | `Core.Classes.LawfulClasses` |
+| `lawful-functors` | `Semigroup`/`Monoid`/`Functor` | **Core** | `Core.Classes.LawfulFunctors` |
+| `transport` | `subst`/`cong`/`cast`/`sym`/`trans` over `J` | **Core** | `Core.Logic.Transport` |
 | `collections` | `Map` (+`Set`, …) + laws | **Data / Collections** | `Data.Collections.Map` |
 | `parsing` | parser combinators | **Capability / Parsing** | `Capability.Parsing.…` |
 | `verify` | proof-erasure boundary checker | **Capability / Verify** | `Capability.Verify.…` |
@@ -171,7 +171,7 @@ Resolved homes, by **content** (`06 §Sections`):
 (Exact leaf-package names are finalized in the move pass; the imports show the
 identity for representative leaves.)
 
-- **`transport` → Core; `Core/Transport.ken` is honest, no rename.** Content is
+- **`transport` → Core; `Core/Logic/Transport.ken` is honest, no rename.** Content is
   the five equality-transport combinators, thin non-recursive wrappers over the
   surface former `J` (`53-transport.md`) — Core proof-utility, zero
   `trusted_base()` delta. **`06`-fix:** the `06 §Capability` line "today's parsing
@@ -189,9 +189,9 @@ identity for representative leaves.)
   packages** (`Data/Collections/Map.ken`, later `Set.ken`, `Vector.ken`, … ⇔
   `import Data.Collections.Map`) — matching Data Section → Collections Domain →
   per-structure packages, and extensible as the Domain grows. **Defer the final
-  split to content-inspection in the move pass:** if `collections.ken`'s content
+  split to content-inspection in the move pass:** if `Derived.ken`'s content
   is genuinely one cohesive unit rather than a Map/Set split, keep it whole
-  (`Data/Collections.ken` ⇔ `import Data.Collections`, honoring leaf-or-namespace).
+  (`Data/Sequence.ken` ⇔ `import Data.Sequence`, honoring leaf-or-namespace).
   spec-author / Ergo resolve per content.
 
 ### P5 — The `06` / `07` / guide doc pins (apply in the build, per this text)

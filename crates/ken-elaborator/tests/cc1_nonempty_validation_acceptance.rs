@@ -1,4 +1,4 @@
-//! CC1 (`Data.NonEmpty` + `Data.Validation`) acceptance —
+//! CC1 (`Data.Collections.NonEmpty` + `Data.Sums.Validation`) acceptance —
 //! `docs/program/wp/cc1-nonempty-validation.md`.
 //!
 //! These packages depend on the existing catalog rather than the bare
@@ -10,32 +10,32 @@ use std::collections::BTreeSet;
 
 use ken_elaborator::ElabEnv;
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const LAWFUL_FUNCTORS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
 const EFFECTFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/EffectfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/EffectfulClasses.ken.md");
 const NONEMPTY_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/NonEmpty/NonEmpty.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/NonEmpty.ken.md");
 const VALIDATION_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Validation/Validation.ken.md");
+    include_str!("../../../catalog/packages/Data/Sums/Validation.ken.md");
 
 fn dependency_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("Core/Transport.ken.md must elaborate first");
+        .expect("Core/Logic/Transport.ken.md must elaborate first");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("Data/Collections/Collections.ken.md must elaborate second");
+        .expect("Data/Collections/Derived.ken.md must elaborate second");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("Core/LawfulClasses.ken.md must elaborate third");
+        .expect("Core/Classes/LawfulClasses.ken.md must elaborate third");
     env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD)
-        .expect("Core/LawfulFunctors.ken.md must elaborate fourth");
+        .expect("Core/Classes/LawfulFunctors.ken.md must elaborate fourth");
     env.elaborate_ken_md_file(EFFECTFUL_CLASSES_KEN_MD)
-        .expect("Core/EffectfulClasses.ken.md must elaborate fifth");
+        .expect("Core/Classes/EffectfulClasses.ken.md must elaborate fifth");
     env
 }
 
@@ -57,7 +57,7 @@ fn ordered_dependency_closure_elaborates_both_packages_and_all_laws() {
     let mut env = dependency_env();
 
     env.elaborate_ken_md_file(NONEMPTY_KEN_MD)
-        .expect("Data/NonEmpty/NonEmpty.ken.md and every checked fence must elaborate");
+        .expect("Data/Collections/NonEmpty.ken.md and every checked fence must elaborate");
     assert_transparent_globals(
         &env,
         &[
@@ -72,7 +72,7 @@ fn ordered_dependency_closure_elaborates_both_packages_and_all_laws() {
     );
 
     env.elaborate_ken_md_file(VALIDATION_KEN_MD)
-        .expect("Data/Validation/Validation.ken.md and every checked fence must elaborate");
+        .expect("Data/Sums/Validation.ken.md and every checked fence must elaborate");
     assert_transparent_globals(
         &env,
         &[

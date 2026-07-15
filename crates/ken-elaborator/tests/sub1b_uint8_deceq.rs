@@ -7,12 +7,12 @@ use ken_elaborator::{ElabEnv, ElabError};
 use ken_interp::eval::{apply, eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::Decl;
 
-const TRANSPORT: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const LAWFUL_CLASSES: &str = include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const LAWFUL_CLASSES: &str = include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const BYTES_KEYS: &str =
-    include_str!("../../../catalog/packages/Data/Collections/BytesKeys.ken.md");
+    include_str!("../../../catalog/packages/Data/Binary/BytesKeys.ken.md");
 
 fn dependency_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");

@@ -16,7 +16,7 @@ window (2026-07-10). Near-mechanical: the hard proofs already exist.
    - `antisymLeqNat : … Equal Bool (leqNat x y) True → Equal Bool (leqNat y x) True → Equal Nat x y`
    - `totalLeqNat  : Or (Equal Bool (leqNat x y) True) (Equal Bool (leqNat y x) True)`
 
-   into a real exported instance of the landed `class Ord` (`Core/LawfulClasses.ken:49`):
+   into a real exported instance of the landed `class Ord` (`Core/Classes/LawfulClasses.ken:49`):
    ```
    class Ord a {
      leq     : a → a → Bool ;
@@ -30,7 +30,7 @@ window (2026-07-10). Near-mechanical: the hard proofs already exist.
    it is zero-`Axiom`, unlike the `Int` instance (postulated). Mirror its shape.
 
 2. **A `Nat` operations entry** collecting `min`/`max`/`sub`/`compare` (today
-   split in `Collections.ken`) into one place, reusing `Ord Nat` where natural.
+   split in `Derived.ken`) into one place, reusing `Ord Nat` where natural.
 
 ## The one real adaptation (probe first — escalate only if it needs a ruling)
 

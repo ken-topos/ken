@@ -8,18 +8,18 @@ Reference: <https://rosettacode.org/wiki/Parsing/RPN_calculator_algorithm>
 
 **Elaborates + evaluates correctly (verified in-process, ~ms).** `ken run`
 end-to-end verification is pending building the runner's package-prelude
-allowlist decision for this dir (it needs no `catalog/packages/collections`
+allowlist decision for this dir (it needs no `catalog/packages/Data/Collections/Derived.ken.md`
 symbols — self-contained — so should work once tested through the CLI).
 
 ## Implementation notes
 
 - `RpnOp = Push Int | Add | Sub | Mul` — a fixed, pre-tokenized
   `List RpnOp` (no string tokenizer/`split-on-whitespace` exists yet in
-  `catalog/packages/collections` — not this example's axis to probe, so
+  `catalog/packages/Data/Collections/Derived.ken.md` — not this example's axis to probe, so
   hardcoded rather than rediscovered here).
 - **Division omitted.** `ken-interp` has no `div_int`/`mod_int` primitive
   at all (only `add_int`/`sub_int`/`mul_int`) — the same already-known gap
-  documented in `catalog/packages/collections/collections.ken`'s header and the
+  documented in `catalog/packages/Data/Collections/Derived.ken.md`'s header and the
   VAL2 `natToDecimal` finding. Not re-filed as a second `KNOWN-GAP.md`;
   this example demonstrates the probed axis (`Option` composition without
   exceptions) over `+`/`-`/`*`, unaffected by it.

@@ -13,9 +13,9 @@ primitive, no postulate, no `Axiom` in CC7's fences.
 
 ## Everything you consume already exists — and you built all of it
 
-`Process.Arguments` (CC6a) · `Parsing.Decoder` + `Parsing.Cursor` (CC3) ·
-`Diagnostic.Core` (CC4) · `Pretty.Doc` (CC5) · `Data.Validation` +
-`Data.NonEmpty` (CC1) · `Text.Codec` + `Text.Numeric` (CC2).
+`Capability.Process.Arguments` (CC6a) · `Capability.Parsing.Decoder` + `Capability.Parsing.Cursor` (CC3) ·
+`Capability.Diagnostics.Core` (CC4) · `Capability.Formatting.Doc` (CC5) · `Data.Sums.Validation` +
+`Data.Collections.NonEmpty` (CC1) · `Data.Text.Codec` + `Capability.Parsing.Numeric` (CC2).
 **Consume them. Do not rebuild any of them, and do not fork a second copy of
 anything.**
 
@@ -47,13 +47,13 @@ corrected than believed.**)
    lives is a dependency-DAG pin, not taste.**
    It does not exist yet, and **CC5 deliberately forbade it in both base
    modules:**
-   - **NOT in `Diagnostic.Core`** — that would give `Diagnostic` knowledge of
+   - **NOT in `Capability.Diagnostics.Core`** — that would give `Diagnostic` knowledge of
      rendering and **destroy CC4's AC4** (the value knows its *location*, not its
      *rendering*). CC4 landed render-free **on purpose**.
-   - **NOT in `Pretty.Doc`** — that would make the abstraction depend on a
+   - **NOT in `Capability.Formatting.Doc`** — that would make the abstraction depend on a
      client. Same cycle CC3 and CC4 both had to correct.
-   - **⇒ It lives in a THIRD module: `catalog/packages/Diagnostic/Render.ken.md`**,
-     depending on **both** `Diagnostic.Core` and `Pretty.Doc`. **It is a CC7
+   - **⇒ It lives in a THIRD module: `catalog/packages/Capability/Diagnostics/Render.ken.md`**,
+     depending on **both** `Capability.Diagnostics.Core` and `Capability.Formatting.Doc`. **It is a CC7
      deliverable**, but it is a **separate package** — do not bury it inside
      `ArgParse`, because CC8 (the env/config decoder) will want it too.
 
@@ -63,7 +63,7 @@ corrected than believed.**)
    scope and is not a stretch goal.**
 
 4. **`ArgParse` is a SPECIALIZATION of what exists, not a new universe.** Argv
-   tokenization runs on `Parsing.Decoder` over an **`ArgCursor`** (CC3);
+   tokenization runs on `Capability.Parsing.Decoder` over an **`ArgCursor`** (CC3);
    failures are **`Diagnostic`s** (CC4) with **`ArgumentOrigin`** locations;
    multiple independent failures **accumulate via `Validation`** (CC1) rather
    than short-circuiting; usage/help **derives a `Doc`** (CC5). **If you find
@@ -72,7 +72,7 @@ corrected than believed.**)
 
 5. **Byte-preserving throughout.** Argv values are `Bytes`. **Never decode to
    `String`** to compare, match, or store. Decoding is the **caller's** explicit
-   choice (`Text.Codec`), never something `ArgParse` does for them. **A quiet
+   choice (`Data.Text.Codec`), never something `ArgParse` does for them. **A quiet
    decode passes every UTF-8 test and breaks only on real non-UTF-8 argv** —
    CC6a proved this guarantee holds; **do not be the WP that breaks it.**
 
@@ -81,13 +81,14 @@ corrected than believed.**)
    `ken check` of a dependent package is **expected to fail** — the known
    package-model gap. **Escalate; do not smuggle `import`.**
 
-7. **Homes:** `ArgParse` → `catalog/packages/ArgParse/ArgParse.ken.md` (or
-   `ArgParse/Core.ken.md` if you split); `Diagnostic.Render` →
-   `catalog/packages/Diagnostic/Render.ken.md`.
+7. **Homes:** `ArgParse` → `catalog/packages/Application/CommandLine/ArgParse.ken.md` (or
+   `Application/CommandLine/ArgParse/Core.ken.md` if you split);
+   `Capability.Diagnostics.Render` →
+   `catalog/packages/Capability/Diagnostics/Render.ken.md`.
 
 ## Mandated deliverable outline
 
-1. **`Diagnostic.Render`** (fixed input 2) — `Diagnostic → Doc`. The renderer
+1. **`Capability.Diagnostics.Render`** (fixed input 2) — `Diagnostic → Doc`. The renderer
    decides *presentation*; the `Diagnostic` still knows only its origin. Keep it
    small and general: **CC8 will consume it.**
 
@@ -95,7 +96,7 @@ corrected than believed.**)
    explicit (fixed input 3). Enough to express: subcommands, long/short options,
    options with values, flags, positionals, and required-vs-optional.
 
-3. **Tokenization + decoding** — over `ArgCursor` via `Parsing.Decoder` (fixed
+3. **Tokenization + decoding** — over `ArgCursor` via `Capability.Parsing.Decoder` (fixed
    input 4), byte-wise option matching (fixed input 1), values validated through
    `Validation` so **multiple errors accumulate** with **exact `ArgumentOrigin`
    locations** (arg index + byte range).
@@ -141,8 +142,8 @@ corrected than believed.**)
 - **No `bytes_eq` / `DecEq Bytes` / new carrier** — byte-wise over `ArgBytes`
   (fixed input 1). The `Bytes → Nat` bridge is an **open operator decision**;
   **a build WP does not settle it.**
-- **`Diagnostic.Render` is its OWN module** — not inside `Diagnostic.Core`
-  (breaks CC4's render-free property) and not inside `Pretty.Doc` (cycle).
+- **`Capability.Diagnostics.Render` is its OWN module** — not inside `Capability.Diagnostics.Core`
+  (breaks CC4's render-free property) and not inside `Capability.Formatting.Doc` (cycle).
 - **No reflection / macros / derivation** — explicit specs (fixed input 3).
 - **No decoding argv to `String`** (fixed input 5).
 - **No second parser / error carrier / renderer** (AC6).
@@ -160,4 +161,4 @@ and the catalog fragmenting) → CV only if `conformance/` is touched →
 **On CC7's merge, Milestone C is met.** Remaining after: CC8 (env/config decoder
 — the *second* description-driven decoder, which is what finally justifies
 extracting a shared `Schema`, and **not before**) and CC9 (`Resource`/`Bracket` +
-`Test.Property`).
+`Tooling.Testing.Property`).

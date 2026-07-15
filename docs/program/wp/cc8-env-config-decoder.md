@@ -38,7 +38,7 @@ boundaries.")*
 - **Raw-value carriers.** Raw argv `Bytes` vs. the config representation.
 - **Provenance / origin.** `ArgumentOrigin` vs. environment/config origin.
 - **Validation policy.**
-- **`Diagnostic → Doc` rendering.** It stays in `Diagnostic.Render`.
+- **`Diagnostic → Doc` rendering.** It stays in `Capability.Diagnostics.Render`.
 
 *(Implementer, verbatim: "do not unify merely similar carriers or erase their
 source-specific diagnostics.")*
@@ -62,7 +62,7 @@ as perishable anyway (§7).
 ### 3.1 The environment is reachable — **I-7 delivers it. CC8 CONSUMES it.**
 
 > **★ AMENDED 2026-07-14 (Steward). This section previously said "a
-> `Process.Environment` accessor is a CC8 deliverable." THAT WAS AN
+> `Capability.Process.Environment` accessor is a CC8 deliverable." THAT WAS AN
 > OWNERSHIP ERROR AND IT IS WITHDRAWN.** The projector sits on the
 > **`ProcessInput` runtime ABI**, which is **Team Runtime's** boundary, and it
 > is already scoped to them by the CLI contract §7 (*"I-7 Env/Process families:
@@ -72,11 +72,11 @@ as perishable anyway (§7).
 
 `ProcessInput` is landed as
 `MkProcessInput (List Bytes) (List (Prod Bytes Bytes)) Bytes` — argv,
-**environment pairs**, cwd (`prelude.rs:1417`). CC6a's `Process.Arguments`
+**environment pairs**, cwd (`prelude.rs:1417`). CC6a's `Capability.Process.Arguments`
 projects field 0 only; the environment is *matched and preserved* but never
 named.
 
-**`Process.Environment` (`process_environment : ProcessInput → List (Prod Bytes
+**`Capability.Process.Environment` (`process_environment : ProcessInput → List (Prod Bytes
 Bytes)`) is delivered by I-7** (Team Runtime,
 `docs/program/wp/i7-env-process-projectors.md`). **CC8 depends on I-7 and must
 not duplicate it.**
@@ -140,7 +140,7 @@ get a fact you could actually use. **That wall is being torn down:**
 
 ### ~~Reuse the landed byte carrier — do NOT mint a fifth~~
 
-`ArgBytes` (`Parsing/Cursor.ken.md:51–62`) is **arg-*named* but structurally
+`ArgBytes` (`Capability/Parsing/Cursor.ken.md:51–62`) is **arg-*named* but structurally
 generic**:
 
 ```ken
@@ -184,7 +184,7 @@ parallel universe. **An extraction nobody refactors onto is not an extraction.**
 
 ## 4. Mandated deliverable
 
-1. ~~**`Process.Environment`** — the missing projector.~~ **WITHDRAWN — this is
+1. ~~**`Capability.Process.Environment`** — the missing projector.~~ **WITHDRAWN — this is
    I-7's (Team Runtime), not CC8's.** See §3.1. **CC8 consumes
    `process_environment`; it does not build it.**
 2. **The shared `Schema` package** — vocabulary + generic traversals per §2.1,

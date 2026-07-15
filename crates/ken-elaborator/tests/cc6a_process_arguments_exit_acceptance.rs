@@ -1,4 +1,4 @@
-//! CC6a (`Process.Arguments` + `System.Exit`) ordered shared-environment acceptance.
+//! CC6a (`Capability.Process.Arguments` + `Capability.Process.Exit`) ordered shared-environment acceptance.
 
 use std::collections::BTreeSet;
 
@@ -6,37 +6,37 @@ use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{apply, eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId, Term};
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
-const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Diagnostic/Core.ken.md");
-const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Cursor.ken.md");
-const ARGUMENTS_KEN_MD: &str = include_str!("../../../catalog/packages/Process/Arguments.ken.md");
-const EXIT_KEN_MD: &str = include_str!("../../../catalog/packages/System/Exit.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
+const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
+const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Cursor.ken.md");
+const ARGUMENTS_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Process/Arguments.ken.md");
+const EXIT_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Process/Exit.ken.md");
 
 fn dependency_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("Core.Transport must elaborate first");
+        .expect("Core.Logic.Transport must elaborate first");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
         .expect("Data.Collections must elaborate second");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("Core.LawfulClasses must elaborate third");
+        .expect("Core.Classes.LawfulClasses must elaborate third");
     env.elaborate_ken_md_file(DIAGNOSTIC_KEN_MD)
-        .expect("Diagnostic.Core must elaborate fourth");
+        .expect("Capability.Diagnostics.Core must elaborate fourth");
     env.elaborate_ken_md_file(CURSOR_KEN_MD)
-        .expect("Parsing.Cursor must elaborate fifth");
+        .expect("Capability.Parsing.Cursor must elaborate fifth");
     env
 }
 
 fn full_env() -> ElabEnv {
     let mut env = dependency_env();
     env.elaborate_ken_md_file(ARGUMENTS_KEN_MD)
-        .expect("Process.Arguments must elaborate after Parsing.Cursor");
+        .expect("Capability.Process.Arguments must elaborate after Capability.Parsing.Cursor");
     env.elaborate_ken_md_file(EXIT_KEN_MD)
-        .expect("System.Exit must elaborate after Process.Arguments");
+        .expect("Capability.Process.Exit must elaborate after Capability.Process.Arguments");
     env
 }
 
@@ -351,12 +351,12 @@ fn exit_policy_is_total_explicit_and_keeps_uint8_payloads() {
 #[test]
 fn cc6a_has_zero_trust_delta_and_no_new_carrier_or_string_hop() {
     let arguments = ken_elaborator::literate::extract_ken_md(ARGUMENTS_KEN_MD)
-        .expect("Process.Arguments must extract");
+        .expect("Capability.Process.Arguments must extract");
     let exit =
-        ken_elaborator::literate::extract_ken_md(EXIT_KEN_MD).expect("System.Exit must extract");
+        ken_elaborator::literate::extract_ken_md(EXIT_KEN_MD).expect("Capability.Process.Exit must extract");
     for (name, source) in [
-        ("Process.Arguments", arguments.source.as_str()),
-        ("System.Exit", exit.source.as_str()),
+        ("Capability.Process.Arguments", arguments.source.as_str()),
+        ("Capability.Process.Exit", exit.source.as_str()),
     ] {
         assert!(!source.contains("Axiom"), "{name} must contain no Axiom");
         assert!(
@@ -387,9 +387,9 @@ fn cc6a_has_zero_trust_delta_and_no_new_carrier_or_string_hop() {
     let mut env = dependency_env();
     let before: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     env.elaborate_ken_md_file(ARGUMENTS_KEN_MD)
-        .expect("Process.Arguments must elaborate in the shared environment");
+        .expect("Capability.Process.Arguments must elaborate in the shared environment");
     env.elaborate_ken_md_file(EXIT_KEN_MD)
-        .expect("System.Exit must elaborate in the shared environment");
+        .expect("Capability.Process.Exit must elaborate in the shared environment");
     let after: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(before, after, "CC6a must add zero trusted-base entries");
 }

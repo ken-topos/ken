@@ -1,4 +1,4 @@
-# CC6b · `System.Path.Posix` — the held half of CC6, now unblocked
+# CC6b · `Capability.Filesystem.Path.Posix` — the held half of CC6, now unblocked
 
 **Owner:** Team Runtime · **Size:** M · **Branch:** `wp/cc6b-path-posix`
 **Base:** `origin/main @ 2c184550` · **Gate:** Runtime QA (+ Architect
@@ -19,7 +19,7 @@ inherit), so there is little CC6a context to lose.
 
 ## 0. Why this WP exists now, and not four hours ago
 
-CC6 was `Process.Arguments` + `System.Exit` + `System.Path.Posix`. The first two
+CC6 was `Capability.Process.Arguments` + `Capability.Process.Exit` + `Capability.Filesystem.Path.Posix`. The first two
 shipped as **CC6a**. `Path.Posix` was **held**, and CC6a's frame said exactly
 why:
 
@@ -90,8 +90,8 @@ I write. Use it.)*
    `bytes_to_list` / `list_to_bytes` live in
    `crates/ken-elaborator/src/bytes.rs:226-241`. **Do not re-declare them.**
    `bytes_nat_length` **is** catalog Ken
-   (`Data/Collections/Collections.ken.md:1343`).
-2. **The List toolbox you have** (`Data/Collections/Collections.ken.md`):
+   (`Data/Collections/Derived.ken.md:1343`).
+2. **The List toolbox you have** (`Data/Collections/Derived.ken.md`):
    `list_append:515` · `nth:521` · `take:531` · `drop:541` · `map:577` ·
    `filter:583` · `mem:593` · `length:603` · `reverse:692` · `concat_map:791` ·
    `foldl:821` · `list_eq:1251` · `list_compare:1269`.
@@ -99,10 +99,10 @@ I write. Use it.)*
    splitter yourself** — `foldl` + `list_append` + `reverse` is sufficient, and
    it is ordinary total structural Ken. **Do not add a primitive for it.**
 3. **`instance DecEq (List a) where DecEq a` ALREADY EXISTS**
-   (`Core/LawfulClasses.ken.md:2022`). **So the moment SUB-1b lands `DecEq
+   (`Core/Classes/LawfulClasses.ken.md:2022`). **So the moment SUB-1b lands `DecEq
    UInt8`, you get `DecEq (List UInt8)` — i.e. lawful segment equality — FOR
    FREE, by instance resolution.** Do not hand-roll it. Do not re-derive it.
-4. **`DecEq` is** (`Core/LawfulClasses.ken.md:74`) — `eq : a → a → Bool` ·
+4. **`DecEq` is** (`Core/Classes/LawfulClasses.ken.md:74`) — `eq : a → a → Bool` ·
    `sound : IsTrue (eq x y) → Equal a x y` ·
    `complete : Equal a x y → IsTrue (eq x y)`.
    **`sound`/`complete` are what your laws consume.** An instance whose

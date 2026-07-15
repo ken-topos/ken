@@ -1,4 +1,4 @@
-# I-7 — `Process.Environment` + `Process.WorkingDirectory` (the pure projectors)
+# I-7 — `Capability.Process.Environment` + `Capability.Process.WorkingDirectory` (the pure projectors)
 
 **Team:** Runtime · **Size:** S · **Branch:** `wp/i7-env-process-projectors`
 **Base:** `origin/main @ 7b4adf5b` (post-I-6) · **Gate:** Program I (Milestone B)
@@ -100,14 +100,14 @@ which is why it is a real effect, and why it is I-8.)
 
 ### 2.3 The pattern to mirror, exactly
 
-`catalog/packages/Process/Arguments.ken.md` (CC6a) is your template. It is
+`catalog/packages/Capability/Process/Arguments.ken.md` (CC6a) is your template. It is
 **pure Ken in a literate `.ken.md` catalog package** — projector, replacer,
 round-trip proof. Follow its shape, its byte-preservation posture, and its
 naming.
 
 ## 3. Mandated deliverables
 
-### 3.1 `catalog/packages/Process/Environment.ken.md`
+### 3.1 `catalog/packages/Capability/Process/Environment.ken.md`
 
 ```ken
 fn process_environment (input : ProcessInput) : List (Prod Bytes Bytes) = …
@@ -117,7 +117,7 @@ fn replace_process_environment
 proof round_trip for process_environment … : Equal …
 ```
 
-### 3.2 `catalog/packages/Process/WorkingDirectory.ken.md`
+### 3.2 `catalog/packages/Capability/Process/WorkingDirectory.ken.md`
 
 ```ken
 fn process_working_directory (input : ProcessInput) : Bytes = …

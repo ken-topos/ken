@@ -19,11 +19,11 @@ use ken_kernel::term::{Level, Term};
 use ken_kernel::{declare_inductive, infer, CtorSpec, GlobalEnv, InductiveSpec};
 
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const EMPTY_DEC_KEN_MD: &str = include_str!("../../../catalog/packages/Core/EmptyDec.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const EMPTY_DEC_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/EmptyDec.ken.md");
 
 fn lv0() -> Level {
     Level::zero()
@@ -259,7 +259,7 @@ fn ac3_trusted_base_delta_is_ordinary_inductive_admission_only() {
 fn ac4_bridge_demonstrated_over_deceq_bool_not_only_deceq_int() {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(EMPTY_DEC_KEN_MD)
-        .expect("catalog/packages/Core/EmptyDec.ken.md must elaborate standalone (Definition + every checked fence)");
+        .expect("catalog/packages/Core/Logic/EmptyDec.ken.md must elaborate standalone (Definition + every checked fence)");
 
     // `trueIsTrue`/`trueIsNotFalse` (from the §3 worked examples) both
     // instantiate `decEqDecides` at `DecEq_instance_Bool` — confirm the
@@ -274,18 +274,18 @@ fn ac4_bridge_demonstrated_over_deceq_bool_not_only_deceq_int() {
 
 // The entry's inlined `DecEq`/`DecEq Bool` (self-containment, `§6` Finding)
 // is a real independent duplicate, not a divergence from the landed
-// package — confirm `catalog/packages/Core/LawfulClasses.ken`
+// package — confirm `catalog/packages/Core/Classes/LawfulClasses.ken`
 // still elaborates over its declared `Transport → Collections` dependencies
 // (this entry doesn't touch it).
 #[test]
 fn landed_lawful_classes_package_still_elaborates_with_dependencies() {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("catalog/packages/Core/Transport.ken must elaborate");
+        .expect("catalog/packages/Core/Logic/Transport.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
+        .expect("catalog/packages/Data/Collections/Derived.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("catalog/packages/Core/LawfulClasses.ken must elaborate");
+        .expect("catalog/packages/Core/Classes/LawfulClasses.ken must elaborate");
     assert!(
         env.globals.contains_key("DecEq_instance_Bool"),
         "the landed package's own DecEq_instance_Bool must be a real registered global"

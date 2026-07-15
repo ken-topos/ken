@@ -627,7 +627,7 @@ pass today (`crates/ken-elaborator/tests/val1_string_literals.rs:327`/`:334`,
 with the ES2 sanction-comment "a genuine 3-way comparison still gets one,
 declared locally"); `Ord Char` is **`leq`-only**
 (`instance Ord Char { leq refl antisym trans total }`, no `compare` method,
-`catalog/packages/lawful-classes/lawful_classes.ken:359`); `eqChar`/`leqChar` landed
+`catalog/packages/Core/Classes/LawfulClasses.ken.md:359`); `eqChar`/`leqChar` landed
 (`= eq_int`/`= leq_int` under `Char`'s `Int` erasure,
 `crates/ken-elaborator/src/decimal_char.rs:242`); the
 `map`/`zip`/`unfoldUpTo`/`insert` recursion precedents landed

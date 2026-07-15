@@ -8,8 +8,8 @@ use ken_interp::eval::{apply, eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId, PrimReduction, Term};
 
 const COLLECTIONS: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const TRANSPORT: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const TRANSPORT: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 
 fn make_store(env: &ElabEnv) -> EvalStore {
     let mut store = EvalStore::new();

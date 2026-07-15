@@ -16,7 +16,7 @@ inputs.
 ## 1. Dependency DIRECTION — an abstraction module must not depend on its clients
 
 I pinned `byte_cursor_ops` (an instance over CAT-5's `Source`) *inside* the new
-`Parsing.Cursor` abstraction module, **and** ordered `Parsing.Cursor` before
+`Capability.Parsing.Cursor` abstraction module, **and** ordered `Capability.Parsing.Cursor` before
 `Capability.Parsing` (CAT-5) in the load order — because CAT-5 was to be
 refactored to *consume* the abstraction. That is a **cycle**: Cursor → CAT-5 →
 Decoder → Cursor. No reordering saves it.

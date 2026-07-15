@@ -11,7 +11,7 @@ fidelity/soundness gate**.
 First open brick of the operator's compare-based lexicographic-order path
 (`lawful DecEq → lawful compare → Collections rework → Ord (Pair)/Ord (List)`).
 The **base** `DecEq` instances are already lawful on main —
-`DecEq {Int, Bool, Char}` in `Core/LawfulClasses.ken.md` (`Char`
+`DecEq {Int, Bool, Char}` in `Core/Classes/LawfulClasses.ken.md` (`Char`
 certificate-backed via transport off `DecEq Int`, ADR 0013 Layer 1). What is
 **not** landed is the **structural lifting** of `DecEq` over the compound and
 recursive carriers — `Pair` and `List`. Those liftings are this WP, and they are
@@ -53,7 +53,7 @@ discipline). Use a **transparent** Bool-conjunction (define one locally, à la
 - The two instances + their real `sound`/`complete` proofs, built on the
   existing `list_eq` (`Collections`) + `Pair`/`mk_pair`/`pair_fst`/`pair_snd`
   (prelude) helpers and the base `DecEq` dictionaries. Reuse, don't re-mint.
-- **Fold the one-line Collections stale-doc fix:** `Collections.ken.md ~:826`
+- **Fold the one-line Collections stale-doc fix:** `Derived.ken.md ~:826`
   says lawful `DecEq Char` is "not yet landed" — it *is* landed; correct that
   line (it blocks nothing but is now false).
 
@@ -66,7 +66,7 @@ discipline). Use a **transparent** Bool-conjunction (define one locally, à la
 
 ## Instance homing — RESOLVED (Architect ruling `evt_48ayfh5jg8v4z`)
 
-**Both instances home in `Core/LawfulClasses`**, alongside `DecEq {Int, Bool,
+**Both instances home in `Core/Classes/LawfulClasses`**, alongside `DecEq {Int, Bool,
 Char}`. Grounded against `origin/main @ 9909e267`; branch-cut unblocked.
 
 - **Why not Collections (frame erratum — corrected):** an earlier draft of this
@@ -74,7 +74,7 @@ Char}`. Grounded against `origin/main @ 9909e267`; branch-cut unblocked.
   likely-Collections home. **Both are wrong.** `Pair`/`mk_pair`/`pair_fst`/
   `pair_snd` and `List` are **prelude** globals (`prelude.rs:490+`); Collections
   merely *uses* them, declares neither head constructor. Under `33 §5.3` the
-  non-orphan homes are the **class** module (`DecEq` → `Core/LawfulClasses`) or
+  non-orphan homes are the **class** module (`DecEq` → `Core/Classes/LawfulClasses`) or
   the **head-type constructor's** module (prelude). Collections is neither →
   a hard orphan error. Do **not** place either instance there.
 - **Precedent is decisive:** every Core-class instance for the prelude `List`

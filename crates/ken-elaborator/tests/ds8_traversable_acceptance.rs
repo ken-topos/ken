@@ -7,7 +7,7 @@
 //! laws. DS-8c closes the two pieces DS-8 honestly size-deferred: `Compose
 //! g h`'s own `ap_cmp` (its 4th `Applicative` law) and the `§5.3`
 //! composition coherence law that consumes it — see
-//! `catalog/packages/Core/EffectfulClasses.ken.md §9.6`-`§9.7`. All three
+//! `catalog/packages/Core/Classes/EffectfulClasses.ken.md §9.6`-`§9.7`. All three
 //! `§5.3` coherence laws (identity, naturality, composition) are now
 //! proved for both instances; the `Traversable` showcase is complete.
 //!
@@ -24,20 +24,20 @@
 
 use ken_elaborator::ElabEnv;
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
-const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const LAWFUL_FUNCTORS_KEN_MD: &str = include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
+const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const LAWFUL_FUNCTORS_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
 const EFFECTFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/EffectfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/EffectfulClasses.ken.md");
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/LawfulFunctors.ken.md must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/Classes/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/Classes/LawfulFunctors.ken.md must elaborate");
     env
 }
 
@@ -45,7 +45,7 @@ fn base_env() -> ElabEnv {
 fn entry_elaborates_with_every_checked_fence() {
     let mut env = base_env();
     env.elaborate_ken_md_file(EFFECTFUL_CLASSES_KEN_MD)
-        .expect("catalog/packages/Core/EffectfulClasses.ken.md must elaborate (Definition + every checked fence)");
+        .expect("catalog/packages/Core/Classes/EffectfulClasses.ken.md must elaborate (Definition + every checked fence)");
     assert!(env.globals.contains_key("Traversable_instance_List"));
     assert!(env.globals.contains_key("Traversable_instance_Option"));
     assert!(env.globals.contains_key("Applicative_instance_Identity"));
@@ -80,7 +80,7 @@ fn trusted_base_delta_is_empty_across_the_entry() {
     let mut env = base_env();
     let before: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     env.elaborate_ken_md_file(EFFECTFUL_CLASSES_KEN_MD)
-        .expect("catalog/packages/Core/EffectfulClasses.ken.md must elaborate");
+        .expect("catalog/packages/Core/Classes/EffectfulClasses.ken.md must elaborate");
     let after: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(
         before, after,

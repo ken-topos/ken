@@ -30,7 +30,7 @@ its three load-bearing "current state" claims are **now false**:
 |---|---|---|
 | "Ken has **one** real host operation: capability-gated whole-file read" | **STALE** | **16 driven host ops**: 10 FS (`eval.rs:2179-2189`), 4 Console (`eval.rs:1847-1857`), 2 Clock (`eval.rs:2045-2048`) |
 | "`Cap` = authority level + effect name; no rights bitset, no resource identity, no scope" | **STALE** | `Cap { authority, effect, scope: FsScope }` — `capabilities.rs:199-203`; `RightSet` `:58-86`; `FsHandle(OwnedFd)` `:97-100`; `FsIdentity{device,inode}` `:129-132`; `lineage` `:136-142` (ADR-0017) |
-| "No realized packages in `catalog/packages/`" | **STALE** | `System/Path/Posix.ken.md` (1758 lines), `System/Exit`, `Process/{Arguments,Environment,WorkingDirectory}`, `Time/Clock`, `Capability/{FS,Console}` |
+| "No realized packages in `catalog/packages/`" | **STALE** | `Capability/Filesystem/Path/Posix.ken.md` (1758 lines), `Capability/Process/Exit`, `Process/{Arguments,Environment,WorkingDirectory}`, `Capability/Time/WallClock`, `Capability/{FS,Console}` |
 | "`write_bytes`/`append`/`send`/`recv` are undriven placeholders" | **STALE** | Retired at `6088e0b8`; FS write/append are **driven**. Net + Rand are not merely undriven — they are **not declared at all** |
 | FFI marshalling is `BytesPtr` + debug-formatted scalar; no foreign call executed | **VERIFIED** | `foreign.rs:36-40`, `:54-58`; zero `dlopen`/`dlsym`/`libloading` hits repo-wide |
 | Native: `ClosedNullary` only; `HostEffectExecution` unavailable; Cranelift rejects `RuntimeExpr::Effect` | **VERIFIED** | `executable_entrypoint_packaging.rs:85-93`, `platform_runtime_support.rs:327-331`, `cranelift_backend.rs:1438-1441` |
@@ -146,7 +146,7 @@ for one is a **scope fork → escalate to the Architect**, not a judgment call.
   `ken-host` seam — added when reached, deferred, Linux-first.** This DROPS all
   POSIX-lowest-common-denominator scope and directly validates §0's finding: the
   `cfg` gate must be `linux` and the ABI facts are Linux facts, probed (PX2).
-  *Consequence to sweep:* the existing `System/Path/Posix.ken.md` name is now a
+  *Consequence to sweep:* the existing `Capability/Filesystem/Path/Posix.ken.md` name is now a
   misnomer — rescope it (catalog change; sequence separately, Steward-flagged).
   *Backend-seam decomposition is Architect-lane* (operator: "confirm the backend
   seam when I frame the work") — confirmed at PX1 framing (`evt_1t429wz5ehf42`).
@@ -522,7 +522,7 @@ flowchart LR
     PX0[PX0 erratum - Linux not unix - MERGING]
     LET4[LET-4 multi-binding let] --> LET2b[LET-2b refresh guides]
     LET2b --> LET3[LET-3 catalog let pilot]
-    LET3 --> CC9[CC9 Resource/Bracket + Test.Property]
+    LET3 --> CC9[CC9 Resource/Bracket + Tooling.Testing.Property]
     CC9 --> PX1[PX1 ken-host over pinned rustix]
     PX0 --> PX1
     PX1 --> PX2[PX2 target ABI + manifest + probe cross-check]
@@ -565,9 +565,9 @@ these four; the campaign's native-first PX-D/PX-E track subsumes them.
 
 | | Status |
 |---|---|
-| Diagnostics | ✅ landed (CC4 `Diagnostic.Core`) |
+| Diagnostics | ✅ landed (CC4 `Capability.Diagnostics.Core`) |
 | Modules / namespaces | ⚠ **partial** — ADR-0014/15/16 landed, but **`export` is SPECIFIED AND NOT PARSED** (zero hits in `parser.rs`) |
-| Test / property framework | ⛔ **nothing** — no `catalog/packages/Test`; CC9 is unbuilt. **Temporary scaffolding only (operator, 2026-07-15) — see below.** |
+| Test / property framework | ⛔ **nothing** — no `catalog/packages/Tooling/Testing`; CC9 is unbuilt. **Temporary scaffolding only (operator, 2026-07-15) — see below.** |
 | Package manager (L4) | ⛔ not started |
 
 **⇒ Flagged for the operator, not assumed.** *"Not a toy" is not purchased by
@@ -578,7 +578,7 @@ it is not smuggled into PX.**
 **★★ The in-Ken test framework is TEMPORARY SCAFFOLDING until Ward takes over
 (operator, 2026-07-15).** Testing is behavioral/empirical assurance —
 PRINCIPLES #9 puts that in **Ward's** domain, not Ken's core. So CC9's
-`Test.Property` is a **stopgap**: it exists so real work can be written and
+`Tooling.Testing.Property` is a **stopgap**: it exists so real work can be written and
 checked *now* (a language you can't test in isn't a tool), but it is **explicitly
 provisional and destined for Ward takeover.** Design consequence, binding on the
 CC9 frame: **minimize language-surface entrenchment** — no test-only primitives
@@ -589,10 +589,10 @@ without a language change. Same principle as resource-lifetime safety: **the
 obligation is Ward's; Ken carries only the minimal, non-entrenching stopgap.**
 
 **★ CC9 is a real dependency, not a courtesy** — but a *scaffolding* one. CC9 is
-framed as `Resource`/`Bracket` + `Test.Property`. **PX7 is the `Bracket`
+framed as `Resource`/`Bracket` + `Tooling.Testing.Property`. **PX7 is the `Bracket`
 consumer** — if CC9 lands a `Bracket` shape that PX7 cannot use for OS handles,
 we will build it twice; **CC9's frame must be re-read against PX7 before CC9 is
-released** (on me). The `Test.Property` half is the temporary-scaffolding piece
+released** (on me). The `Tooling.Testing.Property` half is the temporary-scaffolding piece
 above; the `Resource`/`Bracket` half is durable runtime-safety machinery.
 
 **PX1 and PX2 are the only ones that could start early.** They are pure debt,

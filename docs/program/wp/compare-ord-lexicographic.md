@@ -17,9 +17,9 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
   `compare` field to `class Ord`; do not make the class `compare`-primary; do not
   relitigate `leq`-vs-`compare` primacy** — that is a *decided* fork. `compare`
   is a **derived** operation in this WP.
-- **`OrdResult = Lt | Eq | Gt`** already exists (`Collections.ken.md:74`,
-  inlined in `OrdNat.ken.md:161`). Reuse it — never a second name.
-- **`instance Ord Nat` landed** (`OrdNat.ken.md:144`) with `compare` built from
+- **`OrdResult = Lt | Eq | Gt`** already exists (`Derived.ken.md:74`,
+  inlined in `Order.ken.md:161`). Reuse it — never a second name.
+- **`instance Ord Nat` landed** (`Order.ken.md:144`) with `compare` built from
   `leq_nat` (`:181`) — the shape brick 1 generalizes. `Ord Int`/`Bool`/`Char`
   landed in `LawfulClasses.ken.md`.
 
@@ -32,7 +32,7 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
    `leq : a → a → Bool` parameter + explicit law arguments** (`antisym_law`/
    `trans_law`/… as ordinary `fn` parameters, never `d.leq`/dict projections):
    `compare x y = Eq` when `leq x y ∧ leq y x`, `Lt` when `leq x y ∧ ¬leq y x`,
-   else `Gt` (reflecting `OrdNat.ken.md:181`). Public `Ord`-derived forms are
+   else `Gt` (reflecting `Order.ken.md:181`). Public `Ord`-derived forms are
    **thin wrappers** (`compare_with a d := compare_raw a (d.leq)`,
    `compare_eq_sound a d … := compare_eq_sound_raw a (d.leq) (d.antisym) …`) —
    instantiation is pure application/δ. This is the catalog's established
@@ -54,7 +54,7 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
 2. **Rework Collections onto `compare` — RESOLVED acyclic (Architect ruling
    `evt_4p2683wvtwwcc`, 2026-07-11): no cycle, no relocation, absorbed into brick
    3.** The earlier cycle worry was the wrong reading: `list_compare`
-   (`Collections.ken.md:753`) is **already raw-`cmp`-parameterized**
+   (`Derived.ken.md:753`) is **already raw-`cmp`-parameterized**
    (`cmp : a → a → OrdResult`), exactly as `list_eq` takes a raw `eqf` and never
    calls `DecEq`. So the canonical routing happens at the **instance layer** —
    `Ord (List a)` builds its element-comparator from the canonical `compare` and
@@ -99,7 +99,7 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
 ## Scope
 
 - Catalog proof code in `LawfulClasses.ken.md` (or a pinned new sibling file per
-  seam 2) + `Collections.ken.md` (brick 2 rework). Proof-only + one derived op.
+  seam 2) + `Derived.ken.md` (brick 2 rework). Proof-only + one derived op.
 - Acceptance tests beside the landed `Ord`/`DecEq` suites: the `compare`
   soundness lemmas and the `Ord (Pair)/(List)` law fields **elaborate +
   kernel-check** at the general statement; targeted builds (`-p <crate> <test>`),

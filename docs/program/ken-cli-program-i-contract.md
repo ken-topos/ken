@@ -408,7 +408,7 @@ Int` and `bytes_slice : Bytes → Int → Int → Bytes` go neutral out of bound
 (`bytes.rs:78-95`). **Ask:** land the safe `Option`/`Result` signatures the spec
 specifies — `bytes_decode : Bytes → Result Utf8Error String`,
 `bytes_at : Bytes → Int → Option UInt8`,
-`bytes_slice : … → Option Bytes` — **before** the `Text.Codec`/`ArgParse`
+`bytes_slice : … → Option Bytes` — **before** the `Data.Text.Codec`/`ArgParse`
 packages standardize on the current unsafe shapes. CLI libraries must not freeze
 the neutral-on-invalid signatures as permanent API.
 

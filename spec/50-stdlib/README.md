@@ -69,7 +69,7 @@ discipline that carries into every package build).
 The **constructor-class tranche** — `Semigroup`/`Monoid` (value-level algebra)
 and `Functor`/`Foldable` (the first classes over a type constructor
 `f : Type → Type`) — is pinned in **`55-lawful-functors.md`** (CAT-1,
-`catalog/packages/lawful-functors/`), the reusable template the **effectful
+`catalog/packages/Core/Classes/`), the reusable template the **effectful
 tranche** —
 `Applicative`/`Monad`/`Traversable` — extends in **`56-effectful-classes.md`**
 (CAT-2, same package): the deep chain **wires** superclass fields (`56 §2`), and
@@ -122,7 +122,7 @@ The **Layer-3 parsing/syntax/diagnostics contract** — source artifacts as byte
 identity, half-open byte spans, total parser result values, small package-owned
 grammars, parser/printer and formatter laws, and diagnostic primary/secondary
 span validity — is pinned in **`59-parsing-syntax-diagnostics.md`** (CAT-5).
-It is an ordinary `catalog/packages/parsing/` catalog package: no compiler parser
+It is an ordinary `catalog/packages/Capability/Parsing/` catalog package: no compiler parser
 rewrite, no compiler-internal AST as public API, no full Ken syntax reflection,
 and no `.ken.md` implementation work. A derived input such as a blanked
 `.ken.md` compiled view is only an offset-preserving view of the original

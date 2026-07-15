@@ -16,7 +16,7 @@ fn canonical_live_corpus_is_a_fixed_point() {
     let mut plain = Vec::new();
     collect(&repository.join("examples/rosetta"), ".ken", &mut plain);
     plain.push(
-        repository.join("catalog/packages/Capability/Verify/ProofErasureBoundaryChecker.ken"),
+        repository.join("catalog/packages/Tooling/Verification/ProofErasureBoundaryChecker.ken"),
     );
     literate.sort();
     plain.sort();
@@ -87,7 +87,7 @@ fn balanced_corpus_rejects_the_known_over_width_splay_shape() {
     let mut plain = Vec::new();
     collect(&repository.join("examples/rosetta"), ".ken", &mut plain);
     plain.push(
-        repository.join("catalog/packages/Capability/Verify/ProofErasureBoundaryChecker.ken"),
+        repository.join("catalog/packages/Tooling/Verification/ProofErasureBoundaryChecker.ken"),
     );
     literate.sort();
     plain.sort();

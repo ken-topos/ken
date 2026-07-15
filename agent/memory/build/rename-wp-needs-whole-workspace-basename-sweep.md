@@ -9,7 +9,7 @@ source: catalog-taxonomy-build retros (implementer evt_53erjje0r8vct, QA
 
 On `wp/catalog-taxonomy-build` (2026-07-10, the PascalCase catalog move, PR
 #403), `verify/proof_erasure_boundary_checker.ken` was renamed to
-`Capability/Verify/ProofErasureBoundaryChecker.ken`. The implementer swept every
+`Tooling/Verification/ProofErasureBoundaryChecker.ken`. The implementer swept every
 `include_str!` path and updated it; QA re-checked all 12 `include_str!` sites and
 walked the catalog tree. Both were thorough *within their scope* — and both
 missed `crates/ken-interp/tests/nc9_proof_erasure_boundary_checker.rs`'s

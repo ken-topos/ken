@@ -10,7 +10,7 @@ combinators and their laws. Kicked in the operator's autonomous window
 
 ## Extension point (grounded)
 
-Append to the existing **`catalog/packages/Data/Collections/Collections.ken`**
+Append to the existing **`catalog/packages/Data/Collections/Derived.ken`**
 (a plain `.ken` source, not `.ken.md`). The current List floor there —
 `list_append`, `nth`, `take`, `drop`, `map`, `filter`, `mem`, `length`, with the
 laws `take_drop_decomposition` / `map_length` / `length_take_min` — is the
@@ -66,7 +66,7 @@ equations. State plainly in the entry which laws each combinator carries.
 - **Zero `Axiom`/`postulate`/`sorry`** in any proved law. The reverse-involutive
   proof is real induction, not a papered hole.
 - **Outer-ring only** — `crates/ken-kernel`/`Cargo.lock` diff empty. Format the
-  file to match `Collections.ken`'s existing style.
+  file to match `Derived.ken`'s existing style.
 - **AC8 — discriminators flip** accept→reject on a wrong witness at the named law
   (e.g. a `reverse` that isn't involutive, or a `range` whose length law is off by
   one), asserted as the **specific** error variant, not bare `is_err()`.

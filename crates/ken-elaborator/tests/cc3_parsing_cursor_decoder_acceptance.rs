@@ -1,4 +1,4 @@
-//! CC3 (`Parsing.Cursor` + `Parsing.Decoder`) ordered shared-environment acceptance.
+//! CC3 (`Capability.Parsing.Cursor` + `Capability.Parsing.Decoder`) ordered shared-environment acceptance.
 
 use std::collections::BTreeSet;
 
@@ -6,14 +6,14 @@ use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
-const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Diagnostic/Core.ken.md");
-const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Cursor.ken.md");
-const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Decoder.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
+const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
+const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Cursor.ken.md");
+const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Decoder.ken.md");
 const PARSING_KEN_MD: &str =
     include_str!("../../../catalog/packages/Capability/Parsing/Parsing.ken.md");
 
@@ -26,7 +26,7 @@ fn dependency_env() -> ElabEnv {
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
         .expect("LawfulClasses must elaborate third");
     env.elaborate_ken_md_file(DIAGNOSTIC_KEN_MD)
-        .expect("Diagnostic.Core must elaborate fourth");
+        .expect("Capability.Diagnostics.Core must elaborate fourth");
     env
 }
 
@@ -121,7 +121,7 @@ fn neutralize_fixture_proofs(env: &ElabEnv, store: &mut EvalStore, names: &[&str
 fn ordered_dependency_closure_elaborates_cursor_then_decoder() {
     let mut env = dependency_env();
     env.elaborate_ken_md_file(CURSOR_KEN_MD)
-        .expect("Parsing.Cursor must elaborate after the core closure");
+        .expect("Capability.Parsing.Cursor must elaborate after the core closure");
     assert_transparent_globals(
         &env,
         &[
@@ -144,7 +144,7 @@ fn ordered_dependency_closure_elaborates_cursor_then_decoder() {
     );
 
     env.elaborate_ken_md_file(DECODER_KEN_MD)
-        .expect("Parsing.Decoder must elaborate after Parsing.Cursor");
+        .expect("Capability.Parsing.Decoder must elaborate after Capability.Parsing.Cursor");
     assert_transparent_globals(
         &env,
         &[
@@ -169,7 +169,7 @@ fn ordered_dependency_closure_elaborates_cursor_then_decoder() {
     );
 
     env.elaborate_ken_md_file(PARSING_KEN_MD)
-        .expect("Capability.Parsing must elaborate after Parsing.Decoder");
+        .expect("Capability.Parsing must elaborate after Capability.Parsing.Decoder");
     assert_transparent_globals(
         &env,
         &[
@@ -236,9 +236,9 @@ fn cc3_checked_code_has_zero_axiom_and_zero_trusted_base_delta() {
     let mut env = dependency_env();
     let before: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     env.elaborate_ken_md_file(CURSOR_KEN_MD)
-        .expect("Parsing.Cursor must elaborate");
+        .expect("Capability.Parsing.Cursor must elaborate");
     env.elaborate_ken_md_file(DECODER_KEN_MD)
-        .expect("Parsing.Decoder must elaborate");
+        .expect("Capability.Parsing.Decoder must elaborate");
     env.elaborate_ken_md_file(PARSING_KEN_MD)
         .expect("Capability.Parsing must elaborate");
     let after: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
@@ -390,9 +390,9 @@ fn repetition_progress_and_arg_locations_impl() {
 fn full_env() -> ElabEnv {
     let mut env = dependency_env();
     env.elaborate_ken_md_file(CURSOR_KEN_MD)
-        .expect("Parsing.Cursor must elaborate");
+        .expect("Capability.Parsing.Cursor must elaborate");
     env.elaborate_ken_md_file(DECODER_KEN_MD)
-        .expect("Parsing.Decoder must elaborate");
+        .expect("Capability.Parsing.Decoder must elaborate");
     env.elaborate_ken_md_file(PARSING_KEN_MD)
         .expect("Capability.Parsing must elaborate after Decoder");
     env

@@ -14,7 +14,7 @@ leads; the enclave supplies the spec/conformance half and the CV vote.)*
 Transcribes the **Architect's ruled effect-floor contract** (`evt_2sxd7pszs42af`,
 Deliverable 2). CP0 = the spec-prerequisite that makes the pure Bytes/text ops
 **total and safe** and retires the bogus placeholder primitives, so the Console
-+ FS floors rest on honest signatures and **CC2 (Text.Codec/ArgParse) can
++ FS floors rest on honest signatures and **CC2 (Data.Text.Codec/ArgParse) can
 standardize on the safe shapes.** This is *why CC2 is gated* — land CP0 first.
 
 Runs **in parallel with I-3, no shared-file churn:** **CP0 owns
@@ -61,7 +61,7 @@ Parsing package, Validation package, `examples/rosetta/read-file-lines`, CLI-E2E
 `fs_read_file_lines_flip`, and the `l6_acceptance` / `cat5_parsing` / `nc16`
 tests + the runtime lowering. **Sweep whole** — a missed consumer either fails to
 compile (safe) or silently relies on the old neutral behavior (unsafe). Land the
-safe sigs **before** Text.Codec/ArgParse (CC2) freeze the unsafe shapes.
+safe sigs **before** Data.Text.Codec/ArgParse (CC2) freeze the unsafe shapes.
 
 ## Deliverable C — spec + conformance reconcile (work-program `:109,:115`)
 

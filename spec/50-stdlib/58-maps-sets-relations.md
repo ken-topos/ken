@@ -5,7 +5,7 @@
 > `keys`/`values`), the **set algebra** that rides `Set = Map Unit`, and the
 > **relations frontier** (composition, converse, the property predicates, and
 > transitive closure). It **builds on the landed Map capstone** (`54`/`52`,
-> `catalog/packages/collections/map.ken`) — laws 1/2/3/5 + `to_list`-ordered are proved
+> `catalog/packages/Data/Collections/Map.ken.md`) — laws 1/2/3/5 + `to_list`-ordered are proved
 > there and are **reused, not re-derived** (frame §2 pin 2). It inherits `55`/
 > `57`'s lawful-class template: laws are `Ω` propositions **proved over the
 > landed carriers, zero `Axiom`, zero `trusted_base()` delta**, by the convoy
@@ -63,7 +63,7 @@ re-litigated:
    `Set` type alias is landed); the set-algebra laws ride that identity.
 5. **Surface spelling.** SURF-1's `view → const`/`fn`/`proc` migration is a
    **deferred build** — on `main` the lexer recognizes only `view`, and
-   `catalog/packages/collections/` is 100% `view`-spelled. **New CAT-4 ops are written
+   `catalog/packages/Data/Collections/` is 100% `view`-spelled. **New CAT-4 ops are written
    `view`**, matching every landed sibling; the migration re-spells them
    uniformly when SURF-1's build lands. (`Nat`'s successor is `Suc`, not `Succ`
    — `prelude.rs`, `data Nat = Zero | Suc Nat`.)

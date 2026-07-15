@@ -251,7 +251,7 @@ dissolve the ambient-vs-explicit tension.
 - **Shape (keyword `admits` — operator-chosen 2026-07-12; grammar to the
   enclave).** A bare `program` header (no name — MRES-4e) plus an `admits` list
   of package paths (reusing the MRES-2 dotted addressing): `program` / `admits
-  Core.LawfulClasses, Data.Collections.Map, …`. The **admission check** is a new
+  Core.Classes.LawfulClasses, Data.Collections.Map, …`. The **admission check** is a new
   elaborator gate:
   when `instance_search` resolves an instance, verify its defining package ∈ the
   program's admitted set; unadmitted ⇒ `UnadmittedInstance` error. It composes

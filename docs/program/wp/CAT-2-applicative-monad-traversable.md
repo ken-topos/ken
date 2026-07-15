@@ -49,7 +49,7 @@ force that decision twice.
 **This chapter is the contract.** The enclave brings it to team-ready rigor
 (law statements, instance proof obligations, discriminating conformance cases,
 the pinned design forks resolved); the Language build lands
-`catalog/packages/lawful-functors/` additions + any elaborator delta the enclave rules
+`catalog/packages/Core/Classes/` additions + any elaborator delta the enclave rules
 necessary. The build is **held for the GPT window** (credit-window strategy,
 `agent/MODELS.md`); this elaboration runs **now** on the T1 enclave.
 
@@ -395,7 +395,7 @@ capability**. **Two pointers to EXISTING open items**, neither invented here:
 
 ### E7 — Build sequencing (perishable)
 
-`.ken` source (`catalog/packages/lawful-functors/` additions) is a Language-build
+`.ken` source (`catalog/packages/Core/Classes/` additions) is a Language-build
 deliverable, **held for the GPT window**. CV's grounding confirms
 `map`/`bind`/`foldr`/`traverse` for `List`/`Option` are **not yet landed** — the
 instance-law conformance cases are **red-until-built** (the CAT-1 `Functor`-case

@@ -1,4 +1,4 @@
-# Map-build — implement the proved BST `Map k v` in `catalog/packages/collections` and retire the opaque primitive (VAL2 #8 / OQ-A)
+# Map-build — implement the proved BST `Map k v` in `catalog/packages/Data/Collections/Map.ken.md` and retire the opaque primitive (VAL2 #8 / OQ-A)
 
 **Steward frame → Team Foundation (build).** The spec is **already fully
 elaborated and on `main`** — `spec/50-stdlib/52-map.md` (the proved bare ordered
@@ -45,8 +45,8 @@ these:
 
 ## Mandated deliverable outline (each ends in a concrete, implementable choice)
 
-1. **Carrier + API** in `catalog/packages/collections/` (exact file path Foundation's to
-   fix — alongside the landed `List`/`Nat`; `collections.ken` exists). Implement
+1. **Carrier + API** in `catalog/packages/Data/Collections/` (exact file path Foundation's to
+   fix — alongside the landed `List`/`Nat`; `Derived.ken` exists). Implement
    the **7 operations exactly as specified in `52-map.md §4`**: `empty`,
    `insert`, `lookup`, `member`, `toList` (in-order, ascending), `fromList`,
    `fold` (ascending-key-order contract). All via **`declare_inductive` /

@@ -464,7 +464,7 @@ file, and back, without a lookup table.
   force a fixed depth.
 - **Leaf-or-namespace, never both.** A name at a given level is either a
   package (a `.ken`/`.ken.md` leaf file) or a Domain (a directory) — never
-  both at once (no `Data/Collections.ken` beside a `Data/Collections/`
+  both at once (no `Data/Sequence.ken` beside a `Data/Sequence/`
   directory).
 - **Module is path-inferred.** A file is an implicit module named by its path
   (`33-declarations.md §3.1`) — there is **no mandatory in-file `module A.B.C`
@@ -476,6 +476,6 @@ file, and back, without a lookup table.
   resolves. There is no disk loader yet (module path → file on disk is a
   named follow-on capability); within one compilation unit, dotted module
   refs already work, but a catalog entry that needs another package's helper
-  today still inlines it (the DS-1 pattern, `Core/EmptyDec.ken.md §6`), not
+  today still inlines it (the DS-1 pattern, `Core/Logic/EmptyDec.ken.md §6`), not
   imports it. State this plainly in any entry or guide passage that
   demonstrates the dotted syntax — don't imply cross-file import works.

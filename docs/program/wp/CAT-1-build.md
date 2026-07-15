@@ -3,7 +3,7 @@
 **Owner:** Language build team. **Branch:** `wp/CAT-1-build` (off `origin/main`).
 **Status:** Steward frame — **re-based onto `origin/main @ 5a780f8` post-SURF-1**
 (2026-07-05). **Base:** `origin/main @ 5a780f8` (CAT-1 elaboration + the landed
-`catalog/packages/lawful-functors/` value-level package + SURF-1's `const`/`fn`/`proc`
+`catalog/packages/Core/Classes/` value-level package + SURF-1's `const`/`fn`/`proc`
 migration).
 **Sequence:** first build of the catalog campaign (Track A, Language). **Blocks
 CAT-2 + CAT-3.** Runs in parallel with **CAT-4-build** (Runtime, independent).
@@ -26,7 +26,7 @@ this WP's `view`→`const`/`fn`." **That already happened** — SURF-1 merged
   every new declaration in `const`/`fn`/`proc`; do NOT use `view`** (it no longer
   lexes). `Functor`/`Foldable` law proofs and `map`/`fold` helpers are pure →
   `const`/`fn`.
-- `catalog/packages/lawful-functors/lawful_functors.ken` is **already migrated** to `fn`
+- `catalog/packages/Core/Classes/LawfulFunctors.ken.md` is **already migrated** to `fn`
   (Semigroup/Monoid over `List Nat` + `Bool`, proofs green). D2 = **keep it
   green** under the extension; no re-migration.
 - The bidirectional purity checker is live: a `fn` with a non-empty effect row,

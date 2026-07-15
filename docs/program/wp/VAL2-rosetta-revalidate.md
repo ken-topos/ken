@@ -34,7 +34,7 @@ re-derive list/string/sort ops.
    per its `KNOWN-GAP.md`; `A(3,4)` is too many calls at runtime).
 4. **`letter-frequency`** — `Map` ops landed as a package (#8). Fold over the
    input's `List Char` threading a `Map Char Nat` (insert-or-increment), then
-   `toList` + `catalog/packages/collections` compare for a sorted report. Reuse the
+   `toList` + `catalog/packages/Data/Collections/Derived.ken.md` compare for a sorted report. Reuse the
    landed `Map` — do not hand-roll association lists.
 5. **`accumulator-factory`** — `[State]` effect landed (#10, `5626038`). Use the
    **real hidden-state** form (closure over a `[State]` cell). **Do NOT** fake it
@@ -42,7 +42,7 @@ re-derive list/string/sort ops.
    that misrepresents what the task probes (language-qa confirms idiomatic).
 6. **`read-file-lines`** — `read_bytes` reduction landed (#9, FS/L6). Read bytes
    → `bytes_decode` → split on newlines → print each line. **Likely needs a small
-   `lines`/`splitOn` helper** riding the `catalog/packages/collections` floor — if that
+   `lines`/`splitOn` helper** riding the `catalog/packages/Data/Collections/Derived.ken.md` floor — if that
    helper is a non-trivial sub-build, flag it to Steward as a sub-task rather than
    forcing it in.
 
@@ -67,7 +67,7 @@ unchanged — this is an ergonomics rewrite, verify the value is identical).
 
 ## Guardrails
 - Examples are **surface programs** — kernel/`trusted_base` untouched; reuse
-  landed `catalog/packages/collections` + `catalog/packages/lawful-classes`, no re-derivation.
+  landed `catalog/packages/Data/Collections/Derived.ken.md` + `catalog/packages/Core/Classes/LawfulClasses.ken.md`, no re-derivation.
 - Keep the `natToDecimal` exponential-blowup steer-around (PASS/FAIL oracle
   strings) where the landed examples already use it.
 - **Lane:** Language. **After Phase 1** (`83f728a`) — done. Branch off
