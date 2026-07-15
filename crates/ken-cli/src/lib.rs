@@ -348,21 +348,21 @@ fn exit_status(
     success_id: ken_kernel::GlobalId,
     failure_id: ken_kernel::GlobalId,
 ) -> i32 {
-    match value {
-        ken_interp::EvalVal::Ctor { id, .. } if *id == success_id => 0,
-        ken_interp::EvalVal::Ctor { id, args, .. } if *id == failure_id => match args.first() {
-            Some(ken_interp::EvalVal::Int(0)) => 1,
-            Some(ken_interp::EvalVal::Int(code @ 1..=255)) => *code as i32,
-            _ => {
-                eprintln!("ken run: malformed ExitCode::Failure payload");
-                1
-            }
-        },
-        _ => {
-            eprintln!("ken run: entrypoint returned a malformed ExitCode");
-            1
+    let exit_code = match value {
+        ken_interp::EvalVal::Ctor { id, .. } if *id == success_id => {
+            ken_runtime::ProcessExitCode::Success
         }
+        ken_interp::EvalVal::Ctor { id, args, .. } if *id == failure_id => match args.first() {
+            Some(ken_interp::EvalVal::Int(code)) => ken_runtime::ProcessExitCode::Failure(*code),
+            _ => ken_runtime::ProcessExitCode::MalformedFailure,
+        },
+        _ => ken_runtime::ProcessExitCode::Malformed,
+    };
+    let mapped = ken_runtime::process_exit_status(exit_code);
+    if let Some(report) = mapped.trap_report {
+        eprintln!("ken run: {report}");
     }
+    mapped.status
 }
 
 fn lit_to_eval(

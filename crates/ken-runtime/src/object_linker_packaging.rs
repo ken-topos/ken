@@ -9,20 +9,19 @@
 use std::collections::BTreeSet;
 use std::fmt;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::platform_runtime_support::validate_entrypoint_metadata_payload;
 use crate::{
     emit_runtime_ir_object_with_cranelift, fnv1a_64, platform_runtime_support_report_hash,
     run_runtime_ir_report_with_cranelift, runtime_executable_entrypoint_package_hash,
-    CraneliftObjectArtifact, ExecutableRuntimeSupport, NativeDifferentialStage,
-    NativeRuntimeIrComparisonVerdict, NativeSeedEnvironment, PlatformRuntimeEvidenceFact,
-    PlatformRuntimeEvidenceLane, PlatformRuntimeSupportReport, RuntimeArtifactIdentity,
-    RuntimeExecutableEntrypointPackage, RuntimeGroundValue, RuntimeIrRunReport, RuntimeObservation,
-    RuntimeProgram, RuntimeSymbol, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND,
-    EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION, PLATFORM_RUNTIME_SUPPORT_KIND,
-    PLATFORM_RUNTIME_SUPPORT_VERSION,
+    CraneliftObjectArtifact, NativeDifferentialStage, NativeRuntimeIrComparisonVerdict,
+    NativeSeedEnvironment, PlatformRuntimeEvidenceFact, PlatformRuntimeEvidenceLane,
+    PlatformRuntimeSupportReport, RuntimeArtifactIdentity, RuntimeExecutableEntrypointPackage,
+    RuntimeExpr, RuntimeGroundValue, RuntimeIrRunReport, RuntimeObservation, RuntimeProgram,
+    RuntimeSymbol, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND, EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION,
+    PLATFORM_RUNTIME_SUPPORT_KIND, PLATFORM_RUNTIME_SUPPORT_VERSION,
 };
 
 pub const OBJECT_LINKER_PACKAGE_KIND: &str = "KenObjectLinkerExecutablePackage";
@@ -329,6 +328,59 @@ pub fn package_starter_executable_artifact_with_options(
     package.header.package_hash = object_linker_executable_package_hash(&package);
     validate_package_hash(&package)?;
     Ok(package)
+}
+
+/// Build the tested process-shaped native starter used by PX4 and later native
+/// lowering stages.
+///
+/// The produced artifact receives fresh OS argv, environment, and cwd on every
+/// invocation. It is a validated runtime artifact, never a proof surface.
+pub fn build_process_starter_executable_artifact(
+    entrypoint: &RuntimeExpr,
+    output_dir: impl AsRef<Path>,
+) -> Result<PathBuf, ObjectLinkerPackagingError> {
+    let options = ObjectLinkerPackagingOptions::starter_host();
+    let output_dir = output_dir.as_ref();
+    fs::create_dir_all(output_dir).map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::LinkerOrFinalizer,
+            "output_dir",
+            format!("could not create process starter output directory: {err}"),
+        )
+    })?;
+    let object =
+        crate::emit_process_entrypoint_object_with_cranelift(entrypoint, STARTER_ENTRY_SYMBOL)
+            .map_err(|err| {
+                packaging_error(
+                    ObjectLinkerPackagingStage::ObjectEmission,
+                    "process_cranelift_object",
+                    err.to_string(),
+                )
+            })?;
+    let object_path = output_dir.join(&options.object_relative_path);
+    fs::write(&object_path, object.object_bytes).map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::ObjectEmission,
+            "object_path",
+            format!("could not write process object artifact: {err}"),
+        )
+    })?;
+    let stub_path = output_dir.join(&options.stub_relative_path);
+    fs::write(&stub_path, process_starter_c_stub()).map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::LinkerOrFinalizer,
+            "stub_path",
+            format!("could not write process starter source: {err}"),
+        )
+    })?;
+    let executable_path = output_dir.join(&options.executable_relative_path);
+    link_starter_executable(
+        &options.linker_command,
+        &object_path,
+        &stub_path,
+        &executable_path,
+    )?;
+    Ok(executable_path)
 }
 
 pub fn object_linker_executable_package_hash(package: &ObjectLinkerExecutablePackage) -> u64 {
@@ -1099,7 +1151,140 @@ fn runtime_trap_code_tag(code: &crate::RuntimeTrapCode) -> &'static str {
 }
 
 fn starter_c_stub() -> &'static str {
-    "#include <stdio.h>\nextern long long ken_nc23_entrypoint(void);\nint main(void) {\n    long long value = ken_nc23_entrypoint();\n    printf(\"%lld\\n\", value);\n    return 0;\n}\n"
+    r#"#include <stdio.h>
+
+extern long long ken_nc23_entrypoint(const void *input);
+
+int main(void) {
+    long long value = ken_nc23_entrypoint(NULL);
+    printf("%lld\n", value);
+    return 0;
+}
+"#
+}
+
+pub(crate) fn process_starter_c_stub() -> &'static str {
+    r#"#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+struct KenBorrowedValue {
+    uint64_t kind;
+    uint64_t tag;
+    const void *data;
+    size_t len;
+};
+
+enum { KEN_BYTES = 1, KEN_CONSTRUCTOR = 2 };
+enum { KEN_PROCESS_INPUT = 1, KEN_NIL = 2, KEN_CONS = 3, KEN_PROD = 4 };
+
+struct KenArena {
+    struct KenBorrowedValue *values;
+    size_t next;
+    size_t capacity;
+};
+
+extern long long ken_nc23_entrypoint(const struct KenBorrowedValue *root);
+
+static int constructor(
+    struct KenArena *arena,
+    struct KenBorrowedValue *value,
+    uint64_t tag,
+    size_t arity
+) {
+    if (arity > arena->capacity - arena->next) return 0;
+    value->kind = KEN_CONSTRUCTOR;
+    value->tag = tag;
+    value->data = &arena->values[arena->next];
+    value->len = arity;
+    arena->next += arity;
+    return 1;
+}
+
+static void bytes(
+    struct KenBorrowedValue *value,
+    const unsigned char *data,
+    size_t len
+) {
+    value->kind = KEN_BYTES;
+    value->tag = 0;
+    value->data = data;
+    value->len = len;
+}
+
+static int arguments(
+    struct KenArena *arena,
+    struct KenBorrowedValue *value,
+    size_t index,
+    size_t count,
+    char **argv
+) {
+    for (; index < count; ++index) {
+        if (!constructor(arena, value, KEN_CONS, 2)) return 0;
+        struct KenBorrowedValue *fields = (struct KenBorrowedValue *)value->data;
+        bytes(&fields[0], (const unsigned char *)argv[index], strlen(argv[index]));
+        value = &fields[1];
+    }
+    return constructor(arena, value, KEN_NIL, 0);
+}
+
+static int environment(
+    struct KenArena *arena,
+    struct KenBorrowedValue *value,
+    size_t index,
+    size_t count,
+    char **envp
+) {
+    for (; index < count; ++index) {
+        char *separator = strchr(envp[index], '=');
+        if (separator == NULL || !constructor(arena, value, KEN_CONS, 2)) return 0;
+        struct KenBorrowedValue *fields = (struct KenBorrowedValue *)value->data;
+        if (!constructor(arena, &fields[0], KEN_PROD, 2)) return 0;
+        struct KenBorrowedValue *pair = (struct KenBorrowedValue *)fields[0].data;
+        bytes(&pair[0], (const unsigned char *)envp[index], (size_t)(separator - envp[index]));
+        bytes(&pair[1], (const unsigned char *)(separator + 1), strlen(separator + 1));
+        value = &fields[1];
+    }
+    return constructor(arena, value, KEN_NIL, 0);
+}
+
+int main(int argc, char **argv, char **envp) {
+    size_t argument_count = argc < 0 ? 0 : (size_t)argc;
+    size_t environment_count = 0;
+    while (envp[environment_count] != NULL) ++environment_count;
+    char *cwd = getcwd(NULL, 0);
+    if (cwd == NULL) return 1;
+    if (argument_count > (SIZE_MAX - 4) / 2 ||
+        environment_count > (SIZE_MAX - 4 - 2 * argument_count) / 4) {
+        free(cwd); return 1;
+    }
+    size_t capacity = 4 + 2 * argument_count + 4 * environment_count;
+    struct KenBorrowedValue *pool = calloc(capacity, sizeof(*pool));
+    if (pool == NULL) { free(cwd); return 1; }
+    struct KenArena arena = { .values = pool, .next = 1, .capacity = capacity };
+    struct KenBorrowedValue *root = &pool[0];
+    if (!constructor(&arena, root, KEN_PROCESS_INPUT, 3)) return 1;
+    struct KenBorrowedValue *fields = (struct KenBorrowedValue *)root->data;
+    if (!arguments(&arena, &fields[0], 0, argument_count, argv) ||
+        !environment(&arena, &fields[1], 0, environment_count, envp)) {
+        free(pool); free(cwd); return 1;
+    }
+    bytes(&fields[2], (const unsigned char *)cwd, strlen(cwd));
+    if (arena.next != arena.capacity) { free(pool); free(cwd); return 1; }
+    long long value = ken_nc23_entrypoint(root);
+    free(cwd);
+    free(pool);
+    if (value == -1) fputs("ken native trap: malformed borrowed process input\n", stderr);
+    else if (value == -2) fputs("ken native trap: entrypoint returned a malformed ExitCode\n", stderr);
+    else if (value == -3) fputs("ken native trap: malformed ExitCode::Failure payload\n", stderr);
+    else if (value == -4) fputs("ken native trap: explicit entry trap\n", stderr);
+    else if (value < 0) fputs("ken native trap: unknown terminal sentinel\n", stderr);
+    if (value < 0) return 1;
+    return (int)value;
+}
+"#
 }
 
 fn executable_name(stem: &str) -> String {
@@ -1138,9 +1323,9 @@ mod tests {
         ErasedExecutableCore, ExecutableArgumentPackaging, ExecutableArgumentShape,
         ExecutableDependencyClosure, ExecutableEntrypointPackageMetadata,
         ExecutableEntrypointTargetKind, ExecutableEntrypointVerdict, ExecutableReportContract,
-        ExecutableResultObservation, ExecutableResultShape, ExecutableTrapContract,
-        ExecutableTrapShape, RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr,
-        RuntimeIrProgramReport, RuntimeIrSeedEnvironment, RuntimeLowerabilityStatus,
+        ExecutableResultObservation, ExecutableResultShape, ExecutableRuntimeSupport,
+        ExecutableTrapContract, ExecutableTrapShape, RuntimeDeclaration, RuntimeDeclarationKind,
+        RuntimeExpr, RuntimeIrProgramReport, RuntimeIrSeedEnvironment, RuntimeLowerabilityStatus,
         RuntimeMetadata, RuntimePartiality, RuntimePrimitive, RuntimeSymbolMetadata, RuntimeTrap,
         RuntimeTrapCode, RuntimeValue,
     };
@@ -1331,6 +1516,305 @@ mod tests {
             package.toolchain.whole_compiler_proof,
             ObjectLinkerEvidenceFact::Unavailable { .. }
         ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn same_process_artifact_observes_fresh_byte_exact_os_input() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+        use std::process::Command;
+
+        let output_dir = temp_output_dir("px4-process-input");
+        let cwd_one = output_dir.join(OsString::from_vec(vec![b'c', b'w', b'd', 0xfe]));
+        let cwd_two = output_dir.join(OsString::from_vec(vec![b'c', b'w', b'd', 0xfd]));
+        fs::create_dir_all(&cwd_one).expect("first cwd exists");
+        fs::create_dir_all(&cwd_two).expect("second cwd exists");
+        let option_none = "ctor:fixture::Option::None";
+        let option_some = "ctor:fixture::Option::Some";
+        let byte_at = |bytes: RuntimeExpr, index: i64| RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::PrimitiveCall {
+                primitive: RuntimePrimitive {
+                    symbol: "bytes_at".to_string(),
+                    partiality: RuntimePartiality::SafeOption {
+                        none: option_none.to_string(),
+                        some: option_some.to_string(),
+                        obligation: Some("obl:px4.bytes_at.bounds".to_string()),
+                    },
+                },
+                args: vec![bytes, RuntimeExpr::Value(RuntimeValue::Int(index))],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: option_none.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: option_some.to_string(),
+                    binders: 1,
+                    body: RuntimeExpr::Var(0),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "invalid borrowed bytes_at result".to_string(),
+            },
+        };
+        let argv_byte = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: crate::LIST_CONS_CONSTRUCTOR.to_string(),
+                binders: 2,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(1)),
+                    cases: vec![crate::RuntimeMatchCase {
+                        constructor: crate::LIST_CONS_CONSTRUCTOR.to_string(),
+                        binders: 2,
+                        body: byte_at(RuntimeExpr::Var(0), 0),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "missing process argument".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "missing argv[0]".to_string(),
+            },
+        };
+        let environment_byte = |field: u32| RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(1)),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: crate::LIST_CONS_CONSTRUCTOR.to_string(),
+                binders: 2,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![crate::RuntimeMatchCase {
+                        constructor: crate::PROD_CONSTRUCTOR.to_string(),
+                        binders: 2,
+                        body: byte_at(RuntimeExpr::Var(field), 0),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "environment head is not Prod".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "environment is empty".to_string(),
+            },
+        };
+        let equals = |value: RuntimeExpr, expected: i64| RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "eq_int".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![value, RuntimeExpr::Value(RuntimeValue::Int(expected))],
+        };
+        let cwd_length = RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "bytes_length".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![RuntimeExpr::Var(2)],
+        };
+        let guarded = RuntimeExpr::If {
+            scrutinee: Box::new(equals(argv_byte, 0xff)),
+            then_expr: Box::new(RuntimeExpr::If {
+                scrutinee: Box::new(equals(environment_byte(0), i64::from(b'K'))),
+                then_expr: Box::new(RuntimeExpr::If {
+                    scrutinee: Box::new(equals(
+                        cwd_length,
+                        cwd_one.as_os_str().as_bytes().len() as i64,
+                    )),
+                    then_expr: Box::new(RuntimeExpr::If {
+                        scrutinee: Box::new(equals(
+                            byte_at(
+                                RuntimeExpr::Var(2),
+                                cwd_one.as_os_str().as_bytes().len() as i64 - 1,
+                            ),
+                            i64::from(0xfe_u8),
+                        )),
+                        then_expr: Box::new(environment_byte(1)),
+                        else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                    }),
+                    else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                }),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+            }),
+            else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+        };
+        let entry = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: crate::PROCESS_INPUT_CONSTRUCTOR.to_string(),
+                binders: 3,
+                body: RuntimeExpr::Construct {
+                    constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+                    args: vec![guarded],
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "entry argument is not ProcessInput".to_string(),
+            },
+        };
+        let executable = build_process_starter_executable_artifact(&entry, &output_dir)
+            .expect("process starter links");
+        assert!(!process_starter_c_stub().contains("fnv"));
+        assert!(!process_starter_c_stub().contains("discriminator"));
+
+        let argument_one = OsString::from_vec(vec![0xff, b'a', b'1']);
+        let key_one = OsString::from_vec(vec![b'K', 0xfd]);
+        let retired = |value: u8| {
+            let input = crate::NativeProcessInput {
+                arguments: vec![
+                    executable.as_os_str().as_bytes().to_vec(),
+                    argument_one.as_os_str().as_bytes().to_vec(),
+                ],
+                environment: vec![(key_one.as_os_str().as_bytes().to_vec(), vec![value])],
+                working_directory: cwd_one.as_os_str().as_bytes().to_vec(),
+            };
+            let mut bytes = Vec::new();
+            bytes.extend_from_slice(&(input.arguments.len() as u64).to_le_bytes());
+            for argument in &input.arguments {
+                bytes.extend_from_slice(&(argument.len() as u64).to_le_bytes());
+                bytes.extend_from_slice(argument);
+            }
+            bytes.extend_from_slice(&(input.environment.len() as u64).to_le_bytes());
+            for (key, value) in &input.environment {
+                bytes.extend_from_slice(&(key.len() as u64).to_le_bytes());
+                bytes.extend_from_slice(key);
+                bytes.extend_from_slice(&(value.len() as u64).to_le_bytes());
+                bytes.extend_from_slice(value);
+            }
+            bytes.extend_from_slice(&(input.working_directory.len() as u64).to_le_bytes());
+            bytes.extend_from_slice(&input.working_directory);
+            crate::fnv1a_64(&bytes) % 125 + 1
+        };
+        let (first_byte, second_byte) = (128u8..=255)
+            .flat_map(|first| ((first + 1)..=255).map(move |second| (first, second)))
+            .find(|(first, second)| retired(*first) == retired(*second))
+            .expect("retired 125-value discriminator has a non-UTF-8 collision");
+        let value_one = OsString::from_vec(vec![first_byte]);
+        let output_one = Command::new(&executable)
+            .arg(&argument_one)
+            .env_clear()
+            .env(&key_one, &value_one)
+            .current_dir(&cwd_one)
+            .output()
+            .expect("first process invocation runs");
+        let argument_two = argument_one.clone();
+        let value_two = OsString::from_vec(vec![second_byte]);
+        let output_two = Command::new(&executable)
+            .arg(&argument_two)
+            .env_clear()
+            .env(&key_one, &value_two)
+            .current_dir(&cwd_one)
+            .output()
+            .expect("second process invocation runs");
+        let wrong_cwd = Command::new(&executable)
+            .arg(&argument_one)
+            .env_clear()
+            .env(&key_one, &value_one)
+            .current_dir(&cwd_two)
+            .output()
+            .expect("cwd discriminator invocation runs");
+        let wrong_argument = Command::new(&executable)
+            .arg("utf8")
+            .env_clear()
+            .env(&key_one, &value_one)
+            .current_dir(&cwd_one)
+            .output()
+            .expect("argv discriminator invocation runs");
+        let wrong_key = Command::new(&executable)
+            .arg(&argument_one)
+            .env_clear()
+            .env("X", &value_one)
+            .current_dir(&cwd_one)
+            .output()
+            .expect("environment-key discriminator invocation runs");
+        assert_eq!(retired(first_byte), retired(second_byte));
+        assert_eq!(output_one.status.code(), Some(i32::from(first_byte)));
+        assert_eq!(output_two.status.code(), Some(i32::from(second_byte)));
+        assert_eq!(wrong_cwd.status.code(), Some(1));
+        assert_eq!(wrong_argument.status.code(), Some(1));
+        assert_eq!(wrong_key.status.code(), Some(1));
+
+        fs::remove_dir_all(output_dir).expect("process fixture is removed");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn process_artifact_maps_exitcode_and_reports_terminal_traps() {
+        let run = |name: &str, entry: RuntimeExpr| {
+            let output_dir = temp_output_dir(name);
+            let executable = build_process_starter_executable_artifact(&entry, &output_dir)
+                .expect("process terminal fixture links");
+            let output = Command::new(&executable)
+                .env_clear()
+                .output()
+                .expect("process terminal fixture runs");
+            fs::remove_dir_all(output_dir).expect("terminal fixture is removed");
+            output
+        };
+        let success = || RuntimeExpr::Construct {
+            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+            args: Vec::new(),
+        };
+        let failure = |code: RuntimeExpr| RuntimeExpr::Construct {
+            constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+            args: vec![code],
+        };
+
+        assert_eq!(run("px4-success", success()).status.code(), Some(0));
+        assert_eq!(
+            run(
+                "px4-failure-zero",
+                failure(RuntimeExpr::Value(RuntimeValue::Int(0))),
+            )
+            .status
+            .code(),
+            Some(1)
+        );
+        assert_eq!(
+            run(
+                "px4-failure-255",
+                failure(RuntimeExpr::Value(RuntimeValue::Int(255))),
+            )
+            .status
+            .code(),
+            Some(255)
+        );
+
+        let malformed = run(
+            "px4-malformed-exitcode",
+            RuntimeExpr::Value(RuntimeValue::Int(0)),
+        );
+        assert_eq!(malformed.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&malformed.stderr)
+            .contains("entrypoint returned a malformed ExitCode"));
+
+        let malformed_failure = run(
+            "px4-malformed-failure",
+            failure(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        );
+        assert_eq!(malformed_failure.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&malformed_failure.stderr)
+            .contains("malformed ExitCode::Failure payload"));
+
+        let trapped = run(
+            "px4-explicit-trap",
+            RuntimeExpr::Trap(RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "process object trap fixture".to_string(),
+            }),
+        );
+        assert_eq!(trapped.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&trapped.stderr).contains("explicit entry trap"));
     }
 
     #[test]

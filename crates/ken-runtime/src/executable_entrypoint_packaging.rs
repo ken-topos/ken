@@ -86,6 +86,11 @@ pub struct ExecutableArgumentPackaging {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecutableArgumentShape {
     ClosedNullary,
+    ProcessInput {
+        arguments: Vec<Vec<u8>>,
+        environment: Vec<(Vec<u8>, Vec<u8>)>,
+        working_directory: Vec<u8>,
+    },
     UnsupportedRuntimeArguments {
         parameter_count: usize,
     },
@@ -356,12 +361,12 @@ fn validate_entrypoint_closed(
     }
     if !matches!(
         entrypoint.argument_packaging.shape,
-        ExecutableArgumentShape::ClosedNullary
+        ExecutableArgumentShape::ClosedNullary | ExecutableArgumentShape::ProcessInput { .. }
     ) {
         return Err(packaging_error(
             ExecutableEntrypointPackagingStage::EntrypointClosed,
             "argument_packaging",
-            "runtime executable packaging only accepts closed nullary entrypoints in v0",
+            "runtime executable packaging only accepts closed nullary or process-shaped entrypoints",
         ));
     }
     if !matches!(
@@ -649,6 +654,23 @@ fn push_dependency_closure(bytes: &mut Vec<u8>, closure: &ExecutableDependencyCl
 fn push_argument_packaging(bytes: &mut Vec<u8>, packaging: &ExecutableArgumentPackaging) {
     match &packaging.shape {
         ExecutableArgumentShape::ClosedNullary => push_len_str(bytes, "closed_nullary"),
+        ExecutableArgumentShape::ProcessInput {
+            arguments,
+            environment,
+            working_directory,
+        } => {
+            push_len_str(bytes, "process_input");
+            push_len_str(bytes, &arguments.len().to_string());
+            for argument in arguments {
+                push_len_bytes(bytes, argument);
+            }
+            push_len_str(bytes, &environment.len().to_string());
+            for (key, value) in environment {
+                push_len_bytes(bytes, key);
+                push_len_bytes(bytes, value);
+            }
+            push_len_bytes(bytes, working_directory);
+        }
         ExecutableArgumentShape::UnsupportedRuntimeArguments { parameter_count } => {
             push_len_str(bytes, "unsupported_runtime_arguments");
             push_len_str(bytes, &parameter_count.to_string());
@@ -721,6 +743,11 @@ fn push_lane(bytes: &mut Vec<u8>, lane: &ExecutableEntrypointUnavailableLane) {
 fn push_len_str(bytes: &mut Vec<u8>, value: &str) {
     bytes.extend_from_slice(&(value.len() as u64).to_le_bytes());
     bytes.extend_from_slice(value.as_bytes());
+}
+
+fn push_len_bytes(bytes: &mut Vec<u8>, value: &[u8]) {
+    bytes.extend_from_slice(&(value.len() as u64).to_le_bytes());
+    bytes.extend_from_slice(value);
 }
 
 fn push_field(out: &mut String, name: &str, value: &str) {
@@ -904,6 +931,36 @@ mod tests {
             package.native_artifact_status,
             ExecutableNativeArtifactStatus::Unavailable { .. }
         ));
+    }
+
+    #[test]
+    fn process_entrypoint_packaging_binds_raw_argv_environment_and_cwd() {
+        let program = pure_program();
+        let (report, contract) = runtime_contract(&program);
+        let mut entrypoint = entrypoint_for(&program);
+        entrypoint.argument_packaging = ExecutableArgumentPackaging {
+            shape: ExecutableArgumentShape::ProcessInput {
+                arguments: vec![b"ken".to_vec(), vec![0xff, 0x00]],
+                environment: vec![(vec![0xfe], vec![0xfd])],
+                working_directory: vec![b'/', 0xfc],
+            },
+            evidence_source: "raw process bytes staged by native runtime init".to_string(),
+        };
+        entrypoint.metadata_identity = executable_entrypoint_metadata_hash(&entrypoint);
+
+        let package = executable_entrypoint_package_for_runtime_contract(
+            &program,
+            &report,
+            &contract,
+            entrypoint,
+            "ken-runtime process packaging test",
+        )
+        .expect("process-shaped entrypoint package materializes");
+        assert!(matches!(
+            package.entrypoint.argument_packaging.shape,
+            ExecutableArgumentShape::ProcessInput { .. }
+        ));
+        assert_ne!(package.header.package_hash, 0);
     }
 
     #[test]
