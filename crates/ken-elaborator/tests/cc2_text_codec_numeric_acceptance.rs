@@ -259,13 +259,17 @@ fn bijection_prerequisite_is_the_single_separately_homed_assumption() {
     let extracted = ken_elaborator::literate::extract_ken_md(STRING_BIJECTION_KEN_MD)
         .expect("StringBijection source must extract");
     assert_eq!(
-        extracted.source.matches("Axiom").count(),
+        extracted
+            .source
+            .lines()
+            .filter(|line| line.starts_with("axiom "))
+            .count(),
         1,
         "the prerequisite must contain exactly one named assumption"
     );
     assert!(extracted
         .source
-        .contains("lemma string_to_list_char_retraction"));
+        .contains("axiom string_to_list_char_retraction"));
     assert!(extracted
         .source
         .contains("lemma string_to_list_char_injective"));

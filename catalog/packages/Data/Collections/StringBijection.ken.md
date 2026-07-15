@@ -10,9 +10,8 @@ lawful String keys consume.
 The assumption is explicit and unique. It is not minted in a Text package.
 
 ```ken
-lemma string_to_list_char_retraction
-    : (text : String) → Equal String (list_char_to_string (string_to_list_char text)) text =
-  Axiom
+axiom string_to_list_char_retraction
+    : (text : String) → Equal String (list_char_to_string (string_to_list_char text)) text
 
 lemma string_to_list_char_injective
       (left : String)

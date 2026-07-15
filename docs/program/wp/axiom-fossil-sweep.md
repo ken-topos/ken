@@ -7,8 +7,9 @@ spec-guaranteed mechanical sugar swap, and QA's trusted-base-invariance check
 postulate-ledger delta, STOP and route to the Architect before proceeding — a
 non-empty delta would mean the sugar is not actually equivalent (a spec-vs-impl
 gap), not a catalog edit.
-**Size:** S (3 source sites in 2 files + a formatter re-run; the weight is the
-trust-invariance verification, not the edit).
+**Size:** S (3 source sites in 2 files + 2 coupled test-oracle files + this
+frame sync + a formatter re-run; the weight is the trust-invariance
+verification, not the edit).
 **Branch:** `wp/axiom-fossil-sweep`, cut fresh from `origin/main` at kickoff.
 **CI:** ⛔ FULL CI — touches `catalog/` (never `--doc-only`).
 **Source:** operator decision 2026-07-14 (the `lemma = Axiom` → `axiom`
@@ -93,12 +94,18 @@ current source):
    Nothing else in either file changes by hand.
 3. **Re-format** — run `ken fmt` over the catalog (or at least the two edited
    files); commit the formatter's output. Only `proof-techniques.ken.md` and
-   `StringBijection.ken.md` may change; every other catalog file must remain
-   byte-identical (they are already fixed points from the kenfmt WP).
+   `StringBijection.ken.md` may change under `catalog/`; every other catalog
+   file must remain byte-identical (they are already fixed points from the
+   kenfmt WP).
 4. **Trust-invariance evidence** — capture the trusted-base / postulate ledger
    for the two files (or the whole catalog) **before and after** and show the
    diff is empty: same postulate set, same audit labels, same `Axiom`/
    `declare_postulate` count. This is the semantic gate (AC3).
+5. **Coupled test-oracle migration** — inventory both retired-spelling
+   assertions and static declaration-form enumerations across the complete
+   test/fixture/golden population. Update only the coupled CC2 source-spelling
+   assertions and add only `"axiom"` to kenfmt's top-level declaration-prefix
+   oracle; preserve the exact-one separately-homed-assumption invariant.
 
 ## Acceptance criteria (testable)
 
@@ -117,14 +124,20 @@ current source):
 - **AC4** — the reflowed catalog is a **fixed point**: `ken fmt` run again is a
   no-op, and the strict frozen-corpus gate is green on the migrated corpus (the
   `axiom` decls round-trip stably).
-- **AC5** — scope: the only changed files are `proof-techniques.ken.md` and
-  `StringBijection.ken.md`; **zero** `crates/**`, grammar, spec, or other
-  catalog change. No `--doc-only` (touches `catalog/`).
+- **AC5** — scope: exactly five changed files: this frame; the two catalog
+  sources above; and the coupled test-oracle files
+  `cc2_text_codec_numeric_acceptance.rs` and `kenfmt_c_capstone.rs`. The only
+  `crates/**` changes are assertions that encode the retired spelling and the
+  static top-level declaration-form enumeration that must include `axiom`;
+  **zero production-source `crates/`**, grammar, spec, or other catalog change.
+  No `--doc-only` (touches `catalog/`).
 
 ## Do-not guards
 
 - Do **not** touch the 4 `Core/LawfulClasses.ken.md` instance-field `= Axiom`
   sites, any prose `\`Axiom\``, or any `Axiom` used as an expression body.
+- Do **not** change production `crates/**` or any test beyond the two inventoried
+  coupled oracle files.
 - Do **not** hand-lay-out the `axiom` decls — the formatter owns layout; you run
   it.
 - Do **not** change the type `T` at any site, or any other declaration in either
