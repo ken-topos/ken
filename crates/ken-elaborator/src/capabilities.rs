@@ -15,9 +15,6 @@
 //!   audit-record emission are DEFERRED to `40-runtime`/`Ward`.
 
 use std::fmt;
-#[cfg(unix)]
-use std::os::fd::{AsRawFd, OwnedFd};
-use std::sync::Arc;
 
 use ken_kernel::{declare_postulate, GlobalEnv, Level, Term};
 
@@ -95,16 +92,14 @@ pub enum SymlinkPolicy {
 /// Neither variant contains path bytes.
 #[derive(Clone)]
 pub enum FsHandle {
-    #[cfg(unix)]
-    Posix(Arc<OwnedFd>),
+    Posix(ken_host::RootedHandle),
     Virtual(u64),
 }
 
 impl fmt::Debug for FsHandle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[cfg(unix)]
-            Self::Posix(fd) => f.debug_tuple("Posix").field(&fd.as_raw_fd()).finish(),
+            Self::Posix(handle) => f.debug_tuple("Posix").field(handle).finish(),
             Self::Virtual(id) => f.debug_tuple("Virtual").field(id).finish(),
         }
     }
@@ -113,8 +108,7 @@ impl fmt::Debug for FsHandle {
 impl PartialEq for FsHandle {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            #[cfg(unix)]
-            (Self::Posix(left), Self::Posix(right)) => left.as_raw_fd() == right.as_raw_fd(),
+            (Self::Posix(left), Self::Posix(right)) => left == right,
             (Self::Virtual(left), Self::Virtual(right)) => left == right,
             #[allow(unreachable_patterns)]
             _ => false,

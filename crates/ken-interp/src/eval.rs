@@ -23,15 +23,11 @@
 //!   programs never reach this per canonicity).
 
 use std::collections::{BTreeMap, HashMap};
-use std::ffi::{CString, OsString};
-use std::io::{self, IsTerminal, Read, Seek, SeekFrom, Write};
-#[cfg(target_os = "linux")]
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-use std::path::PathBuf;
+use std::io::{self, IsTerminal, Read, Write};
 use std::rc::Rc;
-use std::sync::Once;
 
 use ken_elaborator::capabilities;
+use ken_host::{OpenRequest as HostOpenRequest, PathComponent, RemoveKind, RootedHandle};
 use ken_kernel::env::{Decl, GlobalEnv, PrimReduction};
 use ken_kernel::term::{GlobalId, Level, Term};
 use ken_runtime::{InternResult, Sign as RtSign, Store, Value as RtValue};
@@ -2321,149 +2317,34 @@ pub trait HostHandler {
     ) -> io::Result<()>;
 }
 
-#[cfg(unix)]
-fn os_string_bytes(value: OsString) -> io::Result<Vec<u8>> {
-    use std::os::unix::ffi::OsStringExt;
-    Ok(value.into_vec())
-}
-
-#[cfg(not(unix))]
-fn os_string_bytes(value: OsString) -> io::Result<Vec<u8>> {
-    value
-        .into_string()
-        .map(String::into_bytes)
-        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
-}
-
-fn metadata_kind(metadata: &std::fs::Metadata) -> HostFileKind {
-    file_type_kind(&metadata.file_type())
-}
-
-fn file_type_kind(file_type: &std::fs::FileType) -> HostFileKind {
-    if file_type.is_file() {
-        HostFileKind::File
-    } else if file_type.is_dir() {
-        HostFileKind::Directory
-    } else if file_type.is_symlink() {
-        HostFileKind::Symlink
-    } else {
-        HostFileKind::Other
-    }
-}
-
 #[cfg(any(test, not(target_os = "linux")))]
 fn host_abi_unsupported() -> io::Error {
     io::Error::from(io::ErrorKind::Unsupported)
 }
 
 #[cfg(target_os = "linux")]
-const O_RDONLY_KEN: i32 = 0;
-#[cfg(target_os = "linux")]
-const O_WRONLY_KEN: i32 = 1;
-#[cfg(target_os = "linux")]
-const O_RDWR_KEN: i32 = 2;
-#[cfg(target_os = "linux")]
-const O_CREAT_KEN: i32 = 0o100;
-#[cfg(target_os = "linux")]
-const O_EXCL_KEN: i32 = 0o200;
-#[cfg(target_os = "linux")]
-const O_TRUNC_KEN: i32 = 0o1000;
-#[cfg(target_os = "linux")]
-const O_APPEND_KEN: i32 = 0o2000;
-#[cfg(target_os = "linux")]
-const O_DIRECTORY_KEN: i32 = 0o200000;
-#[cfg(target_os = "linux")]
-const O_NOFOLLOW_KEN: i32 = 0o400000;
-#[cfg(target_os = "linux")]
-const O_CLOEXEC_KEN: i32 = 0o2000000;
-#[cfg(target_os = "linux")]
-const AT_REMOVEDIR_KEN: i32 = 0x200;
-
-#[cfg(target_os = "linux")]
-unsafe extern "C" {
-    fn openat(dirfd: i32, pathname: *const std::os::raw::c_char, flags: i32, mode: u32) -> i32;
-    fn mkdirat(dirfd: i32, pathname: *const std::os::raw::c_char, mode: u32) -> i32;
-    fn unlinkat(dirfd: i32, pathname: *const std::os::raw::c_char, flags: i32) -> i32;
-    fn renameat(
-        olddirfd: i32,
-        oldpath: *const std::os::raw::c_char,
-        newdirfd: i32,
-        newpath: *const std::os::raw::c_char,
-    ) -> i32;
-    fn readlinkat(
-        dirfd: i32,
-        pathname: *const std::os::raw::c_char,
-        buf: *mut std::os::raw::c_char,
-        bufsiz: usize,
-    ) -> isize;
-}
-
-#[cfg(target_os = "linux")]
-fn c_component(component: &[u8]) -> io::Result<CString> {
-    if component.is_empty() || component == b"." || component == b".." || component.contains(&b'/')
-    {
-        return Err(io::Error::from(io::ErrorKind::InvalidInput));
-    }
-    CString::new(component).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
-}
-
-#[cfg(target_os = "linux")]
 fn openat_handle(
-    parent: &std::sync::Arc<OwnedFd>,
+    parent: &RootedHandle,
     leaf: &[u8],
-    flags: i32,
-) -> io::Result<std::sync::Arc<OwnedFd>> {
-    let leaf = c_component(leaf)?;
-    // SAFETY: `leaf` is NUL-terminated, `parent` owns a live descriptor, and
-    // successful `openat` transfers a new owned descriptor to Rust.
-    let fd = unsafe {
-        openat(
-            parent.as_raw_fd(),
-            leaf.as_ptr(),
-            flags | O_CLOEXEC_KEN,
-            0o666,
-        )
-    };
-    if fd < 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        // SAFETY: `fd` is newly returned by `openat` and uniquely owned here.
-        Ok(std::sync::Arc::new(unsafe { OwnedFd::from_raw_fd(fd) }))
-    }
+    request: HostOpenRequest,
+) -> io::Result<RootedHandle> {
+    Ok(ken_host::open_at(
+        parent,
+        &PathComponent::new(leaf)?,
+        request,
+    )?)
 }
 
 #[cfg(target_os = "linux")]
-fn readlinkat_bytes(parent: &std::sync::Arc<OwnedFd>, leaf: &[u8]) -> io::Result<Vec<u8>> {
-    let leaf = c_component(leaf)?;
-    let mut bytes = vec![0u8; 4096];
-    // SAFETY: buffers are live for the call and `leaf` is NUL-terminated.
-    let count = unsafe {
-        readlinkat(
-            parent.as_raw_fd(),
-            leaf.as_ptr(),
-            bytes.as_mut_ptr().cast(),
-            bytes.len(),
-        )
-    };
-    if count < 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        bytes.truncate(count as usize);
-        Ok(bytes)
-    }
+fn readlinkat_bytes(parent: &RootedHandle, leaf: &[u8]) -> io::Result<Vec<u8>> {
+    Ok(ken_host::readlink_at(parent, &PathComponent::new(leaf)?)?)
 }
 
-#[cfg(target_os = "linux")]
-fn posix_file(handle: &std::sync::Arc<OwnedFd>) -> io::Result<std::fs::File> {
-    Ok(std::fs::File::from(handle.as_ref().try_clone()?))
-}
-
-/// Real process stdio handler. Rust binaries already avoid terminating on a
-/// broken pipe on supported platforms; the explicit mask pins the ABI rule at
-/// the driver boundary as well.
+/// Real process stdio handler. Ken's supported standard-Rust binary entrypoint
+/// inherits Rust's pre-`main` SIGPIPE-ignore contract, so writes report EPIPE.
 pub struct PosixHost {
     #[cfg(target_os = "linux")]
-    root: std::sync::Arc<OwnedFd>,
+    root: RootedHandle,
 }
 
 impl PosixHost {
@@ -2472,13 +2353,11 @@ impl PosixHost {
     }
 
     pub fn new_at(path: impl AsRef<std::path::Path>) -> Self {
-        mask_sigpipe();
         #[cfg(target_os = "linux")]
         {
-            let file = std::fs::File::open(path).expect("open filesystem capability root");
-            Self {
-                root: std::sync::Arc::new(file.into()),
-            }
+            let path = ken_host::RootPath::new(path).expect("validate filesystem capability root");
+            let root = ken_host::open_root(&path).expect("open filesystem capability root");
+            Self { root }
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -2490,13 +2369,10 @@ impl PosixHost {
     pub fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap {
         #[cfg(target_os = "linux")]
         {
-            use std::os::unix::fs::MetadataExt;
-            let metadata = posix_file(&self.root)
-                .and_then(|file| file.metadata())
-                .expect("stat process working directory");
+            let metadata = ken_host::metadata(&self.root).expect("stat process working directory");
             let identity = capabilities::FsIdentity::Posix {
-                device: metadata.dev(),
-                inode: metadata.ino(),
+                device: metadata.identity.device,
+                inode: metadata.identity.inode,
             };
             let rights = if authority == capabilities::AUTH_FULL {
                 capabilities::RightSet::ALL
@@ -2533,15 +2409,14 @@ impl PosixHost {
     ) -> io::Result<capabilities::Cap> {
         #[cfg(target_os = "linux")]
         {
-            use std::os::unix::fs::MetadataExt;
             if relative_root.starts_with(b"/") {
                 return Err(io::Error::from(io::ErrorKind::InvalidInput));
             }
-            let root_metadata = posix_file(&self.root)?.metadata()?;
+            let root_metadata = ken_host::metadata(&self.root)?;
             let mut handle = self.root.clone();
             let mut lineage = vec![capabilities::FsIdentity::Posix {
-                device: root_metadata.dev(),
-                inode: root_metadata.ino(),
+                device: root_metadata.identity.device,
+                inode: root_metadata.identity.inode,
             }];
             for component in relative_root.split(|byte| *byte == b'/') {
                 if component.is_empty() || component == b"." {
@@ -2550,15 +2425,11 @@ impl PosixHost {
                 if component == b".." {
                     return Err(io::Error::from(io::ErrorKind::InvalidInput));
                 }
-                handle = openat_handle(
-                    &handle,
-                    component,
-                    O_RDONLY_KEN | O_DIRECTORY_KEN | O_NOFOLLOW_KEN,
-                )?;
-                let metadata = posix_file(&handle)?.metadata()?;
+                handle = openat_handle(&handle, component, HostOpenRequest::ReadDirectory)?;
+                let metadata = ken_host::metadata(&handle)?;
                 lineage.push(capabilities::FsIdentity::Posix {
-                    device: metadata.dev(),
-                    inode: metadata.ino(),
+                    device: metadata.identity.device,
+                    inode: metadata.identity.inode,
                 });
             }
             Ok(capabilities::Cap::mint_scoped(
@@ -2589,7 +2460,7 @@ impl Default for PosixHost {
 
 impl HostHandler for PosixHost {
     #[cfg(target_os = "linux")]
-    type Handle = std::sync::Arc<OwnedFd>;
+    type Handle = RootedHandle;
     #[cfg(not(target_os = "linux"))]
     type Handle = u64;
 
@@ -2618,7 +2489,6 @@ impl HostHandler for PosixHost {
     }
 
     fn console_write(&mut self, stream: ConsoleStream, bytes: &[u8]) -> io::Result<()> {
-        mask_sigpipe();
         match stream {
             ConsoleStream::Stdout => io::stdout().lock().write_all(bytes),
             ConsoleStream::Stderr => io::stderr().lock().write_all(bytes),
@@ -2690,14 +2560,14 @@ impl HostHandler for PosixHost {
                     }
                     return Ok(Resolution::Parent(current, component));
                 }
-                let flags = if !last || op == FsOpKind::Enumerate {
-                    O_RDONLY_KEN | O_DIRECTORY_KEN | O_NOFOLLOW_KEN
+                let request = if !last || op == FsOpKind::Enumerate {
+                    HostOpenRequest::ReadDirectory
                 } else if matches!(op, FsOpKind::Write | FsOpKind::Append) {
-                    O_RDWR_KEN | O_NOFOLLOW_KEN
+                    HostOpenRequest::ReadWrite
                 } else {
-                    O_RDONLY_KEN | O_NOFOLLOW_KEN
+                    HostOpenRequest::Read
                 };
-                match openat_handle(&current, &component, flags) {
+                match openat_handle(&current, &component, request) {
                     Ok(handle) => {
                         if last {
                             return Ok(Resolution::Existing(handle));
@@ -2712,9 +2582,7 @@ impl HostHandler for PosixHost {
                             }
                             symlink_hops += 1;
                             if symlink_hops > 40 {
-                                return Err(ResolveError::Denied(
-                                    CapabilityDenied::SymlinkDenied,
-                                ));
+                                return Err(ResolveError::Denied(CapabilityDenied::SymlinkDenied));
                             }
                             if target.starts_with(b"/") {
                                 return Err(ResolveError::Denied(CapabilityDenied::ScopeEscape));
@@ -2764,11 +2632,7 @@ impl HostHandler for PosixHost {
     fn fs_read_at(&mut self, handle: &Self::Handle) -> io::Result<Vec<u8>> {
         #[cfg(target_os = "linux")]
         {
-            let mut file = posix_file(handle)?;
-            file.seek(SeekFrom::Start(0))?;
-            let mut bytes = Vec::new();
-            file.read_to_end(&mut bytes)?;
-            Ok(bytes)
+            Ok(ken_host::read(handle)?)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -2791,11 +2655,7 @@ impl HostHandler for PosixHost {
             if policy == HostCreatePolicy::CreateOrKeep {
                 return Ok(());
             }
-            let mut file = posix_file(handle)?;
-            file.set_len(0)?;
-            file.seek(SeekFrom::Start(0))?;
-            file.write_all(bytes)?;
-            file.sync_all()
+            Ok(ken_host::replace(handle, bytes)?)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -2813,17 +2673,13 @@ impl HostHandler for PosixHost {
     ) -> io::Result<()> {
         #[cfg(target_os = "linux")]
         {
-            let flags = match policy {
-                HostCreatePolicy::CreateNew => O_WRONLY_KEN | O_CREAT_KEN | O_EXCL_KEN,
-                HostCreatePolicy::CreateOrTruncate => O_WRONLY_KEN | O_CREAT_KEN | O_TRUNC_KEN,
-                HostCreatePolicy::CreateOrKeep => O_WRONLY_KEN | O_CREAT_KEN | O_EXCL_KEN,
-            } | O_NOFOLLOW_KEN;
-            match openat_handle(parent, leaf, flags) {
-                Ok(handle) => {
-                    let mut file = posix_file(&handle)?;
-                    file.write_all(bytes)?;
-                    file.sync_all()
-                }
+            let request = match policy {
+                HostCreatePolicy::CreateNew => HostOpenRequest::CreateNew,
+                HostCreatePolicy::CreateOrTruncate => HostOpenRequest::CreateOrTruncate,
+                HostCreatePolicy::CreateOrKeep => HostOpenRequest::CreateOrKeep,
+            };
+            match openat_handle(parent, leaf, request) {
+                Ok(handle) => Ok(ken_host::write_new(&handle, bytes)?),
                 Err(error)
                     if policy == HostCreatePolicy::CreateOrKeep
                         && error.kind() == io::ErrorKind::AlreadyExists =>
@@ -2843,9 +2699,7 @@ impl HostHandler for PosixHost {
     fn fs_append_at(&mut self, handle: &Self::Handle, bytes: &[u8]) -> io::Result<()> {
         #[cfg(target_os = "linux")]
         {
-            let mut file = posix_file(handle)?;
-            file.seek(SeekFrom::End(0))?;
-            file.write_all(bytes)
+            Ok(ken_host::append(handle, bytes)?)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -2862,13 +2716,8 @@ impl HostHandler for PosixHost {
     ) -> io::Result<()> {
         #[cfg(target_os = "linux")]
         {
-            let h = openat_handle(
-                parent,
-                leaf,
-                O_WRONLY_KEN | O_CREAT_KEN | O_APPEND_KEN | O_NOFOLLOW_KEN,
-            )?;
-            let mut file = posix_file(&h)?;
-            file.write_all(bytes)
+            let handle = openat_handle(parent, leaf, HostOpenRequest::AppendOrCreate)?;
+            Ok(ken_host::append(&handle, bytes)?)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -2880,10 +2729,15 @@ impl HostHandler for PosixHost {
     fn fs_metadata_at(&mut self, handle: &Self::Handle) -> io::Result<HostFileMetadata> {
         #[cfg(target_os = "linux")]
         {
-            let metadata = posix_file(handle)?.metadata()?;
+            let metadata = ken_host::metadata(handle)?;
             Ok(HostFileMetadata {
-                size: metadata.len(),
-                kind: metadata_kind(&metadata),
+                size: metadata.size,
+                kind: match metadata.kind {
+                    ken_host::FileKind::File => HostFileKind::File,
+                    ken_host::FileKind::Directory => HostFileKind::Directory,
+                    ken_host::FileKind::Symlink => HostFileKind::Symlink,
+                    ken_host::FileKind::Other => HostFileKind::Other,
+                },
             })
         }
         #[cfg(not(target_os = "linux"))]
@@ -2896,17 +2750,18 @@ impl HostHandler for PosixHost {
     fn fs_read_directory_at(&mut self, handle: &Self::Handle) -> io::Result<Vec<HostDirEntry>> {
         #[cfg(target_os = "linux")]
         {
-            let path = PathBuf::from(format!("/proc/self/fd/{}", handle.as_raw_fd()));
-            let mut entries = Vec::new();
-            for entry in std::fs::read_dir(path)? {
-                let entry = entry?;
-                entries.push(HostDirEntry {
-                    name: os_string_bytes(entry.file_name())?,
-                    kind: file_type_kind(&entry.file_type()?),
-                });
-            }
-            entries.sort_by(|left, right| left.name.cmp(&right.name));
-            Ok(entries)
+            Ok(ken_host::read_directory(handle)?
+                .into_iter()
+                .map(|entry| HostDirEntry {
+                    name: entry.name,
+                    kind: match entry.kind {
+                        ken_host::FileKind::File => HostFileKind::File,
+                        ken_host::FileKind::Directory => HostFileKind::Directory,
+                        ken_host::FileKind::Symlink => HostFileKind::Symlink,
+                        ken_host::FileKind::Other => HostFileKind::Other,
+                    },
+                })
+                .collect())
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -2923,13 +2778,10 @@ impl HostHandler for PosixHost {
     ) -> io::Result<()> {
         #[cfg(target_os = "linux")]
         {
-            let leaf = c_component(leaf)?;
-            let rc = unsafe { mkdirat(parent.as_raw_fd(), leaf.as_ptr(), 0o777) };
-            if rc == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
+            Ok(ken_host::create_directory(
+                parent,
+                &PathComponent::new(leaf)?,
+            )?)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -2941,13 +2793,11 @@ impl HostHandler for PosixHost {
     fn fs_remove_file_at(&mut self, parent: &Self::Handle, leaf: &[u8]) -> io::Result<()> {
         #[cfg(target_os = "linux")]
         {
-            let leaf = c_component(leaf)?;
-            let rc = unsafe { unlinkat(parent.as_raw_fd(), leaf.as_ptr(), 0) };
-            if rc == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
+            Ok(ken_host::remove(
+                parent,
+                &PathComponent::new(leaf)?,
+                RemoveKind::File,
+            )?)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -2965,19 +2815,16 @@ impl HostHandler for PosixHost {
         #[cfg(target_os = "linux")]
         {
             if recursive {
-                use std::os::unix::ffi::OsStrExt;
-
-                let mut target = PathBuf::from(format!("/proc/self/fd/{}", parent.as_raw_fd()));
-                target.push(std::ffi::OsStr::from_bytes(leaf));
-                return std::fs::remove_dir_all(target);
+                return Ok(ken_host::remove_directory_tree(
+                    parent,
+                    &PathComponent::new(leaf)?,
+                )?);
             }
-            let leaf = c_component(leaf)?;
-            let rc = unsafe { unlinkat(parent.as_raw_fd(), leaf.as_ptr(), AT_REMOVEDIR_KEN) };
-            if rc == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
+            Ok(ken_host::remove(
+                parent,
+                &PathComponent::new(leaf)?,
+                RemoveKind::Directory,
+            )?)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -2995,21 +2842,12 @@ impl HostHandler for PosixHost {
     ) -> io::Result<()> {
         #[cfg(target_os = "linux")]
         {
-            let from = c_component(from_leaf)?;
-            let to = c_component(to_leaf)?;
-            let rc = unsafe {
-                renameat(
-                    from_parent.as_raw_fd(),
-                    from.as_ptr(),
-                    to_parent.as_raw_fd(),
-                    to.as_ptr(),
-                )
-            };
-            if rc == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
+            Ok(ken_host::rename(
+                from_parent,
+                &PathComponent::new(from_leaf)?,
+                to_parent,
+                &PathComponent::new(to_leaf)?,
+            )?)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -3713,26 +3551,6 @@ fn stream_index(stream: ConsoleStream) -> usize {
         ConsoleStream::Stderr => 2,
     }
 }
-
-#[cfg(target_os = "linux")]
-fn mask_sigpipe() {
-    static ONCE: Once = Once::new();
-    ONCE.call_once(|| {
-        const SIGPIPE: i32 = 13;
-        const SIG_IGN: usize = 1;
-        unsafe extern "C" {
-            fn signal(signal: i32, handler: usize) -> usize;
-        }
-        // SAFETY: POSIX `signal(SIGPIPE, SIG_IGN)` installs a process-global
-        // disposition and dereferences no Rust memory. `Once` avoids races.
-        unsafe {
-            signal(SIGPIPE, SIG_IGN);
-        }
-    });
-}
-
-#[cfg(not(target_os = "linux"))]
-fn mask_sigpipe() {}
 
 /// Recursively strip `InL`/`InR` wrappers off an op value, returning the
 /// innermost non-`Coproduct` base tag (`effect-composition` D3.2). `InL`/`InR`'s
@@ -4691,65 +4509,7 @@ mod px0_target_classification_tests {
     }
 
     #[test]
-    fn px0_linux_abi_facts_are_linux_gated() {
-        let source = include_str!("eval.rs");
-        let linux_gate = "#[cfg(target_os = \"linux\")]";
-        let facts = [
-            "O_RDONLY_KEN",
-            "O_WRONLY_KEN",
-            "O_RDWR_KEN",
-            "O_CREAT_KEN",
-            "O_EXCL_KEN",
-            "O_TRUNC_KEN",
-            "O_APPEND_KEN",
-            "O_DIRECTORY_KEN",
-            "O_NOFOLLOW_KEN",
-            "O_CLOEXEC_KEN",
-            "AT_REMOVEDIR_KEN",
-        ];
-        for fact in facts {
-            let declaration = format!("{linux_gate}\nconst {fact}");
-            assert!(
-                source.contains(&declaration),
-                "Linux ABI fact {fact} must be target_os=linux gated"
-            );
-        }
-
-        let unix_gate = ["#[cfg(", "unix", ")]"].concat();
-        let non_unix_gate = ["#[cfg(not(", "unix", "))]"].concat();
-        assert_eq!(
-            source.matches(&unix_gate).count(),
-            1,
-            "only the unrelated OsString byte-preserving helper stays cfg(unix)"
-        );
-        assert_eq!(
-            source.matches(&non_unix_gate).count(),
-            1,
-            "only the unrelated OsString fallback stays cfg(not(unix))"
-        );
-        assert!(source.contains(&format!("{linux_gate}\nunsafe extern \"C\"")));
-        assert_eq!(source.matches("unsafe extern \"C\"").count(), 2);
-        assert!(source.contains("fn openat("));
-        assert!(source.contains("fn mkdirat("));
-        assert!(source.contains("fn unlinkat("));
-        assert!(source.contains("fn renameat("));
-        assert!(source.contains("fn readlinkat("));
-        assert!(source.contains("fn signal("));
-        let mask_start = source
-            .find(&format!("{linux_gate}\nfn mask_sigpipe()"))
-            .expect("mask_sigpipe must be Linux-gated");
-        let mask_body = &source[mask_start..];
-        let mask_end = mask_body
-            .find("#[cfg(not(target_os = \"linux\"))]")
-            .expect("mask_sigpipe must have a non-Linux absence lane");
-        let linux_mask = &mask_body[..mask_end];
-        assert!(linux_mask.contains("const SIGPIPE: i32 = 13;"));
-        assert!(linux_mask.contains("const SIG_IGN: usize = 1;"));
-        assert!(linux_mask.contains("fn signal("));
-    }
-
-    #[test]
-    fn px0_named_unavailable_lane_maps_to_ken_unsupported() {
+    fn px1_named_unavailable_lane_maps_to_ken_unsupported() {
         let unsupported_id = GlobalId(91);
         let ids = console_ids(unsupported_id);
         let mut store = EvalStore::new();
@@ -4762,7 +4522,7 @@ mod px0_target_classification_tests {
 
     #[cfg(not(target_os = "linux"))]
     #[test]
-    fn px0_non_linux_fs_driver_fails_before_host_io() {
+    fn px1_non_linux_fs_driver_fails_before_host_io() {
         fn assert_unsupported<T: std::fmt::Debug>(result: io::Result<T>) {
             assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Unsupported);
         }

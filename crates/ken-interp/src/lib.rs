@@ -3,6 +3,8 @@
 //! Evaluates core terms (`ken-kernel`) to values (`ken-runtime` K3 store),
 //! realizing the kernel's reductions in CBV-with-sharing order (`42 §1`–`§4`).
 
+#![forbid(unsafe_code)]
+
 pub mod eval;
 pub mod proof_erasure_checker;
 
