@@ -22,6 +22,10 @@ fn main() {
             }
         },
         "check" => check_file(args.get(2).map(OsString::as_os_str)),
+        "native-build" => native_build_file(
+            args.get(2).map(OsString::as_os_str),
+            args.get(3).map(OsString::as_os_str),
+        ),
         "fmt" => format_files(&args[2..]),
         "version" | "--version" | "-V" => {
             println!(
@@ -34,6 +38,43 @@ fn main() {
         "" | "--help" | "-h" | "help" => print_help(),
         unknown => {
             eprintln!("ken: unknown subcommand '{}' — try 'ken help'", unknown);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn native_build_file(path: Option<&OsStr>, output_dir: Option<&OsStr>) {
+    let Some(path) = path else {
+        eprintln!("ken native-build: missing <file> argument");
+        eprintln!("Usage: ken native-build <file.ken> <output-dir>");
+        std::process::exit(1);
+    };
+    let Some(output_dir) = output_dir else {
+        eprintln!("ken native-build: missing <output-dir> argument");
+        eprintln!("Usage: ken native-build <file.ken> <output-dir>");
+        std::process::exit(1);
+    };
+    let source = std::fs::read_to_string(path).unwrap_or_else(|error| {
+        eprintln!(
+            "ken native-build: cannot read '{}': {error}",
+            path.to_string_lossy()
+        );
+        std::process::exit(1);
+    });
+    let format = if path.to_string_lossy().ends_with(".ken.md") {
+        ken_cli::SourceFormat::LiterateKen
+    } else {
+        ken_cli::SourceFormat::Ken
+    };
+    match ken_cli::build_native_program(
+        &source,
+        format,
+        "native-program",
+        PathBuf::from(output_dir),
+    ) {
+        Ok(output) => println!("{}", output.artifact.executable_path.display()),
+        Err(error) => {
+            eprintln!("ken native-build: {error}");
             std::process::exit(1);
         }
     }
@@ -330,6 +371,8 @@ fn print_help() {
     println!("  run <file>    Elaborate and run a Ken source file (Console IO)");
     println!("  check <file>  Elaborate a Ken source file and verify its fences,");
     println!("                without driving IO (for pure-library entries)");
+    println!("  native-build <file> <output-dir>");
+    println!("                Build the checked Program I main as a native artifact");
     println!("  fmt [--check] <paths...>");
     println!("                Canonicalize Ken source, or check without writing");
     println!("  repl          Start the interactive REPL (the Little Prover loop)");

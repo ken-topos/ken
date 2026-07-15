@@ -36,6 +36,7 @@ pub mod modules;
 pub mod numbers;
 pub mod parser;
 pub mod prelude;
+pub mod program_admission;
 pub mod prover;
 pub mod resolve;
 pub mod temporal;

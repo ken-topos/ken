@@ -15,6 +15,31 @@ pub struct ProgramOutcome {
     pub exit_status: i32,
 }
 
+/// Build one checked Program I source into a linked native process artifact.
+/// All process observations remain supplied by the linked artifact at call
+/// time; this library operation reads no ambient argv, environment, or cwd.
+pub fn build_native_program(
+    source: &str,
+    format: SourceFormat,
+    package_name: &str,
+    output_dir: impl AsRef<std::path::Path>,
+) -> Result<
+    ken_elaborator::compiler_driver::NativeProgramBuildOutput,
+    ken_elaborator::compiler_driver::NativeProgramBuildError,
+> {
+    let name = match format {
+        SourceFormat::Ken => "src/main.ken",
+        SourceFormat::LiterateKen => "src/main.ken.md",
+    };
+    ken_elaborator::compiler_driver::compile_native_program_sources(
+        package_name,
+        vec![ken_elaborator::compiler_driver::CompilerSource::new(
+            name, source,
+        )],
+        output_dir,
+    )
+}
+
 /// A failure before an ordinary Ken ProgramOutcome can be produced.
 #[derive(Debug)]
 pub enum RunError {
@@ -56,35 +81,20 @@ pub fn run_program<H: ken_interp::HostHandler>(
         };
     }
 
-    let main_id = resolve_main(&elab_env).map_err(|_| RunError::MissingEntrypoint)?;
+    let admitted = ken_elaborator::program_admission::admit_checked_main(&elab_env)
+        .map_err(map_program_admission_error)?;
+    let main_id = admitted.main;
     let get = |name: &str| -> Option<ken_kernel::GlobalId> { elab_env.globals.get(name).copied() };
-    let (process_input_id, program_caps_id, host_io_id, exit_code_id) = match (
-        get("ProcessInput"),
-        get("ProgramCaps"),
-        get("HostIO"),
-        get("ExitCode"),
-    ) {
-        (Some(a), Some(b), Some(c), Some(d)) => (a, b, c, d),
-        _ => return Err(RunError::EntrypointAbiUnavailable),
+    let declared_fs = DeclaredFsAuthority {
+        name: match admitted.authority_name.as_str() {
+            "ANone" => "ANone",
+            "APartial" => "APartial",
+            "AFull" => "AFull",
+            _ => unreachable!("admission returned an unknown authority"),
+        },
+        authority: admitted.authority,
+        constructor_id: admitted.authority_constructor,
     };
-    let declared_fs = declared_fs_authority(&elab_env).map_err(|error| match error {
-        ProgramValidationError::MissingCapability { effect } => {
-            RunError::MissingCapability { effect }
-        }
-    })?;
-    if !entrypoint_has_abi(
-        &elab_env,
-        main_id,
-        process_input_id,
-        program_caps_id,
-        host_io_id,
-        exit_code_id,
-        declared_fs.constructor_id,
-    ) {
-        return Err(RunError::InvalidEntrypoint {
-            authority: declared_fs.name,
-        });
-    }
 
     let console_ids =
         ken_interp::ConsoleIds::from_elab(&elab_env).ok_or(RunError::ConsoleAbiUnavailable)?;
@@ -126,16 +136,6 @@ pub fn run_program<H: ken_interp::HostHandler>(
     })
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum EntrypointResolutionError {
-    MissingMain,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum ProgramValidationError {
-    MissingCapability { effect: String },
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct DeclaredFsAuthority {
     name: &'static str,
@@ -143,88 +143,30 @@ struct DeclaredFsAuthority {
     constructor_id: ken_kernel::GlobalId,
 }
 
-fn declared_fs_authority(
-    elab_env: &ken_elaborator::ElabEnv,
-) -> Result<DeclaredFsAuthority, ProgramValidationError> {
-    use ken_elaborator::capabilities::{AUTH_FULL, AUTH_NONE, AUTH_PARTIAL};
-
-    let declaration = elab_env
-        .boundary_header()
-        .and_then(|header| header.capabilities.as_ref())
-        .and_then(|capabilities| capabilities.iter().find(|cap| cap.family == "FS"))
-        .ok_or_else(|| ProgramValidationError::MissingCapability {
-            effect: "FS".to_owned(),
-        })?;
-    let (name, authority) = match declaration.authority.as_str() {
-        "ANone" => ("ANone", AUTH_NONE),
-        "APartial" => ("APartial", AUTH_PARTIAL),
-        "AFull" => ("AFull", AUTH_FULL),
-        authority => unreachable!("parser admitted invalid FS authority {authority}"),
-    };
-    let constructor_id = *elab_env
-        .globals
-        .get(name)
-        .expect("parsed Auth constructor registered by the prelude");
-    Ok(DeclaredFsAuthority {
-        name,
-        authority,
-        constructor_id,
-    })
-}
-
-fn resolve_main(
-    elab_env: &ken_elaborator::ElabEnv,
-) -> Result<ken_kernel::GlobalId, EntrypointResolutionError> {
-    elab_env
-        .globals
-        .get("main")
-        .copied()
-        .ok_or(EntrypointResolutionError::MissingMain)
-}
-
-fn entrypoint_has_abi(
-    elab_env: &ken_elaborator::ElabEnv,
-    main_id: ken_kernel::GlobalId,
-    process_input_id: ken_kernel::GlobalId,
-    program_caps_id: ken_kernel::GlobalId,
-    host_io_id: ken_kernel::GlobalId,
-    exit_code_id: ken_kernel::GlobalId,
-    authority_id: ken_kernel::GlobalId,
-) -> bool {
-    use ken_kernel::{Decl, Term};
-
-    if let Some(row) = elab_env.effect_rows.get("main") {
-        let granted = ken_elaborator::effects::EffectRow::from_effects([
-            "Console".to_string(),
-            "Clock".to_string(),
-            "FS".to_string(),
-        ]);
-        if !row.row_vars().is_empty() || !row.concrete_effects().is_subset_of(&granted) {
-            return false;
-        }
+fn map_program_admission_error(
+    error: ken_elaborator::program_admission::ProgramAdmissionError,
+) -> RunError {
+    use ken_elaborator::program_admission::ProgramAdmissionError;
+    match error {
+        ProgramAdmissionError::MissingMain => RunError::MissingEntrypoint,
+        ProgramAdmissionError::MissingProgramBoundary => RunError::EntrypointAbiUnavailable,
+        ProgramAdmissionError::MissingAbiDeclaration { .. } => RunError::EntrypointAbiUnavailable,
+        ProgramAdmissionError::MissingCapability { effect }
+        | ProgramAdmissionError::DuplicateCapability { effect } => RunError::MissingCapability {
+            effect: effect.to_string(),
+        },
+        ProgramAdmissionError::UnsupportedEffectRow => RunError::InvalidEntrypoint {
+            authority: "declared",
+        },
+        ProgramAdmissionError::InvalidMainAbi { authority } => RunError::InvalidEntrypoint {
+            authority: match authority.as_str() {
+                "ANone" => "ANone",
+                "APartial" => "APartial",
+                "AFull" => "AFull",
+                _ => "declared",
+            },
+        },
     }
-
-    let actual = match elab_env.env.lookup(main_id) {
-        Some(Decl::Transparent { ty, .. })
-        | Some(Decl::Opaque { ty, .. })
-        | Some(Decl::Primitive { ty, .. }) => ty,
-        _ => return false,
-    };
-    let process_input = Term::indformer(process_input_id, vec![]);
-    let authority = Term::constructor(authority_id, vec![]);
-    let program_caps = Term::app(Term::indformer(program_caps_id, vec![]), authority.clone());
-    let exit_code = Term::indformer(exit_code_id, vec![]);
-    let host_exit = Term::app(
-        Term::app(Term::const_(host_io_id, vec![]), authority),
-        exit_code,
-    );
-    let expected = Term::pi(process_input, Term::pi(program_caps, host_exit));
-    ken_kernel::convert_type(
-        &elab_env.env,
-        &ken_kernel::Context::new(),
-        actual,
-        &expected,
-    )
 }
 
 fn constructor_value(
@@ -444,18 +386,15 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
         (\_. host_exit AFull Success)
   }"#,
         );
-        let declared = declared_fs_authority(&env).expect("FS AFull declared");
-        assert_eq!(declared.name, "AFull");
+        let admitted = ken_elaborator::program_admission::admit_checked_main(&env)
+            .expect("checked main admitted");
+        let declared = DeclaredFsAuthority {
+            name: "AFull",
+            authority: admitted.authority,
+            constructor_id: admitted.authority_constructor,
+        };
         let main_id = *env.globals.get("main").expect("main");
-        assert!(entrypoint_has_abi(
-            &env,
-            main_id,
-            *env.globals.get("ProcessInput").expect("ProcessInput"),
-            *env.globals.get("ProgramCaps").expect("ProgramCaps"),
-            *env.globals.get("HostIO").expect("HostIO"),
-            *env.globals.get("ExitCode").expect("ExitCode"),
-            declared.constructor_id,
-        ));
+        assert_eq!(admitted.main, main_id);
 
         let console = ken_interp::ConsoleIds::from_elab(&env).expect("Console ABI");
         let fs = ken_interp::FSIds::from_elab(&env).expect("FS ABI");
@@ -521,23 +460,21 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
     #[test]
     fn runner_has_no_implicit_fs_authority_default() {
         let env = elaborate_program("program\n");
-        assert_eq!(
-            declared_fs_authority(&env),
-            Err(ProgramValidationError::MissingCapability {
-                effect: "FS".to_owned(),
-            })
-        );
+        assert!(env
+            .boundary_header()
+            .and_then(|header| header.capabilities.as_ref())
+            .is_none_or(|caps| caps.iter().all(|cap| cap.family != "FS")));
     }
 
     #[test]
     fn apartial_write_returns_named_denial_before_capture_host_syscall() {
         let env = elaborate_program("program capabilities FS APartial\n");
-        let declared = declared_fs_authority(&env).expect("FS APartial declared");
         let console = ken_interp::ConsoleIds::from_elab(&env).expect("Console ABI");
         let fs = ken_interp::FSIds::from_elab(&env).expect("FS ABI");
         let mut host = ken_interp::CaptureHost::new(Vec::new());
         host.insert_directory(b"root".to_vec());
-        let cap = ken_interp::EvalVal::Cap(host.mint_fs_cap(declared.authority));
+        let cap =
+            ken_interp::EvalVal::Cap(host.mint_fs_cap(ken_elaborator::capabilities::AUTH_PARTIAL));
         let mut store = build_eval_store(&env);
         let mut tree = ken_interp::eval(
             &[],
@@ -549,7 +486,7 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
             &mut store,
         );
         for argument in [
-            constructor_value(declared.constructor_id, vec![]),
+            constructor_value(env.globals["APartial"], vec![]),
             cap,
             ken_interp::EvalVal::Bytes(b"root/denied".to_vec()),
             constructor_value(fs.create_new_id, vec![]),
@@ -592,13 +529,13 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
     #[test]
     fn anone_readfile_reaches_named_denial_before_capture_host_syscall() {
         let env = elaborate_program("program capabilities FS ANone\n");
-        let declared = declared_fs_authority(&env).expect("FS ANone declared");
         let console = ken_interp::ConsoleIds::from_elab(&env).expect("Console ABI");
         let fs = ken_interp::FSIds::from_elab(&env).expect("FS ABI");
         let mut host = ken_interp::CaptureHost::new(Vec::new());
         host.insert_directory(b"root".to_vec());
         host.insert_file(b"root/input".to_vec(), b"secret".to_vec());
-        let cap = ken_interp::EvalVal::Cap(host.mint_fs_cap(declared.authority));
+        let cap =
+            ken_interp::EvalVal::Cap(host.mint_fs_cap(ken_elaborator::capabilities::AUTH_NONE));
         let mut store = build_eval_store(&env);
         let mut tree = ken_interp::eval(
             &[],
@@ -610,7 +547,7 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
             &mut store,
         );
         for argument in [
-            constructor_value(declared.constructor_id, vec![]),
+            constructor_value(env.globals["ANone"], vec![]),
             cap,
             ken_interp::EvalVal::Bytes(b"root/input".to_vec()),
         ] {
@@ -689,10 +626,10 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
     #[test]
     fn missing_and_duplicate_main_have_distinct_specific_errors() {
         let env = ken_elaborator::ElabEnv::new().expect("env");
-        assert_eq!(
-            resolve_main(&env),
-            Err(EntrypointResolutionError::MissingMain)
-        );
+        assert!(matches!(
+            ken_elaborator::program_admission::admit_checked_main(&env),
+            Err(ken_elaborator::program_admission::ProgramAdmissionError::MissingMain)
+        ));
 
         let mut env = ken_elaborator::ElabEnv::new().expect("env");
         let error = env

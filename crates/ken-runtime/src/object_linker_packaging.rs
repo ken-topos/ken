@@ -24,6 +24,23 @@ use crate::{
     PLATFORM_RUNTIME_SUPPORT_KIND, PLATFORM_RUNTIME_SUPPORT_VERSION,
 };
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BoundProcessEntrypoint {
+    pub target_symbol: RuntimeSymbol,
+    pub program_caps_constructor: RuntimeSymbol,
+    pub cap_symbol: RuntimeSymbol,
+    pub ret_constructor: RuntimeSymbol,
+    pub process_symbols: crate::NativeProcessSymbols,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BoundProcessExecutableArtifact {
+    pub runtime_artifact: RuntimeArtifactIdentity,
+    pub target_symbol: RuntimeSymbol,
+    pub executable_path: PathBuf,
+    pub executable_hash: u64,
+}
+
 pub const OBJECT_LINKER_PACKAGE_KIND: &str = "KenObjectLinkerExecutablePackage";
 pub const OBJECT_LINKER_PACKAGE_VERSION: u32 = 0;
 pub const OBJECT_LINKER_PACKAGE_SPEC_REF: &str = "docs/program/wp/NC23-object-linker-packaging.md";
@@ -381,6 +398,113 @@ pub fn build_process_starter_executable_artifact(
         &executable_path,
     )?;
     Ok(executable_path)
+}
+
+/// Build a process artifact only from an identity-bound `RuntimeProgram` and
+/// checked entrypoint metadata. The production surface cannot accept naked IR.
+pub fn build_bound_process_starter_executable_artifact(
+    program: &RuntimeProgram,
+    entrypoint: &BoundProcessEntrypoint,
+    output_dir: impl AsRef<Path>,
+) -> Result<BoundProcessExecutableArtifact, ObjectLinkerPackagingError> {
+    if !program
+        .declarations
+        .iter()
+        .any(|declaration| declaration.symbol == entrypoint.target_symbol)
+    {
+        return Err(packaging_error(
+            ObjectLinkerPackagingStage::EntrypointPackage,
+            "target_symbol",
+            "checked process target is absent from the exact RuntimeProgram",
+        ));
+    }
+    let caps = RuntimeExpr::Construct {
+        constructor: entrypoint.program_caps_constructor.clone(),
+        args: vec![RuntimeExpr::Construct {
+            constructor: entrypoint.cap_symbol.clone(),
+            args: Vec::new(),
+        }],
+    };
+    let tree = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: entrypoint.target_symbol.clone(),
+            }),
+            args: vec![RuntimeExpr::Var(0)],
+        }),
+        args: vec![caps],
+    };
+    let adapter = RuntimeExpr::Match {
+        scrutinee: Box::new(tree),
+        cases: vec![crate::RuntimeMatchCase {
+            constructor: entrypoint.ret_constructor.clone(),
+            binders: 1,
+            body: RuntimeExpr::Var(0),
+        }],
+        default: crate::RuntimeTrap {
+            code: crate::RuntimeTrapCode::PatternMatchFailure,
+            message: "effect-free native entrypoint returned Vis".to_string(),
+        },
+    };
+
+    let options = ObjectLinkerPackagingOptions::starter_host();
+    let output_dir = output_dir.as_ref();
+    fs::create_dir_all(output_dir).map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::LinkerOrFinalizer,
+            "output_dir",
+            format!("could not create checked process output directory: {err}"),
+        )
+    })?;
+    let object = crate::cranelift_backend::emit_bound_process_program_object_with_cranelift(
+        program,
+        &adapter,
+        &entrypoint.process_symbols,
+        STARTER_ENTRY_SYMBOL,
+    )
+    .map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::ObjectEmission,
+            "checked_process_object",
+            err.to_string(),
+        )
+    })?;
+    let object_path = output_dir.join(&options.object_relative_path);
+    fs::write(&object_path, object.object_bytes).map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::ObjectEmission,
+            "object_path",
+            format!("could not write checked process object: {err}"),
+        )
+    })?;
+    let stub_path = output_dir.join(&options.stub_relative_path);
+    fs::write(&stub_path, process_starter_c_stub()).map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::LinkerOrFinalizer,
+            "stub_path",
+            format!("could not write checked process starter: {err}"),
+        )
+    })?;
+    let executable_path = output_dir.join(&options.executable_relative_path);
+    link_starter_executable(
+        &options.linker_command,
+        &object_path,
+        &stub_path,
+        &executable_path,
+    )?;
+    let executable_bytes = fs::read(&executable_path).map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::LinkerOrFinalizer,
+            "executable_path",
+            format!("could not read checked process executable: {err}"),
+        )
+    })?;
+    Ok(BoundProcessExecutableArtifact {
+        runtime_artifact: RuntimeArtifactIdentity::from_program(program),
+        target_symbol: entrypoint.target_symbol.clone(),
+        executable_path,
+        executable_hash: fnv1a_64(&executable_bytes),
+    })
 }
 
 pub fn object_linker_executable_package_hash(package: &ObjectLinkerExecutablePackage) -> u64 {
