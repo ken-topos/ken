@@ -11,6 +11,16 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Stable checked-core symbol rendered at the package boundary.
 pub type RuntimeSymbol = String;
 
+/// A capability operand carried by an effectful runtime node.
+///
+/// `identity` is observation-only provenance. `value` is the live, opaque
+/// credential and is the only field allowed to authorize a host operation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeCapabilityUse {
+    pub identity: RuntimeSymbol,
+    pub value: Box<RuntimeExpr>,
+}
+
 /// Complete NC5 runtime artifact for one checked-core package subset.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeProgram {
@@ -374,8 +384,9 @@ pub enum RuntimeExpr {
         args: Vec<RuntimeExpr>,
     },
     Effect {
-        effect: String,
-        capability: Option<RuntimeSymbol>,
+        family: RuntimeSymbol,
+        operation: ken_host::HostOpV1,
+        capability: Option<RuntimeCapabilityUse>,
         args: Vec<RuntimeExpr>,
     },
     Trap(RuntimeTrap),

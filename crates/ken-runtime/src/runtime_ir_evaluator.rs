@@ -1283,9 +1283,14 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
                 call_env.extend_from_slice(env);
                 self.eval_expr(&body, &call_env)
             }
-            RuntimeExpr::Effect { effect, .. } => Err(eval_unsupported(
+            RuntimeExpr::Effect {
+                family, operation, ..
+            } => Err(eval_unsupported(
                 "Effect",
-                format!("effect {effect} is not modeled in the supported runtime-IR subset"),
+                format!(
+                    "effect {family}.{} is not modeled in the supported runtime-IR subset",
+                    *operation as u16
+                ),
             )),
             RuntimeExpr::Trap(trap) => Ok(RuntimeIrOutcome::Trap(trap.clone())),
         }

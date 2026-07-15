@@ -47,7 +47,18 @@ impl HostOpV1 {
     ];
 
     pub const fn availability(self) -> HostOpAvailabilityV1 {
-        HostOpAvailabilityV1::RepresentedUnavailable
+        if matches!(
+            self,
+            Self::ConsoleWrite
+                | Self::ConsoleFlush
+                | Self::ConsoleIsTerminal
+                | Self::FsReadFile
+                | Self::FsWriteFile
+        ) {
+            HostOpAvailabilityV1::NativeTested
+        } else {
+            HostOpAvailabilityV1::RepresentedUnavailable
+        }
     }
 
     pub const fn is_ambient(self) -> bool {
@@ -73,6 +84,43 @@ pub const PX5_PLANNED_NATIVE_TARGETS: [HostOpV1; 5] = [
     HostOpV1::FsWriteFile,
 ];
 
+pub const HOST_EFFECT_ABI_V1_SCHEMA_VERSION: u32 = 1;
+pub const HOST_EFFECT_ABI_V1_HASH: [u8; 32] = [
+    0x6b, 0x65, 0x6e, 0x2d, 0x68, 0x6f, 0x73, 0x74, 0x2d, 0x65, 0x66, 0x66, 0x65, 0x63, 0x74, 0x2d,
+    0x76, 0x31, 0x00, 0x0e, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HostEffectAbiV1 {
+    pub schema_version: u32,
+    pub operation_count: u16,
+    pub native_tested_count: u16,
+    pub capability_token_size: u16,
+    pub capability_token_align: u16,
+    pub response_arena_lifetime_version: u16,
+    pub trace_schema_version: u16,
+    pub manifest_hash: [u8; 32],
+}
+
+pub const HOST_EFFECT_ABI_V1: HostEffectAbiV1 = HostEffectAbiV1 {
+    schema_version: HOST_EFFECT_ABI_V1_SCHEMA_VERSION,
+    operation_count: 14,
+    native_tested_count: 5,
+    capability_token_size: std::mem::size_of::<CapabilityTokenV1>() as u16,
+    capability_token_align: std::mem::align_of::<CapabilityTokenV1>() as u16,
+    response_arena_lifetime_version: 1,
+    trace_schema_version: 1,
+    manifest_hash: HOST_EFFECT_ABI_V1_HASH,
+};
+
+pub fn assert_host_effect_abi_identity(hash: [u8; 32]) -> Result<(), TerminalErrorV1> {
+    if hash == HOST_EFFECT_ABI_V1_HASH {
+        Ok(())
+    } else {
+        Err(TerminalErrorV1::HostEffectAbiMismatch)
+    }
+}
+
 impl TryFrom<u16> for HostOpV1 {
     type Error = UnknownHostOpV1;
 
@@ -91,6 +139,212 @@ pub struct UnknownHostOpV1(pub u16);
 pub enum HostOpAvailabilityV1 {
     NativeTested,
     RepresentedUnavailable,
+}
+
+/// Opaque capability carrier used at the private native host boundary.
+/// Generated code may copy this value only into a dispatch request.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct CapabilityTokenV1 {
+    slot: u32,
+    generation: u32,
+}
+
+impl CapabilityTokenV1 {
+    pub fn erased_identity(self) -> u64 {
+        (u64::from(self.generation) << 32) | u64::from(self.slot)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapabilityGrantV1 {
+    pub identity: CapabilityTraceIdentity,
+    pub authority: CapabilityAuthorityV1,
+    pub rights: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CapabilityAuthorityV1 {
+    None,
+    Partial,
+    Full,
+}
+
+pub const RIGHT_READ_V1: u8 = 1 << 0;
+pub const RIGHT_WRITE_V1: u8 = 1 << 1;
+
+#[derive(Clone, Debug, Default)]
+pub struct CapabilityTableV1 {
+    slots: Vec<CapabilitySlotV1>,
+}
+
+#[derive(Clone, Debug)]
+struct CapabilitySlotV1 {
+    generation: u32,
+    grant: CapabilityGrantV1,
+}
+
+impl CapabilityTableV1 {
+    /// Minting is runner-only. Tokens are never constructible from Ken data.
+    pub fn insert(&mut self, grant: CapabilityGrantV1) -> CapabilityTokenV1 {
+        let slot = u32::try_from(self.slots.len()).expect("capability table exceeds u32");
+        let generation = 1;
+        self.slots.push(CapabilitySlotV1 { generation, grant });
+        CapabilityTokenV1 { slot, generation }
+    }
+
+    pub fn resolve(
+        &self,
+        token: CapabilityTokenV1,
+    ) -> Result<&CapabilityGrantV1, CapabilityDeniedV1> {
+        self.slots
+            .get(token.slot as usize)
+            .filter(|slot| slot.generation == token.generation)
+            .map(|slot| &slot.grant)
+            .ok_or(CapabilityDeniedV1::MalformedCapability)
+    }
+}
+
+/// Host leaves behind the single semantic dispatcher.
+pub trait HostEffectBackendV1 {
+    fn console_write(
+        &mut self,
+        stream: ConsoleStreamV1,
+        bytes: &[u8],
+    ) -> Result<(), IoErrorIdentityV1>;
+    fn console_flush(&mut self, stream: ConsoleStreamV1) -> Result<(), IoErrorIdentityV1>;
+    fn console_is_terminal(&mut self, stream: ConsoleStreamV1) -> bool;
+    fn fs_read_file(
+        &mut self,
+        grant: &CapabilityGrantV1,
+        path: &[u8],
+    ) -> Result<Vec<u8>, FileErrorCauseV1>;
+    fn fs_write_file(
+        &mut self,
+        grant: &CapabilityGrantV1,
+        path: &[u8],
+        create_policy: CreatePolicyV1,
+        bytes: &[u8],
+    ) -> Result<(), FileErrorCauseV1>;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HostDispatchReplyV1 {
+    pub capability_identity: Option<CapabilityTraceIdentity>,
+    pub outcome: CanonicalOutcomeV1,
+}
+
+/// The only V1 semantic operation switch. Validation and capability denial
+/// happen before a backend leaf is invoked.
+pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
+    backend: &mut B,
+    capabilities: &CapabilityTableV1,
+    operation: HostOpV1,
+    capability: Option<CapabilityTokenV1>,
+    request: &CanonicalRequestV1,
+) -> Result<HostDispatchReplyV1, TerminalErrorV1> {
+    if operation.availability() != HostOpAvailabilityV1::NativeTested {
+        return Err(TerminalErrorV1::OperationUnavailable(operation));
+    }
+    let required = match operation {
+        HostOpV1::FsReadFile => Some((RIGHT_READ_V1, FsCapabilityOperationV1::Read)),
+        HostOpV1::FsWriteFile => Some((RIGHT_WRITE_V1, FsCapabilityOperationV1::Write)),
+        _ => None,
+    };
+    let grant = match (required, capability) {
+        (None, None) => None,
+        (None, Some(_)) | (Some(_), None) => {
+            return Ok(denied(
+                operation,
+                request,
+                CapabilityDeniedV1::MalformedCapability,
+            ))
+        }
+        (Some((right, op)), Some(token)) => match capabilities.resolve(token) {
+            Ok(grant) if grant.rights & right == right => Some(grant),
+            Ok(grant) => {
+                return Ok(denied(
+                    operation,
+                    request,
+                    CapabilityDeniedV1::RightNotHeld {
+                        operation: op,
+                        held_rights: grant.rights,
+                    },
+                ))
+            }
+            Err(error) => return Ok(denied(operation, request, error)),
+        },
+    };
+    let outcome = match (operation, request) {
+        (HostOpV1::ConsoleWrite, CanonicalRequestV1::ConsoleWrite { stream, bytes }) => backend
+            .console_write(*stream, bytes)
+            .map(|()| CanonicalReplyV1::Unit)
+            .map_err(SemanticErrorV1::Io),
+        (HostOpV1::ConsoleFlush, CanonicalRequestV1::ConsoleFlush { stream }) => backend
+            .console_flush(*stream)
+            .map(|()| CanonicalReplyV1::Unit)
+            .map_err(SemanticErrorV1::Io),
+        (HostOpV1::ConsoleIsTerminal, CanonicalRequestV1::ConsoleIsTerminal { stream }) => {
+            Ok(CanonicalReplyV1::Bool(backend.console_is_terminal(*stream)))
+        }
+        (HostOpV1::FsReadFile, CanonicalRequestV1::FsReadFile { path }) => backend
+            .fs_read_file(grant.expect("validated FS capability"), path)
+            .map(CanonicalReplyV1::Bytes)
+            .map_err(|cause| file_error(operation, path, cause)),
+        (
+            HostOpV1::FsWriteFile,
+            CanonicalRequestV1::FsWriteFile {
+                path,
+                create_policy,
+                bytes,
+            },
+        ) => backend
+            .fs_write_file(
+                grant.expect("validated FS capability"),
+                path,
+                *create_policy,
+                bytes,
+            )
+            .map(|()| CanonicalReplyV1::Unit)
+            .map_err(|cause| file_error(operation, path, cause)),
+        _ => return Err(TerminalErrorV1::MalformedHostAbiField),
+    };
+    Ok(HostDispatchReplyV1 {
+        capability_identity: grant.map(|grant| grant.identity.clone()),
+        outcome: match outcome {
+            Ok(reply) => CanonicalOutcomeV1::Success(reply),
+            Err(error) => CanonicalOutcomeV1::Error(error),
+        },
+    })
+}
+
+fn file_error(operation: HostOpV1, path: &[u8], cause: FileErrorCauseV1) -> SemanticErrorV1 {
+    SemanticErrorV1::File(FileErrorIdentityV1 {
+        operation,
+        relative_path: path.to_vec(),
+        cause,
+    })
+}
+
+fn denied(
+    operation: HostOpV1,
+    request: &CanonicalRequestV1,
+    error: CapabilityDeniedV1,
+) -> HostDispatchReplyV1 {
+    let path = match request {
+        CanonicalRequestV1::FsReadFile { path } | CanonicalRequestV1::FsWriteFile { path, .. } => {
+            path.clone()
+        }
+        _ => Vec::new(),
+    };
+    HostDispatchReplyV1 {
+        capability_identity: None,
+        outcome: CanonicalOutcomeV1::Error(file_error(
+            operation,
+            &path,
+            FileErrorCauseV1::Capability(error),
+        )),
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -330,9 +584,13 @@ mod tests {
     #[test]
     fn catalog_is_closed_and_availability_is_exact() {
         assert_eq!(HostOpV1::ALL.len(), 14);
-        assert!(HostOpV1::ALL.into_iter().all(|operation| {
-            operation.availability() == HostOpAvailabilityV1::RepresentedUnavailable
-        }));
+        assert_eq!(
+            HostOpV1::ALL
+                .into_iter()
+                .filter(|operation| operation.availability() == HostOpAvailabilityV1::NativeTested)
+                .collect::<Vec<_>>(),
+            PX5_PLANNED_NATIVE_TARGETS
+        );
         assert_eq!(
             PX5_PLANNED_NATIVE_TARGETS,
             [

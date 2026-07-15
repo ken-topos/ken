@@ -79,8 +79,9 @@ fn unavailable_effect_example() -> ken_runtime::RuntimeExample {
         name: "nc18-console-effect".to_string(),
         checked_core_shape: "print_line \"hello\"".to_string(),
         ir: ken_runtime::RuntimeExpr::Effect {
-            effect: "Console".to_string(),
-            capability: Some("meta:fixture::ConsoleCap".to_string()),
+            family: "Console".to_string(),
+            operation: ken_runtime::HostOpV1::ConsoleRead,
+            capability: None,
             args: vec![],
         },
         observation: RuntimeObservation::Trapped(RuntimeTrap {
@@ -384,7 +385,8 @@ fn transparent_effect_body_blocks_supported_runtime_and_native_ready_report() {
         erase_checked_core_package_for_target(&package, [&target]).expect("pure target lowers");
     program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
         body: ken_runtime::RuntimeExpr::Effect {
-            effect: "Console".to_string(),
+            family: "Console".to_string(),
+            operation: ken_runtime::HostOpV1::ConsoleRead,
             capability: None,
             args: vec![],
         },

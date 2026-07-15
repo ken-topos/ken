@@ -2362,7 +2362,7 @@ fn runtime_expr_effect(expr: &RuntimeExpr) -> Option<&str> {
         RuntimeExpr::Call { callee, args } => {
             runtime_expr_effect(callee).or_else(|| args.iter().find_map(runtime_expr_effect))
         }
-        RuntimeExpr::Effect { effect, .. } => Some(effect),
+        RuntimeExpr::Effect { family, .. } => Some(family),
     }
 }
 
@@ -3123,7 +3123,8 @@ mod tests {
     fn replace_target_body_with_effect(program: &mut RuntimeProgram) {
         program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
             body: RuntimeExpr::Effect {
-                effect: "host.io".to_string(),
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleRead,
                 capability: None,
                 args: vec![RuntimeExpr::Value(RuntimeValue::Int(1))],
             },
@@ -3941,7 +3942,7 @@ mod tests {
         assert!(report
             .effect_foreign_policy
             .facts
-            .contains("runtime_expr.effect=host.io"));
+            .contains("runtime_expr.effect=Console"));
         assert!(matches!(
             report.native,
             NativeExecutionLaneReport::Unavailable { .. }
