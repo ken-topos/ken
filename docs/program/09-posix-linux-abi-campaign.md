@@ -138,6 +138,23 @@ for one is a **scope fork → escalate to the Architect**, not a judgment call.
 - **Successful OS execution is never promoted to kernel proof.** The status of
   every host guarantee is `tested` / `validated` / `delegated` — **never
   `proved`** — and that disclosure lives **in the source**, not only in the frame.
+- **`rustix` ACCEPTED in the runtime trust boundary (operator, 2026-07-15).**
+  FORK 2's dependency-risk acceptance is **granted**: exact-pinned,
+  checksum-locked `rustix`, private behind the first-party `ken-host` shell;
+  `ken-kernel` stays `forbid(unsafe_code)`. **PX1 is fully unblocked** (still
+  sequenced behind CC9 unless the operator pulls it ahead).
+- **NO linear/affine types in Ken — R2 CLOSED, not deferred (operator,
+  2026-07-15).** Linear/affine types and further OTT extensions are **open
+  research and stay OUT of the Ken language.** Resource-lifetime safety
+  ("exactly-once release") is delegated OUTSIDE the language: **enforced
+  operationally in the runtime** (generation-checked handle table; close lives at
+  the runtime level, not in Ken types) and its **assurance obligation routed to
+  Ward** through the assumption-boundary export (ADR-0006, G-Ward-seam). Ken
+  reports the invariant runtime-enforced / `tested`, **never `proved`**, and
+  never chases affinity to close the gap. This is the PRINCIPLES #9 Ken/Ward
+  division applied to resources: *if a concern can't live in the static,
+  propositional, total fragment, push it to the runtime and Ward, not into
+  research-grade type theory.*
 
 ---
 
@@ -417,12 +434,14 @@ PX-D and PX-E multiply it.**
 | | |
 |---|---|
 | **The rule (from the operator's tie-break)** | Ship it. Enforce it in the runtime. Report it **`tested`, never `proved`**. Put the disclosure **in the `System/Resource` SOURCE**, not only in the frame. *(A frame is read once. The source is read forever.)* |
-| **⛔ The forbidden move** | Smuggling affinity into PX7. **R2 (linear/affine types) is research, and the operator said "not a research project."** |
-| **★ The decision point** | **At PX7's frame, the Steward re-opens R2 as an explicit fork — with the real resource surface of PX-D/PX-E in hand.** Not before (we would be guessing), and **not after** (retrofitting affinity onto a public, catalog-depended-upon resource API is a far worse deal than deciding at the seam). |
+| **⛔ The forbidden move** | Building affinity into Ken. **R2 (linear/affine types) and further OTT extensions are open research; the operator ruled them OUT of the language (2026-07-15). Do not chase them to close this gap.** |
+| **✅ The resolution (operator, 2026-07-15)** | R2 is **CLOSED, not deferred** — no linear/affine types in Ken, ever. Push the safety machinery **out of the language**: (1) the **runtime** enforces exactly-once release operationally via the generation-checked handle table — close lives at the runtime level, not in Ken types; (2) the *assurance obligation* is **routed to Ward** through the assumption-boundary export (ADR-0006, G-Ward-seam), where resource-lifetime discipline is monitored behaviorally. Ken reports the invariant **runtime-enforced / `tested`, never `proved`**, and the disclosure lives in the `System/Resource` source. |
 
-**This is booked as a NAMED obligation on the Steward, not a vague research
-item.** *The one thing that would betray the operator's intent is to ship a
-resource API whose safety we cannot state and then not say so.*
+**PX7's frame does NOT re-open R2.** The Steward's booked obligation is now to
+**wire the resource-lifetime assurance into the Ward seam** — not to weigh affine
+types. *The one thing that would betray the operator's intent is to ship a
+resource API whose safety we cannot state and then not say so — and the Ward
+export is exactly where we state it.*
 
 ### Explicitly OUT OF SCOPE
 
@@ -477,7 +496,7 @@ flowchart LR
     PX2 --> PX4[PX4 native entrypoint ABI]
     PX4 --> PX5[PX5 native effect lowering]
     PX5 --> PX6[PX6 interp/native differential harness]
-    PX6 --> PX7[PX7 resource handles + bracket - R2 FORK RE-OPENS HERE]
+    PX6 --> PX7[PX7 resource handles + bracket - safety in runtime plus Ward, no affine]
     PX7 --> PX8[PX8 partial IO + buffers]
     PX8 --> PX9[PX9 structured errno]
     PX9 --> PX10[PX10 processes - spawn/wait/pipes]
@@ -496,7 +515,7 @@ flowchart LR
 |---|---|
 | Diagnostics | ✅ landed (CC4 `Diagnostic.Core`) |
 | Modules / namespaces | ⚠ **partial** — ADR-0014/15/16 landed, but **`export` is SPECIFIED AND NOT PARSED** (zero hits in `parser.rs`) |
-| Test / property framework | ⛔ **nothing** — no `catalog/packages/Test`; CC9 is unbuilt |
+| Test / property framework | ⛔ **nothing** — no `catalog/packages/Test`; CC9 is unbuilt. **Temporary scaffolding only (operator, 2026-07-15) — see below.** |
 | Package manager (L4) | ⛔ not started |
 
 **⇒ Flagged for the operator, not assumed.** *"Not a toy" is not purchased by
@@ -504,11 +523,25 @@ syscalls alone — a language you cannot write a test in is not a tool for real
 practical work.* **The Steward will bring a toolchain-axis proposal separately;
 it is not smuggled into PX.**
 
-**★ CC9 is a real dependency, not a courtesy.** CC9 is already framed as
-`Resource`/`Bracket` + `Test.Property`. **PX7 is its consumer** — if CC9 lands a
-`Bracket` shape that PX7 cannot use for OS handles, we will build it twice.
-**CC9's frame must be re-read against PX7 before CC9 is released**, and that is
-on me.
+**★★ The in-Ken test framework is TEMPORARY SCAFFOLDING until Ward takes over
+(operator, 2026-07-15).** Testing is behavioral/empirical assurance —
+PRINCIPLES #9 puts that in **Ward's** domain, not Ken's core. So CC9's
+`Test.Property` is a **stopgap**: it exists so real work can be written and
+checked *now* (a language you can't test in isn't a tool), but it is **explicitly
+provisional and destined for Ward takeover.** Design consequence, binding on the
+CC9 frame: **minimize language-surface entrenchment** — no test-only primitives
+baked into the kernel or surface grammar that would make the Ward handoff a
+breaking migration; keep it a catalog package over existing capabilities, so
+Ward can assume the role behind the same seam (ADR-0006, one-way Ken→Ward export)
+without a language change. Same principle as resource-lifetime safety: **the
+obligation is Ward's; Ken carries only the minimal, non-entrenching stopgap.**
+
+**★ CC9 is a real dependency, not a courtesy** — but a *scaffolding* one. CC9 is
+framed as `Resource`/`Bracket` + `Test.Property`. **PX7 is the `Bracket`
+consumer** — if CC9 lands a `Bracket` shape that PX7 cannot use for OS handles,
+we will build it twice; **CC9's frame must be re-read against PX7 before CC9 is
+released** (on me). The `Test.Property` half is the temporary-scaffolding piece
+above; the `Resource`/`Bracket` half is durable runtime-safety machinery.
 
 **PX1 and PX2 are the only ones that could start early.** They are pure debt,
 they touch no surface, and the defect they close is **on `main` in the security

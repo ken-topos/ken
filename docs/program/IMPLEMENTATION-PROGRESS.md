@@ -14,9 +14,81 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-15 (01:08 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ 24aebc97`
+> ### ⏭ 2026-07-15 (02:13 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ 8dabdeca`
+>
+> ## ✅✅ PAT PX RULINGS (2026-07-15): rustix APPROVED · NO affine/linear types · resource safety → runtime + Ward · test framework = temp scaffolding → Ward.
+>
+> **★ One coherent principle behind all four (PRINCIPLES #9 Ken/Ward split):**
+> Ken stays the static/propositional/total core; **behavioral & resource-safety
+> machinery is pushed OUT to the runtime + Ward; research-grade type theory
+> (affine/linear, deeper OTT) is explicitly DECLINED in the language.** Resource
+> lifetime and testing are both *obligations sent to Ward*, not built into Ken.
+>
+> **Four operator rulings, recorded in charter §2 + §4a + §5-toolchain
+> (`09-posix-linux-abi-campaign.md`, committed steward/work; publish to main with
+> the fossil-frame doc-only bundle):**
+> 1. **`rustix` APPROVED for the runtime trust boundary.** FORK 2 dependency-risk
+>    acceptance GRANTED. `ken-kernel` stays `forbid(unsafe_code)`. **PX1 fully
+>    unblocked** (still behind CC9 unless Pat pulls it ahead — that pull-ahead
+>    call is now the open sequencing question to tee up).
+> 2. **NO linear/affine types in Ken. R2 CLOSED, not deferred.** Do NOT re-open R2
+>    at PX7's frame (charter §4a decision-point row rewritten). Linear/affine +
+>    further OTT extensions are open research → OUT of the language.
+> 3. **Resource-lifetime safety delegated OUTSIDE Ken:** runtime enforces
+>    exactly-once release operationally (generation-checked handle table; close at
+>    the runtime level, not Ken types); the *assurance obligation* is routed to
+>    **Ward** via the assumption-boundary export (ADR-0006, G-Ward-seam). Ken
+>    reports runtime-enforced / `tested`, never `proved`. This is PRINCIPLES #9
+>    (Ken/Ward split) applied to resources. **PX7's booked Steward obligation is
+>    now: wire resource-lifetime assurance into the Ward seam** (was: re-open R2).
+> 4. **The in-Ken test framework is TEMPORARY SCAFFOLDING until Ward takes over.**
+>    Testing = behavioral assurance = Ward's domain. CC9's `Test.Property` is a
+>    stopgap so real work can be tested NOW, but **explicitly provisional**. Binding
+>    on CC9's frame: **minimize language-surface entrenchment** — no test-only
+>    kernel/grammar primitives; keep it a catalog package over existing
+>    capabilities so Ward assumes the role behind the same one-way seam (ADR-0006)
+>    with no language change. (CC9's `Resource`/`Bracket` half stays durable; only
+>    the `Test.Property` half is scaffolding.)
+>
+> **✅ FOSSIL FRAME AUTHORED (steward/work `880ca5aa`,
+> `docs/program/wp/axiom-fossil-sweep.md`).** Grounded: `lemma … = Axiom` →
+> `axiom`, **3 sites / 2 files** — proof-techniques.ken.md:159 + :349,
+> StringBijection.ken.md:15 (sites 2+3 are the SAME `string_to_list_char_retraction`
+> lemma in both files); 4 LawfulClasses `= Axiom` are instance-method fields, OUT
+> per Pat 2026-07-14. **Buildability confirmed:** `axiom` is a distinct AST node
+> (`AxiomDecl`), parser+formatter both support it; `print_decl_signature` is
+> token-preserving so `ken fmt` re-emits `axiom …` and does NOT normalize it back
+> → formatter fixed point holds. Foundation, S, FULL CI. Gate: Foundation QA;
+> semantic AC = trusted-base byte-identical before/after (zero trust delta); no
+> Architect terminal gate (escalate only on a non-empty trust delta).
+>
+> **⇒ HOLDING the release + doc-only publish to BATCH with Pat's PX1/CC9 answer.**
+> When Pat responds: publish ONE doc-only bundle to main (charter rulings
+> `338f68bf` + fossil frame `880ca5aa` + tracker) via scratch worktree, then run
+> the Foundation Handoff Gate (compact foundation-leader/implementer/qa → verify
+> drops → kick) and release the fossil sweep. If Pat says pull PX1/PX2 ahead of
+> CC9, release PX1 to Runtime in the same batch (parallel lane — crates, not
+> catalog; no conflict with the fossil sweep). Toolchain-axis proposal still owed
+> to Pat.
+>
+> ### ⏭ 2026-07-15 (01:08 UTC, clock-read) — (history) · `origin/main @ 24aebc97`
 >
 > ## ✅ kenfmt MERGED + CLOSED (origin/main @ 683711fc; retros in). ▶ FRONTIER: fossil sweep (catalog free) → PX.
+>
+> **⇒ ON RESUME (after self-compact ~01:52 UTC):** (1) **Frame the fossil sweep** —
+> next Foundation catalog WP: `lemma = Axiom → axiom` (lowercase) migration in
+> StringBijection + proof-techniques (×2 sites). RE-GREP the CURRENT post-reflow
+> origin/main for the exact sites (kenfmt just reformatted proof-techniques.ken.md,
+> so line numbers moved) before writing the frame; re-confirm scope with Pat if it
+> exceeds the named files. Catalog is FREE (kenfmt window released). Then Handoff
+> Gate → Foundation. (2) **PX campaign** — check CC9 status + PX1 readiness
+> (runtime-leader idle awaiting both); PX touches Posix.ken.md → sequence after
+> fossil. **IN-FLIGHT at compact:** librarian trimming my personal MEMORY.md index
+> (dispatched evt_75fda6fdgk55e; 17.1KB target was infeasible — revised to
+> tail-trim→~18.2KB preserving all 193 links, evt_1vn9ntnf3zhhn; verify result on
+> resume, don't re-touch MEMORY.md meanwhile). Doc-only tracker-sync DONE (PR #705
+> → origin/main `8dabdeca`, verified, worktree cleaned). Wedge-sweep monitor
+> `b9ondtvbp` runs ~till 02:08.
 >
 > **✅ LET-6 CLOSED** — merged fa750efd; ALL THREE §10 retros verified in
 > `thr_4egp`: leader (00:31:20, coordination retro + boundary), QA (00:31:44,
