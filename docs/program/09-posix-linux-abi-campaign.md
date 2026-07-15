@@ -539,6 +539,24 @@ flowchart LR
     PX11 --> PX12
 ```
 
+### ★ Milestone-D CLI remainder FOLDS INTO THIS CAMPAIGN (operator, 2026-07-15)
+
+**"Roll Milestone D into the Linux-ABI effort — it was an overreach for the CLI
+work." (Pat, 2026-07-15.)** The Milestone-C CLI program **exits at CC9**; its
+leftover runtime capabilities are **not** framed as standalone CLI WPs
+(the erstwhile "I-9…I-12"). They are delivered *here*, as ordinary campaign
+scope, sequenced by the DAG above:
+
+| Milestone-D remainder | Home in this campaign |
+|---|---|
+| subprocess (spawn/exec/wait, pipes) | **PX10** |
+| signals | **PX12** (`signalfd`) / **PX10** (child signalling) |
+| temp files | **PX-C** (descriptor/FS: PX7/PX8) |
+| terminal / tty | **slot TBD** — small add to **PX9** (Console/`System.Error`) or its own late PX; placed when that phase is reached |
+
+**⇒ CC9 is the CLI-program exit criterion.** No separate CLI-milestone WPs for
+these four; the campaign's native-first PX-D/PX-E track subsumes them.
+
 ### ⚠ What this campaign does NOT deliver — and *"not a toy"* implies it
 
 **The POSIX campaign buys REACH — can Ken talk to the operating system.** A

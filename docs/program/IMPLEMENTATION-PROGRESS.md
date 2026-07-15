@@ -14,6 +14,72 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### ⚡ 2026-07-15 (14:44 UTC, clock-read) — 🟢 OPERATOR REPLIED · PX3 + PX4 RELEASING (2 rings) · Milestone-D folded into PX campaign · watchdog RE-ARMED
+>
+> **Pat replied to escalation `evt_4ysrxrbqbs4zq` (in-session):**
+> 1. **PX3 — CONCUR → releasing now** (Language lane, S). Dep PX2 merged/closed.
+> 2. **Milestone-D — "roll it into the Linux-ABI effort; it was an overreach for
+> the CLI work."** ⇒ **CC9 IS the CLI-program exit criterion**; I do **NOT** frame
+> I-9…I-12. The four remainder items fold into the PX campaign: subprocess→**PX10**,
+> signals→**PX12**/PX10 (`signalfd`), temp→**PX-C**, terminal/tty→**slot TBD** (small
+> add to PX9-Console or its own late PX; place when reached). Recorded in
+> `09-posix-linux-abi-campaign.md §6`.
+> 3. **Resource/Bracket — briefed; Pat chose (A) KEEP HOLDING** until the PX7
+> re-read. Honesty gap (exactly-once release unstateable in Ken; runtime-enforced +
+> Ward, R2 CLOSED) laid out; recommended (A) keep-holding over (B) commission an
+> Architect forward-compat `Bracket` shape now — because pinning the shape before
+> PX4/5/6 land takes on exactly the native-lowering risk FORK-3 native-early exists
+> to retire. **Pat concurred (A).** No Architect commission; RB stays HELD, FS
+> file-acquisition stays deferred until PX7. **RESOLVED — off the pending list.**
+> - **STANDING GRANT: "reorder work as necessary to keep the fleet moving."**
+> **⇒ REORDER DECISION: also releasing PX4** (native entrypoint ABI — Runtime, M)
+> to the idle Runtime ring in parallel. Ready (dep PX2 merged), committed scope
+> (FORK 1: commit-through-PX-E), operator-ruled **native-early (PX-B before PX-C)**,
+> P0. PX3 + PX4 are siblings off PX2 (DAG L529-530) → two rings move at once.
+> **Verify** (PX6) stays idle correctly — behind PX5; **Kernel** has nothing in this
+> campaign by design (§1); **Ergo/Foundation** deps unmet. No manufactured work.
+> - **Watchdog RE-ARMED `441e8b57`** (work resuming; auto-cancels if fleet requiesces).
+> - **⇒ NEXT (this turn):** frames AUTHORED (`px3-abi-scalars.md` +
+> `px4-native-entrypoint.md`, grounded vs `origin/main`). **⚠ PX3 grew S→M** on
+> grounding: PX2 manifest has NO pointer/CInt-width fact, so PX3 must ADD probed
+> width facts to `ken-host` (PX2 pattern) before binding — cross-lane spillover,
+> Architect §14 covers the inventory-closure axis. Publish both frames doc-only
+> from a **fresh-from-main** branch `steward/px3-px4-frames` (steward/work is 34
+> behind — must NOT publish it directly; distinct name from `wp/px3-*`/`wp/px4-*`
+> avoids the frame/code stale-ref trap). Then Handoff-Gate Language ring (PX3) +
+> Runtime ring (PX4) — compact each, verify drops → kick off both. Do NOT re-ask
+> rustix (SETTLED). Resource/Bracket HELD (Pat (A)).
+>
+> ### ⚡ 2026-07-15 (14:29 UTC, clock-read) — ✅ RESUMED post-compact · PX2 CLOSED · fleet quiescent, blocked ONLY on operator · watchdog CANCELLED
+>
+> **Post-compact resume (self-compact at CC9-closed seam completed).** Re-oriented
+> (orientation + COORDINATION + MODELS + ken-steward skill + memory scopes +
+> tracker). Ground-truthed: no Pat reply to escalation `evt_4ysrxrbqbs4zq` yet;
+> the one pending item (PX2 §10 QA retro) had **landed** during compaction.
+> **✅ PX2 (target-ABI manifest) CLOSED `evt_39wybjwcmn444`.** All 3 §10 retros in
+> (leader `evt_1462fk6phf2av` + coordination carry / impl `evt_26g6zxs7k218a` / QA
+> `evt_2gp667yaezck7`). §2 DONE: merged `origin/main 626b38dd` (content-verified —
+> `verify_inventory_closure` in `crates/ken-host/build.rs`), ACs met, retros in.
+> Gate trail: QA `evt_33kfxsjwczek2` + §14 `evt_3f9s3ke0ygt4t` + Decision
+> `dec_518zcqxtf5asb` (resolved). The QA retro posted un-mentioned so the gpt
+> runtime-leader seat never woke → I nudged (`evt_1203wmqqvay6w`) + tmux-roused →
+> it handed "retros in" → closed. **Converged carry** (leader+QA, topology-touching):
+> inventory/manifest gates need bidirectional producer↔registry↔observer set-closure
+> + all-3-build-arms proof — the ABI instance of the existing bidirectional
+> exact-set-closure memory; covered, not re-filed.
+> **⇒ FLEET NOW QUIESCENT — blocked ONLY on operator.** All rings idle & legitimately
+> parked: Foundation (CC9 closed), Runtime (PX2 closed), Language (L4 closed),
+> Kernel (KTR-1 merged), Verify (idle by Pat ruling), Ergo (idle), Spec enclave
+> (idle). Nothing in review, nothing mid-task. **WATCHDOG `cc623dbb` CANCELLED**
+> (§13 idle=paused: no active work to catch; every tick would be a no-op token
+> burn). **Re-arm on resume** when Pat's reply releases work.
+> **⇒ ON PAT'S REPLY to `evt_4ysrxrbqbs4zq`:** (1) PX3 approved → frame + Handoff-Gate
+> Language ring (idle post-L4) + release (size S: `USize`/`ISize`/`CInt`); (2)
+> Milestone-D → frame I-9…I-12 or accept CC9 as CLI-program exit; (3) Resource/Bracket
+> → keep HELD unless Pat wants a forward-compat `Bracket`-shape proposal. Do NOT
+> release PX3 or Resource/Bracket without Pat's word; do NOT re-ask rustix (SETTLED).
+> I'm woken by the mention when Pat replies (event-driven; no poll).
+>
 > ### ⚡ 2026-07-15 (13:08 UTC, clock-read) — ✅ L4-export MERGED (PR #717, FULL CI) · awaiting §10 retros to close · CC9 next
 >
 > **L4-export MERGED — `origin/main @ 0fa72ff9`** (PR #717, exact `5f4ed906`, FULL
@@ -31,6 +97,27 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > visibility-surface deny marker must be CONDITIONAL on absent prior binding (never
 > an unconditional negative binding) + non-interference asserted on real N2 source
 > roots, not inline. Language ring → standby.
+>
+> ### ⚡ 2026-07-15 (14:21 UTC, clock-read) — FLEET BLOCKED ON OPERATOR · escalation `evt_4ysrxrbqbs4zq` sent · self-compacting at CC9-closed seam
+>
+> **Operator escalation posted `evt_4ysrxrbqbs4zq`** — 3 unblocking decisions,
+> each with a recommendation (no work started without Pat's word):
+> 1. **PX3** — release now? CC9-Test.Property done; "PX3 behind CC9" predates my
+> split; deadlock if it waits on held Resource/Bracket (RB→PX7→PX3→RB). REC:
+> release PX3 (Language, S — `USize`/`ISize`/`CInt`). ← the immediate unblock.
+> 2. **Milestone-D remainder** (subprocess/signals/temp/terminal, unowned): frame
+> I-9…I-12 or is CC9 the exit criterion? REC: CC9 = exit.
+> 3. **Resource/Bracket** — keep holding on PX7, or forward-compatible `Bracket`
+> proposal now? REC: keep holding.
+> **⇒ ON PAT'S REPLY:** if PX3 approved → frame + Handoff-Gate Language ring +
+> release (Language idle post-L4). Otherwise fleet stays parked.
+> **PX2 housekeeping:** PX2 (Runtime, operator-pulled-ahead) merged; leader+impl
+> retros in; **QA retro stalled on `gpt-5.6-terra` "model at capacity"** →
+> re-nudged runtime-qa 14:21 (went Working). On QA retro posting, runtime-leader
+> hands "retros in" → I close PX2. NOT closed yet.
+> **⇒ SELF-COMPACTING** at this clean seam (CC9 closed, tracker synced to main
+> `c5124f88`, nothing mid-flight). Watchdog `cc623dbb` stays armed (PX2 closure +
+> pending operator reply = not fully quiescent). Resume = this block + tracker.
 >
 > ### ⚡ 2026-07-15 (14:18 UTC, clock-read) — ✅ CC9-Test.Property CLOSED · Foundation idle (no ready WP) · fleet blocked on operator (PX7 / Milestone-D)
 >
