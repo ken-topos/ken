@@ -7,60 +7,60 @@ use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{apply, eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
-const TRANSPORT: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const LAWFUL_CLASSES: &str = include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const LAWFUL_CLASSES: &str = include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const BYTES_KEYS: &str =
-    include_str!("../../../catalog/packages/Data/Collections/BytesKeys.ken.md");
-const LAWFUL_FUNCTORS: &str = include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
+    include_str!("../../../catalog/packages/Data/Binary/BytesKeys.ken.md");
+const LAWFUL_FUNCTORS: &str = include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
 const EFFECTFUL_CLASSES: &str =
-    include_str!("../../../catalog/packages/Core/EffectfulClasses.ken.md");
-const NONEMPTY: &str = include_str!("../../../catalog/packages/Data/NonEmpty/NonEmpty.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/EffectfulClasses.ken.md");
+const NONEMPTY: &str = include_str!("../../../catalog/packages/Data/Collections/NonEmpty.ken.md");
 const VALIDATION: &str =
-    include_str!("../../../catalog/packages/Data/Validation/Validation.ken.md");
-const DIAGNOSTIC: &str = include_str!("../../../catalog/packages/Diagnostic/Core.ken.md");
-const CURSOR: &str = include_str!("../../../catalog/packages/Parsing/Cursor.ken.md");
-const DECODER: &str = include_str!("../../../catalog/packages/Parsing/Decoder.ken.md");
+    include_str!("../../../catalog/packages/Data/Sums/Validation.ken.md");
+const DIAGNOSTIC: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
+const CURSOR: &str = include_str!("../../../catalog/packages/Capability/Parsing/Cursor.ken.md");
+const DECODER: &str = include_str!("../../../catalog/packages/Capability/Parsing/Decoder.ken.md");
 const STRING_BIJECTION: &str =
-    include_str!("../../../catalog/packages/Data/Collections/StringBijection.ken.md");
+    include_str!("../../../catalog/packages/Data/Text/StringBijection.ken.md");
 const STRING_KEYS: &str =
-    include_str!("../../../catalog/packages/Text/StringKeys/StringKeys.ken.md");
-const CODEC: &str = include_str!("../../../catalog/packages/Text/Codec/Codec.ken.md");
-const NUMERIC: &str = include_str!("../../../catalog/packages/Text/Numeric/Numeric.ken.md");
-const PRETTY: &str = include_str!("../../../catalog/packages/Pretty/Doc.ken.md");
-const ARGUMENTS: &str = include_str!("../../../catalog/packages/Process/Arguments.ken.md");
-const ENVIRONMENT: &str = include_str!("../../../catalog/packages/Process/Environment.ken.md");
-const EXIT: &str = include_str!("../../../catalog/packages/System/Exit.ken.md");
-const DIAGNOSTIC_RENDER: &str = include_str!("../../../catalog/packages/Diagnostic/Render.ken.md");
-const SCHEMA: &str = include_str!("../../../catalog/packages/Schema/Schema.ken.md");
-const ARGPARSE: &str = include_str!("../../../catalog/packages/ArgParse/ArgParse.ken.md");
-const CONFIG_DECODER: &str = include_str!("../../../catalog/packages/Config/Decoder.ken.md");
-const EXAMPLE: &str = include_str!("../../../catalog/packages/ArgParse/Example.ken.md");
+    include_str!("../../../catalog/packages/Data/Text/StringKeys.ken.md");
+const CODEC: &str = include_str!("../../../catalog/packages/Data/Text/Codec.ken.md");
+const NUMERIC: &str = include_str!("../../../catalog/packages/Capability/Parsing/Numeric.ken.md");
+const PRETTY: &str = include_str!("../../../catalog/packages/Capability/Formatting/Doc.ken.md");
+const ARGUMENTS: &str = include_str!("../../../catalog/packages/Capability/Process/Arguments.ken.md");
+const ENVIRONMENT: &str = include_str!("../../../catalog/packages/Capability/Process/Environment.ken.md");
+const EXIT: &str = include_str!("../../../catalog/packages/Capability/Process/Exit.ken.md");
+const DIAGNOSTIC_RENDER: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Render.ken.md");
+const SCHEMA: &str = include_str!("../../../catalog/packages/Application/Input/Schema.ken.md");
+const ARGPARSE: &str = include_str!("../../../catalog/packages/Application/CommandLine/ArgParse.ken.md");
+const CONFIG_DECODER: &str = include_str!("../../../catalog/packages/Application/Configuration/Decoder.ken.md");
+const EXAMPLE: &str = include_str!("../../../catalog/examples/CommandLine/Forge.ken.md");
 
 fn dependency_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     for (source, label) in [
-        (TRANSPORT, "Core.Transport"),
+        (TRANSPORT, "Core.Logic.Transport"),
         (COLLECTIONS, "Data.Collections"),
-        (LAWFUL_CLASSES, "Core.LawfulClasses"),
-        (BYTES_KEYS, "Data.Collections.BytesKeys"),
-        (LAWFUL_FUNCTORS, "Core.LawfulFunctors"),
-        (EFFECTFUL_CLASSES, "Core.EffectfulClasses"),
-        (NONEMPTY, "Data.NonEmpty"),
-        (VALIDATION, "Data.Validation"),
-        (DIAGNOSTIC, "Diagnostic.Core"),
-        (CURSOR, "Parsing.Cursor"),
-        (DECODER, "Parsing.Decoder"),
-        (STRING_BIJECTION, "Data.Collections.StringBijection"),
-        (STRING_KEYS, "Text.StringKeys"),
-        (CODEC, "Text.Codec"),
-        (NUMERIC, "Text.Numeric"),
-        (PRETTY, "Pretty.Doc"),
-        (ARGUMENTS, "Process.Arguments"),
-        (ENVIRONMENT, "Process.Environment"),
-        (EXIT, "System.Exit"),
-        (DIAGNOSTIC_RENDER, "Diagnostic.Render"),
+        (LAWFUL_CLASSES, "Core.Classes.LawfulClasses"),
+        (BYTES_KEYS, "Data.Binary.BytesKeys"),
+        (LAWFUL_FUNCTORS, "Core.Classes.LawfulFunctors"),
+        (EFFECTFUL_CLASSES, "Core.Classes.EffectfulClasses"),
+        (NONEMPTY, "Data.Collections.NonEmpty"),
+        (VALIDATION, "Data.Sums.Validation"),
+        (DIAGNOSTIC, "Capability.Diagnostics.Core"),
+        (CURSOR, "Capability.Parsing.Cursor"),
+        (DECODER, "Capability.Parsing.Decoder"),
+        (STRING_BIJECTION, "Data.Text.StringBijection"),
+        (STRING_KEYS, "Data.Text.StringKeys"),
+        (CODEC, "Data.Text.Codec"),
+        (NUMERIC, "Capability.Parsing.Numeric"),
+        (PRETTY, "Capability.Formatting.Doc"),
+        (ARGUMENTS, "Capability.Process.Arguments"),
+        (ENVIRONMENT, "Capability.Process.Environment"),
+        (EXIT, "Capability.Process.Exit"),
+        (DIAGNOSTIC_RENDER, "Capability.Diagnostics.Render"),
     ] {
         env.elaborate_ken_md_file(source)
             .unwrap_or_else(|err| panic!("{label} must elaborate in dependency order: {err:?}"));
@@ -73,8 +73,8 @@ fn full_env() -> ElabEnv {
     for (source, label) in [
         (SCHEMA, "Schema"),
         (ARGPARSE, "ArgParse"),
-        (CONFIG_DECODER, "Config.Decoder"),
-        (EXAMPLE, "ArgParse.Example"),
+        (CONFIG_DECODER, "Application.Configuration.Decoder"),
+        (EXAMPLE, "Application.CommandLine.Forge"),
     ] {
         env.elaborate_ken_md_file(source)
             .unwrap_or_else(|err| panic!("{label} must elaborate in dependency order: {err:?}"));
@@ -413,7 +413,7 @@ fn cc8_adds_no_trust_and_declares_no_second_universe() {
     for (source, label) in [
         (SCHEMA, "Schema"),
         (ARGPARSE, "ArgParse"),
-        (CONFIG_DECODER, "Config.Decoder"),
+        (CONFIG_DECODER, "Application.Configuration.Decoder"),
     ] {
         let before_globals: BTreeSet<_> = env.globals.values().copied().collect();
         env.elaborate_ken_md_file(source)

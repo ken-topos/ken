@@ -210,7 +210,7 @@ A refinement can conjoin more than one property with the prelude's `And`
 permutation of the input, in one refinement). A function parameter can be
 refined too, the mirror case of a refined result — a refined PARAMETER, here
 accepting only Booleans equal to `True`, the same shape
-`catalog/packages/Data/Collections/Collections.ken`'s `true_refinement_project`
+`catalog/packages/Data/Collections/Derived.ken`'s `true_refinement_project`
 uses:
 
 ```ken example
@@ -255,7 +255,7 @@ const wrong : String = (Describe Bool).describe True
 A class field's own type may itself carry a law — the shape every entry in
 `catalog/packages/Core/` follows, covered in depth by the proof techniques
 strand. `Eq` below elides `sym`/`trans` for brevity; see
-`catalog/packages/Core/LawfulClasses.ken` for the full class:
+`catalog/packages/Core/Classes/LawfulClasses.ken` for the full class:
 
 ```ken ignore
 class Eq a {
@@ -596,7 +596,7 @@ type signature, a snippet missing its surrounding declarations).
     (`Eq A a b`, `J motive base eq`) — the kernel equality/`J` sugar. A
     lower-arity type-former or `class` of the same name **coexists
     correctly and is not an error** — this is by design, not an oversight:
-    the landed `class Eq a` (`Core/LawfulClasses.ken`) is arity-1 and never
+    the landed `class Eq a` (`Core/Classes/LawfulClasses.ken`) is arity-1 and never
     collides with the arity-3 equality sugar, so declaring your own
     lower-arity `Eq`/`J` is fine.
 

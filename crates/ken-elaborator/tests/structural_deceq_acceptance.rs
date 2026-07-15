@@ -5,11 +5,11 @@
 use ken_elaborator::{trusted_base_delta, ElabEnv};
 use ken_kernel::env::Decl;
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");

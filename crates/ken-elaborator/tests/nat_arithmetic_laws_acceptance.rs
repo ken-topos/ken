@@ -2,8 +2,8 @@
 
 use ken_elaborator::ElabEnv;
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
-const NAT_ARITH_KEN_MD: &str = include_str!("../../../catalog/packages/Core/NatArith.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const NAT_ARITH_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Numeric/Nat/Arithmetic.ken.md");
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");

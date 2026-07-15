@@ -37,7 +37,7 @@ one concrete parser: a fully parenthesized Boolean-expression grammar.
 
 ## 2. Definition
 
-`SourceId` comes from the lower `Diagnostic.Core` package. `Source` is a
+`SourceId` comes from the lower `Capability.Diagnostics.Core` package. `Source` is a
 checked record carrying artifact identity, the original `Bytes`, and UTF-8
 evidence. Lengths and positions are structural `Nat` quantities computed from
 the total `List UInt8` view. `String` is deliberately not the offset basis;
@@ -341,7 +341,7 @@ its value's own recursive structure; `erase_spans` recovers the bare
 Token recognition is byte-by-byte through CAT-5's explicit
 `byte_cursor_ops`, matching literal ASCII codepoints spelled as `Int` literals
 (`116` is `t`, `102` is `f`, `40` is `(`, `32` is space, and so on). The
-worked grammar is a genuine `Parsing.Decoder` client: fixed tokens use
+worked grammar is a genuine `Capability.Parsing.Decoder` client: fixed tokens use
 `decoder_satisfy`/`decoder_seq`, whitespace uses progress-checked
 `decoder_many`, and recursive expressions use `decoder_recursive`. Both
 repetition and recursive descent seed their private structural fuel from the
@@ -767,7 +767,7 @@ not over-read "Total" here as more than "this function always returns one
 of its two constructors," which the type checker already guarantees; see
 `§6`.
 
-**Why repetition is progress checked.** `Parsing.Decoder` exports repetition,
+**Why repetition is progress checked.** `Capability.Parsing.Decoder` exports repetition,
 but a successful step must strictly decrease the cursor's remaining count.
 `decoder_many` reports the named `DecoderZeroProgress` failure when that
 check fails and derives its private fuel from `remaining`, so it neither loops

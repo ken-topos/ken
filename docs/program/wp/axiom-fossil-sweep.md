@@ -37,11 +37,11 @@ elaborated term, identical trusted base, zero trust delta.
    - `catalog/guide/proof-techniques.ken.md:~349` (wraps; `Axiom` on `:351`):
      `lemma string_to_list_char_retraction : (text : String) → Equal String
      (list_char_to_string (string_to_list_char text)) text = / Axiom`
-   - `catalog/packages/Data/Collections/StringBijection.ken.md:~13` (wraps;
+   - `catalog/packages/Data/Text/StringBijection.ken.md:~13` (wraps;
      `Axiom` on `:15`): the **same** `string_to_list_char_retraction` lemma
      (this is the canonical `\`\`\`ken` source; the proof-techniques copy is in a
      `\`\`\`ken example` fence).
-2. **The 4 `Core/LawfulClasses.ken.md` `= Axiom` sites are OUT** (`refl`/
+2. **The 4 `Core/Classes/LawfulClasses.ken.md` `= Axiom` sites are OUT** (`refl`/
    `antisym`/`trans`/`total` on `Ord Int`). They are **instance-method fields**,
    not top-level `lemma` declarations; the `axiom` keyword is a declaration form
    and does not cover instance fields. Do not touch them. Do not touch any
@@ -134,7 +134,7 @@ current source):
 
 ## Do-not guards
 
-- Do **not** touch the 4 `Core/LawfulClasses.ken.md` instance-field `= Axiom`
+- Do **not** touch the 4 `Core/Classes/LawfulClasses.ken.md` instance-field `= Axiom`
   sites, any prose `\`Axiom\``, or any `Axiom` used as an expression body.
 - Do **not** change production `crates/**` or any test beyond the two inventoried
   coupled oracle files.

@@ -1,4 +1,4 @@
-# WP CC6a — `Process.Arguments` + `System.Exit`
+# WP CC6a — `Capability.Process.Arguments` + `Capability.Process.Exit`
 
 The pure, application-facing values around the runtime ABI: what a program
 **receives** (argv) and what it **returns** (an exit policy). This is the last
@@ -12,9 +12,9 @@ Base: `origin/main @ 3c7d6ce5`. Branch: `wp/cc6a-process-arguments-exit`.
 **Zero trust delta** — ordinary kernel-checked catalog Ken; no kernel rule, no
 primitive, no postulate, no `Axiom` in CC6a's fences.
 
-## ⚠ SCOPE: `System.Path.Posix` is NOT in this WP — it is HELD
+## ⚠ SCOPE: `Capability.Filesystem.Path.Posix` is NOT in this WP — it is HELD
 
-The original CC6 was `Process.Arguments` + `System.Exit` + `System.Path.Posix`.
+The original CC6 was `Capability.Process.Arguments` + `Capability.Process.Exit` + `Capability.Filesystem.Path.Posix`.
 **`Path.Posix` is deliberately held**, pending an **operator decision**, and
 **you must not build it here.**
 
@@ -49,17 +49,17 @@ It is the most valuable line in every frame I write. Use it.)
    CC6a builds the **pure application-facing values over these**, and adds **no
    new ABI type.**
 
-2. **★ `Process.Arguments` CONSUMES CC3's LANDED CARRIER — it does not mint a new
+2. **★ `Capability.Process.Arguments` CONSUMES CC3's LANDED CARRIER — it does not mint a new
    one.** CC3 already landed **`ArgBytes`** (the proof-carrying cached-`Nat`
    argv carrier) and **`ArgLocation`** (arg index + byte range) in
-   `Parsing/Cursor`. **Those are exactly "raw argv bytes + index + byte range."**
+   `Capability/Parsing/Cursor`. **Those are exactly "raw argv bytes + index + byte range."**
    **Reuse them.** Building a second argv location type would be the
    proliferation this catalog exists to avoid — and would be a **fifth**
    hand-paid carrier.
    - **⇒ CC6a needs ZERO new cached-`Nat` carriers.** If you reach for one,
      **STOP and escalate.**
 
-3. **`System.Exit` is a POLICY layer, not a new type.** `ExitCode` is landed
+3. **`Capability.Process.Exit` is a POLICY layer, not a new type.** `ExitCode` is landed
    (fixed input 1). CC6a supplies the **explicit, total** application-facing
    policy: success, failure with a code, and the mapping a program uses to
    *choose* its exit status — **with no host knowledge of the program's result
@@ -67,8 +67,8 @@ It is the most valuable line in every frame I write. Use it.)
    result shape). **No new `ExitCode`. No `Int` exit codes** — the landed type is
    `UInt8`.
 
-4. **Homes:** `Process.Arguments` → `catalog/packages/Process/Arguments.ken.md`;
-   `System.Exit` → `catalog/packages/System/Exit.ken.md` (§13's identity map).
+4. **Homes:** `Capability.Process.Arguments` → `catalog/packages/Capability/Process/Arguments.ken.md`;
+   `Capability.Process.Exit` → `catalog/packages/Capability/Process/Exit.ken.md` (§13's identity map).
 
 5. **Package model — unchanged.** No cross-file `import`/`pub`; dependency-bearing
    packages elaborate **in order into ONE shared `ElabEnv`** (AC1). A standalone
@@ -78,7 +78,7 @@ It is the most valuable line in every frame I write. Use it.)
 
 ## Mandated deliverable outline
 
-1. **`Process.Arguments`** — the pure view over `ProcessInput`'s argv: the arg
+1. **`Capability.Process.Arguments`** — the pure view over `ProcessInput`'s argv: the arg
    list, positional access **by index**, and the **byte-range location** of a
    slice within an arg — **all expressed over CC3's landed `ArgBytes` /
    `ArgLocation`** (fixed input 2). **Byte-preserving throughout**: argv values
@@ -86,7 +86,7 @@ It is the most valuable line in every frame I write. Use it.)
    guardrail — decoding is an explicit *library* choice a caller makes, not
    something this package does for them).
 
-2. **`System.Exit`** — the total exit policy over the landed `ExitCode`
+2. **`Capability.Process.Exit`** — the total exit policy over the landed `ExitCode`
    (fixed input 3). A program's result → an exit status, **explicitly**, with no
    ambient/default coercion and no host inspection of the result datatype.
 
@@ -95,21 +95,21 @@ It is the most valuable line in every frame I write. Use it.)
 - **AC1 — DS-7/8 ordered shared-`ElabEnv` harness.**
   `crates/ken-elaborator/tests/cc6a_process_arguments_exit_acceptance.rs`,
   following `cc5_pretty_doc_acceptance.rs`: ONE shared `ElabEnv`, dependency
-  closure elaborated **IN ORDER** (… → `Parsing.Cursor` (for `ArgBytes`) →
-  `Process.Arguments`, `System.Exit`), then every checked fence. **NOT a
+  closure elaborated **IN ORDER** (… → `Capability.Parsing.Cursor` (for `ArgBytes`) →
+  `Capability.Process.Arguments`, `Capability.Process.Exit`), then every checked fence. **NOT a
   standalone `ken check`.**
 - **AC2 — argv is BYTE-PRESERVING.** A **non-UTF-8** argv value survives
-  round-trip through `Process.Arguments` **byte-identically**. **This is the
+  round-trip through `Capability.Process.Arguments` **byte-identically**. **This is the
   discriminator that proves we did not quietly decode** — a `String`-based
   implementation fails it, and a UTF-8-only test would not catch that. **Use a
   genuinely invalid UTF-8 byte sequence.**
 - **AC3 — location faithfulness at a NON-DEGENERATE position.** A slice at
   **arg 2, bytes 3–5** reports exactly `(2, 3, 5)`. **Non-zero index AND non-zero
   offset** — an arg-0-only or offset-0 case passes a broken implementation.
-- **AC4 — `System.Exit` is total and explicit.** Every result maps to an exit
+- **AC4 — `Capability.Process.Exit` is total and explicit.** Every result maps to an exit
   status; `Failure` carries the landed `UInt8`. **No default/ambient coercion.**
 - **AC5 — zero new carriers.** No new cached-`Nat`-over-opaque-`Bytes` type;
-  `Process.Arguments` **consumes CC3's `ArgBytes`**. Grep-able. (Fixed input 2 —
+  `Capability.Process.Arguments` **consumes CC3's `ArgBytes`**. Grep-able. (Fixed input 2 —
   this is the AC that keeps the substrate decision the operator's.)
 - **AC6 — zero trust delta.** No `Axiom` in CC6a's fences; `trusted_base()` before
   == after; no kernel/prelude/`Cargo`/lock delta; **no new primitives**; **no
@@ -118,12 +118,12 @@ It is the most valuable line in every frame I write. Use it.)
   `crates/ken-cli/tests/ken_fmt.rs` **and**
   `crates/ken-elaborator/tests/kenfmt_c_capstone.rs` targeted before release.
   **Add NO row to `FRAME_LINE_COUNTS`.**
-- **AC8 — scope discipline.** Only `Process/Arguments.ken.md`,
-  `System/Exit.ken.md`, and the AC1 harness. **NO `Path.Posix`** (held).
+- **AC8 — scope discipline.** Only `Capability/Process/Arguments.ken.md`,
+  `Capability/Process/Exit.ken.md`, and the AC1 harness. **NO `Path.Posix`** (held).
 
 ## Do-not-reopen guardrails
 
-- **No `System.Path.Posix`** — held on an operator decision. If you need to split
+- **No `Capability.Filesystem.Path.Posix`** — held on an operator decision. If you need to split
   a raw `Bytes`, **escalate.**
 - **No new cached-`Nat` carrier** — consume CC3's `ArgBytes` (AC5).
 - **No decoding argv to `String`** — byte-preserving throughout (AC2). Decoding is
@@ -141,6 +141,6 @@ if `conformance/` is touched → `git_request` to the Steward → honesty gate +
 publish. CC6a closes when it lands **and** its §10 retros are in.
 
 **Next: CC7 (`ArgParse`) — the MILESTONE-C EXIT CRITERION.** It consumes
-`Process.Arguments` (this WP), `Parsing.Decoder`/`Cursor` (CC3), `Diagnostic`
-(CC4), `Pretty.Doc` (CC5), and `Validation` (CC1). **Everything it needs will
+`Capability.Process.Arguments` (this WP), `Capability.Parsing.Decoder`/`Cursor` (CC3), `Diagnostic`
+(CC4), `Capability.Formatting.Doc` (CC5), and `Validation` (CC1). **Everything it needs will
 exist when this lands.**

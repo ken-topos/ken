@@ -5,7 +5,7 @@ use ken_kernel::{GlobalId, Term};
 
 const CONSOLE_PACKAGE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../catalog/packages/Capability/Console/Console.ken.md"
+    "/../../catalog/packages/Capability/Console/Text.ken.md"
 ));
 
 struct ConsoleEnv {

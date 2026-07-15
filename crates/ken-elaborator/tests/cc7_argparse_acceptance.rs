@@ -6,57 +6,57 @@ use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{apply, eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId, Term};
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const LAWFUL_FUNCTORS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
 const EFFECTFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/EffectfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/EffectfulClasses.ken.md");
 const NONEMPTY_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/NonEmpty/NonEmpty.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/NonEmpty.ken.md");
 const VALIDATION_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Validation/Validation.ken.md");
-const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Diagnostic/Core.ken.md");
-const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Cursor.ken.md");
-const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Decoder.ken.md");
+    include_str!("../../../catalog/packages/Data/Sums/Validation.ken.md");
+const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
+const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Cursor.ken.md");
+const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Decoder.ken.md");
 const STRING_BIJECTION_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/StringBijection.ken.md");
+    include_str!("../../../catalog/packages/Data/Text/StringBijection.ken.md");
 const STRING_KEYS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Text/StringKeys/StringKeys.ken.md");
-const CODEC_KEN_MD: &str = include_str!("../../../catalog/packages/Text/Codec/Codec.ken.md");
-const NUMERIC_KEN_MD: &str = include_str!("../../../catalog/packages/Text/Numeric/Numeric.ken.md");
-const PRETTY_KEN_MD: &str = include_str!("../../../catalog/packages/Pretty/Doc.ken.md");
-const ARGUMENTS_KEN_MD: &str = include_str!("../../../catalog/packages/Process/Arguments.ken.md");
-const EXIT_KEN_MD: &str = include_str!("../../../catalog/packages/System/Exit.ken.md");
+    include_str!("../../../catalog/packages/Data/Text/StringKeys.ken.md");
+const CODEC_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Text/Codec.ken.md");
+const NUMERIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Numeric.ken.md");
+const PRETTY_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Formatting/Doc.ken.md");
+const ARGUMENTS_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Process/Arguments.ken.md");
+const EXIT_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Process/Exit.ken.md");
 const DIAGNOSTIC_RENDER_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Diagnostic/Render.ken.md");
-const SCHEMA_KEN_MD: &str = include_str!("../../../catalog/packages/Schema/Schema.ken.md");
-const ARGPARSE_KEN_MD: &str = include_str!("../../../catalog/packages/ArgParse/ArgParse.ken.md");
-const EXAMPLE_KEN_MD: &str = include_str!("../../../catalog/packages/ArgParse/Example.ken.md");
+    include_str!("../../../catalog/packages/Capability/Diagnostics/Render.ken.md");
+const SCHEMA_KEN_MD: &str = include_str!("../../../catalog/packages/Application/Input/Schema.ken.md");
+const ARGPARSE_KEN_MD: &str = include_str!("../../../catalog/packages/Application/CommandLine/ArgParse.ken.md");
+const EXAMPLE_KEN_MD: &str = include_str!("../../../catalog/examples/CommandLine/Forge.ken.md");
 
 fn dependency_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     for (source, label) in [
-        (TRANSPORT_KEN_MD, "Core.Transport"),
+        (TRANSPORT_KEN_MD, "Core.Logic.Transport"),
         (COLLECTIONS_KEN_MD, "Data.Collections"),
-        (LAWFUL_CLASSES_KEN_MD, "Core.LawfulClasses"),
-        (LAWFUL_FUNCTORS_KEN_MD, "Core.LawfulFunctors"),
-        (EFFECTFUL_CLASSES_KEN_MD, "Core.EffectfulClasses"),
-        (NONEMPTY_KEN_MD, "Data.NonEmpty"),
-        (VALIDATION_KEN_MD, "Data.Validation"),
-        (DIAGNOSTIC_KEN_MD, "Diagnostic.Core"),
-        (CURSOR_KEN_MD, "Parsing.Cursor"),
-        (DECODER_KEN_MD, "Parsing.Decoder"),
-        (STRING_BIJECTION_KEN_MD, "Data.Collections.StringBijection"),
-        (STRING_KEYS_KEN_MD, "Text.StringKeys"),
-        (CODEC_KEN_MD, "Text.Codec"),
-        (NUMERIC_KEN_MD, "Text.Numeric"),
-        (PRETTY_KEN_MD, "Pretty.Doc"),
-        (ARGUMENTS_KEN_MD, "Process.Arguments"),
-        (EXIT_KEN_MD, "System.Exit"),
+        (LAWFUL_CLASSES_KEN_MD, "Core.Classes.LawfulClasses"),
+        (LAWFUL_FUNCTORS_KEN_MD, "Core.Classes.LawfulFunctors"),
+        (EFFECTFUL_CLASSES_KEN_MD, "Core.Classes.EffectfulClasses"),
+        (NONEMPTY_KEN_MD, "Data.Collections.NonEmpty"),
+        (VALIDATION_KEN_MD, "Data.Sums.Validation"),
+        (DIAGNOSTIC_KEN_MD, "Capability.Diagnostics.Core"),
+        (CURSOR_KEN_MD, "Capability.Parsing.Cursor"),
+        (DECODER_KEN_MD, "Capability.Parsing.Decoder"),
+        (STRING_BIJECTION_KEN_MD, "Data.Text.StringBijection"),
+        (STRING_KEYS_KEN_MD, "Data.Text.StringKeys"),
+        (CODEC_KEN_MD, "Data.Text.Codec"),
+        (NUMERIC_KEN_MD, "Capability.Parsing.Numeric"),
+        (PRETTY_KEN_MD, "Capability.Formatting.Doc"),
+        (ARGUMENTS_KEN_MD, "Capability.Process.Arguments"),
+        (EXIT_KEN_MD, "Capability.Process.Exit"),
     ] {
         env.elaborate_ken_md_file(source)
             .unwrap_or_else(|err| panic!("{label} must elaborate in dependency order: {err:?}"));
@@ -67,7 +67,7 @@ fn dependency_env() -> ElabEnv {
 fn full_env() -> ElabEnv {
     let mut env = dependency_env();
     env.elaborate_ken_md_file(DIAGNOSTIC_RENDER_KEN_MD)
-        .expect("Diagnostic.Render must elaborate after Diagnostic.Core and Pretty.Doc");
+        .expect("Capability.Diagnostics.Render must elaborate after Capability.Diagnostics.Core and Capability.Formatting.Doc");
     env.elaborate_ken_md_file(SCHEMA_KEN_MD)
         .expect("Schema must elaborate before either decoder client");
     env.elaborate_ken_md_file(ARGPARSE_KEN_MD)

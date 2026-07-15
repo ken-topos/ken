@@ -86,14 +86,14 @@ graph LR
   end
   subgraph PII["Program II — catalog closure (catalog/) · HELD until kenfmt C merges"]
     CC1["CC1 · NonEmpty + Validation"] --> CC2 --> CC3 --> CC4 --> CC5 --> CC6 --> CC7 --> CC8 --> CC9
-    CC2["CC2 · Text.Codec + Numeric + lawful keys"]
-    CC3["CC3 · Parsing.Cursor + Decoder (refactor CAT-5)"]
-    CC4["CC4 · Diagnostic.Core"]
-    CC5["CC5 · Pretty.Doc"]
-    CC6["CC6 · Process.Arguments + Exit + Path.Posix"]
+    CC2["CC2 · Data.Text.Codec + Numeric + lawful keys"]
+    CC3["CC3 · Capability.Parsing.Cursor + Decoder (refactor CAT-5)"]
+    CC4["CC4 · Capability.Diagnostics.Core"]
+    CC5["CC5 · Capability.Formatting.Doc"]
+    CC6["CC6 · Capability.Process.Arguments + Exit + Path.Posix"]
     CC7["CC7 · ArgParse"]
     CC8["CC8 · Environment/config decoder"]
-    CC9["CC9 · Resource + Test.Property"]
+    CC9["CC9 · Resource + Tooling.Testing.Property"]
   end
   PIII["Program III — native parity (Milestone E) · OUT OF SCOPE for now"]
 ```
@@ -151,27 +151,27 @@ touches). Build order is the report addendum's (each step has multiple obvious
 consumers — no speculative helpers; extract `Schema` only after two real
 consumers). **Do not start until kenfmt capstone C has merged** (freeze gate).
 
-- **CC1 · `Data.NonEmpty` + `Data.Validation`** — a failed validation carries ≥1
+- **CC1 · `Data.Collections.NonEmpty` + `Data.Sums.Validation`** — a failed validation carries ≥1
   error; independent checks accumulate applicatively via a lawful `Semigroup e`
   (normally `NonEmpty Diagnostic`), distinct from `Result`+`Monad` first-error
   sequencing. Small, independent, immediately reusable.
-- **CC2 · `Text.Codec` + `Text.Numeric` + lawful `Bytes`/`String` keys** —
+- **CC2 · `Data.Text.Codec` + `Capability.Parsing.Numeric` + lawful `Bytes`/`String` keys** —
   explicit UTF-8/ASCII views over raw bytes; total byte/text → `Int`/bounded-int
   with located errors; canonical `DecEq`/`Ord` instances for `String`/`Bytes` so
   option names / env keys work in `Map`/sets/dedup/suggestions.
-- **CC3 · `Parsing.Cursor` + progress-safe `Decoder` combinators** — a cursor
+- **CC3 · `Capability.Parsing.Cursor` + progress-safe `Decoder` combinators** — a cursor
   over a token/element type with explicit position + progress; **refactor CAT-5**
   to consume it (don't build a second parsing universe); repetition carries a
   progress proof or explicit fuel. Instances: `ByteCursor` (CAT-5 source) +
   `ArgCursor` (`List Bytes`, preserving arg index + byte range).
-- **CC4 · `Diagnostic.Core`** — generalize CAT-5's `SourceId+Span` to an
+- **CC4 · `Capability.Diagnostics.Core`** — generalize CAT-5's `SourceId+Span` to an
   origin-neutral checked diagnostic (`SourceOrigin`/`ArgumentOrigin`/
   `EnvironmentOrigin`/`ConfigKeyOrigin`); the value knows its valid locations,
   **not** how to print itself.
-- **CC5 · `Pretty.Doc`** — a small ordinary-Ken document algebra (text/line/
+- **CC5 · `Capability.Formatting.Doc`** — a small ordinary-Ken document algebra (text/line/
   concat/nest/group/alt) + deterministic width-parameterized renderer, with laws
   (render preserves text tokens; width affects layout not content; idempotent).
-- **CC6 · `Process.Arguments` + `System.Exit` + `System.Path.Posix`** — the pure
+- **CC6 · `Capability.Process.Arguments` + `Capability.Process.Exit` + `Capability.Filesystem.Path.Posix`** — the pure
   application-facing values around the runtime ABI (raw argv bytes + index + byte
   range; explicit exit policy; byte-preserving POSIX path construction/views/
   lexical-normalization that does **not** claim filesystem canonicalization).
@@ -182,7 +182,7 @@ consumers). **Do not start until kenfmt capstone C has merged** (freeze gate).
 - **CC8 · environment/config decoder** — the second description-driven decoder
   (before extracting any generic `Schema`), consuming the same
   `Cursor`/`Decoder`/`Validation`/`Diagnostic`/codec pieces.
-- **CC9 · `Resource`/`Bracket` + `Test.Property`** — structurally-safe
+- **CC9 · `Resource`/`Bracket` + `Tooling.Testing.Property`** — structurally-safe
   acquire/release for response/config files; reusable generators + properties
   for parser laws + arbitrary-byte totality.
 

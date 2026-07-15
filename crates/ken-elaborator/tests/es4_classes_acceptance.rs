@@ -84,10 +84,10 @@ use ken_kernel::env::Decl as KernelDecl;
 use ken_kernel::Term;
 
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 
 fn mk_env_with_package() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
@@ -581,7 +581,7 @@ fn char_ord_laws_reject_missing_law_field() {
     // with every field present; an instance silently missing a law field
     // must be REJECTED (uninhabited record), never accepted as lawful.
     let tangled = ken_elaborator::literate::extract_ken_md(LAWFUL_CLASSES_KEN_MD)
-        .expect("catalog/packages/Core/LawfulClasses.ken.md must extract")
+        .expect("catalog/packages/Core/Classes/LawfulClasses.ken.md must extract")
         .source;
     let prefix_end = tangled
         .find("instance Ord Char")

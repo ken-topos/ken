@@ -1,4 +1,4 @@
-# WP CC1 — `Data.NonEmpty` + `Data.Validation`
+# WP CC1 — `Data.Collections.NonEmpty` + `Data.Sums.Validation`
 
 **Program II (catalog closure), step 1 of 9.** Owner: **Foundation**. Reviewer:
 **Architect** (soundness/design). Size: **S–M**. Branch:
@@ -14,8 +14,8 @@ kernel-checked Ken; no kernel rule, no primitive, no postulate.
 ## Fixed inputs (settled — do NOT reopen)
 
 1. **Two packages, literate `.ken.md`, catalog pedagogic style.**
-   - `catalog/packages/Data/NonEmpty/NonEmpty.ken.md`
-   - `catalog/packages/Data/Validation/Validation.ken.md`
+   - `catalog/packages/Data/Collections/NonEmpty.ken.md`
+   - `catalog/packages/Data/Sums/Validation.ken.md`
    Follow the landed catalog conventions (`catalog-style-guide.md`): top-down
    `def`/`prop`/`lemma`/`proof`, membership form (`proof … for S`), literate
    fence roles. Both files **must be `ken fmt`-clean** — the strict
@@ -60,15 +60,15 @@ kernel-checked Ken; no kernel rule, no primitive, no postulate.
    CC1's `Validation` stays parameterized over any lawful `Semigroup e`; the
    `NonEmpty Diagnostic` specialization lands later. Depend only on `Data.List`,
    the (possibly new) `Semigroup`/`Functor`/`Applicative` classes, and
-   `Data.NonEmpty`.
+   `Data.Collections.NonEmpty`.
 
 ## Mandated deliverable outline
 
 Each section ends in a concrete, implementable choice — not a survey.
 
-1. **`Data.NonEmpty`** — carrier (per fixed input 2), `head`/`tail`/`toList`/
+1. **`Data.Collections.NonEmpty`** — carrier (per fixed input 2), `head`/`tail`/`toList`/
    `map`/`append`, the lawful `Semigroup (NonEmpty a)` with associativity proof.
-2. **`Data.Validation`** — `Validation e a` type, `Functor (Validation e)`,
+2. **`Data.Sums.Validation`** — `Validation e a` type, `Functor (Validation e)`,
    `Applicative (Validation e)` (accumulating, `Semigroup e` constraint) with law
    proofs, and the no-`Monad` note.
 3. **A worked accumulation example** in the `Validation` package (literate
@@ -115,5 +115,5 @@ Foundation builds → QA (Foundation) → **Architect** review (soundness/design
 the accumulating applicative + the law proofs) → `git_request` to Steward →
 honesty-gate + CI-poll publish → CC1 closed once retros are in. CV is **not** a
 required reviewer unless the build touches `spec/` or `conformance/` (CC1 is pure
-catalog and should not). CC2 (`Text.Codec`/`Text.Numeric`) follows in the
+catalog and should not). CC2 (`Data.Text.Codec`/`Capability.Parsing.Numeric`) follows in the
 Foundation ring.

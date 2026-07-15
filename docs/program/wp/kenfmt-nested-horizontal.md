@@ -10,7 +10,7 @@ the gap via AC5: "fix the formatter, then re-sweep").
 
 The landed horizontal-first formatter horizontalizes **signatures and
 arrow-returns** (R1/R1a) but **leaves nested application / proof-term arguments
-splayed one token per line.** Concrete: in `Core/LawfulClasses.ken.md`
+splayed one token per line.** Concrete: in `Core/Classes/LawfulClasses.ken.md`
 `pair_ord_head_sound`, the subexpression `(pair_fst a b x)` renders **inline in
 the signature** (`: Equal Bool (ord_leq_at a da (pair_fst a b x) (pair_fst a b
 y)) True =`, ~70 cols, fits 96) but is **splayed to four lines in the proof
@@ -65,7 +65,7 @@ signatures. Then re-run the catalog-wide reformat and re-arm the strict gate.
    argument boundaries with each fitting argument kept horizontal (never
    one-token-per-line). No change to R1/R1a/R2.
 2. **Representative-file checkpoint (operator review).** Apply the fixed formatter
-   to **one** representative deep-proof file — **`Core/LawfulClasses.ken.md`**
+   to **one** representative deep-proof file — **`Core/Classes/LawfulClasses.ken.md`**
    (the `pair_ord_*` proofs are the worst case) — and hand the Steward the diff.
    The Steward presents it to the operator for approval **before** any
    catalog-wide re-sweep (same one-file-first discipline that worked in batch-1).
@@ -85,7 +85,7 @@ signatures. Then re-run the catalog-wide reformat and re-arm the strict gate.
   one-token-per-line splay of a fitting application (e.g. no bare `(pair_fst`
   followed by `a`/`b`/`x` on separate lines). Golden tests pin the
   nested-collapse rule alongside the batch-1 R1–R5/R1a goldens.
-- **AC2 — no batch-1 regression.** `Core/OrdNat.ken.md` renders exactly as
+- **AC2 — no batch-1 regression.** `Data/Numeric/Nat/Order.ken.md` renders exactly as
   approved at `431e36ea` (R1 ladder + R1a inline returns unchanged); R2 proof
   selectors stay atomic.
 - **AC3 — whole-corpus idempotent fixed point.** `ken fmt --check` green on every

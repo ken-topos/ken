@@ -13,7 +13,7 @@ you never touched. **Targeted per-crate validation cannot see them**, so they
 surface as **red CI at publish**, after review and after the merge Decision —
 the most expensive place to find them.
 
-CC3 added two `catalog/packages/Parsing/*.ken.md` files. It passed its own
+CC3 added two `catalog/packages/Capability/Parsing/*.ken.md` files. It passed its own
 acceptance harness, the CAT-5 regression suite, QA, Architect terminal review,
 and the Steward honesty gate — then went red on
 `crates/ken-elaborator/tests/kenfmt_c_capstone.rs`, an oracle in a crate CC3

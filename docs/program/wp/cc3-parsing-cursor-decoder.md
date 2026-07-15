@@ -1,4 +1,4 @@
-# WP CC3 — `Parsing.Cursor` + progress-safe `Decoder` (and the CAT-5 refactor)
+# WP CC3 — `Capability.Parsing.Cursor` + progress-safe `Decoder` (and the CAT-5 refactor)
 
 Land the catalog's cursor abstraction and its progress-safe decoder
 combinators, and **refactor CAT-5 to consume them** — so Ken has *one* parsing
@@ -87,15 +87,15 @@ frame.**
    Across their two homes, the instances are two **values** of this record —
    `byte_cursor_ops` and `arg_cursor_ops` — **not** `instance` declarations.
    Each instance lives with the carrier it is over: `arg_cursor_ops` lives in
-   `Parsing.Cursor`, while
+   `Capability.Parsing.Cursor`, while
    `byte_cursor_ops` lives downstream in CAT-5 beside CAT-5's `Source` and
    `Span`. This acyclic home split supersedes the original frame wording that
-   placed both values in `Parsing.Cursor`. If the explicit-dictionary shape
+   placed both values in `Capability.Parsing.Cursor`. If the explicit-dictionary shape
    genuinely cannot be made to work, **escalate to the Architect**; do not
    reach for a class with a higher-kinded or associated-type parameter.
 
 3. **Location stays PARAMETERIZED — CC3 does NOT build the origin-neutral
-   diagnostic.** That is **CC4** (`Diagnostic.Core`, which generalizes
+   diagnostic.** That is **CC4** (`Capability.Diagnostics.Core`, which generalizes
    `SourceId+Span` to `SourceOrigin`/`ArgumentOrigin`/…). In CC3:
    `ByteCursor`'s `loc` is CAT-5's existing `Span`; `ArgCursor`'s `loc` is its
    own carrier (**arg index + byte range**). CC4 **subsumes** both later
@@ -131,8 +131,10 @@ frame.**
      `catalog/**.ken.md` for **formatting only** (AC6).
 
 6. **Homes (pinned, per §13's identity map — N dotted components → N−1
-   directories + a leaf):** `Parsing.Cursor` → `catalog/packages/Parsing/
-   Cursor.ken.md`; `Parsing.Decoder` → `catalog/packages/Parsing/Decoder.ken.md`.
+   directories + a leaf):** `Capability.Parsing.Cursor` →
+   `catalog/packages/Capability/Parsing/Cursor.ken.md`;
+   `Capability.Parsing.Decoder` →
+   `catalog/packages/Capability/Parsing/Decoder.ken.md`.
    CAT-5 **stays put** at `Capability/Parsing/Parsing.ken.md` — do **not** move
    or rename it (pure churn, and it would touch every reference in the corpus).
    If `06-catalog-campaign.md` carries a Section registry, add `Parsing` to it
@@ -142,7 +144,7 @@ frame.**
 
 Each section ends in a concrete, implementable choice — not a survey.
 
-1. **`Parsing.Cursor`** — the `CursorOps` record (fixed input 2); the
+1. **`Capability.Parsing.Cursor`** — the `CursorOps` record (fixed input 2); the
    **progress law** and the bounds/validity laws as plain predicates over a
    cursor (mirroring CAT-5's `ParserValid`-style posture: checkable per
    instance, not enforced by the type); and **`arg_cursor_ops`** over the
@@ -150,7 +152,7 @@ Each section ends in a concrete, implementable choice — not a survey.
    index, byte offset within that arg)**; `locate` → an arg-index + byte-range carrier.
      Crossing an arg boundary is an ordinary advance, not a special case.
 
-2. **`Parsing.Decoder`** — progress-safe combinators over a `CursorOps`:
+2. **`Capability.Parsing.Decoder`** — progress-safe combinators over a `CursorOps`:
    `pure`, `fail`, `map`, `bind`/`seq`, `alt`, `satisfy`/`token`, and the
    repetition family (`many`/`some`) with **fuel seeded from `remaining`**
    (fixed input 1). State the progress obligation on the step decoder, and
@@ -175,8 +177,8 @@ Each section ends in a concrete, implementable choice — not a survey.
   `crates/ken-elaborator/tests/cc3_parsing_cursor_decoder_acceptance.rs`,
   following `cc2_text_codec_numeric_acceptance.rs`: ONE shared `ElabEnv`, the
   dependency closure elaborated **IN ORDER** — Transport → Collections →
-  LawfulClasses → [NonEmpty/Validation if used] → **Parsing.Cursor** →
-  **Parsing.Decoder** → **Capability.Parsing (refactored CAT-5)** — then every
+  LawfulClasses → [NonEmpty/Validation if used] → **Capability.Parsing.Cursor** →
+  **Capability.Parsing.Decoder** → **Capability.Parsing (refactored CAT-5)** — then every
   checked literate fence; assert the checked globals are **real, transparent,
   kernel-checked terms**. **This is AC1 — NOT a standalone `ken check`.**
 - **AC2 — the CAT-5 anti-regression net: `cat5_parsing_package.rs` stays

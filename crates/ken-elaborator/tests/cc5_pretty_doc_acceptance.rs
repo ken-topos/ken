@@ -1,4 +1,4 @@
-//! CC5 (`Pretty.Doc`) ordered shared-environment acceptance.
+//! CC5 (`Capability.Formatting.Doc`) ordered shared-environment acceptance.
 
 use std::collections::BTreeSet;
 
@@ -6,15 +6,15 @@ use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const PRETTY_DOC_KEN_MD: &str = include_str!("../../../catalog/packages/Pretty/Doc.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const PRETTY_DOC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Formatting/Doc.ken.md");
 
 fn dependency_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("Core.Transport must elaborate first");
+        .expect("Core.Logic.Transport must elaborate first");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
         .expect("Data.Collections must elaborate second");
     env
@@ -23,7 +23,7 @@ fn dependency_env() -> ElabEnv {
 fn full_env() -> ElabEnv {
     let mut env = dependency_env();
     env.elaborate_ken_md_file(PRETTY_DOC_KEN_MD)
-        .expect("Pretty.Doc and every checked fence must elaborate third");
+        .expect("Capability.Formatting.Doc and every checked fence must elaborate third");
     env
 }
 
@@ -276,7 +276,7 @@ fn all_three_laws_are_checked_and_consumable_as_proofs() {
 #[test]
 fn cc5_has_zero_trust_delta_and_keeps_string_at_the_boundary() {
     let extracted = ken_elaborator::literate::extract_ken_md(PRETTY_DOC_KEN_MD)
-        .expect("Pretty.Doc must extract");
+        .expect("Capability.Formatting.Doc must extract");
     assert!(!extracted.source.contains("Axiom"));
     assert!(!extracted.source.contains("string_length"));
     assert!(!extracted.source.contains("Diagnostic"));
@@ -291,7 +291,7 @@ fn cc5_has_zero_trust_delta_and_keeps_string_at_the_boundary() {
     let mut env = dependency_env();
     let before: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     env.elaborate_ken_md_file(PRETTY_DOC_KEN_MD)
-        .expect("Pretty.Doc must elaborate after its Core/Data closure");
+        .expect("Capability.Formatting.Doc must elaborate after its Core/Data closure");
     let after: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(before, after, "CC5 must add zero trusted-base entries");
 }

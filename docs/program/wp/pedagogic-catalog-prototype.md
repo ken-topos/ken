@@ -59,19 +59,19 @@ These are decided. Treat them as ground, not as questions to relitigate.
 
 **In scope — rewrite these files, in this order:**
 
-1. **`catalog/packages/Core/NatArith.ken.md`** (flagship, ~232 L). Canonical
+1. **`catalog/packages/Data/Numeric/Nat/Arithmetic.ken.md`** (flagship, ~232 L). Canonical
    arithmetic: `fn add`/`mul` (computation — stay `fn`); the law family
    `add_zero_r`/`add_zero_l`/`add_suc_*`/`add_assoc`/`add_comm`/`mul_*`/
    `mul_add_distrib_*`/`mul_assoc` (all `Equal Nat …`-typed → **Ω → `lemma`**);
    `const add_two_three`/`mul_two_three` (values — stay `const`). This file is
    also the keyword-adoption pilot, so it doubles as that.
-2. **`catalog/packages/Core/OrdNat.ken.md`** (~290 L; already uses `lemma` ×5).
+2. **`catalog/packages/Data/Numeric/Nat/Order.ken.md`** (~290 L; already uses `lemma` ×5).
    Order + its laws — finish the top-down/statement-first treatment and bring the
    remaining `Equal`/`IsTrue`-typed order laws under `lemma`/`proof` per §7.1.
 
 **Optional third if the pattern holds cleanly:**
 
-3. **`catalog/packages/Core/EmptyDec.ken.md`** (~299 L; already `lemma` ×2 +
+3. **`catalog/packages/Core/Logic/EmptyDec.ken.md`** (~299 L; already `lemma` ×2 +
    `proof` ×1). Decidability — a good `prop`/`proof … for` showcase. `Dec`/`Empty`
    have `Type`-level (proof-relevant) content, so it will also **exercise the
    Ω-vs-Type boundary in practice** — a useful stress of §7.1.

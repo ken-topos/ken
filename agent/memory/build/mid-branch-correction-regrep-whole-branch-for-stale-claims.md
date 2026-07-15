@@ -13,7 +13,7 @@ original 5-name set `{Refl, Axiom, absurd, J, Eq}` to the 3-name set
 `{Refl, Axiom, absurd}` (J/Eq are arity-3-gated and coexist by design). The
 implementer applied the correction and re-verified the code — but an *earlier*
 commit on the same branch had already written the pre-correction 5-name set into
-`catalog/packages/Core/EmptyDec.ken.md §6` (Findings prose). The correction's own
+`catalog/packages/Core/Logic/EmptyDec.ken.md §6` (Findings prose). The correction's own
 diff never needed to touch that line, so the stale 5-name overclaim survived —
 reintroducing the *exact* over-broad-claim class the correction exists to fix, in
 the branch's own doc. QA caught it by grepping the **whole branch diff** for the

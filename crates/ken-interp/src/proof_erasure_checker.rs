@@ -12,7 +12,7 @@ use ken_runtime::{
 use crate::{eval, EvalStore, EvalVal};
 
 pub const NC9_PROOF_ERASURE_BOUNDARY_CHECKER_SOURCE: &str =
-    include_str!("../../../catalog/packages/Capability/Verify/ProofErasureBoundaryChecker.ken");
+    include_str!("../../../catalog/packages/Tooling/Verification/ProofErasureBoundaryChecker.ken");
 
 const LANE_ORDER: [&str; 11] = [
     "artifact_identity",
@@ -66,7 +66,7 @@ pub fn ken_check_proof_erasure_boundary_witness(
             artifact: report.artifact,
             checker: KenProofErasureBoundaryChecker::Nc9KenLaneVerdictCheckerV1,
             evidence_source: concat!(
-                "catalog/packages/Capability/Verify/ProofErasureBoundaryChecker.ken elaborated/kernel-checked ",
+                "catalog/packages/Tooling/Verification/ProofErasureBoundaryChecker.ken elaborated/kernel-checked ",
                 "and evaluated by ken-interp over NC9 lane verdicts projected from ",
                 "ken-runtime proof_erasure_boundary_facts_from_program"
             )

@@ -142,14 +142,14 @@ STOP. You are in I-8b.**
 took SUB-1's CI red this morning:
 
 ```rust
-const CONSOLE_PACKAGE: &str = include_str!(…/Console.ken.md);   // ← RAW literate file
+const CONSOLE_PACKAGE: &str = include_str!(…/Text.ken.md);   // ← RAW literate file
 assert!(!CONSOLE_PACKAGE.contains("Axiom"));                    // ← greps PROSE + fences
 ```
 
 **These are the two tests nearest to I-8, they are the ones you will crib the
 zero-`Axiom` idiom from, and they are wrong.** They grep the **raw `.ken.md`** —
 prose *and* code — for the substring `Axiom`. **They pass today only because no
-prose in `Console.ken.md` / `FS.ken.md` has yet happened to use the word.** The
+prose in `Text.ken.md` / `Errors.ken.md` has yet happened to use the word.** The
 moment an author documents *"this package needs no `Axiom`"* — **a true and
 valuable sentence** — CI goes red on a lie. **That already happened**: DS-4's
 identical oracle fired on SUB-1's prose *asserting the absence of an `Axiom`*.
@@ -160,8 +160,8 @@ which asserts on `extract_ken_md(…).source`):
 
 ```rust
 let extracted = ken_elaborator::literate::extract_ken_md(CONSOLE_PACKAGE)
-    .expect("Console.ken.md must extract");
-assert!(!extracted.source.contains("Axiom"), "Console.ken code must declare no Axiom");
+    .expect("Text.ken.md must extract");
+assert!(!extracted.source.contains("Axiom"), "Text.ken code must declare no Axiom");
 ```
 
 **This STRENGTHENS both gates** — still fails on a real `Axiom` in a fence (all
@@ -178,7 +178,7 @@ DECIDES.** (Fleet memory:
 ### Then the WP proper
 
 1. **Surface:** `data Instant = MkInstant Int`; `wall_now : {Clock} → Instant`
-   (catalog package, e.g. `Time/Clock.ken.md`).
+   (catalog package, e.g. `Capability/Time/WallClock.ken.md`).
 2. **Effect:** one `Clock` entry in the effect row; `ClockOp` with the `WallNow`
    op; the response/`clock_resp` plumbing, mirroring `Console`.
 3. **Host ABI:** a **required** `HostHandler` clock method (`&mut self`, **no cap

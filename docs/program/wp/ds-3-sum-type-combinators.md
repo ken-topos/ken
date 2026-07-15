@@ -48,7 +48,7 @@ Architect rules the other way (carry a distinct `Either`), it's a small additive
 ## Combinator scope (mechanical — proceeds regardless of the Either ruling)
 
 Both types are prelude-declared. **`Option` already has `option_map` + `instance
-Functor Option`** (`Core/LawfulFunctors.ken:232`/`:259`) — do **not** re-declare
+Functor Option`** (`Core/Classes/LawfulFunctors.ken:232`/`:259`) — do **not** re-declare
 those; reuse them. Add the combinators the campaign names, each with its laws as
 `Ω`/`Prop` proof terms, zero `Axiom`, over the inductive sums:
 
@@ -82,9 +82,9 @@ valve discipline as DS-8c. Combinators first.
 
 ## Package home (judgment call — Steward recommendation)
 
-**Recommend one new entry `catalog/packages/Data/Sums/Sums.ken`** grouping both
+**Recommend one new entry `catalog/packages/Data/Sums/Combinators.ken`** grouping both
 L2-sum combinator families (Option + Result) — one entry, not two, per subsume-
-don't-proliferate on package count (mirrors `Data/Collections/Collections.ken`
+don't-proliferate on package count (mirrors `Data/Collections/Derived.ken`
 holding all List combinators). Foundation confirms; if the enclave rules a
 distinct `Either` in, it joins this entry.
 

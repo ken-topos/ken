@@ -1,4 +1,4 @@
-# CC9-Test.Property — the minimal, provisional property-test scaffold
+# CC9-Tooling.Testing.Property — the minimal, provisional property-test scaffold
 
 **Owner:** Team Foundation · **Size:** S/M · **Base:** `origin/main @ 0fa72ff9`
 **Branch:** `wp/cc9-test-property`
@@ -10,7 +10,7 @@ Publisher on a RESOLVED Decision.
 > ### This is the FIRST half of a SPLIT CC9. The second half is HELD.
 > Grounding surfaced that the original CC9 bundled two packages with **opposite
 > durability postures**. Only the first is released here:
-> - **`Test.Property` — RELEASED (this frame).** Minimal, provisional test
+> - **`Tooling.Testing.Property` — RELEASED (this frame).** Minimal, provisional test
 >   scaffolding over existing capabilities; depends only on landed
 >   Parsing/`Bytes`; **no PX7 dependency.** "A language you cannot test in isn't
 >   a tool" — this is why CC9 is next.
@@ -57,7 +57,7 @@ discipline — by re-stating a law the catalog is obligated to prove as a
 "property" it merely *asserts*, or by `postulate`/`Axiom`/holing a `Prop` and
 calling the hole a test. **That is the failure mode this frame forbids.**
 
-Concretely, a `Test.Property` "property" is an **empirical, decidable check**:
+Concretely, a `Tooling.Testing.Property` "property" is an **empirical, decidable check**:
 
 - a **generator** produces concrete sample inputs (real `Bytes`, real values);
 - a **decidable predicate** (`a → Bool`, or a `Result`/`Validation` you can
@@ -74,23 +74,23 @@ law position, or "assume `CursorLaws`," STOP — you have crossed the line.
 
 ### 3.1 Package identity & conventions (match the landed corpus, not the prose)
 
-1. **Ships as exactly one file:** `catalog/packages/Test/Property.ken.md`
+1. **Ships as exactly one file:** `catalog/packages/Tooling/Testing/Property.ken.md`
    (Section `Test` — a new section the path itself creates; leaf `Property`).
    **Single literate `.ken.md`** (narrative + `ken` fences + laws/proofs); only
    exact ` ```ken ` fences tangle. Verified: **35 of 36 catalog packages are
    literate `.ken.md`**; the lone bare `.ken` is an early outlier — match the
    35.
 2. **Module is PATH-INFERRED.** No in-file `module` header; the module is
-   `Test.Property` from the path.
+   `Tooling.Testing.Property` from the path.
 3. **NO MANIFEST file.** Verified: **zero `MANIFEST` files on disk** across the
    whole catalog. The MANIFEST prose in `catalog/packages/README.md` is **stale**
    — match the disk (no manifest), not the README.
 4. **§6 "Findings" is RETIRED — do not add it.** Follow the current section
-   order of the exemplar `catalog/packages/Parsing/Cursor.ken.md` (Motivation →
+   order of the exemplar `catalog/packages/Capability/Parsing/Cursor.ken.md` (Motivation →
    Definition → Using it → Laws & proofs → Design notes → References → Trust &
    derivation).
 5. **Pure library — no `proc main`.** Validate with **`ken check
-   catalog/packages/Test/Property.ken.md`**, not `ken run`.
+   catalog/packages/Tooling/Testing/Property.ken.md`**, not `ken run`.
 
 ### 3.2 Cross-file `import` does NOT resolve — INLINE the exercised surface
 
@@ -100,7 +100,7 @@ catalog (`catalog/packages/README.md`, honesty note), and **every one of the
 self-contained. (The `catalog_roots` in `modules.rs` is the **N2 conformance**
 loader, not a catalog cross-package resolver.) So: **INLINE** the minimal slice
 of the Cursor/`Bytes` surface your witness needs, or restate it locally. Do
-**not** write `import Parsing.Cursor`; it will not resolve.
+**not** write `import Capability.Parsing.Cursor`; it will not resolve.
 
 ### 3.3 The generator is DETERMINISTIC — there is no RNG, and you may not add one
 
@@ -116,7 +116,7 @@ reach for randomness, effects, or a stateful seed.
 Arbitrary `Bytes` are generated through the **total `List UInt8` view** of the
 `Bytes` primitive (`Bytes` ⇔ `List UInt8`; element type `UInt8`; length via
 `bytes_nat_length`; the exemplar uses this exact view —
-`catalog/packages/Parsing/Cursor.ken.md:10`, `:41`). Your `gen_bytes : Gen
+`catalog/packages/Capability/Parsing/Cursor.ken.md:10`, `:41`). Your `gen_bytes : Gen
 Bytes` materializes a bounded, deterministic family: the empty string,
 singletons, multi-byte strings, and the `0`/`255` boundary values, built from
 `List UInt8` and converted to `Bytes`. Re-ground the exact view-combinator
@@ -125,7 +125,7 @@ spellings at author time (§7).
 ### 3.5 The law to exercise — Cursor progress (the mandated non-vacuous witness)
 
 The mandated witness is the **computational shadow of `CursorAdvanceProgress`**
-(`catalog/packages/Parsing/Cursor.ken.md`, `fn CursorAdvanceProgress … : Prop`,
+(`catalog/packages/Capability/Parsing/Cursor.ken.md`, `fn CursorAdvanceProgress … : Prop`,
 bundled in `CursorLaws`): *for a cursor with remaining input, one `advance`
 step strictly decreases the remaining count.* As a **decidable `Bool` check** on
 a concrete cursor built from a generated `Bytes`:
@@ -172,8 +172,8 @@ Each item ends in a concrete implementable choice, not a survey.
 
 ## 5. Acceptance criteria (testable)
 
-- **AC1 — package shape.** Exactly `catalog/packages/Test/Property.ken.md`,
-  single literate file, path-inferred module `Test.Property`, no MANIFEST, no
+- **AC1 — package shape.** Exactly `catalog/packages/Tooling/Testing/Property.ken.md`,
+  single literate file, path-inferred module `Tooling.Testing.Property`, no MANIFEST, no
   `import`, no §6 Findings. `ken check` passes.
 - **AC2 — deterministic generators.** `Gen a` carries an explicit finite sample
   set; `gen_bytes` yields a bounded family including empty / singleton /
@@ -196,7 +196,7 @@ Each item ends in a concrete implementable choice, not a survey.
 - **AC6 — ZERO trust / no spill.** **Zero `trusted_base()` delta**; no new
   primitive; no kernel/Cargo/grammar/lexer change; no test-only language
   surface; no new dependency; nothing outside
-  `catalog/packages/Test/Property.ken.md`. CI green (FULL workspace **in CI**,
+  `catalog/packages/Tooling/Testing/Property.ken.md`. CI green (FULL workspace **in CI**,
   never a local `--workspace` run — §12).
 
 ## 6. Guardrails — do not reopen
@@ -226,7 +226,7 @@ Each item ends in a concrete implementable choice, not a survey.
 frame is grounded at `origin/main @ 0fa72ff9`; the exemplar's exact line
 numbers and the byte-view combinator spellings can move under you. **Read the
 ref (`git show origin/main:<file>`), never a stale worktree**, and re-confirm
-`catalog/packages/Parsing/Cursor.ken.md` and the `Bytes`/`List UInt8` view at
+`catalog/packages/Capability/Parsing/Cursor.ken.md` and the `Bytes`/`List UInt8` view at
 author time. The *findings* here (single literate file, no manifest, no import,
 deterministic generators, the anti-postulate line, zero trust delta) are
 durable; the *anchors* are not.

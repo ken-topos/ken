@@ -135,7 +135,7 @@ source via `elaborate_decl`):
 Scalars + native conversion floors: `crates/ken-elaborator/src/` (extend
 `numbers.rs`/`conversions.rs`). Derived Ken-source conversions + `RangeError`:
 prefer a literate catalog package (the `bytes_nat_length` model,
-`catalog/.../Collections.ken.md`) **or** `elaborate_decl` in the elaborator,
+`catalog/.../Derived.ken.md`) **or** `elaborate_decl` in the elaborator,
 matching the existing `conversions.rs` approach. **Concrete choice:** keep the
 public conversion API in **one** location; do not scatter it.
 

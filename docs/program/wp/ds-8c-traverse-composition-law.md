@@ -3,7 +3,7 @@
 > **✅ DELIVERED — `origin/main @ a3a3a39d` (2026-07-10). DO NOT RE-KICK.**
 > Both deliverables landed and are kernel-checked: `compose_ap_cmp` (§9.6) and the
 > `traverse` composition law (§9.7 = spec `56 §5.3`) in
-> `catalog/packages/Core/EffectfulClasses.ken.md`, with
+> `catalog/packages/Core/Classes/EffectfulClasses.ken.md`, with
 > `ds8_traversable_acceptance.rs` asserting both. This WP closed in a prior window;
 > the 2026-07-11 owner-reconcile/kick was a Steward stale-tracker error (the work
 > was already on `main`). The body below is the historical frame, retained for
@@ -36,7 +36,7 @@ showcase for `spec/50-stdlib/56-effectful-classes.md §5.3`:
 
 ## Scope
 
-- Both deliverables land in **`catalog/packages/Core/EffectfulClasses.ken.md`**,
+- Both deliverables land in **`catalog/packages/Core/Classes/EffectfulClasses.ken.md`**,
   continuing DS-8's construction mode. Critically: the Compose applicative there
   is a **`fn`-synonym / explicit dictionary-passing** construction
   (`compose_kleisli`, `functor_map_of`, `applicative_pure_of`, …), **NOT a real

@@ -17,8 +17,8 @@ use ken_elaborator::{foreign::trusted_base_delta, ElabEnv, NumericLitVal};
 use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
-const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const MAP_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Map.ken.md");
 
 fn mk_env() -> ElabEnv {
@@ -26,7 +26,7 @@ fn mk_env() -> ElabEnv {
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
         .expect("catalog/packages/Core/Transport.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("catalog/packages/Data/Collections/Collections.ken.md must elaborate");
+        .expect("catalog/packages/Data/Collections/Derived.ken.md must elaborate");
     env.elaborate_ken_md_file(MAP_KEN_MD)
         .expect("catalog/packages/Data/Collections/Map.ken.md must elaborate");
     env

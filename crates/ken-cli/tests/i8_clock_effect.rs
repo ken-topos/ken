@@ -3,7 +3,7 @@
 use ken_cli::{run_program, ProgramOutcome, SourceFormat};
 use ken_interp::{CaptureHost, ClockTrace, HostHandler};
 
-const CLOCK_PACKAGE: &str = include_str!("../../../catalog/packages/Time/Clock.ken.md");
+const CLOCK_PACKAGE: &str = include_str!("../../../catalog/packages/Capability/Time/WallClock.ken.md");
 
 const CLOCK_BODY: &str = r#"
   bind (Coproduct (FSOp APartial) AmbientOp)
@@ -115,7 +115,7 @@ fn undeclared_clock_row_is_a_named_effect_escape() {
 #[test]
 fn clock_package_is_structural_zero_trust_and_declares_no_ordering_law() {
     let extracted = ken_elaborator::literate::extract_ken_md(CLOCK_PACKAGE)
-        .expect("Time.Clock package must extract");
+        .expect("Capability.Time.WallClock package must extract");
     for forbidden in [
         "Axiom",
         "postulate",
@@ -138,7 +138,7 @@ fn clock_package_is_structural_zero_trust_and_declares_no_ordering_law() {
     let mut env = ken_elaborator::ElabEnv::new().expect("prelude");
     let before = env.env.trusted_base();
     env.elaborate_ken_md_file(CLOCK_PACKAGE)
-        .expect("ordinary Time.Clock package elaborates");
+        .expect("ordinary Capability.Time.WallClock package elaborates");
     assert_eq!(before, env.env.trusted_base());
     for name in [
         "Instant",

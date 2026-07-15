@@ -26,7 +26,7 @@ reader recognizes it when they hit it themselves.
    chains](#6-name-endpoints-and-evidence-in-proof-chains)
 
 Shared definitions for this strand's examples. `cong`, `sym`, and `trans` are
-`catalog/packages/Core/Transport.ken`'s equality idioms, inlined here so this
+`catalog/packages/Core/Logic/Transport.ken`'s equality idioms, inlined here so this
 strand's examples are self-contained:
 
 ```ken
@@ -206,7 +206,7 @@ case-split each variable through its **own** `match`-returning-a-function
 layer, and only introduce the hypothesis's `λ` *after* every relevant
 variable is already concrete — exactly the shape `bool_eq_sound`/
 `bool_eq_complete` use in §3, and the shape every law field in
-`catalog/packages/Core/LawfulClasses.ken` follows. Once the
+`catalog/packages/Core/Classes/LawfulClasses.ken` follows. Once the
 hypothesis's binder-time type is concrete, a branch whose hypothesis is
 *already* the goal (e.g. an "impossible" combination where the hypothesis
 and the goal are the same false equation) can reuse it directly — no
@@ -260,7 +260,7 @@ lemma bool_eq_complete (x : Bool) : (y : Bool) → Equal Bool x y → IsTrue (bo
 An **audited-delta** carrier (a K1 primitive like `Int`, opaque to δ, with
 no induction principle) cannot follow this pattern — its `sound`/`complete`
 are not kernel-provable at all, and the honest spelling is the visible
-`Axiom` postulate (`catalog/packages/Core/LawfulClasses.ken`'s
+`Axiom` postulate (`catalog/packages/Core/Classes/LawfulClasses.ken`'s
 `Int` instance), never a proof that only looks real.
 
 ## 4. `funext` is definitional

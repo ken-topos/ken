@@ -56,17 +56,17 @@ const NEEDS_COLLECTIONS: &[&str] = &["palindrome", "closures", "merge-sort", "tr
 
 fn collections_prelude() -> String {
     let transport_md =
-        fs::read_to_string(workspace_root().join("catalog/packages/Core/Transport.ken.md"))
-            .expect("catalog/packages/Core/Transport.ken.md must be readable");
+        fs::read_to_string(workspace_root().join("catalog/packages/Core/Logic/Transport.ken.md"))
+            .expect("catalog/packages/Core/Logic/Transport.ken.md must be readable");
     let transport = ken_elaborator::literate::extract_ken_md(&transport_md)
-        .expect("catalog/packages/Core/Transport.ken.md must extract")
+        .expect("catalog/packages/Core/Logic/Transport.ken.md must extract")
         .source;
     let collections_md = fs::read_to_string(
-        workspace_root().join("catalog/packages/Data/Collections/Collections.ken.md"),
+        workspace_root().join("catalog/packages/Data/Collections/Derived.ken.md"),
     )
-    .expect("catalog/packages/Data/Collections/Collections.ken.md must be readable");
+    .expect("catalog/packages/Data/Collections/Derived.ken.md must be readable");
     let collections = ken_elaborator::literate::extract_ken_md(&collections_md)
-        .expect("catalog/packages/Data/Collections/Collections.ken.md must extract")
+        .expect("catalog/packages/Data/Collections/Derived.ken.md must extract")
         .source;
     format!("{transport}\n{collections}")
 }

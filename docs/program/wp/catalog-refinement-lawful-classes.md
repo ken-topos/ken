@@ -1,4 +1,4 @@
-# WP catalog-refinement-lawful-classes — style-guide refinement of `Core/LawfulClasses`
+# WP catalog-refinement-lawful-classes — style-guide refinement of `Core/Classes/LawfulClasses`
 
 **Owner:** Ergo team. **Steward-framed** (2026-07-10) as the queued follow-on to
 the landed `catalog-refinement-pilot` (`origin/main @ f9a53ea`, retros §10-closed).
@@ -9,7 +9,7 @@ change.** Behavior- and semantics-preserving throughout.
 ## Dual purpose (stated up front)
 
 1. **Program value** — advance the standing catalog-refinement directive by
-   bringing `Core/LawfulClasses` to guide quality (organization, navigation,
+   bringing `Core/Classes/LawfulClasses` to guide quality (organization, navigation,
    proof-strategy commentary), the natural successor to the refinement pilot.
 2. **Harness trial** — this is the **first ken build WP run on the Codex-native
    harness with `gpt-5.6-terra`** (the `ergo-implementer` seat). Reviewers apply
@@ -29,7 +29,7 @@ out of scope — stop and route back to Steward rather than expanding.
 
 ## Target
 
-`catalog/packages/Core/LawfulClasses.ken.md` (literate `.ken.md`, ~594 lines).
+`catalog/packages/Core/Classes/LawfulClasses.ken.md` (literate `.ken.md`, ~594 lines).
 Sections present: Index · 1 Motivation · 2 Definition · 3 Using it ·
 4 Laws + proofs · 5 Design notes · 6 Findings · 7 References · 8 Trust +
 derivation.

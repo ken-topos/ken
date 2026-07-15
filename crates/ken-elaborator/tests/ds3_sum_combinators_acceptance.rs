@@ -11,14 +11,14 @@
 
 use ken_elaborator::ElabEnv;
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_FUNCTORS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
-const SUMS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Sums/Sums.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
+const SUMS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Sums/Combinators.ken.md");
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");

@@ -51,13 +51,13 @@ and I will hold it.**
 
 **Scope, exactly:**
 
-- **`catalog/packages/Data/Collections/StringBijection.ken.md`** — all 32 Ken
+- **`catalog/packages/Data/Text/StringBijection.ken.md`** — all 32 Ken
   lines / 2 declarations. **The whole file.** It is small, and its injectivity
   proof is the report's own worked example — **already checked against the current
   elaborator**, with the local aliases **definitionally equal** to the originals
   (so the existing `same_chars` proof is accepted **with no transport lemma**).
   *If you find you need a transport lemma, something is wrong — STOP AND REPORT.*
-- **`Collections.ken.md` — `slice` (`:1321`) and one `sort_bool` proof. Those two
+- **`Derived.ken.md` — `slice` (`:1321`) and one `sort_bool` proof. Those two
   only.**
 
 `slice` today is a single nested application whose four domain concepts — the

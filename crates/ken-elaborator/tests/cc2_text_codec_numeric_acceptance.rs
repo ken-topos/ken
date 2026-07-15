@@ -1,4 +1,4 @@
-//! CC2 (`Text.Codec` + `Text.Numeric`) acceptance —
+//! CC2 (`Data.Text.Codec` + `Capability.Parsing.Numeric`) acceptance —
 //! `docs/program/wp/cc2-text-codec-numeric.md`.
 //!
 //! The packages consume catalog dependencies. Elaborate the dependency closure
@@ -11,18 +11,18 @@ use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
-const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Diagnostic/Core.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
+const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
 const STRING_BIJECTION_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/StringBijection.ken.md");
+    include_str!("../../../catalog/packages/Data/Text/StringBijection.ken.md");
 const STRING_KEYS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Text/StringKeys/StringKeys.ken.md");
-const CODEC_KEN_MD: &str = include_str!("../../../catalog/packages/Text/Codec/Codec.ken.md");
-const NUMERIC_KEN_MD: &str = include_str!("../../../catalog/packages/Text/Numeric/Numeric.ken.md");
+    include_str!("../../../catalog/packages/Data/Text/StringKeys.ken.md");
+const CODEC_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Text/Codec.ken.md");
+const NUMERIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Numeric.ken.md");
 const NUMERIC_SEED: &str = include_str!("../../../conformance/stdlib/text/seed-text-numeric.md");
 
 fn dependency_env() -> ElabEnv {

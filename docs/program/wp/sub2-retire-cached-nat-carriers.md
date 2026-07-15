@@ -20,7 +20,7 @@ Retire them.
 
 ## 2. The disease, at both sites
 
-**Site 1 — `catalog/packages/Parsing/Cursor.ken.md`.** `ArgBytes` is a class
+**Site 1 — `catalog/packages/Capability/Parsing/Cursor.ken.md`.** `ArgBytes` is a class
 whose *third field is a proof the caller must fabricate*:
 
 ```ken
@@ -107,7 +107,7 @@ pre-empt it here.)
 ## 5. Acceptance criteria
 
 1. **`ArgByteLength`, `arg_length_field`, `arg_length_valid_field`, and the
-   `ArgBytes` class are GONE** from `Parsing/Cursor.ken.md`; consumers take plain
+   `ArgBytes` class are GONE** from `Capability/Parsing/Cursor.ken.md`; consumers take plain
    `Bytes`. Grep proves absence **in the extracted Ken**, not the prose.
 2. **`byte_unit_zero_int` is gone**, along with the `Capability/Parsing` length
    relation. No function computes a constant by subtracting a value from itself.

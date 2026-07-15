@@ -19,11 +19,11 @@ use ken_kernel::term::{Level, Term};
 use ken_kernel::{declare_inductive, infer, CtorSpec, GlobalEnv, InductiveSpec};
 
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const EMPTY_DEC_KEN_MD: &str = include_str!("../../../catalog/packages/Core/EmptyDec.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const EMPTY_DEC_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/EmptyDec.ken.md");
 
 fn lv0() -> Level {
     Level::zero()
@@ -259,7 +259,7 @@ fn ac3_trusted_base_delta_is_ordinary_inductive_admission_only() {
 fn ac4_bridge_demonstrated_over_deceq_bool_not_only_deceq_int() {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(EMPTY_DEC_KEN_MD)
-        .expect("catalog/packages/Core/EmptyDec.ken.md must elaborate standalone (Definition + every checked fence)");
+        .expect("catalog/packages/Core/Logic/EmptyDec.ken.md must elaborate standalone (Definition + every checked fence)");
 
     // `trueIsTrue`/`trueIsNotFalse` (from the §3 worked examples) both
     // instantiate `decEqDecides` at `DecEq_instance_Bool` — confirm the

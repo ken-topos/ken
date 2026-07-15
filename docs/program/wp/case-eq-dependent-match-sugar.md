@@ -34,10 +34,10 @@ any abstract-element-decidable proof.
 
 **Three occurrences and counting — the subsume-don't-proliferate trigger**
 (`docs/PRINCIPLES.md`):
-1. `catalog/packages/Core/EmptyDec.ken.md` (`dec_eq_decides`, ~:130–137);
+1. `catalog/packages/Core/Logic/EmptyDec.ken.md` (`dec_eq_decides`, ~:130–137);
 2. `catalog/packages/Data/Collections/Map.ken.md` (`dispatch_on_q1`/`q2`,
    `lookup_found_dispatch_*`, ~:275–279, :1001/:1018/:1215/:1232, :697/:709/:732);
-3. `catalog/packages/Core/LawfulClasses.ken.md` (`list_deceq_sound_cons_dispatch`,
+3. `catalog/packages/Core/Classes/LawfulClasses.ken.md` (`list_deceq_sound_cons_dispatch`,
    just landed with `deceq-structural-liftings`).
 
 Every future decidable-element lemma — `lawful compare`, `Ord (List a)`,

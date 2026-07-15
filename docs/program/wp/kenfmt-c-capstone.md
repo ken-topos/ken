@@ -43,7 +43,7 @@ guardrails) and the canonical-form spec (`spec/30-surface/31-lexical.md §1a–d
 ## The corpus C reformats (exact)
 
 **Catalog (15):** the 14 `catalog/**/*.ken.md` + the 1
-`catalog/packages/Capability/Verify/ProofErasureBoundaryChecker.ken`.
+`catalog/packages/Tooling/Verification/ProofErasureBoundaryChecker.ken`.
 **Rosetta (16):** `examples/rosetta/**/*.ken`.
 (Enumerated in the kickoff; the `--check` gate covers exactly this set. If the
 gate globs, the glob must enumerate every Ken-source root — catalog + rosetta —

@@ -1,4 +1,4 @@
-//! CC4 (`Diagnostic.Core`) ordered shared-environment acceptance.
+//! CC4 (`Capability.Diagnostics.Core`) ordered shared-environment acceptance.
 
 use std::collections::BTreeSet;
 
@@ -6,17 +6,17 @@ use ken_elaborator::{ElabEnv, ElabError, NumericLitVal};
 use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
-const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Diagnostic/Core.ken.md");
-const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Cursor.ken.md");
-const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Parsing/Decoder.ken.md");
+    include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
+const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
+const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Cursor.ken.md");
+const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Decoder.ken.md");
 const PARSING_KEN_MD: &str =
     include_str!("../../../catalog/packages/Capability/Parsing/Parsing.ken.md");
-const NUMERIC_KEN_MD: &str = include_str!("../../../catalog/packages/Text/Numeric/Numeric.ken.md");
+const NUMERIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Numeric.ken.md");
 
 fn dependency_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
@@ -32,15 +32,15 @@ fn dependency_env() -> ElabEnv {
 fn full_env() -> ElabEnv {
     let mut env = dependency_env();
     env.elaborate_ken_md_file(DIAGNOSTIC_KEN_MD)
-        .expect("Diagnostic.Core must elaborate fourth");
+        .expect("Capability.Diagnostics.Core must elaborate fourth");
     env.elaborate_ken_md_file(CURSOR_KEN_MD)
-        .expect("Parsing.Cursor must elaborate fifth");
+        .expect("Capability.Parsing.Cursor must elaborate fifth");
     env.elaborate_ken_md_file(DECODER_KEN_MD)
-        .expect("Parsing.Decoder must elaborate sixth");
+        .expect("Capability.Parsing.Decoder must elaborate sixth");
     env.elaborate_ken_md_file(PARSING_KEN_MD)
         .expect("Capability.Parsing must elaborate seventh");
     env.elaborate_ken_md_file(NUMERIC_KEN_MD)
-        .expect("Text.Numeric must elaborate eighth");
+        .expect("Capability.Parsing.Numeric must elaborate eighth");
     env
 }
 
@@ -161,7 +161,7 @@ fn ordered_dependency_closure_elaborates_all_cc4_clients() {
     }
     assert!(
         !env.globals.contains_key("NumericError"),
-        "Text.Numeric must not retain its pre-CC4 carrier"
+        "Capability.Parsing.Numeric must not retain its pre-CC4 carrier"
     );
     assert!(
         !PARSING_KEN_MD.contains("data SourceId ="),
@@ -169,7 +169,7 @@ fn ordered_dependency_closure_elaborates_all_cc4_clients() {
     );
     assert!(
         !DECODER_KEN_MD.contains("Diagnostic") && !DECODER_KEN_MD.contains("Origin"),
-        "the location-generic Decoder must remain independent of Diagnostic.Core"
+        "the location-generic Decoder must remain independent of Capability.Diagnostics.Core"
     );
 }
 
@@ -192,15 +192,15 @@ fn checked_cc4_chain_has_zero_axiom_and_zero_trusted_base_delta() {
     let mut env = dependency_env();
     let before: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     env.elaborate_ken_md_file(DIAGNOSTIC_KEN_MD)
-        .expect("Diagnostic.Core must elaborate");
+        .expect("Capability.Diagnostics.Core must elaborate");
     env.elaborate_ken_md_file(CURSOR_KEN_MD)
-        .expect("Parsing.Cursor must elaborate");
+        .expect("Capability.Parsing.Cursor must elaborate");
     env.elaborate_ken_md_file(DECODER_KEN_MD)
-        .expect("Parsing.Decoder must elaborate");
+        .expect("Capability.Parsing.Decoder must elaborate");
     env.elaborate_ken_md_file(PARSING_KEN_MD)
         .expect("Capability.Parsing must elaborate");
     env.elaborate_ken_md_file(NUMERIC_KEN_MD)
-        .expect("Text.Numeric must elaborate");
+        .expect("Capability.Parsing.Numeric must elaborate");
     let after: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(before, after, "CC4 must add zero trusted-base entries");
 }
@@ -288,7 +288,7 @@ fn exact_non_degenerate_injections_preserve_every_location_field() {
 #[test]
 fn diagnostic_core_is_structured_and_render_free() {
     let extracted = ken_elaborator::literate::extract_ken_md(DIAGNOSTIC_KEN_MD)
-        .expect("Diagnostic.Core must extract");
+        .expect("Capability.Diagnostics.Core must extract");
     let checked = extracted.source;
     assert!(checked.contains("data Diagnostic = MkDiagnostic Origin DiagnosticCode"));
     assert!(checked.contains("data Origin ="));
@@ -303,7 +303,7 @@ fn diagnostic_core_is_structured_and_render_free() {
     for forbidden in ["fn show", "format", "render", "width", "layout", "message"] {
         assert!(
             !checked.contains(forbidden),
-            "Diagnostic.Core must remain presentation-neutral: found `{forbidden}`"
+            "Capability.Diagnostics.Core must remain presentation-neutral: found `{forbidden}`"
         );
     }
 }

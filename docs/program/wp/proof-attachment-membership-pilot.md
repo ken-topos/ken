@@ -53,7 +53,7 @@ membership-not-role (with the "don't demote a reused law" caveat), and the
 `S::X`. Keep the existing Ω-partition rule (`proof-vocab-completion`) intact —
 this convention refines *which proof keyword*, not the fn⊥Ω line.
 
-**2. `catalog/packages/Core/NatArith.ken.md`** — rework every **subject-owned**
+**2. `catalog/packages/Data/Numeric/Nat/Arithmetic.ken.md`** — rework every **subject-owned**
 law to `proof name for S` (`S::name`):
 - `leq_nat` laws: `refl_leq_nat`→`proof refl for leq_nat` (`leq_nat::refl`),
   `trans_leq_nat`→`leq_nat::trans`, `antisym_leq_nat`→`leq_nat::antisym`.
@@ -67,7 +67,7 @@ law to `proof name for S` (`S::name`):
   `lemma`** unless one definition genuinely owns it. Foundation decides per law
   via the single-owning-subject test; flag the calls for Architect review.
 
-**3. `catalog/packages/Core/OrdNat.ken.md`** — same: `leq`/order laws → their
+**3. `catalog/packages/Data/Numeric/Nat/Order.ken.md`** — same: `leq`/order laws → their
 owning subject (`leq_nat::…` / the Ord subject), `lemma` only where no single
 owner.
 

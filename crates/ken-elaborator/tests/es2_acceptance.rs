@@ -22,8 +22,8 @@ use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
 use ken_kernel::env::Decl;
 use ken_kernel::{whnf, Term};
 
-const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const MAP_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Map.ken.md");
 
 fn mk_env() -> ElabEnv {

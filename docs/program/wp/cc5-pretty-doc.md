@@ -1,4 +1,4 @@
-# WP CC5 — `Pretty.Doc` (document algebra + deterministic renderer)
+# WP CC5 — `Capability.Formatting.Doc` (document algebra + deterministic renderer)
 
 A small ordinary-Ken document algebra and a **deterministic,
 width-parameterized renderer**, with laws. This is the piece that turns
@@ -46,7 +46,7 @@ learn an audit of mine is insufficient than believe it worked.)
      the operator's decision. **If you find yourself wanting a cached width,
      STOP and escalate — it means the shape drifted.**
 
-2. **★ DEPENDENCY-DAG PIN — `Pretty.Doc` depends on NOTHING but `Data`/`Core`.**
+2. **★ DEPENDENCY-DAG PIN — `Capability.Formatting.Doc` depends on NOTHING but `Data`/`Core`.**
    It must **NOT** depend on `Diagnostic` (its client). An abstraction module
    that depends on its clients is a cycle — the trap CC3 and CC4 both had to
    correct.
@@ -55,7 +55,7 @@ learn an audit of mine is insufficient than believe it worked.)
      value knows its location, not its rendering) — and CC4 landed that
      deliberately so CC5 would have something to do. **Do not undo it.**
    - When that bridge is built, it lives in a **third module** that depends on
-     both — never inside `Diagnostic.Core`, never inside `Pretty.Doc`. Out of
+     both — never inside `Capability.Diagnostics.Core`, never inside `Capability.Formatting.Doc`. Out of
      scope here; name it, don't build it.
 
 3. **The algebra is CLOSED at the report's constructors:** `text` / `line` /
@@ -68,7 +68,7 @@ learn an audit of mine is insufficient than believe it worked.)
    width ⇒ **byte-identical output**, always. No ambient state, no locale, no
    randomness.
 
-5. **Home:** `Pretty.Doc` → `catalog/packages/Pretty/Doc.ken.md` (§13's identity
+5. **Home:** `Capability.Formatting.Doc` → `catalog/packages/Capability/Formatting/Doc.ken.md` (§13's identity
    map).
 
 6. **Package model — unchanged.** No cross-file `import`/`pub` (the catalog has
@@ -133,7 +133,7 @@ learn an audit of mine is insufficient than believe it worked.)
   **Add NO row to `FRAME_LINE_COUNTS`** — it is a discharged historical baseline
   (CC3 re-scoped it to a coverage check precisely so new files never force a
   fabricated row). **Keep it that way.**
-- **AC8 — scope discipline.** Only `Pretty/Doc.ken.md` + the AC1 harness. **No
+- **AC8 — scope discipline.** Only `Capability/Formatting/Doc.ken.md` + the AC1 harness. **No
   `Diagnostic` change** (fixed input 2 — CC4's render-free property is
   load-bearing). No conformance touch unless deliberate.
 
@@ -142,7 +142,7 @@ learn an audit of mine is insufficient than believe it worked.)
 - **`Doc`'s text is `List Char`** — not `String`, not a cached-`Nat` width. The
   cached-`Nat`-over-opaque idiom is at **two** occurrences and a **third is an
   operator-facing substrate decision**, not a build-WP choice.
-- **`Pretty.Doc` never depends on `Diagnostic`** — and CC5 does **not** build the
+- **`Capability.Formatting.Doc` never depends on `Diagnostic`** — and CC5 does **not** build the
   `Diagnostic → Doc` bridge.
 - **The algebra is closed at six constructors** — no speculative combinators.
 - **The laws are proofs, not tests** (AC2). A green example suite is not a law.
@@ -157,7 +157,7 @@ sampled** — a renderer whose "laws" are example-tests is a renderer with no
 laws) → CV **only if** `conformance/` is touched → `git_request` to the Steward
 → honesty gate + publish. CC5 closes when it lands **and** its §10 retros are in.
 
-**Next in the chain:** CC6 (`Process.Arguments` / `System.Exit` /
-`System.Path.Posix`) → **CC7 (`ArgParse`)**, which is the **Milestone-C exit
+**Next in the chain:** CC6 (`Capability.Process.Arguments` / `Capability.Process.Exit` /
+`Capability.Filesystem.Path.Posix`) → **CC7 (`ArgParse`)**, which is the **Milestone-C exit
 criterion** and the first real consumer of `Doc` (usage/help rendering). Design
 `Doc` so CC7 can use it — but **do not build CC7's needs speculatively.**

@@ -39,11 +39,11 @@ fn import_as_accepts_a_dotted_module_path() {
 
 #[test]
 fn selective_import_accepts_a_dotted_module_path() {
-    let decl = single_decl("import Core.LawfulClasses (eq, Ord)");
+    let decl = single_decl("import Core.Classes.LawfulClasses (eq, Ord)");
     let Decl::ImportDecl { module, kind, .. } = decl else {
         panic!("expected ImportDecl, got {decl:?}");
     };
-    assert_eq!(module, "Core.LawfulClasses");
+    assert_eq!(module, "Core.Classes.LawfulClasses");
     match kind {
         ImportKind::Selective(items) => {
             assert_eq!(items.len(), 2);

@@ -87,7 +87,7 @@ forgotten or deferred on purpose:
   (`07-catalog-style-guide.md` "Path ⇔ import"), but **cross-file `import`
   does not resolve yet** (no disk loader) — the working pattern for a
   catalog entry that needs another package's helper is still DS-1's
-  inline-a-small-helper idiom (`Core/EmptyDec.ken.md §6`), not a working
+  inline-a-small-helper idiom (`Core/Logic/EmptyDec.ken.md §6`), not a working
   cross-file mechanism.
 - **Effect handlers beyond `visits [Console]`/`visits [FS]`** — the row
   *type* is covered (Surface reference §5) because catalog entries declare

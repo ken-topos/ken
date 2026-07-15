@@ -699,7 +699,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > **Operator escalation posted `evt_4ysrxrbqbs4zq`** — 3 unblocking decisions,
 > each with a recommendation (no work started without Pat's word):
-> 1. **PX3** — release now? CC9-Test.Property done; "PX3 behind CC9" predates my
+> 1. **PX3** — release now? CC9-Tooling.Testing.Property done; "PX3 behind CC9" predates my
 > split; deadlock if it waits on held Resource/Bracket (RB→PX7→PX3→RB). REC:
 > release PX3 (Language, S — `USize`/`ISize`/`CInt`). ← the immediate unblock.
 > 2. **Milestone-D remainder** (subprocess/signals/temp/terminal, unowned): frame
@@ -716,7 +716,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `c5124f88`, nothing mid-flight). Watchdog `cc623dbb` stays armed (PX2 closure +
 > pending operator reply = not fully quiescent). Resume = this block + tracker.
 >
-> ### ⚡ 2026-07-15 (14:18 UTC, clock-read) — ✅ CC9-Test.Property CLOSED · Foundation idle (no ready WP) · fleet blocked on operator (PX7 / Milestone-D)
+> ### ⚡ 2026-07-15 (14:18 UTC, clock-read) — ✅ CC9-Tooling.Testing.Property CLOSED · Foundation idle (no ready WP) · fleet blocked on operator (PX7 / Milestone-D)
 >
 > **✅ CLOSED `evt_1g31597ekzwe0`.** All 3 §10 retros in (leader
 > `evt_1mfnr7hy07kyb` / impl `evt_6dhm00ksmkwa5` / QA `evt_6v53pvqg1qj0`). §2
@@ -727,7 +727,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > passing property alone proves nothing. (Covered by the green-vs-green /
 > reaching-negative-arm memory cluster — not re-filed.)
 > **⇒ FLEET STATE: Foundation idle (legitimately) — no ready next WP.** Catalog
-> CC1–CC8 + Path.Posix (CC6b) + CC9-Test.Property all landed. Remaining work is
+> CC1–CC8 + Path.Posix (CC6b) + CC9-Tooling.Testing.Property all landed. Remaining work is
 > (a) **Resource/Bracket** — HELD on operator PX7 re-read (PX7 unbuilt); (b) the
 > **Milestone-D remainder** (subprocess/signals/temp/terminal) — awaiting Pat's
 > "I-9…I-12 or is CC9 the exit criterion?" ruling (raised 2026-07-14). Kernel /
@@ -736,11 +736,11 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **⇒ WATCHDOG: if this holds (nothing in review/mid-task, blocked only on
 > operator), CANCEL the watchdog next tick and re-arm when work resumes.**
 >
-> ### ⚡ 2026-07-15 (14:14 UTC, clock-read) — ✅ CC9-Test.Property MERGED (PR #719, FULL CI) · awaiting 3 §10 retros to close
+> ### ⚡ 2026-07-15 (14:14 UTC, clock-read) — ✅ CC9-Tooling.Testing.Property MERGED (PR #719, FULL CI) · awaiting 3 §10 retros to close
 >
 > **✅ MERGED — `origin/main @ cc2bf2ad`** (PR #719, exact `0afae5b3`, FULL locked
 > CI green: publisher "checks passed and merge command succeeded"). Content-verified
-> on main: `catalog/packages/Test/Property.ken.md` present, title "Test.Property —
+> on main: `catalog/packages/Tooling/Testing/Property.ken.md` present, title "Tooling.Testing.Property —
 > deterministic finite property checks". Gate trail: QA `evt_6e0x4zv1s1v9g` +
 > Architect §14 `evt_58n30fyq16t95` + Decision `dec_5jqmffvfdb6n7` (resolved,
 > resolved_by=Architect, verified fresh). Single-block WP, no respin.
@@ -756,25 +756,25 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > a doc-only frame publish AND the code publish invites a stale-ref push reject;
 > prune between, or use distinct branch names.
 >
-> ### ⚡ 2026-07-15 (14:05 UTC, clock-read) — CC9-Test.Property PUBLISHING · exact `0afae5b3` FULL CI · Decision verified fresh · publisher `bdyuj3ytn`
+> ### ⚡ 2026-07-15 (14:05 UTC, clock-read) — CC9-Tooling.Testing.Property PUBLISHING · exact `0afae5b3` FULL CI · Decision verified fresh · publisher `bdyuj3ytn`
 >
 > **All gates in + Decision verified FRESH from the object:** `dec_5jqmffvfdb6n7`
 > `status:resolved`, **resolved_by=Architect** (`agt_37reqftfe6g00`, 14:03:48),
 > resolution cites QA `evt_6e0x4zv1s1v9g` + Architect §14 `evt_58n30fyq16t95` at
 > exact `0afae5b3`. **No CV** (single catalog file, no conformance path).
 > Candidate verified: direct child of `dd675cc3`, diff = exactly
-> `catalog/packages/Test/Property.ken.md`, `diff --check` clean, **no tracker
+> `catalog/packages/Tooling/Testing/Property.ken.md`, `diff --check` clean, **no tracker
 > commit on WP branch** (exact-SHA §14 approval preserved). **FULL-CI publisher
 > launched `bdyuj3ytn`** (touches `catalog/` — NOT doc-only; waits CI →
 > squash-merge `--match-head-commit`). **⇒ ON MERGE:** content-verify on
 > `origin/main` (plain phrase, e.g. "minimal, provisional property-test scaffold"
-> or the `Test/Property.ken.md` path present) → request 3 §10 retros (leader +
+> or the `Tooling/Testing/Property.ken.md` path present) → request 3 §10 retros (leader +
 > impl + QA: Trap/Held/Carry) → CLOSE. Then sync tracker to main separately.
 >
-> ### ⚡ 2026-07-15 (13:59 UTC, clock-read) — CC9-Test.Property in TERMINAL GATE · candidate `0afae5b3` · QA APPROVE in · Architect §14 in flight
+> ### ⚡ 2026-07-15 (13:59 UTC, clock-read) — CC9-Tooling.Testing.Property in TERMINAL GATE · candidate `0afae5b3` · QA APPROVE in · Architect §14 in flight
 >
 > **Candidate: `wp/cc9-test-property @ 0afae5b341560c73781ced941f35b219bce97e77`**
-> — one file `catalog/packages/Test/Property.ken.md` (274 lines), one direct
+> — one file `catalog/packages/Tooling/Testing/Property.ken.md` (274 lines), one direct
 > commit on `origin/main @ dd675cc3`, branch free. Delivered: deterministic
 > finite `Gen` + `gen_from_list`/`gen_map`, `Result a Unit` runner with
 > first-counterexample order, 5 bounded byte samples (empty/`[0]`/`[255]`/
@@ -791,7 +791,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > commit on the WP branch), content-verify on main, then chase 3 §10 retros +
 > close. Base for publish = `dd675cc3` (frame already on main).
 >
-> ### ⚡ 2026-07-15 (13:41 UTC, clock-read) — ✅ CC9-Test.Property RELEASED · Foundation ring building · next = frame Path.Posix (armed next seam)
+> ### ⚡ 2026-07-15 (13:41 UTC, clock-read) — ✅ CC9-Tooling.Testing.Property RELEASED · Foundation ring building · next = frame Path.Posix (armed next seam)
 >
 > **Handoff Gate COMPLETE (all 7 steps).** Frame published doc-only **PR #718 →
 > `origin/main @ dd675cc3`** (content-verified: title line + tracker marker on
@@ -803,21 +803,21 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > (gate step 7). Gate = Foundation QA + Architect §14 + FULL CI; publisher on a
 > RESOLVED Decision. (Minor: leader's re-orient hit missing
 > `agent/memory/teams/foundation/` — benign, reads fleet/build scopes fine.)
-> **⇒ NEXT: watch the CC9-Test.Property build/gate** (foundation-implementer
+> **⇒ NEXT: watch the CC9-Tooling.Testing.Property build/gate** (foundation-implementer
 > `Working`). **CORRECTION — Path.Posix is NOT a next seam: it ALREADY MERGED as
-> CC6b** (`2b37faf3`, `catalog/packages/System/Path/Posix.ken.md`, 1793 lines w/
+> CC6b** (`2b37faf3`, `catalog/packages/Capability/Filesystem/Path/Posix.ken.md`, 1793 lines w/
 > §3 lexical normalization + proofs). The 2026-07-14 frontier note calling it
 > "not framed" was **stale** — grounded-before-authoring caught it
 > ([[my-own-tracker-capability-landed-line-can-be-stale]]). **Re-survey: no ready
-> next Foundation WP after CC9-Test.Property.** Catalog CC1–CC8 + Path.Posix all
+> next Foundation WP after CC9-Tooling.Testing.Property.** Catalog CC1–CC8 + Path.Posix all
 > landed; remaining Foundation work is Resource/Bracket (HELD on PX7) + the
 > UNOWNED Milestone-D remainder (subprocess/signals/temp/terminal — awaiting
 > Pat's "I-9…I-12 or is CC9 the exit?" ruling, raised 2026-07-14). So Foundation
-> goes legitimately idle when CC9-Test.Property clears — do NOT manufacture work.
+> goes legitimately idle when CC9-Tooling.Testing.Property clears — do NOT manufacture work.
 > Resource/Bracket + PX3 stay HELD/behind. Fleet NOT fully quiescent (Foundation
 > building) → watchdog stays armed.
 >
-> ### ⚡ 2026-07-15 (13:31 UTC, clock-read) — CC9-Test.Property FRAME AUTHORED (`wp/cc9-test-property @ origin/main 0fa72ff9`) · next = Handoff-Gate Foundation + doc-only publish + kickoff
+> ### ⚡ 2026-07-15 (13:31 UTC, clock-read) — CC9-Tooling.Testing.Property FRAME AUTHORED (`wp/cc9-test-property @ origin/main 0fa72ff9`) · next = Handoff-Gate Foundation + doc-only publish + kickoff
 >
 > **Frame written:** `docs/program/wp/cc9-test-property.md` on branch
 > `wp/cc9-test-property` (base `origin/main @ 0fa72ff9`). Grounding RE-VERIFIED
@@ -834,16 +834,16 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > re-export of a proved `Prop` law). Gate = Foundation QA + Architect §14
 > (zero-trust-delta axis); no CV unless a conformance fixture is added; FULL CI.
 >
-> ### ⚡ 2026-07-15 (13:24 UTC) — CC9 SPLIT (from operator's two settled inputs) · releasing Test.Property, holding Resource/Bracket on PX7
+> ### ⚡ 2026-07-15 (13:24 UTC) — CC9 SPLIT (from operator's two settled inputs) · releasing Tooling.Testing.Property, holding Resource/Bracket on PX7
 >
 > **Grounding (Explore `a6913bdbb`) resolved CC9 into two independently-packaged
 > halves with OPPOSITE durability postures — the split is DETERMINED by two settled
 > operator inputs, not a new decision (so NOT re-asked; surfaced as FYI
 > `evt_6gbjkr5r8g4mp`):**
-> - **`Test.Property` → RELEASING NOW.** Decision 2's "minimal Test.Property,
+> - **`Tooling.Testing.Property` → RELEASING NOW.** Decision 2's "minimal Tooling.Testing.Property,
 > catalog-only, no test-only language primitives" (Ward-handoff scaffolding,
 > `09...560-571`). Deps: landed Parsing (Cursor/Decoder) + Bytes/UInt8 + CC1
-> Validation/NonEmpty. **NO PX7 gate.** Ships as `catalog/packages/Test/Property`.
+> Validation/NonEmpty. **NO PX7 gate.** Ships as `catalog/packages/Tooling/Testing/Property`.
 > - **`Resource`/`Bracket` → HELD.** Operator RESERVED its release: *"CC9's frame
 > must be re-read against PX7 before CC9 is released (on me)"* (`09...573-578`) so
 > the Bracket isn't built twice. FS today is whole-file (no OS handle;
@@ -853,10 +853,10 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > deferred until PX7. [[settled-operator-approval-is-a-fixed-input-never-re-ask]] +
 > subsume-don't-proliferate both point to HOLD.
 >
-> **⇒ NOW: frame + release Test.Property to Foundation.** Author
+> **⇒ NOW: frame + release Tooling.Testing.Property to Foundation.** Author
 > `docs/program/wp/cc9-test-property.md` (model CC8 frame `wp/cc8-env-config-decoder.md`).
 > **★ FULL grounding saved (survives compaction): `scratchpad/cc9-grounding.md`** —
-> read it first on resume; it has every anchor. Fixed inputs (grounded, perishable): single literate `.ken.md` `catalog/packages/Test/Property.ken.md`, no
+> read it first on resume; it has every anchor. Fixed inputs (grounded, perishable): single literate `.ken.md` `catalog/packages/Tooling/Testing/Property.ken.md`, no
 > MANIFEST, path-inferred module, §-order w/ retired §6; **INLINE the Parsing surface
 > it exercises** (cross-file catalog import does not resolve — CC1–CC8 all inline;
 > `07-catalog-style-guide.md:474-481` — verify vs post-L4 main); **empirical
@@ -877,8 +877,8 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > CC9 framing (L4 done, CC9 unstarted — ideal seam). (c) **Author**
 > `docs/program/wp/cc9-resource-test-property.md` grounded vs post-merge main
 > `0fa72ff9` (model on `cc8-env-config-decoder.md`): `Resource`/`Bracket`
-> (structurally-safe acquire/release for response/config files) + `Test.Property`
-> (generators + parser-law/byte-totality props), **`Test.Property` MINIMAL — plain
+> (structurally-safe acquire/release for response/config files) + `Tooling.Testing.Property`
+> (generators + parser-law/byte-totality props), **`Tooling.Testing.Property` MINIMAL — plain
 > catalog pkg, NO test-only language primitives** (Pat scaffolding→Ward). FULL CI
 > (catalog/). Owner = **Foundation** (idle; deps met — CC8 landed, freeze lifted).
 > (d) **Handoff-Gate Foundation** (compact leader+impl+qa + kickoff) → release.
@@ -889,7 +889,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > ## Pat concurred with the Steward toolchain-ordering recommendation and said
 > **proceed**: **L4-export (the `export` re-export declaration) is the NEXT
-> Language-lane build**, then CC9 (minimal `Test.Property`), package-manager
+> Language-lane build**, then CC9 (minimal `Tooling.Testing.Property`), package-manager
 > later; **PX3 stays behind CC9** (Pat did not pull it ahead). Watchdog RE-ARMED
 > (`cc623dbb`, `11,26,41,56`). Decision 2 is a **settled fixed input** — do not
 > re-ask.
@@ -952,8 +952,8 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > > diff/seed matrix — neither stalled. Tree clean `steward/work @ 9a76fa2b`;
 > > watchdog `cc623dbb` armed. **CC9 scope grounded** for fast post-close framing:
 > > `Resource`/`Bracket` (safe acquire/release for response/config files) +
-> > `Test.Property` (generators + parser-law/byte-totality props), catalog pkg
-> > following CC8, `Test.Property` MINIMAL (no test-only language primitives —
+> > `Tooling.Testing.Property` (generators + parser-law/byte-totality props), catalog pkg
+> > following CC8, `Tooling.Testing.Property` MINIMAL (no test-only language primitives —
 > > Pat's scaffolding→Ward ruling); owning ring settled at author time (CC-series =
 > > Program II).
 > > - **⇒ TERMINAL-REVIEW ROUND 1 (12:46, on `7a866040`): split verdict → §14
@@ -1030,15 +1030,16 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > > seam per Decision 2 `export → CC9`:**
 > > - **Owner: Team Foundation** (CC8 is Foundation; CC9 = next CC-series/Program-II
 > > catalog pkg in `catalog/`). Foundation ring IDLE (axiom fossil-sweep retros in).
-> > - **Deps MET:** CC8 landed (`catalog/packages/Config` + `Schema` present on main,
+> > - **Deps MET:** CC8 landed (`catalog/packages/Application/Configuration` +
+> >   `Application/Input` present on main,
 > > plus full CC1–CC7 chain: Data/Text/Parsing/Diagnostic/Pretty/Process/ArgParse);
 > > Program-II "HELD until kenfmt C" freeze LIFTED (kenfmt closed). CC9 unbuilt (no
-> > Resource/Bracket/Test.Property pkg). CC9 does NOT technically depend on L4-export
+> > Resource/Bracket/Tooling.Testing.Property pkg). CC9 does NOT technically depend on L4-export
 > > (catalog pkgs built on `pub`, not the export decl) — sequenced after it only by
 > > operator ordering.
 > > - **Scope:** `Resource`/`Bracket` (structurally-safe acquire/release for
-> > response/config files) + `Test.Property` (reusable generators + properties for
-> > parser laws + arbitrary-byte totality). **`Test.Property` MINIMAL — plain catalog
+> > response/config files) + `Tooling.Testing.Property` (reusable generators + properties for
+> > parser laws + arbitrary-byte totality). **`Tooling.Testing.Property` MINIMAL — plain catalog
 > > pkg, NO test-only language primitives** (Pat scaffolding→Ward ruling,
 > > [[obligations-route-to-ward-not-into-ken]]). FULL CI (touches `catalog/`).
 > > - **At the seam:** author `docs/program/wp/cc9-resource-test-property.md` grounded
@@ -1051,7 +1052,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > > merge by CONTENT on origin/main; **exact-SHA rule: NO tracker commit on the WP
 > > branch**). Watch for a GPT capacity-stall (rouse-retry if a seat ends its turn
 > > silently). After L4-export closes (retros in): **CC9 next** (minimal
-> > `Test.Property`, catalog-only, no test-only language primitives). PX3 behind CC9.
+> > `Tooling.Testing.Property`, catalog-only, no test-only language primitives). PX3 behind CC9.
 > >
 > > **↻ SELF-COMPACT SEAM (25%→33%):** L4-export release is a completed task
 > > boundary; tracker is the lossless resume point. On resume: re-orient
@@ -1077,7 +1078,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > > **The whole near-frontier funnels through Pat's unanswered Decision 2**
 > > (toolchain ordering, posted 03:51 `evt_784f8m53ycp0m`): (a) the **`export`
 > > re-export-decl WP** (framed `d8a89915`, HELD; size **M** not S) as the next
-> > Language-lane build; (b) **CC9** as-framed with **minimal `Test.Property`**
+> > Language-lane build; (b) **CC9** as-framed with **minimal `Tooling.Testing.Property`**
 > > (settled: scaffolding → Ward, PRINCIPLES #9); (c) package-manager later; and
 > > implicitly (d) whether **PX3** gets pulled ahead of CC9 too. All Pat's call —
 > > I will NOT open a 2nd build on contested sequencing while he is away.
@@ -1092,7 +1093,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > >
 > > **⇒ NEXT (event-driven standby):** await Pat's Decision 2. On his answer:
 > > `export` greenlight → Handoff-Gate the Language ring + kick; CC9 greenlight →
-> > frame CC9 (minimal Test.Property) + release; PX3 pull-ahead → frame PX3
+> > frame CC9 (minimal Tooling.Testing.Property) + release; PX3 pull-ahead → frame PX3
 > > (Language, manifest-bound scalars) after its predecessor lands. Meanwhile stay
 > > event-driven for an AX-1 `git_request` from the enclave.
 > >
@@ -1360,7 +1361,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > to Pat** (`evt_784f8m53ycp0m`, rooted thread): **Decision 1** — pull PX1/PX2
 > ahead of CC9? [Steward rec: YES — Runtime lane idle, retires live security-path
 > defect, costs language lane nothing]; **Decision 2** — toolchain-axis proposal
-> [`export` parse gap → standalone S soon · CC9 as-framed, Test.Property minimal ·
+> [`export` parse gap → standalone S soon · CC9 as-framed, Tooling.Testing.Property minimal ·
 > package-manager L4 waits].
 >
 > **⇒ WATCHDOG CANCELLED (04:26 UTC, cron `097a5c8b`)** — fleet fully quiescent
@@ -1409,13 +1410,13 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >    (Ken/Ward split) applied to resources. **PX7's booked Steward obligation is
 >    now: wire resource-lifetime assurance into the Ward seam** (was: re-open R2).
 > 4. **The in-Ken test framework is TEMPORARY SCAFFOLDING until Ward takes over.**
->    Testing = behavioral assurance = Ward's domain. CC9's `Test.Property` is a
+>    Testing = behavioral assurance = Ward's domain. CC9's `Tooling.Testing.Property` is a
 >    stopgap so real work can be tested NOW, but **explicitly provisional**. Binding
 >    on CC9's frame: **minimize language-surface entrenchment** — no test-only
 >    kernel/grammar primitives; keep it a catalog package over existing
 >    capabilities so Ward assumes the role behind the same one-way seam (ADR-0006)
 >    with no language change. (CC9's `Resource`/`Bracket` half stays durable; only
->    the `Test.Property` half is scaffolding.)
+>    the `Tooling.Testing.Property` half is scaffolding.)
 >
 > **✅ FOSSIL FRAME AUTHORED (steward/work `880ca5aa`,
 > `docs/program/wp/axiom-fossil-sweep.md`).** Grounded: `lemma … = Axiom` →
@@ -3184,7 +3185,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **(b) THE TOOLCHAIN AXIS — verified against `main`, and PX buys NONE of it.**
 > Diagnostics ✅ (CC4). Modules ⚠ **`export` is SPECIFIED AND NOT PARSED** (zero
 > hits in `parser.rs`). Test/property framework ⛔ **nothing** (no
-> `catalog/packages/Test`; CC9 unbuilt). Package manager ⛔ not started.
+> `catalog/packages/Tooling/Testing`; CC9 unbuilt). Package manager ⛔ not started.
 > **⇒ "Not a toy" is NOT purchased by syscalls alone — a language you cannot write
 > a test in is not a tool for real practical work.** **I bring a separate
 > toolchain proposal; it is NOT smuggled into PX.**
@@ -3694,7 +3695,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > | Ring | WP | Branch |
 > |---|---|---|
 > | **Foundation** | **CC8** · env/config decoder — plain `Bytes` keys, lawful `DecEq Bytes`, **NO cached-`Nat` carrier** | `wp/cc8-env-config-decoder @ 6c7ca45c` |
-> | **Runtime** | **CC6b** · `System.Path.Posix` — the held half of CC6, hold now discharged | `wp/cc6b-path-posix @ 467344a4` |
+> | **Runtime** | **CC6b** · `Capability.Filesystem.Path.Posix` — the held half of CC6, hold now discharged | `wp/cc6b-path-posix @ 467344a4` |
 >
 > **⛔ Do not kick until all 6 seats are compact-verified.** Gate started; verify
 > the drops (capture-pane **WIDE**, `tail -20`) then post BOTH GOs.
@@ -3875,7 +3876,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > bytes.rs on main:  +2 declare_primitive (bytes_to_list · list_to_bytes)
 >                    +2 declare_postulate (bytes_list_roundtrip · list_bytes_roundtrip)
 >                    fail-closed set-equality guard: PRESENT
-> Collections.ken.md on main:  Axiom declarations = 0
+> Derived.ken.md on main:  Axiom declarations = 0
 > ds4 oracle on main:          extract_ken_md(…) FIRST   ← the fixed one
 > ```
 > **PRINCIPLES #15 ruled by Pat this morning, paid in full and three-lane audited the same day.**
@@ -3940,8 +3941,8 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > oracle repair:        + 1 file,   +6/ −4
 > final at 29e63a9a:     11 files, +873/−32   ← ACTUAL. Not one line more.
 > ```
-> **No `catalog/packages/Process/*` — I-7 did NOT leak in through the rebase** (the specific thing a
-> stale-base rebase gets wrong). `Collections.ken.md`, `bytes.rs`, `spec/`, `conformance/` are
+> **No `catalog/packages/Capability/Process/*` — I-7 did NOT leak in through the rebase** (the specific thing a
+> stale-base rebase gets wrong). `Derived.ken.md`, `bytes.rs`, `spec/`, `conformance/` are
 > **byte-identical to `4808832e`.** *(`7d115883` is VOID — stale base.)*
 >
 > **▶ I-8 KICKED to Runtime** — `wp/i8-clock-effect @ ea1f26e7` (`evt_4g4928ayye0rg`). Handoff Gate
@@ -3965,7 +3966,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > | `RAW.contains("Axiom")` | `ds4_list_combinators_acceptance.rs:56` | 🔴 **fired** (SUB-1) — fixed |
 > | `RAW.contains("Axiom")` | **`i2_console_floor.rs:132`**, **`i3_fs_floor.rs:141`** | ⏳ **LATENT — ARMED** |
 >
-> **The latent pair passes today only because no prose in `Console.ken.md` / `FS.ken.md` has YET
+> **The latent pair passes today only because no prose in `Text.ken.md` / `Errors.ken.md` has YET
 > happened to use the word.** And they are **the nearest neighbours to I-8** — *the exact files an
 > implementer opens to crib the zero-`Axiom` idiom from.* **That is how a bad oracle idiom
 > propagates: not by being written twice, but by being COPIED FROM THE FILE NEXT DOOR.** ⇒ **I-8
@@ -3978,7 +3979,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > ## ✅ I-7 MERGED — `origin/main @ 9ae7acd1`. **Verified BY CONTENT, never by SHA or exit code.**
 >
 > ```
-> git ls-tree origin/main catalog/packages/Process/
+> git ls-tree origin/main catalog/packages/Capability/Process/
 >   → Arguments.ken.md   (CC6a)
 >   → Environment.ken.md        ← NEW   ┐ zero Axiom/postulate/primitive
 >   → WorkingDirectory.ken.md   ← NEW   ┘ declarations (emission-counted)
@@ -4000,7 +4001,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > ## ⛔⛔ I COUNTERMANDED A FIX IN FLIGHT — the near-miss that matters more than the merge
 >
 > **@language-leader had queued this into the implementer's composer:**
-> > *"**Rephrase the added Collections.ken prose so `rg -n Axiom … ` is empty**."*
+> > *"**Rephrase the added Derived.ken prose so `rg -n Axiom … ` is empty**."*
 >
 > **That reworks the DOCUMENT to make a BROKEN TEST pass.** I cleared the composer and countermanded
 > it (`evt_3nyvj9n3q3pqe`); the implementer is now on the correct fix. **Three reasons, each
@@ -4031,7 +4032,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > (`evt_31x53064q6r7x`) → Language.
 >
 > **THE FAILURE:** `-p ken-elaborator --test ds4_list_combinators_acceptance` →
-> **`zero_axiom_in_collections_ken`** → *"Collections.ken must contain zero Axiom literals"*
+> **`zero_axiom_in_collections_ken`** → *"Derived.ken must contain zero Axiom literals"*
 > (`ds4_list_combinators_acceptance.rs:55`).
 >
 > ```rust
@@ -4044,7 +4045,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **Two defects:** (1) **it greps a NAME, not an EMISSION** — the question it wants is *"does the
 > checked Ken code DECLARE an `Axiom`?"*, which the word appearing in a sentence does not answer;
 > (2) **its own comment is factually wrong about its own file** — the constant is
-> `COLLECTIONS_KEN_MD` and the file is `Collections.ken.MD`, **literate: prose + fences.** It passed
+> `COLLECTIONS_KEN_MD` and the file is `Derived.ken.MD`, **literate: prose + fences.** It passed
 > for months only because no prose in it had *happened* to use the word.
 > **FIX (ruled):** `extract_ken_md` **first**, then assert on the **extracted code** — exactly what
 > I-7's test already does. **This STRENGTHENS the gate.** **⛔ Do NOT delete the assertion, and do
@@ -4202,7 +4203,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   prior instant. **I asked a COST question ("another `Axiom` wall?"); he answered an
 >   EXPRESSIBILITY question ("the law is UNSAYABLE in the shape you were about to ship").**
 >   ⇒ **`I-8b`** = monotonic + its ONE audited trusted-base postulate + the session. Named, deferred.
-> - **CC8**: my frame claimed `Process.Environment` as a **CC8** deliverable. **It is I-7's** (the
+> - **CC8**: my frame claimed `Capability.Process.Environment` as a **CC8** deliverable. **It is I-7's** (the
 >   `ProcessInput` ABI is Runtime's boundary). Had both stood, **Foundation and Runtime would each
 >   have built it and collided.** Withdrawn (`wp/cc8-env-config-decoder @ fc8a0513`, rebased).
 >   **CC8 dep set = SUB-1 (bridge) AND I-7 (projector).** The seam: **I-7 PROJECTS** (no key
@@ -4279,7 +4280,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > exactly why I-7 is unblocked and CC8 is held. Both traps are named in the frame's §1.
 >
 > ### ★ CC8 FRAME AMENDED — AN OWNERSHIP ERROR OF MINE (`wp/cc8-env-config-decoder @ fc8a0513`)
-> My CC8 frame §3.1 said *"a `Process.Environment` accessor is a **CC8** deliverable."* **It sits on
+> My CC8 frame §3.1 said *"a `Capability.Process.Environment` accessor is a **CC8** deliverable."* **It sits on
 > the `ProcessInput` runtime ABI — Runtime's boundary — and the CLI contract §7 already scopes it to
 > I-7.** Had both frames stood, **Foundation and Runtime would each have built
 > `process_environment`** on separate branches and **collided on merge.** Withdrawn; CC8 now
@@ -4471,7 +4472,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **▶ NEXT (in order):** (1) **SUB-1 lands** → (2) **re-frame CC8 on the bridge + re-kick
 > Foundation** (Schema boundary unchanged; byte-matching becomes ordinary `List UInt8` recursion)
 > → (3) **SUB-2** — retire the cached-`Nat` carriers (`Source`, `ArgBytes`) + **unblock
-> `Path.Posix`** → (4) **CC9** (`Resource`/`Bracket` + `Test.Property`) · **I-7** (Env/Process,
+> `Path.Posix`** → (4) **CC9** (`Resource`/`Bracket` + `Tooling.Testing.Property`) · **I-7** (Env/Process,
 > now owns the clock). **I-6 runs concurrently in Runtime.**
 > **▶ PAT'S BRIEF IS NOW ONE ITEM SHORTER AND ONE ITEM CORRECTED:** the `Bytes → Nat` DECISION is
 > **RULED** (above). **The "model-tier inversion" note was WRONG and is WITHDRAWN** — the table had
@@ -4518,7 +4519,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > Handoff Gate run: **foundation-{leader,implementer,qa} compacted @ ctx-verified →
 > "Context compacted" ×3.** Kickoff `evt_2cy3c8g5mh52c`; frame committed
 > `docs/program/wp/cc3-parsing-cursor-decoder.md` @ **`wp/cc3-parsing-cursor-decoder`
-> (`4a148468`, off `e22f5688`)**. CC3 = `Parsing.Cursor` + progress-safe `Decoder` +
+> (`4a148468`, off `e22f5688`)**. CC3 = `Capability.Parsing.Cursor` + progress-safe `Decoder` +
 > **refactor CAT-5 to consume them** (one parsing universe, not two); instances
 > `ByteCursor` (CAT-5 `Source`) + `ArgCursor` (`List Bytes`, arg index + byte range).
 > **★ THE CC3 DESIGN FORK I SETTLED (from the landed code, not from taste):** the report
@@ -4566,7 +4567,8 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > to state whether the header is now **mandatory** or **optional-with-default** (materially
 > different posture; on the record either way).
 > **NOTE — catalog contention:** §B touches `catalog/guide/`, CC3 touches
-> `catalog/packages/Parsing/` + `Capability/Parsing/`. **Disjoint files**, so no textual
+> the two source families now filed together under
+> `catalog/packages/Capability/Parsing/`. **Disjoint files**, so no textual
 > collision — but whichever merges second rebases. Sequencing is mine; neither ring blocks.
 > **★ 03:4x — ASSEMBLY UNDERWAY. ALL THREE §B PIECES EXIST.**
 > **spec erratum DONE: `wp/i4c-cap-wrapper-erratum-spec @ 5f675810`** (parent `e22f5688`,
@@ -4656,14 +4658,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > ### ⏭ 2026-07-14 (08:0x UTC) — ★★★★★★ MILESTONE C IS MET · `origin/main @ c5f73b9c`
 > **✅✅✅ CC7 MERGED — `origin/main @ c5f73b9c`** (PR #629). **★ MILESTONE C IS MET.**
-> **VERIFIED BY CONTENT:** `ArgParse/ArgParse.ken.md` ✓ · **`ArgParse/Example.ken.md` = THE
-> WORKED MULTI-FILE SUBCOMMAND TOOL** ✓ · `Diagnostic/Render.ken.md` as its **OWN package** ✓ ·
+> **VERIFIED BY CONTENT:** `Application/CommandLine/ArgParse.ken.md` ✓ · **`examples/CommandLine/Forge.ken.md` = THE
+> WORKED MULTI-FILE SUBCOMMAND TOOL** ✓ · `Capability/Diagnostics/Render.ken.md` as its **OWN package** ✓ ·
 > **ZERO `bytes_eq`/`DecEq Bytes` anywhere in the catalog** ✓.
 > **⇒ THE OPERATOR'S NORTH STAR IS REAL:** *"a multi-file subcommand tool with options, help,
 > and diagnostics."* **Written in Ken. Kernel-checked.**
 > **★★ SEVEN WPs BUILT ONE THING, AND THE CATALOG COMPOUNDED INSTEAD OF FRAGMENTING:**
 > `Validation` (CC1) → codecs (CC2) → `Cursor`/`Decoder` (CC3) → `Diagnostic` (CC4) → `Doc`
-> (CC5) → `Process.Arguments` (CC6a) → **`ArgParse` (CC7)**. **`ArgParse` added ONLY the CLI
+> (CC5) → `Capability.Process.Arguments` (CC6a) → **`ArgParse` (CC7)**. **`ArgParse` added ONLY the CLI
 > domain model — everything else it CONSUMED.**
 > **★ THE ARCHITECT'S AC6 VERDICT — THE PHRASE TO KEEP:** *"CC3's `Decoder` is genuinely
 > **DRIVEN**, not **declared-then-shadowed**."* **A WP can import every landed abstraction, list
@@ -4679,7 +4681,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > which the report says is EXACTLY when a shared `Schema` becomes justified, AND NOT BEFORE.
 > What would you extract, and what would you leave alone?"**
 > **▶▶ CATALOG 7/9. REMAINING: CC8** (env/config decoder + the `Schema` extraction question) ·
-> **CC9** (`Resource`/`Bracket` + `Test.Property`) · **`Path.Posix`** (HELD on Pat's substrate
+> **CC9** (`Resource`/`Bracket` + `Tooling.Testing.Property`) · **`Path.Posix`** (HELD on Pat's substrate
 > decision) · **Runtime: I-6 (S) → I-7** (Env/Process, now owns the clock).
 >
 > ### ⏭ 2026-07-14 (07:5x UTC) — ★★★★★ CC7 PUBLISHING — MILESTONE C
@@ -4692,9 +4694,9 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > PAT'S OPEN DECISION inside a build WP.** That is now **THREE WPs IN A ROW** where the
 > constructibility audit kept a build from pre-empting the operator's TCB call. **The mechanism
 > is working.**
-> **★ PIN 2 HELD — `catalog/packages/Diagnostic/Render.ken.md` IS ITS OWN PACKAGE.** Not in
-> `Diagnostic.Core` (would destroy CC4's render-free property — landed ON PURPOSE so CC5 had
-> something to do) and not in `Pretty.Doc` (abstraction depending on its client = the cycle
+> **★ PIN 2 HELD — `catalog/packages/Capability/Diagnostics/Render.ken.md` IS ITS OWN PACKAGE.** Not in
+> `Capability.Diagnostics.Core` (would destroy CC4's render-free property — landed ON PURPOSE so CC5 had
+> something to do) and not in `Capability.Formatting.Doc` (abstraction depending on its client = the cycle
 > Foundation caught in my CC3 frame). **CC8 will consume it.**
 > **★ AC6 — THE REAL TEST — VERIFIED BY THE ARCHITECT:** *"genuine specialization, not a second
 > universe: CC3's `Decoder` is genuinely DRIVEN (not declared-then-shadowed); result/error/render
@@ -4702,7 +4704,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **"Declared-then-shadowed" is exactly the failure a green suite hides** — he checked the
 > mechanism, not the imports.
 > **★★ ON MERGE: MILESTONE C IS MET** — the operator's north star: *"a multi-file subcommand tool
-> with options, help, and diagnostics."* `ArgParse/Example.ken.md` is the worked tool.
+> with options, help, and diagnostics."* `examples/CommandLine/Forge.ken.md` is the worked tool.
 > **▶ AFTER: CC8** (env/config decoder — **the 2nd description-driven decoder = what finally
 > justifies extracting a shared `Schema`, AND NOT BEFORE**) → CC9. **Runtime: I-6 (S — the narrow
 > app-author gap) → I-7 (Env/Process, now owns the clock).**
@@ -4747,7 +4749,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **STATE: `origin/main @ 576d223f`. PROGRAM I COMPLETE (I-1…I-5). CATALOG 6/9 (CC1–CC6a).**
 > **▶ CC7 (`ArgParse`, MILESTONE-C EXIT CRITERION) IS BUILDING** — frame `wp/cc7-argparse @
 > cd1a7a72`; foundation-leader dispatched it correctly (all pins relayed intact: byte-wise
-> `ArgBytes` matching, `Diagnostic.Render` as its own package, no second universe, no
+> `ArgBytes` matching, `Capability.Diagnostics.Render` as its own package, no second universe, no
 > `bytes_eq`/`DecEq Bytes`). **Foundation ring compacted + verified before the kick.**
 > **▶ I-6 GROUNDING REPORT POSTED by runtime-implementer — NOT YET READ BY ME (context
 > exhausted).** **NEXT SESSION: READ IT FIRST**, then frame I-6 **ONLY from its facts.**
@@ -4779,10 +4781,10 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > OPERATOR DECISION and a build WP does not get to settle it.** *(This is the 3rd WP in a row
 > where the audit kept a build from quietly pre-empting Pat's call.)*
 > **(2) THE `Diagnostic → Doc` RENDERER IS A NEW SEPARATE MODULE — a DAG pin, not taste.** It
-> doesn't exist, and **CC5 forbade it in BOTH base modules**: not in `Diagnostic.Core` (would
+> doesn't exist, and **CC5 forbade it in BOTH base modules**: not in `Capability.Diagnostics.Core` (would
 > destroy CC4's render-free property — landed ON PURPOSE so CC5 had something to do) and not in
-> `Pretty.Doc` (abstraction depending on its client = the cycle Foundation caught in my CC3
-> frame). ⇒ **`catalog/packages/Diagnostic/Render.ken.md`**, depending on both. **A CC7
+> `Capability.Formatting.Doc` (abstraction depending on its client = the cycle Foundation caught in my CC3
+> frame). ⇒ **`catalog/packages/Capability/Diagnostics/Render.ken.md`**, depending on both. **A CC7
 > deliverable but a SEPARATE package — CC8 will want it too.**
 > **★ AC6 IS THE REAL TEST: NO SECOND UNIVERSE.** No new parser / error carrier / renderer /
 > carrier. `ArgParse` = a **SPECIALIZATION** of CC1–CC6a (tokenize on `Decoder` over
@@ -4802,11 +4804,11 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > ### ⏭ 2026-07-14 (07:3x UTC) — ✅ CC6a MERGED · CATALOG 6/9 · CC7 = MILESTONE C IS NEXT
 > **✅ CC6a MERGED — `origin/main @ 576d223f`** (PR #628). **VERIFIED BY CONTENT:**
-> `Process/Arguments.ken.md` + `System/Exit.ken.md` present ✓ · **14 refs consuming CC3's
+> `Capability/Process/Arguments.ken.md` + `Capability/Process/Exit.ken.md` present ✓ · **14 refs consuming CC3's
 > `ArgBytes`/`ArgLocation`** ✓ · **ZERO `Path.Posix` on main** ✓.
 > **★★ CATALOG 6/9 — AND EVERYTHING CC7 CONSUMES NOW EXISTS**, every piece from a prior
-> Foundation WP: `Process.Arguments` (CC6a) · `Decoder`/`Cursor` (CC3) · `Diagnostic` (CC4) ·
-> `Pretty.Doc` (CC5) · `Validation`/`NonEmpty` (CC1) · `Text.Codec`/`Numeric` (CC2).
+> Foundation WP: `Capability.Process.Arguments` (CC6a) · `Decoder`/`Cursor` (CC3) · `Diagnostic` (CC4) ·
+> `Capability.Formatting.Doc` (CC5) · `Validation`/`NonEmpty` (CC1) · `Data.Text.Codec`/`Numeric` (CC2).
 > **Six WPs of substrate, each earning the next.**
 > **▶▶ CC7 = `ArgParse` = THE MILESTONE-C EXIT CRITERION** — the operator's north star:
 > *"a multi-file subcommand tool with options / help / diagnostics."* **This is the payoff the
@@ -4838,8 +4840,8 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > passes every UTF-8 test and breaks only on real non-UTF-8 argv) — so a fence scan alone would
 > NOT have been enough, and he knew it.
 > **▶▶ NEXT: CC7 = `ArgParse` = THE MILESTONE-C EXIT CRITERION.** On CC6a's merge, **EVERYTHING
-> CC7 CONSUMES EXISTS**: `Process.Arguments` (CC6a) · `Parsing.Decoder`/`Cursor` (CC3) ·
-> `Diagnostic` (CC4) · `Pretty.Doc` (CC5) · `Validation`/`NonEmpty` (CC1) · `Text.Codec`/
+> CC7 CONSUMES EXISTS**: `Capability.Process.Arguments` (CC6a) · `Capability.Parsing.Decoder`/`Cursor` (CC3) ·
+> `Diagnostic` (CC4) · `Capability.Formatting.Doc` (CC5) · `Validation`/`NonEmpty` (CC1) · `Data.Text.Codec`/
 > `Numeric` (CC2). **The whole catalog chain was built FOR this.**
 > **CC7 = the operator's north-star acceptance:** *"a multi-file subcommand tool with options /
 > help / diagnostics."* Frame it with the pre-pin audits; it is an **L** and it is the payoff.
@@ -4888,7 +4890,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **(1) The ABI values are ALREADY LANDED**: `data ExitCode = Success | Failure UInt8` +
 > `data ProcessInput = MkProcessInput (List Bytes) (List (Prod Bytes Bytes)) Bytes` ⇒ CC6a adds
 > **NO new ABI type**; it builds pure values **over** them.
-> **(2) `Process.Arguments` CONSUMES CC3's LANDED `ArgBytes`/`ArgLocation`** — which **already
+> **(2) `Capability.Process.Arguments` CONSUMES CC3's LANDED `ArgBytes`/`ArgLocation`** — which **already
 > ARE** "raw argv bytes + index + byte range" ⇒ **ZERO new cached-`Nat` carriers** (AC5,
 > grep-able). **A 4th hand-payment is avoided *by reuse*, not by a workaround.**
 > **★ AC2 IS THE DISCRIMINATOR: argv must be BYTE-PRESERVING.** A **genuinely invalid UTF-8**
@@ -4922,11 +4924,11 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   carrier.**
 > **★ MY RULING (`evt_3peran9189ps1`) — CC6 SPLITS. I honor Foundation's carry rather than
 > quietly overriding it:**
-> - **CC6a = `Process.Arguments` + `System.Exit` → PROCEEDS.** Neither splits a `Bytes` (argv
+> - **CC6a = `Capability.Process.Arguments` + `Capability.Process.Exit` → PROCEEDS.** Neither splits a `Bytes` (argv
 >   threads as `List Bytes`; Exit is a policy layer over the **landed** `ExitCode = Success |
 >   Failure UInt8`). **No cached-`Nat` needed. This is the part CC7 (`ArgParse`) ACTUALLY
 >   DEPENDS ON.**
-> - **`System.Path.Posix` → HELD** on the operator decision. It is the ONLY piece needing the
+> - **`Capability.Filesystem.Path.Posix` → HELD** on the operator decision. It is the ONLY piece needing the
 >   byte-split, and **CC7 does NOT need it** (argv tokenization ≠ path parsing) ⇒ **holding it
 >   costs the critical path NOTHING.**
 > **⇒ I will NOT build a 4th hand-paid carrier while Foundation's own promoted carry — which I
@@ -4948,14 +4950,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **⚠⚠ POSSIBLE SUBSTRATE WALL — BLOCKING THE CC6 FRAME. NOT ASSERTED; SENT TO ARCHITECT TO
 > VERIFY OR KILL (`evt_6kjx9t9ctapj6`).**
 > **THE QUESTION: can Ken destructure a raw `Bytes` value AT ALL?**
-> **Why it matters:** CC6 = `Process.Arguments` + `System.Exit` + **`Path.Posix`**; argv arrives
+> **Why it matters:** CC6 = `Capability.Process.Arguments` + `Capability.Process.Exit` + **`Path.Posix`**; argv arrives
 > as **`List Bytes`** (the work program's explicit "POSIX bytes, not `String`" guardrail).
 > `Path.Posix` **must split on `/`** ⇒ must iterate a `Bytes` ⇒ needs an index/length in `Nat`
 > or a bridge to a destructible structure.
 > **What my grep showed** (prelude.rs @ main): the ONLY registered names matching
 > `bytes_*`/`string_to_list_char`/`list_char_to_string` were **`string_to_list_char` +
 > `list_char_to_string`** — **no `bytes_at`, no `bytes_decode`, no `bytes_length`.**
-> **BUT CC2's landed `Text.Codec` was FRAMED around `bytes_decode`/`bytes_at` and it MERGED.**
+> **BUT CC2's landed `Data.Text.Codec` was FRAMED around `bytes_decode`/`bytes_at` and it MERGED.**
 > **⇒ BOTH CANNOT BE TRUE.** Either my read is wrong, or **CC2's surface is thinner than its
 > frame claimed.**
 > **★ I DID NOT ESCALATE THIS TO PAT.** I have had **THREE false-positive greps tonight** and a
@@ -4976,7 +4978,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > ### ⏭ 2026-07-14 (07:4x) — ✅ CC5 MERGED · CATALOG 5/9 · `origin/main @ 3c7d6ce5`
 > **✅ CC5 MERGED — `origin/main @ 3c7d6ce5`** (PR #627). **VERIFIED BY CONTENT:**
-> `Pretty/Doc.ken.md` present ✓ · **the 3 laws are `proof`s** (`preserves_text_tokens` /
+> `Capability/Formatting/Doc.ken.md` present ✓ · **the 3 laws are `proof`s** (`preserves_text_tokens` /
 > `width_independent` / `fixed_point`) ✓ · `Text : List Char` ✓ · **0 `string_length`** ✓ ·
 > **no `Diagnostic` dependency** ✓.
 > **★ THE `List Char` PIN WAS THE WHOLE SUBSTRATE QUESTION, disguised as a typing detail.**
@@ -5000,8 +5002,8 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **proof** (the recursive-eliminator flip — the computation was never the hard part)? And
 > **what made challenging a T1 Architect ruling feel like the expected move?** (The implementer
 > was RIGHT: the flipping arm was the non-recursive `Text` arm.)
-> **▶ NEXT: Handoff-Gate Foundation → CC6** (`Process.Arguments` + `System.Exit` +
-> `System.Path.Posix`) → **CC7 (`ArgParse`) = the MILESTONE-C EXIT CRITERION.**
+> **▶ NEXT: Handoff-Gate Foundation → CC6** (`Capability.Process.Arguments` + `Capability.Process.Exit` +
+> `Capability.Filesystem.Path.Posix`) → **CC7 (`ArgParse`) = the MILESTONE-C EXIT CRITERION.**
 > **▶ CATALOG: CC1–CC5 ✅ (5/9). PROGRAM I: COMPLETE. Remaining: I-6 (cheap now — its seam IS
 > I-5's step 0) + I-7.**
 >
@@ -5169,14 +5171,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **✅ CC4 CLOSED** — merged `edb99c1e`, verified by content, **all 3 §10 retros IN**
 > (impl `evt_1pejk1qx9z4w0`, QA `evt_5x8bg9xargh0`, leader `evt_4yng036wnkf35`).
 > **⏳ Foundation Handoff-Gate compaction RUNNING** (bg) → then **frame + kick CC5
-> (`Pretty.Doc`)**. **VERIFY THE DROPS before kicking; do NOT re-compact.**
+> (`Capability.Formatting.Doc`)**. **VERIFY THE DROPS before kicking; do NOT re-compact.**
 > **⚠⚠ STALE-BASE HAZARD — CAUGHT BEFORE ASSEMBLY (`evt_2jfgq6mt9c5fj`).** CV's I-5 conformance
 > roots `wp/i5-scoped-capability-conformance @ 9a06d2a8` are **content-clean** (exactly 2 files:
 > `seed-capabilities.md` + `conformance/README.md`, +202/−7) — **but its BASE is `92a1d3da`
 > (PRE-CC4)** while main is now `edb99c1e`. **`git merge-base --is-ancestor origin/main
 > 9a06d2a8` = NO.**
-> ⇒ **`git diff origin/main 9a06d2a8` LISTS CC4's FILES** (`Diagnostic/Core.ken.md`,
-> `Parsing/Cursor.ken.md`, `Text/Numeric.ken.md`, the CC4 harness) — **NOT because CV touched
+> ⇒ **`git diff origin/main 9a06d2a8` LISTS CC4's FILES** (`Capability/Diagnostics/Core.ken.md`,
+> `Capability/Parsing/Cursor.ken.md`, `Text/Numeric.ken.md`, the CC4 harness) — **NOT because CV touched
 > them, but because CV's tree PREDATES them.** ⇒ **MERGING that branch (or trusting a naive
 > diff-vs-main) would REVERT CC4 — and the suite would very likely still be GREEN, because
 > CC4's own tests would revert with it.**
@@ -5193,9 +5195,9 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > ### ⏭ 2026-07-14 (06:2x) — ★★ CC4 MERGED · CATALOG 4/9 · `origin/main @ edb99c1e`
 > **✅ CC4 MERGED — `origin/main @ edb99c1e`** (PR #625, CI green). **VERIFIED BY CONTENT:**
-> `Diagnostic/Core.ken.md` present ✓ · **AC5: standalone `NumericError` carrier GONE
+> `Capability/Diagnostics/Core.ken.md` present ✓ · **AC5: standalone `NumericError` carrier GONE
 > catalog-wide** ✓ · `parse_nat`/`parse_int` → **`Result Diagnostic Int`** ✓ ·
-> **`Parsing/Decoder.ken.md` UNTOUCHED** ✓.
+> **`Capability/Parsing/Decoder.ken.md` UNTOUCHED** ✓.
 > **★ THE QUIET WIN: `Decoder` needed ZERO changes** — CC3 made it `loc`-generic, so CC4's
 > clients just instantiate at `Origin`. **A design decision from the PREVIOUS WP paid for
 > itself in the NEXT one, with no rework.** That is "reflect, don't extend" actually working.
@@ -5208,7 +5210,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **I explicitly asked whether my new pre-pin audits' fixed inputs held against the tree, or
 > whether they had to correct them** — I would rather learn the audit is insufficient than
 > believe it worked.
-> **▶ NEXT: Handoff-Gate Foundation → CC5 (`Pretty.Doc`).** A small document algebra
+> **▶ NEXT: Handoff-Gate Foundation → CC5 (`Capability.Formatting.Doc`).** A small document algebra
 > (text/line/concat/nest/group/alt) + deterministic width-parameterized renderer with laws.
 > **CC4 deliberately left `Diagnostic` RENDER-FREE precisely so CC5 has something to do.**
 > **CATALOG CHAIN: CC1 ✅ CC2 ✅ CC3 ✅ CC4 ✅ → CC5 → CC6 → CC7 (`ArgParse` = the Milestone-C
@@ -5308,7 +5310,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > ### ⏭ 2026-07-14 (05:4x) — CC4 RELEASED · ARCHITECT IS THE BOTTLENECK (3 items, sequenced)
 > **✅ CC4 CANDIDATE RELEASED: `wp/cc4-diagnostic-core @ ed4106be`** → Foundation QA now.
-> **My pre-gate: CLEAN** — 0 merges · 9 files · **forbidden-path EMPTY** · `Parsing/Decoder.ken.md`
+> **My pre-gate: CLEAN** — 0 merges · 9 files · **forbidden-path EMPTY** · `Capability/Parsing/Decoder.ken.md`
 > **UNTOUCHED** ✓ (it was already loc-generic; clients instantiate at `Origin` — CC3's
 > parameterization paying off exactly as designed).
 > **AC5 (the real test) SATISFIED — but I nearly mis-called it.** My first grep
@@ -5472,12 +5474,12 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **✅ CC4 KICKED (Foundation)** — `evt_4yy8a2pb4yqv4`; frame `wp/cc4-diagnostic-core @
 > e8722ab3` (off `b91c9735`). Handoff Gate: all 3 seats compacted + **drops verified**.
 > **★ I RAN MY OWN NEW PRE-PIN AUDITS (`51a3c39e`) ON THIS FRAME — AND (a) CAUGHT THE SAME
-> CYCLE AS CC3 BEFORE SHIPPING IT:** `SourceId` is declared INSIDE CAT-5 ⇒ a `Diagnostic.Core`
+> CYCLE AS CC3 BEFORE SHIPPING IT:** `SourceId` is declared INSIDE CAT-5 ⇒ a `Capability.Diagnostics.Core`
 > whose `SourceOrigin` carries it, with CAT-5 consuming `Diagnostic`, is a **CYCLE**. Pinned:
-> **Diagnostic.Core depends on NOTHING**; **`SourceId` MOVES DOWN** into it (it is
+> **Capability.Diagnostics.Core depends on NOTHING**; **`SourceId` MOVES DOWN** into it (it is
 > `MkSourceId Nat`, no CAT-5-dependent laws — a *diagnostic* concept, not a parsing one);
 > **`Span` does NOT move** (its `ValidSpan` laws are `Source`-relative); **every injection
-> lives with its CLIENT**. Load: `Diagnostic.Core → Cursor → Decoder → CAT-5 → Text.Numeric`.
+> lives with its CLIENT**. Load: `Capability.Diagnostics.Core → Cursor → Decoder → CAT-5 → Capability.Parsing.Numeric`.
 > **(b) Constructibility audit: CLEAN** — every location is `Nat`-built (`Span`,
 > `ArgLocation`, `NumericError` char index) ⇒ **no opaque-`Int` hop, no cached-`Nat` carrier
 > needed** (told them: reaching for `bytes_length`/`int_to_nat` ⇒ the shape drifted, ESCALATE).
@@ -5487,7 +5489,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **★ CC3's PARAMETERIZATION PAYS OFF: `Decoder` needs ZERO change** — it is already
 > loc-generic (`DecoderError loc`), so clients just instantiate `loc = Origin`. Told them:
 > **if you're editing `Decoder.ken.md`, you've taken a wrong turn.**
-> **AC5 = the WP's real test: NO surviving second carrier** (`Text.Numeric` must expose no
+> **AC5 = the WP's real test: NO surviving second carrier** (`Capability.Parsing.Numeric` must expose no
 > standalone `NumericError`). A green suite with the old carrier alive underneath is a FAILED
 > CC4 — the CAT-5 lesson, applied up front.
 > **✅ I-5 DESIGN REQUEST → ARCHITECT** (`evt_4xqr5y8rs2qvt`; compacted, roused). Scoped
@@ -5547,7 +5549,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > (gpt-5.6), NOT the Architect. Sharpen this when raising it with Pat.
 > **▶ NEXT ACTIONS ON RESUME (in order):**
 > **(1)** Collect §B/§C retros → **CLOSE I-4**.
-> **(2)** **Handoff-Gate Foundation → frame + kick CC4 (`Diagnostic.Core`)** (retros already
+> **(2)** **Handoff-Gate Foundation → frame + kick CC4 (`Capability.Diagnostics.Core`)** (retros already
 > in ✓; needs compact + kick). CC4 now has its **two real consumers** (CAT-5 `Span` +
 > ArgCursor loc) ⇒ abstraction EARNED.
 > **(3)** **Architect → I-5 DESIGN pass** (scoped capability model: rights × scope × symlink ×
@@ -5580,7 +5582,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > culprit is `kenfmt_c_capstone` (§B touches `catalog/guide/` + `examples/rosetta/`, both
 > oracle-covered) — but Runtime pre-flighted it 3/3 PASS on `c699b530`, and the re-anchor
 > only ADDED CC3 files, so it should hold.
-> **(2) THEN: Handoff-Gate Foundation → kick CC4 (`Diagnostic.Core`).** Frame it first. CC4
+> **(2) THEN: Handoff-Gate Foundation → kick CC4 (`Capability.Diagnostics.Core`).** Frame it first. CC4
 > subsumes CC3's parameterized locations and now has its **two real consumers** (CAT-5 `Span`
 > + ArgCursor's arg-index/byte-range loc) ⇒ the abstraction is finally EARNED.
 > **⚠ APPLY MY OWN NEW PLAYBOOK CLAUSE WHEN FRAMING CC4** (`51a3c39e`, promoted from CC3):
@@ -5606,14 +5608,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > ### ⏭ 2026-07-14 (04:3x) — CC3 MERGED · I-4 §B PUBLISHING (the arc's last merge)
 > **✅ CC3 MERGED — `origin/main @ e6ed51db`** (PR #620, CI green after the oracle repair).
-> **VERIFIED ON MAIN BY CONTENT** (not by SHA/status): `Parsing/Cursor.ken.md` +
-> `Parsing/Decoder.ken.md` **present**; the oracle carries the **subset check** with **ZERO
+> **VERIFIED ON MAIN BY CONTENT** (not by SHA/status): `Capability/Parsing/Cursor.ken.md` +
+> `Capability/Parsing/Decoder.ken.md` **present**; the oracle carries the **subset check** with **ZERO
 > fabricated rows**; and the one that mattered — **CAT-5's bespoke recursion is GONE**
 > (`parse_bool_expr_at_fuel`/`skip_spaces_fuel` = **0 hits** in the landed
 > `Capability/Parsing`) ⇒ **the subsumption is GENUINE, not a wrapper with the old universe
 > alive underneath.** That was the objective a WP can pass every test while quietly failing.
 > **CC3 retros REQUESTED** (`evt_4maad0g6hhnrv`) — merged ≠ closed. **Foundation told to STAY
-> PUT** (no new work until Handoff Gate). **NEXT: CC4 `Diagnostic.Core`** — CC3 earned it: it
+> PUT** (no new work until Handoff Gate). **NEXT: CC4 `Capability.Diagnostics.Core`** — CC3 earned it: it
 > subsumes CC3's parameterized locations and now has its **TWO real consumers** (`Span` +
 > ArgCursor location), so the abstraction is justified, not speculative.
 > **▶ I-4 §B PUBLISHING — head `35317414`** on `wp/i4b-runtime-program-caps`
@@ -5732,7 +5734,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > 0 merges ✓ · exactly the 6 declared files ✓ · **forbidden-path probe EMPTY** ✓ ·
 > `diff --check` clean ✓ · descends from current `main` ✓. Publisher running in background
 > (task `bdu1qjbta`). **ON MERGE:** verify on `origin/main` BY CONTENT → collect §10 retros
-> → close CC3 → **CC4 (`Diagnostic.Core`) is next in the catalog chain** (Foundation, needs
+> → close CC3 → **CC4 (`Capability.Diagnostics.Core`) is next in the catalog chain** (Foundation, needs
 > a frame; it subsumes CC3's parameterized locations — it now has its TWO consumers,
 > `Span` + `ArgLocation`, so the abstraction is finally earned).
 > **What CC3 landed:** explicit `CursorOps c el loc` record (no type class — Ken has no
@@ -6477,7 +6479,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **② located `NumericError = MkNumericError NumericErrorKind Nat`** (char-index offset;
 > `EmptyInput|InvalidDigit`), minimal pre-CC4 carrier. **③ `char_to_digit` via landed
 > `charToInt`+`leq_int`** (no new prim). Steward scope decisions (`evt_6ccq8d4zvkdrw`):
-> **Bytes keys DESCOPED to fast-follow** (no substrate); **Text.Codec + Text.Numeric build
+> **Bytes keys DESCOPED to fast-follow** (no substrate); **Data.Text.Codec + Capability.Parsing.Numeric build
 > NOW (zero-new-trust); lawful String keys = FINAL deliverable GATED on OPERATOR (i-vs-ii)
 > decision** — (i) pay one injectivity cert prereq [rec] vs (ii) functions-only. **Operator
 > decision surfaced `evt_5d61192kcqp4y`** (Pat). **CC2 frame drafting in flight** (subagent
@@ -6496,14 +6498,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > crossing into String — String-facing wrappers stay functions; (3) Codec round-trip rides
 > landed `BytesRoundTripLaw`, no String↔List Char crossing law. Architect re-confirm will
 > check (a) no Numeric/Codec fence states a String-crossing round-trip law, (b) ①-cert
-> homed at prereq bijection layer not a Text fence. (Text.Numeric confirmed independent of
+> homed at prereq bijection layer not a Text fence. (Capability.Parsing.Numeric confirmed independent of
 > DecEq/Ord String — parse/format never compare String keys.)
 > **★ CC2 FRAME AUTHORED ✅ + guard-rail folded + routed to Architect re-confirm.** Frame
 > `docs/program/wp/cc2-text-codec-numeric.md`; WP branch `wp/cc2-text-codec-numeric @
 > b1865ff9` (frame-only off 6088e0b8, shared local ref). Guard-rail folded at 4 points
 > (fixed-input-4 + AC4 + AC5 + guardrail bullet w/ the 2 Architect re-confirm checks).
 > Architect re-confirm requested `evt_3nnssrydaszm0`. Task #59. **On Architect green →
-> Handoff-Gate Foundation ring → kick** (Text.Codec + Text.Numeric build now zero-new-trust;
+> Handoff-Gate Foundation ring → kick** (Data.Text.Codec + Capability.Parsing.Numeric build now zero-new-trust;
 > lawful String keys = FINAL gated deliverable on operator (i)/(ii) answer to Pat
 > `evt_5d61192kcqp4y`). Bytes-keys lawful = descoped fast-follow WP (no substrate).
 > **★ CC2 Architect RE-CONFIRM: FAITHFUL ✅ (`evt_6zp37xvewdayd`) → KICKING.** Both guard-rail
@@ -6515,7 +6517,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > String-keys gated on Pat (i)/(ii)) + rouse foundation-leader. Task #59.
 > **★ CC2 KICKED ✅ ~15:0x** (`evt_1f18z4qmczdf8`) — Foundation ring compacted-verified (all
 > 3 "Context compacted"), kickoff posted, foundation-leader roused + engaged. Building
-> Text.Codec + Text.Numeric NOW; String-keys HELD for operator (i)/(ii). **kenfmt #58
+> Data.Text.Codec + Capability.Parsing.Numeric NOW; String-keys HELD for operator (i)/(ii). **kenfmt #58
 > watch:** the language-implementer HUNG ~19m in a stuck "Working" turn (last action =
 > post-compaction playbook read, zero progress) — Steward interrupted (Escape) + re-nudged
 > to proceed on #58; "Working" restarted. Watch it re-engages with real edits, not another
@@ -6561,9 +6563,9 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > + lawful String keys; show_int deferred (#60). Review chain unchanged.
 > **★ CC2 CANDIDATE RELEASED → IN QA ~15:29** (`evt_56vff9113edks`). `wp/cc2-text-codec-
 > numeric @ c2455f66de689668009b8da47b02d07d5a2c4882`, rebased on `origin/main @ 330f276b`.
-> **6 deliverables:** `Data/Collections/StringBijection.ken.md` (the (i) injectivity cert —
-> SEPARATELY HOMED, outside Text fences ✓), `Text/Codec/Codec.ken.md`, `Text/Numeric/
-> Numeric.ken.md`, `Text/StringKeys/StringKeys.ken.md`, `conformance/stdlib/text/
+> **6 deliverables:** `Data/Text/StringBijection.ken.md` (the (i) injectivity cert —
+> SEPARATELY HOMED, outside Text fences ✓), `Data/Text/Codec.ken.md`, `Text/Numeric/
+> Numeric.ken.md`, `Data/Text/StringKeys.ken.md`, `conformance/stdlib/text/
 > seed-text-numeric.md` (AC7 seed), `cc2_text_codec_numeric_acceptance.rs`. **Trust: exactly
 > 1 retraction Axiom at the StringBijection prereq, delta 1 there only; all Text fences
 > zero-Axiom.** DecEq String/Ord String transparent, sound/antisym consume the cert;
@@ -6639,7 +6641,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > (no next WP; #60 fast-follows unframed).
 > **★ kenfmt #58 batch-1 MERGED ✅ `origin/main @ 431e36ea` (PR #610, squash, CI green).**
 > Landed honesty-gate CLEAN (object store): single parent `132bb75e`, 8 files = 7 reviewed
-> (layout.rs + 3 elaborator tests + cli fmt test + `Core/OrdNat.ken.md` + frame) + tracker
+> (layout.rs + 3 elaborator tests + cli fmt test + `Data/Numeric/Nat/Order.ken.md` + frame) + tracker
 > bundle; forbidden-path EMPTY; R1a witnesses present on main (`→ Equal Nat x y =` line 89,
 > `→ Equal Bool (leq_nat x z) True =` line 68). Batch-1 only — no catalog sweep; strict gate
 > #57 STAYS PAUSED (later catalog-wide batch re-arms it). **Task #58 CLOSED ✅** — all 3
@@ -6651,7 +6653,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > ring idle. **NEXT kenfmt: catalog-wide batch + re-arm gate #57 — a SEPARATE future WP,
 > operator-priority-gated (incremental directive: one file → review → then catalog).**
 > **★ kenfmt #58 R1a REFINED + OPERATOR-APPROVED @ `ee6ec5b5` → PUBLISHING batch-1
-> (2026-07-13).** Ring re-applied R1a to `Core/OrdNat.ken.md`: split-return arrow chains
+> (2026-07-13).** Ring re-applied R1a to `Data/Numeric/Nat/Order.ken.md`: split-return arrow chains
 > now split at top-level `→` only, each fitting operand horizontal — witnesses exact
 > (`→ Equal Nat x y =`, `→ Equal Bool (leq_nat x z) True`). Leader re-confirmed clean
 > diff-check; targeted #58/B3/B4/CLI + token-stream/AST/idempotence/96-col green (NO
@@ -6663,7 +6665,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > stays paused → LATER batch re-arms it). Task #58 → close on publish + retros.
 > **★ kenfmt #58 QA-APPROVED @ `30d3969b` (atop 132bb75e)** (`evt_5bd2mccg2cryk`; QA followed
 > the new rule — targeted only, NO local workspace). 7-file diff = frame + layout.rs +
-> formatter/CLI/B3/B4/#58 tests + ONE rep file `Core/OrdNat.ken.md`. **→ OPERATOR-REVIEW
+> formatter/CLI/B3/B4/#58 tests + ONE rep file `Data/Numeric/Nat/Order.ken.md`. **→ OPERATOR-REVIEW
 > CHECKPOINT (AC2): present the OrdNat diff to Pat before catalog-wide + before publish.**
 > **★ OPERATOR REVIEW DONE — Pat chose REFINE FIRST (2026-07-13).** Horizontal collapses
 > approved; ONE rough spot: short applications inside a SPLIT RETURN TYPE splay one-token-
@@ -6729,7 +6731,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >     UInt8`; `bytes_slice:Bytes→Int→Int→Bytes`→`→Option Bytes`. Native Cranelift lowering +
 >     `bytes_at.bounds` obligation. **Whole-consumer sweep:** Parsing pkg, Validation pkg,
 >     `rosetta/read-file-lines`, CLI-E2E `fs_read_file_lines_flip`, `l6_acceptance`/
->     `cat5_parsing`/`nc16` + runtime lowering. **Land safe sigs BEFORE Text.Codec/ArgParse
+>     `cat5_parsing`/`nc16` + runtime lowering. **Land safe sigs BEFORE Data.Text.Codec/ArgParse
 >     freeze unsafe shapes = why CC2 is gated.** Architect terminal-reviews CP0 too.
 > **(Q0) §32 reconcile — RESOLVED, no-op:** approved grammar content already on
 > `origin/main @ 1f85ad9a` via `106fd60c` (blob `496bab5d` == reviewed `b1942cd7`;
@@ -6771,7 +6773,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > Program II package IN. **Carry (→ memory + bake into CC2+ frames):** dependency-
 > bearing catalog pkg AC1 = ordered shared-`ElabEnv` harness (DS-7/8 pattern), NOT
 > standalone `ken check`; escalate package-model gaps, don't smuggle import/pub;
-> `Semigroup.assoc:Ω` = structural soundness hinge. **CC2 (Text.Codec + Text.Numeric +
+> `Semigroup.assoc:Ω` = structural soundness hinge. **CC2 (Data.Text.Codec + Capability.Parsing.Numeric +
 > lawful Bytes/String keys) — GATED, NOT immediately ready:** its UTF-8 decode needs
 > §5.2's safe `bytes_decode` (work-program L117 forbids CLI libs standardizing the
 > current unsafe/neutral-on-invalid sigs); §5.2 (CA0/task #50) is "gated-by the Architect
@@ -6812,7 +6814,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > 1faeb3b4 → 437fa96a` (single-parent); 14 files all in-scope (Console pkg + CLI/interp/
 > elaborator host-ABI/seam + tests + frame + 2 Rosetta); **zero** kernel/Cargo.lock/spec/
 > conformance/.github delta. **MERGED ✅ `origin/main @ 1f85ad9a`** (PR #604, squash;
-> verified on main: `Console.ken.md` + `i2_console_floor.rs` present, dead
+> verified on main: `Text.ken.md` + `i2_console_floor.rs` present, dead
 > `build_print_line_tree` grep-clean, squash onto prior `1fa9c344`). Milestone B Console
 > floor IN. Relay + retro-request sent; **CLOSES on 3 §10 retros → task #55.**
 > **Architect RULED** (`evt_5x7cgmtz7ygt9`): gates already glob dynamically; the
@@ -7010,7 +7012,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **§5.2 safe-Bytes sigs — HELD (revised):** it edits
 > `catalog/packages/Capability/Parsing/Parsing.ken.md` (uses `bytes_decode/at/
 > slice`, incl. a round-trip law at line 53), so it collides with the kenfmt-C
-> catalog freeze; its only downstream (Text.Codec/ArgParse) is Milestone-C, also
+> catalog freeze; its only downstream (Data.Text.Codec/ArgParse) is Milestone-C, also
 > held. HOLD behind C. **Program II (catalog closure / Milestone-C packages) HELD**
 > — behind the kenfmt-C catalog freeze (operator: "no catalog changes in flight
 > during C"); contract §7 also flags an N2-block — VERIFY vs my "N2 landed" note
@@ -7086,7 +7088,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >    Handoff-Gate Runtime (leader+impl+qa), kick. Architect terminal reviewer.
 > 3. **KICK §5.2** (safe total Bytes sigs) → spec enclave: author frame,
 >    Handoff-Gate enclave (spec-leader+spec-author+CV — confirm §32 ghost cleared),
->    kick. Independent, no deps; gates Text.Codec/ArgParse.
+>    kick. Independent, no deps; gates Data.Text.Codec/ArgParse.
 > 4. **HOLD** Program II / Milestone-C catalog-closure packages behind kenfmt-C
 >    catalog freeze (+ verify the N2-block claim in the fresh contract §7).
 > 5. **✅ OPERATOR CONFIRMED (2026-07-13): proceed B4 → C as planned; sequence
@@ -20129,8 +20131,8 @@ against it*. Run until complete, blocked, or instructed (§2b).
 | **SUB-2** | ✅ QA-approved `@ 4abda39a` · **PR #637 IN CI, publisher polling.** On merge: **content-verify on `origin/main`** (ArgBytes/ArgByteLength/`byte_unit_zero_int` all ABSENT from extracted Ken; zero trust delta) → chase 3 Runtime retros → close. **+384/−615 — it DELETED more than it added.** |
 | **SUB-1b** | 🟢 Language finishing. Candidate `wp/sub1b-uint8-deceq @ bce2e05d` — **rebased onto `9812b59c` ✅**, **exactly ONE `declare_postulate` (`uint8_int_retract`)**, fail-closed guard present, **zero `Axiom` in extracted Ken**. Gate: **Language QA + Architect terminal** (trust grows by 1). |
 | **CC8** | 🟡 **ARMED.** `wp/cc8-env-config-decoder @ 6c7ca45c`. **KICK THE INSTANT SUB-1b MERGES.** |
-| **Path.Posix** | ✅ **MERGED as CC6b** (`2b37faf3`, `catalog/packages/System/Path/Posix.ken.md`, 1793 lines w/ §3 lexical normalization + segment-valid round-trip proofs). This row's "not framed" was STALE. |
-| **CC9** | 🔵 **SPLIT + Test.Property RELEASED** (2026-07-15). `Test.Property` building (Foundation, kickoff `evt_7qgyp9jh8fant`, frame `docs/program/wp/cc9-test-property.md`, on `origin/main dd675cc3`). `Resource`/`Bracket` **HELD** on operator's PX7 re-read. See top-block. |
+| **Path.Posix** | ✅ **MERGED as CC6b** (`2b37faf3`, `catalog/packages/Capability/Filesystem/Path/Posix.ken.md`, 1793 lines w/ §3 lexical normalization + segment-valid round-trip proofs). This row's "not framed" was STALE. |
+| **CC9** | 🔵 **SPLIT + Tooling.Testing.Property RELEASED** (2026-07-15). `Tooling.Testing.Property` building (Foundation, kickoff `evt_7qgyp9jh8fant`, frame `docs/program/wp/cc9-test-property.md`, on `origin/main dd675cc3`). `Resource`/`Bracket` **HELD** on operator's PX7 re-read. See top-block. |
 
 ### ⚠ Path.Posix needs BOTH SUB-1b and SUB-2 — do not kick it on SUB-2 alone
 

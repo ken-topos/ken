@@ -1,4 +1,4 @@
-//! CC6b `System.Path.Posix` acceptance.
+//! CC6b `Capability.Filesystem.Path.Posix` acceptance.
 
 use std::collections::BTreeSet;
 
@@ -6,23 +6,23 @@ use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{apply, eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
-const TRANSPORT: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
-const LAWFUL_CLASSES: &str = include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
-const LAWFUL_FUNCTORS: &str = include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
+    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const LAWFUL_CLASSES: &str = include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
+const LAWFUL_FUNCTORS: &str = include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
 const BYTES_KEYS: &str =
-    include_str!("../../../catalog/packages/Data/Collections/BytesKeys.ken.md");
-const PATH_POSIX: &str = include_str!("../../../catalog/packages/System/Path/Posix.ken.md");
+    include_str!("../../../catalog/packages/Data/Binary/BytesKeys.ken.md");
+const PATH_POSIX: &str = include_str!("../../../catalog/packages/Capability/Filesystem/Path/Posix.ken.md");
 
 fn dependency_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("prelude bootstrap");
     for (name, source) in [
-        ("Core.Transport", TRANSPORT),
+        ("Core.Logic.Transport", TRANSPORT),
         ("Data.Collections", COLLECTIONS),
-        ("Core.LawfulClasses", LAWFUL_CLASSES),
-        ("Core.LawfulFunctors", LAWFUL_FUNCTORS),
-        ("Data.Collections.BytesKeys", BYTES_KEYS),
+        ("Core.Classes.LawfulClasses", LAWFUL_CLASSES),
+        ("Core.Classes.LawfulFunctors", LAWFUL_FUNCTORS),
+        ("Data.Binary.BytesKeys", BYTES_KEYS),
     ] {
         env.elaborate_ken_md_file(source)
             .unwrap_or_else(|error| panic!("{name} must elaborate: {error}"));
@@ -33,7 +33,7 @@ fn dependency_env() -> ElabEnv {
 fn full_env() -> ElabEnv {
     let mut env = dependency_env();
     env.elaborate_ken_md_file(PATH_POSIX)
-        .expect("System.Path.Posix must elaborate after its declared dependencies");
+        .expect("Capability.Filesystem.Path.Posix must elaborate after its declared dependencies");
     env
 }
 

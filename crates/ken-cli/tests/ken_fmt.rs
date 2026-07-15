@@ -98,7 +98,7 @@ fn strict_frozen_corpus_gate_is_green() {
     assert!(!rosetta.is_empty(), "Rosetta corpus must not be empty");
 
     let boundary =
-        repository.join("catalog/packages/Capability/Verify/ProofErasureBoundaryChecker.ken");
+        repository.join("catalog/packages/Tooling/Verification/ProofErasureBoundaryChecker.ken");
     assert!(boundary.is_file());
     let output = Command::new(ken_bin())
         .arg("fmt")

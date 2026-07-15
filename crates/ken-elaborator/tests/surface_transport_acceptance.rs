@@ -16,7 +16,7 @@
 use ken_elaborator::{ElabEnv, ElabError};
 use ken_kernel::{GlobalId, Term};
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")

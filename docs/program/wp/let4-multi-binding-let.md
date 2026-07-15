@@ -494,7 +494,7 @@ Foundation-owned `catalog-let-authoring-rollout` WP grounded in
 3. update `agent/playbooks/tools/write-ken.md`;
 4. create the promised `agent/teams/foundation/` authoring overlays; and
 5. pilot named stages in `StringBijection.ken.md` and selected small
-   `Collections.ken.md` definitions before any `Map.ken.md` refinement.
+   `Derived.ken.md` definitions before any `Map.ken.md` refinement.
 
 Keeping that work separate prevents a language-surface WP from hiding a large
 proof-source rewrite, while ensuring the new construct reaches the agents and

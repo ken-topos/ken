@@ -6,7 +6,7 @@ use ken_kernel::{GlobalId, Term};
 
 const FS_PACKAGE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../catalog/packages/Capability/FS/FS.ken.md"
+    "/../../catalog/packages/Capability/Filesystem/Errors.ken.md"
 ));
 
 struct FsEnv {

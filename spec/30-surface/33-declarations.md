@@ -172,7 +172,7 @@ family and its authority:
 
 ```ken
 program
-admits Core.LawfulClasses, Data.Collections.Map
+admits Core.Classes.LawfulClasses, Data.Collections.Map
 capabilities FS AFull
 ```
 
@@ -548,8 +548,8 @@ instance DecEq (Pair a b) where DecEq a, DecEq b { … }
   `d<v>` on **both** paths (`where DecEq a` → `da`, `da.eq`). The reserved bare
   `d` is **retained for the sole-constraint case on the definition path and on
   instances alike** (`37 §6`/`51 §4`, L3b) — so landed catalog proofs that
-  project it (`Core/EmptyDec`'s `d.eq`/`d.sound`/`d.complete`,
-  `Core/LawfulClasses`'s `d.leq`) stay valid — and it stays available even when
+  project it (`Core/Logic/EmptyDec`'s `d.eq`/`d.sound`/`d.complete`,
+  `Core/Classes/LawfulClasses`'s `d.leq`) stay valid — and it stays available even when
   that sole constraint is written with an explicit named binder (`where (chosen :
   Flag Int)` still admits `d`). With **two or more** constraints, bare `d` is not
   bound — every dictionary is its `d<v>` auto-name or explicit name.
