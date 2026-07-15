@@ -407,6 +407,38 @@ fn loader_executes_facade_and_in_scope_body_scope_discriminator() {
     );
     assert!(!facade.globals.contains_key("P.bar"));
 
+    let preexisting = load_entry(
+        "facade-preserves-preexisting",
+        &[
+            ("M.ken", "pub def Bool = Nat\n"),
+            (
+                "P.ken",
+                "export M (Bool as MBool)\n\
+                 const body_uses_prelude : Type = Bool\n",
+            ),
+            (
+                "Entry.ken",
+                "import P (MBool)\nconst via_facade : Type = MBool\n",
+            ),
+        ],
+    )
+    .expect("facade export must not suppress a pre-existing body binding");
+    let (_, prelude_body) = preexisting
+        .env
+        .transparent_body(preexisting.globals["P.body_uses_prelude"])
+        .expect("P body control is transparent");
+    assert!(
+        matches!(
+            &prelude_body,
+            Term::IndFormer { id, .. } if *id == preexisting.globals["Bool"]
+        ),
+        "P body must retain the registered prelude Bool identity, got {prelude_body:?}"
+    );
+    assert_eq!(
+        body_const(&preexisting, "Entry.via_facade"),
+        preexisting.globals["M.Bool"]
+    );
+
     match load_entry(
         "facade-does-not-bind",
         &[

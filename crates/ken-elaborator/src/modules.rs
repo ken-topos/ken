@@ -335,8 +335,11 @@ fn apply_export(
                     })?;
                 let surface = published_name(item);
                 publish_identity(exports_here, surface, canonical, span)?;
-                scope.facade_only.insert(item.name.clone());
-                scope.facade_only.insert(surface.to_string());
+                for name in [item.name.as_str(), surface] {
+                    if !scope.bindings.contains_key(name) && !globals.contains_key(name) {
+                        scope.facade_only.insert(name.to_string());
+                    }
+                }
             }
         }
         ExportForm::InScope { items } => {
