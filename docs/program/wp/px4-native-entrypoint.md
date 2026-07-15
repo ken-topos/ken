@@ -1,6 +1,8 @@
 # PX4 — Native entrypoint ABI beyond `ClosedNullary`
 
-**Owner:** Team Runtime · **Size:** **M** · **Branch:** `wp/px4-native-entrypoint`
+**Owner:** Team Runtime · **Size:** **L** (grew from M — §0.5 folds in the
+borrowed-dynamic-ingress substrate per Architect ruling `dec_56j4ceev0sk7t`) ·
+**Branch:** `wp/px4-native-entrypoint`
 (cut fresh: `git branch wp/px4-native-entrypoint origin/main` at build time) ·
 **Gate:** Runtime QA + **Architect §14** (soundness: the native process-boundary
 is `tested`/`validated`, never promoted to proof; fail-closed exit/trap mapping;
@@ -15,6 +17,69 @@ the JIT transmute boundary stays confined and named). **No CV** (no
 > shell so PX5/PX6 have something real to lower effects into and to differentially
 > guard. *"Safest possible"* here = a wrong/failed entry **fails closed to a
 > nonzero status with a trap report**, never a silent success.
+
+---
+
+## 0.5. ★ SCOPE AMENDMENT (2026-07-15) — the borrowed-dynamic-ingress substrate
+
+**Authoritative Architect design ruling `dec_56j4ceev0sk7t`
+(`evt_7231fhqsvyph8`). This section is a FIXED INPUT and supersedes any "wiring
+only" reading of §3.A/B and AC1.** Two §14 blocks + a grounded implementer
+hard-stop established that the settled Cranelift subset has **no runtime
+aggregate/control-flow representation**, so an ordinary Ken entry cannot consume
+`ProcessInput` without a new substrate. **Native-early (FORK 3) exists precisely
+to surface this before later semantics depend on it — it did.** The two prior
+candidates are void: `874c2b7a` (starter never received OS input) and `51f19d1d`
+(a C-side `FNV % 125 + 1` digest substituted for real ProcessInput consumption).
+`51f19d1d`'s C intake/layout/lifetime work is **valid scaffolding**, but its
+digest field must **not** remain the observation mechanism.
+
+**The mechanism — a generic, read-only, call-scoped borrowed dynamic-value
+ingress** (NOT process-only primitives; NOT a full native value runtime):
+
+- **`BorrowedNativeValue = Bytes { pointer, length } | Constructor {
+  artifact-local tag, fields pointer, arity }`.** The starter/runtime owns an
+  **immutable arena** holding the ordinary
+  `MkProcessInput (List Bytes) (List (Prod Bytes Bytes)) Bytes` tree for exactly
+  **one** call; the compiled entry **borrows only its root**. Constructor tags
+  are artifact-owned identities with an exact **closed mapping** to the
+  constructor symbols used by the compiled `RuntimeExpr` — **not** C-authored
+  semantic names, **not** a second public registry.
+- **`RuntimeExpr` stays backend-neutral and UNCHANGED.** In process mode `Var(0)`
+  denotes the **borrowed ProcessInput root** (not a digest, not an opaque token).
+  Internal `Lowered` gains borrowed dynamic `Bytes`/`Constructor` forms. Existing
+  `RuntimeExpr::Match` must branch on a borrowed constructor tag, validate arity,
+  and bind borrowed fields. Existing `bytes_length`/`bytes_at` lower over borrowed
+  `Bytes` using runtime length/data, with the **existing safe `Option` bounds
+  semantics**. The minimum dynamic control flow those ordinary expressions need
+  (`Match`/`Bool`/`Option` + arm-result joining) is in scope. Static
+  `RuntimeValue` lowering remains the **constant** path — do **not** conflate
+  Rust's `Vec`-owning `RuntimeValue` with the FFI representation.
+- **Non-escaping by construction:** generated code may READ the borrow during the
+  entry call, but may not store it globally, capture it in a closure, return it,
+  mutate it, or retain it past teardown. **Malformed tag/arity/span metadata
+  fails closed with a nonzero trap report.** The existing `ExitCode → i32`
+  boundary is the **only** egress.
+
+**Scope of the expansion (folds into PX4 — this IS the missing implementation of
+PX4's already-mandated process-shaped entry ABI):** allowed — internal
+`ken-runtime` IR-lowering, process ABI/staging, object-starter generation, and
+the targeted tests the borrowed ingress needs. **Still OUT of scope** (unchanged
+from §2/§5): kernel or trusted-base movement; `ken-host`; public Ken primitives;
+`spec/`+`conformance/`; `RuntimeExpr::Effect`; native heap allocation; aggregate
+**egress**/returns; records/closures; PX5 effect dispatch; PX6's differential
+harness.
+
+**AC1 is REPLACED by this discriminator (mandatory):** the artifact test compiles
+an **ordinary entry expression** that destructures `MkProcessInput`, matches the
+argv/env lists and the `Prod`, and reads actual `Bytes` through
+`bytes_at`/conversion. Run the **same artifact** with distinct raw argv/env/cwd
+including **non-UTF-8** bytes. **Decisive negative control:** choose two
+invocations that **collide under the retired `FNV % 125 + 1`** but whose
+inspected field bytes differ — the native entry must distinguish them, proving
+the result comes from **ProcessInput consumption**, not any renamed/rehashed
+scalar token. Retain the malformed-ABI, bounds, clean/trap, effect-unavailable,
+and sole-transmute arms (AC2–AC7 below stand).
 
 ---
 
