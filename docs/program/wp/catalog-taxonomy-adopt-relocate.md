@@ -116,8 +116,13 @@ no-right-dependency) — a separate hardening WP. No new empty section/domain di
 - **AC2 — every entry relocated + import-identity updated.** Each of the 37 entries
   is at its canonical home (or the superseded one pending, AC5); every dotted
   import identity resolves to the new path; a full-corpus grep finds **no dangling
-  reference** to an old path/identity. (Migration-inventory discipline: enumerate
-  every Ken-source root, including Rust-emitted prelude references.)
+  reference** to an old path/identity. The negative sweep excludes exactly
+  (1) this frame, (2) the redirect table in
+  `research/catalog-package-taxonomy-proposal.md`, and
+  (3) `docs/program/IMPLEMENTATION-PROGRESS.md`; the Steward-owned tracker is a
+  historical operational log, not a live catalog consumer.
+  (Migration-inventory discipline: enumerate every Ken-source root, including
+  Rust-emitted prelude references.)
 - **AC3 — filing only, behavior unchanged.** Ken contents are byte-identical across
   each move (relocation, not edit); no "Split" row split a file; the catalog
   elaborates/type-checks with identities changed but behavior provably unchanged.
