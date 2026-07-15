@@ -14,18 +14,102 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⚡ 2026-07-15 (06:08 UTC, clock-read) — PX1 RELEASING (Linux-ABI-direct) · `origin/main @ 721eedce`
+> ### ⚡ 2026-07-15 (07:50 UTC, clock-read) — PX2 FRAMED (probe half clean-room-held) · L4-export held for Pat · `origin/main @ 609dd600`
 >
-> ## 🔨 PAT RESPONDED: **Linux-ABI-direct (POSIX dropped)** + **PX1/PX2 pulled ahead of CC9**. PX1 frame authored; Architect seam-confirm out; Runtime compacting for kick.
+> ## ✅ PX1 (`ken-host`) **CLOSED** — merged PR #710 → `origin/main @ 609dd600` (FULL CI, content-verified: `ken-host` landed, both `ken-host`+`ken-interp` forbid-unsafe, zero `kernel_sigaction`/`*_KEN` refs, rustix only in ken-host manifest). §10 retros in: leader `evt_6xskzr4rya6z1`, QA `evt_535qf1spews8v`, impl `evt_3t867w60qhstt`. Close post `evt_26ab7bfa07wwe`. Gate trail: QA `evt_7gaxnrpf8t0sj` + Architect §14 `dec_703r48na2v1v2` (resolved) + Steward content-verify.
+> >
+> > ## 📋 PX2 (`TargetAbi` manifest) **FRAMED** — `docs/program/wp/px2-target-abi-manifest.md` (authored on steward/work, NOT yet published). Runtime ring, `crates/` lane, FULL CI. Deliverables: (1) generated `TargetAbi` manifest (target identity + N=3 pinned closure + complete FS ABI-fact inventory + schema ver + output hash), (2) **system-header probe as INDEPENDENT cross-check, fail-closed on any disagreement** ⚠ **clean-room-HELD**, (3) manifest-hash bind into interpreter+native artifacts, fail-closed identity before any syscall, (4) source disclosure. Grounded fix: the charter's "13 facts" is stale — PX1 removed the signal op, so the **2 SIG* facts are ABSENT**; inventory = the landed FS facts only (10 OFlags + AT_REMOVEDIR + Mode + *at syscalls + errno). Gate: Runtime QA + Architect §14 (fail-closed soundness); **no CV Spec-vote at merge** (no spec/conformance delta).
+> >
+> > **⇒ NEXT (do in order):**
+> > 1. **Publish the PX2 frame doc-only + BUNDLE tracker-sync-to-main** (deferred
+> >    from PX1 close — main's tracker stale since #709/d5f3c416). Cut a clean
+> >    branch from `origin/main`, port the frame doc + this tracker, publish
+> >    `--doc-only`. (Frame is `docs/program/` → doc-only eligible; the *code* WP
+> >    is FULL CI later.)
+> > 2. **Route the clean-room leakage recheck to the Spec enclave** (via
+> >    spec-leader) — the system-header probe (`#include`s Linux headers, prints
+> >    values). `CLEAN-ROOM.md` decides; NOT the Steward's to assert. This is the
+> >    one gate on the probe half; the manifest + hash-bind halves are unblocked.
+> > 3. **On enclave clearance → Handoff-Gate the Runtime ring + kick PX2.** (Runtime
+> >    is on standby awaiting the Handoff Gate.) Compact leader+implementer+QA
+> >    unconditionally, verify drops, then kick.
+> > 4. **L4-export** — frame authored + committed (`d8a89915`, steward/work, NOT
+> >    published). Release **HELD for Pat's Decision 2** (still unanswered). When Pat
+> >    greenlights → publish frame + Handoff-Gate the Language ring + kick.
+> > 5. Pat back ~11:00–11:30 UTC — consolidated update (PX1 landed w/ the soundness
+> >    block caught+resolved during his absence; PX2 framed + clean-room-routed;
+> >    L4-export ready pending his Decision 2). Do NOT re-ask rustix (SETTLED).
+> >
+> > **2 carries lifted (candidates — promote on 2nd occurrence, watch PX2):**
+> > (i) a host-boundary safe wrapper inherits the upstream unsafe API's *complete*
+> > documented contract — if unspecified, remove/redesign, don't launder w/ local
+> > tests; prefer the platform-runtime guarantee. (ii) dependency proportionality =
+> > target-selected *compiled* closure, not the `--target all` union.
+> > **PARKED:** (a) `#[unix_sigpipe]`→`-Zon-broken-pipe` terminology in the
+> > broken-pipe test (fix when that text next moves); (b) kenfmt `TOP_LEVEL_PREFIXES`
+> > (fold into L4-export). **Memory:** writing `safe-facade-needs-complete-upstream-unsafe-contract` now (validated — Architect approved my ruling).
+>
+> **PX1 history (compact):** round 1 `7c2b450e` — Architect BLOCKED the one
+> `kernel_sigaction` unsafe (rustix's incomplete safety contract); FS seam always
+> passed. I ruled the SIGPIPE remask **redundant** (Rust std sets SIGPIPE=SIG_IGN
+> before `main`; Ken ships one std Rust binary, no embedding) → remove it, within
+> settled inputs, no operator escalation. Round 2 `7e078f93` — removed the wrapper
+> + call sites, rustix→`["std","fs"]`, `ken-host` also forbid-unsafe, broken-pipe
+> subprocess discriminator (exit 17 not SIGPIPE-kill); QA + Architect §14 APPROVE;
+> merged. Earlier: dependency-size escalation ruled (measure Linux target closure
+> N=3, not `--target all` N=7).
+>
+> **⚡ PX1 terminal-gate state (07:01):** implementer released `7c2b450e`
+> (linear on `origin/main d5f3c416`, 10 paths / +841−331, Cargo/lock + runtime
+> boundary only; no kernel/spec/conformance/JIT delta). QA APPROVE evidence: all
+> 6 facilities + 9 unsafe call sites gone from `ken-interp`; 13 handwritten facts
+> gone across `crates/**`; `#![forbid(unsafe_code)]` effective; sole host unsafe
+> = confined `kernel_sigaction` (typed SIG_IGN, `Once`, disclosed, tested); JIT
+> `cranelift_backend.rs` hash-identical base↔candidate; N=3 governing closure
+> confirmed via `cargo tree --target x86_64-unknown-linux-gnu`, N=7 union
+> informational w/ exclusions; `rustix 1.1.4` appears only in
+> `ken-host/Cargo.toml`. **⇒ MY NEXT ACTION (imminent):** when Architect
+> resolves `dec_yd1sbvd4b10n`, publish `7c2b450e` via
+> `scripts/scripted-pr-automerge.sh` — **FULL CI, NOT --doc-only** (touches
+> `crates/`); verify §14 (RESOLVED + Architect vote in) fresh; then verify merge
+> by CONTENT on origin/main. Pre-draft the PR title/body while Architect reviews.
+>
+> **⚡ PX1 escalation (06:38) + ruling (06:42):** runtime-implementer's mandated
+> dependency-closure audit hit the frame's STOP guard — `rustix`'s **all-target**
+> (`--target all`) normal closure is **N=7** (`rustix`, `bitflags`,
+> `linux-raw-sys`, `errno`, `libc`, `windows-sys`, `windows-link`) > the frame's
+> "6 facilities." Implementer correctly HARD-STOPPED (WIP committed
+> `d876a2a5`, clean) and routed to me. **Ruling (`evt_45qqxce74e0vd`):** the
+> guard mis-fired on the wrong SET — `--target all` unions in the
+> `cfg(windows)` crates + the non-`linux_raw` `libc`/`errno` fallback path,
+> **none compiled on our Linux-direct target**. Governing closure = the
+> **target-selected `cfg(target_os="linux")` tree: 3–4** (`rustix` + `bitflags`
+> + `linux-raw-sys`; `linux-raw-sys` = machine-gen replacement for the 13
+> deleted facts). Proportionate + justified → guard does NOT fire → **PX1
+> PROCEEDS.** Also corrected the metric (proportionate trust footprint, not
+> crate-vs-FFI count). Frame guard reworded to match; deliverable amended to
+> record the Linux closure as governing + the union as informational. Architect
+> §14 terminal + PX2 remain the dependency-soundness backstop.
 >
 > **Operator ruling (2026-07-15, this window):** (1) **Linux ABI is the target;
 > POSIX abstraction DROPPED** — Ken binds the Linux syscall ABI directly (rustix
 > `linux_raw`); other *nix are per-target backends later, not a POSIX portability
 > layer. (2) **PX1/PX2 pulled ahead of CC9** — release now on the Runtime lane.
 > (3) rustix is SETTLED — operator flagged I re-asked 3× ([[settled-operator-approval-is-a-fixed-input-never-re-ask]]);
-> recorded closed in charter §2. (4) Toolchain proposal accepted in principle:
-> `export` parse-gap = a near-term S (Steward proceeds unless vetoed); CC9
-> as-framed; package-manager L4 deferred. Pat away until ~11:00–11:30 UTC.
+> recorded closed in charter §2. Pat away until ~11:00–11:30 UTC.
+>
+> **⚠ CORRECTION — export authorization is PENDING, not granted.** Pat's ruling
+> addressed ONLY Linux-ABI/rustix + pulling PX1/PX2 ahead (Decision 1). My
+> **Decision 2** (toolchain ordering: `export` first, CC9 as-framed, L4 deferred,
+> posted 03:51) was **never answered** — "(Steward proceeds unless vetoed)" was
+> my own inference, NOT Pat's words. So the `export` WP is **framed as prep,
+> release HELD for operator greenlight** (do not autonomously open a 2nd build on
+> unauthorized scope). **Premise also corrected:** the gap is NOT "export
+> unparsed / modules half-built" — the `pub` export *marker* IS landed
+> (`parser.rs:1019`); the real gap is the dedicated **`export` re-export
+> DECLARATION** (facade `export M (…)` + in-scope `export foo,…`, spec `33
+> §3.2/§4` normative, grammar `32:22`). Size is **M** (spans lexer+AST+parser+
+> `modules.rs` resolver+loader-edge+formatter/lossless), not S.
 >
 > **⇒ IN FLIGHT (this window):**
 > - **Charter reframed** Linux-ABI-direct (title + §2 lead fixed input + rustix
@@ -47,14 +131,26 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   "• Context compacted", drops verified; **ready to kick.**
 > - **Watchdog RE-ARMED** (cron `b7c6e6a9`, `11,26,41,56`) — active work resumed.
 >
-> **⇒ NEXT (in order):** (a) fold Architect seam-confirm into the PX1 frame; (b)
-> publish **doc-only** bundle to main [charter reframe + PX1 frame + tracker]; (c)
-> verify Runtime compaction drops (gate step 5); (d) **kick PX1** to Runtime
-> (mention + rouse Codex seats + confirm Working) — leader cuts `wp/px1-ken-host`
-> from origin/main; (e) then author **PX2** frame (has a clean-room gate → Spec
-> enclave leakage recheck for the system-header probe) + the **`export` S**.
-> **PARKED:** `kenfmt_c_capstone.rs` `TOP_LEVEL_PREFIXES` (missing `let`, stale
-> `use`) — fold into next kenfmt-touching WP.
+> **✅ DONE:** charter reframe + PX1 frame + tracker published **doc-only PR #709
+> → origin/main `d5f3c416`** (content-verified: title "Linux ABI
+> (direct-to-kernel)", §2 "LINUX ABI IS THE TARGET", PX1 frame + "deleted in
+> PX1"). PX1 **kicked** (`evt_gdffzk2kkmzq`), runtime-leader roused + **Working**
+> (reading frame, cutting `wp/px1-ken-host`).
+> ⚠ **INCIDENT (recovered):** my first charter-reframe edits were **discarded
+> uncommitted** by a background subagent sharing the steward worktree (the PX1
+> frame/tracker survived because committed; charter didn't). Redone + committed
+> immediately (`f1bb8ea9`). Lesson → [[commit-before-launching-a-worktree-sharing-subagent]].
+>
+> **⇒ NEXT:** (a) **[event-driven] PX1 terminal gate** — Runtime QA + Architect
+> §14 (verify: 6 FFI gone, 13 facts gone, no rustix/raw leak, forbid unsafe);
+> publisher on RESOLVED Decision, FULL CI, by content. (b) **[blocked on PX1]**
+> author **PX2** frame — needs ken-host + PX1's dependency-closure output; clean-
+> room gate → Spec enclave leakage recheck for the system-header probe. (c)
+> **[prep, release HELD for Pat]** the **`export` re-export-decl WP (L4-export,
+> size M)** — authoring the shovel-ready frame now (T1 prep); folds the PARKED
+> `kenfmt_c_capstone.rs` `TOP_LEVEL_PREFIXES` fix (add `export`+`let`, drop
+> retired `use`) since it must touch that oracle. Do NOT release until Pat
+> answers Decision 2. Pat back ~11:00–11:30 UTC.
 >
 > ### ⏭ 2026-07-15 (03:46 UTC, clock-read) — FOSSIL SWEEP CLOSED (history) · `origin/main @ 577245a1`
 >
