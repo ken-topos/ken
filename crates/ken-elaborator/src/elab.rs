@@ -2452,18 +2452,12 @@ fn infer_j(
         Box::new(eq_core),
     );
 
-    // Kernel-check the emitted `J` directly at construction time (AC1: the
-    // sole soundness net is the raw kernel re-deriving everything from
-    // scratch — motive shape, base's type, the whole term's well-formedness
-    // — never trusting this function's own bookkeeping).
-    let zonked_ctx = Context {
-        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
-    };
-    let zonked_term_j = cx.metas.zonk_term(&term_j);
-    kernel_infer(cx.env, &zonked_ctx, &zonked_term_j).map_err(|e| ElabError::KernelRejected {
-        error: e,
-        span: span.clone(),
-    })?;
+    // Whole-result admission (`declare_def`, or standalone
+    // `elaborate_rexpr`'s final `kernel_check`) is the sole soundness net.
+    // Eagerly rechecking this subterm in an assumption-only local `Context`
+    // is incomplete for definitional `let` aliases: the neutral binder cannot
+    // zeta-reduce to its definition until the enclosing `Term::Let` is checked
+    // as a whole.
 
     Ok((term_j, result_ty))
 }

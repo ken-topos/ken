@@ -13,7 +13,7 @@
 //! including via the package's own `sym`/`cast` combinators. AC4 (no
 //! regression) is `cargo test --workspace`, run separately.
 
-use ken_elaborator::ElabEnv;
+use ken_elaborator::{ElabEnv, ElabError};
 use ken_kernel::{GlobalId, Term};
 
 const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
@@ -95,6 +95,57 @@ fn ill_typed_transport_wrong_witness_type_is_kernel_rejected() {
         res.is_err(),
         "J's `eq` argument must be `Eq`-typed; a plain value must be rejected, got {:?}",
         res
+    );
+}
+
+#[test]
+fn standalone_j_admits_a_base_through_an_enclosing_let_definition() {
+    let mut env = mk_env();
+    env.elaborate_file("lemma bool_refl (x : Bool) : Equal Bool x x = Refl")
+        .expect("the closed base proof must elaborate");
+
+    // Before the enclosing `let` is admitted, `alias` is only an assumption
+    // in the local context.  The `J` base therefore appears to have type
+    // `Equal Bool x x` where `Equal Bool x alias` is expected.  The
+    // whole-result kernel check sees the `Term::Let` and zeta-reduces `alias`
+    // to `x`, making the two types definitionally equal.
+    let (core, _) = env
+        .elaborate_expr(
+            "standalone let/J admission probe",
+            "((\\x. let alias : Bool = x in \
+                 ((\\q. J (\\b' _. Equal Bool x b') (bool_refl x) q) \
+                   : (q : Equal Bool alias True) -> Equal Bool x True)) \
+               : (x : Bool) -> (q : Equal Bool x True) -> Equal Bool x True)",
+        )
+        .expect("the complete let/J expression must pass whole-result admission");
+    assert!(
+        mentions_j(&core),
+        "the admitted expression must contain a real J: {core:?}"
+    );
+}
+
+#[test]
+fn standalone_malformed_j_is_rejected_by_the_final_kernel_check() {
+    let mut env = mk_env();
+    env.elaborate_file("lemma bool_refl (x : Bool) : Equal Bool x x = Refl")
+        .expect("the closed base proof must elaborate");
+
+    // The body actually has type `Equal Bool x True`, not `Bool`.  Surface
+    // unification deliberately defers the verdict; after `infer_j` stops doing
+    // a premature local recheck, this `KernelRejected` can only come from
+    // `elaborate_rexpr`'s final whole-result `kernel_check`.
+    let err = env
+        .elaborate_expr(
+            "standalone malformed J probe",
+            "((\\x. let alias : Bool = x in \
+                 ((\\q. J (\\b' _. Equal Bool x b') (bool_refl x) q) \
+                   : (q : Equal Bool alias True) -> Bool)) \
+               : (x : Bool) -> (q : Equal Bool x True) -> Bool)",
+        )
+        .expect_err("the malformed standalone J expression must be kernel-rejected");
+    assert!(
+        matches!(err, ElabError::KernelRejected { .. }),
+        "the universal whole-result kernel boundary must reject, got {err:?}"
     );
 }
 
