@@ -10,6 +10,7 @@ use std::fmt;
 
 use ken_kernel::env::{Decl, PrimReduction};
 use ken_kernel::{GlobalId, Level, Term};
+use num_bigint::BigInt;
 
 pub const CHECKED_CORE_PACKAGE_KIND: &str = "CheckedCorePackage";
 pub const CHECKED_CORE_SCHEMA_VERSION: u32 = 0;
@@ -443,6 +444,9 @@ pub enum CheckedCoreDictionaryFieldValue {
 pub enum CheckedCoreBodyTerm {
     Variable {
         de_bruijn_index: usize,
+    },
+    IntegerLiteral {
+        value: i64,
     },
     DirectDeclarationCall {
         symbol: StableSymbol,
@@ -2868,6 +2872,21 @@ fn decode_supported_body_term_after_tag(
                 malformed_body(owner, format!("variable index {raw} does not fit usize"))
             })?;
             Ok(CheckedCoreBodyTerm::Variable { de_bruijn_index })
+        }
+        "int_lit" => {
+            let len = cursor
+                .read_len()
+                .map_err(|reason| malformed_body(owner, reason))?;
+            let bytes = cursor
+                .read_exact(len)
+                .map_err(|reason| malformed_body(owner, reason))?;
+            let value = i64::try_from(BigInt::from_signed_bytes_be(bytes)).map_err(|_| {
+                CheckedCoreBodyViewError::UnsupportedTermShape {
+                    symbol: owner.clone(),
+                    tag: "int_lit_outside_native_i64".to_string(),
+                }
+            })?;
+            Ok(CheckedCoreBodyTerm::IntegerLiteral { value })
         }
         "const" => {
             let symbol =

@@ -346,15 +346,47 @@ fn lower_transparent_declaration(
         )
     })?;
     let mut stack = vec![symbol.clone()];
-    let body = lower_body_term(
+    let body = lower_top_level_body(
         &declaration.body,
         &view.declarations,
         semantic,
         &mut stack,
         symbol,
-        0,
     )?;
     Ok(RuntimeDeclarationKind::Transparent { body })
+}
+
+fn lower_top_level_body(
+    term: &CheckedCoreBodyTerm,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+    stack: &mut Vec<StableSymbol>,
+    root_symbol: &StableSymbol,
+) -> Result<RuntimeExpr, ErasureError> {
+    let mut parameter_count = 0usize;
+    let mut body = term;
+    while let CheckedCoreBodyTerm::Lambda { body: inner, .. } = body {
+        parameter_count += 1;
+        body = inner;
+    }
+    if parameter_count == 0 {
+        return lower_body_term(body, declarations, semantic, stack, root_symbol, 0);
+    }
+    let body = lower_body_term(
+        body,
+        declarations,
+        semantic,
+        stack,
+        root_symbol,
+        parameter_count,
+    )?;
+    Ok(RuntimeExpr::Closure {
+        captures: Vec::new(),
+        params: (0..parameter_count)
+            .map(|index| format!("arg{index}"))
+            .collect(),
+        body: Box::new(body),
+    })
 }
 
 fn has_runtime_metadata(
@@ -403,26 +435,65 @@ fn lower_body_term(
     )
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Default)]
 struct BranchBinderRemap {
-    start: usize,
-    count: usize,
+    groups: Vec<BranchBinderGroup>,
+}
+
+#[derive(Clone)]
+struct BranchBinderGroup {
+    source_start: usize,
+    runtime_start: usize,
+    argument_count: usize,
+    erased_count: usize,
 }
 
 impl BranchBinderRemap {
-    fn enter_binding(self) -> Self {
-        Self {
-            start: self.start + 1,
-            count: self.count,
+    fn enter_binding(&self) -> Self {
+        let mut remap = self.clone();
+        for group in &mut remap.groups {
+            group.source_start += 1;
+            group.runtime_start += 1;
         }
+        remap
     }
 
-    fn runtime_index(self, de_bruijn_index: usize) -> usize {
-        if (self.start..self.start + self.count).contains(&de_bruijn_index) {
-            self.start + (self.count - 1 - (de_bruijn_index - self.start))
-        } else {
-            de_bruijn_index
+    fn enter_match(&self, argument_count: usize, erased_count: usize) -> Self {
+        let mut remap = self.clone();
+        for group in &mut remap.groups {
+            group.source_start += argument_count + erased_count;
+            group.runtime_start += argument_count;
         }
+        remap.groups.push(BranchBinderGroup {
+            source_start: 0,
+            runtime_start: 0,
+            argument_count,
+            erased_count,
+        });
+        remap
+    }
+
+    fn runtime_index(&self, de_bruijn_index: usize) -> Option<usize> {
+        for group in &self.groups {
+            let erased_end = group.source_start + group.erased_count;
+            let group_end = erased_end + group.argument_count;
+            if (group.source_start..erased_end).contains(&de_bruijn_index) {
+                return None;
+            }
+            if (erased_end..group_end).contains(&de_bruijn_index) {
+                let position = de_bruijn_index - erased_end;
+                return Some(group.runtime_start + (group.argument_count - 1 - position));
+            }
+        }
+        let erased_below = self
+            .groups
+            .iter()
+            .filter(|group| {
+                de_bruijn_index >= group.source_start + group.erased_count + group.argument_count
+            })
+            .map(|group| group.erased_count)
+            .sum::<usize>();
+        Some(de_bruijn_index - erased_below)
     }
 }
 
@@ -433,12 +504,72 @@ fn lower_body_term_inner(
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
-    branch_remap: Option<BranchBinderRemap>,
+    branch_remap: Option<&BranchBinderRemap>,
 ) -> Result<RuntimeExpr, ErasureError> {
     let owner = stack
         .last()
         .expect("expression lowering stack always has an owner")
         .clone();
+    if let Some((symbol, level_args, arguments)) = direct_application_spine(term) {
+        reject_level_args(root_symbol, level_args)?;
+        if let Some(declaration) = declarations.get(symbol) {
+            let mut body = &declaration.body;
+            let mut parameter_count = 0usize;
+            while parameter_count < arguments.len() {
+                let CheckedCoreBodyTerm::Lambda { body: inner, .. } = body else {
+                    break;
+                };
+                parameter_count += 1;
+                body = inner;
+            }
+            if parameter_count == arguments.len() {
+                if stack.contains(symbol) {
+                    return Err(expression_lowering_error(
+                        root_symbol,
+                        "direct_call_cycle",
+                        format!("direct declaration call cycle from {owner} reaches {symbol}"),
+                    ));
+                }
+                let values = arguments
+                    .iter()
+                    .map(|argument| {
+                        lower_body_term_inner(
+                            argument,
+                            declarations,
+                            semantic,
+                            stack,
+                            root_symbol,
+                            context_depth,
+                            branch_remap,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let mut inner_remap = branch_remap.cloned();
+                for _ in 0..parameter_count {
+                    inner_remap = inner_remap.map(|remap| remap.enter_binding());
+                }
+                stack.push(symbol.clone());
+                let lowered = lower_body_term_inner(
+                    body,
+                    declarations,
+                    semantic,
+                    stack,
+                    root_symbol,
+                    context_depth + parameter_count,
+                    inner_remap.as_ref(),
+                );
+                stack.pop();
+                let mut lowered = lowered?;
+                for (index, value) in values.into_iter().enumerate().rev() {
+                    lowered = RuntimeExpr::Let {
+                        value: Box::new(shift_runtime_vars(value, index as u32, 0)),
+                        body: Box::new(lowered),
+                    };
+                }
+                return Ok(lowered);
+            }
+        }
+    }
     if let Some((constructor, args)) = constructor_application_spine(term) {
         return lower_constructor_application(
             constructor,
@@ -464,7 +595,16 @@ fn lower_body_term_inner(
             }
             let runtime_index = branch_remap
                 .map(|remap| remap.runtime_index(*de_bruijn_index))
-                .unwrap_or(*de_bruijn_index);
+                .unwrap_or(Some(*de_bruijn_index))
+                .ok_or_else(|| {
+                    expression_lowering_error(
+                        root_symbol,
+                        "erased_induction_hypothesis_reached_runtime",
+                        format!(
+                            "variable index {de_bruijn_index} names an erased match induction hypothesis"
+                        ),
+                    )
+                })?;
             let index = u32::try_from(runtime_index).map_err(|_| {
                 expression_lowering_error(
                     root_symbol,
@@ -473,6 +613,9 @@ fn lower_body_term_inner(
                 )
             })?;
             Ok(RuntimeExpr::Var(index))
+        }
+        CheckedCoreBodyTerm::IntegerLiteral { value } => {
+            Ok(RuntimeExpr::Value(RuntimeValue::Int(*value)))
         }
         CheckedCoreBodyTerm::DirectDeclarationCall { symbol, level_args } => {
             reject_level_args(root_symbol, level_args)?;
@@ -524,7 +667,9 @@ fn lower_body_term_inner(
                 return Err(expression_lowering_error(
                     root_symbol,
                     "implicit_closure_capture",
-                    "lambda body references an outer de Bruijn binding without an explicit runtime capture lane",
+                    format!(
+                        "lambda body references an outer de Bruijn binding without an explicit runtime capture lane while lowering {owner} at depth {context_depth}"
+                    ),
                 ));
             }
             Ok(RuntimeExpr::Closure {
@@ -537,7 +682,7 @@ fn lower_body_term_inner(
                     stack,
                     root_symbol,
                     context_depth + 1,
-                    branch_remap.map(BranchBinderRemap::enter_binding),
+                    branch_remap.map(BranchBinderRemap::enter_binding).as_ref(),
                 )?),
             })
         }
@@ -578,7 +723,7 @@ fn lower_body_term_inner(
                 stack,
                 root_symbol,
                 context_depth + 1,
-                branch_remap.map(BranchBinderRemap::enter_binding),
+                branch_remap.map(BranchBinderRemap::enter_binding).as_ref(),
             )?),
         }),
         CheckedCoreBodyTerm::ConstructorReference(_) => {
@@ -626,6 +771,121 @@ fn lower_body_term_inner(
             branch_remap,
         ),
     }
+}
+
+fn shift_runtime_vars(expr: RuntimeExpr, by: u32, cutoff: u32) -> RuntimeExpr {
+    match expr {
+        RuntimeExpr::Var(index) if index >= cutoff => RuntimeExpr::Var(index + by),
+        RuntimeExpr::Var(_)
+        | RuntimeExpr::Value(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => expr,
+        RuntimeExpr::Let { value, body } => RuntimeExpr::Let {
+            value: Box::new(shift_runtime_vars(*value, by, cutoff)),
+            body: Box::new(shift_runtime_vars(*body, by, cutoff + 1)),
+        },
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => RuntimeExpr::If {
+            scrutinee: Box::new(shift_runtime_vars(*scrutinee, by, cutoff)),
+            then_expr: Box::new(shift_runtime_vars(*then_expr, by, cutoff)),
+            else_expr: Box::new(shift_runtime_vars(*else_expr, by, cutoff)),
+        },
+        RuntimeExpr::PrimitiveCall { primitive, args } => RuntimeExpr::PrimitiveCall {
+            primitive,
+            args: args
+                .into_iter()
+                .map(|arg| shift_runtime_vars(arg, by, cutoff))
+                .collect(),
+        },
+        RuntimeExpr::Construct { constructor, args } => RuntimeExpr::Construct {
+            constructor,
+            args: args
+                .into_iter()
+                .map(|arg| shift_runtime_vars(arg, by, cutoff))
+                .collect(),
+        },
+        RuntimeExpr::Match {
+            scrutinee,
+            cases,
+            default,
+        } => RuntimeExpr::Match {
+            scrutinee: Box::new(shift_runtime_vars(*scrutinee, by, cutoff)),
+            cases: cases
+                .into_iter()
+                .map(|case| RuntimeMatchCase {
+                    constructor: case.constructor,
+                    binders: case.binders,
+                    body: shift_runtime_vars(case.body, by, cutoff + case.binders as u32),
+                })
+                .collect(),
+            default,
+        },
+        RuntimeExpr::Record { fields } => RuntimeExpr::Record {
+            fields: fields
+                .into_iter()
+                .map(|(name, value)| (name, shift_runtime_vars(value, by, cutoff)))
+                .collect(),
+        },
+        RuntimeExpr::Project { record, field } => RuntimeExpr::Project {
+            record: Box::new(shift_runtime_vars(*record, by, cutoff)),
+            field,
+        },
+        RuntimeExpr::Closure {
+            captures,
+            params,
+            body,
+        } => {
+            let inner_cutoff = cutoff + params.len() as u32;
+            RuntimeExpr::Closure {
+                captures,
+                params,
+                body: Box::new(shift_runtime_vars(*body, by, inner_cutoff)),
+            }
+        }
+        RuntimeExpr::Call { callee, args } => RuntimeExpr::Call {
+            callee: Box::new(shift_runtime_vars(*callee, by, cutoff)),
+            args: args
+                .into_iter()
+                .map(|arg| shift_runtime_vars(arg, by, cutoff))
+                .collect(),
+        },
+        RuntimeExpr::Effect {
+            effect,
+            capability,
+            args,
+        } => RuntimeExpr::Effect {
+            effect,
+            capability,
+            args: args
+                .into_iter()
+                .map(|arg| shift_runtime_vars(arg, by, cutoff))
+                .collect(),
+        },
+    }
+}
+
+fn direct_application_spine<'a>(
+    term: &'a CheckedCoreBodyTerm,
+) -> Option<(
+    &'a StableSymbol,
+    &'a [CheckedCoreLevelView],
+    Vec<&'a CheckedCoreBodyTerm>,
+)> {
+    let mut arguments = Vec::new();
+    let mut current = term;
+    while let CheckedCoreBodyTerm::Application { function, argument } = current {
+        arguments.push(argument.as_ref());
+        current = function.as_ref();
+    }
+    let CheckedCoreBodyTerm::DirectDeclarationCall { symbol, level_args } = current else {
+        return None;
+    };
+    arguments.reverse();
+    Some((symbol, level_args, arguments))
 }
 
 fn lower_recursive_declaration_call(
@@ -725,7 +985,7 @@ fn lower_dictionary_construction(
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
-    branch_remap: Option<BranchBinderRemap>,
+    branch_remap: Option<&BranchBinderRemap>,
 ) -> Result<RuntimeExpr, ErasureError> {
     require_expression_supported(
         root_symbol,
@@ -841,7 +1101,7 @@ fn lower_record_sigma_construction(
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
-    branch_remap: Option<BranchBinderRemap>,
+    branch_remap: Option<&BranchBinderRemap>,
 ) -> Result<RuntimeExpr, ErasureError> {
     require_expression_supported(
         root_symbol,
@@ -916,7 +1176,7 @@ fn lower_record_sigma_projection(
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
-    branch_remap: Option<BranchBinderRemap>,
+    branch_remap: Option<&BranchBinderRemap>,
 ) -> Result<RuntimeExpr, ErasureError> {
     require_expression_supported(
         root_symbol,
@@ -1067,7 +1327,7 @@ fn lower_primitive_application(
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
-    branch_remap: Option<BranchBinderRemap>,
+    branch_remap: Option<&BranchBinderRemap>,
 ) -> Result<RuntimeExpr, ErasureError> {
     require_expression_supported(
         root_symbol,
@@ -1228,7 +1488,7 @@ fn lower_constructor_application(
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
-    branch_remap: Option<BranchBinderRemap>,
+    branch_remap: Option<&BranchBinderRemap>,
 ) -> Result<RuntimeExpr, ErasureError> {
     reject_level_args(root_symbol, &constructor.level_args)?;
     require_expression_supported(
@@ -1294,7 +1554,7 @@ fn lower_match_view(
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
-    branch_remap: Option<BranchBinderRemap>,
+    branch_remap: Option<&BranchBinderRemap>,
 ) -> Result<RuntimeExpr, ErasureError> {
     reject_level_args(root_symbol, &view.level_args)?;
     if !view.indices.is_empty() {
@@ -1339,12 +1599,18 @@ fn lower_match_view(
                 ),
             ));
         }
+        let erased_count = constructor.recursive_positions.len();
+        let source_binder_count = constructor.argument_count + erased_count;
         let body = peel_match_branch_method(
             &branch.method,
-            constructor.argument_count,
+            source_binder_count,
             root_symbol,
             &constructor.symbol,
         )?;
+        let remap = branch_remap
+            .cloned()
+            .unwrap_or_default()
+            .enter_match(constructor.argument_count, erased_count);
         cases.push(RuntimeMatchCase {
             constructor: constructor.symbol.to_string(),
             binders: constructor.argument_count,
@@ -1354,11 +1620,8 @@ fn lower_match_view(
                 semantic,
                 stack,
                 root_symbol,
-                context_depth + constructor.argument_count,
-                Some(BranchBinderRemap {
-                    start: branch_remap.map(|remap| remap.start).unwrap_or(0),
-                    count: constructor.argument_count,
-                }),
+                context_depth + source_binder_count,
+                Some(&remap),
             )?,
         });
     }
@@ -1432,6 +1695,7 @@ fn captures_outer_variable(term: &CheckedCoreBodyTerm) -> bool {
 fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bool {
     match term {
         CheckedCoreBodyTerm::Variable { de_bruijn_index } => *de_bruijn_index >= bound,
+        CheckedCoreBodyTerm::IntegerLiteral { .. } => false,
         CheckedCoreBodyTerm::DirectDeclarationCall { .. } => false,
         CheckedCoreBodyTerm::RecursiveDeclarationCall(_) => false,
         CheckedCoreBodyTerm::ImportedDeclarationCall(_) => false,

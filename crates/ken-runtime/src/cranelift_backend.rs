@@ -1546,6 +1546,52 @@ impl<'a> Lowering<'a> {
                         builder, present, value, &none, &some, cases, default, env,
                     );
                 }
+                if let Lowered::Bool { value, known } = lowered_scrutinee {
+                    let true_case = cases.iter().find(|case| {
+                        case.binders == 0 && case.constructor.ends_with("::Bool::True")
+                    });
+                    let false_case = cases.iter().find(|case| {
+                        case.binders == 0 && case.constructor.ends_with("::Bool::False")
+                    });
+                    let (Some(true_case), Some(false_case)) = (true_case, false_case) else {
+                        return Err(unsupported(
+                            "Match",
+                            "Bool match requires zero-binder True and False cases",
+                        ));
+                    };
+                    if let Some(selected) = known {
+                        return self.lower_expr(
+                            builder,
+                            if selected { &true_case.body } else { &false_case.body },
+                            env,
+                        );
+                    }
+                    let true_block = builder.create_block();
+                    let false_block = builder.create_block();
+                    let merge = builder.create_block();
+                    builder.append_block_param(merge, types::I64);
+                    builder
+                        .ins()
+                        .brif(value, true_block, &[], false_block, &[]);
+                    for (block, case) in
+                        [(true_block, true_case), (false_block, false_case)]
+                    {
+                        builder.switch_to_block(block);
+                        let lowered = self.lower_expr(builder, &case.body, env)?;
+                        let Lowered::Int { value, .. } = lowered else {
+                            return Err(unsupported(
+                                "Match",
+                                "dynamic native Bool match arms must produce scalar Int values",
+                            ));
+                        };
+                        builder.ins().jump(merge, &[value.into()]);
+                    }
+                    builder.switch_to_block(merge);
+                    return Ok(Lowered::Int {
+                        value: builder.block_params(merge)[0],
+                        known: None,
+                    });
+                }
                 let Lowered::Constructor { constructor, args } = lowered_scrutinee else {
                     return Err(unsupported("Match", "scrutinee is not a constructor value"));
                 };
@@ -2056,6 +2102,25 @@ impl<'a> Lowering<'a> {
                 cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual,
                 |lhs, rhs| lhs <= rhs,
             ),
+            "uint8_to_int" | "int_to_uint8_raw" => {
+                let [value]: [Lowered; 1] = lowered_args.try_into().map_err(|args: Vec<_>| {
+                    unsupported(
+                        "PrimitiveCall",
+                        format!(
+                            "{} expects one argument, got {}",
+                            primitive.symbol,
+                            args.len()
+                        ),
+                    )
+                })?;
+                let Lowered::Int { .. } = value else {
+                    return Err(unsupported(
+                        "PrimitiveCall",
+                        format!("{} expects an Int-represented value", primitive.symbol),
+                    ));
+                };
+                Ok(value)
+            }
             "not_bool" => self.lower_bool_not(builder, lowered_args),
             "and_bool" => self.lower_bool_binop(
                 builder,

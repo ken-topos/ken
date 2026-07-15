@@ -5,6 +5,53 @@ fn main (_input : ProcessInput) (_caps : ProgramCaps APartial)
   : HostIO APartial ExitCode = host_exit APartial Success
 "#;
 
+const PROCESS_BYTES_PROGRAM: &str = r#"program capabilities FS APartial
+fn process_discriminator (input : ProcessInput) : UInt8 =
+  match input {
+    MkProcessInput arguments environment cwd |->
+      match arguments {
+        Nil |-> 1 ;
+        Cons _argv0 rest |-> match rest {
+          Nil |-> 2 ;
+          Cons argument _more |-> match environment {
+            Nil |-> 3 ;
+            Cons binding _bindings |-> match binding {
+              MkProd key value |-> match bytes_at argument 0 {
+                None |-> 4 ;
+                Some argument_byte |-> match bytes_at key 0 {
+                  None |-> 5 ;
+                  Some key_byte |-> match bytes_at value 0 {
+                    None |-> 6 ;
+                    Some value_byte |-> match bytes_at cwd 0 {
+                      None |-> 7 ;
+                      Some cwd_byte |->
+                        match eq_int (uint8_to_int argument_byte) 255 {
+                          False |-> argument_byte ;
+                          True |-> match eq_int (uint8_to_int key_byte) 75 {
+                            False |-> key_byte ;
+                            True |-> match eq_int (uint8_to_int value_byte) 254 {
+                              False |-> value_byte ;
+                              True |-> match eq_int (uint8_to_int cwd_byte) 47 {
+                                False |-> cwd_byte ;
+                                True |-> value_byte
+                              }
+                            }
+                          }
+                        }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+  }
+fn main (input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode =
+  host_exit APartial (Failure (process_discriminator input))
+"#;
+
 fn output_dir(name: &str) -> std::path::PathBuf {
     let path = std::env::temp_dir().join(format!(
         "ken-px4b-{name}-{}-{}",
@@ -81,6 +128,47 @@ fn real_source_builds_one_identity_bound_linked_process_artifact() {
         .output()
         .expect("linked process artifact runs with fresh process data");
     assert_eq!(ran.status.code(), Some(0), "stderr: {:?}", ran.stderr);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn public_source_observes_raw_argv_environment_cwd_bytes_in_field_order() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let dir = output_dir("process-bytes");
+    let output = ken_cli::build_native_program(
+        PROCESS_BYTES_PROGRAM,
+        ken_cli::SourceFormat::Ken,
+        "px4b-process-bytes",
+        &dir,
+    )
+    .expect("checked byte discriminator reaches native artifact");
+
+    let run = |argument: u8| {
+        Command::new(&output.artifact.executable_path)
+            .arg(OsString::from_vec(vec![argument]))
+            .env_clear()
+            .env("K", OsString::from_vec(vec![0xfe]))
+            .current_dir(&dir)
+            .output()
+            .expect("linked artifact observes fresh raw process bytes")
+    };
+
+    // The first arm verifies argv=0xff, key='K', value=0xfe, and cwd='/' before
+    // returning the raw environment byte. Changing argv reaches the distinct
+    // fallback, so no field can be dropped, substituted, or reordered.
+    let first = run(0xff);
+    let second = run(0xfd);
+    assert_eq!(first.status.code(), Some(254), "stderr: {:?}", first.stderr);
+    assert_eq!(
+        second.status.code(),
+        Some(253),
+        "stderr: {:?}",
+        second.stderr
+    );
+    assert_ne!(first.status.code(), second.status.code());
     let _ = std::fs::remove_dir_all(dir);
 }
 

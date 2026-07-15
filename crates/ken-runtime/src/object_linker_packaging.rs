@@ -425,14 +425,13 @@ pub fn build_bound_process_starter_executable_artifact(
             args: Vec::new(),
         }],
     };
+    // Checked-core binders are de Bruijn-indexed, so the closest binder
+    // (`ProgramCaps`) is runtime argument zero and `ProcessInput` is one.
     let tree = RuntimeExpr::Call {
-        callee: Box::new(RuntimeExpr::Call {
-            callee: Box::new(RuntimeExpr::DeclarationRef {
-                symbol: entrypoint.target_symbol.clone(),
-            }),
-            args: vec![RuntimeExpr::Var(0)],
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: entrypoint.target_symbol.clone(),
         }),
-        args: vec![caps],
+        args: vec![caps, RuntimeExpr::Var(0)],
     };
     let adapter = RuntimeExpr::Match {
         scrutinee: Box::new(tree),

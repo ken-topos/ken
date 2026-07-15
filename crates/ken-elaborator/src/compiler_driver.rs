@@ -18,8 +18,8 @@ use crate::checked_core::{
     AssumptionTrustKind, AssumptionTrustMetadata, CheckedCoreArtifactInputs, CheckedCoreBodyTerm,
     CheckedCoreBodyViewError, CheckedCoreBodyViewSelection, CheckedCorePackage,
     CheckedCorePackageError, CheckedCorePackageHeader, CheckedCoreSemanticInputs,
-    ConstructorMetadata, DataMetadata, LowerabilityStatus, StableSymbol, StableSymbolTable,
-    SymbolNamespace,
+    ConstructorMetadata, DataMetadata, LowerabilityStatus, PartialityMetadata, PrimitiveMetadata,
+    PrimitiveReductionMetadata, StableSymbol, StableSymbolTable, SymbolNamespace,
 };
 use crate::program_admission::{admit_checked_main, CheckedMainDescriptor, ProgramAdmissionError};
 use crate::{ElabEnv, ElabError};
@@ -556,12 +556,13 @@ pub fn compile_native_program_sources(
         .map_err(NativeProgramBuildError::Driver)?;
         admitted_ids.extend(ids);
     }
+    let source_admitted_ids = admitted_ids.clone();
     let checked = admit_checked_main(&env).map_err(NativeProgramBuildError::Admission)?;
     let main_has_host_effect = env
         .effect_rows
         .get("main")
         .is_some_and(|row| !row.concrete_effects().is_empty());
-    let (symbols, _) = stable_symbols_for_env(package_name, &env);
+    let (symbols, _) = stable_symbols_for_env(package_name, &env, true);
     let plan =
         native_entrypoint_plan(&checked, &symbols).map_err(NativeProgramBuildError::Driver)?;
     let plan_bytes = canonical_native_entrypoint_plan_bytes(&plan);
@@ -612,7 +613,12 @@ pub fn compile_native_program_sources(
     {
         return Err(NativeProgramBuildError::Unavailable(lane));
     }
-    let executable_closure = BTreeSet::from([plan.main.clone(), plan.host_exit.clone()]);
+    let mut executable_closure = source_admitted_ids
+        .iter()
+        .filter_map(|id| symbols.get(id).cloned())
+        .collect::<BTreeSet<_>>();
+    executable_closure.insert(plan.main.clone());
+    executable_closure.insert(plan.host_exit.clone());
     let mut runtime_program =
         crate::erasure::erase_checked_core_package_for_target(&package, executable_closure.iter())
             .map_err(NativeProgramBuildError::Erasure)?;
@@ -1026,6 +1032,7 @@ fn collect_runtime_support_from_term(
 ) {
     match term {
         CheckedCoreBodyTerm::Variable { .. }
+        | CheckedCoreBodyTerm::IntegerLiteral { .. }
         | CheckedCoreBodyTerm::DirectDeclarationCall { .. }
         | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
         | CheckedCoreBodyTerm::PrimitiveLiteral(_)
@@ -1106,7 +1113,8 @@ fn emit_package_from_env(
 ) -> Result<CheckedCorePackage, CompilerDriverError> {
     let package_identity = package_identity(&manifest.package_name);
     let mut semantic = CheckedCoreSemanticInputs::default();
-    let (symbols, table) = stable_symbols_for_env(&manifest.package_name, env);
+    let native_primitives = native_entrypoint_plan.is_some();
+    let (symbols, table) = stable_symbols_for_env(&manifest.package_name, env, native_primitives);
 
     for symbol in symbols.values() {
         semantic.symbols.insert(symbol.clone());
@@ -1130,6 +1138,9 @@ fn emit_package_from_env(
     }
 
     add_data_metadata(env, &symbols, &mut semantic);
+    if native_primitives {
+        add_native_primitive_metadata(env, &symbols, &mut semantic);
+    }
     apply_manifest_target_metadata(manifest, &mut semantic);
     add_trusted_base_metadata(env, &symbols, &mut semantic);
     if let Some(plan) = native_entrypoint_plan {
@@ -1232,6 +1243,7 @@ fn canonical_native_entrypoint_plan_bytes(plan: &NativeEntrypointPlanV1) -> Vec<
 fn stable_symbols_for_env(
     package_name: &str,
     env: &ElabEnv,
+    native_primitives: bool,
 ) -> (BTreeMap<GlobalId, StableSymbol>, StableSymbolTable) {
     let mut names_by_id = BTreeMap::<GlobalId, String>::new();
     let mut global_names = env.globals.iter().collect::<Vec<_>>();
@@ -1255,6 +1267,22 @@ fn stable_symbols_for_env(
 
     let mut symbols = BTreeMap::new();
     for decl in env.env.decls() {
+        if native_primitives {
+            if let Decl::Primitive { id, reduction, .. } = decl {
+                let registry_symbol = match reduction {
+                    ken_kernel::PrimReduction::Op { symbol } => Some((*symbol).to_string()),
+                    ken_kernel::PrimReduction::Literal => match env.num_values.get(id) {
+                        Some(crate::NumericLitVal::Int(value)) => Some(format!("lit_int_{value}")),
+                        _ => None,
+                    },
+                    ken_kernel::PrimReduction::OpaqueType => None,
+                };
+                if let Some(registry_symbol) = registry_symbol {
+                    symbols.insert(*id, StableSymbol::primitive(registry_symbol));
+                    continue;
+                }
+            }
+        }
         let name = names_by_id
             .get(&decl.id())
             .cloned()
@@ -1282,6 +1310,50 @@ fn stable_symbols_for_env(
         table.insert_global(*id, symbol.clone());
     }
     (symbols, table)
+}
+
+fn add_native_primitive_metadata(
+    env: &ElabEnv,
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+    semantic: &mut CheckedCoreSemanticInputs,
+) {
+    for decl in env.env.decls() {
+        let Decl::Primitive { id, reduction, .. } = decl else {
+            continue;
+        };
+        let (registry_symbol, reduction) = match reduction {
+            ken_kernel::PrimReduction::Op { symbol } => {
+                ((*symbol).to_string(), PrimitiveReductionMetadata::Op)
+            }
+            ken_kernel::PrimReduction::Literal => match env.num_values.get(id) {
+                Some(crate::NumericLitVal::Int(value)) => (
+                    format!("lit_int_{value}"),
+                    PrimitiveReductionMetadata::Literal,
+                ),
+                _ => continue,
+            },
+            ken_kernel::PrimReduction::OpaqueType => continue,
+        };
+        let Some(stable) = symbols.get(id).cloned() else {
+            continue;
+        };
+        semantic.primitive_refs.insert(
+            stable.clone(),
+            format!("primitive-registry:{registry_symbol}"),
+        );
+        semantic.primitive_metadata.insert(
+            stable.clone(),
+            PrimitiveMetadata {
+                registry_symbol,
+                reduction,
+                partiality: PartialityMetadata::Total,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        semantic
+            .lowerability
+            .insert(stable, LowerabilityStatus::Supported);
+    }
 }
 
 fn declaration_symbol(package_name: &str, name: &str) -> StableSymbol {
