@@ -1259,7 +1259,8 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         // (`IntN -> Int`), never the value.
         (
             "int8_to_int" | "int16_to_int" | "int32_to_int" | "int64_to_int" | "uint8_to_int"
-            | "uint16_to_int" | "uint32_to_int" | "uint64_to_int",
+            | "uint16_to_int" | "uint32_to_int" | "uint64_to_int" | "usize_to_int"
+            | "isize_to_int" | "cint_to_int",
             [a],
         ) => a.clone(),
         // Narrowing raw cast `Int -> IntN` (UNCHECKED — identity at the value
@@ -1269,7 +1270,8 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         // `saturating*` family after clamping — never exposed un-guarded.
         (
             "int_to_int8_raw" | "int_to_int16_raw" | "int_to_int32_raw" | "int_to_int64_raw"
-            | "int_to_uint8_raw" | "int_to_uint16_raw" | "int_to_uint32_raw" | "int_to_uint64_raw",
+            | "int_to_uint8_raw" | "int_to_uint16_raw" | "int_to_uint32_raw" | "int_to_uint64_raw"
+            | "int_to_usize_raw" | "int_to_isize_raw" | "int_to_cint_raw",
             [a],
         ) => a.clone(),
 

@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, PartialEq, Eq)]
 struct ProducerInventory {
+    abi_widths: BTreeSet<String>,
     o_flags: BTreeSet<String>,
     at_flags: BTreeSet<String>,
     modes: BTreeSet<String>,
@@ -11,14 +12,16 @@ struct ProducerInventory {
 }
 
 pub(crate) fn verify_inventory_closure(
+    build_source: &str,
     host_source: &str,
     consumer_source: &str,
     probe_source: &str,
     facts: &[(&str, u64)],
 ) -> Result<(), String> {
-    let producer = derive_producer_inventory(host_source, consumer_source)?;
+    let producer = derive_producer_inventory(build_source, host_source, consumer_source)?;
     let registry = registry_inventory(facts)?;
 
+    compare_category("ABI width", &producer.abi_widths, &registry.abi_widths)?;
     compare_category("OFlags", &producer.o_flags, &registry.o_flags)?;
     compare_category("AtFlags", &producer.at_flags, &registry.at_flags)?;
     compare_category("Mode", &producer.modes, &registry.modes)?;
@@ -41,6 +44,7 @@ pub(crate) fn verify_inventory_closure(
 }
 
 fn derive_producer_inventory(
+    build_source: &str,
     host_source: &str,
     consumer_source: &str,
 ) -> Result<ProducerInventory, String> {
@@ -55,6 +59,7 @@ fn derive_producer_inventory(
         .ok_or_else(|| "cannot isolate the PosixHost consumer".to_owned())?;
 
     Ok(ProducerInventory {
+        abi_widths: string_arguments(build_source, "width_fact(\"")?,
         o_flags: identifiers_after(production, "OFlags::", None),
         at_flags: identifiers_after(production, "AtFlags::", None),
         modes: call_arguments(production, "Mode::from_raw_mode(")?,
@@ -66,6 +71,7 @@ fn derive_producer_inventory(
 
 fn registry_inventory(facts: &[(&str, u64)]) -> Result<ProducerInventory, String> {
     let mut inventory = ProducerInventory {
+        abi_widths: BTreeSet::new(),
         o_flags: BTreeSet::new(),
         at_flags: BTreeSet::from(["empty".to_owned()]),
         modes: BTreeSet::new(),
@@ -74,7 +80,9 @@ fn registry_inventory(facts: &[(&str, u64)]) -> Result<ProducerInventory, String
         errno_kinds: BTreeSet::new(),
     };
     for (name, _) in facts {
-        if let Some(flag) = name.strip_prefix("O_") {
+        if name.ends_with("_WIDTH") {
+            inventory.abi_widths.insert((*name).to_owned());
+        } else if let Some(flag) = name.strip_prefix("O_") {
             inventory.o_flags.insert(match flag {
                 "CREAT" => "CREATE".to_owned(),
                 other => other.to_owned(),
@@ -96,6 +104,31 @@ fn registry_inventory(facts: &[(&str, u64)]) -> Result<ProducerInventory, String
         }
     }
     Ok(inventory)
+}
+
+fn string_arguments(source: &str, prefix: &str) -> Result<BTreeSet<String>, String> {
+    let mut found = BTreeSet::new();
+    let mut offset = 0;
+    while let Some(relative) = source[offset..].find(prefix) {
+        let start = offset + relative + prefix.len();
+        let rest = &source[start..];
+        let end = rest
+            .find('"')
+            .ok_or_else(|| format!("unterminated producer string after {prefix}"))?;
+        let name = &rest[..end];
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+        {
+            return Err(format!("invalid producer ABI fact label {name:?}"));
+        }
+        if !found.insert(name.to_owned()) {
+            return Err(format!("duplicate producer ABI fact label {name}"));
+        }
+        offset = start + end + 1;
+    }
+    Ok(found)
 }
 
 fn compare_category(

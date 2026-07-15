@@ -33,6 +33,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use ken_kernel::env::PrimReduction;
 use ken_kernel::{declare_postulate, declare_primitive, GlobalEnv, GlobalId, Term};
+use num_bigint::BigInt;
 
 use crate::error::ElabError;
 use crate::ElabEnv;
@@ -61,6 +62,61 @@ fn width_specs() -> [WidthSpec; 8] {
         WidthSpec { name: "UInt32", snake: "uint32", min_expr: "0",                                 max_expr: "4294967295",           signed: false },
         WidthSpec { name: "UInt64", snake: "uint64", min_expr: "0",                                 max_expr: "18446744073709551615", signed: false },
     ]
+}
+
+struct AbiScalarSpec {
+    name: &'static str,
+    snake: &'static str,
+    min_expr: String,
+    max_expr: String,
+}
+
+fn manifested_width(name: &str) -> Result<u32, ElabError> {
+    if ken_host::TARGET_ABI.backend != "linux_raw" {
+        return Err(ElabError::Internal(format!(
+            "PX3 ABI scalar conversions are unavailable for target ABI backend {:?}",
+            ken_host::TARGET_ABI.backend
+        )));
+    }
+    let width = ken_host::TARGET_ABI
+        .facts
+        .iter()
+        .find(|fact| fact.name == name)
+        .ok_or_else(|| ElabError::Internal(format!("target ABI manifest lacks {name}")))?
+        .value;
+    let width = u32::try_from(width)
+        .map_err(|_| ElabError::Internal(format!("target ABI width {name} is too large")))?;
+    if width == 0 {
+        return Err(ElabError::Internal(format!(
+            "target ABI width {name} must be nonzero"
+        )));
+    }
+    Ok(width)
+}
+
+fn bound_exprs(width: u32, signed: bool) -> (String, String) {
+    if signed {
+        let magnitude = BigInt::from(1u8) << (width - 1);
+        let max = &magnitude - 1u8;
+        (format!("(sub_int 0 {magnitude})"), max.to_string())
+    } else {
+        let max = (BigInt::from(1u8) << width) - 1u8;
+        ("0".to_owned(), max.to_string())
+    }
+}
+
+fn abi_scalar_specs() -> Result<Vec<AbiScalarSpec>, ElabError> {
+    [
+        ("USize", "usize", "POINTER_WIDTH", false),
+        ("ISize", "isize", "POINTER_WIDTH", true),
+        ("CInt", "cint", "C_INT_WIDTH", true),
+    ]
+    .into_iter()
+    .map(|(name, snake, width_fact, signed)| {
+        let (min_expr, max_expr) = bound_exprs(manifested_width(width_fact)?, signed);
+        Ok(AbiScalarSpec { name, snake, min_expr, max_expr })
+    })
+    .collect()
 }
 
 /// Register a native unary op `A → B` (mirrors `numbers.rs`'s inline
@@ -239,5 +295,102 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
         }
     }
 
+    // PX3: actionable failure payload for every ABI-scalar narrowing. The
+    // target name and manifested bounds travel with the offending value.
+    elab.elaborate_decl("data RangeError = MkRangeError String Int Int Int")
+        .map_err(|e| ElabError::Internal(format!("RangeError failed: {e}")))?;
+
+    let trusted_before: BTreeSet<_> = elab.env.trusted_base().into_iter().collect();
+    let mut retract_ids = Vec::new();
+    let mut conversion_ids = Vec::new();
+
+    for spec in abi_scalar_specs()? {
+        let ty_id = elab.numeric_env.id_for(spec.name).ok_or_else(|| {
+            ElabError::Internal(format!("conversions: {} not registered", spec.name))
+        })?;
+
+        let widen_name = format!("{}_to_int", spec.snake);
+        let widen_id = reg_unop(
+            &mut elab.env, &mut elab.globals, &widen_name, ty_id, int_id,
+        )?;
+        conversion_ids.push(widen_id);
+        let narrow_raw_name = format!("int_to_{}_raw", spec.snake);
+        let narrow_raw_id = reg_unop(
+            &mut elab.env, &mut elab.globals, &narrow_raw_name, int_id, ty_id,
+        )?;
+        conversion_ids.push(narrow_raw_id);
+
+        let scalar_t = Term::const_(ty_id, vec![]);
+        let retract_ty = Term::pi(
+            scalar_t.clone(),
+            Term::Eq(
+                Box::new(scalar_t),
+                Box::new(Term::app(
+                    Term::const_(narrow_raw_id, vec![]),
+                    Term::app(Term::const_(widen_id, vec![]), Term::var(0)),
+                )),
+                Box::new(Term::var(0)),
+            ),
+        );
+        let retract_name = format!("{}_int_retract", spec.snake);
+        let retract_id = declare_postulate(
+            &mut elab.env, retract_name.clone(), vec![], retract_ty,
+        )
+        .map_err(|e| ElabError::Internal(format!("{retract_name} failed: {e}")))?;
+        elab.globals.insert(retract_name, retract_id);
+        retract_ids.push(retract_id);
+        conversion_ids.push(retract_id);
+
+        let src = format!(
+            "fn intTo{name} (n : Int) : Result RangeError {name} = \
+             match (and_bool (leq_int {min} n) (leq_int n {max})) {{ \
+               True |-> Ok RangeError {name} (int_to_{snake}_raw n) ; \
+               False |-> Err RangeError {name} (MkRangeError \"{name}\" n {min} {max}) \
+             }}",
+            name = spec.name,
+            snake = spec.snake,
+            min = spec.min_expr,
+            max = spec.max_expr,
+        );
+        elab.elaborate_decl(&src)
+            .map_err(|e| ElabError::Internal(format!("intTo{} failed: {e}", spec.name)))?;
+
+        // The primitive remains in Σ for the already-elaborated wrapper and
+        // retract, but has no surface spelling: unchecked narrowing is not a
+        // public API.
+        elab.globals.remove(&narrow_raw_name);
+    }
+
+    let trusted_after: BTreeSet<_> = elab.env.trusted_base().into_iter().collect();
+    let trusted_delta: Vec<_> = trusted_after
+        .difference(&trusted_before)
+        .copied()
+        .collect();
+    let actual_delta: BTreeSet<_> = trusted_delta.iter().copied().collect();
+    let expected_delta: BTreeSet<_> = conversion_ids.iter().copied().collect();
+    if actual_delta != expected_delta {
+        return Err(ElabError::Internal(format!(
+            "PX3 ABI scalar conversion delta must be exactly six native floors plus three retracts: expected {expected_delta:?}, got {actual_delta:?}"
+        )));
+    }
+    elab.numeric_env.abi_scalar_retract_ids = retract_ids;
+    elab.numeric_env.abi_scalar_conversion_trusted_delta = trusted_delta;
+
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bound_exprs;
+
+    #[test]
+    fn manifested_width_changes_the_generated_bounds() {
+        assert_ne!(bound_exprs(32, false), bound_exprs(64, false));
+        assert_ne!(bound_exprs(32, true), bound_exprs(64, true));
+        assert_eq!(bound_exprs(8, false), ("0".into(), "255".into()));
+        assert_eq!(
+            bound_exprs(8, true),
+            ("(sub_int 0 128)".into(), "127".into())
+        );
+    }
 }
