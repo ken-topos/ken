@@ -32,6 +32,107 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > an unconditional negative binding) + non-interference asserted on real N2 source
 > roots, not inline. Language ring → standby.
 >
+> ### ⚡ 2026-07-15 (14:18 UTC, clock-read) — ✅ CC9-Test.Property CLOSED · Foundation idle (no ready WP) · fleet blocked on operator (PX7 / Milestone-D)
+>
+> **✅ CLOSED `evt_1g31597ekzwe0`.** All 3 §10 retros in (leader
+> `evt_1mfnr7hy07kyb` / impl `evt_6dhm00ksmkwa5` / QA `evt_6v53pvqg1qj0`). §2
+> DONE: merged `cc2bf2ad` + ACs met + retros in. **Converged carry** (2/3
+> topology-touching): a provisional/empirical test witness needs a **behavioral
+> flip-proof** — real impl + one-change mutant through the IDENTICAL
+> generator/runner path, negative arm reaching `Failed` after a positive prefix; a
+> passing property alone proves nothing. (Covered by the green-vs-green /
+> reaching-negative-arm memory cluster — not re-filed.)
+> **⇒ FLEET STATE: Foundation idle (legitimately) — no ready next WP.** Catalog
+> CC1–CC8 + Path.Posix (CC6b) + CC9-Test.Property all landed. Remaining work is
+> (a) **Resource/Bracket** — HELD on operator PX7 re-read (PX7 unbuilt); (b) the
+> **Milestone-D remainder** (subprocess/signals/temp/terminal) — awaiting Pat's
+> "I-9…I-12 or is CC9 the exit criterion?" ruling (raised 2026-07-14). Kernel /
+> Verify / Ergo idle by design (K3 = Pat's call). **Fleet is now blocked only on
+> the operator** — do NOT manufacture work. Tracker syncing to main doc-only.
+> **⇒ WATCHDOG: if this holds (nothing in review/mid-task, blocked only on
+> operator), CANCEL the watchdog next tick and re-arm when work resumes.**
+>
+> ### ⚡ 2026-07-15 (14:14 UTC, clock-read) — ✅ CC9-Test.Property MERGED (PR #719, FULL CI) · awaiting 3 §10 retros to close
+>
+> **✅ MERGED — `origin/main @ cc2bf2ad`** (PR #719, exact `0afae5b3`, FULL locked
+> CI green: publisher "checks passed and merge command succeeded"). Content-verified
+> on main: `catalog/packages/Test/Property.ken.md` present, title "Test.Property —
+> deterministic finite property checks". Gate trail: QA `evt_6e0x4zv1s1v9g` +
+> Architect §14 `evt_58n30fyq16t95` + Decision `dec_5jqmffvfdb6n7` (resolved,
+> resolved_by=Architect, verified fresh). Single-block WP, no respin.
+> **Retro request `evt_6sytbagkybn6m`** posted (thread `thr_4syqsvkr7nga5`); all 3
+> Foundation seats auto-woke Working. **⇒ ON 3 RETROS IN: CLOSE** + sync tracker to
+> main (doc-only, since CC9 code publish carried no tracker commit — main's tracker
+> is stale at `dd675cc3`'s version).
+> **PUBLISH STUMBLE (resolved):** first publisher run `bdyuj3ytn` FAILED (exit 1) —
+> force-push rejected "stale info" because the FRAME's PR #718 (same branch name
+> `wp/cc9-test-property`) was auto-deleted on merge, leaving a stale local
+> remote-tracking ref that failed the `--force-with-lease`. Fix: `git fetch
+> --prune` → retry `byuju6250` succeeded. LESSON: reusing one branch name for both
+> a doc-only frame publish AND the code publish invites a stale-ref push reject;
+> prune between, or use distinct branch names.
+>
+> ### ⚡ 2026-07-15 (14:05 UTC, clock-read) — CC9-Test.Property PUBLISHING · exact `0afae5b3` FULL CI · Decision verified fresh · publisher `bdyuj3ytn`
+>
+> **All gates in + Decision verified FRESH from the object:** `dec_5jqmffvfdb6n7`
+> `status:resolved`, **resolved_by=Architect** (`agt_37reqftfe6g00`, 14:03:48),
+> resolution cites QA `evt_6e0x4zv1s1v9g` + Architect §14 `evt_58n30fyq16t95` at
+> exact `0afae5b3`. **No CV** (single catalog file, no conformance path).
+> Candidate verified: direct child of `dd675cc3`, diff = exactly
+> `catalog/packages/Test/Property.ken.md`, `diff --check` clean, **no tracker
+> commit on WP branch** (exact-SHA §14 approval preserved). **FULL-CI publisher
+> launched `bdyuj3ytn`** (touches `catalog/` — NOT doc-only; waits CI →
+> squash-merge `--match-head-commit`). **⇒ ON MERGE:** content-verify on
+> `origin/main` (plain phrase, e.g. "minimal, provisional property-test scaffold"
+> or the `Test/Property.ken.md` path present) → request 3 §10 retros (leader +
+> impl + QA: Trap/Held/Carry) → CLOSE. Then sync tracker to main separately.
+>
+> ### ⚡ 2026-07-15 (13:59 UTC, clock-read) — CC9-Test.Property in TERMINAL GATE · candidate `0afae5b3` · QA APPROVE in · Architect §14 in flight
+>
+> **Candidate: `wp/cc9-test-property @ 0afae5b341560c73781ced941f35b219bce97e77`**
+> — one file `catalog/packages/Test/Property.ken.md` (274 lines), one direct
+> commit on `origin/main @ dd675cc3`, branch free. Delivered: deterministic
+> finite `Gen` + `gen_from_list`/`gen_map`, `Result a Unit` runner with
+> first-counterexample order, 5 bounded byte samples (empty/`[0]`/`[255]`/
+> `[0,255]`/`[1,127,255]`), minimal inline `ByteCursor` slice, real
+> Cursor-progress predicate + stuck-advance mutant (all three witnesses green).
+> - **Foundation QA APPROVE `evt_6e0x4zv1s1v9g`** — independently tangled +
+> executed all 3 witnesses; anti-postulate audit clean (only `data`/`fn`/`const`,
+> no axiom/postulate/hole/import/Resource/Bracket/RNG/effect); zero-`trusted_base`
+> delta structural; kenfmt 2/2 + cc3 3/3.
+> - **Architect §14 in flight `evt_4ej6ht318b1ak`** (roused off a stranded paste
+> 13:58). **NO CV** — single catalog file, no conformance fixture (per frame).
+> **⇒ ON §14 APPROVE + resolved Decision:** publish exact `0afae5b3` via **FULL-CI
+> publisher** (touches `catalog/` — NEVER doc-only; §14 exact-SHA, NO tracker
+> commit on the WP branch), content-verify on main, then chase 3 §10 retros +
+> close. Base for publish = `dd675cc3` (frame already on main).
+>
+> ### ⚡ 2026-07-15 (13:41 UTC, clock-read) — ✅ CC9-Test.Property RELEASED · Foundation ring building · next = frame Path.Posix (armed next seam)
+>
+> **Handoff Gate COMPLETE (all 7 steps).** Frame published doc-only **PR #718 →
+> `origin/main @ dd675cc3`** (content-verified: title line + tracker marker on
+> main). Foundation ring **compacted @ ctx-verified → ~0** (all 3 panes "Context
+> compacted", worktrees reset to `dd675cc3` with frame present, 0-ahead/0-dirty
+> pre-compact). Prior WP (axiom fossil-sweep) closed — 3 retros in (leader +
+> impl `evt_23kwzvcx1f6nd` + QA `evt_2jan7mf3vzmmr`). **Kickoff
+> `evt_7qgyp9jh8fant`** → foundation-leader roused → **`Working`** confirmed
+> (gate step 7). Gate = Foundation QA + Architect §14 + FULL CI; publisher on a
+> RESOLVED Decision. (Minor: leader's re-orient hit missing
+> `agent/memory/teams/foundation/` — benign, reads fleet/build scopes fine.)
+> **⇒ NEXT: watch the CC9-Test.Property build/gate** (foundation-implementer
+> `Working`). **CORRECTION — Path.Posix is NOT a next seam: it ALREADY MERGED as
+> CC6b** (`2b37faf3`, `catalog/packages/System/Path/Posix.ken.md`, 1793 lines w/
+> §3 lexical normalization + proofs). The 2026-07-14 frontier note calling it
+> "not framed" was **stale** — grounded-before-authoring caught it
+> ([[my-own-tracker-capability-landed-line-can-be-stale]]). **Re-survey: no ready
+> next Foundation WP after CC9-Test.Property.** Catalog CC1–CC8 + Path.Posix all
+> landed; remaining Foundation work is Resource/Bracket (HELD on PX7) + the
+> UNOWNED Milestone-D remainder (subprocess/signals/temp/terminal — awaiting
+> Pat's "I-9…I-12 or is CC9 the exit?" ruling, raised 2026-07-14). So Foundation
+> goes legitimately idle when CC9-Test.Property clears — do NOT manufacture work.
+> Resource/Bracket + PX3 stay HELD/behind. Fleet NOT fully quiescent (Foundation
+> building) → watchdog stays armed.
+>
 > ### ⚡ 2026-07-15 (13:31 UTC, clock-read) — CC9-Test.Property FRAME AUTHORED (`wp/cc9-test-property @ origin/main 0fa72ff9`) · next = Handoff-Gate Foundation + doc-only publish + kickoff
 >
 > **Frame written:** `docs/program/wp/cc9-test-property.md` on branch
@@ -19344,8 +19445,8 @@ against it*. Run until complete, blocked, or instructed (§2b).
 | **SUB-2** | ✅ QA-approved `@ 4abda39a` · **PR #637 IN CI, publisher polling.** On merge: **content-verify on `origin/main`** (ArgBytes/ArgByteLength/`byte_unit_zero_int` all ABSENT from extracted Ken; zero trust delta) → chase 3 Runtime retros → close. **+384/−615 — it DELETED more than it added.** |
 | **SUB-1b** | 🟢 Language finishing. Candidate `wp/sub1b-uint8-deceq @ bce2e05d` — **rebased onto `9812b59c` ✅**, **exactly ONE `declare_postulate` (`uint8_int_retract`)**, fail-closed guard present, **zero `Axiom` in extracted Ken**. Gate: **Language QA + Architect terminal** (trust grows by 1). |
 | **CC8** | 🟡 **ARMED.** `wp/cc8-env-config-decoder @ 6c7ca45c`. **KICK THE INSTANT SUB-1b MERGES.** |
-| **Path.Posix** | 🟡 **NOT yet unblocked — needs SUB-1b *AND* SUB-2. NOT framed.** No `Path` package on main (bundled in CC6; only CC6a shipped). **See the dependency note below — do NOT kick it on SUB-2 alone.** |
-| **CC9** | ⚪ Resource + Test.Property. Last in the CC chain. Not framed. |
+| **Path.Posix** | ✅ **MERGED as CC6b** (`2b37faf3`, `catalog/packages/System/Path/Posix.ken.md`, 1793 lines w/ §3 lexical normalization + segment-valid round-trip proofs). This row's "not framed" was STALE. |
+| **CC9** | 🔵 **SPLIT + Test.Property RELEASED** (2026-07-15). `Test.Property` building (Foundation, kickoff `evt_7qgyp9jh8fant`, frame `docs/program/wp/cc9-test-property.md`, on `origin/main dd675cc3`). `Resource`/`Bracket` **HELD** on operator's PX7 re-read. See top-block. |
 
 ### ⚠ Path.Posix needs BOTH SUB-1b and SUB-2 — do not kick it on SUB-2 alone
 
