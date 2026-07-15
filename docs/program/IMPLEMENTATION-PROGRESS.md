@@ -14,6 +14,92 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### ⚡ 2026-07-15 (13:08 UTC, clock-read) — ✅ L4-export MERGED (PR #717, FULL CI) · awaiting §10 retros to close · CC9 next
+>
+> **L4-export MERGED — `origin/main @ 0fa72ff9`** (PR #717, exact `5f4ed906`, FULL
+> locked CI green; publisher log "checks passed and merge command succeeded").
+> Content-verified on main: `KwExport` in `crates/ken-elaborator/src/lexer.rs`;
+> `conformance/surface/declarations/seed-namespace-export.md` indexed; squash
+> subject "L4-export: the export re-export declaration". Gate trail:
+> QA `evt_953yv87hk10q` + §14 `evt_2757amgawf6vh` + CV `evt_3e27mc7xcbsbv`, merge
+> Decision `dec_1nfchy29mxnwq` resolved (verified fresh). NO tracker commit on the
+> WP branch — exact-SHA approval preserved.
+> **✅ L4-export CLOSED** (`evt_2sxb3j8tx7e8y`, 13:09) — all 3 §10 retros in (leader
+> `evt_2fe2ef8v6hcgx` / impl `evt_f59q6q231dws` / QA `evt_1p30w128cdzfk`). §2 DONE:
+> merged + ACs met + retros in. **Carry lifted to fleet record + Steward memory**
+> ([[visibility-surface-deny-marker-conditional-and-source-root-tested]]): a
+> visibility-surface deny marker must be CONDITIONAL on absent prior binding (never
+> an unconditional negative binding) + non-interference asserted on real N2 source
+> roots, not inline. Language ring → standby.
+>
+> ### ⚡ 2026-07-15 (13:31 UTC, clock-read) — CC9-Test.Property FRAME AUTHORED (`wp/cc9-test-property @ origin/main 0fa72ff9`) · next = Handoff-Gate Foundation + doc-only publish + kickoff
+>
+> **Frame written:** `docs/program/wp/cc9-test-property.md` on branch
+> `wp/cc9-test-property` (base `origin/main @ 0fa72ff9`). Grounding RE-VERIFIED
+> against origin/main before authoring; corrected **stale anchors** from
+> `scratchpad/cc9-grounding.md`: (a) style guide moved to
+> **`docs/program/07-catalog-style-guide.md`** (the `catalog/packages/07-…` path
+> is gone); (b) empirically settled the MANIFEST/literate question — **35 of 36
+> catalog pkgs are literate `.ken.md`, ZERO MANIFEST files on disk** (the README
+> MANIFEST prose IS stale, as grounding warned); (c) **every one of 36 pkgs has
+> zero `import`** → INLINE is corpus-confirmed, cross-file import still unresolved.
+> Design pins added: **deterministic sample-list generators** (no RNG primitive to
+> add), one mandated non-vacuous witness (Cursor-progress decidable shadow), the
+> **anti-postulate rule as the load-bearing AC5** (no `postulate`/`Axiom`/hole, no
+> re-export of a proved `Prop` law). Gate = Foundation QA + Architect §14
+> (zero-trust-delta axis); no CV unless a conformance fixture is added; FULL CI.
+>
+> ### ⚡ 2026-07-15 (13:24 UTC) — CC9 SPLIT (from operator's two settled inputs) · releasing Test.Property, holding Resource/Bracket on PX7
+>
+> **Grounding (Explore `a6913bdbb`) resolved CC9 into two independently-packaged
+> halves with OPPOSITE durability postures — the split is DETERMINED by two settled
+> operator inputs, not a new decision (so NOT re-asked; surfaced as FYI
+> `evt_6gbjkr5r8g4mp`):**
+> - **`Test.Property` → RELEASING NOW.** Decision 2's "minimal Test.Property,
+> catalog-only, no test-only language primitives" (Ward-handoff scaffolding,
+> `09...560-571`). Deps: landed Parsing (Cursor/Decoder) + Bytes/UInt8 + CC1
+> Validation/NonEmpty. **NO PX7 gate.** Ships as `catalog/packages/Test/Property`.
+> - **`Resource`/`Bracket` → HELD.** Operator RESERVED its release: *"CC9's frame
+> must be re-read against PX7 before CC9 is released (on me)"* (`09...573-578`) so
+> the Bracket isn't built twice. FS today is whole-file (no OS handle;
+> `read_bytes`/`write_file`, `prelude.rs:1388-1398`); the handle-bracket is **PX7**,
+> behind PX3/4/5/6 (all unbuilt). Cannot do the re-read → HOLD, do not guess a shape
+> PX7 rebuilds. Consequence: FS file-acquisition (CC8 deferred it here) stays
+> deferred until PX7. [[settled-operator-approval-is-a-fixed-input-never-re-ask]] +
+> subsume-don't-proliferate both point to HOLD.
+>
+> **⇒ NOW: frame + release Test.Property to Foundation.** Author
+> `docs/program/wp/cc9-test-property.md` (model CC8 frame `wp/cc8-env-config-decoder.md`).
+> **★ FULL grounding saved (survives compaction): `scratchpad/cc9-grounding.md`** —
+> read it first on resume; it has every anchor. Fixed inputs (grounded, perishable): single literate `.ken.md` `catalog/packages/Test/Property.ken.md`, no
+> MANIFEST, path-inferred module, §-order w/ retired §6; **INLINE the Parsing surface
+> it exercises** (cross-file catalog import does not resolve — CC1–CC8 all inline;
+> `07-catalog-style-guide.md:474-481` — verify vs post-L4 main); **empirical
+> generators over stated Props, must NOT postulate a law the catalog must prove**
+> (`59-parsing-syntax-diagnostics.md:31-33`); target laws = Cursor totality/progress
+> (`Cursor.ken.md:215-255`), Decoder progress/consume (`Decoder.ken.md:215-288`),
+> `BytesRoundTripLaw` (`38-ffi-io.md:228-257`), Config totality; arbitrary-byte via
+> `List UInt8` view; **NO test-only kernel/grammar primitive**; ZERO trusted_base
+> delta; validated `ken check`. Then Handoff-Gate Foundation (compact
+> leader+impl+qa + kickoff) → publish frame doc-only (bundle tracker-sync to main) →
+> kickoff → confirm Working. PX3 still behind CC9.
+>
+> ---
+> **⇒ (superseded plan below — kept for trail) NEXT — CC9 (Decision 2: `export → CC9`):** (a) **sync tracker to main** —
+> main's tracker is stale at `0fa72ff9` (L4 merged with NO tracker commit per
+> exact-SHA rule); bundle the sync with the CC9 frame publish (both docs/program/,
+> doc-only). (b) **Consider §15 self-compact at THIS clean seam** before the fresh
+> CC9 framing (L4 done, CC9 unstarted — ideal seam). (c) **Author**
+> `docs/program/wp/cc9-resource-test-property.md` grounded vs post-merge main
+> `0fa72ff9` (model on `cc8-env-config-decoder.md`): `Resource`/`Bracket`
+> (structurally-safe acquire/release for response/config files) + `Test.Property`
+> (generators + parser-law/byte-totality props), **`Test.Property` MINIMAL — plain
+> catalog pkg, NO test-only language primitives** (Pat scaffolding→Ward). FULL CI
+> (catalog/). Owner = **Foundation** (idle; deps met — CC8 landed, freeze lifted).
+> (d) **Handoff-Gate Foundation** (compact leader+impl+qa + kickoff) → release.
+> Then PX3 (still behind CC9).
+>
+> ---
 > ### ⚡ 2026-07-15 (11:35 UTC, clock-read) — ✅ DECISION 2 RESOLVED (operator) · releasing L4-export to Language ring
 >
 > ## Pat concurred with the Steward toolchain-ordering recommendation and said
@@ -34,12 +120,158 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > > - **Handoff-Gate readiness:** Language ring prior WP **kenfmt CLOSED** (all 3
 > > retros in, `683711fc`); 3 seats quiescent + idle (leader/qa=terra,
 > > impl=sol; GPT/no-poll → rouse after kickoff). Gate steps 1–3 ✅.
-> > - **⇒ NEXT (in order):** (1) publish frame + tracker to `origin/main`
-> > (doc-only bundle); (2) `handoff-gate-compact.sh language-leader
-> > language-implementer language-qa` (background) → verify drops; (3) cut-hint
-> > `wp/l4-export` from fetched `origin/main`; kick off (roots the L4-export
-> > thread) + rouse the 3 GPT seats; (4) confirm all 3 go Working. Then
-> > event-driven: Language QA → Architect §14 + CV Spec-vote → publish FULL CI.
+> > - **✅ RELEASED — Handoff Gate complete (all 7 steps).** (1) frame+tracker
+> > published `origin/main @ eb89ae16` (PR #716, doc-only, content-verified); (2)
+> > kenfmt closure confirmed (all 3 retros in) + 3 seats quiescent; (3)
+> > `handoff-gate-compact.sh` ran (bg `b12t981u4`) → all 3 "Context compacted",
+> > worktrees reset to `eb89ae16` (drops verified WIDE); (4) **kickoff posted
+> > `evt_3c2rmxvw48vmt`** (roots the L4-export thread, mentions language-leader);
+> > (5) leader rouse'd (GPT/no-poll) → **confirmed Working**. L4-export is LIVE in
+> > the Language ring.
+> > - **⇒ BUILD + QA-RESPIN IN PROGRESS** (thread `thr_4kp7nkmwz9k9h`): leader
+> > D0-grounded, cut `wp/l4-export`, assigned impl. Impl **released exact
+> > `3e1616b4`** (`evt_6vzavnqnzw3c9`, 15 paths +731−123, AC net 10/10, zero
+> > kernel/trusted-base delta) → **Language QA BLOCKED** (`evt_3ray06j58ky9k`,
+> > 12:24) — QA-internal **conformance-coverage** gap (not §14/CV): the
+> > `seed-namespace-export.md §A` net doesn't execute the required discriminators —
+> > import×import in **both orders**, the same-identity reject carve-out (a changed
+> > `P` re-exporting distinct `N.foo`), and the **loader-facing routes** (inline
+> > `elaborate_file` instead of the N2 loader). Disposition precise: add the
+> > source-root/loader arms w/ canonical `GlobalId` asserts, preserve production
+> > tree, rerun L4/N2/N3/N4+formatter, fresh SHA. **Respin IN PROGRESS** — impl
+> > running `n2_in_repo_loader`/`n4_program_admits` (QA's exact nets). Ring
+> > self-correcting; no Steward action.
+> > - **✅ RESPIN QA-APPROVED — AT TERMINAL REVIEW.** Impl re-released fresh exact
+> > **`7a866040a9c34b65bd8e3dc9aeb55dba3975b82e`** (`evt_1cy8pcmp4vmad`; parent
+> > `3e1616b4`; correction = 2 elaborator paths +207/−1: seed now runs through
+> > N2-loaded source roots w/ the full discriminator matrix + narrow
+> > `prefix.is_empty()` prelude-collision production fix; L4 13/13). **Language QA
+> > re-APPROVE** `evt_j5hcshpnv65t` (12:38). Leader opened both terminal reviews
+> > (12:39): **Architect §14** `evt_22bzma5863b8t` + **CV Spec-vote**
+> > `evt_6sks67qgvf8hh` (conformance path: seed + index). **⚠ Both GPT reviewer
+> > seats WEDGED on the review-request paste → sweep repaired both (`bp808a7mu`
+> > monitor); architect + CV both confirmed Working.** Two linear commits on
+> > `origin/main @ eb89ae16`; 15-path scope, zero kernel/Cargo/pkg-mgr/trusted-base
+> > delta.
+> > - **⇒ NEXT (event-driven → PUBLISH):** await Architect §14 + CV Spec-vote →
+> > **verify the merge Decision is `status:resolved` FRESH from the decision object
+> > (both votes in), NOT from prose** → publish exact `7a866040` **FULL CI, NOT
+> > --doc-only** (touches `crates/`+`conformance/`) → verify merge by CONTENT on
+> > origin/main → call §10 retros → close. **⚠ EXACT-SHA rule: NO tracker commit on
+> > `wp/l4-export`** (voids §14); tracker-syncs to main SEPARATELY after merge.
+> > Then CC9 next.
+> >
+> > **↻ RESUMED post-compact (12:45 UTC, clock-read).** Re-oriented (orientation +
+> > tracker). **Both terminal reviewers confirmed GENUINELY Working** (not merely
+> > un-wedged): architect + CV each `gpt-5.6-sol high`, 5m59s, actively tracing the
+> > diff/seed matrix — neither stalled. Tree clean `steward/work @ 9a76fa2b`;
+> > watchdog `cc623dbb` armed. **CC9 scope grounded** for fast post-close framing:
+> > `Resource`/`Bracket` (safe acquire/release for response/config files) +
+> > `Test.Property` (generators + parser-law/byte-totality props), catalog pkg
+> > following CC8, `Test.Property` MINIMAL (no test-only language primitives —
+> > Pat's scaffolding→Ward ruling); owning ring settled at author time (CC-series =
+> > Program II).
+> > - **⇒ TERMINAL-REVIEW ROUND 1 (12:46, on `7a866040`): split verdict → §14
+> > BLOCK, ring self-correcting to `5f4ed906`.**
+> > - **CV Spec-vote APPROVE** `evt_59ydmsgh470w7` (12:46) — full fidelity
+> > closure: §32 forms, facade loader-edge publishes canonical `GlobalId`
+> > without body-bind, `UnboundName`/`ReExportCollision`/`UnadmittedInstance`/
+> > `UnresolvedCon` arms all discharged STRUCTURALLY through real N2 source
+> > roots; every seed citation resolves by content (ADR 0014/0016, §32/§33).
+> > CV validated the conformance/seed content — **byte-unchanged in the respin.**
+> > - **Architect §14 BLOCK** `evt_3qzqaq30x186q` (12:46:35) — REAL soundness
+> > bug: `apply_export` `ExportForm::Facade` inserted `facade_only`
+> > **unconditionally** (`modules.rs:338`), so a facade `export M (Bool as
+> > MBool)` SUPPRESSED a pre-existing prelude `Bool` in the facade module's own
+> > body (`UnboundName`) — a *negative body binding*, not merely "facade
+> > doesn't bind." Exact disposition: guard the insert on `!scope.bindings.
+> > contains_key(name) && !globals.contains_key(name)`, per source+published
+> > spelling; keep the absent-`foo` facade-doesn't-bind control; add the 3-file
+> > real-source-root regression (P.body retains prelude `Bool`; Entry.via_facade
+> > retains canonical `M.Bool`). No grammar/kernel/trusted-base/conformance-text
+> > change. **A THREADED terminal vote — no Decision object to reject.**
+> > - **Ring SELF-CORRECTED (no Steward/operator action — PX1/PX2 pattern):**
+> > impl released fresh exact **`5f4ed906455b24ee00dd1f53149bb31b758bad3f`**
+> > (`evt_5gvrtwq56s1wt`, 12:48:33; parent `7a866040`; +37/−2 `modules.rs` +
+> > `l4_export_reexport.rs` ONLY — zero conformance/kernel/Cargo/trusted-base
+> > delta), applying the Architect's exact predicate + the required 3-file
+> > regression; L4 13/13 + the new body-scope pair. Leader requested QA re-gate
+> > `evt_29tfkm4y3s4e2` (12:48:59).
+> > - **⇒ TERMINAL-REVIEW ROUND 2 (on `5f4ed906`) — QA APPROVED, §14 + CV
+> > re-reviews IN FLIGHT (12:53).**
+> > - **QA re-APPROVE** `evt_953yv87hk10q` (12:50:18): body-scope 3-file
+> > regression passes structurally (P.body retains prelude `Bool`;
+> > Entry.via_facade = canonical `M.Bool`; absent-`foo` still `UnboundName`);
+> > `apply_export` marks `facade_only` per-spelling only absent both bindings +
+> > globals; delta byte-confined to `modules.rs` + L4-test (+37/−2).
+> > - Leader re-requested **BOTH** on exact `5f4ed906` (conservative/correct —
+> > did not carry CV forward): **Architect §14 re-review** `evt_1e6v2qawk4zrq`
+> > (picked up `evt_1rjcy11ve3cmv`, Working) + **CV re-confirmation**
+> > `evt_418eqppm3qy71`.
+> > - **⚠ CV re-confirm paste landed in buffer UNSUBMITTED** (GPT/no-poll
+> > transport fail); **Steward backstop = bare `Enter`** (pure transport, did NOT
+> > rewrite leader's msg) → CV confirmed Working 12:53. Monitor `b435h2w6h` armed
+> > on both verdicts.
+> > - **✅ ALL THREE TERMINAL VOTES IN on exact `5f4ed906` (12:55):** QA
+> > `evt_953yv87hk10q` + **§14 APPROVE** `evt_2757amgawf6vh` (reran the exact
+> > counterexample selector, passes; correction excludes it w/o weakening the
+> > negative control) + **CV APPROVE** `evt_3e27mc7xcbsbv` (spec/conformance
+> > byte-identical, citation vote transfers; ran discriminator).
+> > - **Merge Decision `dec_1nfchy29mxnwq` PROPOSED** by language-leader
+> > (`evt_rpgdvz9mg4jr`, 12:55:58) for exact `5f4ed906`, citing all three votes;
+> > asked **Architect to RESOLVE APPROVE** (fleet pattern = leader proposes,
+> > Architect resolves §14, `resolved_by`=architect; PX2 precedent `dec_518...`).
+> > - **⚠ Architect wedged** on the resolve-request paste (`bp808a7mu` monitor);
+> > **Steward backstop = bare `Enter`** → architect Working 12:56, resolving now.
+> > - **✅ DECISION VERIFIED FRESH from the object:** `dec_1nfchy29mxnwq`
+> > `status:resolved`, `resolved_by`=architect (`agt_37reqftfe6g00`), `resolved_at`
+> > 12:57:33, resolution cites QA+§14+CV on exact `5f4ed906`, "Authorized for the
+> > normal publisher path subject to FULL locked CI." §14 hard rule satisfied.
+> > - **🚀 PUBLISHER IN FLIGHT (bg `b419hfm51`, launched 12:5x):** exact `5f4ed906`
+> > **FULL CI, NOT --doc-only**; `--target 5f4ed906... --title "L4-export: the export
+> > re-export declaration" --description-file scratchpad/l4-export-pr-body.md`. Script
+> > resolves target→`wp/l4-export` (tip=5f4ed906, linear 3-commit chain from
+> > eb89ae16), force-pushes to origin, PRs against main, waits full workspace CI +
+> > conformance, squash-merges `--match-head-commit 5f4ed906` on green. **NO tracker
+> > commit on `wp/l4-export`** (exact-SHA rule honored — branch tip untouched).
+> > - **⇒ ON MERGE (Monitor `bgq8lqqan` notifies; publisher is a DETACHED nohup —
+> > harness tracks only the launcher, so the log-Monitor is the real signal):**
+> > verify merge by CONTENT on origin/main (grep a plain phrase NOT spanning a
+> > `code`/`**bold**` marker) → call §10 retros in `thr_4kp7nkmwz9k9h` (leader+impl+QA
+> > Trap/Held/Carry) → close L4-export in tracker + sync tracker to main SEPARATELY.
+> > If CI RED: route the failing check to language-leader, do NOT retry-merge.
+> >
+> > **▶ CC9 READINESS CONFIRMED (prep during CI wait) — release at the post-merge
+> > seam per Decision 2 `export → CC9`:**
+> > - **Owner: Team Foundation** (CC8 is Foundation; CC9 = next CC-series/Program-II
+> > catalog pkg in `catalog/`). Foundation ring IDLE (axiom fossil-sweep retros in).
+> > - **Deps MET:** CC8 landed (`catalog/packages/Config` + `Schema` present on main,
+> > plus full CC1–CC7 chain: Data/Text/Parsing/Diagnostic/Pretty/Process/ArgParse);
+> > Program-II "HELD until kenfmt C" freeze LIFTED (kenfmt closed). CC9 unbuilt (no
+> > Resource/Bracket/Test.Property pkg). CC9 does NOT technically depend on L4-export
+> > (catalog pkgs built on `pub`, not the export decl) — sequenced after it only by
+> > operator ordering.
+> > - **Scope:** `Resource`/`Bracket` (structurally-safe acquire/release for
+> > response/config files) + `Test.Property` (reusable generators + properties for
+> > parser laws + arbitrary-byte totality). **`Test.Property` MINIMAL — plain catalog
+> > pkg, NO test-only language primitives** (Pat scaffolding→Ward ruling,
+> > [[obligations-route-to-ward-not-into-ken]]). FULL CI (touches `catalog/`).
+> > - **At the seam:** author `docs/program/wp/cc9-resource-test-property.md` grounded
+> > vs post-merge main (model on `cc8-env-config-decoder.md`) → Handoff-Gate the
+> > Foundation ring (compact all 3 + kickoff) → release. Then PX3 (still behind CC9).
+> > (Prior NEXT, superseded:) impl re-releases fresh exact SHA → Language QA
+> > re-gate →
+> > **Architect §14 + CV Spec-vote** (conformance path) → I publish FULL CI on the
+> > RESOLVED Decision (verify §14 resolved FRESH from the decision object; verify
+> > merge by CONTENT on origin/main; **exact-SHA rule: NO tracker commit on the WP
+> > branch**). Watch for a GPT capacity-stall (rouse-retry if a seat ends its turn
+> > silently). After L4-export closes (retros in): **CC9 next** (minimal
+> > `Test.Property`, catalog-only, no test-only language primitives). PX3 behind CC9.
+> >
+> > **↻ SELF-COMPACT SEAM (25%→33%):** L4-export release is a completed task
+> > boundary; tracker is the lossless resume point. On resume: re-orient
+> > (orientation → COORD/MODELS → ken-steward skill → memory → THIS file), then
+> > event-driven for the L4-export QA handoff. Watchdog `cc623dbb` armed.
 >
 > ### ⚡ 2026-07-15 (09:47 UTC, clock-read) — RESUMED post-compact · frontier is Pat-gated (Decision 2) · ⚠ PX3 sequencing CORRECTED
 >
@@ -19313,7 +19545,7 @@ forward once K1's API is stable.
 | L1 Int/Decimal/overflow | **merged** (`numbers.rs`; bignum via F1) | L | G6 |
 | L2 sum/match | **merged** (`data.rs`; dependent-match + GADT follow-ons) | L | G6 |
 | L3 strings/collections | **merged** (`l3a`/`l3b`/roundtrip suites) | L | G6 |
-| L4 modules/pkg | **⚠ SPLIT — modules merged, PACKAGE MANAGER NOT STARTED.** `modules.rs` + N1–N4 + ADRs 0014/0015/0016 landed. **No registry / content-addressed lockfile code anywhere in `crates/`** (deferred behind Ward + Sec3). | L | G6 |
+| L4 modules/pkg | **⚠ SPLIT — module SURFACE COMPLETE, PACKAGE MANAGER NOT STARTED.** `modules.rs` + N1–N4 + ADRs 0014/0015/0016 + the **`export` re-export declaration** (L4-export: facade + in-scope forms, PR #717 → `0fa72ff9`, 2026-07-15) landed. **No registry / content-addressed lockfile code anywhere in `crates/`** (package-manager deferred behind Ward + Sec3 — operator). | L | G6 |
 | L5 effects (interaction-tree) — **hub** | **merged** (`elaborator/src/effects/` — 9 modules incl. `itree.rs`, `row_poly.rs`) | L | G6 |
 | L6 Bytes/IO | **merged** (`bytes.rs`) | L | G6 |
 | L7 FFI | **merged** (`foreign.rs`) | L | G6 |
