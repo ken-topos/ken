@@ -189,7 +189,7 @@ identity for representative leaves.)
   packages** (`Data/Collections/Map.ken`, later `Set.ken`, `Vector.ken`, … ⇔
   `import Data.Collections.Map`) — matching Data Section → Collections Domain →
   per-structure packages, and extensible as the Domain grows. **Defer the final
-  split to content-inspection in the move pass:** if `collections.ken`'s content
+  split to content-inspection in the move pass:** if `Derived.ken`'s content
   is genuinely one cohesive unit rather than a Map/Set split, keep it whole
   (`Data/Sequence.ken` ⇔ `import Data.Sequence`, honoring leaf-or-namespace).
   spec-author / Ergo resolve per content.

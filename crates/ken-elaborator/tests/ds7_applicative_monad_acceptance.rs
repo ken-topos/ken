@@ -24,10 +24,10 @@ const EFFECTFUL_CLASSES_KEN_MD: &str =
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/LawfulFunctors.ken.md must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/Classes/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/Classes/LawfulFunctors.ken.md must elaborate");
     env
 }
 

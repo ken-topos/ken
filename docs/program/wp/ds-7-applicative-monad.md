@@ -95,7 +95,7 @@ effectful-class family: `Applicative` + `Monad` + their instances now; DS-8
 appends `Traversable` to the same entry (or a sibling) once SURF-2 lands. It sits
 alongside `LawfulFunctors.ken`/`LawfulClasses.ken` in `Core`, reusing
 `class Functor` from `LawfulFunctors`. (Chapter §6's perishable build-note names
-`catalog/packages/lawful-functors/`; the Steward homes catalog authoring at
+`catalog/packages/Core/Classes/`; the Steward homes catalog authoring at
 Foundation per program-doc `P3`, and the family is `Core`-resident — the
 Foundation build may pick the final basename, this is the frame's suggestion, not
 a hard pin. Flag the final name in the handback.)

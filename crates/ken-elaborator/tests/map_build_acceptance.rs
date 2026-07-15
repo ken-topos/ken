@@ -24,7 +24,7 @@ const MAP_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collection
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("catalog/packages/Core/Transport.ken must elaborate");
+        .expect("catalog/packages/Core/Logic/Transport.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
         .expect("catalog/packages/Data/Collections/Derived.ken.md must elaborate");
     env.elaborate_ken_md_file(MAP_KEN_MD)

@@ -13,7 +13,7 @@ const LAWFUL_FUNCTORS_KEN_MD: &str =
 fn mk_env_with_lawful_functors() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("catalog/packages/Core/Transport.ken must elaborate");
+        .expect("catalog/packages/Core/Logic/Transport.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
         .expect("catalog/packages/Data/Collections/Derived.ken.md must elaborate");
     env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD)

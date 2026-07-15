@@ -22,7 +22,7 @@ constructor**, and their law form is the one **CAT-2's `Applicative`/`Monad`
 inherit verbatim**. Getting the pattern right here — the higher-kinded class
 mechanism, the law-statement form, the proved-not-postulated instances — is
 what makes every later tranche mechanical. This chapter is the **contract**;
-the Team-Language build lands the `.ken` source (`catalog/packages/lawful-functors/`)
+the Team-Language build lands the `.ken` source (`catalog/packages/Core/Classes/`)
 + the one elaborator extension (`§6`).
 
 `Applicative`/`Monad`/`Traversable` are **CAT-2** (fast-follow, depend on this).

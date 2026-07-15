@@ -176,10 +176,10 @@ fn ordered_dependency_closure_elaborates_all_cc4_clients() {
 #[test]
 fn checked_cc4_chain_has_zero_axiom_and_zero_trusted_base_delta() {
     for (name, source) in [
-        ("Diagnostic/Core.ken.md", DIAGNOSTIC_KEN_MD),
-        ("Parsing/Cursor.ken.md", CURSOR_KEN_MD),
+        ("Capability/Diagnostics/Core.ken.md", DIAGNOSTIC_KEN_MD),
+        ("Capability/Parsing/Cursor.ken.md", CURSOR_KEN_MD),
         ("Capability/Parsing.ken.md", PARSING_KEN_MD),
-        ("Text/Numeric.ken.md", NUMERIC_KEN_MD),
+        ("Capability/Parsing/Numeric.ken.md", NUMERIC_KEN_MD),
     ] {
         let extracted =
             ken_elaborator::literate::extract_ken_md(source).expect("CC4 source must extract");

@@ -372,7 +372,7 @@ by induction on the carrier (`55 §3.1`).
   (`catalog/packages/collections`); the landed `bind` (`ken-elaborator/effects/`).
 
 > **Build note (perishable).** The `.ken` source
-> (`catalog/packages/lawful-functors/` additions) is a Language-build deliverable, held
+> (`catalog/packages/Core/Classes/` additions) is a Language-build deliverable, held
 > for the GPT window. CV's grounding confirms `map`/`bind`/`foldr`/`traverse`
 > for `List`/`Option` are **not yet landed** — the instance-law conformance
 > cases are **red-until-built** (the CAT-1 `Functor`-case posture), reconciled

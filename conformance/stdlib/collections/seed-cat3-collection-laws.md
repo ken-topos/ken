@@ -52,14 +52,14 @@ are tagged distinctly from the deeper **blocked-on-missing-op** reds.
   contract: §2 D1 structural laws, §3 verified `sort`, §4 the `view`
   abstraction, §5 derivation paths / `trusted_base()` delta, §6 AC mapping. Law
   anchors: `57 §2.2` (D1), `57 §3.4`/`§3.7` (sort), `57 §4.4` (lens).
-- `catalog/packages/collections/collections.ken` — **landed**: `list_append`
+- `catalog/packages/Data/Collections/Derived.ken.md` — **landed**: `list_append`
   (recursing on its **first** argument, so **left unit is definitional**, right
   unit + assoc inductive), `nth`, `take`, `drop`, `natSub`,
   `list_eq (eqf : a -> a -> Bool)`, `list_compare`,
   `data OrdResult = Lt | Eq | Gt`. **NOT landed** (`57 §2.1`): `count`, `map`,
   `filter`, `sort`, `isSorted`, `mem`, `length`, `min` — hence the
   red-until-built split.
-- `catalog/packages/lawful-classes/lawful_classes.ken` — the lawful-class pattern and
+- `catalog/packages/Core/Classes/LawfulClasses.ken.md` — the lawful-class pattern and
   **the Fork-A precedent**: `Ord.total` is stated
   `total : (x)(y) → IsTrue (bool_or (leq x y) (leq y x))` — a decidable Bool
   equation, chosen *because* a bare propositional disjunction would be
@@ -256,7 +256,7 @@ sortId  (a) (le) (xs) : List a = xs      -- identity (fails isSorted)
 
 ### stdlib/collections/take-drop-decomposition-holds (soundness)
 - spec: `57 §2.2` (decomposition #1, GREEN), `57 §2.3` (provable-now),
-  `55 §3.1`/`§3.2`, `collections.ken` (`take`/`drop`/`list_append` landed)
+  `55 §3.1`/`§3.2`, `Derived.ken` (`take`/`drop`/`list_append` landed)
 - given: the law
   `Equal (List a) (list_append a (take a n xs) (drop a n xs)) xs` as a single
   `Ω` field, stated pointwise; proved by induction on `n`/`xs`; carrier

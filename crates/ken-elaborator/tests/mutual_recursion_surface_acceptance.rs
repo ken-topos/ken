@@ -47,7 +47,7 @@ fn is_even_is_odd_compute_correct_values() {
     // concrete `Bool` constructor, observationally COLLAPSES to `Top`
     // (K7) — the goal is no longer `Eq`-shaped, so the right closing form
     // is `Proved` (Top-introduction), not `Refl` (the same idiom documented in
-    // `catalog/packages/Core/LawfulClasses.ken`). Elaborating only
+    // `catalog/packages/Core/Classes/LawfulClasses.ken`). Elaborating only
     // succeeds if the operand genuinely reduced to the SAME concrete
     // constructor as the right-hand side — a real correctness check.
     env.elaborate_decl("lemma checkOdd3 : Equal Bool (isEven three) False = Proved")

@@ -665,7 +665,7 @@ pub(crate) const SUGAR_EQ: &str = "Eq";
 /// `Cast`/`Ascript` are excluded for a different reason: they're
 /// `ken-kernel::term::Term` variants reached only via ordinary elaboration
 /// of real surface syntax (a type ascription, the `cast` derived combinator
-/// in `Core/Transport.ken`) — grep-confirmed no `RCon("Cast")`/
+/// in `Core/Logic/Transport.ken`) — grep-confirmed no `RCon("Cast")`/
 /// `RCon("Ascript")` match arm exists anywhere in
 /// `elab.rs`/`resolve.rs`/`parser.rs`, so neither shadows a user global the
 /// way `Refl`/`Axiom`/`absurd` do.

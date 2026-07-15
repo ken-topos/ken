@@ -20,7 +20,7 @@ needs a same-hour correction.
 the 5-inductive-law proof skeleton + reconciles → merge → Foundation builds the
 5 proof terms." I framed **`orderedEmpty` (`Ordered empty = tt`)** as
 red-until-built pending Foundation throughout my first seed, on the assumption
-that *every* `catalog/packages/collections/map.ken` change is Foundation's build-phase
+that *every* `catalog/packages/Data/Collections/Map.ken.md` change is Foundation's build-phase
 work. Wrong: `orderedEmpty` was a **Discrepancy-1 reconcile** (make the "two
 shipped Branch-A proofs" narrative true), and spec-author landed it as a real
 `view orderedEmpty … = tt` in the **elaboration commit** (`df81689`), verified

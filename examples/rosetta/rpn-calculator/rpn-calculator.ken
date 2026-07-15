@@ -12,7 +12,7 @@ program capabilities FS APartial
 --
 -- Division is OMITTED: `ken-interp` has no `div_int`/`mod_int` primitive
 -- at all (only `add_int`/`sub_int`/`mul_int` -- the same gap already
--- documented in `catalog/packages/collections/collections.ken`'s header comment
+-- documented in `catalog/packages/Data/Collections/Derived.ken.md`'s header comment
 -- and the VAL2 `natToDecimal` finding). Not re-filing a second
 -- `KNOWN-GAP.md` for the same already-known gap; this example
 -- demonstrates the Option-composition axis over `+`/`-`/`*`, which is

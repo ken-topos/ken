@@ -29,7 +29,7 @@
 > helper defs (`Or`/`bool_dichotomy`/`Not`/`assoc`/`all_in_list`/L1–L5) are
 > ordinary `declare_def`/`declare_inductive` admissions — no
 > `declare_primitive`, no `declare_postulate`, **no `Axiom`** anywhere
-> (`catalog/packages/collections/map.ken`).
+> (`catalog/packages/Data/Collections/Map.ken.md`).
 
 ## 1. What this module is
 
@@ -72,7 +72,7 @@ All spellings below are the **landed** `map.ken` idiom (`52 §2`, the
 C5-verified-sort unbundled encoding): every op/law takes `leq` and its laws as
 **separate bare parameters**, and `IsTrue b := Equal Bool b True` (the landed
 `catalog/packages/lawful-classes` bridge). The order-law parameters, verbatim from the
-`Ord` class (`catalog/packages/lawful-classes/lawful_classes.ken`):
+`Ord` class (`catalog/packages/Core/Classes/LawfulClasses.ken.md`):
 
 ```
 leq   : k -> k -> Bool
@@ -153,7 +153,7 @@ cleanest instance of the idiom.
 
 **Goal (L2).** A tree's `all_keys p` transfers to `all_in_list p` of its
 in-order flattening: `all_keys p m -> all_in_list p (to_list m)`. The landed defs
-(`map.ken`, `collections.ken`):
+(`map.ken`, `Derived.ken`):
 
 ```
 all_keys p Leaf              ⇝ Equal Bool True True                 -- Top (K7)

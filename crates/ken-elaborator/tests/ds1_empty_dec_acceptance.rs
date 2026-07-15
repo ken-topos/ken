@@ -274,18 +274,18 @@ fn ac4_bridge_demonstrated_over_deceq_bool_not_only_deceq_int() {
 
 // The entry's inlined `DecEq`/`DecEq Bool` (self-containment, `§6` Finding)
 // is a real independent duplicate, not a divergence from the landed
-// package — confirm `catalog/packages/Core/LawfulClasses.ken`
+// package — confirm `catalog/packages/Core/Classes/LawfulClasses.ken`
 // still elaborates over its declared `Transport → Collections` dependencies
 // (this entry doesn't touch it).
 #[test]
 fn landed_lawful_classes_package_still_elaborates_with_dependencies() {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("catalog/packages/Core/Transport.ken must elaborate");
+        .expect("catalog/packages/Core/Logic/Transport.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
+        .expect("catalog/packages/Data/Collections/Derived.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("catalog/packages/Core/LawfulClasses.ken must elaborate");
+        .expect("catalog/packages/Core/Classes/LawfulClasses.ken must elaborate");
     assert!(
         env.globals.contains_key("DecEq_instance_Bool"),
         "the landed package's own DecEq_instance_Bool must be a real registered global"

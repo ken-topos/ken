@@ -1,6 +1,6 @@
 -- highlight.js fixture for the Ken language (tooling/highlight-js/ken.js).
 -- This file is a highlighting exercise, NOT a checked catalog entry -- it is
--- shaped like real Ken (borrowing idiom from catalog/packages/core/
+-- shaped like real Ken (borrowing idiom from catalog/packages/Core/
 -- empty-dec.ken.md, catalog/guide/surface-reference.ken.md, and the
 -- examples/rosetta/{gcd,merge-sort} oracles) and it does not need to
 -- elaborate.
@@ -110,7 +110,7 @@ fn operatorSoup (a : Int) (b : Int) : Bool =
 -- `Ω` is a single-codepoint Unicode alias the lexer folds directly to the
 -- ConId `Omega` -- interchangeable with spelling it out, same as real
 -- catalog comments write `Ω`-sorted (prose shorthand) alongside code that
--- spells the type `Omega` (e.g. `catalog/packages/core/empty-dec.ken.md`'s
+-- spells the type `Omega` (e.g. `catalog/packages/Core/Logic/EmptyDec.ken.md`'s
 -- `fn yes (prp : Omega) (p : prp) : Dec prp = ...`).
 fn yesUnicode (prp : Ω) (p : prp) : Dec prp = Yes prp p
 

@@ -28,13 +28,13 @@ const NUMERIC_SEED: &str = include_str!("../../../conformance/stdlib/text/seed-t
 fn dependency_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("Core/Transport.ken.md must elaborate first");
+        .expect("Core/Logic/Transport.ken.md must elaborate first");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("Data/Collections/Collections.ken.md must elaborate second");
+        .expect("Data/Collections/Derived.ken.md must elaborate second");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("Core/LawfulClasses.ken.md must elaborate third");
+        .expect("Core/Classes/LawfulClasses.ken.md must elaborate third");
     env.elaborate_ken_md_file(DIAGNOSTIC_KEN_MD)
-        .expect("Diagnostic/Core.ken.md must elaborate fourth");
+        .expect("Capability/Diagnostics/Core.ken.md must elaborate fourth");
     env
 }
 
@@ -140,7 +140,7 @@ fn ordered_dependency_closure_elaborates_codec_then_numeric() {
     env.elaborate_ken_md_file(STRING_BIJECTION_KEN_MD)
         .expect("StringBijection.ken.md must elaborate fourth as the prerequisite");
     env.elaborate_ken_md_file(STRING_KEYS_KEN_MD)
-        .expect("Text/StringKeys/StringKeys.ken.md must elaborate fifth");
+        .expect("Data/Text/StringKeys.ken.md must elaborate fifth");
     assert_transparent_globals(
         &env,
         &[
@@ -159,7 +159,7 @@ fn ordered_dependency_closure_elaborates_codec_then_numeric() {
     );
 
     env.elaborate_ken_md_file(CODEC_KEN_MD)
-        .expect("Text/Codec/Codec.ken.md and every checked fence must elaborate sixth");
+        .expect("Data/Text/Codec.ken.md and every checked fence must elaborate sixth");
     assert_transparent_globals(
         &env,
         &[
@@ -174,7 +174,7 @@ fn ordered_dependency_closure_elaborates_codec_then_numeric() {
     );
 
     env.elaborate_ken_md_file(NUMERIC_KEN_MD)
-        .expect("Text/Numeric/Numeric.ken.md and every checked fence must elaborate seventh");
+        .expect("Capability/Parsing/Numeric.ken.md and every checked fence must elaborate seventh");
     assert_transparent_globals(
         &env,
         &[

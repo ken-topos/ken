@@ -19,7 +19,7 @@ Base: `origin/main`. Branch (pre-staged by Steward): **`wp/map-verified-laws`**.
 ## The locked inputs — DO NOT REOPEN
 
 - **Both enabling capabilities are LANDED (verify at pickup, cite the merged
-  code, not this line).** Gap A = `catalog/packages/transport/transport.ken` (5
+  code, not this line).** Gap A = `catalog/packages/Core/Logic/Transport.ken.md` (5
   combinators over the `J` former) + `elab.rs::infer_j`; Gap B = the widened
   non-indexed dependent-match gate. The proofs are written **on top of** these —
   this WP builds **no new capability**, only the 5 proofs + their supporting
@@ -65,7 +65,7 @@ perishable — verify at pickup, do not trust this frame over the landed code.**
 **Law 4 additionally needs two list lemmas** (`52 §5.3`): `isSorted`-over-`++`,
 and `allKeys ↔ allInList (toList)`. These are Gap-B-only (structural, no `leq`).
 
-**`catalog/packages/collections/map.ken` current state (162 lines):** carrier `data
+**`catalog/packages/Data/Collections/Map.ken.md` current state (162 lines):** carrier `data
 Tree k v = Leaf | Node (Tree k v) k v (Tree k v)`; ops `empty`/`toList`/`fold`/
 `insert`/`lookup`/`member`/`fromList` + Set ops; Ω-prop `view`s `allKeys`,
 `Ordered` (constant-motive, prover unfolds, never postulates). **Only ONE
@@ -82,7 +82,7 @@ correct the spec/seed narrative. Recommend (a) — it is a one-line `tt` proof a
 makes the "two Branch-A proofs" narrative true. Resolve explicitly; do not ship
 with the narrative ahead of the code.
 
-**Transport idiom (Gap A — the proofs MIRROR this).** `catalog/packages/transport/
+**Transport idiom (Gap A — the proofs MIRROR this).** `catalog/packages/Core/Logic/
 transport.ken` ships `subst`/`cong`/`cast`/`sym`/`trans` (lowercase type params;
 equality spelled `Eq ty x y`, base `Refl`). The `J` former:
 `J <motive> <base> <eq>`, motive a 2-arg lambda `\b' e'. G[b']`, infer-mode,

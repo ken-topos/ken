@@ -47,7 +47,7 @@ re-litigated:
 
 Surface spelling: SURF-1's `view → const`/`fn`/`proc` migration is a **deferred
 build** — on `main` today the lexer recognizes only `view`, and both
-`catalog/packages/collections/` and `catalog/packages/lawful-functors/` are 100% `view`-spelled.
+`catalog/packages/Data/Collections/` and `catalog/packages/Core/Classes/` are 100% `view`-spelled.
 **New CAT-3 ops are written `view`**, matching every landed sibling; the keyword
 migration re-spells them uniformly when SURF-1's build lands.
 
@@ -55,7 +55,7 @@ migration re-spells them uniformly when SURF-1's build lands.
 
 ### 2.1 The landed ops, and the two that are not
 
-Landed in `catalog/packages/collections/collections.ken` (exact signatures, all `view`):
+Landed in `catalog/packages/Data/Collections/Derived.ken.md` (exact signatures, all `view`):
 
 ```
 list_append (a : Type) (xs : List a) (ys : List a) : List a

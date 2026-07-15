@@ -113,10 +113,11 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > stamp) → publish (full CI, not doc-only) → unblocks PX6's comparator arm.**
 >
 > **CAT-TAX — foundation-implementer hit 2 grounding hard-stops, BOTH resolved on-branch by me:**
-> - 37-vs-36 inventory (CC9's `Test/Property.ken.md`, `cc2bf2ad`) → report+frame corrected to
->   37 entries / Test/Property→Tooling/Testing/Property @ `36f3d968`.
-> - split-file provisional homes → Parsing/Parsing **stays** (already allowlisted);
->   Text/Numeric/Numeric → `Capability/Parsing/Numeric.ken.md`; all 4 split homes enumerated
+> - 37-vs-36 inventory (CC9's `Tooling/Testing/Property.ken.md`, `cc2bf2ad`) →
+>   report+frame corrected to 37 entries / Tooling/Testing/Property @ `36f3d968`.
+> - split-file provisional homes → Capability/Parsing/Parsing **stays** (already
+>   allowlisted); Capability/Parsing/Numeric is the intact Phase-2 home; all 4
+>   split homes enumerated
 >   in frame @ `1858b3d2`. foundation-implementer now relocating 37 (inventory/body-hash
 >   baseline complete). Branch tip `1858b3d2`.
 >
@@ -5178,7 +5179,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > (PRE-CC4)** while main is now `edb99c1e`. **`git merge-base --is-ancestor origin/main
 > 9a06d2a8` = NO.**
 > ⇒ **`git diff origin/main 9a06d2a8` LISTS CC4's FILES** (`Capability/Diagnostics/Core.ken.md`,
-> `Capability/Parsing/Cursor.ken.md`, `Text/Numeric.ken.md`, the CC4 harness) — **NOT because CV touched
+> `Capability/Parsing/Cursor.ken.md`, `Capability/Parsing/Numeric.ken.md`, the CC4 harness) — **NOT because CV touched
 > them, but because CV's tree PREDATES them.** ⇒ **MERGING that branch (or trusting a naive
 > diff-vs-main) would REVERT CC4 — and the suite would very likely still be GREEN, because
 > CC4's own tests would revert with it.**
@@ -8150,7 +8151,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **DS-1 (`Empty`+`Dec`) is MERGED — `origin/main @ a83060e` (PR #393, CI-green).**
 > The catalog data-structures program has its validated `.ken.md` pilot: the
 > kernel-direct `Empty`/`Dec`/`Yes`/`No`/`decide` prelude piece +
-> `catalog/packages/core/empty-dec.ken.md`. Decision `dec_6d8fs65ghxate` APPROVE
+> `catalog/packages/Core/Logic/EmptyDec.ken.md`. Decision `dec_6d8fs65ghxate` APPROVE
 > across foundation-qa + Architect (soundness + AC1 smoke-test) + CV
 > (conformance), gated on the correct tip `5623e53` (the `4429b29`/`1500733` SHAs
 > in flight were rebase artifacts; caught + re-anchored). `crates/ken-kernel` +
@@ -8439,7 +8440,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > During the Foundation handoff-gate compaction for the migration WP, the gate's
 > `git reset --hard origin/main` orphaned foundation-implementer's
 > `wp/map-verified-laws` branch — **completed-but-unmerged Map-capstone work
-> (5/5 laws, +1761 on `catalog/packages/collections/map.ken`)**. Recovered + preserved
+> (5/5 laws, +1761 on `catalog/packages/Data/Collections/Map.ken.md`)**. Recovered + preserved
 > at **`wp/map-verified-laws-recovered` (tip `5719800`)**. Both gates are MET
 > (Gap A `surface-transport` merged PR #255/#257; Gap B closed) — it stalled
 > unmerged, not blocked. The leader ring had lost track of it (leader status
@@ -14347,7 +14348,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > direction`). The note records that the Boolean grammar in
 > `spec/50-stdlib/59-parsing-syntax-diagnostics.md` is the v1 demonstrator and
 > that a later catalog refinement should move concrete grammars to `examples/`
-> or equivalent, leaving `catalog/packages/parsing/` focused on reusable parser
+> or equivalent, leaving `catalog/packages/Capability/Parsing/` focused on reusable parser
 > capabilities, checked progress/next-validity surfaces, and diagnostics. This
 > branch is **not routed now** and does not reopen CAT-5; bootstrap-compiler
 > focus remains the next major direction after the current data-match queue.
@@ -14743,8 +14744,8 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > handed back exact head `wp/CAT-5-build @
 > 5cd9d405141fcf8b2324a35124a0727a3c669762` (`5cd9d40`,
 > `CAT-5 D1 source span core`) and returned to `language-implementer/work`.
-> D1 changed only `catalog/packages/parsing/parsing.ken`,
-> `catalog/packages/parsing/MANIFEST.md`, and
+> D1 changed only `catalog/packages/Capability/Parsing/Parsing.ken.md`,
+> `catalog/packages/Capability/Parsing/Parsing.MANIFEST.md`, and
 > `crates/ken-elaborator/tests/cat5_parsing_package.rs`; reported focused
 > package tests 5/5 and `ken-elaborator` green, with diff-check clean and
 > negative scope empty for kernel, `Cargo.lock`, `spec`, and `conformance`.
@@ -15354,7 +15355,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `evt_348q3xxm4q477`. Retires read-file-lines' Option-3 asterisk. **Core's tail DONE; VAL2 16/0.**
 > **✅ CAT-1 elaboration — MERGED.** Integrator PR **#287, squash `24a414b5`** (18:11). CV self-caught a `tt-vs-Refl` erratum in her own seed at
 > the fidelity vote → fixed `ff85c0a`; spec-leader re-assembled `ec03e2b`; Integrator diffed pre/post-erratum SHAs (fold confined to 1 seed file).
-> **Semigroup/Monoid LANDED proved-not-postulated** (`catalog/packages/lawful-functors/lawful_functors.ken`, zero Axiom, List/Bool); **Functor/Foldable
+> **Semigroup/Monoid LANDED proved-not-postulated** (`catalog/packages/Core/Classes/LawfulFunctors.ken.md`, zero Axiom, List/Bool); **Functor/Foldable
 > designed** (pointwise law, funext-definitional) **gated on the 5-piece outer-ring extension** = a build deliverable. **✅ CAT-1 CLOSED (§10) — retros in
 > 18:41** (spec-author `evt_23r1c0cm1r70m` prose-spelling≠grammar/build-attempt-is-ground-truth; CV `evt_40kmtgjb0t73c` `tt`-vs-`Refl` endpoint-discriminator
 > binds-my-own-seed; spec-leader `evt_4g077ym48xvnz` fork-routing-to-single-owners), relayed via `evt_2qjk5tmntntdc`. Architect's re-cert is a separate
@@ -15592,7 +15593,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >      confirms CV's decl-step refinement), quotients `A/R` (C7), Ω-data ctors `data Perm : Ω` (C2). Kernel has the capability;
 >      grammar can't express it. Large surface-language features.
 >    - **2 package-loading gaps → CLOSE (cheap, blocks real probes):** C1 (canonical-carrier `DecEq`) + C6 (law-proved-vs-stub)
->      REJECT only because `DecEq`/`Ord` live in `catalog/packages/lawful-classes/`, not the CLI default env. CV to determine load
+>      REJECT only because `DecEq`/`Ord` live in `catalog/packages/Core/Classes/`, not the CLI default env. CV to determine load
 >      mechanism (import vs default-env) + re-probe the actual soundness edges.
 >    - **C5 emit-vs-discharge → SPEC-GROUND (not a hole):** const-Nil unsound arm elaborates; refinement obligation
 >      `{ys|isSorted∧Perm}` emitted but not discharged at elab. Route to enclave: is elab-time discharge specified, or a separate
@@ -15614,7 +15615,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >    (V3) by design (`spec/20-verification/21-spec-syntax.md §5`); elab never rejects an undischarged obligation. C5-unsound's
 >    const-Nil elaborating is correct per the two/three-stage model. Relayed to CV (`evt_6wpmb9pjzne68`) to document + fold.
 > 3. **✅ Package-loading CLOSED + C1/C6 edges re-probed** (CV `evt_4gda8t21q4fh4`): surface `import` doesn't resolve a package
->    path (no module search); working mechanism = **prepend `catalog/packages/lawful-classes/lawful_classes.ken`** (harness convention,
+>    path (no module search); working mechanism = **prepend `catalog/packages/Core/Classes/LawfulClasses.ken.md`** (harness convention,
 >    README-documented). Edges reached: **C6** law-proved Ord PASSES + Axiom-stub Ord ALSO admitted → discrimination doesn't fire;
 >    must-prove-if-provable enforcement = documented known-gap (CV #48, deferred lawful-classes; NOT opened per Option A). **C1**
 >    canonical `DecEq Char` PASSES + non-canonical `DecEq Decimal` false-`sound=Axiom` ADMITTED → class machinery **guards
@@ -16230,7 +16231,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >    merged 20:21 (squash, docs-only, byte-identity vs `181f6f6`, full CI green, branch deleted). Both gates APPROVE
 >    (Architect soundness + CV Spec, both independently grounded on the diff). Retros in (spec-author `evt_38zdyg9cgzk1p`
 >    + CV `evt_3b031nm2bh50k`, thr_1tgchhte8yp4k). **NO Foundation build triggered** — Unit 1's proofs (`allKeysToAllInList`
->    / `orderedEmpty` / `lookupEmptyIsNone`) already landed on main in `catalog/packages/collections/map.ken` with `f11c61d`; this
+>    / `orderedEmpty` / `lookupEmptyIsNone`) already landed on main in `catalog/packages/Data/Collections/Map.ken.md` with `f11c61d`; this
 >    merge canonicalized the convoy idiom in `54` + reframed `toListOrdered` to confirmed-Gap-conv + folded a `52` staged-
 >    reality honesty reconcile. Retro carries banked: spec-author — a stale root-cause *comment committed in code* reads as
 >    settled fact, more misleading than a stale spec (folded into [[buildability-ruling-must-ground-every-axis]]); CV —
@@ -16344,7 +16345,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > continues (separate lane); toListOrdered parked pending the bisection. QUEUED behind Map: `Axiom` WP; elaborator
 > context-threading audit (Axiom + Wall-1 = a class); `54` idiom canon + K6 erratum.
 >
-> **PENDING ERRATA/ROUTING (queued):** (1) **K6 doc-reconcile** — `catalog/packages/lawful-classes/lawful_classes.ken` "K6
+> **PENDING ERRATA/ROUTING (queued):** (1) **K6 doc-reconcile** — `catalog/packages/Core/Classes/LawfulClasses.ken.md` "K6
 > parked/customerless" note (~218-220) is stale (K6 = the `conv_struct (Eq,Eq)` positional arm = Gap-conv `90f39fe`; Map
 > law 4 = first sound customer; sym/swap case still routed-around, cross-wise still unsound). Architect confirmed
 > (`evt_6nwz3z36dwg9e`); honesty-on-main, non-blocking → **bundle with the `54` end-to-end canonicalization** (same area,
@@ -16378,7 +16379,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > grounding lessons) — batch next corpus-routing epoch. Details:
 > - **✅ Gap A BUILD MERGED — `19955d8`, PR #257** (CI green, byte-identity confirmed). Architect soundness APPROVE
 >   `evt_585szjtb4sgpn` + language-qa APPROVE `evt_5b3jt2fnq5ccj` (Decision `dec_7kq17h65gem85`). **Both Map Gaps now
->   BUILT** (A: `19955d8`, B: `282856c`); `catalog/packages/transport/` (J + 5 combinators) on main. Notable: implementer
+>   BUILT** (A: `19955d8`, B: `282856c`); `catalog/packages/Core/Logic/` (J + 5 combinators) on main. Notable: implementer
 >   transparently flagged a companion `Eq`/`infer_eq` surface spelling → Architect ruled SOUND EXTENSION (spec's
 >   `53-transport §2` writes combinators over `Eq`; `Equal` monomorphic at `Type0`). QA-caught nuance (Architect
 >   concurred, posture STRONGER): the true soundness net is `declare_def`'s whole-body kernel `check` (`check.rs:984`),
@@ -18040,7 +18041,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
            guarded the *deception* case — empty stub claiming proved — and got
            wrongly extended to demand zero-delta on an opaque carrier).
            **Steward lane ruling = option (a):** the lawful `Ord Char` INSTANCE
-           (honest-Axiom laws) lands in `catalog/packages/lawful-classes/` next to its
+           (honest-Axiom laws) lands in `catalog/packages/Core/Classes/` next to its
            `Ord Int` twin, NOT this WP — keeps AC-G a *pure* shrink (zero new
            `declare_postulate` stays absolute, not "except one carve-out"),
            homes the identical pattern together (§7 subsume), separates the
@@ -18173,7 +18174,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
     genuinely POSITIONAL customer appears.** Eventual-fix AC stays: **cross-wise
     REJECTS** (`Eq Bool a b ≢ Eq Bool b a`).
   - **★ Eq Bool case-split WP KICKED (in flight, language-implementer).**
-    `catalog/packages/lawful-classes/lawful_classes.ken`-only, mirrors ES4-lawproofs-
+    `catalog/packages/Core/Classes/LawfulClasses.ken.md`-only, mirrors ES4-lawproofs-
     remainder exactly (`tt`/`absurd` per branch, doc-comment fix removing the now-
     wrong K6-attribution, 2 acceptance tests flip from "stay Axiom" → real). This
     closes the LAST honest-Axiom law field → **finishes the observational fragment
@@ -20950,7 +20951,7 @@ at `origin/main @ 6e34371cc3ebf8a3b34e05cfa7f9111c7da1bf3e`
 `evt_295s9yq3sv355`; Architect approved it at `evt_4sanyej4hnws0`; Integrator
 reported green `build + test`, conformance, clean-room provenance, and
 path-guard before merge. Steward verified landed file scope is exactly
-`catalog/packages/collections/map.ken`,
+`catalog/packages/Data/Collections/Map.ken.md`,
 `crates/ken-elaborator/tests/map_build_acceptance.rs`, and
 `docs/program/wp/CAT-4-build.md`; landed `map.ken` contains the proof-returning
 surfaces and no `intersectionLookupMemberCharacterization`. Steward requested
@@ -21222,7 +21223,7 @@ tip). Mention IFF question-or-action.
 > functional discovery from later refinement. Functional build WPs may leave a
 > component rough if the proofs are real and gates pass; follow-on refinement WPs
 > then bring the component up to catalog standards. Apply the style guide to
-> smaller bodies first, not to `catalog/packages/collections/map.ken` as the first test.
+> smaller bodies first, not to `catalog/packages/Data/Collections/Map.ken.md` as the first test.
 >
 > **FRAMED, NOT KICKED OFF:** `docs/program/wp/catalog-style-guide.md` creates a
 > Spec-enclave WP to author `docs/program/07-catalog-style-guide.md`, pin the
@@ -21232,9 +21233,9 @@ tip). Mention IFF question-or-action.
 >
 > **FRAMED FOLLOW-ON:** `docs/program/wp/catalog-refinement-pilot.md` is a
 > small-package pilot after the guide lands. Candidate packages are
-> `catalog/packages/transport/transport.ken`, `catalog/packages/lawful-classes/lawful_classes.ken`,
+> `catalog/packages/Core/Logic/Transport.ken.md`, `catalog/packages/Core/Classes/LawfulClasses.ken.md`,
 > or a narrow `lawful_functors` slice. It explicitly excludes starting with
-> `catalog/packages/collections/map.ken`; maps/sets/relations get a later refinement WP
+> `catalog/packages/Data/Collections/Map.ken.md`; maps/sets/relations get a later refinement WP
 > after CAT-4's functional build and the pilot both land.
 >
 > **Campaign doc updated:** `docs/program/06-catalog-campaign.md` now records the
@@ -21426,7 +21427,7 @@ tip). Mention IFF question-or-action.
 > f21ab2ced083aab9cd331f0b085f578d886aab8c` at `evt_295s9yq3sv355`.
 >
 > **Approved scope and evidence:** cumulative diff is only
-> `catalog/packages/collections/map.ken`,
+> `catalog/packages/Data/Collections/Map.ken.md`,
 > `crates/ken-elaborator/tests/map_build_acceptance.rs`, and
 > `docs/program/wp/CAT-4-build.md`. `deleteLookupOtherKeyLaw` and
 > `keysValuesProjectionCoherence` are now proof-returning; Bool-dispatch
@@ -21462,7 +21463,7 @@ tip). Mention IFF question-or-action.
 > provenance, and path-guard on reviewed `f21ab2c`.
 >
 > **Steward verify-on-main:** local `origin/main` is `6e34371`; landed file list
-> is exactly `catalog/packages/collections/map.ken`,
+> is exactly `catalog/packages/Data/Collections/Map.ken.md`,
 > `crates/ken-elaborator/tests/map_build_acceptance.rs`, and
 > `docs/program/wp/CAT-4-build.md`. Landed `map.ken` contains
 > `deleteLookupOtherKeyLaw`, `setIntersectionMemberLaw`, and
@@ -21513,7 +21514,7 @@ tip). Mention IFF question-or-action.
 > ### [2026-07-06 ~03:59] CAT-3 D1 handoff relay
 > **Language pickup:** language-leader grounded CAT-3 at `evt_5rj4qzvvrt2gd`,
 > split D1 only, and assigned the smallest honest
-> `catalog/packages/collections/collections.ken` structural list operations/laws slice.
+> `catalog/packages/Data/Collections/Derived.ken.md` structural list operations/laws slice.
 > It confirmed `map`/`filter`/`mem`/`length`/`min` are still absent and made
 > `take`/`drop` decomposition the minimum green D1 proof surface.
 >
@@ -21534,7 +21535,7 @@ tip). Mention IFF question-or-action.
 >
 > **Leader review complete:** language-leader reviewed exact `01ddc99` at
 > `evt_1rtz2ce2xsycv`; no blocker. Reported scope is bounded to
-> `catalog/packages/collections/{collections.ken,MANIFEST.md}` plus CAT-3 and adjacent
+> `catalog/packages/Data/Collections/{Derived.ken,MANIFEST.md}` plus CAT-3 and adjacent
 > package harness/load-order tests; no `crates/ken-kernel` or `Cargo.lock`
 > movement. Leader reran the focused D1 package test and adjacent package
 > consumers.
@@ -21550,17 +21551,17 @@ tip). Mention IFF question-or-action.
 > **Language QA blocked exact `01ddc99`:** at `evt_64mz6wvbpcqaq`, QA verified
 > the three D1 law surfaces are proof-returning and the filter-membership
 > hold-out is honest, but found a production-path load-order regression. The
-> new `collections.ken` proofs depend on `cong` from
-> `catalog/packages/transport/transport.ken`; elaborator package harnesses load
+> new `Derived.ken` proofs depend on `cong` from
+> `catalog/packages/Core/Logic/Transport.ken.md`; elaborator package harnesses load
 > transport first, but `crates/ken-cli/tests/rosetta.rs` still prepends bare
-> `collections.ken` for the four `NEEDS_COLLECTIONS` examples. Result:
+> `Derived.ken` for the four `NEEDS_COLLECTIONS` examples. Result:
 > `scripts/ken-cargo test -p ken-cli --test rosetta -- --nocapture` fails
 > `closures`, `merge-sort`, `palindrome`, and `tree-traversal` with
 > `UnresolvedCon { name: "cong" ... }`.
 >
 > **Leader reproduced and routed:** language-leader reproduced the exact
 > rosetta failure at `evt_qhhnhf2t0g83` and requested a narrow fix: any rosetta
-> example that gets `collections.ken` must also get `transport.ken` first, with
+> example that gets `Derived.ken` must also get `transport.ken` first, with
 > no D1 broadening and no kernel/Cargo/trust-surface movement.
 >
 > **Dropped implementer mention corrected:** the leader fix handoff again
@@ -21575,8 +21576,8 @@ tip). Mention IFF question-or-action.
 > `evt_58n7h6q5paek9` with `wp/CAT-3-build @
 > 0dd4e1b8eda8a337fe008ce118e65d31b41ce14e` (`0dd4e1b`). The delta from
 > blocked `01ddc99` is exactly `crates/ken-cli/tests/rosetta.rs`: rosetta's
-> `collections_prelude()` now prepends `catalog/packages/transport/transport.ken`
-> before `catalog/packages/collections/collections.ken` for the existing
+> `collections_prelude()` now prepends `catalog/packages/Core/Logic/Transport.ken.md`
+> before `catalog/packages/Data/Collections/Derived.ken.md` for the existing
 > `NEEDS_COLLECTIONS` path. The slug list and CAT-3 package proof surfaces are
 > unchanged.
 >
@@ -21595,7 +21596,7 @@ tip). Mention IFF question-or-action.
 > **Language QA approved exact `0dd4e1b`:** QA posted `evt_3ckvyhbajgrba`.
 > The delta from blocked `01ddc99` remains exactly
 > `crates/ken-cli/tests/rosetta.rs`; rosetta now prepends `transport.ken`
-> before `collections.ken` for `NEEDS_COLLECTIONS`, the slug list is unchanged,
+> before `Derived.ken` for `NEEDS_COLLECTIONS`, the slug list is unchanged,
 > and CAT-3 package proof surfaces are unchanged.
 >
 > **Validation:** rosetta passes 16/16 including the four previously failing
@@ -21629,7 +21630,7 @@ tip). Mention IFF question-or-action.
 > `evt_1x93nbaennzs8` with `wp/CAT-3-build @
 > 8654b81ba4bca1f16a2a618b4b5c50a5e2c35667` (`8654b81`,
 > `CAT-3 D2 verified bool sort`). Changed files are
-> `catalog/packages/collections/{collections.ken,MANIFEST.md}` and
+> `catalog/packages/Data/Collections/{Derived.ken,MANIFEST.md}` and
 > `crates/ken-elaborator/tests/cat3_collections_package.rs`.
 >
 > **D2 surfaces:** `bool_and`, `boolLeq`, `eqFromOrd`, `count`,
@@ -21653,7 +21654,7 @@ tip). Mention IFF question-or-action.
 > ### [2026-07-06 ~05:25] CAT-3 D2 approved; D3 relayed
 > **Language QA approved exact `8654b81`:** QA posted `evt_7z5vdvzthv44q`.
 > Delta from D1-approved `0dd4e1b` is exactly
-> `catalog/packages/collections/{collections.ken,MANIFEST.md}` and
+> `catalog/packages/Data/Collections/{Derived.ken,MANIFEST.md}` and
 > `crates/ken-elaborator/tests/cat3_collections_package.rs`; diff-check is
 > clean and kernel/Cargo movement remains empty.
 >
@@ -21684,7 +21685,7 @@ tip). Mention IFF question-or-action.
 > `evt_2rewhk2zfayz2` with `wp/CAT-3-build @
 > b007e0598d0d6bfc3cb4fda841d9d549ab569770` (`b007e05`,
 > `CAT-3 D3 projection records`). Delta is the expected three files:
-> `catalog/packages/collections/{collections.ken,MANIFEST.md}` and
+> `catalog/packages/Data/Collections/{Derived.ken,MANIFEST.md}` and
 > `crates/ken-elaborator/tests/cat3_collections_package.rs`.
 >
 > **Candidate contents:** ordinary Ken record/class surfaces for `View`,
@@ -21873,8 +21874,8 @@ tip). Mention IFF question-or-action.
 > `fstLensSetGet` / `fstLensSetSet` are restored to the full
 > `Equal (Pair Bool Bool) ...` law shape; the rejected public componentwise
 > `And` shape is not present. The resumed correction commit `111d087^..111d087`
-> touches only `catalog/packages/collections/collections.ken`,
-> `catalog/packages/collections/MANIFEST.md`, and
+> touches only `catalog/packages/Data/Collections/Derived.ken.md`,
+> `catalog/packages/Data/Collections/Derived.MANIFEST.md`, and
 > `crates/ken-elaborator/tests/cat3_collections_package.rs`. Cumulative branch
 > diff remains CAT-3 package/test/wrapper/harness scope only, with no
 > `crates/ken-kernel`, `Cargo.lock`, `spec`, or `conformance` movement.
@@ -21921,8 +21922,8 @@ tip). Mention IFF question-or-action.
 > and posted kickoff to ergo-leader at `evt_2vdp6egptx2w5`.
 >
 > **Scope:** behavior-preserving refinement for
-> `catalog/packages/lawful-classes/lawful_classes.ken` and
-> `catalog/packages/lawful-classes/MANIFEST.md`. This is the style guide's second
+> `catalog/packages/Core/Classes/LawfulClasses.ken.md` and
+> `catalog/packages/Core/Classes/LawfulClasses.MANIFEST.md`. This is the style guide's second
 > small-package candidate after `transport`, chosen to exercise audited-delta
 > comments and zero-delta vs primitive-carrier distinctions.
 >
@@ -21983,8 +21984,8 @@ tip). Mention IFF question-or-action.
 > `evt_6nmgs1t129j7g`; QA approved at `evt_ddxbr14j72e6`; Librarian approved
 > at `evt_3xk3b1qvamdkj`; ergo-leader sent Integrator handoff
 > `evt_3xbw6r4p61emb`; Integrator is taking the merge at `evt_5xtf87prwvfgd`.
-> Scope is only `catalog/packages/transport/transport.ken` and
-> `catalog/packages/transport/MANIFEST.md`; public names `subst`, `cong`, `cast`, `sym`,
+> Scope is only `catalog/packages/Core/Logic/Transport.ken.md` and
+> `catalog/packages/Core/Logic/Transport.MANIFEST.md`; public names `subst`, `cong`, `cast`, `sym`,
 > `trans` preserved; `surface_transport_acceptance` passed 6/6 on the reviewed
 > head.
 
@@ -22015,7 +22016,7 @@ tip). Mention IFF question-or-action.
 >
 > **Catalog refinement pilot kicked to Ergo:** branch
 > `wp/catalog-refinement-pilot @ 9d653ac` targets
-> `catalog/packages/transport/transport.ken` plus `catalog/packages/transport/MANIFEST.md`,
+> `catalog/packages/Core/Logic/Transport.ken.md` plus `catalog/packages/Core/Logic/Transport.MANIFEST.md`,
 > using `docs/program/07-catalog-style-guide.md` and
 > `docs/program/wp/catalog-refinement-pilot.md`. Kickoff posted to ergo-leader
 > at `evt_3njwb2nhvda3g`; no pickup yet. Scope is behavior-preserving
@@ -22137,7 +22138,7 @@ tip). Mention IFF question-or-action.
 > `docs/program/06-catalog-campaign.md` two-phase catalog lifecycle, and update
 > `docs/program/wp/catalog-refinement-pilot.md` enough that a small-package pilot
 > can exercise the guide. General style/cadence only; no package rewrites, no
-> semantics changes, and do not start with `catalog/packages/collections/map.ken`.
+> semantics changes, and do not start with `catalog/packages/Data/Collections/Map.ken.md`.
 >
 > **Handoff gate:** Prior Spec enclave WP `KM-dependent-match-proof-motive` is
 > closed with retros-in at `evt_1ndek2x1nngg3`. Spec-leader, spec-author,

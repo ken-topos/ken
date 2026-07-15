@@ -15,7 +15,7 @@ const COLLECTIONS_KEN_MD: &str =
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("catalog/packages/Core/Transport.ken must elaborate");
+        .expect("catalog/packages/Core/Logic/Transport.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
         .expect("catalog/packages/Data/Collections/Derived.ken.md must elaborate");
     env
@@ -63,7 +63,7 @@ fn cat3_d1_structural_collections_package_elaborates_zero_delta() {
             .globals
             .get(name)
             .copied()
-            .unwrap_or_else(|| panic!("{name} should be exported by collections.ken"));
+            .unwrap_or_else(|| panic!("{name} should be exported by Derived.ken"));
         match env.env.lookup(id) {
             Some(Decl::Transparent { .. }) => {}
             other => panic!("{name} must be a transparent checked definition, got {other:?}"),
@@ -88,7 +88,7 @@ fn cat3_d1_structural_collections_package_elaborates_zero_delta() {
             .globals
             .get(name)
             .copied()
-            .unwrap_or_else(|| panic!("{name} should be exported by collections.ken"));
+            .unwrap_or_else(|| panic!("{name} should be exported by Derived.ken"));
         match env.env.lookup(id) {
             Some(Decl::Transparent { .. }) => {}
             other => panic!("{name} must be a transparent checked record type, got {other:?}"),

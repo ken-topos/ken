@@ -130,10 +130,10 @@ fn console_surface_and_package_are_zero_trust_definitions() {
         "Console helpers must add zero trusted-base entries"
     );
     let extracted = ken_elaborator::literate::extract_ken_md(CONSOLE_PACKAGE)
-        .expect("Console.ken.md must extract");
+        .expect("Text.ken.md must extract");
     assert!(
         !extracted.source.contains("Axiom"),
-        "Console.ken code must declare no Axiom"
+        "Text.ken code must declare no Axiom"
     );
 }
 

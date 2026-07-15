@@ -21,9 +21,9 @@ const ORD_NAT_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Numeri
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/Classes/LawfulClasses.ken must elaborate");
     env
 }
 
@@ -41,15 +41,15 @@ fn entry_elaborates_with_every_checked_fence() {
 #[test]
 fn zero_axiom_in_entry_source() {
     let extracted = ken_elaborator::literate::extract_ken_md(ORD_NAT_KEN_MD)
-        .expect("OrdNat.ken.md must extract");
+        .expect("Order.ken.md must extract");
     assert!(
         !extracted.source.contains("Axiom"),
-        "OrdNat.ken.md's tangled/checked code must contain zero Axiom literals (the frame's acceptance bar)"
+        "Order.ken.md's tangled/checked code must contain zero Axiom literals (the frame's acceptance bar)"
     );
     for range in extracted.example_ranges.iter().chain(extracted.reject_ranges.iter()) {
         assert!(
             !ORD_NAT_KEN_MD[range.clone()].contains("Axiom"),
-            "OrdNat.ken.md's example/reject fences must contain zero Axiom literals"
+            "Order.ken.md's example/reject fences must contain zero Axiom literals"
         );
     }
 }
@@ -66,7 +66,7 @@ fn trusted_base_delta_is_empty_across_the_entry() {
     let after: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(
         before, after,
-        "OrdNat.ken.md must introduce ZERO new trusted_base() entries (zero-Axiom acceptance bar)"
+        "Order.ken.md must introduce ZERO new trusted_base() entries (zero-Axiom acceptance bar)"
     );
 }
 

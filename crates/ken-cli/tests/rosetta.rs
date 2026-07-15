@@ -16,7 +16,7 @@
 //! never elaborated — confirmed empirically, `ken-elaborator/src/elab.rs`
 //! has no `ImportDecl`/`ModuleDecl` handling). Examples that reuse
 //! `catalog/packages/collections` (per the frame's DRY rule) need its symbols
-//! concatenated ahead of their own source before `ken run`. `collections.ken`
+//! concatenated ahead of their own source before `ken run`. `Derived.ken`
 //! now carries proof terms using `cong`, so the proof-only transport package
 //! must precede collections in that concatenated prelude.
 //!

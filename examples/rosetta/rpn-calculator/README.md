@@ -19,7 +19,7 @@ symbols — self-contained — so should work once tested through the CLI).
   hardcoded rather than rediscovered here).
 - **Division omitted.** `ken-interp` has no `div_int`/`mod_int` primitive
   at all (only `add_int`/`sub_int`/`mul_int`) — the same already-known gap
-  documented in `catalog/packages/collections/collections.ken`'s header and the
+  documented in `catalog/packages/Data/Collections/Derived.ken.md`'s header and the
   VAL2 `natToDecimal` finding. Not re-filed as a second `KNOWN-GAP.md`;
   this example demonstrates the probed axis (`Option` composition without
   exceptions) over `+`/`-`/`*`, unaffected by it.

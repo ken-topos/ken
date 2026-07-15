@@ -1,7 +1,7 @@
 //! ES4-classes-build + ES4-lawproofs acceptance tests: `Eq`/`DecEq`/`Ord`
 //! structure classes + canonical `Int` (audited-delta) and `Bool`
 //! (zero-delta, K4-enabled) instances, against the REAL
-//! `catalog/packages/Core/LawfulClasses.ken` source (producer-grep: this
+//! `catalog/packages/Core/Classes/LawfulClasses.ken` source (producer-grep: this
 //! drives the actual package file via `include_str!`, never a hand-copied
 //! string).
 //!
@@ -91,9 +91,9 @@ const COLLECTIONS_KEN_MD: &str =
 
 fn mk_env_with_package() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("catalog/packages/Core/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("catalog/packages/Core/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("catalog/packages/Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("catalog/packages/Data/Collections/Derived.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("catalog/packages/Core/Classes/LawfulClasses.ken must elaborate");
     env
 }
 

@@ -18,11 +18,11 @@ const LAWFUL_CLASSES_KEN_MD: &str =
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("Core/Transport.ken must elaborate");
+        .expect("Core/Logic/Transport.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("Data/Collections/Collections.ken must elaborate");
+        .expect("Data/Collections/Derived.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("Core/LawfulClasses.ken must elaborate after its dependencies");
+        .expect("Core/Classes/LawfulClasses.ken must elaborate after its dependencies");
     env
 }
 

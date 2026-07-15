@@ -121,7 +121,7 @@ bar.
   `class Functor`.
 - **Options:** (a) new `Core/Classes/EffectfulClasses.ken.md` [chosen, suggested]; (b)
   append to the existing `LawfulFunctors.ken`; (c) the chapter-56 build-note's
-  `catalog/packages/lawful-functors/` path.
+  `catalog/packages/Core/Classes/` path.
 - **Why:** subsume-don't-proliferate keeps the effectful classes together in one
   entry (they share the wired-superclass story); `Core` is where the
   class/instance vocabulary lives; a fresh entry mirrors DS-2's one-entry-per-WP

@@ -82,7 +82,8 @@ corrected than believed.**)
    package-model gap. **Escalate; do not smuggle `import`.**
 
 7. **Homes:** `ArgParse` → `catalog/packages/Application/CommandLine/ArgParse.ken.md` (or
-   `ArgParse/Core.ken.md` if you split); `Capability.Diagnostics.Render` →
+   `Application/CommandLine/ArgParse/Core.ken.md` if you split);
+   `Capability.Diagnostics.Render` →
    `catalog/packages/Capability/Diagnostics/Render.ken.md`.
 
 ## Mandated deliverable outline

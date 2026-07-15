@@ -60,8 +60,8 @@ Out of scope:
 Before implementation, the spec enclave must pin:
 
 1. **Package shape.** Decide whether CAT-5 ships one package
-   (`catalog/packages/parsing/`) or a split package (`catalog/packages/source/` plus
-   `catalog/packages/parsing/`). Prefer one package unless the derivation path becomes
+   (`catalog/packages/Capability/Parsing/`) or a split package (`catalog/packages/source/` plus
+   `catalog/packages/Capability/Parsing/`). Prefer one package unless the derivation path becomes
    materially clearer by splitting.
 2. **Span model.** Pin `Span` as byte-offset based, with start/end bounds into a
    `Source`, unless the spec identifies a landed reason to use another unit.

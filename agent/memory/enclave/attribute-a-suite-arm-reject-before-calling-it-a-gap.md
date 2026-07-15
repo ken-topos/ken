@@ -21,7 +21,7 @@ and there are four distinct causes that all look like "a gap" at first:
   edge. The absence-assertion discipline's dual: an absence/reject must fire for
   the *right* reason.
 - **(c) harness / loading** — the feature is landed but not in the run
-  environment. (C1/C6: `DecEq`/`Ord` live in `catalog/packages/lawful-classes/`, not the
+  environment. (C1/C6: `DecEq`/`Ord` live in `catalog/packages/Core/Classes/`, not the
   CLI's default `ElabEnv`; surface `import` didn't resolve a package path → the
   fix was *prepending* the package, then the real edges appeared.)
 - **(d) genuine feature gap** — kernel-capability present, surface can't reach

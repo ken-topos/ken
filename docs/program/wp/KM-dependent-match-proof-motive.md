@@ -86,7 +86,7 @@ The audit result must name the exact files/functions touched or ruled out.
 
 ## 4. Regression Shape
 
-Add a focused Ken test smaller than `catalog/packages/collections/map.ken` but preserving
+Add a focused Ken test smaller than `catalog/packages/Data/Collections/Map.ken.md` but preserving
 the load-bearing shape:
 
 - an option-like or two-constructor scrutinee;

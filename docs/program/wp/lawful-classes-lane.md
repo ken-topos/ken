@@ -21,7 +21,7 @@ sections). Runs **parallel** to the F2/F3 tranche (independent lanes).
   Both Decimal instances now sit behind a single decide-once design gate
   (canonicalize the carrier, or a setoid/quotient `Eq Decimal`), tracked in
   `90-open-decisions.md` — not this WP's to resolve.
-- **`Ord Char` shipped** (`catalog/packages/lawful-classes/lawful_classes.ken`,
+- **`Ord Char` shipped** (`catalog/packages/Core/Classes/LawfulClasses.ken.md`,
   conformance in `conformance/stdlib/classes/seed-lawful-classes.md`'s
   `char-ord-laws-carried-not-stubbed`). Along the way: transporting via the
   separately-defined `leqChar` view (rather than a direct `.`-projection off
@@ -44,7 +44,7 @@ sections). Runs **parallel** to the F2/F3 tranche (independent lanes).
 ## Objective
 
 Deliver three law-carrying typeclass instances in
-**`catalog/packages/lawful-classes/lawful_classes.ken`**, homed next to their `Int`
+**`catalog/packages/Core/Classes/LawfulClasses.ken.md`**, homed next to their `Int`
 twins (orphan instances are a hard error — `33 §5`):
 
 - **`Ord Char`** — by **transport** from `Ord Int`. Under refinement erasure

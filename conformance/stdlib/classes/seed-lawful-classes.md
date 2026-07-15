@@ -117,7 +117,7 @@ decoupled from `Eq`'s realization, not a blocker. Only `Eq`'s `refl` routes
 through an unresolved `bool_eq x x` (a live `Eq`, `Refl` fires). A **primitive**
 carrier still proves **no** ∀-law (no eliminator) → **audited-delta**.
 **Realization status:** the real, kernel-checked, zero-delta instances are on
-main (Team Language, `catalog/packages/lawful-classes/`): `Ord Bool`
+main (Team Language, `catalog/packages/Core/Classes/`): `Ord Bool`
 `refl`/`trans`/`total` + `Eq Bool` `refl` (`72e38a5`), and now `Ord Bool`'s
 `antisym` + `DecEq Bool`'s `sound`/`complete` (`9a82745`,
 ES4-lawproofs-remainder) — so `Ord Bool`/`DecEq Bool` are **complete**
@@ -333,7 +333,7 @@ field is fabricated or silently absent.
   (both transport/wrap the same landed `leq_int` reduction path): (a) the
   **canonical, honest-transport** instance — `leq`/`refl`/`antisym`/`trans`/
   `total` all reference `Ord Int`'s own existing fields via `.`-projection
-  (`(Ord_instance_Int).refl` etc, `catalog/packages/lawful-classes/lawful_classes.ken`)
+  (`(Ord_instance_Int).refl` etc, `catalog/packages/Core/Classes/LawfulClasses.ken.md`)
   — every field is present and is a real, kernel-checked term (a projection
   chain that reduces, exactly as honest as `Ord Int`'s own visible `Axiom`s);
   (b) a **deceptive/incomplete** instance attempt with a law field **omitted**
@@ -422,7 +422,7 @@ field is fabricated or silently absent.
 - **AC-transport** (honesty-not-zero-delta, a derived/refinement carrier):
   `char-ord-laws-carried-not-stubbed` — `Ord Char` by transport from
   `Ord Int` (Char's canonical, refinement-erased carrier), landed
-  (`catalog/packages/lawful-classes/lawful_classes.ken`, WP lawful-classes-lane).
+  (`catalog/packages/Core/Classes/LawfulClasses.ken.md`, WP lawful-classes-lane).
   **`Num`/`DecEq Decimal` re-defer** (Steward ruling): `Decimal`'s
   non-canonical `(coeff, exp)` carrier makes `decimalEq` an `Eq`
   (equivalence), not a `DecEq` (decision procedure for the kernel's

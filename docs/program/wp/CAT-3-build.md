@@ -32,11 +32,11 @@ WPs landed. On `origin/main @ 6e34371`, the build starts from this state:
    capitalized type/record names such as `View` / `Lens`, and do not introduce a
    lowercase `view` identifier. The setoid-morphism projection field is
    `project`, per `57 §4.2`.
-3. **CAT-1-build is landed.** `catalog/packages/lawful-functors/lawful_functors.ken`
+3. **CAT-1-build is landed.** `catalog/packages/Core/Classes/LawfulFunctors.ken.md`
    includes the generic `list_assoc`, `list_left_unit`, `list_right_unit`, and
    the parametric `instance Monoid (List a)`. Reuse these proofs; do not
    re-prove append monoid laws.
-4. **CAT-4 is landed but not a dependency.** `catalog/packages/collections/map.ken`
+4. **CAT-4 is landed but not a dependency.** `catalog/packages/Data/Collections/Map.ken.md`
    may offer useful proof style, but CAT-3's target package remains Layer-1
    list/collection laws plus views. Do not migrate CAT-4 map/set laws into this
    WP.
@@ -66,7 +66,7 @@ kernel.
 
 ### D1 — Structural list operations and laws
 
-In `catalog/packages/collections/collections.ken`, verify which operations are already
+In `catalog/packages/Data/Collections/Derived.ken.md`, verify which operations are already
 present. At frame time, `list_append`, `nth`, `take`, and `drop` are present;
 `map`, `filter`, `mem`, `length`, and `min` were absent.
 

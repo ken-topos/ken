@@ -102,7 +102,7 @@ tag.
 
 ### Fork 3 — the `DecEq a → (x y : a) → Dec (Equal a x y)` bridge
 
-Constructible from the **landed** `DecEq` (`catalog/packages/lawful-classes/`,
+Constructible from the **landed** `DecEq` (`catalog/packages/Core/Classes/`,
 `class DecEq a { eq : a → a → Bool ; sound : … → Equal a x y ;
 complete : Equal a x y → IsTrue (eq x y) }`). Case on `eq x y : Bool`:
 
