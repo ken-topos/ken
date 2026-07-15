@@ -16,7 +16,202 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 > ### ⏭ 2026-07-14 (23:16 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ cf741d3b`
 >
-> ## ✅ AX-2 CLOSED. ✅ LET-5 CLOSED (cf741d3b, retros in). 🔨 LET-3 P2 ACTIVE (Foundation, Working-confirmed).
+> ## ✅ AX-2 · LET-5 · LET-6 MERGED (origin/main @ fa750efd). 🔨 LET-3 P2 (Foundation) RESUMED + LIVE — backstop only.
+>
+> **🔨 2026-07-15 00:32 UTC (clock-read) — LET-3 P2 RESUMED + LIVE.** Foundation
+> Handoff Gate complete: all 3 seats "Context compacted" (bg `brsa4zrrd`),
+> worktrees reset to fresh `origin/main @ fa750efd`. Kicked `evt_5j6ph4faca4rr`
+> (standalone mention-led, `agt_37reqsbs5b000`); **foundation-leader confirmed
+> `Working`** (refreshing frame at origin/main, cutting fresh
+> `wp/let3-p2-map-acc-lookup`, briefing implementer on reconstitution+gate).
+> Resume path: overlay preserved candidate blob `b094b034` as Map.ken.md (clean —
+> base a343a722 unchanged through LET-6), verify full family now elaborates under
+> `map_build_acceptance` (formerly-red `delete_..._none_dispatch` flips green),
+> frozen 5-name table UNCHANGED, family-only scope. **Backstop only — do NOT
+> re-kick.** ⇒ Gate at Foundation-QA terminal + Steward co-gate BY CONTENT:
+> ★ acceptance must EXERCISE the rewritten proofs (not name-lookup on unchanged
+> catalog — the LET-6 lesson); ONE shared vocabulary (not 34 nicer proofs);
+> family-only scope; bounded parallelism license. Size L, FULL CI. Then publish,
+> close LET-3 P2. **NEXT Foundation catalog WP (after P2): fold in Pat's
+> `lemma = Axiom → axiom` fossil sweep (StringBijection + proof-techniques ×2 —
+> OUTSIDE P2 scope).**
+>
+> **✅ 2026-07-15 00:29 UTC (clock-read) — LET-6 MERGED origin/main @
+> `fa750efd42606b75562f0a8cf20b99065f333bd2`** (PR #699, FULL locked CI green).
+> Content-verified on main: new `infer_j` whole-result-admission comment present
+> (elab.rs:2458), old eager-check comment GONE, catalog `Map.ken.md` unchanged
+> (blob `a343a722`, zero delta). Decision `dec_38b168g93ncx4` RESOLVED. Merge+retro
+> routed to @language-leader (`evt_hr6scaa55ybq`) — **LET-6 closes when Language
+> §10 retros in** (leader/qa/impl; carry incl. the AC-evidence lesson: a green
+> harness on byte-unchanged catalog = name-lookup only ≠ non-vacuous evidence).
+>
+> **🔨 2026-07-15 00:29 UTC — RETURNING FOUNDATION to LET-3 P2 (the held WP,
+> unblocked by LET-6).** Handoff Gate IN FLIGHT: compaction bg `brsa4zrrd`
+> (foundation-leader+implementer+qa) — resume crosses the LET-6 merge boundary
+> (rebase+re-verify from fresh main = genuine seam), and preserved artifacts are
+> immutable so the worktree reset is SAFE: full-candidate blob
+> `b094b034f5ba8ed11811a80fffeb046360d8f983` (423477 B) + `/tmp/Map.ken.md.let3p2.formatted`
+> (sha256 `b04d0bb5…`) BOTH verified present; reproducer blob `e9b24ec4…` present.
+> **⇒ ON COMPACTION RETURN:** VERIFY DROPS (all 3 Foundation seats "Context
+> compacted") → re-kick foundation-leader (`agt_37reqsbs5b000`) with LET-3 P2
+> RESUME: on fresh origin/main @ fa750efd, overlay blob `b094b034` as
+> `catalog/packages/Data/Collections/Map.ken.md` (byte a343a722 base unchanged
+> through LET-6 → applies clean), run `map_build_acceptance` (NOW passes —
+> infer_j fixed; the red `delete_..._none_dispatch` reproducer flips green),
+> frozen 5-name table UNCHANGED, family-only scope (34 `*_from_list_acc_lookup_*`),
+> bounded parallelism license. Size L, FULL CI (catalog/). Gate: Foundation-QA +
+> Steward co-gate — ★ ENFORCE the AC-evidence lesson: the acceptance gate must
+> exercise the REWRITTEN proofs, not just name them. Then publish, close LET-3 P2.
+> **TODO at LET-3 P2 publish:** this is the LATER Foundation catalog WP where
+> Pat's `lemma = Axiom → axiom` fossil sweep folds in — BUT fossils are OUTSIDE
+> P2's frozen-family scope, so fold into the NEXT Foundation catalog WP after P2,
+> NOT P2 itself. (Re-confirm scope before adding.)
+>
+> **🚀 2026-07-15 00:22 UTC (clock-read) — LET-6 BOTH TERMINAL GATES APPROVED;
+> PUBLISHING `c0140778` (PR #699, FULL CI).** Evidence-replay CLOSED the block:
+> Foundation supplied preserved artifacts as immutable shared git blobs (one-decl
+> `e9b24ec4`, full-candidate `b094b034` = `/tmp/Map.ken.md.let3p2.formatted`);
+> language-implementer ran the detached overlay replay (`evt_6h58a7yxgsx3f`):
+> Replay-1 (real one-decl `entry_key` rewrite) `lookup_empty_law...` **1/1
+> green** (red on cf741d3b), Replay-2 (full 34-family) `map_build_acceptance`
+> **24/24 green** incl. both rewritten witnesses; catalog restored byte-exact,
+> `c0140778` unchanged, zero catalog commit. **Architect TERMINAL APPROVE**
+> (`evt_50hy13pc7hkvm`, independently re-grounded all blob hashes; AC1/AC4 now
+> NON-VACUOUS) + **Language QA APPROVE** (`evt_7daadmt4kej4t`) + Steward
+> content-GREEN. Decision `dec_38b168g93ncx4` PROPOSED (resolve AFTER merge lands,
+> avoid resolve-race). **Publisher `bcbdpfecz` running: PR #699 created @
+> `c0140778`, CI polling.** Merge = exactly 2 elaborator files, zero
+> kernel/catalog delta.
+> **⇒ ON PUBLISHER RETURN (merge success):** (1) verify landed on origin/main BY
+> CONTENT (plain grep, squash makes SHA meaningless); (2) resolve
+> `dec_38b168g93ncx4` w/ landed evidence; (3) route merge+retro to Language, close
+> LET-6; (4) doc-only tracker-sync to main; (5) **RETURN FOUNDATION to LET-3 P2 on
+> the preserved full candidate.** ⇒ **Foundation resume = run the HANDOFF GATE
+> (compact foundation-leader+implementer+qa via handoff-gate-compact.sh; artifacts
+> are immutable blobs so the worktree reset is SAFE) — resume is across the LET-6
+> merge boundary (rebase+re-verify from fresh main), a genuine seam; do NOT skip
+> the compaction on "same WP / context is an asset."** Then re-kick foundation-
+> leader: overlay blob `b094b034` (Map.ken.md byte a343a722 unchanged through
+> LET-6, applies clean), run Map harness (now passes — infer_j fixed), frozen
+> table UNCHANGED. **If publisher BLOCKS:** route the CI/merge blocker, do NOT
+> retry blind.
+>
+> **⛔ 2026-07-15 00:15 UTC (clock-read) — ARCHITECT BLOCKED `c0140778`
+> (`evt_22q1rvmm2fwtb`): production repair CONFIRMED CORRECT & bounded, but the
+> AC1/AC4 EVIDENCE is insufficient — NOT a requested code change.** The catch:
+> `Map.ken.md` is BYTE-UNCHANGED on the candidate, so `delete_..._none_dispatch`
+> still has raw `pair_fst` — the reported `map_build_acceptance
+> cat4_new_api_is_derived_and_axiom_free` merely LOADS the unchanged package and
+> looks up the two NAMES (transparent), passing identically before/after = a
+> green-vs-green that exercises nothing; QA's replay used the new standalone Bool
+> analogue, NOT the frame's required retained one-declaration Map reproducer.
+> **⚠ MY OWN CONTENT-GATE MISSED THIS** — I accepted "map_build_acceptance green
+> enumerating both witnesses" without confirming the test runs the *rewritten*
+> proofs (the classic green-vs-green / green-pilot trap; see memory
+> `green-vs-green-does-not-confirm-a-fix`, `a-green-pilot-is-not-evidence...`).
+> **Required closure = EVIDENCE-ONLY, same SHA (`c0140778` unchanged, zero
+> catalog commit):** in a detached tree, overlay Foundation's preserved
+> byte-exact one-decl `entry_key` rewrite of `delete_..._none_dispatch`, run
+> `map_build_acceptance lookup_empty_law_is_a_real_reducing_proof --exact` (green;
+> was red on cf741d3b), then overlay the preserved full candidate and run the Map
+> harness so the *rewritten* `delete_..._none_dispatch` + `union_..._assoc_inner`
+> both elaborate. Green ⇒ Architect expects to APPROVE `c0140778` unchanged.
+> **IN FLIGHT (Language lane + Foundation ref dependency):** language-implementer
+> running the replay (`evt_5derpb4t0135`); foundation-implementer `Working`
+> producing its preserved trees for Language; language-leader coordinating
+> (`evt_152t4qg29yea1`/`evt_1xfgdyd6yp55y`). **Steward: do NOT publish; backstop
+> the Foundation→Language ref relay against a 2nd-hop stall (language-impl idle,
+> must be roused to consume the refs); publish `c0140778` FULL CI only after
+> Architect re-review APPROVE. No `c0140778` code change, no catalog commit, no
+> Foundation resumption.**
+>
+> **(prior, now superseded) 🟢 2026-07-15 00:12 UTC — LET-6 CANDIDATE; Steward
+> content-gate read GREEN (AC4 mis-cleared, see above); awaiting Architect.**
+> Candidate `wp/let6-infer-j-eager-recheck @
+> c01407789d3a3294f504b49b855a62b8be503285`, direct child of current
+> `origin/main @ 2c97da2e` (no rebase). **Language QA APPROVED** exact SHA
+> (`evt_7daadmt4kej4t`). **Steward pre-verified BY CONTENT from shared object
+> store:** diff = exactly `crates/ken-elaborator/src/elab.rs` +
+> `tests/surface_transport_acceptance.rs`, +58/−13; eager `kernel_infer`
+> (`zonked_ctx`/`zonked_term_j`) block DELETED from `infer_j` only, comment
+> repointed to whole-result admission, `Ok((term_j, result_ty))` retained; final
+> `elaborate_rexpr` `kernel_check` intact @ `elab.rs:6746`; decl-admission
+> `kernel_check` @ 5039/5221/5514 untouched; **zero kernel/catalog/conformance/
+> trusted delta (AC5 ✅)**; QA verified AC1 flip + AC2 malformed-reject + AC3
+> standalone net-pin + AC4 both Map witnesses green. **I unwedged the Architect's
+> review request (stranded `[Pasted Content]`, sent bare Enter → architect
+> `Working` on terminal review, `evt_2er51vvvwc8xt`).**
+> **⇒ ON RESUME / ON ARCHITECT APPROVE:** publish `c0140778` via
+> `scripts/scripted-pr-automerge.sh --target wp/let6-infer-j-eager-recheck` FULL
+> CI (add tracker-sync commit first; NEVER `--doc-only` — touches `crates/`);
+> verify landed on origin/main by content; route merge+retro; close LET-6; THEN
+> return Foundation to the preserved full 34-family candidate (LET-3 P2 resumes
+> unchanged). Do NOT publish before the Architect's terminal APPROVE.
+>
+> **🔨 2026-07-14 23:56 UTC — LET-6 KICKED + LIVE.** Language Handoff Gate
+> complete: all 3 seats "Context compacted", compaction bg `bdcni0ltq` exit 0.
+> Kicked `evt_2aqn6zj70ejtn` (mention `agt_37reqqy6pjm00`); **language-leader
+> confirmed `Working`**. Build branch `wp/let6-infer-j-eager-recheck` (free, cut
+> fresh). **Backstop only — do NOT re-kick.** ⇒ **Gate at Language-QA+Architect
+> terminal BY CONTENT:** eager `kernel_infer` block DELETED from `infer_j`; zero
+> kernel/`catalog` delta (AC5); AC3 standalone malformed-`J` net-pin present; AC4
+> `map_build_acceptance` green incl. `delete_..._none_dispatch` +
+> `union_..._assoc_inner`. Publish FULL CI. **THEN: return Foundation to the
+> preserved full 34-family candidate (LET-3 P2 resumes unchanged).**
+>
+> **⚖ 2026-07-14 23:47 UTC — ARCHITECT RULED the LET-3 P2 stop condition
+> (`evt_29s79hphxdvhd`): it's a real ELABORATOR COMPLETENESS defect, NOT metatheory
+> and NOT a kernel bug** (none of my 3 outcomes — a 4th). The `let`-alias IS
+> definitionally equal (`conv::whnf(Term::Let)` zeta-reduces; whole-result kernel
+> check substitutes `entry_key → pair_fst k v e`). False reject = a **construction-
+> time `kernel_infer` in `infer_j`** (`elab.rs` ~2382; block ~2462-2463) run under
+> an assumption-only Context before the enclosing `Term::Let` exists → neutral
+> `Var(0)` vs raw projection. That local check is NOT the soundness net (whole-
+> result `declare_def`/standalone `kernel_check` is). Fix = DELETE that eager block.
+> Frozen naming table UNCHANGED; LET-3 P2 re-holds; both Foundation trees preserved.
+>
+> **🔨 LET-6 (Language) — FRAMED + on main (PR #698,
+> `docs/program/wp/let6-infer-j-eager-recheck.md`). Size S, FULL CI.** Faithful
+> transcription of the ruling (5-pt discriminator net = ACs, do-nots = guardrails,
+> incl. AC3 standalone malformed-`J` negative so we don't remove the real net).
+> **Handoff Gate IN FLIGHT: Language compaction bg `bdcni0ltq`; build-branch name
+> `wp/let6-infer-j-eager-recheck` FREE; kick PRE-STAGED at
+> `scratchpad/let6-kickoff.md`.** ⇒ **ON RESUME: if compaction done, VERIFY DROPS
+> (all 3 Language seats "Context compacted") then POST the pre-staged kick to
+> language-leader (`agt_37reqqy6pjm00`), confirm `Working`.** Then LET-6 is away
+> (backstop only); gate at Language-QA+Architect terminal BY CONTENT: eager
+> `kernel_infer` block gone from `infer_j`, zero kernel/catalog delta (AC5),
+> AC3 standalone net-pin present, AC4 Map harness green. Publish FULL CI.
+>
+> **📌 PAT DECISION (2026-07-14): the `lemma = Axiom` → `axiom` fossil migration
+> FOLDS INTO the next Foundation WP — NOT a standalone WP.** ~3 real catalog sites
+> (`StringBijection.ken.md`, `proof-techniques.ken.md` ×2); the 4 `LawfulClasses`
+> `= Axiom` are instance-method fields, sugar doesn't cover them. Fossils are
+> OUTSIDE LET-3 P2's frozen-family scope, so this rides a LATER Foundation catalog
+> WP, not P2. **When I frame the next Foundation WP, include the fossil sweep.**
+>
+> **⇒ old status below (stop-condition detail retained for context):**
+>
+> **⛔ 2026-07-14 23:42 UTC — LET-3 P2 STOP CONDITION (post-LET-5, NEW boundary).**
+> Foundation applied the frozen vocab: all 5 `union_from_list_acc_lookup_*`
+> green under the real `map_build_acceptance` harness (incl. the formerly-red
+> singleton `union_..._assoc_inner` — LET-5 confirmed). **First delete member
+> `delete_from_list_acc_lookup_none_dispatch` FAILS** when the earned name
+> `entry_key = pair_fst k v e` is bound: the `let`-alias becomes a **neutral at a
+> rigid `J`/transport endpoint** while `delete_from_list_acc_false_bridge` returns
+> the raw `pair_fst` endpoint → kernel `TypeMismatch` (`g160` vs `g162`).
+> Implementer + leader escalated (`evt_3wp9da3wjm6hj`, `evt_4a6cdmpgsdqy9`) with a
+> minimized one-decl/one-binding red reproducer vs byte-original `cf741d3b`; full
+> 34-family candidate preserved. **This is METATHEORY = @architect's lane, not
+> mine** — routed `evt_5dh4fz81ehm25`, asked for a GENERAL ruling (recurs across
+> every delete/intersection/difference member landing the acc-key at a `J`
+> endpoint). Architect is Working on it. **Three outcomes → whose lane:**
+> (1) principled omit at rigid endpoints = frame amendment I own, no scope growth;
+> (2) sanctioned transport/J-bridge = mechanism + rescope; (3) LET-5
+> let-transparency gap (binder pushed w/ type not definition) = separate
+> kernel/elaborator WP, LET-3 P2 re-holds. **⇒ ON RESUME: read Architect ruling,
+> carry outcome into frame. Do NOT rule the metatheory myself; do NOT nudge
+> Foundation (parked correctly on the reproducer).**
 >
 > **🔨 2026-07-14 23:27 UTC — LET-3 P2 KICKED + LIVE.** Foundation Handoff Gate
 > complete: all 3 seats compact-verified ("Context compacted"), compaction bg
@@ -26,8 +221,23 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > FULL CI (catalog/). **Backstop only — do NOT re-kick.** Gate at Foundation-QA
 > terminal + Steward co-gate: enforce ONE shared vocabulary (not 34 nicer proofs),
 > family-only scope (34 `*_from_list_acc_lookup_*` lemmas, not the whole file),
-> bounded parallelism license. **NEXT FOR ME: the toolchain-axis proposal owed to
-> Pat is now the front task** (critical path is running on its own).
+> bounded parallelism license.
+>
+> **↻ TOOLCHAIN-AXIS ITEM RE-GROUNDED 23:33 UTC — my flattened notes were WRONG,
+> and it is PREMATURE. Do NOT surface a proposal to Pat now.** Ground truth by
+> content: (1) **package manager is NOT an unplanned gap** — the spec defers it to
+> a NAMED "package-manager round" (`MRES-1(a)/MRES-2`; `33-declarations.md`,
+> `63-supply-chain.md` DRAFT): compiled manifest, content-addressed packages,
+> attested validation all live there. (2) **`export` IS specified syntax**
+> (`33-declarations.md §3.2` facade-republish `export M (foo as bar)`); `pub`
+> visibility is built — the narrow open question is only the `export`
+> facade-republish parser status, NOT "export unparsed." (3) **test framework is
+> REFERENCED** by spec (test-scoped admission) but has no user surface.
+> **Judgment:** off critical path — the DAG's next campaign is POSIX/PX, not
+> toolchain — and mostly spec-planned already, so a Pat proposal now is
+> manufacturing. HOLD until it's near on the DAG or Pat asks. (Same family as
+> `my-own-tracker-capability-landed-line-can-be-stale`: don't act on a flattened
+> self-note; re-ground from the spec/gate.)
 >
 > **✅ LET-5 MERGED `origin/main @ cf741d3b` (PR #696, FULL CI green), retros in**
 > (leader `evt_7ectdb1rzw9g3`, qa `evt_177ctg4ptzarw`, impl `evt_3s3b2dztwp9wm`).
