@@ -46,6 +46,7 @@ pub enum Token {
     // ES3 keywords (`33 §3-4` — modules/imports/visibility)
     KwModule,      // "module" — module namespace declaration
     KwImport,      // "import" — qualified/aliased/selective import
+    KwExport,      // "export" — facade/in-scope re-export declaration
     KwUseReserved, // "use" — reserved (ADR-0015); retired open import
     KwPub,         // "pub" — visibility export marker
     // N4 admission-boundary keywords (`33 §3.2.1`, §5.5.1)
@@ -447,6 +448,7 @@ impl<'s> Lexer<'s> {
                 "where" => Token::KwWhere,
                 "module" => Token::KwModule,
                 "import" => Token::KwImport,
+                "export" => Token::KwExport,
                 "use" => Token::KwUseReserved,
                 "pub" => Token::KwPub,
                 "program" => Token::KwProgram,

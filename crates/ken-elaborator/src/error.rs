@@ -137,6 +137,14 @@ pub enum ElabError {
         sources: Vec<String>,
         span: Span,
     },
+    /// Two distinct canonical declarations were assigned one published
+    /// surface name by a re-export (`33 §4.3`).
+    ReExportCollision {
+        surface_name: String,
+        existing: String,
+        incoming: String,
+        span: Span,
+    },
     /// Catch-all for internal elaborator errors.
     Internal(String),
 }
@@ -318,6 +326,17 @@ impl fmt::Display for ElabError {
                     name, span.start, span.end, sorted.join(" and "),
                 )
             }
+            ElabError::ReExportCollision {
+                surface_name,
+                existing,
+                incoming,
+                span,
+            } => write!(
+                f,
+                "re-export collision at {}-{}: public name '{}' already denotes '{}', \
+                 cannot republish distinct identity '{}'",
+                span.start, span.end, surface_name, existing, incoming,
+            ),
             ElabError::Internal(s) => write!(f, "internal error: {}", s),
         }
     }

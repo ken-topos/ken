@@ -170,25 +170,17 @@ fn private_name_access_rejected_at_surface() {
 }
 
 /// Two selective imports binding the same bare name to different declarations
-/// make an unqualified reference ambiguous while qualified references remain
-/// unambiguous.
+/// reject latently at the second binding (`33 §3.3`), even when no later
+/// expression references the name.
 #[test]
 fn selective_import_ambiguity_rejected_naming_both() {
     let mut env = mk_env();
-    env.elaborate_file(
+    let bad = env.elaborate_file(
         "module M { pub const foo : Int = 0 } \
          module N { pub const foo : Int = 1 } \
          import M (foo) \
          import N (foo)",
-    )
-    .expect("both modules + selective imports elaborate");
-
-    // Qualified references disambiguate regardless of the selective collision.
-    assert!(env.elaborate_decl("const viaM : Int = M.foo").is_ok());
-    assert!(env.elaborate_decl("const viaN : Int = N.foo").is_ok());
-
-    // The bare, unqualified reference is ambiguous — must name both sources.
-    let bad = env.elaborate_decl("const bad : Int = foo");
+    );
     match bad {
         Err(ElabError::AmbiguousReference { name, sources, .. }) => {
             assert_eq!(name, "foo");

@@ -124,6 +124,11 @@ pub struct ClassEnv {
     /// Explicit direct-use roots of the active `program`/`package` boundary.
     /// `None` keeps direct, non-loader elaboration backward compatible.
     pub direct_use_packages: Option<std::collections::HashSet<String>>,
+    /// Canonical dictionaries granted through an admitted package's
+    /// re-exported public class/head surface (`33 §5.5.1`). This is kept
+    /// separate from package admission so coherence closure never turns into
+    /// general transitive dispatch.
+    pub direct_use_instances: std::collections::HashSet<GlobalId>,
     /// Whether a boundary-less source closure may use its sole provider
     /// package without an explicit admission declaration.
     pub implicit_single_provider: bool,
@@ -148,6 +153,7 @@ impl ClassEnv {
             global_modules: HashMap::new(),
             current_package: None,
             direct_use_packages: None,
+            direct_use_instances: std::collections::HashSet::new(),
             implicit_single_provider: false,
             source_instance_packages: std::collections::HashSet::new(),
             resolution_provenance: Vec::new(),

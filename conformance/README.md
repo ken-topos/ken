@@ -213,8 +213,7 @@ claim with no conformance case is a claim no one can rely on
   import×prelude clashes, the same-identity carve-out, facade and renamed
   re-export `GlobalId` preservation, facade-vs-body scope, a structured
   re-export-site collision, MRES-4d instance carry, and abstract-constructor
-  hiding. All producer-dependent arms are red until the Language
-  namespace/export follow-on.
+  hiding. The Language namespace/export follow-on executes the producer arms.
 - `surface/declarations/seed-axiom-named-postulates.md` — additive `axiom N : T`
   mechanical sugar for `lemma N : T = Axiom`, with readable derived
   provenance, plus the repeated-`Axiom` discriminator: one semantic owner label

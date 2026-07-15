@@ -12,12 +12,9 @@ map, forge a `GlobalId`, or call a collision helper with hand-built bindings.
 Every identity assertion below compares the `GlobalId` emitted for the
 defining declaration with the ID observed through the named surface path.
 
-All cases are **RED UNTIL the Language namespace/export follow-on** unless a
-case says otherwise. In particular, the current parser has no `export`
-declaration, and the current import×import implementation records an ambiguity
-for a later lookup instead of rejecting every latent clash at binding time.
-The red label names an absent producer; it is not permission to accept a parse
-error or an earlier unrelated failure.
+The Language namespace/export follow-on implements these cases. The executable
+acceptance harness must still reach each named mechanism: a parse error or an
+earlier unrelated failure does not satisfy a rejection arm.
 
 ## A. Identity-keyed general clashes
 

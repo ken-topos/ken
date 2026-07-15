@@ -920,6 +920,9 @@ fn check_match_dependent(
     expected: &Term,
     span: &Span,
 ) -> Result<Term, ElabError> {
+    for arm in arms {
+        ensure_pattern_constructors_resolve(cx, &arm.pat)?;
+    }
     // Zonk `expected` up front: a bare surface `(a : Type)` parameter's own
     // TYPE may still carry an unresolved universe metavariable at this point
     // (pinned to `Type 0` only once something concrete unifies against it,
@@ -3052,6 +3055,7 @@ fn resolve_instance_dictionary_inner(
             if !self_admitted
                 && !sole_implicit_provider
                 && !admitted.contains(&info.defining_package)
+                && !class_env.direct_use_instances.contains(&info.instance_id)
             {
                 return Err(ElabError::UnadmittedInstance {
                     defining_package: info.defining_package.clone(),
@@ -4042,6 +4046,7 @@ pub fn init_class_env(
         global_modules: std::collections::HashMap::new(),
         current_package: None,
         direct_use_packages: None,
+        direct_use_instances: std::collections::HashSet::new(),
         implicit_single_provider: false,
         source_instance_packages: std::collections::HashSet::new(),
         resolution_provenance: Vec::new(),
@@ -6555,6 +6560,9 @@ fn infer_match(
     arms: &[RMatchArm],
     span: &Span,
 ) -> Result<(Term, Term), ElabError> {
+    for arm in arms {
+        ensure_pattern_constructors_resolve(cx, &arm.pat)?;
+    }
     // 1. Infer scrutinee.
     let (scrut_core, scrut_ty_raw) = infer(cx, scrut)?;
     let scrut_ty = whnf(cx.env, &cx.ctx, &scrut_ty_raw);
@@ -6666,6 +6674,24 @@ fn infer_match(
     };
 
     Ok((elim, ret_ty))
+}
+
+fn ensure_pattern_constructors_resolve(
+    cx: &ElabCtx<'_>,
+    pattern: &RPattern,
+) -> Result<(), ElabError> {
+    if let RPatKind::Ctor(name, fields) = &pattern.kind {
+        if !cx.globals.contains_key(name) {
+            return Err(ElabError::UnresolvedCon {
+                name: name.clone(),
+                span: pattern.span.clone(),
+            });
+        }
+        for field in fields {
+            ensure_pattern_constructors_resolve(cx, field)?;
+        }
+    }
+    Ok(())
 }
 
 /// Shift a term's free variables DOWN by `k`, stopping with `None` if any

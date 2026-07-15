@@ -214,6 +214,7 @@ impl Parser {
             Token::KwDerive => self.parse_derive_decl(start),
             Token::KwModule => self.parse_module_decl(start),
             Token::KwImport => self.parse_import_decl(start),
+            Token::KwExport => self.parse_export_decl(start),
             Token::KwUseReserved => Err(ElabError::ParseError {
                 msg: "`use` is retired (ADR-0015); use `import M`, `import M as N`, or \
                       `import M (…)` for a provenance-preserving import."
@@ -227,7 +228,7 @@ impl Parser {
                 msg: format!(
                     "expected 'view', 'const', 'fn', 'proc', 'let', 'prove', 'prop', 'lemma', 'proof', \
                      'law', 'data', 'def', 'foreign', 'temporal', 'class', 'instance', \
-                     'derive', 'module', 'import', \
+                     'derive', 'module', 'import', 'export', \
                      'pub', 'program', 'package', or 'space proc', found {:?}",
                     other
                 ),
@@ -1000,33 +1001,83 @@ impl Parser {
                 let (alias, _) = self.expect_ident()?;
                 crate::ast::ImportKind::Aliased(alias)
             }
-            Token::LParen => {
-                self.advance();
-                let mut items = Vec::new();
-                loop {
-                    let (n, _) = self.expect_ident()?;
-                    let rename = if matches!(self.peek(), Token::Ident(s) if s == "as") {
-                        self.advance();
-                        Some(self.expect_ident()?.0)
-                    } else {
-                        None
-                    };
-                    items.push(crate::ast::ImportItem { name: n, rename });
-                    if matches!(self.peek(), Token::Comma) {
-                        self.advance();
-                        continue;
-                    }
-                    break;
-                }
-                self.expect(&Token::RParen)?;
-                crate::ast::ImportKind::Selective(items)
-            }
+            Token::LParen => crate::ast::ImportKind::Selective(self.parse_parenthesized_items()?),
             _ => crate::ast::ImportKind::Qualified,
         };
         let end = self.tokens[self.pos - 1].1.end;
         Ok(Decl::ImportDecl {
             module,
             kind,
+            span: Span::new(start, end),
+        })
+    }
+
+    fn parse_item_rename(&mut self, name: String) -> Result<crate::ast::ImportItem, ElabError> {
+        let rename = if matches!(self.peek(), Token::Ident(s) if s == "as") {
+            self.advance();
+            Some(self.expect_ident()?.0)
+        } else {
+            None
+        };
+        Ok(crate::ast::ImportItem { name, rename })
+    }
+
+    fn parse_parenthesized_items(&mut self) -> Result<Vec<crate::ast::ImportItem>, ElabError> {
+        self.expect(&Token::LParen)?;
+        let mut items = Vec::new();
+        loop {
+            let name = self.expect_ident()?.0;
+            items.push(self.parse_item_rename(name)?);
+            if matches!(self.peek(), Token::Comma) {
+                self.advance();
+                continue;
+            }
+            break;
+        }
+        self.expect(&Token::RParen)?;
+        Ok(items)
+    }
+
+    fn parse_remaining_export_items(
+        &mut self,
+        first: String,
+    ) -> Result<Vec<crate::ast::ImportItem>, ElabError> {
+        let mut items = vec![self.parse_item_rename(first)?];
+        while matches!(self.peek(), Token::Comma) {
+            self.advance();
+            let name = self.expect_ident()?.0;
+            items.push(self.parse_item_rename(name)?);
+        }
+        Ok(items)
+    }
+
+    /// `export M.N (foo, Bar as baz)` | `export foo, Bar as baz`
+    /// (`33 §3.2`). A leading module path is a facade iff its next token is
+    /// `(`; without the selection list, `export M` is the one-item in-scope
+    /// form rather than a degenerate facade.
+    fn parse_export_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume `export`
+        let form = if matches!(self.peek(), Token::ConId(_)) {
+            let (candidate, _) = self.parse_dotted_module_path()?;
+            if matches!(self.peek(), Token::LParen) {
+                crate::ast::ExportForm::Facade {
+                    module: candidate,
+                    items: self.parse_parenthesized_items()?,
+                }
+            } else {
+                crate::ast::ExportForm::InScope {
+                    items: self.parse_remaining_export_items(candidate)?,
+                }
+            }
+        } else {
+            let first = self.expect_ident()?.0;
+            crate::ast::ExportForm::InScope {
+                items: self.parse_remaining_export_items(first)?,
+            }
+        };
+        let end = self.tokens[self.pos - 1].1.end;
+        Ok(Decl::ExportDecl {
+            form,
             span: Span::new(start, end),
         })
     }

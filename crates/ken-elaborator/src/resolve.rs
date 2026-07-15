@@ -727,7 +727,7 @@ pub(crate) fn resolve_decl_in_unit(
     // The single decl-kind-uniform funnel every fn/const/proc/def/data/class/
     // instance declaration passes through — guard the produced decl's own
     // name here, not at the ~12 downstream `globals.insert` call sites or a
-    // per-use path. `ModuleDecl`/`ImportDecl`/`Pub` are expanded away by
+    // per-use path. Module/import/export/`Pub` declarations are expanded away by
     // `modules.rs` before reaching this function (see the arm below) and
     // have no declared VALUE name of their own to guard here.
     if !matches!(
@@ -735,6 +735,7 @@ pub(crate) fn resolve_decl_in_unit(
         Decl::BoundaryDecl { .. }
             | Decl::ModuleDecl { .. }
             | Decl::ImportDecl { .. }
+            | Decl::ExportDecl { .. }
             | Decl::Pub(_)
     ) {
         let records_definition =
@@ -761,7 +762,7 @@ pub(crate) fn resolve_decl_in_unit(
         )?;
     }
     match decl {
-        // `module`/`import`/`use`/`pub` are resolved away entirely by
+        // `module`/`import`/`export`/`pub` are resolved away entirely by
         // `modules.rs` before any decl reaches this function — it always
         // hands `resolve_decl` an already-unwrapped, already-qualified
         // ordinary decl. Unreachable from that pipeline; kept exhaustive
@@ -769,8 +770,9 @@ pub(crate) fn resolve_decl_in_unit(
         Decl::BoundaryDecl { .. }
         | Decl::ModuleDecl { .. }
         | Decl::ImportDecl { .. }
+        | Decl::ExportDecl { .. }
         | Decl::Pub(_) => Err(ElabError::Internal(
-            "resolve_decl: boundary/module/import/pub decls must be expanded by modules.rs first"
+            "resolve_decl: boundary/module/import/export/pub decls must be expanded by modules.rs first"
                 .into(),
         )),
         Decl::ViewDecl {

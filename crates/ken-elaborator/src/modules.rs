@@ -23,7 +23,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use crate::ast::{BoundaryHeader, CtorDecl, Decl, ExplicitDataCtor, ImportKind};
+use crate::ast::{
+    BoundaryHeader, CtorDecl, Decl, ExplicitDataCtor, ExportForm, ImportItem, ImportKind,
+};
 use crate::error::{ElabError, Span};
 use crate::resolve::{
     self, RCtorDecl, RDecl, RDeclKind, RExplicitCtorDecl, RExpr, RMatchArm, RPatKind, RPattern,
@@ -81,33 +83,33 @@ impl ModuleState {
     }
 }
 
-#[derive(Clone, Debug)]
-enum Binding {
-    One(String),
-    Ambiguous(Vec<String>),
-}
-
 /// Per-scope bare-name resolution: selective-import bindings plus this scope's
 /// own local declarations. A top-level
 /// local/import collision is fail-closed regardless of source order (`33
 /// §3.3`); narrower lexical binders remain innermost-wins.
 #[derive(Default, Clone)]
 struct Scope {
-    bindings: HashMap<String, Binding>,
+    bindings: HashMap<String, String>,
     /// Bare names bound by a top-level LOCAL declaration in this scope.
     locals: std::collections::HashSet<String>,
     /// Alias prefixes from `import M as N` — `N` resolves to `M` when used
     /// as a qualifying prefix (`N.foo`).
     prefixes: HashMap<String, String>,
+    /// Names mentioned by a facade export remain deliberately unavailable to
+    /// the body unless a separate import/local binding supplies them. Keeping
+    /// this negative fact makes the normative facade-vs-binding failure an
+    /// attributed surface `UnboundName` rather than a later global miss.
+    facade_only: HashSet<String>,
 }
 
 impl Scope {
     fn bind_import(&mut self, bare: &str, qualified: &str, span: &Span) -> Result<(), ElabError> {
         if self.locals.contains(bare) {
-            let local = match self.bindings.get(bare) {
-                Some(Binding::One(local)) => local.clone(),
-                _ => bare.to_string(),
-            };
+            let local = self
+                .bindings
+                .get(bare)
+                .cloned()
+                .unwrap_or_else(|| bare.to_string());
             return Err(ElabError::AmbiguousReference {
                 name: bare.to_string(),
                 sources: vec![local, qualified.to_string()],
@@ -117,23 +119,15 @@ impl Scope {
         match self.bindings.get(bare) {
             None => {
                 self.bindings
-                    .insert(bare.to_string(), Binding::One(qualified.to_string()));
+                    .insert(bare.to_string(), qualified.to_string());
             }
-            Some(Binding::One(existing)) if existing == qualified => {}
-            Some(Binding::One(existing)) => {
-                let existing = existing.clone();
-                self.bindings.insert(
-                    bare.to_string(),
-                    Binding::Ambiguous(vec![existing, qualified.to_string()]),
-                );
-            }
-            Some(Binding::Ambiguous(v)) => {
-                let mut v = v.clone();
-                if !v.iter().any(|e| e == qualified) {
-                    v.push(qualified.to_string());
-                }
-                self.bindings
-                    .insert(bare.to_string(), Binding::Ambiguous(v));
+            Some(existing) if existing == qualified => {}
+            Some(existing) => {
+                return Err(ElabError::AmbiguousReference {
+                    name: bare.to_string(),
+                    sources: vec![existing.clone(), qualified.to_string()],
+                    span: span.clone(),
+                });
             }
         }
         Ok(())
@@ -145,10 +139,7 @@ impl Scope {
     fn bind_local(&mut self, bare: &str, qualified: &str, span: &Span) -> Result<(), ElabError> {
         if let Some(binding) = self.bindings.get(bare) {
             if !self.locals.contains(bare) {
-                let mut sources = match binding {
-                    Binding::One(source) => vec![source.clone()],
-                    Binding::Ambiguous(sources) => sources.clone(),
-                };
+                let mut sources = vec![binding.clone()];
                 sources.push(qualified.to_string());
                 return Err(ElabError::AmbiguousReference {
                     name: bare.to_string(),
@@ -159,7 +150,7 @@ impl Scope {
         }
         self.locals.insert(bare.to_string());
         self.bindings
-            .insert(bare.to_string(), Binding::One(qualified.to_string()));
+            .insert(bare.to_string(), qualified.to_string());
         Ok(())
     }
 }
@@ -188,15 +179,8 @@ fn resolve_ref(
 ) -> Result<String, ElabError> {
     if let Some(dot) = name.rfind('.') {
         let (prefix_part, leaf) = (&name[..dot], &name[dot + 1..]);
-        if let Some(binding) = scope.bindings.get(prefix_part) {
-            return match binding {
-                Binding::One(q) => Ok(format!("{q}.{leaf}")),
-                Binding::Ambiguous(sources) => Err(ElabError::AmbiguousReference {
-                    name: name.to_string(),
-                    sources: sources.clone(),
-                    span: span.clone(),
-                }),
-            };
+        if let Some(q) = scope.bindings.get(prefix_part) {
+            return Ok(format!("{q}.{leaf}"));
         }
         let canonical_module = scope
             .prefixes
@@ -222,10 +206,9 @@ fn resolve_ref(
         })
     } else {
         match scope.bindings.get(name) {
-            Some(Binding::One(q)) => Ok(q.clone()),
-            Some(Binding::Ambiguous(sources)) => Err(ElabError::AmbiguousReference {
+            Some(q) => Ok(q.clone()),
+            None if scope.facade_only.contains(name) => Err(ElabError::UnboundName {
                 name: name.to_string(),
-                sources: sources.clone(),
                 span: span.clone(),
             }),
             None => Ok(name.to_string()),
@@ -263,6 +246,7 @@ fn resolve_attached_ref(
 fn apply_import(
     scope: &mut Scope,
     exports: &HashMap<String, HashMap<String, String>>,
+    prelude_names: &HashSet<String>,
     module: &str,
     kind: &ImportKind,
     span: &Span,
@@ -288,7 +272,84 @@ fn apply_import(
                         name: format!("{}.{}", module, item.name),
                         span: span.clone(),
                     })?;
-                scope.bind_import(item.rename.as_deref().unwrap_or(&item.name), q, span)?;
+                let bare = item.rename.as_deref().unwrap_or(&item.name);
+                if prelude_names.contains(bare) {
+                    return Err(ElabError::AmbiguousReference {
+                        name: bare.to_string(),
+                        sources: vec![format!("<prelude>.{bare}"), q.clone()],
+                        span: span.clone(),
+                    });
+                }
+                scope.bind_import(bare, q, span)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn publish_identity(
+    exports_here: &mut HashMap<String, String>,
+    surface_name: &str,
+    canonical: &str,
+    span: &Span,
+) -> Result<(), ElabError> {
+    match exports_here.get(surface_name) {
+        None => {
+            exports_here.insert(surface_name.to_string(), canonical.to_string());
+            Ok(())
+        }
+        Some(existing) if existing == canonical => Ok(()),
+        Some(existing) => Err(ElabError::ReExportCollision {
+            surface_name: surface_name.to_string(),
+            existing: existing.clone(),
+            incoming: canonical.to_string(),
+            span: span.clone(),
+        }),
+    }
+}
+
+fn published_name(item: &ImportItem) -> &str {
+    item.rename.as_deref().unwrap_or(&item.name)
+}
+
+fn apply_export(
+    scope: &mut Scope,
+    exports: &HashMap<String, HashMap<String, String>>,
+    globals: &HashMap<String, ken_kernel::GlobalId>,
+    exports_here: &mut HashMap<String, String>,
+    form: &ExportForm,
+    span: &Span,
+) -> Result<(), ElabError> {
+    match form {
+        ExportForm::Facade { module, items } => {
+            let pubmap = exports.get(module).ok_or_else(|| ElabError::UnboundName {
+                name: module.clone(),
+                span: span.clone(),
+            })?;
+            for item in items {
+                let canonical = pubmap
+                    .get(&item.name)
+                    .ok_or_else(|| ElabError::UnboundName {
+                        name: format!("{module}.{}", item.name),
+                        span: span.clone(),
+                    })?;
+                let surface = published_name(item);
+                publish_identity(exports_here, surface, canonical, span)?;
+                scope.facade_only.insert(item.name.clone());
+                scope.facade_only.insert(surface.to_string());
+            }
+        }
+        ExportForm::InScope { items } => {
+            for item in items {
+                let had_scope_binding = scope.bindings.contains_key(&item.name);
+                let canonical = resolve_ref(scope, exports, &item.name, span)?;
+                if !had_scope_binding && !globals.contains_key(&canonical) {
+                    return Err(ElabError::UnboundName {
+                        name: item.name.clone(),
+                        span: span.clone(),
+                    });
+                }
+                publish_identity(exports_here, published_name(item), &canonical, span)?;
             }
         }
     }
@@ -314,15 +375,17 @@ fn imported_module_paths(decls: &[Decl], out: &mut Vec<(String, Span)>) {
             Decl::ImportDecl { module, span, .. } => {
                 out.push((module.clone(), span.clone()));
             }
+            Decl::ExportDecl {
+                form: ExportForm::Facade { module, .. },
+                span,
+            } => out.push((module.clone(), span.clone())),
             Decl::ModuleDecl { decls: inner, .. } => imported_module_paths(inner, out),
             _ => {}
         }
     }
 }
 
-fn admission_boundary(
-    decls: &[Decl],
-) -> Result<Option<(BoundaryHeader, Span)>, ElabError> {
+fn admission_boundary(decls: &[Decl]) -> Result<Option<(BoundaryHeader, Span)>, ElabError> {
     let mut found = None;
     for (index, decl) in decls.iter().enumerate() {
         if let Decl::BoundaryDecl {
@@ -411,6 +474,28 @@ fn parse_unit_source(path: &Path, span: &Span) -> Result<Vec<Decl>, ElabError> {
     }
 }
 
+fn refresh_carried_instance_admission(elab: &mut ElabEnv) {
+    let Some(admitted) = elab.class_env.direct_use_packages.as_ref() else {
+        return;
+    };
+    let public_identities: HashSet<&str> = admitted
+        .iter()
+        .filter_map(|package| elab.module_state.exports.get(package))
+        .flat_map(|pubmap| pubmap.values().map(String::as_str))
+        .collect();
+    let carried: Vec<ken_kernel::GlobalId> = elab
+        .class_env
+        .instances
+        .iter()
+        .filter_map(|((class_name, head_name), info)| {
+            (public_identities.contains(class_name.as_str())
+                || public_identities.contains(head_name.as_str()))
+            .then_some(info.instance_id)
+        })
+        .collect();
+    elab.class_env.direct_use_instances.extend(carried);
+}
+
 /// Load one file unit through the active-stack gate. Import edges are
 /// discovered before `expand_scope`, so a cyclic unit is rejected before any
 /// of that unit's declarations are admitted to the flat kernel environment.
@@ -447,6 +532,7 @@ fn load_unit(
 
     let previous_package = elab.class_env.current_package.clone();
     let previous_direct_use = elab.class_env.direct_use_packages.clone();
+    let previous_direct_instances = elab.class_env.direct_use_instances.clone();
     let previous_implicit_single_provider = elab.class_env.implicit_single_provider;
     let boundary = admission_boundary(&decls)?;
     let has_boundary = boundary.is_some();
@@ -464,6 +550,9 @@ fn load_unit(
         None if previous_package.is_none() && previous_direct_use.is_none() => Some(HashSet::new()),
         None => previous_direct_use.clone(),
     };
+    if has_boundary || root_unit {
+        elab.class_env.direct_use_instances.clear();
+    }
     elab.class_env.implicit_single_provider = if has_boundary {
         false
     } else if previous_package.is_none() && previous_direct_use.is_none() {
@@ -486,6 +575,7 @@ fn load_unit(
             }
             load_unit(elab, &dependency, &import_span)?;
         }
+        refresh_carried_instance_admission(elab);
 
         // Every loaded source unit is an ordinary orphan-check module. Assign
         // its id only after dependencies return so their current-module ids do
@@ -494,15 +584,14 @@ fn load_unit(
 
         let mut scope = Scope::default();
         let mut unit_definitions = HashSet::new();
-        let (results, exports) =
-            expand_scope(
-                elab,
-                &decls,
-                module,
-                &mut scope,
-                &mut unit_definitions,
-                true,
-            )?;
+        let (results, exports) = expand_scope(
+            elab,
+            &decls,
+            module,
+            &mut scope,
+            &mut unit_definitions,
+            true,
+        )?;
         let ids: Vec<ken_kernel::GlobalId> =
             results.into_iter().map(|result| result.def_id).collect();
         elab.module_state
@@ -514,6 +603,7 @@ fn load_unit(
     debug_assert_eq!(popped.as_deref(), Some(module));
     elab.class_env.current_package = previous_package;
     elab.class_env.direct_use_packages = previous_direct_use;
+    elab.class_env.direct_use_instances = previous_direct_instances;
     elab.class_env.implicit_single_provider = previous_implicit_single_provider;
 
     let ids = result?;
@@ -1223,7 +1313,25 @@ fn expand_scope(
             // ordered pass if `M` is a sibling defined above (the normal
             // case; a module must be declared before it's imported).
             Decl::ImportDecl { module, kind, span } => {
-                apply_import(scope, &elab.module_state.exports, module, kind, span)?;
+                apply_import(
+                    scope,
+                    &elab.module_state.exports,
+                    &elab.module_state.prelude_names,
+                    module,
+                    kind,
+                    span,
+                )?;
+                i += 1;
+            }
+            Decl::ExportDecl { form, span } => {
+                apply_export(
+                    scope,
+                    &elab.module_state.exports,
+                    &elab.globals,
+                    &mut exports_here,
+                    form,
+                    span,
+                )?;
                 i += 1;
             }
             Decl::ModuleDecl {
@@ -1431,9 +1539,19 @@ fn expand_scope(
                                 span: inner.span().clone(),
                             });
                         }
-                        exports_here.insert(format!("{subject}::{proof_name}"), rdecl.name.clone());
+                        publish_identity(
+                            &mut exports_here,
+                            &format!("{subject}::{proof_name}"),
+                            &rdecl.name,
+                            inner.span(),
+                        )?;
                     } else {
-                        exports_here.insert(inner.name().to_string(), rdecl.name.clone());
+                        publish_identity(
+                            &mut exports_here,
+                            inner.name(),
+                            &rdecl.name,
+                            inner.span(),
+                        )?;
                     }
                 }
                 i = run_end;
@@ -1489,7 +1607,7 @@ fn expand_scope(
                             span: span.clone(),
                         })?;
                         elab.globals.insert(qualified.clone(), id);
-                        exports_here.insert(name.clone(), qualified.clone());
+                        publish_identity(&mut exports_here, name, &qualified, span)?;
                         ids.push(crate::elab::ElabResult {
                             name: qualified,
                             def_id: id,
@@ -1543,15 +1661,19 @@ fn expand_scope(
                             ..
                         } = inner
                         {
-                            exports_here
-                                .insert(format!("{subject}::{proof_name}"), result.name.clone());
+                            publish_identity(
+                                &mut exports_here,
+                                &format!("{subject}::{proof_name}"),
+                                &result.name,
+                                inner.span(),
+                            )?;
                         } else {
                             // Only the decl's own qualified name is exported —
                             // never a `DataDecl`'s constructors (`33 §4.2`,
                             // abstract export: ctors are simply never entered
                             // into any export table, so a client can't bring
                             // them into scope by any import form).
-                            exports_here.insert(bare, result.name.clone());
+                            publish_identity(&mut exports_here, &bare, &result.name, inner.span())?;
                         }
                     }
                     ids.push(result);
@@ -1565,6 +1687,14 @@ fn expand_scope(
                         unit_definitions,
                     )?;
                     let result = elaborate_checked(elab, &rdecl)?;
+                    if is_pub && matches!(inner, Decl::ClassDecl { .. }) {
+                        publish_identity(
+                            &mut exports_here,
+                            inner.name(),
+                            &result.name,
+                            inner.span(),
+                        )?;
+                    }
                     ids.push(result);
                 }
                 i += 1;
@@ -1660,6 +1790,7 @@ pub fn expand_and_elaborate(
     let direct_call = boundary.is_some() && elab.class_env.current_package.is_none();
     let previous_package = elab.class_env.current_package.clone();
     let previous_direct_use = elab.class_env.direct_use_packages.clone();
+    let previous_direct_instances = elab.class_env.direct_use_instances.clone();
     let previous_implicit_single_provider = elab.class_env.implicit_single_provider;
     if direct_call {
         let admitted = boundary
@@ -1670,21 +1801,16 @@ pub fn expand_and_elaborate(
             .collect();
         elab.class_env.current_package = Some("<root>".to_string());
         elab.class_env.direct_use_packages = Some(admitted);
+        elab.class_env.direct_use_instances.clear();
         elab.class_env.implicit_single_provider = false;
     }
     let mut scope = elab.module_state.root_scope.clone();
     let mut unit_definitions = HashSet::new();
-    let expanded = expand_scope(
-        elab,
-        decls,
-        "",
-        &mut scope,
-        &mut unit_definitions,
-        true,
-    );
+    let expanded = expand_scope(elab, decls, "", &mut scope, &mut unit_definitions, true);
     if direct_call {
         elab.class_env.current_package = previous_package;
         elab.class_env.direct_use_packages = previous_direct_use;
+        elab.class_env.direct_use_instances = previous_direct_instances;
         elab.class_env.implicit_single_provider = previous_implicit_single_provider;
     }
     let (results, _root_exports) = expanded?;

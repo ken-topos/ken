@@ -497,7 +497,8 @@ fn collect_decl_spans(decl: &Decl, out: &mut Vec<Span>) {
         Decl::BoundaryDecl { .. }
         | Decl::TemporalDecl { .. }
         | Decl::DeriveDecl { .. }
-        | Decl::ImportDecl { .. } => {}
+        | Decl::ImportDecl { .. }
+        | Decl::ExportDecl { .. } => {}
     }
 }
 
