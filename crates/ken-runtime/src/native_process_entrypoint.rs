@@ -27,51 +27,6 @@ pub struct NativeProcessInput {
     pub working_directory: Vec<u8>,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct NativeByteSpan {
-    pub bytes: *const u8,
-    pub len: usize,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct NativeEnvironmentPair {
-    pub key: NativeByteSpan,
-    pub value: NativeByteSpan,
-}
-
-/// Borrowed process data passed through the one native-execution boundary.
-///
-/// The backing storage is owned by `NativeProcessRuntime` for the duration of
-/// the call. This is an internal tested ABI, not a stable embedding surface.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct NativeProcessAbi {
-    pub discriminator: i64,
-    pub arguments: *const NativeByteSpan,
-    pub argument_count: usize,
-    pub environment: *const NativeEnvironmentPair,
-    pub environment_count: usize,
-    pub working_directory: NativeByteSpan,
-}
-
-impl NativeProcessAbi {
-    pub(crate) fn closed_nullary() -> Self {
-        Self {
-            discriminator: 0,
-            arguments: std::ptr::null(),
-            argument_count: 0,
-            environment: std::ptr::null(),
-            environment_count: 0,
-            working_directory: NativeByteSpan {
-                bytes: std::ptr::null(),
-                len: 0,
-            },
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProcessExitCode {
     Success,
@@ -129,59 +84,15 @@ pub enum NativeProcessRuntimeSupportFact {
 #[derive(Debug)]
 pub struct NativeProcessRuntime {
     pub staged_process_input: RuntimeValue,
-    pub(crate) process_abi: NativeProcessAbi,
     pub trap_reporting: NativeProcessRuntimeSupportFact,
-    argument_spans: Vec<NativeByteSpan>,
-    environment_pairs: Vec<NativeEnvironmentPair>,
-    _input: NativeProcessInput,
 }
 
 /// Initialize the native process runtime before the entrypoint is lowered.
 pub fn initialize_native_process_runtime(input: &NativeProcessInput) -> NativeProcessRuntime {
-    let owned_input = input.clone();
-    let argument_spans = owned_input
-        .arguments
-        .iter()
-        .map(|argument| NativeByteSpan {
-            bytes: argument.as_ptr(),
-            len: argument.len(),
-        })
-        .collect::<Vec<_>>();
-    let environment_pairs = owned_input
-        .environment
-        .iter()
-        .map(|(key, value)| NativeEnvironmentPair {
-            key: NativeByteSpan {
-                bytes: key.as_ptr(),
-                len: key.len(),
-            },
-            value: NativeByteSpan {
-                bytes: value.as_ptr(),
-                len: value.len(),
-            },
-        })
-        .collect::<Vec<_>>();
-    let mut runtime = NativeProcessRuntime {
+    NativeProcessRuntime {
         staged_process_input: native_process_input_value(input),
-        process_abi: NativeProcessAbi {
-            discriminator: process_discriminator(input),
-            arguments: std::ptr::null(),
-            argument_count: argument_spans.len(),
-            environment: std::ptr::null(),
-            environment_count: environment_pairs.len(),
-            working_directory: NativeByteSpan {
-                bytes: owned_input.working_directory.as_ptr(),
-                len: owned_input.working_directory.len(),
-            },
-        },
         trap_reporting: NativeProcessRuntimeSupportFact::Available,
-        argument_spans,
-        environment_pairs,
-        _input: owned_input,
-    };
-    runtime.process_abi.arguments = runtime.argument_spans.as_ptr();
-    runtime.process_abi.environment = runtime.environment_pairs.as_ptr();
-    runtime
+    }
 }
 
 /// Tear down the native process runtime by flushing its diagnostic streams.
@@ -255,7 +166,6 @@ where
         entrypoint,
         &NativeSeedEnvironment::empty(),
         &runtime.staged_process_input,
-        &runtime.process_abi,
     ) {
         Ok(report) => report,
         Err(error) => {
@@ -307,25 +217,6 @@ fn runtime_exit_code(value: &RuntimeGroundValue) -> ProcessExitCode {
     }
 }
 
-pub(crate) fn process_discriminator(input: &NativeProcessInput) -> i64 {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&(input.arguments.len() as u64).to_le_bytes());
-    for argument in &input.arguments {
-        bytes.extend_from_slice(&(argument.len() as u64).to_le_bytes());
-        bytes.extend_from_slice(argument);
-    }
-    bytes.extend_from_slice(&(input.environment.len() as u64).to_le_bytes());
-    for (key, value) in &input.environment {
-        bytes.extend_from_slice(&(key.len() as u64).to_le_bytes());
-        bytes.extend_from_slice(key);
-        bytes.extend_from_slice(&(value.len() as u64).to_le_bytes());
-        bytes.extend_from_slice(value);
-    }
-    bytes.extend_from_slice(&(input.working_directory.len() as u64).to_le_bytes());
-    bytes.extend_from_slice(&input.working_directory);
-    (crate::fnv1a_64(&bytes) % 125 + 1) as i64
-}
-
 fn report_runtime_trap(stderr: &mut impl Write, trap: &RuntimeTrap) {
     report_trap(stderr, &format!("{:?}: {}", trap.code, trap.message));
 }
@@ -364,7 +255,7 @@ mod tests {
 
     fn process_entry(body: RuntimeExpr) -> RuntimeExpr {
         RuntimeExpr::Match {
-            scrutinee: Box::new(RuntimeExpr::Var(1)),
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
             cases: vec![crate::RuntimeMatchCase {
                 constructor: PROCESS_INPUT_CONSTRUCTOR.to_string(),
                 binders: 3,
@@ -547,7 +438,6 @@ mod tests {
             runtime.trap_reporting,
             NativeProcessRuntimeSupportFact::Available
         );
-        assert_ne!(runtime.process_abi.discriminator, 0);
         assert_eq!(
             runtime.staged_process_input,
             native_process_input_value(&input)

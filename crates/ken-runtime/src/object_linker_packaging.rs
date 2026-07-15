@@ -1163,118 +1163,123 @@ int main(void) {
 "#
 }
 
-fn process_starter_c_stub() -> &'static str {
+pub(crate) fn process_starter_c_stub() -> &'static str {
     r#"#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-struct KenByteSpan {
-    const unsigned char *bytes;
+struct KenBorrowedValue {
+    uint64_t kind;
+    uint64_t tag;
+    const void *data;
     size_t len;
 };
 
-struct KenEnvironmentPair {
-    struct KenByteSpan key;
-    struct KenByteSpan value;
+enum { KEN_BYTES = 1, KEN_CONSTRUCTOR = 2 };
+enum { KEN_PROCESS_INPUT = 1, KEN_NIL = 2, KEN_CONS = 3, KEN_PROD = 4 };
+
+struct KenArena {
+    struct KenBorrowedValue *values;
+    size_t next;
+    size_t capacity;
 };
 
-struct KenProcessInput {
-    int64_t discriminator;
-    const struct KenByteSpan *arguments;
-    size_t argument_count;
-    const struct KenEnvironmentPair *environment;
-    size_t environment_count;
-    struct KenByteSpan working_directory;
-};
+extern long long ken_nc23_entrypoint(const struct KenBorrowedValue *root);
 
-extern long long ken_nc23_entrypoint(const struct KenProcessInput *input);
-
-static uint64_t fnv_byte(uint64_t hash, unsigned char byte) {
-    return (hash ^ byte) * UINT64_C(0x100000001b3);
+static int constructor(
+    struct KenArena *arena,
+    struct KenBorrowedValue *value,
+    uint64_t tag,
+    size_t arity
+) {
+    if (arity > arena->capacity - arena->next) return 0;
+    value->kind = KEN_CONSTRUCTOR;
+    value->tag = tag;
+    value->data = &arena->values[arena->next];
+    value->len = arity;
+    arena->next += arity;
+    return 1;
 }
 
-static uint64_t fnv_u64_le(uint64_t hash, uint64_t value) {
-    for (unsigned shift = 0; shift < 64; shift += 8) {
-        hash = fnv_byte(hash, (unsigned char)(value >> shift));
-    }
-    return hash;
+static void bytes(
+    struct KenBorrowedValue *value,
+    const unsigned char *data,
+    size_t len
+) {
+    value->kind = KEN_BYTES;
+    value->tag = 0;
+    value->data = data;
+    value->len = len;
 }
 
-static uint64_t fnv_span(uint64_t hash, struct KenByteSpan span) {
-    hash = fnv_u64_le(hash, (uint64_t)span.len);
-    for (size_t index = 0; index < span.len; ++index) {
-        hash = fnv_byte(hash, span.bytes[index]);
+static int arguments(
+    struct KenArena *arena,
+    struct KenBorrowedValue *value,
+    size_t index,
+    size_t count,
+    char **argv
+) {
+    for (; index < count; ++index) {
+        if (!constructor(arena, value, KEN_CONS, 2)) return 0;
+        struct KenBorrowedValue *fields = (struct KenBorrowedValue *)value->data;
+        bytes(&fields[0], (const unsigned char *)argv[index], strlen(argv[index]));
+        value = &fields[1];
     }
-    return hash;
+    return constructor(arena, value, KEN_NIL, 0);
+}
+
+static int environment(
+    struct KenArena *arena,
+    struct KenBorrowedValue *value,
+    size_t index,
+    size_t count,
+    char **envp
+) {
+    for (; index < count; ++index) {
+        char *separator = strchr(envp[index], '=');
+        if (separator == NULL || !constructor(arena, value, KEN_CONS, 2)) return 0;
+        struct KenBorrowedValue *fields = (struct KenBorrowedValue *)value->data;
+        if (!constructor(arena, &fields[0], KEN_PROD, 2)) return 0;
+        struct KenBorrowedValue *pair = (struct KenBorrowedValue *)fields[0].data;
+        bytes(&pair[0], (const unsigned char *)envp[index], (size_t)(separator - envp[index]));
+        bytes(&pair[1], (const unsigned char *)(separator + 1), strlen(separator + 1));
+        value = &fields[1];
+    }
+    return constructor(arena, value, KEN_NIL, 0);
 }
 
 int main(int argc, char **argv, char **envp) {
     size_t argument_count = argc < 0 ? 0 : (size_t)argc;
-    struct KenByteSpan *arguments = calloc(argument_count, sizeof(*arguments));
-    if (argument_count != 0 && arguments == NULL) return 1;
-    for (size_t index = 0; index < argument_count; ++index) {
-        arguments[index].bytes = (const unsigned char *)argv[index];
-        arguments[index].len = strlen(argv[index]);
-    }
-
     size_t environment_count = 0;
     while (envp[environment_count] != NULL) ++environment_count;
-    struct KenEnvironmentPair *environment =
-        calloc(environment_count, sizeof(*environment));
-    if (environment_count != 0 && environment == NULL) {
-        free(arguments);
-        return 1;
-    }
-    for (size_t index = 0; index < environment_count; ++index) {
-        char *separator = strchr(envp[index], '=');
-        if (separator == NULL) {
-            free(environment);
-            free(arguments);
-            return 1;
-        }
-        environment[index].key.bytes = (const unsigned char *)envp[index];
-        environment[index].key.len = (size_t)(separator - envp[index]);
-        environment[index].value.bytes = (const unsigned char *)(separator + 1);
-        environment[index].value.len = strlen(separator + 1);
-    }
-
     char *cwd = getcwd(NULL, 0);
-    if (cwd == NULL) {
-        free(environment);
-        free(arguments);
+    if (cwd == NULL) return 1;
+    if (argument_count > (SIZE_MAX - 4) / 2 ||
+        environment_count > (SIZE_MAX - 4 - 2 * argument_count) / 4) {
+        free(cwd); return 1;
+    }
+    size_t capacity = 4 + 2 * argument_count + 4 * environment_count;
+    struct KenBorrowedValue *pool = calloc(capacity, sizeof(*pool));
+    if (pool == NULL) { free(cwd); return 1; }
+    struct KenArena arena = { .values = pool, .next = 1, .capacity = capacity };
+    struct KenBorrowedValue *root = &pool[0];
+    if (!constructor(&arena, root, KEN_PROCESS_INPUT, 3)) return 1;
+    struct KenBorrowedValue *fields = (struct KenBorrowedValue *)root->data;
+    if (!arguments(&arena, &fields[0], 0, argument_count, argv) ||
+        !environment(&arena, &fields[1], 0, environment_count, envp)) {
+        free(pool); free(cwd); return 1;
+    }
+    bytes(&fields[2], (const unsigned char *)cwd, strlen(cwd));
+    if (arena.next != arena.capacity) { free(pool); free(cwd); return 1; }
+    long long value = ken_nc23_entrypoint(root);
+    free(cwd);
+    free(pool);
+    if (value < 0) {
+        fputs("ken native trap: malformed borrowed process input\n", stderr);
         return 1;
     }
-    struct KenByteSpan cwd_span = {
-        .bytes = (const unsigned char *)cwd,
-        .len = strlen(cwd),
-    };
-
-    uint64_t hash = UINT64_C(0xcbf29ce484222325);
-    hash = fnv_u64_le(hash, (uint64_t)argument_count);
-    for (size_t index = 0; index < argument_count; ++index) {
-        hash = fnv_span(hash, arguments[index]);
-    }
-    hash = fnv_u64_le(hash, (uint64_t)environment_count);
-    for (size_t index = 0; index < environment_count; ++index) {
-        hash = fnv_span(hash, environment[index].key);
-        hash = fnv_span(hash, environment[index].value);
-    }
-    hash = fnv_span(hash, cwd_span);
-
-    struct KenProcessInput input = {
-        .discriminator = (int64_t)(hash % 125 + 1),
-        .arguments = arguments,
-        .argument_count = argument_count,
-        .environment = environment,
-        .environment_count = environment_count,
-        .working_directory = cwd_span,
-    };
-    long long value = ken_nc23_entrypoint(&input);
-    free(cwd);
-    free(environment);
-    free(arguments);
     return (int)value;
 }
 "#
@@ -1519,17 +1524,177 @@ mod tests {
         use std::process::Command;
 
         let output_dir = temp_output_dir("px4-process-input");
-        let executable =
-            build_process_starter_executable_artifact(&RuntimeExpr::Var(0), &output_dir)
-                .expect("process starter links");
         let cwd_one = output_dir.join(OsString::from_vec(vec![b'c', b'w', b'd', 0xfe]));
-        let cwd_two = output_dir.join("cwd-two");
+        let cwd_two = output_dir.join(OsString::from_vec(vec![b'c', b'w', b'd', 0xfd]));
         fs::create_dir_all(&cwd_one).expect("first cwd exists");
         fs::create_dir_all(&cwd_two).expect("second cwd exists");
+        let option_none = "ctor:fixture::Option::None";
+        let option_some = "ctor:fixture::Option::Some";
+        let byte_at = |bytes: RuntimeExpr, index: i64| RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::PrimitiveCall {
+                primitive: RuntimePrimitive {
+                    symbol: "bytes_at".to_string(),
+                    partiality: RuntimePartiality::SafeOption {
+                        none: option_none.to_string(),
+                        some: option_some.to_string(),
+                        obligation: Some("obl:px4.bytes_at.bounds".to_string()),
+                    },
+                },
+                args: vec![bytes, RuntimeExpr::Value(RuntimeValue::Int(index))],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: option_none.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: option_some.to_string(),
+                    binders: 1,
+                    body: RuntimeExpr::Var(0),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "invalid borrowed bytes_at result".to_string(),
+            },
+        };
+        let argv_byte = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: crate::LIST_CONS_CONSTRUCTOR.to_string(),
+                binders: 2,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(1)),
+                    cases: vec![crate::RuntimeMatchCase {
+                        constructor: crate::LIST_CONS_CONSTRUCTOR.to_string(),
+                        binders: 2,
+                        body: byte_at(RuntimeExpr::Var(0), 0),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "missing process argument".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "missing argv[0]".to_string(),
+            },
+        };
+        let environment_byte = |field: u32| RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(1)),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: crate::LIST_CONS_CONSTRUCTOR.to_string(),
+                binders: 2,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![crate::RuntimeMatchCase {
+                        constructor: crate::PROD_CONSTRUCTOR.to_string(),
+                        binders: 2,
+                        body: byte_at(RuntimeExpr::Var(field), 0),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "environment head is not Prod".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "environment is empty".to_string(),
+            },
+        };
+        let equals = |value: RuntimeExpr, expected: i64| RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "eq_int".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![value, RuntimeExpr::Value(RuntimeValue::Int(expected))],
+        };
+        let cwd_length = RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "bytes_length".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![RuntimeExpr::Var(2)],
+        };
+        let guarded = RuntimeExpr::If {
+            scrutinee: Box::new(equals(argv_byte, 0xff)),
+            then_expr: Box::new(RuntimeExpr::If {
+                scrutinee: Box::new(equals(environment_byte(0), i64::from(b'K'))),
+                then_expr: Box::new(RuntimeExpr::If {
+                    scrutinee: Box::new(equals(
+                        cwd_length,
+                        cwd_one.as_os_str().as_bytes().len() as i64,
+                    )),
+                    then_expr: Box::new(RuntimeExpr::If {
+                        scrutinee: Box::new(equals(
+                            byte_at(
+                                RuntimeExpr::Var(2),
+                                cwd_one.as_os_str().as_bytes().len() as i64 - 1,
+                            ),
+                            i64::from(0xfe_u8),
+                        )),
+                        then_expr: Box::new(environment_byte(1)),
+                        else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                    }),
+                    else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                }),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+            }),
+            else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+        };
+        let entry = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: crate::PROCESS_INPUT_CONSTRUCTOR.to_string(),
+                binders: 3,
+                body: guarded,
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "entry argument is not ProcessInput".to_string(),
+            },
+        };
+        let executable = build_process_starter_executable_artifact(&entry, &output_dir)
+            .expect("process starter links");
+        assert!(!process_starter_c_stub().contains("fnv"));
+        assert!(!process_starter_c_stub().contains("discriminator"));
 
-        let argument_one = OsString::from_vec(vec![b'a', 0xff, b'1']);
+        let argument_one = OsString::from_vec(vec![0xff, b'a', b'1']);
         let key_one = OsString::from_vec(vec![b'K', 0xfd]);
-        let value_one = OsString::from_vec(vec![0xfc, b'V']);
+        let retired = |value: u8| {
+            let input = crate::NativeProcessInput {
+                arguments: vec![
+                    executable.as_os_str().as_bytes().to_vec(),
+                    argument_one.as_os_str().as_bytes().to_vec(),
+                ],
+                environment: vec![(key_one.as_os_str().as_bytes().to_vec(), vec![value])],
+                working_directory: cwd_one.as_os_str().as_bytes().to_vec(),
+            };
+            let mut bytes = Vec::new();
+            bytes.extend_from_slice(&(input.arguments.len() as u64).to_le_bytes());
+            for argument in &input.arguments {
+                bytes.extend_from_slice(&(argument.len() as u64).to_le_bytes());
+                bytes.extend_from_slice(argument);
+            }
+            bytes.extend_from_slice(&(input.environment.len() as u64).to_le_bytes());
+            for (key, value) in &input.environment {
+                bytes.extend_from_slice(&(key.len() as u64).to_le_bytes());
+                bytes.extend_from_slice(key);
+                bytes.extend_from_slice(&(value.len() as u64).to_le_bytes());
+                bytes.extend_from_slice(value);
+            }
+            bytes.extend_from_slice(&(input.working_directory.len() as u64).to_le_bytes());
+            bytes.extend_from_slice(&input.working_directory);
+            crate::fnv1a_64(&bytes) % 125 + 1
+        };
+        let (first_byte, second_byte) = (128u8..=255)
+            .flat_map(|first| ((first + 1)..=255).map(move |second| (first, second)))
+            .find(|(first, second)| retired(*first) == retired(*second))
+            .expect("retired 125-value discriminator has a non-UTF-8 collision");
+        let value_one = OsString::from_vec(vec![first_byte]);
         let output_one = Command::new(&executable)
             .arg(&argument_one)
             .env_clear()
@@ -1537,40 +1702,42 @@ mod tests {
             .current_dir(&cwd_one)
             .output()
             .expect("first process invocation runs");
-        let input_one = crate::NativeProcessInput {
-            arguments: vec![
-                executable.as_os_str().as_bytes().to_vec(),
-                argument_one.as_os_str().as_bytes().to_vec(),
-            ],
-            environment: vec![(
-                key_one.as_os_str().as_bytes().to_vec(),
-                value_one.as_os_str().as_bytes().to_vec(),
-            )],
-            working_directory: cwd_one.as_os_str().as_bytes().to_vec(),
-        };
-
-        let argument_two = OsString::from("second");
+        let argument_two = argument_one.clone();
+        let value_two = OsString::from_vec(vec![second_byte]);
         let output_two = Command::new(&executable)
             .arg(&argument_two)
             .env_clear()
-            .env("OTHER", "value")
-            .current_dir(&cwd_two)
+            .env(&key_one, &value_two)
+            .current_dir(&cwd_one)
             .output()
             .expect("second process invocation runs");
-        let input_two = crate::NativeProcessInput {
-            arguments: vec![
-                executable.as_os_str().as_bytes().to_vec(),
-                argument_two.as_os_str().as_bytes().to_vec(),
-            ],
-            environment: vec![(b"OTHER".to_vec(), b"value".to_vec())],
-            working_directory: cwd_two.as_os_str().as_bytes().to_vec(),
-        };
-
-        let expected_one = crate::process_discriminator(&input_one) as i32;
-        let expected_two = crate::process_discriminator(&input_two) as i32;
-        assert_ne!(expected_one, expected_two, "fixtures must discriminate");
-        assert_eq!(output_one.status.code(), Some(expected_one));
-        assert_eq!(output_two.status.code(), Some(expected_two));
+        let wrong_cwd = Command::new(&executable)
+            .arg(&argument_one)
+            .env_clear()
+            .env(&key_one, &value_one)
+            .current_dir(&cwd_two)
+            .output()
+            .expect("cwd discriminator invocation runs");
+        let wrong_argument = Command::new(&executable)
+            .arg("utf8")
+            .env_clear()
+            .env(&key_one, &value_one)
+            .current_dir(&cwd_one)
+            .output()
+            .expect("argv discriminator invocation runs");
+        let wrong_key = Command::new(&executable)
+            .arg(&argument_one)
+            .env_clear()
+            .env("X", &value_one)
+            .current_dir(&cwd_one)
+            .output()
+            .expect("environment-key discriminator invocation runs");
+        assert_eq!(retired(first_byte), retired(second_byte));
+        assert_eq!(output_one.status.code(), Some(i32::from(first_byte)));
+        assert_eq!(output_two.status.code(), Some(i32::from(second_byte)));
+        assert_eq!(wrong_cwd.status.code(), Some(1));
+        assert_eq!(wrong_argument.status.code(), Some(1));
+        assert_eq!(wrong_key.status.code(), Some(1));
 
         fs::remove_dir_all(output_dir).expect("process fixture is removed");
     }

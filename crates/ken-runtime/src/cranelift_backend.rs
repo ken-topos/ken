@@ -827,15 +827,12 @@ pub fn run_example_with_seed_observation(
 /// Execute one runtime expression through the tested native process boundary.
 ///
 /// `staged_process_input` is the byte-accurate argv/environment value bound to
-/// `RuntimeExpr::Var(1)`. `RuntimeExpr::Var(0)` reads the discriminator carried
-/// by the process ABI pointer, so the native parameter is part of execution
-/// rather than an ignored reachability token. Both are runtime plumbing, not a
-/// stable C ABI and not a proof-producing boundary.
+/// `RuntimeExpr::Var(0)` for the in-process validation path. Produced process
+/// objects instead bind `Var(0)` to their call-scoped borrowed ingress root.
 pub(crate) fn run_process_expr_with_cranelift(
     expr: &RuntimeExpr,
     env: &NativeSeedEnvironment,
     staged_process_input: &RuntimeValue,
-    process_abi: &crate::NativeProcessAbi,
 ) -> Result<CraneliftRunReport, CraneliftBackendError> {
     let compiled = compile_expr_with_declarations_and_process_input(
         expr,
@@ -846,7 +843,7 @@ pub(crate) fn run_process_expr_with_cranelift(
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
     let unsupported = compiled.unsupported.clone();
-    let (observation, native_returned) = compiled.run(Some(process_abi))?;
+    let (observation, native_returned) = compiled.run(None)?;
     Ok(CraneliftRunReport {
         example: "native-process-entrypoint".to_string(),
         observation,
@@ -1128,7 +1125,7 @@ enum ResultDecoder {
 impl CompiledModule<JITModule> {
     fn run(
         mut self,
-        process_abi: Option<&crate::NativeProcessAbi>,
+        process_root: Option<*const std::ffi::c_void>,
     ) -> Result<(RuntimeObservation, Option<i64>), CraneliftBackendError> {
         if let Some(trap) = self.trap {
             return Ok((RuntimeObservation::Trapped(trap), None));
@@ -1140,12 +1137,10 @@ impl CompiledModule<JITModule> {
         let code = self.module.get_finalized_function(self.func_id);
         // Named native-code-execution boundary. This is tested/validated JIT
         // execution, never a proof and never a host-ABI syscall boundary.
-        let closed_process_abi = crate::NativeProcessAbi::closed_nullary();
-        let process_abi = process_abi.unwrap_or(&closed_process_abi);
-        let native = unsafe {
-            mem::transmute::<_, extern "C" fn(*const crate::NativeProcessAbi) -> i64>(code)
-        };
-        let token = native(process_abi);
+        let process_root = process_root.unwrap_or(std::ptr::null());
+        let native =
+            unsafe { mem::transmute::<_, extern "C" fn(*const std::ffi::c_void) -> i64>(code) };
+        let token = native(process_root);
         let decoder = self
             .decoder
             .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
@@ -1207,7 +1202,7 @@ fn compile_expr_with_declarations_and_process_input<'a>(
         seed_env,
         declarations,
         staged_process_input,
-        staged_process_input.is_some(),
+        false,
     )
 }
 
@@ -1271,13 +1266,8 @@ fn compile_expr_into_module<'a, M: Module>(
         builder.switch_to_block(block);
         let mut initial_env = Vec::new();
         if process_mode {
-            let process_abi = builder.block_params(block)[0];
-            let discriminator = builder
-                .ins()
-                .load(types::I64, MemFlags::trusted(), process_abi, 0);
-            initial_env.push(Lowered::Int {
-                value: discriminator,
-                known: None,
+            initial_env.push(Lowered::BorrowedNativeValue {
+                pointer: builder.block_params(block)[0],
             });
         }
         if let Some(value) = staged_process_input {
@@ -1378,6 +1368,15 @@ enum Lowered {
         known: Option<bool>,
     },
     Bytes(Vec<u8>),
+    BorrowedNativeValue {
+        pointer: cranelift_codegen::ir::Value,
+    },
+    BorrowedOption {
+        present: cranelift_codegen::ir::Value,
+        value: cranelift_codegen::ir::Value,
+        none: String,
+        some: String,
+    },
     String(String),
     Constructor {
         constructor: String,
@@ -1425,21 +1424,40 @@ impl<'a> Lowering<'a> {
                 else_expr,
             } => {
                 let lowered_scrutinee = self.lower_expr(builder, scrutinee, env)?;
-                let Lowered::Bool {
-                    known: Some(scrutinee),
-                    ..
-                } = lowered_scrutinee
-                else {
+                let Lowered::Bool { value, known } = lowered_scrutinee else {
                     return Err(unsupported(
                         "If",
-                        "branch lowering requires a statically known Bool scrutinee",
+                        "branch lowering requires a Bool scrutinee",
                     ));
                 };
-                if scrutinee {
-                    self.lower_expr(builder, then_expr, env)
-                } else {
-                    self.lower_expr(builder, else_expr, env)
+                if let Some(scrutinee) = known {
+                    return if scrutinee {
+                        self.lower_expr(builder, then_expr, env)
+                    } else {
+                        self.lower_expr(builder, else_expr, env)
+                    };
                 }
+                let then_block = builder.create_block();
+                let else_block = builder.create_block();
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder.ins().brif(value, then_block, &[], else_block, &[]);
+                for (block, arm) in [(then_block, then_expr), (else_block, else_expr)] {
+                    builder.switch_to_block(block);
+                    let lowered = self.lower_expr(builder, arm, env)?;
+                    let Lowered::Int { value, .. } = lowered else {
+                        return Err(unsupported(
+                            "If",
+                            "dynamic native If arms must produce scalar Int values",
+                        ));
+                    };
+                    builder.ins().jump(merge, &[value.into()]);
+                }
+                builder.switch_to_block(merge);
+                Ok(Lowered::Int {
+                    value: builder.block_params(merge)[0],
+                    known: None,
+                })
             }
             RuntimeExpr::Construct { constructor, args } => {
                 let lowered_args = args
@@ -1457,6 +1475,20 @@ impl<'a> Lowering<'a> {
                 default,
             } => {
                 let lowered_scrutinee = self.lower_expr(builder, scrutinee, env)?;
+                if let Lowered::BorrowedNativeValue { pointer } = lowered_scrutinee {
+                    return self.lower_borrowed_match(builder, pointer, cases, default, env);
+                }
+                if let Lowered::BorrowedOption {
+                    present,
+                    value,
+                    none,
+                    some,
+                } = lowered_scrutinee
+                {
+                    return self.lower_borrowed_option_match(
+                        builder, present, value, &none, &some, cases, default, env,
+                    );
+                }
                 let Lowered::Constructor { constructor, args } = lowered_scrutinee else {
                     return Err(unsupported("Match", "scrutinee is not a constructor value"));
                 };
@@ -1595,6 +1627,171 @@ impl<'a> Lowering<'a> {
         let result = self.lower_expr(builder, body, &[]);
         self.declaration_stack.pop();
         result
+    }
+
+    fn require_i64(
+        builder: &mut FunctionBuilder<'_>,
+        actual: cranelift_codegen::ir::Value,
+        expected: i64,
+    ) {
+        let valid = builder.create_block();
+        let invalid = builder.create_block();
+        let matches = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            actual,
+            expected,
+        );
+        builder.ins().brif(matches, valid, &[], invalid, &[]);
+        builder.switch_to_block(invalid);
+        let failure = builder.ins().iconst(types::I64, -1);
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(valid);
+    }
+
+    fn require_nonzero(builder: &mut FunctionBuilder<'_>, value: cranelift_codegen::ir::Value) {
+        let valid = builder.create_block();
+        let invalid = builder.create_block();
+        let present =
+            builder
+                .ins()
+                .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::NotEqual, value, 0);
+        builder.ins().brif(present, valid, &[], invalid, &[]);
+        builder.switch_to_block(invalid);
+        let failure = builder.ins().iconst(types::I64, -1);
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(valid);
+    }
+
+    fn lower_borrowed_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        pointer: cranelift_codegen::ir::Value,
+        cases: &[crate::RuntimeMatchCase],
+        _default: &RuntimeTrap,
+        env: &[Lowered],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let kind = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), pointer, 0);
+        Self::require_i64(builder, kind, 2);
+        let tag = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), pointer, 8);
+        let arity = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), pointer, 24);
+        let pointer_type = builder.func.dfg.value_type(pointer);
+        let fields = builder
+            .ins()
+            .load(pointer_type, MemFlags::trusted(), pointer, 16);
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        let mut test_block = builder.current_block().expect("borrowed match block");
+        for case in cases {
+            let (expected_tag, expected_arity) = borrowed_constructor_identity(&case.constructor)
+                .ok_or_else(|| {
+                unsupported(
+                    "Match",
+                    format!("{} has no borrowed constructor identity", case.constructor),
+                )
+            })?;
+            if case.binders != expected_arity {
+                return Err(unsupported(
+                    "Match",
+                    format!("{} borrowed arity mismatch", case.constructor),
+                ));
+            }
+            let arm = builder.create_block();
+            let next = builder.create_block();
+            if builder.current_block() != Some(test_block) {
+                builder.switch_to_block(test_block);
+            }
+            let selected = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                expected_tag,
+            );
+            builder.ins().brif(selected, arm, &[], next, &[]);
+            builder.switch_to_block(arm);
+            Self::require_i64(builder, arity, expected_arity as i64);
+            if expected_arity != 0 {
+                Self::require_nonzero(builder, fields);
+            }
+            let mut arm_env = (0..expected_arity)
+                .map(|index| {
+                    let field = builder.ins().iadd_imm(fields, (index * 32) as i64);
+                    Lowered::BorrowedNativeValue { pointer: field }
+                })
+                .collect::<Vec<_>>();
+            arm_env.extend_from_slice(env);
+            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
+            let Lowered::Int { value, .. } = lowered else {
+                return Err(unsupported(
+                    "Match",
+                    "borrowed ingress arms must produce a scalar Int",
+                ));
+            };
+            builder.ins().jump(merge, &[value.into()]);
+            test_block = next;
+        }
+        builder.switch_to_block(test_block);
+        let failure = builder.ins().iconst(types::I64, -1);
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(merge);
+        Ok(Lowered::Int {
+            value: builder.block_params(merge)[0],
+            known: None,
+        })
+    }
+
+    fn lower_borrowed_option_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        present: cranelift_codegen::ir::Value,
+        value: cranelift_codegen::ir::Value,
+        none: &str,
+        some: &str,
+        cases: &[crate::RuntimeMatchCase],
+        _default: &RuntimeTrap,
+        env: &[Lowered],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        let some_block = builder.create_block();
+        let none_block = builder.create_block();
+        builder
+            .ins()
+            .brif(present, some_block, &[], none_block, &[]);
+        for (block, symbol, fields) in [
+            (some_block, some, vec![Lowered::Int { value, known: None }]),
+            (none_block, none, Vec::new()),
+        ] {
+            builder.switch_to_block(block);
+            let case = cases.iter().find(|case| case.constructor == symbol);
+            let Some(case) = case else {
+                let failure = builder.ins().iconst(types::I64, -1);
+                builder.ins().return_(&[failure]);
+                continue;
+            };
+            if case.binders != fields.len() {
+                return Err(unsupported("Match", "borrowed Option arity mismatch"));
+            }
+            let mut arm_env = fields;
+            arm_env.extend_from_slice(env);
+            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
+            let Lowered::Int { value, .. } = lowered else {
+                return Err(unsupported(
+                    "Match",
+                    "borrowed Option arms must produce a scalar Int",
+                ));
+            };
+            builder.ins().jump(merge, &[value.into()]);
+        }
+        builder.switch_to_block(merge);
+        Ok(Lowered::Int {
+            value: builder.block_params(merge)[0],
+            known: None,
+        })
     }
 
     fn lower_value(
@@ -1939,6 +2136,19 @@ impl<'a> Lowering<'a> {
                 format!("bytes_length expects 1 arg, got {}", args.len()),
             )
         })?;
+        if let Lowered::BorrowedNativeValue { pointer } = arg {
+            let kind = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), pointer, 0);
+            Self::require_i64(builder, kind, 1);
+            let len = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), pointer, 24);
+            return Ok(Lowered::Int {
+                value: len,
+                known: None,
+            });
+        }
         let Lowered::Bytes(bytes) = arg else {
             return Err(unsupported(
                 "PrimitiveCall",
@@ -1970,16 +2180,63 @@ impl<'a> Lowering<'a> {
             ));
         };
         let (bytes, index) = expect_two_args("bytes_at", args)?;
-        let (
-            Lowered::Bytes(bytes),
-            Lowered::Int {
-                known: Some(index), ..
-            },
-        ) = (bytes, index)
+        let Lowered::Int {
+            known: Some(index), ..
+        } = index
         else {
             return Err(unsupported(
                 "PrimitiveCall",
-                "bytes_at requires Bytes and statically known Int arguments",
+                "bytes_at requires a statically known Int index",
+            ));
+        };
+        if let Lowered::BorrowedNativeValue { pointer } = bytes {
+            let kind = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), pointer, 0);
+            Self::require_i64(builder, kind, 1);
+            let pointer_type = builder.func.dfg.value_type(pointer);
+            let data = builder
+                .ins()
+                .load(pointer_type, MemFlags::trusted(), pointer, 16);
+            let len = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), pointer, 24);
+            let index_value = builder.ins().iconst(types::I64, index);
+            let present = builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThan,
+                index_value,
+                len,
+            );
+            let in_bounds = builder.create_block();
+            let out_of_bounds = builder.create_block();
+            let merge = builder.create_block();
+            builder.append_block_param(merge, types::I64);
+            builder
+                .ins()
+                .brif(present, in_bounds, &[], out_of_bounds, &[]);
+            builder.switch_to_block(in_bounds);
+            Self::require_nonzero(builder, data);
+            let address = builder.ins().iadd_imm(data, index);
+            let byte = builder
+                .ins()
+                .load(types::I8, MemFlags::trusted(), address, 0);
+            let byte = builder.ins().uextend(types::I64, byte);
+            builder.ins().jump(merge, &[byte.into()]);
+            builder.switch_to_block(out_of_bounds);
+            let zero = builder.ins().iconst(types::I64, 0);
+            builder.ins().jump(merge, &[zero.into()]);
+            builder.switch_to_block(merge);
+            return Ok(Lowered::BorrowedOption {
+                present,
+                value: builder.block_params(merge)[0],
+                none: none.clone(),
+                some: some.clone(),
+            });
+        }
+        let Lowered::Bytes(bytes) = bytes else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "bytes_at requires Bytes in native lowering",
             ));
         };
         let byte = usize::try_from(index)
@@ -2216,6 +2473,12 @@ impl<'a> Lowering<'a> {
                 "native aggregate result contains a non-constant Bool field",
             )),
             Lowered::Bytes(value) => Ok(RuntimeGroundValue::Bytes(value)),
+            Lowered::BorrowedNativeValue { .. } | Lowered::BorrowedOption { .. } => {
+                Err(unsupported(
+                    "Result",
+                    "borrowed ingress values cannot escape the native call",
+                ))
+            }
             Lowered::String(value) => Ok(RuntimeGroundValue::String(value)),
             Lowered::Constructor { constructor, args } => Ok(RuntimeGroundValue::Constructor {
                 constructor,
@@ -2262,6 +2525,16 @@ fn expect_two_args(
     Ok((lhs, rhs))
 }
 
+fn borrowed_constructor_identity(symbol: &str) -> Option<(i64, usize)> {
+    match symbol {
+        crate::PROCESS_INPUT_CONSTRUCTOR => Some((1, 3)),
+        crate::LIST_NIL_CONSTRUCTOR => Some((2, 0)),
+        crate::LIST_CONS_CONSTRUCTOR => Some((3, 2)),
+        crate::PROD_CONSTRUCTOR => Some((4, 2)),
+        _ => None,
+    }
+}
+
 fn unsupported(construct: &'static str, reason: impl Into<String>) -> CraneliftBackendError {
     CraneliftBackendError::Unsupported(UnsupportedLowering {
         construct,
@@ -2287,6 +2560,149 @@ mod tests {
         RuntimeFieldStatus, RuntimeIrSeedEnvironment, RuntimeMatchCase, RuntimeMetadata,
         RuntimeSymbolMetadata,
     };
+
+    #[repr(C)]
+    struct BorrowedFixtureValue {
+        kind: u64,
+        tag: u64,
+        data: *const std::ffi::c_void,
+        len: usize,
+    }
+
+    fn run_borrowed_fixture(expr: &RuntimeExpr, root: &BorrowedFixtureValue) -> i64 {
+        let compiled = compile_expr_into_module(
+            new_jit_module().expect("JIT module"),
+            "px4_borrowed_fixture",
+            Linkage::Local,
+            expr,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            true,
+        )
+        .expect("borrowed fixture lowers");
+        compiled
+            .run(Some(root as *const _ as *const std::ffi::c_void))
+            .expect("borrowed fixture runs")
+            .1
+            .expect("borrowed fixture returns scalar")
+    }
+
+    #[test]
+    fn borrowed_ingress_malformed_metadata_fails_closed() {
+        let malformed = BorrowedFixtureValue {
+            kind: 99,
+            tag: 1,
+            data: std::ptr::null(),
+            len: 3,
+        };
+        let expr = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![RuntimeMatchCase {
+                constructor: crate::PROCESS_INPUT_CONSTRUCTOR.to_string(),
+                binders: 3,
+                body: RuntimeExpr::Value(RuntimeValue::Int(0)),
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "malformed process root".to_string(),
+            },
+        };
+        assert_eq!(run_borrowed_fixture(&expr, &malformed), -1);
+        let null_fields = BorrowedFixtureValue {
+            kind: 2,
+            tag: 1,
+            data: std::ptr::null(),
+            len: 3,
+        };
+        assert_eq!(run_borrowed_fixture(&expr, &null_fields), -1);
+        let wrong_arity = BorrowedFixtureValue {
+            kind: 2,
+            tag: 1,
+            data: (&malformed as *const BorrowedFixtureValue).cast(),
+            len: 2,
+        };
+        assert_eq!(run_borrowed_fixture(&expr, &wrong_arity), -1);
+        assert!(crate::object_linker_packaging::process_starter_c_stub()
+            .contains("ken native trap: malformed borrowed process input"));
+    }
+
+    #[test]
+    fn borrowed_ingress_bytes_at_preserves_safe_none_bounds() {
+        let cwd = [0xff_u8];
+        let fields = [
+            BorrowedFixtureValue {
+                kind: 2,
+                tag: 2,
+                data: std::ptr::null(),
+                len: 0,
+            },
+            BorrowedFixtureValue {
+                kind: 2,
+                tag: 2,
+                data: std::ptr::null(),
+                len: 0,
+            },
+            BorrowedFixtureValue {
+                kind: 1,
+                tag: 0,
+                data: cwd.as_ptr().cast(),
+                len: cwd.len(),
+            },
+        ];
+        let root = BorrowedFixtureValue {
+            kind: 2,
+            tag: 1,
+            data: fields.as_ptr().cast(),
+            len: 3,
+        };
+        let none = "ctor:fixture::Option::None";
+        let some = "ctor:fixture::Option::Some";
+        let expr = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![RuntimeMatchCase {
+                constructor: crate::PROCESS_INPUT_CONSTRUCTOR.to_string(),
+                binders: 3,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::PrimitiveCall {
+                        primitive: RuntimePrimitive {
+                            symbol: "bytes_at".to_string(),
+                            partiality: RuntimePartiality::SafeOption {
+                                none: none.to_string(),
+                                some: some.to_string(),
+                                obligation: Some("obl:px4.bounds".to_string()),
+                            },
+                        },
+                        args: vec![
+                            RuntimeExpr::Var(2),
+                            RuntimeExpr::Value(RuntimeValue::Int(99)),
+                        ],
+                    }),
+                    cases: vec![
+                        RuntimeMatchCase {
+                            constructor: none.to_string(),
+                            binders: 0,
+                            body: RuntimeExpr::Value(RuntimeValue::Int(7)),
+                        },
+                        RuntimeMatchCase {
+                            constructor: some.to_string(),
+                            binders: 1,
+                            body: RuntimeExpr::Value(RuntimeValue::Int(9)),
+                        },
+                    ],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "invalid bytes_at option".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "invalid process input".to_string(),
+            },
+        };
+        assert_eq!(run_borrowed_fixture(&expr, &root), 7);
+    }
 
     fn seed_program_with_lowerability(status: Option<RuntimeLowerabilityStatus>) -> RuntimeProgram {
         let symbol = "decl:fixture::Main::main".to_string();
