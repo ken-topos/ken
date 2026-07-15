@@ -1500,6 +1500,25 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
             "mul_int" => eval_int_binop(&primitive.symbol, args, |lhs, rhs| lhs.checked_mul(rhs)),
             "eq_int" => eval_int_cmp(&primitive.symbol, args, |lhs, rhs| lhs == rhs),
             "leq_int" => eval_int_cmp(&primitive.symbol, args, |lhs, rhs| lhs <= rhs),
+            "uint8_to_int" | "int_to_uint8_raw" => {
+                let [value]: [EvaluatedValue; 1] = args.try_into().map_err(|args: Vec<_>| {
+                    eval_unsupported(
+                        "PrimitiveCall",
+                        format!(
+                            "{} expects one argument, got {}",
+                            primitive.symbol,
+                            args.len()
+                        ),
+                    )
+                })?;
+                let EvaluatedValue::Int(_) = value else {
+                    return Err(eval_unsupported(
+                        "PrimitiveCall",
+                        format!("{} expects an Int-represented value", primitive.symbol),
+                    ));
+                };
+                Ok(RuntimeIrOutcome::Value(value))
+            }
             "not_bool" => eval_bool_unop(&primitive.symbol, args, |value| !value),
             "and_bool" => eval_bool_binop(&primitive.symbol, args, |lhs, rhs| lhs && rhs),
             "or_bool" => eval_bool_binop(&primitive.symbol, args, |lhs, rhs| lhs || rhs),

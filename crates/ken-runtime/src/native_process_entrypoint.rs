@@ -10,7 +10,7 @@ use std::io::{self, Write};
 
 use crate::{
     run_process_expr_with_cranelift, NativeSeedEnvironment, RuntimeExpr, RuntimeGroundValue,
-    RuntimeObservation, RuntimeTrap, RuntimeValue,
+    RuntimeObservation, RuntimeSymbol, RuntimeTrap, RuntimeValue,
 };
 
 pub const PROCESS_INPUT_CONSTRUCTOR: &str = "ctor:prelude::ProcessInput::MkProcessInput";
@@ -19,6 +19,30 @@ pub const LIST_CONS_CONSTRUCTOR: &str = "ctor:prelude::List::Cons";
 pub const PROD_CONSTRUCTOR: &str = "ctor:prelude::Prod::MkProd";
 pub const EXIT_SUCCESS_CONSTRUCTOR: &str = "ctor:prelude::ExitCode::Success";
 pub const EXIT_FAILURE_CONSTRUCTOR: &str = "ctor:prelude::ExitCode::Failure";
+
+/// Resolved constructor identities for one checked program package.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeProcessSymbols {
+    pub process_input: RuntimeSymbol,
+    pub list_nil: RuntimeSymbol,
+    pub list_cons: RuntimeSymbol,
+    pub prod: RuntimeSymbol,
+    pub exit_success: RuntimeSymbol,
+    pub exit_failure: RuntimeSymbol,
+}
+
+impl NativeProcessSymbols {
+    pub(crate) fn legacy_prelude() -> Self {
+        Self {
+            process_input: PROCESS_INPUT_CONSTRUCTOR.to_string(),
+            list_nil: LIST_NIL_CONSTRUCTOR.to_string(),
+            list_cons: LIST_CONS_CONSTRUCTOR.to_string(),
+            prod: PROD_CONSTRUCTOR.to_string(),
+            exit_success: EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+            exit_failure: EXIT_FAILURE_CONSTRUCTOR.to_string(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeProcessInput {

@@ -18,9 +18,10 @@ use crate::checked_core::{
     AssumptionTrustKind, AssumptionTrustMetadata, CheckedCoreArtifactInputs, CheckedCoreBodyTerm,
     CheckedCoreBodyViewError, CheckedCoreBodyViewSelection, CheckedCorePackage,
     CheckedCorePackageError, CheckedCorePackageHeader, CheckedCoreSemanticInputs,
-    ConstructorMetadata, DataMetadata, LowerabilityStatus, StableSymbol, StableSymbolTable,
-    SymbolNamespace,
+    ConstructorMetadata, DataMetadata, LowerabilityStatus, PartialityMetadata, PrimitiveMetadata,
+    PrimitiveReductionMetadata, StableSymbol, StableSymbolTable, SymbolNamespace,
 };
+use crate::program_admission::{admit_checked_main, CheckedMainDescriptor, ProgramAdmissionError};
 use crate::{ElabEnv, ElabError};
 
 const PRODUCER: &str = "ken-elaborator:compiler-driver:nc10";
@@ -119,6 +120,75 @@ pub struct CompilerDriverOutput {
     pub closures: Vec<TargetClosure>,
     pub executable_entrypoints: Vec<ExecutableEntrypointPackage>,
 }
+
+/// Hash-free semantic entrypoint plan. Construction is confined to the
+/// checked native-production transaction below.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeEntrypointPlanV1 {
+    pub(crate) main: StableSymbol,
+    pub(crate) process_input: StableSymbol,
+    pub(crate) process_input_constructor: StableSymbol,
+    pub(crate) program_caps: StableSymbol,
+    pub(crate) program_caps_constructor: StableSymbol,
+    pub(crate) cap: StableSymbol,
+    pub(crate) authority_constructor: StableSymbol,
+    pub(crate) host_io: StableSymbol,
+    pub(crate) host_exit: StableSymbol,
+    pub(crate) exit_code: StableSymbol,
+    pub(crate) success_constructor: StableSymbol,
+    pub(crate) failure_constructor: StableSymbol,
+    pub(crate) ret_constructor: StableSymbol,
+    pub(crate) list_nil_constructor: StableSymbol,
+    pub(crate) list_cons_constructor: StableSymbol,
+    pub(crate) prod_constructor: StableSymbol,
+    pub(crate) authority_name: String,
+}
+
+impl NativeEntrypointPlanV1 {
+    pub fn main(&self) -> &StableSymbol {
+        &self.main
+    }
+
+    pub fn authority_name(&self) -> &str {
+        &self.authority_name
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeProgramBuildOutput {
+    pub package: CheckedCorePackage,
+    pub plan: NativeEntrypointPlanV1,
+    pub plan_transport_hash: u64,
+    pub closure: TargetClosure,
+    pub executable_closure: BTreeSet<StableSymbol>,
+    pub runtime_program: ken_runtime::RuntimeProgram,
+    pub executable_entrypoint: ExecutableEntrypointPackage,
+    pub artifact: ken_runtime::BoundProcessExecutableArtifact,
+    pub report: TargetSelectionReport,
+}
+
+#[derive(Debug)]
+pub enum NativeProgramBuildError {
+    Driver(CompilerDriverError),
+    Admission(ProgramAdmissionError),
+    Erasure(crate::erasure::ErasureError),
+    Packaging(ken_runtime::ObjectLinkerPackagingError),
+    Unavailable(UnavailableLane),
+}
+
+impl fmt::Display for NativeProgramBuildError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Driver(error) => error.fmt(f),
+            Self::Admission(error) => write!(f, "program admission failed: {error:?}"),
+            Self::Erasure(error) => error.fmt(f),
+            Self::Packaging(error) => error.fmt(f),
+            Self::Unavailable(lane) => write!(f, "{}: {}", lane.lane, lane.reason),
+        }
+    }
+}
+
+impl std::error::Error for NativeProgramBuildError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TargetSelectionReport {
@@ -239,6 +309,7 @@ pub struct ExecutableArgumentPackaging {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecutableArgumentShape {
     ClosedNullary,
+    CheckedProgramAbi,
     UnsupportedRuntimeArguments { parameter_count: usize },
     Unavailable { lane: UnavailableLane },
 }
@@ -440,7 +511,7 @@ pub fn compile_ken_package_sources(
         admitted.extend(ids);
     }
 
-    let package = emit_package_from_env(manifest, &sources, &env, &admitted)?;
+    let package = emit_package_from_env(manifest, &sources, &env, &admitted, None)?;
     let selected = select_targets(manifest, &package, selector)?;
     let closures = build_target_closures(&package, &selected)?;
     let executable_entrypoints = package_executable_entrypoints(&package, &closures)?;
@@ -450,6 +521,158 @@ pub fn compile_ken_package_sources(
         report,
         closures,
         executable_entrypoints,
+    })
+}
+
+/// Compile one exact checked Program I `main` through lowering and linked
+/// process-artifact production as a single identity-consistent transaction.
+pub fn compile_native_program_sources(
+    package_name: &str,
+    sources: Vec<CompilerSource>,
+    output_dir: impl AsRef<Path>,
+) -> Result<NativeProgramBuildOutput, NativeProgramBuildError> {
+    let manifest = CompilerManifest::new(package_name, Vec::new());
+    if package_name.is_empty() {
+        return Err(NativeProgramBuildError::Driver(
+            CompilerDriverError::EmptyPackageName,
+        ));
+    }
+    if sources.is_empty() {
+        return Err(NativeProgramBuildError::Driver(
+            CompilerDriverError::EmptySourceSet,
+        ));
+    }
+    let mut env = ElabEnv::new()
+        .map_err(CompilerDriverError::Elaboration)
+        .map_err(NativeProgramBuildError::Driver)?;
+    let mut admitted_ids = Vec::new();
+    for source in &sources {
+        let ids = if source.name.ends_with(".ken.md") {
+            env.elaborate_ken_md_file(&source.text)
+        } else {
+            env.elaborate_file(&source.text)
+        }
+        .map_err(CompilerDriverError::Elaboration)
+        .map_err(NativeProgramBuildError::Driver)?;
+        admitted_ids.extend(ids);
+    }
+    let checked = admit_checked_main(&env).map_err(NativeProgramBuildError::Admission)?;
+    let main_has_host_effect = env
+        .effect_rows
+        .get("main")
+        .is_some_and(|row| !row.concrete_effects().is_empty());
+    let (symbols, _) = stable_symbols_for_env(package_name, &env, true);
+    let plan =
+        native_entrypoint_plan(&checked, &symbols).map_err(NativeProgramBuildError::Driver)?;
+    let plan_bytes = canonical_native_entrypoint_plan_bytes(&plan);
+    let plan_transport_hash = fingerprint(&plan_bytes);
+    // The production package owns the exact live-environment closure, including
+    // prelude definitions referenced by `main`; source-only generic packages
+    // deliberately retain their narrower historical emission surface.
+    admitted_ids.extend(env.env.decls().map(Decl::id));
+    admitted_ids.sort();
+    admitted_ids.dedup();
+    let package = emit_package_from_env(&manifest, &sources, &env, &admitted_ids, Some(plan_bytes))
+        .map_err(NativeProgramBuildError::Driver)?;
+    if main_has_host_effect {
+        return Err(NativeProgramBuildError::Unavailable(UnavailableLane::new(
+            "host_effect_lowering_unavailable",
+            "checked main contains a host Vis; PX5 owns executable host-effect lowering",
+        )));
+    }
+    let selector = TargetSelector::StableSymbol {
+        package_identity: package.header.package_identity.clone(),
+        symbol: plan.main.clone(),
+        kind: CompilerTargetKind::Executable,
+    };
+    let mut selected =
+        select_targets(&manifest, &package, selector).map_err(NativeProgramBuildError::Driver)?;
+    for target in &mut selected {
+        target
+            .lanes
+            .retain(|lane| lane.lane != "runtime_lowering_unavailable");
+    }
+    let closures =
+        build_target_closures(&package, &selected).map_err(NativeProgramBuildError::Driver)?;
+    let closure = closures
+        .into_iter()
+        .next()
+        .expect("one exact checked-main selector produces one closure");
+    let executable_entrypoint = package_executable_entrypoint_mode(&package, &closure, true)
+        .map_err(NativeProgramBuildError::Driver)?;
+    if let Some(lane) = executable_entrypoint
+        .unsupported_lanes
+        .values()
+        .flatten()
+        .find(|lane| {
+            lane.lane == "host_effect_lowering_unavailable"
+                || lane.lane == "foreign_entrypoint_unavailable"
+        })
+        .cloned()
+    {
+        return Err(NativeProgramBuildError::Unavailable(lane));
+    }
+    // One closure owns the entire transaction: the declarations reported as
+    // reachable are exactly the declarations erased into the runtime program
+    // and linked artifact. Source admission is deliberately not a reachability
+    // signal; an unused sibling must not enter native production.
+    let executable_closure = closure.reachable_declarations.clone();
+    let mut runtime_program =
+        crate::erasure::erase_checked_core_package_for_target(&package, executable_closure.iter())
+            .map_err(NativeProgramBuildError::Erasure)?;
+    let runtime_targets = runtime_program
+        .declarations
+        .iter()
+        .map(|declaration| declaration.symbol.clone())
+        .collect::<BTreeSet<_>>();
+    runtime_program
+        .erased_core
+        .metadata
+        .assumptions
+        .retain(|symbol, _| runtime_targets.contains(symbol));
+    runtime_program
+        .erased_core
+        .metadata
+        .assumption_trust_metadata
+        .retain(|_, metadata| runtime_targets.contains(&metadata.target));
+    runtime_program
+        .erased_core
+        .metadata
+        .trusted_base_delta
+        .retain(|symbol, _| runtime_targets.contains(symbol));
+    let artifact = ken_runtime::build_bound_process_starter_executable_artifact(
+        &runtime_program,
+        &ken_runtime::BoundProcessEntrypoint {
+            target_symbol: plan.main.to_string(),
+            program_caps_constructor: plan.program_caps_constructor.to_string(),
+            cap_symbol: plan.cap.to_string(),
+            ret_constructor: plan.ret_constructor.to_string(),
+            process_symbols: ken_runtime::NativeProcessSymbols {
+                process_input: plan.process_input_constructor.to_string(),
+                list_nil: plan.list_nil_constructor.to_string(),
+                list_cons: plan.list_cons_constructor.to_string(),
+                prod: plan.prod_constructor.to_string(),
+                exit_success: plan.success_constructor.to_string(),
+                exit_failure: plan.failure_constructor.to_string(),
+            },
+        },
+        output_dir,
+    )
+    .map_err(NativeProgramBuildError::Packaging)?;
+    let mut report = build_target_selection_report(&package, selected);
+    report.runtime_lowering = ReportFact::Emitted;
+    report.native_artifact = ReportFact::Emitted;
+    report.report_identity = target_report_fingerprint(&report);
+    Ok(NativeProgramBuildOutput {
+        package,
+        plan,
+        plan_transport_hash,
+        closure,
+        executable_closure,
+        runtime_program,
+        executable_entrypoint,
+        artifact,
+        report,
     })
 }
 
@@ -475,6 +698,14 @@ pub fn package_executable_entrypoints(
 pub fn package_executable_entrypoint(
     package: &CheckedCorePackage,
     closure: &TargetClosure,
+) -> Result<ExecutableEntrypointPackage, CompilerDriverError> {
+    package_executable_entrypoint_mode(package, closure, false)
+}
+
+fn package_executable_entrypoint_mode(
+    package: &CheckedCorePackage,
+    closure: &TargetClosure,
+    checked_program_abi: bool,
 ) -> Result<ExecutableEntrypointPackage, CompilerDriverError> {
     validate_entrypoint_closure_identity(package, closure)?;
 
@@ -537,13 +768,32 @@ pub fn package_executable_entrypoint(
             ));
     }
 
-    if !closure.semantic.effects_foreign_metadata.is_empty() {
+    let has_foreign = closure
+        .semantic
+        .effects_foreign_metadata
+        .values()
+        .any(|metadata| metadata.boundary == crate::checked_core::EffectBoundary::Foreign);
+    let has_effect = closure
+        .semantic
+        .effects_foreign_metadata
+        .values()
+        .any(|metadata| metadata.boundary == crate::checked_core::EffectBoundary::Effectful);
+    if has_foreign {
         unsupported_lanes
             .entry(closure.target.symbol.clone())
             .or_insert_with(Vec::new)
             .push(UnavailableLane::new(
-                "host_effect_or_foreign_entrypoint",
-                "host effects and foreign calls are outside the NC20 executable entrypoint boundary",
+                "foreign_entrypoint_unavailable",
+                "foreign calls are outside the native executable entrypoint boundary",
+            ));
+    }
+    if has_effect {
+        unsupported_lanes
+            .entry(closure.target.symbol.clone())
+            .or_insert_with(Vec::new)
+            .push(UnavailableLane::new(
+                "host_effect_lowering_unavailable",
+                "host-effect lowering is supplied by PX5, not the base producer",
             ));
     }
 
@@ -551,7 +801,7 @@ pub fn package_executable_entrypoint(
         .as_ref()
         .map(|view| top_level_lambda_count(&view.body))
         .unwrap_or(0);
-    if argument_count > 0 {
+    if argument_count > 0 && !(checked_program_abi && argument_count == 2) {
         unsupported_lanes
             .entry(closure.target.symbol.clone())
             .or_insert_with(Vec::new)
@@ -586,6 +836,8 @@ pub fn package_executable_entrypoint(
             ExecutableArgumentShape::Unavailable { lane }
         } else if argument_count == 0 {
             ExecutableArgumentShape::ClosedNullary
+        } else if checked_program_abi && argument_count == 2 {
+            ExecutableArgumentShape::CheckedProgramAbi
         } else {
             ExecutableArgumentShape::UnsupportedRuntimeArguments {
                 parameter_count: argument_count,
@@ -778,6 +1030,7 @@ fn collect_runtime_support_from_term(
 ) {
     match term {
         CheckedCoreBodyTerm::Variable { .. }
+        | CheckedCoreBodyTerm::IntegerLiteral { .. }
         | CheckedCoreBodyTerm::DirectDeclarationCall { .. }
         | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
         | CheckedCoreBodyTerm::PrimitiveLiteral(_)
@@ -854,10 +1107,12 @@ fn emit_package_from_env(
     sources: &[CompilerSource],
     env: &ElabEnv,
     admitted: &[GlobalId],
+    native_entrypoint_plan: Option<Vec<u8>>,
 ) -> Result<CheckedCorePackage, CompilerDriverError> {
     let package_identity = package_identity(&manifest.package_name);
     let mut semantic = CheckedCoreSemanticInputs::default();
-    let (symbols, table) = stable_symbols_for_env(&manifest.package_name, env);
+    let native_primitives = native_entrypoint_plan.is_some();
+    let (symbols, table) = stable_symbols_for_env(&manifest.package_name, env, native_primitives);
 
     for symbol in symbols.values() {
         semantic.symbols.insert(symbol.clone());
@@ -881,8 +1136,22 @@ fn emit_package_from_env(
     }
 
     add_data_metadata(env, &symbols, &mut semantic);
+    if native_primitives {
+        add_native_primitive_metadata(env, &symbols, &mut semantic);
+    }
     apply_manifest_target_metadata(manifest, &mut semantic);
     add_trusted_base_metadata(env, &symbols, &mut semantic);
+    if let Some(plan) = native_entrypoint_plan {
+        let symbol = StableSymbol::new(
+            SymbolNamespace::Metadata,
+            vec![
+                manifest.package_name.clone(),
+                "NativeEntrypointPlanV1".to_string(),
+            ],
+        );
+        semantic.symbols.insert(symbol.clone());
+        semantic.metadata.insert(symbol, plan);
+    }
 
     let mut source_identity = BTreeMap::new();
     for source in sources {
@@ -910,9 +1179,69 @@ fn emit_package_from_env(
     Ok(package)
 }
 
+fn native_entrypoint_plan(
+    checked: &CheckedMainDescriptor,
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+) -> Result<NativeEntrypointPlanV1, CompilerDriverError> {
+    let resolve = |id: GlobalId| {
+        symbols
+            .get(&id)
+            .cloned()
+            .ok_or(CompilerDriverError::MissingStableSymbol { id })
+    };
+    Ok(NativeEntrypointPlanV1 {
+        main: resolve(checked.main)?,
+        process_input: resolve(checked.process_input)?,
+        process_input_constructor: resolve(checked.process_input_constructor)?,
+        program_caps: resolve(checked.program_caps)?,
+        program_caps_constructor: resolve(checked.program_caps_constructor)?,
+        cap: resolve(checked.cap)?,
+        authority_constructor: resolve(checked.authority_constructor)?,
+        host_io: resolve(checked.host_io)?,
+        host_exit: resolve(checked.host_exit)?,
+        exit_code: resolve(checked.exit_code)?,
+        success_constructor: resolve(checked.success_constructor)?,
+        failure_constructor: resolve(checked.failure_constructor)?,
+        ret_constructor: resolve(checked.ret_constructor)?,
+        list_nil_constructor: resolve(checked.list_nil_constructor)?,
+        list_cons_constructor: resolve(checked.list_cons_constructor)?,
+        prod_constructor: resolve(checked.prod_constructor)?,
+        authority_name: checked.authority_name.clone(),
+    })
+}
+
+fn canonical_native_entrypoint_plan_bytes(plan: &NativeEntrypointPlanV1) -> Vec<u8> {
+    let fields = [
+        plan.main.to_string(),
+        plan.process_input.to_string(),
+        plan.process_input_constructor.to_string(),
+        plan.program_caps.to_string(),
+        plan.program_caps_constructor.to_string(),
+        plan.cap.to_string(),
+        plan.authority_constructor.to_string(),
+        plan.host_io.to_string(),
+        plan.host_exit.to_string(),
+        plan.exit_code.to_string(),
+        plan.success_constructor.to_string(),
+        plan.failure_constructor.to_string(),
+        plan.ret_constructor.to_string(),
+        plan.list_nil_constructor.to_string(),
+        plan.list_cons_constructor.to_string(),
+        plan.prod_constructor.to_string(),
+        plan.authority_name.clone(),
+    ];
+    let mut out = b"NativeEntrypointPlanV1\0".to_vec();
+    for field in fields {
+        out.extend_from_slice(&(field.len() as u64).to_le_bytes());
+        out.extend_from_slice(field.as_bytes());
+    }
+    out
+}
+
 fn stable_symbols_for_env(
     package_name: &str,
     env: &ElabEnv,
+    native_primitives: bool,
 ) -> (BTreeMap<GlobalId, StableSymbol>, StableSymbolTable) {
     let mut names_by_id = BTreeMap::<GlobalId, String>::new();
     let mut global_names = env.globals.iter().collect::<Vec<_>>();
@@ -936,6 +1265,22 @@ fn stable_symbols_for_env(
 
     let mut symbols = BTreeMap::new();
     for decl in env.env.decls() {
+        if native_primitives {
+            if let Decl::Primitive { id, reduction, .. } = decl {
+                let registry_symbol = match reduction {
+                    ken_kernel::PrimReduction::Op { symbol } => Some((*symbol).to_string()),
+                    ken_kernel::PrimReduction::Literal => match env.num_values.get(id) {
+                        Some(crate::NumericLitVal::Int(value)) => Some(format!("lit_int_{value}")),
+                        _ => None,
+                    },
+                    ken_kernel::PrimReduction::OpaqueType => None,
+                };
+                if let Some(registry_symbol) = registry_symbol {
+                    symbols.insert(*id, StableSymbol::primitive(registry_symbol));
+                    continue;
+                }
+            }
+        }
         let name = names_by_id
             .get(&decl.id())
             .cloned()
@@ -963,6 +1308,50 @@ fn stable_symbols_for_env(
         table.insert_global(*id, symbol.clone());
     }
     (symbols, table)
+}
+
+fn add_native_primitive_metadata(
+    env: &ElabEnv,
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+    semantic: &mut CheckedCoreSemanticInputs,
+) {
+    for decl in env.env.decls() {
+        let Decl::Primitive { id, reduction, .. } = decl else {
+            continue;
+        };
+        let (registry_symbol, reduction) = match reduction {
+            ken_kernel::PrimReduction::Op { symbol } => {
+                ((*symbol).to_string(), PrimitiveReductionMetadata::Op)
+            }
+            ken_kernel::PrimReduction::Literal => match env.num_values.get(id) {
+                Some(crate::NumericLitVal::Int(value)) => (
+                    format!("lit_int_{value}"),
+                    PrimitiveReductionMetadata::Literal,
+                ),
+                _ => continue,
+            },
+            ken_kernel::PrimReduction::OpaqueType => continue,
+        };
+        let Some(stable) = symbols.get(id).cloned() else {
+            continue;
+        };
+        semantic.primitive_refs.insert(
+            stable.clone(),
+            format!("primitive-registry:{registry_symbol}"),
+        );
+        semantic.primitive_metadata.insert(
+            stable.clone(),
+            PrimitiveMetadata {
+                registry_symbol,
+                reduction,
+                partiality: PartialityMetadata::Total,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        semantic
+            .lowerability
+            .insert(stable, LowerabilityStatus::Supported);
+    }
 }
 
 fn declaration_symbol(package_name: &str, name: &str) -> StableSymbol {
@@ -1315,6 +1704,7 @@ fn build_target_closure(
     let semantic = &package.artifact.semantic;
     validate_closure_metadata(semantic)?;
     let dependency_index = declaration_dependency_index(package);
+    let semantic_dependency_index = declaration_semantic_dependency_index(package);
     let mut reachable_declarations = BTreeSet::from([target.symbol.clone()]);
     let mut closure_symbols = BTreeSet::from([target.symbol.clone()]);
     let mut external_symbols = BTreeSet::new();
@@ -1330,6 +1720,23 @@ fn build_target_closure(
                     &mut reachable_declarations,
                     &mut external_symbols,
                     &mut queue,
+                );
+            }
+        }
+
+        if let Some(dependencies) = semantic_dependency_index.get(&symbol) {
+            for dependency in dependencies {
+                if dependency_index
+                    .get(&symbol)
+                    .is_some_and(|runtime| runtime.contains(dependency))
+                {
+                    continue;
+                }
+                include_non_runtime_closure_symbol(
+                    semantic,
+                    dependency.clone(),
+                    &mut closure_symbols,
+                    &mut external_symbols,
                 );
             }
         }
@@ -1382,15 +1789,144 @@ fn declaration_dependency_index(
 
     let mut index = BTreeMap::new();
     for (owner, bytes) in &package.artifact.semantic.declarations {
-        let mut dependencies = BTreeSet::new();
-        for (candidate, needle) in &encoded_symbols {
-            if candidate != owner && contains_subslice(bytes, needle) {
-                dependencies.insert(candidate.clone());
+        let selection = CheckedCoreBodyViewSelection {
+            package_identity: package.header.package_identity.clone(),
+            package_core_semantic_hash: package.core_semantic_hash,
+            package_artifact_hash: package.artifact_hash,
+            target_symbol: owner.clone(),
+            reachable_declarations: package
+                .artifact
+                .semantic
+                .declarations
+                .keys()
+                .cloned()
+                .collect(),
+            external_symbols: BTreeSet::new(),
+            dependency_semantic_hashes: package
+                .artifact
+                .semantic
+                .dependency_semantic_hashes
+                .clone(),
+        };
+        let dependencies = match checked_core_declaration_body_view(package, &selection, owner) {
+            Ok(view) => {
+                let mut dependencies = BTreeSet::new();
+                collect_runtime_declaration_dependencies(&view.body, &mut dependencies);
+                dependencies.remove(owner);
+                dependencies
             }
-        }
+            Err(_) => {
+                // Unsupported bodies remain reportable by the established
+                // entrypoint lane. Preserve the conservative dependency scan
+                // for those declarations; supported bodies use the executable
+                // term view so type-only names never enter runtime reachability.
+                encoded_symbols
+                    .iter()
+                    .filter_map(|(candidate, needle)| {
+                        (candidate != owner && contains_subslice(bytes, needle))
+                            .then_some(candidate.clone())
+                    })
+                    .collect()
+            }
+        };
         index.insert(owner.clone(), dependencies);
     }
     index
+}
+
+fn declaration_semantic_dependency_index(
+    package: &CheckedCorePackage,
+) -> BTreeMap<StableSymbol, BTreeSet<StableSymbol>> {
+    let encoded_symbols = package
+        .artifact
+        .semantic
+        .symbols
+        .iter()
+        .map(|symbol| (symbol.clone(), canonical_symbol_bytes(symbol)))
+        .collect::<Vec<_>>();
+
+    package
+        .artifact
+        .semantic
+        .declarations
+        .iter()
+        .map(|(owner, bytes)| {
+            let dependencies = encoded_symbols
+                .iter()
+                .filter_map(|(candidate, needle)| {
+                    (candidate != owner && contains_subslice(bytes, needle))
+                        .then_some(candidate.clone())
+                })
+                .collect();
+            (owner.clone(), dependencies)
+        })
+        .collect()
+}
+
+fn collect_runtime_declaration_dependencies(
+    term: &CheckedCoreBodyTerm,
+    dependencies: &mut BTreeSet<StableSymbol>,
+) {
+    match term {
+        CheckedCoreBodyTerm::DirectDeclarationCall { symbol, .. } => {
+            dependencies.insert(symbol.clone());
+        }
+        CheckedCoreBodyTerm::RecursiveDeclarationCall(view) => {
+            dependencies.insert(view.symbol.clone());
+        }
+        CheckedCoreBodyTerm::PrimitiveApplication(view) => {
+            for argument in &view.arguments {
+                collect_runtime_declaration_dependencies(argument, dependencies);
+            }
+        }
+        CheckedCoreBodyTerm::Lambda { body, .. } => {
+            collect_runtime_declaration_dependencies(body, dependencies);
+        }
+        CheckedCoreBodyTerm::Application { function, argument } => {
+            collect_runtime_declaration_dependencies(function, dependencies);
+            collect_runtime_declaration_dependencies(argument, dependencies);
+        }
+        CheckedCoreBodyTerm::Let { value, body, .. } => {
+            collect_runtime_declaration_dependencies(value, dependencies);
+            collect_runtime_declaration_dependencies(body, dependencies);
+        }
+        CheckedCoreBodyTerm::Match(view) => {
+            collect_runtime_declaration_dependencies(&view.scrutinee, dependencies);
+            for branch in &view.branches {
+                collect_runtime_declaration_dependencies(&branch.method, dependencies);
+            }
+        }
+        CheckedCoreBodyTerm::RecordSigmaConstruction(view) => {
+            for field in &view.fields {
+                if let crate::checked_core::CheckedCoreRecordSigmaFieldValue::Runtime {
+                    value,
+                    ..
+                } = field
+                {
+                    collect_runtime_declaration_dependencies(value, dependencies);
+                }
+            }
+        }
+        CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
+            collect_runtime_declaration_dependencies(&view.base, dependencies);
+        }
+        CheckedCoreBodyTerm::DictionaryConstruction(view) => {
+            for field in &view.fields {
+                if let crate::checked_core::CheckedCoreDictionaryFieldValue::Runtime {
+                    value, ..
+                } = field
+                {
+                    collect_runtime_declaration_dependencies(value, dependencies);
+                }
+            }
+        }
+        CheckedCoreBodyTerm::Variable { .. }
+        | CheckedCoreBodyTerm::IntegerLiteral { .. }
+        | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
+        | CheckedCoreBodyTerm::PrimitiveLiteral(_)
+        | CheckedCoreBodyTerm::ConstructorReference(_)
+        | CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => {}
+    }
 }
 
 fn include_closure_symbol(
@@ -1414,6 +1950,20 @@ fn include_closure_symbol(
         }
         closure_symbols.insert(symbol);
     }
+}
+
+fn include_non_runtime_closure_symbol(
+    semantic: &CheckedCoreSemanticInputs,
+    symbol: StableSymbol,
+    closure_symbols: &mut BTreeSet<StableSymbol>,
+    external_symbols: &mut BTreeSet<StableSymbol>,
+) {
+    if (!has_semantic_entry(semantic, &symbol) && !semantic.declarations.contains_key(&symbol))
+        || semantic.dependency_declaration_refs.contains_key(&symbol)
+    {
+        external_symbols.insert(symbol.clone());
+    }
+    closure_symbols.insert(symbol);
 }
 
 fn has_semantic_entry(semantic: &CheckedCoreSemanticInputs, symbol: &StableSymbol) -> bool {
@@ -1781,6 +2331,7 @@ fn push_runtime_support(bytes: &mut Vec<u8>, support: &ExecutableRuntimeSupport)
 fn push_argument_packaging(bytes: &mut Vec<u8>, packaging: &ExecutableArgumentPackaging) {
     match &packaging.shape {
         ExecutableArgumentShape::ClosedNullary => push_str(bytes, "closed_nullary"),
+        ExecutableArgumentShape::CheckedProgramAbi => push_str(bytes, "checked_program_abi"),
         ExecutableArgumentShape::UnsupportedRuntimeArguments { parameter_count } => {
             push_str(bytes, "unsupported_runtime_arguments");
             push_str(bytes, &parameter_count.to_string());
@@ -2164,6 +2715,13 @@ mod tests {
         match shape {
             ExecutableArgumentShape::ClosedNullary => {
                 ken_runtime::ExecutableArgumentShape::ClosedNullary
+            }
+            ExecutableArgumentShape::CheckedProgramAbi => {
+                ken_runtime::ExecutableArgumentShape::ProcessInput {
+                    arguments: Vec::new(),
+                    environment: Vec::new(),
+                    working_directory: Vec::new(),
+                }
             }
             ExecutableArgumentShape::UnsupportedRuntimeArguments { parameter_count } => {
                 ken_runtime::ExecutableArgumentShape::UnsupportedRuntimeArguments {

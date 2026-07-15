@@ -499,7 +499,8 @@ pub fn emit_runtime_ir_object_with_cranelift(
     })
 }
 
-pub fn emit_process_entrypoint_object_with_cranelift(
+#[cfg(test)]
+pub(crate) fn emit_process_entrypoint_object_with_cranelift(
     entrypoint: &RuntimeExpr,
     entry_symbol: impl Into<String>,
 ) -> Result<CraneliftObjectArtifact, CraneliftBackendError> {
@@ -513,6 +514,7 @@ pub fn emit_process_entrypoint_object_with_cranelift(
         BTreeMap::new(),
         None,
         true,
+        None,
     )?;
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
@@ -530,6 +532,51 @@ pub fn emit_process_entrypoint_object_with_cranelift(
         object_hash,
         platform_target: native_platform_target_name(),
         backend_name: "Cranelift process object".to_string(),
+        verifier_passed,
+        assumptions,
+        unsupported,
+    })
+}
+
+pub(crate) fn emit_bound_process_program_object_with_cranelift(
+    program: &RuntimeProgram,
+    entrypoint: &RuntimeExpr,
+    symbols: &crate::NativeProcessSymbols,
+    entry_symbol: impl Into<String>,
+) -> Result<CraneliftObjectArtifact, CraneliftBackendError> {
+    let entry_symbol = entry_symbol.into();
+    reject_program_blockers(program)?;
+    let compiled = compile_expr_into_module(
+        new_object_module("ken-runtime-bound-process-entrypoint")?,
+        &entry_symbol,
+        Linkage::Export,
+        entrypoint,
+        &NativeSeedEnvironment::empty(),
+        program
+            .declarations
+            .iter()
+            .map(|declaration| (declaration.symbol.as_str(), declaration))
+            .collect(),
+        None,
+        true,
+        Some(symbols),
+    )?;
+    let verifier_passed = compiled.verifier_passed;
+    let assumptions = compiled.assumptions.clone();
+    let unsupported = compiled.unsupported.clone();
+    let object_bytes = compiled
+        .module
+        .finish()
+        .emit()
+        .map_err(|err| backend_module(err.to_string()))?;
+    let object_hash = fnv1a_64(&object_bytes);
+    Ok(CraneliftObjectArtifact {
+        example: "checked-native-program".to_string(),
+        entry_symbol,
+        object_bytes,
+        object_hash,
+        platform_target: native_platform_target_name(),
+        backend_name: "Cranelift checked process object".to_string(),
         verifier_passed,
         assumptions,
         unsupported,
@@ -1203,6 +1250,7 @@ fn compile_expr_with_declarations_and_process_input<'a>(
         declarations,
         staged_process_input,
         false,
+        None,
     )
 }
 
@@ -1225,6 +1273,7 @@ fn compile_program_expr_object(
             .collect(),
         None,
         false,
+        None,
     )
 }
 
@@ -1237,6 +1286,7 @@ fn compile_expr_into_module<'a, M: Module>(
     declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
     staged_process_input: Option<&RuntimeValue>,
     process_mode: bool,
+    process_symbols: Option<&crate::NativeProcessSymbols>,
 ) -> Result<CompiledModule<M>, CraneliftBackendError> {
     let mut sig = module.make_signature();
     sig.params
@@ -1259,6 +1309,9 @@ fn compile_expr_into_module<'a, M: Module>(
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: process_mode,
+        process_symbols: process_symbols
+            .cloned()
+            .unwrap_or_else(crate::NativeProcessSymbols::legacy_prelude),
     };
     let (maybe_trap, decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
@@ -1359,6 +1412,7 @@ struct Lowering<'a> {
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
     process_object: bool,
+    process_symbols: crate::NativeProcessSymbols,
 }
 
 #[derive(Clone)]
@@ -1492,6 +1546,52 @@ impl<'a> Lowering<'a> {
                     return self.lower_borrowed_option_match(
                         builder, present, value, &none, &some, cases, default, env,
                     );
+                }
+                if let Lowered::Bool { value, known } = lowered_scrutinee {
+                    let true_case = cases.iter().find(|case| {
+                        case.binders == 0 && case.constructor.ends_with("::Bool::True")
+                    });
+                    let false_case = cases.iter().find(|case| {
+                        case.binders == 0 && case.constructor.ends_with("::Bool::False")
+                    });
+                    let (Some(true_case), Some(false_case)) = (true_case, false_case) else {
+                        return Err(unsupported(
+                            "Match",
+                            "Bool match requires zero-binder True and False cases",
+                        ));
+                    };
+                    if let Some(selected) = known {
+                        return self.lower_expr(
+                            builder,
+                            if selected { &true_case.body } else { &false_case.body },
+                            env,
+                        );
+                    }
+                    let true_block = builder.create_block();
+                    let false_block = builder.create_block();
+                    let merge = builder.create_block();
+                    builder.append_block_param(merge, types::I64);
+                    builder
+                        .ins()
+                        .brif(value, true_block, &[], false_block, &[]);
+                    for (block, case) in
+                        [(true_block, true_case), (false_block, false_case)]
+                    {
+                        builder.switch_to_block(block);
+                        let lowered = self.lower_expr(builder, &case.body, env)?;
+                        let Lowered::Int { value, .. } = lowered else {
+                            return Err(unsupported(
+                                "Match",
+                                "dynamic native Bool match arms must produce scalar Int values",
+                            ));
+                        };
+                        builder.ins().jump(merge, &[value.into()]);
+                    }
+                    builder.switch_to_block(merge);
+                    return Ok(Lowered::Int {
+                        value: builder.block_params(merge)[0],
+                        known: None,
+                    });
                 }
                 let Lowered::Constructor { constructor, args } = lowered_scrutinee else {
                     return Err(unsupported("Match", "scrutinee is not a constructor value"));
@@ -1689,13 +1789,14 @@ impl<'a> Lowering<'a> {
             .ins()
             .load(pointer_type, MemFlags::trusted(), pointer, 16);
         if let [case] = cases {
-            let (expected_tag, expected_arity) = borrowed_constructor_identity(&case.constructor)
-                .ok_or_else(|| {
-                unsupported(
-                    "Match",
-                    format!("{} has no borrowed constructor identity", case.constructor),
-                )
-            })?;
+            let (expected_tag, expected_arity) =
+                borrowed_constructor_identity(&self.process_symbols, &case.constructor)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "Match",
+                            format!("{} has no borrowed constructor identity", case.constructor),
+                        )
+                    })?;
             if case.binders != expected_arity {
                 return Err(unsupported(
                     "Match",
@@ -1731,13 +1832,14 @@ impl<'a> Lowering<'a> {
         builder.append_block_param(merge, types::I64);
         let mut test_block = builder.current_block().expect("borrowed match block");
         for case in cases {
-            let (expected_tag, expected_arity) = borrowed_constructor_identity(&case.constructor)
-                .ok_or_else(|| {
-                unsupported(
-                    "Match",
-                    format!("{} has no borrowed constructor identity", case.constructor),
-                )
-            })?;
+            let (expected_tag, expected_arity) =
+                borrowed_constructor_identity(&self.process_symbols, &case.constructor)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "Match",
+                            format!("{} has no borrowed constructor identity", case.constructor),
+                        )
+                    })?;
             if case.binders != expected_arity {
                 return Err(unsupported(
                     "Match",
@@ -2001,6 +2103,25 @@ impl<'a> Lowering<'a> {
                 cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual,
                 |lhs, rhs| lhs <= rhs,
             ),
+            "uint8_to_int" | "int_to_uint8_raw" => {
+                let [value]: [Lowered; 1] = lowered_args.try_into().map_err(|args: Vec<_>| {
+                    unsupported(
+                        "PrimitiveCall",
+                        format!(
+                            "{} expects one argument, got {}",
+                            primitive.symbol,
+                            args.len()
+                        ),
+                    )
+                })?;
+                let Lowered::Int { .. } = value else {
+                    return Err(unsupported(
+                        "PrimitiveCall",
+                        format!("{} expects an Int-represented value", primitive.symbol),
+                    ));
+                };
+                Ok(value)
+            }
             "not_bool" => self.lower_bool_not(builder, lowered_args),
             "and_bool" => self.lower_bool_binop(
                 builder,
@@ -2510,14 +2631,14 @@ impl<'a> Lowering<'a> {
         let Lowered::Constructor { constructor, args } = value else {
             return builder.ins().iconst(types::I64, -2);
         };
-        if constructor == crate::EXIT_SUCCESS_CONSTRUCTOR {
+        if constructor == self.process_symbols.exit_success {
             return if args.is_empty() {
                 builder.ins().iconst(types::I64, 0)
             } else {
                 builder.ins().iconst(types::I64, -2)
             };
         }
-        if constructor != crate::EXIT_FAILURE_CONSTRUCTOR {
+        if constructor != self.process_symbols.exit_failure {
             return builder.ins().iconst(types::I64, -2);
         }
         let Ok([payload]) = <Vec<Lowered> as TryInto<[Lowered; 1]>>::try_into(args) else {
@@ -2632,13 +2753,20 @@ fn expect_two_args(
     Ok((lhs, rhs))
 }
 
-fn borrowed_constructor_identity(symbol: &str) -> Option<(i64, usize)> {
-    match symbol {
-        crate::PROCESS_INPUT_CONSTRUCTOR => Some((1, 3)),
-        crate::LIST_NIL_CONSTRUCTOR => Some((2, 0)),
-        crate::LIST_CONS_CONSTRUCTOR => Some((3, 2)),
-        crate::PROD_CONSTRUCTOR => Some((4, 2)),
-        _ => None,
+fn borrowed_constructor_identity(
+    symbols: &crate::NativeProcessSymbols,
+    symbol: &str,
+) -> Option<(i64, usize)> {
+    if symbol == symbols.process_input {
+        Some((1, 3))
+    } else if symbol == symbols.list_nil {
+        Some((2, 0))
+    } else if symbol == symbols.list_cons {
+        Some((3, 2))
+    } else if symbol == symbols.prod {
+        Some((4, 2))
+    } else {
+        None
     }
 }
 
@@ -2686,6 +2814,7 @@ mod tests {
             BTreeMap::new(),
             None,
             true,
+            None,
         )
         .expect("borrowed fixture lowers");
         compiled
