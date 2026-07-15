@@ -22,6 +22,10 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+mod effect_v1;
+
+pub use effect_v1::*;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DependencyIdentity {
     pub name: &'static str,
