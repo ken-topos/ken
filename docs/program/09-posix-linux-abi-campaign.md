@@ -1,9 +1,18 @@
-# POSIX / Linux ABI — campaign charter and work program
+# Linux ABI (direct-to-kernel) — campaign charter and work program
 
-**Owner:** Steward · **Status:** framed, **not released** · **Sequenced after:**
-LET-4 → LET-2b → LET-3 → CC9 (the CLI + `let` work) · **Source:**
-`local/ken-posix-linux-interface-gap-report.md` (research report, 2026-07-12),
-**regrounded against `origin/main @ 26d5255e` on 2026-07-14.**
+> **★ REFRAMED (operator, 2026-07-15): POSIX abstraction DROPPED; Ken targets
+> the Linux syscall ABI directly.** The title/thesis was "POSIX / Linux ABI";
+> the operator ruled that the Linux ABI alone provides the systems-adjacent
+> surface Ken needs and sits directly against the kernel, so we **do not** build
+> a POSIX portability layer — we bind Linux directly and take each other *nix
+> (BSD, macOS) as its own per-target backend later. See §2 lead fixed input.
+> Legacy "POSIX" naming below is being swept; the direction is Linux-direct.
+
+**Owner:** Steward · **Status:** **PX1/PX2 RELEASING** (operator pulled ahead of
+CC9, 2026-07-15) on the Runtime `crates` lane; PX3+ still sequenced behind CC9 ·
+**Source:** `local/ken-posix-linux-interface-gap-report.md` (research report,
+2026-07-12), **regrounded against `origin/main @ 26d5255e` on 2026-07-14**;
+**reframed Linux-ABI-direct (POSIX dropped) 2026-07-15.**
 
 This is the campaign charter. It is **not** a release order. Each `PX` work
 package gets a shovel-ready frame (`docs/program/wp/px<N>-<slug>.md`) authored
@@ -124,10 +133,29 @@ for one is a **scope fork → escalate to the Architect**, not a judgment call.
 
 ## 2. Fixed inputs — SETTLED, do not reopen
 
+- **★ LINUX ABI IS THE TARGET — POSIX abstraction DROPPED (operator,
+  2026-07-15).** The Linux syscall ABI is the one Unix interface with a *hard*
+  userspace-stability guarantee, and it is sufficient for the whole
+  systems-adjacent surface this campaign needs — file I/O, directories, sockets,
+  `clone`/`execve`/wait, `mmap`/`mprotect`, `epoll`, pipes, signals, time.
+  `rustix`'s `linux_raw` backend binds it **directly against the kernel — no
+  libc, no POSIX layer.** So **Ken targets the Linux ABI directly; there is NO
+  POSIX portability abstraction in Ken.** Other Unixes (BSD, macOS) are each a
+  **separate per-target backend** that binds *that* OS's own stable interface
+  (which for the BSDs/macOS is their libc, POSIX-shaped) behind the **same
+  `ken-host` seam — added when reached, deferred, Linux-first.** This DROPS all
+  POSIX-lowest-common-denominator scope and directly validates §0's finding: the
+  `cfg` gate must be `linux` and the ABI facts are Linux facts, probed (PX2).
+  *Consequence to sweep:* the existing `System/Path/Posix.ken.md` name is now a
+  misnomer — rescope it (catalog change; sequence separately, Steward-flagged).
+  *Backend-seam decomposition is Architect-lane* (operator: "confirm the backend
+  seam when I frame the work") — confirmed at PX1 framing (`evt_1t429wz5ehf42`).
 - **ADR-0012** — verified total leaf components are a Ken target; general
   mutation-heavy driver code is not.
-- **ADR-0011** — programs depend on lawful platform interfaces; POSIX handlers
-  install at the edge; no preprocessor as the platform abstraction.
+- **ADR-0011** — programs depend on lawful platform interfaces; the platform
+  handler installs at the edge (now the **Linux-ABI** handler, per the lead
+  fixed input — not a POSIX portability handler); no preprocessor as the platform
+  abstraction.
 - **ADR-0017** — the scoped capability model: `openat`-relative,
   **handle-not-path**, inode-keyed. **The resolve/operate split is correct and
   stays.** `HostHandler` has *no byte-path bypass that can re-resolve after
@@ -138,11 +166,16 @@ for one is a **scope fork → escalate to the Architect**, not a judgment call.
 - **Successful OS execution is never promoted to kernel proof.** The status of
   every host guarantee is `tested` / `validated` / `delegated` — **never
   `proved`** — and that disclosure lives **in the source**, not only in the frame.
-- **`rustix` ACCEPTED in the runtime trust boundary (operator, 2026-07-15).**
-  FORK 2's dependency-risk acceptance is **granted**: exact-pinned,
-  checksum-locked `rustix`, private behind the first-party `ken-host` shell;
-  `ken-kernel` stays `forbid(unsafe_code)`. **PX1 is fully unblocked** (still
-  sequenced behind CC9 unless the operator pulls it ahead).
+- **`rustix` ACCEPTED in the runtime trust boundary (operator, 2026-07-15) —
+  SETTLED, NEVER RE-ASK.** FORK 2's dependency-risk acceptance is **granted**:
+  exact-pinned, checksum-locked `rustix`, private behind the first-party
+  `ken-host` shell; `ken-kernel` stays `forbid(unsafe_code)`. **This is a closed
+  fixed input — it is never re-surfaced to the operator as a pending decision,
+  not even bundled inside an adjacent question** (the operator granted it, then
+  had to grant it three times because each session re-derived it as if live —
+  2026-07-15). State it as a *fact* when framing; do not re-confirm it. **PX1/PX2
+  are pulled ahead of CC9 (operator, 2026-07-15) — released now on the Runtime
+  lane.**
 - **NO linear/affine types in Ken — R2 CLOSED, not deferred (operator,
   2026-07-15).** Linear/affine types and further OTT extensions are **open
   research and stay OUT of the Ken language.** Resource-lifetime safety
@@ -160,7 +193,8 @@ for one is a **scope fork → escalate to the Architect**, not a judgment call.
 
 ## 3. The forks — ✅ ALL THREE RULED
 
-> ### ★★★ THE OPERATOR'S INTENT — the sentence every PX frame is measured against
+> ### ★★★ THE OPERATOR'S INTENT — the sentence every PX frame is
+> measured against
 >
 > > **"The intention is to make Ken a software engineering language. Not a toy,
 > > not a research project, but a tool for doing real practical work in the
