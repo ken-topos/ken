@@ -14,6 +14,7 @@ pub use eval::{
     ConsoleStream, ConsoleTrace, CoproductIds, Env, EvalStore, EvalVal, FSIds, FsOpKind, FsTrace,
     HostCreatePolicy, HostDirEntry, HostFileKind, HostFileMetadata, HostHandler, HostRead,
     ITreeIds, PosixHost, Resolution, ResolveError, RunIoError, SlotId, VfsNodeId, VirtualFsNode,
+    INTERPRETER_TARGET_ABI_MANIFEST_HASH,
 };
 pub use proof_erasure_checker::{
     ken_check_proof_erasure_boundary_witness, KenProofErasureBoundaryCheckError,

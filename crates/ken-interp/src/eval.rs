@@ -28,6 +28,38 @@ use std::rc::Rc;
 
 use ken_elaborator::capabilities;
 use ken_host::{OpenRequest as HostOpenRequest, PathComponent, RemoveKind, RootedHandle};
+
+pub const INTERPRETER_TARGET_ABI_MANIFEST_HASH: [u8; 32] = ken_host::TARGET_ABI_MANIFEST_HASH;
+
+fn assert_interpreter_target_abi_hash(hash: [u8; 32]) -> io::Result<()> {
+    ken_host::assert_target_abi_identity(hash)
+        .map_err(|error| io::Error::new(io::ErrorKind::Unsupported, error))
+}
+
+#[cfg(test)]
+mod target_abi_tests {
+    use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn mismatch_stops_before_interpreter_host_entry() {
+        let mut mismatch = INTERPRETER_TARGET_ABI_MANIFEST_HASH;
+        mismatch[0] ^= 1;
+        let mut entered = false;
+        let result = assert_interpreter_target_abi_hash(mismatch).and_then(|()| {
+            entered = true;
+            Ok(())
+        });
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Unsupported);
+        assert!(
+            !entered,
+            "mismatched artifact must not enter the host boundary"
+        );
+
+        assert_interpreter_target_abi_hash(INTERPRETER_TARGET_ABI_MANIFEST_HASH)
+            .expect("matching interpreter artifact proceeds");
+    }
+}
 use ken_kernel::env::{Decl, GlobalEnv, PrimReduction};
 use ken_kernel::term::{GlobalId, Level, Term};
 use ken_runtime::{InternResult, Sign as RtSign, Store, Value as RtValue};
@@ -2355,6 +2387,8 @@ impl PosixHost {
     pub fn new_at(path: impl AsRef<std::path::Path>) -> Self {
         #[cfg(target_os = "linux")]
         {
+            assert_interpreter_target_abi_hash(INTERPRETER_TARGET_ABI_MANIFEST_HASH)
+                .expect("interpreter target ABI identity");
             let path = ken_host::RootPath::new(path).expect("validate filesystem capability root");
             let root = ken_host::open_root(&path).expect("open filesystem capability root");
             Self { root }
