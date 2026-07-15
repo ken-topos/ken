@@ -585,6 +585,7 @@ dependencies = [
  "ken-elaborator",
  "ken-interp",
  "ken-kernel",
+ "ken-runtime",
 ]
 
 [[package]]

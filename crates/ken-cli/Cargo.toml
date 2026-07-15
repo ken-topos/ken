@@ -19,3 +19,4 @@ path = "src/main.rs"
 ken-kernel = { path = "../ken-kernel" }
 ken-elaborator = { path = "../ken-elaborator" }
 ken-interp = { path = "../ken-interp" }
+ken-runtime = { path = "../ken-runtime" }

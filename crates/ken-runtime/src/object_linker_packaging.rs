@@ -1099,7 +1099,7 @@ fn runtime_trap_code_tag(code: &crate::RuntimeTrapCode) -> &'static str {
 }
 
 fn starter_c_stub() -> &'static str {
-    "#include <stdio.h>\nextern long long ken_nc23_entrypoint(void);\nint main(void) {\n    long long value = ken_nc23_entrypoint();\n    printf(\"%lld\\n\", value);\n    return 0;\n}\n"
+    "#include <stdio.h>\nextern long long ken_nc23_entrypoint(long long process_context_token);\nint main(void) {\n    long long value = ken_nc23_entrypoint(0);\n    printf(\"%lld\\n\", value);\n    return 0;\n}\n"
 }
 
 fn executable_name(stem: &str) -> String {

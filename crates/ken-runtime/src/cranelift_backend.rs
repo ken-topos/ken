@@ -787,6 +787,47 @@ pub fn run_example_with_seed_observation(
     Ok(report)
 }
 
+/// Execute one runtime expression through the tested native process boundary.
+///
+/// `staged_process_input` is the byte-accurate argv/environment value bound to
+/// `RuntimeExpr::Var(0)`. `process_context_token` identifies that staging to the
+/// compiled call ABI. Both are runtime plumbing, not a stable C ABI and not a
+/// proof-producing boundary.
+pub fn run_process_expr_with_cranelift(
+    expr: &RuntimeExpr,
+    env: &NativeSeedEnvironment,
+    staged_process_input: &RuntimeValue,
+    process_context_token: i64,
+) -> Result<CraneliftRunReport, CraneliftBackendError> {
+    let compiled = compile_expr_with_declarations_and_process_input(
+        expr,
+        env,
+        BTreeMap::new(),
+        Some(staged_process_input),
+    )?;
+    let verifier_passed = compiled.verifier_passed;
+    let assumptions = compiled.assumptions.clone();
+    let unsupported = compiled.unsupported.clone();
+    let (observation, native_returned) = compiled.run(process_context_token)?;
+    Ok(CraneliftRunReport {
+        example: "native-process-entrypoint".to_string(),
+        observation,
+        verifier_passed,
+        native_returned,
+        trust: NativeTrustReport {
+            backend: "Cranelift JIT",
+            fidelity: NativeFidelity::F0NativeExample,
+            verifier_passed,
+            artifact_validation: None,
+            ken_checked_proof_erasure_boundary: None,
+            toolchain: native_toolchain_report(),
+            evidence: NativeRunEvidence::seed_example(),
+            assumptions,
+            unsupported,
+        },
+    })
+}
+
 fn run_example_native(
     program: Option<&RuntimeProgram>,
     example: &RuntimeExample,
@@ -803,7 +844,7 @@ fn run_example_native(
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
     let unsupported = compiled.unsupported.clone();
-    let (observation, native_returned) = compiled.run()?;
+    let (observation, native_returned) = compiled.run(0)?;
     Ok(CraneliftRunReport {
         example: example.name.clone(),
         observation,
@@ -1047,7 +1088,10 @@ enum ResultDecoder {
 }
 
 impl CompiledModule<JITModule> {
-    fn run(mut self) -> Result<(RuntimeObservation, Option<i64>), CraneliftBackendError> {
+    fn run(
+        mut self,
+        process_context_token: i64,
+    ) -> Result<(RuntimeObservation, Option<i64>), CraneliftBackendError> {
         if let Some(trap) = self.trap {
             return Ok((RuntimeObservation::Trapped(trap), None));
         }
@@ -1056,8 +1100,10 @@ impl CompiledModule<JITModule> {
             .finalize_definitions()
             .map_err(|err| backend_module(err.to_string()))?;
         let code = self.module.get_finalized_function(self.func_id);
-        let native = unsafe { mem::transmute::<_, extern "C" fn() -> i64>(code) };
-        let token = native();
+        // Named native-code-execution boundary. This is tested/validated JIT
+        // execution, never a proof and never a host-ABI syscall boundary.
+        let native = unsafe { mem::transmute::<_, extern "C" fn(i64) -> i64>(code) };
+        let token = native(process_context_token);
         let decoder = self
             .decoder
             .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
@@ -1102,6 +1148,15 @@ fn compile_expr_with_declarations<'a>(
     seed_env: &'a NativeSeedEnvironment,
     declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
 ) -> Result<CompiledExpr, CraneliftBackendError> {
+    compile_expr_with_declarations_and_process_input(expr, seed_env, declarations, None)
+}
+
+fn compile_expr_with_declarations_and_process_input<'a>(
+    expr: &RuntimeExpr,
+    seed_env: &'a NativeSeedEnvironment,
+    declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
+    staged_process_input: Option<&RuntimeValue>,
+) -> Result<CompiledExpr, CraneliftBackendError> {
     compile_expr_into_module(
         new_jit_module()?,
         "ken_nc6_seed",
@@ -1109,6 +1164,7 @@ fn compile_expr_with_declarations<'a>(
         expr,
         seed_env,
         declarations,
+        staged_process_input,
     )
 }
 
@@ -1129,6 +1185,7 @@ fn compile_program_expr_object(
             .iter()
             .map(|declaration| (declaration.symbol.as_str(), declaration))
             .collect(),
+        None,
     )
 }
 
@@ -1139,8 +1196,10 @@ fn compile_expr_into_module<'a, M: Module>(
     expr: &RuntimeExpr,
     seed_env: &'a NativeSeedEnvironment,
     declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
+    staged_process_input: Option<&RuntimeValue>,
 ) -> Result<CompiledModule<M>, CraneliftBackendError> {
     let mut sig = module.make_signature();
+    sig.params.push(AbiParam::new(types::I64));
     sig.returns.push(AbiParam::new(types::I64));
 
     let func_id = module
@@ -1162,8 +1221,14 @@ fn compile_expr_into_module<'a, M: Module>(
     let (maybe_trap, decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
         let block = builder.create_block();
+        builder.append_block_params_for_function_params(block);
         builder.switch_to_block(block);
-        let lowered = compiler.lower_expr(&mut builder, expr, &[])?;
+        let initial_env = staged_process_input
+            .map(|value| compiler.lower_value(&mut builder, value))
+            .transpose()?
+            .into_iter()
+            .collect::<Vec<_>>();
+        let lowered = compiler.lower_expr(&mut builder, expr, &initial_env)?;
         let result = match lowered {
             Lowered::Trap(trap) => {
                 let zero = builder.ins().iconst(types::I64, 0);

@@ -111,6 +111,7 @@ pub struct PlatformExecutableStartup {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PlatformExecutableArgumentMode {
     ClosedNullaryEntrypoint,
+    ProcessInputEntrypoint,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -433,12 +434,12 @@ pub(crate) fn validate_entrypoint_metadata_payload(
     }
     if !matches!(
         entrypoint.argument_packaging.shape,
-        ExecutableArgumentShape::ClosedNullary
+        ExecutableArgumentShape::ClosedNullary | ExecutableArgumentShape::ProcessInput { .. }
     ) {
         return Err(platform_error(
             PlatformRuntimeSupportStage::EntrypointPackage,
             "entrypoint.argument_packaging",
-            "NC21 only supports closed nullary executable entrypoints",
+            "platform runtime only supports closed nullary or process-shaped entrypoints",
         ));
     }
     if !matches!(
@@ -928,13 +929,22 @@ fn representation_policy(
 fn lifecycle_for_entrypoint(
     package: &RuntimeExecutableEntrypointPackage,
 ) -> PlatformExecutableLifecycle {
+    let (argument_mode, evidence_source) = match package.entrypoint.argument_packaging.shape {
+        ExecutableArgumentShape::ClosedNullary => (
+            PlatformExecutableArgumentMode::ClosedNullaryEntrypoint,
+            "ExecutableArgumentShape::ClosedNullary accepted before runtime startup",
+        ),
+        ExecutableArgumentShape::ProcessInput { .. } => (
+            PlatformExecutableArgumentMode::ProcessInputEntrypoint,
+            "byte-accurate ExecutableArgumentShape::ProcessInput staged before runtime startup",
+        ),
+        _ => unreachable!("entrypoint argument shape validated before lifecycle construction"),
+    };
     PlatformExecutableLifecycle {
         startup: PlatformExecutableStartup {
             entrypoint_symbol: package.entrypoint.target_symbol.clone(),
-            argument_mode: PlatformExecutableArgumentMode::ClosedNullaryEntrypoint,
-            evidence_source:
-                "NC20 ExecutableArgumentShape::ClosedNullary accepted before NC21 startup"
-                    .to_string(),
+            argument_mode,
+            evidence_source: evidence_source.to_string(),
         },
         shutdown: PlatformExecutableShutdown {
             result_observation: PlatformRuntimeObservationMode::DeterministicRuntimeReport,
@@ -1375,6 +1385,43 @@ mod tests {
     }
 
     #[test]
+    fn process_entrypoint_lifecycle_records_staged_process_input() {
+        let (body, observation) = supported_body_and_observation();
+        let program = starter_program(body, observation);
+        let (_report, mut package) = packaged_entrypoint(&program);
+        package.entrypoint.argument_packaging = crate::ExecutableArgumentPackaging {
+            shape: ExecutableArgumentShape::ProcessInput {
+                arguments: vec![b"ken".to_vec(), vec![0xff]],
+                environment: vec![(vec![0xfe], vec![0xfd])],
+                working_directory: b"/tmp".to_vec(),
+            },
+            evidence_source: "raw process bytes staged by native runtime init".to_string(),
+        };
+        package.entrypoint.metadata_identity =
+            executable_entrypoint_metadata_hash(&package.entrypoint);
+        package.header.package_hash = runtime_executable_entrypoint_package_hash(&package);
+        let run_report = runtime_ir_run_report(&program);
+
+        let support = platform_runtime_support_for_entrypoint(
+            &program,
+            &package,
+            &run_report,
+            PlatformRuntimeTarget::starter("test-starter-platform"),
+            "ken-runtime process lifecycle test",
+        )
+        .expect("process lifecycle materializes");
+        assert_eq!(
+            support.lifecycle.startup.argument_mode,
+            PlatformExecutableArgumentMode::ProcessInputEntrypoint
+        );
+        assert!(support
+            .lifecycle
+            .startup
+            .evidence_source
+            .contains("byte-accurate"));
+    }
+
+    #[test]
     fn trap_observation_stays_runtime_report_comparable() {
         let trap = RuntimeTrap {
             code: RuntimeTrapCode::ExplicitTrap,
@@ -1491,6 +1538,19 @@ mod tests {
         .expect_err("stable ABI target rejects");
         assert_eq!(err.stage, PlatformRuntimeSupportStage::PlatformTarget);
         assert_eq!(err.field, "target.kind");
+    }
+
+    #[test]
+    fn host_effect_execution_target_stays_a_named_unavailable_lane() {
+        let target = PlatformRuntimeTarget {
+            kind: PlatformRuntimeTargetKind::HostEffectExecution,
+            platform_triple: "test-host-effect-target".to_string(),
+        };
+        let err = validate_platform_target(&target)
+            .expect_err("HostEffectExecution remains unavailable until PX5");
+        assert_eq!(err.stage, PlatformRuntimeSupportStage::PlatformTarget);
+        assert_eq!(err.field, "target.kind");
+        assert!(err.reason.contains("does not execute host effects"));
     }
 
     #[test]
