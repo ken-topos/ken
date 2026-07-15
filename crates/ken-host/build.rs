@@ -75,43 +75,9 @@ fn verify_boundary_inventory(facts: &[(&str, u64)]) {
     let source = fs::read_to_string("src/lib.rs").expect("read landed ken-host producer");
     let consumer = fs::read_to_string("../ken-interp/src/eval.rs")
         .expect("read landed interpreter host-boundary consumer");
-    let needles = [
-        "OFlags::RDONLY",
-        "OFlags::WRONLY",
-        "OFlags::RDWR",
-        "OFlags::APPEND",
-        "OFlags::CREATE",
-        "OFlags::EXCL",
-        "OFlags::TRUNC",
-        "OFlags::DIRECTORY",
-        "OFlags::NOFOLLOW",
-        "OFlags::CLOEXEC",
-        "AtFlags::REMOVEDIR",
-        "Mode::from_raw_mode(0o666)",
-        "Mode::from_raw_mode(0o777)",
-        "fs::openat(",
-        "fs::mkdirat(",
-        "fs::unlinkat(",
-        "fs::renameat(",
-        "fs::readlinkat(",
-    ];
-    assert_eq!(
-        facts.len(),
-        needles.len() + 2,
-        "PX2 closed fact inventory drifted"
-    );
-    for needle in needles {
-        assert!(
-            source.contains(needle),
-            "PX2 ABI inventory fact is no longer derived from landed ken-host: {needle}"
-        );
-    }
-    for needle in ["io::ErrorKind::NotFound", "io::ErrorKind::AlreadyExists"] {
-        assert!(
-            consumer.contains(needle),
-            "PX2 errno fact is no longer consumed at the host boundary: {needle}"
-        );
-    }
+    let probe = fs::read_to_string("abi_probe.c").expect("read target ABI observer");
+    build_support::verify_inventory_closure(&source, &consumer, &probe, facts)
+        .expect("producer, manifest, and observer ABI inventories must be identical");
 }
 
 fn package_identity(

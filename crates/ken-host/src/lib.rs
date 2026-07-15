@@ -642,6 +642,47 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn producer_inventory_is_bidirectional_and_sync_drift_is_discriminating() {
+        let host = include_str!("lib.rs");
+        let consumer = include_str!("../../ken-interp/src/eval.rs");
+        let probe = include_str!("../abi_probe.c");
+        let facts = TARGET_ABI
+            .facts
+            .iter()
+            .map(|fact| (fact.name, fact.value))
+            .collect::<Vec<_>>();
+
+        build_support::verify_inventory_closure(host, consumer, probe, &facts)
+            .expect("current 20-member producer is exactly manifested");
+
+        let injected_host = host.replacen(
+            "} | OFlags::CLOEXEC;",
+            "} | OFlags::CLOEXEC | OFlags::SYNC;",
+            1,
+        );
+        let error =
+            build_support::verify_inventory_closure(&injected_host, consumer, probe, &facts)
+                .expect_err("an unregistered production OFlags variant must fail closed");
+        assert_eq!(error, "unmanifested producer ABI fact: OFlags::SYNC");
+
+        let mut restored_facts = facts;
+        restored_facts.push(("O_SYNC", linux_raw_sys::general::O_SYNC.into()));
+        let restored_probe = probe.replacen(
+            "    return 0;",
+            "    printf(\"O_SYNC=%lld\\n\", (long long)O_SYNC);\n    return 0;",
+            1,
+        );
+        build_support::verify_inventory_closure(
+            &injected_host,
+            consumer,
+            &restored_probe,
+            &restored_facts,
+        )
+        .expect("linux-raw-sys registration plus matching observer restores closure");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn manifest_identity_accepts_match_and_rejects_mismatch() {
         assert_target_abi_identity(TARGET_ABI_MANIFEST_HASH).expect("matching manifest");
         let mut mismatch = TARGET_ABI_MANIFEST_HASH;
