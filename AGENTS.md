@@ -20,6 +20,7 @@ again **after every context compaction** — orient yourself:
 | `steward` | `ken-steward` |
 | `architect` | `ken-architect` |
 | `librarian` | `ken-librarian` |
+| `research` | `ken-research` |
 | `spec-leader` | `ken-spec-leader` |
 | `spec-author` | `ken-spec-author` |
 | `conformance-validator` | `ken-conformance-validator` |
@@ -58,6 +59,7 @@ narrower scopes on your path (its path + ancestors).
 | `architect` | `fleet` + `enclave` + `agent/memory/roles/architect/` |
 | `spec-leader` / `spec-author` / `conformance-validator` | `fleet` + `enclave` + `agent/memory/roles/<role>/` |
 | `librarian` | `fleet` + `agent/memory/roles/librarian/` |
+| `research` | `fleet` + `agent/memory/enclave/` + `agent/memory/roles/research/` |
 | `<team>-leader` | `fleet` + `agent/memory/build/` + `agent/memory/build/leaders/` + `agent/memory/teams/<team>/` |
 | `<team>-implementer` | `fleet` + `build/` + `build/implementers/` + `teams/<team>/` |
 | `<team>-qa` | `fleet` + `build/` + `build/qa/` + `teams/<team>/` |

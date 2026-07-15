@@ -14,6 +14,603 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### ⚡ 2026-07-15 (20:5x UTC) — ✅ **vocab early-split RE-CUT + routed to Architect · Foundation in QA**
+>
+> **RE-CUT DONE + ROUTED.** `wp/px5-canonical-effect-vocabulary @ 5309a387` — fresh single
+> commit on origin/main `ce05ce12`, ken-host only: `effect_v1.rs` (+413) + `lib.rs` (+4
+> re-export). **Built it by grabbing both file states from the corrected `5b5d6ba1`** (chain
+> `ce05ce12 → 84368994 frame-doc → 40de6dab vocab+lib.rs → 5b5d6ba1 correction`; the held
+> ingress/IR/ABI work is NOT in this range) — frame doc EXCLUDED so the split is code-only,
+> matching the shape the Architect first reviewed. **`lib.rs` re-export confirmed present** (the
+> exact +4 `mod effect_v1; pub use effect_v1::*;`, no ABI) and content **byte-identical to
+> `5b5d6ba1`** (empty diff verified). **Standalone build green** — `ken-cargo fmt -p ken-host
+> --check` clean + `ken-cargo build -p ken-host` exit 0 (my own evidence, since the split omits
+> the frame doc). Proposed **merge Decision `dec_3xctzj0s74n45`** (supersedes rejected
+> `dec_4tsc37feqz27j`), routed to Architect (evt_7skdhbfeqq50x) — **stranded-paste caught &
+> fixed** (pane showed `[Pasted Content 1715 chars]` unsubmitted; bare Enter → Working). **NEXT:**
+> on Architect APPROVE → publish `5309a387` via scripted publisher against full locked CI →
+> notify verify-leader/verify-implementer (holding d6c1b1e5 for the "corrected vocab merge
+> notice") → unblocks PX6. On BLOCK → route corrections to runtime again.
+>
+> **CAT-TAX — Foundation rebased onto `ce05ce12` CLEAN** (b01454c6, 4 commits ahead; the
+> report-dup conflict I predicted resolved DURING the rebase — my 37-entry frame+report
+> corrections survived, zero conflict markers verified). Foundation's own relocation work has
+> started (`b01454c6` "catalog: adopt seven-section taxonomy"). **So the report-dup is already
+> reconciled by Foundation's rebase** — main's research report is the base, Foundation's branch
+> carries its corrections on top. At handback still verify the final `research/…proposal.md`
+> isn't a divergent third copy vs main (should be identical-modulo-my-2-split-lines, which are
+> also in the frame — if it conflicts at merge, drop the branch copy). Branch tip `b01454c6`.
+>
+> ### ⚡ 2026-07-15 (20:3x UTC) — ⛔ **vocab early-split §14 BLOCKED (3 real contract defects) → runtime respin**
+>
+> **`dec_4tsc37feqz27j` REJECTED** on Architect §14 block (evt_2v5y5rrfscnf0). Topology was
+> clean (ken-host only, byte-identical to `70216d1c`) but the vocabulary encodes 3 contract
+> defects — a real catch, review working: (1) **premature availability** — `effect_v1.rs:49-65,
+> 318-334` labels 5 ops `NativeTested` while PX5 is held with no evidence; ADR-0018 §§4-5 →
+> **all 14 must be `RepresentedUnavailable`**, any first tranche as a **separately-named planned
+> target set** (never encode plan as current availability); (2) **replies drop §3 fields** —
+> `CanonicalReplyV1::FileMetadata` unit + `DirectoryEntries` names-only lose size/kind + name/kind
+> (landed `HostFileMetadata`/`HostDirEntry`) → add explicit V1 payload records; (3) **unknown
+> terminal identities collapsed** — `TerminalErrorV1::UnknownFamily`/`UnknownOperation`
+> (`:289-301`) carry no offending identity → carry stable family id + raw op id.
+> **Routed the respin to runtime-leader** (evt_2r5dtsgxpswcj) — fix as a clean standalone
+> ken-host commit so I re-cut the early-split; verify-leader informed (evt_39bh57mam5nwy) to
+> target the corrected shape. **LESSON:** a "vocabulary/types" commit IS the contract — §14 must
+> check it against ADR §3/§4/§5, and availability must reflect EVIDENCE, not PLAN.
+> **NEXT:** on runtime's corrected vocab SHA (runtime-leader assigned it as a standalone
+> ken-host commit, evt_44rfrve613t33; verify-leader realigned adapter evt_1y6rgmnskbr81) →
+> re-cut `wp/px5-canonical-effect-vocabulary` + re-propose the merge Decision → Architect
+> re-review → publish → unblocks PX6.
+> **⚠ WATCH — §0.5 resume:** runtime-leader called the §0.5 identity ruling "pending"
+> (evt_44rfrve613t33), but the Architect RULED it — **option (b)**, evt_7hj00prqfjqs2 (final
+> package binds the plan; a child never contains a parent's digest). If runtime idles after the
+> vocab fix awaiting that ruling, confirm option-(b) is in so §0.5 resumes (both §0.5 base
+> evt_3fw... [ingress evt_3nkr1vx55ca1n] + identity are ruled — nothing is actually pending).
+>
+> ### ⚡ 2026-07-15 (20:3x UTC) — ✅ **research report MERGED `ce05ce12` (cadence resumed) · vocab Decision proposed · Architect unwedged**
+>
+> **MERGE:** research taxonomy report merged doc-only to `origin/main @ ce05ce12`
+> (`research/catalog-package-taxonomy-proposal.md`, verified present + 37-entry). First merge
+> since PX4 (16:56); the 3h gap was design-bound, not a stall. Research agent slimmed its
+> branch to report-only per Pat's ruling (`research/` research-owned); corpus files dropped.
+> **vocab Decision `dec_4tsc37feqz27j` PROPOSED** for `wp/px5-canonical-effect-vocabulary @
+> 239c1c7d` (ken-host only) — Architect soundness vote requested (evt_13w3sd9w0a5vq); on
+> APPROVE+CI I publish → unblocks PX6. **Architect was WEDGED** (stranded paste on that
+> review_request) — cleared with bare Enter (Monitor `bp808a7mu` caught it); now Working.
+> **⚠ CAT-TAX report-dup reconciliation PENDING:** main now carries research's report;
+> CAT-TAX branch carries a copy diverging by exactly my 2 split-home lines (also in the frame).
+> **At CAT-TAX handback: `git rm` CAT-TAX's `research/catalog-package-taxonomy-proposal.md`**
+> (research owns research/; frame carries the WP rulings) → main conflict-free. Do NOT edit
+> CAT-TAX's active worktree now.
+>
+> ### ⚡ 2026-07-15 (20:2x UTC) — ✅ **both PX5 hard-stops RULED · CAT-TAX 2 gaps fixed · vocab-split branch ready · research disposition settled**
+>
+> **Pat (operator) asked why no merges in 3h.** Answer given: **not a pipeline stall** —
+> nothing resolved-but-unmerged. The frontier converged on one unbuilt surface (the native
+> effect contract) needing ADR-0018 first, then PX5 hit 2 legit boundary hard-stops. Last
+> merge PX4 `513955fe` @ 16:56. Honest note: ADR-0018 ruled token/check semantics but
+> under-specified the artifact carrier → PX5 released→hard-stopped→re-ruled (a cycle's cost).
+>
+> **PX5 — BOTH hard-stops RULED by Architect** (branch still HELD at `70216d1c`, implementer
+> building the ruling, no new commits yet):
+> - §0.5 artifact-ingress carrier (evt_3nkr1vx55ca1n): checked `NativeEntrypointPlanV1`;
+>   opaque call-scoped `KenNativeInvocationV1*`; `Lowered::BorrowedCapability{invocation,slot,
+>   generation}` (NOT added to RuntimeValue/GroundValue); two-binder main adapter
+>   (env[0]=ProgramCaps, env[1]=ProcessInput); C builds ProcessInput only. Leader transcribed
+>   to implementer (evt_659zsxp0qj8xf).
+> - identity micro-ruling (evt_7hj00prqfjqs2): **option (b)** — final package binds the plan;
+>   downstream envelopes bind finalized hashes; **a child never contains a parent's digest**
+>   (resolves the FNV fixed-point circularity).
+> - Both routed by me (evt_6admjtc87qssp, evt_54mxpt529scnt). **PX5 frame amendment PENDING
+>   at handback** — can't commit §0.5 into the implementer's ACTIVE worktree; ruling is durable
+>   in convo. Fold it in one pass when Runtime hands back.
+>
+> **PX6 — real ordering block confirmed** (verify-leader evt_2ncnvn1j43xer: scaffold `c70e5047`
+> build/test verified 11/11; comparator arm needs PX5 vocab on main). → **Split-vocab branch
+> CREATED:** `wp/px5-canonical-effect-vocabulary @ 239c1c7d` (cherry-pick of `70216d1c` onto
+> origin/main = `crates/ken-host/src/effect_v1.rs` +340 + lib.rs re-export, ken-host only).
+> **NEXT: propose merge Decision → Architect soundness vote (TCB-adjacent vocab, not rubber-
+> stamp) → publish (full CI, not doc-only) → unblocks PX6's comparator arm.**
+>
+> **CAT-TAX — foundation-implementer hit 2 grounding hard-stops, BOTH resolved on-branch by me:**
+> - 37-vs-36 inventory (CC9's `Test/Property.ken.md`, `cc2bf2ad`) → report+frame corrected to
+>   37 entries / Test/Property→Tooling/Testing/Property @ `36f3d968`.
+> - split-file provisional homes → Parsing/Parsing **stays** (already allowlisted);
+>   Text/Numeric/Numeric → `Capability/Parsing/Numeric.ken.md`; all 4 split homes enumerated
+>   in frame @ `1858b3d2`. foundation-implementer now relocating 37 (inventory/body-hash
+>   baseline complete). Branch tip `1858b3d2`.
+>
+> **RESEARCH disposition SETTLED (Pat):** (1) **standing in-space seat** model — REJECT the
+> branch's ad-hoc reframe; (2) **`research/` is research-agent-owned**, reports land there,
+> duplication with a WP copy is fine; (3) **Steward owns the practice corpus**; (4) research
+> branch does NOT merge as-is. → asked research to **slim `wp/research-workflow-skill` to
+> report-only** (drop 5 corpus files) + re-post git_request; I merge report doc-only
+> (evt_63ftn8jwrzkgx).
+> **⚠ ROOT CAUSE (Pat clarified): the research agent drafted an ad-hoc skill because it "did
+> not see one" — my standing-seat research skill/playbook is UNPUBLISHED (only on steward/work,
+> never landed on main), so it never registered.** The fix is not "hold the corpus" — it's
+> **PUBLISH the standing-seat research skill + playbook + AGENTS routing to main** (the content
+> Pat chose), filling the exact gap Pat directed the agent to fill; the ad-hoc draft is
+> superseded. **NEXT: assemble + publish the standing-seat research corpus doc-only from
+> steward/work** (`agent/playbooks/federation/research.md`, `.claude/skills/ken-research/`,
+> `AGENTS.md` routing, `agent/memory/README.md` + `roles/research/`, moot.toml `[agents.research]`).
+>
+> **NEXT (resume):** (1) propose Decision for `wp/px5-canonical-effect-vocabulary @ 239c1c7d`
+> (mention Architect); (2) merge research report-only branch when re-pushed; (3) amend PX5 frame
+> at Runtime handback; (4) watch PX6 + CAT-TAX handbacks/CI; (5) later: publish standing-seat
+> research corpus from steward/work. Watchdog `1e80151b`.
+>
+> ### ⚡ 2026-07-15 (20:0x UTC) — ⛔ **PX5 HARD-STOP → Architect** · PX6 proceeding · CAT-TAX branch built + pin concurred, Foundation compacting
+>
+> **PX5 BLOCKED on a genuine native-artifact boundary ADR-0018 doesn't cover.**
+> runtime-implementer grounded a real gap (evt_18qx84an728rp, clean anchors): ADR-0018
+> rules the live-cap **token/check semantics** but not the **native artifact-ABI shape**
+> that carries `ProgramCaps` into the produced executable. Landed PX4 boundary supplies
+> only one ProcessInput pointer + no cap-table: emitter seeds `NativeSeedEnvironment::empty()`
+> (`cranelift_backend.rs:502-515`); process-obj sig has 1 ptr param (`:1231-1272`); starter
+> builds only `MkProcessInput`→`entry(root)` (`object_linker_packaging.rs:1189,1267-1276`);
+> `RuntimeValue` has no cap/token value form (`ir.rs:392-409`); only CLI **interp** runner
+> mints ProgramCaps (`ken-cli/src/lib.rs:270-287`), nothing reaches native emitter/launcher.
+> **Routed to Architect** (evt_6admjtc87qssp, thr_rh6fmbpsn7ab) — 3 sub-Qs within ADR-0018
+> semantics (no reopen): (1) how declaration-selected ProgramCaps reaches native compile+startup;
+> (2) how starter obtains root-backed host cap table (native analog of ken-cli:270-287);
+> (3) how erased entry env binds the opaque `{slot,generation}` token. **Effect-analog of
+> PX4's §0.5 ingress — a native-early discovery.** Branch **HELD at `70216d1c`** (frame
+> `062b236b` + independently-valid vocab `70216d1c`; tree clean, NO partial impl).
+> **ON Architect ruling:** amend PX5 frame with boundary as fixed input → re-release to Runtime.
+>
+> **PX6 continues independently** (verify-implementer building `crates/ken-verify` scaffold +
+> PX4-observable stdout/stderr/exit differential + mutation net). **Canonical-vocab route
+> DELIVERED** (evt_35xt3ea3hnb0x → verify-leader ack evt_7tk0jjcmqg1zb): types live at
+> `crates/ken-host/src/effect_v1.rs`, public `ken_host::{HostOpV1, EffectObservationV1,
+> EffectEventV1, CanonicalRequestV1, CanonicalOutcomeV1, SemanticErrorV1, FsDeltaV1,
+> TerminalErrorV1,…}` on PX5 only (`70216d1c`) — shape thin adapter to those names now, real
+> import on PX5→main. Escape hatch offered: split vocab as separable early merge IF PX6 hits
+> a true ordering block (default = import-on-PX5-merge, no branch coupling).
+>
+> **🆕 CAT-TAX dispatch IN PROGRESS.** Branch `wp/catalog-taxonomy-adopt-relocate` built @
+> `1de30192` (frame `docs/program/wp/catalog-taxonomy-adopt-relocate.md` + report
+> `research/catalog-package-taxonomy-proposal.md` committed; local ref, publisher pushes at
+> merge). **Enclave-pin supersession CONCURRED** by spec-leader (evt_13mrsd0ef7af):
+> `Capability/Verify → Tooling/Verification` approved as pure taxonomy filing, no
+> behavior/kernel/soundness/spec change → **the one gated move is CLEARED, Foundation lands it.**
+> **Foundation ring handoff-gate compaction DONE** (bg `b2y5kvss4`; all 3 showed "Context
+> compacted"). **CAT-TAX KICKED** (evt_71rcnmgmysy7p) — foundation-leader confirmed **Working**
+> (re-orienting on frame, dispatching impl+QA lanes). WP now **active**. Kickoff folded the
+> enclave approval in (Capability.Verify→Tooling land-it; all 36 in one pass).
+>
+> **FRONTIER NOW:** PX5 `blocked`→Architect (held `70216d1c`) · PX6 `active` (Verify) · CAT-TAX
+> `active` (Foundation). **Watch:** (1) Architect PX5 boundary ruling → amend frame + re-release;
+> (2) PX6 handback/CI; (3) CAT-TAX handback/CI; (4) any PX6 ordering-block escalation (→ split
+> vocab merge). Watchdog refreshed to this frontier.
+>
+> ### ⚡ 2026-07-15 (19:5x UTC) — ✅ **PX5 + PX6 RELEASED (both leaders Working)** · 🆕 Foundation catalog WP staged · self-compacting
+>
+> **PX5 + PX6 LIVE.** Handoff-gate compaction (bg `bwtdfqim1`) verified — all 6
+> Runtime+Verify members showed "Context compacted". Kicked `runtime-leader` @
+> `wp/px5-native-effect-lowering` (`evt_7v5srbnnpsfx2`) + `verify-leader` @
+> `wp/px6-effect-differential-harness` (`evt_46f9z660ap05h`); **both confirmed
+> Working**. Frame commits `062b236b` / `731a0a28` (local refs; publisher pushes at
+> merge). Coordination: PX5 lands `EffectObservationV1` vocabulary early → PX6 imports.
+> Both teams on gpt-5.6-terra(lead/qa)/sol(impl). WPs now `active` — watch for CI/Decision.
+>
+> **🆕 Foundation catalog WP (Pat: "create a wp from the catalog research report and
+> dispatch it to foundation").** Report = research agent's
+> `research/catalog-package-taxonomy-proposal.md` (7-section taxonomy: Core/Data/
+> Algorithm/Capability/Protocol/Application/Tooling; 36-entry relocation map; 4-phase
+> plan). **Frame AUTHORED + committed:** `docs/program/wp/catalog-taxonomy-adopt-relocate.md`
+> (ID CAT-TAX, Foundation, L). Scope = Phase 1 (adopt vocab + allowlist lint) + Phase 2
+> (mechanical relocate 36 + import-identity rewrite, FILING not editing); Phase 3 splits +
+> Phase 4 checks explicitly deferred. **⚠ Enclave-pin supersession to ROUTE:**
+> `Capability/Verify → Tooling/Verification` overrides the enclave pin in
+> `catalog-taxonomy-paths-imports.md` — needs enclave/Architect concurrence (Foundation
+> proceeds on allowlist + other 34 meanwhile).
+> **NEXT (post-compact):** (1) create `wp/catalog-taxonomy-adopt-relocate` from origin/main,
+> commit frame + copy the report onto the branch; (2) route the enclave-pin supersession
+> to spec-leader/Architect for concurrence; (3) handoff-gate compact Foundation ring
+> (foundation-leader/implementer/qa — CC9 retros in, quiescent); (4) kick foundation-leader
+> @ the frame; verify Working. Research seat DONE (Pat infra). Watchdog `01a2a062`.
+>
+> ### ⚡ 2026-07-15 (19:3x UTC) — 🚀 **RELEASING PX5 + PX6** (Pat: "proceed with V1 as ruled") · Research seat DONE
+>
+> **Pat's two decisions:** (1) PX5/PX6 → **proceed, release with V1 as ruled** (versioning
+> fork closed — V1 is the Ken-owned internal effect-contract schema, orthogonal to the
+> kernel). (2) Research seat → **"already fully set up"** — runs on Pat's infra; leave
+> wiring on `steward/work` only, publish nothing, launch nothing. Research agent is
+> productive (posted `research/catalog-package-taxonomy-proposal.md` — route to
+> Librarian/pkg-ecosystem later, non-blocking).
+>
+> **RELEASE IN PROGRESS:**
+> - wp branches created as local refs from `origin/main @ 513955fe`:
+>   `wp/px5-native-effect-lowering` (frame commit `062b236b`) +
+>   `wp/px6-effect-differential-harness` (`731a0a28`). NOT pushed (Steward has no direct
+>   push creds; publisher pushes at merge, as with PX4). Team worktrees read them as local
+>   refs from the shared `.git`.
+> - **Handoff-gate compaction RUNNING** (bg `bwtdfqim1`): Runtime ring (leader/impl/qa) +
+>   Verify ring (leader/impl/qa), all were ahead-of-main:0 + quiescent. 300s wait.
+> - **NEXT (on bwtdfqim1 return):** gate step 5 — capture-pane each of the 6, verify ctx
+>   dropped (WIDE tail; resend to any pane that didn't); THEN kick `runtime-leader` @
+>   `wp/px5-native-effect-lowering` (frame `docs/program/wp/PX5-native-effect-lowering.md`)
+>   + `verify-leader` @ `wp/px6-effect-differential-harness` (frame
+>   `docs/program/wp/PX6-effect-differential-harness.md`); verify BOTH leaders go Working
+>   (bare-Enter any stranded paste). Coordination: PX5 lands canonical
+>   `EffectObservationV1` vocabulary early so PX6/ken-verify imports it. Watchdog `01a2a062`.
+>
+> ### ⚡ 2026-07-15 (19:0x UTC) — ⚖ **PX-B DESIGN RULING LANDED → authoring PX5 + PX6 frames**
+>
+> Architect ruled the shared effect contract: **Decision `dec_2pgkqkddt6eh3` RESOLVED**,
+> durable **ADR-0018** (`docs/adr/0018-native-effect-execution-contract.md` @ architect
+> checkpoint `cc206d09`, grounded `origin/main @ 513955fe`). Answers all 5 axes +
+> corrects inventory to **14 driven ops (not 16)**. Load-bearing decisions to transcribe
+> as fixed inputs: (1) one sealed versioned `HostOpV1` catalog in ken-host + shared
+> dispatch core (interp Console/Clock/FS + native wrapper adapt to it, no 2nd switch);
+> private static host runtime `ken_host_dispatch_v1(ctx,op_id,req,reply)->status`; ONE
+> named audited `abi_v1` unsafe module (`deny` not `forbid`), no host-unsafe into
+> runtime/lowering/interp/CLI; SIGPIPE→`IOError::BrokenPipe`. (2) IR gains
+> `Effect{family,operation:HostOpV1,capability:Option<RuntimeCapabilityUse{identity,value}>,
+> args}`; live cap = opaque generational `{slot,generation}` token into a host-owned
+> table from declared `ProgramCaps`; cap-check has ONE impl below both executors (NO
+> copying `check_fs_capability`). (3) per-op typed fixed-layout request/reply (table in
+> ADR §3), generated `HostEffectAbiV1` manifest hash (C-probed, bidirectional closure),
+> BOTH TargetAbi + effect hashes embedded; one immutable append-only response arena for
+> the WHOLE entry invocation. (4) canonical `EffectObservationV1{stdout,stderr,
+> fs_delta,terminal_error,effect_trace,exit_status}`, one ordered event per Vis; error
+> identity is an ENUM (exact cap denials + IOError incl Other(raw_os_code) where already
+> observable); one shared error-map fn both lanes; launcher-owned out-of-band trace sink.
+> (5) **PX6 → new `crates/ken-verify` (Verify-owned)**; twin byte-identical real temp
+> roots (interp PosixHost@A vs native artifact@B); CaptureHost = negative/unit only.
+> Trust: tested/target-validated TCB growth — zero kernel rule, zero Ken postulate.
+>
+> **Steward scoping call (pinned in frames):** initial native-tested subset =
+> **Console.Write/Flush/IsTerminal + FS.WriteFile/ReadFile** (5 of 14) — minimal but
+> exercises the WHOLE contract (ambient + capability route + stdout/stderr + FS-delta +
+> response-arena dynamic Bytes + cap/FileError identity + trace + exit). Other 9 stay
+> named unavailable lanes.
+>
+> **STATUS:** both frames DRAFTED + staged on `steward/work` at
+> `docs/program/wp/PX5-native-effect-lowering.md` (Runtime, L, 5-op subset) +
+> `PX6-effect-differential-harness.md` (Verify, M, new `crates/ken-verify`). Frame
+> split per ADR §"Consequences for framing"; reciprocal coordination note in each
+> (PX5 lands canonical `EffectObservationV1` vocabulary early; PX6 imports it).
+> **HELD before release:** Pat raised a versioning-scheme fork — is the `HostOpV1`/
+> `HostEffectAbiV1` `V1` right, or align it with the Linux kernel version? My answer
+> (posted): keep it — it versions the Ken-owned internal effect-contract schema (both
+> caller `ken-runtime` + callee `ken-host` are first-party), orthogonal to the kernel
+> which is already separately tracked by `TargetAbi`+rustix; kernel-align would conflate
+> two axes + break closure discriminators. Asked Pat: proceed as-is, or route
+> kernel-align to the Architect (= an ADR-0018 change). **ON "proceed":** release
+> mechanics = create `wp/px5-native-effect-lowering` + `wp/px6-effect-differential-harness`
+> from `origin/main`, commit each frame on its branch; handoff-gate (compact Runtime ring
+> for PX5 + Verify ring for PX6, verify drops); kick each team at its branch+frame; verify
+> both go Working. Watchdog `01a2a062` armed. Research seat still staged for Pat creds.
+>
+> ### ⚡ 2026-07-15 (18:1x UTC) — 🔨 **PX-B FRONTIER MOVING: Architect design pass convened for PX5 + PX6** (Pat: "keep the fleet moving")
+>
+> Both PX WPs closed → turned to the PX-B frontier. Grounded PX5 (Runtime, native
+> `RuntimeExpr::Effect` lowering) + PX6 (Verify, interp/native differential harness)
+> against landed PX4 via two Explore surface maps — persisted at
+> `scratchpad/pxb-effect-grounding.md` (load-bearing; regenerate if lost). **Key
+> finding: PX5 + PX6 share ONE unbuilt design core** — no versioned ken-host op-shim,
+> no native capability calling-convention (IR carries `capability: RuntimeSymbol`,
+> interp uses positional `EvalVal::Cap` `args[1]`), no runtime effect-arg marshaller,
+> no cross-lane effect-trace/error-identity representation. That's the PX4-§0.5 pattern
+> at larger scale.
+>
+> **⇒ Convened a single Architect design pass** (enclave-only, no build-lead pulls) on
+> the shared contract — 5 questions: (1) versioned ken-host op-shim ABI; (2) capability
+> native calling-convention; (3) per-op arg/result marshalling; (4) cross-lane
+> observation contract (effect-trace + error-identity the native lane emits, PX6's
+> linchpin); (5) PX6 home (`crates/ken-verify`? extend Runtime's
+> `native_execution_differential.rs`?) + real-fs vs virtual-fs substrate. Query
+> **`evt_3fw9y52jtz7hh`** (had to bare-Enter a stranded paste; Architect now Working on
+> `gpt-5.6-sol`). Settled inputs pinned: native-early, rustix (FORK 2), unavailable-lane
+> NEVER no-op (preserve backend + policy lanes, move to `NativeTested`), no affine,
+> manifest-identity assertion retained.
+>
+> **SEQUENCING:** PX5 + PX6 both depend only on merged PX4, different teams (Runtime vs
+> Verify) → **concurrent release** once the ruling lands; PX6 decouples from PX5
+> internals (harness + interp baseline + PX4-observable stdout/stderr/exit buildable now;
+> FS/effect-trace arms arm as PX5 lands) — honors guard-first.
+> **NEXT (on ruling):** author both frames folding the ruling → handoff-gate (compact
+> Runtime + Verify rings) → release concurrently. Watchdog re-armed `01a2a062`.
+>
+> ### ⚡ 2026-07-15 (19:2x UTC) — 🔵 **Research actor JOINED the space** (Pat minted creds out-of-band)
+>
+> `.moot/actors.json` now has `research` = `agt_37v77c59fd000` (real 70-char key,
+> Pat-added). System `evt_3m5aq9wf0zg0d` `participant_joined`: "research joined the
+> space." **No local `moot-research` tmux session** ⇒ almost certainly running on Pat's
+> own infra, not a local seat. Steward-owned wiring is committed to `steward/work`
+> (`ae3b5176`: playbook/skill/AGENTS.md routing/memory scope/`moot.toml` block) but NOT
+> on `main` yet. **Fork for Pat (asked):** (a) if it runs on your infra → publish just
+> the playbook + routing + memory scope to `main` so it orients against main (safe, zero
+> launch impact), HOLD the `moot.toml` block; (b) if you want it launched locally here →
+> I publish the full wiring incl. `moot.toml` and bring it up via moot. Did NOT
+> unilaterally merge to main (moot.toml on main + an already-running actor = duplicate-id
+> risk). Not launching locally without confirmation.
+>
+> ### ⚡ 2026-07-15 (18:0x UTC) — 🆕 **OPERATOR REQUEST: provision a "Research" seat** (Pat, live) + PX4 retros IN
+>
+> **First genuine operator message this session.** Pat: "use my API key to
+> provision a 'Research' agent" — chose **full in-space convo seat**, model
+> **`gpt-5.6-sol`** (Codex, T1 by Sol=star). Steward-owned wiring **committed
+> `ae3b5176`** on `steward/work`: `agent/playbooks/federation/research.md` (v1
+> charter — investigation/synthesis aux, clean-room-bound, **advisory not a
+> directive authority** to avoid a second Steward), `.claude/skills/ken-research`
+> symlink (`.agents/skills`→`.claude/skills`, Codex view follows), AGENTS.md skill
+> + memory routing rows, `agent/memory/roles/research/` scope, `[agents.research]`
+> `moot.toml` block. **BLOCKED on operator-only remainder** (I flagged, can't do as
+> non-admin): (1) mint convo actor → `actor_id`+`CONVO_API_KEY` into
+> `.moot/actors.json`; (2) supply `gpt-5.6-sol` model auth ("your API key") via the
+> `/home/node/.secrets` path other Codex seats use; (3) `moot up` to launch. Turnkey
+> steps + JSON snippet staged in scratchpad `research-seat-provisioning.md`.
+> **Awaiting Pat: creds/launch + v1-charter confirmation (esp. the coordination
+> lane).** Did NOT scrape a key or fake creds into the live file.
+>
+> **PX4 CLOSED** — all three retros posted (runtime leader coord `evt_…`, implementer,
+> QA @ 16:57): carry = *gate the linked artifact end-to-end at the emitted boundary,
+> not the JIT/runner proxy; use an executable negative control that stays green under
+> the runner-only proxy.* Native-early vindicated. PX3 + PX4 both fully closed.
+>
+> ### ⚡ 2026-07-15 (16:56 UTC, clock-read) — 🎯 **BOTH PX3 + PX4 MERGED** · PX3 CLOSED, PX4 @ `513955fe` (retros pending) · frontier opens PX5 (Runtime) + PX6 (Verify)
+>
+> **PX4 MERGED @ `513955fe`** — "PX4: native entrypoint ABI + borrowed-dynamic-ingress
+> substrate" (PR #724, FULL locked CI passed; `37f6d1e2 → 513955fe`).
+> Content-verified on main: `native_process_entrypoint.rs` present,
+> `emit_process_exit_status` in `cranelift_backend.rs` (terminal-egress fail-closed
+> mapping). Decision `dec_xf63h5sye2w6` (resolved_by architect) verified fresh
+> before publish. **Retro call posted** (`evt_54fx9hp0k469n`, mentions
+> runtime-leader) — WP closes when retros in.
+> **PX4 retro carries (native-early VINDICATED — surface to ring + promote-track):**
+> (1) native-early exposed two real backend gaps a spec-only path never surfaces —
+> Cranelift had no runtime-aggregate/control-flow model (→ §0.5 borrowed ingress),
+> and the object artifact's terminal egress bypassed the ExitCode fail-closed
+> mapping + swallowed traps; (2) **gate the LINKED ARTIFACT's terminal path, not
+> the Rust/JIT runner** — verifying the runner overclaimed AC2–AC7; §14
+> self-corrected on the §0.5 artifact test (distinct egress paths → gate the
+> object). Sibling of the "verify the real mechanism, not a proxy" memory cluster.
+>
+> **⇒ FRONTIER (both original PX WPs delivered).** Next per DAG + PX campaign
+> (`09-posix-linux-abi-campaign.md`), now unblocked by PX4:
+> - **PX5 — native effect lowering (Runtime).** Depends on PX4 (merged). Needs a
+>   shovel-ready frame (mine to author, grounded against landed PX4 substrate).
+>   Runtime ring can't start until PX4 retros in + I compact it (§2c).
+> - **PX6 — Verify differential harness (Verify).** Depends on PX4 (merged). Needs
+>   a frame; Verify ring idle-ready.
+> - **PX7 (resource handles + bracket) — HELD** (Pat chose A: Resource/Bracket
+>   stays held until the PX7 re-read). Do NOT release.
+> **NEXT ACTION:** (a) collect PX4 retros → close PX4 → compact Runtime; (b) author
+> PX5 (+PX6) shovel-ready frames grounded on landed PX4; (c) sequence/release under
+> the standing reorder grant. Watchdog 441e8b57 armed; Monitor bp808a7mu covers
+> architect wedges. Do NOT re-ask rustix (SETTLED); do NOT manufacture idle-ring work.
+>
+> ### ⚡ 2026-07-15 (16:33 UTC, clock-read) — ✅ PX3 MERGED @ `37f6d1e2` + retros IN → **CLOSED** · PX4 §0.5 substrate in Architect §14 · one WP done, one at terminal gate
+>
+> **PX3 CLOSED** — retros in (`evt_1q6myfegkhhcf`: leader `evt_3xkfzgkz98jmn`, QA
+> `evt_4k0yrvjqm5rbf`, implementer `evt_15ac1jff8vwdk`). Shared carry (retro-ladder
+> candidate, 1st occurrence — hold for 2nd/cross-team before promoting): *when a
+> change widens a shared registry/value-domain, keep + positively pin the
+> legitimate producer output, repair consumers to select the kind their assertion
+> needs, and run the owning crate's full targeted suite before handoff — not only
+> the new WP test.* Language ring now idle (no ready Language WP — LET-4 is
+> spec-first, not ready); do NOT compact until a WP is ready to hand it, do NOT
+> manufacture work.
+>
+> **PX3 MERGED — CI-red respin loop closed.** Publisher `bib5s6mr0` pushed the
+> exact §14-approved `7bf81084` (force-updated the stale `dd4ced5b` origin ref),
+> FULL locked CI **passed**, PR #722 merged. **Verified on `origin/main`:**
+> `f2b6f21f → 37f6d1e2` "PX3: machine/ABI scalar types (USize/ISize/CInt)" — one
+> squash carrying all 12 paths; `ken-host/build.rs` has both `POINTER_WIDTH` +
+> `C_INT_WIDTH`, PX3 acceptance/retract content present. Decision
+> `dec_5qrmtjsv2cxvh` (resolved_by architect) was verified fresh-from-object before
+> publish. **Retro call posted** (`evt_5vv74njra1qmr`, mentions language-leader) —
+> WP closes when retros in; then compact the Language ring for its next assignment.
+> **PX3 retro carry (surface to the ring):** a shared-registration change
+> (`env.num_values`) must run the whole-crate `ken-cargo test -p ken-elaborator`,
+> not just the WP's own `--test` — targeted-single-test missed the crate-mate
+> regression; CI's `--locked` full run caught it.
+>
+> **PX4 — §0.5 borrowed-ingress substrate at the terminal gate.** Implementer
+> built the ruled substrate (immutable one-call `{Bytes,Constructor}` arena; closed
+> ProcessInput/Nil/Cons/Prod tags; `Var(0)`=borrowed root; dynamic `Match` +
+> borrowed `bytes_at`/`bytes_length` with safe Option bounds; non-escaping;
+> fail-closed trap; FNV digest deleted) → released `wp/px4-native-entrypoint @
+> dc4a09bc` (3 linear commits on `f2b6f21f`; 9 paths / +1653 −55). **Runtime QA
+> APPROVED** (`evt_rs5fwhwqpgbj` — ran AC1 direct: destructures `MkProcessInput`,
+> distinguishes the FNV-collision pair, malformed/bounds arms fail closed).
+> **Architect §14 in progress** on `dc4a09bc` (Decision `dec_kh35j6mnnhxg`; I
+> unwedged two stranded §14 pastes to the architect via Monitor `bp808a7mu`).
+> **On §14 APPROVE → resolve Decision → publish FULL CI.** Note: PX4's base
+> `f2b6f21f` is now one behind `main` (`37f6d1e2`); different crates (ken-runtime
+> vs ken-elaborator/host/interp) so no expected conflict, but the publisher CI runs
+> on the real merge — if it drifts, route a rebase to runtime-leader.
+> **⇒ PX3 done-pending-retro; PX4 one gate from publish; event-driven.** Watchdog
+> 441e8b57 armed; Monitor bp808a7mu covers architect wedges. Resource/Bracket HELD
+> (Pat A). Do NOT re-ask rustix (SETTLED). Do NOT manufacture idle-ring work.
+>
+> ### ⚡ 2026-07-15 (16:02 UTC, clock-read) — 🟢 BOTH WPs RESUMING · PX4 scope resolved (M→L, frame amended, ring released) · PX3 respin in Language ring
+>
+> **PX4 SCOPE RESOLVED — fold-into-PX4 ratified; frame amended; ring released.**
+> Architect design ruling `dec_56j4ceev0sk7t` (`evt_7231fhqsvyph8`): a **generic
+> read-only call-scoped borrowed dynamic-value ingress** (immutable one-call
+> `MkProcessInput` arena; entry borrows root as `Var(0)`; `RuntimeExpr` unchanged;
+> `Match`/`bytes_at` over borrowed values; non-escaping; fail-closed) — NOT
+> process-only primitives, NOT a full value runtime. **Scope call (mine): ratified
+> fold-into-PX4** (it's PX4's already-mandated process-entry ABI; within committed
+> native-early scope; bounded substrate). **Amended the PX4 frame** (new §0.5,
+> authoritative; AC1 replaced by destructure-`MkProcessInput` + FNV-collision
+> negative control; **size M→L**) → published PR #723 → **`origin/main f2b6f21f`**.
+> **Released the held Runtime ring** (`evt_3sxjd0w9rfyp` + roused) — runtime-leader
+> Working, resuming from the amended frame. NO ring compaction (resume of held WP,
+> not new-WP boundary — keeps the 51f19d1d scaffolding + backend context).
+> **PX3 respin — Language ring** (leader assigned `evt_6as9k7kjwn7nx`): fix the
+> `num_values` non-Int seed regressing `l_match_ih_fix_acceptance` (reproduce +
+> whole-crate `-p ken-elaborator` gate) → new SHA → re-QA → re-§14 (new Decision) →
+> re-publish. `dec_7zpw53cyr777r`@`dd4ced5b` VOID.
+> **⇒ BOTH resuming; event-driven.** Watch: PX4 could hard-stop AGAIN if borrowed
+> lowering still can't be expressed (leader has the escalate guard). Brief Pat on the
+> PX4 M→L + native-backend finding (inform — within committed scope). Watchdog
+> 441e8b57 armed; Monitor bp808a7mu covers architect wedges. ⛔ no Decision mergeable.
+>
+> ### ⚡ 2026-07-15 (15:56 UTC, clock-read) — 🔴 PX3 CI-RED (did NOT merge; respin routed) · PX4 HARD-STOP (design fork at Architect) · BOTH WPs in respin/fork
+>
+> **PX3 CI-RED — did NOT merge (my earlier "merged" note was premature).** Publisher
+> `bkftgt11b` created PR #722 @ `dd4ced5b`, polled, hit `build + test: fail`;
+> `origin/main` unchanged at `c82b82f7`. **Failure = a PX3-caused crate-mate
+> regression, NOT a PX3 test:** `ken-elaborator/tests/l_match_ih_fix_acceptance.rs
+> ::ac2_tree_size_uses_both_ihs_and_computes_right_value` panics at `:71`
+> "unexpected literal kind" — that test iterates `env.num_values` matching every
+> entry as `NumericLitVal::Int`; PX3 seeded a non-`Int` entry (the width/bound
+> literals). **Fetched the CI log via the publisher's `.devcontainer/mint-gh-token.sh`**
+> (gh not authed for me directly; this is publisher-path CI-mirroring). **Routed to
+> Language ring `evt_1avpeys1jt4r6`** (+roused leader): fix (PX3-side seed vs
+> test-side match — ring rules, QA+§14 confirm) → new SHA → re-QA → re-§14 (new
+> Decision; `dec_7zpw53cyr777r` @ `dd4ced5b` now VOID) → re-publish. PR #722 stays red.
+> **LESSON (retro carry, PX3):** a shared-registration change (`env.num_values`)
+> must run the WHOLE crate `ken-cargo test -p ken-elaborator`, not just
+> `--test px3_abi_scalars` — targeted-single-test misses crate-mate regressions;
+> CI (`--locked` full) caught it. [[ken-cargo-workspace-does-not-match-ci-locked-for-rejection-changes]] sibling.
+> **PX4 HARD-STOP unchanged** — native Cranelift backend has no runtime aggregate
+> model; design fork at Architect (evt_1ek0ktcn1eth4), scope call pending mine. See
+> next block.
+> **⇒ STATE: neither WP merged.** PX3 respin (Language ring), PX4 design ruling
+> (Architect) → then my scope call + likely brief Pat. Self-compact deferred (2 live
+> threads). ⛔ no Decision mergeable: `dec_7zpw53cyr777r`(void), `dec_1d2zwmdm51q4d`
+> (rejected), `dec_6vnyep71wa1nz`(rejected).
+>
+> ### ⚡ 2026-07-15 (15:52 UTC, clock-read) — 🔶 PX4 HARD-STOP: native backend can't express ProcessInput consumption (design fork → Architect; scope call → me) · PX3 publishing
+>
+> **PX4 HARD-STOP — a real backend-expressibility fork (native-early's predicted
+> lesson).** After the 2nd §14 block, runtime-implementer HARD-STOPPED before
+> edits (correct — per leader's escalate-don't-invent guard), clean branch
+> `51f19d1d`. **Grounded finding (evt_2fpke5zd6xy0 + leader evt_1ek0ktcn1eth4):**
+> the settled Cranelift lowering has **NO runtime aggregate/control-flow model** —
+> `cranelift_backend.rs:1371-95` Bytes=compile-time `Vec<u8>`, Constructor=CT tag;
+> `:1454-64` Match only for statically-known ctors; `:1422-36` rejects runtime Bool
+> branch; `:1931-57` bytes_length/at need CT Bytes/static index; `:1272-85` binds
+> only a scalar ABI load + optional CT-staged RuntimeValue. So consuming OS-variable
+> `List Bytes`/`List (Prod Bytes Bytes)` (ProcessInput) needs EITHER a new runtime
+> aggregate/control-flow/lifetime model OR a new process-field-access primitive
+> family — **both new backend mechanisms beyond PX4's wiring scope.**
+> **LANE SPLIT:** (1) **Architect** rules the DESIGN — expressible? which mechanism
+> (full runtime-aggregate model vs. minimal sound process-field-access primitive)? +
+> soundness. Routed to it (evt_1ek0ktcn1eth4); processing now (I unwedged a stranded
+> paste, Monitor bp808a7mu). (2) **Steward (me)** rules the SCOPE given that design:
+> PX4 grow vs. rescope to a narrower process-shell vs. split the runtime-value-lowering
+> into a new WP / fold into **PX5** (="lower RuntimeExpr::Effect natively" = the SAME
+> native-runtime-value problem). **⇒ ON ARCHITECT DESIGN RULING: make the scope call;
+> likely BRIEF PAT** (native-backend-capability gap reshapes the PX-B/native-early
+> track — FORK-3 lesson surfacing exactly as intended). Runtime ring PARKED on the
+> clean branch pending the ruling; do NOT compact it. ⛔ PX4 not publishable; both
+> `dec_1d2zwmdm51q4d` + `dec_6vnyep71wa1nz` unmerged. Self-compact DEFERRED (live fork).
+>
+> ### ⚡ 2026-07-15 (15:43 UTC, clock-read) — ⚙ PX3 PUBLISHING (FULL CI, bg bkftgt11b) · PX4 at §14 re-review · SELF-COMPACTING at 33%
+>
+> **SELF-COMPACT SEAM (33% ceiling).** Two threads in flight, both captured here:
+> - **PX3 — PUBLISHING.** Decision `dec_7zpw53cyr777r` verified FRESH (status
+> resolved, resolved_by=architect `agt_37reqftfe6g00`, cites QA `evt_y1aafbkn876d`
+> + §14 `evt_47012a2xrk6tg`, exact `dd4ced5b` on `c82b82f7`). Candidate verified:
+> direct child of c82b82f7, 8 files crates/-only, `diff --check` clean, NO tracker
+> commit on branch. **FULL-CI publisher launched `bkftgt11b`** (background, exact
+> `dd4ced5b`, NOT doc-only). **⇒ ON MERGE (task bkftgt11b completes):**
+> content-verify on origin/main (e.g. `USize` in `crates/ken-elaborator/src/numbers.rs`
+> or the `intToUSize`/`RangeError` surface; `POINTER_WIDTH` in
+> `crates/ken-host/build.rs`) → request 3 §10 retros (leader+impl+QA, thread
+> `thr_3zzt8a92j3mxc` root `evt_137pq19w6s0sg`) → CLOSE PX3. Then sync tracker to
+> main separately.
+> - **PX4 — 2nd §14 BLOCK (NOT publishable). `dec_1d2zwmdm51q4d` REJECTED**
+> (`evt_d0044g0xtjha`). Respin `51f19d1d` fixed the starter (real
+> `main(argc,argv,envp)`) BUT a 2nd finding: the C starter computes an **FNV
+> digest** of argv/env/cwd (`hash % 125 + 1`) and passes only that scalar as
+> `Var(0)` — the Ken entry never consumes byte-accurate ProcessInput; no `Var(1)`.
+> The black-box test only proved a 125-valued C-side digest reaches the entry, not
+> AC1 (entry consumes the same byte-accurate ProcessInput as the interpreter).
+> runtime-qa WITHDREW its approve (`evt_dmtfsqa0m357`); **runtime-leader routed the
+> 2nd respin `evt_3ewnvsnv5x185`** (lower `NativeProcessAbi` into the ProcessInput
+> `RuntimeValue`, entry expr must inspect real bytes; hard-stop+escalate if genuine
+> lowering can't be expressed in the backend). ⛔ **do NOT publish PX4**; BOTH
+> `dec_1d2zwmdm51q4d` + `dec_6vnyep71wa1nz` stay unmerged. **⇒ AWAIT 2nd respin
+> candidate → re-QA → re-§14 → resolve → publish.** RETRO carry (PX4, 2nd): a
+> "native entry observes OS input" AC needs the ENTRY EXPRESSION to consume the
+> real value — a C-side digest/token substituting for it is a proxy (green-vs-green
+> cluster); QA missed it twice, §14 caught it twice.
+> **⇒ WATCH: architect (single T1 seat) is the bottleneck + strands pastes** —
+> Monitor bp808a7mu + watchdog 441e8b57 cover a re-wedge (bare Enter to
+> moot-architect if `[Pasted Content]` + no Working ≥60s). Both gpt build rings
+> (Language/Runtime) idle-awaiting-retro/next; do NOT compact them until their WP
+> closes. PX3+PX4 retros still owed → NOT closed. Resource/Bracket HELD (Pat A).
+>
+> ### ⚡ 2026-07-15 (15:42 UTC, clock-read) — BOTH WPs at the finish line · architect is the bottleneck (2 reviews queued) · publish on resolve
+>
+> **PX3 (Language) — CLEAN PASS, one resolve from publish.** QA APPROVE
+> `evt_y1aafbkn876d` + Architect §14 APPROVE `evt_47012a2xrk6tg` (both boundaries
+> hold: bidirectional width-fact closure with `C_LONG_WIDTH` drift discriminators;
+> trust delta exactly 12; manifest-derived bounds; Refl rejects opaque retract).
+> **Decision `dec_7zpw53cyr777r`** created (exact `dd4ced5b`, range
+> `c82b82f7...dd4ced5b`, no CV). Architect resolving it now (I unwedged a stranded
+> [Pasted Content] on moot-architect via bare Enter — Monitor bp808a7mu caught it).
+> **⇒ ON `dec_7zpw53cyr777r` RESOLVED (verify FRESH: status:resolved,
+> resolved_by=architect, §14 vote in): PUBLISH PX3 exact `dd4ced5b` FULL CI** (no
+> tracker commit on WP branch — preserve exact-SHA §14). 8 paths, touches
+> `crates/` → FULL CI, never doc-only.
+> **PX4 (Runtime) — RESPIN LANDED, at §14 re-review.** §14 BLOCK of `874c2b7a`
+> (AC1: artifact never received OS input) → respin `51f19d1d` emits real
+> `main(argc,argv,envp)`, materializes OS argv/env/cwd per invocation, passes
+> `NativeProcessAbi*`, Cranelift dynamically reads the discriminator (dummy token
+> gone). Black-box test spawns ONE artifact 2× w/ distinct+non-UTF-8 input → 2
+> distinct exits. **runtime-qa re-APPROVE `evt_410fvr5j22xpp`**; **§14 re-review
+> requested, Decision `dec_1d2zwmdm51q4d`** (`evt_42ep34crkrv5e`). ⛔ old blocked
+> `dec_6vnyep71wa1nz` stays unmerged. **⇒ ON `dec_1d2zwmdm51q4d` §14 APPROVE +
+> resolved: PUBLISH PX4 exact `51f19d1d` FULL CI.**
+> **⇒ BOTTLENECK: architect (single T1 seat) has BOTH reviews queued and just
+> stranded a paste — WATCH for re-wedge** (Monitor bp808a7mu + watchdog 441e8b57
+> cover it; bare Enter to moot-architect if `[Pasted Content]` + no Working ≥60s).
+> Neither Decision resolved yet; event-driven on the two resolutions.
+>
+> ### ⚡ 2026-07-15 (15:27 UTC, clock-read) — PX4 §14 BLOCK (respin in flight, correct catch) · PX3 building · do-NOT-merge dec_6vnyep71wa1nz
+>
+> **PX4 (Runtime):** implementer built `874c2b7a` → runtime-qa APPROVE
+> (`evt_3k1nekjy6hq5a`) → leader opened Decision `dec_6vnyep71wa1nz` + §14 →
+> **Architect §14 BLOCK `evt_6wgeh5pfbfrnj`.** Load-bearing catch = my AC1 exactly:
+> the native artifact **never receives OS process input** — the starter stub still
+> emits `main(void)`/`ken_nc23_entrypoint(0)` (no argc/argv/envp/cwd), the new JIT
+> `i64` param is never read, and the "two-vector" tests only **JIT-specialize with
+> synthetic input**, not spawn a real binary with OS argv. **⛔ do NOT merge
+> `dec_6vnyep71wa1nz`** (blocked on cast). Leader ALREADY routed the respin
+> (`evt_1db6he312wc4g`); runtime-implementer **Working** on it (verified pane).
+> Architect's discriminator = my AC1: build/spawn the SAME native artifact ≥2×
+> with distinct argv+env (incl. non-UTF-8) at the artifact boundary. All other
+> mechanism (exit mapper, trap, effect lane, single named transmute, disclosure)
+> ruled sound — hold unchanged.
+> **⇒ RETRO LESSON to harvest (PX4):** runtime-qa APPROVED a **JIT-specialization
+> proxy** (unit tests injecting `NativeProcessInput` constants) as if it proved
+> OS-argv reachability — a verify-the-proxy-not-the-mechanism miss (green-vs-green
+> cluster). The real test spawns the artifact. Frame AC1 named the right property;
+> QA verified a stand-in for it. Carry candidate: an "artifact observes OS input"
+> AC must be proven by **spawning the built artifact**, never by API/JIT injection.
+> **PX3 (Language):** building — language-implementer Working (atomic branch:
+> ken-host width-fact spillover + scalars + Result narrowers). No block.
+> **⇒ Event-driven:** await PX4 respin candidate (re-QA + re-§14 → publish) and
+> PX3 handoff. Watchdog `441e8b57` armed.
+>
+> ### ⚡ 2026-07-15 (15:03 UTC, clock-read) — 🟢 PX3 + PX4 KICKED OFF · both rings WORKING · fleet running 2 rings · event-driven
+>
+> **Handoff Gate COMPLETE for both rings.** Frames live on `origin/main c82b82f7`
+> (PR #721). Both rings compacted+reset-to-main (all 6 members "Context compacted"
+> verified), kickoffs posted, both leaders roused + confirmed **Working**:
+> - **PX3 → Language** (kickoff `evt_137pq19w6s0sg`) — language-leader Working.
+> - **PX4 → Runtime** (kickoff `evt_2d415hf37xraj`) — runtime-leader Working.
+> **⇒ NOW EVENT-DRIVEN.** Per WP the cycle is: leader frames team WP → implementer
+> builds → QA verifies → Architect §14 (soundness) [no CV — neither touches
+> `spec/`+`conformance/`] → merge Decision resolved+verified-fresh → publisher FULL
+> CI → content-verify on main → 3 retros → CLOSE. I act on mentions, not a timer.
+> **Watchdog `441e8b57` armed** (2 live WPs). Resource/Bracket HELD (Pat (A)).
+> **PX3 watch-item:** it adds width facts to `ken-host` (Runtime's crate) as
+> Language-owned spillover — Architect §14 must cover the inventory-closure axis
+> there (the PX2-hole axis). **PX4 watch-item:** must NOT lower effects (PX5) or
+> launder the JIT trampoline into ken-host; §14 confirms the confined boundary.
+> **⇒ SELF-COMPACT** eligible at this clean seam (both WPs kicked off, rings
+> Working, nothing mid-flight) if context nears 33%; resume = this block.
+>
 > ### ⚡ 2026-07-15 (14:44 UTC, clock-read) — 🟢 OPERATOR REPLIED · PX3 + PX4 RELEASING (2 rings) · Milestone-D folded into PX campaign · watchdog RE-ARMED
 >
 > **Pat replied to escalation `evt_4ysrxrbqbs4zq` (in-session):**
