@@ -651,6 +651,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ken-verify"
+version = "0.0.0"
+dependencies = [
+ "ken-cli",
+ "ken-elaborator",
+ "ken-host",
+ "ken-interp",
+ "ken-runtime",
+ "num-bigint",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
