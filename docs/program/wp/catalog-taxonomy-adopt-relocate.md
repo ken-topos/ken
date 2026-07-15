@@ -71,9 +71,13 @@ of the importable package corpus.
 report's five "Split" rows — `Collections.Collections` by carrier; `Map`→data +
 relation-algorithm; `Capability.Parsing.Parsing`→source + Boolean grammar;
 `Text.Numeric.Numeric`→decimal parse + format; embedded examples). **Do NOT split
-any file in this WP** — a "Split" row here means *relocate the combined file to
-its provisional home only* (per the report's provisional homes), leaving the
-split to its own dependency-aware WP. Also OUT: **Phase 4** drift checks beyond
+any file in this WP** — a "Split" row means *relocate the combined file, intact,
+to its single Phase-2 provisional home* (now explicit in the report for all four),
+leaving the split to its own dependency-aware WP. The four Phase-2 provisional
+homes: `Collections.Collections` → `Data/Collections/Derived.ken.md`; `Map` →
+**stays** at `Data/Collections/Map.ken.md`; `Capability/Parsing/Parsing.ken.md` →
+**stays** (already allowlisted); `Text/Numeric/Numeric.ken.md` →
+`Capability/Parsing/Numeric.ken.md`. Also OUT: **Phase 4** drift checks beyond
 the allowlist lint (path/import-at-depth, leaf-or-namespace, PascalCase,
 no-empty-namespace, no-Example-without-rationale, canonical-category+facets,
 no-right-dependency) — a separate hardening WP. No new empty section/domain dirs.
