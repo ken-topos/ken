@@ -14,7 +14,49 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⚡ 2026-07-15 (03:46 UTC, clock-read) — FOSSIL SWEEP CLOSED · `origin/main @ 577245a1`
+> ### ⚡ 2026-07-15 (06:08 UTC, clock-read) — PX1 RELEASING (Linux-ABI-direct) · `origin/main @ 721eedce`
+>
+> ## 🔨 PAT RESPONDED: **Linux-ABI-direct (POSIX dropped)** + **PX1/PX2 pulled ahead of CC9**. PX1 frame authored; Architect seam-confirm out; Runtime compacting for kick.
+>
+> **Operator ruling (2026-07-15, this window):** (1) **Linux ABI is the target;
+> POSIX abstraction DROPPED** — Ken binds the Linux syscall ABI directly (rustix
+> `linux_raw`); other *nix are per-target backends later, not a POSIX portability
+> layer. (2) **PX1/PX2 pulled ahead of CC9** — release now on the Runtime lane.
+> (3) rustix is SETTLED — operator flagged I re-asked 3× ([[settled-operator-approval-is-a-fixed-input-never-re-ask]]);
+> recorded closed in charter §2. (4) Toolchain proposal accepted in principle:
+> `export` parse-gap = a near-term S (Steward proceeds unless vetoed); CC9
+> as-framed; package-manager L4 deferred. Pat away until ~11:00–11:30 UTC.
+>
+> **⇒ IN FLIGHT (this window):**
+> - **Charter reframed** Linux-ABI-direct (title + §2 lead fixed input + rustix
+>   SETTLED + ADR-0011 + status line), wrapped. On steward/work, publishing
+>   doc-only with the PX1 frame.
+> - **PX1 frame authored** — `docs/program/wp/px1-ken-host-linux-boundary.md`
+>   (ken-host over pinned rustix; extract the 6 inline FFI boundaries; forbid
+>   unsafe on ken-interp; FORK-2 + Phase-A-exit rulings as fixed inputs; ONE open
+>   item = the backend seam → Architect confirm). Wrapped.
+> - **Architect seam-confirm ✅ IN + FOLDED** (`evt_1t429wz5ehf42`): (1) seam
+>   confirmed — Linux-only, no premature trait, seam = ken-host's **semantic**
+>   API (NOT a mirror of the 6 C sigs; rustix types stay private); (2) **SPLIT
+>   CORRECTED** — the 13 handwritten facts are **DELETED IN PX1** (dead decls
+>   would preserve the FORK-2-retired hand-authored ABI source), not deferred to
+>   PX2; PX2 = manifest measures+binds the replacement. Also: JIT `transmute` is
+>   in `ken-runtime`, not `ken-interp`. Frame updated (commit `16f8ce61`); wrap
+>   running.
+> - **Runtime ring COMPACTED** (handoff-gate `bwukutdx7`) — all 3 seats
+>   "• Context compacted", drops verified; **ready to kick.**
+> - **Watchdog RE-ARMED** (cron `b7c6e6a9`, `11,26,41,56`) — active work resumed.
+>
+> **⇒ NEXT (in order):** (a) fold Architect seam-confirm into the PX1 frame; (b)
+> publish **doc-only** bundle to main [charter reframe + PX1 frame + tracker]; (c)
+> verify Runtime compaction drops (gate step 5); (d) **kick PX1** to Runtime
+> (mention + rouse Codex seats + confirm Working) — leader cuts `wp/px1-ken-host`
+> from origin/main; (e) then author **PX2** frame (has a clean-room gate → Spec
+> enclave leakage recheck for the system-header probe) + the **`export` S**.
+> **PARKED:** `kenfmt_c_capstone.rs` `TOP_LEVEL_PREFIXES` (missing `let`, stale
+> `use`) — fold into next kenfmt-touching WP.
+>
+> ### ⏭ 2026-07-15 (03:46 UTC, clock-read) — FOSSIL SWEEP CLOSED (history) · `origin/main @ 577245a1`
 >
 > ## ✅ AXIOM-KEYWORD FOSSIL SWEEP **CLOSED** (PR #707 → origin/main `577245a1`, FULL CI, content-verified; all 3 §10 retros in).
 >
@@ -26,19 +68,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > leader `03:43:33`, QA `03:43:46`, implementer `03:44:09` (thr_10yzq9hwzhrba). WP
 > DONE per §2 (merged + ACs met + retros in).
 >
-> **⇒ NEXT (Steward, this window):**
-> **(1) DOC-ONLY tracker sync to main** (this checkpoint; steward/work is behind
-> main after PR #707 squash — bundle tracker to origin/main).
-> **(2) 2 MEMORIES WRITTEN** this window: (a) surface-FORM migration trips TWO
-> oracle classes; (b) don't gate a trusted-base change QA-only (§14 Architect
-> soundness not Steward-waivable, structural>empirical). ✅
-> **(3) PARKED FOLLOW-UP:** `kenfmt_c_capstone.rs` `TOP_LEVEL_PREFIXES` omits
-> accepted `let` and retains retired `use` — latent test-oracle-hygiene bug; fold
-> into the next kenfmt/capstone-touching WP or a standalone S (foundation-impl
-> flagged, evt in thr_10yz `03:15:32`).
-> **(4) STILL OPEN for Pat:** PX1/PX2-vs-CC9 sequencing (rustix approved → PX1
-> framable; Runtime lane, parallel to catalog); toolchain-axis proposal owed.
-> Fleet otherwise idle by design — event-driven standby.
+> **⇒ DONE this window:** (1) fossil sweep CLOSED; (2) DOC-ONLY tracker sync to
+> main ✅ (PR #708 → origin/main `721eedce`, content-verified); (3) 2 MEMORIES
+> written + indexed: surface-FORM migration trips TWO oracle classes; don't gate a
+> trusted-base change QA-only (§14 not Steward-waivable); (4) **2 decisions POSTED
+> to Pat** (`evt_784f8m53ycp0m`, rooted thread): **Decision 1** — pull PX1/PX2
+> ahead of CC9? [Steward rec: YES — Runtime lane idle, retires live security-path
+> defect, costs language lane nothing]; **Decision 2** — toolchain-axis proposal
+> [`export` parse gap → standalone S soon · CC9 as-framed, Test.Property minimal ·
+> package-manager L4 waits].
+>
+> **⇒ WATCHDOG CANCELLED (04:26 UTC, cron `097a5c8b`)** — fleet fully quiescent
+> (all WPs closed, nothing in review/mid-task), blocked only on Pat; per operator
+> ruling 2026-07-12 [[cancel-watchdog-cron-when-fleet-quiescent]] the backstop has
+> nothing to catch. **RE-ARM it (`CronCreate`, `11,26,41,56 * * * *`) the moment
+> active work resumes** — a WP goes live / branch in review / Pat kicks off. Pat's
+> mention is the wake signal meanwhile (event-driven).
+>
+> **⇒ ON RESUME:** event-driven standby awaiting Pat's Decision 1 (gates the
+> frontier) + Decision 2 (planning). On Pat's answer:
+> - **PX1/PX2 pull-ahead = YES** → HANDOFF-GATE-compact Runtime (leader/impl/qa),
+>   then frame PX1 (ken-host over pinned rustix) + PX2 (probe-derived ABI
+>   constants) on the Runtime/`crates` lane.
+> - **`export` S approved** → frame it on the language lane (wire parser for the
+>   already-specified `export`; 0 hits in `parser.rs` today).
+> **PARKED:** `kenfmt_c_capstone.rs` `TOP_LEVEL_PREFIXES` omits accepted `let`,
+> retains retired `use` (foundation-impl flagged, thr_10yz `03:15:32`) — fold into
+> next kenfmt/capstone-touching WP or a standalone S. Fleet idle by design.
 >
 > ### ⏭ 2026-07-15 (02:13 UTC, clock-read) — ★★★ (history) · `origin/main @ 8dabdeca`
 >
