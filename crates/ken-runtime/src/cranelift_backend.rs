@@ -1258,6 +1258,7 @@ fn compile_expr_into_module<'a, M: Module>(
         next_token: 0,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        process_object: process_mode,
     };
     let (maybe_trap, decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
@@ -1276,8 +1277,10 @@ fn compile_expr_into_module<'a, M: Module>(
         let lowered = compiler.lower_expr(&mut builder, expr, &initial_env)?;
         let result = match lowered {
             Lowered::Trap(trap) => {
-                let zero = builder.ins().iconst(types::I64, 0);
-                builder.ins().return_(&[zero]);
+                let status = builder
+                    .ins()
+                    .iconst(types::I64, if process_mode { -4 } else { 0 });
+                builder.ins().return_(&[status]);
                 (Some(trap), None)
             }
             value => {
@@ -1355,6 +1358,7 @@ struct Lowering<'a> {
     next_token: i64,
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
+    process_object: bool,
 }
 
 #[derive(Clone)]
@@ -1684,6 +1688,45 @@ impl<'a> Lowering<'a> {
         let fields = builder
             .ins()
             .load(pointer_type, MemFlags::trusted(), pointer, 16);
+        if let [case] = cases {
+            let (expected_tag, expected_arity) = borrowed_constructor_identity(&case.constructor)
+                .ok_or_else(|| {
+                unsupported(
+                    "Match",
+                    format!("{} has no borrowed constructor identity", case.constructor),
+                )
+            })?;
+            if case.binders != expected_arity {
+                return Err(unsupported(
+                    "Match",
+                    format!("{} borrowed arity mismatch", case.constructor),
+                ));
+            }
+            let arm = builder.create_block();
+            let rejected = builder.create_block();
+            let selected = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                expected_tag,
+            );
+            builder.ins().brif(selected, arm, &[], rejected, &[]);
+            builder.switch_to_block(rejected);
+            let failure = builder.ins().iconst(types::I64, -1);
+            builder.ins().return_(&[failure]);
+            builder.switch_to_block(arm);
+            Self::require_i64(builder, arity, expected_arity as i64);
+            if expected_arity != 0 {
+                Self::require_nonzero(builder, fields);
+            }
+            let mut arm_env = (0..expected_arity)
+                .map(|index| {
+                    let field = builder.ins().iadd_imm(fields, (index * 32) as i64);
+                    Lowered::BorrowedNativeValue { pointer: field }
+                })
+                .collect::<Vec<_>>();
+            arm_env.extend_from_slice(env);
+            return self.lower_expr(builder, &case.body, &arm_env);
+        }
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
         let mut test_block = builder.current_block().expect("borrowed match block");
@@ -2439,6 +2482,12 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         value: Lowered,
     ) -> Result<(cranelift_codegen::ir::Value, ResultDecoder), CraneliftBackendError> {
+        if self.process_object {
+            return Ok((
+                self.emit_process_exit_status(builder, value),
+                ResultDecoder::Int,
+            ));
+        }
         match value {
             Lowered::Int { value, .. } => Ok((value, ResultDecoder::Int)),
             Lowered::Bool { value, .. } => Ok((value, ResultDecoder::Bool)),
@@ -2451,6 +2500,64 @@ impl<'a> Lowering<'a> {
                 ))
             }
         }
+    }
+
+    fn emit_process_exit_status(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: Lowered,
+    ) -> cranelift_codegen::ir::Value {
+        let Lowered::Constructor { constructor, args } = value else {
+            return builder.ins().iconst(types::I64, -2);
+        };
+        if constructor == crate::EXIT_SUCCESS_CONSTRUCTOR {
+            return if args.is_empty() {
+                builder.ins().iconst(types::I64, 0)
+            } else {
+                builder.ins().iconst(types::I64, -2)
+            };
+        }
+        if constructor != crate::EXIT_FAILURE_CONSTRUCTOR {
+            return builder.ins().iconst(types::I64, -2);
+        }
+        let Ok([payload]) = <Vec<Lowered> as TryInto<[Lowered; 1]>>::try_into(args) else {
+            return builder.ins().iconst(types::I64, -3);
+        };
+        let Lowered::Int { value, known } = payload else {
+            return builder.ins().iconst(types::I64, -3);
+        };
+        if let Some(code) = known {
+            let mapping = crate::process_exit_status(crate::ProcessExitCode::Failure(code));
+            return builder.ins().iconst(
+                types::I64,
+                if mapping.trap_report.is_some() {
+                    -3
+                } else {
+                    i64::from(mapping.status)
+                },
+            );
+        }
+        let zero = builder.ins().iconst(types::I64, 0);
+        let one = builder.ins().iconst(types::I64, 1);
+        let max = builder.ins().iconst(types::I64, 255);
+        let malformed = builder.ins().iconst(types::I64, -3);
+        let is_zero =
+            builder
+                .ins()
+                .icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, value, zero);
+        let positive = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThan,
+            value,
+            zero,
+        );
+        let within_max = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual,
+            value,
+            max,
+        );
+        let valid = builder.ins().band(positive, within_max);
+        let nonzero = builder.ins().select(valid, value, malformed);
+        builder.ins().select(is_zero, one, nonzero)
     }
 
     fn ground_value(
@@ -2663,37 +2770,40 @@ mod tests {
             cases: vec![RuntimeMatchCase {
                 constructor: crate::PROCESS_INPUT_CONSTRUCTOR.to_string(),
                 binders: 3,
-                body: RuntimeExpr::Match {
-                    scrutinee: Box::new(RuntimeExpr::PrimitiveCall {
-                        primitive: RuntimePrimitive {
-                            symbol: "bytes_at".to_string(),
-                            partiality: RuntimePartiality::SafeOption {
-                                none: none.to_string(),
-                                some: some.to_string(),
-                                obligation: Some("obl:px4.bounds".to_string()),
+                body: RuntimeExpr::Construct {
+                    constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+                    args: vec![RuntimeExpr::Match {
+                        scrutinee: Box::new(RuntimeExpr::PrimitiveCall {
+                            primitive: RuntimePrimitive {
+                                symbol: "bytes_at".to_string(),
+                                partiality: RuntimePartiality::SafeOption {
+                                    none: none.to_string(),
+                                    some: some.to_string(),
+                                    obligation: Some("obl:px4.bounds".to_string()),
+                                },
                             },
-                        },
-                        args: vec![
-                            RuntimeExpr::Var(2),
-                            RuntimeExpr::Value(RuntimeValue::Int(99)),
+                            args: vec![
+                                RuntimeExpr::Var(2),
+                                RuntimeExpr::Value(RuntimeValue::Int(99)),
+                            ],
+                        }),
+                        cases: vec![
+                            RuntimeMatchCase {
+                                constructor: none.to_string(),
+                                binders: 0,
+                                body: RuntimeExpr::Value(RuntimeValue::Int(7)),
+                            },
+                            RuntimeMatchCase {
+                                constructor: some.to_string(),
+                                binders: 1,
+                                body: RuntimeExpr::Value(RuntimeValue::Int(9)),
+                            },
                         ],
-                    }),
-                    cases: vec![
-                        RuntimeMatchCase {
-                            constructor: none.to_string(),
-                            binders: 0,
-                            body: RuntimeExpr::Value(RuntimeValue::Int(7)),
+                        default: RuntimeTrap {
+                            code: RuntimeTrapCode::PatternMatchFailure,
+                            message: "invalid bytes_at option".to_string(),
                         },
-                        RuntimeMatchCase {
-                            constructor: some.to_string(),
-                            binders: 1,
-                            body: RuntimeExpr::Value(RuntimeValue::Int(9)),
-                        },
-                    ],
-                    default: RuntimeTrap {
-                        code: RuntimeTrapCode::PatternMatchFailure,
-                        message: "invalid bytes_at option".to_string(),
-                    },
+                    }],
                 },
             }],
             default: RuntimeTrap {

@@ -1276,10 +1276,12 @@ int main(int argc, char **argv, char **envp) {
     long long value = ken_nc23_entrypoint(root);
     free(cwd);
     free(pool);
-    if (value < 0) {
-        fputs("ken native trap: malformed borrowed process input\n", stderr);
-        return 1;
-    }
+    if (value == -1) fputs("ken native trap: malformed borrowed process input\n", stderr);
+    else if (value == -2) fputs("ken native trap: entrypoint returned a malformed ExitCode\n", stderr);
+    else if (value == -3) fputs("ken native trap: malformed ExitCode::Failure payload\n", stderr);
+    else if (value == -4) fputs("ken native trap: explicit entry trap\n", stderr);
+    else if (value < 0) fputs("ken native trap: unknown terminal sentinel\n", stderr);
+    if (value < 0) return 1;
     return (int)value;
 }
 "#
@@ -1650,7 +1652,10 @@ mod tests {
             cases: vec![crate::RuntimeMatchCase {
                 constructor: crate::PROCESS_INPUT_CONSTRUCTOR.to_string(),
                 binders: 3,
-                body: guarded,
+                body: RuntimeExpr::Construct {
+                    constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+                    args: vec![guarded],
+                },
             }],
             default: RuntimeTrap {
                 code: RuntimeTrapCode::PatternMatchFailure,
@@ -1740,6 +1745,76 @@ mod tests {
         assert_eq!(wrong_key.status.code(), Some(1));
 
         fs::remove_dir_all(output_dir).expect("process fixture is removed");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn process_artifact_maps_exitcode_and_reports_terminal_traps() {
+        let run = |name: &str, entry: RuntimeExpr| {
+            let output_dir = temp_output_dir(name);
+            let executable = build_process_starter_executable_artifact(&entry, &output_dir)
+                .expect("process terminal fixture links");
+            let output = Command::new(&executable)
+                .env_clear()
+                .output()
+                .expect("process terminal fixture runs");
+            fs::remove_dir_all(output_dir).expect("terminal fixture is removed");
+            output
+        };
+        let success = || RuntimeExpr::Construct {
+            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+            args: Vec::new(),
+        };
+        let failure = |code: RuntimeExpr| RuntimeExpr::Construct {
+            constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+            args: vec![code],
+        };
+
+        assert_eq!(run("px4-success", success()).status.code(), Some(0));
+        assert_eq!(
+            run(
+                "px4-failure-zero",
+                failure(RuntimeExpr::Value(RuntimeValue::Int(0))),
+            )
+            .status
+            .code(),
+            Some(1)
+        );
+        assert_eq!(
+            run(
+                "px4-failure-255",
+                failure(RuntimeExpr::Value(RuntimeValue::Int(255))),
+            )
+            .status
+            .code(),
+            Some(255)
+        );
+
+        let malformed = run(
+            "px4-malformed-exitcode",
+            RuntimeExpr::Value(RuntimeValue::Int(0)),
+        );
+        assert_eq!(malformed.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&malformed.stderr)
+            .contains("entrypoint returned a malformed ExitCode"));
+
+        let malformed_failure = run(
+            "px4-malformed-failure",
+            failure(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        );
+        assert_eq!(malformed_failure.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&malformed_failure.stderr)
+            .contains("malformed ExitCode::Failure payload"));
+
+        let trapped = run(
+            "px4-explicit-trap",
+            RuntimeExpr::Trap(RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "process object trap fixture".to_string(),
+            }),
+        );
+        assert_eq!(trapped.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&trapped.stderr).contains("explicit entry trap"));
     }
 
     #[test]
