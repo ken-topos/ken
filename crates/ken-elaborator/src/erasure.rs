@@ -372,6 +372,13 @@ fn lower_top_level_body(
     if parameter_count == 0 {
         return lower_body_term(body, declarations, semantic, stack, root_symbol, 0);
     }
+    if has_free_variable_at_or_above(body, parameter_count) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "implicit_closure_capture",
+            "top-level lambda body references a de Bruijn binding outside its explicit parameter list",
+        ));
+    }
     let body = lower_body_term(
         body,
         declarations,
