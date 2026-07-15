@@ -85,7 +85,7 @@ invariant to prove. Hence tree-first, HAMT-as-later-fast-map — both proved.
   proof shape on this WP branch, merges to `main` via the Integrator, then
   Foundation is kicked. Architect (structure + proof soundness + zero-TCB) + Spec
   review (conformance-validator) + team QA + CI.
-- **Lane:** Foundation (catalog/packages/collections). Branch off `origin/main`.
+- **Lane:** Foundation (catalog/packages/Data/Collections/Map.ken.md). Branch off `origin/main`.
 - **Relation to siblings:** independent of `[State]`/`[FS]` (no effect surface);
   couples to the lawful-classes proof discipline (reuse landed `Ord`, carry real
   law proofs).

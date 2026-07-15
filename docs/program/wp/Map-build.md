@@ -1,4 +1,4 @@
-# Map-build — implement the proved BST `Map k v` in `catalog/packages/collections` and retire the opaque primitive (VAL2 #8 / OQ-A)
+# Map-build — implement the proved BST `Map k v` in `catalog/packages/Data/Collections/Map.ken.md` and retire the opaque primitive (VAL2 #8 / OQ-A)
 
 **Steward frame → Team Foundation (build).** The spec is **already fully
 elaborated and on `main`** — `spec/50-stdlib/52-map.md` (the proved bare ordered

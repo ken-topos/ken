@@ -1,6 +1,6 @@
 # WP lawful-classes-lane — Ord Char, Num/DecEq Decimal (re-homed instances)
 
-**Team: Language (owns `catalog/packages/lawful-classes`). Base: `origin/main`.**
+**Team: Language (owns `catalog/packages/Core/Classes/LawfulClasses.ken.md`). Base: `origin/main`.**
 Steward frame. These are the **three forward obligations** the Decimal/Char
 DEMOTE (`4eea2072`) + erratum (`fcfff1c6`) explicitly deferred and re-homed here
 (seed `conformance/surface/numbers/seed-decimal-char-demote.md`, the RE-HOMED

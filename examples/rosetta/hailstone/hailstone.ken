@@ -91,7 +91,7 @@ fn hailstoneFueled (fuel : Nat) (n : Nat) (acc : List Nat) : List Nat =
   }
 
 -- listEqNat: local (a one-off, `Nat`-specialized `list_eq` -- not
--- reusing `catalog/packages/collections`' generic `list_eq` to avoid its whole
+-- reusing `catalog/packages/Data/Collections/Derived.ken.md`' generic `list_eq` to avoid its whole
 -- floor's declarations for this one check).
 fn listEqNat (xs : List Nat) (ys : List Nat) : Bool =
   match xs {

@@ -15,7 +15,7 @@
 //! Ken has no working cross-file import (`import`/`module` parse but are
 //! never elaborated — confirmed empirically, `ken-elaborator/src/elab.rs`
 //! has no `ImportDecl`/`ModuleDecl` handling). Examples that reuse
-//! `catalog/packages/collections` (per the frame's DRY rule) need its symbols
+//! `catalog/packages/Data/Collections/Derived.ken.md` (per the frame's DRY rule) need its symbols
 //! concatenated ahead of their own source before `ken run`. `Derived.ken`
 //! now carries proof terms using `cong`, so the proof-only transport package
 //! must precede collections in that concatenated prelude.
@@ -49,7 +49,7 @@ fn rosetta_dir() -> PathBuf {
 }
 
 /// Dirs confirmed (in-process AND via a real `ken run`) to need
-/// `catalog/packages/collections` concatenated ahead of their own source, and to
+/// `catalog/packages/Data/Collections/Derived.ken.md` concatenated ahead of their own source, and to
 /// stay within the per-example timeout with it prepended. Do not add a
 /// slug here without measuring it first (see the module doc).
 const NEEDS_COLLECTIONS: &[&str] = &["palindrome", "closures", "merge-sort", "tree-traversal"];

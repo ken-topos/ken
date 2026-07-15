@@ -3,7 +3,7 @@
 Format: `../../README.md`. Third WP of the **catalog campaign**
 (`docs/program/06-catalog-campaign.md`;
 `docs/program/wp/CAT-3-collection-laws.md`). CAT-3 = **Layer 1**: the landed
-`catalog/packages/collections` ops get their **laws as propositions, proved not
+`catalog/packages/Data/Collections/Derived.ken.md` ops get their **laws as propositions, proved not
 postulated** (the CAT-1 lawful-class discipline over a **value carrier**), the
 capstone **verified `sort`** (`isSorted` and `Perm` as two laws), and the
 agent-facing **`view` abstraction** (the catalog's projection unit — the six

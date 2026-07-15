@@ -368,8 +368,8 @@ by induction on the carrier (`55 §3.1`).
   ITree-bridge (`§4.3`) mints no new definition — it attests the landed `bind`.
 - **Reused, never re-defined** (subsume-don't-proliferate): the wired `functor`/
   `applicative`/`foldable` fields are the already-built `55` dicts;
-  `cong`/`sym`/`trans` (`catalog/packages/transport`); `list_append`/`concat_map`
-  (`catalog/packages/collections`); the landed `bind` (`ken-elaborator/effects/`).
+  `cong`/`sym`/`trans` (`catalog/packages/Core/Logic/Transport.ken.md`); `list_append`/`concat_map`
+  (`catalog/packages/Data/Collections/Derived.ken.md`); the landed `bind` (`ken-elaborator/effects/`).
 
 > **Build note (perishable).** The `.ken` source
 > (`catalog/packages/Core/Classes/` additions) is a Language-build deliverable, held

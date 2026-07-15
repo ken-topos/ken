@@ -16,7 +16,7 @@ Findings/forks → **Steward**.
 
 ## What it is
 
-Extend the landed `catalog/packages/lawful-classes` pattern (`Eq`/`DecEq`/`Ord`, over a
+Extend the landed `catalog/packages/Core/Classes/LawfulClasses.ken.md` pattern (`Eq`/`DecEq`/`Ord`, over a
 **value type** `a : Type`) to the workhorse **constructor classes** and their
 value-level algebra companions:
 

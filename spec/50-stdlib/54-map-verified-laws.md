@@ -71,7 +71,7 @@ this WP.
 All spellings below are the **landed** `map.ken` idiom (`52 §2`, the
 C5-verified-sort unbundled encoding): every op/law takes `leq` and its laws as
 **separate bare parameters**, and `IsTrue b := Equal Bool b True` (the landed
-`catalog/packages/lawful-classes` bridge). The order-law parameters, verbatim from the
+`catalog/packages/Core/Classes/LawfulClasses.ken.md` bridge). The order-law parameters, verbatim from the
 `Ord` class (`catalog/packages/Core/Classes/LawfulClasses.ken.md`):
 
 ```

@@ -5,7 +5,7 @@ program capabilities FS APartial
 --
 -- Task: determine whether a string reads the same forwards and backwards.
 --
--- Reuses the landed `catalog/packages/collections` string surface (`eq`,
+-- Reuses the landed `catalog/packages/Data/Collections/Derived.ken.md` string surface (`eq`,
 -- `string_to_list_char`/`list_char_to_string`) -- no re-derivation of a
 -- string op. `reverse` over `List Char` is NOT in the landed 7-combinator
 -- floor (`list_append`/`nth`/`take`/`drop`/`natSub`/`list_eq`/`list_compare`),

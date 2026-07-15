@@ -29,7 +29,7 @@ re-litigated:
 2. **Proved by induction + `cong`** (`55 §3.1`): a law over an inductive carrier
    is a recursive `view : Equal …` that `match`es the carrier, closes the base
    directly, and lifts the self-call **IH** under the constructor with `cong`
-   (`catalog/packages/transport`, `53 §2`).
+   (`catalog/packages/Core/Logic/Transport.ken.md`, `53 §2`).
 3. **Per-branch `Proved`-vs-`Refl`**, never uniform (`55 §3.2`): a branch closes
    with `Proved` when both endpoints reduce to the **same fully-collapsing
    constructor head** — a **nullary** ctor, or one whose components all collapse

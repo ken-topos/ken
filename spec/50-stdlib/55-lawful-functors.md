@@ -97,7 +97,7 @@ elaborate through `elaborate_file`.)
 An `Equal`-valued law over an inductive carrier is a **recursive `view`
 returning `Equal …`**, `match`ing the carrier: the base constructor is closed
 directly, the step lifts the recursive-self-call **IH** under the constructor
-with `cong` (`catalog/packages/transport`, `53 §2`):
+with `cong` (`catalog/packages/Core/Logic/Transport.ken.md`, `53 §2`):
 
 ```
 list_right_unit (a : Type) (xs : List a) : Equal (List a) (list_append a xs (Nil a)) xs =
@@ -278,8 +278,8 @@ CAT-3 (collection laws) extend mechanically:
   inductives with eliminators, so every ∀-law is a real kernel proof; **no
   `Axiom`, nothing enters `trusted_base()`**.
 - **Reused, never re-defined** (subsume-don't-proliferate): `cong`/`sym`/`trans`
-  (`catalog/packages/transport`, over `J`, zero delta); `list_append`
-  (`catalog/packages/collections`, the List monoid op); `bool_and` a **transparent**
+  (`catalog/packages/Core/Logic/Transport.ken.md`, over `J`, zero delta); `list_append`
+  (`catalog/packages/Data/Collections/Derived.ken.md`, the List monoid op); `bool_and` a **transparent**
   view (not the `and_bool` primitive — a primitive never reduces on a symbolic
   argument, `51 §6`'s `bool_or` reasoning).
 

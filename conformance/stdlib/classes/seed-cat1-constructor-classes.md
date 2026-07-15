@@ -3,7 +3,7 @@
 Format: `../../README.md`. First WP of the **catalog campaign**
 (`docs/program/06-catalog-campaign.md`;
 `docs/program/wp/CAT-1-constructor-classes.md`).
-CAT-1 extends the landed `catalog/packages/lawful-classes` pattern (`Eq`/`DecEq`/`Ord`,
+CAT-1 extends the landed `catalog/packages/Core/Classes/LawfulClasses.ken.md` pattern (`Eq`/`DecEq`/`Ord`,
 over a **value type** `a : Type`) to the workhorse **constructor classes** and
 their value-level algebra companions. This seed pins the **discriminating
 conformance for the value-level algebra classes — `Semigroup`/`Monoid`** (the
@@ -209,7 +209,7 @@ definitional, or postulating the inductive one when `Refl` "doesn't work").
   same nullary constructor observationally collapse to **`Top`** (`16 §8.1`, K7;
   spec `55 §3.2`), so the goal is no longer `Eq`-shaped and `Refl` does not
   apply; the step lifts the IH under `Cons a h` with `cong`
-  (`catalog/packages/transport`). A proof term, **never** `Axiom` (it is *provable*, so
+  (`catalog/packages/Core/Logic/Transport.ken.md`). A proof term, **never** `Axiom` (it is *provable*, so
   a postulate here is an
   **avoidable delta = defect**, `51 §6`). Assert the **observable**: `Refl`
   accepts at `left_unit`, `Refl` rejects (conversion failure) at `right_unit`;

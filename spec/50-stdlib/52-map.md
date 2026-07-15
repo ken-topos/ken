@@ -221,7 +221,7 @@ an unproved op under the "proved map" banner. `letter-frequency`'s critical path
 
 - `to_list` is the **in-order** traversal: `to_list Leaf = Nil`,
   `to_list (Node l k v r) = append (to_list l) (Cons (k, v) (to_list r))` (reusing
-  the landed `list_append`, `catalog/packages/collections`). Over an `Ordered` tree its
+  the landed `list_append`, `catalog/packages/Data/Collections/Derived.ken.md`). Over an `Ordered` tree its
   output keys are **ascending** (§5.3, the load-bearing law).
 - `from_list` folds `insert` over the list (`from_list = foldr (λ (k,v) m. insert
   k v m) empty`); the result is `Ordered` (invariant preserved, §5.1) and

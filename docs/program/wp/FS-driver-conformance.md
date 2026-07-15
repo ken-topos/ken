@@ -120,7 +120,7 @@ and I/O-failure are different modes** and the plan pins them distinctly:
   fixture bytes. **Dependency flagged, not assumed:** the example needs a
   `splitOn`/`lines : String -> List String` helper **not yet built**
   (`read-file-lines/KNOWN-GAP.md`); pinned as a Phase-2 prerequisite riding the
-  `catalog/packages/collections` floor — AC2's "correct content" is honestly gated on
+  `catalog/packages/Data/Collections/Derived.ken.md` floor — AC2's "correct content" is honestly gated on
   it, not silently presumed.
 - **I/O-failure surfacing (AC5, distinct from R2's cap-denial).** A
   **statically-valid, runtime-*sufficient*** cap (so the driver *attempts* the

@@ -7,7 +7,7 @@ program capabilities FS APartial
 --
 -- Probes: `Option` composition without exceptions (stack-underflow), a
 -- fixed pre-tokenized `List RpnOp` (no string tokenizer/split-on-
--- whitespace exists yet in `catalog/packages/collections` -- not this example's
+-- whitespace exists yet in `catalog/packages/Data/Collections/Derived.ken.md` -- not this example's
 -- axis to probe, so hardcoded rather than rediscovered here).
 --
 -- Division is OMITTED: `ken-interp` has no `div_int`/`mod_int` primitive

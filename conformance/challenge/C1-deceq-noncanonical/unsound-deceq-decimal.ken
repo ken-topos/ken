@@ -1,6 +1,6 @@
 -- C1 UNSOUND arm — DecEq Decimal over a non-canonical carrier — should-REJECT.
 --
--- Run against the prelude + catalog/packages/lawful-classes (class DecEq, Bool, Equal,
+-- Run against the prelude + catalog/packages/Core/Classes/LawfulClasses.ken.md (class DecEq, Bool, Equal,
 -- Prop, IsTrue, Axiom, and the Int primitives eq_int/add_int/mul_int/sub_int/
 -- and_bool in scope).
 --
