@@ -14,11 +14,55 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⚡ 2026-07-15 (09:31 UTC, clock-read) — ✅ PX2 MERGED (`origin/main @ 626b38dd`) · retros pending · L4-export held for Pat
+> ### ⚡ 2026-07-15 (09:47 UTC, clock-read) — RESUMED post-compact · frontier is Pat-gated (Decision 2) · ⚠ PX3 sequencing CORRECTED
 >
-> ## ✅ PX2 (`TargetAbi` manifest) **MERGED** — PR #713 → `origin/main @ 626b38dd` (FULL locked CI green). Content-verified: `ken-host/build.rs` generates `TargetAbi` + `TARGET_ABI_MANIFEST_HASH` + target-honest probe; `build_support.rs::verify_inventory_closure` = bidirectional exact-set closure (both `unmanifested producer ABI fact` + `manifested ABI fact lacks producer` arms); `OFlags::SYNC` 3-arm regression in `lib.rs`; dependency record has cc/sha2 delta; `cranelift_backend.rs` untouched; forbid-unsafe trio intact. Gate trail: QA `evt_33kfxsjwczek2` + Architect §14 `dec_518zcqxtf5asb` (resolved_by architect, verified fresh) + Steward content-verify. **2-round WP:** round-1 `583302c3` §14-BLOCKED (inventory gate presence-only; SYNC evaded) → narrow respin `0d816221` (bidirectional closure, 4 ken-host files) → APPROVE. Retro call `evt_6d4gqbprx9xj6` (mention runtime-leader).
+> ## Re-oriented after the PX2-CLOSED self-compact. Ground truth: PX2 CLOSED
+> (`626b38dd`, retros in); no open (`proposed`) Decisions; **all** of
+> LET-2b/3/4/5/6 + KTR-1/2 + PX0/1/2 MERGED. The federation is **quiescent
+> because the near-frontier is operator-gated**, not stalled (§2b condition 2) —
+> the one live thread is the enclave's autonomous AX-1 companion loop (spec-author
+> → CV reconfirm), which self-manages and routes to me only via `git_request`.
 > >
-> > **⇒ NEXT (do in order):** (1) **tracker-sync to main** (doc-only) — main tracker stale since dc0711b0. (2) **AWAIT §10 retros** in `thr_4frygmnb2mx2p` (leader/impl/QA) → **close PX2**; fold the **completeness-gate carry** (bidirectional exact-set closure, not presence+count — 2nd occurrence, PROMOTE candidate → write memory). (3) Runtime → standby; **PX3** (Language: `USize`/`ISize`/`CInt` bound to the manifest) becomes READY. (4) **L4-export** held for Pat's Decision 2. (5) Pat back ~11:00–11:30 UTC — consolidated update (PX1 **and** PX2 both landed during his absence — each with a real §14 soundness block caught + resolved; PX3 ready; L4-export pending Decision 2). Do NOT re-ask rustix (SETTLED).
+> > **⚠ CORRECTION — PX3 is NOT "READY"; it is sequenced BEHIND CC9 (operator).**
+> > My 09:34 block called PX3 "ready" tracking only its *technical* dep (PX2,
+> > merged). But charter `09-…-abi-campaign.md:12` keeps **"PX3+ sequenced behind
+> > CC9"** — the operator pulled PX1/PX2 ahead of CC9 but left PX3+ behind it, and
+> > **CC9 is unbuilt/unframed.** So PX3 is **operator-gated**, not releasable now.
+> > Do NOT frame/release PX3 until Pat pulls it ahead (a Decision-2 sub-question).
+> >
+> > **The whole near-frontier funnels through Pat's unanswered Decision 2**
+> > (toolchain ordering, posted 03:51 `evt_784f8m53ycp0m`): (a) the **`export`
+> > re-export-decl WP** (framed `d8a89915`, HELD; size **M** not S) as the next
+> > Language-lane build; (b) **CC9** as-framed with **minimal `Test.Property`**
+> > (settled: scaffolding → Ward, PRINCIPLES #9); (c) package-manager later; and
+> > implicitly (d) whether **PX3** gets pulled ahead of CC9 too. All Pat's call —
+> > I will NOT open a 2nd build on contested sequencing while he is away.
+> >
+> > **⇒ DONE this pass:** (1) tracker corrected (PX3) + synced to main (doc-only)
+> > so Pat returns to current state; (2) **consolidated update + Decision-2
+> > re-ask posted to Pat** — PX1 AND PX2 both landed during his absence, each with
+> > a real §14 soundness block caught + resolved within settled inputs (no
+> > escalation); export framed+held; PX3 tech-unblocked but behind CC9. Did NOT
+> > re-ask rustix (SETTLED).
+> >
+> > **⇒ NEXT (event-driven standby):** await Pat's Decision 2. On his answer:
+> > `export` greenlight → Handoff-Gate the Language ring + kick; CC9 greenlight →
+> > frame CC9 (minimal Test.Property) + release; PX3 pull-ahead → frame PX3
+> > (Language, manifest-bound scalars) after its predecessor lands. Meanwhile stay
+> > event-driven for an AX-1 `git_request` from the enclave. Watchdog `b7c6e6a9`
+> > kept armed (AX-1 loop live; re-eval when it closes).
+>
+> ### ⚡ 2026-07-15 (09:34 UTC, clock-read) — ✅ PX2 CLOSED (merged + retros in) · self-compacting · L4-export held for Pat
+>
+> ## ✅ PX2 (`TargetAbi` manifest) **CLOSED** — merged PR #713 → `origin/main @ 626b38dd` (FULL locked CI, content-verified: `ken-host/build.rs` generates `TargetAbi` + `TARGET_ABI_MANIFEST_HASH` + target-honest probe; `build_support.rs::verify_inventory_closure` = bidirectional exact-set closure; `OFlags::SYNC` 3-arm regression in `lib.rs`; cc/sha2 dep delta; JIT untouched; forbid-unsafe trio). §10 retros in: leader `evt_1462fk6phf2av`, QA `evt_68mjc5tt4e5h3`, impl `evt_26g6zxs7k218a`. Close post `evt_4vq8y3gyyczea`. Gate trail: QA `evt_33kfxsjwczek2` + Architect §14 `dec_518zcqxtf5asb` (resolved, verified fresh) + Steward content-verify. **2-round WP:** round-1 `583302c3` §14-BLOCKED (inventory gate presence-only; SYNC evaded) → narrow respin `0d816221` (bidirectional closure) → APPROVE. Tracker synced to main (a2656b15, PR #714).
+> >
+> > **⇒ NEXT (post-compact resume — do in order):**
+> > 1. **tracker-sync to main** (doc-only) — the CLOSED state is on steward/work; main tracker (a2656b15) shows "retros pending", one step stale. Sync it.
+> > 2. ~~**PX3 is now READY**~~ — ⚠ **SUPERSEDED by the 09:47 correction: PX3 is behind CC9 (operator sequencing), NOT releasable now.** (PX3 tech spec unchanged: Language lane, `USize`/`ISize`/`CInt` bound to the PX2 manifest, explicit partial `Result` conversions, charter §4 size **S** — but held behind CC9 pending Pat.)
+> > 3. **L4-export** — frame authored + committed (`d8a89915`, steward/work, NOT published). Release **HELD for Pat's Decision 2** (still unanswered).
+> > 4. **Pat back ~11:00–11:30 UTC** — consolidated update: **PX1 AND PX2 both landed during his absence**, each with a real §14 soundness block caught + resolved (PX1 kernel_sigaction safe-facade → redundant remask removed; PX2 inventory gate presence-only → bidirectional closure); PX3 ready to frame; L4-export ready pending Decision 2. Do NOT re-ask rustix (SETTLED).
+> >
+> > **Carry harvested → memory** `completeness-gate-must-be-bidirectional-exact-set-closure` (a completeness/inventory gate must prove exact-set closure BOTH directions; presence+count detects loss not extension). All 3 PX2 retros converged; re-validates COORD §7 exhaustive-by-construction in the build-inventory setting.
 > >
 > > ---
 > > **PX2 framing history (compact):**
