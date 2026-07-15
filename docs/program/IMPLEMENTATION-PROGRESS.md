@@ -14,7 +14,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-15 (02:13 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ 8dabdeca`
+> ### ⚡ 2026-07-15 (03:46 UTC, clock-read) — FOSSIL SWEEP CLOSED · `origin/main @ 577245a1`
+>
+> ## ✅ AXIOM-KEYWORD FOSSIL SWEEP **CLOSED** (PR #707 → origin/main `577245a1`, FULL CI, content-verified; all 3 §10 retros in).
+>
+> **Close-out complete.** Merge content-verified: `axiom prim_eq_axiom` + `axiom
+> string_to_list_char_retraction` ×2 on main; zero `lemma…=Axiom` fossils;
+> LawfulClasses byte-identical. Gate trail: Foundation QA APPROVE
+> (evt_5ge5d19kvrww7) + Architect §14 structural trust-neutrality APPROVE
+> (dec_2mb6kmbr3f7ye resolved on-cast) + Steward content co-gate. §10 retros in:
+> leader `03:43:33`, QA `03:43:46`, implementer `03:44:09` (thr_10yzq9hwzhrba). WP
+> DONE per §2 (merged + ACs met + retros in).
+>
+> **⇒ NEXT (Steward, this window):**
+> **(1) DOC-ONLY tracker sync to main** (this checkpoint; steward/work is behind
+> main after PR #707 squash — bundle tracker to origin/main).
+> **(2) 2 MEMORIES WRITTEN** this window: (a) surface-FORM migration trips TWO
+> oracle classes; (b) don't gate a trusted-base change QA-only (§14 Architect
+> soundness not Steward-waivable, structural>empirical). ✅
+> **(3) PARKED FOLLOW-UP:** `kenfmt_c_capstone.rs` `TOP_LEVEL_PREFIXES` omits
+> accepted `let` and retains retired `use` — latent test-oracle-hygiene bug; fold
+> into the next kenfmt/capstone-touching WP or a standalone S (foundation-impl
+> flagged, evt in thr_10yz `03:15:32`).
+> **(4) STILL OPEN for Pat:** PX1/PX2-vs-CC9 sequencing (rustix approved → PX1
+> framable; Runtime lane, parallel to catalog); toolchain-axis proposal owed.
+> Fleet otherwise idle by design — event-driven standby.
+>
+> ### ⏭ 2026-07-15 (02:13 UTC, clock-read) — ★★★ (history) · `origin/main @ 8dabdeca`
 >
 > ## ✅✅ PAT PX RULINGS (2026-07-15): rustix APPROVED · NO affine/linear types · resource safety → runtime + Ward · test framework = temp scaffolding → Ward.
 >
@@ -62,14 +88,105 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > semantic AC = trusted-base byte-identical before/after (zero trust delta); no
 > Architect terminal gate (escalate only on a non-empty trust delta).
 >
-> **⇒ HOLDING the release + doc-only publish to BATCH with Pat's PX1/CC9 answer.**
-> When Pat responds: publish ONE doc-only bundle to main (charter rulings
-> `338f68bf` + fossil frame `880ca5aa` + tracker) via scratch worktree, then run
-> the Foundation Handoff Gate (compact foundation-leader/implementer/qa → verify
-> drops → kick) and release the fossil sweep. If Pat says pull PX1/PX2 ahead of
-> CC9, release PX1 to Runtime in the same batch (parallel lane — crates, not
-> catalog; no conflict with the fossil sweep). Toolchain-axis proposal still owed
-> to Pat.
+> **▶ FOSSIL SWEEP RELEASING (2026-07-15 ~02:59 UTC — decoupled from the PX call,
+> which is independent).** Waited ~35 min across 5 watchdog ticks with no PX
+> answer; fossil is operator-decided + independent, so released per §2b rather
+> than idle-hold. **(1) Doc-only publish DONE — PR #706 → `origin/main @
+> 7c5c7e4a`, content-verified:** frame `axiom-fossil-sweep.md` present; charter
+> rustix + test-framework-scaffolding rulings landed; tracker synced. Scratch
+> worktree cleaned. **(2) Foundation Handoff Gate compaction IN FLIGHT** (bg
+> `b7uyydvzk`, foundation-leader/implementer/qa; all 3 were idle at `›` prompts,
+> LET-3 P2 closed + retros in → safe reset). ⇒ On script return: verify ctx
+> drops (capture-pane WIDE each seat), then KICK foundation-leader (new root
+> thread, mention `agt_37reqsbs5b000`) pointing at the frame on main; confirm
+> Working. **steward/work now BEHIND origin/main** (squash-merge; my commits
+> 338f68bf/880ca5aa/732a5842 are the source of 7c5c7e4a — not lost work).
+>
+> **✅ FOSSIL KICKED + LEADER WORKING (2026-07-15 03:04 UTC).** Kickoff
+> `evt_1nj8h22fh82m4` (new root thread; mention `agt_37reqsbs5b000`);
+> foundation-leader roused via tmux (no-poll Codex, just compacted) and confirmed
+> **Working** (re-orienting → pulling convo context → will fetch + read frame).
+> ⚠ Leader worktree reset to 8dabdeca (pre-#706) so the frame isn't local yet —
+> kickoff instructs `git fetch origin` + cut `wp/axiom-fossil-sweep` from current
+> origin/main (7c5c7e4a, has frame); watch it fetches vs stalls on file-not-found.
+> ⇒ Steward now EVENT-DRIVEN: await Foundation `git_request` (branch
+> `wp/axiom-fossil-sweep`) at the two-reviewer gate. Steward co-gate then: exactly
+> 3 sites migrated; trusted-base byte-identical (AC3 zero trust delta);
+> whole-catalog fixed point; FULL CI.
+>
+> **▶ 03:10–03:14 UTC — WP RUNNING; probe+AC3 GREEN; 2 coupled test-oracles
+> surfaced + BOTH AUTHORIZED (thr_10yzq9hwzhrba).** My AC5 "zero crates" was a
+> frame error — a surface-FORM migration (not a rename) trips oracles that
+> enumerate the OLD form. Two hit one-red-at-a-time via gate runs:
+> (1) **CC2** `cc2_text_codec_numeric_acceptance.rs:261/267` —
+> `bijection_..._single_separately_homed_assumption` pinned the retired spelling
+> (`matches("Axiom").count()==1`, `contains("lemma string_to_list_char_retraction")`).
+> Ruling evt_53cz3t545zj5h: migrate the assertion to the `axiom` spelling,
+> PRESERVING the one-assumption invariant (don't just green it). **Now GREEN 5/5.**
+> (2) **kenfmt_c_capstone** `:202-205` — static `TOP_LEVEL_PREFIXES` omitted the
+> `axiom` keyword → rejected the canonical `axiom prim_eq_axiom` line. Ruling
+> evt_7evappb6fct3x: add `"axiom"` (corrects an incomplete oracle; CLI strict
+> corpus already green). **AC5 BROADENED (durable): the only `crates/**` delta is
+> test-oracle repairs coupled to introducing the first-class `axiom` form —
+> (a) retired-spelling assertions, (b) declaration-form enumerations that must now
+> include `axiom`; zero production `crates/` delta.** Mandated: full static
+> inventory of BOTH oracle classes up front (surface a 3rd before the next gate,
+> not after) → report `N; here are all N`. Implementer Working (8m+), CC2 green,
+> running the rest. **⇒ On git_request: co-gate = 3 catalog sites + ONLY the
+> enumerated test-oracle repairs (no production crates) + AC3 zero-trust-delta +
+> fixed point.**
+> **📌 MEMORY (write on WP close):** a surface-FORM migration trips TWO oracle
+> classes — retired-spelling assertions AND static grammar-form enumerations
+> (prefix/keyword lists) — because you introduce a token the corpus never held;
+> frame both as in-scope companion repairs up front. Sibling of
+> [[adding-a-file-to-a-globbed-corpus-trips-oracles-you-did-not-enumerate]] +
+> [[exported-name-migration-needs-whole-harness-consumer-inventory]].
+>
+> **✅ 03:24 UTC — GIT_REQUEST @ `be7e45d7` (base 7c5c7e4a); QA APPROVE
+> evt_5ge5d19kvrww7. Steward co-gate PASS by content:** 1 non-merge commit; 5-path
+> scope (2 catalog fossils + CC2 + kenfmt_c_capstone + frame AC5 amendment); ZERO
+> production `crates/`; LawfulClasses byte-identical; 3 fossils migrated (old gone,
+> `axiom` ×3); CC2 oracle INTENT-PRESERVING (exactly-one-`axiom` count, real
+> `…injective` lemma stays `lemma`); capstone `+= "axiom"` only.
+> **⚠ §14 CORRECTION: my frame's "QA-only" gate was an under-spec.** §14 = publisher
+> merges only on a RESOLVED Decision with the **Architect's always-on soundness
+> vote** in; this migrates a POSTULATE (trusted-base-touching). Proposed merge
+> Decision `dec_2mb6kmbr3f7ye` (QA + Steward co-gate votes recorded; awaiting
+> Architect). Architect review requested evt_15d9w7x9q7prn — the one question: is
+> `axiom N:T` STRUCTURALLY guaranteed to elaborate to the identical trusted-base
+> entry (audit label incl.) as `lemma N:T=Axiom`? Architect (Sol/T1) auto-woke,
+> Working the elaboration trace. **Lesson: don't gate a trusted-base change
+> QA-only; §14 Architect vote is not waivable by the Steward.**
+> **✅ 03:33 UTC — ARCHITECT APPROVE + dec_2mb6kmbr3f7ye RESOLVED
+> (evt_6vvh53xbr2523; resolved_by architect on cast).** STRUCTURAL trust-neutrality
+> proof (not just empirical): `Decl::AxiomDecl` → same `SUGAR_AXIOM`/zero-binder-
+> `lemma` path → single kernel producer `declare_postulate`, same audit label +
+> type + opaque insertion + alloc order ⇒ byte-identical ledger is a consequence.
+> §14 satisfied (QA+Architect votes in, resolved Decision; no Spec path).
+> **🚀 PUBLISHING FULL CI — publisher bg `baszf5uwu`, candidate `be7e45d7` as-is
+> (approved SHA).** ⇒ ON PUBLISHER RETURN: verify on origin/main BY CONTENT (grep
+> `axiom prim_eq_axiom` in proof-techniques.ken.md; squash → SHA meaningless);
+> route merge+§10-retro to @foundation-leader (`agt_37reqsbs5b000`); close when 3
+> retros in; doc-only tracker sync to main; write the surface-FORM-migration +
+> obligations-to-Ward memories. **If CI RED:** route the failing job to
+> @foundation-leader, don't retry blind.
+>
+> **✅ 03:15 UTC — INVENTORY COMPLETE, N=4 (evt_6c82z4w6z1e92), all green.** The
+> 4 consumers: CC2 assertion (fixed), kenfmt_c_capstone prefix (added `axiom`),
+> and `ax2_axiom_named_postulates.rs:27` which ALREADY matches `Decl::AxiomDecl`
+> structurally (no edit — a form-aware oracle, correctly untouched). Green: CC2
+> 5/5, kenfmt_c_capstone 2/2, CLI strict corpus 5/5. Leader noted-without-widening
+> a latent gap (below). ⇒ WP proceeding to the Foundation QA gate → git_request.
+> **📌 PARKED FOLLOW-UP (do NOT lose; not this WP):** `kenfmt_c_capstone.rs`
+> `TOP_LEVEL_PREFIXES` is INCOMPLETE independently of the fossil sweep — it omits
+> accepted top-level `let` and retains retired/reserved `use`. A latent
+> false-positive the next top-level-`let` catalog addition would trip. Fix in the
+> next kenfmt/capstone-touching WP or a standalone S (test-oracle hygiene). Sibling
+> of the surface-FORM-migration lesson above.
+>
+> **⏸ STILL OPEN for Pat: PX1/PX2-vs-CC9 sequencing.** Independent of the fossil
+> release (Runtime/crates vs Foundation/catalog). On Pat's "pull ahead" → release
+> PX1 to Runtime (parallel lane). Toolchain-axis proposal still owed to Pat.
 >
 > ### ⏭ 2026-07-15 (01:08 UTC, clock-read) — (history) · `origin/main @ 24aebc97`
 >
