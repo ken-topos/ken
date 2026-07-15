@@ -72,11 +72,12 @@ fn main() {
 }
 
 fn verify_boundary_inventory(facts: &[(&str, u64)]) {
+    let build = fs::read_to_string("build.rs").expect("read landed ABI fact producer");
     let source = fs::read_to_string("src/lib.rs").expect("read landed ken-host producer");
     let consumer = fs::read_to_string("../ken-interp/src/eval.rs")
         .expect("read landed interpreter host-boundary consumer");
     let probe = fs::read_to_string("abi_probe.c").expect("read target ABI observer");
-    build_support::verify_inventory_closure(&source, &consumer, &probe, facts)
+    build_support::verify_inventory_closure(&build, &source, &consumer, &probe, facts)
         .expect("producer, manifest, and observer ABI inventories must be identical");
 }
 
@@ -111,6 +112,8 @@ fn package_identity(
 fn linux_raw_facts() -> Vec<(&'static str, u64)> {
     use linux_raw_sys::{errno, general};
     vec![
+        width_fact("POINTER_WIDTH", bit_width::<usize>()),
+        width_fact("C_INT_WIDTH", bit_width::<core::ffi::c_int>()),
         ("O_RDONLY", general::O_RDONLY.into()),
         ("O_WRONLY", general::O_WRONLY.into()),
         ("O_RDWR", general::O_RDWR.into()),
@@ -144,6 +147,16 @@ fn linux_raw_facts() -> Vec<(&'static str, u64)> {
         ("ERRNO_ENOENT", errno::ENOENT.into()),
         ("ERRNO_EEXIST", errno::EEXIST.into()),
     ]
+}
+
+#[cfg(target_os = "linux")]
+fn bit_width<T>() -> u64 {
+    (core::mem::size_of::<T>() * u8::BITS as usize) as u64
+}
+
+#[cfg(target_os = "linux")]
+fn width_fact(name: &'static str, value: u64) -> (&'static str, u64) {
+    (name, value)
 }
 
 #[cfg(not(target_os = "linux"))]

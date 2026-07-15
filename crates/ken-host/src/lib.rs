@@ -598,7 +598,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn generated_manifest_is_closed_and_probe_comparison_discriminates() {
-        assert_eq!(TARGET_ABI.fact_count, 20);
+        assert_eq!(TARGET_ABI.fact_count, 22);
         assert_eq!(TARGET_ABI.fact_count, TARGET_ABI.facts.len());
         assert_eq!(TARGET_ABI.dependencies.len(), 3);
         assert_eq!(
@@ -634,15 +634,32 @@ mod tests {
         build_support::verify_probe(&expected, &observed).expect("true values agree");
 
         let mut tampered = expected.clone();
-        tampered[0].1 ^= 1;
+        tampered
+            .iter_mut()
+            .find(|(name, _)| *name == "O_RDONLY")
+            .expect("O_RDONLY is manifested")
+            .1 ^= 1;
         let mismatch = build_support::verify_probe(&tampered, &observed)
             .expect_err("tampered linux-raw-sys value must fail closed");
         assert!(mismatch.contains("O_RDONLY"));
+
+        for width in ["POINTER_WIDTH", "C_INT_WIDTH"] {
+            let mut tampered = expected.clone();
+            let (_, value) = tampered
+                .iter_mut()
+                .find(|(name, _)| *name == width)
+                .expect("width fact is manifested");
+            *value ^= 1;
+            let mismatch = build_support::verify_probe(&tampered, &observed)
+                .expect_err("tampered width producer must fail closed");
+            assert!(mismatch.contains(width));
+        }
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     fn producer_inventory_is_bidirectional_and_sync_drift_is_discriminating() {
+        let build = include_str!("../build.rs");
         let host = include_str!("lib.rs");
         let consumer = include_str!("../../ken-interp/src/eval.rs");
         let probe = include_str!("../abi_probe.c");
@@ -652,8 +669,8 @@ mod tests {
             .map(|fact| (fact.name, fact.value))
             .collect::<Vec<_>>();
 
-        build_support::verify_inventory_closure(host, consumer, probe, &facts)
-            .expect("current 20-member producer is exactly manifested");
+        build_support::verify_inventory_closure(build, host, consumer, probe, &facts)
+            .expect("current 22-member producer is exactly manifested");
 
         let injected_host = host.replacen(
             "} | OFlags::CLOEXEC;",
@@ -661,11 +678,11 @@ mod tests {
             1,
         );
         let error =
-            build_support::verify_inventory_closure(&injected_host, consumer, probe, &facts)
+            build_support::verify_inventory_closure(build, &injected_host, consumer, probe, &facts)
                 .expect_err("an unregistered production OFlags variant must fail closed");
         assert_eq!(error, "unmanifested producer ABI fact: OFlags::SYNC");
 
-        let mut restored_facts = facts;
+        let mut restored_facts = facts.clone();
         restored_facts.push(("O_SYNC", linux_raw_sys::general::O_SYNC.into()));
         let restored_probe = probe.replacen(
             "    return 0;",
@@ -673,12 +690,41 @@ mod tests {
             1,
         );
         build_support::verify_inventory_closure(
+            build,
             &injected_host,
             consumer,
             &restored_probe,
             &restored_facts,
         )
         .expect("linux-raw-sys registration plus matching observer restores closure");
+
+        let injected_build = build.replacen(
+            "        width_fact(\"POINTER_WIDTH\", bit_width::<usize>()),",
+            "        width_fact(\"C_LONG_WIDTH\", bit_width::<core::ffi::c_long>()),\n        width_fact(\"POINTER_WIDTH\", bit_width::<usize>()),",
+            1,
+        );
+        let producer_only =
+            build_support::verify_inventory_closure(&injected_build, host, consumer, probe, &facts)
+                .expect_err("a producer-only width fact must fail closed");
+        assert_eq!(
+            producer_only,
+            "unmanifested producer ABI fact: ABI width::C_LONG_WIDTH"
+        );
+
+        let mut registry_only_facts = facts;
+        registry_only_facts.push(("C_LONG_WIDTH", 64));
+        let registry_only = build_support::verify_inventory_closure(
+            build,
+            host,
+            consumer,
+            probe,
+            &registry_only_facts,
+        )
+        .expect_err("a registry-only width fact must fail closed");
+        assert_eq!(
+            registry_only,
+            "manifested ABI fact lacks producer: ABI width::C_LONG_WIDTH"
+        );
     }
 
     #[cfg(target_os = "linux")]

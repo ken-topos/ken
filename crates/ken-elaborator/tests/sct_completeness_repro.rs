@@ -129,10 +129,12 @@ fn shape_a_accepts_and_evaluates_correctly() {
 
     let mut store = ken_interp::eval::EvalStore::new();
     for (nid, v) in &env.num_values {
-        store.num_values.entry(*nid).or_insert_with(|| match v {
-            ken_elaborator::NumericLitVal::Int(n) => ken_interp::eval::EvalVal::from(*n),
-            _ => panic!("unexpected literal kind in this test"),
-        });
+        if let ken_elaborator::NumericLitVal::Int(n) = v {
+            store
+                .num_values
+                .entry(*nid)
+                .or_insert_with(|| ken_interp::eval::EvalVal::from(*n));
+        }
     }
     let result_id = *env.globals.get("result").expect("result should be a global");
     let body = match env.env.lookup(result_id) {

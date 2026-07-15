@@ -4,8 +4,8 @@
 //! no-overflow obligations for fixed-width arithmetic, and provides the
 //! type-directed dispatch table used by the elaborator.
 //!
-//! Types: `Int` (arbitrary-precision), `Int8`…`Int64`, `UInt8`…`UInt64`,
-//! `Float`, `Float32`, `Bool`.
+//! Types: `Int` (arbitrary-precision), `Int8`…`Int64`, `UInt8`…`UInt64`, the
+//! nominal ABI scalars `USize`/`ISize`/`CInt`, `Float`, `Float32`, `Bool`.
 //! All are primitive opaque types (`PrimReduction::OpaqueType`).
 //!
 //! `Decimal`/`Char` are **derived** (`18a §5.6`/`§5.9`, Phase-2 tranche #2
@@ -92,6 +92,9 @@ pub struct NumericEnv {
     pub uint16_id:  GlobalId,
     pub uint32_id:  GlobalId,
     pub uint64_id:  GlobalId,
+    pub usize_id:   GlobalId,
+    pub isize_id:   GlobalId,
+    pub cint_id:    GlobalId,
     /// Derived (`18a §5.6`) — filled in by `decimal_char::register_decimal_char`
     /// after `register_numeric_env` returns; not a primitive registration here.
     /// `Term::Const`-shaped (the transparent `Decimal := DecimalPair` alias).
@@ -114,6 +117,14 @@ pub struct NumericEnv {
     /// The actual `trusted_base()` delta observed while installing SUB-1b.
     /// Tests assert that this is exactly `{uint8_int_retract_id}`.
     pub uint8_retract_trusted_delta: Vec<GlobalId>,
+    /// The exact trusted-base delta from PX3's three nominal opaque ABI
+    /// scalar types. The conversion postulates are accounted separately.
+    pub abi_scalar_type_trusted_delta: Vec<GlobalId>,
+    /// PX3's three named conversion-retraction postulates.
+    pub abi_scalar_retract_ids: Vec<GlobalId>,
+    /// The exact trusted-base delta observed while installing the six native
+    /// conversion floors and three retract postulates.
+    pub abi_scalar_conversion_trusted_delta: Vec<GlobalId>,
 
     // --- `+` dispatch table (keyed by the type's GlobalId) ---
     add_table: HashMap<GlobalId, AddEntry>,
@@ -203,6 +214,9 @@ impl NumericEnv {
             "UInt16"  => Some(self.uint16_id),
             "UInt32"  => Some(self.uint32_id),
             "UInt64"  => Some(self.uint64_id),
+            "USize"   => Some(self.usize_id),
+            "ISize"   => Some(self.isize_id),
+            "CInt"    => Some(self.cint_id),
             "Decimal" => Some(self.decimal_id),
             "Float"   => Some(self.float_id),
             "Float32" => Some(self.float32_id),
@@ -298,6 +312,26 @@ pub fn register_numeric_env(
     let uint16_id  = reg_ty!("UInt16");
     let uint32_id  = reg_ty!("UInt32");
     let uint64_id  = reg_ty!("UInt64");
+    let abi_trusted_before: std::collections::BTreeSet<_> =
+        env.trusted_base().into_iter().collect();
+    let usize_id   = reg_ty!("USize");
+    let isize_id   = reg_ty!("ISize");
+    let cint_id    = reg_ty!("CInt");
+    let abi_trusted_after: std::collections::BTreeSet<_> =
+        env.trusted_base().into_iter().collect();
+    let abi_scalar_type_trusted_delta: Vec<_> = abi_trusted_after
+        .difference(&abi_trusted_before)
+        .copied()
+        .collect();
+    let actual_abi_type_delta: std::collections::BTreeSet<_> =
+        abi_scalar_type_trusted_delta.iter().copied().collect();
+    let expected_abi_type_delta =
+        std::collections::BTreeSet::from([usize_id, isize_id, cint_id]);
+    if actual_abi_type_delta != expected_abi_type_delta {
+        return Err(ElabError::Internal(format!(
+            "PX3 ABI scalar trusted-base delta must be exactly USize/ISize/CInt: expected {expected_abi_type_delta:?}, got {actual_abi_type_delta:?}"
+        )));
+    }
     let float_id   = reg_ty!("Float");
     let float32_id = reg_ty!("Float32");
     let bool_id    = reg_ty!("Bool");
@@ -496,10 +530,13 @@ pub fn register_numeric_env(
 
     Ok(NumericEnv {
         int_id, int8_id, int16_id, int32_id, int64_id,
-        uint8_id, uint16_id, uint32_id, uint64_id,
+        uint8_id, uint16_id, uint32_id, uint64_id, usize_id, isize_id, cint_id,
         decimal_id, decimalpair_id, float_id, float32_id, bool_id, char_id,
         uint8_int_retract_id: GlobalId(0),
         uint8_retract_trusted_delta: Vec::new(),
+        abi_scalar_type_trusted_delta,
+        abi_scalar_retract_ids: Vec::new(),
+        abi_scalar_conversion_trusted_delta: Vec::new(),
         add_table,
         eq_table,
         sub_table,

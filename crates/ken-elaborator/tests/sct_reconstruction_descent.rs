@@ -59,10 +59,12 @@ fn eval_nat_decl(env: &ElabEnv, name: &str) -> u64 {
     };
     let mut store = ken_interp::eval::EvalStore::new();
     for (nid, v) in &env.num_values {
-        store.num_values.entry(*nid).or_insert_with(|| match v {
-            ken_elaborator::NumericLitVal::Int(n) => ken_interp::eval::EvalVal::from(*n),
-            _ => panic!("unexpected literal kind in this test"),
-        });
+        if let ken_elaborator::NumericLitVal::Int(n) = v {
+            store
+                .num_values
+                .entry(*nid)
+                .or_insert_with(|| ken_interp::eval::EvalVal::from(*n));
+        }
     }
     let v = ken_interp::eval::eval(&[], &body, &env.env, &mut store);
     nat_count(env, &v)

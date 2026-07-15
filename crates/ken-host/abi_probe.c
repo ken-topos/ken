@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -7,6 +8,8 @@
 
 /* Clean-room clearance evt_5fx7gmprrk07b: fixed names and integers only. */
 int main(void) {
+    printf("POINTER_WIDTH=%lld\n", (long long)(sizeof(void *) * CHAR_BIT));
+    printf("C_INT_WIDTH=%lld\n", (long long)(sizeof(int) * CHAR_BIT));
     printf("O_RDONLY=%lld\n", (long long)O_RDONLY);
     printf("O_WRONLY=%lld\n", (long long)O_WRONLY);
     printf("O_RDWR=%lld\n", (long long)O_RDWR);

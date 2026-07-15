@@ -19,10 +19,12 @@ fn eval_int_decl(env: &mut ElabEnv, src: &str) -> i128 {
     let id = env.elaborate_decl(src).expect("decl should elaborate");
     let mut store = EvalStore::new();
     for (nid, v) in &env.num_values {
-        store.num_values.entry(*nid).or_insert_with(|| match v {
-            ken_elaborator::NumericLitVal::Int(n) => EvalVal::from(*n),
-            other => panic!("unexpected literal kind in this test: {other:?}"),
-        });
+        if let ken_elaborator::NumericLitVal::Int(n) = v {
+            store
+                .num_values
+                .entry(*nid)
+                .or_insert_with(|| EvalVal::from(*n));
+        }
     }
     let body = match env.env.lookup(id) {
         Some(ken_kernel::Decl::Transparent { body, .. }) => body.clone(),
