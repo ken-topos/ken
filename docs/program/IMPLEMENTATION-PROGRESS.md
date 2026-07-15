@@ -16,7 +16,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 > ### ⏭ 2026-07-15 (01:08 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ 24aebc97`
 >
-> ## ✅ LET-6 CLOSED (all retros in). ▶ RELEASING kenfmt match-arm reflow to Language. FRONTIER: kenfmt → fossil sweep → PX.
+> ## ✅ kenfmt MERGED + CLOSED (origin/main @ 683711fc; retros in). ▶ FRONTIER: fossil sweep (catalog free) → PX.
 >
 > **✅ LET-6 CLOSED** — merged fa750efd; ALL THREE §10 retros verified in
 > `thr_4egp`: leader (00:31:20, coordination retro + boundary), QA (00:31:44,
@@ -27,16 +27,59 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > evidence (no rouse spent — the leader is compacted in this same kenfmt Handoff
 > Gate, which resets that stall). Decision `dec_38b168g93ncx4` resolved.
 >
-> **▶ KENFMT match-arm break-after-↦ — RELEASING to Language.** Frame
-> `docs/program/wp/kenfmt-match-arm-break-after-arrow.md` (389ea65e). Hard-dep
-> (LET-3 P2) MET; catalog-quiet window OPEN. Release path: (1) publish frame to
-> main **doc-only** [in flight]; (2) Language Handoff Gate — compact
-> language-leader+implementer+qa (now GPT seats: impl=Sol/T1, leader+qa=Terra/T2),
-> verify drops, kick with frame pointer, confirm Working (**watch Codex
-> mention-wedge**). Owner Language; gate Language QA + Architect
-> semantics-preservation; lambdas UNIFORM (operator-ruled); ~386-site atomic
-> catalog reflow (Map ~199), C-capstone pattern, FULL CI. **HOLD all other catalog
-> work (fossil, PX) during the reflow — exclusive catalog access.**
+> **▶ KENFMT match-arm break-after-↦ — RELEASED, ACTIVE (2026-07-15 01:14 UTC).**
+> Frame on `origin/main` @ `24d93019` (doc-only PR #703 merged, content-verified).
+> Language Handoff Gate complete: all 3 seats "• Context compacted" (bg script,
+> worktrees reset to origin/main w/ frame). Kickoff `evt_424v8ytsvhdt6` (new root
+> thread; mentions `agt_37reqqy6pjm00`); **leader confirmed Working** (re-orienting
+> on kickoff → reading locked frame → handing impl lane; no Codex wedge, clean
+> auto-pickup). Owner Language; gate Language QA + Architect semantics-preservation;
+> lambdas UNIFORM (operator-ruled); ~386-site atomic catalog reflow (Map ~199),
+> C-capstone pattern, FULL CI. **HOLD all other catalog work (fossil, PX) during
+> the reflow — exclusive catalog access.** ⇒ Steward now event-driven: await
+> Language `git_request` (branch `wp/kenfmt-match-arm-break-after-arrow`) at the
+> two-reviewer gate; watchdog cron `097a5c8b` live.
+> **✅ 01:43 UTC — kenfmt MERGED origin/main @ `683711fc` (PR #704, FULL locked
+> CI green).** Content-verified on main: `git diff origin/main f5515f9f` EMPTY for
+> layout.rs + all 23 catalog + 3 Rosetta examples (whole reflow landed
+> byte-identical to approved candidate); discriminating check — old glued
+> `Cons x t ↦ cong` ABSENT, new `Cons x t ↦` at line-end (body nested) PRESENT in
+> proof-techniques.ken.md:194. Merge+retro call routed `evt_5ns8mh7jcnjx7` to
+> @language-leader in thr_3cm1v0rcrc89a. **✅ kenfmt CLOSED — all 3 §10 retros in
+> (leader `evt_2fzhbgs18wk3s`, QA `evt_57fz5adchcena`, impl `evt_2m2ghb8r1hpze`;
+> QA+impl roused via tmux — no-poll Codex seats didn't wake on the leader's
+> mention).** Decision `dec_1m0217g72s9jp` resolved. **★ Convergent carry (4-role
+> independent — 3 retros + Architect caveat): a formatter FIXED POINT proves the
+> new corpus is stable, NOT that it preserves preexisting meaning; the non-vacuous
+> gate for an atomic generated reflow is the PRE-IMAGE→candidate byte-match (run
+> the candidate formatter on the pre-reflow corpus, require byte-equality) paired
+> with whole-corpus AST/token identity. Recorded to memory; promotion candidate.**
+> Catalog window RELEASED — fossil sweep now unblocked.
+>
+> **(history) 🚀 01:38 UTC — kenfmt PUBLISHING, PR #704, FULL locked CI running.**
+> Candidate `f5515f9f` on `origin/main @ 24d93019`. Decision `dec_1m0217g72s9jp`
+> RESOLVED by Steward (both votes verified for exact SHA: QA `evt_3eahk2ygsscr3` +
+> Architect `evt_1fprsddr2p8ar`). Steward content co-gate PASSED: 1 non-merge
+> commit; crates/ = layout.rs + kenfmt_b3_layout.rs ONLY (AC6); zero
+> format.rs/kernel/grammar/Cargo/width/indent/trust delta; layout.rs = mandated
+> group-gated `Doc::line()`+`INDENT_WIDTH` nest; break-after-↦ confirmed by
+> content spot-check. Scope 28 paths (23 catalog + 3 Rosetta examples + layout.rs
+> + test) → FULL CI (never doc-only). **⇒ ON PUBLISHER RETURN:** verify landed on
+> origin/main BY CONTENT (grep a reflowed arm, e.g. `Cons x t ↦` newline-then-nest
+> in proof-techniques.ken.md; squash → SHA meaningless); route merge+retro to
+> @language-leader (`agt_37reqqy6pjm00`), close kenfmt when retros in; doc-only
+> tracker-sync to main; THEN open the next catalog window (fossil sweep). **If CI
+> RED/BLOCKS:** route the failing job to @language-leader, do NOT retry blind.
+>
+> **↻ 01:27 UTC — ring at the ARCHITECT gate.** Candidate `f5515f9f` (28-path
+> catalog reflow, one non-merge commit on `origin/main @ 24d93019`; clean
+> diff/rustfmt; no kernel/grammar/`format.rs`/Cargo/trust/width/indent delta).
+> **Language QA APPROVED** exact SHA (`evt_3eahk2ygsscr3`). Architect
+> semantics-preservation review IN PROGRESS (its review-request mention had
+> wedged as a Codex stranded-paste; Steward repaired via bare Enter, confirmed
+> Working). ⇒ On Architect APPROVE: leader assembles merge Decision + `git_request`
+> → Steward co-gate (AST-preservation by content + break-after-↦ spot-check) →
+> publisher FULL CI.
 >
 > **NEXT after kenfmt merges:** (2) fossil sweep (`lemma = Axiom → axiom`:
 > StringBijection + proof-techniques ×2) — Foundation catalog WP, re-confirm scope.
