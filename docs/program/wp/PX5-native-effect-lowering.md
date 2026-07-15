@@ -39,6 +39,39 @@ binding:
   Read/Write/Flush/IsTerminal; Clock WallNow; FS ReadFile/WriteFile/AppendFile/
   Metadata/ReadDirectory/CreateDirectory/RemoveFile/RemoveDirectory/Rename.
 
+### §0.5 Artifact-ingress carrier — RULED (Architect, do not reopen)
+
+ADR-0018 ruled token/check semantics but left the artifact-ABI carrier (how
+`ProgramCaps`/cap-table/erased-token reach the produced executable) unspecified;
+the Architect fixed it in two micro-rulings on the PX5 thread
+(`thr_rh6fmbpsn7ab`). Both are fixed inputs — build to them, do not relitigate.
+
+- **Ingress mechanism** — Architect `evt_3nkr1vx55ca1n`. One checked
+  `NativeEntrypointPlanV1`, produced by `emit_package_from_env` only after the
+  exact `ProcessInput → ProgramCaps <declared Auth> → HostIO <declared Auth> →
+  ExitCode` conversion. The entry root pointer is replaced by an **opaque,
+  call-scoped `KenNativeInvocationV1*`**. Private ken-host init validates the
+  plan + both ABI hashes, opens the startup cwd `.`, creates a **host-owned
+  generational capability table** initialized from the declared `ProgramCaps`,
+  and mints the **erased token** (identity is provenance/trace only — a
+  `RuntimeExpr::Var` evaluating to that field; generated code may only *pass* it
+  to `ken_host_dispatch_v1`, never inspect/forge it). Any init/plan/hash/shape
+  failure **precedes Ken entry and any host action** (fails closed). Mutating
+  `TargetAbi`, `HostEffectAbi`, or plan identity → init fails before root.
+- **Non-circular identity — choose (b), parent-owned downstream bindings**
+  — Architect `evt_7hj00prqfjqs2`, resolving the hash self-reference hard-stop.
+  The checked plan **omits** all enclosing hashes; the authoritative
+  checked-semantic identity is the final **`core_semantic_hash`**, which covers
+  the plan **by containment**. `artifact_hash = H(header, core_semantic_hash,
+  canonical_artifact_bytes)`. `native_entrypoint_plan_hash = H(plan_bytes)` is
+  **only** an adjacent, domain-separated transport/subobject identity — stored
+  *adjacent to*, never *inside*, the bytes that compute a hash. **A child never
+  contains the digest of a parent.** Reject (a): no second "pre-plan semantic
+  hash" root. Apply the same no-self/parent-hash rule at **every** new PX5 layer
+  (object descriptor, executable package). Mutation checks: plan field w/o hash
+  refresh → `core_semantic_hash` mismatch; refresh only core → `artifact_hash`
+  mismatch; source-only annotation change → `core` stable, `artifact` changes.
+
 ## Initial native-tested subset (Steward-pinned) — the ONLY ops PX5 makes executable
 
 **Native-tested set (5 of 14):** `Console.Write`, `Console.Flush`,
