@@ -499,7 +499,8 @@ pub fn emit_runtime_ir_object_with_cranelift(
     })
 }
 
-pub fn emit_process_entrypoint_object_with_cranelift(
+#[cfg(test)]
+pub(crate) fn emit_process_entrypoint_object_with_cranelift(
     entrypoint: &RuntimeExpr,
     entry_symbol: impl Into<String>,
 ) -> Result<CraneliftObjectArtifact, CraneliftBackendError> {

@@ -556,7 +556,6 @@ pub fn compile_native_program_sources(
         .map_err(NativeProgramBuildError::Driver)?;
         admitted_ids.extend(ids);
     }
-    let source_admitted_ids = admitted_ids.clone();
     let checked = admit_checked_main(&env).map_err(NativeProgramBuildError::Admission)?;
     let main_has_host_effect = env
         .effect_rows
@@ -613,12 +612,11 @@ pub fn compile_native_program_sources(
     {
         return Err(NativeProgramBuildError::Unavailable(lane));
     }
-    let mut executable_closure = source_admitted_ids
-        .iter()
-        .filter_map(|id| symbols.get(id).cloned())
-        .collect::<BTreeSet<_>>();
-    executable_closure.insert(plan.main.clone());
-    executable_closure.insert(plan.host_exit.clone());
+    // One closure owns the entire transaction: the declarations reported as
+    // reachable are exactly the declarations erased into the runtime program
+    // and linked artifact. Source admission is deliberately not a reachability
+    // signal; an unused sibling must not enter native production.
+    let executable_closure = closure.reachable_declarations.clone();
     let mut runtime_program =
         crate::erasure::erase_checked_core_package_for_target(&package, executable_closure.iter())
             .map_err(NativeProgramBuildError::Erasure)?;
@@ -1706,6 +1704,7 @@ fn build_target_closure(
     let semantic = &package.artifact.semantic;
     validate_closure_metadata(semantic)?;
     let dependency_index = declaration_dependency_index(package);
+    let semantic_dependency_index = declaration_semantic_dependency_index(package);
     let mut reachable_declarations = BTreeSet::from([target.symbol.clone()]);
     let mut closure_symbols = BTreeSet::from([target.symbol.clone()]);
     let mut external_symbols = BTreeSet::new();
@@ -1721,6 +1720,23 @@ fn build_target_closure(
                     &mut reachable_declarations,
                     &mut external_symbols,
                     &mut queue,
+                );
+            }
+        }
+
+        if let Some(dependencies) = semantic_dependency_index.get(&symbol) {
+            for dependency in dependencies {
+                if dependency_index
+                    .get(&symbol)
+                    .is_some_and(|runtime| runtime.contains(dependency))
+                {
+                    continue;
+                }
+                include_non_runtime_closure_symbol(
+                    semantic,
+                    dependency.clone(),
+                    &mut closure_symbols,
+                    &mut external_symbols,
                 );
             }
         }
@@ -1773,15 +1789,144 @@ fn declaration_dependency_index(
 
     let mut index = BTreeMap::new();
     for (owner, bytes) in &package.artifact.semantic.declarations {
-        let mut dependencies = BTreeSet::new();
-        for (candidate, needle) in &encoded_symbols {
-            if candidate != owner && contains_subslice(bytes, needle) {
-                dependencies.insert(candidate.clone());
+        let selection = CheckedCoreBodyViewSelection {
+            package_identity: package.header.package_identity.clone(),
+            package_core_semantic_hash: package.core_semantic_hash,
+            package_artifact_hash: package.artifact_hash,
+            target_symbol: owner.clone(),
+            reachable_declarations: package
+                .artifact
+                .semantic
+                .declarations
+                .keys()
+                .cloned()
+                .collect(),
+            external_symbols: BTreeSet::new(),
+            dependency_semantic_hashes: package
+                .artifact
+                .semantic
+                .dependency_semantic_hashes
+                .clone(),
+        };
+        let dependencies = match checked_core_declaration_body_view(package, &selection, owner) {
+            Ok(view) => {
+                let mut dependencies = BTreeSet::new();
+                collect_runtime_declaration_dependencies(&view.body, &mut dependencies);
+                dependencies.remove(owner);
+                dependencies
             }
-        }
+            Err(_) => {
+                // Unsupported bodies remain reportable by the established
+                // entrypoint lane. Preserve the conservative dependency scan
+                // for those declarations; supported bodies use the executable
+                // term view so type-only names never enter runtime reachability.
+                encoded_symbols
+                    .iter()
+                    .filter_map(|(candidate, needle)| {
+                        (candidate != owner && contains_subslice(bytes, needle))
+                            .then_some(candidate.clone())
+                    })
+                    .collect()
+            }
+        };
         index.insert(owner.clone(), dependencies);
     }
     index
+}
+
+fn declaration_semantic_dependency_index(
+    package: &CheckedCorePackage,
+) -> BTreeMap<StableSymbol, BTreeSet<StableSymbol>> {
+    let encoded_symbols = package
+        .artifact
+        .semantic
+        .symbols
+        .iter()
+        .map(|symbol| (symbol.clone(), canonical_symbol_bytes(symbol)))
+        .collect::<Vec<_>>();
+
+    package
+        .artifact
+        .semantic
+        .declarations
+        .iter()
+        .map(|(owner, bytes)| {
+            let dependencies = encoded_symbols
+                .iter()
+                .filter_map(|(candidate, needle)| {
+                    (candidate != owner && contains_subslice(bytes, needle))
+                        .then_some(candidate.clone())
+                })
+                .collect();
+            (owner.clone(), dependencies)
+        })
+        .collect()
+}
+
+fn collect_runtime_declaration_dependencies(
+    term: &CheckedCoreBodyTerm,
+    dependencies: &mut BTreeSet<StableSymbol>,
+) {
+    match term {
+        CheckedCoreBodyTerm::DirectDeclarationCall { symbol, .. } => {
+            dependencies.insert(symbol.clone());
+        }
+        CheckedCoreBodyTerm::RecursiveDeclarationCall(view) => {
+            dependencies.insert(view.symbol.clone());
+        }
+        CheckedCoreBodyTerm::PrimitiveApplication(view) => {
+            for argument in &view.arguments {
+                collect_runtime_declaration_dependencies(argument, dependencies);
+            }
+        }
+        CheckedCoreBodyTerm::Lambda { body, .. } => {
+            collect_runtime_declaration_dependencies(body, dependencies);
+        }
+        CheckedCoreBodyTerm::Application { function, argument } => {
+            collect_runtime_declaration_dependencies(function, dependencies);
+            collect_runtime_declaration_dependencies(argument, dependencies);
+        }
+        CheckedCoreBodyTerm::Let { value, body, .. } => {
+            collect_runtime_declaration_dependencies(value, dependencies);
+            collect_runtime_declaration_dependencies(body, dependencies);
+        }
+        CheckedCoreBodyTerm::Match(view) => {
+            collect_runtime_declaration_dependencies(&view.scrutinee, dependencies);
+            for branch in &view.branches {
+                collect_runtime_declaration_dependencies(&branch.method, dependencies);
+            }
+        }
+        CheckedCoreBodyTerm::RecordSigmaConstruction(view) => {
+            for field in &view.fields {
+                if let crate::checked_core::CheckedCoreRecordSigmaFieldValue::Runtime {
+                    value,
+                    ..
+                } = field
+                {
+                    collect_runtime_declaration_dependencies(value, dependencies);
+                }
+            }
+        }
+        CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
+            collect_runtime_declaration_dependencies(&view.base, dependencies);
+        }
+        CheckedCoreBodyTerm::DictionaryConstruction(view) => {
+            for field in &view.fields {
+                if let crate::checked_core::CheckedCoreDictionaryFieldValue::Runtime {
+                    value, ..
+                } = field
+                {
+                    collect_runtime_declaration_dependencies(value, dependencies);
+                }
+            }
+        }
+        CheckedCoreBodyTerm::Variable { .. }
+        | CheckedCoreBodyTerm::IntegerLiteral { .. }
+        | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
+        | CheckedCoreBodyTerm::PrimitiveLiteral(_)
+        | CheckedCoreBodyTerm::ConstructorReference(_)
+        | CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => {}
+    }
 }
 
 fn include_closure_symbol(
@@ -1805,6 +1950,20 @@ fn include_closure_symbol(
         }
         closure_symbols.insert(symbol);
     }
+}
+
+fn include_non_runtime_closure_symbol(
+    semantic: &CheckedCoreSemanticInputs,
+    symbol: StableSymbol,
+    closure_symbols: &mut BTreeSet<StableSymbol>,
+    external_symbols: &mut BTreeSet<StableSymbol>,
+) {
+    if (!has_semantic_entry(semantic, &symbol) && !semantic.declarations.contains_key(&symbol))
+        || semantic.dependency_declaration_refs.contains_key(&symbol)
+    {
+        external_symbols.insert(symbol.clone());
+    }
+    closure_symbols.insert(symbol);
 }
 
 fn has_semantic_entry(semantic: &CheckedCoreSemanticInputs, symbol: &StableSymbol) -> bool {

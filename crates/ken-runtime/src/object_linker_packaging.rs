@@ -352,7 +352,8 @@ pub fn package_starter_executable_artifact_with_options(
 ///
 /// The produced artifact receives fresh OS argv, environment, and cwd on every
 /// invocation. It is a validated runtime artifact, never a proof surface.
-pub fn build_process_starter_executable_artifact(
+#[cfg(test)]
+fn build_process_starter_executable_artifact(
     entrypoint: &RuntimeExpr,
     output_dir: impl AsRef<Path>,
 ) -> Result<PathBuf, ObjectLinkerPackagingError> {

@@ -1,6 +1,7 @@
 use std::process::Command;
 
 const PURE_PROGRAM: &str = r#"program capabilities FS APartial
+fn unused_sibling (_input : ProcessInput) : ExitCode = Success
 fn main (_input : ProcessInput) (_caps : ProgramCaps APartial)
   : HostIO APartial ExitCode = host_exit APartial Success
 "#;
@@ -93,6 +94,30 @@ fn real_source_builds_one_identity_bound_linked_process_artifact() {
         ken_elaborator::compiler_driver::ReportFact::Emitted
     ));
     assert!(!output.plan.main().to_string().contains("prelude::"));
+
+    let reported = &output.closure.reachable_declarations;
+    let executable = &output.executable_closure;
+    let metadata = &output
+        .runtime_program
+        .erased_core
+        .metadata
+        .runtime_declaration_targets;
+    let declarations = output
+        .runtime_program
+        .declarations
+        .iter()
+        .map(|declaration| declaration.symbol.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    let reported_runtime = reported
+        .iter()
+        .map(ToString::to_string)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(reported, executable);
+    assert_eq!(&reported_runtime, metadata);
+    assert_eq!(reported_runtime, declarations);
+    assert!(reported
+        .iter()
+        .all(|symbol| !symbol.to_string().contains("unused_sibling")));
 
     let mut stale_plan = output.package.clone();
     let plan_bytes = stale_plan
@@ -231,4 +256,16 @@ fn native_build_subcommand_reaches_the_same_public_producer() {
         .expect("CLI artifact runs");
     assert_eq!(ran.status.code(), Some(0), "stderr: {:?}", ran.stderr);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn naked_process_ir_helpers_are_not_public_production_api() {
+    let cranelift = include_str!("../../ken-runtime/src/cranelift_backend.rs");
+    let packaging = include_str!("../../ken-runtime/src/object_linker_packaging.rs");
+    assert!(cranelift
+        .contains("#[cfg(test)]\npub(crate) fn emit_process_entrypoint_object_with_cranelift("));
+    assert!(!cranelift.contains("\npub fn emit_process_entrypoint_object_with_cranelift("));
+    assert!(packaging.contains("#[cfg(test)]\nfn build_process_starter_executable_artifact("));
+    assert!(!packaging.contains("\npub fn build_process_starter_executable_artifact("));
+    assert!(!packaging.contains("\npub(crate) fn build_process_starter_executable_artifact("));
 }
