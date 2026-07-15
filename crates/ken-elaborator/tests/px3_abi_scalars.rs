@@ -96,6 +96,17 @@ fn ac2_types_are_distinct_nominal_opaque_primitives() {
 
 #[test]
 fn ac3_manifest_max_is_ok_and_max_plus_one_is_err_for_every_scalar() {
+    let seed_env = ElabEnv::new().expect("PX3 prelude");
+    for target in ["USize", "ISize", "CInt"] {
+        assert!(
+            seed_env
+                .num_values
+                .values()
+                .any(|value| matches!(value, NumericLitVal::Str(name) if name == target)),
+            "the actionable RangeError payload must retain its {target} string seed"
+        );
+    }
+
     for (name, width_fact, signed) in [
         ("USize", "POINTER_WIDTH", false),
         ("ISize", "POINTER_WIDTH", true),
