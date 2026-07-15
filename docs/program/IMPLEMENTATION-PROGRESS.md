@@ -14,7 +14,36 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-14 (23:16 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ cf741d3b`
+> ### ⏭ 2026-07-15 (01:08 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ 24aebc97`
+>
+> ## ✅ LET-6 CLOSED (all retros in). ▶ RELEASING kenfmt match-arm reflow to Language. FRONTIER: kenfmt → fossil sweep → PX.
+>
+> **✅ LET-6 CLOSED** — merged fa750efd; ALL THREE §10 retros verified in
+> `thr_4egp`: leader (00:31:20, coordination retro + boundary), QA (00:31:44,
+> `evt_6yj716pn9b270`), implementer (00:31:44, `evt_7h4rkj3mta530`).
+> Ground-truthed via orientation on resume: the earlier "closeout stalled" note
+> was STALE — the leader (no-poll GPT seat) merely never posted the ceremonial
+> ring-complete signal; all retro substance is in. Closed by Steward on direct
+> evidence (no rouse spent — the leader is compacted in this same kenfmt Handoff
+> Gate, which resets that stall). Decision `dec_38b168g93ncx4` resolved.
+>
+> **▶ KENFMT match-arm break-after-↦ — RELEASING to Language.** Frame
+> `docs/program/wp/kenfmt-match-arm-break-after-arrow.md` (389ea65e). Hard-dep
+> (LET-3 P2) MET; catalog-quiet window OPEN. Release path: (1) publish frame to
+> main **doc-only** [in flight]; (2) Language Handoff Gate — compact
+> language-leader+implementer+qa (now GPT seats: impl=Sol/T1, leader+qa=Terra/T2),
+> verify drops, kick with frame pointer, confirm Working (**watch Codex
+> mention-wedge**). Owner Language; gate Language QA + Architect
+> semantics-preservation; lambdas UNIFORM (operator-ruled); ~386-site atomic
+> catalog reflow (Map ~199), C-capstone pattern, FULL CI. **HOLD all other catalog
+> work (fossil, PX) during the reflow — exclusive catalog access.**
+>
+> **NEXT after kenfmt merges:** (2) fossil sweep (`lemma = Axiom → axiom`:
+> StringBijection + proof-techniques ×2) — Foundation catalog WP, re-confirm scope.
+> (3) PX campaign — check CC9 + PX1 readiness; PX touches Posix.ken.md (conflicts
+> the catalog window), sequence after the kenfmt reflow.
+>
+> ### ⏭ 2026-07-14 (23:16 UTC, clock-read) — (history) · `origin/main @ cf741d3b`
 >
 > ## ✅ LET CHAIN COMPLETE — LET-5 · LET-6 · LET-3 P2 all MERGED (origin/main @ 4bc7875c). FRONTIER: kenfmt release (unblocked) → fossil sweep → PX. Fleet quiescent.
 >
@@ -29,8 +58,12 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > parallelism only PROPAGATES a name into an identical role, never ORIGINATES a
 > quota.** THE LET CHAIN (LET-1…6 + P2) IS COMPLETE.
 >
-> **✅ LET-6 merged fa750efd; retros landing** (QA+impl posted; confirm
-> language-leader ring-complete in thr_4egp, then mark LET-6 CLOSED). Decision
+> **⚠ LET-6 merged fa750efd; retro closeout STALLED.** QA + implementer retros
+> POSTED, but language-leader is idle-stalled "awaiting the implementer retro"
+> (no-poll seat hasn't re-registered the already-posted impl retro in thr_4egp).
+> **⇒ ON RESUME: ROUSE language-leader (tmux) to re-check thr_4egp + post its
+> leader §10 retro + ring-complete → then mark LET-6 CLOSED.** This is a PREREQ
+> for the kenfmt Language Handoff Gate (step 1 = retros in). Decision
 > `dec_38b168g93ncx4` resolved.
 >
 > **⇒ NEXT FRONTIER (fresh-plan after compact) — three catalog-interacting tracks;
