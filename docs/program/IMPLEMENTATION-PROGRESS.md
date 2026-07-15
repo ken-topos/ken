@@ -14,6 +14,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### ⚡ 2026-07-15 (11:35 UTC, clock-read) — ✅ DECISION 2 RESOLVED (operator) · releasing L4-export to Language ring
+>
+> ## Pat concurred with the Steward toolchain-ordering recommendation and said
+> **proceed**: **L4-export (the `export` re-export declaration) is the NEXT
+> Language-lane build**, then CC9 (minimal `Test.Property`), package-manager
+> later; **PX3 stays behind CC9** (Pat did not pull it ahead). Watchdog RE-ARMED
+> (`cc623dbb`, `11,26,41,56`). Decision 2 is a **settled fixed input** — do not
+> re-ask.
+> >
+> > **L4-export release (§2c) IN PROGRESS:**
+> > - **Frame finalized** `docs/program/wp/l4-export-reexport-declaration.md`
+> > (RELEASE box flipped ✅; anchors re-grounded vs `origin/main @ 21e089ae`:
+> > `parse_pub_decl` :1035, dispatch :223, `exports` `modules.rs:52`,
+> > `resolve_ref` :183, `TOP_LEVEL_PREFIXES` `kenfmt_c_capstone.rs:207`,
+> > `ImportItem` `ast.rs:374`; export gap confirmed REAL — no `KwExport` on main).
+> > Size **M**, FULL CI, gate = Language QA + Architect §14 + **CV Spec-vote**
+> > (conformance path). Committed steward/work `bbf9cfe6`.
+> > - **Handoff-Gate readiness:** Language ring prior WP **kenfmt CLOSED** (all 3
+> > retros in, `683711fc`); 3 seats quiescent + idle (leader/qa=terra,
+> > impl=sol; GPT/no-poll → rouse after kickoff). Gate steps 1–3 ✅.
+> > - **⇒ NEXT (in order):** (1) publish frame + tracker to `origin/main`
+> > (doc-only bundle); (2) `handoff-gate-compact.sh language-leader
+> > language-implementer language-qa` (background) → verify drops; (3) cut-hint
+> > `wp/l4-export` from fetched `origin/main`; kick off (roots the L4-export
+> > thread) + rouse the 3 GPT seats; (4) confirm all 3 go Working. Then
+> > event-driven: Language QA → Architect §14 + CV Spec-vote → publish FULL CI.
+>
 > ### ⚡ 2026-07-15 (09:47 UTC, clock-read) — RESUMED post-compact · frontier is Pat-gated (Decision 2) · ⚠ PX3 sequencing CORRECTED
 >
 > ## Re-oriented after the PX2-CLOSED self-compact. Ground truth: PX2 CLOSED
@@ -38,19 +65,31 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > > implicitly (d) whether **PX3** gets pulled ahead of CC9 too. All Pat's call —
 > > I will NOT open a 2nd build on contested sequencing while he is away.
 > >
-> > **⇒ DONE this pass:** (1) tracker corrected (PX3) + synced to main (doc-only)
-> > so Pat returns to current state; (2) **consolidated update + Decision-2
-> > re-ask posted to Pat** — PX1 AND PX2 both landed during his absence, each with
-> > a real §14 soundness block caught + resolved within settled inputs (no
-> > escalation); export framed+held; PX3 tech-unblocked but behind CC9. Did NOT
-> > re-ask rustix (SETTLED).
+> > **⇒ DONE this pass:** (1) tracker corrected (PX3) + synced to main (doc-only
+> > **PR #715 → `origin/main @ 21e089ae`**, content-verified); (2) **consolidated
+> > update + Decision-2 re-ask posted to Pat** — `evt_4x8pr14rkk2g6` (thread
+> > `thr_f4nbr2b9xfhm`, under the Decision spine `evt_784f8m53ycp0m`): PX1 AND PX2
+> > both landed during his absence, each with a real §14 soundness block caught +
+> > resolved within settled inputs (no escalation); export framed+held; PX3
+> > tech-unblocked but behind CC9. Did NOT re-ask rustix (SETTLED).
 > >
 > > **⇒ NEXT (event-driven standby):** await Pat's Decision 2. On his answer:
 > > `export` greenlight → Handoff-Gate the Language ring + kick; CC9 greenlight →
 > > frame CC9 (minimal Test.Property) + release; PX3 pull-ahead → frame PX3
 > > (Language, manifest-bound scalars) after its predecessor lands. Meanwhile stay
-> > event-driven for an AX-1 `git_request` from the enclave. Watchdog `b7c6e6a9`
-> > kept armed (AX-1 loop live; re-eval when it closes).
+> > event-driven for an AX-1 `git_request` from the enclave.
+> >
+> > **⇒ 09:50 watchdog tick — fleet FULLY QUIESCENT → watchdog CANCELLED.** Sweep
+> > clear; no events since the Pat post; seat scan = no stalls (the `spec-author`
+> > "awaiting CV reconfirm" 22:10 + `conformance-validator` "ledger closed" 22:38
+> > are 11h-stale un-updated statuses, NOT a live loop — verified **AX-1 landed**:
+> > `bcaf1e03`/`0d04ce42` are ancestors of `origin/main`, axiom-sugar spec on main,
+> > no open decisions, no pending `git_request`; `integrator` is a retired role,
+> > its PR #365 status is ancient). All WPs closed, nothing in review/mid-task,
+> > blocked only on Pat's Decision 2 → cancelled cron `b7c6e6a9`
+> > ([[cancel-watchdog-cron-when-fleet-quiescent]]). **RE-ARM** (`CronCreate`,
+> > `11,26,41,56 * * * *`) the moment work resumes — Pat answers Decision 2 / a WP
+> > goes live / a branch enters review. Pat's mention is the wake signal meanwhile.
 >
 > ### ⚡ 2026-07-15 (09:34 UTC, clock-read) — ✅ PX2 CLOSED (merged + retros in) · self-compacting · L4-export held for Pat
 >
