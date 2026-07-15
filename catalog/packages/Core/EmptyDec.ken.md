@@ -163,11 +163,18 @@ discharges it into `Empty` directly; this bridge is `Ω → Type`, not
 fn dec_eq_decides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
   match d.eq x y eqn : h {
     True ↦ Yes (Equal a x y) (d.sound x y h);
-    False ↦ No
-      (Equal a x y)
-      (λpxy.
-        absurd
-          (trans Bool False (d.eq x y) True (sym Bool (d.eq x y) False h) (d.complete x y pxy)))
+    False ↦
+      No
+        (Equal a x y)
+        (λpxy.
+          absurd
+            (trans
+              Bool
+              False
+              (d.eq x y)
+              True
+              (sym Bool (d.eq x y) False h)
+              (d.complete x y pxy)))
   }
 ```
 

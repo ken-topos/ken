@@ -191,13 +191,8 @@ result (the induction hypothesis) is lifted under `Cons x` by `cong`:
 lemma list_right_unit (a : Type) (xs : List a) : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
     Nil ↦ Proved;
-    Cons x t ↦ cong
-      (List a)
-      (List a)
-      (list_append a t (Nil a))
-      t
-      (λl. Cons a x l)
-      (list_right_unit a t)
+    Cons x t ↦
+      cong (List a) (List a) (list_append a t (Nil a)) t (λl. Cons a x l) (list_right_unit a t)
   }
 ```
 

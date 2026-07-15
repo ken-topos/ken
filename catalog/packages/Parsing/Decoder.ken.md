@@ -116,11 +116,12 @@ fn decoder_many_fuel
     Zero ↦
       match cursor_remaining c el loc ops cur {
         Zero ↦ Decoded c loc (List a) (Nil a) cur;
-        Suc rest ↦ DecoderFailed
-          c
-          loc
-          (List a)
-          (DecoderFuelExhausted loc (cursor_locate c el loc ops cur))
+        Suc rest ↦
+          DecoderFailed
+            c
+            loc
+            (List a)
+            (DecoderFuelExhausted loc (cursor_locate c el loc ops cur))
       };
     Suc fuel2 ↦
       match step cur {
@@ -134,11 +135,12 @@ fn decoder_many_fuel
           match cursor_nat_lt
             (cursor_remaining c el loc ops next)
             (cursor_remaining c el loc ops cur) {
-            False ↦ DecoderFailed
-              c
-              loc
-              (List a)
-              (DecoderZeroProgress loc (cursor_locate c el loc ops next));
+            False ↦
+              DecoderFailed
+                c
+                loc
+                (List a)
+                (DecoderZeroProgress loc (cursor_locate c el loc ops next));
             True ↦
               match decoder_many_fuel c el loc a ops step fuel2 next {
                 DecoderFailed err ↦ DecoderFailed c loc (List a) err;
@@ -173,11 +175,12 @@ fn decoder_some
         match cursor_nat_lt
           (cursor_remaining c el loc ops next)
           (cursor_remaining c el loc ops cur) {
-          False ↦ DecoderFailed
-            c
-            loc
-            (List a)
-            (DecoderZeroProgress loc (cursor_locate c el loc ops next));
+          False ↦
+            DecoderFailed
+              c
+              loc
+              (List a)
+              (DecoderZeroProgress loc (cursor_locate c el loc ops next));
           True ↦
             match decoder_many c el loc a ops step next {
               DecoderFailed err ↦ DecoderFailed c loc (List a) err;

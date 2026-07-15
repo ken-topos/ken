@@ -1059,8 +1059,9 @@ impl<'a> LayoutPrinter<'a> {
         } else {
             Doc::concat([
                 self.doc_from_tokens(&head, TokenLayout::Soft),
-                Doc::text(" "),
-                self.print_expr(&arm.body),
+                // Match the shared "break after the connective, nest the
+                // tail" family used by declaration `:` and let `=` layout.
+                Doc::concat([Doc::line(), self.print_expr(&arm.body)]).nest(INDENT_WIDTH),
             ])
             .group()
         }

@@ -126,20 +126,23 @@ fn total_leq_nat
     Zero ↦ Inl (Equal Bool (leq_nat Zero y) True) (Equal Bool (leq_nat y Zero) True) Proved;
     Suc x2 ↦
       match y {
-        Zero ↦ Inr
-          (Equal Bool (leq_nat (Suc x2) Zero) True)
-          (Equal Bool (leq_nat Zero (Suc x2)) True)
-          Proved;
+        Zero ↦
+          Inr
+            (Equal Bool (leq_nat (Suc x2) Zero) True)
+            (Equal Bool (leq_nat Zero (Suc x2)) True)
+            Proved;
         Suc y2 ↦
           match total_leq_nat x2 y2 {
-            Inl h ↦ Inl
-              (Equal Bool (leq_nat (Suc x2) (Suc y2)) True)
-              (Equal Bool (leq_nat (Suc y2) (Suc x2)) True)
-              h;
-            Inr h ↦ Inr
-              (Equal Bool (leq_nat (Suc x2) (Suc y2)) True)
-              (Equal Bool (leq_nat (Suc y2) (Suc x2)) True)
-              h
+            Inl h ↦
+              Inl
+                (Equal Bool (leq_nat (Suc x2) (Suc y2)) True)
+                (Equal Bool (leq_nat (Suc y2) (Suc x2)) True)
+                h;
+            Inr h ↦
+              Inr
+                (Equal Bool (leq_nat (Suc x2) (Suc y2)) True)
+                (Equal Bool (leq_nat (Suc y2) (Suc x2)) True)
+                h
           }
       }
   }
@@ -160,13 +163,14 @@ proof eq_true_of_or for bool_or
       (p : Bool) (q : Bool) (h : Or (Equal Bool p True) (Equal Bool q True))
     : IsTrue (bool_or p q) =
   match h {
-    Inl hp ↦ trans
-      Bool
-      (bool_or p q)
-      (bool_or True q)
-      True
-      (cong Bool Bool p True (λv. bool_or v q) hp)
-      Proved;
+    Inl hp ↦
+      trans
+        Bool
+        (bool_or p q)
+        (bool_or True q)
+        True
+        (cong Bool Bool p True (λv. bool_or v q) hp)
+        Proved;
     Inr hq ↦
       match p {
         True ↦ Proved;

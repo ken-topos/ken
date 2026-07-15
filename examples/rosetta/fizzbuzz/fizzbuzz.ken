@@ -229,16 +229,17 @@ fn fizzBuzzLine (n : Nat) : String =
 proc fizzBuzzLoop (remaining : Nat) (current : Nat) : IO Unit visits [Console] =
   match remaining {
     Zero ↦ Ret ConsoleOp console_resp Unit MkUnit;
-    Suc r ↦ Vis
-      ConsoleOp
-      console_resp
-      Unit
-      (Write
-        Stdout
-        (bytes_concat
-          (bytes_encode (fizzBuzzLine current))
-          (bytes_encode (list_char_to_string (Cons Char (10 : Int) (Nil Char))))))
-      (λ_. fizzBuzzLoop r (Suc current))
+    Suc r ↦
+      Vis
+        ConsoleOp
+        console_resp
+        Unit
+        (Write
+          Stdout
+          (bytes_concat
+            (bytes_encode (fizzBuzzLine current))
+            (bytes_encode (list_char_to_string (Cons Char (10 : Int) (Nil Char))))))
+        (λ_. fizzBuzzLoop r (Suc current))
   }
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────

@@ -100,13 +100,14 @@ proof assoc for nonempty_append
       match ys {
         NonEmptyCons y more ↦
           match zs {
-            NonEmptyCons z last ↦ cong
-              (List a)
-              (NonEmpty a)
-              (list_append a (list_append a rest (Cons a y more)) (Cons a z last))
-              (list_append a rest (Cons a y (list_append a more (Cons a z last))))
-              (NonEmptyCons a x)
-              (list_append::assoc a rest (Cons a y more) (Cons a z last))
+            NonEmptyCons z last ↦
+              cong
+                (List a)
+                (NonEmpty a)
+                (list_append a (list_append a rest (Cons a y more)) (Cons a z last))
+                (list_append a rest (Cons a y (list_append a more (Cons a z last))))
+                (NonEmptyCons a x)
+                (list_append::assoc a rest (Cons a y more) (Cons a z last))
           }
       }
   }

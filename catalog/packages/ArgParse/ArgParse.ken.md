@@ -108,10 +108,8 @@ fn argparse_option_schema_field (spec : OptionSpec) : SchemaField =
 fn argparse_option_schema_fields (specs : List OptionSpec) : List SchemaField =
   match specs {
     Nil ↦ Nil SchemaField;
-    Cons spec rest ↦ Cons
-      SchemaField
-      (argparse_option_schema_field spec)
-      (argparse_option_schema_fields rest)
+    Cons spec rest ↦
+      Cons SchemaField (argparse_option_schema_field spec) (argparse_option_schema_fields rest)
   }
 
 fn argparse_positional_schema_field (spec : PositionalSpec) : SchemaField =
@@ -134,10 +132,11 @@ fn argparse_positional_schema_field (spec : PositionalSpec) : SchemaField =
 fn argparse_positional_schema_fields (specs : List PositionalSpec) : List SchemaField =
   match specs {
     Nil ↦ Nil SchemaField;
-    Cons spec rest ↦ Cons
-      SchemaField
-      (argparse_positional_schema_field spec)
-      (argparse_positional_schema_fields rest)
+    Cons spec rest ↦
+      Cons
+        SchemaField
+        (argparse_positional_schema_field spec)
+        (argparse_positional_schema_fields rest)
   }
 
 fn command_schema (spec : CommandSpec) : Schema =
@@ -163,18 +162,19 @@ fn argparse_byte_matches_char (actual : UInt8) (expected : Char) : Bool =
 fn argparse_name_decoder (expected : List Char) : Decoder ArgCursor ArgLocation Bool =
   match expected {
     Nil ↦ decoder_pure ArgCursor ArgLocation Bool True;
-    Cons first rest ↦ decoder_bind
-      ArgCursor
-      ArgLocation
-      UInt8
-      Bool
-      (decoder_satisfy
+    Cons first rest ↦
+      decoder_bind
         ArgCursor
-        UInt8
         ArgLocation
-        arg_cursor_ops
-        (λactual. argparse_byte_matches_char actual first))
-      (λignored. argparse_name_decoder rest)
+        UInt8
+        Bool
+        (decoder_satisfy
+          ArgCursor
+          UInt8
+          ArgLocation
+          arg_cursor_ops
+          (λactual. argparse_byte_matches_char actual first))
+        (λignored. argparse_name_decoder rest)
   }
 
 fn argparse_single_cursor (argument : Bytes) : ArgCursor =
@@ -277,10 +277,8 @@ fn argparse_missing_field_check
       (index : Nat) (field : SchemaField)
     : SchemaFieldCheck Nat Bool =
   match schema_field_presence field {
-    SchemaRequired ↦ SchemaFieldRejected
-      Nat
-      Bool
-      (MkSchemaIssue Nat index "missing-positional");
+    SchemaRequired ↦
+      SchemaFieldRejected Nat Bool (MkSchemaIssue Nat index "missing-positional");
     SchemaOptional ↦ SchemaFieldAccepted Nat Bool True
   }
 
@@ -294,10 +292,11 @@ fn argparse_missing_positionals
     (argparse_missing_field_check index)
     (argparse_positional_schema_fields positionals) {
     Valid checked ↦ Valid (NonEmpty Diagnostic) (List ParsedArgument) (Nil ParsedArgument);
-    Invalid issues ↦ Invalid
-      (NonEmpty Diagnostic)
-      (List ParsedArgument)
-      (nonempty_map (SchemaIssue Nat) Diagnostic argparse_schema_issue_diagnostic issues)
+    Invalid issues ↦
+      Invalid
+        (NonEmpty Diagnostic)
+        (List ParsedArgument)
+        (nonempty_map (SchemaIssue Nat) Diagnostic argparse_schema_issue_diagnostic issues)
   }
 
 fn argparse_parse_tokens
@@ -312,48 +311,54 @@ fn argparse_parse_tokens
       match argparse_find_option argument options {
         Some spec ↦
           match option_mode spec {
-            FlagOption ↦ argparse_cons_validations
-              (argparse_valid_argument (ParsedFlag (option_name spec)))
-              (argparse_parse_tokens options positionals rest (Suc index));
+            FlagOption ↦
+              argparse_cons_validations
+                (argparse_valid_argument (ParsedFlag (option_name spec)))
+                (argparse_parse_tokens options positionals rest (Suc index));
             ValueOption ↦
               match rest {
-                Nil ↦ argparse_cons_validations
-                  (argparse_error
-                    ParsedArgument
-                    index
-                    Zero
-                    (arg_length argument)
-                    "missing-option-value")
-                  (argparse_missing_positionals positionals (Suc index));
-                Cons value more ↦ argparse_cons_validations
-                  (argparse_valid_argument (ParsedOption (option_name spec) value))
-                  (argparse_parse_tokens options positionals more (Suc (Suc index)))
+                Nil ↦
+                  argparse_cons_validations
+                    (argparse_error
+                      ParsedArgument
+                      index
+                      Zero
+                      (arg_length argument)
+                      "missing-option-value")
+                    (argparse_missing_positionals positionals (Suc index));
+                Cons value more ↦
+                  argparse_cons_validations
+                    (argparse_valid_argument (ParsedOption (option_name spec) value))
+                    (argparse_parse_tokens options positionals more (Suc (Suc index)))
               };
           };
         None ↦
           match argparse_has_prefix_chars argument (string_to_list_char "--") {
-            True ↦ argparse_cons_validations
-              (argparse_error
-                ParsedArgument
-                index
-                (Suc (Suc Zero))
-                (arg_length argument)
-                "unknown-option")
-              (argparse_parse_tokens options positionals rest (Suc index));
+            True ↦
+              argparse_cons_validations
+                (argparse_error
+                  ParsedArgument
+                  index
+                  (Suc (Suc Zero))
+                  (arg_length argument)
+                  "unknown-option")
+                (argparse_parse_tokens options positionals rest (Suc index));
             False ↦
               match positionals {
-                Nil ↦ argparse_cons_validations
-                  (argparse_error
-                    ParsedArgument
-                    index
-                    Zero
-                    (arg_length argument)
-                    "unexpected-positional")
-                  (argparse_parse_tokens options positionals rest (Suc index));
-                Cons positional more ↦ argparse_cons_validations
-                  (argparse_valid_argument
-                    (ParsedPositional (positional_name positional) argument))
-                  (argparse_parse_tokens options more rest (Suc index))
+                Nil ↦
+                  argparse_cons_validations
+                    (argparse_error
+                      ParsedArgument
+                      index
+                      Zero
+                      (arg_length argument)
+                      "unexpected-positional")
+                    (argparse_parse_tokens options positionals rest (Suc index));
+                Cons positional more ↦
+                  argparse_cons_validations
+                    (argparse_valid_argument
+                      (ParsedPositional (positional_name positional) argument))
+                    (argparse_parse_tokens options more rest (Suc index))
               }
           }
       }
@@ -376,19 +381,16 @@ fn argparse_run
     Nil ↦ argparse_error ParsedCommand Zero Zero Zero "missing-subcommand";
     Cons subcommand rest ↦
       match argparse_find_command subcommand (program_commands specification) {
-        None ↦ argparse_error
-          ParsedCommand
-          Zero
-          Zero
-          (arg_length subcommand)
-          "unknown-subcommand";
-        Some spec ↦ argparse_parsed_command
-          (command_name spec)
-          (argparse_parse_tokens
-            (command_options spec)
-            (command_positionals spec)
-            rest
-            (Suc Zero))
+        None ↦
+          argparse_error ParsedCommand Zero Zero (arg_length subcommand) "unknown-subcommand";
+        Some spec ↦
+          argparse_parsed_command
+            (command_name spec)
+            (argparse_parse_tokens
+              (command_options spec)
+              (command_positionals spec)
+              rest
+              (Suc Zero))
       }
   }
 ```
@@ -431,29 +433,29 @@ fn argparse_options_chars (specs : List OptionSpec) : List Char =
 
 fn argparse_positional_chars (spec : PositionalSpec) : List Char =
   match positional_required spec {
-    True ↦ list_append
-      Char
-      (string_to_list_char "  <")
-      (list_append
+    True ↦
+      list_append
         Char
-        (string_to_list_char (positional_name spec))
-        (string_to_list_char ">\n"));
-    False ↦ list_append
-      Char
-      (string_to_list_char "  [")
-      (list_append
+        (string_to_list_char "  <")
+        (list_append
+          Char
+          (string_to_list_char (positional_name spec))
+          (string_to_list_char ">\n"));
+    False ↦
+      list_append
         Char
-        (string_to_list_char (positional_name spec))
-        (string_to_list_char "]\n"))
+        (string_to_list_char "  [")
+        (list_append
+          Char
+          (string_to_list_char (positional_name spec))
+          (string_to_list_char "]\n"))
   }
 
 fn argparse_positionals_chars (specs : List PositionalSpec) : List Char =
   match specs {
     Nil ↦ Nil Char;
-    Cons spec rest ↦ list_append
-      Char
-      (argparse_positional_chars spec)
-      (argparse_positionals_chars rest)
+    Cons spec rest ↦
+      list_append Char (argparse_positional_chars spec) (argparse_positionals_chars rest)
   }
 
 fn argparse_subcommand_chars (spec : CommandSpec) : List Char =
@@ -474,10 +476,8 @@ fn argparse_subcommand_chars (spec : CommandSpec) : List Char =
 fn argparse_subcommands_chars (specs : List CommandSpec) : List Char =
   match specs {
     Nil ↦ Nil Char;
-    Cons spec rest ↦ list_append
-      Char
-      (argparse_subcommand_chars spec)
-      (argparse_subcommands_chars rest)
+    Cons spec rest ↦
+      list_append Char (argparse_subcommand_chars spec) (argparse_subcommands_chars rest)
   }
 
 fn command_help (spec : CommandSpec) : Doc = schema_help (command_schema spec)

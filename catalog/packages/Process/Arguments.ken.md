@@ -18,10 +18,8 @@ fn process_arguments (input : ProcessInput) : List Bytes =
 
 fn replace_process_arguments (arguments : List Bytes) (input : ProcessInput) : ProcessInput =
   match input {
-    MkProcessInput previous environment working_directory ↦ MkProcessInput
-      arguments
-      environment
-      working_directory
+    MkProcessInput previous environment working_directory ↦
+      MkProcessInput arguments environment working_directory
   }
 
 proof round_trip for process_arguments

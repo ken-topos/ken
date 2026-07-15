@@ -257,13 +257,14 @@ lemma validation_ap_cmp
       match v {
         Invalid second ↦
           match w {
-            Invalid third ↦ cong
-              e
-              (Validation e c)
-              (sg.op (sg.op first second) third)
-              (sg.op first (sg.op second third))
-              (Invalid e c)
-              (sg.assoc first second third);
+            Invalid third ↦
+              cong
+                e
+                (Validation e c)
+                (sg.op (sg.op first second) third)
+                (sg.op first (sg.op second third))
+                (Invalid e c)
+                (sg.assoc first second third);
             Valid value ↦ Refl
           };
         Valid g ↦

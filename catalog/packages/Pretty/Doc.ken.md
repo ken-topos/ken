@@ -46,11 +46,12 @@ fn DocContentInvariant (doc : Doc) : Prop =
     Concat left right ↦ And (DocContentInvariant left) (DocContentInvariant right);
     Nest amount body ↦ DocContentInvariant body;
     Group body ↦ DocContentInvariant body;
-    Alt first second ↦ And
-      (DocContentInvariant first)
-      (And
-        (DocContentInvariant second)
-        (Equal (List Char) (doc_content first) (doc_content second)))
+    Alt first second ↦
+      And
+        (DocContentInvariant first)
+        (And
+          (DocContentInvariant second)
+          (Equal (List Char) (doc_content first) (doc_content second)))
   }
 ```
 
@@ -109,10 +110,11 @@ fn render_mode (flat : Bool) (width : Nat) (indent : Nat) (doc : Doc) : List Cha
         True ↦ Cons Char (32 : Int) (Nil Char);
         False ↦ Cons Char (10 : Int) (pretty_repeat_char (32 : Int) indent)
       };
-    Concat left right ↦ list_append
-      Char
-      (render_mode flat width indent left)
-      (render_mode flat width indent right);
+    Concat left right ↦
+      list_append
+        Char
+        (render_mode flat width indent left)
+        (render_mode flat width indent right);
     Nest amount body ↦ render_mode flat width (pretty_nat_add indent amount) body;
     Group body ↦
       match doc_fits width body {
@@ -146,10 +148,11 @@ fn render_content_mode (flat : Bool) (width : Nat) (doc : Doc) : List Char =
   match doc {
     Text chars ↦ chars;
     Line ↦ Nil Char;
-    Concat left right ↦ list_append
-      Char
-      (render_content_mode flat width left)
-      (render_content_mode flat width right);
+    Concat left right ↦
+      list_append
+        Char
+        (render_content_mode flat width left)
+        (render_content_mode flat width right);
     Nest amount body ↦ render_content_mode flat width body;
     Group body ↦
       match doc_fits width body {
@@ -194,28 +197,30 @@ lemma render_content_group_preserves
         (render_content_mode flat width (Group body))
         (doc_content (Group body)) =
   match pretty_bool_cases (doc_fits width body) {
-    Inl h ↦ J
-      (λchoice _.
-        Equal
-          (List Char)
-          (match choice {
-            True ↦ render_content_mode True width body;
-            False ↦ render_content_mode False width body
-          })
-          (doc_content body))
-      (render_content_mode_preserves True width body valid)
-      (sym Bool (doc_fits width body) True h);
-    Inr h ↦ J
-      (λchoice _.
-        Equal
-          (List Char)
-          (match choice {
-            True ↦ render_content_mode True width body;
-            False ↦ render_content_mode False width body
-          })
-          (doc_content body))
-      (render_content_mode_preserves False width body valid)
-      (sym Bool (doc_fits width body) False h)
+    Inl h ↦
+      J
+        (λchoice _.
+          Equal
+            (List Char)
+            (match choice {
+              True ↦ render_content_mode True width body;
+              False ↦ render_content_mode False width body
+            })
+            (doc_content body))
+        (render_content_mode_preserves True width body valid)
+        (sym Bool (doc_fits width body) True h);
+    Inr h ↦
+      J
+        (λchoice _.
+          Equal
+            (List Char)
+            (match choice {
+              True ↦ render_content_mode True width body;
+              False ↦ render_content_mode False width body
+            })
+            (doc_content body))
+        (render_content_mode_preserves False width body valid)
+        (sym Bool (doc_fits width body) False h)
   }
 
 lemma render_content_alt_preserves
@@ -231,34 +236,36 @@ lemma render_content_alt_preserves
         (render_content_mode flat width (Alt first second))
         (doc_content (Alt first second)) =
   match pretty_bool_cases (doc_fits width first) {
-    Inl h ↦ J
-      (λchoice _.
-        Equal
+    Inl h ↦
+      J
+        (λchoice _.
+          Equal
+            (List Char)
+            (match choice {
+              True ↦ render_content_mode True width first;
+              False ↦ render_content_mode False width second
+            })
+            (doc_content first))
+        (render_content_mode_preserves True width first first_valid)
+        (sym Bool (doc_fits width first) True h);
+    Inr h ↦
+      J
+        (λchoice _.
+          Equal
+            (List Char)
+            (match choice {
+              True ↦ render_content_mode True width first;
+              False ↦ render_content_mode False width second
+            })
+            (doc_content first))
+        (trans
           (List Char)
-          (match choice {
-            True ↦ render_content_mode True width first;
-            False ↦ render_content_mode False width second
-          })
-          (doc_content first))
-      (render_content_mode_preserves True width first first_valid)
-      (sym Bool (doc_fits width first) True h);
-    Inr h ↦ J
-      (λchoice _.
-        Equal
-          (List Char)
-          (match choice {
-            True ↦ render_content_mode True width first;
-            False ↦ render_content_mode False width second
-          })
-          (doc_content first))
-      (trans
-        (List Char)
-        (render_content_mode False width second)
-        (doc_content second)
-        (doc_content first)
-        (render_content_mode_preserves False width second second_valid)
-        (sym (List Char) (doc_content first) (doc_content second) same_content))
-      (sym Bool (doc_fits width first) False h)
+          (render_content_mode False width second)
+          (doc_content second)
+          (doc_content first)
+          (render_content_mode_preserves False width second second_valid)
+          (sym (List Char) (doc_content first) (doc_content second) same_content))
+        (sym Bool (doc_fits width first) False h)
   }
 
 lemma render_content_mode_preserves
@@ -268,54 +275,56 @@ lemma render_content_mode_preserves
   match doc {
     Text chars ↦ λvalid. Refl;
     Line ↦ λvalid. Proved;
-    Concat left right ↦ λvalid.
-      pretty_list_append_cong
-        (render_content_mode flat width left)
-        (doc_content left)
-        (render_content_mode flat width right)
-        (doc_content right)
-        (render_content_mode_preserves
-          flat
-          width
-          left
-          (and_fst (DocContentInvariant left) (DocContentInvariant right) valid))
-        (render_content_mode_preserves
-          flat
-          width
-          right
-          (and_snd (DocContentInvariant left) (DocContentInvariant right) valid));
+    Concat left right ↦
+      λvalid.
+        pretty_list_append_cong
+          (render_content_mode flat width left)
+          (doc_content left)
+          (render_content_mode flat width right)
+          (doc_content right)
+          (render_content_mode_preserves
+            flat
+            width
+            left
+            (and_fst (DocContentInvariant left) (DocContentInvariant right) valid))
+          (render_content_mode_preserves
+            flat
+            width
+            right
+            (and_snd (DocContentInvariant left) (DocContentInvariant right) valid));
     Nest amount body ↦ λvalid. render_content_mode_preserves flat width body valid;
     Group body ↦ λvalid. render_content_group_preserves flat width body valid;
-    Alt first second ↦ λvalid.
-      render_content_alt_preserves
-        flat
-        width
-        first
-        second
-        (and_fst
-          (DocContentInvariant first)
-          (And
+    Alt first second ↦
+      λvalid.
+        render_content_alt_preserves
+          flat
+          width
+          first
+          second
+          (and_fst
+            (DocContentInvariant first)
+            (And
+              (DocContentInvariant second)
+              (Equal (List Char) (doc_content first) (doc_content second)))
+            valid)
+          (and_fst
             (DocContentInvariant second)
-            (Equal (List Char) (doc_content first) (doc_content second)))
-          valid)
-        (and_fst
-          (DocContentInvariant second)
-          (Equal (List Char) (doc_content first) (doc_content second))
+            (Equal (List Char) (doc_content first) (doc_content second))
+            (and_snd
+              (DocContentInvariant first)
+              (And
+                (DocContentInvariant second)
+                (Equal (List Char) (doc_content first) (doc_content second)))
+              valid))
           (and_snd
-            (DocContentInvariant first)
-            (And
-              (DocContentInvariant second)
-              (Equal (List Char) (doc_content first) (doc_content second)))
-            valid))
-        (and_snd
-          (DocContentInvariant second)
-          (Equal (List Char) (doc_content first) (doc_content second))
-          (and_snd
-            (DocContentInvariant first)
-            (And
-              (DocContentInvariant second)
-              (Equal (List Char) (doc_content first) (doc_content second)))
-            valid))
+            (DocContentInvariant second)
+            (Equal (List Char) (doc_content first) (doc_content second))
+            (and_snd
+              (DocContentInvariant first)
+              (And
+                (DocContentInvariant second)
+                (Equal (List Char) (doc_content first) (doc_content second)))
+              valid))
   }
 
 proof preserves_text_tokens for render_content_mode

@@ -262,11 +262,12 @@ fn parser_from_decoder (a : Type) (decoder : Decoder ByteCursor Span a) : Parser
     λstart.
       λh.
         match decoder (MkByteCursor s start) {
-          Decoded value next ↦ Parsed
-            a
-            value
-            (MkSpan start (byte_cursor_position next))
-            (byte_cursor_position next);
+          Decoded value next ↦
+            Parsed
+              a
+              value
+              (MkSpan start (byte_cursor_position next))
+              (byte_cursor_position next);
           DecoderFailed err ↦ Failed a (decoder_parse_error s err)
         }
 
@@ -560,31 +561,33 @@ const spaces_decoder : Decoder ByteCursor Span (List UInt8) =
 fn bool_true_decoder (cur : ByteCursor) : DecoderResult ByteCursor Span (Syntax BoolExpr) =
   match true_token_decoder cur {
     DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
-    Decoded ignored next ↦ Decoded
-      ByteCursor
-      Span
-      (Syntax BoolExpr)
-      (syntax_leaf
-        (byte_cursor_source cur)
-        (byte_cursor_position cur)
-        (byte_cursor_position next)
-        BTrue)
-      next
+    Decoded ignored next ↦
+      Decoded
+        ByteCursor
+        Span
+        (Syntax BoolExpr)
+        (syntax_leaf
+          (byte_cursor_source cur)
+          (byte_cursor_position cur)
+          (byte_cursor_position next)
+          BTrue)
+        next
   }
 
 fn bool_false_decoder (cur : ByteCursor) : DecoderResult ByteCursor Span (Syntax BoolExpr) =
   match false_token_decoder cur {
     DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
-    Decoded ignored next ↦ Decoded
-      ByteCursor
-      Span
-      (Syntax BoolExpr)
-      (syntax_leaf
-        (byte_cursor_source cur)
-        (byte_cursor_position cur)
-        (byte_cursor_position next)
-        BFalse)
-      next
+    Decoded ignored next ↦
+      Decoded
+        ByteCursor
+        Span
+        (Syntax BoolExpr)
+        (syntax_leaf
+          (byte_cursor_source cur)
+          (byte_cursor_position cur)
+          (byte_cursor_position next)
+          BFalse)
+        next
   }
 
 fn bool_not_decoder
@@ -605,17 +608,18 @@ fn bool_not_decoder
                   Decoded trailing close_start ↦
                     match byte_code_decoder (41 : Int) close_start {
                       DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
-                      Decoded close after_close ↦ Decoded
-                        ByteCursor
-                        Span
-                        (Syntax BoolExpr)
-                        (syntax_node_unary
-                          (byte_cursor_source cur)
-                          (byte_cursor_position cur)
-                          (byte_cursor_position after_close)
-                          (BNot (erase_spans child))
-                          child)
-                        after_close
+                      Decoded close after_close ↦
+                        Decoded
+                          ByteCursor
+                          Span
+                          (Syntax BoolExpr)
+                          (syntax_node_unary
+                            (byte_cursor_source cur)
+                            (byte_cursor_position cur)
+                            (byte_cursor_position after_close)
+                            (BNot (erase_spans child))
+                            child)
+                          after_close
                     }
                 }
             }
@@ -642,37 +646,29 @@ fn bool_and_decoder
                       DecoderFailed err ↦ DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
                       Decoded middle right_start ↦
                         match recur right_start {
-                          DecoderFailed err ↦ DecoderFailed
-                            ByteCursor
-                            Span
-                            (Syntax BoolExpr)
-                            err;
+                          DecoderFailed err ↦
+                            DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
                           Decoded right right_end ↦
                             match spaces_decoder right_end {
-                              DecoderFailed err ↦ DecoderFailed
-                                ByteCursor
-                                Span
-                                (Syntax BoolExpr)
-                                err;
+                              DecoderFailed err ↦
+                                DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
                               Decoded trailing close_start ↦
                                 match byte_code_decoder (41 : Int) close_start {
-                                  DecoderFailed err ↦ DecoderFailed
-                                    ByteCursor
-                                    Span
-                                    (Syntax BoolExpr)
-                                    err;
-                                  Decoded close after_close ↦ Decoded
-                                    ByteCursor
-                                    Span
-                                    (Syntax BoolExpr)
-                                    (syntax_node_binary
-                                      (byte_cursor_source cur)
-                                      (byte_cursor_position cur)
-                                      (byte_cursor_position after_close)
-                                      (BAnd (erase_spans left) (erase_spans right))
-                                      left
-                                      right)
-                                    after_close
+                                  DecoderFailed err ↦
+                                    DecoderFailed ByteCursor Span (Syntax BoolExpr) err;
+                                  Decoded close after_close ↦
+                                    Decoded
+                                      ByteCursor
+                                      Span
+                                      (Syntax BoolExpr)
+                                      (syntax_node_binary
+                                        (byte_cursor_source cur)
+                                        (byte_cursor_position cur)
+                                        (byte_cursor_position after_close)
+                                        (BAnd (erase_spans left) (erase_spans right))
+                                        left
+                                        right)
+                                      after_close
                                 }
                             }
                         }
@@ -717,11 +713,12 @@ fn complete_bool_decoder (cur : ByteCursor) : DecoderResult ByteCursor Span (Syn
             Decoded trailing end ↦
               match byte_cursor_remaining end {
                 Zero ↦ Decoded ByteCursor Span (Syntax BoolExpr) syntax end;
-                Suc rest ↦ DecoderFailed
-                  ByteCursor
-                  Span
-                  (Syntax BoolExpr)
-                  (DecoderRejected Span (byte_cursor_locate end))
+                Suc rest ↦
+                  DecoderFailed
+                    ByteCursor
+                    Span
+                    (Syntax BoolExpr)
+                    (DecoderRejected Span (byte_cursor_locate end))
               }
           }
       }
@@ -734,14 +731,16 @@ fn print_bool_expr (e : BoolExpr) : Bytes =
   match e {
     BTrue ↦ bytes_encode "true";
     BFalse ↦ bytes_encode "false";
-    BNot child ↦ bytes_concat
-      (bytes_concat (bytes_encode "(not ") (print_bool_expr child))
-      (bytes_encode ")");
-    BAnd left right ↦ bytes_concat
-      (bytes_concat
-        (bytes_concat (bytes_encode "(and ") (print_bool_expr left))
-        (bytes_encode " "))
-      (bytes_concat (print_bool_expr right) (bytes_encode ")"))
+    BNot child ↦
+      bytes_concat
+        (bytes_concat (bytes_encode "(not ") (print_bool_expr child))
+        (bytes_encode ")");
+    BAnd left right ↦
+      bytes_concat
+        (bytes_concat
+          (bytes_concat (bytes_encode "(and ") (print_bool_expr left))
+          (bytes_encode " "))
+        (bytes_concat (print_bool_expr right) (bytes_encode ")"))
   }
 
 fn format_bool_expr (s : Source) : Result ParseError Bytes =

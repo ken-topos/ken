@@ -19,10 +19,8 @@ fn replace_process_working_directory
       (working_directory : Bytes) (input : ProcessInput)
     : ProcessInput =
   match input {
-    MkProcessInput arguments environment previous ↦ MkProcessInput
-      arguments
-      environment
-      working_directory
+    MkProcessInput arguments environment previous ↦
+      MkProcessInput arguments environment working_directory
   }
 
 proof round_trip for process_working_directory

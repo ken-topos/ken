@@ -110,25 +110,25 @@ fn schema_validation_cons
   match head {
     SchemaFieldAccepted accepted ↦
       match tail {
-        Valid rest ↦ Valid
-          (NonEmpty (SchemaIssue origin))
-          (List value)
-          (Cons value accepted rest);
+        Valid rest ↦
+          Valid (NonEmpty (SchemaIssue origin)) (List value) (Cons value accepted rest);
         Invalid issues ↦ Invalid (NonEmpty (SchemaIssue origin)) (List value) issues
       };
     SchemaFieldRejected issue ↦
       match tail {
-        Valid rest ↦ Invalid
-          (NonEmpty (SchemaIssue origin))
-          (List value)
-          (NonEmptyCons (SchemaIssue origin) issue (Nil (SchemaIssue origin)));
-        Invalid issues ↦ Invalid
-          (NonEmpty (SchemaIssue origin))
-          (List value)
-          (nonempty_append
-            (SchemaIssue origin)
-            (NonEmptyCons (SchemaIssue origin) issue (Nil (SchemaIssue origin)))
-            issues)
+        Valid rest ↦
+          Invalid
+            (NonEmpty (SchemaIssue origin))
+            (List value)
+            (NonEmptyCons (SchemaIssue origin) issue (Nil (SchemaIssue origin)));
+        Invalid issues ↦
+          Invalid
+            (NonEmpty (SchemaIssue origin))
+            (List value)
+            (nonempty_append
+              (SchemaIssue origin)
+              (NonEmptyCons (SchemaIssue origin) issue (Nil (SchemaIssue origin)))
+              issues)
       }
   }
 
@@ -140,11 +140,12 @@ fn schema_validate_fields
     : SchemaValidation origin value =
   match fields {
     Nil ↦ Valid (NonEmpty (SchemaIssue origin)) (List value) (Nil value);
-    Cons field rest ↦ schema_validation_cons
-      origin
-      value
-      (inspect field)
-      (schema_validate_fields origin value inspect rest)
+    Cons field rest ↦
+      schema_validation_cons
+        origin
+        value
+        (inspect field)
+        (schema_validate_fields origin value inspect rest)
   }
 
 fn schema_validate
@@ -204,10 +205,8 @@ fn schema_field_help_chars (field : SchemaField) : List Char =
 fn schema_fields_help_chars (fields : List SchemaField) : List Char =
   match fields {
     Nil ↦ Nil Char;
-    Cons field rest ↦ list_append
-      Char
-      (schema_field_help_chars field)
-      (schema_fields_help_chars rest)
+    Cons field rest ↦
+      list_append Char (schema_field_help_chars field) (schema_fields_help_chars rest)
   }
 
 fn schema_help (schema : Schema) : Doc =
