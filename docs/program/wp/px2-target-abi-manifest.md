@@ -14,17 +14,17 @@ cut fresh from `origin/main` at kickoff. **CI:** ⛔ **FULL CI** — touches
 required shape (`evt_7qqf827rr1jxk`) + Phase-A-exit correction; PX1 landed
 (`ken-host` on `origin/main @ 609dd600`).
 
-> ### ⛔ RELEASE STATUS — clean-room clearance REQUIRED before kickoff
-> The operator has **authorized PX2** (pulled PX1/PX2 ahead of CC9,
-> 2026-07-15). What is **not** yet cleared is the **system-header probe**: a
-> build step that `#include`s the Linux system/UAPI headers and *prints values*
-> learns a fact from a build — it does **not** copy GPL'd source into the tree —
-> **but that distinction is load-bearing and is NOT the Steward's to assert**
-> (charter §4; `CLEAN-ROOM.md` decides). **PX2's probe design routes through the
-> Spec enclave's leakage recheck BEFORE Runtime writes a line of probe code.**
-> The Steward holds the Handoff-Gate/kickoff until the enclave clears the probe
-> approach (recorded as an `evt_…`). Everything else in this frame is settled and
-> shovel-ready; only the probe half waits on that clearance.
+> ### ✅ RELEASE STATUS — clean-room CLEARED; PX2 releasable
+> The operator authorized PX2 (pulled PX1/PX2 ahead of CC9, 2026-07-15). The
+> **system-header probe is CLEARED by the Spec enclave's leakage recheck**
+> (`evt_5fx7gmprrk07b`, spec-leader front-desking the enclave's ruling): a
+> Linux-target probe may compile Ken-authored C that `#include`s the platform
+> headers and emits **numeric ABI values only** — that is fact-observation, not
+> vendoring header source; `CLEAN-ROOM.md` bars copying/close-paraphrase of
+> protected *expression*, not independently observing a build-time *fact*. The
+> clearance is **subject to 5 binding constraints** — see **fixed input 9** and
+> **AC8**; they are settled and must be honored verbatim. With those, the probe
+> half is releasable alongside the manifest + hash-binding halves.
 
 ## Objective
 
@@ -101,6 +101,32 @@ fact without a probe"* (charter §7) true, and PX-B…PX-E build on it.
    untouched.** Binding the manifest hash into the native artifact does **not**
    move or launder that native-execution boundary into `ken-host` (Phase-A-exit
    correction — the explicitly forbidden move).
+9. **The 5 clean-room constraints (SETTLED — enclave clearance
+   `evt_5fx7gmprrk07b`; honor verbatim).** The probe is cleared *only* under
+   these; a violation voids AC8:
+   - **(a) No header expression enters the tree.** Do not copy or paraphrase
+     macro bodies, declarations, comments, layout/order, generated header
+     fragments, or preprocessor output. The probe emits only a fixed, reviewed
+     `FACT=INTEGER` protocol; generated Rust/manifest code carries **numeric
+     values only**.
+   - **(b) Interface names are permitted only as the identifiers needed to query
+     the fact.** `#include <…>` paths and macro/function/fact names (e.g.
+     `O_NOFOLLOW`) may appear in Ken-authored probe code and manifest labels. Do
+     **not** reproduce macro definitions or stringify/dump header text.
+   - **(c) The probe is an observer, never a source Ken consumes at runtime.**
+     `linux-raw-sys` remains the runtime/binding source; the header result is
+     compared fact-by-fact and any mismatch fails closed. No copied C
+     declaration, signature, or host-header-derived calling convention may enter
+     the public boundary.
+   - **(d) Target identity must be honest.** Run the probe only through the
+     selected Linux target toolchain/headers **for the target being
+     manifested**. If that target-qualified probe cannot run (including an
+     unsupported cross-build), **fail closed or record the explicitly unavailable
+     backend** — never treat build-host headers as evidence for a different
+     target.
+   - **(e) Keep the probe inventory closed to PX2's enumerated ABI facts** (fixed
+     input 4). No general header dump, discovery scan, or unrelated API
+     extraction; the probe's own C is Ken-authored and minimal.
 
 ## Mandated deliverable outline (each ends in a concrete choice)
 
@@ -129,9 +155,12 @@ fact without a probe"* (charter §7) true, and PX-B…PX-E build on it.
    translation unit compiled by the probe (via the `cc` crate or a direct
    `cc` invocation — record the tool in the dependency delta if a crate is
    added) that prints `FACT=VALUE` lines; `build.rs` parses and diffs them.
-   **⚠ This deliverable is HELD behind the Spec-enclave leakage recheck (RELEASE
-   box).** Do not write probe code until the enclave clears the approach; the
-   probe **copies no header SOURCE into the tree — it emits values only.**
+   **✅ CLEARED (`evt_5fx7gmprrk07b`) — build to the 5 constraints in fixed input
+   9.** The `FACT=INTEGER` protocol is fixed and reviewed; the probe copies **no
+   header source** (values only); it runs only through the
+   target-being-manifested's toolchain/headers and **fails closed** (or records
+   the unavailable backend) if it cannot; and its C is Ken-authored, minimal, and
+   closed to the enumerated inventory.
 3. **Fail-closed manifest-hash binding into interpreter AND native artifacts.**
    Compile `TARGET_ABI_MANIFEST_HASH` into the interpreter (`ken-interp`/`ken-cli`)
    and the native-execution artifact (`ken-runtime`), and add a **fail-closed
@@ -185,9 +214,14 @@ fact without a probe"* (charter §7) true, and PX-B…PX-E build on it.
   `--workspace` run — §12): full locked build + suite green on the publisher's CI
   gate. Any new build dependency (`cc`) is recorded in
   `docs/program/dependency-deltas.md`.
-- **AC8 — clean-room cleared.** The system-header probe approach carries the Spec
-  enclave's recorded leakage-recheck clearance (`evt_…`), and the probe copies no
-  system-header **source** into the tree — it emits values only.
+- **AC8 — clean-room cleared, constraints honored.** The probe carries the Spec
+  enclave's leakage-recheck clearance `evt_5fx7gmprrk07b`, and **all 5 binding
+  constraints (fixed input 9) are demonstrably met**: no header expression in the
+  tree (only a fixed `FACT=INTEGER` protocol + numeric manifest values); interface
+  names appear only as query identifiers/labels; the probe is a build-time
+  observer, never a runtime source; the probe is target-honest (fails closed / an
+  unavailable backend if it cannot run for the manifested target); and the probe
+  inventory is closed to the enumerated ABI facts.
 
 ## Do-not guards
 

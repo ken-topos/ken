@@ -20,25 +20,34 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > >
 > > ## 📋 PX2 (`TargetAbi` manifest) **FRAMED** — `docs/program/wp/px2-target-abi-manifest.md` (authored on steward/work, NOT yet published). Runtime ring, `crates/` lane, FULL CI. Deliverables: (1) generated `TargetAbi` manifest (target identity + N=3 pinned closure + complete FS ABI-fact inventory + schema ver + output hash), (2) **system-header probe as INDEPENDENT cross-check, fail-closed on any disagreement** ⚠ **clean-room-HELD**, (3) manifest-hash bind into interpreter+native artifacts, fail-closed identity before any syscall, (4) source disclosure. Grounded fix: the charter's "13 facts" is stale — PX1 removed the signal op, so the **2 SIG* facts are ABSENT**; inventory = the landed FS facts only (10 OFlags + AT_REMOVEDIR + Mode + *at syscalls + errno). Gate: Runtime QA + Architect §14 (fail-closed soundness); **no CV Spec-vote at merge** (no spec/conformance delta).
 > >
-> > **⇒ NEXT (do in order):**
-> > 1. **Publish the PX2 frame doc-only + BUNDLE tracker-sync-to-main** (deferred
-> >    from PX1 close — main's tracker stale since #709/d5f3c416). Cut a clean
-> >    branch from `origin/main`, port the frame doc + this tracker, publish
-> >    `--doc-only`. (Frame is `docs/program/` → doc-only eligible; the *code* WP
-> >    is FULL CI later.)
-> > 2. **Route the clean-room leakage recheck to the Spec enclave** (via
-> >    spec-leader) — the system-header probe (`#include`s Linux headers, prints
-> >    values). `CLEAN-ROOM.md` decides; NOT the Steward's to assert. This is the
-> >    one gate on the probe half; the manifest + hash-bind halves are unblocked.
-> > 3. **On enclave clearance → Handoff-Gate the Runtime ring + kick PX2.** (Runtime
-> >    is on standby awaiting the Handoff Gate.) Compact leader+implementer+QA
-> >    unconditionally, verify drops, then kick.
-> > 4. **L4-export** — frame authored + committed (`d8a89915`, steward/work, NOT
+> > **⇒ DONE this pass:** (1) ✅ PX2 frame **published to `origin/main @ 67b2857c`**
+> > (PR #711, doc-only) + **tracker synced** (the deferred #709 sync — main tracker
+> > now current). (2) ✅ **Clean-room leakage recheck routed** to the Spec enclave —
+> > `evt_6akvbkgv5e5sv` (root thread, mentions spec-leader; spec-leader confirmed
+> > Working on it). (3) ✅ AX-1 confirmed **landed** as `bcaf1e03` (the `7fa7f138`
+> > re-anchor published under a new SHA) — the stale "handed to Steward" statuses
+> > are NOT a dropped obligation.
+> >
+> > **⇒ ✅ CLEAN-ROOM CLEARED** (`evt_5fx7gmprrk07b`, 08:05) — the enclave cleared
+> > the system-header probe **subject to 5 binding constraints** (no header
+> > expression in tree; interface names as query-identifiers only; observer-not-
+> > runtime-source; target-honest/fail-closed; inventory closed to enumerated
+> > facts). **Folded into the frame** as fixed input 9 + AC8; RELEASE box flipped
+> > to ✅. PX2 is now fully releasable.
+> >
+> > **⇒ NEXT (executing now):**
+> > 1. **Re-publish the updated PX2 frame doc-only** (clearance + constraints
+> >    folded) + tracker-sync.
+> > 2. **Handoff-Gate the Runtime ring + kick PX2** — compact runtime-leader +
+> >    runtime-implementer + runtime-qa unconditionally (they're on standby, PX1
+> >    retros in), verify drops, post kickoff, rouse GPT seats, confirm Working.
+> > 3. **L4-export** — frame authored + committed (`d8a89915`, steward/work, NOT
 > >    published). Release **HELD for Pat's Decision 2** (still unanswered). When Pat
 > >    greenlights → publish frame + Handoff-Gate the Language ring + kick.
-> > 5. Pat back ~11:00–11:30 UTC — consolidated update (PX1 landed w/ the soundness
-> >    block caught+resolved during his absence; PX2 framed + clean-room-routed;
-> >    L4-export ready pending his Decision 2). Do NOT re-ask rustix (SETTLED).
+> > 4. Pat back ~11:00–11:30 UTC — consolidated update (PX1 landed w/ the soundness
+> >    block caught+resolved during his absence; PX2 framed + published + clean-room
+> >    cleared + kicked to Runtime; L4-export ready pending his Decision 2). Do NOT
+> >    re-ask rustix (SETTLED).
 > >
 > > **2 carries lifted (candidates — promote on 2nd occurrence, watch PX2):**
 > > (i) a host-boundary safe wrapper inherits the upstream unsafe API's *complete*
