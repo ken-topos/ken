@@ -1280,7 +1280,10 @@ fn expand_scope(
             }
             let bare = inner.name().to_string();
             let qualified = qualify(prefix, &bare);
-            if elab.module_state.prelude_names.contains(&bare) && !scope.locals.contains(&bare) {
+            if prefix.is_empty()
+                && elab.module_state.prelude_names.contains(&bare)
+                && !scope.locals.contains(&bare)
+            {
                 return Err(ElabError::AmbiguousReference {
                     name: bare.clone(),
                     sources: vec![format!("<prelude>.{bare}"), qualified],

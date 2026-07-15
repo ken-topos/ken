@@ -59,6 +59,16 @@ fn body_const(env: &ElabEnv, name: &str) -> ken_kernel::GlobalId {
     }
 }
 
+fn load_entry(label: &str, files: &[(&str, &str)]) -> Result<ElabEnv, ElabError> {
+    let root = FixtureRoot::new(label);
+    for (path, source) in files {
+        root.write(path, source);
+    }
+    let mut env = ElabEnv::new().expect("base environment");
+    env.elaborate_module_from_roots(&[root.path().to_path_buf()], "Entry")?;
+    Ok(env)
+}
+
 #[test]
 fn parser_distinguishes_facade_and_in_scope_forms_with_renames() {
     let decls = parse_decls("export M (foo, Bar as baz) export foo, Bar as baz")
@@ -239,6 +249,199 @@ fn imported_identity_clashes_are_latent_fail_closed_but_same_identity_is_idempot
         prelude.elaborate_file("module M { pub def Bool = Nat } import M (Bool)"),
         Err(ElabError::AmbiguousReference { ref name, .. }) if name == "Bool"
     ));
+}
+
+#[test]
+fn loader_executes_import_identity_clash_and_rename_discriminators() {
+    let modules = [
+        ("M.ken", "pub const foo : Nat = Zero\n"),
+        ("N.ken", "pub const foo : Nat = Suc Zero\n"),
+    ];
+    for (label, imports) in [
+        ("distinct-mn", "import M (foo)\nimport N (foo)\n"),
+        ("distinct-nm", "import N (foo)\nimport M (foo)\n"),
+    ] {
+        let files = [modules[0], modules[1], ("Entry.ken", imports)];
+        match load_entry(label, &files) {
+            Err(ElabError::AmbiguousReference { name, sources, .. }) => {
+                assert_eq!(name, "foo");
+                assert!(sources.contains(&"M.foo".to_string()));
+                assert!(sources.contains(&"N.foo".to_string()));
+            }
+            Err(other) => panic!("{label} rejected with the wrong error: {other}"),
+            Ok(_) => panic!("{label} must reject both distinct origins"),
+        }
+    }
+
+    let renamed = load_entry(
+        "distinct-rename",
+        &[
+            modules[0],
+            modules[1],
+            (
+                "Entry.ken",
+                "import M (foo)\n\
+                 import N (foo as nfoo)\n\
+                 const from_m : Nat = foo\n\
+                 const from_n : Nat = nfoo\n",
+            ),
+        ],
+    )
+    .expect("renaming the second distinct identity resolves the clash");
+    assert_eq!(
+        body_const(&renamed, "Entry.from_m"),
+        renamed.globals["M.foo"]
+    );
+    assert_eq!(
+        body_const(&renamed, "Entry.from_n"),
+        renamed.globals["N.foo"]
+    );
+    assert_ne!(renamed.globals["M.foo"], renamed.globals["N.foo"]);
+
+    match load_entry(
+        "prelude-reject",
+        &[
+            ("M.ken", "pub def Bool = Nat\n"),
+            ("Entry.ken", "import M (Bool)\n"),
+        ],
+    ) {
+        Err(ElabError::AmbiguousReference { name, sources, .. }) => {
+            assert_eq!(name, "Bool");
+            assert!(sources.contains(&"M.Bool".to_string()));
+            assert!(sources.contains(&"<prelude>.Bool".to_string()));
+        }
+        Err(other) => panic!("prelude clash rejected with the wrong error: {other}"),
+        Ok(_) => panic!("a selective import may not shadow the prelude"),
+    }
+
+    let prelude_rename = load_entry(
+        "prelude-rename",
+        &[
+            ("M.ken", "pub def Bool = Nat\n"),
+            (
+                "Entry.ken",
+                "import M (Bool as MBool)\n\
+                 const from_m : Type = MBool\n\
+                 const from_prelude : Type = Bool\n",
+            ),
+        ],
+    )
+    .expect("renaming preserves both the user and prelude identities");
+    assert_eq!(
+        body_const(&prelude_rename, "Entry.from_m"),
+        prelude_rename.globals["M.Bool"]
+    );
+    let (_, prelude_body) = prelude_rename
+        .env
+        .transparent_body(prelude_rename.globals["Entry.from_prelude"])
+        .expect("prelude control is transparent");
+    assert!(
+        matches!(
+            &prelude_body,
+            Term::IndFormer { id, .. } if *id == prelude_rename.globals["Bool"]
+        ),
+        "bare Bool must remain the registered prelude type, got {prelude_body:?}"
+    );
+    assert_ne!(
+        prelude_rename.globals["M.Bool"],
+        prelude_rename.globals["Bool"]
+    );
+}
+
+#[test]
+fn loader_executes_same_identity_carveout_and_distinct_source_flip() {
+    for (label, imports) in [
+        ("same-mp", "import M (foo)\nimport P (foo)\n"),
+        ("same-pm", "import P (foo)\nimport M (foo)\n"),
+    ] {
+        let entry = format!("{imports}const observed : Nat = foo\n");
+        let env = load_entry(
+            label,
+            &[
+                ("M.ken", "pub const foo : Nat = Zero\n"),
+                ("P.ken", "export M (foo)\n"),
+                ("Entry.ken", &entry),
+            ],
+        )
+        .unwrap_or_else(|error| panic!("{label} must accept one canonical identity: {error}"));
+        assert_eq!(body_const(&env, "Entry.observed"), env.globals["M.foo"]);
+        assert!(!env.globals.contains_key("P.foo"));
+    }
+
+    for (label, imports) in [
+        ("different-mp", "import M (foo)\nimport P (foo)\n"),
+        ("different-pm", "import P (foo)\nimport M (foo)\n"),
+    ] {
+        let files = [
+            ("M.ken", "pub const foo : Nat = Zero\n"),
+            ("N.ken", "pub const foo : Nat = Suc Zero\n"),
+            ("P.ken", "export N (foo)\n"),
+            ("Entry.ken", imports),
+        ];
+        match load_entry(label, &files) {
+            Err(ElabError::AmbiguousReference { name, sources, .. }) => {
+                assert_eq!(name, "foo");
+                assert!(sources.contains(&"M.foo".to_string()));
+                assert!(sources.contains(&"N.foo".to_string()));
+            }
+            Err(other) => panic!("{label} rejected with the wrong error: {other}"),
+            Ok(_) => panic!("{label} must reject the changed facade source"),
+        }
+    }
+}
+
+#[test]
+fn loader_executes_facade_and_in_scope_body_scope_discriminator() {
+    let facade = load_entry(
+        "facade-publishes",
+        &[
+            ("M.ken", "pub const foo : Nat = Zero\n"),
+            ("P.ken", "export M (foo as bar)\n"),
+            ("Entry.ken", "import P (bar)\nconst observed : Nat = bar\n"),
+        ],
+    )
+    .expect("facade export is a loader edge and publishes its renamed identity");
+    assert_eq!(
+        body_const(&facade, "Entry.observed"),
+        facade.globals["M.foo"]
+    );
+    assert!(!facade.globals.contains_key("P.bar"));
+
+    match load_entry(
+        "facade-does-not-bind",
+        &[
+            ("M.ken", "pub const foo : Nat = Zero\n"),
+            ("P.ken", "export M (foo)\nconst local_use : Nat = foo\n"),
+            ("Entry.ken", "import P (foo)\n"),
+        ],
+    ) {
+        Err(ElabError::UnboundName { name, .. }) => assert_eq!(name, "foo"),
+        Err(other) => panic!("facade body lookup rejected with the wrong error: {other}"),
+        Ok(_) => panic!("facade body lookup must reject as UnboundName(foo)"),
+    }
+
+    let in_scope = load_entry(
+        "in-scope-binds",
+        &[
+            ("M.ken", "pub const foo : Nat = Zero\n"),
+            (
+                "P.ken",
+                "import M (foo)\n\
+                 export foo\n\
+                 const local_use : Nat = foo\n",
+            ),
+            ("Entry.ken", "import P (foo)\nconst observed : Nat = foo\n"),
+        ],
+    )
+    .expect("in-scope export republishes an existing body binding");
+    assert_eq!(
+        body_const(&in_scope, "P.local_use"),
+        in_scope.globals["M.foo"]
+    );
+    assert_eq!(
+        body_const(&in_scope, "Entry.observed"),
+        in_scope.globals["M.foo"]
+    );
 }
 
 #[test]
