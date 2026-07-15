@@ -3,6 +3,10 @@
 //! This crate is a tested and target-validated TCB extension around `rustix`;
 //! its host guarantees are never Ken proofs. `rustix` and raw descriptors stay
 //! private. The kernel is unaffected and retains its own unsafe-code ban.
+//! The generated target manifest dual-sources the numeric filesystem ABI from
+//! `linux-raw-sys` and a target-qualified system-header observer. A mismatch
+//! fails the build closed. This is tested/validated host evidence, never a Ken
+//! proof.
 //!
 //! Ken's sole supported entrypoint is the standard-Rust `ken` binary. Rust's
 //! standard runtime ignores SIGPIPE before `main`, including in Rust test
@@ -17,6 +21,68 @@ use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DependencyIdentity {
+    pub name: &'static str,
+    pub version: &'static str,
+    pub checksum: &'static str,
+    pub features: &'static [&'static str],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AbiFact {
+    pub name: &'static str,
+    pub value: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TargetAbi {
+    pub schema_version: u32,
+    pub target: &'static str,
+    pub target_os: &'static str,
+    pub backend: &'static str,
+    pub dependencies: &'static [DependencyIdentity],
+    pub fact_count: usize,
+    pub facts: &'static [AbiFact],
+    pub manifest_hash: [u8; 32],
+}
+
+include!(concat!(env!("OUT_DIR"), "/target_abi.rs"));
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TargetAbiIdentityError {
+    BackendUnavailable,
+    HashMismatch,
+}
+
+impl std::fmt::Display for TargetAbiIdentityError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BackendUnavailable => formatter.write_str("target ABI backend is unavailable"),
+            Self::HashMismatch => formatter.write_str("target ABI manifest hash mismatch"),
+        }
+    }
+}
+
+impl std::error::Error for TargetAbiIdentityError {}
+
+/// Validates an artifact's compiled-in ABI identity before it enters the host
+/// boundary. An unavailable or mismatched identity always fails closed.
+pub fn assert_target_abi_identity(artifact_hash: [u8; 32]) -> Result<(), TargetAbiIdentityError> {
+    if TARGET_ABI.backend != "linux_raw" {
+        return Err(TargetAbiIdentityError::BackendUnavailable);
+    }
+    if artifact_hash != TARGET_ABI_MANIFEST_HASH {
+        return Err(TargetAbiIdentityError::HashMismatch);
+    }
+    Ok(())
+}
+
+fn assert_current_target_abi() -> HostResult<()> {
+    assert_target_abi_identity(TARGET_ABI_MANIFEST_HASH)
+        .map_err(|error| io::Error::new(io::ErrorKind::Unsupported, error.to_string()).into())
+}
 
 #[cfg(target_os = "linux")]
 mod linux {
@@ -357,6 +423,7 @@ fn unsupported<T>() -> HostResult<T> {
 }
 
 pub fn open_root(path: &RootPath) -> HostResult<RootedHandle> {
+    assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
     {
         linux::open_root(path)
@@ -375,6 +442,7 @@ pub fn open_at(
     leaf: &PathComponent,
     request: OpenRequest,
 ) -> HostResult<RootedHandle> {
+    assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
     {
         linux::open_at(&parent.inner, leaf, request)
@@ -389,6 +457,7 @@ pub fn open_at(
 }
 
 pub fn readlink_at(parent: &RootedHandle, leaf: &PathComponent) -> HostResult<Vec<u8>> {
+    assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
     {
         linux::readlink_at(&parent.inner, leaf).map_err(Into::into)
@@ -403,6 +472,7 @@ pub fn readlink_at(parent: &RootedHandle, leaf: &PathComponent) -> HostResult<Ve
 macro_rules! handle_op {
     ($name:ident, $result:ty) => {
         pub fn $name(handle: &RootedHandle) -> HostResult<$result> {
+            assert_current_target_abi()?;
             #[cfg(target_os = "linux")]
             {
                 linux::$name(&handle.inner).map_err(Into::into)
@@ -421,6 +491,7 @@ handle_op!(read, Vec<u8>);
 handle_op!(read_directory, Vec<DirectoryEntry>);
 
 pub fn replace(handle: &RootedHandle, bytes: &[u8]) -> HostResult<()> {
+    assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
     {
         linux::replace(&handle.inner, bytes).map_err(Into::into)
@@ -433,6 +504,7 @@ pub fn replace(handle: &RootedHandle, bytes: &[u8]) -> HostResult<()> {
 }
 
 pub fn append(handle: &RootedHandle, bytes: &[u8]) -> HostResult<()> {
+    assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
     {
         linux::append(&handle.inner, bytes).map_err(Into::into)
@@ -445,6 +517,7 @@ pub fn append(handle: &RootedHandle, bytes: &[u8]) -> HostResult<()> {
 }
 
 pub fn write_new(handle: &RootedHandle, bytes: &[u8]) -> HostResult<()> {
+    assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
     {
         linux::write_new(&handle.inner, bytes).map_err(Into::into)
@@ -457,6 +530,7 @@ pub fn write_new(handle: &RootedHandle, bytes: &[u8]) -> HostResult<()> {
 }
 
 pub fn create_directory(parent: &RootedHandle, leaf: &PathComponent) -> HostResult<()> {
+    assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
     {
         linux::create_directory(&parent.inner, leaf).map_err(Into::into)
@@ -469,6 +543,7 @@ pub fn create_directory(parent: &RootedHandle, leaf: &PathComponent) -> HostResu
 }
 
 pub fn remove(parent: &RootedHandle, leaf: &PathComponent, kind: RemoveKind) -> HostResult<()> {
+    assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
     {
         linux::remove(&parent.inner, leaf, kind).map_err(Into::into)
@@ -481,6 +556,7 @@ pub fn remove(parent: &RootedHandle, leaf: &PathComponent, kind: RemoveKind) -> 
 }
 
 pub fn remove_directory_tree(parent: &RootedHandle, leaf: &PathComponent) -> HostResult<()> {
+    assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
     {
         linux::remove_directory_tree(&parent.inner, leaf).map_err(Into::into)
@@ -498,6 +574,7 @@ pub fn rename(
     to_parent: &RootedHandle,
     to_leaf: &PathComponent,
 ) -> HostResult<()> {
+    assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
     {
         linux::rename(&from_parent.inner, from_leaf, &to_parent.inner, to_leaf).map_err(Into::into)
@@ -512,6 +589,79 @@ pub fn rename(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    mod build_support {
+        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/build_support.rs"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn generated_manifest_is_closed_and_probe_comparison_discriminates() {
+        assert_eq!(TARGET_ABI.fact_count, 20);
+        assert_eq!(TARGET_ABI.fact_count, TARGET_ABI.facts.len());
+        assert_eq!(TARGET_ABI.dependencies.len(), 3);
+        assert_eq!(
+            TARGET_ABI
+                .dependencies
+                .iter()
+                .map(|dependency| (dependency.name, dependency.version, dependency.features))
+                .collect::<Vec<_>>(),
+            vec![
+                ("rustix", "1.1.4", &["std", "fs"][..]),
+                ("bitflags", "2.13.0", &[][..]),
+                ("linux-raw-sys", "0.12.1", &["std", "general", "errno"][..]),
+            ]
+        );
+        assert!(TARGET_ABI
+            .dependencies
+            .iter()
+            .all(|dependency| dependency.checksum.len() == 64));
+        assert_eq!(TARGET_ABI.backend, "linux_raw");
+        assert!(!TARGET_ABI_CANONICAL.contains("SIG"));
+
+        let expected = TARGET_ABI
+            .facts
+            .iter()
+            .map(|fact| (fact.name, fact.value))
+            .collect::<Vec<_>>();
+        let protocol = TARGET_ABI
+            .facts
+            .iter()
+            .map(|fact| format!("{}={}\n", fact.name, fact.value))
+            .collect::<String>();
+        let observed = build_support::parse_probe(&protocol).expect("parse true probe output");
+        build_support::verify_probe(&expected, &observed).expect("true values agree");
+
+        let mut tampered = expected.clone();
+        tampered[0].1 ^= 1;
+        let mismatch = build_support::verify_probe(&tampered, &observed)
+            .expect_err("tampered linux-raw-sys value must fail closed");
+        assert!(mismatch.contains("O_RDONLY"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn manifest_identity_accepts_match_and_rejects_mismatch() {
+        assert_target_abi_identity(TARGET_ABI_MANIFEST_HASH).expect("matching manifest");
+        let mut mismatch = TARGET_ABI_MANIFEST_HASH;
+        mismatch[31] ^= 1;
+        assert_eq!(
+            assert_target_abi_identity(mismatch),
+            Err(TargetAbiIdentityError::HashMismatch)
+        );
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn unavailable_target_manifest_fails_closed() {
+        assert!(TARGET_ABI.backend.starts_with("unavailable-"));
+        assert_eq!(TARGET_ABI.fact_count, 0);
+        assert_eq!(
+            assert_target_abi_identity(TARGET_ABI_MANIFEST_HASH),
+            Err(TargetAbiIdentityError::BackendUnavailable)
+        );
+    }
 
     #[test]
     fn public_components_reject_unrooted_or_ambiguous_inputs() {

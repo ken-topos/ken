@@ -21,6 +21,7 @@ pub mod object_linker_packaging;
 pub mod platform_runtime_support;
 pub mod runtime_ir_evaluator;
 pub mod store;
+pub mod target_abi;
 pub mod unknown;
 pub mod values;
 
@@ -36,5 +37,6 @@ pub use object_linker_packaging::*;
 pub use platform_runtime_support::*;
 pub use runtime_ir_evaluator::*;
 pub use store::{InternResult, Space, Store, StoreStats};
+pub use target_abi::*;
 pub use unknown::Unknown;
 pub use values::{Sign, Value};

@@ -135,6 +135,32 @@ addition to the interpreter's outer ring, netted by the independent
 differential oracle (`conformance/surface/numbers/seed-f1-bignum-int.md` AC2),
 not a kernel-trusted dependency.
 
+## PX2 — generated Target-ABI manifest (`ken-host` build only)
+
+PX2 adds two exact-pinned build tools and reuses `linux-raw-sys = 0.12.1`
+directly at build time. The new `cc` and `sha2` closures are not linked into
+Ken's runtime artifact; `linux-raw-sys` remains in PX1's existing runtime
+closure through `rustix`:
+
+- `cc = 1.2.41`
+  (`ac9fe6cdbb24b6ade63616c0a0688e45bb56732262c158df3c0c4bea4ca47cb7`)
+  selects the target-qualified C compiler for the system-header observer. The
+  observer is run only when host and target identities match; otherwise the
+  manifest records an unavailable backend.
+- `sha2 = 0.10.9`
+  (`a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283`)
+  hashes the canonical generated manifest payload with SHA-256.
+- `linux-raw-sys = 0.12.1` keeps its PX1 checksum and permissive license. Its
+  build-only features are exactly `std`, `general`, and `errno`; it supplies
+  the generated numeric side of the fact-by-fact comparison and remains the
+  runtime binding source through `rustix`.
+
+The lockfile gains ten packages for the two new build tools: `cc`,
+`find-msvc-tools`, `shlex`, `sha2`, `digest`, `block-buffer`, `crypto-common`,
+`generic-array`, `typenum`, and `cpufeatures`. `cfg-if`, `libc`, and
+`version_check` were already locked. This is build-time tooling only; PX1's
+target-selected production closure remains N=3.
+
 ## Kernel-native Int literal (`ken-kernel`) — Int-decidable-equality
 ## value-reduction (ADR 0013 Layer 2)
 

@@ -1,0 +1,269 @@
+mod build_support;
+
+use sha2::{Digest, Sha256};
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+const SCHEMA_VERSION: u32 = 1;
+
+fn main() {
+    println!("cargo:rerun-if-changed=abi_probe.c");
+    println!("cargo:rerun-if-changed=build_support.rs");
+    println!("cargo:rerun-if-changed=src/lib.rs");
+    println!("cargo:rerun-if-changed=../ken-interp/src/eval.rs");
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-env-changed=KEN_HOST_ABI_TEST_MISMATCH");
+    println!("cargo:rerun-if-env-changed=RUSTFLAGS");
+
+    let target = env::var("TARGET").expect("Cargo provides TARGET");
+    let host = env::var("HOST").expect("Cargo provides HOST");
+    let target_os = env::var("CARGO_CFG_TARGET_OS").expect("Cargo provides target OS");
+    let encoded_rustflags = env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_default();
+    let rustflags = env::var("RUSTFLAGS").unwrap_or_default();
+    assert!(
+        !encoded_rustflags.contains("rustix_use_libc")
+            && !rustflags.contains("rustix_use_libc")
+            && env::var_os("CARGO_CFG_MIRI").is_none(),
+        "PX2 requires rustix's linux_raw backend; libc and Miri backends fail closed"
+    );
+    let manifest = fs::read_to_string("Cargo.toml").expect("read ken-host Cargo.toml");
+    assert!(
+        manifest.contains(
+            "rustix = { version = \"=1.1.4\", default-features = false, features = [\"std\", \"fs\"] }"
+        ),
+        "PX2 manifest identity requires the exact audited rustix pin and features"
+    );
+    let workspace = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+        .parent()
+        .and_then(Path::parent)
+        .expect("ken-host is in crates/")
+        .to_path_buf();
+    let lock = fs::read_to_string(workspace.join("Cargo.lock")).expect("read workspace Cargo.lock");
+    let dependencies = [
+        package_identity(&lock, "rustix", "1.1.4", "std,fs"),
+        package_identity(&lock, "bitflags", "2.13.0", ""),
+        package_identity(&lock, "linux-raw-sys", "0.12.1", "std,general,errno"),
+    ];
+
+    let (backend, facts): (&str, Vec<(&str, u64)>) = if target_os == "linux" && target == host {
+        let facts = linux_raw_facts();
+        verify_boundary_inventory(&facts);
+        run_probe(&target, &host, &facts);
+        ("linux_raw", facts)
+    } else if target_os == "linux" {
+        ("unavailable-cross-target", Vec::new())
+    } else {
+        ("unavailable-non-linux", Vec::new())
+    };
+
+    let canonical = canonical_manifest(&target, &target_os, backend, &dependencies, &facts);
+    let hash: [u8; 32] = Sha256::digest(canonical.as_bytes()).into();
+    write_generated(
+        &target,
+        &target_os,
+        backend,
+        &dependencies,
+        &facts,
+        &canonical,
+        &hash,
+    );
+}
+
+fn verify_boundary_inventory(facts: &[(&str, u64)]) {
+    let source = fs::read_to_string("src/lib.rs").expect("read landed ken-host producer");
+    let consumer = fs::read_to_string("../ken-interp/src/eval.rs")
+        .expect("read landed interpreter host-boundary consumer");
+    let needles = [
+        "OFlags::RDONLY",
+        "OFlags::WRONLY",
+        "OFlags::RDWR",
+        "OFlags::APPEND",
+        "OFlags::CREATE",
+        "OFlags::EXCL",
+        "OFlags::TRUNC",
+        "OFlags::DIRECTORY",
+        "OFlags::NOFOLLOW",
+        "OFlags::CLOEXEC",
+        "AtFlags::REMOVEDIR",
+        "Mode::from_raw_mode(0o666)",
+        "Mode::from_raw_mode(0o777)",
+        "fs::openat(",
+        "fs::mkdirat(",
+        "fs::unlinkat(",
+        "fs::renameat(",
+        "fs::readlinkat(",
+    ];
+    assert_eq!(
+        facts.len(),
+        needles.len() + 2,
+        "PX2 closed fact inventory drifted"
+    );
+    for needle in needles {
+        assert!(
+            source.contains(needle),
+            "PX2 ABI inventory fact is no longer derived from landed ken-host: {needle}"
+        );
+    }
+    for needle in ["io::ErrorKind::NotFound", "io::ErrorKind::AlreadyExists"] {
+        assert!(
+            consumer.contains(needle),
+            "PX2 errno fact is no longer consumed at the host boundary: {needle}"
+        );
+    }
+}
+
+fn package_identity(
+    lock: &str,
+    name: &str,
+    version: &str,
+    features: &str,
+) -> (String, String, String, String) {
+    for section in lock.split("[[package]]").skip(1) {
+        let field = |key: &str| {
+            section.lines().find_map(|line| {
+                line.strip_prefix(&format!("{key} = \""))
+                    .and_then(|value| value.strip_suffix('"'))
+            })
+        };
+        if field("name") == Some(name) && field("version") == Some(version) {
+            return (
+                name.to_owned(),
+                version.to_owned(),
+                field("checksum")
+                    .expect("registry dependency has checksum")
+                    .to_owned(),
+                features.to_owned(),
+            );
+        }
+    }
+    panic!("Cargo.lock lacks exact {name} {version}");
+}
+
+#[cfg(target_os = "linux")]
+fn linux_raw_facts() -> Vec<(&'static str, u64)> {
+    use linux_raw_sys::{errno, general};
+    vec![
+        ("O_RDONLY", general::O_RDONLY.into()),
+        ("O_WRONLY", general::O_WRONLY.into()),
+        ("O_RDWR", general::O_RDWR.into()),
+        ("O_APPEND", general::O_APPEND.into()),
+        ("O_CREAT", general::O_CREAT.into()),
+        ("O_EXCL", general::O_EXCL.into()),
+        ("O_TRUNC", general::O_TRUNC.into()),
+        ("O_DIRECTORY", general::O_DIRECTORY.into()),
+        ("O_NOFOLLOW", general::O_NOFOLLOW.into()),
+        ("O_CLOEXEC", general::O_CLOEXEC.into()),
+        ("AT_REMOVEDIR", general::AT_REMOVEDIR.into()),
+        (
+            "MODE_FILE_CREATE",
+            (general::S_IRUSR
+                | general::S_IWUSR
+                | general::S_IRGRP
+                | general::S_IWGRP
+                | general::S_IROTH
+                | general::S_IWOTH)
+                .into(),
+        ),
+        (
+            "MODE_DIRECTORY_CREATE",
+            (general::S_IRWXU | general::S_IRWXG | general::S_IRWXO).into(),
+        ),
+        ("SYS_OPENAT", general::__NR_openat.into()),
+        ("SYS_MKDIRAT", general::__NR_mkdirat.into()),
+        ("SYS_UNLINKAT", general::__NR_unlinkat.into()),
+        ("SYS_RENAMEAT", general::__NR_renameat.into()),
+        ("SYS_READLINKAT", general::__NR_readlinkat.into()),
+        ("ERRNO_ENOENT", errno::ENOENT.into()),
+        ("ERRNO_EEXIST", errno::EEXIST.into()),
+    ]
+}
+
+#[cfg(not(target_os = "linux"))]
+fn linux_raw_facts() -> Vec<(&'static str, u64)> {
+    Vec::new()
+}
+
+fn run_probe(target: &str, host: &str, expected: &[(&str, u64)]) {
+    assert_eq!(
+        target, host,
+        "system headers may only attest their own target"
+    );
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let executable = out_dir.join("ken-host-abi-probe");
+    let compiler = cc::Build::new().target(target).host(host).get_compiler();
+    let mut compile = compiler.to_command();
+    compile.arg("abi_probe.c").arg("-o").arg(&executable);
+    let status = compile.status().expect("run target-qualified C compiler");
+    assert!(
+        status.success(),
+        "target ABI probe compilation failed closed"
+    );
+    let output = Command::new(&executable)
+        .output()
+        .expect("run target ABI probe for the manifested target");
+    assert!(
+        output.status.success(),
+        "target ABI probe execution failed closed"
+    );
+    let stdout = String::from_utf8(output.stdout).expect("probe protocol is ASCII");
+    let observed = build_support::parse_probe(&stdout).expect("parse closed FACT=INTEGER protocol");
+    let mut checked = expected.to_vec();
+    if env::var_os("KEN_HOST_ABI_TEST_MISMATCH").is_some() {
+        checked[0].1 ^= 1;
+    }
+    build_support::verify_probe(&checked, &observed)
+        .expect("system headers disagree with linux-raw-sys");
+}
+
+fn canonical_manifest(
+    target: &str,
+    target_os: &str,
+    backend: &str,
+    dependencies: &[(String, String, String, String); 3],
+    facts: &[(&str, u64)],
+) -> String {
+    let mut out = format!(
+        "schema={SCHEMA_VERSION}\ntarget={target}\ntarget_os={target_os}\nbackend={backend}\n"
+    );
+    for (name, version, checksum, features) in dependencies {
+        out.push_str(&format!(
+            "dependency={name}|{version}|{checksum}|{features}\n"
+        ));
+    }
+    out.push_str(&format!("fact_count={}\n", facts.len()));
+    for (name, value) in facts {
+        out.push_str(&format!("fact={name}|{value}\n"));
+    }
+    out
+}
+
+fn write_generated(
+    target: &str,
+    target_os: &str,
+    backend: &str,
+    dependencies: &[(String, String, String, String); 3],
+    facts: &[(&str, u64)],
+    canonical: &str,
+    hash: &[u8; 32],
+) {
+    let dependencies = dependencies.iter().map(|(name, version, checksum, features)| {
+        format!("DependencyIdentity {{ name: {name:?}, version: {version:?}, checksum: {checksum:?}, features: &{:?} }},", features.split(',').filter(|feature| !feature.is_empty()).collect::<Vec<_>>())
+    }).collect::<String>();
+    let facts = facts
+        .iter()
+        .map(|(name, value)| format!("AbiFact {{ name: {name:?}, value: {value} }},"))
+        .collect::<String>();
+    let generated = format!(
+        "pub const TARGET_ABI_CANONICAL: &str = {canonical:?};\n\
+         pub const TARGET_ABI_MANIFEST_HASH: [u8; 32] = {hash:?};\n\
+         pub const TARGET_ABI: TargetAbi = TargetAbi {{ schema_version: {SCHEMA_VERSION}, target: {target:?}, target_os: {target_os:?}, backend: {backend:?}, dependencies: &[{dependencies}], fact_count: {fact_count}, facts: &[{facts}], manifest_hash: TARGET_ABI_MANIFEST_HASH }};\n",
+        fact_count = facts.matches("AbiFact").count(),
+    );
+    fs::write(
+        PathBuf::from(env::var("OUT_DIR").unwrap()).join("target_abi.rs"),
+        generated,
+    )
+    .expect("write generated TargetAbi module");
+}

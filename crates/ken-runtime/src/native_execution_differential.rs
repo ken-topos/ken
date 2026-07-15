@@ -424,6 +424,11 @@ pub fn run_native_execution_differential(
     interpreter: NativeInterpreterLaneInput,
     producer: impl Into<String>,
 ) -> Result<NativeExecutionDifferentialReport, NativeExecutionDifferentialError> {
+    crate::assert_native_target_abi().map_err(|error| NativeExecutionDifferentialError {
+        stage: NativeExecutionDifferentialStage::NativeExecution,
+        field: "target_abi_manifest_hash",
+        reason: error.to_string(),
+    })?;
     validate_object_linker_package(program, package)?;
     let target_example = validate_runtime_ir_report(program, package, run_report)?;
     let target = NativeExecutionTargetIdentity {
