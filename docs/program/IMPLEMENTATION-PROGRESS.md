@@ -16,9 +16,90 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 > ### ⏭ 2026-07-14 (23:16 UTC, clock-read) — ★★★ NEWEST · RESUME HERE · `origin/main @ cf741d3b`
 >
-> ## ✅ AX-2 · LET-5 · LET-6 MERGED (origin/main @ fa750efd). 🔨 LET-3 P2 (Foundation) RESUMED + LIVE — backstop only.
+> ## ✅ LET CHAIN COMPLETE — LET-5 · LET-6 · LET-3 P2 all MERGED (origin/main @ 4bc7875c). FRONTIER: kenfmt release (unblocked) → fossil sweep → PX. Fleet quiescent.
 >
-> **🔨 2026-07-15 00:32 UTC (clock-read) — LET-3 P2 RESUMED + LIVE.** Foundation
+> **✅ 2026-07-15 01:00 UTC (clock-read) — LET-3 P2 MERGED origin/main @
+> `4bc7875c99f94d1ae9d40996a5103df733069f87`** (PR #701, FULL locked CI green).
+> Content-verified on main: shared vocabulary landed (`entry_key` 140× in
+> Map.ken.md; base 1e9f2b95 had 0 — grep discriminates). Steward co-gate was
+> GREEN by content (fidelity to replay-verified blob `b094b034`; all 5 frozen
+> names as bindings, zero bespoke; family-only 33/34). **✅ LET-3 P2 CLOSED —
+> retros in (leader `evt_339vvd7qsgw4k`, QA `evt_6mtsn3srqwjg8`, impl
+> `evt_4ztsw6jqqx296`); carry: freeze an earned family vocabulary before rollout,
+> parallelism only PROPAGATES a name into an identical role, never ORIGINATES a
+> quota.** THE LET CHAIN (LET-1…6 + P2) IS COMPLETE.
+>
+> **✅ LET-6 merged fa750efd; retros landing** (QA+impl posted; confirm
+> language-leader ring-complete in thr_4egp, then mark LET-6 CLOSED). Decision
+> `dec_38b168g93ncx4` resolved.
+>
+> **⇒ NEXT FRONTIER (fresh-plan after compact) — three catalog-interacting tracks;
+> I own the sequencing:**
+> 1. **KENFMT match-arm break-after-↦ — NOW UNBLOCKED, releasable.** Frame
+>    `docs/program/wp/kenfmt-match-arm-break-after-arrow.md` (committed `389ea65e`).
+>    Owner Language ring (fix `layout.rs:~1060`); gate Language QA + Architect
+>    semantics-preservation; lambdas UNIFORM (operator-ruled); ~386-site atomic
+>    catalog reflow (Map ~199), C-capstone pattern, FULL CI. Hard-dep (P2 merge)
+>    now MET; catalog-quiet window OPEN (nothing else touching catalog). Language
+>    ring FREE (LET-6 done). **⇒ Release = Handoff Gate (compact language-leader+
+>    implementer+qa) → kick. Needs EXCLUSIVE catalog access — hold PX/fossil
+>    catalog work during the reflow.**
+> 2. **Fossil sweep** (`lemma = Axiom → axiom`: StringBijection + proof-techniques
+>    ×2) — next Foundation catalog WP, AFTER kenfmt (catalog exclusivity). Outside
+>    any frozen scope; re-confirm before adding.
+> 3. **PX campaign (POSIX/Linux ABI)** — critical path per roadmap (PX1…PX9 after
+>    LET chain + CC9). runtime-leader idle awaiting CC9 + Steward PX1 release. PX
+>    touches Posix.ken.md (45 kenfmt-reflow sites) → conflicts the kenfmt catalog
+>    window. **Check CC9 status + PX1 readiness; sequence kenfmt reflow vs PX
+>    catalog work (likely kenfmt first — it's small/atomic, PX is a long campaign).**
+> **⇒ ON RESUME: re-orient, confirm LET-6 closed + P2 retros, then sequence the
+> frontier — lead with releasing kenfmt to Language (window open now), and assess
+> CC9/PX1 readiness.**
+>
+> **(history) 🚀 LET-3 P2 co-gate GREEN → PUBLISHING** —
+>
+> **🚀 2026-07-15 00:49 UTC (clock-read) — LET-3 P2 co-gate GREEN, PUBLISHING
+> `049a0fef8e307d3e22cd5369afca984e4aa24831`** (base `origin/main @ 1e9f2b95`,
+> clean direct child; exactly 1 file `Map.ken.md`). Foundation QA APPROVE
+> (`evt_1sfjaxh1tkb7d`). **Steward co-gate BY CONTENT (all green):** (a) FIDELITY
+> — candidate Map.ken.md == preserved blob `b094b034` (the exact bytes Architect
+> re-grounded + ran 24/24 green in LET-6 replay + QA audited); (b) ★ SHARED
+> VOCABULARY (the deliverable, green-blind) — all 5 frozen names present as new
+> bindings (entry_key 33, entry_value 15, updated_acc 15, tail_assoc 6,
+> lookup_before 11), EVERY new typed let-LHS ∈ frozen five, ZERO bespoke names;
+> (c) FAMILY-ONLY — no out-of-family decl touched, 33/34 changed. Gates:
+> map_build_acceptance 24/24 (non-vacuous — elaborates rewritten bytes), es2 9/9,
+> kenfmt_c 2/2, kenfmt_b4 7/7. **Publisher `b1sa473jy` running, FULL CI.**
+> **⇒ ON PUBLISHER RETURN (merge):** verify landed on origin/main BY CONTENT
+> (grep a family `let entry_key`/`tail_assoc` site in Map.ken.md; squash → SHA
+> meaningless); route merge+retro to @foundation-leader (`agt_37reqsbs5b000`),
+> close LET-3 P2 when retros in; doc-only tracker-sync to main. **If BLOCKS:**
+> route CI blocker, do NOT retry blind.
+>
+> **✅ LET-6 CLOSING — merged origin/main @ fa750efd; retros landing** (QA +
+> impl posted, language-leader finalizing ring-complete). Close in tracker once
+> ring-complete seen. Merge+retro routed `evt_hr6scaa55ybq`, decision
+> `dec_38b168g93ncx4` resolved. AC-evidence lesson recorded (memory
+> `cited-ac-test-must-exercise-the-changed-shape`).
+>
+> **📌 KENFMT match-arm break-after-↦ (operator feedback-3) — FRAME AUTHORED,
+> DEFERRED.** `docs/program/wp/kenfmt-match-arm-break-after-arrow.md` (committed
+> steward/work `389ea65e`). Owner = **Language ring** (fix = `layout.rs:~1060`
+> `print_match_arm` else-branch flat `text(" ")` → group-gated break-after-↦;
+> NOT format.rs). Gate = Language QA + **Architect semantics-preservation**.
+> Operator ruled lambdas UNIFORM (wrapping `↦ λx.` breaks after ↦ too).
+> ~386-site corpus reflow (Map ~199), atomic C-capstone-style whole-catalog
+> reformat + strict-gate re-arm, FULL CI. **HARD DEP: release AFTER LET-3 P2
+> merges (Map.ken.md conflict) + a catalog-quiet window (no concurrent catalog
+> WP). ⇒ ON P2 MERGE + Language free: Handoff Gate → kick Language.** Off
+> critical path; told Pat I'd surface the frame if reflow large (it is —
+> surfaced the scope + lambda fork, Pat ruled).
+>
+> **📌 Pat fossil sweep** (`lemma = Axiom → axiom`: StringBijection +
+> proof-techniques ×2) folds into the NEXT Foundation catalog WP after P2 —
+> OUTSIDE P2 scope. Re-confirm scope before adding.
+>
+> **(history) 🔨 2026-07-15 00:32 UTC — LET-3 P2 RESUMED + LIVE.** Foundation
 > Handoff Gate complete: all 3 seats "Context compacted" (bg `brsa4zrrd`),
 > worktrees reset to fresh `origin/main @ fa750efd`. Kicked `evt_5j6ph4faca4rr`
 > (standalone mention-led, `agt_37reqsbs5b000`); **foundation-leader confirmed
@@ -35,6 +116,18 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > close LET-3 P2. **NEXT Foundation catalog WP (after P2): fold in Pat's
 > `lemma = Axiom → axiom` fossil sweep (StringBijection + proof-techniques ×2 —
 > OUTSIDE P2 scope).**
+>
+> **📌 QUEUED (operator, 2026-07-15) — KENFMT match-arm break-after-↦ refinement.**
+> Pat (`local/kenfmt-feedback-3.md`): in a `match` case, IF the arm wraps, break
+> immediately after `↦` (whole body on a new indented line) instead of leaving
+> the body-head (e.g. `cong`) on the `↦` line. One-line arms (`Zero ↦ Refl`) stay
+> put — rule applies ONLY when the arm wraps. Formatter = `crates/ken-elaborator/
+> src/format.rs`, tests `kenfmt_*` (ken-elaborator). Likely a corpus-touching
+> reflow (catalog/ = FULL CI). Owner TBD (Language or Ergo — kenfmt frames in
+> docs/program/wp/). **Investigation agent running** (mechanism + owner + tests +
+> corpus impact) → then I author the frame + sequence to the owner when free
+> (parallelizable w/ LET-3 P2 if a different idle team owns it). "Minor," off
+> critical path (LET chain / PX is critical) — no rush, but operator-directed.
 >
 > **✅ 2026-07-15 00:29 UTC (clock-read) — LET-6 MERGED origin/main @
 > `fa750efd42606b75562f0a8cf20b99065f333bd2`** (PR #699, FULL locked CI green).
