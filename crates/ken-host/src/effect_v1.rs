@@ -2025,7 +2025,9 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn resource_release_invalidates_before_close_and_never_retries() {
+    /// Caller-control only: the injected error proves invalidation, mapping,
+    /// and no retry; it is not evidence that the OS produced a close error.
+    fn caller_control_release_invalidates_before_close_and_never_retries() {
         let (root, owner) = resource_fixture("first");
         let mut table = ResourceTableV1::default();
         let (token, identity) = table.insert_fs_handle(owner, crate::RightSet::METADATA);

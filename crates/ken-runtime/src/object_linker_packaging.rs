@@ -2597,8 +2597,8 @@ mod tests {
         let trace = ken_host::decode_linked_effect_trace_v1(&fs::read(&trace_path).unwrap())
             .expect("resource trace decodes");
 
-        struct InterpreterSemanticBackend;
-        impl ken_host::HostEffectBackendV1 for InterpreterSemanticBackend {
+        struct SharedSemanticBackend;
+        impl ken_host::HostEffectBackendV1 for SharedSemanticBackend {
             fn console_write(
                 &mut self,
                 _: ken_host::ConsoleStreamV1,
@@ -2686,7 +2686,7 @@ mod tests {
             capability: cap,
         });
         let mut resources = ken_host::ResourceTableV1::default();
-        let mut backend = InterpreterSemanticBackend;
+        let mut backend = SharedSemanticBackend;
         let open_request = ken_host::CanonicalRequestV1::FsOpen {
             path: b"held.bin".to_vec(),
             mode: ken_host::FsOpenModeV1::Metadata,
@@ -2745,7 +2745,7 @@ mod tests {
         }
         assert_eq!(
             trace.effect_trace, semantic_events,
-            "the shared interpreter semantic dispatcher and linked native ABI must agree"
+            "the shared host semantic dispatcher and linked native ABI must agree"
         );
         let semantic_trace = ken_host::LinkedEffectTraceV1 {
             plan_hash: trace.plan_hash,
@@ -2758,7 +2758,7 @@ mod tests {
         assert_eq!(
             ken_host::encode_linked_effect_trace_v1(&trace).unwrap(),
             ken_host::encode_linked_effect_trace_v1(&semantic_trace).unwrap(),
-            "resource lifecycle observations are byte-identical across lanes"
+            "shared semantic and linked-native wire observations are byte-identical"
         );
         assert_eq!(
             trace

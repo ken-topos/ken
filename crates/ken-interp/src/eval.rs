@@ -4308,6 +4308,7 @@ fn fs_dispatch<H: HostHandler>(
     op_id: GlobalId,
     args: &[EvalVal],
     handler: &mut H,
+    resources: &mut ken_host::ResourceTableV1,
     fs: &FSIds,
     ids: &ConsoleIds,
     store: &mut EvalStore,
@@ -4435,11 +4436,10 @@ fn fs_dispatch<H: HostHandler>(
         _ => None,
     };
     let mut backend = InterpreterHostBackend { handler };
-    let mut resources = ken_host::ResourceTableV1::default();
     let reply = ken_host::dispatch_host_op_v1(
         &mut backend,
         &capabilities,
-        &mut resources,
+        resources,
         operation,
         token,
         None,
@@ -4531,17 +4531,17 @@ fn ambient_dispatch<H: HostHandler>(
     operation: ken_host::HostOpV1,
     request: ken_host::CanonicalRequestV1,
     handler: &mut H,
+    resources: &mut ken_host::ResourceTableV1,
     ids: &ConsoleIds,
     clock_ids: Option<&ClockIds>,
     store: &mut EvalStore,
     recorder: Option<&mut EffectTraceRecorderV1>,
 ) -> Result<EvalVal, ()> {
     let mut backend = InterpreterHostBackend { handler };
-    let mut resources = ken_host::ResourceTableV1::default();
     let reply = ken_host::dispatch_host_op_v1(
         &mut backend,
         &ken_host::CapabilityTableV1::default(),
-        &mut resources,
+        resources,
         operation,
         None,
         None,
@@ -4752,6 +4752,9 @@ fn run_io_with_effect_recorder<H: HostHandler>(
     mut recorder: Option<&mut EffectTraceRecorderV1>,
 ) -> Result<EvalVal, RunIoError> {
     let m = ids.params_len;
+    // Resource liveness is invocation-scoped. PX7-F can add public resource
+    // constructors without first repairing the interpreter's state lifetime.
+    let mut resources = ken_host::ResourceTableV1::default();
     loop {
         let next = match tree {
             EvalVal::Unknown => return Err(RunIoError::UnknownTree),
@@ -4807,6 +4810,7 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                                     limit: limit as u64,
                                 },
                                 handler,
+                                &mut resources,
                                 ids,
                                 clock_ids,
                                 store,
@@ -4833,6 +4837,7 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                                     bytes: bytes.clone(),
                                 },
                                 handler,
+                                &mut resources,
                                 ids,
                                 clock_ids,
                                 store,
@@ -4855,6 +4860,7 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                                     stream: to_console_stream_v1(stream),
                                 },
                                 handler,
+                                &mut resources,
                                 ids,
                                 clock_ids,
                                 store,
@@ -4877,6 +4883,7 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                                     stream: to_console_stream_v1(stream),
                                 },
                                 handler,
+                                &mut resources,
                                 ids,
                                 clock_ids,
                                 store,
@@ -4896,6 +4903,7 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                                     ken_host::HostOpV1::ClockWallNow,
                                     ken_host::CanonicalRequestV1::ClockWallNow,
                                     handler,
+                                    &mut resources,
                                     ids,
                                     Some(clock),
                                     store,
@@ -4908,6 +4916,7 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                                         *op_id,
                                         op_args,
                                         handler,
+                                        &mut resources,
                                         fs,
                                         ids,
                                         store,
@@ -5236,10 +5245,12 @@ mod px5b_effect_observation_tests {
         let ids = console_ids();
         let fs = fs_ids();
         let mut store = EvalStore::new();
+        let mut resources = ken_host::ResourceTableV1::default();
         fs_dispatch(
             fs.readfile_id,
             &[EvalVal::Unknown, capability, EvalVal::Bytes(path.to_vec())],
             host,
+            &mut resources,
             &fs,
             &ids,
             &mut store,
@@ -5350,6 +5361,7 @@ mod px5b_effect_observation_tests {
         host.set_fixed_clock(17);
         let mut store = EvalStore::new();
         let mut recorder = EffectTraceRecorderV1::default();
+        let mut resources = ken_host::ResourceTableV1::default();
 
         ambient_dispatch(
             ken_host::HostOpV1::ConsoleWrite,
@@ -5358,6 +5370,7 @@ mod px5b_effect_observation_tests {
                 bytes: b"out".to_vec(),
             },
             &mut host,
+            &mut resources,
             &ids,
             Some(&clock),
             &mut store,
@@ -5368,6 +5381,7 @@ mod px5b_effect_observation_tests {
             ken_host::HostOpV1::ClockWallNow,
             ken_host::CanonicalRequestV1::ClockWallNow,
             &mut host,
+            &mut resources,
             &ids,
             Some(&clock),
             &mut store,
@@ -5433,6 +5447,31 @@ mod px5b_effect_observation_tests {
                 exit_status: 0,
             }
         );
+    }
+
+    #[test]
+    fn resource_table_lifetime_is_owned_by_one_interpreter_invocation() {
+        let source = include_str!("eval.rs");
+        let runner = source
+            .split("fn run_io_with_effect_recorder")
+            .nth(1)
+            .expect("real interpreter producer exists");
+        assert!(runner.contains("let mut resources = ken_host::ResourceTableV1::default();"));
+
+        let fs_dispatch_source = source
+            .split("fn fs_dispatch")
+            .nth(1)
+            .and_then(|tail| tail.split("fn reify_host_reply_v1").next())
+            .expect("FS dispatch helper exists");
+        let ambient_dispatch_source = source
+            .split("fn ambient_dispatch")
+            .nth(1)
+            .and_then(|tail| tail.split("/// Host-effect driver").next())
+            .expect("ambient dispatch helper exists");
+        for helper in [fs_dispatch_source, ambient_dispatch_source] {
+            assert!(helper.contains("resources: &mut ken_host::ResourceTableV1"));
+            assert!(!helper.contains("ResourceTableV1::default()"));
+        }
     }
 }
 
