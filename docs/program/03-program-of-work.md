@@ -390,11 +390,64 @@ kernel does not grow** (ADR-0012 stands; bare-metal/drivers remain out of scope)
 | **PX3** | `USize`/`ISize`/`CInt` — manifest-bound machine scalars, explicit partial conversions | Language | S |
 | **PX4** | Native entrypoint ABI beyond `ClosedNullary` (argv, env, exit status) | Runtime | M |
 | **PX5** | Native lowering for `RuntimeExpr::Effect`; unsupported ops stay stable *unavailable lanes* | Runtime | L |
-| **PX6** | Interpreter/native **differential harness on external deltas** (not return values) | **Verify** | M |
+| **PX5B** | Interp-lane canonical effect observation producer — a write-only, one-way hook at the interpreter's canonical host-dispatch seam (`eval.rs:4258-4269`) recording the **actual** `{operation, CanonicalRequestV1, reply.capability_identity, reply.outcome}` into an ordered trace, exposed as a consumable producer returning a real `ken_host::EffectObservationV1` (oracle counterpart to PX5's native producer). Fixes the PX6 §14 producer-seam block (oracle was built from `Scenario.expected_fs`, not observed dispatch). Authorization stays in `HostHandler`; behaviorally inert. **Blocks PX6.** | Runtime | S |
+| **PX6** | Interpreter/native **differential harness on external deltas** (not return values). **Depends on PX5B** (real interp oracle producer). | **Verify** | M |
 | **PX7** | Ken-visible resource handles + `System.Resource` bracket; generation-checked, fail-visible | Runtime + Foundation | L |
 | **PX8** | Partial/positioned IO + `System.Buffer`; a short write is progress, not an error | Runtime + Foundation | L |
 | **PX9** | `System.Error` — structured errno retaining operation + handle context | Foundation | M |
 | PX10–PX12 | Processes/sockets; nonblocking + event loop — **booked, not committed** | — | — |
+| **PX13** | FS mode/ownership ops — add `chmod` (mode bits) and evaluate `chown`/`chgrp` as a **versioned `HostOpV1` catalog extension** (ADR-0018 §1); needs a new capability right-bit (ADR-0017), an `FsDeltaV1` extension to observe mode/uid/gid (currently ignored), and a native-tested lane per op | Runtime | M |
+| **PX14** | Root-execution posture capability — a `ProgramCaps`-declared allowance that permits a program **already started as root** (euid 0) to *continue* executing with root privilege; **absent it, a program that finds itself running as root at fail-closed startup exits with a stable terminal error before any effect**. A capability **cannot escalate** OS privilege (caps attenuate); this only *permits continuing* when already privileged. Runtime-trusted + discriminator-tested (ADR-0017), no kernel rule. Rides PX5's startup-posture seam (same init point as the SIGPIPE posture) | Runtime | M |
+| **PX15** | FS capability **path-root grammar** — a `ProgramCaps` FS authority root may be written `~/…` (home of the executing **euid**, resolved at startup) or `./…` (**cwd at execution start**), not only an absolute path. Resolved to the concrete ADR-0018 §2 **root handle** at capability-table init, **once, identically in both executors**, snapshotted at startup | Runtime | S |
+
+**★ PX13 is sequenced by dependency, not by number:** deps are PX5 + PX6 merged
+(the effect lowering + differential surface it extends) **and** an Architect
+capability-model ruling on the three design gates (mutation right-bit;
+`FsDeltaV1` mode/owner observation; whether `chown`/`chgrp` — usually
+privilege-requiring — belong in a portable capability-scoped surface, or only
+`chmod`). Not-ready until those land. Operator-requested 2026-07-16 (Pat).
+
+**★ PX14 (root-execution posture)** — Operator-requested 2026-07-16 (Pat).
+Deps: **PX5 merged** (the fail-closed startup-posture seam — the Architect's
+SIGPIPE ruling `dec_1gk5vbw2bbg05` establishes process posture inside the
+audited `ken-host::abi_v1` boundary via a posture witness required to construct
+`ProcessContext`; the euid check belongs at that same init point, before the
+first host op) **and** the shared Architect capability-model ruling. Design
+gates for the ruling: the **privilege predicate** (`euid == 0` alone, or the
+richer real/effective/saved-uid + Linux `capabilities(7)` surface); the stable
+**error identity** for refuse-root (e.g. `RootExecutionDenied`); and the
+`ProgramCaps` declaration surface for the allowance. Both executors
+(interpreter + native artifact) must apply the identical check. Discriminators:
+run the same artifact non-root (proceeds), as root **without** the allowance
+(stable terminal error **before any effect**), as root **with** it (proceeds).
+Confinement is honest-boundary runtime-trusted, never kernel-proved (ADR-0017);
+no linear/affine types. Not-ready until PX5 + the ruling land.
+
+**★ PX15 (FS path-root grammar)** — Operator-requested 2026-07-16 (Pat). Deps:
+**PX5 merged** (the FS capability table + root-handle machinery it extends)
+**and** the shared Architect capability-model ruling. ADR-0018 fixes the
+capability's *resolved* representation (a **root handle**, not a literal
+spelling — §2) and canonicalizes observations to **relative** raw-byte paths
+that **ignore absolute root names** (§4), so a declared `~/`/`./` root **must**
+resolve to a fixed handle **once at capability-table init** — per-op
+re-resolution would break canonicalization and PX6's twin-root differential.
+The ADR requires **one** capability check/representation below both executors,
+so the resolver is single-sourced there too. Design gates for the ruling: the
+**home source** for `~/` — `getpwuid(euid)` (principled, non-ambient, matches
+"home of euid") vs the ambient `$HOME` env var (forgeable — weak for authority
+scope); recommended `getpwuid(euid)`. Snapshot semantics: `~/` binds the euid's
+home **at startup**, `./` binds **cwd at execution start** (cwd may move during
+run; euid interacts with PX14). Scope/symlink checks (`ScopeEscape`,
+`SymlinkDenied`) apply relative to the resolved root regardless of spelling — no
+new escape surface. Not-ready until PX5 + the ruling land.
+
+**★ Shared Architect capability-model ruling (gates PX13 + PX14 + PX15).** These
+three FS/privilege capability WPs each extend the capability model along a
+distinct axis (mode/ownership; root-execution posture; path-root grammar) and
+share one design ruling. Whether that ruling **amends ADR-0018** or spawns a new
+capability/privilege ADR is the Architect's call. All three hold the ADR-0017
+honesty boundary: runtime-trusted + discriminator-tested, no kernel proof, no
+linear/affine types.
 
 **★ PX7 depends on `R2` (linear/affine types) for its *permanent* fix.**
 Exactly-once release **cannot be stated in Ken today**; PX7 enforces it in the
