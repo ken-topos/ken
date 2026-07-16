@@ -86,7 +86,11 @@ The Ken-facing token is opaque `ResourceTokenV1 { slot, generation }`; neither
 field nor constructor is Ken-visible. A live slot owns exactly one Rust resource
 and records at least its generation, resource kind, the owned backend object,
 the attenuated rights/context inherited at acquisition, and a canonical trace
-identity distinct from the token.
+identity distinct from the token. The owned backend object is a **distinct,
+unique, non-cloneable** owner — e.g. `ResourceHandleV1(OwnedFd)` with no `Clone`
+and no `Arc` — **not** PX16's cloneable `Handle(Arc<OwnedFd>)`. Correctness never
+depends on `Arc::strong_count` or `try_unwrap`; the existing rooted/path handles
+are unchanged.
 
 On release, the owned object is moved out and the generation is bumped /
 invalidated **before** close is invoked. The token is closed whether close
@@ -113,6 +117,30 @@ stale use or release is fail-visible `Closed`. `Drop` alone is **not** used for
 the normal contract, because `Drop` cannot report a close failure: controlled
 exits call an explicit finalizer, record every result, and let `Drop` cover only
 catastrophic unwinding.
+
+**Close-failure boundary — one confined `try_close` seam.** A real production OS
+close failure cannot be observed through the safe `OwnedFd` boundary: `OwnedFd`'s
+`Drop` discards the close result, and rustix's only error-reporting close is the
+feature-gated `unsafe fn try_close(RawFd) -> Result<()>` (which specifies the raw
+fd is invalid after the call, even on error). A mock failure or a `sync_all`
+flush cannot substitute for that production mechanism. PX7 therefore adds exactly
+**one** private, Linux-only, module-local `#![allow(unsafe_code)]` allowance (e.g.
+`ken-host::resource_close_v1`) — the crate stays `#![deny(unsafe_code)]`
+everywhere else. Its safe facade consumes the unique owner via `IntoRawFd` and
+performs the sole `rustix::io::try_close` call, returning the close result. Its
+safety invariant is local and checkable: the raw fd came from consuming the sole
+owner; no alias, borrower, or in-flight operation survives; the call occurs
+exactly once; the fd is treated invalid on every return; no retry is possible —
+no `ManuallyDrop`, fabricated raw fd, or second owner. Enabling rustix's
+exact-pinned `try_close` feature is an **audited TCB delta** (Cargo-manifest
+assertion, dependency identity/feature registry, target-ABI hash, and
+mutation/foreign-target controls all move), not a routine feature toggle. The
+explicit release path takes the unique owner from the live slot, bumps/retires
+the generation and commits the tombstone, then invokes this facade and maps the
+result **once** to success or `ReleaseFailed { resource_kind, identity, io }`; the
+slot stays closed on both outcomes. Once explicit release consumes the owner into
+the raw-fd seam, no `OwnedFd` remains to double-close, and RAII covers only owners
+never extracted by explicit settlement (catastrophic unwind / leak backstop).
 
 Ward is not the sole net for host safety or leak prevention. It checks the
 exported property over canonical lifecycle observations: (1) every successful
@@ -192,6 +220,17 @@ claim to the kernel or the language. The runtime's generation discipline is the
 at-most-once enforcement; Ward checks the stated exactly-once/settlement
 property over canonical observations; neither substitutes for the other.
 
+PX7 introduces **one** new confined `unsafe` delta to observe a real OS close
+result: the private `resource_close_v1` module-local `#![allow(unsafe_code)]`
+plus rustix's exact-pinned `try_close` feature. This stays within the settled
+`rustix`/`linux_raw` boundary (no new dependency; rustix is already vendored and
+sanctioned), and it is the smallest mechanism that can state the `ReleaseFailed`
+contract honestly. All public dispatch/table APIs remain safe; the crate stays
+`#![deny(unsafe_code)]` outside that one module; the pre-existing audited `abi_v1`
+unsafe boundary is separate and unchanged. This TCB growth is ratified at the
+PX7-R §14 trusted-base-growth Decision; it is runtime-trusted and
+discriminator-tested, never kernel-proved.
+
 ## Decomposition
 
 The work lands as a lead WP plus a follow WP, never one WP split across two
@@ -228,6 +267,19 @@ complete substrate, then Foundation consumes a stable public boundary.
   forbids passing the handle through ordinary `body` computation.
 - **`Drop` alone as the normal close contract** — cannot report a close failure;
   release outcome would be unobservable.
+- **Claiming a real `ReleaseFailed` while forbidding any new `unsafe`** (the
+  original AC9) — internally contradictory: the safe `OwnedFd` boundary
+  structurally discards the close result, so a real OS close errno is
+  unobservable without the confined `try_close` seam.
+- **A mock/backend-injected failure or a `sync_all` flush as the production
+  close-error mechanism** — tests the enum/consumer logic but does not make a real
+  OS close failure observable; permitted only as a labelled caller-control test.
+- **Manufacturing `EBADF` by double-closing** or otherwise violating the facade
+  precondition — the production failure branch must be real (the deployed facade
+  returns the OS result).
+- **Storing the resource owner as `Arc<OwnedFd>`** (PX16's cloneable `Handle`) or
+  deciding correctness on `Arc::strong_count`/`try_unwrap` — the resource owner
+  is a distinct, unique, non-cloneable `ResourceHandleV1(OwnedFd)`.
 - **Ward as the sole net** for host safety or leak prevention, or a Ward verdict
   entering `Q` / the trusted base / runtime control flow.
 - **Two named atoms `"acquire"`/`"release"`** in the landed `Pred::Event` schema

@@ -70,6 +70,30 @@
   `Closed`. **Do NOT use `Drop` alone for the normal contract** (`Drop` cannot
   report a close failure): controlled exits call an **explicit finalizer**, record
   every result, then `Drop` covers only catastrophic unwinding.
+- **Close-failure boundary = ONE confined `try_close` seam (Architect ruling
+  `evt_7jk02bmwg7qj2` — supersedes the original AC9).** A real OS close failure is
+  unobservable through safe `OwnedFd` `Drop` (it discards the result); the only
+  errno-reporting close is rustix's feature-gated `unsafe fn try_close(RawFd)`.
+  So: the resource slot owns a **distinct, unique, non-cloneable
+  `ResourceHandleV1(OwnedFd)`** — **NO `Clone`, NO `Arc`**, NOT PX16's
+  `Handle(Arc<OwnedFd>)`; correctness never depends on
+  `Arc::strong_count`/`try_unwrap`; existing rooted/path handles unchanged. Add
+  **exactly one** private Linux-only module-local `#![allow(unsafe_code)]` (e.g.
+  `ken-host::resource_close_v1`) whose safe facade consumes the unique owner via
+  `IntoRawFd`, performs the **sole** `rustix::io::try_close` call, and returns the
+  close result; the crate stays `#![deny(unsafe_code)]` elsewhere. Enable rustix's
+  **exact-pinned `try_close` feature** — an **audited TCB delta** (Cargo-manifest
+  assertion, dependency identity/feature registry, target-ABI hash, mutation/
+  foreign-target controls all move), NOT a routine toggle. Safety invariant local
+  + checkable: raw fd from consuming the sole owner; no alias/borrower/in-flight op
+  survives; call once; fd invalid on every return; no retry — no `ManuallyDrop`,
+  fabricated raw fd, or second owner. Release order: take the unique owner from the
+  live slot → bump/retire generation + commit tombstone → invoke the facade →
+  map **once** to success or `ReleaseFailed{resource_kind,identity,io}`; slot
+  closed on both outcomes. This stays within the **settled rustix/linux_raw
+  boundary** (no
+  new dependency) — the TCB growth is ratified at the PX7-R §14, NOT re-asked of
+  the operator.
 - **Authority = `FsOpen` on the existing FS grant.** `FsOpen` checks the landed
   FS capability plus the rights required by its requested mode; the resulting slot
   stores only the attenuated subset. **No** `program capabilities Resource …`
@@ -126,11 +150,12 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
    table next to `CapabilityTableV1:348` (do **not** extend it). Opaque
    `ResourceTokenV1 { slot: u32, generation: u32 }` (private fields, no Ken
    constructor). A slot stores: generation, `ResourceKindV1` (V1 = a single
-   `FsHandle` kind), the owned backend object (an `OwnedFd`-backed handle),
-   attenuated rights/context from acquisition, and the `ResourceTraceIdentityV1`.
-   `resolve()` returns the live owner only on exact slot+generation+kind match,
-   else the exact distinct identity (`Closed` / `MalformedResource` /
-   `ResourceKindMismatch`).
+   `FsHandle` kind), the owned backend object as a **distinct, unique,
+   non-cloneable `ResourceHandleV1(OwnedFd)`** (NO `Clone`, NO `Arc` — NOT PX16's
+   `Handle(Arc<OwnedFd>)`), attenuated rights/context from acquisition, and the
+   `ResourceTraceIdentityV1`. `resolve()` returns the live owner only on exact
+   slot+generation+kind match, else the exact distinct identity (`Closed` /
+   `MalformedResource` / `ResourceKindMismatch`).
 3. **`ResourceTraceIdentityV1`.** A lane-independent identity minted from the
    deterministic successful-acquire order (a monotone per-run acquire counter is
    the natural mint; the successful acquire event identity is sufficient).
@@ -150,14 +175,21 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
    `FsHandleStatV1`-style canonical metadata read). It exists so use-after-close
    is a real distinct control, not a renamed double-release. Full PX13-template
    wiring + observation + ABI hash.
-6. **`ResourceRelease` op + generation discipline.** Generic
-   `HostOpV1::ResourceRelease` resolves the live slot, **moves the owned object
-   out, bumps/invalidates the generation, THEN closes**. Public release is
-   non-idempotent (2nd call → `Closed`). A close error becomes `ReleaseFailed {
-   resource_kind, identity: ResourceTraceIdentityV1, io: IoErrorIdentityV1 }` and
-   is **never retried**; the handle is closed regardless. Use an **explicit
-   finalizer** that records the outcome; `Drop` covers only catastrophic
-   unwinding. On generation wrap, retire the slot permanently.
+6. **`ResourceRelease` op + generation discipline + confined close seam.** Generic
+   `HostOpV1::ResourceRelease` resolves the live slot, **moves the unique owner
+   out, bumps/invalidates the generation + commits the tombstone, THEN closes via
+   the confined facade**. Add the one private Linux-only `resource_close_v1`
+   module (`#![allow(unsafe_code)]`; crate stays `#![deny]` elsewhere): its safe
+   fn consumes the `ResourceHandleV1(OwnedFd)` via `IntoRawFd` and performs the
+   sole `rustix::io::try_close`, returning `Result<()>`. Enable rustix's
+   exact-pinned `try_close` feature and move the Cargo-manifest assertion,
+   dependency/feature registry, target-ABI hash, and mutation/foreign-target
+   controls. Public release is non-idempotent (2nd call → `Closed`). Map the close
+   result **once**: a close error → `ReleaseFailed { resource_kind, identity:
+   ResourceTraceIdentityV1, io: IoErrorIdentityV1 }`, **never retried**; the handle
+   is closed regardless. The **explicit finalizer** records the outcome; `Drop`
+   covers only catastrophic unwinding (owners never extracted by explicit
+   settlement). On generation wrap, retire the slot permanently.
 7. **Versioned observation/wire discriminator.** Add the versioned
    observation/wire discriminator that lets release outcome (success vs.
    `ReleaseFailed`) and, in PX7-F, body/settlement pairing be represented without
@@ -206,22 +238,46 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
   those observations is the acquisition-order identity and `git grep` /
   structural check confirms it is derived from no
   fd/slot/generation/pointer/inode/executor value.
-- **AC7 — explicit finalizer, not `Drop` alone.** A structural check confirms
-  the controlled-exit close path runs an explicit finalizer that records the
-  outcome (so a close failure is observable as `ReleaseFailed`), and that `Drop`
-  is only the catastrophic-unwinding backstop — the normal contract does not
-  depend on `Drop`.
+- **AC7 — explicit finalizer + confined close facade.** A structural check
+  confirms the controlled-exit release path runs an explicit finalizer that
+  consumes the unique owner via `IntoRawFd` and reaches the real
+  `resource_close_v1` `try_close` facade **only after** generation invalidation
+  (invalidate-before-close, asserted by order), records the outcome, and maps a
+  close error to `ReleaseFailed`. `Drop` is only the catastrophic-unwinding
+  backstop — the normal contract does not depend on `Drop`, and once the owner is
+  consumed no `OwnedFd` remains to double-close.
 - **AC8 — ABI/hash/inventory closed + wire round-trips.** The three new
   `HostOpV1` variants, their `CanonicalRequestV1` arms, wire request structs, and
   the versioned discriminator are in the generated ABI size/offset hash and the
   op inventory; every new wire form round-trips exactly (encode→decode identity),
   and the mutation gates cover them. **No-regression = green in CI**, never a
   local `--workspace` run.
-- **AC9 — honesty + no-affine.** ADR-0021 states the runtime-enforced /
-  Ward-delegated / never-Ken-affine / never-kernel-proved boundary honestly.
-  `git grep` shows PX7-R adds no affine/linear type, no kernel postulate, and no
-  new `unsafe` allowance beyond the audited boundaries (the `OwnedFd` handle uses
-  the landed safe boundary).
+- **AC9 — honesty + confined-unsafe delta (supersedes the original AC9;
+  Architect ruling `evt_7jk02bmwg7qj2`).** ADR-0021 states the runtime-enforced /
+  Ward-delegated / never-Ken-affine / never-kernel-proved boundary honestly and
+  **names the bounded exception**: `git grep` shows the **only** new
+  `#![allow(unsafe_code)]` introduced by PX7-R is inside `resource_close_v1`,
+  while the crate stays `#![deny]` and the pre-existing audited `abi_v1` boundary
+  remains separate and unchanged; all public dispatch/table APIs remain safe;
+  rustix stays exact-pinned and target-identity-bound with only the `try_close`
+  feature added (dependency/feature registry + target-ABI hash + mutation gates
+  updated). PX7-R adds no affine/linear type and no kernel postulate.
+- **AC10 — close-boundary discriminator net.** (1) A structural test proves the
+  production release path reaches the exact real `try_close` facade only after
+  invalidation. (2) A **real linked-artifact** success test exercises acquire →
+  genuine handle use → release → stale use. (3) A private injected close-result
+  seam MAY deterministically prove invalidation-before-call, error mapping,
+  no-retry, and persistent `Closed` — but it is **labelled a caller-control
+  test**, NOT evidence the OS produced a close error. The test suite does **not**
+  manufacture `EBADF` by double-closing or otherwise violate the facade
+  precondition; the production failure branch is real because the deployed facade
+  returns the OS result.
+- **AC11 — unique non-cloneable owner (compile/structural guard).** A
+  compile/structural guard proves the resource owner
+  (`ResourceHandleV1(OwnedFd)`) is **non-cloneable** and **never crosses into the
+  existing `Arc<OwnedFd>` representation**; correctness does not depend on
+  `Arc::strong_count`/`try_unwrap`. The existing rooted/path `Handle(Arc<OwnedFd>)`
+  is unchanged.
 
 ## Do-not-reopen guards
 
@@ -233,6 +289,14 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
   `FsOpen` carries the domain grant.
 - Do NOT use `Drop` alone for the normal close contract; use an explicit
   finalizer that records the outcome.
+- Do NOT add more than **one** new `#![allow(unsafe_code)]` (the confined
+  `resource_close_v1`); do NOT relax the crate `#![deny]` elsewhere or touch the
+  audited `abi_v1` boundary. Do NOT store the resource owner as `Arc<OwnedFd>` or
+  make correctness depend on `Arc::strong_count`/`try_unwrap`.
+- Do NOT manufacture `EBADF` (double-close) or use a mock/`sync_all` as the
+  production close-error mechanism; injection tests are labelled caller-control.
+- Do NOT re-ask the operator for the `try_close`/confined-unsafe delta — it is
+  within the settled rustix/linux_raw boundary and ratified at the PX7-R §14.
 - Do NOT key `ResourceTraceIdentityV1` on fd/slot/generation/pointer/inode/
   executor provenance; it is acquisition-order.
 - Do NOT retry a raw descriptor after a close error; do NOT reissue a retired
@@ -262,6 +326,13 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
   `crates/ken-host/src/capability.rs:167`; `RootedHandle`
   `crates/ken-host/src/lib.rs:297` (the RAII-closed handle model this WP holds
   across steps).
+- Close boundary (the confined seam): existing cloneable
+  `Handle(Arc<OwnedFd>)` `crates/ken-host/src/lib.rs:112` (do NOT reuse for the
+  resource owner — the resource owner is a unique `ResourceHandleV1(OwnedFd)`);
+  crate `#![deny(unsafe_code)]` `crates/ken-host/src/lib.rs:23`; rustix pin
+  `crates/ken-host/Cargo.toml:15` (`features=["std","fs","process"]` — add
+  `try_close`); rustix `try_close` = `rustix::io::try_close` (unsafe, feature-gated,
+  raw fd invalid after call even on error).
 - Cap declaration surface (unchanged): `parser.rs:269`
   (`crates/ken-elaborator/src/parser.rs`); `program capabilities FS <authority>`
   `crates/ken-cli/src/lib.rs`.
@@ -274,9 +345,13 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
 
 ## Diff scope / review route
 
-Touches `crates/**` + `docs/adr/0021-*` + `docs/program/wp/PX7-R-*` — **no**
-`spec/`+`conformance/` (the `ResourceLifetimeObligationV1` schema is Spec-owned
-and pinned separately for PX7-F) → **Architect-only §14** (CV not in route). One
-branch (`wp/px7r-resource-lifetime-substrate`), one Decision. An `L` may land as
-a short commit series on the one branch. Full locked CI + conformance run on
-GitHub, not locally.
+Touches `crates/**` + `Cargo.toml`/lock (rustix `try_close` feature +
+dependency/feature registry) + `docs/adr/0021-*` + `docs/program/wp/PX7-R-*` —
+**no** `spec/`+`conformance/` (the `ResourceLifetimeObligationV1` schema is
+Spec-owned and pinned separately for PX7-F) → **Architect-only §14** (CV not in
+route). Because the confined `try_close` seam is a **trusted-base growth**, the
+§14 is a soundness/TCB-delta review — flag the `Cargo.toml`/lock movement and the
+new `resource_close_v1` allowance in the handoff so the diff-scope note is
+accurate. One branch (`wp/px7r-resource-lifetime-substrate`), one Decision. An
+`L` may land as a short commit series on the one branch. Full locked CI +
+conformance run on GitHub, not locally.
