@@ -98,9 +98,13 @@ reports success or failure; a raw descriptor is never retried after a close
 error. Slot reuse is allowed only at the bumped generation. On generation wrap
 the slot is retired permanently rather than reissued at an old identity. A token
 for a retired generation yields `Closed`; a zero / out-of-range / never-minted
-encoding yields `MalformedResource`; a live token used by the wrong operation
-yields `ResourceKindMismatch`. A stale token can never resolve a reused slot or
-a recycled fd.
+encoding yields `MalformedResource`. A stale token can never resolve a reused
+slot or a recycled fd. `ResourceKindV1` has a single V1 variant (`FsHandle`), so
+a live wrong-kind state is not reachable and PX7-R defines **no**
+`ResourceKindMismatch`: the resolver verifies validity, liveness, and attenuated
+rights, and the Fs-handle owner is established by construction. The mismatch
+identity is deferred to the first WP that adds a genuinely different production
+resource kind (see the fail-visible-identity roster below).
 
 Canonical observations and Ward pairing use a lane-independent
 `ResourceTraceIdentityV1` minted from deterministic acquisition order (the
@@ -198,12 +202,24 @@ renamed double-close test. A generic authority-free `ResourceAcquire` is **not**
 added; acquisition semantics belong to the resource domain.
 
 The fail-visible identities are distinct: `Closed` (known stale / double-release
-/ use-after-release); `MalformedResource` (token never minted by this table);
-`ResourceKindMismatch` (live token, wrong operation); the existing
-capability/file identities (acquisition denial or failure); and `ReleaseFailed {
-resource_kind, identity, io: IoErrorIdentityV1 }` (OS close failure, without
-exposing an fd). A close error leaves the handle closed and is never retried. If
-body success is followed by release failure, the bracket returns the release
+/ use-after-release); `MalformedResource` (token never minted by this table); the
+existing capability/file identities (acquisition denial or failure); and
+`ReleaseFailed { resource_kind, identity, io: IoErrorIdentityV1 }` (OS close
+failure, without exposing an fd). `ResourceKindMismatch` is **not** a V1 identity:
+with a single-variant `ResourceKindV1` it has no production producer at all
+(unlike close failure, whose facade returns a real OS error that is merely
+nondeterministic). It, its versioned wire discriminator, and a wrong-kind
+resolver branch are **deferred** — the first WP that adds a genuinely different
+production resource kind atomically adds `ResourceKindMismatch { expected, actual
+}`, its canonical wire discriminator plus schema/hash/inventory movement, a real
+mint path for both kinds, and a non-degenerate production-reaching pair (mint kind
+A then apply a kind-B-only op, and mint kind B then apply a kind-A-only op — both
+returning the exact mismatch identities with expected/actual reversed, while valid
+same-kind controls succeed). PX8 read/write/seek over `FsHandle` does **not**
+trigger this; the trigger is a second real resource kind.
+
+A close error leaves the handle closed and is never retried. If body success is
+followed by release failure, the bracket returns the release
 failure; if body error and release failure coexist, both are preserved; if a
 trap and a cleanup failure coexist, the trap is preserved as primary and the
 cleanup failures as an ordered secondary canonical observation, neither

@@ -57,8 +57,11 @@
   the slot permanently** — never reissue an old identity. A stale token can never
   resolve a reused slot or a recycled fd.
 - **Resolution outcomes are distinct + fail-visible:** retired generation →
-  `Closed`; zero/out-of-range/never-minted encoding → `MalformedResource`; live
-  token, wrong op → `ResourceKindMismatch`.
+  `Closed`; zero/out-of-range/never-minted encoding → `MalformedResource`. V1 is
+  single-kind (`ResourceKindV1::FsHandle`), so a live wrong-kind state is
+  unreachable — PX7-R defines **no** `ResourceKindMismatch` (deferred; see the
+  do-not-reopen guard). The resolver checks validity/liveness/rights; the kind is
+  established by construction.
 - **Canonical identity = lane-independent `ResourceTraceIdentityV1`** minted from
   deterministic acquisition order (successful acquire event identity suffices).
   **Never** an fd, slot/generation, pointer, inode, or executor provenance.
@@ -128,8 +131,8 @@ lane-independent `ResourceTraceIdentityV1`; the three V1 `HostOpV1` variants
 observations, and ABI size/offset hash entries following the PX13
 `FsChangeModeRequestV1` template; capability attenuation at `FsOpen`;
 generation-invalidate-before-close with explicit finalizer + RAII backstop;
-structured `ReleaseFailed` + `Closed`/`MalformedResource`/`ResourceKindMismatch`
-identities; the versioned observation/wire discriminator; and the
+structured `ReleaseFailed` + `Closed`/`MalformedResource` identities; the
+versioned observation/wire discriminator; and the
 interpreter/native differential for every op and every negative control.
 
 **Out of scope:** `System.Resource`, `withResource`, delayed-body/settlement
@@ -154,8 +157,11 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
    non-cloneable `ResourceHandleV1(OwnedFd)`** (NO `Clone`, NO `Arc` — NOT PX16's
    `Handle(Arc<OwnedFd>)`), attenuated rights/context from acquisition, and the
    `ResourceTraceIdentityV1`. `resolve()` returns the live owner only on exact
-   slot+generation+kind match, else the exact distinct identity (`Closed` /
-   `MalformedResource` / `ResourceKindMismatch`).
+   slot+generation match (plus liveness + attenuated-rights checks), else the
+   exact distinct identity (`Closed` / `MalformedResource`). The single-variant
+   `ResourceKindV1::FsHandle` is stored as a sealed expansion point, but the kind
+   is established by construction — there is **no** wrong-kind resolver branch and
+   **no** `ResourceKindMismatch` in PX7-R (deferred; see guard).
 3. **`ResourceTraceIdentityV1`.** A lane-independent identity minted from the
    deterministic successful-acquire order (a monotone per-run acquire counter is
    the natural mint; the successful acquire event identity is sufficient).
@@ -216,12 +222,16 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
   resolves `Closed`; a second release resolves `Closed` (non-idempotent); the
   raw descriptor is never retried on a close error. On a forced generation wrap
   the slot is retired and never reissued.
-- **AC3 — distinct fail-visible identities.** Each of these produces its exact
-  distinct identity (assert the specific variant, never `is_err`): retired
-  generation → `Closed`; zero/out-of-range/never-minted → `MalformedResource`;
-  live token used by the wrong op → `ResourceKindMismatch`; OS close failure →
-  `ReleaseFailed { resource_kind, identity, io: IoErrorIdentityV1 }` with **no**
-  fd exposed. A stale token never resolves a reused slot or a recycled fd.
+- **AC3 — distinct fail-visible identities (reachable V1 set only).** Each of
+  these produces its exact distinct identity (assert the specific variant, never
+  `is_err`): retired generation → `Closed`; zero/out-of-range/never-minted →
+  `MalformedResource`; `FsOpen` under a grant lacking the requested rights → the
+  existing capability/file denial identity (not a resource identity); OS close
+  failure → `ReleaseFailed { resource_kind, identity, io: IoErrorIdentityV1 }`
+  with **no** fd exposed. A stale token never resolves a reused slot or a recycled
+  fd (stale-slot/recycled-fd separation asserted). `ResourceKindMismatch` is **out
+  of scope for PX7-R** — single-kind V1 has no live wrong-kind producer; it is
+  deferred to the first second-kind WP (see do-not-reopen guard).
 - **AC4 — real consumer, real use-after-close.** The handle-metadata consumer
   resolves a live token and returns metadata on a live handle; the **same**
   consumer after release returns `Closed`. This control is distinct from the
@@ -301,6 +311,21 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
   executor provenance; it is acquisition-order.
 - Do NOT retry a raw descriptor after a close error; do NOT reissue a retired
   generation/slot; do NOT let a stale token resolve a reused slot or recycled fd.
+- Do NOT define `ResourceErrorV1::ResourceKindMismatch`, its canonical wire form,
+  an error-tag inventory entry, or a wrong-kind branch in `resolve_fs_handle` —
+  single-kind V1 makes it vacuous/unreachable. Do NOT add a `#[cfg(test)]`
+  reserved kind, test-only slot seeder, or fabricated malformed token to force a
+  wrong-kind test (a test-only universe cannot evidence the production V1
+  contract). Do NOT relabel "resource supplied to a non-resource op" as kind
+  mismatch — that is malformed request routing. Keep `ResourceKindV1::FsHandle`
+  and the observation/slot `resource_kind` field (sealed expansion point).
+  **Deferred trigger:** the first WP that adds a genuinely different production
+  resource kind atomically adds `ResourceKindMismatch { expected, actual }` + its
+  versioned wire discriminator / schema / hash / inventory movement + a real mint
+  for both kinds + a non-degenerate production-reaching pair (mint A apply B-only,
+  mint B apply A-only, both returning the exact mismatch with expected/actual
+  reversed, valid same-kind controls succeeding). PX8 read/write/seek over
+  `FsHandle` does NOT trigger it; the trigger is a second real resource kind.
 - Do NOT build `System.Resource`, `withResource`, the T-obligation, or the
   end-to-end trap/escape controls here — those are **PX7-F**.
 - Do NOT change PX16's `FsRootSpec` resolution, ADR-0018 §4 canonicalization, or
