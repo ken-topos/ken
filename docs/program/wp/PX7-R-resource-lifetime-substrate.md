@@ -3,8 +3,10 @@
 - **ID:** PX7-R · **Owner:** Team Runtime · **Size:** L · **Risk:** High
   (introduces the **first held-across-steps resource handle** in the runtime — a
   real departure from the landed path-based/stateless FS model — plus a new
-  generation-checked table, a new host-op family, ABI-hash movement, and the
-  interpreter/native differential for all of it; must not perturb the landed
+  generation-checked table, a new host-op family, ABI-hash movement, the
+  interpreter **state-lifetime seam**, and the native + shared-dispatch
+  differential for it (the first real **public** interpreter/native lifecycle
+  equality is deferred to PX7-F — see AC6); must not perturb the landed
   `CapabilityTableV1`, PX16's `FsRootSpec` resolution, ADR-0018 §4 relative
   canonicalization, or PX6's twin-root differential).
 - **Objective:** Land the **private runtime substrate** for opaque, dynamically
@@ -13,8 +15,11 @@
   release, a lane-independent `ResourceTraceIdentityV1`, and three V1 host ops —
   `FsOpen` (capability-gated acquisition), one **real** non-release consumer
   (handle-metadata), and generic `ResourceRelease` — with structured
-  `ReleaseFailed` errors and full interpreter/native differential closure. This
-  is the **lead** WP of PX7; it lands a complete, stable, private boundary that
+  `ReleaseFailed` errors, the invocation-scoped interpreter **state-lifetime
+  seam**, and native + shared-dispatch differential closure (the first real
+  **public** interpreter/native lifecycle equality is **PX7-F**, not this WP —
+  see AC6). This is the **lead** WP of PX7; it lands a complete, stable, private
+  boundary that
   PX7-F consumes.
 - **Depends on:** the native cap-model campaign (PX13→PX16, all merged;
   `origin/main @ fa33fa55` — the `HostOpV1`/`CanonicalRequestV1`/ABI-hash
@@ -132,8 +137,9 @@ observations, and ABI size/offset hash entries following the PX13
 `FsChangeModeRequestV1` template; capability attenuation at `FsOpen`;
 generation-invalidate-before-close with explicit finalizer + RAII backstop;
 structured `ReleaseFailed` + `Closed`/`MalformedResource` identities; the
-versioned observation/wire discriminator; and the
-interpreter/native differential for every op and every negative control.
+versioned observation/wire discriminator; and the native + shared-dispatch
+differential + the interpreter state-lifetime seam (the first real **public**
+interpreter/native lifecycle equality is deferred to PX7-F — see AC6).
 
 **Out of scope:** `System.Resource`, `withResource`, delayed-body/settlement
 sequencing, optional early release, source-level honesty prose, the generated
@@ -201,11 +207,22 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
    `ReleaseFailed`) and, in PX7-F, body/settlement pairing be represented without
    overwriting either fault. PX7-R lands the discriminator + the single-fault
    release-failure encoding and round-trips it exactly.
-8. **Interpreter/native differential.** Extend the PX6 differential and the
-   native lane so every V1 op and every negative control produces
-   **byte-identical** canonical observations across interpreter and native
-   lanes; the `ResourceTraceIdentityV1` (acquisition-order) is what makes the two
-   lanes agree without leaking fd/slot provenance.
+8. **Native + shared-dispatch differential + the interpreter state-lifetime seam
+   (NOT a public interpreter lifecycle differential — that is PX7-F).** (a) A
+   **real linked-native** acquire→use→release→stale-use path, plus shared
+   semantic-dispatch + wire/ABI agreement across the reachable V1 set, produce
+   **byte-identical** canonical observations; the `ResourceTraceIdentityV1`
+   (acquisition-order) is what makes the lanes agree without leaking fd/slot
+   provenance. (b) One `ResourceTableV1` is **invocation-scoped persistent state**
+   for the real `run_io_effect_observation_v1` / `run_io_with_effect_recorder`
+   producer, and the production dispatch helpers **borrow that same table** —
+   remove the per-dispatch `ResourceTableV1::default()` at `eval.rs:4438` and
+   `:4540` so PX7-F need not repair Runtime's state lifetime before it can express
+   the bracket. (c) The test-local comparator is named `SharedSemanticBackend`
+   (NOT `InterpreterSemanticBackend`): it is shared semantic-dispatch substrate
+   evidence, **not** `ken-interp` evidence. The first real **public**
+   interpreter/native lifecycle + negative-control equality is **PX7-F**, once the
+   `System.Resource`/bracket constructors + IDs land.
 
 ## Acceptance criteria (testable)
 
@@ -242,12 +259,22 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
   stores only the attenuated subset, and a later handle op requiring a right
   outside that subset fails fail-visibly. Acquisition adds no new authority
   right.
-- **AC6 — lane-independent identity + interp/native equality.** For every V1 op
-  and every negative control, the interpreter and native lanes produce
-  **byte-identical** canonical observations; the `ResourceTraceIdentityV1` in
-  those observations is the acquisition-order identity and `git grep` /
-  structural check confirms it is derived from no
-  fd/slot/generation/pointer/inode/executor value.
+- **AC6 — lane-independent identity + native/shared-dispatch agreement + the
+  interpreter state-lifetime seam (NOT a public interpreter lifecycle
+  differential — deferred to PX7-F; Architect ruling `evt_5f65tm0ymzwbh`).** This
+  WP requires: (a) the `ResourceTraceIdentityV1` in canonical observations is the
+  acquisition-order identity, `git grep`/structural-checked as derived from no
+  fd/slot/generation/pointer/inode/executor value; (b) a **real linked-native**
+  acquire→use→release→stale-use path; (c) shared semantic-dispatch and wire/ABI
+  agreement across the reachable V1 set; and (d) **one invocation-scoped
+  persistent `ResourceTableV1`** in the real interpreter producer
+  (`run_io_effect_observation_v1` / `run_io_with_effect_recorder`), with the
+  production dispatch helpers borrowing that same table and the per-dispatch
+  `ResourceTableV1::default()` at `eval.rs:4438`/`:4540` removed. The test-local
+  comparator is named `SharedSemanticBackend` (NOT `InterpreterSemanticBackend`) —
+  shared-dispatch substrate evidence, not `ken-interp` evidence. PX7-R does
+  **not** claim, and merging it must **not** be reported as delivering, a public
+  interpreter↔native lifecycle differential; that first equality is **PX7-F**.
 - **AC7 — explicit finalizer + confined close facade.** A structural check
   confirms the controlled-exit release path runs an explicit finalizer that
   consumes the unique owner via `IntoRawFd` and reaches the real
@@ -281,7 +308,10 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
   test**, NOT evidence the OS produced a close error. The test suite does **not**
   manufacture `EBADF` by double-closing or otherwise violate the facade
   precondition; the production failure branch is real because the deployed facade
-  returns the OS result.
+  returns the OS result. **Every** close-error-injecting test carries this
+  caller-control / non-OS-error label explicitly — including
+  `resource_release_invalidates_before_close_and_never_retries` (Architect §14
+  `evt_5f65tm0ymzwbh`).
 - **AC11 — unique non-cloneable owner (compile/structural guard).** A
   compile/structural guard proves the resource owner
   (`ResourceHandleV1(OwnedFd)`) is **non-cloneable** and **never crosses into the
@@ -326,6 +356,19 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
   mint B apply A-only, both returning the exact mismatch with expected/actual
   reversed, valid same-kind controls succeeding). PX8 read/write/seek over
   `FsHandle` does NOT trigger it; the trigger is a second real resource kind.
+- Do NOT claim or report PX7-R as delivering a **public** interpreter↔native
+  lifecycle differential (Architect ruling `evt_5f65tm0ymzwbh`): the real Ken
+  `System.Resource`/bracket constructors are PX7-F, so the first public
+  lifecycle + reachable-negative-control interp↔native equality is **PX7-F**.
+  PX7-R delivers the runtime substrate + the invocation-scoped interpreter
+  **state-lifetime seam** only. Do NOT relabel a direct `ken-host` dispatcher /
+  `SharedSemanticBackend` fixture as `ken-interp` evidence, and do NOT add a Rust
+  script API, fabricated `GlobalId` set, test-only constructors, or a private Ken
+  ingress to force the public lifecycle (all rejected proxies). Do NOT recreate
+  impossible negatives: `MalformedResource` is unreachable from the opaque public
+  token surface (it stays an internal table/wire discriminator) and injected
+  `ReleaseFailed` stays labelled caller-control — neither is a mandatory public
+  interp↔native fixture.
 - Do NOT build `System.Resource`, `withResource`, the T-obligation, or the
   end-to-end trap/escape controls here — those are **PX7-F**.
 - Do NOT change PX16's `FsRootSpec` resolution, ADR-0018 §4 canonicalization, or
@@ -361,9 +404,13 @@ Ken-level affine/linear type. `spec/`+`conformance/` are not touched by PX7-R
 - Cap declaration surface (unchanged): `parser.rs:269`
   (`crates/ken-elaborator/src/parser.rs`); `program capabilities FS <authority>`
   `crates/ken-cli/src/lib.rs`.
-- Differential harness (extend): PX6 twin-root
+- Differential harness (extend for native + shared-dispatch only): PX6 twin-root
   `crates/ken-verify/src/scenario.rs`; canonical FS observations `FsDeltaV1`/
-  `FsNodeObservationV1` `crates/ken-host/src/effect_v1.rs`.
+  `FsNodeObservationV1` `crates/ken-host/src/effect_v1.rs`. Interpreter
+  state-lifetime seam: `run_io_effect_observation_v1` /
+  `run_io_with_effect_recorder` + the per-dispatch `ResourceTableV1::default()` at
+  `crates/ken-interp/src/eval.rs:4438`/`:4540` (make invocation-scoped). The
+  **public** interpreter/native lifecycle differential is **PX7-F**, not here.
 - ADRs: **ADR-0021** (this WP's normative home), ADR-0019 (capability
   evolution), ADR-0018 (native-effect contract), ADR-0017 (honesty), ADR-0006
   (Ward attestation complement).

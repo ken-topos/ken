@@ -256,12 +256,23 @@ branches or Decisions:
   token, the canonical resource identity, `FsOpen` / real use / `ResourceRelease`,
   capability attenuation, generation invalidation, explicit controlled-exit
   cleanup plus the RAII backstop, structured release errors, ABI/hash/inventory,
-  and interpreter/native differential closure. Its low-level protocol is private
-  substrate, not the public Ken safety API.
+  native + shared-dispatch differential closure, and the invocation-scoped
+  interpreter **state-lifetime seam**. Its low-level protocol is private
+  substrate, not the public Ken safety API. PX7-R does **not** deliver a public
+  interpreter/native lifecycle differential — the real `System.Resource`/bracket
+  constructors are PX7-F, so the first real **public** interpreter/native
+  lifecycle + reachable-negative-control equality is **PX7-F** (Architect ruling
+  `evt_5f65tm0ymzwbh`).
 - **PX7-F (Foundation follow)** owns `System.Resource`, the sole public bracket
   acquisition, delayed-body and settlement sequencing, optional early release,
   the source-level honesty statements, the generated resource-lifetime `T`
-  obligation integration, and the end-to-end success/error/trap/escape controls.
+  obligation integration, the end-to-end success/error/trap/escape controls, and
+  the **first real public interpreter/native lifecycle + negative-control
+  equality** — driving checked public Ken source through the real
+  `run_io_effect_observation_v1` producer + the linked native artifact for every
+  **publicly reachable** V1 operation and outcome (acquire, genuine use, release,
+  stale-use/double-release as exposed by the bracket, capability denial,
+  attenuation failure, and success/error/trap cleanup).
 
 Before PX7-F builds, the Spec enclave pins the additive structured `T`-body
 schema (`ResourceLifetimeObligationV1`) and its conformance route; Foundation
