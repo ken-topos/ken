@@ -265,6 +265,7 @@ impl Parser {
             None
         };
 
+        let mut allow_root_execution = false;
         let capabilities = if matches!(self.peek(), Token::KwCapabilities) {
             if kind == BoundaryKind::Package {
                 return Err(ElabError::PackageCapabilitiesNotAllowed {
@@ -291,10 +292,7 @@ impl Parser {
                     });
                 }
                 let (authority, authority_span) = self.expect_con()?;
-                if !matches!(
-                    authority.as_str(),
-                    "ANone" | "APartial" | "AFull"
-                ) {
+                if !matches!(authority.as_str(), "ANone" | "APartial" | "AFull") {
                     return Err(ElabError::InvalidCapabilityAuthority {
                         family,
                         authority,
@@ -307,6 +305,19 @@ impl Parser {
                     break;
                 }
                 self.advance();
+                if matches!(self.peek(), Token::ConId(name) if name == "RootExecution") {
+                    self.advance();
+                    let (allow, allow_span) = self.expect_con()?;
+                    if allow != "Allow" {
+                        return Err(ElabError::ParseError {
+                            msg: format!("expected 'Allow' after 'RootExecution', found '{allow}'"),
+                            span: allow_span,
+                        });
+                    }
+                    end = allow_span.end;
+                    allow_root_execution = true;
+                    break;
+                }
             }
             Some(declarations)
         } else {
@@ -317,6 +328,7 @@ impl Parser {
             kind,
             admits,
             capabilities,
+            allow_root_execution,
             span: Span::new(start, end),
         })
     }

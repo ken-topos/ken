@@ -143,21 +143,26 @@ production paths — **test injection at the host-observer seam only.**
   terminal outcome with empty trace.
 - A genuinely new fixed boundary (only) hard-stops to the Steward/Architect.
 
-## Grounding anchors (landed on `origin/main`; re-ground before building)
+## Grounding anchors
+
+Base re-grounded on `origin/main @ 412d4b80`; implementation anchors below are
+refreshed after the PX14 edits.
 
 - Startup seam: `crates/ken-host/src/abi_v1.rs` — `ProcessPostureV1(())` `:27`;
-  `establish_process_posture_v1` `:29`; SIGPIPE extern `:23`, check `:35`;
-  `struct ProcessContext{_posture,…}` `:148`; context constructor consuming
-  `posture: Result<ProcessPostureV1,()>` `:441`, `posture.ok()?` `:443`,
-  `_posture: posture` `:488`. Add the admission call + euid snapshot here.
-- Terminal error: `TerminalErrorV1` enum in `crates/ken-host/src/effect_v1.rs`
-  (variants `UnknownFamily … DriverFailure`); add unit `RootExecutionDenied`.
-  `EffectObservationV1` `effect_v1.rs:905`.
+  the single pure `admit_root_execution` `:50`; the sole production
+  `rustix::process::geteuid` read `:63`; combined posture establishment `:95`;
+  `struct ProcessContext{_posture,…}` `:236`; native admission before context
+  construction `:521`; context constructor consuming the posture witness
+  `:552`.
+- Terminal error: `TerminalErrorV1::RootExecutionDenied` in
+  `crates/ken-host/src/effect_v1.rs:946`; `EffectObservationV1` `:949`; the
+  no-context startup observation writer in `abi_v1.rs:633`.
 - Exit mapper: `ProcessExitCode` `crates/ken-runtime/src/native_process_entrypoint.rs:91`;
   `process_exit_status` `:108`.
-- Declaration surface: `program capabilities FS <authority>` header —
-  `crates/ken-cli/src/lib.rs:428`; `ProgramCaps`/`MkProgramCaps` prelude
-  `crates/ken-elaborator/src/prelude.rs:1466`. euid/`geteuid` currently
-  **absent** from `ken-host` (confirmed `git grep` clean) — new rustix call.
+- Declaration surface: optional `, RootExecution Allow` parse in
+  `crates/ken-elaborator/src/parser.rs:268`; checked-plan projection in
+  `compiler_driver.rs:1330`; native-plan hash binding `:1478`. The
+  `ProgramCaps`/`MkProgramCaps` prelude remains unchanged at
+  `crates/ken-elaborator/src/prelude.rs:1466`.
 - ADR homes: ADR-0017, ADR-0018; ADR-0019 (landed by PX13) §process-admission is
   the normative basis.

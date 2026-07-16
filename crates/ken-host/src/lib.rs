@@ -3,6 +3,8 @@
 //! This crate is a tested and target-validated TCB extension around `rustix`;
 //! its host guarantees are never Ken proofs. `rustix` and raw descriptors stay
 //! private. The kernel is unaffected and retains its own unsafe-code ban.
+//! PX14 also snapshots `rustix::process::geteuid` once at startup; that root
+//! posture is discriminator-tested runtime evidence, never a confinement proof.
 //! The generated target manifest dual-sources the numeric filesystem ABI from
 //! `linux-raw-sys` and a target-qualified system-header observer. A mismatch
 //! fails the build closed. This is tested/validated host evidence, never a Ken
@@ -28,6 +30,9 @@ pub mod capability;
 mod effect_v1;
 mod effect_wire_v1;
 
+pub use abi_v1::{
+    admit_root_execution, observe_effective_uid_v1, EffectiveUidSnapshotV1, RootExecutionDeniedV1,
+};
 pub use capability::*;
 pub use effect_v1::*;
 pub use effect_wire_v1::*;
@@ -642,7 +647,7 @@ mod tests {
                 .map(|dependency| (dependency.name, dependency.version, dependency.features))
                 .collect::<Vec<_>>(),
             vec![
-                ("rustix", "1.1.4", &["std", "fs"][..]),
+                ("rustix", "1.1.4", &["std", "fs", "process"][..]),
                 ("bitflags", "2.13.0", &[][..]),
                 ("linux-raw-sys", "0.12.1", &["std", "general", "errno"][..]),
             ]

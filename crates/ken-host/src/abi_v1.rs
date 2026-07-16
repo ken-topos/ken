@@ -26,22 +26,103 @@ unsafe extern "C" {
 #[derive(Debug)]
 struct ProcessPostureV1(());
 
-fn establish_process_posture_v1() -> Result<ProcessPostureV1, ()> {
+/// Immutable observation of the process effective UID at startup.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EffectiveUidSnapshotV1(u32);
+
+impl EffectiveUidSnapshotV1 {
+    pub fn is_root(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Constructs a scripted host observation for discriminator tests.
+    /// Production runners use `observe_effective_uid_v1` instead.
+    #[doc(hidden)]
+    pub const fn scripted(raw: u32) -> Self {
+        Self(raw)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RootExecutionDeniedV1;
+
+/// The single pure effective-root admission check shared by both executors.
+pub fn admit_root_execution(
+    effective_uid: EffectiveUidSnapshotV1,
+    allow_root_execution: bool,
+) -> Result<(), RootExecutionDeniedV1> {
+    if effective_uid.is_root() && !allow_root_execution {
+        Err(RootExecutionDeniedV1)
+    } else {
+        Ok(())
+    }
+}
+
+/// Reads the v1 privilege predicate once through Ken's audited rustix boundary.
+/// This is runtime-trusted and target-validated evidence, never a Ken proof.
+pub fn observe_effective_uid_v1() -> Result<EffectiveUidSnapshotV1, ()> {
+    #[cfg(test)]
+    if let Some(raw) = SCRIPTED_EFFECTIVE_UID_V1.with(std::cell::Cell::get) {
+        return Ok(EffectiveUidSnapshotV1::scripted(raw));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Ok(EffectiveUidSnapshotV1(rustix::process::geteuid().as_raw()))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err(())
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static SCRIPTED_EFFECTIVE_UID_V1: std::cell::Cell<Option<u32>> = const {
+        std::cell::Cell::new(None)
+    };
+}
+
+#[cfg(test)]
+fn with_scripted_effective_uid_v1<T>(raw: u32, run: impl FnOnce() -> T) -> T {
+    SCRIPTED_EFFECTIVE_UID_V1.with(|slot| {
+        let previous = slot.replace(Some(raw));
+        let result = run();
+        slot.set(previous);
+        result
+    })
+}
+
+fn establish_process_posture_v1(
+    effective_uid: Result<EffectiveUidSnapshotV1, ()>,
+    allow_root_execution: bool,
+) -> Result<ProcessPostureV1, PostureErrorV1> {
     #[cfg(target_os = "linux")]
     {
         // SAFETY: this calls Ken's own no-argument C companion. The companion
         // obtains sigaction's layout and constants from the target headers,
         // installs SIG_IGN, retains no pointer, and returns only status.
         if unsafe { ken_host_abi_v1_establish_sigpipe_ignore() } == 0 {
+            admit_root_execution(
+                effective_uid.map_err(|_| PostureErrorV1::HostPostureUnavailable)?,
+                allow_root_execution,
+            )
+            .map_err(|_| PostureErrorV1::RootExecutionDenied)?;
             Ok(ProcessPostureV1(()))
         } else {
-            Err(())
+            Err(PostureErrorV1::HostPostureUnavailable)
         }
     }
     #[cfg(not(target_os = "linux"))]
     {
-        Err(())
+        let _ = (effective_uid, allow_root_execution);
+        Err(PostureErrorV1::HostPostureUnavailable)
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PostureErrorV1 {
+    HostPostureUnavailable,
+    RootExecutionDenied,
 }
 
 #[repr(C)]
@@ -371,6 +452,8 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     cwd_len: usize,
     authority_tag: u64,
     plan_hash: u64,
+    allow_root_execution: u64,
+    root_denied_exit_status: i64,
     target_abi_hash: *const u8,
     host_effect_abi_hash: *const u8,
     observation_path: *const u8,
@@ -398,7 +481,11 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     let Some(authority) = authority(authority_tag) else {
         return -1;
     };
-    if plan_hash == 0 || target_abi_hash.is_null() || host_effect_abi_hash.is_null() {
+    if plan_hash == 0
+        || allow_root_execution > 1
+        || target_abi_hash.is_null()
+        || host_effect_abi_hash.is_null()
+    {
         return -1;
     }
     // SAFETY: both artifact-owned manifest arrays have the fixed V1 length.
@@ -430,13 +517,25 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     let Some(observation_path) = (unsafe { borrowed_slice(&observation_path) }) else {
         return -1;
     };
-    let Some(context) = initialize_process_context(
-        root_path,
-        authority,
-        plan_hash,
-        observation_path,
-        establish_process_posture_v1(),
-    ) else {
+    let posture =
+        match establish_process_posture_v1(observe_effective_uid_v1(), allow_root_execution != 0) {
+            Err(PostureErrorV1::RootExecutionDenied) => {
+                if write_startup_terminal_observation_v1(
+                    observation_path,
+                    plan_hash,
+                    root_denied_exit_status,
+                )
+                .is_err()
+                {
+                    return -1;
+                }
+                return 1;
+            }
+            other => other,
+        };
+    let Some(context) =
+        initialize_process_context(root_path, authority, plan_hash, observation_path, posture)
+    else {
         return -1;
     };
     let capability = context.capability.erased_identity();
@@ -456,7 +555,7 @@ fn initialize_process_context(
     authority: crate::Authority,
     plan_hash: u64,
     observation_path: &[u8],
-    posture: Result<ProcessPostureV1, ()>,
+    posture: Result<ProcessPostureV1, PostureErrorV1>,
 ) -> Option<Box<ProcessContext>> {
     let posture = posture.ok()?;
     let Ok(root) = crate::open_root(&root_path) else {
@@ -514,6 +613,42 @@ fn initialize_process_context(
     }))
 }
 
+fn write_startup_terminal_observation_v1(
+    observation_path: &[u8],
+    plan_hash: u64,
+    exit_status: i64,
+) -> io::Result<()> {
+    if observation_path.is_empty() {
+        return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    let path = {
+        use std::os::unix::ffi::OsStringExt;
+        std::path::PathBuf::from(std::ffi::OsString::from_vec(observation_path.to_vec()))
+    };
+    #[cfg(not(target_os = "linux"))]
+    let path = std::path::PathBuf::from(
+        std::str::from_utf8(observation_path)
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?,
+    );
+    let mut sink = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)?;
+    let bytes = crate::encode_linked_effect_trace_v1(&crate::LinkedEffectTraceV1 {
+        plan_hash,
+        target_abi_hash: crate::TARGET_ABI_MANIFEST_HASH,
+        host_effect_abi_hash: crate::HOST_EFFECT_ABI_V1_HASH,
+        terminal_value: exit_status,
+        terminal_error: Some(crate::TerminalErrorV1::RootExecutionDenied),
+        effect_trace: Vec::new(),
+    })
+    .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
+    sink.write_all(&bytes)?;
+    sink.flush()
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ken_host_invocation_v1_destroy(context: *mut c_void) {
     // SAFETY: destroy is the fail-closed lifecycle fallback for callers that
@@ -551,6 +686,7 @@ fn write_observation_v1(
         target_abi_hash: crate::TARGET_ABI_MANIFEST_HASH,
         host_effect_abi_hash: crate::HOST_EFFECT_ABI_V1_HASH,
         terminal_value,
+        terminal_error: None,
         effect_trace: context.effect_trace.clone(),
     })
     .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
@@ -937,6 +1073,8 @@ mod tests {
                 cwd.len(),
                 2,
                 1,
+                0,
+                1,
                 crate::TARGET_ABI_MANIFEST_HASH.as_ptr(),
                 crate::HOST_EFFECT_ABI_V1_HASH.as_ptr(),
                 std::ptr::null(),
@@ -965,6 +1103,8 @@ mod tests {
                 cwd.len(),
                 2,
                 1,
+                0,
+                1,
                 crate::TARGET_ABI_MANIFEST_HASH.as_ptr(),
                 wrong.as_ptr(),
                 std::ptr::null(),
@@ -990,6 +1130,8 @@ mod tests {
                 cwd.len(),
                 2,
                 0,
+                0,
+                1,
                 crate::TARGET_ABI_MANIFEST_HASH.as_ptr(),
                 crate::HOST_EFFECT_ABI_V1_HASH.as_ptr(),
                 std::ptr::null(),
@@ -1006,7 +1148,118 @@ mod tests {
     #[test]
     fn posture_failure_prevents_context_publication() {
         let root = RootPath::new(std::env::current_dir().unwrap()).unwrap();
-        assert!(initialize_process_context(root, AUTH_FULL, 1, &[], Err(())).is_none());
+        assert!(initialize_process_context(
+            root,
+            AUTH_FULL,
+            1,
+            &[],
+            Err(PostureErrorV1::HostPostureUnavailable)
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn scripted_effective_uid_discriminates_the_native_startup_posture() {
+        assert_eq!(
+            establish_process_posture_v1(Ok(EffectiveUidSnapshotV1::scripted(0)), false)
+                .unwrap_err(),
+            PostureErrorV1::RootExecutionDenied
+        );
+        assert!(
+            establish_process_posture_v1(Ok(EffectiveUidSnapshotV1::scripted(0)), true).is_ok()
+        );
+        assert!(
+            establish_process_posture_v1(Ok(EffectiveUidSnapshotV1::scripted(1000)), false).is_ok()
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn root_denial_writer_needs_no_live_process_context() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let path =
+            std::env::temp_dir().join(format!("ken-px14-root-denied-{}", std::process::id()));
+        write_startup_terminal_observation_v1(path.as_os_str().as_bytes(), 17, 1).unwrap();
+        let trace = crate::decode_linked_effect_trace_v1(&std::fs::read(&path).unwrap()).unwrap();
+        let _ = std::fs::remove_file(path);
+        assert_eq!(trace.plan_hash, 17);
+        assert_eq!(trace.terminal_value, 1);
+        assert_eq!(
+            trace.terminal_error,
+            Some(crate::TerminalErrorV1::RootExecutionDenied)
+        );
+        assert!(trace.effect_trace.is_empty());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn full_native_init_uses_only_the_scripted_observer_seam() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let cwd = b".";
+        let observation_path = std::env::temp_dir().join(format!(
+            "ken-px14-native-init-denied-{}",
+            std::process::id()
+        ));
+        let observation_bytes = observation_path.as_os_str().as_bytes();
+        let mut denied = HostInitResultV1 {
+            context: usize::MAX as *mut c_void,
+            capability: u64::MAX,
+            plan_hash: u64::MAX,
+        };
+        let status = with_scripted_effective_uid_v1(0, || unsafe {
+            ken_host_invocation_v1_init(
+                cwd.as_ptr(),
+                cwd.len(),
+                2,
+                19,
+                0,
+                1,
+                crate::TARGET_ABI_MANIFEST_HASH.as_ptr(),
+                crate::HOST_EFFECT_ABI_V1_HASH.as_ptr(),
+                observation_bytes.as_ptr(),
+                observation_bytes.len(),
+                &mut denied,
+            )
+        });
+        assert_eq!(status, 1);
+        assert!(denied.context.is_null());
+        assert_eq!(denied.capability, 0);
+        assert_eq!(denied.plan_hash, 0);
+        let trace =
+            crate::decode_linked_effect_trace_v1(&std::fs::read(&observation_path).unwrap())
+                .unwrap();
+        let _ = std::fs::remove_file(observation_path);
+        assert_eq!(
+            trace.terminal_error,
+            Some(crate::TerminalErrorV1::RootExecutionDenied)
+        );
+        assert!(trace.effect_trace.is_empty());
+
+        let mut allowed = HostInitResultV1 {
+            context: std::ptr::null_mut(),
+            capability: 0,
+            plan_hash: 0,
+        };
+        let status = with_scripted_effective_uid_v1(0, || unsafe {
+            ken_host_invocation_v1_init(
+                cwd.as_ptr(),
+                cwd.len(),
+                2,
+                19,
+                1,
+                1,
+                crate::TARGET_ABI_MANIFEST_HASH.as_ptr(),
+                crate::HOST_EFFECT_ABI_V1_HASH.as_ptr(),
+                std::ptr::null(),
+                0,
+                &mut allowed,
+            )
+        });
+        assert_eq!(status, 0);
+        assert!(!allowed.context.is_null());
+        unsafe { ken_host_invocation_v1_destroy(allowed.context) };
     }
 
     #[test]

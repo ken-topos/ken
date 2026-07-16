@@ -24,6 +24,7 @@ pub struct CheckedMainDescriptor {
     pub prod_constructor: GlobalId,
     pub authority_name: String,
     pub authority: capabilities::Authority,
+    pub allow_root_execution: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -149,5 +150,6 @@ pub fn admit_checked_main(env: &ElabEnv) -> Result<CheckedMainDescriptor, Progra
         prod_constructor,
         authority_name: authority_name.to_string(),
         authority,
+        allow_root_execution: header.allow_root_execution,
     })
 }

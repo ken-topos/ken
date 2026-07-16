@@ -7,8 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use ken_elaborator::lexer::{Lexer, Token};
 use ken_elaborator::{
-    parser, BoundaryHeader, BoundaryKind, CapabilityDecl, Decl, ElabEnv,
-    ElabError,
+    parser, BoundaryHeader, BoundaryKind, CapabilityDecl, Decl, ElabEnv, ElabError,
 };
 
 static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
@@ -50,11 +49,13 @@ fn parsed_header(source: &str) -> BoundaryHeader {
             kind,
             admits,
             capabilities,
+            allow_root_execution,
             ..
         }] => BoundaryHeader {
             kind: *kind,
             admits: admits.clone(),
             capabilities: capabilities.clone(),
+            allow_root_execution: *allow_root_execution,
         },
         other => panic!("expected one boundary AST node, got {other:?}"),
     }
@@ -91,6 +92,7 @@ fn boundary_keywords_are_reserved_and_four_program_shapes_are_independent() {
             kind: BoundaryKind::Program,
             admits: None,
             capabilities: None,
+            allow_root_execution: false,
         }
     );
     assert_eq!(
@@ -99,6 +101,7 @@ fn boundary_keywords_are_reserved_and_four_program_shapes_are_independent() {
             kind: BoundaryKind::Program,
             admits: Some(vec!["Core.Laws".to_string(), "Data.Map".to_string()]),
             capabilities: None,
+            allow_root_execution: false,
         }
     );
     assert_eq!(
@@ -107,6 +110,7 @@ fn boundary_keywords_are_reserved_and_four_program_shapes_are_independent() {
             kind: BoundaryKind::Program,
             admits: None,
             capabilities: Some(fs("APartial")),
+            allow_root_execution: false,
         }
     );
     assert_eq!(
@@ -115,14 +119,32 @@ fn boundary_keywords_are_reserved_and_four_program_shapes_are_independent() {
             kind: BoundaryKind::Program,
             admits: Some(vec!["P".to_string()]),
             capabilities: Some(fs("AFull")),
+            allow_root_execution: false,
         }
     );
 }
 
 #[test]
+fn root_execution_marker_is_checked_header_metadata() {
+    assert_eq!(
+        parsed_header("program capabilities FS AFull, RootExecution Allow"),
+        BoundaryHeader {
+            kind: BoundaryKind::Program,
+            admits: None,
+            capabilities: Some(fs("AFull")),
+            allow_root_execution: true,
+        }
+    );
+    assert!(matches!(
+        parser::parse_decls("program capabilities FS AFull, RootExecution Deny"),
+        Err(ElabError::ParseError { msg, .. }) if msg.contains("expected 'Allow'")
+    ));
+}
+
+#[test]
 fn boundary_header_is_accepted_before_imports_and_rejected_after_them() {
-    let decls = parser::parse_decls("program\nimport P")
-        .expect("unit-head boundary precedes imports");
+    let decls =
+        parser::parse_decls("program\nimport P").expect("unit-head boundary precedes imports");
     assert!(matches!(decls.first(), Some(Decl::BoundaryDecl { .. })));
     assert!(matches!(decls.get(1), Some(Decl::ImportDecl { .. })));
 
@@ -146,6 +168,7 @@ fn package_boundary_has_admission_only_and_capabilities_fail_closed() {
             kind: BoundaryKind::Package,
             admits: None,
             capabilities: None,
+            allow_root_execution: false,
         }
     );
     assert_eq!(
@@ -154,6 +177,7 @@ fn package_boundary_has_admission_only_and_capabilities_fail_closed() {
             kind: BoundaryKind::Package,
             admits: Some(vec!["Core.Laws".to_string()]),
             capabilities: None,
+            allow_root_execution: false,
         }
     );
     assert!(matches!(
@@ -237,6 +261,7 @@ fn loader_projects_both_readers_and_admits_clause_changes_real_dispatch() {
             kind: BoundaryKind::Program,
             admits: Some(vec!["P".to_string()]),
             capabilities: Some(fs("AFull")),
+            allow_root_execution: false,
         })
     );
     assert_eq!(
@@ -282,6 +307,7 @@ fn direct_file_reader_preserves_manifest_without_minting_or_trust_growth() {
             kind: BoundaryKind::Program,
             admits: None,
             capabilities: Some(fs("ANone")),
+            allow_root_execution: false,
         })
     );
     let after: BTreeSet<_> = env.env.trusted_base().into_iter().collect();

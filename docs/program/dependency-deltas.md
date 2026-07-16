@@ -18,7 +18,7 @@ private to `ken-host`; no `rustix` type crosses the crate's public API.
 The population is defined by Cargo's target-selected normal-dependency graph
 for `x86_64-unknown-linux-gnu`, not by a source-name search. With
 `rustix = { version = "=1.1.4", default-features = false, features =
-["std", "fs"] }`, and without `rustix_use_libc` or Miri, the
+["std", "fs", "process"] }`, and without `rustix_use_libc` or Miri, the
 governing target-selected Linux-raw compiled closure is **three crates**:
 `rustix`, `bitflags`, and `linux-raw-sys`. The complete all-target union is
 **seven crates, enumerated here for information**:
@@ -45,24 +45,28 @@ target, Cargo selects only `rustix`, `bitflags`, and `linux-raw-sys`:
 Cargo nevertheless adds `errno` to this workspace's lockfile resolution, so
 the lockfile delta contains **four** new packages even though only three
 compile for the governing target.
-The `std` feature supplies allocation and standard error integration, and `fs`
-supplies the five filesystem facilities. No other `rustix` API feature is
-enabled. `linux_raw` is the resulting backend configuration, not a Cargo
-feature; enabling `use-libc` or setting `rustix_use_libc` is forbidden.
+The `std` feature supplies allocation and standard error integration, `fs`
+supplies the five filesystem facilities, and PX14's `process` feature supplies
+the single immutable `process::geteuid` startup observation. No other `rustix`
+API feature is enabled. `linux_raw` is the resulting backend configuration,
+not a Cargo feature; enabling `use-libc` or setting `rustix_use_libc` is
+forbidden.
 
 ### Exercised upstream `unsafe` surface
 
-PX1 exercises exactly five typed `rustix` facilities:
+PX1 and PX14 exercise exactly six typed `rustix` facilities:
 
 - `fs::openat`, returning an owned descriptor and taking typed `OFlags` and
   `Mode`;
 - `fs::readlinkat`, taking a borrowed descriptor and validated path argument;
 - `fs::mkdirat`, `fs::unlinkat`, and `fs::renameat`, taking borrowed
   descriptors, validated path arguments, and typed flags/modes.
+- `process::geteuid`, read once into an immutable startup snapshot for PX14's
+  tested root-execution admission posture.
 
 Those wrappers reach `rustix`'s private `linux_raw` syscall/assembly backend and
 `linux-raw-sys`'s generated ABI types/constants. PX1 does not exercise
-`ioctl`, networking, process control, memory mapping, io_uring, time, or the
+`ioctl`, networking, process mutation, memory mapping, io_uring, time, or the
 libc backend. The host guarantees remain tested/validated, never proved.
 
 SIGPIPE is not part of the `rustix` surface. Ken has exactly one supported
