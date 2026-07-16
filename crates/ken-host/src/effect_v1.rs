@@ -154,6 +154,15 @@ impl CapabilityTokenV1 {
     pub fn erased_identity(self) -> u64 {
         (u64::from(self.generation) << 32) | u64::from(self.slot)
     }
+
+    /// Rehydrates only the private host-wire representation. Ken code never
+    /// receives this constructor or either component.
+    pub(crate) fn from_erased_identity(identity: u64) -> Self {
+        Self {
+            slot: identity as u32,
+            generation: (identity >> 32) as u32,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

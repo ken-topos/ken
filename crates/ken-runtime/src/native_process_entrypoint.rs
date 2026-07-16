@@ -29,6 +29,16 @@ pub struct NativeProcessSymbols {
     pub prod: RuntimeSymbol,
     pub exit_success: RuntimeSymbol,
     pub exit_failure: RuntimeSymbol,
+    pub result_err: RuntimeSymbol,
+    pub result_ok: RuntimeSymbol,
+    pub option_some: RuntimeSymbol,
+    pub file_error: RuntimeSymbol,
+    pub file_operation_read: RuntimeSymbol,
+    pub file_operation_write: RuntimeSymbol,
+    pub io_errors: Vec<RuntimeSymbol>,
+    pub unit: RuntimeSymbol,
+    pub bool_false: RuntimeSymbol,
+    pub bool_true: RuntimeSymbol,
 }
 
 impl NativeProcessSymbols {
@@ -40,6 +50,31 @@ impl NativeProcessSymbols {
             prod: PROD_CONSTRUCTOR.to_string(),
             exit_success: EXIT_SUCCESS_CONSTRUCTOR.to_string(),
             exit_failure: EXIT_FAILURE_CONSTRUCTOR.to_string(),
+            result_err: "ctor:prelude::Result::Err".to_string(),
+            result_ok: "ctor:prelude::Result::Ok".to_string(),
+            option_some: "ctor:prelude::Option::Some".to_string(),
+            file_error: "ctor:prelude::FileError::MkFileError".to_string(),
+            file_operation_read: "ctor:prelude::FileOperation::OpReadFile".to_string(),
+            file_operation_write: "ctor:prelude::FileOperation::OpWriteFile".to_string(),
+            io_errors: [
+                "NotFound",
+                "PermissionDenied",
+                "CapabilityDenied",
+                "BrokenPipe",
+                "Interrupted",
+                "AlreadyExists",
+                "InvalidInput",
+                "IsDirectory",
+                "NotDirectory",
+                "NotEmpty",
+                "Unsupported",
+            ]
+            .into_iter()
+            .map(|name| format!("ctor:prelude::IOError::{name}"))
+            .collect(),
+            unit: "ctor:prelude::Unit::MkUnit".to_string(),
+            bool_false: "ctor:prelude::Bool::False".to_string(),
+            bool_true: "ctor:prelude::Bool::True".to_string(),
         }
     }
 }

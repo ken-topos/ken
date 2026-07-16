@@ -566,8 +566,8 @@ pub fn compile_native_program_sources(
         native_entrypoint_plan(&checked, &symbols).map_err(NativeProgramBuildError::Driver)?;
     let plan_bytes = canonical_native_entrypoint_plan_bytes(&plan);
     let plan_transport_hash = fingerprint(&plan_bytes);
-    let host_spine = checked_host_spine_v1(&env, &symbols)
-        .map_err(NativeProgramBuildError::Driver)?;
+    let host_spine =
+        checked_host_spine_v1(&env, &symbols).map_err(NativeProgramBuildError::Driver)?;
     let host_spine_bytes = canonical_checked_host_spine_v1_bytes(&host_spine);
     // The production package owns the exact live-environment closure, including
     // prelude definitions referenced by `main`; source-only generic packages
@@ -575,15 +575,20 @@ pub fn compile_native_program_sources(
     admitted_ids.extend(env.env.decls().map(Decl::id));
     admitted_ids.sort();
     admitted_ids.dedup();
-    let mut package = emit_package_from_env(&manifest, &sources, &env, &admitted_ids, Some(plan_bytes))
-        .map_err(NativeProgramBuildError::Driver)?;
+    let mut package =
+        emit_package_from_env(&manifest, &sources, &env, &admitted_ids, Some(plan_bytes))
+            .map_err(NativeProgramBuildError::Driver)?;
     if main_has_host_effect {
         let symbol = StableSymbol::new(
             SymbolNamespace::Metadata,
             vec![package_name.to_string(), "HostEffectSpineV1".to_string()],
         );
         package.artifact.semantic.symbols.insert(symbol.clone());
-        package.artifact.semantic.metadata.insert(symbol, host_spine_bytes);
+        package
+            .artifact
+            .semantic
+            .metadata
+            .insert(symbol, host_spine_bytes);
         package = emit_checked_core_package(package.header.clone(), package.artifact.clone())
             .map_err(CompilerDriverError::from)
             .map_err(NativeProgramBuildError::Driver)?;
@@ -613,8 +618,53 @@ pub fn compile_native_program_sources(
         closure.reachable_declarations = BTreeSet::from([plan.main.clone()]);
         closure.report.reachable_declarations = closure.reachable_declarations.clone();
     }
-    let mut executable_entrypoint = package_executable_entrypoint_mode(&package, &closure, true)
-        .map_err(NativeProgramBuildError::Driver)?;
+    let normalized_host_package = if main_has_host_effect {
+        let mut normalized = package.clone();
+        let declaration = env.env.lookup(checked.main).ok_or_else(|| {
+            NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
+                id: checked.main,
+            })
+        })?;
+        let Decl::Transparent {
+            id,
+            level_params,
+            ty,
+            body,
+        } = declaration
+        else {
+            unreachable!("checked main admission requires a transparent declaration")
+        };
+        let normalized_main = Decl::Transparent {
+            id: *id,
+            level_params: level_params.clone(),
+            ty: ty.clone(),
+            body: ken_kernel::normalize(&env.env, &ken_kernel::Context::new(), body),
+        };
+        let bytes = canonical_decl_bytes(&normalized_main, &symbol_table).map_err(|_| {
+            NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
+                id: checked.main,
+            })
+        })?;
+        normalized
+            .artifact
+            .semantic
+            .declarations
+            .insert(plan.main.clone(), bytes);
+        Some(
+            emit_checked_core_package(normalized.header.clone(), normalized.artifact.clone())
+                .map_err(CompilerDriverError::from)
+                .map_err(NativeProgramBuildError::Driver)?,
+        )
+    } else {
+        None
+    };
+    let executable_view = normalized_host_package.as_ref().unwrap_or(&package);
+    let mut executable_closure_view = closure.clone();
+    executable_closure_view.report.package_core_semantic_hash = executable_view.core_semantic_hash;
+    executable_closure_view.report.package_artifact_hash = executable_view.artifact_hash;
+    let mut executable_entrypoint =
+        package_executable_entrypoint_mode(executable_view, &executable_closure_view, true)
+            .map_err(NativeProgramBuildError::Driver)?;
     if main_has_host_effect {
         for lanes in executable_entrypoint.unsupported_lanes.values_mut() {
             lanes.retain(|lane| lane.lane != "host_effect_lowering_unavailable");
@@ -641,39 +691,10 @@ pub fn compile_native_program_sources(
     // signal; an unused sibling must not enter native production.
     let executable_closure = closure.reachable_declarations.clone();
     let mut runtime_program = if main_has_host_effect {
-        let mut normalized = package.clone();
-        let declaration = env.env.lookup(checked.main).ok_or_else(|| {
-            NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
-                id: checked.main,
-            })
-        })?;
-        let Decl::Transparent {
-            id,
-            level_params,
-            ty,
-            body,
-        } = declaration
-        else {
-            unreachable!("checked main admission requires a transparent declaration")
-        };
-        let normalized_main = Decl::Transparent {
-            id: *id,
-            level_params: level_params.clone(),
-            ty: ty.clone(),
-            body: ken_kernel::normalize(&env.env, &ken_kernel::Context::new(), body),
-        };
-        let bytes = canonical_decl_bytes(&normalized_main, &symbol_table)
-            .map_err(|_| NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol { id: checked.main }))?;
-        normalized
-            .artifact
-            .semantic
-            .declarations
-            .insert(plan.main.clone(), bytes);
-        normalized = emit_checked_core_package(normalized.header.clone(), normalized.artifact.clone())
-            .map_err(CompilerDriverError::from)
-            .map_err(NativeProgramBuildError::Driver)?;
         let mut program = crate::erasure::erase_checked_host_package_for_target(
-            &normalized,
+            normalized_host_package
+                .as_ref()
+                .expect("host-effect main owns a normalized private view"),
             executable_closure.iter(),
             &plan.main,
             &host_spine,
@@ -713,7 +734,12 @@ pub fn compile_native_program_sources(
         &ken_runtime::BoundProcessEntrypoint {
             target_symbol: plan.main.to_string(),
             program_caps_constructor: plan.program_caps_constructor.to_string(),
-            cap_symbol: plan.cap.to_string(),
+            authority: match plan.authority_name.as_str() {
+                "ANone" => 0,
+                "APartial" => 1,
+                "AFull" => 2,
+                _ => unreachable!("checked main authority is a known Auth constructor"),
+            },
             ret_constructor: plan.ret_constructor.to_string(),
             process_symbols: ken_runtime::NativeProcessSymbols {
                 process_input: plan.process_input_constructor.to_string(),
@@ -722,6 +748,20 @@ pub fn compile_native_program_sources(
                 prod: plan.prod_constructor.to_string(),
                 exit_success: plan.success_constructor.to_string(),
                 exit_failure: plan.failure_constructor.to_string(),
+                result_err: host_spine.result_err.to_string(),
+                result_ok: host_spine.result_ok.to_string(),
+                option_some: host_spine.option_some.to_string(),
+                file_error: host_spine.file_error.to_string(),
+                file_operation_read: host_spine.file_operation_read.to_string(),
+                file_operation_write: host_spine.file_operation_write.to_string(),
+                io_errors: host_spine
+                    .io_errors
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+                unit: host_spine.unit.to_string(),
+                bool_false: host_spine.bool_false.to_string(),
+                bool_true: host_spine.bool_true.to_string(),
             },
         },
         output_dir,
@@ -1283,11 +1323,13 @@ fn checked_host_spine_v1(
     symbols: &BTreeMap<GlobalId, StableSymbol>,
 ) -> Result<crate::erasure::CheckedHostSpineV1, CompilerDriverError> {
     let resolve = |name: &'static str| {
-        let id = env
-            .globals
-            .get(name)
-            .copied()
-            .ok_or(CompilerDriverError::MissingStableSymbol { id: GlobalId(u32::MAX) })?;
+        let id =
+            env.globals
+                .get(name)
+                .copied()
+                .ok_or(CompilerDriverError::MissingStableSymbol {
+                    id: GlobalId(u32::MAX),
+                })?;
         symbols
             .get(&id)
             .cloned()
@@ -1320,13 +1362,37 @@ fn checked_host_spine_v1(
         fs_family: resolve("FSOp")?,
         console_family: resolve("ConsoleOp")?,
         clock_family: resolve("ClockOp")?,
+        capability: resolve("Cap")?,
+        result_err: resolve("Err")?,
+        result_ok: resolve("Ok")?,
+        option_some: resolve("Some")?,
+        file_error: resolve("MkFileError")?,
+        file_operation_read: resolve("OpReadFile")?,
+        file_operation_write: resolve("OpWriteFile")?,
+        io_errors: [
+            "NotFound",
+            "PermissionDenied",
+            "CapabilityDenied",
+            "BrokenPipe",
+            "Interrupted",
+            "AlreadyExists",
+            "InvalidInput",
+            "IsDirectory",
+            "NotDirectory",
+            "NotEmpty",
+            "Unsupported",
+        ]
+        .into_iter()
+        .map(resolve)
+        .collect::<Result<Vec<_>, _>>()?,
+        unit: resolve("MkUnit")?,
+        bool_false: resolve("False")?,
+        bool_true: resolve("True")?,
         operations,
     })
 }
 
-fn canonical_checked_host_spine_v1_bytes(
-    spine: &crate::erasure::CheckedHostSpineV1,
-) -> Vec<u8> {
+fn canonical_checked_host_spine_v1_bytes(spine: &crate::erasure::CheckedHostSpineV1) -> Vec<u8> {
     let mut out = b"HostEffectSpineV1\0".to_vec();
     for symbol in [
         &spine.ret,
@@ -1336,7 +1402,23 @@ fn canonical_checked_host_spine_v1_bytes(
         &spine.fs_family,
         &spine.console_family,
         &spine.clock_family,
+        &spine.capability,
+        &spine.result_err,
+        &spine.result_ok,
+        &spine.option_some,
+        &spine.file_error,
+        &spine.file_operation_read,
+        &spine.file_operation_write,
+        &spine.unit,
+        &spine.bool_false,
+        &spine.bool_true,
     ] {
+        let field = symbol.to_string();
+        out.extend_from_slice(&(field.len() as u64).to_le_bytes());
+        out.extend_from_slice(field.as_bytes());
+    }
+    out.extend_from_slice(&(spine.io_errors.len() as u64).to_le_bytes());
+    for symbol in &spine.io_errors {
         let field = symbol.to_string();
         out.extend_from_slice(&(field.len() as u64).to_le_bytes());
         out.extend_from_slice(field.as_bytes());

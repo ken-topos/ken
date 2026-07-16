@@ -3999,7 +3999,7 @@ fn decode_supported_match_view(
     }
 
     let motive = capture_canonical_term(cursor).map_err(|reason| malformed_body(owner, reason))?;
-    validate_supported_match_motive(owner, &family_symbol, data, &motive)?;
+    validate_supported_match_motive(semantic, owner, &family_symbol, data, &motive)?;
 
     let method_count = cursor
         .read_len()
@@ -4130,6 +4130,7 @@ fn constructor_parent_matches_family(constructor: &StableSymbol, family: &Stable
 }
 
 fn validate_supported_match_motive(
+    semantic: &CheckedCoreSemanticInputs,
     owner: &StableSymbol,
     family: &StableSymbol,
     data: &DataMetadata,
@@ -4143,6 +4144,14 @@ fn validate_supported_match_motive(
     }
     match inspect_non_dependent_motive(motive).map_err(|reason| malformed_body(owner, reason))? {
         MotiveShape::ConstantType => Ok(()),
+        MotiveShape::Dependent
+            if semantic
+                .metadata
+                .values()
+                .any(|bytes| bytes.starts_with(b"HostEffectSpineV1\0")) =>
+        {
+            Ok(())
+        }
         MotiveShape::Dependent => Err(CheckedCoreBodyViewError::UnsupportedDependentMotive {
             symbol: owner.clone(),
             family: family.clone(),

@@ -28,7 +28,7 @@ use crate::{
 pub struct BoundProcessEntrypoint {
     pub target_symbol: RuntimeSymbol,
     pub program_caps_constructor: RuntimeSymbol,
-    pub cap_symbol: RuntimeSymbol,
+    pub authority: u8,
     pub ret_constructor: RuntimeSymbol,
     pub process_symbols: crate::NativeProcessSymbols,
 }
@@ -398,7 +398,7 @@ fn build_process_starter_executable_artifact(
         &object_path,
         &stub_path,
         &executable_path,
-        None,
+        Some(&ken_host_staticlib()?),
     )?;
     Ok(executable_path)
 }
@@ -423,10 +423,7 @@ pub fn build_bound_process_starter_executable_artifact(
     }
     let caps = RuntimeExpr::Construct {
         constructor: entrypoint.program_caps_constructor.clone(),
-        args: vec![RuntimeExpr::Construct {
-            constructor: entrypoint.cap_symbol.clone(),
-            args: Vec::new(),
-        }],
+        args: vec![RuntimeExpr::Var(1)],
     };
     // Checked-core binders are de Bruijn-indexed, so the closest binder
     // (`ProgramCaps`) is runtime argument zero and `ProcessInput` is one.
@@ -484,7 +481,11 @@ pub fn build_bound_process_starter_executable_artifact(
         )
     })?;
     let stub_path = output_dir.join(&options.stub_relative_path);
-    fs::write(&stub_path, process_starter_c_stub()).map_err(|err| {
+    fs::write(
+        &stub_path,
+        process_starter_c_stub_for_authority(entrypoint.authority),
+    )
+    .map_err(|err| {
         packaging_error(
             ObjectLinkerPackagingStage::LinkerOrFinalizer,
             "stub_path",
@@ -521,7 +522,11 @@ fn runtime_expr_contains_effect(expr: &RuntimeExpr, program: &RuntimeProgram) ->
             runtime_expr_contains_effect(value, program)
                 || runtime_expr_contains_effect(body, program)
         }
-        RuntimeExpr::If { scrutinee, then_expr, else_expr } => {
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
             runtime_expr_contains_effect(scrutinee, program)
                 || runtime_expr_contains_effect(then_expr, program)
                 || runtime_expr_contains_effect(else_expr, program)
@@ -535,7 +540,9 @@ fn runtime_expr_contains_effect(expr: &RuntimeExpr, program: &RuntimeProgram) ->
                     .iter()
                     .any(|argument| runtime_expr_contains_effect(argument, program))
         }
-        RuntimeExpr::Match { scrutinee, cases, .. } => {
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
             runtime_expr_contains_effect(scrutinee, program)
                 || cases
                     .iter()
@@ -825,7 +832,10 @@ fn link_starter_executable(
             .arg("-lpthread")
             .arg("-lm");
     }
-    let output = command.arg("-o").arg(executable_path).output()
+    let output = command
+        .arg("-o")
+        .arg(executable_path)
+        .output()
         .map_err(|err| {
             packaging_error(
                 ObjectLinkerPackagingStage::Toolchain,
@@ -854,11 +864,28 @@ fn ken_host_staticlib() -> Result<std::path::PathBuf, ObjectLinkerPackagingError
             format!("cannot locate current Cargo target directory: {error}"),
         )
     })?;
+    let mut candidates = Vec::new();
     for directory in executable.ancestors().take(4) {
-        let candidate = directory.join("libken_host.a");
-        if candidate.is_file() {
-            return Ok(candidate);
+        for search in [directory.to_path_buf(), directory.join("deps")] {
+            if let Ok(entries) = fs::read_dir(search) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                        continue;
+                    };
+                    if (name == "libken_host.a"
+                        || (name.starts_with("libken_host-") && name.ends_with(".a")))
+                        && path.is_file()
+                    {
+                        candidates.push(path);
+                    }
+                }
+            }
         }
+    }
+    candidates.sort_by_key(|path| fs::metadata(path).and_then(|meta| meta.modified()).ok());
+    if let Some(candidate) = candidates.pop() {
+        return Ok(candidate);
     }
     Err(packaging_error(
         ObjectLinkerPackagingStage::Toolchain,
@@ -1369,7 +1396,12 @@ int main(void) {
 "#
 }
 
-pub(crate) fn process_starter_c_stub() -> &'static str {
+#[cfg(test)]
+pub(crate) fn process_starter_c_stub() -> String {
+    process_starter_c_stub_for_authority(1)
+}
+
+fn process_starter_c_stub_for_authority(authority: u8) -> String {
     r#"#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1392,7 +1424,24 @@ struct KenArena {
     size_t capacity;
 };
 
-extern long long ken_nc23_entrypoint(const struct KenBorrowedValue *root);
+struct KenNativeInvocationV1 {
+    const struct KenBorrowedValue *process_input;
+    void *host_context;
+    uint64_t capability;
+};
+
+extern long long ken_nc23_entrypoint(const struct KenNativeInvocationV1 *invocation);
+extern void *ken_host_invocation_v1_init(
+    const unsigned char *cwd,
+    size_t len,
+    uint64_t authority,
+    const unsigned char *target_abi_hash,
+    const unsigned char *host_effect_abi_hash
+);
+extern void ken_host_invocation_v1_destroy(void *context);
+
+static const unsigned char KEN_TARGET_ABI_HASH[32] = { __KEN_TARGET_HASH__ };
+static const unsigned char KEN_HOST_EFFECT_ABI_HASH[32] = { __KEN_EFFECT_HASH__ };
 
 static int constructor(
     struct KenArena *arena,
@@ -1479,7 +1528,21 @@ int main(int argc, char **argv, char **envp) {
     }
     bytes(&fields[2], (const unsigned char *)cwd, strlen(cwd));
     if (arena.next != arena.capacity) { free(pool); free(cwd); return 1; }
-    long long value = ken_nc23_entrypoint(root);
+    void *host_context = ken_host_invocation_v1_init(
+        (const unsigned char *)cwd,
+        strlen(cwd),
+        __KEN_AUTHORITY__,
+        KEN_TARGET_ABI_HASH,
+        KEN_HOST_EFFECT_ABI_HASH
+    );
+    if (host_context == NULL) { free(pool); free(cwd); return 1; }
+    struct KenNativeInvocationV1 invocation = {
+        .process_input = root,
+        .host_context = host_context,
+        .capability = ((uint64_t)1 << 32)
+    };
+    long long value = ken_nc23_entrypoint(&invocation);
+    ken_host_invocation_v1_destroy(host_context);
     free(cwd);
     free(pool);
     if (value == -1) fputs("ken native trap: malformed borrowed process input\n", stderr);
@@ -1491,6 +1554,23 @@ int main(int argc, char **argv, char **envp) {
     return (int)value;
 }
 "#
+    .replace("__KEN_AUTHORITY__", &authority.to_string())
+    .replace(
+        "__KEN_TARGET_HASH__",
+        &ken_host::TARGET_ABI_MANIFEST_HASH
+            .iter()
+            .map(|byte| byte.to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+    )
+    .replace(
+        "__KEN_EFFECT_HASH__",
+        &ken_host::HOST_EFFECT_ABI_V1_HASH
+            .iter()
+            .map(|byte| byte.to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+    )
 }
 
 fn executable_name(stem: &str) -> String {

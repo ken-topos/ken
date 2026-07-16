@@ -222,18 +222,188 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
   : HostIO APartial ExitCode visits [Console] =
   host_program APartial (print_line "px5")
 "#;
-    let output = ken_cli::build_native_program(
-        source,
-        ken_cli::SourceFormat::Ken,
-        "px5-vis",
-        &dir,
-    )
-    .expect("checked Vis reaches the PX5 artifact lane");
+    let output = ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-vis", &dir)
+        .expect("checked Vis reaches the PX5 artifact lane");
     let ran = Command::new(&output.artifact.executable_path)
         .output()
         .expect("linked host-effect artifact runs");
     assert_eq!(ran.status.code(), Some(0), "stderr: {:?}", ran.stderr);
     assert_eq!(ran.stdout, b"px5\n");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn two_vis_nodes_resume_once_in_source_order() {
+    let dir = output_dir("two-vis");
+    let source = r#"program capabilities FS APartial
+proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [Console] =
+  host_program_then APartial
+    (bind ConsoleOp console_resp Unit Unit
+      (print_line "one")
+      (\_. print_line "two"))
+    Success
+"#;
+    let output =
+        ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-two-vis", &dir)
+            .expect("two checked Vis nodes reach one artifact");
+    let ran = Command::new(&output.artifact.executable_path)
+        .output()
+        .expect("two-Vis artifact runs");
+    assert_eq!(ran.status.code(), Some(0), "stderr: {:?}", ran.stderr);
+    assert_eq!(ran.stdout, b"one\ntwo\n");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn host_reply_selects_the_continuation_outcome() {
+    let dir = output_dir("reply-dependent");
+    let source = r#"program capabilities FS APartial
+proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [Console] =
+  bind (Coproduct (FSOp APartial) AmbientOp)
+    (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
+    Bool ExitCode
+    (host_console APartial Bool (is_terminal Stdout))
+    (\terminal. match terminal {
+      False |-> host_exit APartial (Failure 23) ;
+      True |-> host_exit APartial (Failure 24)
+    })
+"#;
+    let output = ken_cli::build_native_program(
+        source,
+        ken_cli::SourceFormat::Ken,
+        "px5-reply-dependent",
+        &dir,
+    )
+    .expect("checked response-dependent continuation reaches the artifact");
+    let ran = Command::new(&output.artifact.executable_path)
+        .output()
+        .expect("response-dependent artifact runs");
+    assert_eq!(ran.status.code(), Some(23), "stderr: {:?}", ran.stderr);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn fs_write_and_read_resume_through_the_native_capability() {
+    let dir = output_dir("fs-roundtrip");
+    let source = r#"program capabilities FS AFull
+proc main (input : ProcessInput) (caps : ProgramCaps AFull)
+  : HostIO AFull ExitCode visits [FS, Console] =
+  match input {
+    MkProcessInput arguments _environment _cwd |-> match arguments {
+      Nil |-> host_exit AFull (Failure 30) ;
+      Cons _argv0 rest |-> match rest {
+        Nil |-> host_exit AFull (Failure 31) ;
+        Cons path more |-> match more {
+          Nil |-> host_exit AFull (Failure 32) ;
+          Cons contents _ |-> match caps {
+            MkProgramCaps cap |->
+              bind (Coproduct (FSOp AFull) AmbientOp)
+                (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+                (Result FileError Unit) ExitCode
+                (inject_l (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp
+                  (Result FileError Unit)
+                  (writeFile cap path CreateNew contents))
+                (\written. match written {
+                  Err _ |-> host_exit AFull (Failure 34) ;
+                  Ok _ |->
+                    bind (Coproduct (FSOp AFull) AmbientOp)
+                      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+                      (Result FileError Bytes) ExitCode
+                      (inject_l (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp
+                        (Result FileError Bytes) (readFile AFull cap path))
+                      (\read. match read {
+                        Err _ |-> host_exit AFull (Failure 35) ;
+                        Ok bytes |->
+                          bind (Coproduct (FSOp AFull) AmbientOp)
+                            (resp_coproduct (FSOp AFull) AmbientOp
+                              (fs_resp AFull) ambient_resp)
+                            (Result IOError Unit) ExitCode
+                            (host_console AFull (Result IOError Unit) (flush Stdout))
+                            (\_. match bytes_at bytes 0 {
+                              None |-> host_exit AFull (Failure 36) ;
+                              Some byte |-> host_exit AFull (Failure byte)
+                            })
+                      })
+                })
+          }
+        }
+      }
+    }
+  }
+"#;
+    let output =
+        ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-fs-roundtrip", &dir)
+            .expect("FS Vis nodes reach the native capability lane");
+    let ran = Command::new(&output.artifact.executable_path)
+        .arg("px5.bin")
+        .arg("retained")
+        .current_dir(&dir)
+        .output()
+        .expect("FS artifact runs");
+    assert_eq!(
+        ran.status.code(),
+        Some(b'r' as i32),
+        "stderr: {:?}",
+        ran.stderr
+    );
+    assert_eq!(std::fs::read(dir.join("px5.bin")).unwrap(), b"retained");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn fs_scope_denial_reaches_ken_as_the_named_error() {
+    let dir = output_dir("fs-denial");
+    let source = r#"program capabilities FS AFull
+proc main (input : ProcessInput) (caps : ProgramCaps AFull)
+  : HostIO AFull ExitCode visits [FS, Console] =
+  match input {
+    MkProcessInput arguments _environment _cwd |-> match arguments {
+      Nil |-> host_exit AFull (Failure 40) ;
+      Cons _argv0 rest |-> match rest {
+        Nil |-> host_exit AFull (Failure 41) ;
+        Cons path _ |-> match caps {
+          MkProgramCaps cap |->
+            bind (Coproduct (FSOp AFull) AmbientOp)
+              (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+              (Result FileError Unit) ExitCode
+              (inject_l (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp
+                (Result FileError Unit) (writeFile cap path CreateNew path))
+              (\written. match written {
+                Ok _ |-> host_exit AFull (Failure 43) ;
+                Err error |-> match error {
+                  MkFileError _operation _path cause |-> match cause {
+                    CapabilityDenied |-> host_exit AFull (Failure 44) ;
+                    NotFound |-> host_exit AFull (Failure 45) ;
+                    PermissionDenied |-> host_exit AFull (Failure 46) ;
+                    BrokenPipe |-> host_exit AFull (Failure 47) ;
+                    Interrupted |-> host_exit AFull (Failure 48) ;
+                    AlreadyExists |-> host_exit AFull (Failure 49) ;
+                    InvalidInput |-> host_exit AFull (Failure 50) ;
+                    IsDirectory |-> host_exit AFull (Failure 51) ;
+                    NotDirectory |-> host_exit AFull (Failure 52) ;
+                    NotEmpty |-> host_exit AFull (Failure 53) ;
+                    Unsupported |-> host_exit AFull (Failure 54) ;
+                    Other _ |-> host_exit AFull (Failure 55)
+                  }
+                }
+              })
+        }
+      }
+    }
+  }
+"#;
+    let output =
+        ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-fs-denial", &dir)
+            .expect("checked FS denial program reaches the artifact");
+    let ran = Command::new(&output.artifact.executable_path)
+        .arg("../escape")
+        .current_dir(&dir)
+        .output()
+        .expect("FS denial artifact runs");
+    assert_eq!(ran.status.code(), Some(44), "stderr: {:?}", ran.stderr);
+    assert!(!dir.parent().unwrap().join("escape").exists());
     let _ = std::fs::remove_dir_all(dir);
 }
 
