@@ -315,7 +315,7 @@ impl HostEffectBackendV1 for ProcessHost {
         mode: u16,
     ) -> Result<(), FileErrorCauseV1> {
         let (parent, leaf) = Self::parent(grant, path)?;
-        let handle = crate::open_at(&parent, &leaf, OpenRequest::ReadWrite).map_err(host_error)?;
+        let handle = crate::open_at(&parent, &leaf, OpenRequest::Read).map_err(host_error)?;
         crate::change_mode(&handle, mode).map_err(host_error)
     }
 }

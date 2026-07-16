@@ -585,6 +585,28 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
         }
     }
 
+    fn change_directory_mode_scenario() -> Scenario {
+        let path = b"mode-dir".to_vec();
+        Scenario {
+            process_input: RawProcessInput {
+                arguments: vec![path.clone()],
+                environment: Vec::new(),
+            },
+            ambient: AmbientScript::default(),
+            program_caps: ProgramCapsShape::default(),
+            entry: CheckedProgramEntry {
+                identity: "px13-change-directory-mode-real-artifact".to_string(),
+                package_name: "px13-change-directory-mode-real-artifact".to_string(),
+                source: CHANGE_MODE_SOURCE.to_string(),
+            },
+            initial_filesystem: vec![SeedNode {
+                relative_path: path.clone(),
+                kind: crate::SeedNodeKind::Directory,
+            }],
+            expected_fs: vec![ExpectedFsEffect::ChangeMode { path, mode: 0o640 }],
+        }
+    }
+
     fn invalid_change_mode_scenario() -> Scenario {
         let mut scenario = change_mode_scenario();
         scenario.entry.identity = "px13-invalid-change-mode".to_string();
@@ -723,6 +745,42 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
             confirm_native_tested_transition(HostOpV1::FsChangeMode, evidence),
             Ok(HostOpAvailabilityV1::NativeTested)
         );
+    }
+
+    #[test]
+    fn directory_change_mode_matches_across_real_twin_roots() {
+        let run = run_scenario(&change_directory_mode_scenario())
+            .expect("real directory change-mode differential");
+        run.compare_exact()
+            .expect("directory trace, mode delta, and exit equality");
+        assert!(run.exact_artifact_executed);
+        assert_eq!(run.interpreter.exit_status, 0);
+        assert_eq!(run.native.exit_status, 0);
+        assert_eq!(run.interpreter.effect_trace, run.native.effect_trace);
+        assert_eq!(
+            run.interpreter.filesystem_delta,
+            run.native.filesystem_delta
+        );
+        assert_eq!(
+            run.interpreter
+                .effect_trace
+                .iter()
+                .map(|event| event.operation)
+                .collect::<Vec<_>>(),
+            vec![HostOpV1::FsChangeMode]
+        );
+        assert!(matches!(
+            run.interpreter.filesystem_delta.as_slice(),
+            [ken_host::FsDeltaV1::Modified {
+                relative_path,
+                before,
+                after,
+            }] if relative_path == b"mode-dir"
+                && before.kind == ken_host::FsNodeKindV1::Directory
+                && before.file_bytes == after.file_bytes
+                && before.mode != after.mode
+                && after.mode == Some(0o640)
+        ));
     }
 
     #[test]
