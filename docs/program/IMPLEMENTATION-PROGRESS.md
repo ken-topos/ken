@@ -14,7 +14,92 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ## ⚡⚡ RESUME NEXT (2026-07-16 05:3x) — ✅ PX5 CLOSED · ✅ PX5B CLOSED (merged c4200a84 + 3 retros) · PX6 RESUMED (repair in-flight)
+> ## ⚡⚡ RESUME NEXT (2026-07-16 06:2x) — ✅ PX5/PX5B/**PX5C CLOSED** (merged d65bc308 + 3 retros) · ▶ PX6 RESUMING on Verify (last of native chain)
+>
+> > **✅✅✅ PX5C CLOSED — `origin/main @ d65bc308` (PR #736, §14-approved `22fa5e26`, `dec_38cnenh5f75b0` resolved).**
+> > Content-verified on main (canonical `program_caps_fs_trace_identity_v1()`=`"FS"` helper + both grant sites + ADR
+> > §4 sentence). **All 3 §10 retros IN** (thr_5dm9x42c107sj): leader evt_7khwn7dbfbs5m, impl evt_6ab1y8q5m5x6g, QA
+> > evt_7nqtxjjbnebyw. **Carry harvested** (re-validates [[green-vs-green-does-not-confirm-a-fix]] +
+> > [[discriminator-negative-arm-must-be-expressible-and-reaching]], now ≥Nth occurrence): a drift/negative arm is
+> > evidence ONLY if it perturbs the real producer/consumer edge it claims to guard — pair exact equality with an
+> > explicit expected value (`Some("FS")`) so equal-but-wrong JOINT drift can't hide; the proxy (helper-vs-string,
+> > never reaching the grant constructors) was green-but-guarding-nothing and QA blocked it pre-publication.
+> > **▶ PX6 RESUMING (Verify, last of the native chain):** verify-leader dispatched the resume packet
+> > (evt_6r0rjvnqpfayr) onto `d65bc308`; verify-implementer WORKING — rebase held PX5B-consumption branch, demote
+> > `Scenario.expected_fs` to producer-source-only, keep root-A snapshot for its FS-delta field, retain descriptor-
+> > collision + malformed-token controls, rerun 5-op + denial lanes; comparator/native/root-B UNCHANGED (identity now
+> > `Some("FS")`-equal by construction). **NEXT (event-driven): watch PX6 handback (fresh SHA on d65bc308 + per-AC
+> > evidence) → verify-qa → §14 (Architect; CV not in route) → publish (standing authority) → content-verify → 3
+> > retros → CLOSE PX6.** Then native chain COMPLETE → shared Architect cap-model ruling (mutation right-bit /
+> > FsDeltaV1 mode-owner obs / chown-chgrp scope) → author + release PX13/14/15 (Runtime). PX7 HELD. Doc-only
+> > tracker-sync to main pending (bundles PX5C-closed). Pat offline until ~11:30 UTC; window log =
+> > docs/program/autonomous-window-log-2026-07-16.md.
+>
+> ---
+> _(prior:)_ ## ⚡⚡ RESUME NEXT (2026-07-16 05:5x) — ✅ PX5/PX5B · ⚖ Architect RULED (Option 1 producer-unify) · ▶ PX5C released to Runtime (compacting) · PX6 waits on PX5C
+>
+> > **⚖ ARCHITECT RULED (evt_5gpv47r3pdj2, thr_74tys5r5e39s4): OPTION 1 — PRODUCER-UNIFY, Runtime owns it.** ADR-0018 §4
+> > already defines `CapabilityTraceIdentity` as the stable declared `ProgramCaps` field identity (NOT executor
+> > provenance) → both landed labels are wrong (`interpreter:FS` adds substrate; `declared:FS` adds a producer prefix).
+> > Canonical = exact family key **`FS`**. Mechanism pinned: a `program_caps_fs_trace_identity_v1()` helper in `ken-host`
+> > used by BOTH grant constructors (`ken-interp/src/eval.rs`, `ken-host/src/abi_v1.rs`); `dispatch_host_op_v1` stays
+> > sole reply-owner; **Verify does NO normalization** (keeps exact whole-observation equality). 4 discriminators incl.
+> > a DRIFT control (reseeding either producer with a substrate label must fail cross-lane cmp → proves equality is
+> > producer-sourced, not comparator-normalized). +1 sentence to ADR-0018 §4; NO /spec or /conformance change.
+> > Options 2 (lane-local) & 3 (new field) rejected/deferred.
+> > **▶ PX5C AUTHORED + RELEASED (Runtime, S).** Frame `docs/program/wp/PX5C-canonical-fs-capability-identity.md` on
+> > `wp/px5c-canonical-fs-capability-identity @ 253edd5d` (pushed to origin, off `origin/main @ 801079fc`); catalog
+> > row added. **✅ Handoff gate DONE + PX5C KICKED:** Runtime ring compacted (all 3 "Context compacted" @ 801079fc,
+> > gate-verified WIDE); kickoff posted evt_7432t6wnqfqhc (ROOT — Steward opened the PX5C spine); runtime-leader
+> > auto-woke, routed the ring.
+> > **▶▶ PX5C IN §14 REVIEW — exact SHA `wp/px5c-… @ 22fa5e26`, Decision `dec_38cnenh5f75b0`, Architect reviewing
+> > (evt_65nted9y0b2ej).** QA caught+closed a real defect: first tip `61cb42d1` had a PROXY drift test (built the
+> > helper twice vs hand-made strings, never drove the real grant constructors; 2 CLI tests pinned `Some("FS")` for
+> > *different* programs → mutating either seed left all green). Repair `22fa5e26` (3 linear, +290/−8, native prod
+> > 12/12): one admitted read-only FS program drives BOTH real producers → exact-equal 6-field observations w/ event
+> > `Some("FS")`, + independent either-side drift mutations (`interpreter:FS`/`declared:FS`/`other:FS`) each fail
+> > equality. runtime-qa APPROVE evt_1s4ssg8g62sbd; CV NOT in route.
+> > **✅✅ PX5C MERGED + CONTENT-VERIFIED — `origin/main @ d65bc308` (PR #736, squash of §14-approved `22fa5e26`,
+> > `dec_38cnenh5f75b0` resolved APPROVE).** Verified on main: `program_caps_fs_trace_identity_v1()` = `"FS"` sole
+> > owner in ken-host effect_v1.rs:674; both grant sites call it (interp eval.rs:4253, native abi_v1.rs:465), NO
+> > lane-prefixed literal survives; ADR-0018 §4 sentence present. Full locked CI passed. **Retros CALLED**
+> > (evt_17076m2qtk2ah, runtime-leader Working) — carry pinned: a drift/discriminator test must drive the REAL
+> > producers, not a proxy (green-vs-green catch; QA blocked the proxy tip 61cb42d1). **PX6 UNPARKED**
+> > (evt_1k3q5a3bfcw2a → verify-leader Working, resuming HELD PX5B-consumption branch UNCHANGED onto d65bc308 —
+> > comparator untouched, identity now `Some("FS")` equal by producer construction). **NEXT (event-driven, 2 tracks):
+> > (a) collect 3 PX5C §10 retros → CLOSE PX5C → doc-only tracker-sync PR to main; (b) watch PX6 handback (fresh SHA
+> > rebased on d65bc308) → verify-qa → §14 (Architect; CV not in route) → publish → close.** Then native chain
+> > complete → shared cap-model ruling → PX13/14/15.
+> > Then native chain complete → shared cap-model ruling → PX13/14/15. PX7 HELD. Pat offline until ~11:30
+> > UTC; window log = docs/program/autonomous-window-log-2026-07-16.md.
+>
+> ---
+> _(prior:)_ ## ⚡⚡ RESUME NEXT (2026-07-16 05:4x) — ✅ PX5 · ✅ PX5B CLOSED · ⏸ PX6 BLOCKED on cross-lane capability-identity fork → Architect ruling routed
+>
+> > **⏸ PX6 §14 PRODUCER DIVERGENCE (real, not a bug) — awaiting Architect canonical-identity ruling.** PX6 consumed
+> > the merged PX5B producer (`run_program_effect_observation_v1`, `c4200a84`) and the 3 real lanes match on
+> > **everything** — raw request bytes (incl. `dir/./…`), outcomes, root deltas, terminal state, stdout/stderr,
+> > exit — and fail comparison **only** on per-op capability trace identity: interp seeds
+> > `CapabilityTraceIdentity("interpreter:FS")` (`ken-interp/src/eval.rs:4253`), native seeds `"declared:FS"`
+> > (`ken-host/src/abi_v1.rs:465`). Both are **hardcoded substrate literals** at grant construction, echoed
+> > faithfully by each reply — so PX5B's reply-sourced discipline HOLDS; the lanes just seed definitionally-different
+> > substrate labels (differ on every FS op). Verify correctly won't normalize/pick one (violates PX6 AC1/AC4 +
+> > §14 reply-owned-identity); holds only uncommitted mechanical consumption on the rebased branch (no new SHA).
+> > **STEWARD ROUTED the soundness/contract fork to Architect** (evt_1x5e18892bhf4, thr_74tys5r5e39s4; ADR-0018 §4).
+> > Three options laid out: (1) producer-unify to a normalized logical class (Runtime acts); (2) declare
+> > capability_identity lane-local + comparator compares intra-lane-only, needs ADR-0018 §4 amendment (Verify acts);
+> > (3) add a canonical logical-capability field, retain substrate label as provenance (contract+both producers+
+> > comparator). Hard constraint on any ruling: PX6's malformed-token discriminator still needs intra-lane
+> > reply-sourced identity (`None`+`MalformedCapability`). Architect is a `gpt-5.6-sol` T1 seat; picked up (Working),
+> > itself just compacted (will re-orient first). **NEXT (event-driven): await Architect cast → if producer-unify,
+> > route to Runtime (new/amended WP); if lane-local/canonical-field, route to Verify (+ CV joins only if the
+> > resolution amends spec/conformance). Then PX6 resumes → qa → §14 → publish (standing authority) → close.**
+> > Then the native chain is complete → shared Architect capability-model ruling (mutation right-bit / FsDeltaV1
+> > mode-owner obs / chown-chgrp scope) → author + release PX13/PX14/PX15 (Runtime). PX7 HELD. Pat offline until
+> > ~11:30 UTC; window log = docs/program/autonomous-window-log-2026-07-16.md.
+>
+> ---
+> _(prior:)_ ## ⚡⚡ RESUME NEXT (2026-07-16 05:3x) — ✅ PX5 CLOSED · ✅ PX5B CLOSED (merged c4200a84 + 3 retros) · PX6 RESUMED (repair in-flight)
 >
 > > **✅✅ PX5B CLOSED — `origin/main @ c4200a84` (PR #734, §14-approved `af46df7d`, dec_3pydwdpc3hphs).** Interp-lane
 > > canonical effect observation producer (`run_io_effect_observation_v1` / `run_program_effect_observation_v1`);
@@ -25,8 +110,15 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > > c4200a84 — verify-leader dispatched the rebase-and-repair packet (evt_2ke362ntqtgez) to the implementer:
 > > consume `run_program_effect_observation_v1` for the oracle lane, root-A snapshot fills only `filesystem_delta`,
 > > demote `Scenario.expected_fs` to an assertion, add the 2 producer-seam discriminators; native half/comparator/
-> > root-B binding unchanged (already §14-sound). **NEXT: doc-only tracker-sync (PX5B-closed + PX5B/PX14/PX15
-> > catalog rows) → watch PX6 impl handback → verify-qa → §14 → publish → close PX6 → cap-model ruling → PX13/14/15.**
+> > root-B binding unchanged (already §14-sound). ✅ **Doc-only tracker-sync MERGED** — PR #735, origin/main @
+> > 801079fc (PX5B-closed tracker + PX5B/PX13/PX14/PX15 catalog rows; window-log entries 9-11). Main is current.
+> > **NEXT (event-driven, nothing of mine mid-flight): watch PX6 impl handback (fresh exact SHA, rebased onto
+> > c4200a84, per-AC evidence) → verify-qa gate → §14 (Architect soundness; CV not in route — PX6 touches no
+> > spec/conformance) → CI → publish (standing authority) → content-verify → relay + 3 retros → CLOSE PX6.**
+> > Then fleet frontier clears the native serialized chain (PX4B→PX5→PX5B→PX6 all merged) → route the shared
+> > Architect capability-model ruling (3 design gates: mutation right-bit / FsDeltaV1 mode-owner obs / chown-chgrp
+> > scope) → on ruling, author frames + release PX13/PX14/PX15 (Runtime). PX7 HELD (do not release). Pat offline
+> > until ~11:30 UTC; window log = docs/program/autonomous-window-log-2026-07-16.md.
 >
 > ---
 > _(prior:)_ ## ⚡⚡ RESUME NEXT (2026-07-16 04:1x) — ✅ PX5 CLOSED (merged 049628f8 + all 3 §10 retros in); next = resume PX6 (Verify) via handoff-gate
