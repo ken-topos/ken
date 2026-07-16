@@ -14,7 +14,196 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ## ⚡⚡ RESUME NEXT (2026-07-16 00:4x) — PX5 seam RULED (dec_3vgprj0f2vat8); resuming in-place; ADR-0018 publishing
+> ## ⚡⚡ RESUME NEXT (2026-07-16 04:1x) — ✅ PX5 CLOSED (merged 049628f8 + all 3 §10 retros in); next = resume PX6 (Verify) via handoff-gate
+>
+> > **✅✅ PX5 CLOSED — `origin/main @ 049628f8` (PR #732, squash of §14-approved `bfc12020`, `dec_22hxvhcrah7ac`
+> > resolved). Verified by CONTENT** (effect_v1.rs, `host_effect_wire_layout_v1`, six-field EffectObservationV1
+> > on main); full locked CI passed. **All 3 §10 retros IN** (thr_2c1m): leader 04:03:47, implementer 04:04:06,
+> > QA 04:04:06. Retro carries captured to shared record: (a) checked-source HostIO recognizer→deforest-to-
+> > `Effect`+`Let` producer seam + exactly-once continuation; (b) **B2/B4 vacuity** (passed mechanical QA but
+> > failed structural §14) — a closure/mutation test must mutate REAL inputs (generated layout facts, live
+> > per-op consumers) & demonstrate verifier rejection, not `!=` on temporaries; an observation test must
+> > decode/compare the COMPLETE canonical value, not textual `contains`; (c) `ken-host::abi_v1` C-companion
+> > SIGPIPE posture (witness-gated `ProcessContext`) as the pattern for a non-Rust-runtime entrypoint.
+> > **IMMEDIATE NEXT ACTIONS (in order):**
+> > 1. **Doc-only tracker-sync PR** to bring main's tracker + window log current (PX4B precedent — separate
+> >    from the code merge). Bundles this closed-PX5 state.
+> > 2. **Resume PX6 (Verify)** — verify ring was BLOCKED awaiting PX5's real producer/host-context/observation
+> >    APIs (branch a83059c used a proxy comparator). Now unblocked by 049628f8. DECISION (logged): treat as
+> >    new-work-vs-changed-dep → **compact the verify ring (leader+impl+qa) via handoff-gate, then kick the
+> >    resume** onto 049628f8 (rebase, wire the REAL six-field EffectObservationV1 two-lane differential). Their
+> >    stale pre-final-PX5 context is a liability, not an asset (operator hard rule). No prior-WP retro due (PX6
+> >    is their current WP). ⚠ this is the frontier-advancing move — do it with full budget.
+> > 3. Then fleet frontier = PX6 in-flight; after PX6 merges, route the shared Architect cap-model ruling → PX13/14/15.
+>
+> **▶ PAT OFFLINE ~02:40 → ~11:30 UTC (2026-07-16).** Running approved queue autonomously; lean on
+> PRINCIPLES.md, route around genuine product questions + log them. **Decision log:
+> `docs/program/autonomous-window-log-2026-07-16.md`** (the review artifact for Pat's return). Pat may
+> check in 1–2×. Runway: PX5 B1–B4 repair → QA → §14 → publish → PX6 → route shared cap-model ruling →
+> PX13/14/15 frames+release. Settled/do-not-touch: PX7 HELD, rustix, no linear types, multi-root DECLINED.
+>
+> **▶ PX5 STATUS (02:10) — COMPLETE, IN QA RE-GATE.** SIGPIPE **RULED** (`dec_1gk5vbw2bbg05`, evt at
+> 02:05, thr_2c1m): host-owned **header-compiled C posture shim** — `ken-host/src/abi_v1/sigpipe.c`
+> (`ken_host_abi_v1_establish_sigpipe_ignore`, owns `struct sigaction`/`SIGPIPE`/`SIG_IGN`), compiled from
+> `ken-host/build.rs` via the target `cc`, Linux-only; ONE private Rust decl/call in audited `abi_v1` under
+> its `#![allow(unsafe_code)]`; a `ProcessPostureV1(())` witness REQUIRED to construct `ProcessContext`
+> (omission structural). Rejects generated-C `signal()`, handwritten libc FFI, rustix `kernel_sigaction`,
+> per-write masking, synthetic-trace fakery. PX1 not reopened (PX1 rejected a *duplicate* posture inside a
+> Rust-`main` program; a C-started artifact is the opposite boundary PX1 explicitly left open). Fold into
+> frame beside AC6. **Implementer completed PX5, released `a33b07d1`** (24-path scoped diff, all 8
+> discriminators evidenced incl real 96 KiB EPIPE→BrokenPipe through the linked artifact).
+>
+> **▶ QA BLOCK→REPAIR (BTreeMap — CORRECTED attribution).** runtime-qa BLOCKED `a33b07d1` (evt 02:08):
+> the candidate `a33b07d1` had **removed the root import** (`use std::collections::{BTreeMap, BTreeSet}`
+> → `BTreeSet` only) as a mistaken "unused" cleanup, but `#[cfg(test)] mod tests` still uses
+> `BTreeMap::new()` (via `use super::*`) → `ken-runtime --lib` fails E0433 → AC7 no-regression unmet.
+> **This was CANDIDATE-OWNED, not base debt** (origin/main retained the import — my earlier "main is
+> clean" grounding was right, but my "non-issue / not-a-blocker" conclusion was WRONG: the branch
+> introduced it). Implementer's initial 01:49 "same on main" self-attribution was also wrong. QA caught
+> it exactly. **Implementer repaired @ `7afb5b0f`** (child of blocked SHA, +2 lines: test-local
+> `use BTreeMap` inside the tests mod; production unchanged; `ken-runtime --lib` 173/173 green). LESSON:
+> a "base-defect" claim can flip to a candidate regression — attribution must be checked on the CANDIDATE
+> branch diff, not just main; symptom-on-main-clean ≠ candidate-clean.
+>
+> **▶ QA APPROVED `7afb5b0f`** (evt 02:12): `ken-runtime --lib` 173/173, NC13 7/7, NC18 8/8, linked
+> public-source suite 11/11; leader opened §14 merge Decision `dec_4085a4vdrjybq`.
+>
+> **▶ §14 BLOCKED `7afb5b0f`** (Architect, evt 02:22, `dec_4085a4vdrjybq` → REJECT). The recognizer,
+> deforestation, 5-op Cranelift marshalling, confined `abi_v1` unsafe, and SIGPIPE companion are REAL, but
+> **4 load-bearing contract breaks** (ADR-0018/frame AC3/AC4/AC6 + §0.5 ingress — NOT polish, NOT deferred
+> PX6 work):
+> - **B1 — no shared dispatcher/error map below both executors.** `ken-interp/eval.rs:3839` keeps its own
+>   FS switch + `:3727` its own `io::ErrorKind→IOError` map; native uses `effect_v1::dispatch_host_op_v1` +
+>   a 2nd map at `abi_v1.rs:254`; the shared dispatcher implements only 5 methods & rejects 9 as Unsupported,
+>   and `native_execution_differential.rs:2195` classifies EVERY Effect (incl the 5 NativeTested) Unsupported.
+>   FIX: ONE all-14 host-neutral semantic dispatcher + ONE canonical error mapper below both; availability =
+>   a lane POLICY around it, not rejection inside it; report exactly-5 NativeTested + prove 9 named-unavail.
+> - **B2 — `HostEffectAbiV1` is a hand-authored 32-byte literal, not generated** (`effect_v1.rs:87`); binds
+>   no op IDs/sizes/aligns/offsets/tags/arities; `build.rs` has no ABI-descriptor gen / C-probe / mutation
+>   net → both sides compare the same unrelated literal; a wire-layout/op-ID change doesn't move the hash.
+>   FIX: GENERATE manifest/hash from one catalog descriptor, C-probe every C-visible layout, close
+>   producer/registry/observer/per-op-consumer bidirectionally + fail-closed mutations; starter+init consume it.
+> - **B3 — generated C fabricates the capability token.** init discards the token from
+>   `CapabilityTableV1::insert` (`abi_v1.rs:365`), starter hand-builds `.capability=((uint64_t)1<<32)`
+>   (`object_linker_packaging.rs:1539`) → couples gen-code to slot/gen layout, violates copy/pass-only.
+>   FIX: init RETURNS the minted opaque token (manifest-covered out field); gen-code only copies it; carry+
+>   validate non-circular plan/ABI bindings before Ken entry; discriminator: changed slot/gen or malformed
+>   init fails before dispatch w/o a starter-side literal repair.
+> - **B4 — linked artifact discards the canonical observation.** `abi_v1.rs:575` appends to
+>   `effect_trace` but `..._destroy:392` drops it; only `EffectObservationV1` producer is the hand-fed
+>   `ken-runtime::native_effect_v1` proxy (`lib.rs:19,38`) — the naked path the frame forbids.
+>   FIX: launcher-owned sink/result through the SAME linked artifact yields the real trace+terminal id;
+>   preserve arena lifetime to entry return; delete/confine the hand-fed substrate to tests; discriminator
+>   observes 1 event per completed Vis before resume (reply retained across a later effect), drop/dup flips.
+>
+> **▶ B1–B4 respin `0b26583f` (03:02) — QA-approved but §14-BLOCKED (see below); B1/B3 closed, B2/B4 vacuous.**
+> Implementer released `wp/px5-native-effect-lowering @ 0b26583f` (11 linear commits, 26-path scope, base
+> `origin/main @ 5babaed5`). Claimed all 4 fixed:
+> B1 one `ken_host::dispatch_host_op_v1` (14 arms) + sole `io_error_identity_v1` mapper below both
+> executors, availability OUTSIDE it (5 NativeTested, 9 individually named-unavailable); B2 catalog-driven
+> generated+C-probed ABI manifest/hash w/ bidirectional producer/registry/observer/consumer closure +
+> mutation discriminators; B3 init RETURNS opaque cap + plan_hash, starter only copies it (slot/gen literal
+> gone), malformed/zero-plan/wrong-gen fail pre-host; B4 launcher-owned out-of-band observation sink via
+> `ken_host_invocation_v1_finish` before arena drop, excluded from ProcessInput + cap root, hand-fed
+> `native_effect_v1` now test-only. **runtime-qa APPROVED** (evt 03:05): ken-host 18/18, ken-runtime
+> 174/174, NC13 7/7, NC18 8/8, I5 7/7, linked artifact 11/11. Leader opened §14 Decision `dec_6grzc1bna0pvf`.
+>
+> **▶ §14 BLOCKED AGAIN (architect, 03:14, `dec_6grzc1bna0pvf` REJECTED).** B1 (shared 14-op dispatcher
+> `dispatch_host_op_v1` + sole `io_error_identity_v1` mapper, availability outside core) and B3 (host-minted
+> opaque cap via `HostInitResultV1`, starter copies only) **genuinely CLOSE**. But **B2 + B4 were
+> STRUCTURALLY VACUOUS "fixes"** (caught by structural inspection, NOT QA's green runs):
+> - **B2 still vacuous:** live Cranelift consumer `cranelift_backend.rs:1937-2033` uses HARD-CODED size/
+>   align/offset/tag literals (24/8/24/48, offsets 0..40, reply 32) NOT generated from `effect_abi_v1.catalog`
+>   /C-probe. Closure test `effect_v1.rs:1015` defines registry+consumers both from `HostOpV1::ALL` (never
+>   enumerates the Cranelift per-op wire consumers); its "discriminators" mutate TEMPORARY sets + assert
+>   `!=` → prove nothing. A request-layout change updates the C-probe hash while Cranelift's stale offsets
+>   stay green → mis-marshal. FIX: Cranelift emitter consumes generated facts OR build-time verifier
+>   enumerating live bindings + REAL-input mutation discriminators; cross-target gen fails closed.
+> - **B4 still incomplete:** `write_observation_v1 abi_v1.rs:526` writes only a TEXTUAL header/scalars/event
+>   lines, NOT `EffectObservationV1 {stdout,stderr,filesystem_delta,terminal_error,effect_trace,exit_status}`.
+>   Only canonical constructor is `#[cfg(test)]`-confined `native_effect_v1.rs:78`; linked CLI tests use
+>   textual `contains()`, never assemble/compare a canonical observation. FIX: launcher sink carries a
+>   COMPLETE versioned observation (or total 1:1 wire decoder) + checked-source interp/native discriminator
+>   comparing all 6 fields + field mutations that flip it. Producer/continuation/unsafe/SIGPIPE remain sound.
+> - **⚠ QA DETECTOR-STRENGTH GAP (§10 retro carry):** runtime-qa APPROVED `0b26583f` on mechanical gates
+>   that did NOT detect B2/B4 vacuity (accepted a `!=`-on-temporaries test + a textual trace at face value).
+>   Architect's structural review is the net. Retro lesson: a closure/mutation test must mutate REAL inputs
+>   & demonstrate rejection (cf. verify-the-check-fires-on-known-bad). NOT interjecting mid-respin.
+>
+> **Housekeeping:** the leader's §14 request had STRANDED on the architect pane (Monitor bp808a7mu) — I sent
+> a bare Enter (§2c transport, no rewrite) → architect reviewed. `dec_4085a4vdrjybq` + `dec_6grzc1bna0pvf`
+> both DEAD; next respin gets a FRESH Decision — do NOT touch terminal Decisions (resolve race).
+>
+> **▶▶ PX5 §14 APPROVED + PUBLISHER RUNNING (03:5x). `bfc12020` — merge Decision `dec_22hxvhcrah7ac`
+> RESOLVED APPROVE** (Architect evt_a8q1q7j4gkzc 03:49: B2+B4 close, B1/B3 transfer; QA independently
+> APPROVE). Verified provenance vs origin/main: base=5babaed5 (current main head), 12 linear/0 merges,
+> diff --check clean, 27 paths, ZERO kernel/spec/Cargo.lock/conformance. **PUBLISHER LAUNCHED under STANDING
+> authority** (bg task `bp9db4a64`): raw-SHA target → force-pushed `wp/px5-native-effect-lowering`
+> 966f804f→bfc12020 (stale frame ref fixed), **PR #732** open at exact bfc12020, `--match-head-commit`
+> bound; waiting ~417s then polls CI (build+test --workspace --locked) → SQUASH-merge on green.
+> **Published EXACTLY as approved — did NOT bundle a tracker commit (would change the approved SHA); doing a
+> separate --doc-only tracker-sync PR after merge (PX4B precedent).** ON RE-INVOKE (bp9db4a64 done): exit 0 =
+> merged → VERIFY landed origin/main SHA BY CONTENT → relay merge + request 3 §10 retros → doc-only tracker
+> sync → close PX5 → **PX6 (Verify) auto-resumes.** Non-zero = CI-red (full-workspace caught a targeted-local
+> gap, PX4B/nc13 class) → route to ring for fresh SHA + fresh Decision, do NOT merge.
+> Note: origin wp branch was stale at 966f804f (frame) — implementer's push never landed on origin; publisher
+> force-push fixed it. Prior detail (B2/B4 now substantive):
+>
+> **▶ 2ND RESPIN `bfc12020` — QA-APPROVED (03:40), then §14 APPROVED (03:49).** Implementer released
+> `wp/px5-native-effect-lowering @ bfc12020` (03:38; 12 linear commits, 27-path, base `5babaed5`). B2/B4 now
+> SUBSTANTIVE (not vacuous): B2 = Cranelift consumes C-probed generated `host_effect_wire_layout_v1` facts
+> (size/align/offset/exact tags), real layout/tag mutations reject via verifier, all-14 inventory closes
+> bidirectionally, foreign target fails closed pre-companion. B4 = bounded versioned BINARY artifact trace +
+> total decoder (rejects bad magic/truncation/trailing/count drift), launcher returns COMPLETE six-field
+> `EffectObservationV1`, checked two-Vis source compared interp-vs-native across all 6 fields w/ per-field
+> mutations flipping; hand-fed proxy test-only. Gates: ken-host 20/20, ken-runtime 175/175, linked 11/11,
+> NC13/NC18/I5 green. **runtime-qa APPROVED.** **WATCH: leader routes fresh §14 Decision → architect review
+> (may STRAND — bare Enter) → if APPROVE, publish `bfc12020` under STANDING authority once CI-green
+> (build+test --workspace --locked); CI-red → route back. Then content-verify → PX6 resumes.**
+>
+> **▶ fmt-red is NOT a CI gate (GROUNDED).** Implementer flagged "whole-package fmt check red on inherited
+> debt." Checked `.github/workflows/ci.yml`: CI = `cargo build/test --workspace --locked` + 3 placeholder
+> echo jobs; **NO `cargo fmt`/rustfmt gate**. So fmt-red (inherited or not) does NOT block merge. Real CI
+> gates = full-workspace build+test --locked (a targeted-local pass can still miss a full-CI failure — the
+> PX4B/nc13 class); publisher polls those. → §14 verdict: if **APPROVE**, run publisher on `0b26583f` under
+> **STANDING authority** (§14-approved + CI-green, Pat confirmed 02:55); CI-red → route back for fresh SHA.
+> **PX6 (Verify) auto-resumes on PX5 producer merge.**
+>
+> **NEW WPs from operator (Pat, 2026-07-16) — capability/privilege surface (DESIGN SESSION to resume):**
+> - **PX13 CREATED** (03-program-of-work.md) — FS mode/ownership ops: add `chmod`, eval `chown`/`chgrp`
+>   as a versioned `HostOpV1` catalog extension (ADR-0018 §1). NOT-READY: deps PX5+PX6 merged + Architect
+>   cap-model ruling on 3 gates (new mutation right-bit per ADR-0017; `FsDeltaV1` extend to observe
+>   mode/uid/gid — currently ignored; chown/chgrp-need-privilege vs chmod-defensible). grep-confirmed
+>   chmod/chown absent from all crates/+spec/ today. Detailed frame authored at release time (§2c), not now.
+> - **PX14 CREATED** (Pat confirmed "add a WP for that", 2026-07-16) — root-execution posture capability.
+>   A `ProgramCaps`-declared allowance that lets a program **already started as root** (euid 0) *continue*
+>   at root; absent it, a program that finds itself root at fail-closed startup **exits with a stable
+>   terminal error before any effect**. A cap can't *escalate* (caps attenuate; launcher/OS sets euid) —
+>   this only permits continuing. NOT-READY: deps **PX5 merged** (rides the same fail-closed startup-posture
+>   seam as the SIGPIPE ruling `dec_1gk5vbw2bbg05` — euid check at ProcessContext init, before first host op)
+>   + shared Architect cap-model ruling. Ruling gates: privilege predicate (euid==0 vs richer uid-triple +
+>   capabilities(7)); stable error id (`RootExecutionDenied`); ProgramCaps surface. Both executors identical.
+>   Runtime-trusted (ADR-0017), no kernel rule, no linear types.
+> - **PX15 CREATED** (from Pat's FS-cap path-root requirement, 2026-07-16) — FS capability **path-root
+>   grammar**. A `ProgramCaps` FS authority root may be `~/…` (home of executing **euid**, resolved @ startup)
+>   or `./…` (**cwd @ execution start**), not only absolute. Resolves to the ADR-0018 §2 **root handle** ONCE
+>   at cap-table init, identically in both executors, snapshotted @ startup (per-op re-resolution would break
+>   §4 relative-path canonicalization + PX6 twin-root differential). NOT-READY: deps PX5 merged + cap-model
+>   ruling. Ruling gate: home source = `getpwuid(euid)` (recommended: principled, non-ambient) vs `$HOME`
+>   (ambient/forgeable). Scope/symlink checks apply relative to resolved root regardless of spelling.
+> - **ANSWERED Pat's ADR question:** ADR-0018 does NOT restrict the surface *spelling* of the cap path root
+>   — it fixes only the *resolved runtime* form (root handle §2; scope/symlink checks; ScopeEscape/
+>   SymlinkDenied; §4 relative-raw-byte-path canonicalization ignoring absolute root names). `~/`,`./`,abs
+>   all legal as long as they resolve to ONE fixed root handle at init, identically across both executors.
+> - **SHARED Architect cap-model ruling** gates PX13+PX14+PX15 (one ruling, 3 axes). Amend-ADR-0018-vs-new-ADR
+>   is the Architect's call. All 3 hold ADR-0017 honesty (runtime-trusted + discriminator-tested, no proof).
+> - **MULTI-ROOT FS AUTHORITY — CONSIDERED & DECLINED by Pat (2026-07-16). DO NOT re-raise.** Pat asked
+>   whether two FS roots (e.g. `~/` + `/tmp`) would be two caps or one cap with a path-list. Answered:
+>   ADR-0018 forces **two separate `Cap` values** (one root handle each; ops take exactly one cap; ambient
+>   path→cap lookup forbidden) — never a path-list inside one cap; and it's not expressible today anyway
+>   (spec `33-declarations.md:183`: "at most one authority per effect family"; `ProgramCaps a = MkProgramCaps
+>   (Cap a)` is authority-monomorphic). Offered a PX16 (multi-root/heterogeneous FS authority) → **Pat: "no,
+>   nvm, ADR-0018 is better as is."** Keep the single-authority-per-family model; NO PX16. Settled input.
 >
 > **PX4B — ✅ CLOSED & MERGED.** `origin/main @ 5e82926f` (PR #729). All 3 §10 retros in. Tracker synced
 > (PR #730 → `cdca13fe`).
@@ -43,12 +232,23 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > raw fixture Effect still hits backend unsupported; linked-artifact drives real host call/arena/trace/
 > resume/exit).
 >
-> **⏭ MY MOVES (in flight):** (1) **ADR-0018 → main** — frame cites `docs/adr/0018-native-effect-
-> execution-contract.md` but it exists only on Architect commit `cc206d09` (NOT on main). Publishing
-> doc-only (ADR file ONLY, not ARCHITECT-STATE.md) + tracker-sync. (2) **Route resume to runtime-leader**
-> in thr_2c1mzggww95kk: resume from held `1fb611e2` on the ruling; rebase onto new main (post-ADR); ruling
-> is the shovel-ready contract; fold a frame citation of dec_3vgprj0f2vat8 onto the branch. **NO handoff-
-> gate** (mid-WP resume, not new-WP kickoff — compacting would destroy held WIP context).
+> **✅ MY MOVES — DONE:** (1) **ADR-0018 landed on `origin/main @ 5babaed5`** (PR #731 doc-only, ADR
+> file only — NOT ARCHITECT-STATE.md — + tracker-sync; verified by content, 370 lines). Frame citation
+> now grounds. (2) **Resume routed** to runtime-leader (evt_22zd7c0c1p8mg in thr_2c1mzggww95kk): resume
+> from held `1fb611e2` rebased onto `5babaed5`; ruling is the shovel-ready contract; fold a dec_3vgprj0f2vat8
+> citation onto the branch. **NO handoff-gate** (mid-WP resume). runtime-leader relayed verbatim
+> (evt_5d2qv0f9b3t3q); implementer acked+resumed (evt_5t45j3r90rgn4).
+>
+> **PX5 LIVE (01:1x):** implementer progressed to **WIP `4588b0de`** (evt_4gwjb16b7f5xd, tree clean):
+> recognizer works (public one-Vis normalizes through ITree/Coproduct spine → `Effect + Let`,
+> `HostEffectSpineV1` hash-covered, no dup Runtime plan), artifact **prints `px5\n` via one imported
+> `ken_host_dispatch_v1`** (ken-host sole raw-ABI module, shared typed dispatcher). Remaining lanes:
+> exact response construction, two-Vis continuation, FS token/read-write, then promote availability.
+> **⚠ STALL RECOVERED (01:00→01:13):** implementer self-compacted mid-WP via `request_context_reset`
+> — which stages an **unsubmitted `/compact`** (broken on gpt-5.6/Codex seats too, not just Claude
+> Code) → stranded 12min. I cleared it (**BSpace works; C-u/Escape do NOT** on the Codex input) +
+> nudged it to continue with full context (NO mid-WP compaction per §15; Steward compacts the ring at
+> the WP-done seam). Implementer Working again from 4588b0de. **Told it not to self-compact.**
 >
 > **WATCH after resume:** implementer handback (SHA + AC evidence for the 8 discriminators + targeted
 > gates incl NC13 + native differential/observation) → runtime-qa gate → §14 Decision (Architect
