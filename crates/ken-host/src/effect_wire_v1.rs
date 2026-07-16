@@ -339,13 +339,8 @@ fn put_error(out: &mut Vec<u8>, error: &SemanticErrorV1) -> Result<(), EffectTra
             match error {
                 ResourceErrorV1::Closed => put_u8(out, 0),
                 ResourceErrorV1::MalformedResource => put_u8(out, 1),
-                ResourceErrorV1::ResourceKindMismatch { expected, actual } => {
-                    put_u8(out, 2);
-                    put_resource_kind(out, *expected);
-                    put_resource_kind(out, *actual);
-                }
                 ResourceErrorV1::RightNotHeld { required, held } => {
-                    put_u8(out, 3);
+                    put_u8(out, 2);
                     put_u8(out, *required);
                     put_u8(out, *held);
                 }
@@ -355,7 +350,7 @@ fn put_error(out: &mut Vec<u8>, error: &SemanticErrorV1) -> Result<(), EffectTra
                     identity,
                     io,
                 } => {
-                    put_u8(out, 4);
+                    put_u8(out, 3);
                     put_u16(out, *schema_version);
                     put_resource_kind(out, *resource_kind);
                     put_u64(out, identity.0);
@@ -708,15 +703,11 @@ fn get_error(cursor: &mut Cursor<'_>) -> Result<SemanticErrorV1, EffectTraceWire
         3 => SemanticErrorV1::Resource(match cursor.u8()? {
             0 => ResourceErrorV1::Closed,
             1 => ResourceErrorV1::MalformedResource,
-            2 => ResourceErrorV1::ResourceKindMismatch {
-                expected: get_resource_kind(cursor)?,
-                actual: get_resource_kind(cursor)?,
-            },
-            3 => ResourceErrorV1::RightNotHeld {
+            2 => ResourceErrorV1::RightNotHeld {
                 required: cursor.u8()?,
                 held: cursor.u8()?,
             },
-            4 => ResourceErrorV1::ReleaseFailed {
+            3 => ResourceErrorV1::ReleaseFailed {
                 schema_version: cursor.u16()?,
                 resource_kind: get_resource_kind(cursor)?,
                 identity: ResourceTraceIdentityV1(cursor.u64()?),

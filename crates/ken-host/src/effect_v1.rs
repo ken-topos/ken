@@ -465,10 +465,6 @@ impl FsOpenModeV1 {
 pub enum ResourceErrorV1 {
     Closed,
     MalformedResource,
-    ResourceKindMismatch {
-        expected: ResourceKindV1,
-        actual: ResourceKindV1,
-    },
     RightNotHeld {
         required: u8,
         held: u8,
@@ -585,19 +581,13 @@ impl ResourceTableV1 {
         let slot = self.lookup(token)?;
         let ResourceSlotStateV1::Live {
             owner,
-            kind,
             rights,
             identity,
+            ..
         } = &slot.state
         else {
             return Err(ResourceErrorV1::Closed);
         };
-        if *kind != ResourceKindV1::FsHandle {
-            return Err(ResourceErrorV1::ResourceKindMismatch {
-                expected: ResourceKindV1::FsHandle,
-                actual: *kind,
-            });
-        }
         if !rights.contains(required) {
             return Err(ResourceErrorV1::RightNotHeld {
                 required: required.bits(),
