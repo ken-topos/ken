@@ -51,10 +51,12 @@ Two properties make it trustworthy:
   Ken's verified content — proved `Q`, the residual `P` from
   `trusted_base_delta` (`../20-verification/25 §3`), the effect alphabet from
   the interaction-tree denotation (`OQ-8`, `../30-surface/36 §2`), the
-  `Temporal` values written in source (`72`). It therefore **cannot overclaim**:
-  it states exactly the four-way epistemic status (`../20-verification/21 §5`),
-  with no room to assert more than Ken proved. This is the structural antidote
-  to model↔code drift — the model is a *function of the code* (`73`).
+  `Temporal` values written in source (`72`), and the structured resource-
+  lifetime template derived from a reachable resource acquisition (§2.2). It
+  therefore **cannot overclaim**: it states exactly the four-way epistemic
+  status (`../20-verification/21 §5`), with no room to assert more than Ken
+  proved. This is the structural antidote to model↔code drift — the model is a
+  *function of the code* (`73`).
 
 ## 2. The schema — an assume-guarantee contract
 
@@ -68,7 +70,7 @@ are a separate **ITF** layer (§3).
 | **`guarantees` (Q)** | proved postconditions & per-space invariants | `proved` | invariants the model may *assume*, not re-prove → smaller state space |
 | **`assumptions` (P)** | the assumption boundary: `trusted_base_delta`, explicit `assume`s, boundary labels | `tested` | the nondeterministic *environment*; the generator's input domain |
 | **`alphabet` (Σ)** | the interaction-tree perform-node signatures (`OQ-8`) | — | the behavioral state machine's **event alphabet**; the monitor's alphabet |
-| **`obligations` (T)** | the `Temporal` data values stated in source (`72`) | `delegated` | LTL / μ-calculus properties to model-check and monitor |
+| **`obligations` (T)** | `Temporal` data (`72`) and structured correlated resource lifetimes (§2.2) | `delegated` | behavioral properties to model-check and monitor |
 | **`generators` (G)** | refinement/dependent-type **support structure** (§4) | derived | the *territory map* for spec-driven test generation |
 
 `Σ` is **reuse, not reinvention**: the event vocabulary `Ward` monitors over
@@ -98,6 +100,7 @@ relates to it by the projection of `21 §5.3`. The export map is total over
 | explicit `assume`/`test` clause, boundary label | `tested` | **`P`** | `tested` |
 | open typed hole (postulate of the goal) | `unknown` | **`P`** | `unknown` |
 | `Temporal` property stated in source | `delegated` | **`T`** | `delegated` |
+| generated correlated resource-lifetime template (§2.2) | `delegated` | **`T`** | `delegated` |
 | refuted claim (countermodel) | *(none, `21 §5.3`)* | **never exported** | — |
 
 - **`Q` and `P` partition the propositional claims; `unknown` rides `P`, never
@@ -146,14 +149,122 @@ artifact it reads and the function that projects it (no field invents content):
   program's denotation can perform — **not** a re-derived alphabet (AC4 asserts
   structural equality to the denotation's signatures). No second alphabet.
 - **`T` (obligations)** ← claims with status `delegated`: the `Temporal` data
-  values stated in source (`72`, `OQ-temporal`). Emit each as an obligation
-  tagged `delegated`. B1 structures **the channel** (the values + their status +
-  the `Σ` they range over); the `Temporal` **datatype** and the `compile`
-  faithfulness lemma are **B2/B3** (§5.2) — emit what exists.
+  values stated in source (`72`, `OQ-temporal`) plus the generated correlated
+  resource-lifetime template of §2.2 when reachable `Σ` contains `FsOpen`.
+  Emit each as an obligation tagged `delegated`. B1 structures **the channel**
+  (the values + their status + the `Σ` they range over); the `Temporal`
+  **datatype** and the `compile` faithfulness lemma are **B2/B3** (§5.2) — emit
+  what exists. The structured resource body is a distinct correlation-only
+  schema and does not change the existing `Temporal` body.
 - **`G` (generators)** ← refinement predicates `{x:A | φ}` and `match` arms in
   the checked program. Project the equivalence-class **partition**, the
   **boundaries**, and the **case decomposition** (§4) — **support only**, no
   measure (the sealed type, §4.1).
+
+### 2.2 Correlated resource-lifetime obligations
+
+The ordinary `Temporal` body cannot express the identity correlation required
+by a resource lifetime. In particular, two independent
+`Pred::Event("FsOpen")` and `Pred::Event("ResourceRelease")` atoms do not say
+that the released resource is the one that was acquired. For this correlation
+case, the `T` channel therefore admits the following additional, versioned entry
+shape:
+
+```text
+ResourceLifetimeObligationV1 {
+  schema_version: 1,
+  body_kind: ResourceLifetimeObligationV1,
+  obligation_id: String,
+  status: delegated,
+  correlation: ResourceLifetimeCorrelationV1 {
+    identity_type: ResourceTraceIdentityV1,
+    event_field: EffectEventV1.resource,
+    bind_at: Successful(FsOpen),
+    require_same_at: [FsHandleMetadata, ResourceRelease],
+  },
+  acquire_op: FsOpen,
+  use_op: FsHandleMetadata,
+  settle_op: ResourceRelease,
+  monitor_template: WardResourceLifetimeMonitorV1 {
+    successful_acquire_settles_exactly_once: true,
+    forbid_successful_use_after_settlement: true,
+    require_no_live_resource_on:
+      [NormalReturn, ReturnedError, ControlledTrap],
+    retain_settlement_outcome: true,
+  },
+}
+```
+
+This is one obligation template over all resource lifetimes in the target, not
+one unrelated obligation per operation and not one static entry per dynamically
+minted handle. On each successful `FsOpen`, the monitor binds the event's
+`ResourceTraceIdentityV1` as `r`. A matching use or settlement is an event whose
+`EffectEventV1.resource` field carries the same `r`. The serialized obligation
+contains the correlation descriptor above, not a runtime value for `r`:
+`bind_at` selects the successful acquisition event, and `require_same_at`
+selects every operation whose event field must equal the bound value. The
+identity type is the lane-independent, acquisition-order identity carried by
+canonical resource observations; an fd, resource-table slot or generation,
+pointer, inode, or executor identity is neither a valid key nor a permitted
+fallback.
+
+The V1 operation inventory is closed and exact:
+
+- `FsOpen` is the acquisition operation;
+- `FsHandleMetadata` is the one non-release use operation; and
+- `ResourceRelease` is the terminal settlement operation.
+
+The monitor template is the conjunction of these four checks, all quantified by
+the bound identity `r`:
+
+1. every successful acquisition of `r` has exactly one terminal settlement of
+   `r`;
+2. no successful `FsHandleMetadata` use of `r` occurs after that settlement;
+3. normal return, returned error, and a controlled Ken trap leave no resource
+   acquired by that bracket live; and
+4. the settlement outcome for `r`, including release failure, remains present
+   in the canonical trace.
+
+The supported-exit set in check 3 and the settlement outcome in check 4 are
+monitor observations, not additional host operations. External kill, abort,
+fatal signal, and machine failure remain outside this obligation. Ken emits the
+template and leaves its status `delegated`; Ward checks it and may attest the
+result, but no result is ingested as a Ken proof (§5.1).
+
+The emitter produces exactly one `ResourceLifetimeObligationV1` entry when the
+target's reachable `Σ` contains `FsOpen`, and none when it does not. Its
+canonical `T` representation includes a body discriminator and every field
+above, including every field of the canonical correlation descriptor, the exact
+operation inventory, status, and monitor template. The runtime value bound as
+`r` is not part of the target-level export. The descriptor bytes participate in
+the export hash of §3.3; changing any descriptor field changes that hash. There
+is no out-of-band resource-obligation field or independently hashed side
+channel.
+
+This extension is additive. Existing `TEntry { obligation_id, formula:
+Temporal }` values, `TemporalObligation`, their serialization, and their hash
+contribution are unchanged. `ResourceLifetimeObligationV1` supersedes a
+`Temporal` body only when identity correlation across acquire/use/settle is
+required; every other temporal obligation continues to use the existing path.
+
+The locked invariants are:
+
+- **RL1 — one canonical correlation binder.** The descriptor binds
+  `EffectEventV1.resource : ResourceTraceIdentityV1` at successful `FsOpen` and
+  requires the same value at `FsHandleMetadata` and `ResourceRelease`.
+  Removing or altering a descriptor field, serializing a runtime `r`, or
+  supplying independent event atoms is malformed.
+- **RL2 — exact V1 alphabet.** The resource-operation set is exactly
+  `{FsOpen, FsHandleMetadata, ResourceRelease}`, and each is a member of the
+  target's `Σ` (I3). An additional or substituted operation is malformed.
+- **RL3 — delegated only.** Every resource-lifetime entry has status
+  `delegated`, never `proved`, `tested`, or `unknown` (I4).
+- **RL4 — content-bound.** The complete entry is canonicalized with `T` and is
+  covered by the export hash; no field may be omitted from that input.
+- **RL5 — correlation-only supersession.** Existing `Temporal` entries retain
+  their exact body and behavior. The structured body is required only for the
+  resource-correlation case and cannot be represented by two independent event
+  atoms.
 
 ## 3. Two layers: Ken-native contract, ITF traces
 
@@ -392,6 +503,11 @@ translation will be stated over, so B2/B3 build the lemma without re-litigating
 the channel or the alphabet (coordinate cross-WP via spec, do not hard-bind wire
 spellings, §3.1).
 
+That `compile` ownership statement applies to existing `Temporal` bodies. The
+structured resource-lifetime body of §2.2 carries its fixed Ward monitor
+template directly; it does not pretend that `Temporal`/`Pred::Event` acquired an
+identity binder.
+
 ## 6. What this chapter delivers, and its acceptance
 
 The export emitter lives in `crates/ken-elaborator` and is, end to end, a
@@ -415,6 +531,10 @@ trusted base and proves nothing new. The implementable deliverables:
 5. **The one-way-flow gate (§5.1)** — no code path promotes a `delegated`/
    `tested` obligation to `proved`; the `compile` lemma is named as B2/B3's,
    with the `T` channel + `Σ` it reuses fixed here (§5.2).
+6. **The correlated resource-lifetime body (§2.2)** — the exact V1 operation
+   inventory, `ResourceTraceIdentityV1` correlation, Ward monitor template,
+   delegated-only status, and hash participation, additive to the existing
+   `Temporal` path.
 
 **Acceptance criteria.** *Names align with the frame's AC1–AC6.*
 
