@@ -397,58 +397,77 @@ kernel does not grow** (ADR-0012 stands; bare-metal/drivers remain out of scope)
 | **PX8** | Partial/positioned IO + `System.Buffer`; a short write is progress, not an error | Runtime + Foundation | L |
 | **PX9** | `System.Error` — structured errno retaining operation + handle context | Foundation | M |
 | PX10–PX12 | Processes/sockets; nonblocking + event loop — **booked, not committed** | — | — |
-| **PX13** | FS mode/ownership ops — add `chmod` (mode bits) and evaluate `chown`/`chgrp` as a **versioned `HostOpV1` catalog extension** (ADR-0018 §1); needs a new capability right-bit (ADR-0017), an `FsDeltaV1` extension to observe mode/uid/gid (currently ignored), and a native-tested lane per op | Runtime | M |
+| **PX13** | FS **mode** op — add `chmod` as a **versioned `HostOpV1` catalog extension** (ADR-0018 §1) behind a **distinct `RightSet::CHANGE_MODE` right** (ADR-0017; `WRITE`/`METADATA` do not imply it), `fchmod` on the already-authorized no-follow handle, and an `FsDeltaV1` **mode-only** observation (`mode: Option<u16>` = `st_mode & 0o7777`; **no** uid/gid); native-tested lane. **chown/chgrp EXCLUDED** (future `CHANGE_OWNER` WP). **Lead deliverable: the new capability-evolution/process-admission ADR** (Architect ruling `evt_7k8n8rwj1xbh1`). | Runtime | M |
 | **PX14** | Root-execution posture capability — a `ProgramCaps`-declared allowance that permits a program **already started as root** (euid 0) to *continue* executing with root privilege; **absent it, a program that finds itself running as root at fail-closed startup exits with a stable terminal error before any effect**. A capability **cannot escalate** OS privilege (caps attenuate); this only *permits continuing* when already privileged. Runtime-trusted + discriminator-tested (ADR-0017), no kernel rule. Rides PX5's startup-posture seam (same init point as the SIGPIPE posture) | Runtime | M |
-| **PX15** | FS capability **path-root grammar** — a `ProgramCaps` FS authority root may be written `~/…` (home of the executing **euid**, resolved at startup) or `./…` (**cwd at execution start**), not only an absolute path. Resolved to the concrete ADR-0018 §2 **root handle** at capability-table init, **once, identically in both executors**, snapshotted at startup | Runtime | S |
+| **PX15** | FS capability **path-root grammar — `./…` (cwd) only** — a `ProgramCaps` FS authority root may be written `./…` (**cwd at execution start**), not only an absolute path. Typed root-spec variant; cwd captured **once** at capability-table init, root handle opened then, **no ambient cwd dependency** afterward; suffix resolved component-by-component under `ScopeEscape`/`SymlinkDenied`; observations stay relative to the resolved cap root. **`~/` split out to PX16** (Architect ruling `evt_7k8n8rwj1xbh1`) | Runtime | S |
+| **PX16** | **Account-database (NSS) resolver boundary + `~/` grammar tail** — the `~/…` FS-authority-root spelling resolves the executing **euid**'s home via `getpwuid_r(geteuid())`, which is **libc/NSS policy, not a Linux syscall** — so it crosses the operator-settled **rustix/linux_raw-only** trusted surface (PX1). This WP owns that boundary: the libc/NSS trusted surface, dependency/feature delta, bounded failure semantics, startup home snapshot, and an injectable differential seam; then admits `EffectiveUserHome` into the root-spec enum. **`$HOME` is rejected** (forgeable). **✅ SANCTIONED** (Pat 2026-07-16) + **RULED** (`evt_1hxnmejwcvz1d` → ADR-0020); ready to frame after PX15 | Runtime | M |
 
-**★ PX13 is sequenced by dependency, not by number:** deps are PX5 + PX6 merged
-(the effect lowering + differential surface it extends) **and** an Architect
-capability-model ruling on the three design gates (mutation right-bit;
-`FsDeltaV1` mode/owner observation; whether `chown`/`chgrp` — usually
-privilege-requiring — belong in a portable capability-scoped surface, or only
-`chmod`). Not-ready until those land. Operator-requested 2026-07-16 (Pat).
+**★ Shared Architect capability-model ruling — DELIVERED 2026-07-16
+(`evt_7k8n8rwj1xbh1`, thread `thr_szhcns1f2mpe`).** The one design ruling gating
+PX13/PX14/PX15 is in. Verdict summary (the fixed inputs the frames pin):
+- **Meta — NEW ADR.** A new capability-evolution/process-admission ADR (do
+  **not** grow ADR-0018 into a grab-bag). ADR-0017 stays the authority/
+  confinement honesty boundary; ADR-0018 stays the native-effect/ABI/
+  differential contract; the new ADR names the extension points in both. All
+  claims runtime-trusted + discriminator-tested, never kernel-proved. It rides
+  as **PX13's lead deliverable**.
+- **PX13 → `chmod` only.** Distinct `RightSet::CHANGE_MODE` +
+  `FsCapabilityOperation::ChangeMode` (neither `WRITE` nor `METADATA` imply it;
+  `AFull` includes it, `APartial` doesn't; attenuation intersects it). Host op
+  uses the existing component-by-component **no-follow** resolution → authorized
+  handle → `fchmod` **on that handle** (no path-based second lookup); accept
+  only `mode & !0o7777 == 0`. Observe **mode, not owner**: extend the canonical
+  node observation with `mode: Option<u16>` = `st_mode & 0o7777` (`Some` for
+  regular files/dirs, `None` for symlink/other); **no** uid/gid/timestamps/ACL/
+  xattr/inode/dev/absolute-root. The catalog/registry/observer/consumer closure,
+  manifest hash, wire layout, and **PX6 twin-root delta all move together**;
+  append **one** explicit FS operation ID, fail closed on old inventory/hash.
+  **chown/chgrp REJECTED** from PX13 (need a principal-ID model + a separate
+  `CHANGE_OWNER` right + separately-versioned observation — a future WP).
+- **PX14 → effective-root admission, NOT a capability token.** v1 predicate is
+  exactly `geteuid() == 0` via the sole audited `ken-host` Linux-direct (pinned
+  rustix) boundary (real/saved/fs-uid, Linux `capabilities(7)`, user-ns,
+  securebits all deferred). Surface = the **header declaration marker** `program
+  capabilities FS <authority>, RootExecution Allow` (omission = deny); it is
+  **not** a field in the Ken-visible `ProgramCaps a`, not an FS right, not a
+  forgeable scalar, and a **CLI flag / env var may not add it** — the compiler
+  binds it into the native entrypoint plan/hash. **One shared startup-admission
+  fn** consumes an immutable euid snapshot + the declaration, called by **both**
+  executors **before** `ProcessContext`, **before** minting any cap-table grant,
+  **before** the first effect; the posture witness records this admission +
+  SIGPIPE both completed (same seam as `dec_1gk5vbw2bbg05`). Refuse-root =
+  `TerminalErrorV1::RootExecutionDenied` (unit variant, startup terminal — empty
+  trace/FS-delta/stdout/stderr, exit via the shared `ProcessExitCode -> i32`);
+  the native init path must write that canonical terminal observation with **no**
+  live `ProcessContext`.
+- **PX15 → `./` (cwd) ONLY, ready now.** Typed root-spec variant for
+  execution-start cwd; capture cwd **once** at cap-table init, open the handle
+  then, no ambient cwd dependency after; suffix resolved component-by-component
+  under `ScopeEscape`/`SymlinkDenied`; observations relative to the resolved cap
+  root (never the cwd spelling).
+- **`~/` (home) → split to PX16, NEEDS-OPERATOR.** `$HOME` is **rejected**
+  (forgeable). The principled `getpwuid_r(geteuid())` is **libc/NSS policy, not
+  a Linux syscall** — it crosses the operator-settled **rustix/linux_raw-only**
+  seam (PX1). So `~/` is **not** a small grammar addition: it must wait behind a
+  prerequisite account-database (NSS) resolver boundary (PX16) that owns the
+  libc/NSS trusted surface + dependency delta + bounded failure + startup
+  snapshot + injectable differential seam. Only after that lands may
+  `EffectiveUserHome` enter the root-spec enum. **The libc/NSS dependency is now
+  operator-SANCTIONED** (Pat 2026-07-16); Architect ruled the mechanism
+  (`evt_1hxnmejwcvz1d` → **ADR-0020**: exact-pin `libc = "=0.2.186"` in a confined
+  `ken-host::account_db_v1` module, `getpwuid_r` with bounded buffer + full record
+  validation, `HomeRootResolutionFailed` startup-terminal, `AccountHomeLookupV1`
+  prod+scripted seam). `$HOME` stays rejected; rustix stays the euid/process
+  boundary. Frame after PX15.
 
-**★ PX14 (root-execution posture)** — Operator-requested 2026-07-16 (Pat).
-Deps: **PX5 merged** (the fail-closed startup-posture seam — the Architect's
-SIGPIPE ruling `dec_1gk5vbw2bbg05` establishes process posture inside the
-audited `ken-host::abi_v1` boundary via a posture witness required to construct
-`ProcessContext`; the euid check belongs at that same init point, before the
-first host op) **and** the shared Architect capability-model ruling. Design
-gates for the ruling: the **privilege predicate** (`euid == 0` alone, or the
-richer real/effective/saved-uid + Linux `capabilities(7)` surface); the stable
-**error identity** for refuse-root (e.g. `RootExecutionDenied`); and the
-`ProgramCaps` declaration surface for the allowance. Both executors
-(interpreter + native artifact) must apply the identical check. Discriminators:
-run the same artifact non-root (proceeds), as root **without** the allowance
-(stable terminal error **before any effect**), as root **with** it (proceeds).
-Confinement is honest-boundary runtime-trusted, never kernel-proved (ADR-0017);
-no linear/affine types. Not-ready until PX5 + the ruling land.
-
-**★ PX15 (FS path-root grammar)** — Operator-requested 2026-07-16 (Pat). Deps:
-**PX5 merged** (the FS capability table + root-handle machinery it extends)
-**and** the shared Architect capability-model ruling. ADR-0018 fixes the
-capability's *resolved* representation (a **root handle**, not a literal
-spelling — §2) and canonicalizes observations to **relative** raw-byte paths
-that **ignore absolute root names** (§4), so a declared `~/`/`./` root **must**
-resolve to a fixed handle **once at capability-table init** — per-op
-re-resolution would break canonicalization and PX6's twin-root differential.
-The ADR requires **one** capability check/representation below both executors,
-so the resolver is single-sourced there too. Design gates for the ruling: the
-**home source** for `~/` — `getpwuid(euid)` (principled, non-ambient, matches
-"home of euid") vs the ambient `$HOME` env var (forgeable — weak for authority
-scope); recommended `getpwuid(euid)`. Snapshot semantics: `~/` binds the euid's
-home **at startup**, `./` binds **cwd at execution start** (cwd may move during
-run; euid interacts with PX14). Scope/symlink checks (`ScopeEscape`,
-`SymlinkDenied`) apply relative to the resolved root regardless of spelling — no
-new escape surface. Not-ready until PX5 + the ruling land.
-
-**★ Shared Architect capability-model ruling (gates PX13 + PX14 + PX15).** These
-three FS/privilege capability WPs each extend the capability model along a
-distinct axis (mode/ownership; root-execution posture; path-root grammar) and
-share one design ruling. Whether that ruling **amends ADR-0018** or spawns a new
-capability/privilege ADR is the Architect's call. All three hold the ADR-0017
-honesty boundary: runtime-trusted + discriminator-tested, no kernel proof, no
-linear/affine types.
+**★ Sequencing (Runtime is a single ring → one WP at a time).** **PX13 MERGED +
+CLOSED** (`origin/main @ bbb0eca2`, PR #740; landed `CHANGE_MODE`/`FsChangeMode`/
+ADR-0019 — the shared home the siblings cite). **PX14 RELEASING now**, then
+PX15(`./`), then **PX16** (`~/`). **PX16 is now operator-SANCTIONED** (Pat
+2026-07-16: libc/NSS is the right way for `~/`) and **RULED** (Architect
+`evt_1hxnmejwcvz1d` → **ADR-0020**); ready to frame after PX15 (it extends
+PX15's root-spec enum). All hold the ADR-0017 honesty boundary: runtime-trusted +
+discriminator-tested, no kernel proof, no linear/affine types (operator-settled).
 
 **★ PX7 depends on `R2` (linear/affine types) for its *permanent* fix.**
 Exactly-once release **cannot be stated in Ken today**; PX7 enforces it in the
