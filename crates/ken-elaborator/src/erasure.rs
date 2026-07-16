@@ -434,33 +434,34 @@ fn lower_checked_host_computation(
                 }
             };
             let runtime_args = &decoded.args[decoded.constructor.family_parameter_count..];
-            let (capability, semantic_args) = if decoded.operation.is_ambient() {
-                (None, runtime_args)
-            } else {
-                let (cap, rest) = runtime_args.split_first().ok_or_else(|| {
-                    expression_lowering_error(
+            let (capability, semantic_args) =
+                if static_host_operation_requires_capability(decoded.operation) {
+                    let (cap, rest) = runtime_args.split_first().ok_or_else(|| {
+                        expression_lowering_error(
+                            root,
+                            "host_capability_shape",
+                            "FS operation is missing its live capability operand",
+                        )
+                    })?;
+                    let value = lower_body_term_inner(
+                        cap,
+                        declarations,
+                        semantic,
+                        stack,
                         root,
-                        "host_capability_shape",
-                        "FS operation is missing its live capability operand",
+                        context_depth,
+                        branch_remap,
+                    )?;
+                    (
+                        Some(RuntimeCapabilityUse {
+                            identity: spine.capability.to_string(),
+                            value: Box::new(value),
+                        }),
+                        rest,
                     )
-                })?;
-                let value = lower_body_term_inner(
-                    cap,
-                    declarations,
-                    semantic,
-                    stack,
-                    root,
-                    context_depth,
-                    branch_remap,
-                )?;
-                (
-                    Some(RuntimeCapabilityUse {
-                        identity: spine.capability.to_string(),
-                        value: Box::new(value),
-                    }),
-                    rest,
-                )
-            };
+                } else {
+                    (None, runtime_args)
+                };
             let args = semantic_args
                 .iter()
                 .map(|argument| {
@@ -621,6 +622,24 @@ fn decode_checked_host_operation<'a>(
     })
 }
 
+const fn static_host_operation_requires_capability(operation: ken_host::HostOpV1) -> bool {
+    !operation.is_ambient()
+        && !matches!(
+            operation,
+            ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
+        )
+}
+
+const fn runtime_selected_host_operation_requires_capability(
+    operation: ken_host::HostOpV1,
+) -> bool {
+    !operation.is_ambient()
+        && !matches!(
+            operation,
+            ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
+        )
+}
+
 fn lower_runtime_selected_host_operation(
     operation: RuntimeExpr,
     continuation_body: RuntimeExpr,
@@ -679,25 +698,26 @@ fn lower_runtime_selected_host_operation(
             let runtime_args = (0..argument_count)
                 .map(|index| RuntimeExpr::Var(index as u32))
                 .collect::<Vec<_>>();
-            let (capability, args) = if host_operation.is_ambient() {
-                (None, runtime_args)
-            } else {
-                let mut args = runtime_args.into_iter();
-                let cap = args.next().ok_or_else(|| {
-                    expression_lowering_error(
-                        root,
-                        "host_capability_shape",
-                        "FS operation is missing its live capability operand",
+            let (capability, args) =
+                if runtime_selected_host_operation_requires_capability(host_operation) {
+                    let mut args = runtime_args.into_iter();
+                    let cap = args.next().ok_or_else(|| {
+                        expression_lowering_error(
+                            root,
+                            "host_capability_shape",
+                            "FS operation is missing its live capability operand",
+                        )
+                    })?;
+                    (
+                        Some(RuntimeCapabilityUse {
+                            identity: spine.capability.to_string(),
+                            value: Box::new(cap),
+                        }),
+                        args.collect(),
                     )
-                })?;
-                (
-                    Some(RuntimeCapabilityUse {
-                        identity: spine.capability.to_string(),
-                        value: Box::new(cap),
-                    }),
-                    args.collect(),
-                )
-            };
+                } else {
+                    (None, runtime_args)
+                };
             cases.push(RuntimeMatchCase {
                 constructor: constructor.symbol.to_string(),
                 binders: argument_count,
@@ -3389,5 +3409,31 @@ mod px7l_tests {
             ),
             "host_coproduct_shape"
         );
+    }
+
+    #[test]
+    fn static_and_runtime_selected_capability_policies_are_exhaustively_identical() {
+        for operation in ken_host::HostOpV1::ALL {
+            let expected = !operation.is_ambient()
+                && !matches!(
+                    operation,
+                    ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
+                );
+            assert_eq!(
+                static_host_operation_requires_capability(operation),
+                expected,
+                "static capability policy drifted for {operation:?}"
+            );
+            assert_eq!(
+                runtime_selected_host_operation_requires_capability(operation),
+                expected,
+                "runtime-selected capability policy drifted for {operation:?}"
+            );
+            assert_eq!(
+                static_host_operation_requires_capability(operation),
+                runtime_selected_host_operation_requires_capability(operation),
+                "static and runtime-selected paths disagree for {operation:?}"
+            );
+        }
     }
 }

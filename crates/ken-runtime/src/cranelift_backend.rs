@@ -1611,6 +1611,13 @@ fn dynamic_host_result_producer_case<'a>(
     Ok(Some(case))
 }
 
+#[derive(Clone, Copy)]
+struct ComputationalEliminatorFrame<'a> {
+    cases: &'a [crate::RuntimeComputationalMatchCase],
+    default: &'a RuntimeTrap,
+    env: &'a [Lowered],
+}
+
 impl<'a> Lowering<'a> {
     fn lower_computational_match_expr(
         &mut self,
@@ -1621,6 +1628,31 @@ impl<'a> Lowering<'a> {
         producer_env: &[Lowered],
         eliminator_env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
+        self.lower_computational_producer_expr(
+            builder,
+            scrutinee,
+            producer_env,
+            &[ComputationalEliminatorFrame {
+                cases,
+                default,
+                env: eliminator_env,
+            }],
+        )
+    }
+
+    fn lower_computational_producer_expr(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: &RuntimeExpr,
+        producer_env: &[Lowered],
+        eliminators: &[ComputationalEliminatorFrame<'_>],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if eliminators.is_empty() {
+            return Err(unsupported(
+                "ComputationalMatch",
+                "nested computational producer has no eliminator",
+            ));
+        }
         match scrutinee {
             RuntimeExpr::Let { value, body } => {
                 let value = self.lower_expr(builder, value, producer_env)?;
@@ -1629,14 +1661,7 @@ impl<'a> Lowering<'a> {
                 }
                 let mut body_env = vec![value];
                 body_env.extend_from_slice(producer_env);
-                self.lower_computational_match_expr(
-                    builder,
-                    body,
-                    cases,
-                    default,
-                    &body_env,
-                    eliminator_env,
-                )
+                self.lower_computational_producer_expr(builder, body, &body_env, eliminators)
             }
             RuntimeExpr::Call { callee, args } => {
                 let callee = self.lower_expr(builder, callee, producer_env)?;
@@ -1667,14 +1692,7 @@ impl<'a> Lowering<'a> {
                     .collect::<Result<Vec<_>, _>>()?;
                 call_env.extend(captures);
                 call_env.extend_from_slice(producer_env);
-                self.lower_computational_match_expr(
-                    builder,
-                    &body,
-                    cases,
-                    default,
-                    &call_env,
-                    eliminator_env,
-                )
+                self.lower_computational_producer_expr(builder, &body, &call_env, eliminators)
             }
             RuntimeExpr::Match {
                 scrutinee,
@@ -1696,17 +1714,15 @@ impl<'a> Lowering<'a> {
                         ));
                     };
                     if let Some(known) = known {
-                        return self.lower_computational_match_expr(
+                        return self.lower_computational_producer_expr(
                             builder,
                             if known {
                                 &true_case.body
                             } else {
                                 &false_case.body
                             },
-                            cases,
-                            default,
                             producer_env,
-                            eliminator_env,
+                            eliminators,
                         );
                     }
                     let true_block = builder.create_block();
@@ -1719,13 +1735,11 @@ impl<'a> Lowering<'a> {
                         [(true_block, true_case), (false_block, false_case)]
                     {
                         builder.switch_to_block(block);
-                        let lowered = self.lower_computational_match_expr(
+                        let lowered = self.lower_computational_producer_expr(
                             builder,
                             &producer_case.body,
-                            cases,
-                            default,
                             producer_env,
-                            eliminator_env,
+                            eliminators,
                         )?;
                         let (value, is_exit) =
                             self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
@@ -1764,13 +1778,11 @@ impl<'a> Lowering<'a> {
                         {
                             let mut case_env = vec![payload];
                             case_env.extend_from_slice(producer_env);
-                            self.lower_computational_match_expr(
+                            self.lower_computational_producer_expr(
                                 builder,
                                 &producer_case.body,
-                                cases,
-                                default,
                                 &case_env,
-                                eliminator_env,
+                                eliminators,
                             )?
                         } else {
                             Lowered::Trap(producer_default.clone())
@@ -1808,13 +1820,33 @@ impl<'a> Lowering<'a> {
                 }
                 let mut case_env = args;
                 case_env.extend_from_slice(producer_env);
-                self.lower_computational_match_expr(
+                self.lower_computational_producer_expr(
                     builder,
                     &producer_case.body,
-                    cases,
-                    default,
                     &case_env,
-                    eliminator_env,
+                    eliminators,
+                )
+            }
+            RuntimeExpr::ComputationalMatch {
+                scrutinee: inner_scrutinee,
+                cases: inner_cases,
+                default: inner_default,
+            } => {
+                // Fuse the inner eliminator ahead of the outer stack. Its
+                // selected case body remains a producer for every outer frame;
+                // no intermediate aggregate is materialized or exit-lowered.
+                let mut composed = Vec::with_capacity(eliminators.len() + 1);
+                composed.push(ComputationalEliminatorFrame {
+                    cases: inner_cases,
+                    default: inner_default,
+                    env: producer_env,
+                });
+                composed.extend_from_slice(eliminators);
+                self.lower_computational_producer_expr(
+                    builder,
+                    inner_scrutinee,
+                    producer_env,
+                    &composed,
                 )
             }
             RuntimeExpr::If {
@@ -1830,13 +1862,11 @@ impl<'a> Lowering<'a> {
                     ));
                 };
                 if let Some(known) = known {
-                    return self.lower_computational_match_expr(
+                    return self.lower_computational_producer_expr(
                         builder,
                         if known { then_expr } else { else_expr },
-                        cases,
-                        default,
                         producer_env,
-                        eliminator_env,
+                        eliminators,
                     );
                 }
                 let then_block = builder.create_block();
@@ -1847,13 +1877,11 @@ impl<'a> Lowering<'a> {
                 let mut exit_merge = None;
                 for (block, branch) in [(then_block, then_expr), (else_block, else_expr)] {
                     builder.switch_to_block(block);
-                    let lowered = self.lower_computational_match_expr(
+                    let lowered = self.lower_computational_producer_expr(
                         builder,
                         branch,
-                        cases,
-                        default,
                         producer_env,
-                        eliminator_env,
+                        eliminators,
                     )?;
                     let (value, is_exit) =
                         self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
@@ -1870,27 +1898,35 @@ impl<'a> Lowering<'a> {
             }
             _ => {
                 let value = self.lower_expr(builder, scrutinee, producer_env)?;
-                self.lower_computational_match_value(builder, value, cases, default, eliminator_env)
+                self.lower_computational_match_value_composed(builder, value, eliminators)
             }
         }
     }
 
-    fn lower_computational_match_value(
+    fn lower_computational_match_value_composed(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         scrutinee: Lowered,
-        cases: &[crate::RuntimeComputationalMatchCase],
-        default: &RuntimeTrap,
-        env: &[Lowered],
+        eliminators: &[ComputationalEliminatorFrame<'_>],
     ) -> Result<Lowered, CraneliftBackendError> {
+        let Some(eliminator) = eliminators.first().copied() else {
+            return Err(unsupported(
+                "ComputationalMatch",
+                "nested computational producer has no eliminator",
+            ));
+        };
         let Lowered::Constructor { constructor, args } = scrutinee else {
             return Err(unsupported(
                 "ComputationalMatch",
                 "scrutinee is not a constructor value after ordinary expression lowering",
             ));
         };
-        let Some(case) = cases.iter().find(|case| case.constructor == constructor) else {
-            return Ok(Lowered::Trap(default.clone()));
+        let Some(case) = eliminator
+            .cases
+            .iter()
+            .find(|case| case.constructor == constructor)
+        else {
+            return Ok(Lowered::Trap(eliminator.default.clone()));
         };
         if case.argument_binders != args.len() {
             return Err(unsupported(
@@ -1917,15 +1953,24 @@ impl<'a> Lowering<'a> {
             }
             induction_hypotheses.push(Lowered::ComputationalRecursorClosure {
                 recursive: Box::new(args[position].clone()),
-                cases: cases.to_vec(),
-                default: default.clone(),
-                outer_env: env.to_vec(),
+                cases: eliminator.cases.to_vec(),
+                default: eliminator.default.clone(),
+                outer_env: eliminator.env.to_vec(),
             });
         }
         let mut case_env = induction_hypotheses;
         case_env.extend(args);
-        case_env.extend_from_slice(env);
-        self.lower_expr(builder, &case.body, &case_env)
+        case_env.extend_from_slice(eliminator.env);
+        if eliminators.len() == 1 {
+            self.lower_expr(builder, &case.body, &case_env)
+        } else {
+            self.lower_computational_producer_expr(
+                builder,
+                &case.body,
+                &case_env,
+                &eliminators[1..],
+            )
+        }
     }
 
     fn merge_branch_value(
@@ -4084,6 +4129,115 @@ mod tests {
         }
     }
 
+    fn nested_computational_fixture(
+        outer_binders: usize,
+        inner_recursive_positions: Vec<usize>,
+        mismatched_result_kind: bool,
+        payload_is_int: bool,
+    ) -> RuntimeExpr {
+        let inner_true = "ctor:fixture::Inner::TrueLeaf".to_string();
+        let inner_false = "ctor:fixture::Inner::FalseLeaf".to_string();
+        let aggregate_ok = "ctor:fixture::Aggregate::Ok".to_string();
+        let aggregate_err = "ctor:fixture::Aggregate::Err".to_string();
+        let inner_cases = [
+            (inner_true.clone(), aggregate_ok.clone()),
+            (inner_false.clone(), aggregate_err.clone()),
+        ]
+        .into_iter()
+        .map(
+            |(constructor, aggregate)| crate::RuntimeComputationalMatchCase {
+                constructor,
+                argument_binders: 1,
+                recursive_positions: inner_recursive_positions.clone(),
+                body: RuntimeExpr::Construct {
+                    constructor: aggregate,
+                    args: vec![RuntimeExpr::PrimitiveCall {
+                        primitive: RuntimePrimitive {
+                            symbol: "sub_int".to_string(),
+                            partiality: RuntimePartiality::Total,
+                        },
+                        args: vec![RuntimeExpr::Var(1), RuntimeExpr::Var(0)],
+                    }],
+                },
+            },
+        )
+        .collect();
+        let producer_cases = [
+            ("ctor:prelude::Bool::True", inner_true, 7),
+            ("ctor:prelude::Bool::False", inner_false, 9),
+        ]
+        .into_iter()
+        .map(|(constructor, leaf, payload)| RuntimeMatchCase {
+            constructor: constructor.to_string(),
+            binders: 0,
+            body: RuntimeExpr::Construct {
+                constructor: leaf,
+                args: vec![if payload_is_int {
+                    RuntimeExpr::Value(RuntimeValue::Int(payload))
+                } else {
+                    RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                        args: Vec::new(),
+                    }
+                }],
+            },
+        })
+        .collect();
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int(41))),
+                body: Box::new(RuntimeExpr::ComputationalMatch {
+                    scrutinee: Box::new(RuntimeExpr::Match {
+                        scrutinee: Box::new(RuntimeExpr::Effect {
+                            family: "Console".to_string(),
+                            operation: ken_host::HostOpV1::ConsoleIsTerminal,
+                            capability: None,
+                            args: vec![RuntimeExpr::Construct {
+                                constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                                args: Vec::new(),
+                            }],
+                        }),
+                        cases: producer_cases,
+                        default: RuntimeTrap {
+                            code: RuntimeTrapCode::PatternMatchFailure,
+                            message: "inner producer default".to_string(),
+                        },
+                    }),
+                    cases: inner_cases,
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "inner eliminator default".to_string(),
+                    },
+                }),
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: aggregate_ok,
+                    argument_binders: outer_binders,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Var(0),
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: aggregate_err,
+                    argument_binders: 1,
+                    recursive_positions: Vec::new(),
+                    body: if mismatched_result_kind {
+                        RuntimeExpr::Construct {
+                            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                            args: Vec::new(),
+                        }
+                    } else {
+                        RuntimeExpr::Var(0)
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "outer eliminator default".to_string(),
+            },
+        }
+    }
+
     #[test]
     fn dynamic_host_result_producer_missing_case_routes_to_default() {
         assert!(
@@ -4137,6 +4291,79 @@ mod tests {
             "ken_px7m_well_formed",
         )
         .expect("both dynamic Result branches recursively lower and merge");
+    }
+
+    #[test]
+    fn nested_computational_producer_well_formed_control_emits() {
+        emit_process_entrypoint_object_with_cranelift(
+            &nested_computational_fixture(1, Vec::new(), false, true),
+            "ken_px7n_well_formed",
+        )
+        .expect("inner dynamic branches compose through the outer eliminator");
+    }
+
+    #[test]
+    fn nested_computational_outer_arity_rejects_specifically() {
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &nested_computational_fixture(0, Vec::new(), false, true),
+            "ken_px7n_wrong_outer_arity",
+        )
+        .expect_err("the outer aggregate payload must remain bound");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "ComputationalMatch",
+                reason,
+            }) if reason == "case ctor:fixture::Aggregate::Ok expects 0 constructor arguments but value has 1"
+        ));
+    }
+
+    #[test]
+    fn nested_computational_malformed_recursive_position_rejects_specifically() {
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &nested_computational_fixture(1, vec![1], false, true),
+            "ken_px7n_bad_recursive_position",
+        )
+        .expect_err("an out-of-range inner recursive position must fail closed");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "ComputationalMatch",
+                reason,
+            }) if reason == "case ctor:fixture::Inner::TrueLeaf has malformed recursive position 1"
+        ));
+    }
+
+    #[test]
+    fn nested_computational_final_merge_kind_rejects_specifically() {
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &nested_computational_fixture(1, Vec::new(), true, true),
+            "ken_px7n_final_kind_mismatch",
+        )
+        .expect_err("the final scalar and ExitCode arms must not merge");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "ComputationalMatch",
+                reason,
+            }) if reason == "dynamic native arms disagree on scalar versus ExitCode result"
+        ));
+    }
+
+    #[test]
+    fn nested_computational_payload_kind_rejects_specifically() {
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &nested_computational_fixture(1, Vec::new(), false, false),
+            "ken_px7n_payload_kind",
+        )
+        .expect_err("the inner aggregate payload must retain its scalar kind");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "PrimitiveCall",
+                reason,
+            }) if reason == "sub_int only supports Int arguments in native lowering"
+        ));
     }
 
     #[test]
