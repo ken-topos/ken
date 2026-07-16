@@ -18,8 +18,8 @@
 
 use ken_elaborator::{
     effects::{
-        CapParam, check_capabilities_no_handler, check_escape, infer_all,
-        EffectDecl, EffectError, WitnessMap,
+        check_capabilities_no_handler, check_escape, infer_all, CapParam, EffectDecl, EffectError,
+        WitnessMap,
     },
     foreign::elaborate_foreign,
     trusted_base_delta, ElabEnv, MarshalKind, Span,
@@ -40,7 +40,9 @@ fn foreign_decl_binds_typed_effect_rowed() {
         .elaborate_decl_v1(r#"foreign os_write : Int -> Bytes -> Int = "write" "libc" [FS]"#)
         .expect("foreign decl must elaborate");
 
-    let fb = result.foreign_binding.expect("ForeignBinding must be present");
+    let fb = result
+        .foreign_binding
+        .expect("ForeignBinding must be present");
 
     // AC1-a: postulate is in trusted_base (assumed, not verified).
     assert!(
@@ -69,7 +71,10 @@ fn foreign_decl_binds_typed_effect_rowed() {
     );
 
     // AC1-e: no runtime checks (no ensures clause).
-    assert!(fb.runtime_checks.is_empty(), "no ensures → no runtime checks");
+    assert!(
+        fb.runtime_checks.is_empty(),
+        "no ensures → no runtime checks"
+    );
 }
 
 // ─── B1/B2: AC2 — trusted_base_delta dependency pair ─────────────────────────
@@ -163,8 +168,14 @@ fn trusted_base_delta_flips_on_dependency_not_scope() {
     let delta_use = trusted_base_delta(&env.env, use_id);
     let delta_no = trusted_base_delta(&env.env, no_id);
 
-    assert!(delta_use.contains(&os_write_id), "caller: os_write in delta");
-    assert!(!delta_no.contains(&os_write_id), "non_caller: os_write absent");
+    assert!(
+        delta_use.contains(&os_write_id),
+        "caller: os_write in delta"
+    );
+    assert!(
+        !delta_no.contains(&os_write_id),
+        "non_caller: os_write absent"
+    );
     // Discriminating: the two deltas differ on os_write.
     assert_ne!(
         delta_use.contains(&os_write_id),
@@ -256,10 +267,7 @@ fn unprovable_foreign_ensures_emits_runtime_check() {
     let bytes_id = *env.globals.get("Bytes").expect("Bytes");
     let int_id = *env.globals.get("Int").expect("Int");
 
-    let ty = Term::pi(
-        Term::const_(int_id, vec![]),
-        Term::const_(int_id, vec![]),
-    );
+    let ty = Term::pi(Term::const_(int_id, vec![]), Term::const_(int_id, vec![]));
     let binding = elaborate_foreign(
         &mut env.env,
         &mut env.globals,
@@ -293,10 +301,7 @@ fn unprovable_foreign_ensures_emits_runtime_check() {
     );
 
     // Discriminant: WITHOUT ensures → no runtime checks.
-    let int_ty2 = Term::pi(
-        Term::const_(int_id, vec![]),
-        Term::const_(int_id, vec![]),
-    );
+    let int_ty2 = Term::pi(Term::const_(int_id, vec![]), Term::const_(int_id, vec![]));
     let no_check = elaborate_foreign(
         &mut env.env,
         &mut env.globals,
@@ -334,7 +339,10 @@ fn world_foreign_without_row_rejected() {
 
     // Seed from ACTUAL registration.
     let seed = env.foreign_env.io_effect_rows.clone();
-    assert!(seed.contains_key("os_write"), "os_write must be in io_effect_rows");
+    assert!(
+        seed.contains_key("os_write"),
+        "os_write must be in io_effect_rows"
+    );
 
     // caller_no_row: no declared row — FS escapes.
     let caller_no = EffectDecl::new("caller_no").with_callee("os_write");
@@ -351,7 +359,10 @@ fn world_foreign_without_row_rejected() {
     }
 
     // caller_ok: declares [FS] — accepts.
-    let fs_row = seed.get("os_write").cloned().expect("FS row from registration");
+    let fs_row = seed
+        .get("os_write")
+        .cloned()
+        .expect("FS row from registration");
     let caller_ok = EffectDecl::new("caller_ok")
         .with_declared_row(fs_row)
         .with_callee("os_write");
@@ -500,7 +511,10 @@ fn verified_component_foreign_call_and_roundtrip_proof() {
     assert!(env.discharge_hole(&obl, cert), "discharge must succeed");
 
     // After discharge: rt_hole ∉ trusted_base → Q.
-    assert!(!env.is_open_hole(rt_hole_id), "discharged rt leaves trusted_base → Q");
+    assert!(
+        !env.is_open_hole(rt_hole_id),
+        "discharged rt leaves trusted_base → Q"
+    );
 
     // Foreign postulate still in trusted_base → P.
     assert!(

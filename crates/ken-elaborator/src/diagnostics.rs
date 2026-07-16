@@ -97,7 +97,7 @@ impl KripkeCountermodel {
     pub fn from_v3(tag: DiagnosticTag, v3: &Countermodel) -> Self {
         Self {
             verdict: tag,
-            worlds: vec![WorldId("w0".to_owned())],  // minimal scaffold
+            worlds: vec![WorldId("w0".to_owned())], // minimal scaffold
             order: vec![],
             forcing: vec![],
             // [placeholder — V4-backend]: failure.world names the refuting
@@ -226,10 +226,7 @@ pub struct Diagnostic {
 ///
 /// This is the soundness bridge of V4: if this function projects faithfully,
 /// no V4 bug can relabel a verdict.
-pub fn project_diagnostic(
-    result: &ProverResult,
-    triple: &ObligationTriple,
-) -> Option<Diagnostic> {
+pub fn project_diagnostic(result: &ProverResult, triple: &ObligationTriple) -> Option<Diagnostic> {
     match &result.verdict {
         // proved → no diagnostic (24 §7 AC5, 24 preamble table row 1)
         Verdict::Proved { .. } => None,
@@ -283,10 +280,7 @@ pub fn project_diagnostic(
 ///
 /// `proved` results contribute `None` and are filtered; the returned `Vec`
 /// contains only non-proved verdicts (`24 §7` AC5).
-pub fn project_all(
-    results: &[ProverResult],
-    triples: &[ObligationTriple],
-) -> Vec<Diagnostic> {
+pub fn project_all(results: &[ProverResult], triples: &[ObligationTriple]) -> Vec<Diagnostic> {
     results
         .iter()
         .zip(triples.iter())
@@ -320,9 +314,7 @@ pub enum ThirdValue {
 /// the CBV-laziness carry): `unknown ∧ false` does NOT force the hole.
 pub fn tv_and(a: ThirdValue, b: ThirdValue) -> ThirdValue {
     match (a, b) {
-        (ThirdValue::Known(false), _) | (_, ThirdValue::Known(false)) => {
-            ThirdValue::Known(false)
-        }
+        (ThirdValue::Known(false), _) | (_, ThirdValue::Known(false)) => ThirdValue::Known(false),
         (ThirdValue::Known(true), ThirdValue::Known(true)) => ThirdValue::Known(true),
         _ => ThirdValue::Unknown,
     }
@@ -337,9 +329,7 @@ pub fn tv_and(a: ThirdValue, b: ThirdValue) -> ThirdValue {
 /// ```
 pub fn tv_or(a: ThirdValue, b: ThirdValue) -> ThirdValue {
     match (a, b) {
-        (ThirdValue::Known(true), _) | (_, ThirdValue::Known(true)) => {
-            ThirdValue::Known(true)
-        }
+        (ThirdValue::Known(true), _) | (_, ThirdValue::Known(true)) => ThirdValue::Known(true),
         (ThirdValue::Known(false), ThirdValue::Known(false)) => ThirdValue::Known(false),
         _ => ThirdValue::Unknown,
     }

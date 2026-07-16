@@ -15,9 +15,9 @@
 use ken_elaborator::{ElabEnv, ElabError};
 
 fn expect_collision_error(env: &mut ElabEnv, src: &str, colliding_name: &str) {
-    let err = env
-        .elaborate_decl(src)
-        .expect_err(&format!("'{colliding_name}' must be rejected as a reserved-sugar collision"));
+    let err = env.elaborate_decl(src).expect_err(&format!(
+        "'{colliding_name}' must be rejected as a reserved-sugar collision"
+    ));
     match err {
         ElabError::ParseError { msg, .. } => {
             assert!(

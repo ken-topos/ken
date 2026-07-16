@@ -35,7 +35,10 @@ fn decl_nat_rel(env: &mut ElabEnv, name: &str) {
     let nat_id = *env.globals.get("Nat").unwrap();
     let nat = Term::indformer(nat_id, vec![]);
     // Pi(Nat, Pi(Nat, Omega 0))
-    let ty = Term::pi(nat.clone(), Term::pi(weaken(&nat, 1), Term::omega(Level::Zero)));
+    let ty = Term::pi(
+        nat.clone(),
+        Term::pi(weaken(&nat, 1), Term::omega(Level::Zero)),
+    );
     env.declare_postulate_raw(name, ty).unwrap();
 }
 
@@ -189,8 +192,7 @@ fn result_out_of_ensures_rejects() {
     decl_nat_rel(&mut env, "Equal");
 
     // `result` in requires scope → scope error
-    let result = env
-        .elaborate_decl_v1("fn h (n : Nat) : Nat requires Equal result n = n");
+    let result = env.elaborate_decl_v1("fn h (n : Nat) : Nat requires Equal result n = n");
     assert!(
         result.is_err(),
         "result in requires must be rejected, got {:?}",
@@ -212,12 +214,14 @@ fn old_resolves_in_space_op_ensures() {
 
     // space view: old(n) is in scope in ensures
     let res = env
-        .elaborate_decl_v1(
-            "space proc inc (n : Nat) : Nat ensures Equal n (old n) = n",
-        )
+        .elaborate_decl_v1("space proc inc (n : Nat) : Nat ensures Equal n (old n) = n")
         .expect("old in space-op ensures should resolve");
     // Obligation is emitted
-    assert_eq!(res.obligations.len(), 1, "space-op ensures emits obligation");
+    assert_eq!(
+        res.obligations.len(),
+        1,
+        "space-op ensures emits obligation"
+    );
 }
 
 /// verify/spec-syntax/old-out-of-scope-rejects  (soundness)
@@ -228,8 +232,7 @@ fn old_out_of_scope_rejects() {
     let mut env = mk_env();
     decl_nat_rel(&mut env, "Equal");
 
-    let result = env
-        .elaborate_decl_v1("fn k (n : Nat) : Nat ensures Equal n (old n) = n");
+    let result = env.elaborate_decl_v1("fn k (n : Nat) : Nat ensures Equal n (old n) = n");
     assert!(
         result.is_err(),
         "old in pure const ensures must be rejected, got {:?}",
@@ -375,7 +378,10 @@ fn epistemic_projection_distinct() {
         .elaborate_decl_v1("fn etest (n : Nat) : Nat ensures PropE n = n")
         .expect("elaborates");
     let obl = &res.obligations[0];
-    assert!(env.is_open_hole(obl.hole_id), "unknown: hole in trusted_base");
+    assert!(
+        env.is_open_hole(obl.hole_id),
+        "unknown: hole in trusted_base"
+    );
 
     // Projection: unknown ≠ proved (by trusted_base membership)
     // tested/delegated are deferred [§5.5, OQ-syntax]
@@ -396,9 +402,7 @@ fn obligation_hole_set_exposed_to_v2() {
 
     // Two ensures clauses → exactly two obligation holes
     let res = env
-        .elaborate_decl_v1(
-            "fn f2 (n : Nat) : Nat ensures Pos n ensures NonNeg2 n = n",
-        )
+        .elaborate_decl_v1("fn f2 (n : Nat) : Nat ensures Pos n ensures NonNeg2 n = n")
         .expect("two ensures should elaborate");
 
     assert_eq!(res.obligations.len(), 2, "two ensures → two obligations");
@@ -421,7 +425,8 @@ fn obligation_hole_set_exposed_to_v2() {
 fn prove_goal_obligation_and_postulate_binding() {
     let mut env = mk_env();
     // SomeGoal : Omega 0 — a proposition (no arguments needed)
-    env.declare_postulate_raw("SomeGoal", Term::omega(Level::Zero)).unwrap();
+    env.declare_postulate_raw("SomeGoal", Term::omega(Level::Zero))
+        .unwrap();
 
     // Before discharge
     let res = env
@@ -429,7 +434,10 @@ fn prove_goal_obligation_and_postulate_binding() {
         .expect("prove should elaborate");
     assert_eq!(res.obligations.len(), 1, "prove emits one obligation");
     let obl = &res.obligations[0];
-    assert!(env.is_open_hole(obl.hole_id), "goal in trusted_base (unknown)");
+    assert!(
+        env.is_open_hole(obl.hole_id),
+        "goal in trusted_base (unknown)"
+    );
 
     // `addComm` is usable as a proof term (it IS the hole postulate)
     let comm_id = *env.globals.get("addComm").expect("addComm bound");
@@ -454,8 +462,10 @@ fn prove_goal_obligation_and_postulate_binding() {
 fn law_all_omega_fields_is_proposition() {
     let mut env = mk_env();
     // Pre-declare the field propositions as Omega-typed postulates
-    env.declare_postulate_raw("AssocP", Term::omega(Level::Zero)).unwrap();
-    env.declare_postulate_raw("UnitLP", Term::omega(Level::Zero)).unwrap();
+    env.declare_postulate_raw("AssocP", Term::omega(Level::Zero))
+        .unwrap();
+    env.declare_postulate_raw("UnitLP", Term::omega(Level::Zero))
+        .unwrap();
 
     let res = env
         .elaborate_decl_v1("law Monoid (M) { assoc : AssocP ; unit_l : UnitLP }")
@@ -485,17 +495,17 @@ fn v0_behavior_unchanged() {
 
     // Core body unchanged: Lam(Type 0, Lam(Var(0), Var(0)))
     let body = env.env.transparent_body(id).expect("transparent").1;
-    let expected = Term::lam(
-        Term::ty(lv(0)),
-        Term::lam(Term::var(0), Term::var(0)),
-    );
+    let expected = Term::lam(Term::ty(lv(0)), Term::lam(Term::var(0), Term::var(0)));
     assert_eq!(body, expected, "V0 body must be unchanged");
 
     // No obligations (no spec forms)
     let res_v1 = env
         .elaborate_decl_v1("fn const2 (A : Type) (x : A) (y : A) : A = x")
         .expect("V0 const should elaborate via V1 path");
-    assert!(res_v1.obligations.is_empty(), "no spec forms → no obligations");
+    assert!(
+        res_v1.obligations.is_empty(),
+        "no spec forms → no obligations"
+    );
 }
 
 // ======================================================================
@@ -526,7 +536,11 @@ fn requires_on_first_of_two_params() {
 
     // Full type: Pi(n:Nat, Pi(d:Nat, Pi(Positive(n), Nat)))
     // Full body: Lam(n, Lam(d, Lam(proof, d)))  where body=d=Var(1) in innermost ctx
-    let body = env.env.transparent_body(res.def_id).expect("transparent body").1;
+    let body = env
+        .env
+        .transparent_body(res.def_id)
+        .expect("transparent body")
+        .1;
     // In Lam(n, Lam(d, Lam(proof, body))):
     //   innermost ctx: Var(0)=proof, Var(1)=d, Var(2)=n
     // body = d = Var(1) after fix (was Var(0)=proof before fix → TypeMismatch)
@@ -544,7 +558,10 @@ fn requires_on_first_of_two_params() {
             ),
         ),
     );
-    assert_eq!(body, expected, "body must be d (Var(1) in proof-ctx), not proof (Var(0))");
+    assert_eq!(
+        body, expected,
+        "body must be d (Var(1) in proof-ctx), not proof (Var(0))"
+    );
 }
 
 /// verify/spec-syntax/requires-on-middle-param-of-three
@@ -565,7 +582,11 @@ fn requires_on_middle_param_of_three() {
     assert!(res.obligations.is_empty(), "requires-only → no obligations");
     // Body should be `a` (the first param). In innermost ctx (a,b,c,proof):
     // Var(0)=proof, Var(1)=c, Var(2)=b, Var(3)=a → body = Var(3)
-    let body = env.env.transparent_body(res.def_id).expect("transparent body").1;
+    let body = env
+        .env
+        .transparent_body(res.def_id)
+        .expect("transparent body")
+        .1;
     let mid_pred_id = *env.globals.get("MidPred").unwrap();
     let nat_id = *env.globals.get("Nat").unwrap();
     let nat = Term::indformer(nat_id, vec![]);
@@ -580,7 +601,7 @@ fn requires_on_middle_param_of_three() {
                 nat.clone(),
                 Term::lam(
                     Term::app(Term::const_(mid_pred_id, vec![]), Term::var(1)), // b in c-ctx
-                    Term::var(3), // a in proof-ctx
+                    Term::var(3),                                               // a in proof-ctx
                 ),
             ),
         ),
@@ -604,7 +625,11 @@ fn requires_on_final_param_unaffected() {
 
     assert!(res.obligations.is_empty());
     // Body = n. In innermost ctx (n,d,proof): Var(0)=proof, Var(1)=d, Var(2)=n → body=Var(2)
-    let body = env.env.transparent_body(res.def_id).expect("transparent body").1;
+    let body = env
+        .env
+        .transparent_body(res.def_id)
+        .expect("transparent body")
+        .1;
     let fin_pred_id = *env.globals.get("FinalPred").unwrap();
     let nat_id = *env.globals.get("Nat").unwrap();
     let nat = Term::indformer(nat_id, vec![]);
@@ -617,7 +642,7 @@ fn requires_on_final_param_unaffected() {
             nat.clone(),
             Term::lam(
                 Term::app(Term::const_(fin_pred_id, vec![]), Term::var(0)), // d in d-ctx
-                Term::var(2), // n in proof-ctx
+                Term::var(2),                                               // n in proof-ctx
             ),
         ),
     );

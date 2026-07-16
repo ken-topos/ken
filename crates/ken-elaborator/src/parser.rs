@@ -291,10 +291,7 @@ impl Parser {
                     });
                 }
                 let (authority, authority_span) = self.expect_con()?;
-                if !matches!(
-                    authority.as_str(),
-                    "ANone" | "APartial" | "AFull"
-                ) {
+                if !matches!(authority.as_str(), "ANone" | "APartial" | "AFull") {
                     return Err(ElabError::InvalidCapabilityAuthority {
                         family,
                         authority,

@@ -732,10 +732,15 @@ fn collect_runtime_support_for_expr(
             }
             Ok(())
         }
-        RuntimeExpr::Effect { effect, .. } => Err(platform_error(
+        RuntimeExpr::Effect {
+            family, operation, ..
+        } => Err(platform_error(
             PlatformRuntimeSupportStage::RuntimeExpressionSupport,
             "Effect",
-            format!("host effect {effect} is unavailable for NC21 executable runtime support"),
+            format!(
+                "host effect {family}.{} is unavailable for NC21 executable runtime support",
+                *operation as u16
+            ),
         )),
         RuntimeExpr::Trap(trap) => {
             collect_runtime_support_for_trap(trap, shapes);

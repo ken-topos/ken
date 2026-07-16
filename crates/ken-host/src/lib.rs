@@ -22,8 +22,10 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+pub mod capability;
 mod effect_v1;
 
+pub use capability::*;
 pub use effect_v1::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

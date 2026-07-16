@@ -6,7 +6,8 @@ use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{apply, eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId, Term};
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
@@ -19,22 +20,30 @@ const NONEMPTY_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/NonEmpty.ken.md");
 const VALIDATION_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Sums/Validation.ken.md");
-const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
-const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Cursor.ken.md");
-const DECODER_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Decoder.ken.md");
+const DIAGNOSTIC_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
+const CURSOR_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/Parsing/Cursor.ken.md");
+const DECODER_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/Parsing/Decoder.ken.md");
 const STRING_BIJECTION_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Text/StringBijection.ken.md");
 const STRING_KEYS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Text/StringKeys.ken.md");
 const CODEC_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Text/Codec.ken.md");
-const NUMERIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Numeric.ken.md");
-const PRETTY_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Formatting/Doc.ken.md");
-const ARGUMENTS_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Process/Arguments.ken.md");
+const NUMERIC_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/Parsing/Numeric.ken.md");
+const PRETTY_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/Formatting/Doc.ken.md");
+const ARGUMENTS_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/Process/Arguments.ken.md");
 const EXIT_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Process/Exit.ken.md");
 const DIAGNOSTIC_RENDER_KEN_MD: &str =
     include_str!("../../../catalog/packages/Capability/Diagnostics/Render.ken.md");
-const SCHEMA_KEN_MD: &str = include_str!("../../../catalog/packages/Application/Input/Schema.ken.md");
-const ARGPARSE_KEN_MD: &str = include_str!("../../../catalog/packages/Application/CommandLine/ArgParse.ken.md");
+const SCHEMA_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Application/Input/Schema.ken.md");
+const ARGPARSE_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Application/CommandLine/ArgParse.ken.md");
 const EXAMPLE_KEN_MD: &str = include_str!("../../../catalog/examples/CommandLine/Forge.ken.md");
 
 fn dependency_env() -> ElabEnv {

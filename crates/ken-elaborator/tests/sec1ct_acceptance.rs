@@ -11,11 +11,10 @@
 //! Grounding: `61 §5a.1`–`§5a.6`, `§7`, `§9`, `§H`; `36 §3.1`.
 
 use ken_elaborator::ifc::{
-    check_ct_promise, check_declassify, check_declassify_in_delta, classify_vis_op,
-    CtGuaranteeQ, CtHook, CtPromise, DeclassifyCap, DeclassifyResult,
-    FlowCtx, FlowResult, LeakageSink, VisOpClass,
-    CT_BOT, CT_TOP, SECRET,
-    TRIGGER_SEC1_DUAL, TRIGGER_SEC1_LAUNDER, TRIGGER_SEC1_REDUCE, TRIGGER_WARD,
+    check_ct_promise, check_declassify, check_declassify_in_delta, classify_vis_op, CtGuaranteeQ,
+    CtHook, CtPromise, DeclassifyCap, DeclassifyResult, FlowCtx, FlowResult, LeakageSink,
+    VisOpClass, CT_BOT, CT_TOP, SECRET, TRIGGER_SEC1_DUAL, TRIGGER_SEC1_LAUNDER,
+    TRIGGER_SEC1_REDUCE, TRIGGER_WARD,
 };
 
 // ─── CT-A. @ct steers a leakage sink → reject (AC1, AC2, AC3) ───────────────
@@ -34,7 +33,10 @@ fn ct_value_steers_branch_guard_rejected() {
     let err = reject.error().unwrap();
     assert_eq!(err.rule, "L-CT-SINK");
     assert!(err.data_label.ct, "error names data.ct = ct⊤");
-    assert!(!err.pc_label.ct,  "error names pc.ct = ct⊥ (direct value, not pc)");
+    assert!(
+        !err.pc_label.ct,
+        "error names pc.ct = ct⊥ (direct value, not pc)"
+    );
     assert_eq!(err.site, "cmp.branch_on");
     assert_eq!(err.sink_clearance, CT_BOT, "sink clearance is ct⊥");
 
@@ -63,7 +65,10 @@ fn ct_value_steers_memory_index_rejected() {
 
     // Flip: ct⊥ index, or a constant-time full-table scan primitive → accepts.
     let accept = ctx.l_ct_sink(&CT_BOT, &LeakageSink::MemoryIndex, "lookup.t_index");
-    assert!(accept.is_accept(), "AC2 flip: ct⊥ index at MemoryIndex → accept");
+    assert!(
+        accept.is_accept(),
+        "AC2 flip: ct⊥ index at MemoryIndex → accept"
+    );
 
     // Sealed-set coverage: MemoryIndex is distinct from BranchGuard (AC2 ≠ AC1 trigger).
     assert_ne!(
@@ -89,13 +94,25 @@ fn ct_value_into_var_time_primitive_rejected() {
     // Flip: same @ct operand into a CT-safe primitive (CtByteEq, not VarTimePrimitive).
     // classify_vis_op(CtByteEq) = None → no l_ct_sink call on that op → accepts.
     let ct_safe_class = classify_vis_op(VisOpClass::CtByteEq);
-    assert!(ct_safe_class.is_none(), "AC3 flip: CtByteEq is not a LeakSink");
+    assert!(
+        ct_safe_class.is_none(),
+        "AC3 flip: CtByteEq is not a LeakSink"
+    );
 
     // Exhaustive-by-construction: all three sealed-set members are classified
     // (no _ => None catch-all — the omission-hole discipline).
-    assert_eq!(classify_vis_op(VisOpClass::ControlFlowBranch), Some(LeakageSink::BranchGuard));
-    assert_eq!(classify_vis_op(VisOpClass::ArrayIndex),         Some(LeakageSink::MemoryIndex));
-    assert_eq!(classify_vis_op(VisOpClass::VarTimePrimitive),   Some(LeakageSink::VarTimePrimitive));
+    assert_eq!(
+        classify_vis_op(VisOpClass::ControlFlowBranch),
+        Some(LeakageSink::BranchGuard)
+    );
+    assert_eq!(
+        classify_vis_op(VisOpClass::ArrayIndex),
+        Some(LeakageSink::MemoryIndex)
+    );
+    assert_eq!(
+        classify_vis_op(VisOpClass::VarTimePrimitive),
+        Some(LeakageSink::VarTimePrimitive)
+    );
 }
 
 /// CT-A4. A `ct⊥` inner op inside a `@ct`-guarded branch is rejected via
@@ -109,17 +126,23 @@ fn ct_guarded_branch_implicit_leak_rejected() {
 
     // L-OBSERVE raises pc.ct to ct⊤ in both branches.
     let ctx_branch = ctx.l_observe(scrutinee);
-    assert!(ctx_branch.pc.ct, "AC4: pc.ct raised to ct⊤ after @ct branch");
+    assert!(
+        ctx_branch.pc.ct,
+        "AC4: pc.ct raised to ct⊤ after @ct branch"
+    );
 
     // Inner op: ct⊥ indices j, j' — but pc.ct = ct⊤ → caught anyway.
     // `if (k[0]==g[0] : Bool @ ct) then t[j] else t[j']`
     let j_label = CT_BOT; // ct⊥ index
     let reject = ctx_branch.l_ct_sink(&j_label, &LeakageSink::MemoryIndex, "t_index");
-    assert!(reject.is_reject(), "AC4: ct⊥ inner op under ct⊤ pc → implicit CT leak → reject");
+    assert!(
+        reject.is_reject(),
+        "AC4: ct⊥ inner op under ct⊤ pc → implicit CT leak → reject"
+    );
     let err = reject.error().unwrap();
     // The pc.ct is the culprit, not the operand's ct.
     assert!(!err.data_label.ct, "data is ct⊥");
-    assert!(err.pc_label.ct,    "pc.ct = ct⊤ caused the rejection");
+    assert!(err.pc_label.ct, "pc.ct = ct⊤ caused the rejection");
 
     // Flip-bug: if l_observe drops the pc.ct-raise, wrongly accepts.
     let buggy_ctx = FlowCtx::new(); // pc.ct stays false (bug: l_observe dropped)
@@ -150,15 +173,25 @@ fn secret_not_ct_branches_freely_accepted() {
 
     // Same BranchGuard shape as CT-A1, different CT component.
     let accept = ctx.l_ct_sink(&p, &LeakageSink::BranchGuard, "route.if");
-    assert!(accept.is_accept(), "AC4: Secret-not-@ct at BranchGuard → accept");
+    assert!(
+        accept.is_accept(),
+        "AC4: Secret-not-@ct at BranchGuard → accept"
+    );
 
     // The SAME shape that CT-A1 rejects (k = CT_TOP):
     let k = CT_TOP;
     let reject = ctx.l_ct_sink(&k, &LeakageSink::BranchGuard, "route.if");
-    assert!(reject.is_reject(), "AC4 pair: @ct at BranchGuard → reject (CT-A1)");
+    assert!(
+        reject.is_reject(),
+        "AC4 pair: @ct at BranchGuard → reject (CT-A1)"
+    );
 
     // Only difference: p.ct = false vs k.ct = true. Axes are orthogonal (§5a.1).
-    assert_eq!(p.conf, k.conf + 2, "demo: conf(Secret)=2, conf(CT_TOP)=0 — distinct components");
+    assert_eq!(
+        p.conf,
+        k.conf + 2,
+        "demo: conf(Secret)=2, conf(CT_TOP)=0 — distinct components"
+    );
     // The pair makes the orientation non-degenerate and guards [Sec1-dual].
     assert_eq!(TRIGGER_SEC1_DUAL, "[Sec1-dual]");
 }
@@ -193,12 +226,18 @@ fn declassified_ct_value_steers_sink_accepted_and_listed() {
     // Now steer the ct⊥ value into the same BranchGuard → accepts.
     let ctx = FlowCtx::new();
     let accept = ctx.l_ct_sink(&k_prime, &LeakageSink::BranchGuard, "cmp_ok.branch_on");
-    assert!(accept.is_accept(), "AC5: ct⊥ post-declassify steers BranchGuard → accept");
+    assert!(
+        accept.is_accept(),
+        "AC5: ct⊥ post-declassify steers BranchGuard → accept"
+    );
 
     // Flip vs CT-A1: same sink, same branch shape — only the authorised declassify
     // turns reject into accept. The declassify machinery is the sole span terminator.
     let reject = ctx.l_ct_sink(&CT_TOP, &LeakageSink::BranchGuard, "cmp_ok.branch_on");
-    assert!(reject.is_reject(), "AC5 flip: pre-declassify @ct → same sink → reject");
+    assert!(
+        reject.is_reject(),
+        "AC5 flip: pre-declassify @ct → same sink → reject"
+    );
 }
 
 // ─── CT-D. CT-in-parameter promise + the Q export (AC6) ─────────────────────
@@ -212,7 +251,7 @@ fn ct_in_parameter_promise_checked_emits_q() {
     let ctx = FlowCtx::new();
 
     let promise = CtPromise {
-        param_name:   "k".to_owned(),
+        param_name: "k".to_owned(),
         source_level: true,
     };
 
@@ -220,10 +259,12 @@ fn ct_in_parameter_promise_checked_emits_q() {
     // classify_vis_op(CtByteEq) = None → no LeakSink triggered → body = Accept.
     // (The test simulates the body-check result; the body does not route k to a sink.)
     let good_body = FlowResult::Accept;
-    let q = check_ct_promise(&promise, good_body)
-        .expect("AC6: clean body → Q emitted");
-    assert_eq!(q.param_name, "k",  "AC6: Q names the parameter");
-    assert!(q.source_level,         "AC6: Q is source-level precondition, NOT timing guarantee");
+    let q = check_ct_promise(&promise, good_body).expect("AC6: clean body → Q emitted");
+    assert_eq!(q.param_name, "k", "AC6: Q names the parameter");
+    assert!(
+        q.source_level,
+        "AC6: Q is source-level precondition, NOT timing guarantee"
+    );
 
     // Structural assertion: Q is present + well-formed (guards the silent-omission hole).
     // A function accepted with NO Q clause would be an over-claim (the completion-hole
@@ -249,21 +290,34 @@ fn ct_in_parameter_promise_checked_emits_q() {
 #[test]
 fn timing_guarantee_delegated_not_claimed() {
     // The three kernel-blind surfaces remain named as scoped work (§H).
-    assert_eq!(TRIGGER_SEC1_DUAL,    "[Sec1-dual]");
+    assert_eq!(TRIGGER_SEC1_DUAL, "[Sec1-dual]");
     assert_eq!(TRIGGER_SEC1_LAUNDER, "[Sec1-launder]");
-    assert_eq!(TRIGGER_SEC1_REDUCE,  "[Sec1-reduce]");
+    assert_eq!(TRIGGER_SEC1_REDUCE, "[Sec1-reduce]");
 
     // The binary timing guarantee is delegated to [Ward].
     assert_eq!(TRIGGER_WARD, "[Ward]");
 
     // @ct hook carries [Ward] (Sec1ct now landed; timing deferred to Ward, not [Sec1ct]).
     let hook = CtHook::new(true);
-    assert!(hook.has_reify_trigger(), "AC7: @ct hook carries a reify-trigger");
-    assert_eq!(hook.deferred_timing, Some(TRIGGER_WARD), "AC7: trigger is [Ward]");
+    assert!(
+        hook.has_reify_trigger(),
+        "AC7: @ct hook carries a reify-trigger"
+    );
+    assert_eq!(
+        hook.deferred_timing,
+        Some(TRIGGER_WARD),
+        "AC7: trigger is [Ward]"
+    );
 
     // CT-in-param Q is a SOURCE-LEVEL precondition, not a timing guarantee.
-    let q = CtGuaranteeQ { param_name: "k".to_owned(), source_level: true };
-    assert!(q.source_level, "AC7: Q is source-level — Ken owns the precondition");
+    let q = CtGuaranteeQ {
+        param_name: "k".to_owned(),
+        source_level: true,
+    };
+    assert!(
+        q.source_level,
+        "AC7: Q is source-level — Ken owns the precondition"
+    );
     // Ken never asserts "well-typed ⇒ constant-time execution."
     // That would over-claim past Ken's locked granularity (61 §5a.6/§H).
 
@@ -291,8 +345,8 @@ fn ct_discipline_cross_case_sweep() {
 
     // Reject class: all three sealed-set members, direct @ct.
     for (sink, site) in [
-        (&LeakageSink::BranchGuard,     "sweep.branch"),
-        (&LeakageSink::MemoryIndex,      "sweep.index"),
+        (&LeakageSink::BranchGuard, "sweep.branch"),
+        (&LeakageSink::MemoryIndex, "sweep.index"),
         (&LeakageSink::VarTimePrimitive, "sweep.vartime"),
     ] {
         let r = ctx.l_ct_sink(&CT_TOP, sink, site);
@@ -301,8 +355,8 @@ fn ct_discipline_cross_case_sweep() {
 
     // Accept class: ct⊥ at the same sinks.
     for (sink, site) in [
-        (&LeakageSink::BranchGuard,     "sweep.branch"),
-        (&LeakageSink::MemoryIndex,      "sweep.index"),
+        (&LeakageSink::BranchGuard, "sweep.branch"),
+        (&LeakageSink::MemoryIndex, "sweep.index"),
         (&LeakageSink::VarTimePrimitive, "sweep.vartime"),
     ] {
         let a = ctx.l_ct_sink(&CT_BOT, sink, site);
@@ -310,10 +364,16 @@ fn ct_discipline_cross_case_sweep() {
     }
 
     // [Sec1-dual] orientation pin: A1 rejects WHILE B1 accepts on same shape.
-    let branch_a1 = ctx.l_ct_sink(&CT_TOP,  &LeakageSink::BranchGuard, "pin.branch");
-    let branch_b1 = ctx.l_ct_sink(&SECRET,  &LeakageSink::BranchGuard, "pin.branch");
-    assert!(branch_a1.is_reject(), "pin: @ct at BranchGuard rejects (A1)");
-    assert!(branch_b1.is_accept(), "pin: Secret-not-@ct at BranchGuard accepts (B1)");
+    let branch_a1 = ctx.l_ct_sink(&CT_TOP, &LeakageSink::BranchGuard, "pin.branch");
+    let branch_b1 = ctx.l_ct_sink(&SECRET, &LeakageSink::BranchGuard, "pin.branch");
+    assert!(
+        branch_a1.is_reject(),
+        "pin: @ct at BranchGuard rejects (A1)"
+    );
+    assert!(
+        branch_b1.is_accept(),
+        "pin: Secret-not-@ct at BranchGuard accepts (B1)"
+    );
 
     // Implicit pc.ct flow: ct⊥ inner op under ct⊤ pc → reject.
     let ctx_ct_pc = FlowCtx::new().l_observe(CT_TOP);

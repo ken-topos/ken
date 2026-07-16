@@ -9,7 +9,8 @@
 
 use ken_elaborator::ElabEnv;
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const COLLECTIONS_KEN_MD: &str =
@@ -17,9 +18,12 @@ const COLLECTIONS_KEN_MD: &str =
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/Classes/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
+        .expect("Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
+        .expect("Data/Collections/Derived.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
+        .expect("Core/Classes/LawfulClasses.ken must elaborate");
     env
 }
 
@@ -65,9 +69,11 @@ fn zero_axiom_in_collections_ken() {
 #[test]
 fn trusted_base_delta_is_empty_across_the_file() {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
+        .expect("Core/Logic/Transport.ken must elaborate");
     let before: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
+        .expect("Data/Collections/Derived.ken.md must elaborate");
     let after: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(
         before, after,
@@ -111,7 +117,9 @@ fn ac8_off_by_one_range_length_rejected() {
         "lemma bad_range_length_off_by_one (n : Nat) : Equal Nat (length Nat (range n)) (Suc n) = range_length n",
     );
     match r {
-        Ok(_) => panic!("range_length proves length(range n) = n, not Suc n — reusing it here must be rejected"),
+        Ok(_) => panic!(
+            "range_length proves length(range n) = n, not Suc n — reusing it here must be rejected"
+        ),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(
@@ -134,7 +142,9 @@ fn ac8_zip_length_is_min_not_left_length() {
            Equal Nat (length (Pair a b) (zip a b xs ys)) (length a xs) = zip_length a b xs ys",
     );
     match r {
-        Ok(_) => panic!("zip_length proves length = min(..), not the left length alone — must be rejected"),
+        Ok(_) => panic!(
+            "zip_length proves length = min(..), not the left length alone — must be rejected"
+        ),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(

@@ -2,8 +2,8 @@
 //! that the kernel proves path confinement.
 
 use ken_elaborator::capabilities::{
-    attenuate, discharge_attenuation, AttenuationWindow, Cap, RightSet, SymlinkPolicy,
-    AUTH_FULL, AUTH_PARTIAL,
+    attenuate, discharge_attenuation, AttenuationWindow, Cap, RightSet, SymlinkPolicy, AUTH_FULL,
+    AUTH_PARTIAL,
 };
 use ken_elaborator::prover::Verdict;
 use ken_interp::{
@@ -47,13 +47,7 @@ enum DriverOp<'a> {
     Write(&'a [u8]),
 }
 
-fn drive(
-    env: &FsEnv,
-    host: &mut CaptureHost,
-    cap: &Cap,
-    path: &[u8],
-    op: DriverOp<'_>,
-) -> EvalVal {
+fn drive(env: &FsEnv, host: &mut CaptureHost, cap: &Cap, path: &[u8], op: DriverOp<'_>) -> EvalVal {
     let mut store = ken_interp::EvalStore::new();
     let id = match op {
         DriverOp::Read => env.read_bytes,
@@ -128,7 +122,12 @@ fn traversal_denies_while_sibling_accepts_through_real_dispatch() {
     host.insert_file(b"dir1/sub/ok".to_vec(), b"ok".to_vec());
     host.insert_file(b"dir1/secret".to_vec(), b"secret".to_vec());
     let cap = host
-        .mint_scoped_fs_cap(AUTH_FULL, b"dir1/sub", RightSet::READ, SymlinkPolicy::NoFollow)
+        .mint_scoped_fs_cap(
+            AUTH_FULL,
+            b"dir1/sub",
+            RightSet::READ,
+            SymlinkPolicy::NoFollow,
+        )
         .unwrap();
 
     let denied = drive(&env, &mut host, &cap, b"../secret", DriverOp::Read);
@@ -157,7 +156,10 @@ fn symlink_policy_pairs_reach_the_real_dispatch_and_resolver() {
     assert_err(&env, &denied);
     assert_eq!(host.fs_denials(), &[CapabilityDenied::SymlinkDenied]);
     assert!(host.fs_trace().is_empty());
-    assert_ok(&env, &drive(&env, &mut host, &no_follow, b"real/x", DriverOp::Read));
+    assert_ok(
+        &env,
+        &drive(&env, &mut host, &no_follow, b"real/x", DriverOp::Read),
+    );
 
     let follow = host
         .mint_scoped_fs_cap(
@@ -169,12 +171,21 @@ fn symlink_policy_pairs_reach_the_real_dispatch_and_resolver() {
         .unwrap();
     let denied = drive(&env, &mut host, &follow, b"link/passwd", DriverOp::Read);
     assert_err(&env, &denied);
-    assert_eq!(host.fs_denials().last(), Some(&CapabilityDenied::ScopeEscape));
-    assert_ok(&env, &drive(&env, &mut host, &follow, b"inside", DriverOp::Read));
+    assert_eq!(
+        host.fs_denials().last(),
+        Some(&CapabilityDenied::ScopeEscape)
+    );
+    assert_ok(
+        &env,
+        &drive(&env, &mut host, &follow, b"inside", DriverOp::Read),
+    );
     let before = host.fs_trace().len();
     let denied = drive(&env, &mut host, &follow, b"loop", DriverOp::Read);
     assert_err(&env, &denied);
-    assert_eq!(host.fs_denials().last(), Some(&CapabilityDenied::SymlinkDenied));
+    assert_eq!(
+        host.fs_denials().last(),
+        Some(&CapabilityDenied::SymlinkDenied)
+    );
     assert_eq!(host.fs_trace().len(), before);
 }
 
@@ -198,7 +209,10 @@ fn absolute_and_right_pairs_have_exact_pre_operation_denials() {
     assert_err(&env, &denied);
     assert!(matches!(
         host.fs_denials().last(),
-        Some(CapabilityDenied::RightNotHeld { op: FsOpKind::Write, .. })
+        Some(CapabilityDenied::RightNotHeld {
+            op: FsOpKind::Write,
+            ..
+        })
     ));
     assert_eq!(host.fs_trace().len(), before);
 }
@@ -219,7 +233,10 @@ fn coarse_authority_is_a_named_real_dispatch_backstop() {
         .unwrap();
     let denied = drive(&env, &mut host, &cap, b"x", DriverOp::Write(b"denied"));
     assert_err(&env, &denied);
-    assert_eq!(host.fs_denials(), &[CapabilityDenied::AuthorityInsufficient]);
+    assert_eq!(
+        host.fs_denials(),
+        &[CapabilityDenied::AuthorityInsufficient]
+    );
     assert!(host.fs_trace().is_empty());
 }
 
@@ -240,7 +257,13 @@ fn resolved_virtual_handle_stays_pinned_across_parent_replacement() {
     );
     assert_ok(
         &env,
-        &drive(&env, &mut host, &cap, b"sub/file", DriverOp::Write(b"pinned")),
+        &drive(
+            &env,
+            &mut host,
+            &cap,
+            b"sub/file",
+            DriverOp::Write(b"pinned"),
+        ),
     );
     assert_eq!(host.fs_resolve_count(), 1, "operation must not re-resolve");
     let nodes = host.fs_nodes();
@@ -286,7 +309,12 @@ fn product_attenuation_narrows_and_deviant_widenings_are_unknown() {
         )
         .unwrap();
     let child_scope = host
-        .mint_scoped_fs_cap(AUTH_FULL, b"dir1/sub", RightSet::READ, SymlinkPolicy::NoFollow)
+        .mint_scoped_fs_cap(
+            AUTH_FULL,
+            b"dir1/sub",
+            RightSet::READ,
+            SymlinkPolicy::NoFollow,
+        )
         .unwrap()
         .scope()
         .clone();
@@ -349,7 +377,10 @@ fn posix_resolution_is_descriptor_relative_and_nofollow() {
     let root = std::env::temp_dir().join(format!(
         "ken-i5-openat-{}-{}",
         std::process::id(),
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
     ));
     std::fs::create_dir_all(root.join("dir1")).unwrap();
     std::fs::write(root.join("dir1/x"), b"x").unwrap();
@@ -377,7 +408,9 @@ fn posix_resolution_is_descriptor_relative_and_nofollow() {
             SymlinkPolicy::NoFollow,
         )
         .unwrap();
-    let Resolution::Existing(handle) = accepted else { panic!("existing descriptor") };
+    let Resolution::Existing(handle) = accepted else {
+        panic!("existing descriptor")
+    };
     assert_eq!(host.fs_read_at(&handle).unwrap(), b"x");
     std::fs::remove_dir_all(root).unwrap();
 }

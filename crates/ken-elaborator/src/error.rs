@@ -195,7 +195,11 @@ impl fmt::Display for ElabError {
                 write!(f, "unbound name '{}' at {}-{}", name, span.start, span.end)
             }
             ElabError::UnresolvedCon { name, span } => {
-                write!(f, "unresolved type '{}' at {}-{}", name, span.start, span.end)
+                write!(
+                    f,
+                    "unresolved type '{}' at {}-{}",
+                    name, span.start, span.end
+                )
             }
             ElabError::DuplicateDefinition { name, span } => write!(
                 f,
@@ -210,7 +214,11 @@ impl fmt::Display for ElabError {
                 cycle.join(" → "),
             ),
             ElabError::TypeMismatch { span, reason } => {
-                write!(f, "type mismatch at {}-{}: {}", span.start, span.end, reason)
+                write!(
+                    f,
+                    "type mismatch at {}-{}: {}",
+                    span.start, span.end, reason
+                )
             }
             ElabError::LambdaVsNonFunction { span } => {
                 write!(
@@ -274,7 +282,11 @@ impl fmt::Display for ElabError {
                     span.start, span.end
                 )
             }
-            ElabError::OrphanInstance { class, head_type, span } => write!(
+            ElabError::OrphanInstance {
+                class,
+                head_type,
+                span,
+            } => write!(
                 f,
                 "orphan instance at {}-{}: instance of '{}' for '{}' must be declared \
                  in the module of the class or the head type",
@@ -285,22 +297,32 @@ impl fmt::Display for ElabError {
                 head_type,
                 first_span,
                 second_span,
-            } => write!(
+            } => {
+                write!(
                 f,
                 "overlapping instances at {}-{} and {}-{}: a canonical instance of '{}' for '{}' \
                  is already registered",
                 first_span.start, first_span.end, second_span.start, second_span.end,
                 class, head_type,
-            ),
+            )
+            }
             ElabError::UnadmittedInstance {
-                defining_package, class, head_type, instance_id, span,
+                defining_package,
+                class,
+                head_type,
+                instance_id,
+                span,
             } => write!(
                 f,
                 "unadmitted instance at {}-{}: package '{}' defines {:?} for '{} {}'; \
                  add it to the boundary's admits list",
                 span.start, span.end, defining_package, instance_id, class, head_type,
             ),
-            ElabError::AmbiguousInstance { class, head_type, span } => write!(
+            ElabError::AmbiguousInstance {
+                class,
+                head_type,
+                span,
+            } => write!(
                 f,
                 "ambiguous instance at {}-{}: multiple candidates for '{}' at '{}'; \
                  pass the dictionary explicitly",
@@ -317,7 +339,11 @@ impl fmt::Display for ElabError {
                  reified resolution group (cyclic or non-decreasing)",
                 span.start, span.end,
             ),
-            ElabError::AmbiguousReference { name, sources, span } => {
+            ElabError::AmbiguousReference {
+                name,
+                sources,
+                span,
+            } => {
                 let mut sorted = sources.clone();
                 sorted.sort();
                 write!(

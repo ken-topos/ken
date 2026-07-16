@@ -12,11 +12,11 @@
 use ken_elaborator::{
     attempt_obligation, attempt_with_cert,
     diagnostics::{
-        project_all, project_diagnostic, Diagnostic, DiagnosticTag, Region, SuggestedAction,
-        ThirdValue, TypedHole, tv_and, tv_not, tv_or, tv_strict,
+        project_all, project_diagnostic, tv_and, tv_not, tv_or, tv_strict, Diagnostic,
+        DiagnosticTag, Region, SuggestedAction, ThirdValue, TypedHole,
     },
-    extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     error::Span,
+    extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     prover::{Countermodel, ProverResult, Verdict},
 };
 use ken_kernel::{declare_postulate, GlobalEnv, GlobalId, Level, Term};
@@ -31,10 +31,20 @@ struct ProofEnv {
 
 fn make_proof_env() -> ProofEnv {
     let mut env = GlobalEnv::new();
-    let p_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
-        .expect("P postulate");
-    let q_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
-        .expect("Q postulate");
+    let p_id = declare_postulate(
+        &mut env,
+        "test postulate".to_string(),
+        vec![],
+        Term::omega(Level::zero()),
+    )
+    .expect("P postulate");
+    let q_id = declare_postulate(
+        &mut env,
+        "test postulate".to_string(),
+        vec![],
+        Term::omega(Level::zero()),
+    )
+    .expect("Q postulate");
     ProofEnv {
         p: Term::const_(p_id, vec![]),
         q: Term::const_(q_id, vec![]),
@@ -50,10 +60,12 @@ fn closed_triple(env: &mut GlobalEnv, id: &str, phi: Term) -> ObligationTriple {
         context: vec![],
         phi: phi.clone(),
         goal_closed: phi,
-        provenance: Provenance { kind: ProvKind::Prove, span: Span::zero() },
+        provenance: Provenance {
+            kind: ProvKind::Prove,
+            span: Span::zero(),
+        },
     }
 }
-
 
 /// Manufacture a synthetic `Disproved` result (for fidelity tests that need
 /// a disproved verdict without a real backend).
@@ -62,7 +74,13 @@ fn synthetic_disproved(id: &str, env: &mut GlobalEnv) -> (ProverResult, Obligati
     // We synthesize a Disproved by constructing the ProverResult directly.
     // (No real backend yet — this tests the diagnostic projection, not V3.)
     let mut env2 = GlobalEnv::new();
-    let p_id = declare_postulate(&mut env2, "test postulate".to_string(), vec![], Term::omega(Level::zero())).unwrap();
+    let p_id = declare_postulate(
+        &mut env2,
+        "test postulate".to_string(),
+        vec![],
+        Term::omega(Level::zero()),
+    )
+    .unwrap();
     let phi = Term::const_(p_id, vec![]);
     let placeholder_hole = env.fresh_id();
     let triple = ObligationTriple {
@@ -71,7 +89,10 @@ fn synthetic_disproved(id: &str, env: &mut GlobalEnv) -> (ProverResult, Obligati
         context: vec![],
         phi: phi.clone(),
         goal_closed: phi.clone(),
-        provenance: Provenance { kind: ProvKind::Prove, span: Span::zero() },
+        provenance: Provenance {
+            kind: ProvKind::Prove,
+            span: Span::zero(),
+        },
     };
     let result = ProverResult {
         obligation_id: ObligationId(id.to_owned()),
@@ -85,7 +106,9 @@ fn synthetic_disproved(id: &str, env: &mut GlobalEnv) -> (ProverResult, Obligati
 }
 
 fn has_add_precondition(d: &Diagnostic) -> bool {
-    d.suggested_actions.iter().any(|a| matches!(a, SuggestedAction::AddPrecondition { .. }))
+    d.suggested_actions
+        .iter()
+        .any(|a| matches!(a, SuggestedAction::AddPrecondition { .. }))
 }
 
 fn has_fix_counterexample(d: &Diagnostic) -> bool {
@@ -108,8 +131,7 @@ fn disproved_verdict_projects_false_tag() {
     let mut env = GlobalEnv::new();
     let (result, triple) = synthetic_disproved("test.phi_a1", &mut env);
 
-    let diag = project_diagnostic(&result, &triple)
-        .expect("disproved must produce a diagnostic");
+    let diag = project_diagnostic(&result, &triple).expect("disproved must produce a diagnostic");
 
     assert_eq!(
         diag.tag,
@@ -122,7 +144,10 @@ fn disproved_verdict_projects_false_tag() {
         "disproved → S_{{¬φ}} region (24 §3)"
     );
     // The tag IS the verdict field on KripkeCountermodel — no separate is_false.
-    let cm = diag.countermodel.as_ref().expect("disproved diagnostic must carry countermodel");
+    let cm = diag
+        .countermodel
+        .as_ref()
+        .expect("disproved diagnostic must carry countermodel");
     assert_eq!(
         cm.verdict,
         DiagnosticTag::False,
@@ -148,8 +173,7 @@ fn unknown_verdict_not_relabeled_false() {
         "abstract P: V3 must yield unknown (not disproved by Glivenko)"
     );
 
-    let diag = project_diagnostic(&result, &triple)
-        .expect("unknown must produce a diagnostic");
+    let diag = project_diagnostic(&result, &triple).expect("unknown must produce a diagnostic");
 
     // FIDELITY: tag must be Unknown, NEVER False
     assert_eq!(
@@ -182,10 +206,12 @@ fn evidence_consumed_unchanged_from_v3() {
 
     let diag = project_diagnostic(&result, &triple).expect("unknown → diagnostic");
 
-    let hole = diag.typed_hole.as_ref().expect("unknown diagnostic must carry TypedHole");
+    let hole = diag
+        .typed_hole
+        .as_ref()
+        .expect("unknown diagnostic must carry TypedHole");
     assert_eq!(
-        hole.id.0,
-        hole_id,
+        hole.id.0, hole_id,
         "TypedHole.id must equal V3's hole_id (evidence consumed unchanged, 24 §7 AC4)"
     );
     // goal is phi (unchanged)
@@ -208,7 +234,11 @@ fn refuted_goal_false_with_forcing_world() {
     let diag = project_diagnostic(&result, &triple).expect("disproved → diagnostic");
 
     assert_eq!(diag.tag, DiagnosticTag::False, "refuted goal → false tag");
-    assert_eq!(diag.region, Region::Refuted, "refuted goal → S_{{¬φ}} region");
+    assert_eq!(
+        diag.region,
+        Region::Refuted,
+        "refuted goal → S_{{¬φ}} region"
+    );
 
     // fix_counterexample present (false-region action)
     assert!(
@@ -238,7 +268,8 @@ fn lem_unknown_no_forcing_world() {
 
     // FIDELITY: tag Unknown, NOT False (no world forces ¬p for abstract p)
     assert_eq!(
-        diag.tag, DiagnosticTag::Unknown,
+        diag.tag,
+        DiagnosticTag::Unknown,
         "lem-unknown-no-forcing-world: abstract p → unknown, not false (24 §1)"
     );
     // No countermodel.failure.world forcing ¬φ
@@ -275,7 +306,9 @@ fn open_hole_typechecks_runs_in_trusted_base() {
     );
 
     let diag = project_diagnostic(&result, &triple).expect("unknown → diagnostic");
-    let hole: &TypedHole = diag.typed_hole.as_ref()
+    let hole: &TypedHole = diag
+        .typed_hole
+        .as_ref()
         .expect("unknown diagnostic must carry TypedHole");
     assert_eq!(hole.id.0, hole_id, "hole id must match V3's postulate id");
 }
@@ -290,21 +323,57 @@ fn unknown_absorption_on_known_operand() {
     let t = ThirdValue::Known(true);
 
     // ∧ absorbing: false wins
-    assert_eq!(tv_and(u, f), ThirdValue::Known(false), "unknown ∧ false = false (41 §6)");
-    assert_eq!(tv_and(f, u), ThirdValue::Known(false), "false ∧ unknown = false (41 §6)");
+    assert_eq!(
+        tv_and(u, f),
+        ThirdValue::Known(false),
+        "unknown ∧ false = false (41 §6)"
+    );
+    assert_eq!(
+        tv_and(f, u),
+        ThirdValue::Known(false),
+        "false ∧ unknown = false (41 §6)"
+    );
     // ∧ no absorber: unknown propagates
-    assert_eq!(tv_and(u, t), ThirdValue::Unknown, "unknown ∧ true = unknown (41 §6)");
-    assert_eq!(tv_and(t, u), ThirdValue::Unknown, "true ∧ unknown = unknown (41 §6)");
+    assert_eq!(
+        tv_and(u, t),
+        ThirdValue::Unknown,
+        "unknown ∧ true = unknown (41 §6)"
+    );
+    assert_eq!(
+        tv_and(t, u),
+        ThirdValue::Unknown,
+        "true ∧ unknown = unknown (41 §6)"
+    );
 
     // ∨ absorbing: true wins
-    assert_eq!(tv_or(u, t), ThirdValue::Known(true), "unknown ∨ true = true (41 §6)");
-    assert_eq!(tv_or(t, u), ThirdValue::Known(true), "true ∨ unknown = true (41 §6)");
+    assert_eq!(
+        tv_or(u, t),
+        ThirdValue::Known(true),
+        "unknown ∨ true = true (41 §6)"
+    );
+    assert_eq!(
+        tv_or(t, u),
+        ThirdValue::Known(true),
+        "true ∨ unknown = true (41 §6)"
+    );
     // ∨ no absorber: unknown propagates
-    assert_eq!(tv_or(u, f), ThirdValue::Unknown, "unknown ∨ false = unknown (41 §6)");
-    assert_eq!(tv_or(f, u), ThirdValue::Unknown, "false ∨ unknown = unknown (41 §6)");
+    assert_eq!(
+        tv_or(u, f),
+        ThirdValue::Unknown,
+        "unknown ∨ false = unknown (41 §6)"
+    );
+    assert_eq!(
+        tv_or(f, u),
+        ThirdValue::Unknown,
+        "false ∨ unknown = unknown (41 §6)"
+    );
 
     // ¬ unknown = unknown
-    assert_eq!(tv_not(u), ThirdValue::Unknown, "¬ unknown = unknown (41 §6)");
+    assert_eq!(
+        tv_not(u),
+        ThirdValue::Unknown,
+        "¬ unknown = unknown (41 §6)"
+    );
 
     // Discriminating: a STRICT evaluator would yield unknown where absorption yields false/true.
     // Assert the absorbing result is DIFFERENT from what strict eval would give:
@@ -328,15 +397,25 @@ fn unknown_propagates_in_strict_position() {
     let u = ThirdValue::Unknown;
 
     // apply unknown u = unknown (strict application)
-    assert_eq!(tv_strict(u), ThirdValue::Unknown, "strict(unknown) = unknown (41 §6)");
+    assert_eq!(
+        tv_strict(u),
+        ThirdValue::Unknown,
+        "strict(unknown) = unknown (41 §6)"
+    );
     // known(b) at strict position: passes through
     assert_eq!(tv_strict(ThirdValue::Known(true)), ThirdValue::Known(true));
-    assert_eq!(tv_strict(ThirdValue::Known(false)), ThirdValue::Known(false));
+    assert_eq!(
+        tv_strict(ThirdValue::Known(false)),
+        ThirdValue::Known(false)
+    );
 
     // Chain: tv_and(tv_strict(unknown), known(true)) = tv_and(unknown, true) = unknown
     let chained = tv_and(tv_strict(u), ThirdValue::Known(true));
-    assert_eq!(chained, ThirdValue::Unknown,
-               "strict unknown in chain position propagates (41 §6)");
+    assert_eq!(
+        chained,
+        ThirdValue::Unknown,
+        "strict unknown in chain position propagates (41 §6)"
+    );
 }
 
 /// C4 (fidelity): hole-free-program-never-unknown
@@ -391,22 +470,35 @@ fn three_regions_partition_keyed_to_verdict() {
     let triple_unknown = closed_triple(&mut env, "test.unknown", phi_unknown.clone());
     let result_unknown = attempt_obligation(&mut env, &triple_unknown);
     assert!(matches!(result_unknown.verdict, Verdict::Unknown { .. }));
-    let diag_unknown = project_diagnostic(&result_unknown, &triple_unknown)
-        .expect("unknown → diagnostic");
-    assert_eq!(diag_unknown.region, Region::Unknown, "unknown → unknown region (24 §3)");
+    let diag_unknown =
+        project_diagnostic(&result_unknown, &triple_unknown).expect("unknown → diagnostic");
+    assert_eq!(
+        diag_unknown.region,
+        Region::Unknown,
+        "unknown → unknown region (24 §3)"
+    );
 
     // disproved (synthetic)
-    let (result_disproved, triple_disproved) =
-        synthetic_disproved("test.disproved", &mut env);
-    let diag_disproved = project_diagnostic(&result_disproved, &triple_disproved)
-        .expect("disproved → diagnostic");
-    assert_eq!(diag_disproved.region, Region::Refuted, "disproved → S_{{¬φ}} region (24 §3)");
+    let (result_disproved, triple_disproved) = synthetic_disproved("test.disproved", &mut env);
+    let diag_disproved =
+        project_diagnostic(&result_disproved, &triple_disproved).expect("disproved → diagnostic");
+    assert_eq!(
+        diag_disproved.region,
+        Region::Refuted,
+        "disproved → S_{{¬φ}} region (24 §3)"
+    );
 
     // The three regions are disjoint: proved has no diag; unknown ≠ Refuted; disproved ≠ Unknown
-    assert_ne!(diag_unknown.region, Region::Refuted,
-               "unknown must not be in S_{{¬φ}} (Glivenko: abstract P is not refutable)");
-    assert_ne!(diag_disproved.region, Region::Unknown,
-               "disproved must not be in unknown region");
+    assert_ne!(
+        diag_unknown.region,
+        Region::Refuted,
+        "unknown must not be in S_{{¬φ}} (Glivenko: abstract P is not refutable)"
+    );
+    assert_ne!(
+        diag_disproved.region,
+        Region::Unknown,
+        "disproved must not be in unknown region"
+    );
 }
 
 /// D2 (fidelity): classically-valid-never-in-refuted-region
@@ -424,22 +516,24 @@ fn classically_valid_never_in_refuted_region() {
     let triple_lem = closed_triple(&mut env, "test.lem", phi_lem.clone());
     let result_lem = attempt_obligation(&mut env, &triple_lem);
 
-    let diag_lem = project_diagnostic(&result_lem, &triple_lem)
-        .expect("unknown → diagnostic");
+    let diag_lem = project_diagnostic(&result_lem, &triple_lem).expect("unknown → diagnostic");
 
     // FIDELITY: region is Unknown, NEVER Refuted
     assert_ne!(
-        diag_lem.region, Region::Refuted,
+        diag_lem.region,
+        Region::Refuted,
         "classically-valid-never-in-refuted-region: abstract atom (LEM analog) \
          must NOT land in S_{{¬φ}} (Glivenko: ¬φ unprovable, no world forces ¬φ)"
     );
     assert_eq!(
-        diag_lem.region, Region::Unknown,
+        diag_lem.region,
+        Region::Unknown,
         "classically-valid goal lands in unknown region (the ¬¬φ gap, 24 §3)"
     );
     // Cross-case consistency: same as A2/B2 — all Unknown, never False
     assert_eq!(
-        diag_lem.tag, DiagnosticTag::Unknown,
+        diag_lem.tag,
+        DiagnosticTag::Unknown,
         "cross-case sweep: LEM-analog must agree with A2/B2 (all unknown)"
     );
 }
@@ -464,8 +558,8 @@ fn slice_missing_hypothesis_sufficiency_flip() {
     );
 
     // The unknown diagnostic has add_precondition (not fix_counterexample)
-    let diag_unknown = project_diagnostic(&result_no_hyp, &triple_no_hyp)
-        .expect("unknown → diagnostic");
+    let diag_unknown =
+        project_diagnostic(&result_no_hyp, &triple_no_hyp).expect("unknown → diagnostic");
     assert!(
         has_add_precondition(&diag_unknown),
         "unknown diagnostic must include add_precondition action (24 §4/§5)"
@@ -482,10 +576,13 @@ fn slice_missing_hypothesis_sufficiency_flip() {
     let triple_with_hyp = ObligationTriple {
         id: ObligationId("test.slice_proved".into()),
         hole_id: placeholder_hole,
-        context: vec![phi.clone()],       // [h : P]
-        phi: phi.clone(),                  // open goal: P
+        context: vec![phi.clone()],                      // [h : P]
+        phi: phi.clone(),                                // open goal: P
         goal_closed: Term::pi(phi.clone(), phi.clone()), // Pi(P, P) — closed form
-        provenance: Provenance { kind: ProvKind::Prove, span: Span::zero() },
+        provenance: Provenance {
+            kind: ProvKind::Prove,
+            span: Span::zero(),
+        },
     };
     let result_with_hyp = attempt_obligation(&mut env, &triple_with_hyp);
 
@@ -586,7 +683,11 @@ fn deterministic_same_input_same_diagnostic() {
     let run1 = run_once();
     let run2 = run_once();
 
-    assert_eq!(run1.len(), run2.len(), "same run → same number of diagnostics");
+    assert_eq!(
+        run1.len(),
+        run2.len(),
+        "same run → same number of diagnostics"
+    );
     for (d1, d2) in run1.iter().zip(run2.iter()) {
         assert_eq!(
             d1.obligation_id.0, d2.obligation_id.0,

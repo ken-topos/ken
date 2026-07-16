@@ -542,7 +542,8 @@ mod tests {
         };
         let mut stderr = Vec::new();
         let effect_entrypoint = RuntimeExpr::Effect {
-            effect: "Console.Write".to_string(),
+            family: "Console".to_string(),
+            operation: ken_host::HostOpV1::ConsoleRead,
             capability: None,
             args: vec![],
         };
@@ -551,6 +552,6 @@ mod tests {
         assert_eq!(outcome.exit_status, 1);
         let report = String::from_utf8(stderr).unwrap();
         assert!(report.contains("unsupported runtime-IR lowering: Effect"));
-        assert!(report.contains("Console.Write"));
+        assert!(report.contains("Console.257"));
     }
 }

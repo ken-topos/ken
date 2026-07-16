@@ -40,10 +40,7 @@ pub enum ITree {
     Ret(Value),
     /// `Vis e k` — perform effect `e`, then continue with `k` applied to the
     /// runtime's response. The continuation is a pure function into the tree.
-    Vis {
-        effect: EffectName,
-        cont: Cont,
-    },
+    Vis { effect: EffectName, cont: Cont },
 }
 
 impl ITree {
@@ -53,10 +50,7 @@ impl ITree {
     }
 
     /// Construct `Vis e k` from a closure.
-    pub fn vis(
-        effect: impl Into<EffectName>,
-        cont: impl Fn(Response) -> ITree + 'static,
-    ) -> Self {
+    pub fn vis(effect: impl Into<EffectName>, cont: impl Fn(Response) -> ITree + 'static) -> Self {
         Self::Vis {
             effect: effect.into(),
             cont: Rc::new(cont),
@@ -142,7 +136,10 @@ pub struct HandlerCase {
 
 impl HandlerCase {
     pub fn new(effect: impl Into<EffectName>, response: Response) -> Self {
-        Self { effect: effect.into(), response }
+        Self {
+            effect: effect.into(),
+            response,
+        }
     }
 }
 
@@ -169,9 +166,7 @@ pub fn handler_fold(tree: ITree, cases: Rc<[HandlerCase]>) -> ITree {
             } else {
                 // Unhandled effect: re-emit the Vis node; fold recursively.
                 let cases2 = Rc::clone(&cases);
-                ITree::vis(effect, move |r| {
-                    handler_fold(cont(r), Rc::clone(&cases2))
-                })
+                ITree::vis(effect, move |r| handler_fold(cont(r), Rc::clone(&cases2)))
             }
         }
     }

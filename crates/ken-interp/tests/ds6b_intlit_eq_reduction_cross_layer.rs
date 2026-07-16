@@ -11,7 +11,10 @@
 use ken_interp::eval::{prim_reduce, EvalVal};
 use ken_kernel::env::{Context, PrimReduction};
 use ken_kernel::term::{Level, Term};
-use ken_kernel::{declare_deceq_certificate, declare_inductive, declare_primitive, whnf, CtorSpec, GlobalEnv, InductiveSpec};
+use ken_kernel::{
+    declare_deceq_certificate, declare_inductive, declare_primitive, whnf, CtorSpec, GlobalEnv,
+    InductiveSpec,
+};
 use num_bigint::BigInt;
 
 /// Same minimal env shape as `ken-kernel/tests/ds6b_intlit_eq_reduction.rs`
@@ -24,15 +27,26 @@ fn mk_env() -> (GlobalEnv, ken_kernel::GlobalId) {
         indices: vec![],
         level: Level::zero(),
         constructors: vec![
-            CtorSpec { args: vec![], target_indices: vec![] },
-            CtorSpec { args: vec![], target_indices: vec![] },
+            CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            },
+            CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            },
         ],
     })
     .expect("Bool");
     let true_ = env.inductive(bool_).unwrap().constructors[0].id;
 
-    let prim_t = declare_primitive(&mut env, vec![], Term::Type(Level::zero()), PrimReduction::OpaqueType)
-        .expect("PrimT");
+    let prim_t = declare_primitive(
+        &mut env,
+        vec![],
+        Term::Type(Level::zero()),
+        PrimReduction::OpaqueType,
+    )
+    .expect("PrimT");
     let prim_const = Term::const_(prim_t, vec![]);
     let bool_t = Term::indformer(bool_, vec![]);
     let eq_op = declare_primitive(
@@ -58,12 +72,18 @@ fn kernel_eq_int(env: &GlobalEnv, prim_t: ken_kernel::GlobalId, m: &BigInt, n: &
     match &reduced {
         Term::Const { id, .. } if *id == env.top_id() => true,
         Term::Const { id, .. } if *id == env.bottom_id() => false,
-        other => panic!("kernel eq_reduce did not decide (stayed neutral): {:?}", other),
+        other => panic!(
+            "kernel eq_reduce did not decide (stayed neutral): {:?}",
+            other
+        ),
     }
 }
 
 fn interp_eq_int(m: &BigInt, n: &BigInt) -> bool {
-    match prim_reduce("eq_int", &[EvalVal::BigInt(m.clone()), EvalVal::BigInt(n.clone())]) {
+    match prim_reduce(
+        "eq_int",
+        &[EvalVal::BigInt(m.clone()), EvalVal::BigInt(n.clone())],
+    ) {
         EvalVal::Bool(b) => b,
         other => panic!("interp eq_int did not decide: {:?}", other),
     }

@@ -16,7 +16,8 @@
 use ken_elaborator::{ElabEnv, ElabError};
 use ken_kernel::{GlobalId, Term};
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")
@@ -57,7 +58,10 @@ fn j_elaborates_to_a_real_term_j_node() {
         )
         .expect("J on refl should elaborate and kernel-check");
     let id = ids[0];
-    let (_, body) = env.env.transparent_body(id).expect("lemma must be transparent");
+    let (_, body) = env
+        .env
+        .transparent_body(id)
+        .expect("lemma must be transparent");
     assert!(
         mentions_j(&body),
         "elaborated body must contain a real Term::J node, got {:?}",
@@ -155,8 +159,12 @@ fn standalone_malformed_j_is_rejected_by_the_final_kernel_check() {
 
 #[test]
 fn transport_package_adds_zero_trusted_base_delta() {
-    let base_tb: std::collections::HashSet<GlobalId> =
-        ElabEnv::new().unwrap().env.trusted_base().into_iter().collect();
+    let base_tb: std::collections::HashSet<GlobalId> = ElabEnv::new()
+        .unwrap()
+        .env
+        .trusted_base()
+        .into_iter()
+        .collect();
     let env = mk_env_with_package();
     let with_pkg_tb: std::collections::HashSet<GlobalId> =
         env.env.trusted_base().into_iter().collect();
@@ -197,7 +205,11 @@ fn stuck_match_over_abstract_key_transports_via_hand_written_motive() {
         .env
         .transparent_body(stuck_transport_id)
         .expect("lemma must be transparent");
-    assert!(mentions_j(&body), "the proof must be a real Term::J, got {:?}", body);
+    assert!(
+        mentions_j(&body),
+        "the proof must be a real Term::J, got {:?}",
+        body
+    );
 }
 
 #[test]
@@ -219,6 +231,13 @@ fn stuck_match_transports_via_package_sym() {
         )
         .expect("J + package sym must transport a stuck match too");
     let id = ids[1];
-    let (_, body) = env.env.transparent_body(id).expect("lemma must be transparent");
-    assert!(mentions_j(&body), "must bottom out in a real Term::J, got {:?}", body);
+    let (_, body) = env
+        .env
+        .transparent_body(id)
+        .expect("lemma must be transparent");
+    assert!(
+        mentions_j(&body),
+        "must bottom out in a real Term::J, got {:?}",
+        body
+    );
 }

@@ -57,7 +57,11 @@ fn goal_closing_over_pre_scrutinee_type_param_narrows_correctly() {
              index produces a TypeMismatch) or Internal-error here",
         );
 
-    let body = env.env.transparent_body(id).expect("sameHead is transparent").1;
+    let body = env
+        .env
+        .transparent_body(id)
+        .expect("sameHead is transparent")
+        .1;
     // Peel the function's own `a`, `v`, `xs` parameter lambdas to reach the match.
     let mut inner = &body;
     for _ in 0..3 {
@@ -70,8 +74,15 @@ fn goal_closing_over_pre_scrutinee_type_param_narrows_correctly() {
         Term::Elim { fam, methods, .. } => (*fam, methods),
         other => panic!("sameHead's match must lower to a real Term::Elim, got {other:?}"),
     };
-    assert_eq!(fam, env.globals["List"], "must eliminate over the real List family");
-    assert_eq!(methods.len(), 2, "List has exactly 2 constructors (Nil, Cons)");
+    assert_eq!(
+        fam, env.globals["List"],
+        "must eliminate over the real List family"
+    );
+    assert_eq!(
+        methods.len(),
+        2,
+        "List has exactly 2 constructors (Nil, Cons)"
+    );
 
     // Cons method: λ(b:a).λ(bs:List a).λ(ih:Equal a v v -> Prop, since the
     // goal is CONSTANT in xs here).λ(h:<narrowed goal>). body. Peel the 2
@@ -122,7 +133,10 @@ fn goal_closing_over_pre_scrutinee_type_param_narrows_correctly() {
             let a_ref = args[0];
             let v_lhs = args[1];
             let v_rhs = args[2];
-            assert_eq!(v_lhs, v_rhs, "both Equal operands must reference the SAME outer `v`");
+            assert_eq!(
+                v_lhs, v_rhs,
+                "both Equal operands must reference the SAME outer `v`"
+            );
             match a_ref {
                 Term::Var(i) => {
                     assert!(
@@ -143,7 +157,10 @@ fn goal_closing_over_pre_scrutinee_type_param_narrows_correctly() {
                          freshly-bound b/bs/ih (Var 0..2) — got Var({i})"
                     );
                     if let Term::Var(a_i) = a_ref {
-                        assert_ne!(i, a_i, "`a` and `v` must reference DISTINCT outer variables");
+                        assert_ne!(
+                            i, a_i,
+                            "`a` and `v` must reference DISTINCT outer variables"
+                        );
                     }
                 }
                 other => panic!("expected `v` to still be a bound Var, got {other:?}"),

@@ -288,7 +288,9 @@ pub fn emit_export(
                 // DISPROVED BOUNDARY (71 §2.1, EX-F1): a refuted claim is never
                 // exported. The build is non-shippable. Return an error — the
                 // caller must not produce an export from this state.
-                return Err(ExportError::DisproovedClaim { obligation_id: id_str });
+                return Err(ExportError::DisproovedClaim {
+                    obligation_id: id_str,
+                });
             }
         }
     }
@@ -372,7 +374,14 @@ fn compute_hash(
 
     // Σ: BTreeSet is already sorted.
     let sigma_repr: Vec<&String> = alphabet.iter().collect();
-    root.insert("alphabet", sigma_repr.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(","));
+    root.insert(
+        "alphabet",
+        sigma_repr
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
 
     // T entries: id + the delegated `Temporal` formula body (content-addressed
     // — a different formula yields a different hash, `71 §3.3`).
@@ -416,39 +425,55 @@ fn compute_hash(
 pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
     use serde_json::{json, Value};
 
-    let guarantees: Vec<Value> = export.guarantees.iter().map(|e| {
-        json!({
-            "obligation_id": e.obligation_id,    // (oracle): "id" / "obligation_id"
-            "goal": e.goal,
-            "status": "proved"
+    let guarantees: Vec<Value> = export
+        .guarantees
+        .iter()
+        .map(|e| {
+            json!({
+                "obligation_id": e.obligation_id,    // (oracle): "id" / "obligation_id"
+                "goal": e.goal,
+                "status": "proved"
+            })
         })
-    }).collect();
+        .collect();
 
-    let assumptions: Vec<Value> = export.assumptions.iter().map(|e| {
-        json!({
-            "obligation_id": e.obligation_id,    // (oracle)
-            "goal": e.goal,
-            "status": e.status.as_str()          // "tested" | "unknown"
+    let assumptions: Vec<Value> = export
+        .assumptions
+        .iter()
+        .map(|e| {
+            json!({
+                "obligation_id": e.obligation_id,    // (oracle)
+                "goal": e.goal,
+                "status": e.status.as_str()          // "tested" | "unknown"
+            })
         })
-    }).collect();
+        .collect();
 
     let alphabet: Vec<&String> = export.alphabet.iter().collect();
 
-    let obligations: Vec<Value> = export.obligations.iter().map(|e| {
-        json!({
-            "obligation_id": e.obligation_id,    // (oracle)
-            "status": "delegated",              // constant (`72 §5`); never proved/tested/unknown
-            "formula": format!("{:?}", e.formula) // (oracle): Ward-facing spelling deferred
+    let obligations: Vec<Value> = export
+        .obligations
+        .iter()
+        .map(|e| {
+            json!({
+                "obligation_id": e.obligation_id,    // (oracle)
+                "status": "delegated",              // constant (`72 §5`); never proved/tested/unknown
+                "formula": format!("{:?}", e.formula) // (oracle): Ward-facing spelling deferred
+            })
         })
-    }).collect();
+        .collect();
 
-    let generators: Vec<Value> = export.generators.iter().map(|e| {
-        json!({
-            "source": e.source,
-            "conditions": e.conditions,
-            // No weight/measure field — structural seal (I5, §4.1)
+    let generators: Vec<Value> = export
+        .generators
+        .iter()
+        .map(|e| {
+            json!({
+                "source": e.source,
+                "conditions": e.conditions,
+                // No weight/measure field — structural seal (I5, §4.1)
+            })
         })
-    }).collect();
+        .collect();
 
     json!({
         "schema": "ken.export/v0",               // (oracle): version token

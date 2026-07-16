@@ -36,9 +36,7 @@ fn axiom_surface_parses_formats_and_elaborates_as_a_named_postulate() {
         .expect("axiom declaration elaborates through the lemma lane");
     let entries = trusted_opaque_entries(&env);
     assert!(
-        entries
-            .iter()
-            .any(|(_, name)| name == "assumed_top"),
+        entries.iter().any(|(_, name)| name == "assumed_top"),
         "trusted-base audit must expose the declared axiom name"
     );
 }
@@ -59,7 +57,11 @@ fn repeated_expression_axioms_share_the_owner_label_but_not_identity() {
         .collect::<Vec<_>>();
     assert_eq!(shared.len(), 2, "both Axiom occurrences retain provenance");
     assert_eq!(
-        shared.iter().map(|(id, _)| id).collect::<BTreeSet<_>>().len(),
+        shared
+            .iter()
+            .map(|(id, _)| id)
+            .collect::<BTreeSet<_>>()
+            .len(),
         2,
         "shared provenance is not shared identity"
     );
@@ -88,19 +90,14 @@ fn standalone_api_requires_and_preserves_its_caller_owner() {
     let mut env = ElabEnv::new().expect("base environment builds");
     env.elaborate_expr("standalone_assumption", "Axiom : Top")
         .expect("checking-mode Axiom remains legal through the standalone API");
-    assert!(
-        trusted_opaque_entries(&env)
-            .iter()
-            .any(|(_, name)| name == "standalone_assumption")
-    );
+    assert!(trusted_opaque_entries(&env)
+        .iter()
+        .any(|(_, name)| name == "standalone_assumption"));
 
     env.elaborate_file("lemma choose_api (x : Top) (y : Top) : Top = x")
         .expect("standalone fixture helper elaborates");
-    env.elaborate_expr(
-        "standalone_shared_owner",
-        "choose_api Axiom Axiom",
-    )
-    .expect("both standalone Axiom operands elaborate");
+    env.elaborate_expr("standalone_shared_owner", "choose_api Axiom Axiom")
+        .expect("both standalone Axiom operands elaborate");
     let trusted = trusted_opaque_entries(&env);
     let shared = trusted
         .iter()
@@ -115,9 +112,7 @@ fn module_qualification_is_the_axiom_owner() {
     let mut env = ElabEnv::new().expect("base environment builds");
     env.elaborate_file("module Claims { pub axiom admitted : Top }")
         .expect("module-owned axiom elaborates");
-    assert!(
-        trusted_opaque_entries(&env)
-            .iter()
-            .any(|(_, name)| name == "Claims.admitted")
-    );
+    assert!(trusted_opaque_entries(&env)
+        .iter()
+        .any(|(_, name)| name == "Claims.admitted"));
 }

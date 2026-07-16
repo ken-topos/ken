@@ -120,15 +120,16 @@ fn lift_obligation(def_name: &str, obl: &Obligation) -> ObligationTriple {
     let (id_str, prov_kind) = match &obl.kind {
         ObligationKind::Ensures => (
             format!("{}.ensures.{}", def_name, obl.id),
-            ProvKind::Ensures { index: obl.id as usize },
+            ProvKind::Ensures {
+                index: obl.id as usize,
+            },
         ),
-        ObligationKind::Prove => (
-            format!("{}.prove", def_name),
-            ProvKind::Prove,
-        ),
+        ObligationKind::Prove => (format!("{}.prove", def_name), ProvKind::Prove),
         ObligationKind::LawField(field) => (
             format!("{}.law.{}", def_name, field),
-            ProvKind::LawField { field_name: field.clone() },
+            ProvKind::LawField {
+                field_name: field.clone(),
+            },
         ),
         ObligationKind::PartialPrim => (
             format!("{}.prim.{}", def_name, obl.id),
@@ -147,7 +148,10 @@ fn lift_obligation(def_name: &str, obl: &Obligation) -> ObligationTriple {
         context,
         phi,
         goal_closed: obl.goal_closed.clone(),
-        provenance: Provenance { kind: prov_kind, span: obl.span.clone() },
+        provenance: Provenance {
+            kind: prov_kind,
+            span: obl.span.clone(),
+        },
     }
 }
 

@@ -52,7 +52,10 @@ fn nat_count(env: &ken_elaborator::ElabEnv, v: &ken_interp::eval::EvalVal) -> u6
 }
 
 fn eval_nat_decl(env: &ElabEnv, name: &str) -> u64 {
-    let id = *env.globals.get(name).unwrap_or_else(|| panic!("{name} should be a global"));
+    let id = *env
+        .globals
+        .get(name)
+        .unwrap_or_else(|| panic!("{name} should be a global"));
     let body = match env.env.lookup(id) {
         Some(ken_kernel::Decl::Transparent { body, .. }) => body.clone(),
         other => panic!("{name} should be Transparent, got {other:?}"),

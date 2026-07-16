@@ -25,7 +25,8 @@ use ken_kernel::{Decl, GlobalId, Term};
 
 const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
@@ -40,7 +41,9 @@ fn make_store(env: &ElabEnv) -> EvalStore {
     let mut store = EvalStore::new();
     let mkdecimalpair_id = env.prelude_env.mkdecimalpair_id;
     for (id, v) in &env.num_values {
-        store.num_values.insert(*id, lit_to_eval(v, mkdecimalpair_id));
+        store
+            .num_values
+            .insert(*id, lit_to_eval(v, mkdecimalpair_id));
     }
     store.list_char_ids = Some(ListCharIds {
         nil_id: env.prelude_env.nil_id,
@@ -73,7 +76,13 @@ fn eval_def(env: &ElabEnv, store: &mut EvalStore, id: GlobalId) -> EvalVal {
 /// literal declared after `make_store` time evaluates against a stale
 /// snapshot otherwise (`l3_strings_roundtrip_acceptance.rs`'s documented
 /// discipline).
-fn eval_view(env: &mut ElabEnv, store: &mut EvalStore, name: &str, ty: &str, expr: &str) -> EvalVal {
+fn eval_view(
+    env: &mut ElabEnv,
+    store: &mut EvalStore,
+    name: &str,
+    ty: &str,
+    expr: &str,
+) -> EvalVal {
     let src = format!("const {name} : {ty} = {expr}");
     let id = env
         .elaborate_decl(&src)
@@ -188,7 +197,9 @@ fn list_combinator_floor_derived_over_real_elim() {
     // shaped — it's checked separately: just confirm it's Transparent and not
     // an opaque postulate stand-in.
     assert!(
-        env.env.transparent_body(env.globals["compare_char"]).is_some(),
+        env.env
+            .transparent_body(env.globals["compare_char"])
+            .is_some(),
         "compare_char must be a real (checked) def"
     );
 
@@ -201,7 +212,16 @@ fn list_combinator_floor_derived_over_real_elim() {
 
     // Zero-TCB-delta: none of the floor combinators or OrdResult contribute
     // any new trusted_base() member (they are all declare_def/data, checked).
-    for name in ["list_append", "nth", "take", "drop", "nat_sub", "list_eq", "list_compare", "compare_char"] {
+    for name in [
+        "list_append",
+        "nth",
+        "take",
+        "drop",
+        "nat_sub",
+        "list_eq",
+        "list_compare",
+        "compare_char",
+    ] {
         let id = env.globals[name];
         let delta = trusted_base_delta(&env.env, id);
         assert!(
@@ -251,10 +271,30 @@ fn derived_string_ops_reduce_over_real_roundtrip() {
         let mut store = make_store(&env);
 
         // concat, including a multi-byte pair (CJK), preserves every scalar.
-        let v = eval_view(&mut env, &mut store, "t_concat", "String", "concat \"ab\" \"cd\"");
-        assert_eq!(v, EvalVal::Str("abcd".into()), "concat \"ab\" \"cd\" must be \"abcd\"");
-        let v = eval_view(&mut env, &mut store, "t_concat_mb", "String", "concat \"世\" \"界\"");
-        assert_eq!(v, EvalVal::Str("世界".into()), "concat must preserve multi-byte scalars");
+        let v = eval_view(
+            &mut env,
+            &mut store,
+            "t_concat",
+            "String",
+            "concat \"ab\" \"cd\"",
+        );
+        assert_eq!(
+            v,
+            EvalVal::Str("abcd".into()),
+            "concat \"ab\" \"cd\" must be \"abcd\""
+        );
+        let v = eval_view(
+            &mut env,
+            &mut store,
+            "t_concat_mb",
+            "String",
+            "concat \"世\" \"界\"",
+        );
+        assert_eq!(
+            v,
+            EvalVal::Str("世界".into()),
+            "concat must preserve multi-byte scalars"
+        );
 
         // slice: ordinary, over-range clamp, and j < i (empty, no underflow).
         let v = eval_view(
@@ -264,7 +304,11 @@ fn derived_string_ops_reduce_over_real_roundtrip() {
             "String",
             &format!("slice ({}) ({}) \"abcde\"", nat(1), nat(3)),
         );
-        assert_eq!(v, EvalVal::Str("bc".into()), "slice 1 3 \"abcde\" must be \"bc\"");
+        assert_eq!(
+            v,
+            EvalVal::Str("bc".into()),
+            "slice 1 3 \"abcde\" must be \"bc\""
+        );
 
         let v = eval_view(
             &mut env,
@@ -295,19 +339,41 @@ fn derived_string_ops_reduce_over_real_roundtrip() {
         // char_at: Option Char, honest absence.
         let some_id = env.globals["Some"];
         let none_id = env.globals["None"];
-        let v = eval_view(&mut env, &mut store, "t_charat1", "Option Char", &format!("char_at ({}) \"abc\"", nat(1)));
+        let v = eval_view(
+            &mut env,
+            &mut store,
+            "t_charat1",
+            "Option Char",
+            &format!("char_at ({}) \"abc\"", nat(1)),
+        );
         match v {
             EvalVal::Ctor { id, ref args, .. } if id == some_id => {
-                assert_eq!(args[1], EvalVal::Int('b' as i64), "char_at 1 \"abc\" must be Some 'b'");
+                assert_eq!(
+                    args[1],
+                    EvalVal::Int('b' as i64),
+                    "char_at 1 \"abc\" must be Some 'b'"
+                );
             }
             other => panic!("char_at 1 \"abc\" must be Some 'b'; got {other:?}"),
         }
-        let v = eval_view(&mut env, &mut store, "t_charat_oob", "Option Char", &format!("char_at ({}) \"abc\"", nat(5)));
+        let v = eval_view(
+            &mut env,
+            &mut store,
+            "t_charat_oob",
+            "Option Char",
+            &format!("char_at ({}) \"abc\"", nat(5)),
+        );
         assert!(
             matches!(v, EvalVal::Ctor { id, .. } if id == none_id),
             "char_at 5 \"abc\" must be None"
         );
-        let v = eval_view(&mut env, &mut store, "t_charat_empty", "Option Char", &format!("char_at ({}) \"\"", nat(0)));
+        let v = eval_view(
+            &mut env,
+            &mut store,
+            "t_charat_empty",
+            "Option Char",
+            &format!("char_at ({}) \"\"", nat(0)),
+        );
         assert!(
             matches!(v, EvalVal::Ctor { id, .. } if id == none_id),
             "char_at 0 \"\" must be None"
@@ -326,17 +392,44 @@ fn string_eq_codepoint_wise_accept_reject_pair() {
     let true_id = env.globals["True"];
     let false_id = env.globals["False"];
 
-    let v = eval_view(&mut env, &mut store, "t_eq_accept", "Bool", "eq \"abc\" \"abc\"");
-    assert!(matches!(v, EvalVal::Ctor{id,..} if id==true_id), "eq \"abc\" \"abc\" must be True");
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_eq_accept",
+        "Bool",
+        "eq \"abc\" \"abc\"",
+    );
+    assert!(
+        matches!(v, EvalVal::Ctor{id,..} if id==true_id),
+        "eq \"abc\" \"abc\" must be True"
+    );
 
     // Non-degenerate reject: same length, single codepoint differs — the
     // tightest guard (a length-only equality would pass this and both
     // corpus witnesses below, and only this case catches it).
-    let v = eval_view(&mut env, &mut store, "t_eq_reject_samelen", "Bool", "eq \"abc\" \"abd\"");
-    assert!(matches!(v, EvalVal::Ctor{id,..} if id==false_id), "eq \"abc\" \"abd\" must be False");
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_eq_reject_samelen",
+        "Bool",
+        "eq \"abc\" \"abd\"",
+    );
+    assert!(
+        matches!(v, EvalVal::Ctor{id,..} if id==false_id),
+        "eq \"abc\" \"abd\" must be False"
+    );
 
-    let v = eval_view(&mut env, &mut store, "t_eq_reject_len", "Bool", "eq \"ab\" \"abc\"");
-    assert!(matches!(v, EvalVal::Ctor{id,..} if id==false_id), "eq \"ab\" \"abc\" must be False");
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_eq_reject_len",
+        "Bool",
+        "eq \"ab\" \"abc\"",
+    );
+    assert!(
+        matches!(v, EvalVal::Ctor{id,..} if id==false_id),
+        "eq \"ab\" \"abc\" must be False"
+    );
 }
 
 /// `surface/strings/string-compare-3way-lexicographic-triple`
@@ -348,14 +441,50 @@ fn string_compare_3way_lexicographic_triple() {
     let eq_id = env.globals["Eq"];
     let gt_id = env.globals["Gt"];
 
-    let v = eval_view(&mut env, &mut store, "t_cmp1", "OrdResult", "compare \"a\" \"ab\"");
-    assert!(matches!(v, EvalVal::Ctor{id,..} if id==lt_id), "compare \"a\" \"ab\" must be Lt; got {v:?}");
-    let v = eval_view(&mut env, &mut store, "t_cmp2", "OrdResult", "compare \"ab\" \"b\"");
-    assert!(matches!(v, EvalVal::Ctor{id,..} if id==lt_id), "compare \"ab\" \"b\" must be Lt; got {v:?}");
-    let v = eval_view(&mut env, &mut store, "t_cmp3", "OrdResult", "compare \"b\" \"a\"");
-    assert!(matches!(v, EvalVal::Ctor{id,..} if id==gt_id), "compare \"b\" \"a\" must be Gt; got {v:?}");
-    let v = eval_view(&mut env, &mut store, "t_cmp4", "OrdResult", "compare \"ab\" \"ab\"");
-    assert!(matches!(v, EvalVal::Ctor{id,..} if id==eq_id), "compare \"ab\" \"ab\" must be Eq; got {v:?}");
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cmp1",
+        "OrdResult",
+        "compare \"a\" \"ab\"",
+    );
+    assert!(
+        matches!(v, EvalVal::Ctor{id,..} if id==lt_id),
+        "compare \"a\" \"ab\" must be Lt; got {v:?}"
+    );
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cmp2",
+        "OrdResult",
+        "compare \"ab\" \"b\"",
+    );
+    assert!(
+        matches!(v, EvalVal::Ctor{id,..} if id==lt_id),
+        "compare \"ab\" \"b\" must be Lt; got {v:?}"
+    );
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cmp3",
+        "OrdResult",
+        "compare \"b\" \"a\"",
+    );
+    assert!(
+        matches!(v, EvalVal::Ctor{id,..} if id==gt_id),
+        "compare \"b\" \"a\" must be Gt; got {v:?}"
+    );
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cmp4",
+        "OrdResult",
+        "compare \"ab\" \"ab\"",
+    );
+    assert!(
+        matches!(v, EvalVal::Ctor{id,..} if id==eq_id),
+        "compare \"ab\" \"ab\" must be Eq; got {v:?}"
+    );
 }
 
 /// `surface/strings/list-eq-is-codepoint-wise-not-nfc-folding` (property)
@@ -429,7 +558,11 @@ fn concat_slice_compose_and_floor_totality() {
             "String",
             &format!("slice ({}) ({}) (concat \"ab\" \"cd\")", nat(0), nat(2)),
         );
-        assert_eq!(v, EvalVal::Str("ab".into()), "slice 0 (charLength \"ab\") (concat \"ab\" \"cd\") must be \"ab\"");
+        assert_eq!(
+            v,
+            EvalVal::Str("ab".into()),
+            "slice 0 (charLength \"ab\") (concat \"ab\" \"cd\") must be \"ab\""
+        );
 
         // list_append associativity on a small corpus:
         // list_append (list_append xs ys) zs ≡ list_append xs (list_append ys zs).
@@ -455,7 +588,16 @@ fn concat_slice_compose_and_floor_totality() {
         // corpus values are all non-Neutral (they were asserted to concrete
         // values above; this call re-confirms the out-of-range/underflow
         // faces specifically).
-        let v = eval_view(&mut env, &mut store, "t_natsub_sat", "Nat", &format!("nat_sub ({}) ({})", nat(1), nat(2)));
-        assert!(!matches!(v, EvalVal::Neutral), "nat_sub 1 2 must not be stuck");
+        let v = eval_view(
+            &mut env,
+            &mut store,
+            "t_natsub_sat",
+            "Nat",
+            &format!("nat_sub ({}) ({})", nat(1), nat(2)),
+        );
+        assert!(
+            !matches!(v, EvalVal::Neutral),
+            "nat_sub 1 2 must not be stuck"
+        );
     });
 }

@@ -1691,9 +1691,14 @@ impl<'a> Lowering<'a> {
                 self.lower_expr(builder, &body, &call_env)
             }
             RuntimeExpr::Trap(trap) => Ok(Lowered::Trap(trap.clone())),
-            RuntimeExpr::Effect { effect, .. } => Err(unsupported(
+            RuntimeExpr::Effect {
+                family, operation, ..
+            } => Err(unsupported(
                 "Effect",
-                format!("effect {effect} is not modeled in the supported native subset"),
+                format!(
+                    "effect {family}.{} is not modeled in the supported native subset",
+                    *operation as u16
+                ),
             )),
         }
     }
@@ -4185,8 +4190,9 @@ mod tests {
             name: "unsupported-effect".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::Effect {
-                effect: "Console".to_string(),
-                capability: Some("cap:Console".to_string()),
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleRead,
+                capability: None,
                 args: vec![],
             },
             observation: RuntimeObservation::Trapped(RuntimeTrap {

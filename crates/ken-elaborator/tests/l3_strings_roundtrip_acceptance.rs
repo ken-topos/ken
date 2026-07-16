@@ -18,7 +18,9 @@ fn make_store(env: &ElabEnv) -> EvalStore {
     let mut store = EvalStore::new();
     let mkdecimalpair_id = env.prelude_env.mkdecimalpair_id;
     for (id, v) in &env.num_values {
-        store.num_values.insert(*id, lit_to_eval(v, mkdecimalpair_id));
+        store
+            .num_values
+            .insert(*id, lit_to_eval(v, mkdecimalpair_id));
     }
     store.list_char_ids = Some(ListCharIds {
         nil_id: env.prelude_env.nil_id,
@@ -41,9 +43,7 @@ fn lit_to_eval(v: &NumericLitVal, mkdecimalpair_id: GlobalId) -> EvalVal {
 
 fn eval_def(env: &ElabEnv, store: &mut EvalStore, id: GlobalId) -> EvalVal {
     match env.env.lookup(id) {
-        Some(Decl::Transparent { body, .. }) => {
-            ken_interp::eval::eval(&[], body, &env.env, store)
-        }
+        Some(Decl::Transparent { body, .. }) => ken_interp::eval::eval(&[], body, &env.env, store),
         _ => EvalVal::Unknown,
     }
 }
@@ -55,7 +55,13 @@ fn eval_def(env: &ElabEnv, store: &mut EvalStore, id: GlobalId) -> EvalVal {
 /// must be resynced after every `elaborate_decl` call, not just once at
 /// `make_store` time, or a literal declared after store creation evaluates
 /// against a stale (missing-entry) snapshot.
-fn eval_view(env: &mut ElabEnv, store: &mut EvalStore, name: &str, ty: &str, expr: &str) -> EvalVal {
+fn eval_view(
+    env: &mut ElabEnv,
+    store: &mut EvalStore,
+    name: &str,
+    ty: &str,
+    expr: &str,
+) -> EvalVal {
     let src = format!("const {name} : {ty} = {expr}");
     let id = env
         .elaborate_decl(&src)
@@ -137,7 +143,10 @@ fn ac1_s2l_witness_is_always_a_valid_scalar() {
     for s in corpus {
         let v = eval_view(&mut env, &mut store, "t_ac1", "List Char", &s2l_expr(s));
         for cp in list_char_codepoints(&env, &v) {
-            assert!(is_scalar(cp), "codepoint {cp:#x} from {s:?} is not a valid scalar");
+            assert!(
+                is_scalar(cp),
+                "codepoint {cp:#x} from {s:?} is not a valid scalar"
+            );
         }
     }
 }
@@ -216,13 +225,13 @@ fn ac3_utf8_length_boundary_corpus() {
     let mut store = make_store(&env);
 
     let cases: &[(&str, u32)] = &[
-        ("\u{0000}", 0x0000), // 1-byte min
-        ("\u{007F}", 0x007F), // 1-byte max
-        ("\u{0080}", 0x0080), // 2-byte min
-        ("\u{07FF}", 0x07FF), // 2-byte max
-        ("\u{0800}", 0x0800), // 3-byte min
-        ("\u{FFFF}", 0xFFFF), // 3-byte max
-        ("\u{10000}", 0x10000), // 4-byte min
+        ("\u{0000}", 0x0000),     // 1-byte min
+        ("\u{007F}", 0x007F),     // 1-byte max
+        ("\u{0080}", 0x0080),     // 2-byte min
+        ("\u{07FF}", 0x07FF),     // 2-byte max
+        ("\u{0800}", 0x0800),     // 3-byte min
+        ("\u{FFFF}", 0xFFFF),     // 3-byte max
+        ("\u{10000}", 0x10000),   // 4-byte min
         ("\u{10FFFF}", 0x10FFFF), // 4-byte max (Unicode ceiling)
     ];
     for (s, expected) in cases {
@@ -242,11 +251,23 @@ fn ac3_mixed_multiscalar_and_empty_string() {
     let mut env = ElabEnv::new().expect("base env");
     let mut store = make_store(&env);
 
-    let v_empty = eval_view(&mut env, &mut store, "t_ac3_empty", "List Char", &s2l_expr(""));
+    let v_empty = eval_view(
+        &mut env,
+        &mut store,
+        "t_ac3_empty",
+        "List Char",
+        &s2l_expr(""),
+    );
     assert_eq!(list_char_codepoints(&env, &v_empty), Vec::<u32>::new());
 
     let mixed = "A\u{00e9}\u{4e2d}\u{1F600}z";
-    let v_mixed = eval_view(&mut env, &mut store, "t_ac3_mixed", "List Char", &s2l_expr(mixed));
+    let v_mixed = eval_view(
+        &mut env,
+        &mut store,
+        "t_ac3_mixed",
+        "List Char",
+        &s2l_expr(mixed),
+    );
     assert_eq!(
         list_char_codepoints(&env, &v_mixed),
         vec![0x41, 0xe9, 0x4e2d, 0x1F600, 0x7A]
@@ -271,11 +292,25 @@ fn ac3_surrogate_guard_across_corpus() {
     let mut store = make_store(&env);
 
     let corpus = [
-        "\u{0000}", "\u{007F}", "\u{0080}", "\u{07FF}", "\u{0800}",
-        "\u{D7FF}", "\u{E000}", "\u{FFFF}", "\u{10000}", "\u{10FFFF}",
+        "\u{0000}",
+        "\u{007F}",
+        "\u{0080}",
+        "\u{07FF}",
+        "\u{0800}",
+        "\u{D7FF}",
+        "\u{E000}",
+        "\u{FFFF}",
+        "\u{10000}",
+        "\u{10FFFF}",
     ];
     for s in corpus {
-        let v = eval_view(&mut env, &mut store, "t_ac3_guard", "List Char", &s2l_expr(s));
+        let v = eval_view(
+            &mut env,
+            &mut store,
+            "t_ac3_guard",
+            "List Char",
+            &s2l_expr(s),
+        );
         for cp in list_char_codepoints(&env, &v) {
             assert!(
                 !(0xD800..=0xDFFF).contains(&cp),
@@ -323,5 +358,8 @@ fn derived_list_char_surface_out_of_scope() {
     let result = env.elaborate_decl(
         "const t : String = concat (string_to_list_char \"a\") (string_to_list_char \"b\")",
     );
-    assert!(result.is_err(), "concat over List Char must not exist yet (slice 2, Team Language)");
+    assert!(
+        result.is_err(),
+        "concat over List Char must not exist yet (slice 2, Team Language)"
+    );
 }

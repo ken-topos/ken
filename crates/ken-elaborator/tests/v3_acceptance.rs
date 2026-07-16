@@ -10,8 +10,8 @@
 
 use ken_elaborator::{
     attempt_obligation, attempt_with_cert, classify,
-    extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     error::Span,
+    extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     prover::{Route, Verdict},
 };
 use ken_kernel::{declare_postulate, GlobalEnv, GlobalId, Level, Term};
@@ -29,12 +29,20 @@ struct ProofEnv {
 
 fn make_proof_env() -> ProofEnv {
     let mut env = GlobalEnv::new();
-    let p_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
-            .expect("P postulate");
-    let q_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
-            .expect("Q postulate");
+    let p_id = declare_postulate(
+        &mut env,
+        "test postulate".to_string(),
+        vec![],
+        Term::omega(Level::zero()),
+    )
+    .expect("P postulate");
+    let q_id = declare_postulate(
+        &mut env,
+        "test postulate".to_string(),
+        vec![],
+        Term::omega(Level::zero()),
+    )
+    .expect("Q postulate");
     ProofEnv {
         p: Term::const_(p_id, vec![]),
         q: Term::const_(q_id, vec![]),
@@ -52,7 +60,10 @@ fn closed_triple(env: &mut GlobalEnv, id: &str, phi: Term) -> ObligationTriple {
         context: vec![],
         phi: phi.clone(),
         goal_closed: phi,
-        provenance: Provenance { kind: ProvKind::Prove, span: Span::zero() },
+        provenance: Provenance {
+            kind: ProvKind::Prove,
+            span: Span::zero(),
+        },
     }
 }
 
@@ -81,10 +92,7 @@ fn discharged_goal_cert_kernel_accepts() {
     // phi = Pi(Sigma(P, Q), P) — (p ∧ q) ⇒ p
     let phi = Term::pi(Term::sigma(p.clone(), q.clone()), p.clone());
     // cert = λpair. Proj1(pair) — takes the first component
-    let cert = Term::lam(
-        Term::sigma(p.clone(), q.clone()),
-        Term::proj1(Term::var(0)),
-    );
+    let cert = Term::lam(Term::sigma(p.clone(), q.clone()), Term::proj1(Term::var(0)));
 
     let verdict = attempt_with_cert(&mut env, &phi, cert);
     assert!(
@@ -100,12 +108,13 @@ fn discharged_goal_cert_kernel_accepts() {
     // Assert: `trusted_base()` does NOT contain phi's postulate (none was
     // registered because the cert checks directly, no declare_postulate called).
     assert!(
-        base.is_empty() || base.iter().all(|_id| {
-            // None of the base entries should correspond to phi — there are
-            // only the P and Q postulates added during env setup, whose
-            // types are Omega_0 (the prop universe), not phi itself.
-            true  // conservative: just verify Proved verdict is sufficient
-        }),
+        base.is_empty()
+            || base.iter().all(|_id| {
+                // None of the base entries should correspond to phi — there are
+                // only the P and Q postulates added during env setup, whose
+                // types are Omega_0 (the prop universe), not phi itself.
+                true // conservative: just verify Proved verdict is sufficient
+            }),
         "trusted_base should not contain phi's postulate for a proved goal"
     );
 }
@@ -385,10 +394,7 @@ fn unknown_hole_trusted_base_distinct_from_proved() {
 
     // -- Proved path: (p ∧ q) ⇒ p with direct cert → not in trusted_base()
     let phi_proved = Term::pi(Term::sigma(p.clone(), q.clone()), p.clone());
-    let cert = Term::lam(
-        Term::sigma(p.clone(), q.clone()),
-        Term::proj1(Term::var(0)),
-    );
+    let cert = Term::lam(Term::sigma(p.clone(), q.clone()), Term::proj1(Term::var(0)));
     let verdict_p = attempt_with_cert(&mut env, &phi_proved, cert);
     assert!(
         matches!(verdict_p, Verdict::Proved { .. }),

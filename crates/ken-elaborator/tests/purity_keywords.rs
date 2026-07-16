@@ -64,10 +64,8 @@ fn surf1_d2_fn_calling_proc_reuses_escape_gate() {
         "fn calling a proc must reject via the row escape gate: {bad_fn}"
     );
 
-    env.elaborate_decl(
-        "proc surf1_load_ok (p : String) : String visits [FS] = surf1_read p",
-    )
-    .expect("same body under proc with matching row must accept");
+    env.elaborate_decl("proc surf1_load_ok (p : String) : String visits [FS] = surf1_read p")
+        .expect("same body under proc with matching row must accept");
 }
 
 #[test]

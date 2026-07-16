@@ -168,11 +168,12 @@ pub fn elaborate_foreign(
     let marshal_sig = compute_marshal_sig(&ty_core, bytes_id);
 
     // Declare the postulate — the foreign type is ASSUMED, not verified.
-    let postulate_id = declare_postulate(env, name.to_string(), vec![], ty_core)
-        .map_err(|e| ElabError::KernelRejected {
+    let postulate_id = declare_postulate(env, name.to_string(), vec![], ty_core).map_err(|e| {
+        ElabError::KernelRejected {
             error: e,
             span: span.clone(),
-        })?;
+        }
+    })?;
     globals.insert(name.to_string(), postulate_id);
 
     // Emit runtime checks for statically-unprovable boundary contracts (AC4).
@@ -182,16 +183,11 @@ pub fn elaborate_foreign(
     for clause in ensures_clauses {
         // Each runtime check gets its own postulate slot in trusted_base.
         let rc_ty = ken_kernel::Term::omega(ken_kernel::Level::Zero);
-        let hole_id = declare_postulate(
-            env,
-            format!("{name}.runtime_check"),
-            vec![],
-            rc_ty,
-        )
-        .map_err(|e| ElabError::KernelRejected {
-            error: e,
-            span: span.clone(),
-        })?;
+        let hole_id = declare_postulate(env, format!("{name}.runtime_check"), vec![], rc_ty)
+            .map_err(|e| ElabError::KernelRejected {
+                error: e,
+                span: span.clone(),
+            })?;
         runtime_checks.push(FfiRuntimeCheck {
             hole_id,
             clause_kind: "ensures",
@@ -275,13 +271,15 @@ fn collect_consts_in_tb(
             }
         }
         Term::Var(_) | Term::Type(_) | Term::Omega(_) | Term::IntLit(_) => {}
-        Term::Pi(a, b) | Term::Lam(a, b) | Term::Sigma(a, b) | Term::Pair(a, b)
+        Term::Pi(a, b)
+        | Term::Lam(a, b)
+        | Term::Sigma(a, b)
+        | Term::Pair(a, b)
         | Term::App(a, b) => {
             collect_consts_in_tb(a, tb, out);
             collect_consts_in_tb(b, tb, out);
         }
-        Term::Proj1(t) | Term::Proj2(t) | Term::Trunc(t) | Term::TruncProj(t)
-        | Term::Refl(t) => {
+        Term::Proj1(t) | Term::Proj2(t) | Term::Trunc(t) | Term::TruncProj(t) | Term::Refl(t) => {
             collect_consts_in_tb(t, tb, out);
         }
         Term::Ascript(t, ty) => {
@@ -316,15 +314,33 @@ fn collect_consts_in_tb(
             collect_consts_in_tb(val, tb, out);
             collect_consts_in_tb(body, tb, out);
         }
-        Term::Elim { params, motive, methods, indices, scrut, .. } => {
-            for p in params { collect_consts_in_tb(p, tb, out); }
+        Term::Elim {
+            params,
+            motive,
+            methods,
+            indices,
+            scrut,
+            ..
+        } => {
+            for p in params {
+                collect_consts_in_tb(p, tb, out);
+            }
             collect_consts_in_tb(motive, tb, out);
-            for m in methods { collect_consts_in_tb(m, tb, out); }
-            for i in indices { collect_consts_in_tb(i, tb, out); }
+            for m in methods {
+                collect_consts_in_tb(m, tb, out);
+            }
+            for i in indices {
+                collect_consts_in_tb(i, tb, out);
+            }
             collect_consts_in_tb(scrut, tb, out);
         }
         Term::IndFormer { .. } | Term::Constructor { .. } => {}
-        Term::QuotElim { motive, method, respect, scrut } => {
+        Term::QuotElim {
+            motive,
+            method,
+            respect,
+            scrut,
+        } => {
             collect_consts_in_tb(motive, tb, out);
             collect_consts_in_tb(method, tb, out);
             collect_consts_in_tb(respect, tb, out);

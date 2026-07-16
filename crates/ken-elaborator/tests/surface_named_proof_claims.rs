@@ -176,7 +176,10 @@ fn duplicate_attached_proof_name_on_same_subject_is_rejected() {
 
     match err {
         ElabError::DuplicateDefinition { name, .. } => {
-            assert_eq!(name, "id::p", "duplicate proof rejection must name the collision");
+            assert_eq!(
+                name, "id::p",
+                "duplicate proof rejection must name the collision"
+            );
         }
         other => panic!("expected duplicate attached-proof rejection, got {other:?}"),
     }

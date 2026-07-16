@@ -1259,8 +1259,8 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         // (`IntN -> Int`), never the value.
         (
             "int8_to_int" | "int16_to_int" | "int32_to_int" | "int64_to_int" | "uint8_to_int"
-            | "uint16_to_int" | "uint32_to_int" | "uint64_to_int" | "usize_to_int"
-            | "isize_to_int" | "cint_to_int",
+            | "uint16_to_int" | "uint32_to_int" | "uint64_to_int" | "usize_to_int" | "isize_to_int"
+            | "cint_to_int",
             [a],
         ) => a.clone(),
         // Narrowing raw cast `Int -> IntN` (UNCHECKED — identity at the value
@@ -2205,54 +2205,7 @@ pub enum VirtualFsNode {
 
 pub type VfsNodeId = u64;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FsOpKind {
-    Read,
-    Write,
-    Append,
-    Metadata,
-    Enumerate,
-    CreateDirectory,
-    RemoveFile,
-    RemoveDirectory,
-    RenameSource,
-    RenameDestination,
-}
-
-impl FsOpKind {
-    fn required_right(self) -> capabilities::RightSet {
-        use capabilities::RightSet as R;
-        match self {
-            Self::Read => R::READ,
-            Self::Write | Self::Append => R::WRITE.union(R::CREATE),
-            Self::Metadata => R::METADATA,
-            Self::Enumerate => R::ENUMERATE,
-            Self::CreateDirectory => R::CREATE,
-            Self::RemoveFile | Self::RemoveDirectory => R::DELETE,
-            Self::RenameSource | Self::RenameDestination => R::WRITE.union(R::DELETE),
-        }
-    }
-
-    fn resolves_parent(self) -> bool {
-        matches!(
-            self,
-            Self::CreateDirectory
-                | Self::RemoveFile
-                | Self::RemoveDirectory
-                | Self::RenameSource
-                | Self::RenameDestination
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CapabilityDenied {
-    RightNotHeld { op: FsOpKind, held_rights: u8 },
-    ScopeEscape,
-    SymlinkDenied,
-    AuthorityInsufficient,
-    MalformedCapability,
-}
+pub use ken_host::capability::{CapabilityDenied, FsCapabilityOperation as FsOpKind};
 
 #[derive(Debug)]
 pub enum ResolveError {
@@ -3360,8 +3313,8 @@ impl HostHandler for CaptureHost {
                 HostCreatePolicy::CreateOrKeep => Ok(()),
                 HostCreatePolicy::CreateOrTruncate => {
                     *contents = bytes.to_vec();
-                Ok(())
-            }
+                    Ok(())
+                }
             },
             Some(VirtualFsNode::Directory) => Err(io::Error::from(io::ErrorKind::IsADirectory)),
             _ => Err(io::Error::from(io::ErrorKind::NotFound)),
@@ -3398,8 +3351,8 @@ impl HostHandler for CaptureHost {
             .insert(id, VirtualFsNode::File(bytes.to_vec()));
         self.fs_entries.insert((*parent, leaf.to_vec()), id);
         self.fs_parents.insert(id, (*parent, leaf.to_vec()));
-                Ok(())
-            }
+        Ok(())
+    }
 
     fn fs_append_at(&mut self, handle: &Self::Handle, bytes: &[u8]) -> io::Result<()> {
         let path = self.virtual_path(*handle);
@@ -3409,9 +3362,9 @@ impl HostHandler for CaptureHost {
         });
         match self.fs_nodes.get_mut(handle) {
             Some(VirtualFsNode::File(contents)) => {
-                    contents.extend_from_slice(bytes);
-                    Ok(())
-                }
+                contents.extend_from_slice(bytes);
+                Ok(())
+            }
             Some(VirtualFsNode::Directory) => Err(io::Error::from(io::ErrorKind::IsADirectory)),
             _ => Err(io::Error::from(io::ErrorKind::NotFound)),
         }
@@ -3452,8 +3405,8 @@ impl HostHandler for CaptureHost {
             path: self.virtual_path(*handle),
         });
         if !matches!(self.fs_nodes.get(handle), Some(VirtualFsNode::Directory)) {
-                return Err(io::Error::from(io::ErrorKind::NotADirectory));
-            }
+            return Err(io::Error::from(io::ErrorKind::NotADirectory));
+        }
         Ok(self
             .fs_entries
             .iter()
@@ -3518,8 +3471,8 @@ impl HostHandler for CaptureHost {
         self.fs_trace
             .push(FsTrace::RemoveDirectory { path, recursive });
         if !matches!(self.fs_nodes.get(&id), Some(VirtualFsNode::Directory)) {
-                return Err(io::Error::from(io::ErrorKind::NotADirectory));
-            }
+            return Err(io::Error::from(io::ErrorKind::NotADirectory));
+        }
         let children: Vec<_> = self
             .fs_entries
             .iter()
@@ -3737,7 +3690,7 @@ pub fn check_fs_capability<'a>(
     cap: &'a EvalVal,
     op: FsOpKind,
     required: capabilities::Authority,
-    operation: &str,
+    _operation: &str,
 ) -> Result<&'a capabilities::FsScope, CapabilityDenied> {
     let cap = match cap {
         EvalVal::Cap(cap) => cap,
@@ -3746,21 +3699,7 @@ pub fn check_fs_capability<'a>(
         // never a soundness hole).
         _ => return Err(CapabilityDenied::MalformedCapability),
     };
-    let scope = cap.scope();
-    let right = op.required_right();
-    if !scope.rights.contains(right) {
-        return Err(CapabilityDenied::RightNotHeld {
-            op,
-            held_rights: scope.rights.bits(),
-        });
-    }
-    if capabilities::check_authority_sufficient(cap, required, operation).is_err() {
-        return Err(CapabilityDenied::AuthorityInsufficient);
-    }
-    if scope.empty {
-        return Err(CapabilityDenied::ScopeEscape);
-    }
-    Ok(scope)
+    ken_host::capability::check_fs_capability(cap, op, required)
 }
 
 pub fn fs_target_components(path: &[u8]) -> Result<Vec<Vec<u8>>, CapabilityDenied> {
@@ -4006,7 +3945,7 @@ fn fs_dispatch<H: HostHandler>(
         Ok(resolved) => resolved,
         Err(ResolveError::Denied(denial)) => {
             handler.fs_denied(denial);
-            return Some(Ok(fs_denied(operation, path, fs, ids, store)))
+            return Some(Ok(fs_denied(operation, path, fs, ids, store)));
         }
         Err(ResolveError::Io(error)) => {
             return Some(Ok(file_result(Err(error), operation, path, fs, ids, store)))
@@ -4365,9 +4304,9 @@ pub fn run_io<H: HostHandler>(
                             args: op_args,
                             ..
                         } => {
-                            if let Some(clock) = clock_ids.filter(|clock| {
-                                *op_id == clock.wall_now_id && op_args.is_empty()
-                            }) {
+                            if let Some(clock) = clock_ids
+                                .filter(|clock| *op_id == clock.wall_now_id && op_args.is_empty())
+                            {
                                 make_ctor(
                                     clock.mkinstant_id,
                                     vec![bigint_to_int_val(handler.clock_wall_now())],

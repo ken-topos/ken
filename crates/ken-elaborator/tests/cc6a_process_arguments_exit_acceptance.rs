@@ -6,14 +6,18 @@ use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{apply, eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId, Term};
 
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
-const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
-const CURSOR_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Cursor.ken.md");
-const ARGUMENTS_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Process/Arguments.ken.md");
+const DIAGNOSTIC_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
+const CURSOR_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/Parsing/Cursor.ken.md");
+const ARGUMENTS_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/Process/Arguments.ken.md");
 const EXIT_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Process/Exit.ken.md");
 
 fn dependency_env() -> ElabEnv {
@@ -352,8 +356,8 @@ fn exit_policy_is_total_explicit_and_keeps_uint8_payloads() {
 fn cc6a_has_zero_trust_delta_and_no_new_carrier_or_string_hop() {
     let arguments = ken_elaborator::literate::extract_ken_md(ARGUMENTS_KEN_MD)
         .expect("Capability.Process.Arguments must extract");
-    let exit =
-        ken_elaborator::literate::extract_ken_md(EXIT_KEN_MD).expect("Capability.Process.Exit must extract");
+    let exit = ken_elaborator::literate::extract_ken_md(EXIT_KEN_MD)
+        .expect("Capability.Process.Exit must extract");
     for (name, source) in [
         ("Capability.Process.Arguments", arguments.source.as_str()),
         ("Capability.Process.Exit", exit.source.as_str()),

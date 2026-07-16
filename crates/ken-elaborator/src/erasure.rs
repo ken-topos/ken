@@ -861,12 +861,17 @@ fn shift_runtime_vars(expr: RuntimeExpr, by: u32, cutoff: u32) -> RuntimeExpr {
                 .collect(),
         },
         RuntimeExpr::Effect {
-            effect,
+            family,
+            operation,
             capability,
             args,
         } => RuntimeExpr::Effect {
-            effect,
-            capability,
+            family,
+            operation,
+            capability: capability.map(|capability| ken_runtime::RuntimeCapabilityUse {
+                identity: capability.identity,
+                value: Box::new(shift_runtime_vars(*capability.value, by, cutoff)),
+            }),
             args: args
                 .into_iter()
                 .map(|arg| shift_runtime_vars(arg, by, cutoff))
