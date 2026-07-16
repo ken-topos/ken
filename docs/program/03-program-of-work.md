@@ -6,10 +6,11 @@ behavioral anchor from an earlier design, treat it as a pointer to `/spec` —
 behavior already captured in the spec, never code to port (see
 `../../CLEAN-ROOM.md`).
 
-**Conventions.** Size: S / M / L. Risk: ★ low, ★★ medium, ★★★ high (trust- or
-research-critical). Every WP leaves the conformance suite green, adds its own
-tests, and makes no claim a test has not confirmed. Branch per WP; merge on
-green. Definition of done = acceptance criteria + docs + conformance green.
+**Conventions.** Size: S / M / L. Risk: ★ low, ★★ medium, ★★★ high
+(trust- or research-critical). Every WP leaves the conformance suite green,
+adds its own tests, and makes no claim a test has not confirmed. Branch per
+WP; merge on green. Definition of done = acceptance criteria + docs +
+conformance green.
 
 **Clean-room reminder:** all behavioral understanding flows from the spec and
 conformance tests, not from prototype material. Teams writing Ken
@@ -400,7 +401,7 @@ kernel does not grow** (ADR-0012 stands; bare-metal/drivers remain out of scope)
 | **PX13** | FS **mode** op — add `chmod` as a **versioned `HostOpV1` catalog extension** (ADR-0018 §1) behind a **distinct `RightSet::CHANGE_MODE` right** (ADR-0017; `WRITE`/`METADATA` do not imply it), `fchmod` on the already-authorized no-follow handle, and an `FsDeltaV1` **mode-only** observation (`mode: Option<u16>` = `st_mode & 0o7777`; **no** uid/gid); native-tested lane. **chown/chgrp EXCLUDED** (future `CHANGE_OWNER` WP). **Lead deliverable: the new capability-evolution/process-admission ADR** (Architect ruling `evt_7k8n8rwj1xbh1`). | Runtime | M |
 | **PX14** | Root-execution posture capability — a `ProgramCaps`-declared allowance that permits a program **already started as root** (euid 0) to *continue* executing with root privilege; **absent it, a program that finds itself running as root at fail-closed startup exits with a stable terminal error before any effect**. A capability **cannot escalate** OS privilege (caps attenuate); this only *permits continuing* when already privileged. Runtime-trusted + discriminator-tested (ADR-0017), no kernel rule. Rides PX5's startup-posture seam (same init point as the SIGPIPE posture) | Runtime | M |
 | **PX15** | FS capability **path-root grammar — `./…` (cwd) only** — a `ProgramCaps` FS authority root may be written `./…` (**cwd at execution start**), not only an absolute path. Typed root-spec variant; cwd captured **once** at capability-table init, root handle opened then, **no ambient cwd dependency** afterward; suffix resolved component-by-component under `ScopeEscape`/`SymlinkDenied`; observations stay relative to the resolved cap root. **`~/` split out to PX16** (Architect ruling `evt_7k8n8rwj1xbh1`) | Runtime | S |
-| **PX16** | **Account-database (NSS) resolver boundary + `~/` grammar tail** — the `~/…` FS-authority-root spelling resolves the executing **euid**'s home via `getpwuid_r(geteuid())`, which is **libc/NSS policy, not a Linux syscall** — so it crosses the operator-settled **rustix/linux_raw-only** trusted surface (PX1). This WP owns that boundary: the libc/NSS trusted surface, dependency/feature delta, bounded failure semantics, startup home snapshot, and an injectable differential seam; then admits `EffectiveUserHome` into the root-spec enum. **`$HOME` is rejected** (forgeable). **✅ SANCTIONED** (Pat 2026-07-16) + **RULED** (`evt_1hxnmejwcvz1d` → ADR-0020); ready to frame after PX15 | Runtime | M |
+| **PX16** | **Account-database (NSS) resolver boundary + `~/` grammar tail** — the `~/…` FS-authority-root spelling resolves the executing **euid**'s home via `getpwuid_r(geteuid())`, which is **libc/NSS policy, not a Linux syscall** — so it crosses the operator-settled **rustix/linux_raw-only** trusted surface (PX1). This WP owns that boundary: the libc/NSS trusted surface, dependency/feature delta, bounded failure semantics, startup home snapshot, and an injectable differential seam; then admits `EffectiveUserHome` into the root-spec enum. **`$HOME` is rejected** (forgeable). **✅ SANCTIONED** (Pat 2026-07-16) + **RULED** (`evt_1hxnmejwcvz1d` → ADR-0020). **✅ MERGED+CLOSED `origin/main @ 6fe038eb` (PR #744, 2026-07-16) — closes the native capability-model campaign (PX13→PX14→PX15→PX16); absolute/`./`/`~/` all land.** | Runtime | M |
 
 **★ Shared Architect capability-model ruling — DELIVERED 2026-07-16
 (`evt_7k8n8rwj1xbh1`, thread `thr_szhcns1f2mpe`).** The one design ruling gating
@@ -462,18 +463,31 @@ PX13/PX14/PX15 is in. Verdict summary (the fixed inputs the frames pin):
 
 **★ Sequencing (Runtime is a single ring → one WP at a time).** **PX13 MERGED +
 CLOSED** (`origin/main @ bbb0eca2`, PR #740; landed `CHANGE_MODE`/`FsChangeMode`/
-ADR-0019 — the shared home the siblings cite). **PX14 RELEASING now**, then
-PX15(`./`), then **PX16** (`~/`). **PX16 is now operator-SANCTIONED** (Pat
+ADR-0019 — the shared home the siblings cite). **PX14 MERGED + CLOSED**
+(`origin/main @ d5783f20`, PR #742; landed `admit_root_execution` + the
+`RootExecution Allow` header marker + `TerminalErrorV1::RootExecutionDenied`).
+**PX15(`./`) MERGED + CLOSED** (`origin/main @ e4475143`, PR #743; landed
+`FsRootSpec::ExecutionStartCwd` + the shared `resolve_fs_root_spec_v1`).
+**PX16(`~/`) RELEASING now** — the **final** WP of the native cap-model campaign.
+**PX16 is now operator-SANCTIONED** (Pat
 2026-07-16: libc/NSS is the right way for `~/`) and **RULED** (Architect
 `evt_1hxnmejwcvz1d` → **ADR-0020**); ready to frame after PX15 (it extends
 PX15's root-spec enum). All hold the ADR-0017 honesty boundary: runtime-trusted +
 discriminator-tested, no kernel proof, no linear/affine types (operator-settled).
 
-**★ PX7 depends on `R2` (linear/affine types) for its *permanent* fix.**
-Exactly-once release **cannot be stated in Ken today**; PX7 enforces it in the
-runtime and reports it **`tested`, never `proved`**, with the disclosure in the
-**source**. PX7 must not smuggle affinity in — that is R2's job, and R2 is
-research.
+**★ PX7 is NOT held and NOT blocked on `R2`** (operator-corrected 2026-07-16;
+Pat originated + repeatedly approved the strategy — the "don't re-ask" was
+STRATEGY-SETTLED, not a hold). Exactly-once release cannot be *stated in Ken*
+(no Ken affine types — "**until CS research shows a proven path, Ken will not
+have affine types**", Pat verbatim), so the settled strategy does **not** wait
+on R2: do the **affine enforcement in Rust** (Rust has affine types), **lift a
+reasonable interface to Ken**, and **discharge the exactly-once-release
+obligations to Ward** to be checked (the assumption-boundary export T-channel).
+The guarantee is real (Rust affinity + Ward-checked obligation), reported
+**`tested`, never `proved`**, disclosed in source. PX7 must not smuggle affinity
+into Ken's type system — that stays R2 research. **Status: buildable now; design
+ruling in flight with the Architect; next major Runtime + Foundation WP after the
+native cap-model campaign.** See [[px7-resource-bracket-strategy-not-held]].
 
 **Open forks (see the charter §3):** campaign ambition · whose `unsafe`
 (hand-declared vs `rustix` vs `libc`-for-constants — an ADR with a **Sec3**
@@ -533,9 +547,9 @@ WPs.** Each notes the WS it would attach to.
 
 - **Team Foundation** → F1, F3, F4, then T1-schema; **Sec3** (supply-chain);
   supports F2.
-- **Team Spec** → F2 (spec authoring + conformance corpus), then conformance maintenance
-  throughout; **owns the copyleft-leakage recheck** (the conformance-validator,
-  ≠ the spec-author — `CLEAN-ROOM.md`).
+- **Team Spec** → F2 (spec authoring + conformance corpus), then
+  conformance maintenance throughout; **owns the copyleft-leakage recheck**
+  (the conformance-validator, ≠ the spec-author — `CLEAN-ROOM.md`).
 - **Team Kernel** → K1 → K2 (with K3 alongside); **Sec4** (trust/audit); the
   highest-trust spine.
 - **Team Verify** → V0 → V2 → V3 (the prover; riskiest), with V1/V4 from Team
@@ -567,8 +581,9 @@ Steward tracks its bring-up (`IMPLEMENTATION-PROGRESS.md`).
 Each team gets its own mootup space; merge approvals are mootup Decisions and
 PRs surface as thread artifacts where relevant. Synchronization is at the
 roadmap gates (G0–G8): no team
-advances past a gate until its acceptance criteria are met and the conformance
-suite is green on a fresh checkout. The clean-room boundary (Spec enclave grounds the spec in permissive
-references and first principles; implementation teams work from the spec) holds
-at every step, and is enforced mechanically at the merge gate
+advances past a gate until its acceptance criteria are met and the
+conformance suite is green on a fresh checkout. The clean-room boundary
+(Spec enclave grounds the spec in permissive references and first
+principles; implementation teams work from the spec) holds at every step,
+and is enforced mechanically at the merge gate
 (`04-git-and-integration.md §7`).
