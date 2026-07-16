@@ -1592,6 +1592,25 @@ fn lowered_char_list(value: &Lowered) -> Option<Vec<u8>> {
     Some(tail)
 }
 
+fn dynamic_host_result_producer_case<'a>(
+    cases: &'a [crate::RuntimeMatchCase],
+    constructor: &str,
+) -> Result<Option<&'a crate::RuntimeMatchCase>, CraneliftBackendError> {
+    let Some(case) = cases.iter().find(|case| case.constructor == constructor) else {
+        return Ok(None);
+    };
+    if case.binders != 1 {
+        return Err(unsupported(
+            "ComputationalMatch",
+            format!(
+                "dynamic HostResult tree producer case {} expects exactly one binder, got {}",
+                case.constructor, case.binders
+            ),
+        ));
+    }
+    Ok(Some(case))
+}
+
 impl<'a> Lowering<'a> {
     fn lower_computational_match_expr(
         &mut self,
@@ -1708,6 +1727,54 @@ impl<'a> Lowering<'a> {
                             producer_env,
                             eliminator_env,
                         )?;
+                        let (value, is_exit) =
+                            self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
+                        Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
+                        builder.ins().jump(merge, &[value.into()]);
+                    }
+                    builder.switch_to_block(merge);
+                    let value = builder.block_params(merge)[0];
+                    return Ok(if exit_merge == Some(true) {
+                        Lowered::ProcessExitStatus { value }
+                    } else {
+                        Lowered::Int { value, known: None }
+                    });
+                }
+                if let Lowered::HostResult {
+                    success,
+                    error,
+                    ok,
+                    err_constructor,
+                    ok_constructor,
+                } = selected
+                {
+                    let ok_block = builder.create_block();
+                    let err_block = builder.create_block();
+                    let merge = builder.create_block();
+                    builder.append_block_param(merge, types::I64);
+                    builder.ins().brif(success, ok_block, &[], err_block, &[]);
+                    let mut exit_merge = None;
+                    for (block, constructor, payload) in [
+                        (ok_block, ok_constructor.as_str(), *ok),
+                        (err_block, err_constructor.as_str(), *error),
+                    ] {
+                        builder.switch_to_block(block);
+                        let lowered = if let Some(producer_case) =
+                            dynamic_host_result_producer_case(producer_cases, constructor)?
+                        {
+                            let mut case_env = vec![payload];
+                            case_env.extend_from_slice(producer_env);
+                            self.lower_computational_match_expr(
+                                builder,
+                                &producer_case.body,
+                                cases,
+                                default,
+                                &case_env,
+                                eliminator_env,
+                            )?
+                        } else {
+                            Lowered::Trap(producer_default.clone())
+                        };
                         let (value, is_exit) =
                             self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
                         Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
@@ -3936,6 +4003,140 @@ mod tests {
         process_input: *const BorrowedFixtureValue,
         host_context: *mut std::ffi::c_void,
         capability: u64,
+    }
+
+    fn host_result_computational_fixture(
+        ok_binders: usize,
+        include_ok: bool,
+        mismatched_result_kind: bool,
+    ) -> RuntimeExpr {
+        let result_ok = "ctor:prelude::Result::Ok".to_string();
+        let result_err = "ctor:prelude::Result::Err".to_string();
+        let scalar_tree = "ctor:fixture::Tree::Scalar".to_string();
+        let exit_tree = "ctor:fixture::Tree::Exit".to_string();
+        let mut producer_cases = vec![RuntimeMatchCase {
+            constructor: result_err,
+            binders: 1,
+            body: RuntimeExpr::Construct {
+                constructor: if mismatched_result_kind {
+                    exit_tree.clone()
+                } else {
+                    scalar_tree.clone()
+                },
+                args: if mismatched_result_kind {
+                    Vec::new()
+                } else {
+                    vec![RuntimeExpr::Value(RuntimeValue::Int(9))]
+                },
+            },
+        }];
+        if include_ok {
+            producer_cases.push(RuntimeMatchCase {
+                constructor: result_ok,
+                binders: ok_binders,
+                body: RuntimeExpr::Construct {
+                    constructor: scalar_tree.clone(),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                },
+            });
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Effect {
+                    family: "Console".to_string(),
+                    operation: ken_host::HostOpV1::ConsoleWrite,
+                    capability: None,
+                    args: vec![
+                        RuntimeExpr::Construct {
+                            constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                            args: Vec::new(),
+                        },
+                        RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec())),
+                    ],
+                }),
+                cases: producer_cases,
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "dynamic Result producer default".to_string(),
+                },
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: scalar_tree,
+                    argument_binders: 1,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Var(0),
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: exit_tree,
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "computational tree default".to_string(),
+            },
+        }
+    }
+
+    #[test]
+    fn dynamic_host_result_producer_missing_case_routes_to_default() {
+        assert!(
+            dynamic_host_result_producer_case(&[], "ctor:prelude::Result::Ok")
+                .expect("missing case is a fail-closed default route")
+                .is_none()
+        );
+        emit_process_entrypoint_object_with_cranelift(
+            &host_result_computational_fixture(1, false, true),
+            "ken_px7m_missing_case_default",
+        )
+        .expect("the absent dynamic arm lowers through the producer default trap");
+    }
+
+    #[test]
+    fn dynamic_host_result_producer_wrong_arity_rejects_specifically() {
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &host_result_computational_fixture(0, true, false),
+            "ken_px7m_wrong_arity",
+        )
+        .expect_err("dynamic Result case must bind its one payload");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "ComputationalMatch",
+                reason,
+            }) if reason == "dynamic HostResult tree producer case ctor:prelude::Result::Ok expects exactly one binder, got 0"
+        ));
+    }
+
+    #[test]
+    fn dynamic_host_result_producer_result_kind_mismatch_rejects_specifically() {
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &host_result_computational_fixture(1, true, true),
+            "ken_px7m_kind_mismatch",
+        )
+        .expect_err("scalar and ExitCode branches must not merge");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "ComputationalMatch",
+                reason,
+            }) if reason == "dynamic native arms disagree on scalar versus ExitCode result"
+        ));
+    }
+
+    #[test]
+    fn dynamic_host_result_producer_well_formed_control_emits() {
+        emit_process_entrypoint_object_with_cranelift(
+            &host_result_computational_fixture(1, true, false),
+            "ken_px7m_well_formed",
+        )
+        .expect("both dynamic Result branches recursively lower and merge");
     }
 
     #[test]
