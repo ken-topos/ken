@@ -119,15 +119,16 @@ root behavior (unchanged); PX13/PX14 mechanisms.
 
 - Cap-table init that already opens startup cwd `.` and builds the table from
   declared `ProgramCaps`: PX5's `ken-host` `abi_v1` init (see
-  `PX5-native-effect-lowering.md` §0.5; `crates/ken-host/src/abi_v1.rs` init path
-  ~`:441`–`:488`).
+  `PX5-native-effect-lowering.md` §0.5;
+  `crates/ken-host/src/abi_v1.rs:450` init path).
 - Capability/scope types: `crates/ken-host/src/capability.rs` (`Cap`, `FsScope`,
   `SymlinkPolicy`); elaborator-facing `crates/ken-elaborator/src/capabilities.rs`
   (`FsScope`, `RightSet`, `AUTH_*`).
-- Declaration surface: `program capabilities FS <authority>` —
-  `crates/ken-cli/src/lib.rs:428`.
+- Declaration metadata: `crates/ken-elaborator/src/ast.rs:408` and checked
+  projection `crates/ken-elaborator/src/program_admission.rs:8`; the PX14
+  `RootExecution Allow` runner surface is around `crates/ken-cli/src/lib.rs:724`.
 - Canonical observation (relative, spelling-free): `FsDeltaV1` /
-  `FsNodeObservationV1` `crates/ken-host/src/effect_v1.rs:858`–`905`; PX6
+  `FsNodeObservationV1` around `crates/ken-host/src/effect_v1.rs:905`; PX6
   twin-root differential `crates/ken-verify/src/scenario.rs`.
 - ADR homes: ADR-0018 §2 (root handle) + §4 (relative canonicalization);
   ADR-0019 §path-root-resolution (landed by PX13) is the normative basis.

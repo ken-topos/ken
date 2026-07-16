@@ -182,6 +182,21 @@ impl HostHandler for ScriptedPosixHost {
         }
     }
 
+    fn mint_fs_cap_for_root(
+        &self,
+        authority: capabilities::Authority,
+        root: &capabilities::FsRootSpec,
+    ) -> io::Result<Cap> {
+        match &self.scoped_cap {
+            Some((expected, cap))
+                if *expected == authority && root == &capabilities::FsRootSpec::default() =>
+            {
+                Ok(cap.clone())
+            }
+            _ => self.inner.mint_fs_cap_for_root(authority, root),
+        }
+    }
+
     fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead> {
         if stream != ConsoleStream::Stdin {
             return Err(io::Error::new(

@@ -52,6 +52,7 @@ pub enum RunError {
     InvalidEntrypoint { authority: &'static str },
     ConsoleAbiUnavailable,
     RootExecutionObservationUnavailable,
+    CapabilityRoot(std::io::Error),
     Io(ken_interp::RunIoError),
 }
 
@@ -170,7 +171,10 @@ fn run_program_inner<H: ken_interp::HostHandler>(
         ken_interp::ConsoleIds::from_elab(&elab_env).ok_or(RunError::ConsoleAbiUnavailable)?;
     let fs_ids = ken_interp::FSIds::from_elab(&elab_env);
     let clock_ids = ken_interp::ClockIds::from_elab(&elab_env);
-    let cap = ken_interp::EvalVal::Cap(host.mint_fs_cap(declared_fs.authority));
+    let cap = ken_interp::EvalVal::Cap(
+        host.mint_fs_cap_for_root(declared_fs.authority, &admitted.fs_root_spec)
+            .map_err(RunError::CapabilityRoot)?,
+    );
     let mut store = build_eval_store(&elab_env);
     let tree = apply_entrypoint(
         &elab_env,
@@ -552,10 +556,11 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
     #[test]
     fn runner_has_no_implicit_fs_authority_default() {
         let env = elaborate_program("program\n");
-        assert!(env
-            .boundary_header()
-            .and_then(|header| header.capabilities.as_ref())
-            .is_none_or(|caps| caps.iter().all(|cap| cap.family != "FS")));
+        assert!(
+            env.boundary_header()
+                .and_then(|header| header.capabilities.as_ref())
+                .is_none_or(|caps| caps.iter().all(|cap| cap.family != "FS"))
+        );
     }
 
     #[test]

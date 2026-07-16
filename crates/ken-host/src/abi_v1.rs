@@ -11,11 +11,11 @@ use std::fs::OpenOptions;
 use std::io::{self, Write};
 
 use crate::{
-    dispatch_host_op_v1, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, Cap,
-    CapabilityGrantV1, CapabilityTableV1, CapabilityTokenV1, ConsoleStreamV1, CreatePolicyV1,
-    EffectEventV1, FileErrorCauseV1, FsHandle, FsIdentity, FsScope, HostEffectBackendV1, HostOpV1,
+    AUTH_FULL, AUTH_NONE, AUTH_PARTIAL, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1,
+    Cap, CapabilityGrantV1, CapabilityTableV1, CapabilityTokenV1, ConsoleStreamV1, CreatePolicyV1,
+    EffectEventV1, FileErrorCauseV1, FsHandle, FsRootSpec, HostEffectBackendV1, HostOpV1,
     IoErrorIdentityV1, OpenRequest, PathComponent, RootPath, RootedHandle, SymlinkPolicy,
-    AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
+    dispatch_host_op_v1,
 };
 
 #[cfg(target_os = "linux")]
@@ -450,6 +450,9 @@ unsafe fn borrowed_slice<'a>(slice: &SliceV1) -> Option<&'a [u8]> {
 pub unsafe extern "C" fn ken_host_invocation_v1_init(
     cwd: *const u8,
     cwd_len: usize,
+    fs_root_tag: u64,
+    fs_root: *const u8,
+    fs_root_len: usize,
     authority_tag: u64,
     plan_hash: u64,
     allow_root_execution: u64,
@@ -463,6 +466,16 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     if result.is_null() || !result.is_aligned() {
         return -1;
     }
+    let cwd = SliceV1 {
+        data: cwd,
+        len: cwd_len,
+    };
+    let fs_root = SliceV1 {
+        data: fs_root,
+        len: fs_root_len,
+    };
+    let cwd_bytes;
+    let fs_root_bytes;
     // Clear the caller-owned result before any validation or host action.
     unsafe {
         result.write(HostInitResultV1 {
@@ -470,13 +483,19 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
             capability: 0,
             plan_hash: 0,
         });
+        cwd_bytes = borrowed_slice(&cwd);
+        fs_root_bytes = borrowed_slice(&fs_root);
     }
-    let cwd = SliceV1 {
-        data: cwd,
-        len: cwd_len,
-    };
-    let Some(cwd) = (unsafe { borrowed_slice(&cwd) }) else {
+    let Some(cwd) = cwd_bytes else {
         return -1;
+    };
+    let Some(fs_root) = fs_root_bytes else {
+        return -1;
+    };
+    let fs_root_spec = match fs_root_tag {
+        0 => FsRootSpec::Absolute(fs_root.to_vec()),
+        1 => FsRootSpec::ExecutionStartCwd(fs_root.to_vec()),
+        _ => return -1,
     };
     let Some(authority) = authority(authority_tag) else {
         return -1;
@@ -533,9 +552,14 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
             }
             other => other,
         };
-    let Some(context) =
-        initialize_process_context(root_path, authority, plan_hash, observation_path, posture)
-    else {
+    let Some(context) = initialize_process_context(
+        root_path,
+        fs_root_spec,
+        authority,
+        plan_hash,
+        observation_path,
+        posture,
+    ) else {
         return -1;
     };
     let capability = context.capability.erased_identity();
@@ -551,32 +575,26 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
 }
 
 fn initialize_process_context(
-    root_path: RootPath,
+    execution_start_cwd: RootPath,
+    fs_root_spec: FsRootSpec,
     authority: crate::Authority,
     plan_hash: u64,
     observation_path: &[u8],
     posture: Result<ProcessPostureV1, PostureErrorV1>,
 ) -> Option<Box<ProcessContext>> {
     let posture = posture.ok()?;
-    let Ok(root) = crate::open_root(&root_path) else {
+    let Ok(cwd_root) = crate::open_root(&execution_start_cwd) else {
         return None;
     };
-    let Ok(metadata) = crate::metadata(&root) else {
+    let Ok(scope) = crate::resolve_fs_root_spec_v1(
+        &fs_root_spec,
+        &cwd_root,
+        crate::rights_for_authority(authority),
+        SymlinkPolicy::NoFollow,
+    ) else {
         return None;
     };
-    let cap = Cap::mint_scoped(
-        authority,
-        "FS",
-        FsScope::root(
-            crate::rights_for_authority(authority),
-            FsHandle::Posix(root),
-            FsIdentity::Posix {
-                device: metadata.identity.device,
-                inode: metadata.identity.inode,
-            },
-            SymlinkPolicy::NoFollow,
-        ),
-    );
+    let cap = Cap::mint_scoped(authority, "FS", scope);
     let mut capabilities = CapabilityTableV1::default();
     let capability = capabilities.insert(CapabilityGrantV1 {
         identity: crate::program_caps_fs_trace_identity_v1(),
@@ -1071,6 +1089,9 @@ mod tests {
             ken_host_invocation_v1_init(
                 cwd.as_ptr(),
                 cwd.len(),
+                1,
+                std::ptr::null(),
+                0,
                 2,
                 1,
                 0,
@@ -1101,6 +1122,9 @@ mod tests {
             ken_host_invocation_v1_init(
                 cwd.as_ptr(),
                 cwd.len(),
+                1,
+                std::ptr::null(),
+                0,
                 2,
                 1,
                 0,
@@ -1128,6 +1152,9 @@ mod tests {
             ken_host_invocation_v1_init(
                 cwd.as_ptr(),
                 cwd.len(),
+                1,
+                std::ptr::null(),
+                0,
                 2,
                 0,
                 0,
@@ -1148,14 +1175,17 @@ mod tests {
     #[test]
     fn posture_failure_prevents_context_publication() {
         let root = RootPath::new(std::env::current_dir().unwrap()).unwrap();
-        assert!(initialize_process_context(
-            root,
-            AUTH_FULL,
-            1,
-            &[],
-            Err(PostureErrorV1::HostPostureUnavailable)
-        )
-        .is_none());
+        assert!(
+            initialize_process_context(
+                root,
+                FsRootSpec::default(),
+                AUTH_FULL,
+                1,
+                &[],
+                Err(PostureErrorV1::HostPostureUnavailable)
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -1212,6 +1242,9 @@ mod tests {
             ken_host_invocation_v1_init(
                 cwd.as_ptr(),
                 cwd.len(),
+                1,
+                std::ptr::null(),
+                0,
                 2,
                 19,
                 0,
@@ -1246,6 +1279,9 @@ mod tests {
             ken_host_invocation_v1_init(
                 cwd.as_ptr(),
                 cwd.len(),
+                1,
+                std::ptr::null(),
+                0,
                 2,
                 19,
                 1,
