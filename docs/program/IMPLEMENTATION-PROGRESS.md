@@ -14,25 +14,108 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ## ⚡⚡ RESUME NEXT (2026-07-16 06:5x) — 🎉 NATIVE CHAIN COMPLETE + PX6 CLOSED (PX4B→PX5→PX5B→PX5C→PX6 all merged+retro'd) · next = cap-model ruling → PX13/14/15
+> ## ⚡⚡ RESUME NEXT (2026-07-16 ~13:2x) — ✅ **PX13 CLOSED** (merged `bbb0eca2`, PR #740) · ✅ **PX14 RELEASED** — handoff gate done (ring compacted, verified "Context compacted" ×3), kickoff `evt_6pw225rz8zwye` posted, leader Working (re-orienting→picks up kickoff) · ▶ EVENT-DRIVEN: PX14 build → QA → Architect-only §14 (STRAND risk) → publish → close → release PX15(`./`) · ✅ PX16/`~` RULED (ADR-0020) · ⧗ tracker-sync doc-PR to main pending
 >
-> > **🎉🎉 PX6 MERGED + CONTENT-VERIFIED — `origin/main @ b8fa779d` (PR #738, §14-approved `25048a10`,
-> > `dec_6s8yt7gnfv5fe` resolved APPROVE).** The `ken-verify` differential-harness crate is on main (all 8 files);
-> > workspace Cargo.toml includes it; full `--workspace --locked` CI passed (first build of the new crate); my
-> > 26661194 doc-sync NOT reverted (verified PX5C-CLOSED still on main). **NATIVE EFFECT CHAIN COMPLETE:
-> > PX4B→PX5→PX5B→PX5C→PX6 all merged.** Retros CALLED (evt_1r0etnxctvxd2, verify-leader) — carries pinned:
-> > producer/judge split (ADR-0018 §5, Verify doesn't author the oracle it judges → PX5B); assemble-then-compare
-> > six-field EffectObservationV1 from both real producers, no normalization; discriminators must drive the real seam.
-> > **✅ PX6 CLOSED — all 3 §10 retros IN** (leader evt_4gjw9dbwk07fp, QA evt_17vgjkvbm7rte, impl evt_3swap4pxp0z02;
-> > verify-leader "retros in" evt_4jvfk3ymsvx43). Verify ring home-clean/standby.
-> > **NEXT (event-driven / next-action): (a) DONE bar the doc-only tracker-sync to main (bundles PX6-closed +
-> > native-chain-complete); (b) NATIVE
-> > CHAIN DONE → route the shared Architect capability-model ruling (3 design gates: mutation right-bit / FsDeltaV1
-> > mode-owner observation / chown-chgrp scope) → on ruling, author frames + release PX13/PX14/PX15 (Runtime). This is
-> > the next substantive work unit — do it in FRESH context (self-compact first).**
-> > PX13/14/15 were operator-requested 2026-07-16, gated on native chain (now done) + this ruling. PX7 HELD (Resource/
-> > Bracket — do NOT release/re-ask). SELF-COMPACT SEAM: native chain complete is the ideal compact point before the
-> > cap-model work (~33% ctx). Pat offline until ~11:30 UTC; window log = docs/program/autonomous-window-log-2026-07-16.md.
+> > **✅✅ ALL THREE READY CAP-MODEL FRAMES AUTHORED + on branches (off origin/main 3368c3a3, frame-only):**
+> > • **PX13** `wp/px13-fs-chmod-mode-capability @ 34f967c4` — **RELEASED, Runtime building** (kickoff
+> >   `evt_59bzg6846nrs9`, PX13 thread spine; leader Working). chmod-only + CHANGE_MODE right + FsChangeMode op +
+> >   fchmod-on-handle + mode-only obs + ADR-0019 lead deliverable + PX6-delta closure.
+> > • **PX14** `wp/px14-root-execution-posture @ 9a8432f0` — **READY, queued.** euid==0 admission marker, not a cap
+> >   token; `RootExecution Allow` header → plan/hash; one shared admission fn at the abi_v1 ProcessContext seam;
+> >   `TerminalErrorV1::RootExecutionDenied` startup-terminal.
+> > • **PX15(`./`)** `wp/px15-cwd-path-root @ 6578b315` — **READY, queued.** `./` cwd root-spec bound ONCE at
+> >   cap-table init (leverages PX5's existing open-startup-cwd seam); no per-op re-resolve; ADR-0018 §4 canonical
+> >   invariance. `~/`+`$HOME` explicitly OUT (→ PX16).
+> > All frames also on steward/work (@ ece346e5); grounding anchors verified real on origin/main.
+> > **PX13 WATCH (event-driven — do NOT poll):** leader frames team WP → implementer builds → runtime-qa gates the
+> > RELEASED SHA → §14 Decision (**Architect-only**, no spec/conformance → CV not in route) → CI → publish (standing
+> > authority; content-verify on main) → relay retros → CLOSE. Architect §14 may STRAND (Monitor bp808a7mu; bare-Enter).
+> > CI-red → route failing job to Runtime for fresh SHA+Decision.
+> > **NEXT AFTER PX13 CLOSES:** handoff-gate the Runtime ring again (compact all 3 seats) → **release PX14**
+> > (`wp/px14-root-execution-posture`), then repeat → **release PX15(`./`)** (`wp/px15-cwd-path-root`). Kickoff drafts:
+> > adapt scratchpad/px13-kickoff.md pattern. Runtime is ONE ring → strictly one WP at a time.
+> > **✅ PX16 (account-DB/NSS boundary + `~/` tail) — OPERATOR SANCTIONED** (Pat 2026-07-16: "`~/` is functionality
+> > tool writers will want; libc/NSS is the right way"). libc/NSS dependency APPROVED for this bounded purpose (rustix
+> > stays the boundary for euid/process; `$HOME` stays rejected). **✅ ARCHITECT RULING DELIVERED**
+> > (`evt_1hxnmejwcvz1d`, state `a9f7ce68`; window log #21) — shovel-ready fixed inputs: **ADR-0020** (account-database
+> > home-root; ADR-0019 stays `EffectiveUserHome` semantic owner, PX16 xrefs; do NOT amend in-flight PX13); dep =
+> > exact-pin `libc = "=0.2.186"` default-features=false, Linux-target, NOT rustix's libc backend; one private
+> > `ken-host::account_db_v1` module (inner `#![allow(unsafe_code)]`, safe owned facade, consumes PX14 euid snapshot);
+> > `getpwuid_r` 1KiB→ERANGE-double→1MiB cap + full record validation; failure =
+> > `HomeRootResolutionFailureV1`/`TerminalErrorV1::HomeRootResolutionFailed` startup-terminal (no wall-clock bound);
+> > `AccountHomeLookupV1` prod+scripted verify seam, no env/CLI home injection. **→ FRAME PX16 (pure transcription) →
+> > queue in the Runtime ring AFTER PX15(`./`)** (extends PX15's root-spec enum). **PX7 HELD** (Resource/Bracket — do
+> > NOT release/re-ask). Pat back ~11:30 UTC; window log 17-22.
+> > **▶ IN FLIGHT — PX14 RELEASE (Runtime is ONE ring, one WP at a time).** Handoff gate running:
+> > `scripts/handoff-gate-compact.sh runtime-leader runtime-implementer runtime-qa` (bg `b27uc1k14`; resets homes to
+> > `origin/main bbb0eca2` + compacts all 3). **STEP 5 (mine): verify all 3 drops WIDE** (`capture-pane | tail -20`;
+> > ctx→~0 or live `Compacting…`/queued `❯ /compact`) → resend the manual sequence to any pane that didn't move →
+> > **post PX14 kickoff** (adapt `scratchpad/px13-kickoff.md`) → **confirm each seat goes `Working`** (bare-Enter any
+> > stranded paste; post-compaction rouse if needed).
+> > **PX14** `wp/px14-root-execution-posture @ 9a8432f0` (frame-only, off OLD main `3368c3a3` — implementer must REBASE
+> > onto `bbb0eca2` + **RE-GROUND**: PX13 shifted `abi_v1.rs`/`effect_v1.rs` line anchors). euid==0 admission marker;
+> > `RootExecution Allow` header→plan/hash (NOT a `ProgramCaps` field / not CLI-env-settable); one shared admission fn
+> > before ProcessContext + first grant; `TerminalErrorV1::RootExecutionDenied` startup-terminal via shared exit mapper.
+> > **Architect-only §14** (no spec/conformance → CV not in route); §14 request WILL likely STRAND on the architect
+> > pane (Monitor bp808a7mu; bare-Enter). On §14 APPROVE → verify Decision genuinely `resolved` → publish EXACT SHA via
+> > `scripts/scripted-pr-automerge.sh` (standing authority) → content-verify main → relay 3 retros → CLOSE → release
+> > **PX15(`./`)** (`wp/px15-cwd-path-root @ 6578b315`). CI-red → route failing job to Runtime for a fresh SHA+Decision.
+> >
+> > _(ruling as fixed inputs, still authoritative below:)_
+> ## _(prior header retained:)_ ✅ CAP-MODEL RULING DELIVERED + catalog reshaped
+>
+> > **✅ ARCHITECT CAP-MODEL RULING DELIVERED — `evt_7k8n8rwj1xbh1` (thread `thr_szhcns1f2mpe`).** Comprehensive +
+> > shovel-ready. Acked mention-free (`evt_26wr6qdwtw3cm`); catalog reshaped (`03-program-of-work.md` rows + star
+> > notes) with the ruling pinned as fixed inputs. **THE RULING (frame these verbatim as fixed inputs):**
+> > • **META = NEW ADR** (capability-evolution/process-admission; NOT an ADR-0018 amend; rides as **PX13's lead
+> >   deliverable**; ADR-0017 stays honesty boundary, ADR-0018 stays native-effect/ABI/differential contract).
+> > • **PX13 = `chmod` ONLY** — distinct `RightSet::CHANGE_MODE` + `FsCapabilityOperation::ChangeMode` (WRITE/METADATA
+> >   don't imply; AFull yes / APartial no; attenuation intersects); `fchmod` on the authorized **no-follow** handle,
+> >   NO path re-lookup, accept only `mode & !0o7777 == 0`. Observe **mode not owner**: node obs gets `mode:
+> >   Option<u16>` = `st_mode & 0o7777` (Some regular/dir, None symlink/other); NO uid/gid/ts/acl/xattr/inode/dev. The
+> >   catalog/registry/observer/consumer closure + manifest hash + wire layout + **PX6 twin-root delta all move
+> >   together**; append ONE FS op ID, fail closed on old inventory/hash. **chown/chgrp REJECTED** (→ future
+> >   `CHANGE_OWNER` WP). Negative controls: WRITE-w/o-ChangeMode denies pre-leaf; ChangeMode-w/o-WRITE succeeds;
+> >   attenuation drops ChangeMode; symlink/path-swap can't redirect the handle; mode-mutation changes delta, uid/gid
+> >   drift alone doesn't.
+> > • **PX14 = effective-root admission, NOT a cap token** — v1 predicate exactly `geteuid()==0` via the audited
+> >   ken-host rustix boundary (real/saved/fs-uid + caps(7) + userns + securebits DEFERRED). Surface = header marker
+> >   `program capabilities FS <authority>, RootExecution Allow` (omission=deny); NOT a `ProgramCaps a` field, not an
+> >   FS right, not a forgeable scalar, **CLI/env may NOT add it** (compiler binds into native plan/hash). ONE shared
+> >   startup-admission fn (immutable euid snapshot + declaration) called by BOTH executors **before** ProcessContext,
+> >   **before** any cap-table grant, **before** first effect; posture witness records admission+SIGPIPE done.
+> >   Refuse-root = `TerminalErrorV1::RootExecutionDenied` (unit variant, startup terminal: empty
+> >   trace/delta/stdout/stderr, exit via shared `ProcessExitCode->i32`); native init writes that canonical terminal
+> >   obs with NO live ProcessContext. Controls: non-root proceeds / euid0-no-marker exact-denies + zero host leaves /
+> >   euid0-with-marker proceeds / CLI-env-plan mutation can't manufacture the marker / both executors share the pure
+> >   checker; test injection at host-observer seam ONLY.
+> > • **PX15 = `./` (cwd) ONLY, ready now** — typed root-spec variant, capture cwd ONCE at cap-table init, open handle
+> >   then, no ambient cwd dep after; suffix component-by-component under `ScopeEscape`/`SymlinkDenied`; obs relative to
+> >   resolved cap root (never cwd spelling).
+> > • **`~/` (home) → SPLIT to new PX16, ⛔ NEEDS-OPERATOR** — `$HOME` REJECTED (forgeable); `getpwuid_r(geteuid())`
+> >   is **libc/NSS policy, NOT a Linux syscall** → crosses the operator-settled **rustix/linux_raw-only** seam (PX1).
+> >   PX16 owns the NSS boundary (trusted surface + dep delta + bounded failure + startup snapshot + injectable diff
+> >   seam), then `EffectiveUserHome` enters the enum. **Escalated to Pat** (supply-chain/dependency-posture call, sib
+> >   of the "whose unsafe" fork; I will NOT sanction the libc/NSS TCB expansion unilaterally). Logged window-log #18.
+> >
+> > **NEXT (I initiate — NOT event-gated):** (1) **author 3 shovel-ready frames** `docs/program/wp/PX13-*.md`,
+> > `PX14-*.md`, `PX15-cwd-*.md` (§2c: ruling's choices as FIXED INPUTS w/ do-not-reopen guard, mandated deliverable
+> > outline, testable ACs incl. each ruling's negative controls, ADR-0017 CI-green-not-local-workspace AC wording; the
+> > new ADR is PX13's lead deliverable). (2) **handoff-gate the Runtime ring** — runtime-leader `agt_37reqrd72cg00` +
+> > runtime-implementer `agt_37reqg3nync00` + runtime-qa `agt_37reqvb6ce400` (all home-clean/idle, PX5C retros in;
+> > compact ALL THREE unconditionally via `scripts/handoff-gate-compact.sh runtime-leader runtime-implementer
+> > runtime-qa` in bg, verify drops WIDE, handle post-compact rouse). (3) **release PX13 FIRST** (carries the shared
+> > ADR the others cite; Runtime is ONE ring → PX14 + PX15(`./`) wait as READY, pulled after PX13). **PX7 HELD**
+> > (Resource/Bracket — do NOT release/re-ask). Pat offline until ~11:30 UTC; window log =
+> > docs/program/autonomous-window-log-2026-07-16.md (entries 17-18).
+> >
+> > _(prior state:)_ **🎉 PX6 MERGED + CONTENT-VERIFIED — `origin/main @ b8fa779d` (PR #738, §14-approved `25048a10`,
+> > `dec_6s8yt7gnfv5fe` resolved APPROVE).** ken-verify crate on main; workspace Cargo.toml includes it; full
+> > `--workspace --locked` CI passed; 26661194 doc-sync NOT reverted. **NATIVE EFFECT CHAIN COMPLETE:
+> > PX4B→PX5→PX5B→PX5C→PX6 all merged.** **✅ PX6 CLOSED — all 3 §10 retros IN** (leader evt_4gjw9dbwk07fp, QA
+> > evt_17vgjkvbm7rte, impl evt_3swap4pxp0z02; verify-leader "retros in" evt_4jvfk3ymsvx43). Carries pinned:
+> > producer/judge split (ADR-0018 §5); assemble-then-compare six-field EffectObservationV1 from both real producers,
+> > no normalization; discriminators must drive the real seam. Main synced 3368c3a3 (PX6-closed tracker).
 >
 > ---
 > _(prior:)_ ## ⚡⚡ RESUME NEXT (2026-07-16 06:2x) — ✅ PX5/PX5B/**PX5C CLOSED** (merged d65bc308 + 3 retros) · ▶ PX6 RESUMING on Verify (last of native chain)
