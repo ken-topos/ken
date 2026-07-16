@@ -14,28 +14,55 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ## ⚡⚡ RESUME NEXT (2026-07-16 00:0x) — PX4B ✅ CLOSED; PX5 RELEASING (handoff-gate running)
+> ## ⚡⚡ RESUME NEXT (2026-07-16 00:4x) — PX5 seam RULED (dec_3vgprj0f2vat8); resuming in-place; ADR-0018 publishing
 >
-> **PX4B — ✅ CLOSED.** `origin/main @ 5e82926f` (PR #729, content-verified). Decision dec_3rh4rmnynzfpp
-> closed. All 3 §10 retros in (leader evt_4wgkajm260fs6, QA evt_3rk6g7n34jd5z, impl evt_3zh7wjnn92dzv).
-> Close post evt_5d9c0xt7h8287. 4-round WP. **Owed: doc-only tracker→main sync** (discharges CAT-TAX
-> deferral + carries PX4B-closed tracker to main) — do after PX5 kickoff settles.
+> **PX4B — ✅ CLOSED & MERGED.** `origin/main @ 5e82926f` (PR #729). All 3 §10 retros in. Tracker synced
+> (PR #730 → `cdca13fe`).
 >
-> **PX5 — RELEASED & ACTIVE.** Release branch **`wp/px5-native-effect-lowering @ 966f804f`** = main-
-> with-PX4B `5e82926f` + amended 282-line frame (origin). Scaffold pinned at **`origin/px5-scaffold-
-> 1ad70339`** (+ local `px5-wip-backup-1ad70339` + `preserved/wp-px5-native-effect-lowering-1ad70339`).
-> Ring handoff-gated (all 3 compacted+verified). **Kickoff evt_7sa73m877tgwy → runtime-leader WORKING.**
-> WATCH: leader dispatches to runtime-implementer (build effect lowering) + runtime-qa (ACs + interp-
-> vs-native observational match) → both Working; first handback + gates. Gate: Runtime QA + Architect
-> §14 (trusted-base growth); CV if spec/conformance touched.
-> KICKOFF POINTS: PX5 = effect extension ON PX4B's landed producer — replace PX4B's
-> `host_effect_lowering_unavailable` lane with REAL effect lowering for the pinned ops per ADR-0018 +
-> §0.5 rulings (ingress evt_3nkr1vx55ca1n, identity-b evt_7hj00prqfjqs2). Base = 5e82926f. Scaffold
-> `origin/px5-scaffold-1ad70339` is REFERENCE for the lowering approach — reconcile against PX4B's
-> landed producer (admit_checked_main/program_admission.rs/one-closure txn/named lane); NOT a clean
-> replay. Ground frame line-citations against current main (may drift post-PX4B). NO naked RuntimeExpr;
-> unsupported ops stay unavailable lanes (not no-ops); NO affine/linear; targeted local gates only.
-> PX6 (Verify, parked) resumes on the PX5 producer merge. Campaign PX4B✓ → PX5 → PX6.
+> **PX5 seam fork — ✅ RULED by Architect (`dec_3vgprj0f2vat8`, evt_7mxsfb3vqxg37, 00:42).** Mechanism =
+> **option (a) refined: identity-checked HostIO/ITree recognizer in the checked producer, then DEFOREST
+> the tree into ordinary effectful Runtime IR** — NOT a general dynamic ITree interpreter. `RuntimeExpr::
+> Effect` gains **NO continuation** (reject b); the surrounding `Let`/`Match` carries resume — resumed
+> **exactly once by construction** via `lower_host(Vis … op k) = Let{value:Effect{…}, body:lower_host(
+> beta(k,Var0), resp::Γ)}`. Recognition by **stable identities/checked shape** (ITree/Ret/Vis, Coproduct/
+> InL/InR, FSOp/ConsoleOp/ClockOp, arity/capability-position/Resp-op), NEVER source spelling. Add checked
+> `CheckedHostComputationV1` view (Elaborator-owned, entered only from `compile_native_program_sources`
+> after `admit_checked_main`; no public hand-built constructor). Record **`HostEffectSpineV1` semantic
+> metadata ADJACENT to the entrypoint plan** before checked-core hashing (identities only, no enclosing
+> hashes → §0.5 parent-owned-hash preserved, core_semantic_hash covers by containment). **Normalization
+> boundary repairs the `AmbientOp`/`ind_former` failure**: ITree/response/type/coproduct formers are
+> SEMANTIC deps (kept in checked metadata, hash-covered) NOT executable runtime decls — build executable
+> reachability from the normalized HostIO body; do NOT re-admit every source decl (would reopen PX4B B1).
+> Malformed → stable `malformed_host_tree`/`unknown_host_operation`, NEVER fixture Effect/generic ind_former
+> erasure. **Does NOT reopen ADR-0018** — supplies the producer mechanism the ADR's "map reply & resume
+> once" presupposed. Ownership spans ken-elaborator(checked_core+erasure)/ken-runtime/Cranelift/ken-host/
+> object-packaging — **all within PX5** (NOT a predecessor carve). 8 discriminators = the ACs (real
+> public one-Vis→Effect via recognizer; two-Vis ordered+exactly-once resume; response-dependent branch;
+> InL/arity/ambient-cap/spine-identity fail-closed; pure host_exit via Return; 4 PX4B closure sets equal
+> +AmbientOp/formers/unused absent from runtime decls but hash-covered; deferred op stays unavailable +
+> raw fixture Effect still hits backend unsupported; linked-artifact drives real host call/arena/trace/
+> resume/exit).
+>
+> **⏭ MY MOVES (in flight):** (1) **ADR-0018 → main** — frame cites `docs/adr/0018-native-effect-
+> execution-contract.md` but it exists only on Architect commit `cc206d09` (NOT on main). Publishing
+> doc-only (ADR file ONLY, not ARCHITECT-STATE.md) + tracker-sync. (2) **Route resume to runtime-leader**
+> in thr_2c1mzggww95kk: resume from held `1fb611e2` on the ruling; rebase onto new main (post-ADR); ruling
+> is the shovel-ready contract; fold a frame citation of dec_3vgprj0f2vat8 onto the branch. **NO handoff-
+> gate** (mid-WP resume, not new-WP kickoff — compacting would destroy held WIP context).
+>
+> **WATCH after resume:** implementer handback (SHA + AC evidence for the 8 discriminators + targeted
+> gates incl NC13 + native differential/observation) → runtime-qa gate → §14 Decision (Architect
+> trusted-base-growth soundness; CV if spec/conformance touched) → CI (may catch targeted-local≠full-CI
+> gap as PX4B did; route CI-red to ring for fresh SHA+Decision) → publish → content-verify → retros →
+> close. PX6 (Verify) resumes on the PX5 producer merge.
+>
+> **PX6 (Verify) — parked** behind PX5 producer (verify-impl/qa/leader blocked on PX5 native-effect
+> boundary — correct). **Idle rings** (Kernel/Language/Ergo/Foundation + enclave) correctly idle: no
+> ready WP, next non-PX wave operator-gated on PX7 (HELD). **Scaffold** `origin/px5-scaffold-1ad70339` =
+> REFERENCE only (its 2nd Runtime-owned NativeEntrypointPlanV1 + `default_native_entrypoint_plan_v1`
+> "prelude::" strings are NON-authoritative — must not survive; Elaborator plan is the one plan). Fixed
+> rulings in force: rustix SETTLED (never re-ask); PX7 HELD (never release); NO affine/linear (ADR-0017);
+> NO naked RuntimeExpr; unsupported ops stay unavailable lanes; targeted local gates, no-reg = green CI.
 >
 > ---
 > ### ⚡ (superseded) 22:0x — CAT-TAX CLOSED; PX4B building
@@ -74,10 +101,9 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >    site discipline insufficient); fix = pub(crate)/bound-carrier + visibility regression. Both
 >    structural, real catches (trust-adjacent gate working). runtime-implementer respinning R3
 >    (evt_4tht68p1n3qwf) → QA → FRESH §14 Decision. Architect posted cleanly (earlier Enter-fix held).
-> - PX6 parked on PX5 producer. Research corpus merged (2f83f5db). Watchdog cron **51b3c71d**
->   (refreshed to current frontier; every 15min @ :9/:24/:39/:54) + Monitor bp808a7mu (architect
->   stranded-paste) active — Architect seat strands pastes repeatedly; bare Enter fixes. The
->   PX4B §14 review will route to the architect — watch for a stranded paste there.
+> - PX6 parked on PX5 producer merge. Watchdog cron **3888dd71** (refreshed to PX5-building frontier;
+>   every 15min @ :9/:24/:39/:54) + Monitor bp808a7mu (architect stranded-paste) active — the PX5 §14
+>   review (when it hands back) will route to the architect; watch for a stranded paste (bare Enter fixes).
 >
 > ### ⚡ 2026-07-15 (21:1x UTC) — ✅ **PX5 split MERGED (6e7abf63) · PX6 released · research corpus merged · PX5-proper resuming**
 >
