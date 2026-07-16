@@ -23,6 +23,12 @@ fn main() {
     let target = env::var("TARGET").expect("Cargo provides TARGET");
     let host = env::var("HOST").expect("Cargo provides HOST");
     let target_os = env::var("CARGO_CFG_TARGET_OS").expect("Cargo provides target OS");
+    if target_os != "linux" || target != host {
+        panic!(
+            "HostEffectAbiV1 layout generation is unavailable for target {target}; \
+             cross-target or non-Linux effect ABI generation fails closed"
+        );
+    }
     let encoded_rustflags = env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_default();
     let rustflags = env::var("RUSTFLAGS").unwrap_or_default();
     assert!(
@@ -65,11 +71,7 @@ fn main() {
         ("unavailable-non-linux", Vec::new())
     };
 
-    let effect_layout = if target_os == "linux" && target == host {
-        run_effect_abi_probe(&target, &host)
-    } else {
-        Vec::new()
-    };
+    let effect_layout = run_effect_abi_probe(&target, &host);
     let effect_catalog = parse_effect_catalog();
     write_host_effect_generated(&target, &effect_catalog, &effect_layout);
 

@@ -255,21 +255,82 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
     let output =
         ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-two-vis", &dir)
             .expect("two checked Vis nodes reach one artifact");
-    let observation = dir.join("two-vis.observation");
-    let ran = Command::new(&output.artifact.executable_path)
-        .env("KEN_HOST_OBSERVATION_PATH", &observation)
-        .output()
-        .expect("two-Vis artifact runs");
-    assert_eq!(ran.status.code(), Some(0), "stderr: {:?}", ran.stderr);
-    assert_eq!(ran.stdout, b"one\ntwo\n");
-    let observation = std::fs::read_to_string(observation).unwrap();
-    assert!(observation.contains("event_count=2"));
-    assert!(observation.contains(
-        "event=0|op=0102|capability=none|request=console_write:stdout:6f6e650a|outcome=ok:unit"
-    ));
-    assert!(observation.contains(
-        "event=1|op=0102|capability=none|request=console_write:stdout:74776f0a|outcome=ok:unit"
-    ));
+    let native = ken_runtime::run_bound_process_effect_observation_v1(
+        &output.artifact,
+        &ken_runtime::NativeEffectRunOptionsV1 {
+            arguments: Vec::new(),
+            environment: Vec::new(),
+            cwd: dir.clone(),
+            plan_hash: output.plan_transport_hash,
+        },
+    )
+    .expect("the production launcher decodes the complete observation");
+
+    let mut host = ken_interp::CaptureHost::new(Vec::new());
+    let interpreted = ken_cli::run_program(
+        source,
+        ken_cli::SourceFormat::Ken,
+        &[b"ken".to_vec()],
+        &[],
+        b"/",
+        &mut host,
+    )
+    .expect("the same checked source runs through the interpreter");
+    let expected_trace = [b"one\n".as_slice(), b"two\n".as_slice()]
+        .into_iter()
+        .enumerate()
+        .map(|(sequence, bytes)| ken_runtime::EffectEventV1 {
+            sequence: sequence as u64,
+            operation: ken_runtime::HostOpV1::ConsoleWrite,
+            capability: None,
+            request: ken_runtime::CanonicalRequestV1::ConsoleWrite {
+                stream: ken_runtime::ConsoleStreamV1::Stdout,
+                bytes: bytes.to_vec(),
+            },
+            outcome: ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::Unit),
+        })
+        .collect();
+    let interpreted = ken_runtime::EffectObservationV1 {
+        stdout: host.stdout().to_vec(),
+        stderr: host.stderr().to_vec(),
+        filesystem_delta: Vec::new(),
+        terminal_error: None,
+        effect_trace: expected_trace,
+        exit_status: interpreted.exit_status,
+    };
+    assert_eq!(native, interpreted);
+
+    let mut mutations = Vec::new();
+    let mut changed = native.clone();
+    changed.stdout.push(1);
+    mutations.push(changed);
+    let mut changed = native.clone();
+    changed.stderr.push(1);
+    mutations.push(changed);
+    let mut changed = native.clone();
+    changed
+        .filesystem_delta
+        .push(ken_runtime::FsDeltaV1::Created {
+            relative_path: b"mutation".to_vec(),
+            node: ken_runtime::FsNodeObservationV1 {
+                kind: ken_runtime::FsNodeKindV1::File,
+                file_bytes: Some(Vec::new()),
+                symlink_target: None,
+            },
+        });
+    mutations.push(changed);
+    let mut changed = native.clone();
+    changed.terminal_error = Some(ken_runtime::TerminalErrorV1::DriverFailure);
+    mutations.push(changed);
+    let mut changed = native.clone();
+    changed.effect_trace.pop();
+    mutations.push(changed);
+    let mut changed = native.clone();
+    changed.exit_status ^= 1;
+    mutations.push(changed);
+    for changed in mutations {
+        assert_ne!(changed, interpreted);
+    }
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -359,10 +420,15 @@ proc main (input : ProcessInput) (_caps : ProgramCaps APartial)
     drop(child.stdout.take().expect("stdout reader was piped"));
     let status = child.wait().expect("BrokenPipe artifact terminates");
     assert_eq!(status.code(), Some(61));
-    let observation = std::fs::read_to_string(dir.join("broken-pipe.observation")).unwrap();
-    assert!(observation.contains("event_count=1"));
-    assert!(observation.contains("event=0|op=0102|capability=none|request=console_write:stdout:"));
-    assert!(observation.contains("outcome=error:io:BrokenPipe"));
+    let observation = std::fs::read(dir.join("broken-pipe.observation")).unwrap();
+    let observation = ken_runtime::decode_linked_effect_trace_v1(&observation).unwrap();
+    assert_eq!(observation.effect_trace.len(), 1);
+    assert_eq!(
+        observation.effect_trace[0].outcome,
+        ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Io(
+            ken_runtime::IoErrorIdentityV1::BrokenPipe,
+        ))
+    );
 
     let starter_source = include_str!("../../ken-runtime/src/object_linker_packaging.rs");
     for forbidden in ["SIGPIPE", "SIG_IGN", "sigaction", "signal("] {
@@ -423,31 +489,30 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
     let output =
         ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-fs-roundtrip", &dir)
             .expect("FS Vis nodes reach the native capability lane");
-    let observation_dir = output_dir("fs-observation");
-    let observation = observation_dir.join("fs-roundtrip.observation");
-    let ran = Command::new(&output.artifact.executable_path)
-        .arg("px5.bin")
-        .arg("retained")
-        .env("KEN_HOST_OBSERVATION_PATH", &observation)
-        .current_dir(&dir)
-        .output()
-        .expect("FS artifact runs");
-    assert_eq!(
-        ran.status.code(),
-        Some(b'r' as i32),
-        "stderr: {:?}",
-        ran.stderr
-    );
+    let observation = ken_runtime::run_bound_process_effect_observation_v1(
+        &output.artifact,
+        &ken_runtime::NativeEffectRunOptionsV1 {
+            arguments: vec!["px5.bin".into(), "retained".into()],
+            environment: Vec::new(),
+            cwd: dir.clone(),
+            plan_hash: output.plan_transport_hash,
+        },
+    )
+    .expect("the production launcher returns the complete FS observation");
+    assert_eq!(observation.exit_status, b'r' as i32);
     assert_eq!(std::fs::read(dir.join("px5.bin")).unwrap(), b"retained");
-    let observation = std::fs::read_to_string(observation).unwrap();
-    assert!(observation.contains("event_count=3"));
-    assert!(observation.contains("event=0|op=0302|capability=declared:FS|request=fs_write:7078352e62696e:create_new:72657461696e6564|outcome=ok:unit"));
-    assert!(observation.contains(
-        "event=1|op=0301|capability=declared:FS|request=fs_read:7078352e62696e|outcome=ok:bytes:8"
-    ));
-    assert!(observation
-        .contains("event=2|op=0103|capability=none|request=console_flush:stdout|outcome=ok:unit"));
-    let _ = std::fs::remove_dir_all(observation_dir);
+    assert_eq!(observation.effect_trace.len(), 3);
+    assert_eq!(
+        observation.filesystem_delta,
+        vec![ken_runtime::FsDeltaV1::Created {
+            relative_path: b"px5.bin".to_vec(),
+            node: ken_runtime::FsNodeObservationV1 {
+                kind: ken_runtime::FsNodeKindV1::File,
+                file_bytes: Some(b"retained".to_vec()),
+                symlink_target: None,
+            },
+        }]
+    );
     let _ = std::fs::remove_dir_all(dir);
 }
 

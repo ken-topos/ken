@@ -26,9 +26,11 @@ use std::sync::Arc;
 mod abi_v1;
 pub mod capability;
 mod effect_v1;
+mod effect_wire_v1;
 
 pub use capability::*;
 pub use effect_v1::*;
+pub use effect_wire_v1::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DependencyIdentity {

@@ -6,7 +6,8 @@
 //! target. Native bytes and linker success remain evidence artifacts, not Ken
 //! semantic authority or proof evidence.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -40,6 +41,214 @@ pub struct BoundProcessExecutableArtifact {
     pub target_symbol: RuntimeSymbol,
     pub executable_path: PathBuf,
     pub executable_hash: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeEffectRunOptionsV1 {
+    pub arguments: Vec<OsString>,
+    pub environment: Vec<(OsString, OsString)>,
+    pub cwd: PathBuf,
+    pub plan_hash: u64,
+}
+
+#[derive(Debug)]
+pub enum NativeEffectRunErrorV1 {
+    Io(std::io::Error),
+    MalformedTrace,
+    BindingMismatch,
+    ObservationBoundaryUnavailable,
+}
+
+impl fmt::Display for NativeEffectRunErrorV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(error) => write!(formatter, "native effect launcher I/O failed: {error}"),
+            Self::MalformedTrace => formatter.write_str("native effect trace is malformed"),
+            Self::BindingMismatch => {
+                formatter.write_str("native effect trace binding does not match the artifact")
+            }
+            Self::ObservationBoundaryUnavailable => formatter.write_str(
+                "native effect observation sink cannot be placed outside the capability root",
+            ),
+        }
+    }
+}
+
+impl std::error::Error for NativeEffectRunErrorV1 {}
+
+impl From<std::io::Error> for NativeEffectRunErrorV1 {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+fn snapshot_effect_root_v1(
+    root: &Path,
+) -> Result<BTreeMap<Vec<u8>, ken_host::FsNodeObservationV1>, std::io::Error> {
+    fn walk(
+        root: &Path,
+        relative: &Path,
+        output: &mut BTreeMap<Vec<u8>, ken_host::FsNodeObservationV1>,
+    ) -> Result<(), std::io::Error> {
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStrExt;
+
+        let directory = root.join(relative);
+        let mut entries = fs::read_dir(&directory)?.collect::<Result<Vec<_>, _>>()?;
+        entries.sort_by(|left, right| {
+            #[cfg(unix)]
+            {
+                left.file_name()
+                    .as_bytes()
+                    .cmp(right.file_name().as_bytes())
+            }
+            #[cfg(not(unix))]
+            {
+                left.file_name().cmp(&right.file_name())
+            }
+        });
+        for entry in entries {
+            let child = relative.join(entry.file_name());
+            let path = root.join(&child);
+            let metadata = fs::symlink_metadata(&path)?;
+            #[cfg(unix)]
+            let key = child.as_os_str().as_bytes().to_vec();
+            #[cfg(not(unix))]
+            let key = child.to_string_lossy().as_bytes().to_vec();
+            let node = if metadata.file_type().is_symlink() {
+                let target = fs::read_link(&path)?;
+                #[cfg(unix)]
+                let target = target.as_os_str().as_bytes().to_vec();
+                #[cfg(not(unix))]
+                let target = target.to_string_lossy().as_bytes().to_vec();
+                ken_host::FsNodeObservationV1 {
+                    kind: ken_host::FsNodeKindV1::Symlink,
+                    file_bytes: None,
+                    symlink_target: Some(target),
+                }
+            } else if metadata.is_dir() {
+                ken_host::FsNodeObservationV1 {
+                    kind: ken_host::FsNodeKindV1::Directory,
+                    file_bytes: None,
+                    symlink_target: None,
+                }
+            } else if metadata.is_file() {
+                ken_host::FsNodeObservationV1 {
+                    kind: ken_host::FsNodeKindV1::File,
+                    file_bytes: Some(fs::read(&path)?),
+                    symlink_target: None,
+                }
+            } else {
+                ken_host::FsNodeObservationV1 {
+                    kind: ken_host::FsNodeKindV1::Other,
+                    file_bytes: None,
+                    symlink_target: None,
+                }
+            };
+            output.insert(key, node);
+            if metadata.is_dir() {
+                walk(root, &child, output)?;
+            }
+        }
+        Ok(())
+    }
+
+    let mut output = BTreeMap::new();
+    walk(root, Path::new(""), &mut output)?;
+    Ok(output)
+}
+
+fn filesystem_delta_v1(
+    before: &BTreeMap<Vec<u8>, ken_host::FsNodeObservationV1>,
+    after: &BTreeMap<Vec<u8>, ken_host::FsNodeObservationV1>,
+) -> Vec<ken_host::FsDeltaV1> {
+    let keys = before
+        .keys()
+        .chain(after.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    keys.into_iter()
+        .filter_map(
+            |relative_path| match (before.get(&relative_path), after.get(&relative_path)) {
+                (None, Some(node)) => Some(ken_host::FsDeltaV1::Created {
+                    relative_path,
+                    node: node.clone(),
+                }),
+                (Some(node), None) => Some(ken_host::FsDeltaV1::Removed {
+                    relative_path,
+                    node: node.clone(),
+                }),
+                (Some(before), Some(after)) if before != after => {
+                    Some(ken_host::FsDeltaV1::Modified {
+                        relative_path,
+                        before: before.clone(),
+                        after: after.clone(),
+                    })
+                }
+                _ => None,
+            },
+        )
+        .collect()
+}
+
+/// Runs the linked checked-source artifact and returns its complete canonical
+/// observation. The trace sink is launcher-owned and outside the capability
+/// root; stdout/stderr and filesystem deltas are observed by this same call.
+pub fn run_bound_process_effect_observation_v1(
+    artifact: &BoundProcessExecutableArtifact,
+    options: &NativeEffectRunOptionsV1,
+) -> Result<ken_host::EffectObservationV1, NativeEffectRunErrorV1> {
+    let cwd = fs::canonicalize(&options.cwd)?;
+    let observation_root = cwd
+        .parent()
+        .ok_or(NativeEffectRunErrorV1::ObservationBoundaryUnavailable)?;
+    let before = snapshot_effect_root_v1(&cwd)?;
+    let trace_path = observation_root.join(format!(
+        "ken-effect-observation-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| NativeEffectRunErrorV1::MalformedTrace)?
+            .as_nanos()
+    ));
+    let output = Command::new(&artifact.executable_path)
+        .args(&options.arguments)
+        .env_clear()
+        .envs(options.environment.iter().cloned())
+        .env("KEN_HOST_OBSERVATION_PATH", &trace_path)
+        .current_dir(&cwd)
+        .output()?;
+    let after = snapshot_effect_root_v1(&cwd)?;
+    let trace_bytes = fs::read(&trace_path)?;
+    let _ = fs::remove_file(&trace_path);
+    let trace = ken_host::decode_linked_effect_trace_v1(&trace_bytes)
+        .map_err(|_| NativeEffectRunErrorV1::MalformedTrace)?;
+    if trace.plan_hash != options.plan_hash
+        || trace.target_abi_hash != ken_host::TARGET_ABI_MANIFEST_HASH
+        || trace.host_effect_abi_hash != ken_host::HOST_EFFECT_ABI_V1_HASH
+    {
+        return Err(NativeEffectRunErrorV1::BindingMismatch);
+    }
+    let exit_status = output.status.code().unwrap_or(1);
+    let terminal_error = if output.status.code().is_none() {
+        Some(ken_host::TerminalErrorV1::DriverFailure)
+    } else if trace.terminal_value < 0 {
+        Some(ken_host::TerminalErrorV1::RuntimeTrap(
+            u16::try_from(-trace.terminal_value).unwrap_or(u16::MAX),
+        ))
+    } else if trace.terminal_value != i64::from(exit_status) {
+        Some(ken_host::TerminalErrorV1::MalformedHostAbiField)
+    } else {
+        None
+    };
+    Ok(ken_host::EffectObservationV1 {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        filesystem_delta: filesystem_delta_v1(&before, &after),
+        terminal_error,
+        effect_trace: trace.effect_trace,
+        exit_status,
+    })
 }
 
 pub const OBJECT_LINKER_PACKAGE_KIND: &str = "KenObjectLinkerExecutablePackage";

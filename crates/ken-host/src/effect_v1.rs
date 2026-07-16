@@ -112,6 +112,153 @@ pub const HOST_EFFECT_ABI_V1: HostEffectAbiV1 = HostEffectAbiV1 {
     manifest_hash: HOST_EFFECT_ABI_V1_HASH,
 };
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HostEffectWireLayoutV1 {
+    pub request_size: u32,
+    pub request_align_shift: u8,
+    pub request_offsets: Vec<u32>,
+    pub reply_size: u32,
+    pub reply_align_shift: u8,
+    pub reply_tag_offset: u32,
+    pub reply_detail_offset: u32,
+    pub reply_bytes_data_offset: u32,
+    pub reply_bytes_len_offset: u32,
+    pub reply_unit_tag: u64,
+    pub reply_bool_tag: u64,
+    pub reply_bytes_tag: u64,
+    pub reply_error_tag: u64,
+}
+
+fn generated_layout_fact(name: &str) -> Result<u64, TerminalErrorV1> {
+    HOST_EFFECT_ABI_V1_FACTS
+        .iter()
+        .find_map(|(fact, value)| (*fact == name).then_some(*value))
+        .ok_or(TerminalErrorV1::HostEffectAbiMismatch)
+}
+
+fn generated_binding(kind: &str, name: &str) -> Result<u64, TerminalErrorV1> {
+    HOST_EFFECT_ABI_V1_BINDINGS
+        .iter()
+        .find_map(|(bound_kind, bound_name, value)| {
+            (*bound_kind == kind && *bound_name == name).then_some(*value)
+        })
+        .ok_or(TerminalErrorV1::HostEffectAbiMismatch)
+}
+
+fn checked_u32(value: u64) -> Result<u32, TerminalErrorV1> {
+    u32::try_from(value).map_err(|_| TerminalErrorV1::HostEffectAbiMismatch)
+}
+
+fn align_shift(align: u64) -> Result<u8, TerminalErrorV1> {
+    if align == 0 || !align.is_power_of_two() {
+        return Err(TerminalErrorV1::HostEffectAbiMismatch);
+    }
+    u8::try_from(align.trailing_zeros()).map_err(|_| TerminalErrorV1::HostEffectAbiMismatch)
+}
+
+/// Returns the target-C-probed layout consumed by the live Cranelift emitter.
+/// No request size, alignment, offset, or reply tag is restated in Runtime.
+pub fn host_effect_wire_layout_v1(
+    operation: HostOpV1,
+) -> Result<HostEffectWireLayoutV1, TerminalErrorV1> {
+    let row = HOST_EFFECT_ABI_V1_CATALOG
+        .iter()
+        .find(|row| row.1 == operation as u16)
+        .ok_or(TerminalErrorV1::HostEffectAbiMismatch)?;
+    let request = row.3;
+    let size = |record: &str| generated_layout_fact(&format!("SIZE_{record}"));
+    let align = |record: &str| generated_layout_fact(&format!("ALIGN_{record}"));
+    let offset =
+        |record: &str, field: &str| generated_layout_fact(&format!("OFFSET_{record}_{field}"));
+    let slice_data = offset("SliceV1", "data")?;
+    let slice_len = offset("SliceV1", "len")?;
+    let field = |name: &str| offset(request, name);
+    let slice = |name: &str| -> Result<[u32; 2], TerminalErrorV1> {
+        let base = field(name)?;
+        Ok([
+            checked_u32(base + slice_data)?,
+            checked_u32(base + slice_len)?,
+        ])
+    };
+    let request_offsets = match operation {
+        HostOpV1::ConsoleWrite => {
+            let bytes = slice("bytes")?;
+            vec![checked_u32(field("stream")?)?, bytes[0], bytes[1]]
+        }
+        HostOpV1::ConsoleFlush | HostOpV1::ConsoleIsTerminal => {
+            vec![checked_u32(field("stream")?)?]
+        }
+        HostOpV1::FsReadFile => {
+            let path = slice("path")?;
+            vec![checked_u32(field("capability")?)?, path[0], path[1]]
+        }
+        HostOpV1::FsWriteFile => {
+            let path = slice("path")?;
+            let bytes = slice("bytes")?;
+            vec![
+                checked_u32(field("capability")?)?,
+                path[0],
+                path[1],
+                checked_u32(field("create_policy")?)?,
+                bytes[0],
+                bytes[1],
+            ]
+        }
+        _ => return Err(TerminalErrorV1::OperationUnavailable(operation)),
+    };
+    let reply_bytes = offset("HostReplyV1", "bytes")?;
+    Ok(HostEffectWireLayoutV1 {
+        request_size: checked_u32(size(request)?)?,
+        request_align_shift: align_shift(align(request)?)?,
+        request_offsets,
+        reply_size: checked_u32(size("HostReplyV1")?)?,
+        reply_align_shift: align_shift(align("HostReplyV1")?)?,
+        reply_tag_offset: checked_u32(offset("HostReplyV1", "tag")?)?,
+        reply_detail_offset: checked_u32(offset("HostReplyV1", "detail")?)?,
+        reply_bytes_data_offset: checked_u32(reply_bytes + slice_data)?,
+        reply_bytes_len_offset: checked_u32(reply_bytes + slice_len)?,
+        reply_unit_tag: generated_binding("tag", "reply.unit")?,
+        reply_bool_tag: generated_binding("tag", "reply.bool")?,
+        reply_bytes_tag: generated_binding("tag", "reply.bytes")?,
+        reply_error_tag: generated_binding("tag", "reply.error")?,
+    })
+}
+
+pub fn verify_host_effect_wire_layout_v1(
+    operation: HostOpV1,
+    candidate: &HostEffectWireLayoutV1,
+) -> Result<(), TerminalErrorV1> {
+    if &host_effect_wire_layout_v1(operation)? == candidate {
+        Ok(())
+    } else {
+        Err(TerminalErrorV1::HostEffectAbiMismatch)
+    }
+}
+
+pub fn verify_host_effect_inventory_v1(
+    producer: &[u16],
+    registry: &[u16],
+    observer: &[u16],
+    consumers: &[u16],
+) -> Result<(), TerminalErrorV1> {
+    let closed = |values: &[u16]| {
+        let mut values = values.to_vec();
+        values.sort_unstable();
+        values.dedup();
+        values
+    };
+    let producer = closed(producer);
+    if producer.len() == HostOpV1::ALL.len()
+        && producer == closed(registry)
+        && producer == closed(observer)
+        && producer == closed(consumers)
+    {
+        Ok(())
+    } else {
+        Err(TerminalErrorV1::HostEffectAbiMismatch)
+    }
+}
+
 pub fn assert_host_effect_abi_identity(hash: [u8; 32]) -> Result<(), TerminalErrorV1> {
     if hash == HOST_EFFECT_ABI_V1_HASH {
         Ok(())
@@ -1033,6 +1180,17 @@ mod tests {
         assert_eq!(producer, registry);
         assert_eq!(producer, observer);
         assert_eq!(producer, consumers);
+        let as_vec =
+            |set: &std::collections::BTreeSet<u16>| set.iter().copied().collect::<Vec<_>>();
+        assert_eq!(
+            verify_host_effect_inventory_v1(
+                &as_vec(&producer),
+                &as_vec(&registry),
+                &as_vec(&observer),
+                &as_vec(&consumers),
+            ),
+            Ok(())
+        );
         for row in HOST_EFFECT_ABI_V1_CATALOG {
             assert!(HOST_EFFECT_ABI_V1_FACTS
                 .iter()
@@ -1050,16 +1208,40 @@ mod tests {
 
         let mut producer_only = producer.clone();
         producer_only.insert(0x7fff);
-        assert_ne!(producer_only, registry);
+        assert!(verify_host_effect_inventory_v1(
+            &as_vec(&producer_only),
+            &as_vec(&registry),
+            &as_vec(&observer),
+            &as_vec(&consumers),
+        )
+        .is_err());
         let mut registry_only = registry.clone();
         registry_only.remove(&(HostOpV1::ConsoleWrite as u16));
-        assert_ne!(producer, registry_only);
+        assert!(verify_host_effect_inventory_v1(
+            &as_vec(&producer),
+            &as_vec(&registry_only),
+            &as_vec(&observer),
+            &as_vec(&consumers),
+        )
+        .is_err());
         let mut observer_only = observer.clone();
         observer_only.insert(0x7ffe);
-        assert_ne!(producer, observer_only);
+        assert!(verify_host_effect_inventory_v1(
+            &as_vec(&producer),
+            &as_vec(&registry),
+            &as_vec(&observer_only),
+            &as_vec(&consumers),
+        )
+        .is_err());
         let mut consumer_only = consumers.clone();
         consumer_only.remove(&(HostOpV1::FsRename as u16));
-        assert_ne!(producer, consumer_only);
+        assert!(verify_host_effect_inventory_v1(
+            &as_vec(&producer),
+            &as_vec(&registry),
+            &as_vec(&observer),
+            &as_vec(&consumer_only),
+        )
+        .is_err());
     }
 
     #[test]

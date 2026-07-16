@@ -33,6 +33,14 @@ use crate::{
     RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
 
+const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 5] = [
+    ken_host::HostOpV1::ConsoleWrite,
+    ken_host::HostOpV1::ConsoleFlush,
+    ken_host::HostOpV1::ConsoleIsTerminal,
+    ken_host::HostOpV1::FsReadFile,
+    ken_host::HostOpV1::FsWriteFile,
+];
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CraneliftRunReport {
     pub example: String,
@@ -1910,14 +1918,7 @@ impl<'a> Lowering<'a> {
         args: &[RuntimeExpr],
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
-        if !matches!(
-            operation,
-            ken_host::HostOpV1::ConsoleWrite
-                | ken_host::HostOpV1::ConsoleFlush
-                | ken_host::HostOpV1::ConsoleIsTerminal
-                | ken_host::HostOpV1::FsReadFile
-                | ken_host::HostOpV1::FsWriteFile
-        ) {
+        if !CRANELIFT_HOST_EFFECT_CONSUMERS_V1.contains(&operation) {
             return Err(unsupported(
                 "Effect",
                 format!(
@@ -1934,17 +1935,20 @@ impl<'a> Lowering<'a> {
             self.invocation_pointer
                 .expect("process effect lowering owns an invocation pointer"),
         );
-        let request_size = match operation {
-            ken_host::HostOpV1::ConsoleWrite => 24,
-            ken_host::HostOpV1::ConsoleFlush | ken_host::HostOpV1::ConsoleIsTerminal => 8,
-            ken_host::HostOpV1::FsReadFile => 24,
-            ken_host::HostOpV1::FsWriteFile => 48,
-            _ => unreachable!("availability was checked above"),
+        let wire = ken_host::host_effect_wire_layout_v1(operation).map_err(|error| {
+            unsupported(
+                "Effect",
+                format!("generated HostEffectAbiV1 layout rejected: {error:?}"),
+            )
+        })?;
+        let request_offset = |index: usize| {
+            i32::try_from(wire.request_offsets[index])
+                .expect("C-probed request offset was checked as u32")
         };
         let request = builder.create_sized_stack_slot(StackSlotData::new(
             StackSlotKind::ExplicitSlot,
-            request_size,
-            3,
+            wire.request_size,
+            wire.request_align_shift,
         ));
         match operation {
             ken_host::HostOpV1::ConsoleWrite
@@ -1963,7 +1967,9 @@ impl<'a> Lowering<'a> {
                         unsupported("Effect", "Console operation has a malformed Stream operand")
                     })?;
                 let stream = builder.ins().iconst(types::I64, stream);
-                builder.ins().stack_store(stream, request, 0);
+                builder
+                    .ins()
+                    .stack_store(stream, request, request_offset(0));
                 if operation == ken_host::HostOpV1::ConsoleWrite {
                     let (data, len) = self.wire_bytes(
                         builder,
@@ -1971,8 +1977,8 @@ impl<'a> Lowering<'a> {
                             unsupported("Effect", "Console.Write is missing Bytes")
                         })?,
                     )?;
-                    builder.ins().stack_store(data, request, 8);
-                    builder.ins().stack_store(len, request, 16);
+                    builder.ins().stack_store(data, request, request_offset(1));
+                    builder.ins().stack_store(len, request, request_offset(2));
                 }
             }
             ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsWriteFile => {
@@ -1986,15 +1992,17 @@ impl<'a> Lowering<'a> {
                         "FS capability operand is not the opaque invocation token",
                     ));
                 };
-                builder.ins().stack_store(token, request, 0);
+                builder.ins().stack_store(token, request, request_offset(0));
                 let (path, path_len) = self.wire_bytes(
                     builder,
                     lowered
                         .first()
                         .ok_or_else(|| unsupported("Effect", "FS operation is missing its path"))?,
                 )?;
-                builder.ins().stack_store(path, request, 8);
-                builder.ins().stack_store(path_len, request, 16);
+                builder.ins().stack_store(path, request, request_offset(1));
+                builder
+                    .ins()
+                    .stack_store(path_len, request, request_offset(2));
                 if operation == ken_host::HostOpV1::FsWriteFile {
                     let policy = lowered.get(1).and_then(create_policy_tag).ok_or_else(|| {
                         unsupported("Effect", "FS.WriteFile has a malformed CreatePolicy")
@@ -2006,21 +2014,30 @@ impl<'a> Lowering<'a> {
                         })?,
                     )?;
                     let policy = builder.ins().iconst(types::I64, policy);
-                    builder.ins().stack_store(policy, request, 24);
-                    builder.ins().stack_store(bytes, request, 32);
-                    builder.ins().stack_store(bytes_len, request, 40);
+                    builder
+                        .ins()
+                        .stack_store(policy, request, request_offset(3));
+                    builder.ins().stack_store(bytes, request, request_offset(4));
+                    builder
+                        .ins()
+                        .stack_store(bytes_len, request, request_offset(5));
                 }
             }
             _ => unreachable!("availability was checked above"),
         }
-        let reply =
-            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 32, 3));
+        let reply = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            wire.reply_size,
+            wire.reply_align_shift,
+        ));
         let invocation = self
             .invocation_pointer
             .expect("process effect lowering owns an invocation pointer");
         let op = builder.ins().iconst(types::I64, operation as i64);
         let request_pointer = builder.ins().stack_addr(pointer_type, request, 0);
-        let request_size = builder.ins().iconst(types::I64, i64::from(request_size));
+        let request_size = builder
+            .ins()
+            .iconst(types::I64, i64::from(wire.request_size));
         let reply_pointer = builder.ins().stack_addr(pointer_type, reply, 0);
         let call = builder.ins().call(
             self.host_dispatch
@@ -2029,14 +2046,29 @@ impl<'a> Lowering<'a> {
         );
         let status = builder.inst_results(call)[0];
         Self::require_i64(builder, status, 0);
-        let tag = builder.ins().stack_load(types::I64, reply, 0);
-        let detail = builder.ins().stack_load(types::I64, reply, 8);
+        let tag = builder.ins().stack_load(
+            types::I64,
+            reply,
+            i32::try_from(wire.reply_tag_offset).expect("reply tag offset is u32"),
+        );
+        let detail = builder.ins().stack_load(
+            types::I64,
+            reply,
+            i32::try_from(wire.reply_detail_offset).expect("reply detail offset is u32"),
+        );
         if operation == ken_host::HostOpV1::ConsoleIsTerminal {
+            Self::require_i64(builder, tag, wire.reply_bool_tag as i64);
             Ok(Lowered::Bool {
                 value: detail,
                 known: None,
             })
         } else {
+            let success_tag = if operation == ken_host::HostOpV1::FsReadFile {
+                wire.reply_bytes_tag
+            } else {
+                wire.reply_unit_tag
+            } as i64;
+            Self::require_one_of_i64(builder, tag, &[success_tag, wire.reply_error_tag as i64]);
             let io_error = Lowered::DynamicNullaryConstructor {
                 tag: builder.ins().band_imm(detail, 0xff),
                 payload: Some(builder.ins().sshr_imm(detail, 32)),
@@ -2073,8 +2105,18 @@ impl<'a> Lowering<'a> {
             };
             let ok = if operation == ken_host::HostOpV1::FsReadFile {
                 Lowered::ResponseBytes {
-                    pointer: builder.ins().stack_load(pointer_type, reply, 16),
-                    len: builder.ins().stack_load(types::I64, reply, 24),
+                    pointer: builder.ins().stack_load(
+                        pointer_type,
+                        reply,
+                        i32::try_from(wire.reply_bytes_data_offset)
+                            .expect("reply bytes data offset is u32"),
+                    ),
+                    len: builder.ins().stack_load(
+                        types::I64,
+                        reply,
+                        i32::try_from(wire.reply_bytes_len_offset)
+                            .expect("reply bytes len offset is u32"),
+                    ),
                 }
             } else {
                 Lowered::Constructor {
@@ -2082,11 +2124,10 @@ impl<'a> Lowering<'a> {
                     args: Vec::new(),
                 }
             };
-            let error_tag = builder.ins().iconst(types::I64, 3);
-            let success = builder.ins().icmp(
-                cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+            let success = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
                 tag,
-                error_tag,
+                success_tag,
             );
             Ok(Lowered::HostResult {
                 success,
@@ -2198,6 +2239,33 @@ impl<'a> Lowering<'a> {
             actual,
             expected,
         );
+        builder.ins().brif(matches, valid, &[], invalid, &[]);
+        builder.switch_to_block(invalid);
+        let failure = builder.ins().iconst(types::I64, -1);
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(valid);
+    }
+
+    fn require_one_of_i64(
+        builder: &mut FunctionBuilder<'_>,
+        actual: cranelift_codegen::ir::Value,
+        expected: &[i64],
+    ) {
+        let valid = builder.create_block();
+        let invalid = builder.create_block();
+        let mut matches = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            actual,
+            expected[0],
+        );
+        for expected in &expected[1..] {
+            let next = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                actual,
+                *expected,
+            );
+            matches = builder.ins().bor(matches, next);
+        }
         builder.ins().brif(matches, valid, &[], invalid, &[]);
         builder.switch_to_block(invalid);
         let failure = builder.ins().iconst(types::I64, -1);
@@ -3446,6 +3514,52 @@ mod tests {
         process_input: *const BorrowedFixtureValue,
         host_context: *mut std::ffi::c_void,
         capability: u64,
+    }
+
+    #[test]
+    fn live_effect_emitter_inventory_and_generated_layout_mutations_are_closed() {
+        assert_eq!(
+            CRANELIFT_HOST_EFFECT_CONSUMERS_V1,
+            ken_host::PX5_PLANNED_NATIVE_TARGETS
+        );
+        for operation in CRANELIFT_HOST_EFFECT_CONSUMERS_V1 {
+            let layout = ken_host::host_effect_wire_layout_v1(operation).unwrap();
+            assert_eq!(
+                ken_host::verify_host_effect_wire_layout_v1(operation, &layout),
+                Ok(())
+            );
+            let mut mutations = Vec::new();
+            let mut changed = layout.clone();
+            changed.request_size ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.request_align_shift ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.request_offsets[0] ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_size ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_tag_offset ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_error_tag ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_unit_tag ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_bool_tag ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_bytes_tag ^= 1;
+            mutations.push(changed);
+            for mutation in mutations {
+                assert!(ken_host::verify_host_effect_wire_layout_v1(operation, &mutation).is_err());
+            }
+        }
     }
 
     fn run_borrowed_fixture(expr: &RuntimeExpr, root: &BorrowedFixtureValue) -> i64 {
