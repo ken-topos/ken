@@ -14,7 +14,22 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ## ⚡⚡ RESUME NEXT (2026-07-16 04:1x) — ✅ PX5 CLOSED (merged 049628f8 + all 3 §10 retros in); next = resume PX6 (Verify) via handoff-gate
+> ## ⚡⚡ RESUME NEXT (2026-07-16 05:3x) — ✅ PX5 CLOSED · ✅ PX5B CLOSED (merged c4200a84 + 3 retros) · PX6 RESUMED (repair in-flight)
+>
+> > **✅✅ PX5B CLOSED — `origin/main @ c4200a84` (PR #734, §14-approved `af46df7d`, dec_3pydwdpc3hphs).** Interp-lane
+> > canonical effect observation producer (`run_io_effect_observation_v1` / `run_program_effect_observation_v1`);
+> > content-verified; full locked CI passed. **All 3 §10 retros in** (thr_6y5tfazmy8nhx): leader evt_6wm8k2sema4fa,
+> > impl evt_27e45vqq0vvjb, QA evt_7vv751sgecpe1. Carry pinned: write-only post-`HostDispatchReplyV1`/pre-reification
+> > recording; reply-sourced (not configured-cap-inferred) capability/error identity; the `dir/./x` vs `dir/x`
+> > descriptor-collision oracle (distinguishes actual dispatched bytes from resolved-node). **PX6 RESUMED** on
+> > c4200a84 — verify-leader dispatched the rebase-and-repair packet (evt_2ke362ntqtgez) to the implementer:
+> > consume `run_program_effect_observation_v1` for the oracle lane, root-A snapshot fills only `filesystem_delta`,
+> > demote `Scenario.expected_fs` to an assertion, add the 2 producer-seam discriminators; native half/comparator/
+> > root-B binding unchanged (already §14-sound). **NEXT: doc-only tracker-sync (PX5B-closed + PX5B/PX14/PX15
+> > catalog rows) → watch PX6 impl handback → verify-qa → §14 → publish → close PX6 → cap-model ruling → PX13/14/15.**
+>
+> ---
+> _(prior:)_ ## ⚡⚡ RESUME NEXT (2026-07-16 04:1x) — ✅ PX5 CLOSED (merged 049628f8 + all 3 §10 retros in); next = resume PX6 (Verify) via handoff-gate
 >
 > > **✅✅ PX5 CLOSED — `origin/main @ 049628f8` (PR #732, squash of §14-approved `bfc12020`, `dec_22hxvhcrah7ac`
 > > resolved). Verified by CONTENT** (effect_v1.rs, `host_effect_wire_layout_v1`, six-field EffectObservationV1
@@ -26,15 +41,38 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > > decode/compare the COMPLETE canonical value, not textual `contains`; (c) `ken-host::abi_v1` C-companion
 > > SIGPIPE posture (witness-gated `ProcessContext`) as the pattern for a non-Rust-runtime entrypoint.
 > > **IMMEDIATE NEXT ACTIONS (in order):**
-> > 1. **Doc-only tracker-sync PR** to bring main's tracker + window log current (PX4B precedent — separate
-> >    from the code merge). Bundles this closed-PX5 state.
-> > 2. **Resume PX6 (Verify)** — verify ring was BLOCKED awaiting PX5's real producer/host-context/observation
-> >    APIs (branch a83059c used a proxy comparator). Now unblocked by 049628f8. DECISION (logged): treat as
-> >    new-work-vs-changed-dep → **compact the verify ring (leader+impl+qa) via handoff-gate, then kick the
-> >    resume** onto 049628f8 (rebase, wire the REAL six-field EffectObservationV1 two-lane differential). Their
-> >    stale pre-final-PX5 context is a liability, not an asset (operator hard rule). No prior-WP retro due (PX6
-> >    is their current WP). ⚠ this is the frontier-advancing move — do it with full budget.
-> > 3. Then fleet frontier = PX6 in-flight; after PX6 merges, route the shared Architect cap-model ruling → PX13/14/15.
+> > 1. ✅ **Doc-only tracker-sync PR DONE** — PR #733 merged `origin/main @ c87f3d2e` (tracker + window log;
+> >    verified by content). Scoped file-only from fresh origin/main (steward/work is far behind main — never
+> >    merge it wholesale; the sync is always file-scoped: tracker + window log only).
+> > 2. **Resume PX6 (Verify) — IN PROGRESS.** Verify ring was BLOCKED awaiting PX5's real producer/host-context/
+> >    observation APIs (a83059c used a proxy comparator). Unblocked by 049628f8. Handoff-gate: worktrees clean
+> >    at 513955fe/0-ahead (lossless) → **compaction SENT to all 3 via handoff-gate-compact.sh** (reset to
+> >    origin/main + /compact). **Kick DRAFTED + HELD** (scratchpad/px6-resume-kick.md) — pins landed APIs:
+> >    `ken_host::EffectObservationV1` (effect_v1.rs:896, import don't redefine), native passing substrate
+> >    `run_bound_process_effect_observation_v1` (object_linker_packaging.rs:196, root B = options.cwd),
+> >    `build_bound_process_starter_executable_artifact` (:618); ⛔ NOT native_effect_v1 (cfg(test) proxy).
+> >    Closes the 2 a83059c defects (synthetic canonical cmp → real; native adapter ignored root B → set cwd).
+> >    ✅ **DONE: all 3 verify seats "Context compacted"; kick POSTED evt_3hwf03a4tnser (thr_74tys5r5e39s4);
+> >    verify-leader WORKING** (re-grounding frame + merged producer API, routing repair packet to implementer).
+> > 3. **PX6 §14 BLOCKED on b7e7a14d → routed to new WP PX5B (Runtime).** Verify handed back b7e7a14d (qa APPROVE
+> >    evt_1n823qn2x2vzp); Architect §14 BLOCK (evt_6q01xcfrmzz16): native half + comparator + root-B binding all
+> >    SOUND, but one producer-seam defect — the **interp oracle lane built its trace from `Scenario.expected_fs`
+> >    (caller expectation), not observed dispatch** → a raw-path-normalization bug (`dir/./x` run as `dir/x`)
+> >    could falsely pass. verify-leader routed the ownership/API-placement q to me (crosses into ken-interp).
+> >    **DECISION (logged, autonomous):** the interp observation hook is a **Runtime deliverable** (ken-interp
+> >    producer, symmetric to PX5's native producer; Verify authoring the oracle it judges = ADR-0018 §5
+> >    anti-pattern). **Opened PX5B** (Runtime, S — frame `docs/program/wp/PX5B-interp-effect-observation-producer.md`):
+> >    write-only one-way hook at eval.rs:4258-4269 recording real `{operation, CanonicalRequestV1,
+> >    reply.capability_identity, reply.outcome}` → consumable `EffectObservationV1` producer. Reply posted
+> >    evt_5yab2dyx3tjyw. **PX6 PARKED on PX5B.** ✅ PX5B built + gated: impl handback af46df7d (evt_jxvf4q82f0cv),
+> >    **runtime-qa APPROVE** evt_55mx8pnzk4gav, **§14 APPROVE** dec_3pydwdpc3hphs (Architect evt_3yap6yny792ra —
+> >    seam independently re-anchored). Provenance verified: 2 commits on origin/main c87f3d2e, 5 paths/+751−25,
+> >    zero forbidden-path movement. **PUBLISHING under standing authority** (bg pid 1400625, target af46df7d,
+> >    no tracker bundle per PX5 precedent). NEXT: verify merge by content → doc-only tracker-sync →
+> >    **route handback to Verify (verify-leader thr_74tys5r5e39s4)** → PX6 consumes producer
+> >    `run_program_effect_observation_v1`/`run_io_effect_observation_v1` + demotes expected_fs + adds 2
+> >    discriminators + re-gates fresh SHA → PX6 qa/§14/publish → then cap-model ruling → PX13/14/15.
+> > 4. After PX6 merges, route the shared Architect cap-model ruling → author frames + release PX13/14/15.
 >
 > **▶ PAT OFFLINE ~02:40 → ~11:30 UTC (2026-07-16).** Running approved queue autonomously; lean on
 > PRINCIPLES.md, route around genuine product questions + log them. **Decision log:
