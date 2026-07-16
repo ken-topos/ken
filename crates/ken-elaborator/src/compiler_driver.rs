@@ -740,6 +740,7 @@ pub fn compile_native_program_sources(
                 "AFull" => 2,
                 _ => unreachable!("checked main authority is a known Auth constructor"),
             },
+            plan_hash: plan_transport_hash,
             ret_constructor: plan.ret_constructor.to_string(),
             process_symbols: ken_runtime::NativeProcessSymbols {
                 process_input: plan.process_input_constructor.to_string(),

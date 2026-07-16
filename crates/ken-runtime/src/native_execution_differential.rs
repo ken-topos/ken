@@ -2193,17 +2193,39 @@ fn effect_foreign_executable_policy_report(
     }
 
     if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
-        if let Some(effect) = runtime_expr_effect(body) {
-            facts.insert(format!("runtime_expr.effect={effect}"));
+        let mut operations = BTreeSet::new();
+        runtime_expr_host_ops(body, &mut operations);
+        if !operations.is_empty() {
+            for operation in &operations {
+                facts.insert(format!(
+                    "runtime_expr.host_op={:04x}:{:?}",
+                    *operation as u16, operation
+                ));
+            }
+            if let Some(operation) = operations
+                .iter()
+                .find(|operation| {
+                    operation.availability() != ken_host::HostOpAvailabilityV1::NativeTested
+                })
+                .copied()
+            {
+                return Ok(policy_report(
+                    target_symbol,
+                    NativeEffectForeignExecutableStatus::RepresentedUnavailable {
+                        reason: format!(
+                            "host operation {operation:?} ({:04x}) remains individually unavailable",
+                            operation as u16
+                        ),
+                    },
+                    facts,
+                    "sealed HostOpV1 availability policy",
+                ));
+            }
             return Ok(policy_report(
                 target_symbol,
-                NativeEffectForeignExecutableStatus::Unsupported {
-                    reason:
-                        "transparent RuntimeExpr::Effect bodies are outside native executable policy"
-                            .to_string(),
-                },
+                NativeEffectForeignExecutableStatus::NativeTested,
                 facts,
-                "RuntimeDeclaration transparent body",
+                "all transparent RuntimeExpr::Effect operations are in the pinned native set",
             ));
         }
     }
@@ -2327,42 +2349,59 @@ fn lowerability_status_tag(status: &RuntimeLowerabilityStatus) -> String {
     }
 }
 
-fn runtime_expr_effect(expr: &RuntimeExpr) -> Option<&str> {
+fn runtime_expr_host_ops(expr: &RuntimeExpr, operations: &mut BTreeSet<ken_host::HostOpV1>) {
     match expr {
-        RuntimeExpr::Value(_)
-        | RuntimeExpr::Var(_)
-        | RuntimeExpr::DeclarationRef { .. }
-        | RuntimeExpr::ImportedDeclarationRef { .. }
-        | RuntimeExpr::Trap(_) => None,
+        RuntimeExpr::Effect {
+            operation, args, ..
+        } => {
+            operations.insert(*operation);
+            for arg in args {
+                runtime_expr_host_ops(arg, operations);
+            }
+        }
         RuntimeExpr::Let { value, body } => {
-            runtime_expr_effect(value).or_else(|| runtime_expr_effect(body))
+            runtime_expr_host_ops(value, operations);
+            runtime_expr_host_ops(body, operations);
         }
         RuntimeExpr::If {
             scrutinee,
             then_expr,
             else_expr,
-        } => runtime_expr_effect(scrutinee)
-            .or_else(|| runtime_expr_effect(then_expr))
-            .or_else(|| runtime_expr_effect(else_expr)),
-        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
-            args.iter().find_map(runtime_expr_effect)
+        } => {
+            runtime_expr_host_ops(scrutinee, operations);
+            runtime_expr_host_ops(then_expr, operations);
+            runtime_expr_host_ops(else_expr, operations);
+        }
+        RuntimeExpr::PrimitiveCall { args, .. }
+        | RuntimeExpr::Construct { args, .. }
+        | RuntimeExpr::Call { args, .. } => {
+            for arg in args {
+                runtime_expr_host_ops(arg, operations);
+            }
+            if let RuntimeExpr::Call { callee, .. } = expr {
+                runtime_expr_host_ops(callee, operations);
+            }
         }
         RuntimeExpr::Match {
             scrutinee, cases, ..
-        } => runtime_expr_effect(scrutinee).or_else(|| {
-            cases
-                .iter()
-                .find_map(|case| runtime_expr_effect(&case.body))
-        }),
-        RuntimeExpr::Record { fields } => fields
-            .iter()
-            .find_map(|(_, value)| runtime_expr_effect(value)),
-        RuntimeExpr::Project { record, .. } => runtime_expr_effect(record),
-        RuntimeExpr::Closure { body, .. } => runtime_expr_effect(body),
-        RuntimeExpr::Call { callee, args } => {
-            runtime_expr_effect(callee).or_else(|| args.iter().find_map(runtime_expr_effect))
+        } => {
+            runtime_expr_host_ops(scrutinee, operations);
+            for case in cases {
+                runtime_expr_host_ops(&case.body, operations);
+            }
         }
-        RuntimeExpr::Effect { family, .. } => Some(family),
+        RuntimeExpr::Record { fields } => {
+            for (_, value) in fields {
+                runtime_expr_host_ops(value, operations);
+            }
+        }
+        RuntimeExpr::Project { record, .. } => runtime_expr_host_ops(record, operations),
+        RuntimeExpr::Closure { body, .. } => runtime_expr_host_ops(body, operations),
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => {}
     }
 }
 
@@ -3916,7 +3955,7 @@ mod tests {
     }
 
     #[test]
-    fn hidden_runtime_effect_body_reports_unsupported_without_native_execution() {
+    fn hidden_deferred_effect_body_reports_named_unavailable_without_native_execution() {
         let base_program = starter_program(43);
         let run_report = runtime_ir_run_report(&base_program);
         let output_dir = temp_output_dir("nc25-hidden-effect-body");
@@ -3932,21 +3971,44 @@ mod tests {
             interpreter_available(&program, &run_report),
             "native differential unit test",
         )
-        .expect("hidden RuntimeExpr::Effect is an unsupported policy report");
+        .expect("hidden deferred effect is a represented-unavailable policy report");
 
         assert!(matches!(
             report.effect_foreign_policy.status,
-            NativeEffectForeignExecutableStatus::Unsupported { ref reason }
-                if reason.contains("RuntimeExpr::Effect")
+            NativeEffectForeignExecutableStatus::RepresentedUnavailable { ref reason }
+                if reason.contains("ConsoleRead")
         ));
         assert!(report
             .effect_foreign_policy
             .facts
-            .contains("runtime_expr.effect=Console"));
+            .contains("runtime_expr.host_op=0101:ConsoleRead"));
         assert!(matches!(
             report.native,
             NativeExecutionLaneReport::Unavailable { .. }
         ));
+    }
+
+    #[test]
+    fn pinned_effect_body_is_native_tested_by_exact_operation_identity() {
+        let mut program = starter_program(43);
+        program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleWrite,
+                capability: None,
+                args: Vec::new(),
+            },
+        };
+        let report =
+            effect_foreign_executable_policy_report(&program, &program.declarations[0].symbol)
+                .unwrap();
+        assert_eq!(
+            report.status,
+            NativeEffectForeignExecutableStatus::NativeTested
+        );
+        assert!(report
+            .facts
+            .contains("runtime_expr.host_op=0102:ConsoleWrite"));
     }
 
     #[test]
@@ -4422,7 +4484,7 @@ mod tests {
     }
 
     #[test]
-    fn closeout_classifies_effect_policy_unsupported_as_unsupported() {
+    fn closeout_classifies_deferred_effect_policy_as_unavailable() {
         let base_program = starter_program(53);
         let run_report = runtime_ir_run_report(&base_program);
         let output_dir = temp_output_dir("nc27-closeout-effect-unsupported");
@@ -4446,8 +4508,8 @@ mod tests {
         assert_eq!(closeout.corpus.blockers.len(), 1);
         assert!(matches!(
             closeout.corpus.blockers[0].status,
-            NativeExecutablePhaseStatus::Unsupported { ref reason }
-                if reason.contains("RuntimeExpr::Effect")
+            NativeExecutablePhaseStatus::Unavailable { ref reason }
+                if reason.contains("ConsoleRead")
         ));
         assert!(matches!(
             closeout_claim_status(
@@ -4455,8 +4517,8 @@ mod tests {
                 &report.target.target_symbol,
                 &NativeExecutableEvidenceClaim::EffectForeignExecutablePolicy
             ),
-            NativeExecutablePhaseStatus::Unsupported { reason }
-                if reason.contains("RuntimeExpr::Effect")
+            NativeExecutablePhaseStatus::Unavailable { reason }
+                if reason.contains("ConsoleRead")
         ));
     }
 

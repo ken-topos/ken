@@ -3665,9 +3665,6 @@ impl FSIds {
 /// The authority a `read_bytes` sink demands (`62 §3.1`'s sink-sufficiency
 /// check). `AUTH_PARTIAL` ("restricted, e.g. read-only, single dir") is the
 /// least authority that authorizes a read; `AUTH_NONE` never suffices.
-const READ_BYTES_REQUIRED_AUTHORITY: capabilities::Authority = capabilities::AUTH_PARTIAL;
-const WRITE_BYTES_REQUIRED_AUTHORITY: capabilities::Authority = capabilities::AUTH_FULL;
-
 /// Runtime capability gate (FS-driver-build D3, `FS-driver.md` D3, AC3's
 /// runtime arm). Load-bearing — R2 flips on this returning `false`; a
 /// no-op always-true `authorizes` is ambient authority and fails AC3.
@@ -3724,22 +3721,35 @@ pub fn fs_target_components(path: &[u8]) -> Result<Vec<Vec<u8>>, CapabilityDenie
 
 /// Map a `std::io::ErrorKind` to Ken's in-language `IOError` sum (D2, D5:
 /// failure surfaces as a total `Result`, never a panic).
+#[cfg(test)]
 fn io_error_value(error: &io::Error, ids: &ConsoleIds, store: &mut EvalStore) -> EvalVal {
-    let ctor = match error.kind() {
-        std::io::ErrorKind::NotFound => ids.notfound_id,
-        std::io::ErrorKind::PermissionDenied => ids.permissiondenied_id,
-        std::io::ErrorKind::BrokenPipe => ids.brokenpipe_id,
-        std::io::ErrorKind::Interrupted => ids.interrupted_id,
-        std::io::ErrorKind::AlreadyExists => ids.alreadyexists_id,
-        std::io::ErrorKind::InvalidInput => ids.invalidinput_id,
-        std::io::ErrorKind::IsADirectory => ids.isdirectory_id,
-        std::io::ErrorKind::NotADirectory => ids.notdirectory_id,
-        std::io::ErrorKind::DirectoryNotEmpty => ids.notempty_id,
-        std::io::ErrorKind::Unsupported => ids.unsupported_id,
-        _ => ids.other_id,
+    let identity = ken_host::io_error_identity_v1(error);
+    io_error_identity_value(identity, ids, store)
+}
+
+fn io_error_identity_value(
+    identity: ken_host::IoErrorIdentityV1,
+    ids: &ConsoleIds,
+    store: &mut EvalStore,
+) -> EvalVal {
+    let ctor = match identity {
+        ken_host::IoErrorIdentityV1::NotFound => ids.notfound_id,
+        ken_host::IoErrorIdentityV1::PermissionDenied => ids.permissiondenied_id,
+        ken_host::IoErrorIdentityV1::BrokenPipe => ids.brokenpipe_id,
+        ken_host::IoErrorIdentityV1::Interrupted => ids.interrupted_id,
+        ken_host::IoErrorIdentityV1::AlreadyExists => ids.alreadyexists_id,
+        ken_host::IoErrorIdentityV1::InvalidInput => ids.invalidinput_id,
+        ken_host::IoErrorIdentityV1::IsDirectory => ids.isdirectory_id,
+        ken_host::IoErrorIdentityV1::NotDirectory => ids.notdirectory_id,
+        ken_host::IoErrorIdentityV1::NotEmpty => ids.notempty_id,
+        ken_host::IoErrorIdentityV1::Unsupported => ids.unsupported_id,
+        ken_host::IoErrorIdentityV1::Other(_) => ids.other_id,
     };
     let args = if ctor == ids.other_id {
-        vec![EvalVal::Int(error.raw_os_error().unwrap_or(0) as i64)]
+        let ken_host::IoErrorIdentityV1::Other(raw) = identity else {
+            unreachable!("only Other carries a raw error payload")
+        };
+        vec![EvalVal::Int(i64::from(raw))]
     } else {
         vec![]
     };
@@ -3760,24 +3770,6 @@ fn file_error_value(
         store,
     );
     make_ctor(fs.mk_file_error_id, vec![operation, path, error], store)
-}
-
-fn file_result(
-    result: io::Result<EvalVal>,
-    operation_id: GlobalId,
-    path: &[u8],
-    fs: &FSIds,
-    ids: &ConsoleIds,
-    store: &mut EvalStore,
-) -> EvalVal {
-    match result {
-        Ok(value) => make_result(true, value, ids, store),
-        Err(error) => {
-            let kind = io_error_value(&error, ids, store);
-            let file_error = file_error_value(operation_id, path, kind, fs, store);
-            make_result(false, file_error, ids, store)
-        }
-    }
 }
 
 /// Build a `Result e a` response `EvalVal` (`Result`'s 2 type
@@ -3814,26 +3806,336 @@ fn read_limit(value: &EvalVal) -> Option<usize> {
     }
 }
 
-fn fs_kind_value(kind: HostFileKind, fs: &FSIds, store: &mut EvalStore) -> EvalVal {
-    let id = match kind {
-        HostFileKind::File => fs.k_file_id,
-        HostFileKind::Directory => fs.k_directory_id,
-        HostFileKind::Symlink => fs.k_symlink_id,
-        HostFileKind::Other => fs.k_other_id,
-    };
-    make_ctor(id, vec![], store)
+struct InterpreterHostBackend<'a, H: HostHandler> {
+    handler: &'a mut H,
 }
 
-fn fs_denied(
-    operation_id: GlobalId,
-    path: &[u8],
-    fs: &FSIds,
-    ids: &ConsoleIds,
-    store: &mut EvalStore,
-) -> EvalVal {
-    let kind = make_ctor(ids.capabilitydenied_id, vec![], store);
-    let error = file_error_value(operation_id, path, kind, fs, store);
-    make_result(false, error, ids, store)
+impl<H: HostHandler> InterpreterHostBackend<'_, H> {
+    fn resolve(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+        op: FsOpKind,
+    ) -> Result<Resolution<H::Handle>, ken_host::FileErrorCauseV1> {
+        let components = fs_target_components(path)
+            .map_err(|error| ken_host::FileErrorCauseV1::Capability(map_denial_v1(error)))?;
+        let scope = grant.capability.scope();
+        let resolved = self
+            .handler
+            .fs_resolve(&scope.root, &components, op, scope.symlink)
+            .map_err(|error| match error {
+                ResolveError::Denied(error) => {
+                    ken_host::FileErrorCauseV1::Capability(map_denial_v1(error))
+                }
+                ResolveError::Io(error) => {
+                    ken_host::FileErrorCauseV1::Io(ken_host::io_error_identity_v1(&error))
+                }
+            })?;
+        self.handler.fs_after_resolve();
+        Ok(resolved)
+    }
+}
+
+fn map_denial_v1(error: CapabilityDenied) -> ken_host::CapabilityDeniedV1 {
+    match error {
+        CapabilityDenied::RightNotHeld { op, held_rights } => {
+            ken_host::CapabilityDeniedV1::RightNotHeld {
+                operation: match op {
+                    FsOpKind::Read => ken_host::FsCapabilityOperationV1::Read,
+                    FsOpKind::Write => ken_host::FsCapabilityOperationV1::Write,
+                    FsOpKind::Append => ken_host::FsCapabilityOperationV1::Append,
+                    FsOpKind::Metadata => ken_host::FsCapabilityOperationV1::Metadata,
+                    FsOpKind::Enumerate => ken_host::FsCapabilityOperationV1::Enumerate,
+                    FsOpKind::CreateDirectory => ken_host::FsCapabilityOperationV1::CreateDirectory,
+                    FsOpKind::RemoveFile => ken_host::FsCapabilityOperationV1::RemoveFile,
+                    FsOpKind::RemoveDirectory => ken_host::FsCapabilityOperationV1::RemoveDirectory,
+                    FsOpKind::RenameSource => ken_host::FsCapabilityOperationV1::RenameSource,
+                    FsOpKind::RenameDestination => {
+                        ken_host::FsCapabilityOperationV1::RenameDestination
+                    }
+                },
+                held_rights,
+            }
+        }
+        CapabilityDenied::AuthorityInsufficient => {
+            ken_host::CapabilityDeniedV1::AuthorityInsufficient
+        }
+        CapabilityDenied::ScopeEscape => ken_host::CapabilityDeniedV1::ScopeEscape,
+        CapabilityDenied::SymlinkDenied => ken_host::CapabilityDeniedV1::SymlinkDenied,
+        CapabilityDenied::MalformedCapability => ken_host::CapabilityDeniedV1::MalformedCapability,
+    }
+}
+
+fn from_denial_v1(error: &ken_host::CapabilityDeniedV1) -> CapabilityDenied {
+    match error {
+        ken_host::CapabilityDeniedV1::RightNotHeld {
+            operation,
+            held_rights,
+        } => CapabilityDenied::RightNotHeld {
+            op: match operation {
+                ken_host::FsCapabilityOperationV1::Read => FsOpKind::Read,
+                ken_host::FsCapabilityOperationV1::Write => FsOpKind::Write,
+                ken_host::FsCapabilityOperationV1::Append => FsOpKind::Append,
+                ken_host::FsCapabilityOperationV1::Metadata => FsOpKind::Metadata,
+                ken_host::FsCapabilityOperationV1::Enumerate => FsOpKind::Enumerate,
+                ken_host::FsCapabilityOperationV1::CreateDirectory => FsOpKind::CreateDirectory,
+                ken_host::FsCapabilityOperationV1::RemoveFile => FsOpKind::RemoveFile,
+                ken_host::FsCapabilityOperationV1::RemoveDirectory => FsOpKind::RemoveDirectory,
+                ken_host::FsCapabilityOperationV1::RenameSource => FsOpKind::RenameSource,
+                ken_host::FsCapabilityOperationV1::RenameDestination => FsOpKind::RenameDestination,
+            },
+            held_rights: *held_rights,
+        },
+        ken_host::CapabilityDeniedV1::AuthorityInsufficient => {
+            CapabilityDenied::AuthorityInsufficient
+        }
+        ken_host::CapabilityDeniedV1::ScopeEscape => CapabilityDenied::ScopeEscape,
+        ken_host::CapabilityDeniedV1::SymlinkDenied => CapabilityDenied::SymlinkDenied,
+        ken_host::CapabilityDeniedV1::MalformedCapability => CapabilityDenied::MalformedCapability,
+    }
+}
+
+fn host_error_v1(error: io::Error) -> ken_host::FileErrorCauseV1 {
+    ken_host::FileErrorCauseV1::Io(ken_host::io_error_identity_v1(&error))
+}
+
+impl<H: HostHandler> ken_host::HostEffectBackendV1 for InterpreterHostBackend<'_, H> {
+    fn console_read(
+        &mut self,
+        stream: ken_host::ConsoleStreamV1,
+        limit: u64,
+    ) -> Result<ken_host::CanonicalReplyV1, ken_host::IoErrorIdentityV1> {
+        let stream = from_console_stream_v1(stream);
+        self.handler
+            .console_read(stream, usize::try_from(limit).unwrap_or(usize::MAX))
+            .map(|read| match read {
+                HostRead::Chunk(bytes) => ken_host::CanonicalReplyV1::ReadChunk(bytes),
+                HostRead::Eof => ken_host::CanonicalReplyV1::ReadEof,
+            })
+            .map_err(|error| ken_host::io_error_identity_v1(&error))
+    }
+
+    fn console_write(
+        &mut self,
+        stream: ken_host::ConsoleStreamV1,
+        bytes: &[u8],
+    ) -> Result<(), ken_host::IoErrorIdentityV1> {
+        self.handler
+            .console_write(from_console_stream_v1(stream), bytes)
+            .map_err(|error| ken_host::io_error_identity_v1(&error))
+    }
+
+    fn console_flush(
+        &mut self,
+        stream: ken_host::ConsoleStreamV1,
+    ) -> Result<(), ken_host::IoErrorIdentityV1> {
+        self.handler
+            .console_flush(from_console_stream_v1(stream))
+            .map_err(|error| ken_host::io_error_identity_v1(&error))
+    }
+
+    fn console_is_terminal(&mut self, stream: ken_host::ConsoleStreamV1) -> bool {
+        self.handler
+            .console_is_terminal(from_console_stream_v1(stream))
+    }
+
+    fn clock_wall_now(&mut self) -> Vec<u8> {
+        self.handler.clock_wall_now().to_signed_bytes_be()
+    }
+
+    fn fs_read_file(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+    ) -> Result<Vec<u8>, ken_host::FileErrorCauseV1> {
+        let Resolution::Existing(handle) = self.resolve(grant, path, FsOpKind::Read)? else {
+            return Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::InvalidInput,
+            ));
+        };
+        self.handler.fs_read_at(&handle).map_err(host_error_v1)
+    }
+
+    fn fs_write_file(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+        policy: ken_host::CreatePolicyV1,
+        bytes: &[u8],
+    ) -> Result<(), ken_host::FileErrorCauseV1> {
+        let policy = match policy {
+            ken_host::CreatePolicyV1::CreateNew => HostCreatePolicy::CreateNew,
+            ken_host::CreatePolicyV1::CreateOrTruncate => HostCreatePolicy::CreateOrTruncate,
+            ken_host::CreatePolicyV1::CreateOrKeep => HostCreatePolicy::CreateOrKeep,
+        };
+        match self.resolve(grant, path, FsOpKind::Write)? {
+            Resolution::Existing(handle) => self.handler.fs_write_at(&handle, policy, bytes),
+            Resolution::Parent(parent, leaf) => self
+                .handler
+                .fs_create_file_at(&parent, &leaf, policy, bytes),
+        }
+        .map_err(host_error_v1)
+    }
+
+    fn fs_append_file(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+        bytes: &[u8],
+    ) -> Result<(), ken_host::FileErrorCauseV1> {
+        match self.resolve(grant, path, FsOpKind::Append)? {
+            Resolution::Existing(handle) => self.handler.fs_append_at(&handle, bytes),
+            Resolution::Parent(parent, leaf) => {
+                self.handler.fs_create_append_at(&parent, &leaf, bytes)
+            }
+        }
+        .map_err(host_error_v1)
+    }
+
+    fn fs_metadata(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+    ) -> Result<ken_host::FileMetadataV1, ken_host::FileErrorCauseV1> {
+        let Resolution::Existing(handle) = self.resolve(grant, path, FsOpKind::Metadata)? else {
+            return Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::InvalidInput,
+            ));
+        };
+        self.handler
+            .fs_metadata_at(&handle)
+            .map(|metadata| ken_host::FileMetadataV1 {
+                size: metadata.size,
+                kind: host_kind_v1(metadata.kind),
+            })
+            .map_err(host_error_v1)
+    }
+
+    fn fs_read_directory(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+    ) -> Result<Vec<ken_host::DirEntryV1>, ken_host::FileErrorCauseV1> {
+        let Resolution::Existing(handle) = self.resolve(grant, path, FsOpKind::Enumerate)? else {
+            return Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::InvalidInput,
+            ));
+        };
+        self.handler
+            .fs_read_directory_at(&handle)
+            .map(|entries| {
+                entries
+                    .into_iter()
+                    .map(|entry| ken_host::DirEntryV1 {
+                        name: entry.name,
+                        kind: host_kind_v1(entry.kind),
+                    })
+                    .collect()
+            })
+            .map_err(host_error_v1)
+    }
+
+    fn fs_create_directory(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+        recursive: bool,
+    ) -> Result<(), ken_host::FileErrorCauseV1> {
+        let Resolution::Parent(parent, leaf) =
+            self.resolve(grant, path, FsOpKind::CreateDirectory)?
+        else {
+            return Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::InvalidInput,
+            ));
+        };
+        self.handler
+            .fs_create_directory_at(&parent, &leaf, recursive)
+            .map_err(host_error_v1)
+    }
+
+    fn fs_remove_file(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+    ) -> Result<(), ken_host::FileErrorCauseV1> {
+        let Resolution::Parent(parent, leaf) = self.resolve(grant, path, FsOpKind::RemoveFile)?
+        else {
+            return Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::InvalidInput,
+            ));
+        };
+        self.handler
+            .fs_remove_file_at(&parent, &leaf)
+            .map_err(host_error_v1)
+    }
+
+    fn fs_remove_directory(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+        recursive: bool,
+    ) -> Result<(), ken_host::FileErrorCauseV1> {
+        let Resolution::Parent(parent, leaf) =
+            self.resolve(grant, path, FsOpKind::RemoveDirectory)?
+        else {
+            return Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::InvalidInput,
+            ));
+        };
+        self.handler
+            .fs_remove_directory_at(&parent, &leaf, recursive)
+            .map_err(host_error_v1)
+    }
+
+    fn fs_rename(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        source: &[u8],
+        destination: &[u8],
+    ) -> Result<(), ken_host::FileErrorCauseV1> {
+        let Resolution::Parent(from_parent, from_leaf) =
+            self.resolve(grant, source, FsOpKind::RenameSource)?
+        else {
+            return Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::InvalidInput,
+            ));
+        };
+        let Resolution::Parent(to_parent, to_leaf) =
+            self.resolve(grant, destination, FsOpKind::RenameDestination)?
+        else {
+            return Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::InvalidInput,
+            ));
+        };
+        self.handler
+            .fs_rename_at(&from_parent, &from_leaf, &to_parent, &to_leaf)
+            .map_err(host_error_v1)
+    }
+}
+
+fn from_console_stream_v1(stream: ken_host::ConsoleStreamV1) -> ConsoleStream {
+    match stream {
+        ken_host::ConsoleStreamV1::Stdin => ConsoleStream::Stdin,
+        ken_host::ConsoleStreamV1::Stdout => ConsoleStream::Stdout,
+        ken_host::ConsoleStreamV1::Stderr => ConsoleStream::Stderr,
+    }
+}
+
+fn to_console_stream_v1(stream: ConsoleStream) -> ken_host::ConsoleStreamV1 {
+    match stream {
+        ConsoleStream::Stdin => ken_host::ConsoleStreamV1::Stdin,
+        ConsoleStream::Stdout => ken_host::ConsoleStreamV1::Stdout,
+        ConsoleStream::Stderr => ken_host::ConsoleStreamV1::Stderr,
+    }
+}
+
+fn host_kind_v1(kind: HostFileKind) -> ken_host::FsNodeKindV1 {
+    match kind {
+        HostFileKind::File => ken_host::FsNodeKindV1::File,
+        HostFileKind::Directory => ken_host::FsNodeKindV1::Directory,
+        HostFileKind::Symlink => ken_host::FsNodeKindV1::Symlink,
+        HostFileKind::Other => ken_host::FsNodeKindV1::Other,
+    }
 }
 
 fn fs_dispatch<H: HostHandler>(
@@ -3844,299 +4146,247 @@ fn fs_dispatch<H: HostHandler>(
     ids: &ConsoleIds,
     store: &mut EvalStore,
 ) -> Option<Result<EvalVal, ()>> {
-    let cap = args.get(1)?;
     let bytes_at = |index| match args.get(index) {
-        Some(EvalVal::Bytes(bytes)) => Some(bytes.as_slice()),
+        Some(EvalVal::Bytes(bytes)) => Some(bytes.clone()),
         _ => None,
     };
-    let unit = |store: &mut EvalStore| make_ctor(ids.unit_id, vec![], store);
-
-    let (path, operation, required, operation_name, op_kind) = if op_id == fs.readfile_id {
+    let (operation, request, operation_id) = if op_id == fs.readfile_id {
         (
-            bytes_at(2)?,
+            ken_host::HostOpV1::FsReadFile,
+            ken_host::CanonicalRequestV1::FsReadFile { path: bytes_at(2)? },
             fs.op_read_file_id,
-            READ_BYTES_REQUIRED_AUTHORITY,
-            "fs_driver::read_file",
-            FsOpKind::Read,
         )
     } else if op_id == fs.writefile_id {
+        let create_policy = match args.get(3) {
+            Some(EvalVal::Ctor { id, .. }) if *id == fs.create_new_id => {
+                ken_host::CreatePolicyV1::CreateNew
+            }
+            Some(EvalVal::Ctor { id, .. }) if *id == fs.create_or_truncate_id => {
+                ken_host::CreatePolicyV1::CreateOrTruncate
+            }
+            Some(EvalVal::Ctor { id, .. }) if *id == fs.create_or_keep_id => {
+                ken_host::CreatePolicyV1::CreateOrKeep
+            }
+            _ => return Some(Err(())),
+        };
         (
-            bytes_at(2)?,
+            ken_host::HostOpV1::FsWriteFile,
+            ken_host::CanonicalRequestV1::FsWriteFile {
+                path: bytes_at(2)?,
+                create_policy,
+                bytes: bytes_at(4)?,
+            },
             fs.op_write_file_id,
-            WRITE_BYTES_REQUIRED_AUTHORITY,
-            "fs_driver::write_file",
-            FsOpKind::Write,
         )
     } else if op_id == fs.appendfile_id {
         (
-            bytes_at(2)?,
+            ken_host::HostOpV1::FsAppendFile,
+            ken_host::CanonicalRequestV1::FsAppendFile {
+                path: bytes_at(2)?,
+                bytes: bytes_at(3)?,
+            },
             fs.op_append_file_id,
-            WRITE_BYTES_REQUIRED_AUTHORITY,
-            "fs_driver::append_file",
-            FsOpKind::Append,
         )
     } else if op_id == fs.metadata_id {
         (
-            bytes_at(2)?,
+            ken_host::HostOpV1::FsMetadata,
+            ken_host::CanonicalRequestV1::FsMetadata { path: bytes_at(2)? },
             fs.op_metadata_id,
-            READ_BYTES_REQUIRED_AUTHORITY,
-            "fs_driver::metadata",
-            FsOpKind::Metadata,
         )
     } else if op_id == fs.readdirectory_id {
         (
-            bytes_at(2)?,
+            ken_host::HostOpV1::FsReadDirectory,
+            ken_host::CanonicalRequestV1::FsReadDirectory { path: bytes_at(2)? },
             fs.op_read_directory_id,
-            READ_BYTES_REQUIRED_AUTHORITY,
-            "fs_driver::read_directory",
-            FsOpKind::Enumerate,
         )
     } else if op_id == fs.createdirectory_id {
+        let recursive = match args.get(2) {
+            Some(EvalVal::Ctor { id, .. }) if *id == ids.true_id => true,
+            Some(EvalVal::Ctor { id, .. }) if *id == ids.false_id => false,
+            _ => return Some(Err(())),
+        };
         (
-            bytes_at(3)?,
+            ken_host::HostOpV1::FsCreateDirectory,
+            ken_host::CanonicalRequestV1::FsCreateDirectory {
+                recursive,
+                path: bytes_at(3)?,
+            },
             fs.op_create_directory_id,
-            WRITE_BYTES_REQUIRED_AUTHORITY,
-            "fs_driver::create_directory",
-            FsOpKind::CreateDirectory,
         )
     } else if op_id == fs.removefile_id {
         (
-            bytes_at(2)?,
+            ken_host::HostOpV1::FsRemoveFile,
+            ken_host::CanonicalRequestV1::FsRemoveFile { path: bytes_at(2)? },
             fs.op_remove_file_id,
-            WRITE_BYTES_REQUIRED_AUTHORITY,
-            "fs_driver::remove_file",
-            FsOpKind::RemoveFile,
         )
     } else if op_id == fs.removedirectory_id {
+        let recursive = match args.get(2) {
+            Some(EvalVal::Ctor { id, .. }) if *id == ids.true_id => true,
+            Some(EvalVal::Ctor { id, .. }) if *id == ids.false_id => false,
+            _ => return Some(Err(())),
+        };
         (
-            bytes_at(3)?,
+            ken_host::HostOpV1::FsRemoveDirectory,
+            ken_host::CanonicalRequestV1::FsRemoveDirectory {
+                recursive,
+                path: bytes_at(3)?,
+            },
             fs.op_remove_directory_id,
-            WRITE_BYTES_REQUIRED_AUTHORITY,
-            "fs_driver::remove_directory",
-            FsOpKind::RemoveDirectory,
         )
     } else if op_id == fs.rename_id {
         (
-            bytes_at(2)?,
+            ken_host::HostOpV1::FsRename,
+            ken_host::CanonicalRequestV1::FsRename {
+                source: bytes_at(2)?,
+                destination: bytes_at(3)?,
+            },
             fs.op_rename_id,
-            WRITE_BYTES_REQUIRED_AUTHORITY,
-            "fs_driver::rename",
-            FsOpKind::RenameSource,
         )
     } else {
         return None;
     };
 
-    let scope = match check_fs_capability(cap, op_kind, required, operation_name) {
-        Ok(scope) => scope,
-        Err(denial) => {
-            handler.fs_denied(denial);
-            return Some(Ok(fs_denied(operation, path, fs, ids, store)));
-        }
+    let mut capabilities = ken_host::CapabilityTableV1::default();
+    let token = match args.get(1) {
+        Some(EvalVal::Cap(capability)) => Some(capabilities.insert(ken_host::CapabilityGrantV1 {
+            identity: ken_host::CapabilityTraceIdentity("interpreter:FS".to_string()),
+            capability: capability.clone(),
+        })),
+        _ => None,
     };
-    let components = match fs_target_components(path) {
-        Ok(components) => components,
-        Err(denial) => {
-            handler.fs_denied(denial);
-            return Some(Ok(fs_denied(operation, path, fs, ids, store)));
+    let mut backend = InterpreterHostBackend { handler };
+    let reply =
+        ken_host::dispatch_host_op_v1(&mut backend, &capabilities, operation, token, &request)
+            .map_err(|_| ());
+    let reply = reply.and_then(|reply| {
+        if let ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::File(error)) =
+            &reply.outcome
+        {
+            if let ken_host::FileErrorCauseV1::Capability(denial) = &error.cause {
+                backend.handler.fs_denied(from_denial_v1(denial));
+            }
         }
-    };
-    let resolved = match handler.fs_resolve(&scope.root, &components, op_kind, scope.symlink) {
-        Ok(resolved) => resolved,
-        Err(ResolveError::Denied(denial)) => {
-            handler.fs_denied(denial);
-            return Some(Ok(fs_denied(operation, path, fs, ids, store)));
-        }
-        Err(ResolveError::Io(error)) => {
-            return Some(Ok(file_result(Err(error), operation, path, fs, ids, store)))
-        }
-    };
-    handler.fs_after_resolve();
+        reify_host_reply_v1(reply.outcome, operation_id, fs, ids, store)
+    });
+    Some(reply)
+}
 
-    let response = if op_id == fs.readfile_id {
-        let Resolution::Existing(handle) = resolved else {
-            return Some(Err(()));
-        };
-        file_result(
-            handler.fs_read_at(&handle).map(EvalVal::Bytes),
-            operation,
-            path,
-            fs,
-            ids,
-            store,
-        )
-    } else if op_id == fs.writefile_id {
-        let policy = match args.get(3) {
-            Some(EvalVal::Ctor { id, .. }) if *id == fs.create_new_id => {
-                HostCreatePolicy::CreateNew
-            }
-            Some(EvalVal::Ctor { id, .. }) if *id == fs.create_or_truncate_id => {
-                HostCreatePolicy::CreateOrTruncate
-            }
-            Some(EvalVal::Ctor { id, .. }) if *id == fs.create_or_keep_id => {
-                HostCreatePolicy::CreateOrKeep
-            }
-            _ => return Some(Err(())),
-        };
-        let Some(contents) = bytes_at(4) else {
-            return Some(Err(()));
-        };
-        let result = match resolved {
-            Resolution::Existing(handle) => handler.fs_write_at(&handle, policy, contents),
-            Resolution::Parent(parent, leaf) => {
-                handler.fs_create_file_at(&parent, &leaf, policy, contents)
-            }
-        };
-        file_result(
-            result.map(|()| unit(store)),
-            operation,
-            path,
-            fs,
-            ids,
-            store,
-        )
-    } else if op_id == fs.appendfile_id {
-        let Some(contents) = bytes_at(3) else {
-            return Some(Err(()));
-        };
-        let result = match resolved {
-            Resolution::Existing(handle) => handler.fs_append_at(&handle, contents),
-            Resolution::Parent(parent, leaf) => {
-                handler.fs_create_append_at(&parent, &leaf, contents)
-            }
-        };
-        file_result(
-            result.map(|()| unit(store)),
-            operation,
-            path,
-            fs,
-            ids,
-            store,
-        )
-    } else if op_id == fs.metadata_id {
-        let Resolution::Existing(handle) = resolved else {
-            return Some(Err(()));
-        };
-        let result = handler.fs_metadata_at(&handle).map(|metadata| {
-            let kind = fs_kind_value(metadata.kind, fs, store);
+fn reify_host_reply_v1(
+    outcome: ken_host::CanonicalOutcomeV1,
+    operation_id: GlobalId,
+    fs: &FSIds,
+    ids: &ConsoleIds,
+    store: &mut EvalStore,
+) -> Result<EvalVal, ()> {
+    let value = match outcome {
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::Unit) => {
+            make_ctor(ids.unit_id, vec![], store)
+        }
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::Bytes(bytes)) => {
+            EvalVal::Bytes(bytes)
+        }
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::FileMetadata(
+            metadata,
+        )) => {
+            let kind = match metadata.kind {
+                ken_host::FsNodeKindV1::File => fs.k_file_id,
+                ken_host::FsNodeKindV1::Directory => fs.k_directory_id,
+                ken_host::FsNodeKindV1::Symlink => fs.k_symlink_id,
+                ken_host::FsNodeKindV1::Other => fs.k_other_id,
+            };
+            let kind = make_ctor(kind, vec![], store);
             make_ctor(
                 fs.mk_file_metadata_id,
                 vec![EvalVal::BigInt(BigInt::from(metadata.size)), kind],
                 store,
             )
-        });
-        file_result(result, operation, path, fs, ids, store)
-    } else if op_id == fs.readdirectory_id {
-        let Resolution::Existing(handle) = resolved else {
-            return Some(Err(()));
-        };
-        let result = handler.fs_read_directory_at(&handle).map(|entries| {
-            entries.into_iter().rev().fold(
-                make_ctor(fs.nil_id, vec![EvalVal::Unknown], store),
-                |tail, entry| {
-                    let kind = fs_kind_value(entry.kind, fs, store);
-                    let value = make_ctor(
-                        fs.mk_dir_entry_id,
-                        vec![EvalVal::Bytes(entry.name), kind],
-                        store,
-                    );
-                    make_ctor(fs.cons_id, vec![EvalVal::Unknown, value, tail], store)
-                },
-            )
-        });
-        file_result(result, operation, path, fs, ids, store)
-    } else if op_id == fs.createdirectory_id {
-        let recursive = match args.get(2) {
-            Some(EvalVal::Ctor { id, .. }) if *id == ids.true_id => true,
-            Some(EvalVal::Ctor { id, .. }) if *id == ids.false_id => false,
-            _ => return Some(Err(())),
-        };
-        let Resolution::Parent(parent, leaf) = resolved else {
-            return Some(Err(()));
-        };
-        file_result(
-            handler
-                .fs_create_directory_at(&parent, &leaf, recursive)
-                .map(|()| unit(store)),
-            operation,
-            path,
-            fs,
-            ids,
-            store,
-        )
-    } else if op_id == fs.removefile_id {
-        let Resolution::Parent(parent, leaf) = resolved else {
-            return Some(Err(()));
-        };
-        file_result(
-            handler
-                .fs_remove_file_at(&parent, &leaf)
-                .map(|()| unit(store)),
-            operation,
-            path,
-            fs,
-            ids,
-            store,
-        )
-    } else if op_id == fs.removedirectory_id {
-        let recursive = match args.get(2) {
-            Some(EvalVal::Ctor { id, .. }) if *id == ids.true_id => true,
-            Some(EvalVal::Ctor { id, .. }) if *id == ids.false_id => false,
-            _ => return Some(Err(())),
-        };
-        let Resolution::Parent(parent, leaf) = resolved else {
-            return Some(Err(()));
-        };
-        file_result(
-            handler
-                .fs_remove_directory_at(&parent, &leaf, recursive)
-                .map(|()| unit(store)),
-            operation,
-            path,
-            fs,
-            ids,
-            store,
-        )
-    } else {
-        let Some(to) = bytes_at(3) else {
-            return Some(Err(()));
-        };
-        let Resolution::Parent(from_parent, from_leaf) = resolved else {
-            return Some(Err(()));
-        };
-        let to_components = match fs_target_components(to) {
-            Ok(components) => components,
-            Err(_) => return Some(Ok(fs_denied(operation, path, fs, ids, store))),
-        };
-        let to_resolution = match handler.fs_resolve(
-            &scope.root,
-            &to_components,
-            FsOpKind::RenameDestination,
-            scope.symlink,
-        ) {
-            Ok(resolution) => resolution,
-            Err(ResolveError::Denied(_)) => {
-                return Some(Ok(fs_denied(operation, path, fs, ids, store)))
-            }
-            Err(ResolveError::Io(error)) => {
-                return Some(Ok(file_result(Err(error), operation, path, fs, ids, store)))
-            }
-        };
-        let Resolution::Parent(to_parent, to_leaf) = to_resolution else {
-            return Some(Err(()));
-        };
-        file_result(
-            handler
-                .fs_rename_at(&from_parent, &from_leaf, &to_parent, &to_leaf)
-                .map(|()| unit(store)),
-            operation,
-            path,
-            fs,
-            ids,
-            store,
-        )
+        }
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::DirectoryEntries(
+            entries,
+        )) => entries.into_iter().rev().fold(
+            make_ctor(fs.nil_id, vec![EvalVal::Unknown], store),
+            |tail, entry| {
+                let kind = match entry.kind {
+                    ken_host::FsNodeKindV1::File => fs.k_file_id,
+                    ken_host::FsNodeKindV1::Directory => fs.k_directory_id,
+                    ken_host::FsNodeKindV1::Symlink => fs.k_symlink_id,
+                    ken_host::FsNodeKindV1::Other => fs.k_other_id,
+                };
+                let kind = make_ctor(kind, vec![], store);
+                let value = make_ctor(
+                    fs.mk_dir_entry_id,
+                    vec![EvalVal::Bytes(entry.name), kind],
+                    store,
+                );
+                make_ctor(fs.cons_id, vec![EvalVal::Unknown, value, tail], store)
+            },
+        ),
+        ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::File(error)) => {
+            let cause = match error.cause {
+                ken_host::FileErrorCauseV1::Io(error) => io_error_identity_value(error, ids, store),
+                ken_host::FileErrorCauseV1::Capability(_) => {
+                    make_ctor(ids.capabilitydenied_id, vec![], store)
+                }
+            };
+            let file_error = file_error_value(operation_id, &error.relative_path, cause, fs, store);
+            return Ok(make_result(false, file_error, ids, store));
+        }
+        _ => return Err(()),
     };
-    Some(Ok(response))
+    Ok(make_result(true, value, ids, store))
+}
+
+fn ambient_dispatch<H: HostHandler>(
+    operation: ken_host::HostOpV1,
+    request: ken_host::CanonicalRequestV1,
+    handler: &mut H,
+    ids: &ConsoleIds,
+    clock_ids: Option<&ClockIds>,
+    store: &mut EvalStore,
+) -> Result<EvalVal, ()> {
+    let mut backend = InterpreterHostBackend { handler };
+    let reply = ken_host::dispatch_host_op_v1(
+        &mut backend,
+        &ken_host::CapabilityTableV1::default(),
+        operation,
+        None,
+        &request,
+    )
+    .map_err(|_| ())?;
+    match reply.outcome {
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::ReadChunk(bytes)) => {
+            let chunk = make_ctor(ids.chunk_id, vec![EvalVal::Bytes(bytes)], store);
+            Ok(make_result(true, chunk, ids, store))
+        }
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::ReadEof) => {
+            let eof = make_ctor(ids.eof_id, vec![], store);
+            Ok(make_result(true, eof, ids, store))
+        }
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::Unit) => {
+            let unit = make_ctor(ids.unit_id, vec![], store);
+            Ok(make_result(true, unit, ids, store))
+        }
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::Bool(value)) => {
+            Ok(make_ctor(
+                if value { ids.true_id } else { ids.false_id },
+                vec![],
+                store,
+            ))
+        }
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::Instant(bytes)) => {
+            let clock = clock_ids.ok_or(())?;
+            Ok(make_ctor(
+                clock.mkinstant_id,
+                vec![bigint_to_int_val(BigInt::from_signed_bytes_be(&bytes))],
+                store,
+            ))
+        }
+        ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::Io(error)) => {
+            let error = io_error_identity_value(error, ids, store);
+            Ok(make_result(false, error, ids, store))
+        }
+        _ => Err(()),
+    }
 }
 
 /// Host-effect driver (`42 §6.2`, `§6.3`): runs an `ITree` value to
@@ -4211,26 +4461,18 @@ pub fn run_io<H: HostHandler>(
                             let Some(limit) = op_args.get(1).and_then(read_limit) else {
                                 return Err(RunIoError::UnknownEffect(op));
                             };
-                            match handler.console_read(stream, limit) {
-                                Ok(HostRead::Chunk(bytes)) => make_result(
-                                    true,
-                                    make_ctor(ids.chunk_id, vec![EvalVal::Bytes(bytes)], store),
-                                    ids,
-                                    store,
-                                ),
-                                Ok(HostRead::Eof) => make_result(
-                                    true,
-                                    make_ctor(ids.eof_id, vec![], store),
-                                    ids,
-                                    store,
-                                ),
-                                Err(error) => make_result(
-                                    false,
-                                    io_error_value(&error, ids, store),
-                                    ids,
-                                    store,
-                                ),
-                            }
+                            ambient_dispatch(
+                                ken_host::HostOpV1::ConsoleRead,
+                                ken_host::CanonicalRequestV1::ConsoleRead {
+                                    stream: to_console_stream_v1(stream),
+                                    limit: limit as u64,
+                                },
+                                handler,
+                                ids,
+                                clock_ids,
+                                store,
+                            )
+                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
                         }
                         EvalVal::Ctor {
                             id: op_id,
@@ -4244,20 +4486,18 @@ pub fn run_io<H: HostHandler>(
                             let Some(EvalVal::Bytes(bytes)) = op_args.get(1) else {
                                 return Err(RunIoError::UnknownEffect(op));
                             };
-                            match handler.console_write(stream, bytes) {
-                                Ok(()) => make_result(
-                                    true,
-                                    make_ctor(ids.unit_id, vec![], store),
-                                    ids,
-                                    store,
-                                ),
-                                Err(error) => make_result(
-                                    false,
-                                    io_error_value(&error, ids, store),
-                                    ids,
-                                    store,
-                                ),
-                            }
+                            ambient_dispatch(
+                                ken_host::HostOpV1::ConsoleWrite,
+                                ken_host::CanonicalRequestV1::ConsoleWrite {
+                                    stream: to_console_stream_v1(stream),
+                                    bytes: bytes.clone(),
+                                },
+                                handler,
+                                ids,
+                                clock_ids,
+                                store,
+                            )
+                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
                         }
                         EvalVal::Ctor {
                             id: op_id,
@@ -4268,20 +4508,17 @@ pub fn run_io<H: HostHandler>(
                             else {
                                 return Err(RunIoError::UnknownEffect(op));
                             };
-                            match handler.console_flush(stream) {
-                                Ok(()) => make_result(
-                                    true,
-                                    make_ctor(ids.unit_id, vec![], store),
-                                    ids,
-                                    store,
-                                ),
-                                Err(error) => make_result(
-                                    false,
-                                    io_error_value(&error, ids, store),
-                                    ids,
-                                    store,
-                                ),
-                            }
+                            ambient_dispatch(
+                                ken_host::HostOpV1::ConsoleFlush,
+                                ken_host::CanonicalRequestV1::ConsoleFlush {
+                                    stream: to_console_stream_v1(stream),
+                                },
+                                handler,
+                                ids,
+                                clock_ids,
+                                store,
+                            )
+                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
                         }
                         EvalVal::Ctor {
                             id: op_id,
@@ -4292,12 +4529,17 @@ pub fn run_io<H: HostHandler>(
                             else {
                                 return Err(RunIoError::UnknownEffect(op));
                             };
-                            let bool_id = if handler.console_is_terminal(stream) {
-                                ids.true_id
-                            } else {
-                                ids.false_id
-                            };
-                            make_ctor(bool_id, vec![], store)
+                            ambient_dispatch(
+                                ken_host::HostOpV1::ConsoleIsTerminal,
+                                ken_host::CanonicalRequestV1::ConsoleIsTerminal {
+                                    stream: to_console_stream_v1(stream),
+                                },
+                                handler,
+                                ids,
+                                clock_ids,
+                                store,
+                            )
+                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
                         }
                         EvalVal::Ctor {
                             id: op_id,
@@ -4307,11 +4549,15 @@ pub fn run_io<H: HostHandler>(
                             if let Some(clock) = clock_ids
                                 .filter(|clock| *op_id == clock.wall_now_id && op_args.is_empty())
                             {
-                                make_ctor(
-                                    clock.mkinstant_id,
-                                    vec![bigint_to_int_val(handler.clock_wall_now())],
+                                ambient_dispatch(
+                                    ken_host::HostOpV1::ClockWallNow,
+                                    ken_host::CanonicalRequestV1::ClockWallNow,
+                                    handler,
+                                    ids,
+                                    Some(clock),
                                     store,
                                 )
+                                .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
                             } else {
                                 match fs_ids.and_then(|fs| {
                                     fs_dispatch(*op_id, op_args, handler, fs, ids, store)

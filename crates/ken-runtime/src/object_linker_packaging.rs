@@ -29,6 +29,7 @@ pub struct BoundProcessEntrypoint {
     pub target_symbol: RuntimeSymbol,
     pub program_caps_constructor: RuntimeSymbol,
     pub authority: u8,
+    pub plan_hash: u64,
     pub ret_constructor: RuntimeSymbol,
     pub process_symbols: crate::NativeProcessSymbols,
 }
@@ -483,7 +484,7 @@ pub fn build_bound_process_starter_executable_artifact(
     let stub_path = output_dir.join(&options.stub_relative_path);
     fs::write(
         &stub_path,
-        process_starter_c_stub_for_authority(entrypoint.authority),
+        process_starter_c_stub_for_authority(entrypoint.authority, entrypoint.plan_hash),
     )
     .map_err(|err| {
         packaging_error(
@@ -1398,10 +1399,10 @@ int main(void) {
 
 #[cfg(test)]
 pub(crate) fn process_starter_c_stub() -> String {
-    process_starter_c_stub_for_authority(1)
+    process_starter_c_stub_for_authority(1, 1)
 }
 
-fn process_starter_c_stub_for_authority(authority: u8) -> String {
+fn process_starter_c_stub_for_authority(authority: u8, plan_hash: u64) -> String {
     r#"#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1430,18 +1431,30 @@ struct KenNativeInvocationV1 {
     uint64_t capability;
 };
 
+struct KenHostInitResultV1 {
+    void *context;
+    uint64_t capability;
+    uint64_t plan_hash;
+};
+
 extern long long ken_nc23_entrypoint(const struct KenNativeInvocationV1 *invocation);
-extern void *ken_host_invocation_v1_init(
+extern long long ken_host_invocation_v1_init(
     const unsigned char *cwd,
     size_t len,
     uint64_t authority,
+    uint64_t plan_hash,
     const unsigned char *target_abi_hash,
-    const unsigned char *host_effect_abi_hash
+    const unsigned char *host_effect_abi_hash,
+    const unsigned char *observation_path,
+    size_t observation_path_len,
+    struct KenHostInitResultV1 *result
 );
 extern void ken_host_invocation_v1_destroy(void *context);
+extern long long ken_host_invocation_v1_finish(void *context, long long terminal_value);
 
 static const unsigned char KEN_TARGET_ABI_HASH[32] = { __KEN_TARGET_HASH__ };
 static const unsigned char KEN_HOST_EFFECT_ABI_HASH[32] = { __KEN_EFFECT_HASH__ };
+static const uint64_t KEN_ENTRYPOINT_PLAN_HASH = __KEN_PLAN_HASH__;
 
 static int constructor(
     struct KenArena *arena,
@@ -1494,7 +1507,13 @@ static int environment(
 ) {
     for (; index < count; ++index) {
         char *separator = strchr(envp[index], '=');
-        if (separator == NULL || !constructor(arena, value, KEN_CONS, 2)) return 0;
+        if (separator == NULL) return 0;
+        size_t key_len = (size_t)(separator - envp[index]);
+        if (key_len == sizeof("KEN_HOST_OBSERVATION_PATH") - 1 &&
+            memcmp(envp[index], "KEN_HOST_OBSERVATION_PATH", key_len) == 0) {
+            continue;
+        }
+        if (!constructor(arena, value, KEN_CONS, 2)) return 0;
         struct KenBorrowedValue *fields = (struct KenBorrowedValue *)value->data;
         if (!constructor(arena, &fields[0], KEN_PROD, 2)) return 0;
         struct KenBorrowedValue *pair = (struct KenBorrowedValue *)fields[0].data;
@@ -1508,14 +1527,24 @@ static int environment(
 int main(int argc, char **argv, char **envp) {
     size_t argument_count = argc < 0 ? 0 : (size_t)argc;
     size_t environment_count = 0;
-    while (envp[environment_count] != NULL) ++environment_count;
+    size_t process_environment_count = 0;
+    while (envp[environment_count] != NULL) {
+        char *separator = strchr(envp[environment_count], '=');
+        if (separator == NULL) return 1;
+        size_t key_len = (size_t)(separator - envp[environment_count]);
+        if (key_len != sizeof("KEN_HOST_OBSERVATION_PATH") - 1 ||
+            memcmp(envp[environment_count], "KEN_HOST_OBSERVATION_PATH", key_len) != 0) {
+            ++process_environment_count;
+        }
+        ++environment_count;
+    }
     char *cwd = getcwd(NULL, 0);
     if (cwd == NULL) return 1;
     if (argument_count > (SIZE_MAX - 4) / 2 ||
-        environment_count > (SIZE_MAX - 4 - 2 * argument_count) / 4) {
+        process_environment_count > (SIZE_MAX - 4 - 2 * argument_count) / 4) {
         free(cwd); return 1;
     }
-    size_t capacity = 4 + 2 * argument_count + 4 * environment_count;
+    size_t capacity = 4 + 2 * argument_count + 4 * process_environment_count;
     struct KenBorrowedValue *pool = calloc(capacity, sizeof(*pool));
     if (pool == NULL) { free(cwd); return 1; }
     struct KenArena arena = { .values = pool, .next = 1, .capacity = capacity };
@@ -1528,23 +1557,34 @@ int main(int argc, char **argv, char **envp) {
     }
     bytes(&fields[2], (const unsigned char *)cwd, strlen(cwd));
     if (arena.next != arena.capacity) { free(pool); free(cwd); return 1; }
-    void *host_context = ken_host_invocation_v1_init(
+    const char *observation_path = getenv("KEN_HOST_OBSERVATION_PATH");
+    size_t observation_path_len = observation_path == NULL ? 0 : strlen(observation_path);
+    struct KenHostInitResultV1 host_init = {0};
+    long long init_status = ken_host_invocation_v1_init(
         (const unsigned char *)cwd,
         strlen(cwd),
         __KEN_AUTHORITY__,
+        KEN_ENTRYPOINT_PLAN_HASH,
         KEN_TARGET_ABI_HASH,
-        KEN_HOST_EFFECT_ABI_HASH
+        KEN_HOST_EFFECT_ABI_HASH,
+        (const unsigned char *)observation_path,
+        observation_path_len,
+        &host_init
     );
-    if (host_context == NULL) { free(pool); free(cwd); return 1; }
+    if (init_status != 0 || host_init.context == NULL || host_init.capability == 0 ||
+        host_init.plan_hash != KEN_ENTRYPOINT_PLAN_HASH) {
+        free(pool); free(cwd); return 1;
+    }
     struct KenNativeInvocationV1 invocation = {
         .process_input = root,
-        .host_context = host_context,
-        .capability = ((uint64_t)1 << 32)
+        .host_context = host_init.context,
+        .capability = host_init.capability
     };
     long long value = ken_nc23_entrypoint(&invocation);
-    ken_host_invocation_v1_destroy(host_context);
+    long long finish_status = ken_host_invocation_v1_finish(host_init.context, value);
     free(cwd);
     free(pool);
+    if (finish_status != 0) return 1;
     if (value == -1) fputs("ken native trap: malformed borrowed process input\n", stderr);
     else if (value == -2) fputs("ken native trap: entrypoint returned a malformed ExitCode\n", stderr);
     else if (value == -3) fputs("ken native trap: malformed ExitCode::Failure payload\n", stderr);
@@ -1555,6 +1595,7 @@ int main(int argc, char **argv, char **envp) {
 }
 "#
     .replace("__KEN_AUTHORITY__", &authority.to_string())
+    .replace("__KEN_PLAN_HASH__", &plan_hash.to_string())
     .replace(
         "__KEN_TARGET_HASH__",
         &ken_host::TARGET_ABI_MANIFEST_HASH

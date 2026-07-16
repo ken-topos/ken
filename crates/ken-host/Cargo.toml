@@ -21,3 +21,4 @@ sha2 = "=0.10.9"
 
 [dev-dependencies]
 linux-raw-sys = { version = "=0.12.1", default-features = false, features = ["std", "general"] }
+sha2 = "=0.10.9"

@@ -7,6 +7,7 @@
 #![allow(unsafe_code)]
 
 use std::ffi::c_void;
+use std::fs::OpenOptions;
 use std::io::{self, Write};
 
 use crate::{
@@ -51,6 +52,13 @@ struct NativeInvocationV1 {
 }
 
 #[repr(C)]
+pub(crate) struct HostInitResultV1 {
+    context: *mut c_void,
+    capability: u64,
+    plan_hash: u64,
+}
+
+#[repr(C)]
 struct SliceV1 {
     data: *const u8,
     len: usize,
@@ -63,8 +71,21 @@ struct ConsoleWriteRequestV1 {
 }
 
 #[repr(C)]
+#[allow(dead_code)] // Manifest-covered V1 lane; native execution is deferred.
+struct ConsoleReadRequestV1 {
+    stream: u64,
+    limit: u64,
+}
+
+#[repr(C)]
 struct ConsoleStreamRequestV1 {
     stream: u64,
+}
+
+#[repr(C)]
+#[allow(dead_code)] // Manifest-covered V1 lane; native execution is deferred.
+struct UnitRequestV1 {
+    reserved: u8,
 }
 
 #[repr(C)]
@@ -79,6 +100,37 @@ struct FsWriteFileRequestV1 {
     path: SliceV1,
     create_policy: u64,
     bytes: SliceV1,
+}
+
+#[repr(C)]
+#[allow(dead_code)] // Manifest-covered V1 lane; native execution is deferred.
+struct FsAppendFileRequestV1 {
+    capability: u64,
+    path: SliceV1,
+    bytes: SliceV1,
+}
+
+#[repr(C)]
+#[allow(dead_code)] // Manifest-covered V1 lane; native execution is deferred.
+struct FsPathRequestV1 {
+    capability: u64,
+    path: SliceV1,
+}
+
+#[repr(C)]
+#[allow(dead_code)] // Manifest-covered V1 lane; native execution is deferred.
+struct FsRecursivePathRequestV1 {
+    capability: u64,
+    recursive: u64,
+    path: SliceV1,
+}
+
+#[repr(C)]
+#[allow(dead_code)] // Manifest-covered V1 lane; native execution is deferred.
+struct FsRenameRequestV1 {
+    capability: u64,
+    source: SliceV1,
+    destination: SliceV1,
 }
 
 #[repr(C)]
@@ -99,6 +151,9 @@ struct ProcessContext {
     capabilities: CapabilityTableV1,
     response_arena: Vec<Box<[u8]>>,
     effect_trace: Vec<EffectEventV1>,
+    observation: Option<std::fs::File>,
+    plan_hash: u64,
+    capability: CapabilityTokenV1,
 }
 
 struct ProcessHost;
@@ -176,7 +231,7 @@ impl HostEffectBackendV1 for ProcessHost {
             ConsoleStreamV1::Stderr => io::stderr().lock().write_all(bytes),
             ConsoleStreamV1::Stdin => Err(io::ErrorKind::InvalidInput.into()),
         };
-        result.map_err(map_io_error)
+        result.map_err(|error| crate::io_error_identity_v1(&error))
     }
 
     fn console_flush(&mut self, stream: ConsoleStreamV1) -> Result<(), IoErrorIdentityV1> {
@@ -185,7 +240,7 @@ impl HostEffectBackendV1 for ProcessHost {
             ConsoleStreamV1::Stderr => io::stderr().lock().flush(),
             ConsoleStreamV1::Stdin => Err(io::ErrorKind::InvalidInput.into()),
         };
-        result.map_err(map_io_error)
+        result.map_err(|error| crate::io_error_identity_v1(&error))
     }
 
     fn console_is_terminal(&mut self, stream: ConsoleStreamV1) -> bool {
@@ -248,23 +303,8 @@ impl HostEffectBackendV1 for ProcessHost {
 }
 
 fn host_error(error: crate::HostError) -> FileErrorCauseV1 {
-    FileErrorCauseV1::Io(map_io_error(error.into_io_error()))
-}
-
-fn map_io_error(error: io::Error) -> IoErrorIdentityV1 {
-    match error.kind() {
-        io::ErrorKind::NotFound => IoErrorIdentityV1::NotFound,
-        io::ErrorKind::PermissionDenied => IoErrorIdentityV1::PermissionDenied,
-        io::ErrorKind::BrokenPipe => IoErrorIdentityV1::BrokenPipe,
-        io::ErrorKind::Interrupted => IoErrorIdentityV1::Interrupted,
-        io::ErrorKind::AlreadyExists => IoErrorIdentityV1::AlreadyExists,
-        io::ErrorKind::InvalidInput => IoErrorIdentityV1::InvalidInput,
-        io::ErrorKind::IsADirectory => IoErrorIdentityV1::IsDirectory,
-        io::ErrorKind::NotADirectory => IoErrorIdentityV1::NotDirectory,
-        io::ErrorKind::DirectoryNotEmpty => IoErrorIdentityV1::NotEmpty,
-        io::ErrorKind::Unsupported => IoErrorIdentityV1::Unsupported,
-        _ => IoErrorIdentityV1::Other(error.raw_os_error().unwrap_or(0)),
-    }
+    let error = error.into_io_error();
+    FileErrorCauseV1::Io(crate::io_error_identity_v1(&error))
 }
 
 fn authority(tag: u64) -> Option<crate::Authority> {
@@ -282,6 +322,14 @@ fn stream(tag: u64) -> Option<ConsoleStreamV1> {
         1 => Some(ConsoleStreamV1::Stdout),
         2 => Some(ConsoleStreamV1::Stderr),
         _ => None,
+    }
+}
+
+fn require_native_operation_v1(operation: HostOpV1) -> Result<(), crate::TerminalErrorV1> {
+    if operation.availability() == crate::HostOpAvailabilityV1::NativeTested {
+        Ok(())
+    } else {
+        Err(crate::TerminalErrorV1::OperationUnavailable(operation))
     }
 }
 
@@ -304,21 +352,36 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     cwd: *const u8,
     cwd_len: usize,
     authority_tag: u64,
+    plan_hash: u64,
     target_abi_hash: *const u8,
     host_effect_abi_hash: *const u8,
-) -> *mut c_void {
+    observation_path: *const u8,
+    observation_path_len: usize,
+    result: *mut HostInitResultV1,
+) -> i64 {
+    if result.is_null() || !result.is_aligned() {
+        return -1;
+    }
+    // Clear the caller-owned result before any validation or host action.
+    unsafe {
+        result.write(HostInitResultV1 {
+            context: std::ptr::null_mut(),
+            capability: 0,
+            plan_hash: 0,
+        });
+    }
     let cwd = SliceV1 {
         data: cwd,
         len: cwd_len,
     };
     let Some(cwd) = (unsafe { borrowed_slice(&cwd) }) else {
-        return std::ptr::null_mut();
+        return -1;
     };
     let Some(authority) = authority(authority_tag) else {
-        return std::ptr::null_mut();
+        return -1;
     };
-    if target_abi_hash.is_null() || host_effect_abi_hash.is_null() {
-        return std::ptr::null_mut();
+    if plan_hash == 0 || target_abi_hash.is_null() || host_effect_abi_hash.is_null() {
+        return -1;
     }
     // SAFETY: both artifact-owned manifest arrays have the fixed V1 length.
     let target_hash = unsafe { std::slice::from_raw_parts(target_abi_hash, 32) };
@@ -327,7 +390,7 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     if target_hash != crate::TARGET_ABI_MANIFEST_HASH
         || effect_hash != crate::HOST_EFFECT_ABI_V1_HASH
     {
-        return std::ptr::null_mut();
+        return -1;
     }
     #[cfg(target_os = "linux")]
     let path = {
@@ -337,22 +400,44 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     #[cfg(not(target_os = "linux"))]
     let path = match std::str::from_utf8(cwd) {
         Ok(path) => std::path::PathBuf::from(path),
-        Err(_) => return std::ptr::null_mut(),
+        Err(_) => return -1,
     };
     let Ok(root_path) = RootPath::new(path) else {
-        return std::ptr::null_mut();
+        return -1;
     };
-    let Some(context) =
-        initialize_process_context(root_path, authority, establish_process_posture_v1())
-    else {
-        return std::ptr::null_mut();
+    let observation_path = SliceV1 {
+        data: observation_path,
+        len: observation_path_len,
     };
-    Box::into_raw(context).cast()
+    let Some(observation_path) = (unsafe { borrowed_slice(&observation_path) }) else {
+        return -1;
+    };
+    let Some(context) = initialize_process_context(
+        root_path,
+        authority,
+        plan_hash,
+        observation_path,
+        establish_process_posture_v1(),
+    ) else {
+        return -1;
+    };
+    let capability = context.capability.erased_identity();
+    let context = Box::into_raw(context).cast();
+    unsafe {
+        result.write(HostInitResultV1 {
+            context,
+            capability,
+            plan_hash,
+        });
+    }
+    0
 }
 
 fn initialize_process_context(
     root_path: RootPath,
     authority: crate::Authority,
+    plan_hash: u64,
+    observation_path: &[u8],
     posture: Result<ProcessPostureV1, ()>,
 ) -> Option<Box<ProcessContext>> {
     let posture = posture.ok()?;
@@ -376,25 +461,274 @@ fn initialize_process_context(
         ),
     );
     let mut capabilities = CapabilityTableV1::default();
-    capabilities.insert(CapabilityGrantV1 {
+    let capability = capabilities.insert(CapabilityGrantV1 {
         identity: CapabilityTraceIdentity("declared:FS".to_string()),
         capability: cap,
     });
+    let observation = if observation_path.is_empty() {
+        None
+    } else {
+        #[cfg(target_os = "linux")]
+        let path = {
+            use std::os::unix::ffi::OsStringExt;
+            std::path::PathBuf::from(std::ffi::OsString::from_vec(observation_path.to_vec()))
+        };
+        #[cfg(not(target_os = "linux"))]
+        let path = std::path::PathBuf::from(std::str::from_utf8(observation_path).ok()?);
+        Some(
+            OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(path)
+                .ok()?,
+        )
+    };
     Some(Box::new(ProcessContext {
         _posture: posture,
         host: ProcessHost,
         capabilities,
         response_arena: Vec::new(),
         effect_trace: Vec::new(),
+        observation,
+        plan_hash,
+        capability,
     }))
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ken_host_invocation_v1_destroy(context: *mut c_void) {
-    if !context.is_null() {
-        // SAFETY: the starter passes exactly the unique pointer returned by
-        // init, after the Ken entry has returned and no reply can be retained.
-        drop(unsafe { Box::from_raw(context.cast::<ProcessContext>()) });
+    // SAFETY: destroy is the fail-closed lifecycle fallback for callers that
+    // cannot provide a terminal value; it still emits any completed events.
+    let _ = unsafe { ken_host_invocation_v1_finish(context, -5) };
+}
+
+/// Completes the call-scoped observation before releasing reply storage.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ken_host_invocation_v1_finish(
+    context: *mut c_void,
+    terminal_value: i64,
+) -> i64 {
+    if context.is_null() || !context.cast::<ProcessContext>().is_aligned() {
+        return -1;
+    }
+    // SAFETY: the starter supplies the unique init result exactly once after
+    // Ken entry returns; no borrowed response is used after this call.
+    let mut context = unsafe { Box::from_raw(context.cast::<ProcessContext>()) };
+    if let Some(mut sink) = context.observation.take() {
+        if write_observation_v1(&mut sink, &context, terminal_value).is_err() {
+            return -1;
+        }
+    }
+    0
+}
+
+fn write_observation_v1(
+    sink: &mut impl Write,
+    context: &ProcessContext,
+    terminal_value: i64,
+) -> io::Result<()> {
+    writeln!(sink, "KEN_EFFECT_OBSERVATION_V1")?;
+    writeln!(sink, "plan_hash={:016x}", context.plan_hash)?;
+    writeln!(
+        sink,
+        "target_abi_hash={}",
+        hex_bytes(&crate::TARGET_ABI_MANIFEST_HASH)
+    )?;
+    writeln!(
+        sink,
+        "host_effect_abi_hash={}",
+        hex_bytes(&crate::HOST_EFFECT_ABI_V1_HASH)
+    )?;
+    writeln!(sink, "terminal_value={terminal_value}")?;
+    writeln!(sink, "event_count={}", context.effect_trace.len())?;
+    for event in &context.effect_trace {
+        writeln!(
+            sink,
+            "event={}|op={:04x}|capability={}|request={}|outcome={}",
+            event.sequence,
+            event.operation as u16,
+            event
+                .capability
+                .as_ref()
+                .map_or("none", |identity| identity.0.as_str()),
+            canonical_request_name(&event.request),
+            canonical_outcome_name(&event.outcome)
+        )?;
+    }
+    sink.flush()
+}
+
+fn hex_bytes(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn canonical_request_name(request: &CanonicalRequestV1) -> String {
+    match request {
+        CanonicalRequestV1::ConsoleRead { stream, limit } => {
+            format!("console_read:{}:{limit}", stream_name(*stream))
+        }
+        CanonicalRequestV1::ConsoleWrite { stream, bytes } => {
+            format!(
+                "console_write:{}:{}",
+                stream_name(*stream),
+                hex_bytes(bytes)
+            )
+        }
+        CanonicalRequestV1::ConsoleFlush { stream } => {
+            format!("console_flush:{}", stream_name(*stream))
+        }
+        CanonicalRequestV1::ConsoleIsTerminal { stream } => {
+            format!("console_is_terminal:{}", stream_name(*stream))
+        }
+        CanonicalRequestV1::ClockWallNow => "clock_wall_now".to_string(),
+        CanonicalRequestV1::FsReadFile { path } => format!("fs_read:{}", hex_bytes(path)),
+        CanonicalRequestV1::FsWriteFile {
+            path,
+            create_policy,
+            bytes,
+        } => format!(
+            "fs_write:{}:{}:{}",
+            hex_bytes(path),
+            create_policy_name(*create_policy),
+            hex_bytes(bytes)
+        ),
+        CanonicalRequestV1::FsAppendFile { path, bytes } => {
+            format!("fs_append:{}:{}", hex_bytes(path), hex_bytes(bytes))
+        }
+        CanonicalRequestV1::FsMetadata { path } => format!("fs_metadata:{}", hex_bytes(path)),
+        CanonicalRequestV1::FsReadDirectory { path } => {
+            format!("fs_read_directory:{}", hex_bytes(path))
+        }
+        CanonicalRequestV1::FsCreateDirectory { recursive, path } => {
+            format!("fs_create_directory:{recursive}:{}", hex_bytes(path))
+        }
+        CanonicalRequestV1::FsRemoveFile { path } => {
+            format!("fs_remove_file:{}", hex_bytes(path))
+        }
+        CanonicalRequestV1::FsRemoveDirectory { recursive, path } => {
+            format!("fs_remove_directory:{recursive}:{}", hex_bytes(path))
+        }
+        CanonicalRequestV1::FsRename {
+            source,
+            destination,
+        } => format!("fs_rename:{}:{}", hex_bytes(source), hex_bytes(destination)),
+    }
+}
+
+fn stream_name(stream: ConsoleStreamV1) -> &'static str {
+    match stream {
+        ConsoleStreamV1::Stdin => "stdin",
+        ConsoleStreamV1::Stdout => "stdout",
+        ConsoleStreamV1::Stderr => "stderr",
+    }
+}
+
+fn create_policy_name(policy: CreatePolicyV1) -> &'static str {
+    match policy {
+        CreatePolicyV1::CreateNew => "create_new",
+        CreatePolicyV1::CreateOrTruncate => "create_or_truncate",
+        CreatePolicyV1::CreateOrKeep => "create_or_keep",
+    }
+}
+
+fn canonical_outcome_name(outcome: &CanonicalOutcomeV1) -> String {
+    match outcome {
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::Unit) => "ok:unit".to_string(),
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::Bool(value)) => {
+            format!("ok:bool:{}", u8::from(*value))
+        }
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(bytes)) => {
+            format!("ok:bytes:{}", bytes.len())
+        }
+        CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Io(error)) => {
+            format!("error:io:{}", io_error_name(*error))
+        }
+        CanonicalOutcomeV1::Error(crate::SemanticErrorV1::File(error)) => match &error.cause {
+            FileErrorCauseV1::Io(error) => format!("error:file:io:{}", io_error_name(*error)),
+            FileErrorCauseV1::Capability(error) => {
+                format!("error:file:capability:{}", capability_error_name(error))
+            }
+        },
+        CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Capability(error)) => {
+            format!("error:capability:{}", capability_error_name(error))
+        }
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadChunk(bytes)) => {
+            format!("ok:read_chunk:{}", hex_bytes(bytes))
+        }
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadEof) => "ok:read_eof".to_string(),
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::Instant(bytes)) => {
+            format!("ok:instant:{}", hex_bytes(bytes))
+        }
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::FileMetadata(metadata)) => format!(
+            "ok:metadata:{}:{}",
+            metadata.size,
+            node_kind_name(metadata.kind)
+        ),
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::DirectoryEntries(entries)) => {
+            let entries = entries
+                .iter()
+                .map(|entry| format!("{}:{}", hex_bytes(&entry.name), node_kind_name(entry.kind)))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("ok:directory_entries:{entries}")
+        }
+    }
+}
+
+fn node_kind_name(kind: crate::FsNodeKindV1) -> &'static str {
+    match kind {
+        crate::FsNodeKindV1::File => "file",
+        crate::FsNodeKindV1::Directory => "directory",
+        crate::FsNodeKindV1::Symlink => "symlink",
+        crate::FsNodeKindV1::Other => "other",
+    }
+}
+
+fn capability_error_name(error: &crate::CapabilityDeniedV1) -> String {
+    match error {
+        crate::CapabilityDeniedV1::RightNotHeld {
+            operation,
+            held_rights,
+        } => format!(
+            "right_not_held:{}:{held_rights}",
+            fs_operation_name(*operation)
+        ),
+        crate::CapabilityDeniedV1::AuthorityInsufficient => "authority_insufficient".to_string(),
+        crate::CapabilityDeniedV1::ScopeEscape => "scope_escape".to_string(),
+        crate::CapabilityDeniedV1::SymlinkDenied => "symlink_denied".to_string(),
+        crate::CapabilityDeniedV1::MalformedCapability => "malformed_capability".to_string(),
+    }
+}
+
+fn fs_operation_name(operation: crate::FsCapabilityOperationV1) -> &'static str {
+    match operation {
+        crate::FsCapabilityOperationV1::Read => "read",
+        crate::FsCapabilityOperationV1::Write => "write",
+        crate::FsCapabilityOperationV1::Append => "append",
+        crate::FsCapabilityOperationV1::Metadata => "metadata",
+        crate::FsCapabilityOperationV1::Enumerate => "enumerate",
+        crate::FsCapabilityOperationV1::CreateDirectory => "create_directory",
+        crate::FsCapabilityOperationV1::RemoveFile => "remove_file",
+        crate::FsCapabilityOperationV1::RemoveDirectory => "remove_directory",
+        crate::FsCapabilityOperationV1::RenameSource => "rename_source",
+        crate::FsCapabilityOperationV1::RenameDestination => "rename_destination",
+    }
+}
+
+fn io_error_name(error: IoErrorIdentityV1) -> String {
+    match error {
+        IoErrorIdentityV1::NotFound => "NotFound".to_string(),
+        IoErrorIdentityV1::PermissionDenied => "PermissionDenied".to_string(),
+        IoErrorIdentityV1::BrokenPipe => "BrokenPipe".to_string(),
+        IoErrorIdentityV1::Interrupted => "Interrupted".to_string(),
+        IoErrorIdentityV1::AlreadyExists => "AlreadyExists".to_string(),
+        IoErrorIdentityV1::InvalidInput => "InvalidInput".to_string(),
+        IoErrorIdentityV1::IsDirectory => "IsDirectory".to_string(),
+        IoErrorIdentityV1::NotDirectory => "NotDirectory".to_string(),
+        IoErrorIdentityV1::NotEmpty => "NotEmpty".to_string(),
+        IoErrorIdentityV1::Unsupported => "Unsupported".to_string(),
+        IoErrorIdentityV1::Other(raw) => format!("Other:{raw}"),
     }
 }
 
@@ -484,6 +818,9 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
     else {
         return -3;
     };
+    if require_native_operation_v1(op).is_err() {
+        return -(0x1_0000_i64 + i64::from(op as u16));
+    }
     let (capability, request) = match op {
         HostOpV1::ConsoleWrite if request_size == std::mem::size_of::<ConsoleWriteRequestV1>() => {
             if !request.cast::<ConsoleWriteRequestV1>().is_aligned() {
@@ -592,7 +929,135 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
 mod tests {
     use super::*;
 
-    fn context(directory: &std::path::Path) -> *mut c_void {
+    fn effect_fact(name: &str) -> u64 {
+        crate::HOST_EFFECT_ABI_V1_FACTS
+            .iter()
+            .find_map(|(fact, value)| (*fact == name).then_some(*value))
+            .unwrap_or_else(|| panic!("missing generated effect ABI fact {name}"))
+    }
+
+    fn effect_binding(kind: &str, name: &str) -> u64 {
+        crate::HOST_EFFECT_ABI_V1_BINDINGS
+            .iter()
+            .find_map(|(bound_kind, bound_name, value)| {
+                (*bound_kind == kind && *bound_name == name).then_some(*value)
+            })
+            .unwrap_or_else(|| panic!("missing generated effect ABI binding {kind}:{name}"))
+    }
+
+    #[test]
+    fn generated_effect_layout_matches_every_live_wire_record() {
+        macro_rules! size_align {
+            ($name:literal, $ty:ty) => {
+                assert_eq!(
+                    effect_fact(concat!("SIZE_", $name)),
+                    std::mem::size_of::<$ty>() as u64
+                );
+                assert_eq!(
+                    effect_fact(concat!("ALIGN_", $name)),
+                    std::mem::align_of::<$ty>() as u64
+                );
+            };
+        }
+        size_align!("SliceV1", SliceV1);
+        size_align!("CapabilityTokenV1", CapabilityTokenV1);
+        size_align!("NativeInvocationV1", NativeInvocationV1);
+        size_align!("HostInitResultV1", HostInitResultV1);
+        size_align!("ConsoleWriteRequestV1", ConsoleWriteRequestV1);
+        size_align!("ConsoleReadRequestV1", ConsoleReadRequestV1);
+        size_align!("ConsoleStreamRequestV1", ConsoleStreamRequestV1);
+        size_align!("UnitRequestV1", UnitRequestV1);
+        size_align!("FsReadFileRequestV1", FsReadFileRequestV1);
+        size_align!("FsWriteFileRequestV1", FsWriteFileRequestV1);
+        size_align!("FsAppendFileRequestV1", FsAppendFileRequestV1);
+        size_align!("FsPathRequestV1", FsPathRequestV1);
+        size_align!("FsRecursivePathRequestV1", FsRecursivePathRequestV1);
+        size_align!("FsRenameRequestV1", FsRenameRequestV1);
+        size_align!("HostReplyV1", HostReplyV1);
+        macro_rules! offset {
+            ($record:literal, $ty:ty, $field:ident) => {
+                assert_eq!(
+                    effect_fact(concat!("OFFSET_", $record, "_", stringify!($field))),
+                    std::mem::offset_of!($ty, $field) as u64
+                );
+            };
+        }
+        offset!("SliceV1", SliceV1, data);
+        offset!("SliceV1", SliceV1, len);
+        offset!("NativeInvocationV1", NativeInvocationV1, process_input);
+        offset!("NativeInvocationV1", NativeInvocationV1, host_context);
+        offset!("NativeInvocationV1", NativeInvocationV1, capability);
+        offset!("HostInitResultV1", HostInitResultV1, context);
+        offset!("HostInitResultV1", HostInitResultV1, capability);
+        offset!("HostInitResultV1", HostInitResultV1, plan_hash);
+        offset!("ConsoleWriteRequestV1", ConsoleWriteRequestV1, stream);
+        offset!("ConsoleWriteRequestV1", ConsoleWriteRequestV1, bytes);
+        offset!("ConsoleReadRequestV1", ConsoleReadRequestV1, stream);
+        offset!("ConsoleReadRequestV1", ConsoleReadRequestV1, limit);
+        offset!("ConsoleStreamRequestV1", ConsoleStreamRequestV1, stream);
+        offset!("UnitRequestV1", UnitRequestV1, reserved);
+        offset!("FsReadFileRequestV1", FsReadFileRequestV1, capability);
+        offset!("FsReadFileRequestV1", FsReadFileRequestV1, path);
+        offset!("FsWriteFileRequestV1", FsWriteFileRequestV1, capability);
+        offset!("FsWriteFileRequestV1", FsWriteFileRequestV1, path);
+        offset!("FsWriteFileRequestV1", FsWriteFileRequestV1, create_policy);
+        offset!("FsWriteFileRequestV1", FsWriteFileRequestV1, bytes);
+        offset!("FsAppendFileRequestV1", FsAppendFileRequestV1, capability);
+        offset!("FsAppendFileRequestV1", FsAppendFileRequestV1, path);
+        offset!("FsAppendFileRequestV1", FsAppendFileRequestV1, bytes);
+        offset!("FsPathRequestV1", FsPathRequestV1, capability);
+        offset!("FsPathRequestV1", FsPathRequestV1, path);
+        offset!(
+            "FsRecursivePathRequestV1",
+            FsRecursivePathRequestV1,
+            capability
+        );
+        offset!(
+            "FsRecursivePathRequestV1",
+            FsRecursivePathRequestV1,
+            recursive
+        );
+        offset!("FsRecursivePathRequestV1", FsRecursivePathRequestV1, path);
+        offset!("FsRenameRequestV1", FsRenameRequestV1, capability);
+        offset!("FsRenameRequestV1", FsRenameRequestV1, source);
+        offset!("FsRenameRequestV1", FsRenameRequestV1, destination);
+        offset!("HostReplyV1", HostReplyV1, tag);
+        offset!("HostReplyV1", HostReplyV1, detail);
+        offset!("HostReplyV1", HostReplyV1, bytes);
+        assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 14);
+        for operation in HostOpV1::ALL {
+            let row = crate::HOST_EFFECT_ABI_V1_CATALOG
+                .iter()
+                .find(|row| row.1 == operation as u16)
+                .expect("every HostOpV1 has one generated catalog row");
+            assert_eq!(
+                row.2 == "native",
+                operation.availability() == crate::HostOpAvailabilityV1::NativeTested
+            );
+        }
+        assert_eq!(effect_binding("tag", "reply.unit"), REPLY_UNIT);
+        assert_eq!(effect_binding("tag", "reply.bool"), REPLY_BOOL);
+        assert_eq!(effect_binding("tag", "reply.bytes"), REPLY_BYTES);
+        assert_eq!(effect_binding("tag", "reply.error"), REPLY_ERROR);
+        assert_eq!(effect_binding("error", "io.BrokenPipe"), 3);
+        assert_eq!(effect_binding("error", "io.Other"), 11);
+    }
+
+    #[test]
+    fn every_deferred_operation_has_its_own_named_native_boundary_rejection() {
+        for operation in HostOpV1::ALL {
+            let status = require_native_operation_v1(operation);
+            assert_eq!(
+                status.is_ok(),
+                operation.availability() == crate::HostOpAvailabilityV1::NativeTested
+            );
+            if let Err(crate::TerminalErrorV1::OperationUnavailable(rejected)) = status {
+                assert_eq!(rejected, operation);
+            }
+        }
+    }
+
+    fn context(directory: &std::path::Path) -> HostInitResultV1 {
         #[cfg(target_os = "linux")]
         let cwd = {
             use std::os::unix::ffi::OsStrExt;
@@ -600,15 +1065,27 @@ mod tests {
         };
         #[cfg(not(target_os = "linux"))]
         let cwd = directory.to_string_lossy().as_bytes().to_vec();
-        unsafe {
+        let mut result = HostInitResultV1 {
+            context: std::ptr::null_mut(),
+            capability: 0,
+            plan_hash: 0,
+        };
+        let status = unsafe {
             ken_host_invocation_v1_init(
                 cwd.as_ptr(),
                 cwd.len(),
                 2,
+                1,
                 crate::TARGET_ABI_MANIFEST_HASH.as_ptr(),
                 crate::HOST_EFFECT_ABI_V1_HASH.as_ptr(),
+                std::ptr::null(),
+                0,
+                &mut result,
             )
-        }
+        };
+        assert_eq!(status, 0);
+        assert_ne!(result.capability, 0);
+        result
     }
 
     #[test]
@@ -616,22 +1093,59 @@ mod tests {
         let mut wrong = crate::HOST_EFFECT_ABI_V1_HASH;
         wrong[0] ^= 1;
         let cwd = b".";
-        let context = unsafe {
+        let mut result = HostInitResultV1 {
+            context: std::ptr::null_mut(),
+            capability: 0,
+            plan_hash: 0,
+        };
+        let status = unsafe {
             ken_host_invocation_v1_init(
                 cwd.as_ptr(),
                 cwd.len(),
                 2,
+                1,
                 crate::TARGET_ABI_MANIFEST_HASH.as_ptr(),
                 wrong.as_ptr(),
+                std::ptr::null(),
+                0,
+                &mut result,
             )
         };
-        assert!(context.is_null());
+        assert_ne!(status, 0);
+        assert!(result.context.is_null());
+    }
+
+    #[test]
+    fn zero_plan_binding_clears_the_complete_init_result() {
+        let cwd = b".";
+        let mut result = HostInitResultV1 {
+            context: usize::MAX as *mut c_void,
+            capability: u64::MAX,
+            plan_hash: u64::MAX,
+        };
+        let status = unsafe {
+            ken_host_invocation_v1_init(
+                cwd.as_ptr(),
+                cwd.len(),
+                2,
+                0,
+                crate::TARGET_ABI_MANIFEST_HASH.as_ptr(),
+                crate::HOST_EFFECT_ABI_V1_HASH.as_ptr(),
+                std::ptr::null(),
+                0,
+                &mut result,
+            )
+        };
+        assert_ne!(status, 0);
+        assert!(result.context.is_null());
+        assert_eq!(result.capability, 0);
+        assert_eq!(result.plan_hash, 0);
     }
 
     #[test]
     fn posture_failure_prevents_context_publication() {
         let root = RootPath::new(std::env::current_dir().unwrap()).unwrap();
-        assert!(initialize_process_context(root, AUTH_FULL, Err(())).is_none());
+        assert!(initialize_process_context(root, AUTH_FULL, 1, &[], Err(())).is_none());
     }
 
     #[test]
@@ -639,11 +1153,11 @@ mod tests {
         let directory =
             std::env::temp_dir().join(format!("ken-px5-malformed-token-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
-        let context = context(&directory);
-        assert!(!context.is_null());
+        let initialized = context(&directory);
+        assert!(!initialized.context.is_null());
         let invocation = NativeInvocationV1 {
             process_input: std::ptr::null(),
-            host_context: context.cast(),
+            host_context: initialized.context.cast(),
             capability: (2_u64 << 32),
         };
         let path = b"must-not-be-read";
@@ -675,7 +1189,7 @@ mod tests {
         assert_eq!(reply.tag, REPLY_ERROR);
         assert_eq!(reply.detail, 2);
         assert!(!directory.join("must-not-be-read").exists());
-        unsafe { ken_host_invocation_v1_destroy(context) };
+        unsafe { ken_host_invocation_v1_destroy(initialized.context) };
         let _ = std::fs::remove_dir_all(directory);
     }
 }

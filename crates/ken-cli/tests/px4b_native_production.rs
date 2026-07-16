@@ -16,7 +16,9 @@ fn process_discriminator (input : ProcessInput) : UInt8 =
           Nil |-> 2 ;
           Cons argument _more |-> match environment {
             Nil |-> 3 ;
-            Cons binding _bindings |-> match binding {
+            Cons binding bindings |-> match bindings {
+              Cons _ _ |-> 8 ;
+              Nil |-> match binding {
               MkProd key value |-> match bytes_at argument 0 {
                 None |-> 4 ;
                 Some argument_byte |-> match bytes_at key 0 {
@@ -42,6 +44,7 @@ fn process_discriminator (input : ProcessInput) : UInt8 =
                     }
                   }
                 }
+              }
               }
             }
           }
@@ -170,12 +173,15 @@ fn public_source_observes_raw_argv_environment_cwd_bytes_in_field_order() {
         &dir,
     )
     .expect("checked byte discriminator reaches native artifact");
+    let observation_dir = output_dir("process-observation");
+    let observation_path = observation_dir.join("process.observation");
 
     let run = |argument: u8| {
         Command::new(&output.artifact.executable_path)
             .arg(OsString::from_vec(vec![argument]))
             .env_clear()
             .env("K", OsString::from_vec(vec![0xfe]))
+            .env("KEN_HOST_OBSERVATION_PATH", &observation_path)
             .current_dir(&dir)
             .output()
             .expect("linked artifact observes fresh raw process bytes")
@@ -194,6 +200,8 @@ fn public_source_observes_raw_argv_environment_cwd_bytes_in_field_order() {
         second.stderr
     );
     assert_ne!(first.status.code(), second.status.code());
+    assert!(observation_path.is_file());
+    let _ = std::fs::remove_dir_all(observation_dir);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -247,11 +255,21 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
     let output =
         ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-two-vis", &dir)
             .expect("two checked Vis nodes reach one artifact");
+    let observation = dir.join("two-vis.observation");
     let ran = Command::new(&output.artifact.executable_path)
+        .env("KEN_HOST_OBSERVATION_PATH", &observation)
         .output()
         .expect("two-Vis artifact runs");
     assert_eq!(ran.status.code(), Some(0), "stderr: {:?}", ran.stderr);
     assert_eq!(ran.stdout, b"one\ntwo\n");
+    let observation = std::fs::read_to_string(observation).unwrap();
+    assert!(observation.contains("event_count=2"));
+    assert!(observation.contains(
+        "event=0|op=0102|capability=none|request=console_write:stdout:6f6e650a|outcome=ok:unit"
+    ));
+    assert!(observation.contains(
+        "event=1|op=0102|capability=none|request=console_write:stdout:74776f0a|outcome=ok:unit"
+    ));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -331,12 +349,20 @@ proc main (input : ProcessInput) (_caps : ProgramCaps APartial)
 
     let mut child = Command::new(&output.artifact.executable_path)
         .arg(std::ffi::OsString::from_vec(vec![b'x'; 96 * 1024]))
+        .env(
+            "KEN_HOST_OBSERVATION_PATH",
+            dir.join("broken-pipe.observation"),
+        )
         .stdout(std::process::Stdio::piped())
         .spawn()
         .expect("BrokenPipe artifact starts");
     drop(child.stdout.take().expect("stdout reader was piped"));
     let status = child.wait().expect("BrokenPipe artifact terminates");
     assert_eq!(status.code(), Some(61));
+    let observation = std::fs::read_to_string(dir.join("broken-pipe.observation")).unwrap();
+    assert!(observation.contains("event_count=1"));
+    assert!(observation.contains("event=0|op=0102|capability=none|request=console_write:stdout:"));
+    assert!(observation.contains("outcome=error:io:BrokenPipe"));
 
     let starter_source = include_str!("../../ken-runtime/src/object_linker_packaging.rs");
     for forbidden in ["SIGPIPE", "SIG_IGN", "sigaction", "signal("] {
@@ -397,9 +423,12 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
     let output =
         ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-fs-roundtrip", &dir)
             .expect("FS Vis nodes reach the native capability lane");
+    let observation_dir = output_dir("fs-observation");
+    let observation = observation_dir.join("fs-roundtrip.observation");
     let ran = Command::new(&output.artifact.executable_path)
         .arg("px5.bin")
         .arg("retained")
+        .env("KEN_HOST_OBSERVATION_PATH", &observation)
         .current_dir(&dir)
         .output()
         .expect("FS artifact runs");
@@ -410,6 +439,15 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
         ran.stderr
     );
     assert_eq!(std::fs::read(dir.join("px5.bin")).unwrap(), b"retained");
+    let observation = std::fs::read_to_string(observation).unwrap();
+    assert!(observation.contains("event_count=3"));
+    assert!(observation.contains("event=0|op=0302|capability=declared:FS|request=fs_write:7078352e62696e:create_new:72657461696e6564|outcome=ok:unit"));
+    assert!(observation.contains(
+        "event=1|op=0301|capability=declared:FS|request=fs_read:7078352e62696e|outcome=ok:bytes:8"
+    ));
+    assert!(observation
+        .contains("event=2|op=0103|capability=none|request=console_flush:stdout|outcome=ok:unit"));
+    let _ = std::fs::remove_dir_all(observation_dir);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -501,4 +539,8 @@ fn naked_process_ir_helpers_are_not_public_production_api() {
     assert!(packaging.contains("#[cfg(test)]\nfn build_process_starter_executable_artifact("));
     assert!(!packaging.contains("\npub fn build_process_starter_executable_artifact("));
     assert!(!packaging.contains("\npub(crate) fn build_process_starter_executable_artifact("));
+    assert!(!packaging.contains(".capability = ((uint64_t)1 << 32)"));
+    assert!(packaging.contains(".capability = host_init.capability"));
+    assert!(packaging.contains("host_init.capability == 0"));
+    assert!(packaging.contains("process_environment_count"));
 }

@@ -16,7 +16,8 @@ pub mod executable_artifact_contract;
 pub mod executable_entrypoint_packaging;
 pub mod hash;
 pub mod ir;
-pub mod native_effect_v1;
+#[cfg(test)]
+mod native_effect_v1;
 pub mod native_execution_differential;
 pub mod native_process_entrypoint;
 pub mod object_linker_packaging;
@@ -35,7 +36,6 @@ pub use executable_entrypoint_packaging::*;
 pub use hash::fnv1a_64;
 pub use ir::*;
 pub use ken_host::HostOpV1;
-pub use native_effect_v1::*;
 pub use native_execution_differential::*;
 pub use native_process_entrypoint::*;
 pub use object_linker_packaging::*;

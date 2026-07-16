@@ -5,6 +5,8 @@
 //! They deliberately exclude descriptors, pointers, inode identities, absolute
 //! host roots, and diagnostic prose.
 
+use std::io;
+
 /// The closed Program-I host operation catalog.
 ///
 /// Numeric values are explicit ABI identities. Declaration order is not an
@@ -85,10 +87,7 @@ pub const PX5_PLANNED_NATIVE_TARGETS: [HostOpV1; 5] = [
 ];
 
 pub const HOST_EFFECT_ABI_V1_SCHEMA_VERSION: u32 = 1;
-pub const HOST_EFFECT_ABI_V1_HASH: [u8; 32] = [
-    0x6b, 0x65, 0x6e, 0x2d, 0x68, 0x6f, 0x73, 0x74, 0x2d, 0x65, 0x66, 0x66, 0x65, 0x63, 0x74, 0x2d,
-    0x76, 0x31, 0x00, 0x0e, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-];
+include!(concat!(env!("OUT_DIR"), "/host_effect_abi_v1.rs"));
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HostEffectAbiV1 {
@@ -104,8 +103,8 @@ pub struct HostEffectAbiV1 {
 
 pub const HOST_EFFECT_ABI_V1: HostEffectAbiV1 = HostEffectAbiV1 {
     schema_version: HOST_EFFECT_ABI_V1_SCHEMA_VERSION,
-    operation_count: 14,
-    native_tested_count: 5,
+    operation_count: HOST_EFFECT_ABI_V1_CATALOG.len() as u16,
+    native_tested_count: PX5_PLANNED_NATIVE_TARGETS.len() as u16,
     capability_token_size: std::mem::size_of::<CapabilityTokenV1>() as u16,
     capability_token_align: std::mem::align_of::<CapabilityTokenV1>() as u16,
     response_arena_lifetime_version: 1,
@@ -208,6 +207,13 @@ impl CapabilityTableV1 {
 
 /// Host leaves behind the single semantic dispatcher.
 pub trait HostEffectBackendV1 {
+    fn console_read(
+        &mut self,
+        _stream: ConsoleStreamV1,
+        _limit: u64,
+    ) -> Result<CanonicalReplyV1, IoErrorIdentityV1> {
+        Err(IoErrorIdentityV1::Unsupported)
+    }
     fn console_write(
         &mut self,
         stream: ConsoleStreamV1,
@@ -215,6 +221,9 @@ pub trait HostEffectBackendV1 {
     ) -> Result<(), IoErrorIdentityV1>;
     fn console_flush(&mut self, stream: ConsoleStreamV1) -> Result<(), IoErrorIdentityV1>;
     fn console_is_terminal(&mut self, stream: ConsoleStreamV1) -> bool;
+    fn clock_wall_now(&mut self) -> Vec<u8> {
+        Vec::new()
+    }
     fn fs_read_file(
         &mut self,
         grant: &CapabilityGrantV1,
@@ -227,6 +236,59 @@ pub trait HostEffectBackendV1 {
         create_policy: CreatePolicyV1,
         bytes: &[u8],
     ) -> Result<(), FileErrorCauseV1>;
+    fn fs_append_file(
+        &mut self,
+        _grant: &CapabilityGrantV1,
+        _path: &[u8],
+        _bytes: &[u8],
+    ) -> Result<(), FileErrorCauseV1> {
+        Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
+    }
+    fn fs_metadata(
+        &mut self,
+        _grant: &CapabilityGrantV1,
+        _path: &[u8],
+    ) -> Result<FileMetadataV1, FileErrorCauseV1> {
+        Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
+    }
+    fn fs_read_directory(
+        &mut self,
+        _grant: &CapabilityGrantV1,
+        _path: &[u8],
+    ) -> Result<Vec<DirEntryV1>, FileErrorCauseV1> {
+        Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
+    }
+    fn fs_create_directory(
+        &mut self,
+        _grant: &CapabilityGrantV1,
+        _path: &[u8],
+        _recursive: bool,
+    ) -> Result<(), FileErrorCauseV1> {
+        Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
+    }
+    fn fs_remove_file(
+        &mut self,
+        _grant: &CapabilityGrantV1,
+        _path: &[u8],
+    ) -> Result<(), FileErrorCauseV1> {
+        Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
+    }
+    fn fs_remove_directory(
+        &mut self,
+        _grant: &CapabilityGrantV1,
+        _path: &[u8],
+        _recursive: bool,
+    ) -> Result<(), FileErrorCauseV1> {
+        Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
+    }
+    fn fs_rename(
+        &mut self,
+        _grant: &CapabilityGrantV1,
+        _source: &[u8],
+        _destination: &[u8],
+    ) -> Result<(), FileErrorCauseV1> {
+        Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -244,12 +306,26 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
     capability: Option<CapabilityTokenV1>,
     request: &CanonicalRequestV1,
 ) -> Result<HostDispatchReplyV1, TerminalErrorV1> {
-    if operation.availability() != HostOpAvailabilityV1::NativeTested {
-        return Err(TerminalErrorV1::OperationUnavailable(operation));
-    }
     let required = match operation {
         HostOpV1::FsReadFile => Some((crate::FsCapabilityOperation::Read, crate::AUTH_PARTIAL)),
         HostOpV1::FsWriteFile => Some((crate::FsCapabilityOperation::Write, crate::AUTH_FULL)),
+        HostOpV1::FsAppendFile => Some((crate::FsCapabilityOperation::Append, crate::AUTH_FULL)),
+        HostOpV1::FsMetadata => Some((crate::FsCapabilityOperation::Metadata, crate::AUTH_PARTIAL)),
+        HostOpV1::FsReadDirectory => {
+            Some((crate::FsCapabilityOperation::Enumerate, crate::AUTH_PARTIAL))
+        }
+        HostOpV1::FsCreateDirectory => Some((
+            crate::FsCapabilityOperation::CreateDirectory,
+            crate::AUTH_FULL,
+        )),
+        HostOpV1::FsRemoveFile => {
+            Some((crate::FsCapabilityOperation::RemoveFile, crate::AUTH_FULL))
+        }
+        HostOpV1::FsRemoveDirectory => Some((
+            crate::FsCapabilityOperation::RemoveDirectory,
+            crate::AUTH_FULL,
+        )),
+        HostOpV1::FsRename => Some((crate::FsCapabilityOperation::RenameSource, crate::AUTH_FULL)),
         _ => None,
     };
     let grant = match (required, capability) {
@@ -274,6 +350,9 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
         },
     };
     let outcome = match (operation, request) {
+        (HostOpV1::ConsoleRead, CanonicalRequestV1::ConsoleRead { stream, limit }) => backend
+            .console_read(*stream, *limit)
+            .map_err(SemanticErrorV1::Io),
         (HostOpV1::ConsoleWrite, CanonicalRequestV1::ConsoleWrite { stream, bytes }) => backend
             .console_write(*stream, bytes)
             .map(|()| CanonicalReplyV1::Unit)
@@ -284,6 +363,9 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             .map_err(SemanticErrorV1::Io),
         (HostOpV1::ConsoleIsTerminal, CanonicalRequestV1::ConsoleIsTerminal { stream }) => {
             Ok(CanonicalReplyV1::Bool(backend.console_is_terminal(*stream)))
+        }
+        (HostOpV1::ClockWallNow, CanonicalRequestV1::ClockWallNow) => {
+            Ok(CanonicalReplyV1::Instant(backend.clock_wall_now()))
         }
         (HostOpV1::FsReadFile, CanonicalRequestV1::FsReadFile { path }) => backend
             .fs_read_file(grant.expect("validated FS capability"), path)
@@ -305,6 +387,46 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             )
             .map(|()| CanonicalReplyV1::Unit)
             .map_err(|cause| file_error(operation, path, cause)),
+        (HostOpV1::FsAppendFile, CanonicalRequestV1::FsAppendFile { path, bytes }) => backend
+            .fs_append_file(grant.expect("validated FS capability"), path, bytes)
+            .map(|()| CanonicalReplyV1::Unit)
+            .map_err(|cause| file_error(operation, path, cause)),
+        (HostOpV1::FsMetadata, CanonicalRequestV1::FsMetadata { path }) => backend
+            .fs_metadata(grant.expect("validated FS capability"), path)
+            .map(CanonicalReplyV1::FileMetadata)
+            .map_err(|cause| file_error(operation, path, cause)),
+        (HostOpV1::FsReadDirectory, CanonicalRequestV1::FsReadDirectory { path }) => backend
+            .fs_read_directory(grant.expect("validated FS capability"), path)
+            .map(CanonicalReplyV1::DirectoryEntries)
+            .map_err(|cause| file_error(operation, path, cause)),
+        (
+            HostOpV1::FsCreateDirectory,
+            CanonicalRequestV1::FsCreateDirectory { recursive, path },
+        ) => backend
+            .fs_create_directory(grant.expect("validated FS capability"), path, *recursive)
+            .map(|()| CanonicalReplyV1::Unit)
+            .map_err(|cause| file_error(operation, path, cause)),
+        (HostOpV1::FsRemoveFile, CanonicalRequestV1::FsRemoveFile { path }) => backend
+            .fs_remove_file(grant.expect("validated FS capability"), path)
+            .map(|()| CanonicalReplyV1::Unit)
+            .map_err(|cause| file_error(operation, path, cause)),
+        (
+            HostOpV1::FsRemoveDirectory,
+            CanonicalRequestV1::FsRemoveDirectory { recursive, path },
+        ) => backend
+            .fs_remove_directory(grant.expect("validated FS capability"), path, *recursive)
+            .map(|()| CanonicalReplyV1::Unit)
+            .map_err(|cause| file_error(operation, path, cause)),
+        (
+            HostOpV1::FsRename,
+            CanonicalRequestV1::FsRename {
+                source,
+                destination,
+            },
+        ) => backend
+            .fs_rename(grant.expect("validated FS capability"), source, destination)
+            .map(|()| CanonicalReplyV1::Unit)
+            .map_err(|cause| file_error(operation, source, cause)),
         _ => return Err(TerminalErrorV1::MalformedHostAbiField),
     };
     Ok(HostDispatchReplyV1 {
@@ -364,9 +486,15 @@ fn denied(
     error: CapabilityDeniedV1,
 ) -> HostDispatchReplyV1 {
     let path = match request {
-        CanonicalRequestV1::FsReadFile { path } | CanonicalRequestV1::FsWriteFile { path, .. } => {
-            path.clone()
-        }
+        CanonicalRequestV1::FsReadFile { path }
+        | CanonicalRequestV1::FsWriteFile { path, .. }
+        | CanonicalRequestV1::FsAppendFile { path, .. }
+        | CanonicalRequestV1::FsMetadata { path }
+        | CanonicalRequestV1::FsReadDirectory { path }
+        | CanonicalRequestV1::FsCreateDirectory { path, .. }
+        | CanonicalRequestV1::FsRemoveFile { path }
+        | CanonicalRequestV1::FsRemoveDirectory { path, .. } => path.clone(),
+        CanonicalRequestV1::FsRename { source, .. } => source.clone(),
         _ => Vec::new(),
     };
     HostDispatchReplyV1 {
@@ -475,6 +603,24 @@ pub enum IoErrorIdentityV1 {
     NotEmpty,
     Unsupported,
     Other(i32),
+}
+
+/// The one host-neutral mapping from Rust I/O errors into Ken's semantic
+/// error identity. Both interpreter and native executors reify this value.
+pub fn io_error_identity_v1(error: &io::Error) -> IoErrorIdentityV1 {
+    match error.kind() {
+        io::ErrorKind::NotFound => IoErrorIdentityV1::NotFound,
+        io::ErrorKind::PermissionDenied => IoErrorIdentityV1::PermissionDenied,
+        io::ErrorKind::BrokenPipe => IoErrorIdentityV1::BrokenPipe,
+        io::ErrorKind::Interrupted => IoErrorIdentityV1::Interrupted,
+        io::ErrorKind::AlreadyExists => IoErrorIdentityV1::AlreadyExists,
+        io::ErrorKind::InvalidInput => IoErrorIdentityV1::InvalidInput,
+        io::ErrorKind::IsADirectory => IoErrorIdentityV1::IsDirectory,
+        io::ErrorKind::NotADirectory => IoErrorIdentityV1::NotDirectory,
+        io::ErrorKind::DirectoryNotEmpty => IoErrorIdentityV1::NotEmpty,
+        io::ErrorKind::Unsupported => IoErrorIdentityV1::Unsupported,
+        _ => IoErrorIdentityV1::Other(error.raw_os_error().unwrap_or(0)),
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -612,6 +758,232 @@ pub struct EffectObservationV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::{Digest, Sha256};
+
+    #[derive(Default)]
+    struct AllOpsBackend(Vec<HostOpV1>);
+
+    impl HostEffectBackendV1 for AllOpsBackend {
+        fn console_read(
+            &mut self,
+            _: ConsoleStreamV1,
+            _: u64,
+        ) -> Result<CanonicalReplyV1, IoErrorIdentityV1> {
+            self.0.push(HostOpV1::ConsoleRead);
+            Ok(CanonicalReplyV1::ReadEof)
+        }
+        fn console_write(&mut self, _: ConsoleStreamV1, _: &[u8]) -> Result<(), IoErrorIdentityV1> {
+            self.0.push(HostOpV1::ConsoleWrite);
+            Ok(())
+        }
+        fn console_flush(&mut self, _: ConsoleStreamV1) -> Result<(), IoErrorIdentityV1> {
+            self.0.push(HostOpV1::ConsoleFlush);
+            Ok(())
+        }
+        fn console_is_terminal(&mut self, _: ConsoleStreamV1) -> bool {
+            self.0.push(HostOpV1::ConsoleIsTerminal);
+            false
+        }
+        fn clock_wall_now(&mut self) -> Vec<u8> {
+            self.0.push(HostOpV1::ClockWallNow);
+            vec![1]
+        }
+        fn fs_read_file(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+        ) -> Result<Vec<u8>, FileErrorCauseV1> {
+            self.0.push(HostOpV1::FsReadFile);
+            Ok(Vec::new())
+        }
+        fn fs_write_file(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+            _: CreatePolicyV1,
+            _: &[u8],
+        ) -> Result<(), FileErrorCauseV1> {
+            self.0.push(HostOpV1::FsWriteFile);
+            Ok(())
+        }
+        fn fs_append_file(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+            _: &[u8],
+        ) -> Result<(), FileErrorCauseV1> {
+            self.0.push(HostOpV1::FsAppendFile);
+            Ok(())
+        }
+        fn fs_metadata(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+        ) -> Result<FileMetadataV1, FileErrorCauseV1> {
+            self.0.push(HostOpV1::FsMetadata);
+            Ok(FileMetadataV1 {
+                size: 0,
+                kind: FsNodeKindV1::File,
+            })
+        }
+        fn fs_read_directory(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+        ) -> Result<Vec<DirEntryV1>, FileErrorCauseV1> {
+            self.0.push(HostOpV1::FsReadDirectory);
+            Ok(Vec::new())
+        }
+        fn fs_create_directory(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+            _: bool,
+        ) -> Result<(), FileErrorCauseV1> {
+            self.0.push(HostOpV1::FsCreateDirectory);
+            Ok(())
+        }
+        fn fs_remove_file(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+        ) -> Result<(), FileErrorCauseV1> {
+            self.0.push(HostOpV1::FsRemoveFile);
+            Ok(())
+        }
+        fn fs_remove_directory(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+            _: bool,
+        ) -> Result<(), FileErrorCauseV1> {
+            self.0.push(HostOpV1::FsRemoveDirectory);
+            Ok(())
+        }
+        fn fs_rename(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+            _: &[u8],
+        ) -> Result<(), FileErrorCauseV1> {
+            self.0.push(HostOpV1::FsRename);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn all_fourteen_operations_share_one_semantic_dispatch() {
+        let mut capabilities = CapabilityTableV1::default();
+        let token = capabilities.insert(CapabilityGrantV1 {
+            identity: CapabilityTraceIdentity("test:all".to_string()),
+            capability: crate::Cap::mint_scoped(
+                crate::AUTH_FULL,
+                "FS",
+                crate::FsScope::root(
+                    crate::RightSet::from_bits(u8::MAX),
+                    crate::FsHandle::Virtual(0),
+                    crate::FsIdentity::Virtual(0),
+                    crate::SymlinkPolicy::NoFollow,
+                ),
+            ),
+        });
+        let requests = [
+            (
+                HostOpV1::ConsoleRead,
+                CanonicalRequestV1::ConsoleRead {
+                    stream: ConsoleStreamV1::Stdin,
+                    limit: 1,
+                },
+            ),
+            (
+                HostOpV1::ConsoleWrite,
+                CanonicalRequestV1::ConsoleWrite {
+                    stream: ConsoleStreamV1::Stdout,
+                    bytes: vec![],
+                },
+            ),
+            (
+                HostOpV1::ConsoleFlush,
+                CanonicalRequestV1::ConsoleFlush {
+                    stream: ConsoleStreamV1::Stdout,
+                },
+            ),
+            (
+                HostOpV1::ConsoleIsTerminal,
+                CanonicalRequestV1::ConsoleIsTerminal {
+                    stream: ConsoleStreamV1::Stdout,
+                },
+            ),
+            (HostOpV1::ClockWallNow, CanonicalRequestV1::ClockWallNow),
+            (
+                HostOpV1::FsReadFile,
+                CanonicalRequestV1::FsReadFile {
+                    path: b"a".to_vec(),
+                },
+            ),
+            (
+                HostOpV1::FsWriteFile,
+                CanonicalRequestV1::FsWriteFile {
+                    path: b"a".to_vec(),
+                    create_policy: CreatePolicyV1::CreateNew,
+                    bytes: vec![],
+                },
+            ),
+            (
+                HostOpV1::FsAppendFile,
+                CanonicalRequestV1::FsAppendFile {
+                    path: b"a".to_vec(),
+                    bytes: vec![],
+                },
+            ),
+            (
+                HostOpV1::FsMetadata,
+                CanonicalRequestV1::FsMetadata {
+                    path: b"a".to_vec(),
+                },
+            ),
+            (
+                HostOpV1::FsReadDirectory,
+                CanonicalRequestV1::FsReadDirectory {
+                    path: b"a".to_vec(),
+                },
+            ),
+            (
+                HostOpV1::FsCreateDirectory,
+                CanonicalRequestV1::FsCreateDirectory {
+                    recursive: false,
+                    path: b"a".to_vec(),
+                },
+            ),
+            (
+                HostOpV1::FsRemoveFile,
+                CanonicalRequestV1::FsRemoveFile {
+                    path: b"a".to_vec(),
+                },
+            ),
+            (
+                HostOpV1::FsRemoveDirectory,
+                CanonicalRequestV1::FsRemoveDirectory {
+                    recursive: false,
+                    path: b"a".to_vec(),
+                },
+            ),
+            (
+                HostOpV1::FsRename,
+                CanonicalRequestV1::FsRename {
+                    source: b"a".to_vec(),
+                    destination: b"b".to_vec(),
+                },
+            ),
+        ];
+        let mut backend = AllOpsBackend::default();
+        for (operation, request) in requests {
+            let capability = (!operation.is_ambient()).then_some(token);
+            dispatch_host_op_v1(&mut backend, &capabilities, operation, capability, &request)
+                .unwrap();
+        }
+        assert_eq!(backend.0, HostOpV1::ALL);
+    }
 
     #[test]
     fn catalog_is_closed_and_availability_is_exact() {
@@ -637,6 +1009,105 @@ mod tests {
             assert_eq!(HostOpV1::try_from(operation as u16), Ok(operation));
         }
         assert_eq!(HostOpV1::try_from(0), Err(UnknownHostOpV1(0)));
+    }
+
+    #[test]
+    fn generated_manifest_closes_catalog_observer_and_consumer_sets() {
+        let producer = HOST_EFFECT_ABI_V1_CATALOG
+            .iter()
+            .map(|row| row.1)
+            .collect::<std::collections::BTreeSet<_>>();
+        let registry = HostOpV1::ALL
+            .into_iter()
+            .map(|operation| operation as u16)
+            .collect::<std::collections::BTreeSet<_>>();
+        let observer = HOST_EFFECT_ABI_V1_CANONICAL
+            .lines()
+            .filter_map(|line| line.strip_prefix("operation="))
+            .map(|line| u16::from_str_radix(line.split('|').nth(1).unwrap(), 16).unwrap())
+            .collect::<std::collections::BTreeSet<_>>();
+        let consumers = HostOpV1::ALL
+            .into_iter()
+            .map(|operation| operation as u16)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(producer, registry);
+        assert_eq!(producer, observer);
+        assert_eq!(producer, consumers);
+        for row in HOST_EFFECT_ABI_V1_CATALOG {
+            assert!(HOST_EFFECT_ABI_V1_FACTS
+                .iter()
+                .any(|(name, _)| *name == format!("SIZE_{}", row.3)));
+            assert!(HOST_EFFECT_ABI_V1_FACTS
+                .iter()
+                .any(|(name, _)| *name == format!("ALIGN_{}", row.3)));
+            assert!(HOST_EFFECT_ABI_V1_FACTS
+                .iter()
+                .any(|(name, _)| *name == format!("SIZE_{}", row.5)));
+            assert!(HOST_EFFECT_ABI_V1_FACTS
+                .iter()
+                .any(|(name, _)| *name == format!("ALIGN_{}", row.5)));
+        }
+
+        let mut producer_only = producer.clone();
+        producer_only.insert(0x7fff);
+        assert_ne!(producer_only, registry);
+        let mut registry_only = registry.clone();
+        registry_only.remove(&(HostOpV1::ConsoleWrite as u16));
+        assert_ne!(producer, registry_only);
+        let mut observer_only = observer.clone();
+        observer_only.insert(0x7ffe);
+        assert_ne!(producer, observer_only);
+        let mut consumer_only = consumers.clone();
+        consumer_only.remove(&(HostOpV1::FsRename as u16));
+        assert_ne!(producer, consumer_only);
+    }
+
+    #[test]
+    fn every_catalog_or_layout_value_mutation_changes_the_manifest_hash() {
+        assert_eq!(
+            <[u8; 32]>::from(Sha256::digest(HOST_EFFECT_ABI_V1_CANONICAL.as_bytes())),
+            HOST_EFFECT_ABI_V1_HASH
+        );
+        for needle in [
+            "ConsoleWrite|0102|native|ConsoleWriteRequestV1|2|HostReplyV1|1",
+            "FsRename|0309|unavailable|FsRenameRequestV1|3|HostReplyV1|1",
+            "layout=SIZE_HostReplyV1|",
+            "error=io.BrokenPipe|3",
+            "tag=reply.error|3",
+        ] {
+            assert!(HOST_EFFECT_ABI_V1_CANONICAL.contains(needle));
+            let mutated = HOST_EFFECT_ABI_V1_CANONICAL.replacen(needle, "MUTATED", 1);
+            assert_ne!(
+                <[u8; 32]>::from(Sha256::digest(mutated.as_bytes())),
+                HOST_EFFECT_ABI_V1_HASH
+            );
+        }
+    }
+
+    #[test]
+    fn generated_manifest_binds_the_opaque_capability_layout() {
+        let fact = |name: &str| {
+            HOST_EFFECT_ABI_V1_FACTS
+                .iter()
+                .find_map(|(fact, value)| (*fact == name).then_some(*value))
+                .unwrap()
+        };
+        assert_eq!(
+            fact("SIZE_CapabilityTokenV1"),
+            std::mem::size_of::<CapabilityTokenV1>() as u64
+        );
+        assert_eq!(
+            fact("ALIGN_CapabilityTokenV1"),
+            std::mem::align_of::<CapabilityTokenV1>() as u64
+        );
+        assert_eq!(
+            fact("OFFSET_CapabilityTokenV1_slot"),
+            std::mem::offset_of!(CapabilityTokenV1, slot) as u64
+        );
+        assert_eq!(
+            fact("OFFSET_CapabilityTokenV1_generation"),
+            std::mem::offset_of!(CapabilityTokenV1, generation) as u64
+        );
     }
 
     #[test]

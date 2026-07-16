@@ -4,6 +4,8 @@
 //! contains no enclosing digest. Hashes for the plan, core, and artifact are
 //! parent-owned adjacent bindings.
 
+#![allow(dead_code)]
+
 use ken_host::{
     assert_host_effect_abi_identity, assert_target_abi_identity, dispatch_host_op_v1,
     CanonicalRequestV1, CapabilityTableV1, CapabilityTokenV1, EffectEventV1, EffectObservationV1,
