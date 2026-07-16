@@ -395,6 +395,7 @@ fn admission_boundary(decls: &[Decl]) -> Result<Option<(BoundaryHeader, Span)>, 
             kind,
             admits,
             capabilities,
+            allow_root_execution,
             span,
         } = decl.unwrap_pub()
         {
@@ -411,6 +412,7 @@ fn admission_boundary(decls: &[Decl]) -> Result<Option<(BoundaryHeader, Span)>, 
                     kind: *kind,
                     admits: admits.clone(),
                     capabilities: capabilities.clone(),
+                    allow_root_execution: *allow_root_execution,
                 },
                 span.clone(),
             ));

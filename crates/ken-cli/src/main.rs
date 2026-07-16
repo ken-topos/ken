@@ -333,6 +333,10 @@ fn run_file(path: &OsStr, arguments: &[Vec<u8>]) {
             eprintln!("ken run: Console ABI declarations are unavailable");
             std::process::exit(2);
         }
+        Err(ken_cli::RunError::RootExecutionObservationUnavailable) => {
+            eprintln!("ken run: effective-UID observation is unavailable");
+            std::process::exit(1);
+        }
         Err(ken_cli::RunError::Initialization(error)) => {
             eprintln!("ken run: elaborator init failed: {error:?}");
             std::process::exit(1);

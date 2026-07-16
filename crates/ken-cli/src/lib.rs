@@ -51,6 +51,7 @@ pub enum RunError {
     MissingCapability { effect: String },
     InvalidEntrypoint { authority: &'static str },
     ConsoleAbiUnavailable,
+    RootExecutionObservationUnavailable,
     Io(ken_interp::RunIoError),
 }
 
@@ -67,8 +68,19 @@ pub fn run_program<H: ken_interp::HostHandler>(
     cwd: &[u8],
     host: &mut H,
 ) -> Result<ProgramOutcome, RunError> {
-    run_program_inner(source, format, arguments, environment, cwd, host, false)
-        .map(|(outcome, _)| outcome)
+    let effective_uid = ken_runtime::observe_effective_uid_v1()
+        .map_err(|_| RunError::RootExecutionObservationUnavailable)?;
+    run_program_inner(
+        source,
+        format,
+        arguments,
+        environment,
+        cwd,
+        host,
+        false,
+        effective_uid,
+    )
+    .map(|(outcome, _)| outcome)
 }
 
 /// Elaborate and run one Ken application while producing the interpreter's
@@ -85,8 +97,19 @@ pub fn run_program_effect_observation_v1<H: ken_interp::HostHandler>(
     cwd: &[u8],
     host: &mut H,
 ) -> Result<ken_runtime::EffectObservationV1, RunError> {
-    run_program_inner(source, format, arguments, environment, cwd, host, true)
-        .map(|(_, observation)| observation.expect("observation requested"))
+    let effective_uid = ken_runtime::observe_effective_uid_v1()
+        .map_err(|_| RunError::RootExecutionObservationUnavailable)?;
+    run_program_inner(
+        source,
+        format,
+        arguments,
+        environment,
+        cwd,
+        host,
+        true,
+        effective_uid,
+    )
+    .map(|(_, observation)| observation.expect("observation requested"))
 }
 
 fn run_program_inner<H: ken_interp::HostHandler>(
@@ -97,6 +120,7 @@ fn run_program_inner<H: ken_interp::HostHandler>(
     cwd: &[u8],
     host: &mut H,
     observe_effects: bool,
+    effective_uid: ken_runtime::EffectiveUidSnapshotV1,
 ) -> Result<(ProgramOutcome, Option<ken_runtime::EffectObservationV1>), RunError> {
     let mut elab_env = ken_elaborator::ElabEnv::new().map_err(RunError::Initialization)?;
     let elaborated = match format {
@@ -114,6 +138,21 @@ fn run_program_inner<H: ken_interp::HostHandler>(
 
     let admitted = ken_elaborator::program_admission::admit_checked_main(&elab_env)
         .map_err(map_program_admission_error)?;
+    if ken_runtime::admit_root_execution(effective_uid, admitted.allow_root_execution).is_err() {
+        let exit_status =
+            ken_runtime::process_exit_status(ken_runtime::ProcessExitCode::Failure(0)).status;
+        return Ok((
+            ProgramOutcome { exit_status },
+            observe_effects.then_some(ken_runtime::EffectObservationV1 {
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+                filesystem_delta: Vec::new(),
+                terminal_error: Some(ken_runtime::TerminalErrorV1::RootExecutionDenied),
+                effect_trace: Vec::new(),
+                exit_status,
+            }),
+        ));
+    }
     let main_id = admitted.main;
     let get = |name: &str| -> Option<ken_kernel::GlobalId> { elab_env.globals.get(name).copied() };
     let declared_fs = DeclaredFsAuthority {
@@ -674,6 +713,114 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
                 expected
             );
         }
+    }
+
+    fn root_program(allow_root: bool) -> String {
+        let marker = if allow_root {
+            ", RootExecution Allow"
+        } else {
+            ""
+        };
+        format!(
+            r#"program capabilities FS APartial{marker}
+proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [Console] =
+  bind (Coproduct (FSOp APartial) AmbientOp)
+       (resp_coproduct (FSOp APartial) AmbientOp
+         (fs_resp APartial) ambient_resp)
+       (Result IOError Unit) ExitCode
+       (host_console APartial (Result IOError Unit)
+         (write Stdout (bytes_encode "admitted")))
+       (\_ . host_exit APartial Success)
+"#
+        )
+    }
+
+    fn run_with_scripted_uid(
+        effective_uid: u32,
+        allow_root: bool,
+        arguments: &[Vec<u8>],
+        environment: &[(Vec<u8>, Vec<u8>)],
+    ) -> (ken_runtime::EffectObservationV1, ken_interp::CaptureHost) {
+        let mut host = ken_interp::CaptureHost::new(Vec::new());
+        let (_, observation) = run_program_inner(
+            &root_program(allow_root),
+            SourceFormat::Ken,
+            arguments,
+            environment,
+            b".",
+            &mut host,
+            true,
+            ken_runtime::EffectiveUidSnapshotV1::scripted(effective_uid),
+        )
+        .expect("checked program reaches the real interpreter runner");
+        (observation.expect("observation requested"), host)
+    }
+
+    #[test]
+    fn root_admission_precedes_host_leaves_and_marker_flips_the_same_program() {
+        let (denied, denied_host) = run_with_scripted_uid(0, false, &[], &[]);
+        assert_eq!(denied.exit_status, 1);
+        assert_eq!(
+            denied.terminal_error,
+            Some(ken_runtime::TerminalErrorV1::RootExecutionDenied)
+        );
+        assert!(denied.stdout.is_empty());
+        assert!(denied.stderr.is_empty());
+        assert!(denied.filesystem_delta.is_empty());
+        assert!(denied.effect_trace.is_empty());
+        assert!(denied_host.trace().is_empty());
+        assert!(denied_host.fs_trace().is_empty());
+        assert!(denied_host.clock_trace().is_empty());
+
+        let (allowed, allowed_host) = run_with_scripted_uid(0, true, &[], &[]);
+        assert_eq!(allowed.exit_status, 0);
+        assert_eq!(allowed.terminal_error, None);
+        assert_eq!(allowed.stdout, b"admitted");
+        assert_eq!(allowed.effect_trace.len(), 1);
+        assert_eq!(allowed_host.trace().len(), 1);
+    }
+
+    #[test]
+    fn non_root_proceeds_and_process_input_cannot_forge_the_marker() {
+        let (non_root, non_root_host) = run_with_scripted_uid(1000, false, &[], &[]);
+        assert_eq!(non_root.exit_status, 0);
+        assert_eq!(non_root.stdout, b"admitted");
+        assert_eq!(non_root_host.trace().len(), 1);
+
+        let arguments = vec![b"--allow-root".to_vec()];
+        let environment = vec![(b"KEN_ALLOW_ROOT_EXECUTION".to_vec(), b"1".to_vec())];
+        let (denied, denied_host) = run_with_scripted_uid(0, false, &arguments, &environment);
+        assert_eq!(
+            denied.terminal_error,
+            Some(ken_runtime::TerminalErrorV1::RootExecutionDenied)
+        );
+        assert!(denied.effect_trace.is_empty());
+        assert!(denied_host.trace().is_empty());
+    }
+
+    #[test]
+    fn checked_admission_projects_root_marker_without_changing_program_caps() {
+        let denied = elaborate_program(&root_program(false));
+        let allowed = elaborate_program(&root_program(true));
+        assert!(
+            !ken_elaborator::program_admission::admit_checked_main(&denied)
+                .unwrap()
+                .allow_root_execution
+        );
+        assert!(
+            ken_elaborator::program_admission::admit_checked_main(&allowed)
+                .unwrap()
+                .allow_root_execution
+        );
+        assert_eq!(
+            denied
+                .env
+                .lookup(*denied.globals.get("ProgramCaps").unwrap()),
+            allowed
+                .env
+                .lookup(*allowed.globals.get("ProgramCaps").unwrap())
+        );
     }
 
     #[test]

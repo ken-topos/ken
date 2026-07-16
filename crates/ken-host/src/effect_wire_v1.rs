@@ -15,6 +15,7 @@ pub struct LinkedEffectTraceV1 {
     pub target_abi_hash: [u8; 32],
     pub host_effect_abi_hash: [u8; 32],
     pub terminal_value: i64,
+    pub terminal_error: Option<crate::TerminalErrorV1>,
     pub effect_trace: Vec<EffectEventV1>,
 }
 
@@ -298,6 +299,11 @@ pub fn encode_linked_effect_trace_v1(
     out.extend_from_slice(&trace.target_abi_hash);
     out.extend_from_slice(&trace.host_effect_abi_hash);
     put_i64(&mut out, trace.terminal_value);
+    match &trace.terminal_error {
+        None => put_u8(&mut out, 0),
+        Some(crate::TerminalErrorV1::RootExecutionDenied) => put_u8(&mut out, 1),
+        Some(_) => return Err(EffectTraceWireErrorV1),
+    }
     put_u64(
         &mut out,
         u64::try_from(trace.effect_trace.len()).map_err(|_| EffectTraceWireErrorV1)?,
@@ -570,6 +576,11 @@ pub fn decode_linked_effect_trace_v1(
     let target_abi_hash = cursor.take(32)?.try_into().unwrap();
     let host_effect_abi_hash = cursor.take(32)?.try_into().unwrap();
     let terminal_value = cursor.i64()?;
+    let terminal_error = match cursor.u8()? {
+        0 => None,
+        1 => Some(crate::TerminalErrorV1::RootExecutionDenied),
+        _ => return Err(EffectTraceWireErrorV1),
+    };
     let count = usize::try_from(cursor.u64()?).map_err(|_| EffectTraceWireErrorV1)?;
     if count > cursor.remaining() / 13 {
         return Err(EffectTraceWireErrorV1);
@@ -605,6 +616,7 @@ pub fn decode_linked_effect_trace_v1(
         target_abi_hash,
         host_effect_abi_hash,
         terminal_value,
+        terminal_error,
         effect_trace,
     })
 }
@@ -619,6 +631,7 @@ mod tests {
             target_abi_hash: [3; 32],
             host_effect_abi_hash: [5; 32],
             terminal_value: 61,
+            terminal_error: None,
             effect_trace: vec![
                 EffectEventV1 {
                     sequence: 0,

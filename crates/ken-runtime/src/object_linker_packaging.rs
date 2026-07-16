@@ -31,8 +31,24 @@ pub struct BoundProcessEntrypoint {
     pub program_caps_constructor: RuntimeSymbol,
     pub authority: u8,
     pub plan_hash: u64,
+    pub allow_root_execution: bool,
+    pub root_execution_binding: u64,
     pub ret_constructor: RuntimeSymbol,
     pub process_symbols: crate::NativeProcessSymbols,
+}
+
+impl BoundProcessEntrypoint {
+    pub fn root_execution_binding_is_valid(&self) -> bool {
+        self.root_execution_binding
+            == root_execution_plan_binding_v1(self.plan_hash, self.allow_root_execution)
+    }
+}
+
+pub fn root_execution_plan_binding_v1(plan_hash: u64, allow_root_execution: bool) -> u64 {
+    let mut bytes = b"ken.root-execution-plan-binding.v1\0".to_vec();
+    bytes.extend_from_slice(&plan_hash.to_le_bytes());
+    bytes.push(u8::from(allow_root_execution));
+    fnv1a_64(&bytes)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -242,7 +258,9 @@ pub fn run_bound_process_effect_observation_v1(
         return Err(NativeEffectRunErrorV1::BindingMismatch);
     }
     let exit_status = output.status.code().unwrap_or(1);
-    let terminal_error = if output.status.code().is_none() {
+    let terminal_error = if trace.terminal_error.is_some() {
+        trace.terminal_error
+    } else if output.status.code().is_none() {
         Some(ken_host::TerminalErrorV1::DriverFailure)
     } else if trace.terminal_value < 0 {
         Some(ken_host::TerminalErrorV1::RuntimeTrap(
@@ -632,6 +650,13 @@ pub fn build_bound_process_starter_executable_artifact(
     entrypoint: &BoundProcessEntrypoint,
     output_dir: impl AsRef<Path>,
 ) -> Result<BoundProcessExecutableArtifact, ObjectLinkerPackagingError> {
+    if !entrypoint.root_execution_binding_is_valid() {
+        return Err(packaging_error(
+            ObjectLinkerPackagingStage::EntrypointPackage,
+            "root_execution_binding",
+            "root-execution metadata does not match the checked plan binding",
+        ));
+    }
     if !program
         .declarations
         .iter()
@@ -705,7 +730,12 @@ pub fn build_bound_process_starter_executable_artifact(
     let stub_path = output_dir.join(&options.stub_relative_path);
     fs::write(
         &stub_path,
-        process_starter_c_stub_for_authority(entrypoint.authority, entrypoint.plan_hash),
+        process_starter_c_stub_for_authority(
+            entrypoint.authority,
+            entrypoint.plan_hash,
+            entrypoint.allow_root_execution,
+            crate::process_exit_status(crate::ProcessExitCode::Failure(0)).status,
+        ),
     )
     .map_err(|err| {
         packaging_error(
@@ -1620,10 +1650,15 @@ int main(void) {
 
 #[cfg(test)]
 pub(crate) fn process_starter_c_stub() -> String {
-    process_starter_c_stub_for_authority(1, 1)
+    process_starter_c_stub_for_authority(1, 1, false, 1)
 }
 
-fn process_starter_c_stub_for_authority(authority: u8, plan_hash: u64) -> String {
+fn process_starter_c_stub_for_authority(
+    authority: u8,
+    plan_hash: u64,
+    allow_root_execution: bool,
+    root_denied_exit_status: i32,
+) -> String {
     r#"#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1664,6 +1699,8 @@ extern long long ken_host_invocation_v1_init(
     size_t len,
     uint64_t authority,
     uint64_t plan_hash,
+    uint64_t allow_root_execution,
+    long long root_denied_exit_status,
     const unsigned char *target_abi_hash,
     const unsigned char *host_effect_abi_hash,
     const unsigned char *observation_path,
@@ -1786,12 +1823,17 @@ int main(int argc, char **argv, char **envp) {
         strlen(cwd),
         __KEN_AUTHORITY__,
         KEN_ENTRYPOINT_PLAN_HASH,
+        __KEN_ALLOW_ROOT_EXECUTION__,
+        __KEN_ROOT_DENIED_EXIT_STATUS__,
         KEN_TARGET_ABI_HASH,
         KEN_HOST_EFFECT_ABI_HASH,
         (const unsigned char *)observation_path,
         observation_path_len,
         &host_init
     );
+    if (init_status == 1) {
+        free(pool); free(cwd); return __KEN_ROOT_DENIED_EXIT_STATUS__;
+    }
     if (init_status != 0 || host_init.context == NULL || host_init.capability == 0 ||
         host_init.plan_hash != KEN_ENTRYPOINT_PLAN_HASH) {
         free(pool); free(cwd); return 1;
@@ -1817,6 +1859,14 @@ int main(int argc, char **argv, char **envp) {
 "#
     .replace("__KEN_AUTHORITY__", &authority.to_string())
     .replace("__KEN_PLAN_HASH__", &plan_hash.to_string())
+    .replace(
+        "__KEN_ALLOW_ROOT_EXECUTION__",
+        &u8::from(allow_root_execution).to_string(),
+    )
+    .replace(
+        "__KEN_ROOT_DENIED_EXIT_STATUS__",
+        &root_denied_exit_status.to_string(),
+    )
     .replace(
         "__KEN_TARGET_HASH__",
         &ken_host::TARGET_ABI_MANIFEST_HASH
@@ -2709,5 +2759,23 @@ mod tests {
 
         assert_eq!(err.stage, ObjectLinkerPackagingStage::SmokeExecution);
         assert_eq!(err.field, "runtime_observation");
+    }
+
+    #[test]
+    fn stale_root_execution_marker_fails_the_bound_entrypoint_check() {
+        let plan_hash = 41;
+        let mut entrypoint = BoundProcessEntrypoint {
+            target_symbol: "main".to_string(),
+            program_caps_constructor: "MkProgramCaps".to_string(),
+            authority: 2,
+            plan_hash,
+            allow_root_execution: false,
+            root_execution_binding: root_execution_plan_binding_v1(plan_hash, false),
+            ret_constructor: "Ret".to_string(),
+            process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
+        };
+        assert!(entrypoint.root_execution_binding_is_valid());
+        entrypoint.allow_root_execution = true;
+        assert!(!entrypoint.root_execution_binding_is_valid());
     }
 }

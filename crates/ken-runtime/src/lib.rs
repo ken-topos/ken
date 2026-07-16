@@ -36,9 +36,10 @@ pub use executable_entrypoint_packaging::*;
 pub use hash::fnv1a_64;
 pub use ir::*;
 pub use ken_host::{
-    decode_linked_effect_trace_v1, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1,
-    ConsoleStreamV1, EffectEventV1, EffectObservationV1, FsDeltaV1, FsNodeKindV1,
-    FsNodeObservationV1, HostOpV1, IoErrorIdentityV1, SemanticErrorV1, TerminalErrorV1,
+    admit_root_execution, decode_linked_effect_trace_v1, observe_effective_uid_v1,
+    CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, ConsoleStreamV1, EffectEventV1,
+    EffectObservationV1, EffectiveUidSnapshotV1, FsDeltaV1, FsNodeKindV1, FsNodeObservationV1,
+    HostOpV1, IoErrorIdentityV1, RootExecutionDeniedV1, SemanticErrorV1, TerminalErrorV1,
 };
 pub use native_execution_differential::*;
 pub use native_process_entrypoint::*;

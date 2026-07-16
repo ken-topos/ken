@@ -40,7 +40,7 @@ fn main() {
     let manifest = fs::read_to_string("Cargo.toml").expect("read ken-host Cargo.toml");
     assert!(
         manifest.contains(
-            "rustix = { version = \"=1.1.4\", default-features = false, features = [\"std\", \"fs\"] }"
+            "rustix = { version = \"=1.1.4\", default-features = false, features = [\"std\", \"fs\", \"process\"] }"
         ),
         "PX2 manifest identity requires the exact audited rustix pin and features"
     );
@@ -51,7 +51,7 @@ fn main() {
         .to_path_buf();
     let lock = fs::read_to_string(workspace.join("Cargo.lock")).expect("read workspace Cargo.lock");
     let dependencies = [
-        package_identity(&lock, "rustix", "1.1.4", "std,fs"),
+        package_identity(&lock, "rustix", "1.1.4", "std,fs,process"),
         package_identity(&lock, "bitflags", "2.13.0", ""),
         package_identity(&lock, "linux-raw-sys", "0.12.1", "std,general,errno"),
     ];

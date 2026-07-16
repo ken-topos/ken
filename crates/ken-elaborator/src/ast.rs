@@ -167,6 +167,9 @@ pub enum Decl {
         /// Present iff a `capabilities` clause was written. Packages never
         /// carry this field; the parser rejects that surface before loading.
         capabilities: Option<Vec<CapabilityDecl>>,
+        /// Checked declaration metadata permitting execution when the host's
+        /// immutable effective-UID snapshot is zero.
+        allow_root_execution: bool,
         span: Span,
     },
     ViewDecl {
@@ -416,6 +419,7 @@ pub struct BoundaryHeader {
     pub kind: BoundaryKind,
     pub admits: Option<Vec<String>>,
     pub capabilities: Option<Vec<CapabilityDecl>>,
+    pub allow_root_execution: bool,
 }
 
 impl Decl {

@@ -943,6 +943,7 @@ pub enum TerminalErrorV1 {
     OperationUnavailable(HostOpV1),
     RuntimeTrap(u16),
     DriverFailure,
+    RootExecutionDenied,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
