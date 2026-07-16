@@ -76,9 +76,18 @@ fn filesystem_root_is_checked_boundary_metadata() {
     let header = parsed_header(r#"program capabilities FS AFull "./data""#);
     let declaration = &header.capabilities.unwrap()[0];
     assert_eq!(declaration.root.as_deref(), Some(&b"./data"[..]));
+    let home = parsed_header(r#"program capabilities FS AFull "~/data""#);
+    assert_eq!(
+        home.capabilities.unwrap()[0].root.as_deref(),
+        Some(&b"~/data"[..])
+    );
     assert!(matches!(
         parser::parse_decls(r#"program capabilities FS AFull "data""#),
-        Err(ElabError::ParseError { msg, .. }) if msg.contains("absolute or begin with './'")
+        Err(ElabError::ParseError { msg, .. }) if msg.contains("absolute or begin with './' or '~/'")
+    ));
+    assert!(matches!(
+        parser::parse_decls(r#"program capabilities FS AFull "~""#),
+        Err(ElabError::ParseError { msg, .. }) if msg.contains("begin with './' or '~/'")
     ));
 }
 

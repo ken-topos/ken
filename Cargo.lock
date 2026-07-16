@@ -612,6 +612,7 @@ name = "ken-host"
 version = "0.0.0"
 dependencies = [
  "cc",
+ "libc",
  "linux-raw-sys",
  "rustix",
  "sha2",

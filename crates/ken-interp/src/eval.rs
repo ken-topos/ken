@@ -2252,7 +2252,9 @@ pub trait HostHandler {
         &self,
         authority: capabilities::Authority,
         root: &capabilities::FsRootSpec,
+        effective_uid: ken_host::EffectiveUidSnapshotV1,
     ) -> io::Result<capabilities::Cap> {
+        let _ = effective_uid;
         if root == &capabilities::FsRootSpec::default() {
             Ok(self.mint_fs_cap(authority))
         } else {
@@ -2485,12 +2487,14 @@ impl HostHandler for PosixHost {
         &self,
         authority: capabilities::Authority,
         root: &capabilities::FsRootSpec,
+        effective_uid: ken_host::EffectiveUidSnapshotV1,
     ) -> io::Result<capabilities::Cap> {
         #[cfg(target_os = "linux")]
         {
             let scope = ken_host::resolve_fs_root_spec_v1(
                 root,
                 &self.root,
+                effective_uid,
                 capabilities::rights_for_authority(authority),
                 capabilities::SymlinkPolicy::NoFollow,
             )
@@ -2500,6 +2504,9 @@ impl HostHandler for PosixHost {
                 }
                 ken_host::FsRootResolveError::SymlinkDenied => {
                     io::Error::new(io::ErrorKind::PermissionDenied, "SymlinkDenied")
+                }
+                ken_host::FsRootResolveError::HomeRootResolution(error) => {
+                    io::Error::new(io::ErrorKind::Other, error)
                 }
                 ken_host::FsRootResolveError::Io(error) => error,
             })?;
@@ -3206,7 +3213,9 @@ impl HostHandler for CaptureHost {
         &self,
         authority: capabilities::Authority,
         root: &capabilities::FsRootSpec,
+        effective_uid: ken_host::EffectiveUidSnapshotV1,
     ) -> io::Result<capabilities::Cap> {
+        let _ = effective_uid;
         match root {
             capabilities::FsRootSpec::ExecutionStartCwd(suffix) => self.mint_scoped_fs_cap(
                 authority,
@@ -3215,6 +3224,9 @@ impl HostHandler for CaptureHost {
                 capabilities::SymlinkPolicy::NoFollow,
             ),
             capabilities::FsRootSpec::Absolute(_) => {
+                Err(io::Error::from(io::ErrorKind::Unsupported))
+            }
+            capabilities::FsRootSpec::EffectiveUserHome(_) => {
                 Err(io::Error::from(io::ErrorKind::Unsupported))
             }
         }

@@ -102,6 +102,10 @@ prerequisite work package that owns the dependency and trusted-surface delta,
 startup snapshot, and injectable differential seam. Manual `/etc/passwd`
 parsing and `/home/<name>` conventions are also rejected.
 
+ADR 0020 supplies that bounded account-database boundary and is the normative
+owner of effective-user home resolution; this section remains the semantic
+owner of the typed root-specification choice.
+
 ## Consequences
 
 Capability evolution remains additive and fail-closed: new operation IDs,

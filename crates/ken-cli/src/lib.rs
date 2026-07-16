@@ -171,10 +171,39 @@ fn run_program_inner<H: ken_interp::HostHandler>(
         ken_interp::ConsoleIds::from_elab(&elab_env).ok_or(RunError::ConsoleAbiUnavailable)?;
     let fs_ids = ken_interp::FSIds::from_elab(&elab_env);
     let clock_ids = ken_interp::ClockIds::from_elab(&elab_env);
-    let cap = ken_interp::EvalVal::Cap(
-        host.mint_fs_cap_for_root(declared_fs.authority, &admitted.fs_root_spec)
-            .map_err(RunError::CapabilityRoot)?,
-    );
+    let cap = match host.mint_fs_cap_for_root(
+        declared_fs.authority,
+        &admitted.fs_root_spec,
+        effective_uid,
+    ) {
+        Ok(cap) => ken_interp::EvalVal::Cap(cap),
+        Err(error) => {
+            let Some(failure) = error
+                .get_ref()
+                .and_then(|source| {
+                    source.downcast_ref::<ken_runtime::HomeRootResolutionFailureV1>()
+                })
+                .cloned()
+            else {
+                return Err(RunError::CapabilityRoot(error));
+            };
+            let exit_status =
+                ken_runtime::process_exit_status(ken_runtime::ProcessExitCode::Failure(0)).status;
+            return Ok((
+                ProgramOutcome { exit_status },
+                observe_effects.then_some(ken_runtime::EffectObservationV1 {
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    filesystem_delta: Vec::new(),
+                    terminal_error: Some(ken_runtime::TerminalErrorV1::HomeRootResolutionFailed(
+                        failure,
+                    )),
+                    effect_trace: Vec::new(),
+                    exit_status,
+                }),
+            ));
+        }
+    };
     let mut store = build_eval_store(&elab_env);
     let tree = apply_entrypoint(
         &elab_env,

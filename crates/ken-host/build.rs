@@ -44,6 +44,10 @@ fn main() {
         ),
         "PX2 manifest identity requires the exact audited rustix pin and features"
     );
+    assert!(
+        manifest.contains("libc = { version = \"=0.2.186\", default-features = false }"),
+        "PX16 manifest identity requires the exact audited libc pin"
+    );
     let workspace = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
         .and_then(Path::parent)
@@ -54,6 +58,7 @@ fn main() {
         package_identity(&lock, "rustix", "1.1.4", "std,fs,process"),
         package_identity(&lock, "bitflags", "2.13.0", ""),
         package_identity(&lock, "linux-raw-sys", "0.12.1", "std,general,errno"),
+        package_identity(&lock, "libc", "0.2.186", ""),
     ];
 
     if target_os == "linux" {
@@ -430,7 +435,7 @@ fn canonical_manifest(
     target: &str,
     target_os: &str,
     backend: &str,
-    dependencies: &[(String, String, String, String); 3],
+    dependencies: &[(String, String, String, String)],
     facts: &[(&str, u64)],
 ) -> String {
     let mut out = format!(
@@ -452,7 +457,7 @@ fn write_generated(
     target: &str,
     target_os: &str,
     backend: &str,
-    dependencies: &[(String, String, String, String); 3],
+    dependencies: &[(String, String, String, String)],
     facts: &[(&str, u64)],
     canonical: &str,
     hash: &[u8; 32],

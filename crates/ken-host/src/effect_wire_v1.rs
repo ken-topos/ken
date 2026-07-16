@@ -302,6 +302,24 @@ pub fn encode_linked_effect_trace_v1(
     match &trace.terminal_error {
         None => put_u8(&mut out, 0),
         Some(crate::TerminalErrorV1::RootExecutionDenied) => put_u8(&mut out, 1),
+        Some(crate::TerminalErrorV1::HomeRootResolutionFailed(failure)) => {
+            put_u8(&mut out, 2);
+            match failure {
+                crate::HomeRootResolutionFailureV1::NoAccountRecord => put_u8(&mut out, 0),
+                crate::HomeRootResolutionFailureV1::AccountRecordTooLarge => put_u8(&mut out, 1),
+                crate::HomeRootResolutionFailureV1::AccountLookup(error) => {
+                    put_u8(&mut out, 2);
+                    put_io_error(&mut out, *error);
+                }
+                crate::HomeRootResolutionFailureV1::InvalidAccountRecord => put_u8(&mut out, 3),
+                crate::HomeRootResolutionFailureV1::RootOpen(error) => {
+                    put_u8(&mut out, 4);
+                    put_io_error(&mut out, *error);
+                }
+                crate::HomeRootResolutionFailureV1::ScopeEscape => put_u8(&mut out, 5),
+                crate::HomeRootResolutionFailureV1::SymlinkDenied => put_u8(&mut out, 6),
+            }
+        }
         Some(_) => return Err(EffectTraceWireErrorV1),
     }
     put_u64(
@@ -579,6 +597,18 @@ pub fn decode_linked_effect_trace_v1(
     let terminal_error = match cursor.u8()? {
         0 => None,
         1 => Some(crate::TerminalErrorV1::RootExecutionDenied),
+        2 => Some(crate::TerminalErrorV1::HomeRootResolutionFailed(
+            match cursor.u8()? {
+                0 => crate::HomeRootResolutionFailureV1::NoAccountRecord,
+                1 => crate::HomeRootResolutionFailureV1::AccountRecordTooLarge,
+                2 => crate::HomeRootResolutionFailureV1::AccountLookup(get_io_error(&mut cursor)?),
+                3 => crate::HomeRootResolutionFailureV1::InvalidAccountRecord,
+                4 => crate::HomeRootResolutionFailureV1::RootOpen(get_io_error(&mut cursor)?),
+                5 => crate::HomeRootResolutionFailureV1::ScopeEscape,
+                6 => crate::HomeRootResolutionFailureV1::SymlinkDenied,
+                _ => return Err(EffectTraceWireErrorV1),
+            },
+        )),
         _ => return Err(EffectTraceWireErrorV1),
     };
     let count = usize::try_from(cursor.u64()?).map_err(|_| EffectTraceWireErrorV1)?;
@@ -673,6 +703,27 @@ mod tests {
         let expected = representative_trace();
         let encoded = encode_linked_effect_trace_v1(&expected).unwrap();
         assert_eq!(decode_linked_effect_trace_v1(&encoded), Ok(expected));
+    }
+
+    #[test]
+    fn home_failure_wire_distinguishes_lookup_from_root_open_and_keeps_identity() {
+        let mut lookup = representative_trace();
+        lookup.terminal_error = Some(crate::TerminalErrorV1::HomeRootResolutionFailed(
+            crate::HomeRootResolutionFailureV1::AccountLookup(IoErrorIdentityV1::Other(5)),
+        ));
+        let mut root_open = representative_trace();
+        root_open.terminal_error = Some(crate::TerminalErrorV1::HomeRootResolutionFailed(
+            crate::HomeRootResolutionFailureV1::RootOpen(IoErrorIdentityV1::Other(5)),
+        ));
+
+        let lookup_wire = encode_linked_effect_trace_v1(&lookup).unwrap();
+        let root_open_wire = encode_linked_effect_trace_v1(&root_open).unwrap();
+        assert_ne!(lookup_wire, root_open_wire);
+        assert_eq!(decode_linked_effect_trace_v1(&lookup_wire), Ok(lookup));
+        assert_eq!(
+            decode_linked_effect_trace_v1(&root_open_wire),
+            Ok(root_open)
+        );
     }
 
     #[test]
