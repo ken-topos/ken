@@ -316,6 +316,7 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
                 kind: ken_runtime::FsNodeKindV1::File,
                 file_bytes: Some(Vec::new()),
                 symlink_target: None,
+                mode: Some(0o644),
             },
         });
     mutations.push(changed);
@@ -525,6 +526,7 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
                 kind: ken_runtime::FsNodeKindV1::File,
                 file_bytes: Some(b"retained".to_vec()),
                 symlink_target: None,
+                mode: Some(0o644),
             },
         }]
     );

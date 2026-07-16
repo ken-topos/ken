@@ -28,10 +28,11 @@ pub enum HostOpV1 {
     FsRemoveFile = 0x0307,
     FsRemoveDirectory = 0x0308,
     FsRename = 0x0309,
+    FsChangeMode = 0x030A,
 }
 
 impl HostOpV1 {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::ConsoleRead,
         Self::ConsoleWrite,
         Self::ConsoleFlush,
@@ -46,6 +47,7 @@ impl HostOpV1 {
         Self::FsRemoveFile,
         Self::FsRemoveDirectory,
         Self::FsRename,
+        Self::FsChangeMode,
     ];
 
     pub const fn availability(self) -> HostOpAvailabilityV1 {
@@ -56,6 +58,7 @@ impl HostOpV1 {
                 | Self::ConsoleIsTerminal
                 | Self::FsReadFile
                 | Self::FsWriteFile
+                | Self::FsChangeMode
         ) {
             HostOpAvailabilityV1::NativeTested
         } else {
@@ -86,6 +89,15 @@ pub const PX5_PLANNED_NATIVE_TARGETS: [HostOpV1; 5] = [
     HostOpV1::FsWriteFile,
 ];
 
+pub const NATIVE_TESTED_TARGETS_V1: [HostOpV1; 6] = [
+    HostOpV1::ConsoleWrite,
+    HostOpV1::ConsoleFlush,
+    HostOpV1::ConsoleIsTerminal,
+    HostOpV1::FsReadFile,
+    HostOpV1::FsWriteFile,
+    HostOpV1::FsChangeMode,
+];
+
 pub const HOST_EFFECT_ABI_V1_SCHEMA_VERSION: u32 = 1;
 include!(concat!(env!("OUT_DIR"), "/host_effect_abi_v1.rs"));
 
@@ -98,17 +110,19 @@ pub struct HostEffectAbiV1 {
     pub capability_token_align: u16,
     pub response_arena_lifetime_version: u16,
     pub trace_schema_version: u16,
+    pub filesystem_observation_schema_version: u16,
     pub manifest_hash: [u8; 32],
 }
 
 pub const HOST_EFFECT_ABI_V1: HostEffectAbiV1 = HostEffectAbiV1 {
     schema_version: HOST_EFFECT_ABI_V1_SCHEMA_VERSION,
     operation_count: HOST_EFFECT_ABI_V1_CATALOG.len() as u16,
-    native_tested_count: PX5_PLANNED_NATIVE_TARGETS.len() as u16,
+    native_tested_count: NATIVE_TESTED_TARGETS_V1.len() as u16,
     capability_token_size: std::mem::size_of::<CapabilityTokenV1>() as u16,
     capability_token_align: std::mem::align_of::<CapabilityTokenV1>() as u16,
     response_arena_lifetime_version: 1,
     trace_schema_version: 1,
+    filesystem_observation_schema_version: 2,
     manifest_hash: HOST_EFFECT_ABI_V1_HASH,
 };
 
@@ -202,6 +216,15 @@ pub fn host_effect_wire_layout_v1(
                 checked_u32(field("create_policy")?)?,
                 bytes[0],
                 bytes[1],
+            ]
+        }
+        HostOpV1::FsChangeMode => {
+            let path = slice("path")?;
+            vec![
+                checked_u32(field("capability")?)?,
+                path[0],
+                path[1],
+                checked_u32(field("mode")?)?,
             ]
         }
         _ => return Err(TerminalErrorV1::OperationUnavailable(operation)),
@@ -319,6 +342,7 @@ pub struct CapabilityGrantV1 {
 
 pub const RIGHT_READ_V1: u8 = crate::RightSet::READ.bits();
 pub const RIGHT_WRITE_V1: u8 = crate::RightSet::WRITE.union(crate::RightSet::CREATE).bits();
+pub const RIGHT_CHANGE_MODE_V1: u8 = crate::RightSet::CHANGE_MODE.bits();
 
 #[derive(Clone, Debug, Default)]
 pub struct CapabilityTableV1 {
@@ -436,6 +460,14 @@ pub trait HostEffectBackendV1 {
     ) -> Result<(), FileErrorCauseV1> {
         Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
     }
+    fn fs_change_mode(
+        &mut self,
+        _grant: &CapabilityGrantV1,
+        _path: &[u8],
+        _mode: u16,
+    ) -> Result<(), FileErrorCauseV1> {
+        Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -473,6 +505,9 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             crate::AUTH_FULL,
         )),
         HostOpV1::FsRename => Some((crate::FsCapabilityOperation::RenameSource, crate::AUTH_FULL)),
+        HostOpV1::FsChangeMode => {
+            Some((crate::FsCapabilityOperation::ChangeMode, crate::AUTH_FULL))
+        }
         _ => None,
     };
     let grant = match (required, capability) {
@@ -574,6 +609,10 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             .fs_rename(grant.expect("validated FS capability"), source, destination)
             .map(|()| CanonicalReplyV1::Unit)
             .map_err(|cause| file_error(operation, source, cause)),
+        (HostOpV1::FsChangeMode, CanonicalRequestV1::FsChangeMode { path, mode }) => backend
+            .fs_change_mode(grant.expect("validated FS capability"), path, *mode)
+            .map(|()| CanonicalReplyV1::Unit)
+            .map_err(|cause| file_error(operation, path, cause)),
         _ => return Err(TerminalErrorV1::MalformedHostAbiField),
     };
     Ok(HostDispatchReplyV1 {
@@ -608,6 +647,7 @@ fn map_capability_denial(error: crate::CapabilityDenied) -> CapabilityDeniedV1 {
                     crate::FsCapabilityOperation::RenameDestination => {
                         FsCapabilityOperationV1::RenameDestination
                     }
+                    crate::FsCapabilityOperation::ChangeMode => FsCapabilityOperationV1::ChangeMode,
                 },
                 held_rights,
             }
@@ -642,6 +682,7 @@ fn denied(
         | CanonicalRequestV1::FsRemoveFile { path }
         | CanonicalRequestV1::FsRemoveDirectory { path, .. } => path.clone(),
         CanonicalRequestV1::FsRename { source, .. } => source.clone(),
+        CanonicalRequestV1::FsChangeMode { path, .. } => path.clone(),
         _ => Vec::new(),
     };
     HostDispatchReplyV1 {
@@ -727,6 +768,10 @@ pub enum CanonicalRequestV1 {
         source: Vec<u8>,
         destination: Vec<u8>,
     },
+    FsChangeMode {
+        path: Vec<u8>,
+        mode: u16,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -741,6 +786,7 @@ pub enum FsCapabilityOperationV1 {
     RemoveDirectory,
     RenameSource,
     RenameDestination,
+    ChangeMode,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -860,6 +906,7 @@ pub struct FsNodeObservationV1 {
     pub kind: FsNodeKindV1,
     pub file_bytes: Option<Vec<u8>>,
     pub symlink_target: Option<Vec<u8>>,
+    pub mode: Option<u16>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1022,10 +1069,19 @@ mod tests {
             self.0.push(HostOpV1::FsRename);
             Ok(())
         }
+        fn fs_change_mode(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+            _: u16,
+        ) -> Result<(), FileErrorCauseV1> {
+            self.0.push(HostOpV1::FsChangeMode);
+            Ok(())
+        }
     }
 
     #[test]
-    fn all_fourteen_operations_share_one_semantic_dispatch() {
+    fn all_fifteen_operations_share_one_semantic_dispatch() {
         let mut capabilities = CapabilityTableV1::default();
         let token = capabilities.insert(CapabilityGrantV1 {
             identity: CapabilityTraceIdentity("test:all".to_string()),
@@ -1128,6 +1184,13 @@ mod tests {
                     destination: b"b".to_vec(),
                 },
             ),
+            (
+                HostOpV1::FsChangeMode,
+                CanonicalRequestV1::FsChangeMode {
+                    path: b"a".to_vec(),
+                    mode: 0o640,
+                },
+            ),
         ];
         let mut backend = AllOpsBackend::default();
         for (operation, request) in requests {
@@ -1140,13 +1203,13 @@ mod tests {
 
     #[test]
     fn catalog_is_closed_and_availability_is_exact() {
-        assert_eq!(HostOpV1::ALL.len(), 14);
+        assert_eq!(HostOpV1::ALL.len(), 15);
         assert_eq!(
             HostOpV1::ALL
                 .into_iter()
                 .filter(|operation| operation.availability() == HostOpAvailabilityV1::NativeTested)
                 .collect::<Vec<_>>(),
-            PX5_PLANNED_NATIVE_TARGETS
+            NATIVE_TESTED_TARGETS_V1
         );
         assert_eq!(
             PX5_PLANNED_NATIVE_TARGETS,
@@ -1259,6 +1322,9 @@ mod tests {
         for needle in [
             "ConsoleWrite|0102|native|ConsoleWriteRequestV1|2|HostReplyV1|1",
             "FsRename|0309|unavailable|FsRenameRequestV1|3|HostReplyV1|1",
+            "FsChangeMode|030a|native|FsChangeModeRequestV1|3|HostReplyV1|1",
+            "lifetime=filesystem_observation_schema|2",
+            "layout=OFFSET_FsChangeModeRequestV1_mode|24",
             "layout=SIZE_HostReplyV1|",
             "error=io.BrokenPipe|3",
             "tag=reply.error|3",

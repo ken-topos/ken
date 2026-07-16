@@ -92,6 +92,8 @@ fn snapshot_effect_root_v1(
     ) -> Result<(), std::io::Error> {
         #[cfg(unix)]
         use std::os::unix::ffi::OsStrExt;
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt;
 
         let directory = root.join(relative);
         let mut entries = fs::read_dir(&directory)?.collect::<Result<Vec<_>, _>>()?;
@@ -125,24 +127,34 @@ fn snapshot_effect_root_v1(
                     kind: ken_host::FsNodeKindV1::Symlink,
                     file_bytes: None,
                     symlink_target: Some(target),
+                    mode: None,
                 }
             } else if metadata.is_dir() {
                 ken_host::FsNodeObservationV1 {
                     kind: ken_host::FsNodeKindV1::Directory,
                     file_bytes: None,
                     symlink_target: None,
+                    #[cfg(unix)]
+                    mode: Some((metadata.mode() & 0o7777) as u16),
+                    #[cfg(not(unix))]
+                    mode: None,
                 }
             } else if metadata.is_file() {
                 ken_host::FsNodeObservationV1 {
                     kind: ken_host::FsNodeKindV1::File,
                     file_bytes: Some(fs::read(&path)?),
                     symlink_target: None,
+                    #[cfg(unix)]
+                    mode: Some((metadata.mode() & 0o7777) as u16),
+                    #[cfg(not(unix))]
+                    mode: None,
                 }
             } else {
                 ken_host::FsNodeObservationV1 {
                     kind: ken_host::FsNodeKindV1::Other,
                     file_bytes: None,
                     symlink_target: None,
+                    mode: None,
                 }
             };
             output.insert(key, node);

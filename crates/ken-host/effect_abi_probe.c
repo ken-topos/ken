@@ -22,6 +22,7 @@ struct FsAppendFileRequestV1 { uint64_t capability; struct SliceV1 path; struct 
 struct FsPathRequestV1 { uint64_t capability; struct SliceV1 path; };
 struct FsRecursivePathRequestV1 { uint64_t capability; uint64_t recursive; struct SliceV1 path; };
 struct FsRenameRequestV1 { uint64_t capability; struct SliceV1 source; struct SliceV1 destination; };
+struct FsChangeModeRequestV1 { uint64_t capability; struct SliceV1 path; uint16_t mode; };
 struct HostReplyV1 { uint64_t tag; uint64_t detail; struct SliceV1 bytes; };
 
 #define FACT_SIZE(T) printf("SIZE_%s=%zu\n", #T, sizeof(struct T))
@@ -44,6 +45,7 @@ int main(void) {
     FACT_SIZE(FsPathRequestV1); FACT_ALIGN(FsPathRequestV1); FACT_OFFSET(FsPathRequestV1, capability); FACT_OFFSET(FsPathRequestV1, path);
     FACT_SIZE(FsRecursivePathRequestV1); FACT_ALIGN(FsRecursivePathRequestV1); FACT_OFFSET(FsRecursivePathRequestV1, capability); FACT_OFFSET(FsRecursivePathRequestV1, recursive); FACT_OFFSET(FsRecursivePathRequestV1, path);
     FACT_SIZE(FsRenameRequestV1); FACT_ALIGN(FsRenameRequestV1); FACT_OFFSET(FsRenameRequestV1, capability); FACT_OFFSET(FsRenameRequestV1, source); FACT_OFFSET(FsRenameRequestV1, destination);
+    FACT_SIZE(FsChangeModeRequestV1); FACT_ALIGN(FsChangeModeRequestV1); FACT_OFFSET(FsChangeModeRequestV1, capability); FACT_OFFSET(FsChangeModeRequestV1, path); FACT_OFFSET(FsChangeModeRequestV1, mode);
     FACT_SIZE(HostReplyV1); FACT_ALIGN(HostReplyV1); FACT_OFFSET(HostReplyV1, tag); FACT_OFFSET(HostReplyV1, detail); FACT_OFFSET(HostReplyV1, bytes);
     return 0;
 }
