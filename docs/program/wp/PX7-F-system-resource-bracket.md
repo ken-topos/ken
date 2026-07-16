@@ -101,7 +101,7 @@ combinators, and optional early `release`; the delayed-`body` acquisition →
 settlement sequencing over PX7-R's `FsOpen`/handle-metadata/`ResourceRelease`;
 the controlled-trap settlement path (trap reaches the runtime as a controlled
 terminal outcome); the surface `Closed` / `MalformedResource` /
-`ResourceKindMismatch` / `ReleaseFailed` result shapes lifted from PX7-R; the
+`RightNotHeld` / `ReleaseFailed` result shapes lifted from PX7-R; the
 generated `ResourceLifetimeObligationV1` delegated T-obligation emitted into
 `export.rs` (per the pinned Spec schema) whenever `Σ` reaches a resource
 acquisition; the trap-primary + ordered-cleanup-failure secondary observation
@@ -118,7 +118,7 @@ affine/linear type; a new capability family or `RightSet` bit; any kernel change
 1. **`System.Resource` module surface.** The first `System.*` module: opaque
    `Resource k` (no Ken constructor; minted only via `withResource`), the bracket
    result/error type carrying the lifted `Closed` / `MalformedResource` /
-   `ResourceKindMismatch` / `ReleaseFailed` identities, `withResource`, the
+   `RightNotHeld` / `ReleaseFailed` identities, `withResource`, the
    handle-metadata use combinator (over PX7-R's real consumer), and optional
    early `release`. No declaration-grammar change.
 2. **`withResource acquire body` sequencing.** `body` is a delayed function.
@@ -202,6 +202,12 @@ affine/linear type; a new capability family or `RightSet` bit; any kernel change
 - Do NOT export raw acquire; `withResource` is the sole public route.
 - Do NOT add a `program capabilities Resource` family, spend a `RightSet` bit,
   or broaden the FS-only declaration grammar.
+- Do NOT surface a `ResourceKindMismatch` identity — PX7-R fixed V1 as
+  **single-kind** (`ResourceKindV1::FsHandle`) and ADR-0021 / the PX7-R frame
+  **defer** the mismatch identity to the first WP that adds a second production
+  resource kind. Lift only the reachable V1 roster from `ResourceErrorV1`:
+  `{ Closed, MalformedResource, RightNotHeld, ReleaseFailed }` (grounded at
+  `crates/ken-host/src/effect_v1.rs:465`).
 - Do NOT accept an aborting trap as a settlement path; the controlled trap is the
   guaranteed one. Do NOT claim external process destruction is covered.
 - Do NOT emit the two-atom `Pred::Event("acquire")`/`"release"` form as the
