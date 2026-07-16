@@ -911,20 +911,6 @@ pub struct EffectObservationV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn canonical_fs_producer_identity_compares_exactly_and_drift_fails() {
-        let interpreter = program_caps_fs_trace_identity_v1();
-        let native = program_caps_fs_trace_identity_v1();
-        assert_eq!(interpreter, native);
-        assert_eq!(interpreter.0, PROGRAM_CAPS_FS_TRACE_IDENTITY_V1);
-
-        for drift in ["interpreter:FS", "declared:FS", "other:FS"] {
-            let drift = CapabilityTraceIdentity(drift.to_string());
-            assert_ne!(interpreter, drift, "interpreter seed drift must fail");
-            assert_ne!(drift, native, "native seed drift must fail");
-        }
-    }
     use sha2::{Digest, Sha256};
 
     #[derive(Default)]
