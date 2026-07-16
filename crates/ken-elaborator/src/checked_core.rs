@@ -312,6 +312,9 @@ pub struct CheckedCoreMatchView {
     pub indices: Vec<Vec<u8>>,
     pub scrutinee: Box<CheckedCoreBodyTerm>,
     pub branches: Vec<CheckedCoreMatchBranchView>,
+    /// The eliminator motive is classified in `Type`, so recursive induction
+    /// hypotheses are computational runtime values rather than erased proofs.
+    pub computational_recursive_hypotheses: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3999,7 +4002,8 @@ fn decode_supported_match_view(
     }
 
     let motive = capture_canonical_term(cursor).map_err(|reason| malformed_body(owner, reason))?;
-    validate_supported_match_motive(semantic, owner, &family_symbol, data, &motive)?;
+    let computational_recursive_hypotheses =
+        validate_supported_match_motive(semantic, owner, &family_symbol, data, &motive)?;
 
     let method_count = cursor
         .read_len()
@@ -4066,6 +4070,7 @@ fn decode_supported_match_view(
         indices,
         scrutinee,
         branches,
+        computational_recursive_hypotheses,
     }))
 }
 
@@ -4135,7 +4140,7 @@ fn validate_supported_match_motive(
     family: &StableSymbol,
     data: &DataMetadata,
     motive: &[u8],
-) -> Result<(), CheckedCoreBodyViewError> {
+) -> Result<bool, CheckedCoreBodyViewError> {
     if data.index_count != 0 {
         return Err(CheckedCoreBodyViewError::UnsupportedDependentMotive {
             symbol: owner.clone(),
@@ -4143,14 +4148,14 @@ fn validate_supported_match_motive(
         });
     }
     match inspect_non_dependent_motive(motive).map_err(|reason| malformed_body(owner, reason))? {
-        MotiveShape::ConstantType => Ok(()),
+        MotiveShape::ConstantType => Ok(true),
         MotiveShape::Dependent
             if semantic
                 .metadata
                 .values()
                 .any(|bytes| bytes.starts_with(b"HostEffectSpineV1\0")) =>
         {
-            Ok(())
+            Ok(true)
         }
         MotiveShape::Dependent => Err(CheckedCoreBodyViewError::UnsupportedDependentMotive {
             symbol: owner.clone(),

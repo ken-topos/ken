@@ -698,6 +698,19 @@ fn collect_runtime_support_for_expr(
             }
             Ok(())
         }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases,
+            default,
+        } => {
+            shapes.insert(PlatformRuntimeShape::PatternMatch);
+            collect_runtime_support_for_expr(program, scrutinee, shapes, visiting)?;
+            collect_runtime_support_for_trap(default, shapes);
+            for case in cases {
+                collect_runtime_support_for_expr(program, &case.body, shapes, visiting)?;
+            }
+            Ok(())
+        }
         RuntimeExpr::Record { fields } => {
             shapes.insert(PlatformRuntimeShape::Record);
             for (_, value) in fields {
@@ -711,6 +724,13 @@ fn collect_runtime_support_for_expr(
         }
         RuntimeExpr::Closure { body, .. } => {
             shapes.insert(PlatformRuntimeShape::Closure);
+            collect_runtime_support_for_expr(program, body, shapes, visiting)
+        }
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            shapes.insert(PlatformRuntimeShape::Closure);
+            for capture in captures {
+                collect_runtime_support_for_expr(program, capture, shapes, visiting)?;
+            }
             collect_runtime_support_for_expr(program, body, shapes, visiting)
         }
         RuntimeExpr::DeclarationRef { symbol } => {

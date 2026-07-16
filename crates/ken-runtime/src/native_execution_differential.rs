@@ -2390,6 +2390,14 @@ fn runtime_expr_host_ops(expr: &RuntimeExpr, operations: &mut BTreeSet<ken_host:
                 runtime_expr_host_ops(&case.body, operations);
             }
         }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            runtime_expr_host_ops(scrutinee, operations);
+            for case in cases {
+                runtime_expr_host_ops(&case.body, operations);
+            }
+        }
         RuntimeExpr::Record { fields } => {
             for (_, value) in fields {
                 runtime_expr_host_ops(value, operations);
@@ -2397,6 +2405,12 @@ fn runtime_expr_host_ops(expr: &RuntimeExpr, operations: &mut BTreeSet<ken_host:
         }
         RuntimeExpr::Project { record, .. } => runtime_expr_host_ops(record, operations),
         RuntimeExpr::Closure { body, .. } => runtime_expr_host_ops(body, operations),
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            for capture in captures {
+                runtime_expr_host_ops(capture, operations);
+            }
+            runtime_expr_host_ops(body, operations);
+        }
         RuntimeExpr::Value(_)
         | RuntimeExpr::Var(_)
         | RuntimeExpr::DeclarationRef { .. }

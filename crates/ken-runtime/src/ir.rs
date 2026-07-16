@@ -359,6 +359,14 @@ pub enum RuntimeExpr {
         cases: Vec<RuntimeMatchCase>,
         default: RuntimeTrap,
     },
+    /// A computational eliminator whose recursive hypotheses are runtime
+    /// values.  Each recursive constructor field produces one lazily-applied
+    /// recursive hypothesis before the branch body runs.
+    ComputationalMatch {
+        scrutinee: Box<RuntimeExpr>,
+        cases: Vec<RuntimeComputationalMatchCase>,
+        default: RuntimeTrap,
+    },
     Record {
         fields: Vec<(String, RuntimeExpr)>,
     },
@@ -368,6 +376,13 @@ pub enum RuntimeExpr {
     },
     Closure {
         captures: Vec<RuntimeSymbol>,
+        params: Vec<String>,
+        body: Box<RuntimeExpr>,
+    },
+    /// An ordinary lexical closure.  Capture expressions are evaluated in the
+    /// closure-creation environment and precede no implicit/dynamic bindings.
+    LexicalClosure {
+        captures: Vec<RuntimeExpr>,
         params: Vec<String>,
         body: Box<RuntimeExpr>,
     },
@@ -396,6 +411,14 @@ pub enum RuntimeExpr {
 pub struct RuntimeMatchCase {
     pub constructor: RuntimeSymbol,
     pub binders: usize,
+    pub body: RuntimeExpr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeComputationalMatchCase {
+    pub constructor: RuntimeSymbol,
+    pub argument_binders: usize,
+    pub recursive_positions: Vec<usize>,
     pub body: RuntimeExpr,
 }
 

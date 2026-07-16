@@ -909,6 +909,15 @@ fn reject_runtime_expr_blockers(
             }
             Ok(())
         }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            reject_runtime_expr_blockers(program, scrutinee)?;
+            for case in cases {
+                reject_runtime_expr_blockers(program, &case.body)?;
+            }
+            Ok(())
+        }
         RuntimeExpr::Record { fields } => {
             for (_, value) in fields {
                 reject_runtime_expr_blockers(program, value)?;
@@ -917,6 +926,12 @@ fn reject_runtime_expr_blockers(
         }
         RuntimeExpr::Project { record, .. } => reject_runtime_expr_blockers(program, record),
         RuntimeExpr::Closure { body, .. } => reject_runtime_expr_blockers(program, body),
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            for capture in captures {
+                reject_runtime_expr_blockers(program, capture)?;
+            }
+            reject_runtime_expr_blockers(program, body)
+        }
         RuntimeExpr::DeclarationRef { symbol } => {
             require_referenced_symbol_supported(program, "DeclarationRef", symbol)?;
             if !program
@@ -1005,11 +1020,22 @@ fn runtime_expr_contains_effect(expr: &RuntimeExpr) -> bool {
                     .iter()
                     .any(|case| runtime_expr_contains_effect(&case.body))
         }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            runtime_expr_contains_effect(scrutinee)
+                || cases
+                    .iter()
+                    .any(|case| runtime_expr_contains_effect(&case.body))
+        }
         RuntimeExpr::Record { fields } => fields
             .iter()
             .any(|(_, value)| runtime_expr_contains_effect(value)),
         RuntimeExpr::Project { record, .. } => runtime_expr_contains_effect(record),
         RuntimeExpr::Closure { body, .. } => runtime_expr_contains_effect(body),
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            captures.iter().any(runtime_expr_contains_effect) || runtime_expr_contains_effect(body)
+        }
         RuntimeExpr::DeclarationRef { .. } | RuntimeExpr::ImportedDeclarationRef { .. } => false,
         RuntimeExpr::Call { callee, args } => {
             runtime_expr_contains_effect(callee) || args.iter().any(runtime_expr_contains_effect)
@@ -1207,6 +1233,10 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
                 case_env.extend_from_slice(env);
                 self.eval_expr(&case.body, &case_env)
             }
+            RuntimeExpr::ComputationalMatch { .. } => Err(eval_unsupported(
+                "ComputationalMatch",
+                "computational recursive hypotheses are native-process lowering only",
+            )),
             RuntimeExpr::Record { fields } => {
                 let fields = match self.eval_record_fields(fields, env)? {
                     Ok(fields) => fields,
@@ -1240,6 +1270,21 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
                     .iter()
                     .map(|symbol| self.eval_seed_capture(symbol))
                     .collect::<Result<Vec<_>, _>>()?;
+                Ok(RuntimeIrOutcome::Value(EvaluatedValue::Closure {
+                    captures,
+                    params: params.clone(),
+                    body: (**body).clone(),
+                }))
+            }
+            RuntimeExpr::LexicalClosure {
+                captures,
+                params,
+                body,
+            } => {
+                let captures = match self.eval_value_args(captures, env)? {
+                    Ok(captures) => captures,
+                    Err(trap) => return Ok(RuntimeIrOutcome::Trap(trap)),
+                };
                 Ok(RuntimeIrOutcome::Value(EvaluatedValue::Closure {
                     captures,
                     params: params.clone(),

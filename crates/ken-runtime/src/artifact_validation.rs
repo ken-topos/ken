@@ -739,9 +739,17 @@ fn validate_runtime_expr(
             Err(unsupported_runtime_expr_error("Construct", fact_subject))
         }
         RuntimeExpr::Match { .. } => Err(unsupported_runtime_expr_error("Match", fact_subject)),
+        RuntimeExpr::ComputationalMatch { .. } => Err(unsupported_runtime_expr_error(
+            "ComputationalMatch",
+            fact_subject,
+        )),
         RuntimeExpr::Record { .. } => Err(unsupported_runtime_expr_error("Record", fact_subject)),
         RuntimeExpr::Project { .. } => Err(unsupported_runtime_expr_error("Project", fact_subject)),
         RuntimeExpr::Closure { .. } => Err(unsupported_runtime_expr_error("Closure", fact_subject)),
+        RuntimeExpr::LexicalClosure { .. } => Err(unsupported_runtime_expr_error(
+            "LexicalClosure",
+            fact_subject,
+        )),
         RuntimeExpr::DeclarationRef { .. } => Err(unsupported_runtime_expr_error(
             "DeclarationRef",
             fact_subject,
