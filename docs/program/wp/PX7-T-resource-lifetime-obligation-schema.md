@@ -35,6 +35,21 @@ A new delegated T-body schema **`ResourceLifetimeObligationV1`**:
    `Pred::Event`s). Correlation keys on the lifetime identity — **not**
    fd/slot/inode — mirroring Runtime's lane-independent `ResourceTraceIdentityV1`
    (acquisition-order identity, landed in PX7-R `crates/ken-host`).
+   The locked, canonical descriptor is:
+
+   ```text
+   ResourceLifetimeCorrelationV1 {
+     identity_type: ResourceTraceIdentityV1,
+     event_field: EffectEventV1.resource,
+     bind_at: Successful(FsOpen),
+     require_same_at: [FsHandleMetadata, ResourceRelease],
+   }
+   ```
+
+   The target-level `T` entry hashes this descriptor, not a runtime identity
+   value. A successful `FsOpen` binds `r` only when Ward evaluates the monitor;
+   the two named later operations must carry that same `r` in
+   `EffectEventV1.resource`.
 2. **Status = `delegated`** — Ken does not discharge it; **Ward attests** the four
    lifecycle properties. The schema carries a **Ward monitor template** (the
    attestation shape Ward consumes). Attestation-only: Ken emits, Ward checks.
@@ -70,13 +85,18 @@ A new delegated T-body schema **`ResourceLifetimeObligationV1`**:
 ## Acceptance criteria
 
 - **AC1** — `ResourceLifetimeObligationV1` is defined in `spec/` with a locked
-  field set covering the acquire/use/settle op set + identity-correlation policy
-  + the Ward monitor template, status `delegated`, content-hashed with `T`.
+  field set covering the acquire/use/settle op set + the explicit canonical
+  `ResourceLifetimeCorrelationV1` binder descriptor + the Ward monitor template,
+  status `delegated`, content-hashed with `T`. Every descriptor field is in the
+  hash input; a runtime identity value is not.
 - **AC2** — the schema structurally encodes **one correlated** obligation
-  (acquisition identity correlated to settlement), demonstrably not two
-  independent `Pred::Event`s.
+  (`EffectEventV1.resource` bound at successful `FsOpen`, then required equal at
+  `FsHandleMetadata` and `ResourceRelease`), demonstrably not two independent
+  `Pred::Event`s.
 - **AC3** — a conformance route validates a conforming obligation and rejects a
-  malformed / uncorrelated one (a real negative control, not vacuous).
+  malformed / uncorrelated one (a real negative control, not vacuous). The
+  discriminating pair holds every other field fixed and varies only the
+  canonical descriptor versus independent atoms.
 - **AC4** — no change to existing `TemporalObligation` emission/semantics; the new
   schema is purely additive and supersedes only for the correlation case.
 - **AC5** — the op set matches PX7-R's landed V1 inventory exactly (no ops PX7-R

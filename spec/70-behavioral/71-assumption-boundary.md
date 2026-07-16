@@ -176,7 +176,12 @@ ResourceLifetimeObligationV1 {
   body_kind: ResourceLifetimeObligationV1,
   obligation_id: String,
   status: delegated,
-  identity_key: ResourceTraceIdentityV1,
+  correlation: ResourceLifetimeCorrelationV1 {
+    identity_type: ResourceTraceIdentityV1,
+    event_field: EffectEventV1.resource,
+    bind_at: Successful(FsOpen),
+    require_same_at: [FsHandleMetadata, ResourceRelease],
+  },
   acquire_op: FsOpen,
   use_op: FsHandleMetadata,
   settle_op: ResourceRelease,
@@ -194,10 +199,14 @@ This is one obligation template over all resource lifetimes in the target, not
 one unrelated obligation per operation and not one static entry per dynamically
 minted handle. On each successful `FsOpen`, the monitor binds the event's
 `ResourceTraceIdentityV1` as `r`. A matching use or settlement is an event whose
-resource identity is the same `r`. The key is the lane-independent,
-acquisition-order identity carried by canonical resource observations; an fd,
-resource-table slot or generation, pointer, inode, or executor identity is
-neither a valid key nor a permitted fallback.
+`EffectEventV1.resource` field carries the same `r`. The serialized obligation
+contains the correlation descriptor above, not a runtime value for `r`:
+`bind_at` selects the successful acquisition event, and `require_same_at`
+selects every operation whose event field must equal the bound value. The
+identity type is the lane-independent, acquisition-order identity carried by
+canonical resource observations; an fd, resource-table slot or generation,
+pointer, inode, or executor identity is neither a valid key nor a permitted
+fallback.
 
 The V1 operation inventory is closed and exact:
 
@@ -225,10 +234,12 @@ result, but no result is ingested as a Ken proof (§5.1).
 The emitter produces exactly one `ResourceLifetimeObligationV1` entry when the
 target's reachable `Σ` contains `FsOpen`, and none when it does not. Its
 canonical `T` representation includes a body discriminator and every field
-above, including the correlation key, exact operation inventory, status, and
-monitor template. Those bytes participate in the export hash of §3.3; changing
-any field changes that hash. There is no out-of-band resource-obligation field
-or independently hashed side channel.
+above, including every field of the canonical correlation descriptor, the exact
+operation inventory, status, and monitor template. The runtime value bound as
+`r` is not part of the target-level export. The descriptor bytes participate in
+the export hash of §3.3; changing any descriptor field changes that hash. There
+is no out-of-band resource-obligation field or independently hashed side
+channel.
 
 This extension is additive. Existing `TEntry { obligation_id, formula:
 Temporal }` values, `TemporalObligation`, their serialization, and their hash
@@ -238,9 +249,11 @@ required; every other temporal obligation continues to use the existing path.
 
 The locked invariants are:
 
-- **RL1 — one correlation binder.** Acquisition binds one
-  `ResourceTraceIdentityV1`; use and settlement compare against that same
-  binding. Removing the key or supplying independent keys is malformed.
+- **RL1 — one canonical correlation binder.** The descriptor binds
+  `EffectEventV1.resource : ResourceTraceIdentityV1` at successful `FsOpen` and
+  requires the same value at `FsHandleMetadata` and `ResourceRelease`.
+  Removing or altering a descriptor field, serializing a runtime `r`, or
+  supplying independent event atoms is malformed.
 - **RL2 — exact V1 alphabet.** The resource-operation set is exactly
   `{FsOpen, FsHandleMetadata, ResourceRelease}`, and each is a member of the
   target's `Σ` (I3). An additional or substituted operation is malformed.
