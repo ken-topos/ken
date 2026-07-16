@@ -193,8 +193,7 @@ mod tests {
             ),
         });
         (
-            KenNativeInvocationV1::initialize(bindings, MockHost::default(), capabilities)
-                .unwrap(),
+            KenNativeInvocationV1::initialize(bindings, MockHost::default(), capabilities).unwrap(),
             token,
         )
     }
