@@ -31,6 +31,9 @@ struct ProcessPostureV1(());
 pub struct EffectiveUidSnapshotV1(u32);
 
 impl EffectiveUidSnapshotV1 {
+    pub(crate) const fn raw(self) -> u32 {
+        self.0
+    }
     pub fn is_root(self) -> bool {
         self.0 == 0
     }
@@ -495,6 +498,7 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     let fs_root_spec = match fs_root_tag {
         0 => FsRootSpec::Absolute(fs_root.to_vec()),
         1 => FsRootSpec::ExecutionStartCwd(fs_root.to_vec()),
+        2 => FsRootSpec::EffectiveUserHome(fs_root.to_vec()),
         _ => return -1,
     };
     let Some(authority) = authority(authority_tag) else {
@@ -536,13 +540,15 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     let Some(observation_path) = (unsafe { borrowed_slice(&observation_path) }) else {
         return -1;
     };
+    let effective_uid = observe_effective_uid_v1();
     let posture =
-        match establish_process_posture_v1(observe_effective_uid_v1(), allow_root_execution != 0) {
+        match establish_process_posture_v1(effective_uid, allow_root_execution != 0) {
             Err(PostureErrorV1::RootExecutionDenied) => {
                 if write_startup_terminal_observation_v1(
                     observation_path,
                     plan_hash,
                     root_denied_exit_status,
+                    crate::TerminalErrorV1::RootExecutionDenied,
                 )
                 .is_err()
                 {
@@ -552,15 +558,30 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
             }
             other => other,
         };
-    let Some(context) = initialize_process_context(
+    let context = match initialize_process_context(
         root_path,
         fs_root_spec,
         authority,
         plan_hash,
         observation_path,
         posture,
-    ) else {
-        return -1;
+        effective_uid.ok(),
+    ) {
+        Ok(context) => context,
+        Err(ProcessContextInitError::Home(failure)) => {
+            if write_startup_terminal_observation_v1(
+                observation_path,
+                plan_hash,
+                root_denied_exit_status,
+                crate::TerminalErrorV1::HomeRootResolutionFailed(failure),
+            )
+            .is_err()
+            {
+                return -1;
+            }
+            return 1;
+        }
+        Err(ProcessContextInitError::Ordinary) => return -1,
     };
     let capability = context.capability.erased_identity();
     let context = Box::into_raw(context).cast();
@@ -581,19 +602,25 @@ fn initialize_process_context(
     plan_hash: u64,
     observation_path: &[u8],
     posture: Result<ProcessPostureV1, PostureErrorV1>,
-) -> Option<Box<ProcessContext>> {
-    let posture = posture.ok()?;
+    effective_uid: Option<EffectiveUidSnapshotV1>,
+) -> Result<Box<ProcessContext>, ProcessContextInitError> {
+    let posture = posture.map_err(|_| ProcessContextInitError::Ordinary)?;
     let Ok(cwd_root) = crate::open_root(&execution_start_cwd) else {
-        return None;
+        return Err(ProcessContextInitError::Ordinary);
     };
-    let Ok(scope) = crate::resolve_fs_root_spec_v1(
+    let scope = crate::resolve_fs_root_spec_v1(
         &fs_root_spec,
         &cwd_root,
+        effective_uid.ok_or(ProcessContextInitError::Ordinary)?,
         crate::rights_for_authority(authority),
         SymlinkPolicy::NoFollow,
-    ) else {
-        return None;
-    };
+    )
+    .map_err(|error| match error {
+        crate::FsRootResolveError::HomeRootResolution(failure) => {
+            ProcessContextInitError::Home(failure)
+        }
+        _ => ProcessContextInitError::Ordinary,
+    })?;
     let cap = Cap::mint_scoped(authority, "FS", scope);
     let mut capabilities = CapabilityTableV1::default();
     let capability = capabilities.insert(CapabilityGrantV1 {
@@ -616,10 +643,10 @@ fn initialize_process_context(
                 .truncate(true)
                 .write(true)
                 .open(path)
-                .ok()?,
+                .map_err(|_| ProcessContextInitError::Ordinary)?,
         )
     };
-    Some(Box::new(ProcessContext {
+    Ok(Box::new(ProcessContext {
         _posture: posture,
         host: ProcessHost,
         capabilities,
@@ -631,10 +658,17 @@ fn initialize_process_context(
     }))
 }
 
+#[derive(Debug)]
+enum ProcessContextInitError {
+    Ordinary,
+    Home(crate::HomeRootResolutionFailureV1),
+}
+
 fn write_startup_terminal_observation_v1(
     observation_path: &[u8],
     plan_hash: u64,
     exit_status: i64,
+    terminal_error: crate::TerminalErrorV1,
 ) -> io::Result<()> {
     if observation_path.is_empty() {
         return Ok(());
@@ -659,7 +693,7 @@ fn write_startup_terminal_observation_v1(
         target_abi_hash: crate::TARGET_ABI_MANIFEST_HASH,
         host_effect_abi_hash: crate::HOST_EFFECT_ABI_V1_HASH,
         terminal_value: exit_status,
-        terminal_error: Some(crate::TerminalErrorV1::RootExecutionDenied),
+        terminal_error: Some(terminal_error),
         effect_trace: Vec::new(),
     })
     .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
@@ -1182,9 +1216,10 @@ mod tests {
                 AUTH_FULL,
                 1,
                 &[],
-                Err(PostureErrorV1::HostPostureUnavailable)
+                Err(PostureErrorV1::HostPostureUnavailable),
+                Some(EffectiveUidSnapshotV1::scripted(1000)),
             )
-            .is_none()
+            .is_err()
         );
     }
 
@@ -1210,7 +1245,13 @@ mod tests {
 
         let path =
             std::env::temp_dir().join(format!("ken-px14-root-denied-{}", std::process::id()));
-        write_startup_terminal_observation_v1(path.as_os_str().as_bytes(), 17, 1).unwrap();
+        write_startup_terminal_observation_v1(
+            path.as_os_str().as_bytes(),
+            17,
+            1,
+            crate::TerminalErrorV1::RootExecutionDenied,
+        )
+        .unwrap();
         let trace = crate::decode_linked_effect_trace_v1(&std::fs::read(&path).unwrap()).unwrap();
         let _ = std::fs::remove_file(path);
         assert_eq!(trace.plan_hash, 17);

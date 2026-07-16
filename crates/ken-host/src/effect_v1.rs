@@ -944,6 +944,7 @@ pub enum TerminalErrorV1 {
     RuntimeTrap(u16),
     DriverFailure,
     RootExecutionDenied,
+    HomeRootResolutionFailed(crate::HomeRootResolutionFailureV1),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 mod abi_v1;
+mod account_db_v1;
 pub mod capability;
 mod effect_v1;
 mod effect_wire_v1;
@@ -463,6 +464,7 @@ pub fn open_root(path: &RootPath) -> HostResult<RootedHandle> {
 pub enum FsRootResolveError {
     ScopeEscape,
     SymlinkDenied,
+    HomeRootResolution(HomeRootResolutionFailureV1),
     Io(io::Error),
 }
 
@@ -480,8 +482,27 @@ impl From<HostError> for FsRootResolveError {
 pub fn resolve_fs_root_spec_v1(
     spec: &FsRootSpec,
     execution_start_cwd: &RootedHandle,
+    effective_uid: EffectiveUidSnapshotV1,
     rights: RightSet,
     symlink: SymlinkPolicy,
+) -> Result<FsScope, FsRootResolveError> {
+    resolve_fs_root_spec_with_lookup_v1(
+        spec,
+        execution_start_cwd,
+        effective_uid,
+        rights,
+        symlink,
+        &account_db_v1::LibcAccountHomeLookupV1,
+    )
+}
+
+fn resolve_fs_root_spec_with_lookup_v1(
+    spec: &FsRootSpec,
+    execution_start_cwd: &RootedHandle,
+    effective_uid: EffectiveUidSnapshotV1,
+    rights: RightSet,
+    symlink: SymlinkPolicy,
+    home_lookup: &impl account_db_v1::AccountHomeLookupV1,
 ) -> Result<FsScope, FsRootResolveError> {
     #[cfg(target_os = "linux")]
     {
@@ -495,6 +516,24 @@ pub fn resolve_fs_root_spec_v1(
             FsRootSpec::ExecutionStartCwd(suffix) => {
                 (execution_start_cwd.clone(), suffix.as_slice())
             }
+            FsRootSpec::EffectiveUserHome(suffix) => {
+                use std::os::unix::ffi::OsStringExt;
+                let home = home_lookup
+                    .resolve_effective_user_home(effective_uid)
+                    .map_err(FsRootResolveError::HomeRootResolution)?;
+                let path = PathBuf::from(std::ffi::OsString::from_vec(home));
+                let path = RootPath::new(path).map_err(|_| {
+                    FsRootResolveError::HomeRootResolution(
+                        HomeRootResolutionFailureV1::RootOpen,
+                    )
+                })?;
+                let handle = open_root(&path).map_err(|_| {
+                    FsRootResolveError::HomeRootResolution(
+                        HomeRootResolutionFailureV1::RootOpen,
+                    )
+                })?;
+                (handle, suffix.as_slice())
+            }
         };
         let root_metadata = metadata(&handle)?;
         let mut lineage = vec![FsIdentity::Posix {
@@ -506,14 +545,26 @@ pub fn resolve_fs_root_spec_v1(
                 continue;
             }
             if component == b".." {
-                return Err(FsRootResolveError::ScopeEscape);
+                return Err(match spec {
+                    FsRootSpec::EffectiveUserHome(_) => FsRootResolveError::HomeRootResolution(
+                        HomeRootResolutionFailureV1::ScopeEscape,
+                    ),
+                    _ => FsRootResolveError::ScopeEscape,
+                });
             }
             let component = PathComponent::new(component)?;
             match open_at(&handle, &component, OpenRequest::ReadDirectory) {
                 Ok(next) => handle = next,
                 Err(error) if readlink_at(&handle, &component).is_ok() => {
                     let _ = error;
-                    return Err(FsRootResolveError::SymlinkDenied);
+                    return Err(match spec {
+                        FsRootSpec::EffectiveUserHome(_) => {
+                            FsRootResolveError::HomeRootResolution(
+                                HomeRootResolutionFailureV1::SymlinkDenied,
+                            )
+                        }
+                        _ => FsRootResolveError::SymlinkDenied,
+                    });
                 }
                 Err(error) => return Err(error.into()),
             }
@@ -533,7 +584,7 @@ pub fn resolve_fs_root_spec_v1(
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (spec, execution_start_cwd, rights, symlink);
+        let _ = (spec, execution_start_cwd, effective_uid, rights, symlink, home_lookup);
         Err(FsRootResolveError::Io(io::Error::from(
             io::ErrorKind::Unsupported,
         )))
@@ -965,6 +1016,7 @@ mod tests {
         let scope = resolve_fs_root_spec_v1(
             &FsRootSpec::ExecutionStartCwd(b"data".to_vec()),
             &cwd,
+            EffectiveUidSnapshotV1::scripted(1000),
             RightSet::READ,
             SymlinkPolicy::NoFollow,
         )
@@ -988,6 +1040,7 @@ mod tests {
         let fresh = resolve_fs_root_spec_v1(
             &FsRootSpec::ExecutionStartCwd(b"data".to_vec()),
             &fresh_cwd,
+            EffectiveUidSnapshotV1::scripted(1000),
             RightSet::READ,
             SymlinkPolicy::NoFollow,
         )
@@ -1007,6 +1060,7 @@ mod tests {
             resolve_fs_root_spec_v1(
                 &FsRootSpec::ExecutionStartCwd(b"../escape".to_vec()),
                 &cwd,
+                EffectiveUidSnapshotV1::scripted(1000),
                 RightSet::READ,
                 SymlinkPolicy::NoFollow,
             ),
@@ -1017,6 +1071,7 @@ mod tests {
             resolve_fs_root_spec_v1(
                 &FsRootSpec::ExecutionStartCwd(b"link".to_vec()),
                 &fresh_cwd,
+                EffectiveUidSnapshotV1::scripted(1000),
                 RightSet::READ,
                 SymlinkPolicy::NoFollow,
             ),

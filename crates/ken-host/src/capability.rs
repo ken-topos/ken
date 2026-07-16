@@ -14,6 +14,7 @@ use crate::RootedHandle;
 pub enum FsRootSpec {
     Absolute(Vec<u8>),
     ExecutionStartCwd(Vec<u8>),
+    EffectiveUserHome(Vec<u8>),
 }
 
 impl Default for FsRootSpec {
@@ -24,7 +25,11 @@ impl Default for FsRootSpec {
 
 impl FsRootSpec {
     pub fn parse_declared(bytes: &[u8]) -> Option<Self> {
-        if let Some(suffix) = bytes.strip_prefix(b"./") {
+        if let Some(suffix) = bytes.strip_prefix(b"~/") {
+            Some(Self::EffectiveUserHome(suffix.to_vec()))
+        } else if bytes == b"~" {
+            Some(Self::EffectiveUserHome(Vec::new()))
+        } else if let Some(suffix) = bytes.strip_prefix(b"./") {
             Some(Self::ExecutionStartCwd(suffix.to_vec()))
         } else if bytes == b"." {
             Some(Self::ExecutionStartCwd(Vec::new()))
@@ -39,15 +44,38 @@ impl FsRootSpec {
         match self {
             Self::Absolute(_) => 0,
             Self::ExecutionStartCwd(_) => 1,
+            Self::EffectiveUserHome(_) => 2,
         }
     }
 
     pub fn bytes(&self) -> &[u8] {
         match self {
-            Self::Absolute(bytes) | Self::ExecutionStartCwd(bytes) => bytes,
+            Self::Absolute(bytes)
+            | Self::ExecutionStartCwd(bytes)
+            | Self::EffectiveUserHome(bytes) => bytes,
         }
     }
 }
+
+/// Exact startup failures while binding an effective-user home root.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HomeRootResolutionFailureV1 {
+    BufferCapacityExceeded,
+    NoEntry,
+    InvalidHomeDirectory,
+    NssError(i32),
+    RootOpen,
+    ScopeEscape,
+    SymlinkDenied,
+}
+
+impl fmt::Display for HomeRootResolutionFailureV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "effective-user home resolution failed: {self:?}")
+    }
+}
+
+impl std::error::Error for HomeRootResolutionFailureV1 {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Authority(pub u8);

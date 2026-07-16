@@ -302,6 +302,21 @@ pub fn encode_linked_effect_trace_v1(
     match &trace.terminal_error {
         None => put_u8(&mut out, 0),
         Some(crate::TerminalErrorV1::RootExecutionDenied) => put_u8(&mut out, 1),
+        Some(crate::TerminalErrorV1::HomeRootResolutionFailed(failure)) => {
+            put_u8(&mut out, 2);
+            match failure {
+                crate::HomeRootResolutionFailureV1::BufferCapacityExceeded => put_u8(&mut out, 0),
+                crate::HomeRootResolutionFailureV1::NoEntry => put_u8(&mut out, 1),
+                crate::HomeRootResolutionFailureV1::InvalidHomeDirectory => put_u8(&mut out, 2),
+                crate::HomeRootResolutionFailureV1::NssError(status) => {
+                    put_u8(&mut out, 3);
+                    put_i32(&mut out, *status);
+                }
+                crate::HomeRootResolutionFailureV1::RootOpen => put_u8(&mut out, 4),
+                crate::HomeRootResolutionFailureV1::ScopeEscape => put_u8(&mut out, 5),
+                crate::HomeRootResolutionFailureV1::SymlinkDenied => put_u8(&mut out, 6),
+            }
+        }
         Some(_) => return Err(EffectTraceWireErrorV1),
     }
     put_u64(
@@ -579,6 +594,18 @@ pub fn decode_linked_effect_trace_v1(
     let terminal_error = match cursor.u8()? {
         0 => None,
         1 => Some(crate::TerminalErrorV1::RootExecutionDenied),
+        2 => Some(crate::TerminalErrorV1::HomeRootResolutionFailed(
+            match cursor.u8()? {
+                0 => crate::HomeRootResolutionFailureV1::BufferCapacityExceeded,
+                1 => crate::HomeRootResolutionFailureV1::NoEntry,
+                2 => crate::HomeRootResolutionFailureV1::InvalidHomeDirectory,
+                3 => crate::HomeRootResolutionFailureV1::NssError(cursor.i32()?),
+                4 => crate::HomeRootResolutionFailureV1::RootOpen,
+                5 => crate::HomeRootResolutionFailureV1::ScopeEscape,
+                6 => crate::HomeRootResolutionFailureV1::SymlinkDenied,
+                _ => return Err(EffectTraceWireErrorV1),
+            },
+        )),
         _ => return Err(EffectTraceWireErrorV1),
     };
     let count = usize::try_from(cursor.u64()?).map_err(|_| EffectTraceWireErrorV1)?;

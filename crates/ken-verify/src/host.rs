@@ -186,6 +186,7 @@ impl HostHandler for ScriptedPosixHost {
         &self,
         authority: capabilities::Authority,
         root: &capabilities::FsRootSpec,
+        effective_uid: ken_host::EffectiveUidSnapshotV1,
     ) -> io::Result<Cap> {
         match &self.scoped_cap {
             Some((expected, cap))
@@ -193,7 +194,9 @@ impl HostHandler for ScriptedPosixHost {
             {
                 Ok(cap.clone())
             }
-            _ => self.inner.mint_fs_cap_for_root(authority, root),
+            _ => self
+                .inner
+                .mint_fs_cap_for_root(authority, root, effective_uid),
         }
     }
 

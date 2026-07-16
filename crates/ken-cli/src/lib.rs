@@ -172,7 +172,11 @@ fn run_program_inner<H: ken_interp::HostHandler>(
     let fs_ids = ken_interp::FSIds::from_elab(&elab_env);
     let clock_ids = ken_interp::ClockIds::from_elab(&elab_env);
     let cap = ken_interp::EvalVal::Cap(
-        host.mint_fs_cap_for_root(declared_fs.authority, &admitted.fs_root_spec)
+        host.mint_fs_cap_for_root(
+            declared_fs.authority,
+            &admitted.fs_root_spec,
+            effective_uid,
+        )
             .map_err(RunError::CapabilityRoot)?,
     );
     let mut store = build_eval_store(&elab_env);
