@@ -405,6 +405,12 @@ claim with no conformance case is a claim no one can rely on
   `Q`/`P` assertion points, and the monitor projected from `T`. An **untrusted
   one-way projection** of already-verified content + instrumentation: adds
   nothing to the trusted base, proves nothing new.
+- `behavioral/resource-lifetime/seed-resource-lifetime.md` — PX7-T's additive
+  `ResourceLifetimeObligationV1` body in the `T` channel: the exact landed
+  `FsOpen` / `FsHandleMetadata` / `ResourceRelease` inventory, one
+  `ResourceTraceIdentityV1` correlation binder, the Ward monitor template,
+  `delegated` status, content-hash participation, a conforming-vs-uncorrelated
+  verdict flip, and the unchanged ordinary-`Temporal` control.
 - `behavioral/agentic/seed-agentic.md` — B4 the agentic boundary (WS-B capstone,
   `74`): assuring an embedded agent's outputs **reduces to the existing seam**
   aimed at a maximally-nondeterministic component (agent = maximal `P`) — **no
