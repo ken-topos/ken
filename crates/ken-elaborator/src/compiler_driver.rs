@@ -1381,6 +1381,7 @@ fn checked_host_spine_v1(
             "NotDirectory",
             "NotEmpty",
             "Unsupported",
+            "Other",
         ]
         .into_iter()
         .map(resolve)

@@ -1484,6 +1484,7 @@ enum Lowered {
     },
     DynamicNullaryConstructor {
         tag: cranelift_codegen::ir::Value,
+        payload: Option<cranelift_codegen::ir::Value>,
         constructors: Vec<String>,
     },
     Bytes(Vec<u8>),
@@ -1722,12 +1723,17 @@ impl<'a> Lowering<'a> {
                         env,
                     );
                 }
-                if let Lowered::DynamicNullaryConstructor { tag, constructors } =
+                if let Lowered::DynamicNullaryConstructor {
+                    tag,
+                    payload,
+                    constructors,
+                } =
                     lowered_scrutinee
                 {
                     return self.lower_dynamic_nullary_match(
                         builder,
                         tag,
+                        payload,
                         &constructors,
                         cases,
                         env,
@@ -2032,7 +2038,8 @@ impl<'a> Lowering<'a> {
             })
         } else {
             let io_error = Lowered::DynamicNullaryConstructor {
-                tag: detail,
+                tag: builder.ins().band_imm(detail, 0xff),
+                payload: Some(builder.ins().sshr_imm(detail, 32)),
                 constructors: self.process_symbols.io_errors.clone(),
             };
             let error = if matches!(
@@ -2434,6 +2441,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         tag: cranelift_codegen::ir::Value,
+        payload: Option<cranelift_codegen::ir::Value>,
         constructors: &[String],
         cases: &[crate::RuntimeMatchCase],
         env: &[Lowered],
@@ -2457,16 +2465,27 @@ impl<'a> Lowering<'a> {
             );
             builder.ins().brif(selected, arm, &[], next, &[]);
             builder.switch_to_block(arm);
+            let expected_binders =
+                usize::from(index + 1 == constructors.len() && payload.is_some());
             let Some(case) = cases
                 .iter()
-                .find(|case| case.constructor == *constructor && case.binders == 0)
+                .find(|case| case.constructor == *constructor && case.binders == expected_binders)
             else {
                 let failure = builder.ins().iconst(types::I64, -1);
                 builder.ins().return_(&[failure]);
                 test_block = next;
                 continue;
             };
-            let lowered = self.lower_expr(builder, &case.body, env)?;
+            let mut arm_env = if expected_binders == 1 {
+                vec![Lowered::Int {
+                    value: payload.expect("one-binder dynamic constructor has a payload"),
+                    known: None,
+                }]
+            } else {
+                Vec::new()
+            };
+            arm_env.extend_from_slice(env);
+            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
             let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
             Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
             builder.ins().jump(merge, &[value.into()]);

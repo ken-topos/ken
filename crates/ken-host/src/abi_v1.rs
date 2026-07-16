@@ -76,6 +76,16 @@ struct ProcessContext {
 struct ProcessHost;
 
 impl ProcessHost {
+    fn reject_symlink(parent: &RootedHandle, leaf: &PathComponent) -> Result<(), FileErrorCauseV1> {
+        if crate::readlink_at(parent, leaf).is_ok() {
+            Err(FileErrorCauseV1::Capability(
+                crate::CapabilityDeniedV1::SymlinkDenied,
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
     fn components<'a>(path: &'a [u8]) -> Result<Vec<&'a [u8]>, FileErrorCauseV1> {
         if path.starts_with(b"/") || path.contains(&0) {
             return Err(FileErrorCauseV1::Capability(
@@ -116,14 +126,13 @@ impl ProcessHost {
         let components = Self::components(path)?;
         let mut current = Self::root(grant)?;
         for component in &components[..components.len() - 1] {
-            current = crate::open_at(
-                &current,
-                &PathComponent::new(component).map_err(host_error)?,
-                OpenRequest::ReadDirectory,
-            )
-            .map_err(host_error)?;
+            let component = PathComponent::new(component).map_err(host_error)?;
+            Self::reject_symlink(&current, &component)?;
+            current = crate::open_at(&current, &component, OpenRequest::ReadDirectory)
+                .map_err(host_error)?;
         }
         let leaf = PathComponent::new(components[components.len() - 1]).map_err(host_error)?;
+        Self::reject_symlink(&current, &leaf)?;
         Ok((current, leaf))
     }
 }
@@ -396,7 +405,8 @@ fn io_error_tag(error: IoErrorIdentityV1) -> u64 {
         IoErrorIdentityV1::IsDirectory => 7,
         IoErrorIdentityV1::NotDirectory => 8,
         IoErrorIdentityV1::NotEmpty => 9,
-        IoErrorIdentityV1::Unsupported | IoErrorIdentityV1::Other(_) => 10,
+        IoErrorIdentityV1::Unsupported => 10,
+        IoErrorIdentityV1::Other(raw) => (u64::from(raw as u32) << 32) | 11,
     }
 }
 

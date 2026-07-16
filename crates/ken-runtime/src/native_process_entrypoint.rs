@@ -68,6 +68,7 @@ impl NativeProcessSymbols {
                 "NotDirectory",
                 "NotEmpty",
                 "Unsupported",
+                "Other",
             ]
             .into_iter()
             .map(|name| format!("ctor:prelude::IOError::{name}"))
