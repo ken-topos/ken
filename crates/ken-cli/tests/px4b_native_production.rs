@@ -503,6 +503,21 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
     assert_eq!(std::fs::read(dir.join("px5.bin")).unwrap(), b"retained");
     assert_eq!(observation.effect_trace.len(), 3);
     assert_eq!(
+        observation.effect_trace[0]
+            .capability
+            .as_ref()
+            .map(|identity| identity.0.as_str()),
+        Some("FS")
+    );
+    assert_eq!(
+        observation.effect_trace[1]
+            .capability
+            .as_ref()
+            .map(|identity| identity.0.as_str()),
+        Some("FS")
+    );
+    assert_eq!(observation.effect_trace[2].capability, None);
+    assert_eq!(
         observation.filesystem_delta,
         vec![ken_runtime::FsDeltaV1::Created {
             relative_path: b"px5.bin".to_vec(),
