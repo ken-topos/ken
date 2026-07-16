@@ -85,6 +85,10 @@ fn filesystem_root_is_checked_boundary_metadata() {
         parser::parse_decls(r#"program capabilities FS AFull "data""#),
         Err(ElabError::ParseError { msg, .. }) if msg.contains("absolute or begin with './' or '~/'")
     ));
+    assert!(matches!(
+        parser::parse_decls(r#"program capabilities FS AFull "~""#),
+        Err(ElabError::ParseError { msg, .. }) if msg.contains("begin with './' or '~/'")
+    ));
 }
 
 #[test]

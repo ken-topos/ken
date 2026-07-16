@@ -27,8 +27,6 @@ impl FsRootSpec {
     pub fn parse_declared(bytes: &[u8]) -> Option<Self> {
         if let Some(suffix) = bytes.strip_prefix(b"~/") {
             Some(Self::EffectiveUserHome(suffix.to_vec()))
-        } else if bytes == b"~" {
-            Some(Self::EffectiveUserHome(Vec::new()))
         } else if let Some(suffix) = bytes.strip_prefix(b"./") {
             Some(Self::ExecutionStartCwd(suffix.to_vec()))
         } else if bytes == b"." {
