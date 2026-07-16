@@ -1618,6 +1618,30 @@ struct ComputationalEliminatorFrame<'a> {
     env: &'a [Lowered],
 }
 
+fn select_computational_case<'frames, 'data>(
+    eliminators: &'frames [ComputationalEliminatorFrame<'data>],
+    constructor: &str,
+) -> Result<
+    (
+        &'data crate::RuntimeComputationalMatchCase,
+        &'frames [ComputationalEliminatorFrame<'data>],
+    ),
+    RuntimeTrap,
+> {
+    let Some(eliminator) = eliminators.first() else {
+        return Err(RuntimeTrap {
+            code: RuntimeTrapCode::UnsupportedErasure,
+            message: "nested computational producer has no eliminator".to_string(),
+        });
+    };
+    eliminator
+        .cases
+        .iter()
+        .find(|case| case.constructor == constructor)
+        .map(|case| (case, &eliminators[1..]))
+        .ok_or_else(|| eliminator.default.clone())
+}
+
 impl<'a> Lowering<'a> {
     fn lower_computational_match_expr(
         &mut self,
@@ -1921,13 +1945,11 @@ impl<'a> Lowering<'a> {
                 "scrutinee is not a constructor value after ordinary expression lowering",
             ));
         };
-        let Some(case) = eliminator
-            .cases
-            .iter()
-            .find(|case| case.constructor == constructor)
-        else {
-            return Ok(Lowered::Trap(eliminator.default.clone()));
-        };
+        let (case, remaining_eliminators) =
+            match select_computational_case(eliminators, &constructor) {
+                Ok(selected) => selected,
+                Err(trap) => return Ok(Lowered::Trap(trap)),
+            };
         if case.argument_binders != args.len() {
             return Err(unsupported(
                 "ComputationalMatch",
@@ -1961,14 +1983,14 @@ impl<'a> Lowering<'a> {
         let mut case_env = induction_hypotheses;
         case_env.extend(args);
         case_env.extend_from_slice(eliminator.env);
-        if eliminators.len() == 1 {
+        if remaining_eliminators.is_empty() {
             self.lower_expr(builder, &case.body, &case_env)
         } else {
             self.lower_computational_producer_expr(
                 builder,
                 &case.body,
                 &case_env,
-                &eliminators[1..],
+                remaining_eliminators,
             )
         }
     }
@@ -4364,6 +4386,98 @@ mod tests {
                 reason,
             }) if reason == "sub_int only supports Int arguments in native lowering"
         ));
+    }
+
+    #[test]
+    fn nested_computational_inner_missing_selects_exact_inner_default() {
+        let inner_cases = vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::Inner::Hit".to_string(),
+            argument_binders: 0,
+            recursive_positions: Vec::new(),
+            body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+        }];
+        let outer_cases = vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::Outer::Hit".to_string(),
+            argument_binders: 0,
+            recursive_positions: Vec::new(),
+            body: RuntimeExpr::Value(RuntimeValue::Int(2)),
+        }];
+        let inner_default = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "px7n exact inner default".to_string(),
+        };
+        let outer_default = RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "px7n exact outer default".to_string(),
+        };
+        let frames = [
+            ComputationalEliminatorFrame {
+                cases: &inner_cases,
+                default: &inner_default,
+                env: &[],
+            },
+            ComputationalEliminatorFrame {
+                cases: &outer_cases,
+                default: &outer_default,
+                env: &[],
+            },
+        ];
+
+        let trap = match select_computational_case(&frames, "ctor:fixture::Inner::Missing") {
+            Err(trap) => trap,
+            Ok(_) => panic!("a missing inner case must select the inner frame default"),
+        };
+        assert_eq!(trap.code, RuntimeTrapCode::PatternMatchFailure);
+        assert_eq!(trap.message, "px7n exact inner default");
+        assert_ne!(trap.code, outer_default.code);
+        assert_ne!(trap.message, outer_default.message);
+    }
+
+    #[test]
+    fn nested_computational_outer_missing_selects_exact_outer_default() {
+        let inner_cases = vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::Inner::Hit".to_string(),
+            argument_binders: 0,
+            recursive_positions: Vec::new(),
+            body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+        }];
+        let outer_cases = vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::Outer::Hit".to_string(),
+            argument_binders: 0,
+            recursive_positions: Vec::new(),
+            body: RuntimeExpr::Value(RuntimeValue::Int(2)),
+        }];
+        let inner_default = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "px7n exact inner default".to_string(),
+        };
+        let outer_default = RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "px7n exact outer default".to_string(),
+        };
+        let frames = [
+            ComputationalEliminatorFrame {
+                cases: &inner_cases,
+                default: &inner_default,
+                env: &[],
+            },
+            ComputationalEliminatorFrame {
+                cases: &outer_cases,
+                default: &outer_default,
+                env: &[],
+            },
+        ];
+
+        let (_, outer_frames) = select_computational_case(&frames, "ctor:fixture::Inner::Hit")
+            .expect("the inner case succeeds before the outer miss");
+        let trap = match select_computational_case(outer_frames, "ctor:fixture::Outer::Missing") {
+            Err(trap) => trap,
+            Ok(_) => panic!("a missing outer case must select the outer frame default"),
+        };
+        assert_eq!(trap.code, RuntimeTrapCode::ExplicitTrap);
+        assert_eq!(trap.message, "px7n exact outer default");
+        assert_ne!(trap.code, inner_default.code);
+        assert_ne!(trap.message, inner_default.message);
     }
 
     #[test]

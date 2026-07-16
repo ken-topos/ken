@@ -97,11 +97,13 @@ The `erasure.rs` repair carried in the PX7-F durable red object (`e96902bc`,
 land in THIS prerequisite** — **not** ride silently in PX7-F, and **not** as a
 second PX7-L erratum branch (Architect-ruled).
 
-- The already-landed **static** path classifies `FsHandleMetadata` and
-  `ResourceRelease` as **capability-less** because the **resource token is their
-  authority-bearing operand**; the **runtime-selected** path
-  (`lower_runtime_selected_host_operation`, `erasure.rs:624`, `is_ambient()`
-  capability gate at `:682` on `0920adea`) must use the **same classification**.
+- On exact base `0920adea`, both the **static** and **runtime-selected** paths
+  still treat every non-ambient operation as capability-bearing. This WP
+  atomically corrects both paths so `FsHandleMetadata` and `ResourceRelease`
+  are **capability-less** because the **resource token is their
+  authority-bearing operand**. The runtime-selected path is
+  `lower_runtime_selected_host_operation` (`erasure.rs:624`, `is_ambient()`
+  capability gate at `:682` on `0920adea`).
 - **Ambient** operations remain capability-less; **every other FS operation
   still consumes exactly one capability operand.**
 - Ship an **exhaustive static-versus-runtime-selected capability-policy
