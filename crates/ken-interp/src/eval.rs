@@ -4145,6 +4145,7 @@ fn fs_dispatch<H: HostHandler>(
     fs: &FSIds,
     ids: &ConsoleIds,
     store: &mut EvalStore,
+    recorder: Option<&mut EffectTraceRecorderV1>,
 ) -> Option<Result<EvalVal, ()>> {
     let bytes_at = |index| match args.get(index) {
         Some(EvalVal::Bytes(bytes)) => Some(bytes.clone()),
@@ -4259,6 +4260,9 @@ fn fs_dispatch<H: HostHandler>(
         ken_host::dispatch_host_op_v1(&mut backend, &capabilities, operation, token, &request)
             .map_err(|_| ());
     let reply = reply.and_then(|reply| {
+        if let Some(recorder) = recorder {
+            recorder.record(operation, request.clone(), &reply);
+        }
         if let ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::File(error)) =
             &reply.outcome
         {
@@ -4343,6 +4347,7 @@ fn ambient_dispatch<H: HostHandler>(
     ids: &ConsoleIds,
     clock_ids: Option<&ClockIds>,
     store: &mut EvalStore,
+    recorder: Option<&mut EffectTraceRecorderV1>,
 ) -> Result<EvalVal, ()> {
     let mut backend = InterpreterHostBackend { handler };
     let reply = ken_host::dispatch_host_op_v1(
@@ -4353,6 +4358,9 @@ fn ambient_dispatch<H: HostHandler>(
         &request,
     )
     .map_err(|_| ())?;
+    if let Some(recorder) = recorder {
+        recorder.record(operation, request, &reply);
+    }
     match reply.outcome {
         ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::ReadChunk(bytes)) => {
             let chunk = make_ctor(ids.chunk_id, vec![EvalVal::Bytes(bytes)], store);
@@ -4403,6 +4411,145 @@ fn ambient_dispatch<H: HostHandler>(
 /// (3 for the lifted `ITree (E:Type)(Resp:E->Type)(R:Type)`; 0 for the
 /// simplified 0-param test ITree).
 pub fn run_io<H: HostHandler>(
+    tree: EvalVal,
+    handler: &mut H,
+    ids: &ConsoleIds,
+    fs_ids: Option<&FSIds>,
+    clock_ids: Option<&ClockIds>,
+    coproduct_ids: Option<&CoproductIds>,
+    globals: &GlobalEnv,
+    store: &mut EvalStore,
+) -> Result<EvalVal, RunIoError> {
+    run_io_with_effect_recorder(
+        tree,
+        handler,
+        ids,
+        fs_ids,
+        clock_ids,
+        coproduct_ids,
+        globals,
+        store,
+        None,
+    )
+}
+
+#[derive(Default)]
+struct EffectTraceRecorderV1 {
+    events: Vec<ken_host::EffectEventV1>,
+}
+
+impl EffectTraceRecorderV1 {
+    fn record(
+        &mut self,
+        operation: ken_host::HostOpV1,
+        request: ken_host::CanonicalRequestV1,
+        reply: &ken_host::HostDispatchReplyV1,
+    ) {
+        self.events.push(ken_host::EffectEventV1 {
+            sequence: self.events.len() as u64,
+            operation,
+            capability: reply.capability_identity.clone(),
+            request,
+            outcome: reply.outcome.clone(),
+        });
+    }
+}
+
+/// Run the interpreter host driver and return its canonical six-field effect
+/// observation.
+///
+/// Every trace event is appended after the canonical dispatcher has produced
+/// its real reply and before that reply is reified into Ken. Console bytes are
+/// derived only from successful dispatched writes. The descriptor-only
+/// `HostHandler` surface intentionally exposes no filesystem snapshot, so
+/// `filesystem_delta` is empty here; the differential harness supplies that
+/// field from its independent root snapshot.
+pub fn run_io_effect_observation_v1<H: HostHandler>(
+    tree: EvalVal,
+    handler: &mut H,
+    ids: &ConsoleIds,
+    fs_ids: Option<&FSIds>,
+    clock_ids: Option<&ClockIds>,
+    coproduct_ids: Option<&CoproductIds>,
+    globals: &GlobalEnv,
+    store: &mut EvalStore,
+    success_id: GlobalId,
+    failure_id: GlobalId,
+) -> ken_host::EffectObservationV1 {
+    let mut recorder = EffectTraceRecorderV1::default();
+    let result = run_io_with_effect_recorder(
+        tree,
+        handler,
+        ids,
+        fs_ids,
+        clock_ids,
+        coproduct_ids,
+        globals,
+        store,
+        Some(&mut recorder),
+    );
+    effect_observation_v1(result, recorder.events, success_id, failure_id)
+}
+
+fn effect_observation_v1(
+    result: Result<EvalVal, RunIoError>,
+    effect_trace: Vec<ken_host::EffectEventV1>,
+    success_id: GlobalId,
+    failure_id: GlobalId,
+) -> ken_host::EffectObservationV1 {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    for event in &effect_trace {
+        if !matches!(
+            event.outcome,
+            ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::Unit)
+        ) {
+            continue;
+        }
+        let ken_host::CanonicalRequestV1::ConsoleWrite { stream, bytes } = &event.request else {
+            continue;
+        };
+        match stream {
+            ken_host::ConsoleStreamV1::Stdout => stdout.extend_from_slice(bytes),
+            ken_host::ConsoleStreamV1::Stderr => stderr.extend_from_slice(bytes),
+            ken_host::ConsoleStreamV1::Stdin => {}
+        }
+    }
+    let (terminal_error, exit_status) = match result {
+        Ok(value) => {
+            let exit_code = match value {
+                EvalVal::Ctor { id, .. } if id == success_id => {
+                    ken_runtime::ProcessExitCode::Success
+                }
+                EvalVal::Ctor { id, args, .. } if id == failure_id => match args.first() {
+                    Some(EvalVal::Int(code)) => ken_runtime::ProcessExitCode::Failure(*code),
+                    _ => ken_runtime::ProcessExitCode::MalformedFailure,
+                },
+                _ => ken_runtime::ProcessExitCode::Malformed,
+            };
+            let mapped = ken_runtime::process_exit_status(exit_code);
+            (
+                mapped
+                    .trap_report
+                    .map(|_| ken_host::TerminalErrorV1::MalformedHostAbiField),
+                mapped.status,
+            )
+        }
+        Err(RunIoError::UnknownTree) => (Some(ken_host::TerminalErrorV1::UnknownTree), 1),
+        Err(RunIoError::UnknownEffect(_)) => (Some(ken_host::TerminalErrorV1::DriverFailure), 1),
+        Err(RunIoError::NotAnIOTree(_)) => (Some(ken_host::TerminalErrorV1::MalformedTree), 1),
+    };
+    ken_host::EffectObservationV1 {
+        stdout,
+        stderr,
+        filesystem_delta: Vec::new(),
+        terminal_error,
+        effect_trace,
+        exit_status,
+    }
+}
+
+fn run_io_with_effect_recorder<H: HostHandler>(
     mut tree: EvalVal,
     handler: &mut H,
     ids: &ConsoleIds,
@@ -4411,6 +4558,7 @@ pub fn run_io<H: HostHandler>(
     coproduct_ids: Option<&CoproductIds>,
     globals: &GlobalEnv,
     store: &mut EvalStore,
+    mut recorder: Option<&mut EffectTraceRecorderV1>,
 ) -> Result<EvalVal, RunIoError> {
     let m = ids.params_len;
     loop {
@@ -4471,6 +4619,7 @@ pub fn run_io<H: HostHandler>(
                                 ids,
                                 clock_ids,
                                 store,
+                                recorder.as_deref_mut(),
                             )
                             .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
                         }
@@ -4496,6 +4645,7 @@ pub fn run_io<H: HostHandler>(
                                 ids,
                                 clock_ids,
                                 store,
+                                recorder.as_deref_mut(),
                             )
                             .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
                         }
@@ -4517,6 +4667,7 @@ pub fn run_io<H: HostHandler>(
                                 ids,
                                 clock_ids,
                                 store,
+                                recorder.as_deref_mut(),
                             )
                             .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
                         }
@@ -4538,6 +4689,7 @@ pub fn run_io<H: HostHandler>(
                                 ids,
                                 clock_ids,
                                 store,
+                                recorder.as_deref_mut(),
                             )
                             .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
                         }
@@ -4556,11 +4708,20 @@ pub fn run_io<H: HostHandler>(
                                     ids,
                                     Some(clock),
                                     store,
+                                    recorder.as_deref_mut(),
                                 )
                                 .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
                             } else {
                                 match fs_ids.and_then(|fs| {
-                                    fs_dispatch(*op_id, op_args, handler, fs, ids, store)
+                                    fs_dispatch(
+                                        *op_id,
+                                        op_args,
+                                        handler,
+                                        fs,
+                                        ids,
+                                        store,
+                                        recorder.as_deref_mut(),
+                                    )
                                 }) {
                                     Some(Ok(response)) => response,
                                     Some(Err(())) | None => {
@@ -4783,6 +4944,291 @@ mod px0_target_classification_tests {
         assert_unsupported(host.fs_remove_file_at(&handle, b"file"));
         assert_unsupported(host.fs_remove_directory_at(&handle, b"dir", false));
         assert_unsupported(host.fs_rename_at(&handle, b"from", &handle, b"to"));
+    }
+}
+
+#[cfg(test)]
+mod px5b_effect_observation_tests {
+    use super::*;
+
+    fn console_ids() -> ConsoleIds {
+        let mut next = 100u32;
+        let mut id = || {
+            let value = GlobalId(next);
+            next += 1;
+            value
+        };
+        ConsoleIds {
+            itree_id: id(),
+            ret_id: id(),
+            vis_id: id(),
+            read_id: id(),
+            write_id: id(),
+            flush_id: id(),
+            is_terminal_id: id(),
+            stdin_id: id(),
+            stdout_id: id(),
+            stderr_id: id(),
+            chunk_id: id(),
+            eof_id: id(),
+            true_id: id(),
+            false_id: id(),
+            ok_id: id(),
+            err_id: id(),
+            notfound_id: id(),
+            permissiondenied_id: id(),
+            capabilitydenied_id: id(),
+            brokenpipe_id: id(),
+            interrupted_id: id(),
+            alreadyexists_id: id(),
+            invalidinput_id: id(),
+            isdirectory_id: id(),
+            notdirectory_id: id(),
+            notempty_id: id(),
+            unsupported_id: id(),
+            other_id: id(),
+            unit_id: id(),
+            params_len: 0,
+        }
+    }
+
+    fn fs_ids() -> FSIds {
+        let mut next = 200u32;
+        let mut id = || {
+            let value = GlobalId(next);
+            next += 1;
+            value
+        };
+        FSIds {
+            readfile_id: id(),
+            writefile_id: id(),
+            appendfile_id: id(),
+            metadata_id: id(),
+            readdirectory_id: id(),
+            createdirectory_id: id(),
+            removefile_id: id(),
+            removedirectory_id: id(),
+            rename_id: id(),
+            create_new_id: id(),
+            create_or_truncate_id: id(),
+            create_or_keep_id: id(),
+            mk_file_error_id: id(),
+            some_id: id(),
+            op_read_file_id: id(),
+            op_write_file_id: id(),
+            op_append_file_id: id(),
+            op_metadata_id: id(),
+            op_read_directory_id: id(),
+            op_create_directory_id: id(),
+            op_remove_file_id: id(),
+            op_remove_directory_id: id(),
+            op_rename_id: id(),
+            nil_id: id(),
+            cons_id: id(),
+            mk_file_metadata_id: id(),
+            mk_dir_entry_id: id(),
+            k_file_id: id(),
+            k_directory_id: id(),
+            k_symlink_id: id(),
+            k_other_id: id(),
+        }
+    }
+
+    fn dispatch_read(
+        path: &[u8],
+        capability: EvalVal,
+        host: &mut CaptureHost,
+        recorder: Option<&mut EffectTraceRecorderV1>,
+    ) -> Option<Result<EvalVal, ()>> {
+        let ids = console_ids();
+        let fs = fs_ids();
+        let mut store = EvalStore::new();
+        fs_dispatch(
+            fs.readfile_id,
+            &[EvalVal::Unknown, capability, EvalVal::Bytes(path.to_vec())],
+            host,
+            &fs,
+            &ids,
+            &mut store,
+            recorder,
+        )
+    }
+
+    #[test]
+    fn actual_raw_requests_survive_descriptor_collision() {
+        let mut host = CaptureHost::new(Vec::new());
+        host.insert_file(b"dir/x".to_vec(), b"payload".to_vec());
+        let cap = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_PARTIAL));
+        let mut recorder = EffectTraceRecorderV1::default();
+
+        dispatch_read(b"dir/./x", cap.clone(), &mut host, Some(&mut recorder))
+            .expect("read operation")
+            .expect("first read reifies");
+        dispatch_read(b"dir/x", cap, &mut host, Some(&mut recorder))
+            .expect("read operation")
+            .expect("second read reifies");
+
+        assert_eq!(recorder.events.len(), 2);
+        assert_eq!(recorder.events[0].sequence, 0);
+        assert_eq!(recorder.events[1].sequence, 1);
+        assert_eq!(
+            recorder.events[0].request,
+            ken_host::CanonicalRequestV1::FsReadFile {
+                path: b"dir/./x".to_vec()
+            }
+        );
+        assert_eq!(
+            recorder.events[1].request,
+            ken_host::CanonicalRequestV1::FsReadFile {
+                path: b"dir/x".to_vec()
+            }
+        );
+        assert_eq!(host.fs_trace().len(), 2, "both requests reach one node");
+    }
+
+    #[test]
+    fn malformed_capability_identity_and_error_come_from_reply() {
+        let mut host = CaptureHost::new(Vec::new());
+        host.insert_file(b"x".to_vec(), b"payload".to_vec());
+        let mut recorder = EffectTraceRecorderV1::default();
+
+        dispatch_read(b"x", EvalVal::Int(7), &mut host, Some(&mut recorder))
+            .expect("read operation")
+            .expect("denial reifies as Ken Err");
+
+        let [event] = recorder.events.as_slice() else {
+            panic!("one denied dispatch must emit exactly one event")
+        };
+        assert_eq!(event.capability, None);
+        assert!(matches!(
+            &event.outcome,
+            ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::File(
+                ken_host::FileErrorIdentityV1 {
+                    cause: ken_host::FileErrorCauseV1::Capability(
+                        ken_host::CapabilityDeniedV1::MalformedCapability
+                    ),
+                    ..
+                }
+            ))
+        ));
+        assert!(
+            host.fs_trace().is_empty(),
+            "denial precedes every host leaf"
+        );
+        assert_eq!(host.fs_denials(), &[CapabilityDenied::MalformedCapability]);
+    }
+
+    #[test]
+    fn recording_is_behaviorally_inert() {
+        let mut plain = CaptureHost::new(Vec::new());
+        let mut observed = CaptureHost::new(Vec::new());
+        plain.insert_file(b"dir/x".to_vec(), b"payload".to_vec());
+        observed.insert_file(b"dir/x".to_vec(), b"payload".to_vec());
+        let plain_cap = EvalVal::Cap(plain.mint_fs_cap(capabilities::AUTH_PARTIAL));
+        let observed_cap = EvalVal::Cap(observed.mint_fs_cap(capabilities::AUTH_PARTIAL));
+        let mut recorder = EffectTraceRecorderV1::default();
+
+        let plain_result = dispatch_read(b"dir/./x", plain_cap, &mut plain, None);
+        let observed_result =
+            dispatch_read(b"dir/./x", observed_cap, &mut observed, Some(&mut recorder));
+
+        assert_eq!(plain_result, observed_result);
+        assert_eq!(plain.fs_trace(), observed.fs_trace());
+        assert_eq!(plain.fs_nodes(), observed.fs_nodes());
+        assert_eq!(plain.fs_denials(), observed.fs_denials());
+        assert_eq!(recorder.events.len(), 1);
+    }
+
+    #[test]
+    fn ambient_dispatches_append_canonical_events_in_order() {
+        let ids = console_ids();
+        let clock = ClockIds {
+            wall_now_id: GlobalId(400),
+            mkinstant_id: GlobalId(401),
+        };
+        let mut host = CaptureHost::new(Vec::new());
+        host.set_fixed_clock(17);
+        let mut store = EvalStore::new();
+        let mut recorder = EffectTraceRecorderV1::default();
+
+        ambient_dispatch(
+            ken_host::HostOpV1::ConsoleWrite,
+            ken_host::CanonicalRequestV1::ConsoleWrite {
+                stream: ken_host::ConsoleStreamV1::Stdout,
+                bytes: b"out".to_vec(),
+            },
+            &mut host,
+            &ids,
+            Some(&clock),
+            &mut store,
+            Some(&mut recorder),
+        )
+        .expect("write reifies");
+        ambient_dispatch(
+            ken_host::HostOpV1::ClockWallNow,
+            ken_host::CanonicalRequestV1::ClockWallNow,
+            &mut host,
+            &ids,
+            Some(&clock),
+            &mut store,
+            Some(&mut recorder),
+        )
+        .expect("clock reifies");
+
+        assert_eq!(
+            recorder
+                .events
+                .iter()
+                .map(|event| (event.sequence, event.operation))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, ken_host::HostOpV1::ConsoleWrite),
+                (1, ken_host::HostOpV1::ClockWallNow),
+            ]
+        );
+        assert_eq!(host.stdout(), b"out");
+    }
+
+    #[test]
+    fn producer_returns_the_imported_six_field_observation() {
+        let ids = console_ids();
+        let success_id = GlobalId(500);
+        let failure_id = GlobalId(501);
+        let tree = EvalVal::Ctor {
+            id: ids.ret_id,
+            args: Rc::new(vec![EvalVal::Ctor {
+                id: success_id,
+                args: Rc::new(Vec::new()),
+                slot: NULL_SLOT,
+            }]),
+            slot: NULL_SLOT,
+        };
+        let mut host = CaptureHost::new(Vec::new());
+        let mut store = EvalStore::new();
+        let observation = run_io_effect_observation_v1(
+            tree,
+            &mut host,
+            &ids,
+            None,
+            None,
+            None,
+            &GlobalEnv::new(),
+            &mut store,
+            success_id,
+            failure_id,
+        );
+
+        assert_eq!(
+            observation,
+            ken_host::EffectObservationV1 {
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+                filesystem_delta: Vec::new(),
+                terminal_error: None,
+                effect_trace: Vec::new(),
+                exit_status: 0,
+            }
+        );
     }
 }
 

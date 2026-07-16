@@ -67,6 +67,37 @@ pub fn run_program<H: ken_interp::HostHandler>(
     cwd: &[u8],
     host: &mut H,
 ) -> Result<ProgramOutcome, RunError> {
+    run_program_inner(source, format, arguments, environment, cwd, host, false)
+        .map(|(outcome, _)| outcome)
+}
+
+/// Elaborate and run one Ken application while producing the interpreter's
+/// canonical host-effect observation from the real dispatch seam.
+///
+/// The returned filesystem delta is empty because the descriptor-only
+/// interpreter host interface exposes no root snapshot. A differential harness
+/// may fill that field from its independently captured before/after root state.
+pub fn run_program_effect_observation_v1<H: ken_interp::HostHandler>(
+    source: &str,
+    format: SourceFormat,
+    arguments: &[Vec<u8>],
+    environment: &[(Vec<u8>, Vec<u8>)],
+    cwd: &[u8],
+    host: &mut H,
+) -> Result<ken_runtime::EffectObservationV1, RunError> {
+    run_program_inner(source, format, arguments, environment, cwd, host, true)
+        .map(|(_, observation)| observation.expect("observation requested"))
+}
+
+fn run_program_inner<H: ken_interp::HostHandler>(
+    source: &str,
+    format: SourceFormat,
+    arguments: &[Vec<u8>],
+    environment: &[(Vec<u8>, Vec<u8>)],
+    cwd: &[u8],
+    host: &mut H,
+    observe_effects: bool,
+) -> Result<(ProgramOutcome, Option<ken_runtime::EffectObservationV1>), RunError> {
     let mut elab_env = ken_elaborator::ElabEnv::new().map_err(RunError::Initialization)?;
     let elaborated = match format {
         SourceFormat::Ken => elab_env.elaborate_file(source),
@@ -116,24 +147,46 @@ pub fn run_program<H: ken_interp::HostHandler>(
         inl_id: elab_env.prelude_env.inl_id,
         inr_id: elab_env.prelude_env.inr_id,
     };
-    let final_value = ken_interp::run_io(
-        tree,
-        host,
-        &console_ids,
-        fs_ids.as_ref(),
-        clock_ids.as_ref(),
-        Some(&coproduct_ids),
-        &elab_env.env,
-        &mut store,
-    )
-    .map_err(RunError::Io)?;
-    Ok(ProgramOutcome {
-        exit_status: exit_status(
-            &final_value,
-            get("Success").expect("Success registered"),
-            get("Failure").expect("Failure registered"),
-        ),
-    })
+    let success_id = get("Success").expect("Success registered");
+    let failure_id = get("Failure").expect("Failure registered");
+    if observe_effects {
+        let observation = ken_interp::run_io_effect_observation_v1(
+            tree,
+            host,
+            &console_ids,
+            fs_ids.as_ref(),
+            clock_ids.as_ref(),
+            Some(&coproduct_ids),
+            &elab_env.env,
+            &mut store,
+            success_id,
+            failure_id,
+        );
+        Ok((
+            ProgramOutcome {
+                exit_status: observation.exit_status,
+            },
+            Some(observation),
+        ))
+    } else {
+        let final_value = ken_interp::run_io(
+            tree,
+            host,
+            &console_ids,
+            fs_ids.as_ref(),
+            clock_ids.as_ref(),
+            Some(&coproduct_ids),
+            &elab_env.env,
+            &mut store,
+        )
+        .map_err(RunError::Io)?;
+        Ok((
+            ProgramOutcome {
+                exit_status: exit_status(&final_value, success_id, failure_id),
+            },
+            None,
+        ))
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
