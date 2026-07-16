@@ -318,6 +318,7 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
             sequence: sequence as u64,
             operation: ken_runtime::HostOpV1::ConsoleWrite,
             capability: None,
+            resource: None,
             request: ken_runtime::CanonicalRequestV1::ConsoleWrite {
                 stream: ken_runtime::ConsoleStreamV1::Stdout,
                 bytes: bytes.to_vec(),
@@ -604,13 +605,9 @@ proc main (input : ProcessInput) (caps : ProgramCaps APartial)
   }
 "#;
 
-    let output = ken_cli::build_native_program(
-        source,
-        ken_cli::SourceFormat::Ken,
-        "px5c-fs-identity",
-        &dir,
-    )
-    .expect("same checked source reaches the native producer");
+    let output =
+        ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5c-fs-identity", &dir)
+            .expect("same checked source reaches the native producer");
     let native = ken_runtime::run_bound_process_effect_observation_v1(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {
@@ -651,7 +648,10 @@ proc main (input : ProcessInput) (caps : ProgramCaps APartial)
             .as_mut()
             .expect("successful FS event has an identity")
             .0 = drift.to_string();
-        assert_ne!(interpreter_drift, native, "interpreter seed drift must fail");
+        assert_ne!(
+            interpreter_drift, native,
+            "interpreter seed drift must fail"
+        );
 
         let mut native_drift = native.clone();
         native_drift.effect_trace[0]

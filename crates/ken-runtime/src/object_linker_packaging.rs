@@ -15,15 +15,14 @@ use std::process::Command;
 
 use crate::platform_runtime_support::validate_entrypoint_metadata_payload;
 use crate::{
-    CraneliftObjectArtifact, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND,
-    EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION, NativeDifferentialStage,
-    NativeRuntimeIrComparisonVerdict, NativeSeedEnvironment, PLATFORM_RUNTIME_SUPPORT_KIND,
-    PLATFORM_RUNTIME_SUPPORT_VERSION, PlatformRuntimeEvidenceFact, PlatformRuntimeEvidenceLane,
+    emit_runtime_ir_object_with_cranelift, fnv1a_64, platform_runtime_support_report_hash,
+    run_runtime_ir_report_with_cranelift, runtime_executable_entrypoint_package_hash,
+    CraneliftObjectArtifact, NativeDifferentialStage, NativeRuntimeIrComparisonVerdict,
+    NativeSeedEnvironment, PlatformRuntimeEvidenceFact, PlatformRuntimeEvidenceLane,
     PlatformRuntimeSupportReport, RuntimeArtifactIdentity, RuntimeExecutableEntrypointPackage,
     RuntimeExpr, RuntimeGroundValue, RuntimeIrRunReport, RuntimeObservation, RuntimeProgram,
-    RuntimeSymbol, emit_runtime_ir_object_with_cranelift, fnv1a_64,
-    platform_runtime_support_report_hash, run_runtime_ir_report_with_cranelift,
-    runtime_executable_entrypoint_package_hash,
+    RuntimeSymbol, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND, EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION,
+    PLATFORM_RUNTIME_SUPPORT_KIND, PLATFORM_RUNTIME_SUPPORT_VERSION,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1966,6 +1965,9 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
+        evaluate_runtime_ir_example, executable_artifact_contract_for_runtime_report,
+        executable_entrypoint_metadata_hash, executable_entrypoint_package_for_runtime_contract,
+        platform_runtime_support_for_entrypoint, summarize_runtime_ir_program,
         ErasedExecutableCore, ExecutableArgumentPackaging, ExecutableArgumentShape,
         ExecutableDependencyClosure, ExecutableEntrypointPackageMetadata,
         ExecutableEntrypointTargetKind, ExecutableEntrypointVerdict, ExecutableReportContract,
@@ -1973,10 +1975,7 @@ mod tests {
         ExecutableTrapContract, ExecutableTrapShape, RuntimeDeclaration, RuntimeDeclarationKind,
         RuntimeExpr, RuntimeIrProgramReport, RuntimeIrSeedEnvironment, RuntimeLowerabilityStatus,
         RuntimeMetadata, RuntimePartiality, RuntimePrimitive, RuntimeSymbolMetadata, RuntimeTrap,
-        RuntimeTrapCode, RuntimeValue, evaluate_runtime_ir_example,
-        executable_artifact_contract_for_runtime_report, executable_entrypoint_metadata_hash,
-        executable_entrypoint_package_for_runtime_contract,
-        platform_runtime_support_for_entrypoint, summarize_runtime_ir_program,
+        RuntimeTrapCode, RuntimeValue,
     };
 
     fn starter_program(body: RuntimeExpr, observation: RuntimeObservation) -> RuntimeProgram {
@@ -2158,11 +2157,9 @@ mod tests {
         assert!(package.smoke.passed);
         assert!(package.object_artifact.byte_len > 0);
         assert!(package.executable_artifact.byte_len > 0);
-        assert!(
-            package
-                .unavailable_lanes
-                .contains(&ObjectLinkerUnavailableLane::WholeCompilerProof)
-        );
+        assert!(package
+            .unavailable_lanes
+            .contains(&ObjectLinkerUnavailableLane::WholeCompilerProof));
         assert!(matches!(
             package.toolchain.whole_compiler_proof,
             ObjectLinkerEvidenceFact::Unavailable { .. }
@@ -2446,20 +2443,16 @@ mod tests {
             RuntimeExpr::Value(RuntimeValue::Int(0)),
         );
         assert_eq!(malformed.status.code(), Some(1));
-        assert!(
-            String::from_utf8_lossy(&malformed.stderr)
-                .contains("entrypoint returned a malformed ExitCode")
-        );
+        assert!(String::from_utf8_lossy(&malformed.stderr)
+            .contains("entrypoint returned a malformed ExitCode"));
 
         let malformed_failure = run(
             "px4-malformed-failure",
             failure(RuntimeExpr::Value(RuntimeValue::Bool(true))),
         );
         assert_eq!(malformed_failure.status.code(), Some(1));
-        assert!(
-            String::from_utf8_lossy(&malformed_failure.stderr)
-                .contains("malformed ExitCode::Failure payload")
-        );
+        assert!(String::from_utf8_lossy(&malformed_failure.stderr)
+            .contains("malformed ExitCode::Failure payload"));
 
         let trapped = run(
             "px4-explicit-trap",
@@ -2470,6 +2463,332 @@ mod tests {
         );
         assert_eq!(trapped.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&trapped.stderr).contains("explicit entry trap"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linked_process_artifact_drives_real_resource_open_use_release() {
+        let result_err = "ctor:prelude::Result::Err".to_string();
+        let result_ok = "ctor:prelude::Result::Ok".to_string();
+        let success = || RuntimeExpr::Construct {
+            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+            args: Vec::new(),
+        };
+        let failure = |code| RuntimeExpr::Construct {
+            constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(code))],
+        };
+        let stale_use = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "FS".to_string(),
+                operation: ken_host::HostOpV1::FsHandleMetadata,
+                capability: None,
+                args: vec![RuntimeExpr::Var(2)],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: result_err.clone(),
+                    binders: 1,
+                    body: success(),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: result_ok.clone(),
+                    binders: 1,
+                    body: failure(94),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "resource stale-use result".to_string(),
+            },
+        };
+        let release = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "Resource".to_string(),
+                operation: ken_host::HostOpV1::ResourceRelease,
+                capability: None,
+                args: vec![RuntimeExpr::Var(1)],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: result_err.clone(),
+                    binders: 1,
+                    body: failure(93),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: result_ok.clone(),
+                    binders: 1,
+                    body: stale_use,
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "resource release result".to_string(),
+            },
+        };
+        let metadata = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "FS".to_string(),
+                operation: ken_host::HostOpV1::FsHandleMetadata,
+                capability: None,
+                args: vec![RuntimeExpr::Var(0)],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: result_err.clone(),
+                    binders: 1,
+                    body: failure(92),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: result_ok.clone(),
+                    binders: 1,
+                    body: release,
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "resource metadata result".to_string(),
+            },
+        };
+        let entry = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "FS".to_string(),
+                operation: ken_host::HostOpV1::FsOpen,
+                capability: Some(crate::RuntimeCapabilityUse {
+                    identity: "program_caps.fs".to_string(),
+                    value: Box::new(RuntimeExpr::Var(1)),
+                }),
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Bytes(b"held.bin".to_vec())),
+                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                ],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: result_err,
+                    binders: 1,
+                    body: failure(91),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: result_ok,
+                    binders: 1,
+                    body: metadata,
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "resource open result".to_string(),
+            },
+        };
+        let output_dir = temp_output_dir("px7r-linked-resource");
+        let executable = build_process_starter_executable_artifact(&entry, &output_dir)
+            .expect("resource process fixture links");
+        let cwd = output_dir.join("root");
+        fs::create_dir_all(&cwd).unwrap();
+        fs::write(cwd.join("held.bin"), b"held-resource").unwrap();
+        let trace_path = output_dir.join("resource.trace");
+        let output = Command::new(&executable)
+            .env_clear()
+            .env("KEN_HOST_OBSERVATION_PATH", &trace_path)
+            .current_dir(&cwd)
+            .output()
+            .expect("linked resource process runs");
+        assert_eq!(output.status.code(), Some(0));
+        let trace = ken_host::decode_linked_effect_trace_v1(&fs::read(&trace_path).unwrap())
+            .expect("resource trace decodes");
+
+        struct SharedSemanticBackend;
+        impl ken_host::HostEffectBackendV1 for SharedSemanticBackend {
+            fn console_write(
+                &mut self,
+                _: ken_host::ConsoleStreamV1,
+                _: &[u8],
+            ) -> Result<(), ken_host::IoErrorIdentityV1> {
+                unreachable!()
+            }
+
+            fn console_flush(
+                &mut self,
+                _: ken_host::ConsoleStreamV1,
+            ) -> Result<(), ken_host::IoErrorIdentityV1> {
+                unreachable!()
+            }
+
+            fn console_is_terminal(&mut self, _: ken_host::ConsoleStreamV1) -> bool {
+                unreachable!()
+            }
+
+            fn fs_read_file(
+                &mut self,
+                _: &ken_host::CapabilityGrantV1,
+                _: &[u8],
+            ) -> Result<Vec<u8>, ken_host::FileErrorCauseV1> {
+                unreachable!()
+            }
+
+            fn fs_write_file(
+                &mut self,
+                _: &ken_host::CapabilityGrantV1,
+                _: &[u8],
+                _: ken_host::CreatePolicyV1,
+                _: &[u8],
+            ) -> Result<(), ken_host::FileErrorCauseV1> {
+                unreachable!()
+            }
+
+            fn fs_open_resource(
+                &mut self,
+                grant: &ken_host::CapabilityGrantV1,
+                path: &[u8],
+                _: ken_host::FsOpenModeV1,
+            ) -> Result<ken_host::ResourceHandleV1, ken_host::FileErrorCauseV1> {
+                let ken_host::FsHandle::Posix(root) = &grant.capability.scope().root else {
+                    return Err(ken_host::FileErrorCauseV1::Capability(
+                        ken_host::CapabilityDeniedV1::ScopeEscape,
+                    ));
+                };
+                let leaf = ken_host::PathComponent::new(path).map_err(|error| {
+                    ken_host::FileErrorCauseV1::Io(ken_host::io_error_identity_v1(
+                        &error.into_io_error(),
+                    ))
+                })?;
+                ken_host::open_resource_at_v1(root, &leaf, ken_host::OpenRequest::Read).map_err(
+                    |error| {
+                        ken_host::FileErrorCauseV1::Io(ken_host::io_error_identity_v1(
+                            &error.into_io_error(),
+                        ))
+                    },
+                )
+            }
+        }
+
+        let semantic_root = output_dir.join("semantic-root");
+        fs::create_dir_all(&semantic_root).unwrap();
+        fs::write(semantic_root.join("held.bin"), b"held-resource").unwrap();
+        let root = ken_host::open_root(&ken_host::RootPath::new(&semantic_root).unwrap()).unwrap();
+        let root_metadata = ken_host::metadata(&root).unwrap();
+        let cap = ken_host::Cap::mint_scoped(
+            ken_host::AUTH_FULL,
+            "FS",
+            ken_host::FsScope::root(
+                ken_host::RightSet::METADATA,
+                ken_host::FsHandle::Posix(root),
+                ken_host::FsIdentity::Posix {
+                    device: root_metadata.identity.device,
+                    inode: root_metadata.identity.inode,
+                },
+                ken_host::SymlinkPolicy::NoFollow,
+            ),
+        );
+        let mut capabilities = ken_host::CapabilityTableV1::default();
+        let capability = capabilities.insert(ken_host::CapabilityGrantV1 {
+            identity: ken_host::program_caps_fs_trace_identity_v1(),
+            capability: cap,
+        });
+        let mut resources = ken_host::ResourceTableV1::default();
+        let mut backend = SharedSemanticBackend;
+        let open_request = ken_host::CanonicalRequestV1::FsOpen {
+            path: b"held.bin".to_vec(),
+            mode: ken_host::FsOpenModeV1::Metadata,
+        };
+        let open = ken_host::dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            ken_host::HostOpV1::FsOpen,
+            Some(capability),
+            None,
+            &open_request,
+        )
+        .unwrap();
+        let token = open.resource_token.expect("semantic lane mints a token");
+        let mut semantic_events = vec![ken_host::EffectEventV1 {
+            sequence: 0,
+            operation: ken_host::HostOpV1::FsOpen,
+            capability: open.capability_identity,
+            resource: open.resource_identity,
+            request: open_request,
+            outcome: open.outcome,
+        }];
+        for (operation, request) in [
+            (
+                ken_host::HostOpV1::FsHandleMetadata,
+                ken_host::CanonicalRequestV1::FsHandleMetadata,
+            ),
+            (
+                ken_host::HostOpV1::ResourceRelease,
+                ken_host::CanonicalRequestV1::ResourceRelease,
+            ),
+            (
+                ken_host::HostOpV1::FsHandleMetadata,
+                ken_host::CanonicalRequestV1::FsHandleMetadata,
+            ),
+        ] {
+            let reply = ken_host::dispatch_host_op_v1(
+                &mut backend,
+                &capabilities,
+                &mut resources,
+                operation,
+                None,
+                Some(token),
+                &request,
+            )
+            .unwrap();
+            semantic_events.push(ken_host::EffectEventV1 {
+                sequence: semantic_events.len() as u64,
+                operation,
+                capability: reply.capability_identity,
+                resource: reply.resource_identity,
+                request,
+                outcome: reply.outcome,
+            });
+        }
+        assert_eq!(
+            trace.effect_trace, semantic_events,
+            "the shared host semantic dispatcher and linked native ABI must agree"
+        );
+        let semantic_trace = ken_host::LinkedEffectTraceV1 {
+            plan_hash: trace.plan_hash,
+            target_abi_hash: trace.target_abi_hash,
+            host_effect_abi_hash: trace.host_effect_abi_hash,
+            terminal_value: trace.terminal_value,
+            terminal_error: trace.terminal_error.clone(),
+            effect_trace: semantic_events,
+        };
+        assert_eq!(
+            ken_host::encode_linked_effect_trace_v1(&trace).unwrap(),
+            ken_host::encode_linked_effect_trace_v1(&semantic_trace).unwrap(),
+            "shared semantic and linked-native wire observations are byte-identical"
+        );
+        assert_eq!(
+            trace
+                .effect_trace
+                .iter()
+                .map(|event| event.operation)
+                .collect::<Vec<_>>(),
+            vec![
+                ken_host::HostOpV1::FsOpen,
+                ken_host::HostOpV1::FsHandleMetadata,
+                ken_host::HostOpV1::ResourceRelease,
+                ken_host::HostOpV1::FsHandleMetadata,
+            ]
+        );
+        assert_eq!(
+            trace
+                .effect_trace
+                .iter()
+                .map(|event| event.resource)
+                .collect::<Vec<_>>(),
+            vec![Some(ken_host::ResourceTraceIdentityV1(1)); 4]
+        );
+        assert!(matches!(
+            trace.effect_trace[3].outcome,
+            ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::Resource(
+                ken_host::ResourceErrorV1::Closed
+            ))
+        ));
+        assert_eq!(fs::read(cwd.join("held.bin")).unwrap(), b"held-resource");
+        fs::remove_dir_all(output_dir).unwrap();
     }
 
     #[test]

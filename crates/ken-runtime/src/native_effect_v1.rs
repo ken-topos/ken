@@ -9,7 +9,8 @@
 use ken_host::{
     assert_host_effect_abi_identity, assert_target_abi_identity, dispatch_host_op_v1,
     CanonicalRequestV1, CapabilityTableV1, CapabilityTokenV1, EffectEventV1, EffectObservationV1,
-    FsDeltaV1, HostDispatchReplyV1, HostEffectBackendV1, HostOpV1, TerminalErrorV1,
+    FsDeltaV1, HostDispatchReplyV1, HostEffectBackendV1, HostOpV1, ResourceTableV1,
+    TerminalErrorV1,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -51,6 +52,7 @@ pub struct KenNativeInvocationV1<B> {
     pub bindings: NativeEntrypointBindingsV1,
     pub backend: B,
     pub capabilities: CapabilityTableV1,
+    pub resources: ResourceTableV1,
     pub response_arena: ResponseArenaV1,
     pub observation: EffectObservationV1,
 }
@@ -74,6 +76,7 @@ impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
             bindings,
             backend,
             capabilities,
+            resources: ResourceTableV1::default(),
             response_arena: ResponseArenaV1::default(),
             observation: EffectObservationV1 {
                 stdout: Vec::new(),
@@ -94,8 +97,10 @@ impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
         let reply = dispatch_host_op_v1(
             &mut self.backend,
             &self.capabilities,
+            &mut self.resources,
             call.operation,
             token,
+            None,
             &call.request,
         )?;
         let sequence = self.observation.effect_trace.len() as u64;
@@ -103,6 +108,7 @@ impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
             sequence,
             operation: call.operation,
             capability: trace_identity.map(ken_host::CapabilityTraceIdentity),
+            resource: reply.resource_identity,
             request: call.request,
             outcome: reply.outcome.clone(),
         });

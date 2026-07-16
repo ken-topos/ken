@@ -29,10 +29,13 @@ pub enum HostOpV1 {
     FsRemoveDirectory = 0x0308,
     FsRename = 0x0309,
     FsChangeMode = 0x030A,
+    FsOpen = 0x030B,
+    FsHandleMetadata = 0x030C,
+    ResourceRelease = 0x0401,
 }
 
 impl HostOpV1 {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 18] = [
         Self::ConsoleRead,
         Self::ConsoleWrite,
         Self::ConsoleFlush,
@@ -48,6 +51,9 @@ impl HostOpV1 {
         Self::FsRemoveDirectory,
         Self::FsRename,
         Self::FsChangeMode,
+        Self::FsOpen,
+        Self::FsHandleMetadata,
+        Self::ResourceRelease,
     ];
 
     pub const fn availability(self) -> HostOpAvailabilityV1 {
@@ -59,6 +65,9 @@ impl HostOpV1 {
                 | Self::FsReadFile
                 | Self::FsWriteFile
                 | Self::FsChangeMode
+                | Self::FsOpen
+                | Self::FsHandleMetadata
+                | Self::ResourceRelease
         ) {
             HostOpAvailabilityV1::NativeTested
         } else {
@@ -89,13 +98,16 @@ pub const PX5_PLANNED_NATIVE_TARGETS: [HostOpV1; 5] = [
     HostOpV1::FsWriteFile,
 ];
 
-pub const NATIVE_TESTED_TARGETS_V1: [HostOpV1; 6] = [
+pub const NATIVE_TESTED_TARGETS_V1: [HostOpV1; 9] = [
     HostOpV1::ConsoleWrite,
     HostOpV1::ConsoleFlush,
     HostOpV1::ConsoleIsTerminal,
     HostOpV1::FsReadFile,
     HostOpV1::FsWriteFile,
     HostOpV1::FsChangeMode,
+    HostOpV1::FsOpen,
+    HostOpV1::FsHandleMetadata,
+    HostOpV1::ResourceRelease,
 ];
 
 pub const HOST_EFFECT_ABI_V1_SCHEMA_VERSION: u32 = 1;
@@ -108,9 +120,12 @@ pub struct HostEffectAbiV1 {
     pub native_tested_count: u16,
     pub capability_token_size: u16,
     pub capability_token_align: u16,
+    pub resource_token_size: u16,
+    pub resource_token_align: u16,
     pub response_arena_lifetime_version: u16,
     pub trace_schema_version: u16,
     pub filesystem_observation_schema_version: u16,
+    pub resource_observation_schema_version: u16,
     pub manifest_hash: [u8; 32],
 }
 
@@ -120,9 +135,12 @@ pub const HOST_EFFECT_ABI_V1: HostEffectAbiV1 = HostEffectAbiV1 {
     native_tested_count: NATIVE_TESTED_TARGETS_V1.len() as u16,
     capability_token_size: std::mem::size_of::<CapabilityTokenV1>() as u16,
     capability_token_align: std::mem::align_of::<CapabilityTokenV1>() as u16,
+    resource_token_size: std::mem::size_of::<ResourceTokenV1>() as u16,
+    resource_token_align: std::mem::align_of::<ResourceTokenV1>() as u16,
     response_arena_lifetime_version: 1,
     trace_schema_version: 1,
     filesystem_observation_schema_version: 2,
+    resource_observation_schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
     manifest_hash: HOST_EFFECT_ABI_V1_HASH,
 };
 
@@ -141,6 +159,8 @@ pub struct HostEffectWireLayoutV1 {
     pub reply_bool_tag: u64,
     pub reply_bytes_tag: u64,
     pub reply_error_tag: u64,
+    pub reply_resource_tag: u64,
+    pub reply_metadata_tag: u64,
 }
 
 fn generated_layout_fact(name: &str) -> Result<u64, TerminalErrorV1> {
@@ -227,6 +247,18 @@ pub fn host_effect_wire_layout_v1(
                 checked_u32(field("mode")?)?,
             ]
         }
+        HostOpV1::FsOpen => {
+            let path = slice("path")?;
+            vec![
+                checked_u32(field("capability")?)?,
+                path[0],
+                path[1],
+                checked_u32(field("mode")?)?,
+            ]
+        }
+        HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease => {
+            vec![checked_u32(field("resource")?)?]
+        }
         _ => return Err(TerminalErrorV1::OperationUnavailable(operation)),
     };
     let reply_bytes = offset("HostReplyV1", "bytes")?;
@@ -244,6 +276,8 @@ pub fn host_effect_wire_layout_v1(
         reply_bool_tag: generated_binding("tag", "reply.bool")?,
         reply_bytes_tag: generated_binding("tag", "reply.bytes")?,
         reply_error_tag: generated_binding("tag", "reply.error")?,
+        reply_resource_tag: generated_binding("tag", "reply.resource")?,
+        reply_metadata_tag: generated_binding("tag", "reply.metadata")?,
     })
 }
 
@@ -376,6 +410,381 @@ impl CapabilityTableV1 {
     }
 }
 
+/// Opaque resource carrier used only at the private host boundary.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ResourceTokenV1 {
+    slot: u32,
+    generation: u32,
+}
+
+impl ResourceTokenV1 {
+    pub fn erased_identity(self) -> u64 {
+        (u64::from(self.generation) << 32) | u64::from(self.slot)
+    }
+
+    pub(crate) fn from_erased_identity(identity: u64) -> Self {
+        Self {
+            slot: identity as u32,
+            generation: (identity >> 32) as u32,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ResourceKindV1 {
+    FsHandle,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ResourceTraceIdentityV1(pub u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FsOpenModeV1 {
+    Read,
+    Metadata,
+}
+
+impl FsOpenModeV1 {
+    pub const fn required_right(self) -> crate::RightSet {
+        match self {
+            Self::Read => crate::RightSet::READ,
+            Self::Metadata => crate::RightSet::METADATA,
+        }
+    }
+
+    const fn capability_operation(self) -> crate::FsCapabilityOperation {
+        match self {
+            Self::Read => crate::FsCapabilityOperation::Read,
+            Self::Metadata => crate::FsCapabilityOperation::Metadata,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResourceErrorV1 {
+    Closed,
+    MalformedResource,
+    RightNotHeld {
+        required: u8,
+        held: u8,
+    },
+    ReleaseFailed {
+        schema_version: u16,
+        resource_kind: ResourceKindV1,
+        identity: ResourceTraceIdentityV1,
+        io: IoErrorIdentityV1,
+    },
+}
+
+pub const RESOURCE_OBSERVATION_SCHEMA_VERSION_V1: u16 = 1;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResourceSettlementOutcomeV1 {
+    Released,
+    ReleaseFailed(IoErrorIdentityV1),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResourceSettlementObservationV1 {
+    pub schema_version: u16,
+    pub resource_kind: ResourceKindV1,
+    pub identity: ResourceTraceIdentityV1,
+    pub outcome: ResourceSettlementOutcomeV1,
+}
+
+#[derive(Debug)]
+enum ResourceSlotStateV1 {
+    Live {
+        owner: crate::ResourceHandleV1,
+        kind: ResourceKindV1,
+        rights: crate::RightSet,
+        identity: ResourceTraceIdentityV1,
+    },
+    Vacant {
+        last_identity: ResourceTraceIdentityV1,
+    },
+    Retired {
+        last_identity: Option<ResourceTraceIdentityV1>,
+    },
+}
+
+#[derive(Debug)]
+struct ResourceSlotV1 {
+    generation: u32,
+    state: ResourceSlotStateV1,
+}
+
+#[derive(Debug, Default)]
+pub struct ResourceTableV1 {
+    slots: Vec<ResourceSlotV1>,
+    next_acquisition_identity: u64,
+}
+
+#[derive(Debug)]
+pub struct PendingResourceCloseV1 {
+    owner: crate::ResourceHandleV1,
+    kind: ResourceKindV1,
+    identity: ResourceTraceIdentityV1,
+}
+
+impl ResourceTableV1 {
+    pub fn insert_fs_handle(
+        &mut self,
+        owner: crate::ResourceHandleV1,
+        rights: crate::RightSet,
+    ) -> (ResourceTokenV1, ResourceTraceIdentityV1) {
+        self.next_acquisition_identity = self
+            .next_acquisition_identity
+            .checked_add(1)
+            .expect("resource acquisition identity exhausted");
+        let identity = ResourceTraceIdentityV1(self.next_acquisition_identity);
+        if let Some((slot_index, slot)) = self
+            .slots
+            .iter_mut()
+            .enumerate()
+            .find(|(_, slot)| matches!(slot.state, ResourceSlotStateV1::Vacant { .. }))
+        {
+            slot.state = ResourceSlotStateV1::Live {
+                owner,
+                kind: ResourceKindV1::FsHandle,
+                rights,
+                identity,
+            };
+            return (
+                ResourceTokenV1 {
+                    slot: slot_index as u32,
+                    generation: slot.generation,
+                },
+                identity,
+            );
+        }
+        let slot = u32::try_from(self.slots.len()).expect("resource table exceeds u32");
+        let generation = 1;
+        self.slots.push(ResourceSlotV1 {
+            generation,
+            state: ResourceSlotStateV1::Live {
+                owner,
+                kind: ResourceKindV1::FsHandle,
+                rights,
+                identity,
+            },
+        });
+        (ResourceTokenV1 { slot, generation }, identity)
+    }
+
+    pub fn resolve_fs_handle(
+        &self,
+        token: ResourceTokenV1,
+        required: crate::RightSet,
+    ) -> Result<(&crate::ResourceHandleV1, ResourceTraceIdentityV1), ResourceErrorV1> {
+        let slot = self.lookup(token)?;
+        let (owner, rights, identity) = match &slot.state {
+            ResourceSlotStateV1::Live {
+                owner,
+                rights,
+                identity,
+                ..
+            } => (owner, rights, identity),
+            ResourceSlotStateV1::Vacant { .. } => return Err(ResourceErrorV1::MalformedResource),
+            ResourceSlotStateV1::Retired { .. } => return Err(ResourceErrorV1::Closed),
+        };
+        if !rights.contains(required) {
+            return Err(ResourceErrorV1::RightNotHeld {
+                required: required.bits(),
+                held: rights.bits(),
+            });
+        }
+        Ok((owner, *identity))
+    }
+
+    pub fn identity(
+        &self,
+        token: ResourceTokenV1,
+    ) -> Result<ResourceTraceIdentityV1, ResourceErrorV1> {
+        if token.generation == 0 {
+            return Err(ResourceErrorV1::MalformedResource);
+        }
+        let Some(slot) = self.slots.get(token.slot as usize) else {
+            return Err(ResourceErrorV1::MalformedResource);
+        };
+        match &slot.state {
+            ResourceSlotStateV1::Live { identity, .. } if token.generation == slot.generation => {
+                Ok(*identity)
+            }
+            ResourceSlotStateV1::Live { .. } if token.generation < slot.generation => {
+                Err(ResourceErrorV1::Closed)
+            }
+            ResourceSlotStateV1::Live { .. } => Err(ResourceErrorV1::MalformedResource),
+            ResourceSlotStateV1::Vacant { last_identity }
+                if token.generation.checked_add(1) == Some(slot.generation) =>
+            {
+                Ok(*last_identity)
+            }
+            ResourceSlotStateV1::Retired {
+                last_identity: Some(last_identity),
+            } if token.generation == slot.generation => Ok(*last_identity),
+            ResourceSlotStateV1::Vacant { .. } | ResourceSlotStateV1::Retired { .. }
+                if token.generation < slot.generation =>
+            {
+                Err(ResourceErrorV1::Closed)
+            }
+            ResourceSlotStateV1::Vacant { .. } => Err(ResourceErrorV1::MalformedResource),
+            ResourceSlotStateV1::Retired { .. } => Err(ResourceErrorV1::MalformedResource),
+        }
+    }
+
+    fn lookup(&self, token: ResourceTokenV1) -> Result<&ResourceSlotV1, ResourceErrorV1> {
+        if token.generation == 0 {
+            return Err(ResourceErrorV1::MalformedResource);
+        }
+        let Some(slot) = self.slots.get(token.slot as usize) else {
+            return Err(ResourceErrorV1::MalformedResource);
+        };
+        if token.generation < slot.generation {
+            return Err(ResourceErrorV1::Closed);
+        }
+        if token.generation > slot.generation {
+            return Err(ResourceErrorV1::MalformedResource);
+        }
+        Ok(slot)
+    }
+
+    pub fn begin_release(
+        &mut self,
+        token: ResourceTokenV1,
+    ) -> Result<PendingResourceCloseV1, ResourceErrorV1> {
+        if token.generation == 0 {
+            return Err(ResourceErrorV1::MalformedResource);
+        }
+        let Some(slot) = self.slots.get_mut(token.slot as usize) else {
+            return Err(ResourceErrorV1::MalformedResource);
+        };
+        if token.generation < slot.generation {
+            return Err(ResourceErrorV1::Closed);
+        }
+        if token.generation > slot.generation {
+            return Err(ResourceErrorV1::MalformedResource);
+        }
+        match &slot.state {
+            ResourceSlotStateV1::Vacant { .. } => return Err(ResourceErrorV1::MalformedResource),
+            ResourceSlotStateV1::Retired { .. } => return Err(ResourceErrorV1::Closed),
+            ResourceSlotStateV1::Live { .. } => {}
+        }
+        let state = std::mem::replace(
+            &mut slot.state,
+            ResourceSlotStateV1::Retired {
+                last_identity: None,
+            },
+        );
+        let ResourceSlotStateV1::Live {
+            owner,
+            kind,
+            identity,
+            ..
+        } = state
+        else {
+            return Err(ResourceErrorV1::Closed);
+        };
+        match slot.generation.checked_add(1) {
+            Some(next) => {
+                slot.generation = next;
+                slot.state = ResourceSlotStateV1::Vacant {
+                    last_identity: identity,
+                };
+            }
+            None => {
+                slot.state = ResourceSlotStateV1::Retired {
+                    last_identity: Some(identity),
+                }
+            }
+        }
+        Ok(PendingResourceCloseV1 {
+            owner,
+            kind,
+            identity,
+        })
+    }
+
+    pub fn finish_release_with(
+        pending: PendingResourceCloseV1,
+        close: impl FnOnce(crate::ResourceHandleV1) -> Result<(), IoErrorIdentityV1>,
+    ) -> Result<ResourceSettlementObservationV1, ResourceErrorV1> {
+        let PendingResourceCloseV1 {
+            owner,
+            kind,
+            identity,
+        } = pending;
+        match close(owner) {
+            Ok(()) => Ok(ResourceSettlementObservationV1 {
+                schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                resource_kind: kind,
+                identity,
+                outcome: ResourceSettlementOutcomeV1::Released,
+            }),
+            Err(io) => Err(ResourceErrorV1::ReleaseFailed {
+                schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                resource_kind: kind,
+                identity,
+                io,
+            }),
+        }
+    }
+
+    pub fn finalize_all_with(
+        &mut self,
+        mut close: impl FnMut(crate::ResourceHandleV1) -> Result<(), IoErrorIdentityV1>,
+    ) -> Vec<ResourceSettlementObservationV1> {
+        let tokens = self
+            .slots
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, entry)| {
+                matches!(entry.state, ResourceSlotStateV1::Live { .. }).then_some(ResourceTokenV1 {
+                    slot: slot as u32,
+                    generation: entry.generation,
+                })
+            })
+            .collect::<Vec<_>>();
+        tokens
+            .into_iter()
+            .filter_map(|token| {
+                let pending = self.begin_release(token).ok()?;
+                let kind = pending.kind;
+                let identity = pending.identity;
+                Some(match close(pending.owner) {
+                    Ok(()) => ResourceSettlementObservationV1 {
+                        schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                        resource_kind: kind,
+                        identity,
+                        outcome: ResourceSettlementOutcomeV1::Released,
+                    },
+                    Err(io) => ResourceSettlementObservationV1 {
+                        schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                        resource_kind: kind,
+                        identity,
+                        outcome: ResourceSettlementOutcomeV1::ReleaseFailed(io),
+                    },
+                })
+            })
+            .collect()
+    }
+
+    #[cfg(test)]
+    fn force_generation_for_test(
+        &mut self,
+        token: ResourceTokenV1,
+        generation: u32,
+    ) -> ResourceTokenV1 {
+        let slot = &mut self.slots[token.slot as usize];
+        slot.generation = generation;
+        ResourceTokenV1 {
+            slot: token.slot,
+            generation,
+        }
+    }
+}
+
 /// Host leaves behind the single semantic dispatcher.
 pub trait HostEffectBackendV1 {
     fn console_read(
@@ -468,11 +877,44 @@ pub trait HostEffectBackendV1 {
     ) -> Result<(), FileErrorCauseV1> {
         Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
     }
+
+    fn fs_open_resource(
+        &mut self,
+        _grant: &CapabilityGrantV1,
+        _path: &[u8],
+        _mode: FsOpenModeV1,
+    ) -> Result<crate::ResourceHandleV1, FileErrorCauseV1> {
+        Err(FileErrorCauseV1::Io(IoErrorIdentityV1::Unsupported))
+    }
+
+    fn fs_resource_metadata(
+        &mut self,
+        handle: &crate::ResourceHandleV1,
+    ) -> Result<FileMetadataV1, IoErrorIdentityV1> {
+        crate::resource_metadata_v1(handle)
+            .map(|metadata| FileMetadataV1 {
+                size: metadata.size,
+                kind: match metadata.kind {
+                    crate::FileKind::File => FsNodeKindV1::File,
+                    crate::FileKind::Directory => FsNodeKindV1::Directory,
+                    crate::FileKind::Symlink => FsNodeKindV1::Symlink,
+                    crate::FileKind::Other => FsNodeKindV1::Other,
+                },
+            })
+            .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+    }
+
+    fn resource_close(&mut self, handle: crate::ResourceHandleV1) -> Result<(), IoErrorIdentityV1> {
+        crate::close_resource_v1(handle)
+            .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HostDispatchReplyV1 {
     pub capability_identity: Option<CapabilityTraceIdentity>,
+    pub resource_identity: Option<ResourceTraceIdentityV1>,
+    pub resource_token: Option<ResourceTokenV1>,
     pub outcome: CanonicalOutcomeV1,
 }
 
@@ -481,8 +923,10 @@ pub struct HostDispatchReplyV1 {
 pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
     backend: &mut B,
     capabilities: &CapabilityTableV1,
+    resources: &mut ResourceTableV1,
     operation: HostOpV1,
     capability: Option<CapabilityTokenV1>,
+    resource: Option<ResourceTokenV1>,
     request: &CanonicalRequestV1,
 ) -> Result<HostDispatchReplyV1, TerminalErrorV1> {
     let required = match operation {
@@ -508,6 +952,12 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
         HostOpV1::FsChangeMode => {
             Some((crate::FsCapabilityOperation::ChangeMode, crate::AUTH_FULL))
         }
+        HostOpV1::FsOpen => {
+            let CanonicalRequestV1::FsOpen { mode, .. } = request else {
+                return Err(TerminalErrorV1::MalformedHostAbiField);
+            };
+            Some((mode.capability_operation(), crate::AUTH_PARTIAL))
+        }
         _ => None,
     };
     let grant = match (required, capability) {
@@ -531,6 +981,30 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             Err(error) => return Ok(denied(operation, request, error)),
         },
     };
+    if matches!(
+        operation,
+        HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease
+    ) != resource.is_some()
+    {
+        return Ok(resource_denied(
+            operation,
+            request,
+            ResourceErrorV1::MalformedResource,
+        ));
+    }
+    if !matches!(
+        operation,
+        HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease
+    ) && resource.is_some()
+    {
+        return Ok(resource_denied(
+            operation,
+            request,
+            ResourceErrorV1::MalformedResource,
+        ));
+    }
+    let mut resource_identity = None;
+    let mut minted_resource = None;
     let outcome = match (operation, request) {
         (HostOpV1::ConsoleRead, CanonicalRequestV1::ConsoleRead { stream, limit }) => backend
             .console_read(*stream, *limit)
@@ -613,10 +1087,51 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             .fs_change_mode(grant.expect("validated FS capability"), path, *mode)
             .map(|()| CanonicalReplyV1::Unit)
             .map_err(|cause| file_error(operation, path, cause)),
+        (HostOpV1::FsOpen, CanonicalRequestV1::FsOpen { path, mode }) => backend
+            .fs_open_resource(grant.expect("validated FS capability"), path, *mode)
+            .map(|owner| {
+                let (token, identity) = resources.insert_fs_handle(owner, mode.required_right());
+                resource_identity = Some(identity);
+                minted_resource = Some(token);
+                CanonicalReplyV1::ResourceAcquired {
+                    schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                    resource_kind: ResourceKindV1::FsHandle,
+                    identity,
+                }
+            })
+            .map_err(|cause| file_error(operation, path, cause)),
+        (HostOpV1::FsHandleMetadata, CanonicalRequestV1::FsHandleMetadata) => {
+            let token = resource.expect("validated resource token");
+            resource_identity = resources.identity(token).ok();
+            match resources.resolve_fs_handle(token, crate::RightSet::METADATA) {
+                Ok((handle, identity)) => {
+                    resource_identity = Some(identity);
+                    backend
+                        .fs_resource_metadata(handle)
+                        .map(CanonicalReplyV1::FileMetadata)
+                        .map_err(SemanticErrorV1::Io)
+                }
+                Err(error) => Err(SemanticErrorV1::Resource(error)),
+            }
+        }
+        (HostOpV1::ResourceRelease, CanonicalRequestV1::ResourceRelease) => {
+            let token = resource.expect("validated resource token");
+            resource_identity = resources.identity(token).ok();
+            match resources.begin_release(token) {
+                Ok(pending) => ResourceTableV1::finish_release_with(pending, |owner| {
+                    backend.resource_close(owner)
+                })
+                .map(CanonicalReplyV1::ResourceSettlement)
+                .map_err(SemanticErrorV1::Resource),
+                Err(error) => Err(SemanticErrorV1::Resource(error)),
+            }
+        }
         _ => return Err(TerminalErrorV1::MalformedHostAbiField),
     };
     Ok(HostDispatchReplyV1 {
         capability_identity: grant.map(|grant| grant.identity.clone()),
+        resource_identity,
+        resource_token: minted_resource,
         outcome: match outcome {
             Ok(reply) => CanonicalOutcomeV1::Success(reply),
             Err(error) => CanonicalOutcomeV1::Error(error),
@@ -682,16 +1197,33 @@ fn denied(
         | CanonicalRequestV1::FsRemoveFile { path }
         | CanonicalRequestV1::FsRemoveDirectory { path, .. } => path.clone(),
         CanonicalRequestV1::FsRename { source, .. } => source.clone(),
-        CanonicalRequestV1::FsChangeMode { path, .. } => path.clone(),
+        CanonicalRequestV1::FsChangeMode { path, .. } | CanonicalRequestV1::FsOpen { path, .. } => {
+            path.clone()
+        }
         _ => Vec::new(),
     };
     HostDispatchReplyV1 {
         capability_identity: None,
+        resource_identity: None,
+        resource_token: None,
         outcome: CanonicalOutcomeV1::Error(file_error(
             operation,
             &path,
             FileErrorCauseV1::Capability(error),
         )),
+    }
+}
+
+fn resource_denied(
+    _operation: HostOpV1,
+    _request: &CanonicalRequestV1,
+    error: ResourceErrorV1,
+) -> HostDispatchReplyV1 {
+    HostDispatchReplyV1 {
+        capability_identity: None,
+        resource_identity: None,
+        resource_token: None,
+        outcome: CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(error)),
     }
 }
 
@@ -772,6 +1304,12 @@ pub enum CanonicalRequestV1 {
         path: Vec<u8>,
         mode: u16,
     },
+    FsOpen {
+        path: Vec<u8>,
+        mode: FsOpenModeV1,
+    },
+    FsHandleMetadata,
+    ResourceRelease,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -852,6 +1390,7 @@ pub enum SemanticErrorV1 {
     Io(IoErrorIdentityV1),
     File(FileErrorIdentityV1),
     Capability(CapabilityDeniedV1),
+    Resource(ResourceErrorV1),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -864,6 +1403,12 @@ pub enum CanonicalReplyV1 {
     Instant(Vec<u8>),
     FileMetadata(FileMetadataV1),
     DirectoryEntries(Vec<DirEntryV1>),
+    ResourceAcquired {
+        schema_version: u16,
+        resource_kind: ResourceKindV1,
+        identity: ResourceTraceIdentityV1,
+    },
+    ResourceSettlement(ResourceSettlementObservationV1),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -889,6 +1434,7 @@ pub struct EffectEventV1 {
     pub sequence: u64,
     pub operation: HostOpV1,
     pub capability: Option<CapabilityTraceIdentity>,
+    pub resource: Option<ResourceTraceIdentityV1>,
     pub request: CanonicalRequestV1,
     pub outcome: CanonicalOutcomeV1,
 }
@@ -1083,7 +1629,7 @@ mod tests {
     }
 
     #[test]
-    fn all_fifteen_operations_share_one_semantic_dispatch() {
+    fn all_pre_resource_operations_share_one_semantic_dispatch() {
         let mut capabilities = CapabilityTableV1::default();
         let token = capabilities.insert(CapabilityGrantV1 {
             identity: CapabilityTraceIdentity("test:all".to_string()),
@@ -1195,17 +1741,26 @@ mod tests {
             ),
         ];
         let mut backend = AllOpsBackend::default();
+        let mut resources = ResourceTableV1::default();
         for (operation, request) in requests {
             let capability = (!operation.is_ambient()).then_some(token);
-            dispatch_host_op_v1(&mut backend, &capabilities, operation, capability, &request)
-                .unwrap();
+            dispatch_host_op_v1(
+                &mut backend,
+                &capabilities,
+                &mut resources,
+                operation,
+                capability,
+                None,
+                &request,
+            )
+            .unwrap();
         }
-        assert_eq!(backend.0, HostOpV1::ALL);
+        assert_eq!(backend.0, HostOpV1::ALL[..15]);
     }
 
     #[test]
     fn catalog_is_closed_and_availability_is_exact() {
-        assert_eq!(HostOpV1::ALL.len(), 15);
+        assert_eq!(HostOpV1::ALL.len(), 18);
         assert_eq!(
             HostOpV1::ALL
                 .into_iter()
@@ -1325,8 +1880,13 @@ mod tests {
             "ConsoleWrite|0102|native|ConsoleWriteRequestV1|2|HostReplyV1|1",
             "FsRename|0309|unavailable|FsRenameRequestV1|3|HostReplyV1|1",
             "FsChangeMode|030a|native|FsChangeModeRequestV1|3|HostReplyV1|1",
+            "FsOpen|030b|native|FsOpenRequestV1|3|HostReplyV1|1",
+            "FsHandleMetadata|030c|native|ResourceRequestV1|1|HostReplyV1|1",
+            "ResourceRelease|0401|native|ResourceRequestV1|1|HostReplyV1|1",
             "lifetime=filesystem_observation_schema|2",
+            "lifetime=resource_observation_schema|1",
             "layout=OFFSET_FsChangeModeRequestV1_mode|24",
+            "layout=OFFSET_ResourceRequestV1_resource|0",
             "layout=SIZE_HostReplyV1|",
             "error=io.BrokenPipe|3",
             "tag=reply.error|3",
@@ -1363,6 +1923,22 @@ mod tests {
         assert_eq!(
             fact("OFFSET_CapabilityTokenV1_generation"),
             std::mem::offset_of!(CapabilityTokenV1, generation) as u64
+        );
+        assert_eq!(
+            fact("SIZE_ResourceTokenV1"),
+            std::mem::size_of::<ResourceTokenV1>() as u64
+        );
+        assert_eq!(
+            fact("ALIGN_ResourceTokenV1"),
+            std::mem::align_of::<ResourceTokenV1>() as u64
+        );
+        assert_eq!(
+            fact("OFFSET_ResourceTokenV1_slot"),
+            std::mem::offset_of!(ResourceTokenV1, slot) as u64
+        );
+        assert_eq!(
+            fact("OFFSET_ResourceTokenV1_generation"),
+            std::mem::offset_of!(ResourceTokenV1, generation) as u64
         );
     }
 
@@ -1426,5 +2002,519 @@ mod tests {
                 raw_operation_id: 2,
             }
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    fn resource_fixture(name: &str) -> (std::path::PathBuf, crate::ResourceHandleV1) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let root = std::env::temp_dir().join(format!(
+            "ken-px7r-{}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed),
+            name
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join(name), b"resource-bytes").unwrap();
+        let root_path = crate::RootPath::new(&root).unwrap();
+        let parent = crate::open_root(&root_path).unwrap();
+        let leaf = crate::PathComponent::new(name.as_bytes()).unwrap();
+        let handle = crate::open_resource_at_v1(&parent, &leaf, crate::OpenRequest::Read).unwrap();
+        (root, handle)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    /// Caller-control only: the injected error proves invalidation, mapping,
+    /// and no retry; it is not evidence that the OS produced a close error.
+    fn caller_control_release_invalidates_before_close_and_never_retries() {
+        let (root, owner) = resource_fixture("first");
+        let mut table = ResourceTableV1::default();
+        let (token, identity) = table.insert_fs_handle(owner, crate::RightSet::METADATA);
+        assert_eq!(identity, ResourceTraceIdentityV1(1));
+        assert!(table
+            .resolve_fs_handle(token, crate::RightSet::METADATA)
+            .is_ok());
+
+        let pending = table.begin_release(token).unwrap();
+        assert!(matches!(
+            table.resolve_fs_handle(token, crate::RightSet::METADATA),
+            Err(ResourceErrorV1::Closed)
+        ));
+        let calls = std::cell::Cell::new(0);
+        let result = ResourceTableV1::finish_release_with(pending, |owner| {
+            calls.set(calls.get() + 1);
+            drop(owner);
+            Err(IoErrorIdentityV1::Other(5))
+        });
+        assert_eq!(calls.get(), 1);
+        assert_eq!(
+            result,
+            Err(ResourceErrorV1::ReleaseFailed {
+                schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                resource_kind: ResourceKindV1::FsHandle,
+                identity,
+                io: IoErrorIdentityV1::Other(5),
+            })
+        );
+        assert!(matches!(
+            table.begin_release(token),
+            Err(ResourceErrorV1::Closed)
+        ));
+        assert_eq!(calls.get(), 1, "closed descriptors are never retried");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Caller-control only: this proves explicit finalization preserves every
+    /// close result after invalidation; it does not claim the OS produced the
+    /// injected error.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn explicit_finalizer_settles_every_live_owner_once_and_records_failure() {
+        let (root_a, owner_a) = resource_fixture("final-a");
+        let (root_b, owner_b) = resource_fixture("final-b");
+        let mut table = ResourceTableV1::default();
+        let (token_a, identity_a) = table.insert_fs_handle(owner_a, crate::RightSet::METADATA);
+        let (token_b, identity_b) = table.insert_fs_handle(owner_b, crate::RightSet::METADATA);
+        let calls = std::cell::Cell::new(0);
+        let settlements = table.finalize_all_with(|owner| {
+            let call = calls.get();
+            calls.set(call + 1);
+            drop(owner);
+            if call == 0 {
+                Ok(())
+            } else {
+                Err(IoErrorIdentityV1::Other(5))
+            }
+        });
+        assert_eq!(calls.get(), 2);
+        assert_eq!(
+            settlements,
+            vec![
+                ResourceSettlementObservationV1 {
+                    schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                    resource_kind: ResourceKindV1::FsHandle,
+                    identity: identity_a,
+                    outcome: ResourceSettlementOutcomeV1::Released,
+                },
+                ResourceSettlementObservationV1 {
+                    schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                    resource_kind: ResourceKindV1::FsHandle,
+                    identity: identity_b,
+                    outcome: ResourceSettlementOutcomeV1::ReleaseFailed(IoErrorIdentityV1::Other(
+                        5
+                    ),),
+                },
+            ]
+        );
+        for token in [token_a, token_b] {
+            assert!(matches!(
+                table.resolve_fs_handle(token, crate::RightSet::METADATA),
+                Err(ResourceErrorV1::Closed)
+            ));
+        }
+        assert!(table.finalize_all_with(|_| unreachable!()).is_empty());
+        assert_eq!(calls.get(), 2, "explicit finalization never retries");
+        for root in [root_a, root_b] {
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn stale_slot_reuse_wrap_retirement_and_real_consumer_are_distinct() {
+        let (root_a, owner_a) = resource_fixture("a");
+        let (root_b, owner_b) = resource_fixture("b");
+        let (root_c, owner_c) = resource_fixture("c");
+        let mut table = ResourceTableV1::default();
+        let (stale, _) = table.insert_fs_handle(owner_a, crate::RightSet::METADATA);
+        let metadata = crate::resource_metadata_v1(
+            table
+                .resolve_fs_handle(stale, crate::RightSet::METADATA)
+                .unwrap()
+                .0,
+        )
+        .unwrap();
+        assert_eq!(metadata.size, 14);
+        let pending = table.begin_release(stale).unwrap();
+        ResourceTableV1::finish_release_with(pending, |owner| {
+            crate::close_resource_v1(owner)
+                .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+        })
+        .unwrap();
+        assert!(matches!(
+            table.resolve_fs_handle(stale, crate::RightSet::METADATA),
+            Err(ResourceErrorV1::Closed)
+        ));
+
+        let never_minted = ResourceTokenV1 {
+            slot: stale.slot,
+            generation: stale.generation + 1,
+        };
+        assert_eq!(
+            table.identity(never_minted),
+            Err(ResourceErrorV1::MalformedResource)
+        );
+        assert!(matches!(
+            table.resolve_fs_handle(never_minted, crate::RightSet::METADATA),
+            Err(ResourceErrorV1::MalformedResource)
+        ));
+        assert!(matches!(
+            table.begin_release(never_minted),
+            Err(ResourceErrorV1::MalformedResource)
+        ));
+
+        let (reused, second_identity) = table.insert_fs_handle(owner_b, crate::RightSet::METADATA);
+        assert_eq!(reused.slot, stale.slot);
+        assert_ne!(reused.generation, stale.generation);
+        assert_eq!(second_identity, ResourceTraceIdentityV1(2));
+        assert!(matches!(
+            table.resolve_fs_handle(reused, crate::RightSet::READ),
+            Err(ResourceErrorV1::RightNotHeld { .. })
+        ));
+
+        let wrapped = table.force_generation_for_test(reused, u32::MAX);
+        let pending = table.begin_release(wrapped).unwrap();
+        ResourceTableV1::finish_release_with(pending, |owner| {
+            crate::close_resource_v1(owner)
+                .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+        })
+        .unwrap();
+        let (after_wrap, third_identity) =
+            table.insert_fs_handle(owner_c, crate::RightSet::METADATA);
+        assert_ne!(
+            after_wrap.slot, wrapped.slot,
+            "wrapped slots retire permanently"
+        );
+        assert_eq!(third_identity, ResourceTraceIdentityV1(3));
+        assert_eq!(
+            table.identity(ResourceTokenV1 {
+                slot: u32::MAX,
+                generation: 1,
+            }),
+            Err(ResourceErrorV1::MalformedResource)
+        );
+        assert_eq!(
+            table.identity(ResourceTokenV1 {
+                slot: after_wrap.slot,
+                generation: 0,
+            }),
+            Err(ResourceErrorV1::MalformedResource)
+        );
+        let pending = table.begin_release(after_wrap).unwrap();
+        ResourceTableV1::finish_release_with(pending, |owner| {
+            crate::close_resource_v1(owner)
+                .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+        })
+        .unwrap();
+        for root in [root_a, root_b, root_c] {
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn resource_owner_and_close_allowance_are_structurally_confined() {
+        let lib = include_str!("lib.rs");
+        let close = include_str!("resource_close_v1.rs");
+        let abi = include_str!("abi_v1.rs");
+        assert!(lib.contains("pub struct ResourceHandleV1"));
+        assert!(!lib.contains("impl Clone for ResourceHandleV1"));
+        assert!(!lib.contains("ResourceHandleV1 {\n    inner: Arc"));
+        assert_eq!(
+            close
+                .matches("unsafe { rustix::io::try_close(raw_fd) }")
+                .count(),
+            1
+        );
+        assert_eq!(close.matches("#![allow(unsafe_code)]").count(), 1);
+        assert!(!close.contains("ManuallyDrop"));
+        assert!(!close.contains("from_raw_fd"));
+        let finish = abi
+            .split("pub unsafe extern \"C\" fn ken_host_invocation_v1_finish")
+            .nth(1)
+            .expect("controlled finish entrypoint exists");
+        let finalize = finish
+            .find("context.finalize_resources();")
+            .expect("controlled finish explicitly finalizes resources");
+        let observation = finish
+            .find("write_observation_v1")
+            .expect("controlled finish records its observation");
+        assert!(
+            finalize < observation,
+            "settlement precedes observation emission"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    struct RealResourceBackend {
+        root: crate::RootedHandle,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl HostEffectBackendV1 for RealResourceBackend {
+        fn console_write(&mut self, _: ConsoleStreamV1, _: &[u8]) -> Result<(), IoErrorIdentityV1> {
+            unreachable!()
+        }
+
+        fn console_flush(&mut self, _: ConsoleStreamV1) -> Result<(), IoErrorIdentityV1> {
+            unreachable!()
+        }
+
+        fn console_is_terminal(&mut self, _: ConsoleStreamV1) -> bool {
+            unreachable!()
+        }
+
+        fn fs_read_file(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+        ) -> Result<Vec<u8>, FileErrorCauseV1> {
+            unreachable!()
+        }
+
+        fn fs_write_file(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+            _: CreatePolicyV1,
+            _: &[u8],
+        ) -> Result<(), FileErrorCauseV1> {
+            unreachable!()
+        }
+
+        fn fs_open_resource(
+            &mut self,
+            _: &CapabilityGrantV1,
+            path: &[u8],
+            _: FsOpenModeV1,
+        ) -> Result<crate::ResourceHandleV1, FileErrorCauseV1> {
+            crate::open_resource_at_v1(
+                &self.root,
+                &crate::PathComponent::new(path).map_err(|error| {
+                    FileErrorCauseV1::Io(io_error_identity_v1(&error.into_io_error()))
+                })?,
+                crate::OpenRequest::Read,
+            )
+            .map_err(|error| FileErrorCauseV1::Io(io_error_identity_v1(&error.into_io_error())))
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn resource_lane(root: &std::path::Path) -> Vec<EffectEventV1> {
+        let root_path = crate::RootPath::new(root).unwrap();
+        let root_handle = crate::open_root(&root_path).unwrap();
+        let metadata = crate::metadata(&root_handle).unwrap();
+        let cap = crate::Cap::mint_scoped(
+            crate::AUTH_PARTIAL,
+            "FS",
+            crate::FsScope::root(
+                crate::RightSet::METADATA,
+                crate::FsHandle::Posix(root_handle.clone()),
+                crate::FsIdentity::Posix {
+                    device: metadata.identity.device,
+                    inode: metadata.identity.inode,
+                },
+                crate::SymlinkPolicy::NoFollow,
+            ),
+        );
+        let mut capabilities = CapabilityTableV1::default();
+        let capability = capabilities.insert(CapabilityGrantV1 {
+            identity: crate::program_caps_fs_trace_identity_v1(),
+            capability: cap,
+        });
+        let mut resources = ResourceTableV1::default();
+        let mut backend = RealResourceBackend { root: root_handle };
+        let mut events = Vec::new();
+        let open_request = CanonicalRequestV1::FsOpen {
+            path: b"held.bin".to_vec(),
+            mode: FsOpenModeV1::Metadata,
+        };
+        let open = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            None,
+            &open_request,
+        )
+        .unwrap();
+        let token = open.resource_token.unwrap();
+        events.push(EffectEventV1 {
+            sequence: 0,
+            operation: HostOpV1::FsOpen,
+            capability: open.capability_identity,
+            resource: open.resource_identity,
+            request: open_request,
+            outcome: open.outcome,
+        });
+        for (sequence, operation, request) in [
+            (
+                1,
+                HostOpV1::FsHandleMetadata,
+                CanonicalRequestV1::FsHandleMetadata,
+            ),
+            (
+                2,
+                HostOpV1::ResourceRelease,
+                CanonicalRequestV1::ResourceRelease,
+            ),
+        ] {
+            let reply = dispatch_host_op_v1(
+                &mut backend,
+                &capabilities,
+                &mut resources,
+                operation,
+                None,
+                Some(token),
+                &request,
+            )
+            .unwrap();
+            events.push(EffectEventV1 {
+                sequence,
+                operation,
+                capability: reply.capability_identity,
+                resource: reply.resource_identity,
+                request,
+                outcome: reply.outcome,
+            });
+        }
+        events
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn distinct_host_roots_have_byte_identical_resource_lifecycle_observations() {
+        let left = std::env::temp_dir().join(format!("ken-px7r-left-{}", std::process::id()));
+        let right = std::env::temp_dir().join(format!("ken-px7r-right-{}", std::process::id()));
+        for root in [&left, &right] {
+            let _ = std::fs::remove_dir_all(root);
+            std::fs::create_dir_all(root).unwrap();
+            std::fs::write(root.join("held.bin"), b"same-bytes").unwrap();
+        }
+        let left_events = resource_lane(&left);
+        let right_events = resource_lane(&right);
+        assert_eq!(left_events, right_events);
+        assert_eq!(
+            left_events
+                .iter()
+                .map(|event| event.resource)
+                .collect::<Vec<_>>(),
+            vec![Some(ResourceTraceIdentityV1(1)); 3]
+        );
+        std::fs::remove_dir_all(left).unwrap();
+        std::fs::remove_dir_all(right).unwrap();
+    }
+
+    #[test]
+    fn fs_open_denial_remains_a_capability_error_before_resource_mint() {
+        let mut capabilities = CapabilityTableV1::default();
+        let capability = capabilities.insert(CapabilityGrantV1 {
+            identity: crate::program_caps_fs_trace_identity_v1(),
+            capability: crate::Cap::mint(crate::AUTH_NONE, "FS"),
+        });
+        let mut resources = ResourceTableV1::default();
+        let mut backend = AllOpsBackend::default();
+        let request = CanonicalRequestV1::FsOpen {
+            path: b"denied".to_vec(),
+            mode: FsOpenModeV1::Metadata,
+        };
+        let reply = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            None,
+            &request,
+        )
+        .unwrap();
+        assert!(matches!(
+            reply.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::File(FileErrorIdentityV1 {
+                cause: FileErrorCauseV1::Capability(_),
+                ..
+            }))
+        ));
+        assert!(reply.resource_token.is_none());
+        assert!(backend.0.is_empty(), "denial precedes every host leaf");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn fs_open_attenuates_the_live_handle_to_the_requested_mode() {
+        let root =
+            std::env::temp_dir().join(format!("ken-px7r-attenuation-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("held.bin"), b"held-resource").unwrap();
+        let rooted = crate::open_root(&crate::RootPath::new(&root).unwrap()).unwrap();
+        let metadata = crate::metadata(&rooted).unwrap();
+        let cap = crate::Cap::mint_scoped(
+            crate::AUTH_PARTIAL,
+            "FS",
+            crate::FsScope::root(
+                crate::RightSet::READ.union(crate::RightSet::METADATA),
+                crate::FsHandle::Posix(rooted.clone()),
+                crate::FsIdentity::Posix {
+                    device: metadata.identity.device,
+                    inode: metadata.identity.inode,
+                },
+                crate::SymlinkPolicy::NoFollow,
+            ),
+        );
+        let mut capabilities = CapabilityTableV1::default();
+        let capability = capabilities.insert(CapabilityGrantV1 {
+            identity: crate::program_caps_fs_trace_identity_v1(),
+            capability: cap,
+        });
+        let mut resources = ResourceTableV1::default();
+        let mut backend = RealResourceBackend { root: rooted };
+        let opened = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"held.bin".to_vec(),
+                mode: FsOpenModeV1::Read,
+            },
+        )
+        .unwrap();
+        let token = opened.resource_token.unwrap();
+        let denied = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsHandleMetadata,
+            None,
+            Some(token),
+            &CanonicalRequestV1::FsHandleMetadata,
+        )
+        .unwrap();
+        assert_eq!(
+            denied.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::RightNotHeld {
+                required: crate::RightSet::METADATA.bits(),
+                held: crate::RightSet::READ.bits(),
+            },))
+        );
+        let released = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::ResourceRelease,
+            None,
+            Some(token),
+            &CanonicalRequestV1::ResourceRelease,
+        )
+        .unwrap();
+        assert!(matches!(
+            released.outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::ResourceSettlement(_))
+        ));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

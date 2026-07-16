@@ -6,15 +6,16 @@ use std::fmt;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
-use ken_elaborator::capabilities::{AUTH_FULL, Authority, RightSet, SymlinkPolicy};
+use ken_elaborator::capabilities::{Authority, RightSet, SymlinkPolicy, AUTH_FULL};
 use ken_host::EffectObservationV1;
 use ken_runtime::{
     BoundProcessExecutableArtifact, NativeEffectRunErrorV1, NativeEffectRunOptionsV1,
 };
 
 use crate::{
-    AmbientScript, ExpectedFsEffect, LaneActionEvidence, ObservationMismatch, ScriptedPosixHost,
-    SeedNode, TwinRealRoots, TwinRootError, canonical_filesystem_delta, compare_canonical_exact,
+    canonical_filesystem_delta, compare_canonical_exact, AmbientScript, ExpectedFsEffect,
+    LaneActionEvidence, ObservationMismatch, ScriptedPosixHost, SeedNode, TwinRealRoots,
+    TwinRootError,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -298,15 +299,15 @@ fn raw_path_bytes(_path: &std::path::Path) -> Result<Vec<u8>, HarnessError> {
 mod tests {
     use super::*;
     use crate::{
-        CanonicalMutation, NativeTestedEvidence, RunnerOnlyProxy, StatusTransitionError,
         apply_canonical_mutation, confirm_native_tested_transition, denial_precedes_host_action,
+        CanonicalMutation, NativeTestedEvidence, RunnerOnlyProxy, StatusTransitionError,
     };
     use ken_host::{
-        CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, CapabilityDeniedV1,
-        CapabilityGrantV1, CapabilityTableV1, ConsoleStreamV1, CreatePolicyV1, FileErrorCauseV1,
-        HostEffectBackendV1, HostOpAvailabilityV1, HostOpV1, IoErrorIdentityV1,
-        PX5_PLANNED_NATIVE_TARGETS, SemanticErrorV1, dispatch_host_op_v1,
-        program_caps_fs_trace_identity_v1,
+        dispatch_host_op_v1, program_caps_fs_trace_identity_v1, CanonicalOutcomeV1,
+        CanonicalReplyV1, CanonicalRequestV1, CapabilityDeniedV1, CapabilityGrantV1,
+        CapabilityTableV1, ConsoleStreamV1, CreatePolicyV1, FileErrorCauseV1, HostEffectBackendV1,
+        HostOpAvailabilityV1, HostOpV1, IoErrorIdentityV1, SemanticErrorV1,
+        PX5_PLANNED_NATIVE_TARGETS,
     };
 
     const FIVE_OP_SOURCE: &str = r#"program capabilities FS AFull
@@ -1005,12 +1006,15 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
             path: b"raw/./identity".to_vec(),
         };
         let mut backend = NoLeafBackend::default();
+        let mut resources = ken_host::ResourceTableV1::default();
 
         let reply = dispatch_host_op_v1(
             &mut backend,
             &target_table,
+            &mut resources,
             HostOpV1::FsReadFile,
             Some(wrong_token),
+            None,
             &request,
         )
         .expect("malformed token is a typed canonical reply");
@@ -1168,6 +1172,7 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
                 sequence: 0,
                 operation: HostOpV1::ConsoleWrite,
                 capability: None,
+                resource: None,
                 request: ken_host::CanonicalRequestV1::ConsoleWrite {
                     stream: ken_host::ConsoleStreamV1::Stdout,
                     bytes: b"capture-only\n".to_vec(),

@@ -4,10 +4,12 @@ use crate::{
     CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, CapabilityDeniedV1,
     CapabilityTraceIdentity, ConsoleStreamV1, CreatePolicyV1, DirEntryV1, EffectEventV1,
     FileErrorCauseV1, FileErrorIdentityV1, FileMetadataV1, FsCapabilityOperationV1, FsNodeKindV1,
-    HostOpV1, IoErrorIdentityV1, SemanticErrorV1,
+    FsOpenModeV1, HostOpV1, IoErrorIdentityV1, ResourceErrorV1, ResourceKindV1,
+    ResourceSettlementObservationV1, ResourceSettlementOutcomeV1, ResourceTraceIdentityV1,
+    SemanticErrorV1,
 };
 
-const MAGIC: &[u8; 8] = b"KETRACE1";
+const MAGIC: &[u8; 8] = b"KETRACE2";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinkedEffectTraceV1 {
@@ -148,6 +150,19 @@ fn put_request(
             put_bytes(out, path)?;
             put_u16(out, *mode);
         }
+        CanonicalRequestV1::FsOpen { path, mode } => {
+            put_u8(out, 15);
+            put_bytes(out, path)?;
+            put_u8(
+                out,
+                match mode {
+                    FsOpenModeV1::Read => 0,
+                    FsOpenModeV1::Metadata => 1,
+                },
+            );
+        }
+        CanonicalRequestV1::FsHandleMetadata => put_u8(out, 16),
+        CanonicalRequestV1::ResourceRelease => put_u8(out, 17),
     }
     Ok(())
 }
@@ -200,8 +215,41 @@ fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTr
                 put_node_kind(out, entry.kind);
             }
         }
+        CanonicalReplyV1::ResourceAcquired {
+            schema_version,
+            resource_kind,
+            identity,
+        } => {
+            put_u8(out, 8);
+            put_u16(out, *schema_version);
+            put_resource_kind(out, *resource_kind);
+            put_u64(out, identity.0);
+        }
+        CanonicalReplyV1::ResourceSettlement(settlement) => {
+            put_u8(out, 9);
+            put_settlement(out, settlement);
+        }
     }
     Ok(())
+}
+
+fn put_resource_kind(out: &mut Vec<u8>, kind: ResourceKindV1) {
+    match kind {
+        ResourceKindV1::FsHandle => put_u8(out, 0),
+    }
+}
+
+fn put_settlement(out: &mut Vec<u8>, settlement: &ResourceSettlementObservationV1) {
+    put_u16(out, settlement.schema_version);
+    put_resource_kind(out, settlement.resource_kind);
+    put_u64(out, settlement.identity.0);
+    match settlement.outcome {
+        ResourceSettlementOutcomeV1::Released => put_u8(out, 0),
+        ResourceSettlementOutcomeV1::ReleaseFailed(io) => {
+            put_u8(out, 1);
+            put_io_error(out, io);
+        }
+    }
 }
 
 fn put_io_error(out: &mut Vec<u8>, error: IoErrorIdentityV1) {
@@ -286,6 +334,30 @@ fn put_error(out: &mut Vec<u8>, error: &SemanticErrorV1) -> Result<(), EffectTra
             put_u8(out, 2);
             put_denial(out, error);
         }
+        SemanticErrorV1::Resource(error) => {
+            put_u8(out, 3);
+            match error {
+                ResourceErrorV1::Closed => put_u8(out, 0),
+                ResourceErrorV1::MalformedResource => put_u8(out, 1),
+                ResourceErrorV1::RightNotHeld { required, held } => {
+                    put_u8(out, 2);
+                    put_u8(out, *required);
+                    put_u8(out, *held);
+                }
+                ResourceErrorV1::ReleaseFailed {
+                    schema_version,
+                    resource_kind,
+                    identity,
+                    io,
+                } => {
+                    put_u8(out, 3);
+                    put_u16(out, *schema_version);
+                    put_resource_kind(out, *resource_kind);
+                    put_u64(out, identity.0);
+                    put_io_error(out, *io);
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -334,6 +406,13 @@ pub fn encode_linked_effect_trace_v1(
             Some(identity) => {
                 put_u8(&mut out, 1);
                 put_string(&mut out, &identity.0)?;
+            }
+        }
+        match event.resource {
+            None => put_u8(&mut out, 0),
+            Some(identity) => {
+                put_u8(&mut out, 1);
+                put_u64(&mut out, identity.0);
             }
         }
         put_request(&mut out, &event.request)?;
@@ -483,6 +562,16 @@ fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTrac
             path: cursor.bytes()?,
             mode: cursor.u16()?,
         },
+        15 => CanonicalRequestV1::FsOpen {
+            path: cursor.bytes()?,
+            mode: match cursor.u8()? {
+                0 => FsOpenModeV1::Read,
+                1 => FsOpenModeV1::Metadata,
+                _ => return Err(EffectTraceWireErrorV1),
+            },
+        },
+        16 => CanonicalRequestV1::FsHandleMetadata,
+        17 => CanonicalRequestV1::ResourceRelease,
         _ => return Err(EffectTraceWireErrorV1),
     })
 }
@@ -513,7 +602,39 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
             }
             CanonicalReplyV1::DirectoryEntries(entries)
         }
+        8 => CanonicalReplyV1::ResourceAcquired {
+            schema_version: cursor.u16()?,
+            resource_kind: get_resource_kind(cursor)?,
+            identity: ResourceTraceIdentityV1(cursor.u64()?),
+        },
+        9 => CanonicalReplyV1::ResourceSettlement(get_settlement(cursor)?),
         _ => return Err(EffectTraceWireErrorV1),
+    })
+}
+
+fn get_resource_kind(cursor: &mut Cursor<'_>) -> Result<ResourceKindV1, EffectTraceWireErrorV1> {
+    match cursor.u8()? {
+        0 => Ok(ResourceKindV1::FsHandle),
+        _ => Err(EffectTraceWireErrorV1),
+    }
+}
+
+fn get_settlement(
+    cursor: &mut Cursor<'_>,
+) -> Result<ResourceSettlementObservationV1, EffectTraceWireErrorV1> {
+    let schema_version = cursor.u16()?;
+    let resource_kind = get_resource_kind(cursor)?;
+    let identity = ResourceTraceIdentityV1(cursor.u64()?);
+    let outcome = match cursor.u8()? {
+        0 => ResourceSettlementOutcomeV1::Released,
+        1 => ResourceSettlementOutcomeV1::ReleaseFailed(get_io_error(cursor)?),
+        _ => return Err(EffectTraceWireErrorV1),
+    };
+    Ok(ResourceSettlementObservationV1 {
+        schema_version,
+        resource_kind,
+        identity,
+        outcome,
     })
 }
 fn get_io_error(cursor: &mut Cursor<'_>) -> Result<IoErrorIdentityV1, EffectTraceWireErrorV1> {
@@ -579,6 +700,21 @@ fn get_error(cursor: &mut Cursor<'_>) -> Result<SemanticErrorV1, EffectTraceWire
             cause: get_cause(cursor)?,
         }),
         2 => SemanticErrorV1::Capability(get_denial(cursor)?),
+        3 => SemanticErrorV1::Resource(match cursor.u8()? {
+            0 => ResourceErrorV1::Closed,
+            1 => ResourceErrorV1::MalformedResource,
+            2 => ResourceErrorV1::RightNotHeld {
+                required: cursor.u8()?,
+                held: cursor.u8()?,
+            },
+            3 => ResourceErrorV1::ReleaseFailed {
+                schema_version: cursor.u16()?,
+                resource_kind: get_resource_kind(cursor)?,
+                identity: ResourceTraceIdentityV1(cursor.u64()?),
+                io: get_io_error(cursor)?,
+            },
+            _ => return Err(EffectTraceWireErrorV1),
+        }),
         _ => return Err(EffectTraceWireErrorV1),
     })
 }
@@ -624,6 +760,11 @@ pub fn decode_linked_effect_trace_v1(
             1 => Some(CapabilityTraceIdentity(cursor.string()?)),
             _ => return Err(EffectTraceWireErrorV1),
         };
+        let resource = match cursor.u8()? {
+            0 => None,
+            1 => Some(ResourceTraceIdentityV1(cursor.u64()?)),
+            _ => return Err(EffectTraceWireErrorV1),
+        };
         let request = get_request(&mut cursor)?;
         let outcome = match cursor.u8()? {
             0 => CanonicalOutcomeV1::Success(get_reply(&mut cursor)?),
@@ -634,6 +775,7 @@ pub fn decode_linked_effect_trace_v1(
             sequence,
             operation,
             capability,
+            resource,
             request,
             outcome,
         });
@@ -667,6 +809,7 @@ mod tests {
                     sequence: 0,
                     operation: HostOpV1::ConsoleWrite,
                     capability: None,
+                    resource: None,
                     request: CanonicalRequestV1::ConsoleWrite {
                         stream: ConsoleStreamV1::Stdout,
                         bytes: vec![0, 0xff],
@@ -679,6 +822,7 @@ mod tests {
                     sequence: 1,
                     operation: HostOpV1::FsReadFile,
                     capability: Some(CapabilityTraceIdentity("declared:FS".into())),
+                    resource: None,
                     request: CanonicalRequestV1::FsReadFile {
                         path: vec![b'f', 0xff],
                     },
@@ -688,11 +832,42 @@ mod tests {
                     sequence: 2,
                     operation: HostOpV1::FsChangeMode,
                     capability: Some(CapabilityTraceIdentity("declared:FS".into())),
+                    resource: None,
                     request: CanonicalRequestV1::FsChangeMode {
                         path: vec![b'm', 0xfe],
                         mode: 0o640,
                     },
                     outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::Unit),
+                },
+                EffectEventV1 {
+                    sequence: 3,
+                    operation: HostOpV1::FsOpen,
+                    capability: Some(CapabilityTraceIdentity("declared:FS".into())),
+                    resource: Some(ResourceTraceIdentityV1(1)),
+                    request: CanonicalRequestV1::FsOpen {
+                        path: vec![b'r', 0xff],
+                        mode: FsOpenModeV1::Metadata,
+                    },
+                    outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::ResourceAcquired {
+                        schema_version: 1,
+                        resource_kind: ResourceKindV1::FsHandle,
+                        identity: ResourceTraceIdentityV1(1),
+                    }),
+                },
+                EffectEventV1 {
+                    sequence: 4,
+                    operation: HostOpV1::ResourceRelease,
+                    capability: None,
+                    resource: Some(ResourceTraceIdentityV1(1)),
+                    request: CanonicalRequestV1::ResourceRelease,
+                    outcome: CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(
+                        ResourceErrorV1::ReleaseFailed {
+                            schema_version: 1,
+                            resource_kind: ResourceKindV1::FsHandle,
+                            identity: ResourceTraceIdentityV1(1),
+                            io: IoErrorIdentityV1::Other(5),
+                        },
+                    )),
                 },
             ],
         }

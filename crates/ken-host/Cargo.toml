@@ -12,7 +12,7 @@ rust-version.workspace = true
 crate-type = ["rlib", "staticlib"]
 
 [dependencies]
-rustix = { version = "=1.1.4", default-features = false, features = ["std", "fs", "process"] }
+rustix = { version = "=1.1.4", default-features = false, features = ["std", "fs", "process", "try_close"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { version = "=0.2.186", default-features = false }

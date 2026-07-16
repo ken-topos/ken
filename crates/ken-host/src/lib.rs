@@ -32,9 +32,11 @@ mod account_db_v1;
 pub mod capability;
 mod effect_v1;
 mod effect_wire_v1;
+#[cfg(target_os = "linux")]
+mod resource_close_v1;
 
 pub use abi_v1::{
-    EffectiveUidSnapshotV1, RootExecutionDeniedV1, admit_root_execution, observe_effective_uid_v1,
+    admit_root_execution, observe_effective_uid_v1, EffectiveUidSnapshotV1, RootExecutionDeniedV1,
 };
 pub use capability::*;
 pub use effect_v1::*;
@@ -111,6 +113,11 @@ mod linux {
     #[derive(Debug)]
     pub(super) struct Handle(pub(super) Arc<OwnedFd>);
 
+    /// Unique descriptor owner for a dynamically acquired resource. Unlike
+    /// `Handle`, this is deliberately neither cloneable nor reference-counted.
+    #[derive(Debug)]
+    pub(super) struct ResourceHandle(pub(super) OwnedFd);
+
     impl Clone for Handle {
         fn clone(&self) -> Self {
             Self(self.0.clone())
@@ -157,6 +164,38 @@ mod linux {
         .map_err(io::Error::from)
     }
 
+    pub(super) fn open_resource_at(
+        parent: &Handle,
+        leaf: &PathComponent,
+        request: OpenRequest,
+    ) -> io::Result<ResourceHandle> {
+        let flags = match request {
+            OpenRequest::Read => OFlags::RDONLY | OFlags::NOFOLLOW,
+            OpenRequest::ReadDirectory => OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+            OpenRequest::ReadWrite => OFlags::RDWR | OFlags::NOFOLLOW,
+            OpenRequest::CreateNew => {
+                OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW
+            }
+            OpenRequest::CreateOrTruncate => {
+                OFlags::WRONLY | OFlags::CREATE | OFlags::TRUNC | OFlags::NOFOLLOW
+            }
+            OpenRequest::CreateOrKeep => {
+                OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW
+            }
+            OpenRequest::AppendOrCreate => {
+                OFlags::WRONLY | OFlags::CREATE | OFlags::APPEND | OFlags::NOFOLLOW
+            }
+        } | OFlags::CLOEXEC;
+        fs::openat(
+            &*parent.0,
+            leaf.as_bytes(),
+            flags,
+            Mode::from_raw_mode(0o666),
+        )
+        .map(ResourceHandle)
+        .map_err(io::Error::from)
+    }
+
     pub(super) fn readlink_at(parent: &Handle, leaf: &PathComponent) -> io::Result<Vec<u8>> {
         fs::readlinkat(&*parent.0, leaf.as_bytes(), Vec::new())
             .map(|path| path.into_bytes())
@@ -187,6 +226,36 @@ mod linux {
             kind,
             mode: matches!(kind, FileKind::File | FileKind::Directory)
                 .then_some((metadata.mode() & 0o7777) as u16),
+            identity: FileIdentity {
+                device: metadata.dev(),
+                inode: metadata.ino(),
+            },
+        })
+    }
+
+    pub(super) fn resource_metadata(handle: &ResourceHandle) -> io::Result<Metadata> {
+        use std::os::unix::fs::{FileTypeExt, MetadataExt};
+        let metadata = File::from(handle.0.try_clone()?).metadata()?;
+        let file_type = metadata.file_type();
+        let kind = if file_type.is_file() {
+            FileKind::File
+        } else if file_type.is_dir() {
+            FileKind::Directory
+        } else if file_type.is_symlink() {
+            FileKind::Symlink
+        } else if file_type.is_socket()
+            || file_type.is_fifo()
+            || file_type.is_block_device()
+            || file_type.is_char_device()
+        {
+            FileKind::Other
+        } else {
+            FileKind::Other
+        };
+        Ok(Metadata {
+            size: metadata.len(),
+            kind,
+            mode: Some((metadata.mode() & 0o7777) as u16),
             identity: FileIdentity {
                 device: metadata.dev(),
                 inode: metadata.ino(),
@@ -297,6 +366,14 @@ mod linux {
 pub struct RootedHandle {
     #[cfg(target_os = "linux")]
     inner: linux::Handle,
+}
+
+/// A unique, non-cloneable owner for a held-across-steps filesystem resource.
+/// It is distinct from the cloneable rooted/path handle representation.
+#[derive(Debug)]
+pub struct ResourceHandleV1 {
+    #[cfg(target_os = "linux")]
+    pub(crate) inner: linux::ResourceHandle,
 }
 
 impl std::fmt::Debug for RootedHandle {
@@ -626,6 +703,52 @@ pub fn open_at(
     }
 }
 
+pub fn open_resource_at_v1(
+    parent: &RootedHandle,
+    leaf: &PathComponent,
+    request: OpenRequest,
+) -> HostResult<ResourceHandleV1> {
+    assert_current_target_abi()?;
+    #[cfg(target_os = "linux")]
+    {
+        linux::open_resource_at(&parent.inner, leaf, request)
+            .map(|inner| ResourceHandleV1 { inner })
+            .map_err(Into::into)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (parent, leaf, request);
+        unsupported()
+    }
+}
+
+pub fn resource_metadata_v1(handle: &ResourceHandleV1) -> HostResult<Metadata> {
+    assert_current_target_abi()?;
+    #[cfg(target_os = "linux")]
+    {
+        linux::resource_metadata(&handle.inner).map_err(Into::into)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = handle;
+        unsupported()
+    }
+}
+
+/// Explicitly closes a unique resource owner and reports the real OS result.
+pub fn close_resource_v1(handle: ResourceHandleV1) -> HostResult<()> {
+    assert_current_target_abi()?;
+    #[cfg(target_os = "linux")]
+    {
+        resource_close_v1::close(handle).map_err(Into::into)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        drop(handle);
+        unsupported()
+    }
+}
+
 pub fn readlink_at(parent: &RootedHandle, leaf: &PathComponent) -> HostResult<Vec<u8>> {
     assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
@@ -813,7 +936,11 @@ mod tests {
                 .map(|dependency| (dependency.name, dependency.version, dependency.features))
                 .collect::<Vec<_>>(),
             vec![
-                ("rustix", "1.1.4", &["std", "fs", "process"][..]),
+                (
+                    "rustix",
+                    "1.1.4",
+                    &["std", "fs", "process", "try_close"][..],
+                ),
                 ("bitflags", "2.13.0", &[][..]),
                 ("linux-raw-sys", "0.12.1", &["std", "general", "errno"][..]),
                 ("libc", "0.2.186", &[][..]),
