@@ -6,6 +6,49 @@ use std::fmt;
 
 use crate::RootedHandle;
 
+/// Checked filesystem-root spelling retained until executor initialization.
+///
+/// Resolution consumes the execution-start cwd handle once and produces the
+/// ordinary handle-backed `FsScope`; no operation retains this specification.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FsRootSpec {
+    Absolute(Vec<u8>),
+    ExecutionStartCwd(Vec<u8>),
+}
+
+impl Default for FsRootSpec {
+    fn default() -> Self {
+        Self::ExecutionStartCwd(Vec::new())
+    }
+}
+
+impl FsRootSpec {
+    pub fn parse_declared(bytes: &[u8]) -> Option<Self> {
+        if let Some(suffix) = bytes.strip_prefix(b"./") {
+            Some(Self::ExecutionStartCwd(suffix.to_vec()))
+        } else if bytes == b"." {
+            Some(Self::ExecutionStartCwd(Vec::new()))
+        } else if bytes.starts_with(b"/") {
+            Some(Self::Absolute(bytes.to_vec()))
+        } else {
+            None
+        }
+    }
+
+    pub fn tag_v1(&self) -> u64 {
+        match self {
+            Self::Absolute(_) => 0,
+            Self::ExecutionStartCwd(_) => 1,
+        }
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        match self {
+            Self::Absolute(bytes) | Self::ExecutionStartCwd(bytes) => bytes,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Authority(pub u8);
 

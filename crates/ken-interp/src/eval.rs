@@ -494,11 +494,7 @@ fn projection_accessor_path(term: &Term, globals: &GlobalEnv) -> Option<Vec<Proj
     match term {
         Term::Lam(_, body) => {
             let path = projection_path_from_var0(body)?;
-            if path.is_empty() {
-                None
-            } else {
-                Some(path)
-            }
+            if path.is_empty() { None } else { Some(path) }
         }
         Term::Ascript(inner, _) => projection_accessor_path(inner, globals),
         Term::Const { id, .. } => match globals.lookup(*id) {
@@ -1715,7 +1711,14 @@ fn reduce_safe_bytes_primitive(
                 None => make_ctor(none.id, type_args(), store),
             }
         }
-        ("bytes_slice", [EvalVal::Bytes(bytes), EvalVal::Int(start), EvalVal::Int(len)]) => {
+        (
+            "bytes_slice",
+            [
+                EvalVal::Bytes(bytes),
+                EvalVal::Int(start),
+                EvalVal::Int(len),
+            ],
+        ) => {
             let Some(none) = result_decl.constructors.first() else {
                 return EvalVal::Neutral;
             };
@@ -2242,6 +2245,21 @@ pub trait HostHandler {
     /// declared authority. This is runner-only and never reachable from Ken.
     fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap;
 
+    /// Resolve the checked declaration root once and mint the stored-handle
+    /// capability. Implementations must not retain the root spelling for later
+    /// operation-time lookup.
+    fn mint_fs_cap_for_root(
+        &self,
+        authority: capabilities::Authority,
+        root: &capabilities::FsRootSpec,
+    ) -> io::Result<capabilities::Cap> {
+        if root == &capabilities::FsRootSpec::default() {
+            Ok(self.mint_fs_cap(authority))
+        } else {
+            Err(io::Error::from(io::ErrorKind::Unsupported))
+        }
+    }
+
     fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead>;
     fn console_write(&mut self, stream: ConsoleStream, bytes: &[u8]) -> io::Result<()>;
     fn console_flush(&mut self, stream: ConsoleStream) -> io::Result<()>;
@@ -2461,6 +2479,37 @@ impl HostHandler for PosixHost {
 
     fn mint_fs_cap(&self, authority: capabilities::Authority) -> capabilities::Cap {
         PosixHost::mint_fs_cap(self, authority)
+    }
+
+    fn mint_fs_cap_for_root(
+        &self,
+        authority: capabilities::Authority,
+        root: &capabilities::FsRootSpec,
+    ) -> io::Result<capabilities::Cap> {
+        #[cfg(target_os = "linux")]
+        {
+            let scope = ken_host::resolve_fs_root_spec_v1(
+                root,
+                &self.root,
+                capabilities::rights_for_authority(authority),
+                capabilities::SymlinkPolicy::NoFollow,
+            )
+            .map_err(|error| match error {
+                ken_host::FsRootResolveError::ScopeEscape => {
+                    io::Error::new(io::ErrorKind::PermissionDenied, "ScopeEscape")
+                }
+                ken_host::FsRootResolveError::SymlinkDenied => {
+                    io::Error::new(io::ErrorKind::PermissionDenied, "SymlinkDenied")
+                }
+                ken_host::FsRootResolveError::Io(error) => error,
+            })?;
+            Ok(capabilities::Cap::mint_scoped(authority, "FS", scope))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (authority, root);
+            Err(host_abi_unsupported())
+        }
     }
 
     fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead> {
@@ -3153,6 +3202,24 @@ impl HostHandler for CaptureHost {
         CaptureHost::mint_fs_cap(self, authority)
     }
 
+    fn mint_fs_cap_for_root(
+        &self,
+        authority: capabilities::Authority,
+        root: &capabilities::FsRootSpec,
+    ) -> io::Result<capabilities::Cap> {
+        match root {
+            capabilities::FsRootSpec::ExecutionStartCwd(suffix) => self.mint_scoped_fs_cap(
+                authority,
+                suffix,
+                capabilities::rights_for_authority(authority),
+                capabilities::SymlinkPolicy::NoFollow,
+            ),
+            capabilities::FsRootSpec::Absolute(_) => {
+                Err(io::Error::from(io::ErrorKind::Unsupported))
+            }
+        }
+    }
+
     fn console_read(&mut self, stream: ConsoleStream, limit: usize) -> io::Result<HostRead> {
         self.trace.push(ConsoleTrace::Read { stream, limit });
         if stream != ConsoleStream::Stdin {
@@ -3322,7 +3389,7 @@ impl HostHandler for CaptureHost {
                 Some(_) => {
                     return Err(ResolveError::Io(io::Error::from(
                         io::ErrorKind::NotADirectory,
-                    )))
+                    )));
                 }
                 None => return Err(ResolveError::Io(io::Error::from(io::ErrorKind::NotFound))),
             }
@@ -4680,7 +4747,7 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                                 id,
                                 args,
                                 slot: NULL_SLOT,
-                            }))
+                            }));
                         }
                     };
                     let k = match args.get(m + 1).cloned() {
@@ -4690,7 +4757,7 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                                 id,
                                 args: Rc::new(vec![op]),
                                 slot: NULL_SLOT,
-                            }))
+                            }));
                         }
                     };
                     // D3 coproduct peel: strip InL/InR down to the innermost
@@ -5299,10 +5366,12 @@ mod px5b_effect_observation_tests {
             ]
         );
         assert_eq!(host.stdout(), b"out");
-        assert!(recorder
-            .events
-            .iter()
-            .all(|event| event.capability.is_none()));
+        assert!(
+            recorder
+                .events
+                .iter()
+                .all(|event| event.capability.is_none())
+        );
     }
 
     #[test]

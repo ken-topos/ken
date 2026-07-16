@@ -2,7 +2,7 @@
 
 use ken_kernel::{Context, Decl, GlobalId, Term};
 
-use crate::{capabilities, effects::EffectRow, ElabEnv};
+use crate::{ElabEnv, capabilities, effects::EffectRow};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CheckedMainDescriptor {
@@ -24,6 +24,7 @@ pub struct CheckedMainDescriptor {
     pub prod_constructor: GlobalId,
     pub authority_name: String,
     pub authority: capabilities::Authority,
+    pub fs_root_spec: ken_host::FsRootSpec,
     pub allow_root_execution: bool,
 }
 
@@ -76,6 +77,11 @@ pub fn admit_checked_main(env: &ElabEnv) -> Result<CheckedMainDescriptor, Progra
         "AFull" => ("AFull", capabilities::AUTH_FULL),
         other => unreachable!("parser admitted invalid FS authority {other}"),
     };
+    let fs_root_spec = declaration
+        .root
+        .as_deref()
+        .and_then(ken_host::FsRootSpec::parse_declared)
+        .unwrap_or_default();
 
     if let Some(row) = env.effect_rows.get("main") {
         let granted =
@@ -108,7 +114,7 @@ pub fn admit_checked_main(env: &ElabEnv) -> Result<CheckedMainDescriptor, Progra
         _ => {
             return Err(ProgramAdmissionError::InvalidMainAbi {
                 authority: authority_name.to_string(),
-            })
+            });
         }
     };
     let authority_term = Term::constructor(authority_constructor, vec![]);
@@ -150,6 +156,7 @@ pub fn admit_checked_main(env: &ElabEnv) -> Result<CheckedMainDescriptor, Progra
         prod_constructor,
         authority_name: authority_name.to_string(),
         authority,
+        fs_root_spec,
         allow_root_execution: header.allow_root_execution,
     })
 }

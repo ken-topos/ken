@@ -300,7 +300,26 @@ impl Parser {
                     });
                 }
                 end = authority_span.end;
-                declarations.push(CapabilityDecl { family, authority });
+                let root = if let Token::Str(root) = self.peek().clone() {
+                    let root_span = self.peek_span().clone();
+                    self.advance();
+                    let bytes = root.into_bytes();
+                    if ken_host::FsRootSpec::parse_declared(&bytes).is_none() {
+                        return Err(ElabError::ParseError {
+                            msg: "FS root must be absolute or begin with './'".to_string(),
+                            span: root_span,
+                        });
+                    }
+                    end = root_span.end;
+                    Some(bytes)
+                } else {
+                    None
+                };
+                declarations.push(CapabilityDecl {
+                    family,
+                    authority,
+                    root,
+                });
                 if !matches!(self.peek(), Token::Comma) {
                     break;
                 }
@@ -1351,10 +1370,10 @@ impl Parser {
                 other => {
                     return Err(ElabError::ParseError {
                         msg: format!(
-                        "expected ',' or '}}' in constructor `{name}` field list, found {other:?}"
-                    ),
+                            "expected ',' or '}}' in constructor `{name}` field list, found {other:?}"
+                        ),
                         span: self.peek_span().clone(),
-                    })
+                    });
                 }
             }
         }
@@ -1412,7 +1431,7 @@ impl Parser {
                 return Err(ElabError::ParseError {
                     msg: format!("expected string literal for symbol name, found {:?}", other),
                     span,
-                })
+                });
             }
         };
         // library string literal
@@ -1425,7 +1444,7 @@ impl Parser {
                         other
                     ),
                     span,
-                })
+                });
             }
         };
         // optional `pure` contextual keyword
@@ -1863,7 +1882,7 @@ impl Parser {
                     return Err(ElabError::ParseError {
                         msg: format!("expected binder name or '.', found {:?}", other),
                         span: self.peek_span().clone(),
-                    })
+                    });
                 }
             }
         }

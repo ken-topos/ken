@@ -31,7 +31,7 @@ mod effect_v1;
 mod effect_wire_v1;
 
 pub use abi_v1::{
-    admit_root_execution, observe_effective_uid_v1, EffectiveUidSnapshotV1, RootExecutionDeniedV1,
+    EffectiveUidSnapshotV1, RootExecutionDeniedV1, admit_root_execution, observe_effective_uid_v1,
 };
 pub use capability::*;
 pub use effect_v1::*;
@@ -459,6 +459,87 @@ pub fn open_root(path: &RootPath) -> HostResult<RootedHandle> {
     }
 }
 
+#[derive(Debug)]
+pub enum FsRootResolveError {
+    ScopeEscape,
+    SymlinkDenied,
+    Io(io::Error),
+}
+
+impl From<HostError> for FsRootResolveError {
+    fn from(error: HostError) -> Self {
+        Self::Io(error.into_io_error())
+    }
+}
+
+/// Resolve a checked root specification exactly once at capability-table init.
+///
+/// Both executors call this function. The returned scope owns only resolved
+/// handles and identities; neither the cwd spelling nor the root specification
+/// survives into the operation path or canonical observations.
+pub fn resolve_fs_root_spec_v1(
+    spec: &FsRootSpec,
+    execution_start_cwd: &RootedHandle,
+    rights: RightSet,
+    symlink: SymlinkPolicy,
+) -> Result<FsScope, FsRootResolveError> {
+    #[cfg(target_os = "linux")]
+    {
+        let (mut handle, suffix) = match spec {
+            FsRootSpec::Absolute(bytes) => {
+                use std::os::unix::ffi::OsStringExt;
+                let path = PathBuf::from(std::ffi::OsString::from_vec(bytes.clone()));
+                let path = RootPath::new(path)?;
+                (open_root(&path)?, &[][..])
+            }
+            FsRootSpec::ExecutionStartCwd(suffix) => {
+                (execution_start_cwd.clone(), suffix.as_slice())
+            }
+        };
+        let root_metadata = metadata(&handle)?;
+        let mut lineage = vec![FsIdentity::Posix {
+            device: root_metadata.identity.device,
+            inode: root_metadata.identity.inode,
+        }];
+        for component in suffix.split(|byte| *byte == b'/') {
+            if component.is_empty() || component == b"." {
+                continue;
+            }
+            if component == b".." {
+                return Err(FsRootResolveError::ScopeEscape);
+            }
+            let component = PathComponent::new(component)?;
+            match open_at(&handle, &component, OpenRequest::ReadDirectory) {
+                Ok(next) => handle = next,
+                Err(error) if readlink_at(&handle, &component).is_ok() => {
+                    let _ = error;
+                    return Err(FsRootResolveError::SymlinkDenied);
+                }
+                Err(error) => return Err(error.into()),
+            }
+            let metadata = metadata(&handle)?;
+            lineage.push(FsIdentity::Posix {
+                device: metadata.identity.device,
+                inode: metadata.identity.inode,
+            });
+        }
+        Ok(FsScope {
+            rights,
+            root: FsHandle::Posix(handle),
+            lineage,
+            symlink,
+            empty: false,
+        })
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (spec, execution_start_cwd, rights, symlink);
+        Err(FsRootResolveError::Io(io::Error::from(
+            io::ErrorKind::Unsupported,
+        )))
+    }
+}
+
 pub fn open_at(
     parent: &RootedHandle,
     leaf: &PathComponent,
@@ -652,10 +733,12 @@ mod tests {
                 ("linux-raw-sys", "0.12.1", &["std", "general", "errno"][..]),
             ]
         );
-        assert!(TARGET_ABI
-            .dependencies
-            .iter()
-            .all(|dependency| dependency.checksum.len() == 64));
+        assert!(
+            TARGET_ABI
+                .dependencies
+                .iter()
+                .all(|dependency| dependency.checksum.len() == 64)
+        );
         assert_eq!(TARGET_ABI.backend, "linux_raw");
         assert!(!TARGET_ABI_CANONICAL.contains("SIG"));
 
@@ -860,5 +943,86 @@ mod tests {
         remove(&root, &renamed, RemoveKind::File).expect("unlink file");
         remove(&root, &subdir, RemoveKind::Directory).expect("rmdir");
         std::fs::remove_dir(&directory).expect("remove temp root");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cwd_root_is_resolved_once_and_preserves_scope_and_symlink_denials() {
+        use std::os::unix::fs::symlink;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let parent =
+            std::env::temp_dir().join(format!("ken-host-px15-{}-{unique}", std::process::id()));
+        let start = parent.join("start");
+        std::fs::create_dir_all(start.join("data")).expect("start tree");
+        std::fs::write(start.join("data/value"), b"original").expect("original file");
+        let cwd = open_root(&RootPath::new(&start).unwrap()).expect("startup cwd handle");
+
+        let scope = resolve_fs_root_spec_v1(
+            &FsRootSpec::ExecutionStartCwd(b"data".to_vec()),
+            &cwd,
+            RightSet::READ,
+            SymlinkPolicy::NoFollow,
+        )
+        .expect("resolve root at init");
+        let FsHandle::Posix(stored_root) = scope.root else {
+            panic!("linux root must be a descriptor")
+        };
+
+        std::fs::rename(&start, parent.join("moved")).expect("move startup cwd");
+        std::fs::create_dir_all(start.join("data")).expect("replacement tree");
+        std::fs::write(start.join("data/value"), b"replacement").expect("replacement file");
+        let value = open_at(
+            &stored_root,
+            &PathComponent::new(b"value").unwrap(),
+            OpenRequest::Read,
+        )
+        .expect("stored handle remains live");
+        assert_eq!(read(&value).unwrap(), b"original");
+
+        let fresh_cwd = open_root(&RootPath::new(&start).unwrap()).expect("fresh moved cwd");
+        let fresh = resolve_fs_root_spec_v1(
+            &FsRootSpec::ExecutionStartCwd(b"data".to_vec()),
+            &fresh_cwd,
+            RightSet::READ,
+            SymlinkPolicy::NoFollow,
+        )
+        .expect("fresh resolver reaches replacement");
+        let FsHandle::Posix(fresh_root) = fresh.root else {
+            panic!("linux root must be a descriptor")
+        };
+        let replacement = open_at(
+            &fresh_root,
+            &PathComponent::new(b"value").unwrap(),
+            OpenRequest::Read,
+        )
+        .unwrap();
+        assert_eq!(read(&replacement).unwrap(), b"replacement");
+
+        assert!(matches!(
+            resolve_fs_root_spec_v1(
+                &FsRootSpec::ExecutionStartCwd(b"../escape".to_vec()),
+                &cwd,
+                RightSet::READ,
+                SymlinkPolicy::NoFollow,
+            ),
+            Err(FsRootResolveError::ScopeEscape)
+        ));
+        symlink(parent.join("moved/data"), start.join("link")).expect("outgoing symlink");
+        assert!(matches!(
+            resolve_fs_root_spec_v1(
+                &FsRootSpec::ExecutionStartCwd(b"link".to_vec()),
+                &fresh_cwd,
+                RightSet::READ,
+                SymlinkPolicy::NoFollow,
+            ),
+            Err(FsRootResolveError::SymlinkDenied)
+        ));
+
+        std::fs::remove_dir_all(parent).expect("remove PX15 tree");
     }
 }

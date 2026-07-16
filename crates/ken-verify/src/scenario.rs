@@ -6,16 +6,15 @@ use std::fmt;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
-use ken_elaborator::capabilities::{Authority, RightSet, SymlinkPolicy, AUTH_FULL};
+use ken_elaborator::capabilities::{AUTH_FULL, Authority, RightSet, SymlinkPolicy};
 use ken_host::EffectObservationV1;
 use ken_runtime::{
     BoundProcessExecutableArtifact, NativeEffectRunErrorV1, NativeEffectRunOptionsV1,
 };
 
 use crate::{
-    canonical_filesystem_delta, compare_canonical_exact, AmbientScript, ExpectedFsEffect,
-    LaneActionEvidence, ObservationMismatch, ScriptedPosixHost, SeedNode, TwinRealRoots,
-    TwinRootError,
+    AmbientScript, ExpectedFsEffect, LaneActionEvidence, ObservationMismatch, ScriptedPosixHost,
+    SeedNode, TwinRealRoots, TwinRootError, canonical_filesystem_delta, compare_canonical_exact,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -299,15 +298,15 @@ fn raw_path_bytes(_path: &std::path::Path) -> Result<Vec<u8>, HarnessError> {
 mod tests {
     use super::*;
     use crate::{
-        apply_canonical_mutation, confirm_native_tested_transition, denial_precedes_host_action,
         CanonicalMutation, NativeTestedEvidence, RunnerOnlyProxy, StatusTransitionError,
+        apply_canonical_mutation, confirm_native_tested_transition, denial_precedes_host_action,
     };
     use ken_host::{
-        dispatch_host_op_v1, program_caps_fs_trace_identity_v1, CanonicalOutcomeV1,
-        CanonicalReplyV1, CanonicalRequestV1, CapabilityDeniedV1, CapabilityGrantV1,
-        CapabilityTableV1, ConsoleStreamV1, CreatePolicyV1, FileErrorCauseV1, HostEffectBackendV1,
-        HostOpAvailabilityV1, HostOpV1, IoErrorIdentityV1, SemanticErrorV1,
-        PX5_PLANNED_NATIVE_TARGETS,
+        CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, CapabilityDeniedV1,
+        CapabilityGrantV1, CapabilityTableV1, ConsoleStreamV1, CreatePolicyV1, FileErrorCauseV1,
+        HostEffectBackendV1, HostOpAvailabilityV1, HostOpV1, IoErrorIdentityV1,
+        PX5_PLANNED_NATIVE_TARGETS, SemanticErrorV1, dispatch_host_op_v1,
+        program_caps_fs_trace_identity_v1,
     };
 
     const FIVE_OP_SOURCE: &str = r#"program capabilities FS AFull
@@ -535,6 +534,39 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
         }
     }
 
+    fn cwd_root_denial_scenario(path: Vec<u8>, symlink: bool) -> Scenario {
+        let mut scenario = denial_scenario();
+        scenario.entry.identity = if symlink {
+            "px15-cwd-root-symlink-denial"
+        } else {
+            "px15-cwd-root-scope-denial"
+        }
+        .to_string();
+        scenario.entry.package_name = scenario.entry.identity.clone();
+        scenario.entry.source = scenario.entry.source.replacen(
+            "program capabilities FS AFull",
+            r#"program capabilities FS AFull "./data""#,
+            1,
+        );
+        scenario.process_input.arguments = vec![path.clone()];
+        scenario.initial_filesystem = vec![SeedNode {
+            relative_path: b"data".to_vec(),
+            kind: crate::SeedNodeKind::Directory,
+        }];
+        if symlink {
+            scenario.initial_filesystem.push(SeedNode {
+                relative_path: b"data/link".to_vec(),
+                kind: crate::SeedNodeKind::Symlink(b"../../outside".to_vec()),
+            });
+        }
+        scenario.expected_fs = vec![ExpectedFsEffect::WriteFile {
+            path: path.clone(),
+            create_policy: CreatePolicyV1::CreateNew,
+            bytes: path,
+        }];
+        scenario
+    }
+
     fn raw_descriptor_collision_scenario() -> Scenario {
         let raw_path = b"dir/./x".to_vec();
         let normalized_path = b"dir/x".to_vec();
@@ -559,6 +591,41 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
                 ExpectedFsEffect::ReadFile {
                     path: normalized_path,
                 },
+            ],
+        }
+    }
+
+    fn execution_start_cwd_root_scenario() -> Scenario {
+        let path = b"x".to_vec();
+        Scenario {
+            process_input: RawProcessInput {
+                arguments: vec![path.clone(), path.clone()],
+                environment: Vec::new(),
+            },
+            ambient: AmbientScript::default(),
+            program_caps: ProgramCapsShape::default(),
+            entry: CheckedProgramEntry {
+                identity: "px15-execution-start-cwd-root".to_string(),
+                package_name: "px15-execution-start-cwd-root".to_string(),
+                source: RAW_COLLISION_SOURCE.replacen(
+                    "program capabilities FS AFull",
+                    r#"program capabilities FS AFull "./data""#,
+                    1,
+                ),
+            },
+            initial_filesystem: vec![
+                SeedNode {
+                    relative_path: b"data".to_vec(),
+                    kind: crate::SeedNodeKind::Directory,
+                },
+                SeedNode {
+                    relative_path: b"data/x".to_vec(),
+                    kind: crate::SeedNodeKind::File(b"cwd-root".to_vec()),
+                },
+            ],
+            expected_fs: vec![
+                ExpectedFsEffect::ReadFile { path: path.clone() },
+                ExpectedFsEffect::ReadFile { path },
             ],
         }
     }
@@ -847,6 +914,86 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
     }
 
     #[test]
+    fn execution_start_cwd_root_reaches_the_same_real_node_in_both_lanes() {
+        let run = run_scenario(&execution_start_cwd_root_scenario())
+            .expect("PX15 real cwd-root differential");
+        run.compare_exact().expect("cwd-root canonical equality");
+        assert!(run.exact_artifact_executed);
+        assert_eq!(run.interpreter.exit_status, 0);
+        assert!(run.interpreter.filesystem_delta.is_empty());
+        assert_eq!(run.interpreter_actions.fs_actions_after_resolve, Some(2));
+        for observation in [&run.interpreter, &run.native] {
+            assert!(observation.effect_trace.iter().all(|event| matches!(
+                &event.request,
+                CanonicalRequestV1::FsReadFile { path } if path == b"x"
+            )));
+            assert!(observation.effect_trace.iter().all(|event| matches!(
+                &event.outcome,
+                CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(bytes))
+                    if bytes == b"cwd-root"
+            )));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cwd_and_absolute_root_spellings_emit_byte_identical_observations() {
+        let root = std::env::temp_dir().join(format!(
+            "ken-px15-spelling-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let data = root.join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("x"), b"same").unwrap();
+        let base = "program capabilities FS AFull";
+        let cwd_source = RAW_COLLISION_SOURCE.replacen(
+            base,
+            r#"program capabilities FS AFull "./data", RootExecution Allow"#,
+            1,
+        );
+        let absolute_source = RAW_COLLISION_SOURCE.replacen(
+            base,
+            &format!(
+                r#"program capabilities FS AFull "{}", RootExecution Allow"#,
+                data.display()
+            ),
+            1,
+        );
+        let arguments = vec![b"px15".to_vec(), b"x".to_vec(), b"x".to_vec()];
+        let cwd_bytes = root.as_os_str().as_bytes();
+        let mut cwd_host = ken_interp::PosixHost::new_at(&root);
+        let cwd_observation = ken_cli::run_program_effect_observation_v1(
+            &cwd_source,
+            ken_cli::SourceFormat::Ken,
+            &arguments,
+            &[],
+            cwd_bytes,
+            &mut cwd_host,
+        )
+        .expect("cwd-root interpreter observation");
+        let mut absolute_host = ken_interp::PosixHost::new_at(&root);
+        let absolute_observation = ken_cli::run_program_effect_observation_v1(
+            &absolute_source,
+            ken_cli::SourceFormat::Ken,
+            &arguments,
+            &[],
+            cwd_bytes,
+            &mut absolute_host,
+        )
+        .expect("absolute-root interpreter observation");
+        assert_eq!(cwd_observation, absolute_observation);
+        assert!(cwd_observation.effect_trace.iter().all(|event| matches!(
+            &event.request,
+            CanonicalRequestV1::FsReadFile { path } if path == b"x"
+        )));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn wrong_token_malformed_identity_and_error_are_reply_owned() {
         let mut source_table = CapabilityTableV1::default();
         let wrong_token = source_table.insert(CapabilityGrantV1 {
@@ -963,6 +1110,34 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
             scenario_identity: run.scenario_identity,
             returned_value: run.interpreter.exit_status,
         }));
+    }
+
+    #[test]
+    fn cwd_root_preserves_scope_escape_and_symlink_denied_identities() {
+        for (scenario, expected) in [
+            (
+                cwd_root_denial_scenario(b"../escape".to_vec(), false),
+                CapabilityDeniedV1::ScopeEscape,
+            ),
+            (
+                cwd_root_denial_scenario(b"link".to_vec(), true),
+                CapabilityDeniedV1::SymlinkDenied,
+            ),
+        ] {
+            let run = run_scenario(&scenario).expect("PX15 denial differential");
+            run.compare_exact().expect("typed denial equality");
+            assert_eq!(run.interpreter.exit_status, 44);
+            assert!(run.interpreter.filesystem_delta.is_empty());
+            assert!(denial_precedes_host_action(
+                &run.interpreter_actions,
+                &run.interpreter
+            ));
+            assert!(matches!(
+                &run.interpreter.effect_trace[0].outcome,
+                CanonicalOutcomeV1::Error(SemanticErrorV1::File(error))
+                    if error.cause == FileErrorCauseV1::Capability(expected)
+            ));
+        }
     }
 
     #[test]

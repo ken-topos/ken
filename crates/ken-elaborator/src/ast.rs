@@ -408,6 +408,9 @@ pub enum BoundaryKind {
 pub struct CapabilityDecl {
     pub family: String,
     pub authority: String,
+    /// Optional checked filesystem-root spelling. Absence preserves the v1
+    /// execution-start cwd root.
+    pub root: Option<Vec<u8>>,
 }
 
 /// The runner-readable projection of a parsed anonymous boundary header.

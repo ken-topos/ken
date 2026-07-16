@@ -142,6 +142,7 @@ pub struct NativeEntrypointPlanV1 {
     pub(crate) list_cons_constructor: StableSymbol,
     pub(crate) prod_constructor: StableSymbol,
     pub(crate) authority_name: String,
+    pub(crate) fs_root_spec: ken_host::FsRootSpec,
     pub(crate) allow_root_execution: bool,
 }
 
@@ -156,6 +157,10 @@ impl NativeEntrypointPlanV1 {
 
     pub fn allows_root_execution(&self) -> bool {
         self.allow_root_execution
+    }
+
+    pub fn fs_root_spec(&self) -> &ken_host::FsRootSpec {
+        &self.fs_root_spec
     }
 
     pub fn matches_transport_hash(&self, transport_hash: u64) -> bool {
@@ -749,6 +754,11 @@ pub fn compile_native_program_sources(
                 "AFull" => 2,
                 _ => unreachable!("checked main authority is a known Auth constructor"),
             },
+            fs_root_spec: plan.fs_root_spec.clone(),
+            fs_root_binding: ken_runtime::fs_root_plan_binding_v1(
+                plan_transport_hash,
+                &plan.fs_root_spec,
+            ),
             plan_hash: plan_transport_hash,
             allow_root_execution: plan.allow_root_execution,
             root_execution_binding: ken_runtime::root_execution_plan_binding_v1(
@@ -1331,6 +1341,7 @@ fn native_entrypoint_plan(
         list_cons_constructor: resolve(checked.list_cons_constructor)?,
         prod_constructor: resolve(checked.prod_constructor)?,
         authority_name: checked.authority_name.clone(),
+        fs_root_spec: checked.fs_root_spec.clone(),
         allow_root_execution: checked.allow_root_execution,
     })
 }
@@ -1480,6 +1491,9 @@ fn canonical_native_entrypoint_plan_bytes(plan: &NativeEntrypointPlanV1) -> Vec<
         out.extend_from_slice(field.as_bytes());
     }
     out.push(u8::from(plan.allow_root_execution));
+    out.extend_from_slice(&plan.fs_root_spec.tag_v1().to_le_bytes());
+    out.extend_from_slice(&(plan.fs_root_spec.bytes().len() as u64).to_le_bytes());
+    out.extend_from_slice(plan.fs_root_spec.bytes());
     out
 }
 
@@ -3918,11 +3932,16 @@ mod tests {
             list_cons_constructor: symbol.clone(),
             prod_constructor: symbol,
             authority_name: "AFull".to_string(),
+            fs_root_spec: ken_host::FsRootSpec::default(),
             allow_root_execution: false,
         };
         let stale_hash = fingerprint(&canonical_native_entrypoint_plan_bytes(&plan));
         assert!(plan.matches_transport_hash(stale_hash));
         plan.allow_root_execution = true;
+        assert!(!plan.matches_transport_hash(stale_hash));
+
+        plan.allow_root_execution = false;
+        plan.fs_root_spec = ken_host::FsRootSpec::ExecutionStartCwd(b"data".to_vec());
         assert!(!plan.matches_transport_hash(stale_hash));
     }
 }

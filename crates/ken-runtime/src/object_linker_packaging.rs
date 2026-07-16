@@ -15,14 +15,15 @@ use std::process::Command;
 
 use crate::platform_runtime_support::validate_entrypoint_metadata_payload;
 use crate::{
-    emit_runtime_ir_object_with_cranelift, fnv1a_64, platform_runtime_support_report_hash,
-    run_runtime_ir_report_with_cranelift, runtime_executable_entrypoint_package_hash,
-    CraneliftObjectArtifact, NativeDifferentialStage, NativeRuntimeIrComparisonVerdict,
-    NativeSeedEnvironment, PlatformRuntimeEvidenceFact, PlatformRuntimeEvidenceLane,
+    CraneliftObjectArtifact, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND,
+    EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION, NativeDifferentialStage,
+    NativeRuntimeIrComparisonVerdict, NativeSeedEnvironment, PLATFORM_RUNTIME_SUPPORT_KIND,
+    PLATFORM_RUNTIME_SUPPORT_VERSION, PlatformRuntimeEvidenceFact, PlatformRuntimeEvidenceLane,
     PlatformRuntimeSupportReport, RuntimeArtifactIdentity, RuntimeExecutableEntrypointPackage,
     RuntimeExpr, RuntimeGroundValue, RuntimeIrRunReport, RuntimeObservation, RuntimeProgram,
-    RuntimeSymbol, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND, EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION,
-    PLATFORM_RUNTIME_SUPPORT_KIND, PLATFORM_RUNTIME_SUPPORT_VERSION,
+    RuntimeSymbol, emit_runtime_ir_object_with_cranelift, fnv1a_64,
+    platform_runtime_support_report_hash, run_runtime_ir_report_with_cranelift,
+    runtime_executable_entrypoint_package_hash,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,6 +31,8 @@ pub struct BoundProcessEntrypoint {
     pub target_symbol: RuntimeSymbol,
     pub program_caps_constructor: RuntimeSymbol,
     pub authority: u8,
+    pub fs_root_spec: ken_host::FsRootSpec,
+    pub fs_root_binding: u64,
     pub plan_hash: u64,
     pub allow_root_execution: bool,
     pub root_execution_binding: u64,
@@ -42,12 +45,25 @@ impl BoundProcessEntrypoint {
         self.root_execution_binding
             == root_execution_plan_binding_v1(self.plan_hash, self.allow_root_execution)
     }
+
+    pub fn fs_root_binding_is_valid(&self) -> bool {
+        self.fs_root_binding == fs_root_plan_binding_v1(self.plan_hash, &self.fs_root_spec)
+    }
 }
 
 pub fn root_execution_plan_binding_v1(plan_hash: u64, allow_root_execution: bool) -> u64 {
     let mut bytes = b"ken.root-execution-plan-binding.v1\0".to_vec();
     bytes.extend_from_slice(&plan_hash.to_le_bytes());
     bytes.push(u8::from(allow_root_execution));
+    fnv1a_64(&bytes)
+}
+
+pub fn fs_root_plan_binding_v1(plan_hash: u64, spec: &ken_host::FsRootSpec) -> u64 {
+    let mut bytes = b"ken.fs-root-plan-binding.v1\0".to_vec();
+    bytes.extend_from_slice(&plan_hash.to_le_bytes());
+    bytes.extend_from_slice(&spec.tag_v1().to_le_bytes());
+    bytes.extend_from_slice(&(spec.bytes().len() as u64).to_le_bytes());
+    bytes.extend_from_slice(spec.bytes());
     fnv1a_64(&bytes)
 }
 
@@ -657,6 +673,13 @@ pub fn build_bound_process_starter_executable_artifact(
             "root-execution metadata does not match the checked plan binding",
         ));
     }
+    if !entrypoint.fs_root_binding_is_valid() {
+        return Err(packaging_error(
+            ObjectLinkerPackagingStage::EntrypointPackage,
+            "fs_root_binding",
+            "filesystem-root metadata does not match the checked plan binding",
+        ));
+    }
     if !program
         .declarations
         .iter()
@@ -735,6 +758,7 @@ pub fn build_bound_process_starter_executable_artifact(
             entrypoint.plan_hash,
             entrypoint.allow_root_execution,
             crate::process_exit_status(crate::ProcessExitCode::Failure(0)).status,
+            &entrypoint.fs_root_spec,
         ),
     )
     .map_err(|err| {
@@ -1650,7 +1674,7 @@ int main(void) {
 
 #[cfg(test)]
 pub(crate) fn process_starter_c_stub() -> String {
-    process_starter_c_stub_for_authority(1, 1, false, 1)
+    process_starter_c_stub_for_authority(1, 1, false, 1, &ken_host::FsRootSpec::default())
 }
 
 fn process_starter_c_stub_for_authority(
@@ -1658,6 +1682,7 @@ fn process_starter_c_stub_for_authority(
     plan_hash: u64,
     allow_root_execution: bool,
     root_denied_exit_status: i32,
+    fs_root_spec: &ken_host::FsRootSpec,
 ) -> String {
     r#"#include <stdint.h>
 #include <stdio.h>
@@ -1697,6 +1722,9 @@ extern long long ken_nc23_entrypoint(const struct KenNativeInvocationV1 *invocat
 extern long long ken_host_invocation_v1_init(
     const unsigned char *cwd,
     size_t len,
+    uint64_t fs_root_tag,
+    const unsigned char *fs_root,
+    size_t fs_root_len,
     uint64_t authority,
     uint64_t plan_hash,
     uint64_t allow_root_execution,
@@ -1712,6 +1740,7 @@ extern long long ken_host_invocation_v1_finish(void *context, long long terminal
 
 static const unsigned char KEN_TARGET_ABI_HASH[32] = { __KEN_TARGET_HASH__ };
 static const unsigned char KEN_HOST_EFFECT_ABI_HASH[32] = { __KEN_EFFECT_HASH__ };
+static const unsigned char KEN_FS_ROOT[__KEN_FS_ROOT_ARRAY_LEN__] = { __KEN_FS_ROOT_BYTES__ };
 static const uint64_t KEN_ENTRYPOINT_PLAN_HASH = __KEN_PLAN_HASH__;
 
 static int constructor(
@@ -1821,6 +1850,9 @@ int main(int argc, char **argv, char **envp) {
     long long init_status = ken_host_invocation_v1_init(
         (const unsigned char *)cwd,
         strlen(cwd),
+        __KEN_FS_ROOT_TAG__,
+        KEN_FS_ROOT,
+        __KEN_FS_ROOT_LEN__,
         __KEN_AUTHORITY__,
         KEN_ENTRYPOINT_PLAN_HASH,
         __KEN_ALLOW_ROOT_EXECUTION__,
@@ -1859,6 +1891,25 @@ int main(int argc, char **argv, char **envp) {
 "#
     .replace("__KEN_AUTHORITY__", &authority.to_string())
     .replace("__KEN_PLAN_HASH__", &plan_hash.to_string())
+    .replace("__KEN_FS_ROOT_TAG__", &fs_root_spec.tag_v1().to_string())
+    .replace("__KEN_FS_ROOT_LEN__", &fs_root_spec.bytes().len().to_string())
+    .replace(
+        "__KEN_FS_ROOT_ARRAY_LEN__",
+        &fs_root_spec.bytes().len().max(1).to_string(),
+    )
+    .replace(
+        "__KEN_FS_ROOT_BYTES__",
+        &if fs_root_spec.bytes().is_empty() {
+            "0".to_string()
+        } else {
+            fs_root_spec
+                .bytes()
+                .iter()
+                .map(|byte| byte.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        },
+    )
     .replace(
         "__KEN_ALLOW_ROOT_EXECUTION__",
         &u8::from(allow_root_execution).to_string(),
@@ -1915,9 +1966,6 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
-        evaluate_runtime_ir_example, executable_artifact_contract_for_runtime_report,
-        executable_entrypoint_metadata_hash, executable_entrypoint_package_for_runtime_contract,
-        platform_runtime_support_for_entrypoint, summarize_runtime_ir_program,
         ErasedExecutableCore, ExecutableArgumentPackaging, ExecutableArgumentShape,
         ExecutableDependencyClosure, ExecutableEntrypointPackageMetadata,
         ExecutableEntrypointTargetKind, ExecutableEntrypointVerdict, ExecutableReportContract,
@@ -1925,7 +1973,10 @@ mod tests {
         ExecutableTrapContract, ExecutableTrapShape, RuntimeDeclaration, RuntimeDeclarationKind,
         RuntimeExpr, RuntimeIrProgramReport, RuntimeIrSeedEnvironment, RuntimeLowerabilityStatus,
         RuntimeMetadata, RuntimePartiality, RuntimePrimitive, RuntimeSymbolMetadata, RuntimeTrap,
-        RuntimeTrapCode, RuntimeValue,
+        RuntimeTrapCode, RuntimeValue, evaluate_runtime_ir_example,
+        executable_artifact_contract_for_runtime_report, executable_entrypoint_metadata_hash,
+        executable_entrypoint_package_for_runtime_contract,
+        platform_runtime_support_for_entrypoint, summarize_runtime_ir_program,
     };
 
     fn starter_program(body: RuntimeExpr, observation: RuntimeObservation) -> RuntimeProgram {
@@ -2107,9 +2158,11 @@ mod tests {
         assert!(package.smoke.passed);
         assert!(package.object_artifact.byte_len > 0);
         assert!(package.executable_artifact.byte_len > 0);
-        assert!(package
-            .unavailable_lanes
-            .contains(&ObjectLinkerUnavailableLane::WholeCompilerProof));
+        assert!(
+            package
+                .unavailable_lanes
+                .contains(&ObjectLinkerUnavailableLane::WholeCompilerProof)
+        );
         assert!(matches!(
             package.toolchain.whole_compiler_proof,
             ObjectLinkerEvidenceFact::Unavailable { .. }
@@ -2393,16 +2446,20 @@ mod tests {
             RuntimeExpr::Value(RuntimeValue::Int(0)),
         );
         assert_eq!(malformed.status.code(), Some(1));
-        assert!(String::from_utf8_lossy(&malformed.stderr)
-            .contains("entrypoint returned a malformed ExitCode"));
+        assert!(
+            String::from_utf8_lossy(&malformed.stderr)
+                .contains("entrypoint returned a malformed ExitCode")
+        );
 
         let malformed_failure = run(
             "px4-malformed-failure",
             failure(RuntimeExpr::Value(RuntimeValue::Bool(true))),
         );
         assert_eq!(malformed_failure.status.code(), Some(1));
-        assert!(String::from_utf8_lossy(&malformed_failure.stderr)
-            .contains("malformed ExitCode::Failure payload"));
+        assert!(
+            String::from_utf8_lossy(&malformed_failure.stderr)
+                .contains("malformed ExitCode::Failure payload")
+        );
 
         let trapped = run(
             "px4-explicit-trap",
@@ -2764,10 +2821,13 @@ mod tests {
     #[test]
     fn stale_root_execution_marker_fails_the_bound_entrypoint_check() {
         let plan_hash = 41;
+        let fs_root_spec = ken_host::FsRootSpec::default();
         let mut entrypoint = BoundProcessEntrypoint {
             target_symbol: "main".to_string(),
             program_caps_constructor: "MkProgramCaps".to_string(),
             authority: 2,
+            fs_root_binding: fs_root_plan_binding_v1(plan_hash, &fs_root_spec),
+            fs_root_spec,
             plan_hash,
             allow_root_execution: false,
             root_execution_binding: root_execution_plan_binding_v1(plan_hash, false),
@@ -2777,5 +2837,26 @@ mod tests {
         assert!(entrypoint.root_execution_binding_is_valid());
         entrypoint.allow_root_execution = true;
         assert!(!entrypoint.root_execution_binding_is_valid());
+    }
+
+    #[test]
+    fn stale_filesystem_root_fails_the_bound_entrypoint_check() {
+        let plan_hash = 43;
+        let original = ken_host::FsRootSpec::ExecutionStartCwd(b"data".to_vec());
+        let mut entrypoint = BoundProcessEntrypoint {
+            target_symbol: "main".to_string(),
+            program_caps_constructor: "MkProgramCaps".to_string(),
+            authority: 2,
+            fs_root_binding: fs_root_plan_binding_v1(plan_hash, &original),
+            fs_root_spec: original,
+            plan_hash,
+            allow_root_execution: false,
+            root_execution_binding: root_execution_plan_binding_v1(plan_hash, false),
+            ret_constructor: "Ret".to_string(),
+            process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
+        };
+        assert!(entrypoint.fs_root_binding_is_valid());
+        entrypoint.fs_root_spec = ken_host::FsRootSpec::ExecutionStartCwd(b"other".to_vec());
+        assert!(!entrypoint.fs_root_binding_is_valid());
     }
 }
