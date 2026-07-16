@@ -40,7 +40,7 @@ fn main() {
     let manifest = fs::read_to_string("Cargo.toml").expect("read ken-host Cargo.toml");
     assert!(
         manifest.contains(
-            "rustix = { version = \"=1.1.4\", default-features = false, features = [\"std\", \"fs\", \"process\"] }"
+            "rustix = { version = \"=1.1.4\", default-features = false, features = [\"std\", \"fs\", \"process\", \"try_close\"] }"
         ),
         "PX2 manifest identity requires the exact audited rustix pin and features"
     );
@@ -55,7 +55,7 @@ fn main() {
         .to_path_buf();
     let lock = fs::read_to_string(workspace.join("Cargo.lock")).expect("read workspace Cargo.lock");
     let dependencies = [
-        package_identity(&lock, "rustix", "1.1.4", "std,fs,process"),
+        package_identity(&lock, "rustix", "1.1.4", "std,fs,process,try_close"),
         package_identity(&lock, "bitflags", "2.13.0", ""),
         package_identity(&lock, "linux-raw-sys", "0.12.1", "std,general,errno"),
         package_identity(&lock, "libc", "0.2.186", ""),
@@ -158,7 +158,7 @@ fn parse_effect_catalog() -> EffectCatalog {
             kind => panic!("unknown effect catalog row {kind}"),
         }
     }
-    assert_eq!(operations.len(), 15, "HostOpV1 catalog is closed at 15");
+    assert_eq!(operations.len(), 18, "HostOpV1 catalog is closed at 18");
     let mut ids = operations
         .iter()
         .map(|operation| operation.id)

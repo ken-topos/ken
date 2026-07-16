@@ -11,11 +11,11 @@ use std::fs::OpenOptions;
 use std::io::{self, Write};
 
 use crate::{
-    AUTH_FULL, AUTH_NONE, AUTH_PARTIAL, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1,
-    Cap, CapabilityGrantV1, CapabilityTableV1, CapabilityTokenV1, ConsoleStreamV1, CreatePolicyV1,
+    dispatch_host_op_v1, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, Cap,
+    CapabilityGrantV1, CapabilityTableV1, CapabilityTokenV1, ConsoleStreamV1, CreatePolicyV1,
     EffectEventV1, FileErrorCauseV1, FsHandle, FsRootSpec, HostEffectBackendV1, HostOpV1,
     IoErrorIdentityV1, OpenRequest, PathComponent, RootPath, RootedHandle, SymlinkPolicy,
-    dispatch_host_op_v1,
+    AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
 };
 
 #[cfg(target_os = "linux")]
@@ -225,6 +225,18 @@ struct FsChangeModeRequestV1 {
 }
 
 #[repr(C)]
+struct FsOpenRequestV1 {
+    capability: u64,
+    path: SliceV1,
+    mode: u64,
+}
+
+#[repr(C)]
+struct ResourceRequestV1 {
+    resource: u64,
+}
+
+#[repr(C)]
 struct HostReplyV1 {
     tag: u64,
     detail: u64,
@@ -235,11 +247,14 @@ const REPLY_UNIT: u64 = 0;
 const REPLY_BOOL: u64 = 1;
 const REPLY_BYTES: u64 = 2;
 const REPLY_ERROR: u64 = 3;
+const REPLY_RESOURCE: u64 = 4;
+const REPLY_METADATA: u64 = 5;
 
 struct ProcessContext {
     _posture: ProcessPostureV1,
     host: ProcessHost,
     capabilities: CapabilityTableV1,
+    resources: crate::ResourceTableV1,
     response_arena: Vec<Box<[u8]>>,
     effect_trace: Vec<EffectEventV1>,
     observation: Option<std::fs::File>,
@@ -401,6 +416,16 @@ impl HostEffectBackendV1 for ProcessHost {
         let (parent, leaf) = Self::parent(grant, path)?;
         let handle = crate::open_at(&parent, &leaf, OpenRequest::Read).map_err(host_error)?;
         crate::change_mode(&handle, mode).map_err(host_error)
+    }
+
+    fn fs_open_resource(
+        &mut self,
+        grant: &CapabilityGrantV1,
+        path: &[u8],
+        _mode: crate::FsOpenModeV1,
+    ) -> Result<crate::ResourceHandleV1, FileErrorCauseV1> {
+        let (parent, leaf) = Self::parent(grant, path)?;
+        crate::open_resource_at_v1(&parent, &leaf, OpenRequest::Read).map_err(host_error)
     }
 }
 
@@ -672,6 +697,7 @@ fn initialize_process_context_with_lookup(
         _posture: posture,
         host: ProcessHost,
         capabilities,
+        resources: crate::ResourceTableV1::default(),
         response_arena: Vec::new(),
         effect_trace: Vec::new(),
         observation,
@@ -742,12 +768,44 @@ pub unsafe extern "C" fn ken_host_invocation_v1_finish(
     // SAFETY: the starter supplies the unique init result exactly once after
     // Ken entry returns; no borrowed response is used after this call.
     let mut context = unsafe { Box::from_raw(context.cast::<ProcessContext>()) };
+    context.finalize_resources();
     if let Some(mut sink) = context.observation.take() {
         if write_observation_v1(&mut sink, &context, terminal_value).is_err() {
             return -1;
         }
     }
     0
+}
+
+impl ProcessContext {
+    fn finalize_resources(&mut self) {
+        let settlements = self
+            .resources
+            .finalize_all_with(|owner| self.host.resource_close(owner));
+        for settlement in settlements {
+            let outcome = match &settlement.outcome {
+                crate::ResourceSettlementOutcomeV1::Released => CanonicalOutcomeV1::Success(
+                    CanonicalReplyV1::ResourceSettlement(settlement.clone()),
+                ),
+                crate::ResourceSettlementOutcomeV1::ReleaseFailed(io) => CanonicalOutcomeV1::Error(
+                    crate::SemanticErrorV1::Resource(crate::ResourceErrorV1::ReleaseFailed {
+                        schema_version: settlement.schema_version,
+                        resource_kind: settlement.resource_kind,
+                        identity: settlement.identity,
+                        io: *io,
+                    }),
+                ),
+            };
+            self.effect_trace.push(EffectEventV1 {
+                sequence: self.effect_trace.len() as u64,
+                operation: HostOpV1::ResourceRelease,
+                capability: None,
+                resource: Some(settlement.identity),
+                request: CanonicalRequestV1::ResourceRelease,
+                outcome,
+            });
+        }
+    }
 }
 
 fn write_observation_v1(
@@ -792,6 +850,22 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
                 len: bytes.len(),
             };
         }
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::ResourceAcquired { .. }) => {
+            reply.tag = REPLY_RESOURCE;
+        }
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::ResourceSettlement(_)) => {
+            reply.tag = REPLY_UNIT;
+        }
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::FileMetadata(metadata)) => {
+            reply.tag = REPLY_METADATA;
+            reply.detail = metadata.size;
+            reply.bytes.len = match metadata.kind {
+                crate::FsNodeKindV1::File => 0,
+                crate::FsNodeKindV1::Directory => 1,
+                crate::FsNodeKindV1::Symlink => 2,
+                crate::FsNodeKindV1::Other => 3,
+            };
+        }
         CanonicalOutcomeV1::Error(error) => {
             reply.tag = REPLY_ERROR;
             reply.detail = match error {
@@ -801,6 +875,7 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
                     FileErrorCauseV1::Capability(_) => 2,
                 },
                 crate::SemanticErrorV1::Capability(_) => 2,
+                crate::SemanticErrorV1::Resource(_) => 6,
             };
         }
         CanonicalOutcomeV1::Success(_) => reply.tag = REPLY_ERROR,
@@ -857,7 +932,7 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
     if require_native_operation_v1(op).is_err() {
         return -(0x1_0000_i64 + i64::from(op as u16));
     }
-    let (capability, request) = match op {
+    let (capability, resource, request) = match op {
         HostOpV1::ConsoleWrite if request_size == std::mem::size_of::<ConsoleWriteRequestV1>() => {
             if !request.cast::<ConsoleWriteRequestV1>().is_aligned() {
                 return -1;
@@ -869,6 +944,7 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
                 return -1;
             };
             (
+                None,
                 None,
                 CanonicalRequestV1::ConsoleWrite {
                     stream,
@@ -891,7 +967,7 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             } else {
                 CanonicalRequestV1::ConsoleIsTerminal { stream }
             };
-            (None, request)
+            (None, None, request)
         }
         HostOpV1::FsReadFile if request_size == std::mem::size_of::<FsReadFileRequestV1>() => {
             if !request.cast::<FsReadFileRequestV1>().is_aligned() {
@@ -903,6 +979,7 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             };
             (
                 Some(CapabilityTokenV1::from_erased_identity(wire.capability)),
+                None,
                 CanonicalRequestV1::FsReadFile {
                     path: path.to_vec(),
                 },
@@ -926,6 +1003,7 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             };
             (
                 Some(CapabilityTokenV1::from_erased_identity(wire.capability)),
+                None,
                 CanonicalRequestV1::FsWriteFile {
                     path: path.to_vec(),
                     create_policy: policy,
@@ -958,10 +1036,51 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             }
             (
                 Some(CapabilityTokenV1::from_erased_identity(wire.capability)),
+                None,
                 CanonicalRequestV1::FsChangeMode {
                     path: path.to_vec(),
                     mode: wire.mode,
                 },
+            )
+        }
+        HostOpV1::FsOpen if request_size == std::mem::size_of::<FsOpenRequestV1>() => {
+            if !request.cast::<FsOpenRequestV1>().is_aligned() {
+                return -1;
+            }
+            let wire = unsafe { &*(request.cast::<FsOpenRequestV1>()) };
+            let Some(path) = (unsafe { borrowed_slice(&wire.path) }) else {
+                return -1;
+            };
+            let mode = match wire.mode {
+                0 => crate::FsOpenModeV1::Read,
+                1 => crate::FsOpenModeV1::Metadata,
+                _ => return -1,
+            };
+            (
+                Some(CapabilityTokenV1::from_erased_identity(wire.capability)),
+                None,
+                CanonicalRequestV1::FsOpen {
+                    path: path.to_vec(),
+                    mode,
+                },
+            )
+        }
+        HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease
+            if request_size == std::mem::size_of::<ResourceRequestV1>() =>
+        {
+            if !request.cast::<ResourceRequestV1>().is_aligned() {
+                return -1;
+            }
+            let wire = unsafe { &*(request.cast::<ResourceRequestV1>()) };
+            let request = if op == HostOpV1::FsHandleMetadata {
+                CanonicalRequestV1::FsHandleMetadata
+            } else {
+                CanonicalRequestV1::ResourceRelease
+            };
+            (
+                None,
+                Some(crate::ResourceTokenV1::from_erased_identity(wire.resource)),
+                request,
             )
         }
         _ => return -3,
@@ -969,8 +1088,10 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
     let result = dispatch_host_op_v1(
         &mut context.host,
         &context.capabilities,
+        &mut context.resources,
         op,
         capability,
+        resource,
         &request,
     );
     let Ok(result) = result else {
@@ -980,15 +1101,20 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
         sequence: context.effect_trace.len() as u64,
         operation: op,
         capability: result.capability_identity,
+        resource: result.resource_identity,
         request,
         outcome: result.outcome.clone(),
     });
     // SAFETY: generated code supplies an aligned writable HostReplyV1 slot.
+    let token = result.resource_token;
     set_reply(
         unsafe { &mut *(reply.cast::<HostReplyV1>()) },
         result.outcome,
         context,
     );
+    if let Some(token) = token {
+        unsafe { &mut *(reply.cast::<HostReplyV1>()) }.detail = token.erased_identity();
+    }
     0
 }
 
@@ -1028,6 +1154,7 @@ mod tests {
         }
         size_align!("SliceV1", SliceV1);
         size_align!("CapabilityTokenV1", CapabilityTokenV1);
+        size_align!("ResourceTokenV1", crate::ResourceTokenV1);
         size_align!("NativeInvocationV1", NativeInvocationV1);
         size_align!("HostInitResultV1", HostInitResultV1);
         size_align!("ConsoleWriteRequestV1", ConsoleWriteRequestV1);
@@ -1041,6 +1168,8 @@ mod tests {
         size_align!("FsRecursivePathRequestV1", FsRecursivePathRequestV1);
         size_align!("FsRenameRequestV1", FsRenameRequestV1);
         size_align!("FsChangeModeRequestV1", FsChangeModeRequestV1);
+        size_align!("FsOpenRequestV1", FsOpenRequestV1);
+        size_align!("ResourceRequestV1", ResourceRequestV1);
         size_align!("HostReplyV1", HostReplyV1);
         macro_rules! offset {
             ($record:literal, $ty:ty, $field:ident) => {
@@ -1092,10 +1221,14 @@ mod tests {
         offset!("FsChangeModeRequestV1", FsChangeModeRequestV1, capability);
         offset!("FsChangeModeRequestV1", FsChangeModeRequestV1, path);
         offset!("FsChangeModeRequestV1", FsChangeModeRequestV1, mode);
+        offset!("FsOpenRequestV1", FsOpenRequestV1, capability);
+        offset!("FsOpenRequestV1", FsOpenRequestV1, path);
+        offset!("FsOpenRequestV1", FsOpenRequestV1, mode);
+        offset!("ResourceRequestV1", ResourceRequestV1, resource);
         offset!("HostReplyV1", HostReplyV1, tag);
         offset!("HostReplyV1", HostReplyV1, detail);
         offset!("HostReplyV1", HostReplyV1, bytes);
-        assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 15);
+        assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 18);
         for operation in HostOpV1::ALL {
             let row = crate::HOST_EFFECT_ABI_V1_CATALOG
                 .iter()
@@ -1110,6 +1243,8 @@ mod tests {
         assert_eq!(effect_binding("tag", "reply.bool"), REPLY_BOOL);
         assert_eq!(effect_binding("tag", "reply.bytes"), REPLY_BYTES);
         assert_eq!(effect_binding("tag", "reply.error"), REPLY_ERROR);
+        assert_eq!(effect_binding("tag", "reply.resource"), REPLY_RESOURCE);
+        assert_eq!(effect_binding("tag", "reply.metadata"), REPLY_METADATA);
         assert_eq!(effect_binding("error", "io.BrokenPipe"), 3);
         assert_eq!(effect_binding("error", "io.Other"), 11);
     }
@@ -1378,10 +1513,8 @@ mod tests {
             }
         }
 
-        let parent = std::env::temp_dir().join(format!(
-            "ken-px16-init-success-{}",
-            std::process::id()
-        ));
+        let parent =
+            std::env::temp_dir().join(format!("ken-px16-init-success-{}", std::process::id()));
         let cwd = parent.join("cwd");
         let home = parent.join("account-home");
         std::fs::create_dir_all(&cwd).unwrap();
@@ -1603,5 +1736,84 @@ mod tests {
         );
         unsafe { ken_host_invocation_v1_destroy(initialized.context) };
         let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn native_resource_open_metadata_release_and_stale_use_share_one_real_context() {
+        let directory =
+            std::env::temp_dir().join(format!("ken-px7r-native-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(directory.join("held.bin"), b"held-resource").unwrap();
+        let initialized = context(&directory);
+        let invocation = NativeInvocationV1 {
+            process_input: std::ptr::null(),
+            host_context: initialized.context.cast(),
+            capability: initialized.capability,
+        };
+        let path = b"held.bin";
+        let open = FsOpenRequestV1 {
+            capability: initialized.capability,
+            path: SliceV1 {
+                data: path.as_ptr(),
+                len: path.len(),
+            },
+            mode: 1,
+        };
+        let mut reply = HostReplyV1 {
+            tag: u64::MAX,
+            detail: u64::MAX,
+            bytes: SliceV1 {
+                data: std::ptr::null(),
+                len: 0,
+            },
+        };
+        let status = unsafe {
+            ken_host_dispatch_v1(
+                (&invocation as *const NativeInvocationV1).cast(),
+                HostOpV1::FsOpen as u64,
+                (&open as *const FsOpenRequestV1).cast(),
+                std::mem::size_of::<FsOpenRequestV1>(),
+                (&mut reply as *mut HostReplyV1).cast(),
+            )
+        };
+        assert_eq!(status, 0);
+        assert_eq!(reply.tag, REPLY_RESOURCE);
+        let resource = reply.detail;
+
+        let request = ResourceRequestV1 { resource };
+        let dispatch_resource = |operation, reply: &mut HostReplyV1| unsafe {
+            ken_host_dispatch_v1(
+                (&invocation as *const NativeInvocationV1).cast(),
+                operation as u64,
+                (&request as *const ResourceRequestV1).cast(),
+                std::mem::size_of::<ResourceRequestV1>(),
+                (reply as *mut HostReplyV1).cast(),
+            )
+        };
+        assert_eq!(dispatch_resource(HostOpV1::FsHandleMetadata, &mut reply), 0);
+        assert_eq!(reply.tag, REPLY_METADATA);
+        assert_eq!(reply.detail, 13);
+        assert_eq!(dispatch_resource(HostOpV1::ResourceRelease, &mut reply), 0);
+        assert_eq!(reply.tag, REPLY_UNIT);
+        assert_eq!(dispatch_resource(HostOpV1::FsHandleMetadata, &mut reply), 0);
+        assert_eq!(reply.tag, REPLY_ERROR);
+
+        let context = unsafe { &*initialized.context.cast::<ProcessContext>() };
+        assert_eq!(context.effect_trace.len(), 4);
+        let identities = context
+            .effect_trace
+            .iter()
+            .filter_map(|event| event.resource)
+            .collect::<Vec<_>>();
+        assert_eq!(identities, vec![crate::ResourceTraceIdentityV1(1); 4]);
+        assert!(matches!(
+            context.effect_trace[3].outcome,
+            CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Resource(
+                crate::ResourceErrorV1::Closed
+            ))
+        ));
+        unsafe { ken_host_invocation_v1_destroy(initialized.context) };
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

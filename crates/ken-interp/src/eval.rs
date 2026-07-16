@@ -494,7 +494,11 @@ fn projection_accessor_path(term: &Term, globals: &GlobalEnv) -> Option<Vec<Proj
     match term {
         Term::Lam(_, body) => {
             let path = projection_path_from_var0(body)?;
-            if path.is_empty() { None } else { Some(path) }
+            if path.is_empty() {
+                None
+            } else {
+                Some(path)
+            }
         }
         Term::Ascript(inner, _) => projection_accessor_path(inner, globals),
         Term::Const { id, .. } => match globals.lookup(*id) {
@@ -1711,14 +1715,7 @@ fn reduce_safe_bytes_primitive(
                 None => make_ctor(none.id, type_args(), store),
             }
         }
-        (
-            "bytes_slice",
-            [
-                EvalVal::Bytes(bytes),
-                EvalVal::Int(start),
-                EvalVal::Int(len),
-            ],
-        ) => {
+        ("bytes_slice", [EvalVal::Bytes(bytes), EvalVal::Int(start), EvalVal::Int(len)]) => {
             let Some(none) = result_decl.constructors.first() else {
                 return EvalVal::Neutral;
             };
@@ -4438,9 +4435,17 @@ fn fs_dispatch<H: HostHandler>(
         _ => None,
     };
     let mut backend = InterpreterHostBackend { handler };
-    let reply =
-        ken_host::dispatch_host_op_v1(&mut backend, &capabilities, operation, token, &request)
-            .map_err(|_| ());
+    let mut resources = ken_host::ResourceTableV1::default();
+    let reply = ken_host::dispatch_host_op_v1(
+        &mut backend,
+        &capabilities,
+        &mut resources,
+        operation,
+        token,
+        None,
+        &request,
+    )
+    .map_err(|_| ());
     let reply = reply.and_then(|reply| {
         if let Some(recorder) = recorder {
             recorder.record(operation, request.clone(), &reply);
@@ -4532,10 +4537,13 @@ fn ambient_dispatch<H: HostHandler>(
     recorder: Option<&mut EffectTraceRecorderV1>,
 ) -> Result<EvalVal, ()> {
     let mut backend = InterpreterHostBackend { handler };
+    let mut resources = ken_host::ResourceTableV1::default();
     let reply = ken_host::dispatch_host_op_v1(
         &mut backend,
         &ken_host::CapabilityTableV1::default(),
+        &mut resources,
         operation,
+        None,
         None,
         &request,
     )
@@ -4631,6 +4639,7 @@ impl EffectTraceRecorderV1 {
             sequence: self.events.len() as u64,
             operation,
             capability: reply.capability_identity.clone(),
+            resource: reply.resource_identity,
             request,
             outcome: reply.outcome.clone(),
         });
@@ -5378,12 +5387,10 @@ mod px5b_effect_observation_tests {
             ]
         );
         assert_eq!(host.stdout(), b"out");
-        assert!(
-            recorder
-                .events
-                .iter()
-                .all(|event| event.capability.is_none())
-        );
+        assert!(recorder
+            .events
+            .iter()
+            .all(|event| event.capability.is_none()));
     }
 
     #[test]

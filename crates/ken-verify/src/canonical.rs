@@ -210,6 +210,7 @@ pub fn apply_canonical_mutation(
                 sequence,
                 operation: HostOpV1::FsWriteFile,
                 capability: Some(CapabilityTraceIdentity("program_caps.fs".to_string())),
+                resource: None,
                 request: CanonicalRequestV1::FsWriteFile {
                     path: b"trace-without-mutation".to_vec(),
                     create_policy: CreatePolicyV1::CreateOrTruncate,
@@ -435,6 +436,7 @@ mod tests {
             sequence,
             operation,
             capability: capability.then(|| CapabilityTraceIdentity("program_caps.fs".to_string())),
+            resource: None,
             request,
             outcome,
         }

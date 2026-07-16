@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn imported_catalog_has_exact_six_native_and_nine_named_unavailable() {
-        assert_eq!(HostOpV1::ALL.len(), 15);
+        assert_eq!(HostOpV1::ALL.len(), 18);
         assert_eq!(native_tested_lanes(), ken_host::NATIVE_TESTED_TARGETS_V1);
         assert_eq!(deferred_named_lanes().len(), 9);
         assert!(deferred_named_lanes().into_iter().all(|operation| {

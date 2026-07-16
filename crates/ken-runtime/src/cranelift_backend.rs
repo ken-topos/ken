@@ -33,13 +33,16 @@ use crate::{
     RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
 
-const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 6] = [
+const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 9] = [
     ken_host::HostOpV1::ConsoleWrite,
     ken_host::HostOpV1::ConsoleFlush,
     ken_host::HostOpV1::ConsoleIsTerminal,
     ken_host::HostOpV1::FsReadFile,
     ken_host::HostOpV1::FsWriteFile,
     ken_host::HostOpV1::FsChangeMode,
+    ken_host::HostOpV1::FsOpen,
+    ken_host::HostOpV1::FsHandleMetadata,
+    ken_host::HostOpV1::ResourceRelease,
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1480,6 +1483,9 @@ enum Lowered {
     CapabilityToken {
         value: cranelift_codegen::ir::Value,
     },
+    ResourceToken {
+        value: cranelift_codegen::ir::Value,
+    },
     ResponseBytes {
         pointer: cranelift_codegen::ir::Value,
         len: cranelift_codegen::ir::Value,
@@ -1984,7 +1990,8 @@ impl<'a> Lowering<'a> {
             }
             ken_host::HostOpV1::FsReadFile
             | ken_host::HostOpV1::FsWriteFile
-            | ken_host::HostOpV1::FsChangeMode => {
+            | ken_host::HostOpV1::FsChangeMode
+            | ken_host::HostOpV1::FsOpen => {
                 let capability = capability
                     .ok_or_else(|| unsupported("Effect", "FS operation has no live capability"))?;
                 let Lowered::CapabilityToken { value: token } =
@@ -2040,7 +2047,35 @@ impl<'a> Lowering<'a> {
                     let invalid = builder.ins().iconst(types::I16, 0xffff);
                     let mode = builder.ins().select(in_range, narrowed, invalid);
                     builder.ins().stack_store(mode, request, request_offset(3));
+                } else if operation == ken_host::HostOpV1::FsOpen {
+                    let Lowered::Int { value: mode, .. } = lowered
+                        .get(1)
+                        .ok_or_else(|| unsupported("Effect", "FS.Open is missing its mode"))?
+                    else {
+                        return Err(unsupported("Effect", "FS.Open mode is not an Int"));
+                    };
+                    builder.ins().stack_store(*mode, request, request_offset(3));
                 }
+            }
+            ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease => {
+                if capability.is_some() {
+                    return Err(unsupported(
+                        "Effect",
+                        "resource operation carried a capability",
+                    ));
+                }
+                let Lowered::ResourceToken { value: token } = lowered.first().ok_or_else(|| {
+                    unsupported("Effect", "resource operation is missing its token")
+                })?
+                else {
+                    return Err(unsupported(
+                        "Effect",
+                        "resource operand is not an opaque resource token",
+                    ));
+                };
+                builder
+                    .ins()
+                    .stack_store(*token, request, request_offset(0));
             }
             _ => unreachable!("availability was checked above"),
         }
@@ -2082,10 +2117,11 @@ impl<'a> Lowering<'a> {
                 known: None,
             })
         } else {
-            let success_tag = if operation == ken_host::HostOpV1::FsReadFile {
-                wire.reply_bytes_tag
-            } else {
-                wire.reply_unit_tag
+            let success_tag = match operation {
+                ken_host::HostOpV1::FsReadFile => wire.reply_bytes_tag,
+                ken_host::HostOpV1::FsOpen => wire.reply_resource_tag,
+                ken_host::HostOpV1::FsHandleMetadata => wire.reply_metadata_tag,
+                _ => wire.reply_unit_tag,
             } as i64;
             Self::require_one_of_i64(builder, tag, &[success_tag, wire.reply_error_tag as i64]);
             let io_error = Lowered::DynamicNullaryConstructor {
@@ -2098,6 +2134,7 @@ impl<'a> Lowering<'a> {
                 ken_host::HostOpV1::FsReadFile
                     | ken_host::HostOpV1::FsWriteFile
                     | ken_host::HostOpV1::FsChangeMode
+                    | ken_host::HostOpV1::FsOpen
             ) {
                 let path = lowered
                     .first()
@@ -2116,6 +2153,9 @@ impl<'a> Lowering<'a> {
                                 }
                                 ken_host::HostOpV1::FsChangeMode => {
                                     self.process_symbols.file_operation_change_mode.clone()
+                                }
+                                ken_host::HostOpV1::FsOpen => {
+                                    self.process_symbols.file_operation_read.clone()
                                 }
                                 _ => unreachable!("validated FS result operation"),
                             },
@@ -2145,6 +2185,13 @@ impl<'a> Lowering<'a> {
                         i32::try_from(wire.reply_bytes_len_offset)
                             .expect("reply bytes len offset is u32"),
                     ),
+                }
+            } else if operation == ken_host::HostOpV1::FsOpen {
+                Lowered::ResourceToken { value: detail }
+            } else if operation == ken_host::HostOpV1::FsHandleMetadata {
+                Lowered::Int {
+                    value: detail,
+                    known: None,
                 }
             } else {
                 Lowered::Constructor {
@@ -3435,6 +3482,7 @@ impl<'a> Lowering<'a> {
             | Lowered::BorrowedOption { .. }
             | Lowered::ResponseBytes { .. }
             | Lowered::CapabilityToken { .. }
+            | Lowered::ResourceToken { .. }
             | Lowered::HostResult { .. }
             | Lowered::DynamicNullaryConstructor { .. } => Err(unsupported(
                 "Result",

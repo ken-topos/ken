@@ -15,15 +15,14 @@ use std::process::Command;
 
 use crate::platform_runtime_support::validate_entrypoint_metadata_payload;
 use crate::{
-    CraneliftObjectArtifact, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND,
-    EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION, NativeDifferentialStage,
-    NativeRuntimeIrComparisonVerdict, NativeSeedEnvironment, PLATFORM_RUNTIME_SUPPORT_KIND,
-    PLATFORM_RUNTIME_SUPPORT_VERSION, PlatformRuntimeEvidenceFact, PlatformRuntimeEvidenceLane,
+    emit_runtime_ir_object_with_cranelift, fnv1a_64, platform_runtime_support_report_hash,
+    run_runtime_ir_report_with_cranelift, runtime_executable_entrypoint_package_hash,
+    CraneliftObjectArtifact, NativeDifferentialStage, NativeRuntimeIrComparisonVerdict,
+    NativeSeedEnvironment, PlatformRuntimeEvidenceFact, PlatformRuntimeEvidenceLane,
     PlatformRuntimeSupportReport, RuntimeArtifactIdentity, RuntimeExecutableEntrypointPackage,
     RuntimeExpr, RuntimeGroundValue, RuntimeIrRunReport, RuntimeObservation, RuntimeProgram,
-    RuntimeSymbol, emit_runtime_ir_object_with_cranelift, fnv1a_64,
-    platform_runtime_support_report_hash, run_runtime_ir_report_with_cranelift,
-    runtime_executable_entrypoint_package_hash,
+    RuntimeSymbol, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND, EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION,
+    PLATFORM_RUNTIME_SUPPORT_KIND, PLATFORM_RUNTIME_SUPPORT_VERSION,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1966,6 +1965,9 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
+        evaluate_runtime_ir_example, executable_artifact_contract_for_runtime_report,
+        executable_entrypoint_metadata_hash, executable_entrypoint_package_for_runtime_contract,
+        platform_runtime_support_for_entrypoint, summarize_runtime_ir_program,
         ErasedExecutableCore, ExecutableArgumentPackaging, ExecutableArgumentShape,
         ExecutableDependencyClosure, ExecutableEntrypointPackageMetadata,
         ExecutableEntrypointTargetKind, ExecutableEntrypointVerdict, ExecutableReportContract,
@@ -1973,10 +1975,7 @@ mod tests {
         ExecutableTrapContract, ExecutableTrapShape, RuntimeDeclaration, RuntimeDeclarationKind,
         RuntimeExpr, RuntimeIrProgramReport, RuntimeIrSeedEnvironment, RuntimeLowerabilityStatus,
         RuntimeMetadata, RuntimePartiality, RuntimePrimitive, RuntimeSymbolMetadata, RuntimeTrap,
-        RuntimeTrapCode, RuntimeValue, evaluate_runtime_ir_example,
-        executable_artifact_contract_for_runtime_report, executable_entrypoint_metadata_hash,
-        executable_entrypoint_package_for_runtime_contract,
-        platform_runtime_support_for_entrypoint, summarize_runtime_ir_program,
+        RuntimeTrapCode, RuntimeValue,
     };
 
     fn starter_program(body: RuntimeExpr, observation: RuntimeObservation) -> RuntimeProgram {
@@ -2158,11 +2157,9 @@ mod tests {
         assert!(package.smoke.passed);
         assert!(package.object_artifact.byte_len > 0);
         assert!(package.executable_artifact.byte_len > 0);
-        assert!(
-            package
-                .unavailable_lanes
-                .contains(&ObjectLinkerUnavailableLane::WholeCompilerProof)
-        );
+        assert!(package
+            .unavailable_lanes
+            .contains(&ObjectLinkerUnavailableLane::WholeCompilerProof));
         assert!(matches!(
             package.toolchain.whole_compiler_proof,
             ObjectLinkerEvidenceFact::Unavailable { .. }
@@ -2446,20 +2443,16 @@ mod tests {
             RuntimeExpr::Value(RuntimeValue::Int(0)),
         );
         assert_eq!(malformed.status.code(), Some(1));
-        assert!(
-            String::from_utf8_lossy(&malformed.stderr)
-                .contains("entrypoint returned a malformed ExitCode")
-        );
+        assert!(String::from_utf8_lossy(&malformed.stderr)
+            .contains("entrypoint returned a malformed ExitCode"));
 
         let malformed_failure = run(
             "px4-malformed-failure",
             failure(RuntimeExpr::Value(RuntimeValue::Bool(true))),
         );
         assert_eq!(malformed_failure.status.code(), Some(1));
-        assert!(
-            String::from_utf8_lossy(&malformed_failure.stderr)
-                .contains("malformed ExitCode::Failure payload")
-        );
+        assert!(String::from_utf8_lossy(&malformed_failure.stderr)
+            .contains("malformed ExitCode::Failure payload"));
 
         let trapped = run(
             "px4-explicit-trap",
@@ -2470,6 +2463,137 @@ mod tests {
         );
         assert_eq!(trapped.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&trapped.stderr).contains("explicit entry trap"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linked_process_artifact_drives_real_resource_open_use_release() {
+        let result_err = "ctor:prelude::Result::Err".to_string();
+        let result_ok = "ctor:prelude::Result::Ok".to_string();
+        let success = || RuntimeExpr::Construct {
+            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+            args: Vec::new(),
+        };
+        let failure = |code| RuntimeExpr::Construct {
+            constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(code))],
+        };
+        let release = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "Resource".to_string(),
+                operation: ken_host::HostOpV1::ResourceRelease,
+                capability: None,
+                args: vec![RuntimeExpr::Var(1)],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: result_err.clone(),
+                    binders: 1,
+                    body: failure(93),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: result_ok.clone(),
+                    binders: 1,
+                    body: success(),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "resource release result".to_string(),
+            },
+        };
+        let metadata = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "FS".to_string(),
+                operation: ken_host::HostOpV1::FsHandleMetadata,
+                capability: None,
+                args: vec![RuntimeExpr::Var(0)],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: result_err.clone(),
+                    binders: 1,
+                    body: failure(92),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: result_ok.clone(),
+                    binders: 1,
+                    body: release,
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "resource metadata result".to_string(),
+            },
+        };
+        let entry = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "FS".to_string(),
+                operation: ken_host::HostOpV1::FsOpen,
+                capability: Some(crate::RuntimeCapabilityUse {
+                    identity: "program_caps.fs".to_string(),
+                    value: Box::new(RuntimeExpr::Var(1)),
+                }),
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Bytes(b"held.bin".to_vec())),
+                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                ],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: result_err,
+                    binders: 1,
+                    body: failure(91),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: result_ok,
+                    binders: 1,
+                    body: metadata,
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "resource open result".to_string(),
+            },
+        };
+        let output_dir = temp_output_dir("px7r-linked-resource");
+        let executable = build_process_starter_executable_artifact(&entry, &output_dir)
+            .expect("resource process fixture links");
+        let cwd = output_dir.join("root");
+        fs::create_dir_all(&cwd).unwrap();
+        fs::write(cwd.join("held.bin"), b"held-resource").unwrap();
+        let trace_path = output_dir.join("resource.trace");
+        let output = Command::new(&executable)
+            .env_clear()
+            .env("KEN_HOST_OBSERVATION_PATH", &trace_path)
+            .current_dir(&cwd)
+            .output()
+            .expect("linked resource process runs");
+        assert_eq!(output.status.code(), Some(0));
+        let trace = ken_host::decode_linked_effect_trace_v1(&fs::read(&trace_path).unwrap())
+            .expect("resource trace decodes");
+        assert_eq!(
+            trace
+                .effect_trace
+                .iter()
+                .map(|event| event.operation)
+                .collect::<Vec<_>>(),
+            vec![
+                ken_host::HostOpV1::FsOpen,
+                ken_host::HostOpV1::FsHandleMetadata,
+                ken_host::HostOpV1::ResourceRelease,
+            ]
+        );
+        assert_eq!(
+            trace
+                .effect_trace
+                .iter()
+                .map(|event| event.resource)
+                .collect::<Vec<_>>(),
+            vec![Some(ken_host::ResourceTraceIdentityV1(1)); 3]
+        );
+        assert_eq!(fs::read(cwd.join("held.bin")).unwrap(), b"held-resource");
+        fs::remove_dir_all(output_dir).unwrap();
     }
 
     #[test]
