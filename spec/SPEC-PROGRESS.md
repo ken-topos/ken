@@ -108,6 +108,12 @@ sections; seeded opportunistically as core sections are written.)
 
 ## Next action
 
+**Incremental normative pins:** PX7-T specifies the additive
+`ResourceLifetimeObligationV1` body in the behavioral export's `T` channel: one
+`ResourceTraceIdentityV1`-correlated acquire/use/settle obligation, status
+`delegated`, carrying the Ward monitor template and covered by the export hash.
+PX7-F is the corresponding emitter and `System.Resource` implementation work.
+
 **Incremental normative pins:** AX-1 specifies the additive `axiom N : T` sugar,
 the checking-mode `Axiom` intercept, stable names for every postulate producer,
 readable trust-base entries, and kernel-inert postulate labels across `11`, `18`,
