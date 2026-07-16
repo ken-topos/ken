@@ -1525,6 +1525,12 @@ enum Lowered {
         params: Vec<String>,
         body: RuntimeExpr,
     },
+    ComputationalRecursorClosure {
+        recursive: Box<Lowered>,
+        cases: Vec<crate::RuntimeComputationalMatchCase>,
+        default: RuntimeTrap,
+        outer_env: Vec<Lowered>,
+    },
     Trap(RuntimeTrap),
 }
 
@@ -1587,6 +1593,274 @@ fn lowered_char_list(value: &Lowered) -> Option<Vec<u8>> {
 }
 
 impl<'a> Lowering<'a> {
+    fn lower_computational_match_expr(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: &RuntimeExpr,
+        cases: &[crate::RuntimeComputationalMatchCase],
+        default: &RuntimeTrap,
+        producer_env: &[Lowered],
+        eliminator_env: &[Lowered],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        match scrutinee {
+            RuntimeExpr::Let { value, body } => {
+                let value = self.lower_expr(builder, value, producer_env)?;
+                if let Lowered::Trap(trap) = value {
+                    return Ok(Lowered::Trap(trap));
+                }
+                let mut body_env = vec![value];
+                body_env.extend_from_slice(producer_env);
+                self.lower_computational_match_expr(
+                    builder,
+                    body,
+                    cases,
+                    default,
+                    &body_env,
+                    eliminator_env,
+                )
+            }
+            RuntimeExpr::Call { callee, args } => {
+                let callee = self.lower_expr(builder, callee, producer_env)?;
+                let Lowered::Closure {
+                    captures,
+                    params,
+                    body,
+                } = callee
+                else {
+                    return Err(unsupported(
+                        "ComputationalMatch",
+                        "tree producer callee is not a closure",
+                    ));
+                };
+                if params.len() != args.len() {
+                    return Err(unsupported(
+                        "ComputationalMatch",
+                        format!(
+                            "tree producer expects {} args but call provides {}",
+                            params.len(),
+                            args.len()
+                        ),
+                    ));
+                }
+                let mut call_env = args
+                    .iter()
+                    .map(|arg| self.lower_expr(builder, arg, producer_env))
+                    .collect::<Result<Vec<_>, _>>()?;
+                call_env.extend(captures);
+                call_env.extend_from_slice(producer_env);
+                self.lower_computational_match_expr(
+                    builder,
+                    &body,
+                    cases,
+                    default,
+                    &call_env,
+                    eliminator_env,
+                )
+            }
+            RuntimeExpr::Match {
+                scrutinee,
+                cases: producer_cases,
+                default: producer_default,
+            } => {
+                let selected = self.lower_expr(builder, scrutinee, producer_env)?;
+                if let Lowered::Bool { value, known } = selected {
+                    let true_case = producer_cases.iter().find(|case| {
+                        case.binders == 0 && case.constructor.ends_with("::Bool::True")
+                    });
+                    let false_case = producer_cases.iter().find(|case| {
+                        case.binders == 0 && case.constructor.ends_with("::Bool::False")
+                    });
+                    let (Some(true_case), Some(false_case)) = (true_case, false_case) else {
+                        return Err(unsupported(
+                            "ComputationalMatch",
+                            "Bool tree producer requires True and False cases",
+                        ));
+                    };
+                    if let Some(known) = known {
+                        return self.lower_computational_match_expr(
+                            builder,
+                            if known {
+                                &true_case.body
+                            } else {
+                                &false_case.body
+                            },
+                            cases,
+                            default,
+                            producer_env,
+                            eliminator_env,
+                        );
+                    }
+                    let true_block = builder.create_block();
+                    let false_block = builder.create_block();
+                    let merge = builder.create_block();
+                    builder.append_block_param(merge, types::I64);
+                    builder.ins().brif(value, true_block, &[], false_block, &[]);
+                    let mut exit_merge = None;
+                    for (block, producer_case) in
+                        [(true_block, true_case), (false_block, false_case)]
+                    {
+                        builder.switch_to_block(block);
+                        let lowered = self.lower_computational_match_expr(
+                            builder,
+                            &producer_case.body,
+                            cases,
+                            default,
+                            producer_env,
+                            eliminator_env,
+                        )?;
+                        let (value, is_exit) =
+                            self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
+                        Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
+                        builder.ins().jump(merge, &[value.into()]);
+                    }
+                    builder.switch_to_block(merge);
+                    let value = builder.block_params(merge)[0];
+                    return Ok(if exit_merge == Some(true) {
+                        Lowered::ProcessExitStatus { value }
+                    } else {
+                        Lowered::Int { value, known: None }
+                    });
+                }
+                let Lowered::Constructor { constructor, args } = selected else {
+                    return Err(unsupported(
+                        "ComputationalMatch",
+                        "tree-producing match scrutinee is not Bool or a constructor",
+                    ));
+                };
+                let Some(producer_case) = producer_cases
+                    .iter()
+                    .find(|case| case.constructor == constructor)
+                else {
+                    return Ok(Lowered::Trap(producer_default.clone()));
+                };
+                if producer_case.binders != args.len() {
+                    return Err(unsupported(
+                        "ComputationalMatch",
+                        "tree-producing match constructor arity changed",
+                    ));
+                }
+                let mut case_env = args;
+                case_env.extend_from_slice(producer_env);
+                self.lower_computational_match_expr(
+                    builder,
+                    &producer_case.body,
+                    cases,
+                    default,
+                    &case_env,
+                    eliminator_env,
+                )
+            }
+            RuntimeExpr::If {
+                scrutinee,
+                then_expr,
+                else_expr,
+            } => {
+                let selected = self.lower_expr(builder, scrutinee, producer_env)?;
+                let Lowered::Bool { value, known } = selected else {
+                    return Err(unsupported(
+                        "ComputationalMatch",
+                        "tree-producing If scrutinee is not Bool",
+                    ));
+                };
+                if let Some(known) = known {
+                    return self.lower_computational_match_expr(
+                        builder,
+                        if known { then_expr } else { else_expr },
+                        cases,
+                        default,
+                        producer_env,
+                        eliminator_env,
+                    );
+                }
+                let then_block = builder.create_block();
+                let else_block = builder.create_block();
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder.ins().brif(value, then_block, &[], else_block, &[]);
+                let mut exit_merge = None;
+                for (block, branch) in [(then_block, then_expr), (else_block, else_expr)] {
+                    builder.switch_to_block(block);
+                    let lowered = self.lower_computational_match_expr(
+                        builder,
+                        branch,
+                        cases,
+                        default,
+                        producer_env,
+                        eliminator_env,
+                    )?;
+                    let (value, is_exit) =
+                        self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
+                    Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
+                    builder.ins().jump(merge, &[value.into()]);
+                }
+                builder.switch_to_block(merge);
+                let value = builder.block_params(merge)[0];
+                Ok(if exit_merge == Some(true) {
+                    Lowered::ProcessExitStatus { value }
+                } else {
+                    Lowered::Int { value, known: None }
+                })
+            }
+            _ => {
+                let value = self.lower_expr(builder, scrutinee, producer_env)?;
+                self.lower_computational_match_value(builder, value, cases, default, eliminator_env)
+            }
+        }
+    }
+
+    fn lower_computational_match_value(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: Lowered,
+        cases: &[crate::RuntimeComputationalMatchCase],
+        default: &RuntimeTrap,
+        env: &[Lowered],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let Lowered::Constructor { constructor, args } = scrutinee else {
+            return Err(unsupported(
+                "ComputationalMatch",
+                "scrutinee is not a constructor value after ordinary expression lowering",
+            ));
+        };
+        let Some(case) = cases.iter().find(|case| case.constructor == constructor) else {
+            return Ok(Lowered::Trap(default.clone()));
+        };
+        if case.argument_binders != args.len() {
+            return Err(unsupported(
+                "ComputationalMatch",
+                format!(
+                    "case {} expects {} constructor arguments but value has {}",
+                    case.constructor,
+                    case.argument_binders,
+                    args.len()
+                ),
+            ));
+        }
+        let mut seen = BTreeSet::new();
+        let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
+        for position in case.recursive_positions.iter().rev().copied() {
+            if !seen.insert(position) || position >= args.len() {
+                return Err(unsupported(
+                    "ComputationalMatch",
+                    format!(
+                        "case {} has malformed recursive position {position}",
+                        case.constructor
+                    ),
+                ));
+            }
+            induction_hypotheses.push(Lowered::ComputationalRecursorClosure {
+                recursive: Box::new(args[position].clone()),
+                cases: cases.to_vec(),
+                default: default.clone(),
+                outer_env: env.to_vec(),
+            });
+        }
+        let mut case_env = induction_hypotheses;
+        case_env.extend(args);
+        case_env.extend_from_slice(env);
+        self.lower_expr(builder, &case.body, &case_env)
+    }
+
     fn merge_branch_value(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -1821,6 +2095,20 @@ impl<'a> Lowering<'a> {
                 case_env.extend_from_slice(env);
                 self.lower_expr(builder, &case.body, &case_env)
             }
+            RuntimeExpr::ComputationalMatch {
+                scrutinee,
+                cases,
+                default,
+            } => {
+                self.lower_computational_match_expr(
+                    builder,
+                    scrutinee,
+                    cases,
+                    default,
+                    env,
+                    env,
+                )
+            }
             RuntimeExpr::Record { fields } => {
                 let lowered_fields = fields
                     .iter()
@@ -1858,6 +2146,21 @@ impl<'a> Lowering<'a> {
                     body: (**body).clone(),
                 })
             }
+            RuntimeExpr::LexicalClosure {
+                captures,
+                params,
+                body,
+            } => {
+                let captures = captures
+                    .iter()
+                    .map(|capture| self.lower_expr(builder, capture, env))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Lowered::Closure {
+                    captures,
+                    params: params.clone(),
+                    body: (**body).clone(),
+                })
+            }
             RuntimeExpr::DeclarationRef { symbol } => self.lower_declaration_ref(builder, symbol),
             RuntimeExpr::ImportedDeclarationRef {
                 symbol,
@@ -1871,31 +2174,70 @@ impl<'a> Lowering<'a> {
             )),
             RuntimeExpr::Call { callee, args } => {
                 let lowered_callee = self.lower_expr(builder, callee, env)?;
-                let Lowered::Closure {
-                    captures,
-                    params,
-                    body,
-                } = lowered_callee
-                else {
-                    return Err(unsupported("Call", "callee is not a closure"));
-                };
-                if params.len() != args.len() {
-                    return Err(unsupported(
-                        "Call",
-                        format!(
-                            "closure expects {} args but call provides {}",
-                            params.len(),
-                            args.len()
-                        ),
-                    ));
-                }
                 let mut call_env = args
                     .iter()
                     .map(|arg| self.lower_expr(builder, arg, env))
                     .collect::<Result<Vec<_>, _>>()?;
-                call_env.extend(captures);
-                call_env.extend_from_slice(env);
-                self.lower_expr(builder, &body, &call_env)
+                match lowered_callee {
+                    Lowered::Closure {
+                        captures,
+                        params,
+                        body,
+                    } => {
+                        if params.len() != call_env.len() {
+                            return Err(unsupported(
+                                "Call",
+                                format!(
+                                    "closure expects {} args but call provides {}",
+                                    params.len(),
+                                    call_env.len()
+                                ),
+                            ));
+                        }
+                        call_env.extend(captures);
+                        call_env.extend_from_slice(env);
+                        self.lower_expr(builder, &body, &call_env)
+                    }
+                    Lowered::ComputationalRecursorClosure {
+                        recursive,
+                        cases,
+                        default,
+                        outer_env,
+                    } => {
+                        let Lowered::Closure {
+                            captures,
+                            params,
+                            body,
+                        } = *recursive
+                        else {
+                            return Err(unsupported(
+                                "ComputationalMatch",
+                                "recursive constructor field is not a closure",
+                            ));
+                        };
+                        if params.len() != call_env.len() {
+                            return Err(unsupported(
+                                "ComputationalMatch",
+                                format!(
+                                    "recursive field expects {} args but call provides {}",
+                                    params.len(),
+                                    call_env.len()
+                                ),
+                            ));
+                        }
+                        call_env.extend(captures);
+                        call_env.extend_from_slice(env);
+                        self.lower_computational_match_expr(
+                            builder,
+                            &body,
+                            &cases,
+                            &default,
+                            &call_env,
+                            &outer_env,
+                        )
+                    }
+                    _ => Err(unsupported("Call", "callee is not a closure")),
+                }
             }
             RuntimeExpr::Trap(trap) => Ok(Lowered::Trap(trap.clone())),
             RuntimeExpr::Effect {
@@ -3505,6 +3847,10 @@ impl<'a> Lowering<'a> {
             Lowered::Closure { .. } => Err(unsupported(
                 "Closure",
                 "closures are callable but not observable ground values in native lowering",
+            )),
+            Lowered::ComputationalRecursorClosure { .. } => Err(unsupported(
+                "ComputationalMatch",
+                "recursive hypotheses are callable but not observable ground values",
             )),
             Lowered::Trap(trap) => Err(unsupported(
                 "Trap",

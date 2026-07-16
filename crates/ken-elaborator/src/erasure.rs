@@ -276,6 +276,7 @@ fn lower_checked_host_computation(
             context_depth,
             branch_remap,
         )?;
+        let computational = match_uses_computational_recursive_hypothesis(view, root)?;
         let cases = view
             .branches
             .iter()
@@ -309,34 +310,56 @@ fn lower_checked_host_computation(
                     root,
                     &constructor.symbol,
                 )?;
-                let remap = branch_remap
-                    .cloned()
-                    .unwrap_or_default()
-                    .enter_match(constructor.argument_count, erased_count);
-                Ok(RuntimeMatchCase {
-                    constructor: constructor.symbol.to_string(),
-                    binders: constructor.argument_count,
-                    body: lower_checked_host_computation(
-                        method,
-                        declarations,
-                        semantic,
-                        stack,
-                        root,
-                        context_depth + source_binders,
-                        spine,
-                        Some(&remap),
-                    )?,
-                })
+                let remap = branch_remap.cloned().unwrap_or_default().enter_match(
+                    constructor.argument_count,
+                    erased_count,
+                    computational,
+                );
+                let body = lower_checked_host_computation(
+                    method,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth + source_binders,
+                    spine,
+                    Some(&remap),
+                )?;
+                Ok((constructor, body))
             })
             .collect::<Result<Vec<_>, ErasureError>>()?;
-        return Ok(RuntimeExpr::Match {
-            scrutinee: Box::new(scrutinee),
-            cases,
-            default: RuntimeTrap {
-                code: RuntimeTrapCode::PatternMatchFailure,
-                message: "checked HostIO Bool match had no constructor arm".to_string(),
-            },
-        });
+        let default = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "checked HostIO match had no constructor arm".to_string(),
+        };
+        return if computational {
+            Ok(RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(scrutinee),
+                cases: cases
+                    .into_iter()
+                    .map(|(constructor, body)| RuntimeComputationalMatchCase {
+                        constructor: constructor.symbol.to_string(),
+                        argument_binders: constructor.argument_count,
+                        recursive_positions: constructor.recursive_positions.clone(),
+                        body,
+                    })
+                    .collect(),
+                default,
+            })
+        } else {
+            Ok(RuntimeExpr::Match {
+                scrutinee: Box::new(scrutinee),
+                cases: cases
+                    .into_iter()
+                    .map(|(constructor, body)| RuntimeMatchCase {
+                        constructor: constructor.symbol.to_string(),
+                        binders: constructor.argument_count,
+                        body,
+                    })
+                    .collect(),
+                default,
+            })
+        };
     }
     if let Some((constructor, args)) = constructor_application_spine(term) {
         if constructor.symbol == spine.ret {
@@ -363,7 +386,53 @@ fn lower_checked_host_computation(
             }
             let operation_term = args[args.len() - 2];
             let continuation = args[args.len() - 1];
-            let decoded = decode_checked_host_operation(operation_term, spine, root)?;
+            let continuation_body = if let CheckedCoreBodyTerm::Lambda { body, .. } = continuation {
+                lower_checked_host_computation(
+                    body,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth + 1,
+                    spine,
+                    branch_remap.map(BranchBinderRemap::enter_binding).as_ref(),
+                )?
+            } else {
+                let callee = lower_body_term_inner(
+                    continuation,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth,
+                    branch_remap,
+                )?;
+                RuntimeExpr::Call {
+                    callee: Box::new(shift_runtime_vars(callee, 1, 0)),
+                    args: vec![RuntimeExpr::Var(0)],
+                }
+            };
+            let decoded = match select_checked_host_operation(operation_term, spine, root, true)? {
+                CheckedHostOperationSelection::Static(decoded) => decoded,
+                CheckedHostOperationSelection::RuntimeSelected => {
+                    let operation = lower_body_term_inner(
+                        operation_term,
+                        declarations,
+                        semantic,
+                        stack,
+                        root,
+                        context_depth,
+                        branch_remap,
+                    )?;
+                    return lower_runtime_selected_host_operation(
+                        operation,
+                        continuation_body,
+                        semantic,
+                        spine,
+                        root,
+                    );
+                }
+            };
             let runtime_args = &decoded.args[decoded.constructor.family_parameter_count..];
             let (capability, semantic_args) = if decoded.operation.is_ambient() {
                 (None, runtime_args)
@@ -406,23 +475,6 @@ fn lower_checked_host_computation(
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let CheckedCoreBodyTerm::Lambda { body, .. } = continuation else {
-                return Err(expression_lowering_error(
-                    root,
-                    "host_continuation_shape",
-                    "Vis continuation must be a checked lambda",
-                ));
-            };
-            let body = lower_checked_host_computation(
-                body,
-                declarations,
-                semantic,
-                stack,
-                root,
-                context_depth + 1,
-                spine,
-                branch_remap.map(BranchBinderRemap::enter_binding).as_ref(),
-            )?;
             return Ok(RuntimeExpr::Let {
                 value: Box::new(RuntimeExpr::Effect {
                     family: decoded.constructor.family_symbol.to_string(),
@@ -430,7 +482,7 @@ fn lower_checked_host_computation(
                     capability,
                     args,
                 }),
-                body: Box::new(body),
+                body: Box::new(continuation_body),
             });
         }
     }
@@ -441,10 +493,34 @@ fn lower_checked_host_computation(
     ))
 }
 
+#[derive(Debug)]
 struct DecodedCheckedHostOperation<'a> {
     operation: ken_host::HostOpV1,
     constructor: &'a checked_core::CheckedCoreConstructorView,
     args: Vec<&'a CheckedCoreBodyTerm>,
+}
+
+#[derive(Debug)]
+enum CheckedHostOperationSelection<'a> {
+    Static(DecodedCheckedHostOperation<'a>),
+    RuntimeSelected,
+}
+
+fn select_checked_host_operation<'a>(
+    term: &'a CheckedCoreBodyTerm,
+    spine: &CheckedHostSpineV1,
+    root: &StableSymbol,
+    allow_runtime_selected: bool,
+) -> Result<CheckedHostOperationSelection<'a>, ErasureError> {
+    match decode_checked_host_operation(term, spine, root) {
+        Ok(decoded) => Ok(CheckedHostOperationSelection::Static(decoded)),
+        Err(_error)
+            if allow_runtime_selected && matches!(term, CheckedCoreBodyTerm::Variable { .. }) =>
+        {
+            Ok(CheckedHostOperationSelection::RuntimeSelected)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn decode_checked_host_operation<'a>(
@@ -456,7 +532,7 @@ fn decode_checked_host_operation<'a>(
         expression_lowering_error(
             root,
             "host_coproduct_shape",
-            "HostIO operation is not a checked coproduct constructor",
+            format!("HostIO operation is not a checked coproduct constructor: {term:?}"),
         )
     })?;
     let leaf = if outer.symbol == spine.in_l {
@@ -542,6 +618,156 @@ fn decode_checked_host_operation<'a>(
         operation,
         constructor,
         args,
+    })
+}
+
+fn lower_runtime_selected_host_operation(
+    operation: RuntimeExpr,
+    continuation_body: RuntimeExpr,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+    spine: &CheckedHostSpineV1,
+    root: &StableSymbol,
+) -> Result<RuntimeExpr, ErasureError> {
+    let leaf_dispatch = |family: &StableSymbol,
+                         operation_expr: RuntimeExpr,
+                         enclosing_binders: u32|
+     -> Result<RuntimeExpr, ErasureError> {
+        let data = semantic.data_metadata.get(family).ok_or_else(|| {
+            expression_lowering_error(
+                root,
+                "host_operation_family_identity",
+                format!("checked host family {family} has no data metadata"),
+            )
+        })?;
+        let mut cases = Vec::new();
+        for constructor in &data.constructors {
+            let Some(host_operation) = spine.operations.get(&constructor.symbol).copied() else {
+                return Err(expression_lowering_error(
+                    root,
+                    "unknown_host_operation_identity",
+                    format!(
+                        "checked host family {family} contains unadmitted constructor {}",
+                        constructor.symbol
+                    ),
+                ));
+            };
+            let argument_count = constructor.argument_count;
+            let argument_shift = u32::try_from(argument_count).map_err(|_| {
+                expression_lowering_error(
+                    root,
+                    "host_operation_arity",
+                    "host operation arity does not fit runtime IR",
+                )
+            })?;
+            let expected_family = if host_operation == ken_host::HostOpV1::ClockWallNow {
+                &spine.clock_family
+            } else if host_operation.is_ambient() {
+                &spine.console_family
+            } else {
+                &spine.fs_family
+            };
+            if family != expected_family {
+                return Err(expression_lowering_error(
+                    root,
+                    "host_operation_family_identity",
+                    format!(
+                        "operation {} belongs to {family}, expected {expected_family}",
+                        constructor.symbol
+                    ),
+                ));
+            }
+            let runtime_args = (0..argument_count)
+                .map(|index| RuntimeExpr::Var(index as u32))
+                .collect::<Vec<_>>();
+            let (capability, args) = if host_operation.is_ambient() {
+                (None, runtime_args)
+            } else {
+                let mut args = runtime_args.into_iter();
+                let cap = args.next().ok_or_else(|| {
+                    expression_lowering_error(
+                        root,
+                        "host_capability_shape",
+                        "FS operation is missing its live capability operand",
+                    )
+                })?;
+                (
+                    Some(RuntimeCapabilityUse {
+                        identity: spine.capability.to_string(),
+                        value: Box::new(cap),
+                    }),
+                    args.collect(),
+                )
+            };
+            cases.push(RuntimeMatchCase {
+                constructor: constructor.symbol.to_string(),
+                binders: argument_count,
+                body: RuntimeExpr::Let {
+                    value: Box::new(RuntimeExpr::Effect {
+                        family: family.to_string(),
+                        operation: host_operation,
+                        capability,
+                        args,
+                    }),
+                    body: Box::new(shift_runtime_vars(
+                        continuation_body.clone(),
+                        enclosing_binders + argument_shift,
+                        0,
+                    )),
+                },
+            });
+        }
+        Ok(RuntimeExpr::Match {
+            scrutinee: Box::new(operation_expr),
+            cases,
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: format!("runtime-selected operation was not in checked family {family}"),
+            },
+        })
+    };
+
+    let fs = leaf_dispatch(&spine.fs_family, RuntimeExpr::Var(0), 1)?;
+    let console = leaf_dispatch(&spine.console_family, RuntimeExpr::Var(0), 2)?;
+    let clock = leaf_dispatch(&spine.clock_family, RuntimeExpr::Var(0), 2)?;
+    let ambient = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![
+            RuntimeMatchCase {
+                constructor: spine.in_l.to_string(),
+                binders: 1,
+                body: console,
+            },
+            RuntimeMatchCase {
+                constructor: spine.in_r.to_string(),
+                binders: 1,
+                body: clock,
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "runtime-selected ambient operation had malformed coproduct identity"
+                .to_string(),
+        },
+    };
+    Ok(RuntimeExpr::Match {
+        scrutinee: Box::new(operation),
+        cases: vec![
+            RuntimeMatchCase {
+                constructor: spine.in_l.to_string(),
+                binders: 1,
+                body: fs,
+            },
+            RuntimeMatchCase {
+                constructor: spine.in_r.to_string(),
+                binders: 1,
+                body: ambient,
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "runtime-selected HostIO operation had malformed coproduct identity"
+                .to_string(),
+        },
     })
 }
 
@@ -869,7 +1095,8 @@ struct BranchBinderGroup {
     source_start: usize,
     runtime_start: usize,
     argument_count: usize,
-    erased_count: usize,
+    recursive_count: usize,
+    recursive_runtime: bool,
 }
 
 impl BranchBinderRemap {
@@ -882,42 +1109,75 @@ impl BranchBinderRemap {
         remap
     }
 
-    fn enter_match(&self, argument_count: usize, erased_count: usize) -> Self {
+    fn enter_match(
+        &self,
+        argument_count: usize,
+        recursive_count: usize,
+        recursive_runtime: bool,
+    ) -> Self {
         let mut remap = self.clone();
         for group in &mut remap.groups {
-            group.source_start += argument_count + erased_count;
-            group.runtime_start += argument_count;
+            group.source_start += argument_count + recursive_count;
+            group.runtime_start += argument_count
+                + if recursive_runtime {
+                    recursive_count
+                } else {
+                    0
+                };
         }
         remap.groups.push(BranchBinderGroup {
             source_start: 0,
             runtime_start: 0,
             argument_count,
-            erased_count,
+            recursive_count,
+            recursive_runtime,
         });
         remap
     }
 
     fn runtime_index(&self, de_bruijn_index: usize) -> Option<usize> {
         for group in &self.groups {
-            let erased_end = group.source_start + group.erased_count;
-            let group_end = erased_end + group.argument_count;
-            if (group.source_start..erased_end).contains(&de_bruijn_index) {
-                return None;
+            let recursive_end = group.source_start + group.recursive_count;
+            let group_end = recursive_end + group.argument_count;
+            if (group.source_start..recursive_end).contains(&de_bruijn_index) {
+                return group
+                    .recursive_runtime
+                    .then_some(group.runtime_start + de_bruijn_index - group.source_start);
             }
-            if (erased_end..group_end).contains(&de_bruijn_index) {
-                let position = de_bruijn_index - erased_end;
-                return Some(group.runtime_start + (group.argument_count - 1 - position));
+            if (recursive_end..group_end).contains(&de_bruijn_index) {
+                let position = de_bruijn_index - recursive_end;
+                let recursive_offset = if group.recursive_runtime {
+                    group.recursive_count
+                } else {
+                    0
+                };
+                return Some(
+                    group.runtime_start + recursive_offset + (group.argument_count - 1 - position),
+                );
             }
         }
         let erased_below = self
             .groups
             .iter()
             .filter(|group| {
-                de_bruijn_index >= group.source_start + group.erased_count + group.argument_count
+                de_bruijn_index >= group.source_start + group.recursive_count + group.argument_count
             })
-            .map(|group| group.erased_count)
+            .map(|group| {
+                if group.recursive_runtime {
+                    0
+                } else {
+                    group.recursive_count
+                }
+            })
             .sum::<usize>();
         Some(de_bruijn_index - erased_below)
+    }
+
+    fn runtime_depth(&self, source_depth: usize) -> usize {
+        (0..source_depth)
+            .filter_map(|index| self.runtime_index(index))
+            .max()
+            .map_or(0, |index| index + 1)
     }
 }
 
@@ -1087,17 +1347,13 @@ fn lower_body_term_inner(
             branch_remap,
         ),
         CheckedCoreBodyTerm::Lambda { body, .. } => {
-            if captures_outer_variable(body) {
-                return Err(expression_lowering_error(
-                    root_symbol,
-                    "implicit_closure_capture",
-                    format!(
-                        "lambda body references an outer de Bruijn binding without an explicit runtime capture lane while lowering {owner} at depth {context_depth}"
-                    ),
-                ));
-            }
-            Ok(RuntimeExpr::Closure {
-                captures: Vec::new(),
+            let runtime_depth = branch_remap
+                .map(|remap| remap.runtime_depth(context_depth))
+                .unwrap_or(context_depth);
+            Ok(RuntimeExpr::LexicalClosure {
+                captures: (0..runtime_depth)
+                    .map(|index| RuntimeExpr::Var(index as u32))
+                    .collect(),
                 params: vec!["arg0".to_string()],
                 body: Box::new(lower_body_term_inner(
                     body,
@@ -1248,6 +1504,26 @@ fn shift_runtime_vars(expr: RuntimeExpr, by: u32, cutoff: u32) -> RuntimeExpr {
                 .collect(),
             default,
         },
+        RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases,
+            default,
+        } => RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(shift_runtime_vars(*scrutinee, by, cutoff)),
+            cases: cases
+                .into_iter()
+                .map(|case| {
+                    let binders = case.argument_binders + case.recursive_positions.len();
+                    RuntimeComputationalMatchCase {
+                        constructor: case.constructor,
+                        argument_binders: case.argument_binders,
+                        recursive_positions: case.recursive_positions,
+                        body: shift_runtime_vars(case.body, by, cutoff + binders as u32),
+                    }
+                })
+                .collect(),
+            default,
+        },
         RuntimeExpr::Record { fields } => RuntimeExpr::Record {
             fields: fields
                 .into_iter()
@@ -1268,6 +1544,21 @@ fn shift_runtime_vars(expr: RuntimeExpr, by: u32, cutoff: u32) -> RuntimeExpr {
                 captures,
                 params,
                 body: Box::new(shift_runtime_vars(*body, by, inner_cutoff)),
+            }
+        }
+        RuntimeExpr::LexicalClosure {
+            captures,
+            params,
+            body,
+        } => {
+            let body_cutoff = cutoff + params.len() as u32 + captures.len() as u32;
+            RuntimeExpr::LexicalClosure {
+                captures: captures
+                    .into_iter()
+                    .map(|capture| shift_runtime_vars(capture, by, cutoff))
+                    .collect(),
+                params,
+                body: Box::new(shift_runtime_vars(*body, by, body_cutoff)),
             }
         }
         RuntimeExpr::Call { callee, args } => RuntimeExpr::Call {
@@ -2002,6 +2293,7 @@ fn lower_match_view(
         context_depth,
         branch_remap,
     )?);
+    let computational = match_uses_computational_recursive_hypothesis(view, root_symbol)?;
     let mut cases = Vec::with_capacity(view.branches.len());
     for branch in &view.branches {
         let constructor = &branch.constructor;
@@ -2036,14 +2328,14 @@ fn lower_match_view(
             root_symbol,
             &constructor.symbol,
         )?;
-        let remap = branch_remap
-            .cloned()
-            .unwrap_or_default()
-            .enter_match(constructor.argument_count, erased_count);
-        cases.push(RuntimeMatchCase {
-            constructor: constructor.symbol.to_string(),
-            binders: constructor.argument_count,
-            body: lower_body_term_inner(
+        let remap = branch_remap.cloned().unwrap_or_default().enter_match(
+            constructor.argument_count,
+            erased_count,
+            computational,
+        );
+        cases.push((
+            constructor,
+            lower_body_term_inner(
                 body,
                 declarations,
                 semantic,
@@ -2052,16 +2344,40 @@ fn lower_match_view(
                 context_depth + source_binder_count,
                 Some(&remap),
             )?,
-        });
+        ));
     }
-    Ok(RuntimeExpr::Match {
-        scrutinee,
-        cases,
-        default: RuntimeTrap {
-            code: RuntimeTrapCode::PatternMatchFailure,
-            message: format!("no runtime match case selected for {}", view.family_symbol),
-        },
-    })
+    let default = RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: format!("no runtime match case selected for {}", view.family_symbol),
+    };
+    if computational {
+        Ok(RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases: cases
+                .into_iter()
+                .map(|(constructor, body)| RuntimeComputationalMatchCase {
+                    constructor: constructor.symbol.to_string(),
+                    argument_binders: constructor.argument_count,
+                    recursive_positions: constructor.recursive_positions.clone(),
+                    body,
+                })
+                .collect(),
+            default,
+        })
+    } else {
+        Ok(RuntimeExpr::Match {
+            scrutinee,
+            cases: cases
+                .into_iter()
+                .map(|(constructor, body)| RuntimeMatchCase {
+                    constructor: constructor.symbol.to_string(),
+                    binders: constructor.argument_count,
+                    body,
+                })
+                .collect(),
+            default,
+        })
+    }
 }
 
 fn peel_match_branch_method<'a>(
@@ -2083,6 +2399,31 @@ fn peel_match_branch_method<'a>(
         method = body.as_ref();
     }
     Ok(method)
+}
+
+fn match_uses_computational_recursive_hypothesis(
+    view: &checked_core::CheckedCoreMatchView,
+    root_symbol: &StableSymbol,
+) -> Result<bool, ErasureError> {
+    if !view.computational_recursive_hypotheses {
+        return Ok(false);
+    }
+    for branch in &view.branches {
+        let recursive_count = branch.constructor.recursive_positions.len();
+        if recursive_count == 0 {
+            continue;
+        }
+        let body = peel_match_branch_method(
+            &branch.method,
+            branch.constructor.argument_count + recursive_count,
+            root_symbol,
+            &branch.constructor.symbol,
+        )?;
+        if references_outer_binder_range(body, 0, recursive_count, 0) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn require_expression_supported(
@@ -2115,10 +2456,6 @@ fn reject_level_args(
             "runtime expression lowering does not instantiate level-polymorphic direct calls",
         ))
     }
-}
-
-fn captures_outer_variable(term: &CheckedCoreBodyTerm) -> bool {
-    has_free_variable_at_or_above(term, 1)
 }
 
 fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bool {
@@ -2166,6 +2503,66 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
             view.fields.iter().any(|field| match field {
                 checked_core::CheckedCoreDictionaryFieldValue::Runtime { value, .. } => {
                     has_free_variable_at_or_above(value, bound)
+                }
+                checked_core::CheckedCoreDictionaryFieldValue::Erased { .. } => false,
+            })
+        }
+    }
+}
+
+fn references_outer_binder_range(
+    term: &CheckedCoreBodyTerm,
+    start: usize,
+    end: usize,
+    local_depth: usize,
+) -> bool {
+    match term {
+        CheckedCoreBodyTerm::Variable { de_bruijn_index } => {
+            (local_depth + start..local_depth + end).contains(de_bruijn_index)
+        }
+        CheckedCoreBodyTerm::IntegerLiteral { .. }
+        | CheckedCoreBodyTerm::DirectDeclarationCall { .. }
+        | CheckedCoreBodyTerm::RecursiveDeclarationCall(_)
+        | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
+        | CheckedCoreBodyTerm::PrimitiveLiteral(_)
+        | CheckedCoreBodyTerm::ConstructorReference(_)
+        | CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => false,
+        CheckedCoreBodyTerm::PrimitiveApplication(view) => view
+            .arguments
+            .iter()
+            .any(|term| references_outer_binder_range(term, start, end, local_depth)),
+        CheckedCoreBodyTerm::Lambda { body, .. } => {
+            references_outer_binder_range(body, start, end, local_depth + 1)
+        }
+        CheckedCoreBodyTerm::Application { function, argument } => {
+            references_outer_binder_range(function, start, end, local_depth)
+                || references_outer_binder_range(argument, start, end, local_depth)
+        }
+        CheckedCoreBodyTerm::Let { value, body, .. } => {
+            references_outer_binder_range(value, start, end, local_depth)
+                || references_outer_binder_range(body, start, end, local_depth + 1)
+        }
+        CheckedCoreBodyTerm::Match(view) => {
+            references_outer_binder_range(&view.scrutinee, start, end, local_depth)
+                || view.branches.iter().any(|branch| {
+                    references_outer_binder_range(&branch.method, start, end, local_depth)
+                })
+        }
+        CheckedCoreBodyTerm::RecordSigmaConstruction(view) => {
+            view.fields.iter().any(|field| match field {
+                checked_core::CheckedCoreRecordSigmaFieldValue::Runtime { value, .. } => {
+                    references_outer_binder_range(value, start, end, local_depth)
+                }
+                checked_core::CheckedCoreRecordSigmaFieldValue::Erased { .. } => false,
+            })
+        }
+        CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
+            references_outer_binder_range(&view.base, start, end, local_depth)
+        }
+        CheckedCoreBodyTerm::DictionaryConstruction(view) => {
+            view.fields.iter().any(|field| match field {
+                checked_core::CheckedCoreDictionaryFieldValue::Runtime { value, .. } => {
+                    references_outer_binder_range(value, start, end, local_depth)
                 }
                 checked_core::CheckedCoreDictionaryFieldValue::Erased { .. } => false,
             })
@@ -2733,4 +3130,242 @@ fn effects_for_targets(package: &CheckedCorePackage, targets: &[StableSymbol]) -
         .filter(|(symbol, _)| targets.contains(symbol))
         .flat_map(|(_, meta)| meta.declared_effects.iter().cloned())
         .collect()
+}
+
+#[cfg(test)]
+mod px7l_tests {
+    use super::*;
+
+    fn family(name: &str) -> StableSymbol {
+        StableSymbol::declaration("px7l", &[], name)
+    }
+
+    fn constructor_view(
+        family: &StableSymbol,
+        name: &str,
+        family_parameter_count: usize,
+        argument_count: usize,
+    ) -> checked_core::CheckedCoreConstructorView {
+        checked_core::CheckedCoreConstructorView {
+            symbol: StableSymbol::constructor(family, name),
+            family_symbol: family.clone(),
+            level_args: Vec::new(),
+            family_parameter_count,
+            family_index_count: 0,
+            argument_count,
+            target_index_count: 0,
+            recursive_positions: Vec::new(),
+            constructor_lowerability: LowerabilityStatus::Supported,
+            family_lowerability: LowerabilityStatus::Supported,
+        }
+    }
+
+    fn apply_constructor(
+        constructor: checked_core::CheckedCoreConstructorView,
+        args: Vec<CheckedCoreBodyTerm>,
+    ) -> CheckedCoreBodyTerm {
+        args.into_iter().fold(
+            CheckedCoreBodyTerm::ConstructorReference(constructor),
+            |function, argument| CheckedCoreBodyTerm::Application {
+                function: Box::new(function),
+                argument: Box::new(argument),
+            },
+        )
+    }
+
+    fn spine() -> CheckedHostSpineV1 {
+        let fs_family = family("FSOp");
+        let console_family = family("ConsoleOp");
+        let clock_family = family("ClockOp");
+        let coproduct = family("Coproduct");
+        let in_l = StableSymbol::constructor(&coproduct, "InL");
+        let in_r = StableSymbol::constructor(&coproduct, "InR");
+        let read = StableSymbol::constructor(&fs_family, "ReadFile");
+        CheckedHostSpineV1 {
+            ret: StableSymbol::constructor(&family("ITree"), "Ret"),
+            vis: StableSymbol::constructor(&family("ITree"), "Vis"),
+            in_l,
+            in_r,
+            fs_family,
+            console_family,
+            clock_family,
+            capability: family("Cap"),
+            result_err: StableSymbol::constructor(&family("Result"), "Err"),
+            result_ok: StableSymbol::constructor(&family("Result"), "Ok"),
+            option_some: StableSymbol::constructor(&family("Option"), "Some"),
+            file_error: StableSymbol::constructor(&family("FileError"), "MkFileError"),
+            file_operation_read: StableSymbol::constructor(&family("FileOperation"), "Read"),
+            file_operation_write: StableSymbol::constructor(&family("FileOperation"), "Write"),
+            file_operation_change_mode: StableSymbol::constructor(
+                &family("FileOperation"),
+                "ChangeMode",
+            ),
+            io_errors: Vec::new(),
+            unit: StableSymbol::constructor(&family("Unit"), "MkUnit"),
+            bool_false: StableSymbol::constructor(&family("Bool"), "False"),
+            bool_true: StableSymbol::constructor(&family("Bool"), "True"),
+            operations: BTreeMap::from([(read, ken_host::HostOpV1::FsReadFile)]),
+        }
+    }
+
+    fn erased() -> CheckedCoreBodyTerm {
+        CheckedCoreBodyTerm::ErasedConstructorArgument { term: Vec::new() }
+    }
+
+    fn static_fs_read(spine: &CheckedHostSpineV1) -> CheckedCoreBodyTerm {
+        let read = constructor_view(&spine.fs_family, "ReadFile", 1, 2);
+        let leaf = apply_constructor(
+            read,
+            vec![
+                erased(),
+                CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 },
+                CheckedCoreBodyTerm::Variable { de_bruijn_index: 1 },
+            ],
+        );
+        let coproduct = family("Coproduct");
+        apply_constructor(
+            checked_core::CheckedCoreConstructorView {
+                symbol: spine.in_l.clone(),
+                ..constructor_view(&coproduct, "InL", 2, 1)
+            },
+            vec![erased(), erased(), leaf],
+        )
+    }
+
+    fn static_fs_read_with_leaf_family(
+        spine: &CheckedHostSpineV1,
+        leaf_family: &StableSymbol,
+    ) -> CheckedCoreBodyTerm {
+        let mut read = constructor_view(&spine.fs_family, "ReadFile", 1, 2);
+        read.family_symbol = leaf_family.clone();
+        let leaf = apply_constructor(
+            read,
+            vec![
+                erased(),
+                CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 },
+                CheckedCoreBodyTerm::Variable { de_bruijn_index: 1 },
+            ],
+        );
+        let coproduct = family("Coproduct");
+        apply_constructor(
+            checked_core::CheckedCoreConstructorView {
+                symbol: spine.in_l.clone(),
+                ..constructor_view(&coproduct, "InL", 2, 1)
+            },
+            vec![erased(), erased(), leaf],
+        )
+    }
+
+    fn lane(error: ErasureError) -> &'static str {
+        match error {
+            ErasureError::ExpressionLowering { lane, .. } => lane,
+            other => panic!("expected expression-lowering error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn runtime_selected_dispatch_is_load_bearing_and_static_decode_stays_exact() {
+        let spine = spine();
+        let root = family("main");
+        let dynamic = CheckedCoreBodyTerm::Variable { de_bruijn_index: 2 };
+        assert!(matches!(
+            select_checked_host_operation(&dynamic, &spine, &root, true).unwrap(),
+            CheckedHostOperationSelection::RuntimeSelected
+        ));
+        assert_eq!(
+            lane(select_checked_host_operation(&dynamic, &spine, &root, false).unwrap_err()),
+            "host_coproduct_shape"
+        );
+
+        let static_read = static_fs_read(&spine);
+        let CheckedHostOperationSelection::Static(decoded) =
+            select_checked_host_operation(&static_read, &spine, &root, false).unwrap()
+        else {
+            panic!("visible constructor spine must retain the static path")
+        };
+        assert_eq!(decoded.operation, ken_host::HostOpV1::FsReadFile);
+    }
+
+    #[test]
+    fn computational_ih_and_capture_order_have_independent_opposites() {
+        let preserved = BranchBinderRemap::default().enter_match(2, 1, true);
+        assert_eq!(preserved.runtime_index(0), Some(0), "IH is live");
+        assert_eq!(preserved.runtime_index(1), Some(2), "continuation order");
+        assert_eq!(preserved.runtime_index(2), Some(1), "operation order");
+
+        let erased = BranchBinderRemap::default().enter_match(2, 1, false);
+        assert_eq!(erased.runtime_index(0), None, "erased-IH mutation flips");
+        let root = family("main");
+        let mut stack = vec![root.clone()];
+        let erased_error = lower_body_term_inner(
+            &CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 },
+            &BTreeMap::new(),
+            &checked_core::CheckedCoreSemanticInputs::default(),
+            &mut stack,
+            &root,
+            3,
+            Some(&erased),
+        )
+        .unwrap_err();
+        assert_eq!(
+            lane(erased_error),
+            "erased_induction_hypothesis_reached_runtime"
+        );
+
+        let under_lambda = preserved.enter_binding();
+        assert_eq!(under_lambda.runtime_index(0), Some(0), "lambda parameter");
+        assert_eq!(under_lambda.runtime_index(1), Some(1), "captured IH");
+        assert_eq!(
+            under_lambda.runtime_index(2),
+            Some(3),
+            "captured continuation"
+        );
+        assert_eq!(under_lambda.runtime_index(3), Some(2), "captured operation");
+        assert_ne!(
+            under_lambda.runtime_index(2),
+            under_lambda.runtime_index(3),
+            "capture-order swap is discriminating"
+        );
+    }
+
+    #[test]
+    fn checked_host_identity_failures_remain_specific_and_closed() {
+        let root = family("main");
+
+        let mut unknown = spine();
+        unknown.operations.clear();
+        assert_eq!(
+            lane(
+                decode_checked_host_operation(&static_fs_read(&unknown), &unknown, &root)
+                    .unwrap_err()
+            ),
+            "unknown_host_operation_identity"
+        );
+
+        let wrong_family = spine();
+        assert_eq!(
+            lane(
+                decode_checked_host_operation(
+                    &static_fs_read_with_leaf_family(&wrong_family, &wrong_family.console_family,),
+                    &wrong_family,
+                    &root,
+                )
+                .unwrap_err(),
+            ),
+            "host_operation_family_identity"
+        );
+
+        let malformed = spine();
+        assert_eq!(
+            lane(
+                decode_checked_host_operation(
+                    &CheckedCoreBodyTerm::Variable { de_bruijn_index: 7 },
+                    &malformed,
+                    &root,
+                )
+                .unwrap_err(),
+            ),
+            "host_coproduct_shape"
+        );
+    }
 }

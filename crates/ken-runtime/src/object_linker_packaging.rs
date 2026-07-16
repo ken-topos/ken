@@ -823,11 +823,21 @@ fn runtime_expr_contains_effect(expr: &RuntimeExpr, program: &RuntimeProgram) ->
                     .iter()
                     .any(|case| runtime_expr_contains_effect(&case.body, program))
         }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            runtime_expr_contains_effect(scrutinee, program)
+                || cases
+                    .iter()
+                    .any(|case| runtime_expr_contains_effect(&case.body, program))
+        }
         RuntimeExpr::Record { fields } => fields
             .iter()
             .any(|(_, value)| runtime_expr_contains_effect(value, program)),
         RuntimeExpr::Project { record, .. } => runtime_expr_contains_effect(record, program),
-        RuntimeExpr::Closure { body, .. } => runtime_expr_contains_effect(body, program),
+        RuntimeExpr::Closure { body, .. } | RuntimeExpr::LexicalClosure { body, .. } => {
+            runtime_expr_contains_effect(body, program)
+        }
         RuntimeExpr::DeclarationRef { symbol } => program
             .declarations
             .iter()
