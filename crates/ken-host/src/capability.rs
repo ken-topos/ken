@@ -58,11 +58,11 @@ impl FsRootSpec {
 /// Exact startup failures while binding an effective-user home root.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HomeRootResolutionFailureV1 {
-    BufferCapacityExceeded,
     NoAccountRecord,
-    InvalidHomeDirectory,
-    NssError(i32),
-    RootOpen,
+    AccountRecordTooLarge,
+    AccountLookup(crate::IoErrorIdentityV1),
+    InvalidAccountRecord,
+    RootOpen(crate::IoErrorIdentityV1),
     ScopeEscape,
     SymlinkDenied,
 }

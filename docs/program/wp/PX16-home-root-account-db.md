@@ -46,8 +46,12 @@
   unbounded `CStr::from_ptr`); **copy the bytes out before** the buffer drops;
   open the home handle **once**, then resolve the suffix component-by-component
   no-follow under the **existing** `ScopeEscape`/`SymlinkDenied` policy.
-- **Failure semantics:** a new `HomeRootResolutionFailureV1` enum (buffer-cap
-  exceeded / no-entry / `pw_dir` invalid / NSS error) → a new
+- **Failure semantics:** the exact `HomeRootResolutionFailureV1` vocabulary is
+  `NoAccountRecord`, `AccountRecordTooLarge`,
+  `AccountLookup(IoErrorIdentityV1)`, `InvalidAccountRecord`,
+  `RootOpen(IoErrorIdentityV1)`, `ScopeEscape`, and `SymlinkDenied`. Non-ERANGE
+  account-lookup failures and root-open failures retain their host-neutral I/O
+  identity. These map to a new
   `TerminalErrorV1::HomeRootResolutionFailed`, **exact mapping**, delivered as a
   **startup-terminal** observation via **PX14's** no-context startup writer
   (`write_startup_terminal_observation_v1`) — **NO wall-clock bound** (NSS may
@@ -134,8 +138,9 @@ any kernel/spec/conformance change.
   passes.
 - **AC5 — failure is a clean startup-terminal.** The same private injectable
   initialization helper drives each `HomeRootResolutionFailureV1` cause
-  (buffer-cap exceeded, no account record, invalid `pw_dir`, NSS error) through
-  the real pre-context writer and shared exit mapper to
+  (account record too large, no account record, invalid account record,
+  identity-bearing account lookup and root open, scope escape, and symlink
+  denial) through the real pre-context writer and shared exit mapper to
   `TerminalErrorV1::HomeRootResolutionFailed`, with empty
   trace/delta/leaves. The separate linked integration proves the produced child
   reaches the production boundary. No wall-clock bound exists on the path.

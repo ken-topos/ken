@@ -42,7 +42,22 @@ nonempty value, and an absolute path. Bytes are copied before the buffer drops.
 No libc type, pointer, or borrow crosses the module boundary.
 
 Lookup and binding failures are exact
-`HomeRootResolutionFailureV1` values. Native startup maps them to
+`HomeRootResolutionFailureV1` values:
+
+```rust
+pub enum HomeRootResolutionFailureV1 {
+    NoAccountRecord,
+    AccountRecordTooLarge,
+    AccountLookup(IoErrorIdentityV1),
+    InvalidAccountRecord,
+    RootOpen(IoErrorIdentityV1),
+    ScopeEscape,
+    SymlinkDenied,
+}
+```
+
+Non-`ERANGE` account-lookup failures and root-open failures retain their
+host-neutral I/O identity. Native startup maps these values to
 `TerminalErrorV1::HomeRootResolutionFailed` through the existing no-context
 startup writer and shared nonzero exit mapping, before capability mint or any
 effect. NSS has no wall-clock bound; this decision adds no timeout claim.

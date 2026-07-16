@@ -2,7 +2,8 @@
 
 #![allow(unsafe_code)]
 
-use crate::{EffectiveUidSnapshotV1, HomeRootResolutionFailureV1};
+use crate::{io_error_identity_v1, EffectiveUidSnapshotV1, HomeRootResolutionFailureV1};
+use std::io;
 
 pub(crate) trait AccountHomeLookupV1 {
     fn resolve_effective_user_home(
@@ -96,7 +97,7 @@ fn resolve_with_backend(
         let (record_uid, offset) = match backend.lookup(uid.raw(), &mut buffer) {
             LookupAttemptV1::Range => {
                 if capacity == LIMIT {
-                    return Err(HomeRootResolutionFailureV1::BufferCapacityExceeded);
+                    return Err(HomeRootResolutionFailureV1::AccountRecordTooLarge);
                 }
                 capacity = (capacity * 2).min(LIMIT);
                 continue;
@@ -105,10 +106,13 @@ fn resolve_with_backend(
                 return Err(HomeRootResolutionFailureV1::NoAccountRecord);
             }
             LookupAttemptV1::BackendError(status) => {
-                return Err(HomeRootResolutionFailureV1::NssError(status));
+                let error = io::Error::from_raw_os_error(status);
+                return Err(HomeRootResolutionFailureV1::AccountLookup(
+                    io_error_identity_v1(&error),
+                ));
             }
             LookupAttemptV1::InvalidRecord => {
-                return Err(HomeRootResolutionFailureV1::InvalidHomeDirectory);
+                return Err(HomeRootResolutionFailureV1::InvalidAccountRecord);
             }
             LookupAttemptV1::Record {
                 uid,
@@ -116,16 +120,16 @@ fn resolve_with_backend(
             } => (uid, directory_offset),
         };
         if record_uid != uid.raw() || offset >= buffer.len() {
-            return Err(HomeRootResolutionFailureV1::InvalidHomeDirectory);
+            return Err(HomeRootResolutionFailureV1::InvalidAccountRecord);
         }
         let tail = &buffer[offset..];
         let length = tail
             .iter()
             .position(|byte| *byte == 0)
-            .ok_or(HomeRootResolutionFailureV1::InvalidHomeDirectory)?;
+            .ok_or(HomeRootResolutionFailureV1::InvalidAccountRecord)?;
         let bytes = &tail[..length];
         if bytes.is_empty() || bytes[0] != b'/' {
-            return Err(HomeRootResolutionFailureV1::InvalidHomeDirectory);
+            return Err(HomeRootResolutionFailureV1::InvalidAccountRecord);
         }
         return Ok(bytes.to_vec());
     }
@@ -195,8 +199,9 @@ mod tests {
         );
         assert_eq!(
             resolve_with_backend(uid, &capped),
-            Err(HomeRootResolutionFailureV1::BufferCapacityExceeded)
+            Err(HomeRootResolutionFailureV1::AccountRecordTooLarge)
         );
+        let backend_error = io::Error::from_raw_os_error(5);
         for (attempt, expected) in [
             (
                 LookupAttemptV1::NoAccountRecord,
@@ -204,25 +209,25 @@ mod tests {
             ),
             (
                 LookupAttemptV1::BackendError(5),
-                HomeRootResolutionFailureV1::NssError(5),
+                HomeRootResolutionFailureV1::AccountLookup(io_error_identity_v1(&backend_error)),
             ),
             (
                 LookupAttemptV1::InvalidRecord,
-                HomeRootResolutionFailureV1::InvalidHomeDirectory,
+                HomeRootResolutionFailureV1::InvalidAccountRecord,
             ),
             (
                 LookupAttemptV1::Record {
                     uid: 1001,
                     directory_offset: 0,
                 },
-                HomeRootResolutionFailureV1::InvalidHomeDirectory,
+                HomeRootResolutionFailureV1::InvalidAccountRecord,
             ),
             (
                 LookupAttemptV1::Record {
                     uid: 1000,
                     directory_offset: usize::MAX,
                 },
-                HomeRootResolutionFailureV1::InvalidHomeDirectory,
+                HomeRootResolutionFailureV1::InvalidAccountRecord,
             ),
         ] {
             assert_eq!(
@@ -242,7 +247,7 @@ mod tests {
                         directory,
                     ),
                 ),
-                Err(HomeRootResolutionFailureV1::InvalidHomeDirectory)
+                Err(HomeRootResolutionFailureV1::InvalidAccountRecord)
             );
         }
         let unterminated = vec![b'/'; 1024];
@@ -257,7 +262,7 @@ mod tests {
                     &unterminated,
                 ),
             ),
-            Err(HomeRootResolutionFailureV1::InvalidHomeDirectory)
+            Err(HomeRootResolutionFailureV1::InvalidAccountRecord)
         );
     }
 

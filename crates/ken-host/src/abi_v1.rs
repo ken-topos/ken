@@ -1301,11 +1301,13 @@ mod tests {
 
         let cwd = RootPath::new(std::env::current_dir().unwrap()).unwrap();
         for (index, failure) in [
-            crate::HomeRootResolutionFailureV1::BufferCapacityExceeded,
             crate::HomeRootResolutionFailureV1::NoAccountRecord,
-            crate::HomeRootResolutionFailureV1::InvalidHomeDirectory,
-            crate::HomeRootResolutionFailureV1::NssError(5),
-            crate::HomeRootResolutionFailureV1::RootOpen,
+            crate::HomeRootResolutionFailureV1::AccountRecordTooLarge,
+            crate::HomeRootResolutionFailureV1::AccountLookup(
+                crate::IoErrorIdentityV1::PermissionDenied,
+            ),
+            crate::HomeRootResolutionFailureV1::InvalidAccountRecord,
+            crate::HomeRootResolutionFailureV1::RootOpen(crate::IoErrorIdentityV1::NotFound),
             crate::HomeRootResolutionFailureV1::ScopeEscape,
             crate::HomeRootResolutionFailureV1::SymlinkDenied,
         ]

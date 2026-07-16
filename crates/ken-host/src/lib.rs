@@ -520,23 +520,28 @@ fn resolve_fs_root_spec_with_lookup_v1(
             }
             FsRootSpec::EffectiveUserHome(suffix) => {
                 use std::os::unix::ffi::OsStringExt;
+                let root_open_failure = |error: HostError| {
+                    let error = error.into_io_error();
+                    FsRootResolveError::HomeRootResolution(HomeRootResolutionFailureV1::RootOpen(
+                        io_error_identity_v1(&error),
+                    ))
+                };
                 let home = home_lookup
                     .resolve_effective_user_home(effective_uid)
                     .map_err(FsRootResolveError::HomeRootResolution)?;
                 let path = PathBuf::from(std::ffi::OsString::from_vec(home));
-                let path = RootPath::new(path).map_err(|_| {
-                    FsRootResolveError::HomeRootResolution(HomeRootResolutionFailureV1::RootOpen)
-                })?;
-                let handle = open_root(&path).map_err(|_| {
-                    FsRootResolveError::HomeRootResolution(HomeRootResolutionFailureV1::RootOpen)
-                })?;
+                let path = RootPath::new(path).map_err(root_open_failure)?;
+                let handle = open_root(&path).map_err(root_open_failure)?;
                 (handle, suffix.as_slice())
             }
         };
         let home_root = matches!(spec, FsRootSpec::EffectiveUserHome(_));
         let map_root_error = |error: HostError| {
             if home_root {
-                FsRootResolveError::HomeRootResolution(HomeRootResolutionFailureV1::RootOpen)
+                let error = error.into_io_error();
+                FsRootResolveError::HomeRootResolution(HomeRootResolutionFailureV1::RootOpen(
+                    io_error_identity_v1(&error),
+                ))
             } else {
                 FsRootResolveError::from(error)
             }
@@ -1209,7 +1214,7 @@ mod tests {
                 &lookup,
             ),
             Err(FsRootResolveError::HomeRootResolution(
-                HomeRootResolutionFailureV1::RootOpen
+                HomeRootResolutionFailureV1::RootOpen(IoErrorIdentityV1::NotFound)
             ))
         ));
         std::fs::remove_dir_all(parent).unwrap();
