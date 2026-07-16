@@ -14,7 +14,28 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ## ⚡⚡ RESUME NEXT (2026-07-16 06:2x) — ✅ PX5/PX5B/**PX5C CLOSED** (merged d65bc308 + 3 retros) · ▶ PX6 RESUMING on Verify (last of native chain)
+> ## ⚡⚡ RESUME NEXT (2026-07-16 06:5x) — 🎉 NATIVE CHAIN COMPLETE + PX6 CLOSED (PX4B→PX5→PX5B→PX5C→PX6 all merged+retro'd) · next = cap-model ruling → PX13/14/15
+>
+> > **🎉🎉 PX6 MERGED + CONTENT-VERIFIED — `origin/main @ b8fa779d` (PR #738, §14-approved `25048a10`,
+> > `dec_6s8yt7gnfv5fe` resolved APPROVE).** The `ken-verify` differential-harness crate is on main (all 8 files);
+> > workspace Cargo.toml includes it; full `--workspace --locked` CI passed (first build of the new crate); my
+> > 26661194 doc-sync NOT reverted (verified PX5C-CLOSED still on main). **NATIVE EFFECT CHAIN COMPLETE:
+> > PX4B→PX5→PX5B→PX5C→PX6 all merged.** Retros CALLED (evt_1r0etnxctvxd2, verify-leader) — carries pinned:
+> > producer/judge split (ADR-0018 §5, Verify doesn't author the oracle it judges → PX5B); assemble-then-compare
+> > six-field EffectObservationV1 from both real producers, no normalization; discriminators must drive the real seam.
+> > **✅ PX6 CLOSED — all 3 §10 retros IN** (leader evt_4gjw9dbwk07fp, QA evt_17vgjkvbm7rte, impl evt_3swap4pxp0z02;
+> > verify-leader "retros in" evt_4jvfk3ymsvx43). Verify ring home-clean/standby.
+> > **NEXT (event-driven / next-action): (a) DONE bar the doc-only tracker-sync to main (bundles PX6-closed +
+> > native-chain-complete); (b) NATIVE
+> > CHAIN DONE → route the shared Architect capability-model ruling (3 design gates: mutation right-bit / FsDeltaV1
+> > mode-owner observation / chown-chgrp scope) → on ruling, author frames + release PX13/PX14/PX15 (Runtime). This is
+> > the next substantive work unit — do it in FRESH context (self-compact first).**
+> > PX13/14/15 were operator-requested 2026-07-16, gated on native chain (now done) + this ruling. PX7 HELD (Resource/
+> > Bracket — do NOT release/re-ask). SELF-COMPACT SEAM: native chain complete is the ideal compact point before the
+> > cap-model work (~33% ctx). Pat offline until ~11:30 UTC; window log = docs/program/autonomous-window-log-2026-07-16.md.
+>
+> ---
+> _(prior:)_ ## ⚡⚡ RESUME NEXT (2026-07-16 06:2x) — ✅ PX5/PX5B/**PX5C CLOSED** (merged d65bc308 + 3 retros) · ▶ PX6 RESUMING on Verify (last of native chain)
 >
 > > **✅✅✅ PX5C CLOSED — `origin/main @ d65bc308` (PR #736, §14-approved `22fa5e26`, `dec_38cnenh5f75b0` resolved).**
 > > Content-verified on main (canonical `program_caps_fs_trace_identity_v1()`=`"FS"` helper + both grant sites + ADR
@@ -28,11 +49,30 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > > (evt_6r0rjvnqpfayr) onto `d65bc308`; verify-implementer WORKING — rebase held PX5B-consumption branch, demote
 > > `Scenario.expected_fs` to producer-source-only, keep root-A snapshot for its FS-delta field, retain descriptor-
 > > collision + malformed-token controls, rerun 5-op + denial lanes; comparator/native/root-B UNCHANGED (identity now
-> > `Some("FS")`-equal by construction). **NEXT (event-driven): watch PX6 handback (fresh SHA on d65bc308 + per-AC
-> > evidence) → verify-qa → §14 (Architect; CV not in route) → publish (standing authority) → content-verify → 3
-> > retros → CLOSE PX6.** Then native chain COMPLETE → shared Architect cap-model ruling (mutation right-bit /
+> > `Some("FS")`-equal by construction).
+> > **▶▶ PX6 IN §14 REVIEW — exact `wp/px6-effect-differential-harness @ 25048a10` (base d65bc308, 2 linear commits
+> > c8837edf+25048a10, 11 paths/2740 ins, NO Runtime/Host/Interp source movement, comparator unchanged).**
+> > verify-qa APPROVE evt_1dx3cr820tk34; verify-leader §14 request evt_38gx4vrfnnqa2 (Architect reviewing). Ownership
+> > hole CLOSED: `ScriptedPosixHost` is exec + independent descriptor-assertion only; interp fields from real
+> > `run_program_effect_observation_v1`; `expected_fs` supplies NO EffectObservationV1 field; root-A snapshot fills
+> > only `filesystem_delta` (after asserting PX5 producer left it empty); native = checked artifact via
+> > `run_bound_process_effect_observation_v1` @ root B. Discriminators live: `dir/./x`/`dir/x` collision keeps distinct
+> > raw requests + reply-owned `Some(program_caps_fs_trace_identity_v1())`; wrong-token → None + typed
+> > MalformedCapability pre-leaf; captured mutation net still bites. (verify-leader's §14 request stranded as an
+> > unsubmitted paste; Monitor bp808a7mu caught it, I diagnosed + bare-Enter'd → Architect reviewed.)
+> > **▶▶▶ PX6 PUBLISHING — Architect §14 APPROVE (evt_1mbphh07g8q2q); Decision `dec_6s8yt7gnfv5fe` RESOLVED APPROVE**
+> > (resolved_by Architect @ 06:43:23, verified against the Decision OBJECT via list_decisions, not prose — the
+> > Architect flagged no Decision existed → verify-leader opened it → Architect resolved). **Publisher running (bg
+> > bjrm62l15) on exact local `25048a10`** (verified: merge-base d65bc308, 2 linear c8837edf+25048a10, 0 merges, 11
+> > paths/2740 ins — all Verify-owned `crates/ken-verify/*` + frame + EXPECTED Cargo workspace wiring for the NEW
+> > ken-verify crate; NO kernel/host/interp/spec/conformance source moves; branch does NOT touch tracker files so the
+> > squash won't revert the 26661194 doc-sync). First CI run that builds ken-verify under --workspace --locked.
+> > **NEXT (event-driven): on publisher success → content-verify 25048a10 on origin/main → relay merge + 3 §10 retros
+> > → CLOSE PX6 (native chain COMPLETE) → doc-only tracker-sync. If CI RED → publisher stops, route failing job to
+> > Verify ring for fresh SHA + Decision (PX4B/nc13 precedent; the new-crate workspace build is the likeliest gap).**
+> > Then native chain COMPLETE → shared Architect cap-model ruling (mutation right-bit /
 > > FsDeltaV1 mode-owner obs / chown-chgrp scope) → author + release PX13/14/15 (Runtime). PX7 HELD. Doc-only
-> > tracker-sync to main pending (bundles PX5C-closed). Pat offline until ~11:30 UTC; window log =
+> > tracker-sync to main DONE (PR #737, origin/main @ 26661194). Pat offline until ~11:30 UTC; window log =
 > > docs/program/autonomous-window-log-2026-07-16.md.
 >
 > ---
