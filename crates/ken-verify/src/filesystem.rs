@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 
 static NEXT_ROOTS: AtomicU64 = AtomicU64::new(0);
 
@@ -39,6 +41,8 @@ pub struct SnapshotNode {
     pub kind: SnapshotNodeKind,
     /// File bytes or raw symlink-target bytes. Directories use an empty value.
     pub bytes: Vec<u8>,
+    /// POSIX permission/special bits for regular files and directories.
+    pub mode: Option<u16>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -269,16 +273,19 @@ fn canonical_nodes(snapshot: &RootSnapshot) -> BTreeMap<Vec<u8>, ken_host::FsNod
                     kind: ken_host::FsNodeKindV1::Directory,
                     file_bytes: None,
                     symlink_target: None,
+                    mode: node.mode,
                 },
                 SnapshotNodeKind::File => ken_host::FsNodeObservationV1 {
                     kind: ken_host::FsNodeKindV1::File,
                     file_bytes: Some(node.bytes.clone()),
                     symlink_target: None,
+                    mode: node.mode,
                 },
                 SnapshotNodeKind::Symlink => ken_host::FsNodeObservationV1 {
                     kind: ken_host::FsNodeKindV1::Symlink,
                     file_bytes: None,
                     symlink_target: Some(node.bytes.clone()),
+                    mode: None,
                 },
             };
             (node.relative_path.clone(), observation)
@@ -307,12 +314,14 @@ fn snapshot_directory(
                 relative_path: relative,
                 kind: SnapshotNodeKind::Symlink,
                 bytes: raw_os_str(&fs::read_link(entry.path())?).to_vec(),
+                mode: None,
             });
         } else if file_type.is_dir() {
             nodes.push(SnapshotNode {
                 relative_path: relative.clone(),
                 kind: SnapshotNodeKind::Directory,
                 bytes: Vec::new(),
+                mode: Some((metadata.mode() & 0o7777) as u16),
             });
             snapshot_directory(&entry.path(), &relative, nodes)?;
         } else if file_type.is_file() {
@@ -320,6 +329,7 @@ fn snapshot_directory(
                 relative_path: relative,
                 kind: SnapshotNodeKind::File,
                 bytes: fs::read(entry.path())?,
+                mode: Some((metadata.mode() & 0o7777) as u16),
             });
         }
     }
@@ -349,6 +359,32 @@ fn raw_os_str(_path: &Path) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_snapshot_projects_mode_but_never_owner_namespace() {
+        let node = ken_host::FsNodeObservationV1 {
+            kind: ken_host::FsNodeKindV1::File,
+            file_bytes: Some(Vec::new()),
+            symlink_target: None,
+            mode: Some(0o640),
+        };
+        let ken_host::FsNodeObservationV1 {
+            kind: _,
+            file_bytes: _,
+            symlink_target: _,
+            mode,
+        } = node;
+        assert_eq!(mode, Some(0o640));
+
+        let native = include_str!("../../ken-runtime/src/object_linker_packaging.rs");
+        let verifier = include_str!("filesystem.rs");
+        for producer in [native, verifier] {
+            for owner_projection in ["uid()", "gid()"] {
+                let needle = format!("metadata.{owner_projection}");
+                assert!(!producer.contains(&needle));
+            }
+        }
+    }
 
     #[test]
     fn twin_roots_preserve_raw_paths_files_directories_and_symlinks() {

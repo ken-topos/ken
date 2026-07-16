@@ -164,6 +164,7 @@ pub(crate) struct CheckedHostSpineV1 {
     pub file_error: StableSymbol,
     pub file_operation_read: StableSymbol,
     pub file_operation_write: StableSymbol,
+    pub file_operation_change_mode: StableSymbol,
     pub io_errors: Vec<StableSymbol>,
     pub unit: StableSymbol,
     pub bool_false: StableSymbol,

@@ -32,7 +32,8 @@ impl RightSet {
     pub const DELETE: Self = Self(1 << 3);
     pub const ENUMERATE: Self = Self(1 << 4);
     pub const METADATA: Self = Self(1 << 5);
-    pub const ALL: Self = Self((1 << 6) - 1);
+    pub const CHANGE_MODE: Self = Self(1 << 6);
+    pub const ALL: Self = Self((1 << 7) - 1);
 
     pub const fn union(self, other: Self) -> Self {
         Self(self.0 | other.0)
@@ -198,6 +199,7 @@ pub enum FsCapabilityOperation {
     RemoveDirectory,
     RenameSource,
     RenameDestination,
+    ChangeMode,
 }
 
 impl FsCapabilityOperation {
@@ -210,6 +212,7 @@ impl FsCapabilityOperation {
             Self::CreateDirectory => RightSet::CREATE,
             Self::RemoveFile | Self::RemoveDirectory => RightSet::DELETE,
             Self::RenameSource | Self::RenameDestination => RightSet::WRITE.union(RightSet::DELETE),
+            Self::ChangeMode => RightSet::CHANGE_MODE,
         }
     }
     pub const fn resolves_parent(self) -> bool {

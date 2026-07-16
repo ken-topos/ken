@@ -153,7 +153,7 @@ fn parse_effect_catalog() -> EffectCatalog {
             kind => panic!("unknown effect catalog row {kind}"),
         }
     }
-    assert_eq!(operations.len(), 14, "HostOpV1 catalog is closed at 14");
+    assert_eq!(operations.len(), 15, "HostOpV1 catalog is closed at 15");
     let mut ids = operations
         .iter()
         .map(|operation| operation.id)
@@ -373,6 +373,7 @@ fn linux_raw_facts() -> Vec<(&'static str, u64)> {
         ("SYS_UNLINKAT", general::__NR_unlinkat.into()),
         ("SYS_RENAMEAT", general::__NR_renameat.into()),
         ("SYS_READLINKAT", general::__NR_readlinkat.into()),
+        ("SYS_FCHMOD", general::__NR_fchmod.into()),
         ("ERRNO_ENOENT", errno::ENOENT.into()),
         ("ERRNO_EEXIST", errno::EEXIST.into()),
     ]

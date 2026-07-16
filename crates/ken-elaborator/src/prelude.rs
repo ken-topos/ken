@@ -249,7 +249,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     )
     .map_err(|e| ElabError::Internal(format!("prelude IOError failed: {}", e)))?;
     elab.elaborate_decl(
-        "data FileOperation = OpReadFile | OpWriteFile | OpAppendFile | OpMetadata | OpReadDirectory | OpCreateDirectory | OpRemoveFile | OpRemoveDirectory | OpRename",
+        "data FileOperation = OpReadFile | OpWriteFile | OpAppendFile | OpMetadata | OpReadDirectory | OpCreateDirectory | OpRemoveFile | OpRemoveDirectory | OpRename | OpChangeMode",
     )
     .map_err(|e| ElabError::Internal(format!("prelude FileOperation failed: {}", e)))?;
     elab.elaborate_decl("data FileError = MkFileError FileOperation (Option Bytes) IOError")
@@ -1282,6 +1282,12 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .copied()
         .map(|id| Term::indformer(id, vec![]))
         .ok_or_else(|| ElabError::Internal("prelude: Bool missing".into()))?;
+    let int_t = elab
+        .globals
+        .get("Int")
+        .copied()
+        .map(|id| Term::const_(id, vec![]))
+        .ok_or_else(|| ElabError::Internal("prelude: Int missing".into()))?;
     let fsop_id = declare_inductive(&mut elab.env, |_fsop_id| InductiveSpec {
         level_params: vec![],
         params: vec![auth_t.clone()],
@@ -1308,6 +1314,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
                 named(vec![cap_a(), bytes_t.clone()]),
                 named(vec![cap_a(), bool_t, bytes_t.clone()]),
                 named(vec![cap_a(), bytes_t.clone(), bytes_t.clone()]),
+                named(vec![cap_a(), bytes_t.clone(), int_t]),
             ]
         },
     })
@@ -1331,6 +1338,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "RemoveFile",
         "RemoveDirectory",
         "Rename",
+        "ChangeMode",
     ]
     .into_iter()
     .zip(fs_ctor_ids)
@@ -1351,7 +1359,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            CreateDirectory cap recursive path |-> Result FileError Unit; \
            RemoveFile cap path |-> Result FileError Unit; \
            RemoveDirectory cap recursive path |-> Result FileError Unit; \
-           Rename cap from to |-> Result FileError Unit \
+           Rename cap from to |-> Result FileError Unit; \
+           ChangeMode cap path mode |-> Result FileError Unit \
          }",
     )
     .map_err(|e| ElabError::Internal(format!("prelude fs_resp failed: {}", e)))?;
@@ -1438,6 +1447,12 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            (\\r. Ret (FSOp a) (fs_resp a) (Result FileError Unit) r)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude rename_file failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc change_mode (a : Auth) (cap : Cap a) (path : Bytes) (mode : Int) : FS a (Result FileError Unit) visits [FS] = \
+         Vis (FSOp a) (fs_resp a) (Result FileError Unit) (ChangeMode a cap path mode) \
+           (\\r. Ret (FSOp a) (fs_resp a) (Result FileError Unit) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude change_mode failed: {}", e)))?;
 
     // Program-I I-1 entrypoint ABI. These are ordinary, kernel-checked Ken
     // declarations: the host runner knows their fixed shape, but no kernel

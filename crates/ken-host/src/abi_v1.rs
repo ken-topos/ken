@@ -11,11 +11,11 @@ use std::fs::OpenOptions;
 use std::io::{self, Write};
 
 use crate::{
-    AUTH_FULL, AUTH_NONE, AUTH_PARTIAL, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1,
-    Cap, CapabilityGrantV1, CapabilityTableV1, CapabilityTokenV1, ConsoleStreamV1, CreatePolicyV1,
+    dispatch_host_op_v1, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, Cap,
+    CapabilityGrantV1, CapabilityTableV1, CapabilityTokenV1, ConsoleStreamV1, CreatePolicyV1,
     EffectEventV1, FileErrorCauseV1, FsHandle, FsIdentity, FsScope, HostEffectBackendV1, HostOpV1,
     IoErrorIdentityV1, OpenRequest, PathComponent, RootPath, RootedHandle, SymlinkPolicy,
-    dispatch_host_op_v1,
+    AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
 };
 
 #[cfg(target_os = "linux")]
@@ -131,6 +131,13 @@ struct FsRenameRequestV1 {
     capability: u64,
     source: SliceV1,
     destination: SliceV1,
+}
+
+#[repr(C)]
+struct FsChangeModeRequestV1 {
+    capability: u64,
+    path: SliceV1,
+    mode: u16,
 }
 
 #[repr(C)]
@@ -299,6 +306,17 @@ impl HostEffectBackendV1 for ProcessHost {
             }
             Err(error) => Err(host_error(error)),
         }
+    }
+
+    fn fs_change_mode(
+        &mut self,
+        grant: &CapabilityGrantV1,
+        path: &[u8],
+        mode: u16,
+    ) -> Result<(), FileErrorCauseV1> {
+        let (parent, leaf) = Self::parent(grant, path)?;
+        let handle = crate::open_at(&parent, &leaf, OpenRequest::ReadWrite).map_err(host_error)?;
+        crate::change_mode(&handle, mode).map_err(host_error)
     }
 }
 
@@ -705,6 +723,37 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
                 },
             )
         }
+        HostOpV1::FsChangeMode if request_size == std::mem::size_of::<FsChangeModeRequestV1>() => {
+            if !request.cast::<FsChangeModeRequestV1>().is_aligned() {
+                return -1;
+            }
+            let wire = unsafe { &*(request.cast::<FsChangeModeRequestV1>()) };
+            let Some(path) = (unsafe { borrowed_slice(&wire.path) }) else {
+                return -1;
+            };
+            if wire.mode & !0o7777 != 0 {
+                let outcome = CanonicalOutcomeV1::Error(crate::SemanticErrorV1::File(
+                    crate::FileErrorIdentityV1 {
+                        operation: HostOpV1::FsChangeMode,
+                        relative_path: path.to_vec(),
+                        cause: FileErrorCauseV1::Io(IoErrorIdentityV1::InvalidInput),
+                    },
+                ));
+                set_reply(
+                    unsafe { &mut *(reply.cast::<HostReplyV1>()) },
+                    outcome,
+                    context,
+                );
+                return 0;
+            }
+            (
+                Some(CapabilityTokenV1::from_erased_identity(wire.capability)),
+                CanonicalRequestV1::FsChangeMode {
+                    path: path.to_vec(),
+                    mode: wire.mode,
+                },
+            )
+        }
         _ => return -3,
     };
     let result = dispatch_host_op_v1(
@@ -781,6 +830,7 @@ mod tests {
         size_align!("FsPathRequestV1", FsPathRequestV1);
         size_align!("FsRecursivePathRequestV1", FsRecursivePathRequestV1);
         size_align!("FsRenameRequestV1", FsRenameRequestV1);
+        size_align!("FsChangeModeRequestV1", FsChangeModeRequestV1);
         size_align!("HostReplyV1", HostReplyV1);
         macro_rules! offset {
             ($record:literal, $ty:ty, $field:ident) => {
@@ -829,10 +879,13 @@ mod tests {
         offset!("FsRenameRequestV1", FsRenameRequestV1, capability);
         offset!("FsRenameRequestV1", FsRenameRequestV1, source);
         offset!("FsRenameRequestV1", FsRenameRequestV1, destination);
+        offset!("FsChangeModeRequestV1", FsChangeModeRequestV1, capability);
+        offset!("FsChangeModeRequestV1", FsChangeModeRequestV1, path);
+        offset!("FsChangeModeRequestV1", FsChangeModeRequestV1, mode);
         offset!("HostReplyV1", HostReplyV1, tag);
         offset!("HostReplyV1", HostReplyV1, detail);
         offset!("HostReplyV1", HostReplyV1, bytes);
-        assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 14);
+        assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 15);
         for operation in HostOpV1::ALL {
             let row = crate::HOST_EFFECT_ABI_V1_CATALOG
                 .iter()
@@ -1009,6 +1062,58 @@ mod tests {
                 ..
             }))
         ));
+        unsafe { ken_host_invocation_v1_destroy(initialized.context) };
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn change_mode_rejects_file_type_bits_before_dispatch() {
+        let directory =
+            std::env::temp_dir().join(format!("ken-px13-invalid-mode-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(directory.join("mode.bin"), b"retained").unwrap();
+        let initialized = context(&directory);
+        assert!(!initialized.context.is_null());
+        let invocation = NativeInvocationV1 {
+            process_input: std::ptr::null(),
+            host_context: initialized.context.cast(),
+            capability: initialized.capability,
+        };
+        let path = b"mode.bin";
+        let request = FsChangeModeRequestV1 {
+            capability: initialized.capability,
+            path: SliceV1 {
+                data: path.as_ptr(),
+                len: path.len(),
+            },
+            mode: 0o10000,
+        };
+        let mut reply = HostReplyV1 {
+            tag: u64::MAX,
+            detail: u64::MAX,
+            bytes: SliceV1 {
+                data: std::ptr::null(),
+                len: 0,
+            },
+        };
+        let status = unsafe {
+            ken_host_dispatch_v1(
+                (&invocation as *const NativeInvocationV1).cast(),
+                HostOpV1::FsChangeMode as u64,
+                (&request as *const FsChangeModeRequestV1).cast(),
+                std::mem::size_of::<FsChangeModeRequestV1>(),
+                (&mut reply as *mut HostReplyV1).cast(),
+            )
+        };
+        assert_eq!(status, 0);
+        assert_eq!(reply.tag, REPLY_ERROR);
+        assert_eq!(reply.detail, io_error_tag(IoErrorIdentityV1::InvalidInput));
+        let context = unsafe { &*initialized.context.cast::<ProcessContext>() };
+        assert!(context.effect_trace.is_empty());
+        assert_eq!(
+            std::fs::read(directory.join("mode.bin")).unwrap(),
+            b"retained"
+        );
         unsafe { ken_host_invocation_v1_destroy(initialized.context) };
         let _ = std::fs::remove_dir_all(directory);
     }

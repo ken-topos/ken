@@ -142,6 +142,11 @@ fn put_request(
             put_bytes(out, source)?;
             put_bytes(out, destination)?;
         }
+        CanonicalRequestV1::FsChangeMode { path, mode } => {
+            put_u8(out, 14);
+            put_bytes(out, path)?;
+            put_u16(out, *mode);
+        }
     }
     Ok(())
 }
@@ -230,6 +235,7 @@ fn fs_operation_tag(operation: FsCapabilityOperationV1) -> u8 {
         FsCapabilityOperationV1::RemoveDirectory => 7,
         FsCapabilityOperationV1::RenameSource => 8,
         FsCapabilityOperationV1::RenameDestination => 9,
+        FsCapabilityOperationV1::ChangeMode => 10,
     }
 }
 
@@ -449,6 +455,10 @@ fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTrac
             source: cursor.bytes()?,
             destination: cursor.bytes()?,
         },
+        14 => CanonicalRequestV1::FsChangeMode {
+            path: cursor.bytes()?,
+            mode: cursor.u16()?,
+        },
         _ => return Err(EffectTraceWireErrorV1),
     })
 }
@@ -512,6 +522,7 @@ fn get_fs_operation(
         7 => Ok(FsCapabilityOperationV1::RemoveDirectory),
         8 => Ok(FsCapabilityOperationV1::RenameSource),
         9 => Ok(FsCapabilityOperationV1::RenameDestination),
+        10 => Ok(FsCapabilityOperationV1::ChangeMode),
         _ => Err(EffectTraceWireErrorV1),
     }
 }
@@ -629,6 +640,16 @@ mod tests {
                         path: vec![b'f', 0xff],
                     },
                     outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(vec![1, 2])),
+                },
+                EffectEventV1 {
+                    sequence: 2,
+                    operation: HostOpV1::FsChangeMode,
+                    capability: Some(CapabilityTraceIdentity("declared:FS".into())),
+                    request: CanonicalRequestV1::FsChangeMode {
+                        path: vec![b'm', 0xfe],
+                        mode: 0o640,
+                    },
+                    outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::Unit),
                 },
             ],
         }

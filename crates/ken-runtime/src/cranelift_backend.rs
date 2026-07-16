@@ -33,12 +33,13 @@ use crate::{
     RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
 
-const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 5] = [
+const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 6] = [
     ken_host::HostOpV1::ConsoleWrite,
     ken_host::HostOpV1::ConsoleFlush,
     ken_host::HostOpV1::ConsoleIsTerminal,
     ken_host::HostOpV1::FsReadFile,
     ken_host::HostOpV1::FsWriteFile,
+    ken_host::HostOpV1::FsChangeMode,
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1981,7 +1982,9 @@ impl<'a> Lowering<'a> {
                     builder.ins().stack_store(len, request, request_offset(2));
                 }
             }
-            ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsWriteFile => {
+            ken_host::HostOpV1::FsReadFile
+            | ken_host::HostOpV1::FsWriteFile
+            | ken_host::HostOpV1::FsChangeMode => {
                 let capability = capability
                     .ok_or_else(|| unsupported("Effect", "FS operation has no live capability"))?;
                 let Lowered::CapabilityToken { value: token } =
@@ -2021,6 +2024,22 @@ impl<'a> Lowering<'a> {
                     builder
                         .ins()
                         .stack_store(bytes_len, request, request_offset(5));
+                } else if operation == ken_host::HostOpV1::FsChangeMode {
+                    let Lowered::Int { value: mode, .. } = lowered.get(1).ok_or_else(|| {
+                        unsupported("Effect", "FS.ChangeMode is missing its mode")
+                    })?
+                    else {
+                        return Err(unsupported("Effect", "FS.ChangeMode mode is not an Int"));
+                    };
+                    let in_range = builder.ins().icmp_imm(
+                        cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
+                        *mode,
+                        0o7777,
+                    );
+                    let narrowed = builder.ins().ireduce(types::I16, *mode);
+                    let invalid = builder.ins().iconst(types::I16, 0xffff);
+                    let mode = builder.ins().select(in_range, narrowed, invalid);
+                    builder.ins().stack_store(mode, request, request_offset(3));
                 }
             }
             _ => unreachable!("availability was checked above"),
@@ -2076,7 +2095,9 @@ impl<'a> Lowering<'a> {
             };
             let error = if matches!(
                 operation,
-                ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsWriteFile
+                ken_host::HostOpV1::FsReadFile
+                    | ken_host::HostOpV1::FsWriteFile
+                    | ken_host::HostOpV1::FsChangeMode
             ) {
                 let path = lowered
                     .first()
@@ -2086,10 +2107,17 @@ impl<'a> Lowering<'a> {
                     constructor: self.process_symbols.file_error.clone(),
                     args: vec![
                         Lowered::Constructor {
-                            constructor: if operation == ken_host::HostOpV1::FsReadFile {
-                                self.process_symbols.file_operation_read.clone()
-                            } else {
-                                self.process_symbols.file_operation_write.clone()
+                            constructor: match operation {
+                                ken_host::HostOpV1::FsReadFile => {
+                                    self.process_symbols.file_operation_read.clone()
+                                }
+                                ken_host::HostOpV1::FsWriteFile => {
+                                    self.process_symbols.file_operation_write.clone()
+                                }
+                                ken_host::HostOpV1::FsChangeMode => {
+                                    self.process_symbols.file_operation_change_mode.clone()
+                                }
+                                _ => unreachable!("validated FS result operation"),
                             },
                             args: Vec::new(),
                         },
@@ -3520,7 +3548,7 @@ mod tests {
     fn live_effect_emitter_inventory_and_generated_layout_mutations_are_closed() {
         assert_eq!(
             CRANELIFT_HOST_EFFECT_CONSUMERS_V1,
-            ken_host::PX5_PLANNED_NATIVE_TARGETS
+            ken_host::NATIVE_TESTED_TARGETS_V1
         );
         for operation in CRANELIFT_HOST_EFFECT_CONSUMERS_V1 {
             let layout = ken_host::host_effect_wire_layout_v1(operation).unwrap();

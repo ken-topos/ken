@@ -35,6 +35,7 @@ pub struct NativeProcessSymbols {
     pub file_error: RuntimeSymbol,
     pub file_operation_read: RuntimeSymbol,
     pub file_operation_write: RuntimeSymbol,
+    pub file_operation_change_mode: RuntimeSymbol,
     pub io_errors: Vec<RuntimeSymbol>,
     pub unit: RuntimeSymbol,
     pub bool_false: RuntimeSymbol,
@@ -56,6 +57,7 @@ impl NativeProcessSymbols {
             file_error: "ctor:prelude::FileError::MkFileError".to_string(),
             file_operation_read: "ctor:prelude::FileOperation::OpReadFile".to_string(),
             file_operation_write: "ctor:prelude::FileOperation::OpWriteFile".to_string(),
+            file_operation_change_mode: "ctor:prelude::FileOperation::OpChangeMode".to_string(),
             io_errors: [
                 "NotFound",
                 "PermissionDenied",

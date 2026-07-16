@@ -1,6 +1,7 @@
 schema|1
 lifetime|response_arena|1
 lifetime|trace_schema|1
+lifetime|filesystem_observation_schema|2
 tag|reply.unit|0
 tag|reply.bool|1
 tag|reply.bytes|2
@@ -39,3 +40,4 @@ operation|FsCreateDirectory|0306|unavailable|FsRecursivePathRequestV1|3|HostRepl
 operation|FsRemoveFile|0307|unavailable|FsPathRequestV1|2|HostReplyV1|1
 operation|FsRemoveDirectory|0308|unavailable|FsRecursivePathRequestV1|3|HostReplyV1|1
 operation|FsRename|0309|unavailable|FsRenameRequestV1|3|HostReplyV1|1
+operation|FsChangeMode|030A|native|FsChangeModeRequestV1|3|HostReplyV1|1

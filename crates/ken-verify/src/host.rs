@@ -35,6 +35,10 @@ pub enum ExpectedFsEffect {
         create_policy: CreatePolicyV1,
         bytes: Vec<u8>,
     },
+    ChangeMode {
+        path: Vec<u8>,
+        mode: u16,
+    },
 }
 
 impl ExpectedFsEffect {
@@ -42,12 +46,15 @@ impl ExpectedFsEffect {
         match self {
             Self::ReadFile { .. } => HostOpV1::FsReadFile,
             Self::WriteFile { .. } => HostOpV1::FsWriteFile,
+            Self::ChangeMode { .. } => HostOpV1::FsChangeMode,
         }
     }
 
     fn path(&self) -> &[u8] {
         match self {
-            Self::ReadFile { path } | Self::WriteFile { path, .. } => path,
+            Self::ReadFile { path }
+            | Self::WriteFile { path, .. }
+            | Self::ChangeMode { path, .. } => path,
         }
     }
 
@@ -55,6 +62,7 @@ impl ExpectedFsEffect {
         match self {
             Self::ReadFile { .. } => FsOpKind::Read,
             Self::WriteFile { .. } => FsOpKind::Write,
+            Self::ChangeMode { .. } => FsOpKind::ChangeMode,
         }
     }
 }
@@ -346,6 +354,17 @@ impl HostHandler for ScriptedPosixHost {
     ) -> io::Result<()> {
         self.inner
             .fs_rename_at(from_parent, from_leaf, to_parent, to_leaf)
+    }
+
+    fn fs_change_mode_at(&mut self, handle: &Self::Handle, mode: u16) -> io::Result<()> {
+        let expected = self.take_pending(HostOpV1::FsChangeMode);
+        if !matches!(expected, Some(ExpectedFsEffect::ChangeMode { mode: expected, .. }) if expected == mode)
+        {
+            self.fail_assertion(format!(
+                "interpreter FS chmod payload diverged: expected={expected:?}, mode={mode:o}"
+            ));
+        }
+        self.inner.fs_change_mode_at(handle, mode)
     }
 }
 

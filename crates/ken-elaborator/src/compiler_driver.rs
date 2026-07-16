@@ -755,6 +755,7 @@ pub fn compile_native_program_sources(
                 file_error: host_spine.file_error.to_string(),
                 file_operation_read: host_spine.file_operation_read.to_string(),
                 file_operation_write: host_spine.file_operation_write.to_string(),
+                file_operation_change_mode: host_spine.file_operation_change_mode.to_string(),
                 io_errors: host_spine
                     .io_errors
                     .iter()
@@ -1352,6 +1353,7 @@ fn checked_host_spine_v1(
         ("RemoveFile", ken_host::HostOpV1::FsRemoveFile),
         ("RemoveDirectory", ken_host::HostOpV1::FsRemoveDirectory),
         ("Rename", ken_host::HostOpV1::FsRename),
+        ("ChangeMode", ken_host::HostOpV1::FsChangeMode),
     ] {
         operations.insert(resolve(name)?, operation);
     }
@@ -1370,6 +1372,7 @@ fn checked_host_spine_v1(
         file_error: resolve("MkFileError")?,
         file_operation_read: resolve("OpReadFile")?,
         file_operation_write: resolve("OpWriteFile")?,
+        file_operation_change_mode: resolve("OpChangeMode")?,
         io_errors: [
             "NotFound",
             "PermissionDenied",
@@ -1411,6 +1414,7 @@ fn canonical_checked_host_spine_v1_bytes(spine: &crate::erasure::CheckedHostSpin
         &spine.file_error,
         &spine.file_operation_read,
         &spine.file_operation_write,
+        &spine.file_operation_change_mode,
         &spine.unit,
         &spine.bool_false,
         &spine.bool_true,

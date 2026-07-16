@@ -177,6 +177,8 @@ mod linux {
         Ok(Metadata {
             size: metadata.len(),
             kind,
+            mode: matches!(kind, FileKind::File | FileKind::Directory)
+                .then_some((metadata.mode() & 0o7777) as u16),
             identity: FileIdentity {
                 device: metadata.dev(),
                 inode: metadata.ino(),
@@ -210,6 +212,10 @@ mod linux {
         let mut file = file(handle)?;
         file.write_all(bytes)?;
         file.sync_all()
+    }
+
+    pub(super) fn change_mode(handle: &Handle, mode: u16) -> io::Result<()> {
+        fs::fchmod(&*handle.0, Mode::from_bits_retain(u32::from(mode))).map_err(io::Error::from)
     }
 
     pub(super) fn read_directory(handle: &Handle) -> io::Result<Vec<DirectoryEntry>> {
@@ -382,6 +388,7 @@ pub struct FileIdentity {
 pub struct Metadata {
     pub size: u64,
     pub kind: FileKind,
+    pub mode: Option<u16>,
     pub identity: FileIdentity,
 }
 
@@ -539,6 +546,23 @@ pub fn write_new(handle: &RootedHandle, bytes: &[u8]) -> HostResult<()> {
     }
 }
 
+/// Changes only permission/set-id/sticky bits on an already-authorized handle.
+pub fn change_mode(handle: &RootedHandle, mode: u16) -> HostResult<()> {
+    assert_current_target_abi()?;
+    if mode & !0o7777 != 0 {
+        return Err(io::Error::from(io::ErrorKind::InvalidInput).into());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux::change_mode(&handle.inner, mode).map_err(Into::into)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (handle, mode);
+        unsupported()
+    }
+}
+
 pub fn create_directory(parent: &RootedHandle, leaf: &PathComponent) -> HostResult<()> {
     assert_current_target_abi()?;
     #[cfg(target_os = "linux")]
@@ -608,7 +632,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn generated_manifest_is_closed_and_probe_comparison_discriminates() {
-        assert_eq!(TARGET_ABI.fact_count, 22);
+        assert_eq!(TARGET_ABI.fact_count, 23);
         assert_eq!(TARGET_ABI.fact_count, TARGET_ABI.facts.len());
         assert_eq!(TARGET_ABI.dependencies.len(), 3);
         assert_eq!(

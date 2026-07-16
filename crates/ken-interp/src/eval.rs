@@ -2149,6 +2149,7 @@ pub enum HostFileKind {
 pub struct HostFileMetadata {
     pub size: u64,
     pub kind: HostFileKind,
+    pub mode: Option<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2192,6 +2193,10 @@ pub enum FsTrace {
     Rename {
         from: Vec<u8>,
         to: Vec<u8>,
+    },
+    ChangeMode {
+        path: Vec<u8>,
+        mode: u16,
     },
 }
 
@@ -2302,6 +2307,7 @@ pub trait HostHandler {
         to_parent: &Self::Handle,
         to_leaf: &[u8],
     ) -> io::Result<()>;
+    fn fs_change_mode_at(&mut self, handle: &Self::Handle, mode: u16) -> io::Result<()>;
 }
 
 #[cfg(any(test, not(target_os = "linux")))]
@@ -2727,6 +2733,7 @@ impl HostHandler for PosixHost {
                     ken_host::FileKind::Symlink => HostFileKind::Symlink,
                     ken_host::FileKind::Other => HostFileKind::Other,
                 },
+                mode: metadata.mode,
             })
         }
         #[cfg(not(target_os = "linux"))]
@@ -2844,6 +2851,18 @@ impl HostHandler for PosixHost {
             Err(host_abi_unsupported())
         }
     }
+
+    fn fs_change_mode_at(&mut self, handle: &Self::Handle, mode: u16) -> io::Result<()> {
+        #[cfg(target_os = "linux")]
+        {
+            Ok(ken_host::change_mode(handle, mode)?)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (handle, mode);
+            Err(host_abi_unsupported())
+        }
+    }
 }
 
 /// Deterministic in-memory Console provider used by tests and embedding.
@@ -2859,6 +2878,7 @@ pub struct CaptureHost {
     clock_cursor: usize,
     clock_trace: Vec<ClockTrace>,
     fs_nodes: BTreeMap<VfsNodeId, VirtualFsNode>,
+    fs_modes: BTreeMap<VfsNodeId, u16>,
     fs_entries: BTreeMap<(VfsNodeId, Vec<u8>), VfsNodeId>,
     fs_parents: BTreeMap<VfsNodeId, (VfsNodeId, Vec<u8>)>,
     next_fs_node: VfsNodeId,
@@ -2889,6 +2909,7 @@ impl CaptureHost {
             clock_cursor: 0,
             clock_trace: Vec::new(),
             fs_nodes: [(0, VirtualFsNode::Directory)].into_iter().collect(),
+            fs_modes: [(0, 0o755)].into_iter().collect(),
             fs_entries: BTreeMap::new(),
             fs_parents: BTreeMap::new(),
             next_fs_node: 1,
@@ -2962,6 +2983,14 @@ impl CaptureHost {
                 }
             })
             .collect()
+    }
+
+    pub fn fs_mode(&self, path: &[u8]) -> Option<u16> {
+        self.fs_nodes.iter().find_map(|(id, _)| {
+            (self.virtual_path(*id) == path)
+                .then(|| self.fs_modes.get(id).copied())
+                .flatten()
+        })
     }
 
     pub fn fs_trace(&self) -> &[FsTrace] {
@@ -3056,6 +3085,7 @@ impl CaptureHost {
                 let id = self.next_fs_node;
                 self.next_fs_node += 1;
                 self.fs_nodes.insert(id, VirtualFsNode::Directory);
+                self.fs_modes.insert(id, 0o755);
                 self.fs_entries.insert((parent, component.clone()), id);
                 self.fs_parents.insert(id, (parent, component.clone()));
                 id
@@ -3063,11 +3093,27 @@ impl CaptureHost {
         }
         if let Some(id) = self.fs_entries.get(&(parent, leaf.clone())).copied() {
             self.fs_nodes.insert(id, node);
+            self.fs_modes.insert(
+                id,
+                if matches!(self.fs_nodes.get(&id), Some(VirtualFsNode::Directory)) {
+                    0o755
+                } else {
+                    0o644
+                },
+            );
             id
         } else {
             let id = self.next_fs_node;
             self.next_fs_node += 1;
             self.fs_nodes.insert(id, node);
+            self.fs_modes.insert(
+                id,
+                if matches!(self.fs_nodes.get(&id), Some(VirtualFsNode::Directory)) {
+                    0o755
+                } else {
+                    0o644
+                },
+            );
             self.fs_entries.insert((parent, leaf.clone()), id);
             self.fs_parents.insert(id, (parent, leaf.clone()));
             id
@@ -3349,6 +3395,7 @@ impl HostHandler for CaptureHost {
         self.next_fs_node += 1;
         self.fs_nodes
             .insert(id, VirtualFsNode::File(bytes.to_vec()));
+        self.fs_modes.insert(id, 0o644);
         self.fs_entries.insert((*parent, leaf.to_vec()), id);
         self.fs_parents.insert(id, (*parent, leaf.to_vec()));
         Ok(())
@@ -3387,14 +3434,17 @@ impl HostHandler for CaptureHost {
             Some(VirtualFsNode::File(bytes)) => Ok(HostFileMetadata {
                 size: bytes.len() as u64,
                 kind: HostFileKind::File,
+                mode: self.fs_modes.get(handle).copied(),
             }),
             Some(VirtualFsNode::Directory) => Ok(HostFileMetadata {
                 size: 0,
                 kind: HostFileKind::Directory,
+                mode: self.fs_modes.get(handle).copied(),
             }),
             Some(VirtualFsNode::Symlink(target)) => Ok(HostFileMetadata {
                 size: target.len() as u64,
                 kind: HostFileKind::Symlink,
+                mode: None,
             }),
             None => Err(io::Error::from(io::ErrorKind::NotFound)),
         }
@@ -3438,6 +3488,7 @@ impl HostHandler for CaptureHost {
         let id = self.next_fs_node;
         self.next_fs_node += 1;
         self.fs_nodes.insert(id, VirtualFsNode::Directory);
+        self.fs_modes.insert(id, 0o755);
         self.fs_entries.insert((*parent, leaf.to_vec()), id);
         self.fs_parents.insert(id, (*parent, leaf.to_vec()));
         Ok(())
@@ -3455,6 +3506,7 @@ impl HostHandler for CaptureHost {
         self.fs_entries.remove(&(*parent, leaf.to_vec()));
         self.fs_parents.remove(&id);
         self.fs_nodes.remove(&id);
+        self.fs_modes.remove(&id);
         Ok(())
     }
 
@@ -3493,6 +3545,7 @@ impl HostHandler for CaptureHost {
             }
             host.fs_parents.remove(&id);
             host.fs_nodes.remove(&id);
+            host.fs_modes.remove(&id);
         }
         self.fs_entries.remove(&(*parent, leaf.to_vec()));
         remove_tree(self, id);
@@ -3521,6 +3574,21 @@ impl HostHandler for CaptureHost {
         });
         self.fs_entries.insert((*to_parent, to_leaf.to_vec()), id);
         self.fs_parents.insert(id, (*to_parent, to_leaf.to_vec()));
+        Ok(())
+    }
+
+    fn fs_change_mode_at(&mut self, handle: &Self::Handle, mode: u16) -> io::Result<()> {
+        if !matches!(
+            self.fs_nodes.get(handle),
+            Some(VirtualFsNode::File(_) | VirtualFsNode::Directory)
+        ) {
+            return Err(io::Error::from(io::ErrorKind::NotFound));
+        }
+        self.fs_trace.push(FsTrace::ChangeMode {
+            path: self.virtual_path(*handle),
+            mode,
+        });
+        self.fs_modes.insert(*handle, mode);
         Ok(())
     }
 }
@@ -3599,6 +3667,7 @@ pub struct FSIds {
     pub removefile_id: GlobalId,
     pub removedirectory_id: GlobalId,
     pub rename_id: GlobalId,
+    pub change_mode_id: GlobalId,
     pub create_new_id: GlobalId,
     pub create_or_truncate_id: GlobalId,
     pub create_or_keep_id: GlobalId,
@@ -3613,6 +3682,7 @@ pub struct FSIds {
     pub op_remove_file_id: GlobalId,
     pub op_remove_directory_id: GlobalId,
     pub op_rename_id: GlobalId,
+    pub op_change_mode_id: GlobalId,
     pub mk_file_metadata_id: GlobalId,
     pub mk_dir_entry_id: GlobalId,
     pub k_file_id: GlobalId,
@@ -3636,6 +3706,7 @@ impl FSIds {
             removefile_id: get("RemoveFile")?,
             removedirectory_id: get("RemoveDirectory")?,
             rename_id: get("Rename")?,
+            change_mode_id: get("ChangeMode")?,
             create_new_id: get("CreateNew")?,
             create_or_truncate_id: get("CreateOrTruncate")?,
             create_or_keep_id: get("CreateOrKeep")?,
@@ -3650,6 +3721,7 @@ impl FSIds {
             op_remove_file_id: get("OpRemoveFile")?,
             op_remove_directory_id: get("OpRemoveDirectory")?,
             op_rename_id: get("OpRename")?,
+            op_change_mode_id: get("OpChangeMode")?,
             mk_file_metadata_id: get("MkFileMetadata")?,
             mk_dir_entry_id: get("MkDirEntry")?,
             k_file_id: get("KFile")?,
@@ -3853,6 +3925,7 @@ fn map_denial_v1(error: CapabilityDenied) -> ken_host::CapabilityDeniedV1 {
                     FsOpKind::RenameDestination => {
                         ken_host::FsCapabilityOperationV1::RenameDestination
                     }
+                    FsOpKind::ChangeMode => ken_host::FsCapabilityOperationV1::ChangeMode,
                 },
                 held_rights,
             }
@@ -3883,6 +3956,7 @@ fn from_denial_v1(error: &ken_host::CapabilityDeniedV1) -> CapabilityDenied {
                 ken_host::FsCapabilityOperationV1::RemoveDirectory => FsOpKind::RemoveDirectory,
                 ken_host::FsCapabilityOperationV1::RenameSource => FsOpKind::RenameSource,
                 ken_host::FsCapabilityOperationV1::RenameDestination => FsOpKind::RenameDestination,
+                ken_host::FsCapabilityOperationV1::ChangeMode => FsOpKind::ChangeMode,
             },
             held_rights: *held_rights,
         },
@@ -4111,6 +4185,22 @@ impl<H: HostHandler> ken_host::HostEffectBackendV1 for InterpreterHostBackend<'_
             .fs_rename_at(&from_parent, &from_leaf, &to_parent, &to_leaf)
             .map_err(host_error_v1)
     }
+
+    fn fs_change_mode(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+        mode: u16,
+    ) -> Result<(), ken_host::FileErrorCauseV1> {
+        let Resolution::Existing(handle) = self.resolve(grant, path, FsOpKind::ChangeMode)? else {
+            return Err(ken_host::FileErrorCauseV1::Io(
+                ken_host::IoErrorIdentityV1::InvalidInput,
+            ));
+        };
+        self.handler
+            .fs_change_mode_at(&handle, mode)
+            .map_err(host_error_v1)
+    }
 }
 
 fn from_console_stream_v1(stream: ken_host::ConsoleStreamV1) -> ConsoleStream {
@@ -4242,6 +4332,19 @@ fn fs_dispatch<H: HostHandler>(
                 destination: bytes_at(3)?,
             },
             fs.op_rename_id,
+        )
+    } else if op_id == fs.change_mode_id {
+        let path = bytes_at(2)?;
+        let mode = eval_to_bigint(args.get(3)?).and_then(|mode| mode.to_u16());
+        let Some(mode) = mode.filter(|mode| mode & !0o7777 == 0) else {
+            let cause = make_ctor(ids.invalidinput_id, vec![], store);
+            let error = file_error_value(fs.op_change_mode_id, &path, cause, fs, store);
+            return Some(Ok(make_result(false, error, ids, store)));
+        };
+        (
+            ken_host::HostOpV1::FsChangeMode,
+            ken_host::CanonicalRequestV1::FsChangeMode { path, mode },
+            fs.op_change_mode_id,
         )
     } else {
         return None;
@@ -5009,6 +5112,7 @@ mod px5b_effect_observation_tests {
             removefile_id: id(),
             removedirectory_id: id(),
             rename_id: id(),
+            change_mode_id: id(),
             create_new_id: id(),
             create_or_truncate_id: id(),
             create_or_keep_id: id(),
@@ -5023,6 +5127,7 @@ mod px5b_effect_observation_tests {
             op_remove_file_id: id(),
             op_remove_directory_id: id(),
             op_rename_id: id(),
+            op_change_mode_id: id(),
             nil_id: id(),
             cons_id: id(),
             mk_file_metadata_id: id(),
@@ -5194,12 +5299,10 @@ mod px5b_effect_observation_tests {
             ]
         );
         assert_eq!(host.stdout(), b"out");
-        assert!(
-            recorder
-                .events
-                .iter()
-                .all(|event| event.capability.is_none())
-        );
+        assert!(recorder
+            .events
+            .iter()
+            .all(|event| event.capability.is_none()));
     }
 
     #[test]

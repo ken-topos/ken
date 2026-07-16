@@ -16,6 +16,7 @@ struct FsEnv {
     elab: ken_elaborator::ElabEnv,
     read_bytes: ken_kernel::GlobalId,
     write_file: ken_kernel::GlobalId,
+    change_mode: ken_kernel::GlobalId,
     afull: ken_kernel::GlobalId,
     create_or_truncate: ken_kernel::GlobalId,
     ok: ken_kernel::GlobalId,
@@ -32,6 +33,7 @@ fn fs_env() -> FsEnv {
     FsEnv {
         read_bytes: get("read_bytes"),
         write_file: get("write_file"),
+        change_mode: get("change_mode"),
         afull: get("AFull"),
         create_or_truncate: get("CreateOrTruncate"),
         ok: console.ok_id,
@@ -45,6 +47,7 @@ fn fs_env() -> FsEnv {
 enum DriverOp<'a> {
     Read,
     Write(&'a [u8]),
+    ChangeMode(i64),
 }
 
 fn drive(
@@ -58,6 +61,7 @@ fn drive(
     let id = match op {
         DriverOp::Read => env.read_bytes,
         DriverOp::Write(_) => env.write_file,
+        DriverOp::ChangeMode(_) => env.change_mode,
     };
     let mut tree = ken_interp::eval(
         &[],
@@ -98,6 +102,8 @@ fn drive(
             &env.elab.env,
             &mut store,
         );
+    } else if let DriverOp::ChangeMode(mode) = op {
+        tree = ken_interp::apply(tree, EvalVal::Int(mode), &env.elab.env, &mut store);
     }
     ken_interp::run_io(
         tree,
@@ -301,6 +307,17 @@ fn product_attenuation_narrows_and_deviant_widenings_are_unknown() {
     );
     assert_eq!(child.scope().rights, RightSet::READ);
     assert!(obligation.is_satisfied());
+    assert!(matches!(
+        ken_host::check_fs_capability(
+            &child,
+            ken_host::FsCapabilityOperation::ChangeMode,
+            AUTH_FULL,
+        ),
+        Err(ken_host::CapabilityDenied::RightNotHeld {
+            op: ken_host::FsCapabilityOperation::ChangeMode,
+            ..
+        })
+    ));
     let mut env = GlobalEnv::new();
     assert!(matches!(
         discharge_attenuation(&mut env, &obligation, "i5_narrow").verdict,
@@ -336,6 +353,83 @@ fn product_attenuation_narrows_and_deviant_widenings_are_unknown() {
     assert!(matches!(
         discharge_attenuation(&mut env, &escaped, "i5_scope_widen").verdict,
         Verdict::Unknown { .. }
+    ));
+}
+
+#[test]
+fn change_mode_is_distinct_handle_bound_and_validated_before_dispatch() {
+    let env = fs_env();
+    let mut host = CaptureHost::new(Vec::new());
+    host.insert_directory(b"dir1/sub".to_vec());
+    host.insert_file(b"dir1/sub/file".to_vec(), b"old".to_vec());
+
+    let write_only = host
+        .mint_scoped_fs_cap(
+            AUTH_FULL,
+            b"dir1",
+            RightSet::WRITE.union(RightSet::CREATE),
+            SymlinkPolicy::NoFollow,
+        )
+        .unwrap();
+    let denied = drive(
+        &env,
+        &mut host,
+        &write_only,
+        b"sub/file",
+        DriverOp::ChangeMode(0o640),
+    );
+    assert_err(&env, &denied);
+    assert!(matches!(
+        host.fs_denials().last(),
+        Some(CapabilityDenied::RightNotHeld {
+            op: FsOpKind::ChangeMode,
+            ..
+        })
+    ));
+    assert!(host.fs_trace().is_empty());
+
+    let change_only = host
+        .mint_scoped_fs_cap(
+            AUTH_FULL,
+            b"dir1",
+            RightSet::CHANGE_MODE,
+            SymlinkPolicy::NoFollow,
+        )
+        .unwrap();
+    let resolves_before = host.fs_resolve_count();
+    let invalid = drive(
+        &env,
+        &mut host,
+        &change_only,
+        b"sub/file",
+        DriverOp::ChangeMode(0o10000),
+    );
+    assert_err(&env, &invalid);
+    assert_eq!(host.fs_resolve_count(), resolves_before);
+    assert!(host.fs_trace().is_empty());
+
+    host.replace_subtree_after_next_resolve(
+        b"dir1/sub".to_vec(),
+        b"dir1/other".to_vec(),
+        b"dir1/sub/file".to_vec(),
+        b"replacement".to_vec(),
+    );
+    assert_ok(
+        &env,
+        &drive(
+            &env,
+            &mut host,
+            &change_only,
+            b"sub/file",
+            DriverOp::ChangeMode(0o600),
+        ),
+    );
+    assert_eq!(host.fs_mode(b"dir1/other/file"), Some(0o600));
+    assert_eq!(host.fs_mode(b"dir1/sub/file"), Some(0o644));
+    assert!(matches!(
+        host.fs_trace().last(),
+        Some(ken_interp::FsTrace::ChangeMode { path, mode })
+            if path == b"dir1/other/file" && *mode == 0o600
     ));
 }
 

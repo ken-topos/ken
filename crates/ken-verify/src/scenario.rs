@@ -454,6 +454,34 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
   }
 "#;
 
+    const CHANGE_MODE_SOURCE: &str = r#"program capabilities FS AFull
+proc main (input : ProcessInput) (caps : ProgramCaps AFull)
+  : HostIO AFull ExitCode visits [FS] =
+  match input {
+    MkProcessInput arguments _environment _cwd |-> match arguments {
+      Nil |-> host_exit AFull (Failure 70) ;
+      Cons _argv0 rest |-> match rest {
+        Nil |-> host_exit AFull (Failure 71) ;
+        Cons path _ |-> match caps {
+          MkProgramCaps cap |->
+            bind (Coproduct (FSOp AFull) AmbientOp)
+              (resp_coproduct (FSOp AFull) AmbientOp
+                (fs_resp AFull) ambient_resp)
+              (Result FileError Unit) ExitCode
+              (inject_l (FSOp AFull) AmbientOp
+                (fs_resp AFull) ambient_resp
+                (Result FileError Unit)
+                (change_mode AFull cap path 416))
+              (\changed. match changed {
+                Err _ |-> host_exit AFull (Failure 72) ;
+                Ok _ |-> host_exit AFull Success
+              })
+        }
+      }
+    }
+  }
+"#;
+
     fn five_op_scenario() -> Scenario {
         let path = b"dir/./px6.bin".to_vec();
         let bytes = vec![b'r', 0xff, b'x'];
@@ -533,6 +561,40 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
                 },
             ],
         }
+    }
+
+    fn change_mode_scenario() -> Scenario {
+        let path = b"mode.bin".to_vec();
+        Scenario {
+            process_input: RawProcessInput {
+                arguments: vec![path.clone()],
+                environment: Vec::new(),
+            },
+            ambient: AmbientScript::default(),
+            program_caps: ProgramCapsShape::default(),
+            entry: CheckedProgramEntry {
+                identity: "px13-change-mode-real-artifact".to_string(),
+                package_name: "px13-change-mode-real-artifact".to_string(),
+                source: CHANGE_MODE_SOURCE.to_string(),
+            },
+            initial_filesystem: vec![SeedNode {
+                relative_path: path.clone(),
+                kind: crate::SeedNodeKind::File(b"mode-retained".to_vec()),
+            }],
+            expected_fs: vec![ExpectedFsEffect::ChangeMode { path, mode: 0o640 }],
+        }
+    }
+
+    fn invalid_change_mode_scenario() -> Scenario {
+        let mut scenario = change_mode_scenario();
+        scenario.entry.identity = "px13-invalid-change-mode".to_string();
+        scenario.entry.package_name = "px13-invalid-change-mode".to_string();
+        scenario.entry.source = scenario.entry.source.replace(
+            "change_mode AFull cap path 416",
+            "change_mode AFull cap path 4096",
+        );
+        scenario.expected_fs.clear();
+        scenario
     }
 
     #[derive(Default)]
@@ -616,6 +678,70 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
             );
         }
         assert!(run.rejects_wrong_plan_binding());
+    }
+
+    #[test]
+    fn change_mode_is_observed_and_matches_across_real_twin_roots() {
+        let run = run_scenario(&change_mode_scenario()).expect("real change-mode differential");
+        run.compare_exact().expect("mode-aware equality");
+        assert!(run.exact_artifact_executed);
+        assert_eq!(run.interpreter.exit_status, 0);
+        assert_eq!(
+            run.interpreter
+                .effect_trace
+                .iter()
+                .map(|event| event.operation)
+                .collect::<Vec<_>>(),
+            vec![HostOpV1::FsChangeMode]
+        );
+        assert!(matches!(
+            run.interpreter.filesystem_delta.as_slice(),
+            [ken_host::FsDeltaV1::Modified {
+                relative_path,
+                before,
+                after,
+            }] if relative_path == b"mode.bin"
+                && before.file_bytes == after.file_bytes
+                && before.mode != after.mode
+                && after.mode == Some(0o640)
+        ));
+        assert_eq!(
+            run.interpreter_actions.root_after,
+            run.native_actions.root_after
+        );
+        let mut wrong_mode = run.native.clone();
+        let [ken_host::FsDeltaV1::Modified { after, .. }] =
+            wrong_mode.filesystem_delta.as_mut_slice()
+        else {
+            panic!("change-mode scenario must have one modified node")
+        };
+        after.mode = Some(0o600);
+        assert!(compare_canonical_exact(&run.interpreter, &wrong_mode).is_err());
+        let evidence = NativeTestedEvidence::from_run(HostOpV1::FsChangeMode, &run);
+        assert!(evidence.permits_confirmation());
+        assert_eq!(
+            confirm_native_tested_transition(HostOpV1::FsChangeMode, evidence),
+            Ok(HostOpAvailabilityV1::NativeTested)
+        );
+    }
+
+    #[test]
+    fn invalid_change_mode_is_a_typed_pre_dispatch_result_in_both_lanes() {
+        let run =
+            run_scenario(&invalid_change_mode_scenario()).expect("real invalid-mode differential");
+        run.compare_exact().expect("typed invalid-input equality");
+        assert_eq!(run.interpreter.exit_status, 72);
+        assert!(run.interpreter.effect_trace.is_empty());
+        assert!(run.interpreter.filesystem_delta.is_empty());
+        assert_eq!(run.interpreter_actions.fs_actions_after_resolve, Some(0));
+        assert_eq!(
+            run.interpreter_actions.root_before,
+            run.interpreter_actions.root_after
+        );
+        assert_eq!(
+            run.native_actions.root_before,
+            run.native_actions.root_after
+        );
     }
 
     #[test]

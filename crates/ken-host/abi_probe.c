@@ -28,6 +28,7 @@ int main(void) {
     printf("SYS_UNLINKAT=%lld\n", (long long)SYS_unlinkat);
     printf("SYS_RENAMEAT=%lld\n", (long long)SYS_renameat);
     printf("SYS_READLINKAT=%lld\n", (long long)SYS_readlinkat);
+    printf("SYS_FCHMOD=%lld\n", (long long)SYS_fchmod);
     printf("ERRNO_ENOENT=%lld\n", (long long)ENOENT);
     printf("ERRNO_EEXIST=%lld\n", (long long)EEXIST);
     return 0;

@@ -328,7 +328,8 @@ fn request_path_mut(request: &mut CanonicalRequestV1) -> Option<&mut Vec<u8>> {
         | CanonicalRequestV1::FsReadDirectory { path }
         | CanonicalRequestV1::FsCreateDirectory { path, .. }
         | CanonicalRequestV1::FsRemoveFile { path }
-        | CanonicalRequestV1::FsRemoveDirectory { path, .. } => Some(path),
+        | CanonicalRequestV1::FsRemoveDirectory { path, .. }
+        | CanonicalRequestV1::FsChangeMode { path, .. } => Some(path),
         CanonicalRequestV1::FsRename { source, .. } => Some(source),
         _ => None,
     }
@@ -377,6 +378,7 @@ fn is_fs_operation(operation: HostOpV1) -> bool {
             | HostOpV1::FsRemoveFile
             | HostOpV1::FsRemoveDirectory
             | HostOpV1::FsRename
+            | HostOpV1::FsChangeMode
     )
 }
 
@@ -412,6 +414,7 @@ fn file_node(bytes: &[u8]) -> FsNodeObservationV1 {
         kind: FsNodeKindV1::File,
         file_bytes: Some(bytes.to_vec()),
         symlink_target: None,
+        mode: Some(0o644),
     }
 }
 
@@ -607,6 +610,7 @@ mod tests {
                 relative_path: b"acted".to_vec(),
                 kind: SnapshotNodeKind::File,
                 bytes: Vec::new(),
+                mode: Some(0o644),
             });
             assert!(!denial_precedes_host_action(&capture, &observation));
         }

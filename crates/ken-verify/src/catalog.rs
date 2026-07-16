@@ -1,6 +1,6 @@
 //! Evidence-bearing confirmation gate over PX5's sealed catalog.
 
-use ken_host::{EffectObservationV1, HostOpAvailabilityV1, HostOpV1, PX5_PLANNED_NATIVE_TARGETS};
+use ken_host::{EffectObservationV1, HostOpAvailabilityV1, HostOpV1};
 
 use crate::{compare_canonical_exact, CanonicalDifferentialRun};
 
@@ -85,7 +85,7 @@ pub fn confirm_native_tested_transition(
     operation: HostOpV1,
     evidence: NativeTestedEvidence,
 ) -> Result<HostOpAvailabilityV1, StatusTransitionError> {
-    if !PX5_PLANNED_NATIVE_TARGETS.contains(&operation)
+    if !ken_host::NATIVE_TESTED_TARGETS_V1.contains(&operation)
         || operation.availability() != HostOpAvailabilityV1::NativeTested
     {
         return Err(StatusTransitionError::OutsideNativeTestedSet(operation));
@@ -111,13 +111,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn imported_catalog_has_exact_five_native_and_nine_named_unavailable() {
-        assert_eq!(HostOpV1::ALL.len(), 14);
-        assert_eq!(native_tested_lanes(), PX5_PLANNED_NATIVE_TARGETS);
+    fn imported_catalog_has_exact_six_native_and_nine_named_unavailable() {
+        assert_eq!(HostOpV1::ALL.len(), 15);
+        assert_eq!(native_tested_lanes(), ken_host::NATIVE_TESTED_TARGETS_V1);
         assert_eq!(deferred_named_lanes().len(), 9);
         assert!(deferred_named_lanes().into_iter().all(|operation| {
             operation.availability() == HostOpAvailabilityV1::RepresentedUnavailable
-                && !PX5_PLANNED_NATIVE_TARGETS.contains(&operation)
+                && !ken_host::NATIVE_TESTED_TARGETS_V1.contains(&operation)
         }));
     }
 
