@@ -12,10 +12,36 @@ use std::io::{self, Write};
 use crate::{
     dispatch_host_op_v1, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, Cap,
     CapabilityGrantV1, CapabilityTableV1, CapabilityTokenV1, CapabilityTraceIdentity,
-    ConsoleStreamV1, CreatePolicyV1, FileErrorCauseV1, FsHandle, FsIdentity, FsScope,
-    HostEffectBackendV1, HostOpV1, IoErrorIdentityV1, OpenRequest, PathComponent, RootPath,
-    RootedHandle, SymlinkPolicy, AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
+    ConsoleStreamV1, CreatePolicyV1, EffectEventV1, FileErrorCauseV1, FsHandle, FsIdentity,
+    FsScope, HostEffectBackendV1, HostOpV1, IoErrorIdentityV1, OpenRequest, PathComponent,
+    RootPath, RootedHandle, SymlinkPolicy, AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
 };
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn ken_host_abi_v1_establish_sigpipe_ignore() -> std::ffi::c_int;
+}
+
+#[derive(Debug)]
+struct ProcessPostureV1(());
+
+fn establish_process_posture_v1() -> Result<ProcessPostureV1, ()> {
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: this calls Ken's own no-argument C companion. The companion
+        // obtains sigaction's layout and constants from the target headers,
+        // installs SIG_IGN, retains no pointer, and returns only status.
+        if unsafe { ken_host_abi_v1_establish_sigpipe_ignore() } == 0 {
+            Ok(ProcessPostureV1(()))
+        } else {
+            Err(())
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err(())
+    }
+}
 
 #[repr(C)]
 struct NativeInvocationV1 {
@@ -68,9 +94,11 @@ const REPLY_BYTES: u64 = 2;
 const REPLY_ERROR: u64 = 3;
 
 struct ProcessContext {
+    _posture: ProcessPostureV1,
     host: ProcessHost,
     capabilities: CapabilityTableV1,
     response_arena: Vec<Box<[u8]>>,
+    effect_trace: Vec<EffectEventV1>,
 }
 
 struct ProcessHost;
@@ -314,11 +342,25 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     let Ok(root_path) = RootPath::new(path) else {
         return std::ptr::null_mut();
     };
-    let Ok(root) = crate::open_root(&root_path) else {
+    let Some(context) =
+        initialize_process_context(root_path, authority, establish_process_posture_v1())
+    else {
         return std::ptr::null_mut();
     };
+    Box::into_raw(context).cast()
+}
+
+fn initialize_process_context(
+    root_path: RootPath,
+    authority: crate::Authority,
+    posture: Result<ProcessPostureV1, ()>,
+) -> Option<Box<ProcessContext>> {
+    let posture = posture.ok()?;
+    let Ok(root) = crate::open_root(&root_path) else {
+        return None;
+    };
     let Ok(metadata) = crate::metadata(&root) else {
-        return std::ptr::null_mut();
+        return None;
     };
     let cap = Cap::mint_scoped(
         authority,
@@ -338,12 +380,13 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
         identity: CapabilityTraceIdentity("declared:FS".to_string()),
         capability: cap,
     });
-    Box::into_raw(Box::new(ProcessContext {
+    Some(Box::new(ProcessContext {
+        _posture: posture,
         host: ProcessHost,
         capabilities,
         response_arena: Vec::new(),
+        effect_trace: Vec::new(),
     }))
-    .cast()
 }
 
 #[unsafe(no_mangle)]
@@ -529,6 +572,13 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
     let Ok(result) = result else {
         return -3;
     };
+    context.effect_trace.push(EffectEventV1 {
+        sequence: context.effect_trace.len() as u64,
+        operation: op,
+        capability: result.capability_identity,
+        request,
+        outcome: result.outcome.clone(),
+    });
     // SAFETY: generated code supplies an aligned writable HostReplyV1 slot.
     set_reply(
         unsafe { &mut *(reply.cast::<HostReplyV1>()) },
@@ -576,6 +626,12 @@ mod tests {
             )
         };
         assert!(context.is_null());
+    }
+
+    #[test]
+    fn posture_failure_prevents_context_publication() {
+        let root = RootPath::new(std::env::current_dir().unwrap()).unwrap();
+        assert!(initialize_process_context(root, AUTH_FULL, Err(())).is_none());
     }
 
     #[test]

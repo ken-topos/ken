@@ -164,6 +164,9 @@ leader through the Steward.
    unsafe moves into `ken-runtime`, generated Cranelift, interp, or CLI. Restore
    **SIGPIPE → `IOError::BrokenPipe`** before the first Console op (the starter
    isn't under Rust `main`); signal termination must not bypass the trace.
+   Decision `dec_1gk5vbw2bbg05` fixes this as a checked-in, header-compiled
+   `ken-host::abi_v1` C posture shim whose successful witness is required by
+   `ProcessContext`; generated C and Rust carry no platform signal facts.
 
 5. **Per-op wire ABI + `HostEffectAbiV1` manifest.** Each op gets a named
    fixed-layout request/reply record in the semantic field order of the ADR §3

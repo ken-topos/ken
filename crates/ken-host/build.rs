@@ -10,6 +10,7 @@ const SCHEMA_VERSION: u32 = 1;
 
 fn main() {
     println!("cargo:rerun-if-changed=abi_probe.c");
+    println!("cargo:rerun-if-changed=src/abi_v1/sigpipe.c");
     println!("cargo:rerun-if-changed=build_support.rs");
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rerun-if-changed=../ken-interp/src/eval.rs");
@@ -47,6 +48,10 @@ fn main() {
         package_identity(&lock, "linux-raw-sys", "0.12.1", "std,general,errno"),
     ];
 
+    if target_os == "linux" {
+        compile_abi_v1_companion(&target, &host);
+    }
+
     let (backend, facts): (&str, Vec<(&str, u64)>) = if target_os == "linux" && target == host {
         let facts = linux_raw_facts();
         verify_boundary_inventory(&facts);
@@ -69,6 +74,16 @@ fn main() {
         &canonical,
         &hash,
     );
+}
+
+fn compile_abi_v1_companion(target: &str, host: &str) {
+    cc::Build::new()
+        .target(target)
+        .host(host)
+        .file("src/abi_v1/sigpipe.c")
+        .warnings(true)
+        .warnings_into_errors(true)
+        .compile("ken_host_abi_v1_posture");
 }
 
 fn verify_boundary_inventory(facts: &[(&str, u64)]) {

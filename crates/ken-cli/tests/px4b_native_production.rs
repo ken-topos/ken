@@ -284,6 +284,67 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
     let _ = std::fs::remove_dir_all(dir);
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn linked_console_broken_pipe_reaches_ken_instead_of_signal_termination() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let dir = output_dir("broken-pipe");
+    let source = r#"program capabilities FS APartial
+proc main (input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [Console] =
+  match input {
+    MkProcessInput arguments _environment _cwd |-> match arguments {
+      Nil |-> host_exit APartial (Failure 60) ;
+      Cons _argv0 rest |-> match rest {
+        Nil |-> host_exit APartial (Failure 60) ;
+        Cons payload _ |->
+          bind (Coproduct (FSOp APartial) AmbientOp)
+            (resp_coproduct (FSOp APartial) AmbientOp
+              (fs_resp APartial) ambient_resp)
+            (Result IOError Unit) ExitCode
+            (host_console APartial (Result IOError Unit) (write Stdout payload))
+            (\written. match written {
+              Ok _ |-> host_exit APartial (Failure 62) ;
+              Err error |-> match error {
+                CapabilityDenied |-> host_exit APartial (Failure 63) ;
+                BrokenPipe |-> host_exit APartial (Failure 61) ;
+                NotFound |-> host_exit APartial (Failure 63) ;
+                PermissionDenied |-> host_exit APartial (Failure 63) ;
+                Interrupted |-> host_exit APartial (Failure 63) ;
+                AlreadyExists |-> host_exit APartial (Failure 63) ;
+                InvalidInput |-> host_exit APartial (Failure 63) ;
+                IsDirectory |-> host_exit APartial (Failure 63) ;
+                NotDirectory |-> host_exit APartial (Failure 63) ;
+                NotEmpty |-> host_exit APartial (Failure 63) ;
+                Unsupported |-> host_exit APartial (Failure 63) ;
+                Other _ |-> host_exit APartial (Failure 63)
+              }
+            })
+      }
+    }
+  }
+"#;
+    let output =
+        ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-broken-pipe", &dir)
+            .expect("checked BrokenPipe observer reaches the linked artifact");
+
+    let mut child = Command::new(&output.artifact.executable_path)
+        .arg(std::ffi::OsString::from_vec(vec![b'x'; 96 * 1024]))
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("BrokenPipe artifact starts");
+    drop(child.stdout.take().expect("stdout reader was piped"));
+    let status = child.wait().expect("BrokenPipe artifact terminates");
+    assert_eq!(status.code(), Some(61));
+
+    let starter_source = include_str!("../../ken-runtime/src/object_linker_packaging.rs");
+    for forbidden in ["SIGPIPE", "SIG_IGN", "sigaction", "signal("] {
+        assert!(!starter_source.contains(forbidden));
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn fs_write_and_read_resume_through_the_native_capability() {
     let dir = output_dir("fs-roundtrip");

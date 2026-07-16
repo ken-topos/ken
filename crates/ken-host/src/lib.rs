@@ -12,8 +12,9 @@
 //! standard runtime ignores SIGPIPE before `main`, including in Rust test
 //! binaries, so console writes surface a broken pipe as an I/O error. Ken does
 //! not support `cdylib`, `staticlib`, C embedding, or a `#[unix_sigpipe]`
-//! opt-out. A future non-Rust-standard-runtime embedding must re-establish the
-//! SIGPIPE contract at its own entrypoint before calling Ken.
+//! opt-out. The supported produced linked artifact is C-started, so its private
+//! `abi_v1` host context re-establishes the same process-lifetime posture before
+//! calling Ken; no general C embedding API is exposed.
 
 #![deny(unsafe_code)]
 
@@ -22,8 +23,8 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub mod capability;
 mod abi_v1;
+pub mod capability;
 mod effect_v1;
 
 pub use capability::*;
