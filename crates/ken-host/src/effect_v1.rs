@@ -579,14 +579,15 @@ impl ResourceTableV1 {
         required: crate::RightSet,
     ) -> Result<(&crate::ResourceHandleV1, ResourceTraceIdentityV1), ResourceErrorV1> {
         let slot = self.lookup(token)?;
-        let ResourceSlotStateV1::Live {
-            owner,
-            rights,
-            identity,
-            ..
-        } = &slot.state
-        else {
-            return Err(ResourceErrorV1::Closed);
+        let (owner, rights, identity) = match &slot.state {
+            ResourceSlotStateV1::Live {
+                owner,
+                rights,
+                identity,
+                ..
+            } => (owner, rights, identity),
+            ResourceSlotStateV1::Vacant { .. } => return Err(ResourceErrorV1::MalformedResource),
+            ResourceSlotStateV1::Retired { .. } => return Err(ResourceErrorV1::Closed),
         };
         if !rights.contains(required) {
             return Err(ResourceErrorV1::RightNotHeld {
@@ -611,7 +612,10 @@ impl ResourceTableV1 {
             ResourceSlotStateV1::Live { identity, .. } if token.generation == slot.generation => {
                 Ok(*identity)
             }
-            ResourceSlotStateV1::Live { .. } => Err(ResourceErrorV1::Closed),
+            ResourceSlotStateV1::Live { .. } if token.generation < slot.generation => {
+                Err(ResourceErrorV1::Closed)
+            }
+            ResourceSlotStateV1::Live { .. } => Err(ResourceErrorV1::MalformedResource),
             ResourceSlotStateV1::Vacant { last_identity }
                 if token.generation.checked_add(1) == Some(slot.generation) =>
             {
@@ -620,9 +624,13 @@ impl ResourceTableV1 {
             ResourceSlotStateV1::Retired {
                 last_identity: Some(last_identity),
             } if token.generation == slot.generation => Ok(*last_identity),
-            ResourceSlotStateV1::Vacant { .. } | ResourceSlotStateV1::Retired { .. } => {
+            ResourceSlotStateV1::Vacant { .. } | ResourceSlotStateV1::Retired { .. }
+                if token.generation < slot.generation =>
+            {
                 Err(ResourceErrorV1::Closed)
             }
+            ResourceSlotStateV1::Vacant { .. } => Err(ResourceErrorV1::MalformedResource),
+            ResourceSlotStateV1::Retired { .. } => Err(ResourceErrorV1::MalformedResource),
         }
     }
 
@@ -633,8 +641,11 @@ impl ResourceTableV1 {
         let Some(slot) = self.slots.get(token.slot as usize) else {
             return Err(ResourceErrorV1::MalformedResource);
         };
-        if token.generation != slot.generation {
+        if token.generation < slot.generation {
             return Err(ResourceErrorV1::Closed);
+        }
+        if token.generation > slot.generation {
+            return Err(ResourceErrorV1::MalformedResource);
         }
         Ok(slot)
     }
@@ -649,8 +660,16 @@ impl ResourceTableV1 {
         let Some(slot) = self.slots.get_mut(token.slot as usize) else {
             return Err(ResourceErrorV1::MalformedResource);
         };
-        if token.generation != slot.generation {
+        if token.generation < slot.generation {
             return Err(ResourceErrorV1::Closed);
+        }
+        if token.generation > slot.generation {
+            return Err(ResourceErrorV1::MalformedResource);
+        }
+        match &slot.state {
+            ResourceSlotStateV1::Vacant { .. } => return Err(ResourceErrorV1::MalformedResource),
+            ResourceSlotStateV1::Retired { .. } => return Err(ResourceErrorV1::Closed),
+            ResourceSlotStateV1::Live { .. } => {}
         }
         let state = std::mem::replace(
             &mut slot.state,
@@ -1610,7 +1629,7 @@ mod tests {
     }
 
     #[test]
-    fn all_fifteen_operations_share_one_semantic_dispatch() {
+    fn all_pre_resource_operations_share_one_semantic_dispatch() {
         let mut capabilities = CapabilityTableV1::default();
         let token = capabilities.insert(CapabilityGrantV1 {
             identity: CapabilityTraceIdentity("test:all".to_string()),
@@ -2044,6 +2063,61 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    /// Caller-control only: this proves explicit finalization preserves every
+    /// close result after invalidation; it does not claim the OS produced the
+    /// injected error.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn explicit_finalizer_settles_every_live_owner_once_and_records_failure() {
+        let (root_a, owner_a) = resource_fixture("final-a");
+        let (root_b, owner_b) = resource_fixture("final-b");
+        let mut table = ResourceTableV1::default();
+        let (token_a, identity_a) = table.insert_fs_handle(owner_a, crate::RightSet::METADATA);
+        let (token_b, identity_b) = table.insert_fs_handle(owner_b, crate::RightSet::METADATA);
+        let calls = std::cell::Cell::new(0);
+        let settlements = table.finalize_all_with(|owner| {
+            let call = calls.get();
+            calls.set(call + 1);
+            drop(owner);
+            if call == 0 {
+                Ok(())
+            } else {
+                Err(IoErrorIdentityV1::Other(5))
+            }
+        });
+        assert_eq!(calls.get(), 2);
+        assert_eq!(
+            settlements,
+            vec![
+                ResourceSettlementObservationV1 {
+                    schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                    resource_kind: ResourceKindV1::FsHandle,
+                    identity: identity_a,
+                    outcome: ResourceSettlementOutcomeV1::Released,
+                },
+                ResourceSettlementObservationV1 {
+                    schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                    resource_kind: ResourceKindV1::FsHandle,
+                    identity: identity_b,
+                    outcome: ResourceSettlementOutcomeV1::ReleaseFailed(IoErrorIdentityV1::Other(
+                        5
+                    ),),
+                },
+            ]
+        );
+        for token in [token_a, token_b] {
+            assert!(matches!(
+                table.resolve_fs_handle(token, crate::RightSet::METADATA),
+                Err(ResourceErrorV1::Closed)
+            ));
+        }
+        assert!(table.finalize_all_with(|_| unreachable!()).is_empty());
+        assert_eq!(calls.get(), 2, "explicit finalization never retries");
+        for root in [root_a, root_b] {
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn stale_slot_reuse_wrap_retirement_and_real_consumer_are_distinct() {
@@ -2069,6 +2143,23 @@ mod tests {
         assert!(matches!(
             table.resolve_fs_handle(stale, crate::RightSet::METADATA),
             Err(ResourceErrorV1::Closed)
+        ));
+
+        let never_minted = ResourceTokenV1 {
+            slot: stale.slot,
+            generation: stale.generation + 1,
+        };
+        assert_eq!(
+            table.identity(never_minted),
+            Err(ResourceErrorV1::MalformedResource)
+        );
+        assert!(matches!(
+            table.resolve_fs_handle(never_minted, crate::RightSet::METADATA),
+            Err(ResourceErrorV1::MalformedResource)
+        ));
+        assert!(matches!(
+            table.begin_release(never_minted),
+            Err(ResourceErrorV1::MalformedResource)
         ));
 
         let (reused, second_identity) = table.insert_fs_handle(owner_b, crate::RightSet::METADATA);
@@ -2123,6 +2214,7 @@ mod tests {
     fn resource_owner_and_close_allowance_are_structurally_confined() {
         let lib = include_str!("lib.rs");
         let close = include_str!("resource_close_v1.rs");
+        let abi = include_str!("abi_v1.rs");
         assert!(lib.contains("pub struct ResourceHandleV1"));
         assert!(!lib.contains("impl Clone for ResourceHandleV1"));
         assert!(!lib.contains("ResourceHandleV1 {\n    inner: Arc"));
@@ -2135,6 +2227,20 @@ mod tests {
         assert_eq!(close.matches("#![allow(unsafe_code)]").count(), 1);
         assert!(!close.contains("ManuallyDrop"));
         assert!(!close.contains("from_raw_fd"));
+        let finish = abi
+            .split("pub unsafe extern \"C\" fn ken_host_invocation_v1_finish")
+            .nth(1)
+            .expect("controlled finish entrypoint exists");
+        let finalize = finish
+            .find("context.finalize_resources();")
+            .expect("controlled finish explicitly finalizes resources");
+        let observation = finish
+            .find("write_observation_v1")
+            .expect("controlled finish records its observation");
+        assert!(
+            finalize < observation,
+            "settlement precedes observation emission"
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -2330,5 +2436,83 @@ mod tests {
         ));
         assert!(reply.resource_token.is_none());
         assert!(backend.0.is_empty(), "denial precedes every host leaf");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn fs_open_attenuates_the_live_handle_to_the_requested_mode() {
+        let root =
+            std::env::temp_dir().join(format!("ken-px7r-attenuation-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("held.bin"), b"held-resource").unwrap();
+        let rooted = crate::open_root(&crate::RootPath::new(&root).unwrap()).unwrap();
+        let metadata = crate::metadata(&rooted).unwrap();
+        let cap = crate::Cap::mint_scoped(
+            crate::AUTH_PARTIAL,
+            "FS",
+            crate::FsScope::root(
+                crate::RightSet::READ.union(crate::RightSet::METADATA),
+                crate::FsHandle::Posix(rooted.clone()),
+                crate::FsIdentity::Posix {
+                    device: metadata.identity.device,
+                    inode: metadata.identity.inode,
+                },
+                crate::SymlinkPolicy::NoFollow,
+            ),
+        );
+        let mut capabilities = CapabilityTableV1::default();
+        let capability = capabilities.insert(CapabilityGrantV1 {
+            identity: crate::program_caps_fs_trace_identity_v1(),
+            capability: cap,
+        });
+        let mut resources = ResourceTableV1::default();
+        let mut backend = RealResourceBackend { root: rooted };
+        let opened = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"held.bin".to_vec(),
+                mode: FsOpenModeV1::Read,
+            },
+        )
+        .unwrap();
+        let token = opened.resource_token.unwrap();
+        let denied = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsHandleMetadata,
+            None,
+            Some(token),
+            &CanonicalRequestV1::FsHandleMetadata,
+        )
+        .unwrap();
+        assert_eq!(
+            denied.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::RightNotHeld {
+                required: crate::RightSet::METADATA.bits(),
+                held: crate::RightSet::READ.bits(),
+            },))
+        );
+        let released = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::ResourceRelease,
+            None,
+            Some(token),
+            &CanonicalRequestV1::ResourceRelease,
+        )
+        .unwrap();
+        assert!(matches!(
+            released.outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::ResourceSettlement(_))
+        ));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

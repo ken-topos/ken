@@ -111,7 +111,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn imported_catalog_has_exact_six_native_and_nine_named_unavailable() {
+    fn imported_catalog_has_exact_nine_native_and_nine_named_unavailable() {
         assert_eq!(HostOpV1::ALL.len(), 18);
         assert_eq!(native_tested_lanes(), ken_host::NATIVE_TESTED_TARGETS_V1);
         assert_eq!(deferred_named_lanes().len(), 9);
