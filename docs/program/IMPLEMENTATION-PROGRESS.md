@@ -14,7 +14,243 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⚡ 2026-07-15 (20:5x UTC) — ✅ **vocab early-split RE-CUT + routed to Architect · Foundation in QA**
+> ## ⚡⚡ RESUME NEXT (2026-07-16 00:0x) — PX4B ✅ CLOSED; PX5 RELEASING (handoff-gate running)
+>
+> **PX4B — ✅ CLOSED.** `origin/main @ 5e82926f` (PR #729, content-verified). Decision dec_3rh4rmnynzfpp
+> closed. All 3 §10 retros in (leader evt_4wgkajm260fs6, QA evt_3rk6g7n34jd5z, impl evt_3zh7wjnn92dzv).
+> Close post evt_5d9c0xt7h8287. 4-round WP. **Owed: doc-only tracker→main sync** (discharges CAT-TAX
+> deferral + carries PX4B-closed tracker to main) — do after PX5 kickoff settles.
+>
+> **PX5 — RELEASED & ACTIVE.** Release branch **`wp/px5-native-effect-lowering @ 966f804f`** = main-
+> with-PX4B `5e82926f` + amended 282-line frame (origin). Scaffold pinned at **`origin/px5-scaffold-
+> 1ad70339`** (+ local `px5-wip-backup-1ad70339` + `preserved/wp-px5-native-effect-lowering-1ad70339`).
+> Ring handoff-gated (all 3 compacted+verified). **Kickoff evt_7sa73m877tgwy → runtime-leader WORKING.**
+> WATCH: leader dispatches to runtime-implementer (build effect lowering) + runtime-qa (ACs + interp-
+> vs-native observational match) → both Working; first handback + gates. Gate: Runtime QA + Architect
+> §14 (trusted-base growth); CV if spec/conformance touched.
+> KICKOFF POINTS: PX5 = effect extension ON PX4B's landed producer — replace PX4B's
+> `host_effect_lowering_unavailable` lane with REAL effect lowering for the pinned ops per ADR-0018 +
+> §0.5 rulings (ingress evt_3nkr1vx55ca1n, identity-b evt_7hj00prqfjqs2). Base = 5e82926f. Scaffold
+> `origin/px5-scaffold-1ad70339` is REFERENCE for the lowering approach — reconcile against PX4B's
+> landed producer (admit_checked_main/program_admission.rs/one-closure txn/named lane); NOT a clean
+> replay. Ground frame line-citations against current main (may drift post-PX4B). NO naked RuntimeExpr;
+> unsupported ops stay unavailable lanes (not no-ops); NO affine/linear; targeted local gates only.
+> PX6 (Verify, parked) resumes on the PX5 producer merge. Campaign PX4B✓ → PX5 → PX6.
+>
+> ---
+> ### ⚡ (superseded) 22:0x — CAT-TAX CLOSED; PX4B building
+>
+> 1. **CAT-TAX — ✅ CLOSED.** Merged `origin/main @ 7c4cf1de` (PR #728, full CI, verified by content).
+>    Decision dec_1bgrqsmz9eg0j closed (Architect+CV APPROVE @ 62a9ba16). All 3 Foundation §10 retros
+>    in (leader evt_2d27v2739yn0t, QA evt_2s1wmqe9ybn03, impl evt_anzbpkjps73b). **Foundation ring
+>    FREE** — no ready Foundation WP queued; idle-awaiting-next is correct, not a stall. Shared carry
+>    (record as lesson): an identity/catalog migration needs an up-front *reproducible negative-sweep
+>    vocabulary* (canonical paths + extension variants + dotted IDs + legacy shorthand/basename
+>    classes) AND an explicit exclusion ledger (owner + non-consumer rationale per historical
+>    exclusion). Bit this campaign twice (41 stale citations; tracker-exclusion not durably named).
+>    NOTE: tracker NOT synced into PR #728 (carve-out integrity); sync tracker→main on the NEXT
+>    Steward merge (PX4B or a dedicated doc-only).
+> 2. **PX4B — §14 IN FLIGHT (architect reviewing @ `c844748a`).** Branch `wp/px4b-base-native-
+>    production-spine`; linear frame `2bf2d2b1` → blocked R1 `4bd8028d` → repair `c844748a`. R1 QA
+>    BLOCK on AC4 (vacuous discriminator) → respin SUCCEEDED: the real ProcessInput discriminator
+>    (destructures MkProcessInput/argv/env/cwd, reads raw bytes, 254 vs 253 distinguishing pair)
+>    exposed+closed REAL lowering gaps — native packages bind actual primitive identities, IntLit
+>    enters executable body, top-level binders + direct calls lower without escaping closures,
+>    recursive-ctor IH binders erase via nested de Bruijn, UInt8/Bool-match lanes lower in both
+>    evaluators. **runtime-qa APPROVED** `c844748a` (evt_2h1ra6x6m8f46; AC1–AC8 hold, AC4 non-vacuous;
+>    gates: PX4B 5/5, ken-cli, elab 82, runtime 170, NC16 5/5, NC5 15/15, NC18 8/8). **§14 Decision
+>    `dec_489mvkhsqje5n`** opened by runtime-leader (evt_30v4vkqdabk5g) — Architect-only (native,
+>    no spec delta → no CV vote). Review request stranded on architect pane → I sent bare Enter →
+>    **architect WORKING** on the §14. WATCH: architect APPROVE + resolve → **I publish `c844748a`
+>    (bundle tracker-sync → discharges the deferred CAT-TAX tracker→main sync), FULL CI**. Watch for
+>    a re-strand on the architect vote. On merge → PX5 resumes. Campaign PX4B → PX5 → PX6.
+>    **UPDATE (22:54): architect §14 BLOCKED `c844748a`** (dec_489mvkhsqje5n rejected, evt_2ywhz9156y15p)
+>    — 2 structural catches: **B1** reported target closure (`build_target_closures`) ≠ artifact-
+>    producing closure (`executable_closure` from ALL source_admitted_ids) → unused sibling enters
+>    native exec / report-A-artifact-B mismatch; fix = `closure.reachable_declarations` sole set +
+>    4-set-identity regression w/ unused decl absent. **B2** `ken_runtime` still PUBLICLY exports
+>    `emit_process_entrypoint_object_with_cranelift(&RuntimeExpr)` + `build_process_starter_executable
+>    _artifact(&RuntimeExpr)` → naked-IR bypass of checked admission (AC1 structural boundary; call-
+>    site discipline insufficient); fix = pub(crate)/bound-carrier + visibility regression. Both
+>    structural, real catches (trust-adjacent gate working). runtime-implementer respinning R3
+>    (evt_4tht68p1n3qwf) → QA → FRESH §14 Decision. Architect posted cleanly (earlier Enter-fix held).
+> - PX6 parked on PX5 producer. Research corpus merged (2f83f5db). Watchdog cron **51b3c71d**
+>   (refreshed to current frontier; every 15min @ :9/:24/:39/:54) + Monitor bp808a7mu (architect
+>   stranded-paste) active — Architect seat strands pastes repeatedly; bare Enter fixes. The
+>   PX4B §14 review will route to the architect — watch for a stranded paste there.
+>
+> ### ⚡ 2026-07-15 (21:1x UTC) — ✅ **PX5 split MERGED (6e7abf63) · PX6 released · research corpus merged · PX5-proper resuming**
+>
+> **PX5 vocab split — MERGED** PR #726, CI green, `origin/main @ 6e7abf63` (effect_v1.rs +
+> lib.rs re-export verified on main). **PX6 released** — verify-leader (evt_594062p9tdzrw) told
+> implementer to rebase `wp/px6-effect-differential-harness` onto 6e7abf63 + swap the reserved
+> adapter seam for real `ken_host` imports; both Verify seats went Working on my merge notice
+> (evt_474hykxge35c9). **PX6 now active on the canonical arms.**
+>
+> ### ⚡ 2026-07-15 (21:3x UTC) — 🧭 **Architect RULED PX5 boundary → PREDECESSOR WP (I frame it next) · CAT-TAX one-file residue**
+>
+> **ARCHITECT RULING evt_3bsx082257v92 (READ IT IN FULL before framing) — carve the base
+> producer as a PREDECESSOR to PX5.** Answers my expand-vs-predecessor question: **PREDECESSOR**
+> (clean architectural split, independently discriminable). Design spine the frame must transcribe:
+> - **§1 Checked-main source of truth:** EXTRACT (not copy) resolve_main/declared_fs_authority/
+>   entrypoint_has_abi from `ken-cli/src/lib.rs:146-218` into a new **Elaborator-owned admission
+>   operation** on the same live ElabEnv (anonymous boundary, exactly one FS authority; resolve
+>   main/ProcessInput/ProgramCaps/MkProgramCaps/Cap/Auth/HostIO/ExitCode; closed effect-row
+>   policy; construct ProcessInput→ProgramCaps a→HostIO a ExitCode; call
+>   ken_kernel::convert_type). Result = checked-main descriptor (GlobalIds→StableSymbol). NO
+>   hard-coded prelude strings, NO public NativeEntrypointPlanV1 ctor. Both interp run_program AND
+>   native path call this ONE op.
+> - **§2 Base producer shape:** dedicated program/native compilation MODE at the compiler-driver
+>   spine (don't weaken generic pkg/target compilation). 8-step ordered transaction: elaborate
+>   once → checked-main admission → emit_package_from_env constructs hash-free plan into
+>   CheckedCoreSemanticInputs BEFORE core_semantic_hash finalizes → select main, build closure,
+>   erase to ONE RuntimeProgram → package from RuntimeProgram+plan+closure/metadata (NOT naked
+>   RuntimeExpr) → return identity-consistent result → expose via real CLI native package/run
+>   path. Keep interp `ken run` as the PX6 oracle.
+> - **§3 Lane replacement:** don't delete NC10/NC20; make runtime_lowering_unavailable /
+>   native_artifact_unavailable Emitted-ONLY-when-artifact-exists; entrypoint_runtime_arguments_
+>   unavailable stays except the plan-bound two-binder program ABI; SPLIT
+>   host_effect_or_foreign_entrypoint (foreign stays rejected; executable Vis → named
+>   host_effect_lowering_unavailable lane; PX5 replaces that lane only for its 5 pinned ops).
+> - **§4 Split:** predecessor owns base production spine (positive: effect-free exact-ABI HostIO
+>   main → one linked artifact; negative: same source + one Vis → host_effect_lowering_unavailable);
+>   PX5 owns semantic effect extension, MUST consume predecessor's PUBLIC production result
+>   (fixture-fed RuntimeExpr earns NO AC evidence). 7 predecessor discriminators listed in the
+>   ruling.
+> **PROGRESS:** (1) DONE — **PX4B frame authored** `docs/program/wp/PX4B-base-native-production-
+> spine.md` (commit 02bb2eac): base native-CLI production spine, transcribes the §1-§4 ruling as
+> fixed inputs + AC1-AC8 from the 7 discriminators. (2) DONE — **PX5 frame amended** (006c6a7d) to
+> depend on + consume PX4B, drop the naked-IR path (scaffold 1ad70339 replays above PX4B).
+> (3) **NEXT (mine, HIGH):** RELEASE PX4B to runtime — create `wp/px4b-...` branch off origin/main
+> with the frame, **handoff-gate the runtime ring** (compact runtime-leader/implementer/qa),
+> release to runtime-leader, verify Working. §14 on handback = Architect soundness (trust-adjacent
+> identity). **Campaign now serializes: PX4B → PX5 → PX6.** runtime-leader reconnected (was in the
+> 21:34:44 space-wide disconnect blip; all seats back). Runtime held clean (frame 6acaa960, WIP
+> 1ad70339). Operator informed of the scope development (predecessor WP).
+>
+> --- prior PX5 hard-stop detail ---
+> **PX5-proper — NEW-BOUNDARY HARD-STOP (routed to Architect).** Runtime correctly stopped at a
+> genuinely new boundary (NOT reopening §0.5): the **checked-main → effect-IR → native-package
+> PRODUCER does not exist**. Evidence (both seats, evt_6qhqt4csh6htf/evt_322bde9vsns32):
+> compiler_driver.rs:443-446 emit_package_from_env yields only CheckedCorePackage; :540-560 the
+> entrypoint packager REJECTS host effects + nonzero runtime args (can't take
+> ProcessInput→ProgramCaps→HostIO→ExitCode); :1244-1253 runtime_lowering_unavailable / "NC10 no
+> RuntimeProgram"; erasure.rs :454+ has no ITree→RuntimeExpr::Effect producer; zero
+> RuntimeExpr::Effect constructions in elaborator/cli/interp src; ken-cli main.rs:255-264 is
+> interpreter-only — NO production native compile/package/run route exists at all (even
+> effect-free). Building now would synthesize the plan from fixture IR = PX6's rejected proxy
+> path; runtime refuses. **Routed to Architect (evt_12nsama8p2kwy)** for the design ruling:
+> producer shape + what it replaces (NC10/NC20 lanes) + exact main-ABI conversion source, AND
+> whether there's a clean split between the BASE native-CLI production route and the
+> effect-lowering layer. **NEXT (mine):** on the Architect design/split ruling → decide
+> expand-PX5 vs. carve a predecessor WP (base native-CLI production) + resequence; PX6 waits on
+> whichever lands the producer. Runtime held clean: frame 6acaa960, WIP scaffold 1ad70339,
+> ken-host 8/8 + ken-runtime 173/173 + NC18 8/8 green. **⚠ This may be a material scope expansion
+> of the native campaign — if the Architect's ruling implies multi-WP effort, surface the
+> sequencing decision to the operator.**
+>
+> --- prior PX5-proper release detail ---
+> **PX5-proper (native lowering) — RELEASED & ACTIVE.** Runtime ring handoff-gate-compacted
+> (b1vixk3h9 exit 0; all 3 "Context compacted" verified). Released to runtime-leader
+> (evt_53a0fz4dzdqjd) — leader went Working, status "PX5: resumed on ruled ingress + identity;
+> assigning implementation." Both §0.5 hard-stops RULED (verified in record): ingress
+> **evt_3nkr1vx55ca1n**; identity **evt_7hj00prqfjqs2 = option (b)** parent-owned downstream
+> bindings. Frame amended (steward/work 55706cd9, §0.5 fixed-input subsection) — release told the
+> ring to pull it onto the branch. Rebase wp/px5-native-effect-lowering onto 6e7abf63 (vocab
+> commits drop empty; frame 84368994 survives). §14 on handback = Architect soundness only (no
+> spec/conformance paths).
+>
+> **PX6 — canonical arm BLOCKED-ON-PX5-proper (grounded ordering, NOT a stall).** verify-impl
+> grounded it thoroughly (evt_70cktn9rwvd2p): vocab types on main are necessary but not
+> sufficient — the true end-to-end comparator needs a RUNNABLE producer (cranelift_backend.rs:1594
+> still rejects RuntimeExpr::Effect; nothing emits EffectObservationV1 outside ken-host defn; the
+> artifact API exposes no host-context/cap-root-B/observation channel). verify-impl correctly
+> REFUSED to build PX5's producer inside ken-verify (would move PX5 ownership into Verify /
+> create the forbidden synthetic substitute), released untouched, home-clean, event-driven on the
+> PX5 merge. PX4-observable differential + mutation nets already landed synthetic-free (15 tests).
+> **The seam PX6 needs is guaranteed by PX5 frame deliverable #7 + AC1** (produce identical
+> EffectObservationV1 both lanes; root-B binding; FS-cap route AC2). Confirmed to verify-leader
+> (evt_5mkc7984vbg4v). PX6 resumes automatically on the PX5 producer merge event.
+>
+> **CAT-TAX — CV BLOCKED (real AC2 catch) → scoped respin in progress.** foundation-qa APPROVEd
+> a61c2f57, but **CV BLOCK dec_23gtqt2pc1909** (evt_736gwkybwbqap): AC2 full-corpus sweep still
+> finds **41 stale lowercase shorthand citations in 29 files** (`catalog/packages/lawful-classes`
+> ×11 → Core/Classes/LawfulClasses.ken.md; `collections` ×25 → resolve EACH to real producer
+> Derived/Map/etc, NO blind sub; `transport` ×5 → Core/Logic/Transport.ken.md), **15 in
+> spec/conformance**. Real migration-inventory miss. foundation-leader routed the respin
+> (evt_3jcphterybetx) + already dispatched to implementer (evt_714veg7dn05pq).
+> **STEWARD TRACKER CARVE-OUT (mine):** a61c2f57 modified `IMPLEMENTATION-PROGRESS.md`, and my
+> steward/work tracker holds 33 of these citations in DEEP HISTORICAL past-tense entries; since I
+> publisher-sync the tracker on every merge, a branch-side fix is clobbered AND my sync would
+> REINTRODUCE the stale paths → re-block. Resolved (evt_jvvdtn4rpejf): Foundation reverts the
+> tracker to origin/main + excludes it from diff scope AND the AC2 sweep; CV concurs scoping AC2
+> to LIVE consumers only; the tracker is a Steward historical log, not a catalog consumer — its
+> past-tense entries legitimately keep paths-as-they-were. foundation-leader accepted + relayed
+> it verbatim. **Architect vote on a61c2f57 still pending (evt_trz8ck76k87a)** — folding any
+> finding into THIS same respin (one round-trip).
+> **NEXT:** (a) on corrected-SHA handback (3-pattern sweep empty outside redirect tables + tracker
+> excluded) → **supersede dec_23gtqt2pc1909 with a FRESH Decision** at the new SHA for Architect +
+> CV re-vote → publisher on both-APPROVE + FULL CI green. (b) **At handback, record the tracker
+> exclusion durably in the CAT-TAX frame's AC2** (permitted-non-consumer, alongside redirect
+> tables) — deferred now to avoid frame-copy divergence during the active respin.
+> **CONVERGED (21:23):** CV CONCURRED the carve-out (evt_74g61z244gq4q — sweep excludes exactly
+> frame/report tables + the tracker, requires zero hits across all live consumers). Architect
+> CORRECTED its own prior a61c2f57 APPROVE (evt_1cavnefv8bae4 — its zero-hit inventory used only
+> the 35 rename-map keys, couldn't find older shorthand roots; CV's catch correct; tracker
+> carve-out sound; **NO additional Architect finding**). Fresh candidate must: repair 3 shorthand
+> classes by real producer identity; drop the tracker delta entirely; preserve 37/37 bodies +
+> zero TCB/semantic movement; carry fresh Decision/SHA. Both reviewers will re-vote the corrected
+> SHA. Foundation respinning.
+> **RESPIN DONE + RE-ROUTED (21:26-21:3x):** corrected candidate **`aec37325`** on origin/main
+> 6e7abf63 (202 paths, tracker excluded/byte-identical to main). 38 live citations resolved
+> producer-aware (10 LawfulClasses, 5 Transport, 21 Derived, 2 Map); three-pattern sweep 0
+> outside the 3 durable exclusions (frame + research report + Steward tracker); catalog/example
+> bodies byte-identical to a61c2f57 → 37/37 fidelity. foundation-qa APPROVED the respin. Old
+> **dec_23gtqt2pc1909 REJECTED/superseded**; **fresh Decision `dec_16y1qptgzy7x0`** proposed at
+> aec37325 + routed to Architect + CV re-votes (evt_35f7cj9vfv520; CV Working, Architect queued
+> behind its PX5 ruling). **NEXT:** on both APPROVE + FULL locked CI green → publisher merges
+> aec37325 (bundle tracker-sync first). **THEN:** record the tracker AC2-exclusion durably in the
+> merged CAT-TAX frame (deferred item) + close CAT-TAX (retro in).
+> **RE-VOTE ROUND (21:31-21:33):** CV BLOCKED fresh dec_16y1qptgzy7x0 (evt_1gpx5fyq35c6e) — repair
+> passes EVERY live-consumer axis (38 citations producer-aware, sweep 0, tracker byte-identical),
+> **sole blocker = the deferred item bit me:** frame AC2 (`catalog-taxonomy-adopt-relocate.md:
+> 116-120`) still says unqualified "full-corpus grep, no dangling reference" without naming the 3
+> exclusions, so a faithful AC2 run re-finds the tracker's 33 historical citations. CV requires
+> the frame AC2 amended to name exactly (1) this frame (2) research redirect table (3) the Steward
+> tracker + state tracker is not a live consumer. **foundation-leader dispatched the one-file
+> amendment** (evt_219fncd9zq0mx). **NEXT:** on the one-file handback → CV one-file binary
+> re-review → I re-propose the Decision at the new SHA → publish. (Lesson: should have amended the
+> frame AC2 when I first promised the carve-out, not deferred it.)
+> **ONE-FILE AMENDMENT DONE + RE-PROPOSED (21:3x):** foundation-implementer applied the AC2 hunk
+> at **`62a9ba16`** (+7/−2, names exactly the 3 exclusions + tracker-not-a-live-consumer).
+> Architect re-anchored + confirmed the one-file repair (evt_cweb3t57wtf8). dec_16y1qptgzy7x0
+> REJECTED; **fresh Decision `dec_1bgrqsmz9eg0j`** proposed at 62a9ba16 + routed (evt_4cak8fp0477yy);
+> both reviewers Working on re-votes. **NEXT:** on both APPROVE + FULL locked CI green → publisher
+> merges 62a9ba16 (bundle tracker-sync first) → close CAT-TAX (retro).
+>
+> **RESEARCH SEAT CORPUS — MERGED** doc-only PR #727, `origin/main @ 2f83f5db` (playbook, skill,
+> AGENTS routing, memory scope, moot.toml block — all verified). Standing-seat model. research
+> notified (evt_52az1vzf0yj7k) to adopt ken-research + discard the ad-hoc skill.
+>
+> --- superseded detail below ---
+> ### ⚡ 2026-07-15 (21:0x UTC) — ✅ **PX5 split APPROVED→publishing (CI) · research corpus MERGED · Foundation in QA**
+>
+> **PX5 vocab split — Architect §14 APPROVE** (evt_461tw652k6qf9, dec_3xctzj0s74n45
+> resolved-on-cast at exact `5309a387`). **Publishing:** PR **#726** on full locked CI
+> (publisher bg task b98dxqztx, 402s CI wait then poll-to-green-merge). On merge → notify
+> verify-leader/verify-implementer (holding d6c1b1e5 for the "corrected vocab merge notice") →
+> **PX6 comparator arm unblocked**. Do NOT re-resolve the Decision (Architect resolved on cast).
+>
+> **RESEARCH SEAT CORPUS — MERGED** doc-only, PR **#727**, now on `origin/main @ 2f83f5db`
+> (playbook `agent/playbooks/federation/research.md`, skill `.claude/skills/ken-research`,
+> AGENTS.md routing, memory scope, `moot.toml [agents.research]` — all verified on main). Fills
+> the gap that made research draft an ad-hoc skill (Pat: "it did not see one"); standing-seat
+> model (legwork-not-authority, clean-room-bound, Steward-owned v1 charter), NOT the ad-hoc
+> reframe. CLAUDE.md already routed `research→ken-research`. Cut as single commit ae3b5176
+> cherry-picked off origin/main (steward/work is 139-ahead/39-behind — cannot publish from it
+> directly). **NEXT:** notify research the corpus is canonical (discard any ad-hoc skill).
+>
+
 >
 > **RE-CUT DONE + ROUTED.** `wp/px5-canonical-effect-vocabulary @ 5309a387` — fresh single
 > commit on origin/main `ce05ce12`, ken-host only: `effect_v1.rs` (+413) + `lib.rs` (+4
