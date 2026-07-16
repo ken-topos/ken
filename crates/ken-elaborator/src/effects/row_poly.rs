@@ -23,8 +23,8 @@
 
 use std::collections::HashMap;
 
-use super::check::EffectError;
 use super::row::{EffectName, EffectRow, RowType, RowVar};
+use super::check::EffectError;
 
 /// Infer the row type for a declaration with row-polymorphic higher-order
 /// parameters (§1.2, row-poly path).
@@ -78,11 +78,13 @@ pub fn check_row_poly_escape(
     declared_row_type: Option<&RowType>,
     declared_row: Option<&EffectRow>,
 ) -> Result<(), EffectError> {
-    let declared: RowType = declared_row_type.cloned().unwrap_or_else(|| {
-        declared_row
-            .map(|r| RowType::Concrete(r.clone()))
-            .unwrap_or(RowType::empty())
-    });
+    let declared: RowType = declared_row_type
+        .cloned()
+        .unwrap_or_else(|| {
+            declared_row
+                .map(|r| RowType::Concrete(r.clone()))
+                .unwrap_or(RowType::empty())
+        });
 
     if inferred.is_subset_of(&declared) {
         return Ok(());
@@ -95,7 +97,10 @@ pub fn check_row_poly_escape(
         .map(|e| (e.clone(), "<unknown>".to_string()))
         .collect();
     for v in &var_esc {
-        witnesses.push((format!("ρ_{}", v.0), "<row-var-escape>".to_string()));
+        witnesses.push((
+            format!("ρ_{}", v.0),
+            "<row-var-escape>".to_string(),
+        ));
     }
 
     Err(EffectError::EffectEscapes {
@@ -103,3 +108,4 @@ pub fn check_row_poly_escape(
         witnesses,
     })
 }
+

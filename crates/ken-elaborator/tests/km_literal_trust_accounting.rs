@@ -7,7 +7,9 @@
 use std::collections::HashSet;
 
 use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
-use ken_kernel::{declare_def, declare_primitive, GlobalEnv, GlobalId, Level, PrimReduction, Term};
+use ken_kernel::{
+    declare_def, declare_primitive, GlobalEnv, GlobalId, Level, PrimReduction, Term,
+};
 
 fn trusted_set(env: &ken_kernel::GlobalEnv) -> HashSet<GlobalId> {
     env.trusted_base().into_iter().collect()
@@ -101,7 +103,9 @@ fn literal_classification_is_the_only_primitive_accounting_exclusion() {
 fn foreign_axiom_and_open_obligation_trust_entries_still_count() {
     let mut env = ElabEnv::new().expect("base env");
 
-    env.elaborate_decl_v1(r#"foreign km_foreign : Int -> Int = "ffi_symbol" "ffi_lib" pure"#)
+    env.elaborate_decl_v1(
+        r#"foreign km_foreign : Int -> Int = "ffi_symbol" "ffi_lib" pure"#,
+    )
         .expect("foreign declaration must elaborate");
     let foreign_id = env.globals["km_foreign"];
     assert!(

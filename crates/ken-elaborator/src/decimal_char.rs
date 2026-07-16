@@ -125,7 +125,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
         vec![],
         unbounded_ty,
     )
-    .map_err(|e| ElabError::Internal(format!("decimalPow10Unbounded failed: {}", e)))?;
+        .map_err(|e| ElabError::Internal(format!("decimalPow10Unbounded failed: {}", e)))?;
     elab.globals
         .insert("decimalPow10Unbounded".to_string(), unbounded_id);
 
@@ -203,12 +203,8 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
             result_id: decimal_id,
         },
     );
-    elab.numeric_env.set_eq_entry(
-        decimalpair_id,
-        EqEntry {
-            op_id: decimal_eq_id,
-        },
-    );
+    elab.numeric_env
+        .set_eq_entry(decimalpair_id, EqEntry { op_id: decimal_eq_id });
     elab.numeric_env.decimal_id = decimal_id;
     elab.numeric_env.decimalpair_id = decimalpair_id;
 

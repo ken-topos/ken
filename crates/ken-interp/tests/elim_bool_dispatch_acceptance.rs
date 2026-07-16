@@ -45,10 +45,7 @@ fn eval_view(src: &str) -> EvalVal {
     }
     match env.env.lookup(r.def_id) {
         Some(Decl::Transparent { body, .. }) => eval(&[], body, &env.env, &mut store),
-        other => panic!(
-            "expected a checked Transparent def, got {:?}",
-            other.map(|_| ())
-        ),
+        other => panic!("expected a checked Transparent def, got {:?}", other.map(|_| ())),
     }
 }
 
@@ -58,12 +55,10 @@ fn eval_view(src: &str) -> EvalVal {
 /// branch, matching `data Bool = True | False`'s declared index 0.
 #[test]
 fn computed_bool_true_dispatches_to_first_method() {
-    let result = eval_view("const t = match (eq_int 5 5) { True |-> 1 ; False |-> 2 }");
-    assert_eq!(
-        result,
-        EvalVal::Int(1),
-        "eq_int 5 5 is True — must select methods[0]"
+    let result = eval_view(
+        "const t = match (eq_int 5 5) { True |-> 1 ; False |-> 2 }",
     );
+    assert_eq!(result, EvalVal::Int(1), "eq_int 5 5 is True — must select methods[0]");
 }
 
 /// surface/numbers/elim-reduce-computed-bool-false-branch (soundness) —
@@ -73,12 +68,10 @@ fn computed_bool_true_dispatches_to_first_method() {
 /// [[taint-axis-orientation-needs-distinguishing-pair]]).
 #[test]
 fn computed_bool_false_dispatches_to_second_method() {
-    let result = eval_view("const t = match (eq_int 5 6) { True |-> 1 ; False |-> 2 }");
-    assert_eq!(
-        result,
-        EvalVal::Int(2),
-        "eq_int 5 6 is False — must select methods[1]"
+    let result = eval_view(
+        "const t = match (eq_int 5 6) { True |-> 1 ; False |-> 2 }",
     );
+    assert_eq!(result, EvalVal::Int(2), "eq_int 5 6 is False — must select methods[1]");
 }
 
 /// surface/numbers/elim-reduce-computed-vs-literal-bool-agree (soundness) —
@@ -91,17 +84,11 @@ fn computed_bool_false_dispatches_to_second_method() {
 fn computed_bool_agrees_with_literal_bool_dispatch() {
     let computed_true = eval_view("const t = match (eq_int 5 5) { True |-> 1 ; False |-> 2 }");
     let literal_true = eval_view("const t = match True { True |-> 1 ; False |-> 2 }");
-    assert_eq!(
-        computed_true, literal_true,
-        "computed True and literal True must agree"
-    );
+    assert_eq!(computed_true, literal_true, "computed True and literal True must agree");
 
     let computed_false = eval_view("const t = match (eq_int 5 6) { True |-> 1 ; False |-> 2 }");
     let literal_false = eval_view("const t = match False { True |-> 1 ; False |-> 2 }");
-    assert_eq!(
-        computed_false, literal_false,
-        "computed False and literal False must agree"
-    );
+    assert_eq!(computed_false, literal_false, "computed False and literal False must agree");
 }
 
 /// surface/numbers/elim-reduce-computed-bool-via-leq-int (soundness) — the
@@ -111,15 +98,7 @@ fn computed_bool_agrees_with_literal_bool_dispatch() {
 #[test]
 fn computed_bool_via_leq_int_dispatches_correctly() {
     let le = eval_view("const t = match (leq_int 3 5) { True |-> 1 ; False |-> 2 }");
-    assert_eq!(
-        le,
-        EvalVal::Int(1),
-        "leq_int 3 5 is True — must select methods[0]"
-    );
+    assert_eq!(le, EvalVal::Int(1), "leq_int 3 5 is True — must select methods[0]");
     let gt = eval_view("const t = match (leq_int 5 3) { True |-> 1 ; False |-> 2 }");
-    assert_eq!(
-        gt,
-        EvalVal::Int(2),
-        "leq_int 5 3 is False — must select methods[1]"
-    );
+    assert_eq!(gt, EvalVal::Int(2), "leq_int 5 3 is False — must select methods[1]");
 }

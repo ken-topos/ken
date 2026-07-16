@@ -208,7 +208,9 @@ pub fn elaborate_temporal_expr(expr: &TemporalExpr) -> Temporal {
             Box::new(elaborate_temporal_expr(a)),
             Box::new(elaborate_temporal_expr(b)),
         ),
-        TemporalExpr::Eventually(a) => Temporal::eventually(&elaborate_temporal_expr(a)),
+        TemporalExpr::Eventually(a) => {
+            Temporal::eventually(&elaborate_temporal_expr(a))
+        }
         TemporalExpr::Always(a) => Temporal::always(&elaborate_temporal_expr(a)),
         TemporalExpr::Leadsto(a, b) => {
             Temporal::leadsto(&elaborate_temporal_expr(a), &elaborate_temporal_expr(b))

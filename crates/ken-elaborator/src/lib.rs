@@ -9,64 +9,86 @@
 
 mod ast;
 pub mod bytes;
-pub mod capabilities;
 pub mod checked_core;
 pub mod classes;
+pub mod capabilities;
 pub mod compiler_driver;
 pub mod conversions;
 pub mod data;
 pub mod decimal_char;
 pub mod diagnostics;
-pub mod effects;
 pub mod elab;
+pub mod effects;
 pub mod erasure;
-pub mod error;
 pub mod export;
-pub mod extract;
-pub mod foreign;
 pub mod format;
-pub mod ifc;
 pub mod layout;
-pub mod lexer;
+pub mod foreign;
+pub mod ifc;
 pub mod literate;
 pub mod lossless;
+pub mod trace;
+pub mod protocol;
+pub mod error;
+pub mod extract;
+pub mod lexer;
 pub mod modules;
 pub mod numbers;
 pub mod parser;
 pub mod prelude;
 pub mod program_admission;
-pub mod protocol;
 pub mod prover;
 pub mod resolve;
 pub mod temporal;
-pub mod trace;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use ken_kernel::{check as kernel_check, declare_postulate, Context, GlobalEnv, GlobalId, Term};
+use ken_kernel::{
+    check as kernel_check, declare_postulate, Context, GlobalEnv, GlobalId, Term,
+};
 
+pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, ObligationKind};
+pub use error::{ElabError, Span};
 pub use ast::{
     BinOp, BoundaryHeader, BoundaryKind, CapabilityDecl, ConstructorSignature,
     ConstructorSignatureArg, Decl, ExplicitDataCtor, ExportForm, Expr, ImportItem, ImportKind,
     LetBinding, Type,
 };
-pub use bytes::BytesEnv;
-pub use classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo, InstanceResolution};
-pub use diagnostics::{
-    project_all, project_diagnostic, tv_and, tv_not, tv_or, tv_strict, Diagnostic, DiagnosticTag,
-    FailureWitness, FormRef, HoleId, KripkeCountermodel, Region, SuggestedAction, ThirdValue,
-    TypedHole, WorldId,
+pub use extract::{
+    v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,
 };
-pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, ObligationKind};
-pub use error::{ElabError, Span};
+pub use diagnostics::{
+    project_all, project_diagnostic, Diagnostic, DiagnosticTag, FailureWitness, FormRef, HoleId,
+    KripkeCountermodel, Region, SuggestedAction, ThirdValue, TypedHole, WorldId, tv_and, tv_not,
+    tv_or, tv_strict,
+};
+pub use prover::{
+    attempt_obligation, attempt_with_cert, classify, Countermodel, ProverResult, Route, Verdict,
+};
 pub use export::{
     emit_export, serialize_export, BehavioralExport, ExportError, GEntry, PEntry, PStatus, QEntry,
     TEntry,
 };
-pub use extract::{
-    v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,
+pub use temporal::{
+    closed, elaborate_temporal_expr, temporal_hoas_inductive_spec, temporal_inductive_spec,
+    Pred, Temporal, TemporalExpr, TemporalObligation, Var,
 };
+pub use trace::{
+    emit_trace_contract, serialize_trace_contract,
+    AssertionPoint, MonitorProjection, TraceContract, TraceEvent,
+};
+pub use protocol::{
+    hole_id_string, obligation_id_string, project_obligation_status, project_wire_verdict,
+    rollup_doc_status, round_trip, serialize_action, serialize_countermodel, serialize_decomposition,
+    serialize_diagnostic, serialize_document, serialize_hole, serialize_obligation,
+    serialize_slice, trusted_base_entry, validate_document, DocStatus, ObligationStatus,
+    WireVerdict,
+};
+pub use resolve::{RDecl, RDeclKind, RExpr, RType};
+pub use numbers::{NumericEnv, NumericLitVal};
+pub use bytes::BytesEnv;
+pub use prelude::PreludeEnv;
 pub use foreign::{
     trusted_base_delta, FfiRuntimeCheck, ForeignBinding, ForeignEnv, MarshalKind, MarshalSig,
 };
@@ -74,27 +96,7 @@ pub use literate::{
     extract_ken_md, format_ken_md, validate_ken_md_fences, KenMdExtraction, KenMdFence,
     KenMdFenceRole,
 };
-pub use numbers::{NumericEnv, NumericLitVal};
-pub use prelude::PreludeEnv;
-pub use protocol::{
-    hole_id_string, obligation_id_string, project_obligation_status, project_wire_verdict,
-    rollup_doc_status, round_trip, serialize_action, serialize_countermodel,
-    serialize_decomposition, serialize_diagnostic, serialize_document, serialize_hole,
-    serialize_obligation, serialize_slice, trusted_base_entry, validate_document, DocStatus,
-    ObligationStatus, WireVerdict,
-};
-pub use prover::{
-    attempt_obligation, attempt_with_cert, classify, Countermodel, ProverResult, Route, Verdict,
-};
-pub use resolve::{RDecl, RDeclKind, RExpr, RType};
-pub use temporal::{
-    closed, elaborate_temporal_expr, temporal_hoas_inductive_spec, temporal_inductive_spec, Pred,
-    Temporal, TemporalExpr, TemporalObligation, Var,
-};
-pub use trace::{
-    emit_trace_contract, serialize_trace_contract, AssertionPoint, MonitorProjection,
-    TraceContract, TraceEvent,
-};
+pub use classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo, InstanceResolution};
 
 /// The surface-level elaboration environment.
 pub struct ElabEnv {
@@ -185,7 +187,8 @@ impl ElabEnv {
         // primitive signatures are installed only after those sums exist.
         bytes::register_safe_bytes_ops(&mut elab.env, &mut elab.globals, &mut elab.bytes_env)?;
         // Lc typeclass env: pre-declare RecordNil + record_nil_val (`33 §5`).
-        elab.class_env = elab::init_class_env(&mut elab.env, &mut elab.globals)?;
+        elab.class_env =
+            elab::init_class_env(&mut elab.env, &mut elab.globals)?;
         elab.module_state.install_prelude_floor();
         Ok(elab)
     }
@@ -199,7 +202,11 @@ impl ElabEnv {
     ///
     /// Used by tests to pre-declare types, predicates, and propositions needed
     /// for conformance test setup.
-    pub fn declare_postulate_raw(&mut self, name: &str, ty: Term) -> Result<GlobalId, ElabError> {
+    pub fn declare_postulate_raw(
+        &mut self,
+        name: &str,
+        ty: Term,
+    ) -> Result<GlobalId, ElabError> {
         let id = declare_postulate(&mut self.env, name.to_string(), vec![], ty)
             .map_err(|e| ElabError::Internal(format!("declare_postulate failed: {}", e)))?;
         self.globals.insert(name.to_string(), id);
@@ -218,9 +225,11 @@ impl ElabEnv {
             });
         }
         let results = modules::expand_and_elaborate(self, &decls)?;
-        results.into_iter().last().map(|r| r.def_id).ok_or_else(|| {
-            ElabError::Internal("declaration produced no definition (bare import?)".into())
-        })
+        results
+            .into_iter()
+            .last()
+            .map(|r| r.def_id)
+            .ok_or_else(|| ElabError::Internal("declaration produced no definition (bare import?)".into()))
     }
 
     /// Elaborate a V1/L1 declaration, returning obligations alongside the id.
@@ -233,9 +242,10 @@ impl ElabEnv {
             });
         }
         let results = modules::expand_and_elaborate(self, &decls)?;
-        results.into_iter().last().ok_or_else(|| {
-            ElabError::Internal("declaration produced no definition (bare import?)".into())
-        })
+        results
+            .into_iter()
+            .last()
+            .ok_or_else(|| ElabError::Internal("declaration produced no definition (bare import?)".into()))
     }
 
     /// Elaborate zero or more declarations from source, in order.
@@ -313,11 +323,12 @@ impl ElabEnv {
             }
         }
         for range in &extracted.example_ranges {
-            self.elaborate_file(&src[range.clone()])
-                .map_err(|_| ElabError::ParseError {
+            self.elaborate_file(&src[range.clone()]).map_err(|_| {
+                ElabError::ParseError {
                     msg: "a 'ken example' block failed to elaborate".to_string(),
                     span: Span::new(range.start, range.end),
-                })?;
+                }
+            })?;
         }
 
         Ok(ids)

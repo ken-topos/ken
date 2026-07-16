@@ -85,7 +85,8 @@ fn ac2_local_param_shadows_global() {
         .expect("declare pp");
 
     // View with a PARAMETER also named "pp". Body `pp` must resolve to the param.
-    let shadow_id = elab_ok(&mut env, "fn shadow_view (pp : Int) : Int = pp");
+    let shadow_id =
+        elab_ok(&mut env, "fn shadow_view (pp : Int) : Int = pp");
 
     // Extract the transparent body: should be Lam(Int, Var(0)).
     let (_, body) = env
@@ -97,7 +98,11 @@ fn ac2_local_param_shadows_global() {
     // · If body = Lam(Int, Var(0))        → result is Int_const  (local shadow ✓)
     // · If body = Lam(Int, Const(pp_id))  → result is pp_const   (global leak ✗)
     let int_const = Term::const_(int_id, vec![]);
-    let applied = whnf(&env.env, &Context::new(), &Term::app(body, int_const));
+    let applied = whnf(
+        &env.env,
+        &Context::new(),
+        &Term::app(body, int_const),
+    );
     assert!(
         matches!(&applied, Term::Const { id, .. } if *id == int_id),
         "body should return its argument (local Var(0)), not the global pp; \

@@ -69,7 +69,7 @@ fn surf1_d3_membership_glyph_is_not_let_delimiter() {
         "surf1_d3_membership_glyph_is_not_let_delimiter",
         "let x = 1 in x",
     )
-    .expect("ASCII keyword in remains the let delimiter");
+        .expect("ASCII keyword in remains the let delimiter");
     assert!(
         env.elaborate_expr(
             "surf1_d3_membership_glyph_is_not_let_delimiter",

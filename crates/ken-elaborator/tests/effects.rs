@@ -13,12 +13,14 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use ken_elaborator::effects::{
-    bind, build_decl_from_telescope, check_capabilities_no_handler, check_cross_space,
-    check_decl_poly, check_escape, check_higher_order_guard, check_row_poly_escape,
-    check_tail_resumptive, classify_telescope, handler_fold, infer_all, infer_all_poly,
-    infer_row_poly, perform, row_var_map, surface_row_to_row_type, CapParam, CrossSpaceAccess,
-    EffectDecl, EffectError, EffectName, EffectRow, HandlerCase, ITree, ParamTy, ResumeKind,
-    RowSubst, RowType, RowVar, RowVarAllocator, WitnessMap,
+    bind, build_decl_from_telescope, check_capabilities_no_handler,
+    check_cross_space, check_decl_poly, check_escape, check_higher_order_guard,
+    check_row_poly_escape, check_tail_resumptive, classify_telescope,
+    handler_fold, perform, infer_all, infer_all_poly, infer_row_poly,
+    row_var_map, surface_row_to_row_type,
+    CapParam, CrossSpaceAccess, EffectDecl, EffectError, EffectName, EffectRow,
+    HandlerCase, ITree, ParamTy, ResumeKind, RowSubst, RowType, RowVar,
+    RowVarAllocator, WitnessMap,
 };
 use ken_elaborator::parser::parse_decls;
 use ken_elaborator::resolve::{resolve_decl, RDeclKind};
@@ -36,8 +38,11 @@ use ken_elaborator::resolve::{resolve_decl, RDeclKind};
 #[test]
 fn eff_row_inferred_transitively() {
     // Seed: leaf primitive `read_config` has declared row [FS].
-    let seed: HashMap<String, EffectRow> =
-        [("read_config".to_string(), EffectRow::singleton("FS"))].into();
+    let seed: HashMap<String, EffectRow> = [(
+        "read_config".to_string(),
+        EffectRow::singleton("FS"),
+    )]
+    .into();
 
     // `setup` calls only `read_config`; no declared row, no direct performs.
     let setup = EffectDecl::new("setup").with_callee("read_config");
@@ -69,9 +74,11 @@ fn eff_row_union_two_effects() {
         .with_callee("now");
     let rows = infer_all(&seed, &[boot]);
 
-    let expected = EffectRow::from_effects(["FS".to_string(), "Clock".to_string()]);
+    let expected =
+        EffectRow::from_effects(["FS".to_string(), "Clock".to_string()]);
     assert_eq!(
-        rows["boot"], expected,
+        rows["boot"],
+        expected,
         "inferred row must be [Clock, FS] (join); [FS] or [Clock] alone is a bug"
     );
 }
@@ -115,7 +122,8 @@ fn eff_undeclared_escapes_rejected() {
         .expect_err("Clock escapes declared [Console] — must reject");
     match err {
         EffectError::EffectEscapes { witnesses: ws, .. } => {
-            let escaping_effects: Vec<&EffectName> = ws.iter().map(|(e, _)| e).collect();
+            let escaping_effects: Vec<&EffectName> =
+                ws.iter().map(|(e, _)| e).collect();
             assert!(
                 escaping_effects.iter().any(|e| *e == "Clock"),
                 "error must name Clock as escaping"
@@ -125,7 +133,11 @@ fn eff_undeclared_escapes_rejected() {
                 .iter()
                 .find(|(e, _)| e == "Clock")
                 .map(|(_, site)| site.as_str());
-            assert_eq!(clock_witness, Some("now"), "Clock witness must be 'now'");
+            assert_eq!(
+                clock_witness,
+                Some("now"),
+                "Clock witness must be 'now'"
+            );
         }
         other => panic!("expected EffectEscapes, got {:?}", other),
     }
@@ -271,15 +283,20 @@ fn cap_op_with_token_accepted() {
 /// gated. A bug checking only the first cap misses (c); only the last misses (b).
 #[test]
 fn cap_two_distinct_caps_each_gated() {
-    let performed = EffectRow::from_effects(["FS".to_string(), "Net".to_string()]);
+    let performed =
+        EffectRow::from_effects(["FS".to_string(), "Net".to_string()]);
 
     // (a) both caps in scope → accept
     {
         let exfil = EffectDecl::new("exfil")
-            .with_cap_params(vec![CapParam::new("fs", "FS"), CapParam::new("net", "Net")])
+            .with_cap_params(vec![
+                CapParam::new("fs", "FS"),
+                CapParam::new("net", "Net"),
+            ])
             .with_direct_effect("FS")
             .with_direct_effect("Net");
-        check_capabilities_no_handler(&exfil, &performed).expect("(a) both caps — must accept");
+        check_capabilities_no_handler(&exfil, &performed)
+            .expect("(a) both caps — must accept");
     }
 
     // (b) only `fs` in scope → rejects MissingCapability(Net)
@@ -346,7 +363,7 @@ fn space_becomes_threads_state_type_level() {
     // A compound body `{ inc() ; inc() ; get() }` calls all three.
     let body = EffectDecl::new("body")
         .with_callee("inc")
-        .with_callee("inc") // same callee twice — join is idempotent
+        .with_callee("inc")  // same callee twice — join is idempotent
         .with_callee("get");
     let rows = infer_all(&seed, &[body]);
 
@@ -377,8 +394,11 @@ fn space_becomes_threads_state_type_level() {
 /// kernel (not this pass); we assert only the row and effect presence here.
 #[test]
 fn space_old_scoped_to_ensures_type_level() {
-    let seed: HashMap<String, EffectRow> =
-        [("inc".to_string(), EffectRow::singleton("Counter"))].into();
+    let seed: HashMap<String, EffectRow> = [(
+        "inc".to_string(),
+        EffectRow::singleton("Counter"),
+    )]
+    .into();
 
     let inc = EffectDecl::new("inc")
         .with_declared_row(EffectRow::singleton("Counter"))
@@ -409,8 +429,8 @@ fn space_shared_nothing_no_cross_space_alias() {
         from_space: "A".to_string(),
         to_space: "B".to_string(),
     }];
-    let err =
-        check_cross_space(&accesses).expect_err("(a) direct cross-space alias must be rejected");
+    let err = check_cross_space(&accesses)
+        .expect_err("(a) direct cross-space alias must be rejected");
     match err {
         EffectError::CrossSpaceAlias { target_space, .. } => {
             assert_eq!(target_space, "B", "(a) target space must be B");
@@ -420,14 +440,8 @@ fn space_shared_nothing_no_cross_space_alias() {
 
     // (b) message-passing (no direct cell access — A accesses only its own cells)
     let no_alias: Vec<CrossSpaceAccess> = vec![
-        CrossSpaceAccess {
-            from_space: "A".to_string(),
-            to_space: "A".to_string(),
-        },
-        CrossSpaceAccess {
-            from_space: "B".to_string(),
-            to_space: "B".to_string(),
-        },
+        CrossSpaceAccess { from_space: "A".to_string(), to_space: "A".to_string() },
+        CrossSpaceAccess { from_space: "B".to_string(), to_space: "B".to_string() },
     ];
     check_cross_space(&no_alias)
         .expect("(b) message-passing (own-space accesses only) must accept");
@@ -504,8 +518,11 @@ fn pure_view_usable_in_pure_context() {
 #[test]
 fn impure_boundary_marker_exposed() {
     // `read_clock` is a foreign with row [Clock]
-    let seed: HashMap<String, EffectRow> =
-        [("read_clock".to_string(), EffectRow::singleton("Clock"))].into();
+    let seed: HashMap<String, EffectRow> = [(
+        "read_clock".to_string(),
+        EffectRow::singleton("Clock"),
+    )]
+    .into();
 
     // A caller inherits Clock transitively
     let caller = EffectDecl::new("caller").with_callee("read_clock");
@@ -530,8 +547,11 @@ fn impure_boundary_marker_exposed() {
 /// [Clock] and accepts). Integrity of the pure/impure boundary (§7.2, §1.4).
 #[test]
 fn impure_masquerading_as_pure_rejected() {
-    let seed: HashMap<String, EffectRow> =
-        [("read_clock".to_string(), EffectRow::singleton("Clock"))].into();
+    let seed: HashMap<String, EffectRow> = [(
+        "read_clock".to_string(),
+        EffectRow::singleton("Clock"),
+    )]
+    .into();
 
     let mut witnesses = WitnessMap::new();
     witnesses.insert("Clock".to_string(), "read_clock".to_string());
@@ -579,7 +599,8 @@ fn impure_masquerading_as_pure_rejected() {
 fn higher_order_param_undeclared_rejected() {
     // (a) `apply_twice` with unknown param that may release `FS` —
     //     no declared row → guard fires.
-    let apply_twice = EffectDecl::new("apply_twice").with_unknown_param_effect("FS"); // f : A →[FS] A
+    let apply_twice = EffectDecl::new("apply_twice")
+        .with_unknown_param_effect("FS"); // f : A →[FS] A
 
     let err = check_higher_order_guard(&apply_twice)
         .expect_err("(a) higher-order FS param undeclared — guard must reject");
@@ -637,7 +658,8 @@ fn higher_order_two_params_each_guarded() {
             ]))
             .with_unknown_param_effect("FS")
             .with_unknown_param_effect("Net");
-        check_higher_order_guard(&f).expect("(a) both declared — must accept");
+        check_higher_order_guard(&f)
+            .expect("(a) both declared — must accept");
     }
 
     // (b) only FS declared → rejects Net
@@ -646,14 +668,13 @@ fn higher_order_two_params_each_guarded() {
             .with_declared_row(EffectRow::singleton("FS"))
             .with_unknown_param_effect("FS")
             .with_unknown_param_effect("Net");
-        let err =
-            check_higher_order_guard(&f).expect_err("(b) missing Net declaration — must reject");
+        let err = check_higher_order_guard(&f)
+            .expect_err("(b) missing Net declaration — must reject");
         match err {
             EffectError::EffectEscapes { witnesses, .. } => {
                 assert!(
                     witnesses.iter().any(|(e, _)| e == "Net"),
-                    "(b) must name Net; got {:?}",
-                    witnesses
+                    "(b) must name Net; got {:?}", witnesses
                 );
                 assert!(
                     !witnesses.iter().any(|(e, _)| e == "FS"),
@@ -670,14 +691,13 @@ fn higher_order_two_params_each_guarded() {
             .with_declared_row(EffectRow::singleton("Net"))
             .with_unknown_param_effect("FS")
             .with_unknown_param_effect("Net");
-        let err =
-            check_higher_order_guard(&f).expect_err("(c) missing FS declaration — must reject");
+        let err = check_higher_order_guard(&f)
+            .expect_err("(c) missing FS declaration — must reject");
         match err {
             EffectError::EffectEscapes { witnesses, .. } => {
                 assert!(
                     witnesses.iter().any(|(e, _)| e == "FS"),
-                    "(c) must name FS; got {:?}",
-                    witnesses
+                    "(c) must name FS; got {:?}", witnesses
                 );
             }
             other => panic!("(c) expected EffectEscapes, got {:?}", other),
@@ -692,8 +712,11 @@ fn higher_order_two_params_each_guarded() {
 /// row; the guard then checks the param candidate against the declared row.
 #[test]
 fn higher_order_guard_coexists_with_first_order_callee() {
-    let seed: HashMap<String, EffectRow> =
-        [("log".to_string(), EffectRow::singleton("Console"))].into();
+    let seed: HashMap<String, EffectRow> = [(
+        "log".to_string(),
+        EffectRow::singleton("Console"),
+    )]
+    .into();
 
     // `audit (f : A →[FS] A)` calls `log` (Console) and has an FS param.
     // declares `visits [Console, FS]` — both covered.
@@ -760,10 +783,7 @@ fn itree_perform_creates_vis_node() {
 
     // Verdict flip: Ret is not a Vis (a buggy impl that returned Ret would fail this)
     let ret_t = ITree::ret(0);
-    assert!(
-        !ret_t.is_vis(),
-        "Ret is not a Vis — verdict flips vs perform"
-    );
+    assert!(!ret_t.is_vis(), "Ret is not a Vis — verdict flips vs perform");
 }
 
 /// `surface/effects/itree-bind-ret-left-unit` (oracle)
@@ -774,19 +794,12 @@ fn itree_perform_creates_vis_node() {
 fn itree_bind_ret_left_unit() {
     let t = ITree::ret(5);
     let result = bind(t, Rc::new(|v| ITree::ret(v * 2)));
-    assert_eq!(
-        result.ret_value(),
-        Some(10),
-        "bind(Ret 5)(λv.Ret(v*2)) = Ret 10"
-    );
+    assert_eq!(result.ret_value(), Some(10), "bind(Ret 5)(λv.Ret(v*2)) = Ret 10");
 
     // Verdict flip: bind of a Vis node gives Vis, not Ret v*2
     let vis_t = perform("FS");
     let vis_result = bind(vis_t, Rc::new(|v| ITree::ret(v * 2)));
-    assert!(
-        vis_result.is_vis(),
-        "bind(Vis e k)(f) must give Vis, not Ret — flip"
-    );
+    assert!(vis_result.is_vis(), "bind(Vis e k)(f) must give Vis, not Ret — flip");
 }
 
 /// `surface/effects/itree-bind-vis-distributes` (oracle)
@@ -808,18 +821,12 @@ fn itree_bind_vis_distributes() {
 
     // (b) applying the continuation: cont(7) = bind((Ret 7))(λv.Ret v+1) = Ret 8
     let inner = result.apply_cont(7).unwrap();
-    assert_eq!(
-        inner.ret_value(),
-        Some(8),
-        "cont(7) must be bind(Ret 7)(λv.Ret(v+1)) = Ret 8"
-    );
+    assert_eq!(inner.ret_value(), Some(8),
+        "cont(7) must be bind(Ret 7)(λv.Ret(v+1)) = Ret 8");
 
     // Verdict flip: bind(Ret 5)(f) is NOT a Vis
     let bind_ret = bind(ITree::ret(5), Rc::clone(&f));
-    assert!(
-        !bind_ret.is_vis(),
-        "bind(Ret …)(f) is Ret — flips vs bind(Vis …)(f)"
-    );
+    assert!(!bind_ret.is_vis(), "bind(Ret …)(f) is Ret — flips vs bind(Vis …)(f)");
 }
 
 /// `surface/effects/handler-fold-discharges-effect` (oracle)
@@ -849,15 +856,9 @@ fn handler_fold_passes_through_unhandled() {
     let cases: Rc<[HandlerCase]> = vec![HandlerCase::new("FS", 0)].into();
     let result = handler_fold(t, cases);
 
-    assert!(
-        result.is_vis(),
-        "Net is unhandled — Vis node must pass through"
-    );
-    assert_eq!(
-        result.effect_name(),
-        Some(&"Net".to_string()),
-        "unhandled Vis must preserve the original effect name"
-    );
+    assert!(result.is_vis(), "Net is unhandled — Vis node must pass through");
+    assert_eq!(result.effect_name(), Some(&"Net".to_string()),
+        "unhandled Vis must preserve the original effect name");
 }
 
 /// `surface/effects/handler-fold-tail-resumptive` (oracle)
@@ -876,7 +877,8 @@ fn handler_fold_tail_resumptive_chains() {
     let result = handler_fold(t, cases);
 
     // Both FS nodes consumed, continuation responds with 7
-    assert!(result.is_ret(), "both FS nodes folded → final Ret");
+    assert!(result.is_ret(),
+        "both FS nodes folded → final Ret");
     assert_eq!(result.ret_value(), Some(7));
 }
 
@@ -902,11 +904,8 @@ fn row_poly_apply_twice_infers_row_var() {
         &decl.callees,
         &decl.param_rows,
     );
-    assert_eq!(
-        inferred,
-        RowType::Var(RowVar(0)),
-        "apply_twice must infer the row variable of its param, not ∅"
-    );
+    assert_eq!(inferred, RowType::Var(RowVar(0)),
+        "apply_twice must infer the row variable of its param, not ∅");
 
     check_row_poly_escape(
         &decl.name,
@@ -924,7 +923,8 @@ fn row_poly_apply_twice_infers_row_var() {
 /// Verdict FLIPS against `row_poly_apply_twice_infers_row_var` above.
 #[test]
 fn row_poly_undeclared_row_var_rejected() {
-    let decl = EffectDecl::new("apply_twice_bad").with_param_row(RowVar(0));
+    let decl = EffectDecl::new("apply_twice_bad")
+        .with_param_row(RowVar(0));
     // No declared_row_type → defaults to Concrete(∅)
 
     let inferred = infer_row_poly(
@@ -943,11 +943,8 @@ fn row_poly_undeclared_row_var_rejected() {
     )
     .expect_err("ρ₀ not covered by declared ∅ — must reject");
 
-    assert!(
-        matches!(err, EffectError::EffectEscapes { .. }),
-        "expected EffectEscapes, got {:?}",
-        err
-    );
+    assert!(matches!(err, EffectError::EffectEscapes { .. }),
+        "expected EffectEscapes, got {:?}", err);
 }
 
 /// `surface/effects/row-poly-concrete-caller-substitution` (oracle)
@@ -964,10 +961,8 @@ fn row_poly_concrete_caller_substitution() {
     let declared = RowType::Var(RowVar(0)).apply_subst(&subst);
 
     assert_eq!(inferred, RowType::concrete(EffectRow::singleton("FS")));
-    assert!(
-        inferred.is_subset_of(&declared),
-        "after substitution FS ⊆ FS — caller with concrete arg passes"
-    );
+    assert!(inferred.is_subset_of(&declared),
+        "after substitution FS ⊆ FS — caller with concrete arg passes");
 }
 
 /// `surface/effects/row-poly-pure-caller-substitution` (oracle)
@@ -980,15 +975,10 @@ fn row_poly_pure_caller_is_pure() {
     let subst: RowSubst = [(RowVar(0), RowType::empty())].into();
 
     let inferred = RowType::Var(RowVar(0)).apply_subst(&subst);
-    assert_eq!(
-        inferred,
-        RowType::empty(),
-        "apply_twice(id) with pure id → row ∅"
-    );
-    assert!(
-        inferred.is_subset_of(&RowType::empty()),
-        "pure inferred row ⊆ ∅ declared — accepts"
-    );
+    assert_eq!(inferred, RowType::empty(),
+        "apply_twice(id) with pure id → row ∅");
+    assert!(inferred.is_subset_of(&RowType::empty()),
+        "pure inferred row ⊆ ∅ declared — accepts");
 }
 
 /// `surface/effects/row-poly-two-params-each-tracked` (oracle)
@@ -1001,8 +991,8 @@ fn row_poly_pure_caller_is_pure() {
 fn row_poly_two_params_each_tracked() {
     let inferred = infer_row_poly(
         &HashMap::new(),
-        &[], // no direct effects
-        &[], // no named callees
+        &[],   // no direct effects
+        &[],   // no named callees
         &[RowVar(0), RowVar(1)],
     );
     // inferred = Join(Var(0), Var(1))
@@ -1012,24 +1002,22 @@ fn row_poly_two_params_each_tracked() {
     // (a) declared = Join(Var(0), Var(1)) → accepts
     {
         let declared = RowType::Var(RowVar(0)).join(RowType::Var(RowVar(1)));
-        assert!(
-            inferred.is_subset_of(&declared),
-            "(a) both row vars declared — must accept"
-        );
+        assert!(inferred.is_subset_of(&declared),
+            "(a) both row vars declared — must accept");
     }
 
     // (b) declared = Var(0) only → rejects ρ₁
     {
         let declared = RowType::Var(RowVar(0));
-        assert!(
-            !inferred.is_subset_of(&declared),
-            "(b) only ρ₀ declared — ρ₁ escapes, must reject"
+        assert!(!inferred.is_subset_of(&declared),
+            "(b) only ρ₀ declared — ρ₁ escapes, must reject");
+        let result = check_row_poly_escape(
+            "compose_bad",
+            &inferred,
+            Some(&declared),
+            None,
         );
-        let result = check_row_poly_escape("compose_bad", &inferred, Some(&declared), None);
-        assert!(
-            result.is_err(),
-            "(b) ρ₁ not covered — check_row_poly_escape must reject"
-        );
+        assert!(result.is_err(), "(b) ρ₁ not covered — check_row_poly_escape must reject");
     }
 }
 
@@ -1041,20 +1029,25 @@ fn row_poly_two_params_each_tracked() {
 /// Declared `[Console, ρ₀]` (concrete + same var) → accepts.
 #[test]
 fn row_poly_mixed_concrete_and_var() {
-    let env: HashMap<String, EffectRow> =
-        [("log".to_string(), EffectRow::singleton("Console"))].into();
+    let env: HashMap<String, EffectRow> = [
+        ("log".to_string(), EffectRow::singleton("Console")),
+    ].into();
 
-    let inferred = infer_row_poly(&env, &[], &["log".to_string()], &[RowVar(0)]);
+    let inferred = infer_row_poly(
+        &env,
+        &[],
+        &["log".to_string()],
+        &[RowVar(0)],
+    );
     // Concrete Console + Var(0)
     assert!(inferred.concrete_effects().contains("Console"));
     assert!(inferred.row_vars().contains(&RowVar(0)));
 
     // Declared = Concrete({Console}) join Var(0) → accepts
-    let declared = RowType::concrete(EffectRow::singleton("Console")).join(RowType::Var(RowVar(0)));
-    assert!(
-        inferred.is_subset_of(&declared),
-        "mixed concrete+var declared correctly — must accept"
-    );
+    let declared = RowType::concrete(EffectRow::singleton("Console"))
+        .join(RowType::Var(RowVar(0)));
+    assert!(inferred.is_subset_of(&declared),
+        "mixed concrete+var declared correctly — must accept");
 }
 
 /// SURF-1 D1 / PK8: a written bare row variable in `visits [e]` survives
@@ -1070,9 +1063,7 @@ fn surf1_surface_visits_bare_row_var_reaches_row_type() {
     let rdecl = resolve_decl(&decls[0]).expect("proc with visits [e] must resolve");
 
     let visits = match &rdecl.kind {
-        RDeclKind::View {
-            visits: Some(row), ..
-        } => row,
+        RDeclKind::View { visits: Some(row), .. } => row,
         other => panic!("expected resolved const visits row, got {:?}", other),
     };
 
@@ -1081,11 +1072,12 @@ fn surf1_surface_visits_bare_row_var_reaches_row_type() {
     let classified = classify_telescope(&telescope, &mut alloc);
     let vars = row_var_map(&classified);
 
-    let declared =
-        surface_row_to_row_type(visits, &vars).expect("[e] must resolve to the HOF row variable");
+    let declared = surface_row_to_row_type(visits, &vars)
+        .expect("[e] must resolve to the HOF row variable");
     assert_eq!(declared, RowType::Var(RowVar(0)));
 
-    let decl = build_decl_from_telescope("traverse", &classified).with_declared_row_type(declared);
+    let decl = build_decl_from_telescope("traverse", &classified)
+        .with_declared_row_type(declared);
     let inferred = infer_all_poly(&HashMap::new(), &[decl.clone()]);
     check_decl_poly(&decl, &inferred["traverse"], &EffectRow::empty())
         .expect("ρ_e ⊆ ρ_e: written [e] must cover the inferred row variable");
@@ -1103,9 +1095,7 @@ fn surf1_surface_visits_open_row_reaches_join_and_stays_conservative() {
     let rdecl = resolve_decl(&decls[0]).expect("open row const must resolve");
 
     let visits = match &rdecl.kind {
-        RDeclKind::View {
-            visits: Some(row), ..
-        } => row,
+        RDeclKind::View { visits: Some(row), .. } => row,
         other => panic!("expected resolved open visits row, got {:?}", other),
     };
 
@@ -1220,23 +1210,20 @@ fn surf1_recursive_row_poly_fixpoint_is_idempotent() {
 //
 // Kernel environment setup mirrors `k1p5_wstyle.rs` AC5 helpers.
 
-use ken_elaborator::effects::{lower_bind, lower_elim_itree, lower_handler_fold_uniform};
-use ken_kernel::env::Context;
-use ken_kernel::term::{Level, Term};
-use ken_kernel::{
-    declare_inductive, infer as kernel_infer, normalize, whnf, CtorSpec, GlobalEnv, InductiveSpec,
+use ken_elaborator::effects::{
+    lower_bind, lower_elim_itree, lower_handler_fold_uniform,
 };
+use ken_kernel::{
+    declare_inductive, infer as kernel_infer, normalize, whnf,
+    CtorSpec, GlobalEnv, InductiveSpec,
+};
+use ken_kernel::term::{Level, Term};
+use ken_kernel::env::Context;
 
-fn lv0() -> Level {
-    Level::zero()
-}
+fn lv0() -> Level { Level::zero() }
 
-fn setup_nat(
-    env: &mut GlobalEnv,
-) -> (
-    ken_kernel::GlobalId,
-    ken_kernel::GlobalId,
-    ken_kernel::GlobalId,
+fn setup_nat(env: &mut GlobalEnv) -> (
+    ken_kernel::GlobalId, ken_kernel::GlobalId, ken_kernel::GlobalId,
 ) {
     let nat = declare_inductive(env, |nat| InductiveSpec {
         level_params: vec![],
@@ -1244,20 +1231,16 @@ fn setup_nat(
         indices: vec![],
         level: lv0(),
         constructors: vec![
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            },
+            CtorSpec { args: vec![], target_indices: vec![] },
             CtorSpec {
                 args: vec![Term::indformer(nat, vec![])],
                 target_indices: vec![],
             },
         ],
-    })
-    .unwrap();
+    }).unwrap();
     let decl = env.inductive(nat).unwrap();
     let zero = decl.constructors[0].id;
-    let suc = decl.constructors[1].id;
+    let suc  = decl.constructors[1].id;
     (nat, zero, suc)
 }
 
@@ -1265,9 +1248,7 @@ fn setup_itree(
     env: &mut GlobalEnv,
     nat_id: ken_kernel::GlobalId,
 ) -> (
-    ken_kernel::GlobalId,
-    ken_kernel::GlobalId,
-    ken_kernel::GlobalId,
+    ken_kernel::GlobalId, ken_kernel::GlobalId, ken_kernel::GlobalId,
 ) {
     let itree = declare_inductive(env, |itree| InductiveSpec {
         level_params: vec![],
@@ -1275,10 +1256,7 @@ fn setup_itree(
         indices: vec![],
         level: lv0(),
         constructors: vec![
-            CtorSpec {
-                args: vec![Term::var(0)],
-                target_indices: vec![],
-            },
+            CtorSpec { args: vec![Term::var(0)], target_indices: vec![] },
             CtorSpec {
                 args: vec![Term::pi(
                     Term::indformer(nat_id, vec![]),
@@ -1287,8 +1265,7 @@ fn setup_itree(
                 target_indices: vec![],
             },
         ],
-    })
-    .unwrap();
+    }).unwrap();
     let decl = env.inductive(itree).unwrap();
     let ret_id = decl.constructors[0].id;
     let vis_id = decl.constructors[1].id;
@@ -1296,12 +1273,20 @@ fn setup_itree(
 }
 
 /// Helper: `Ret_R r` = `App(App(Constructor(ret), R), r)`.
-fn ret_term(ret_id: ken_kernel::GlobalId, r_type: Term, r_val: Term) -> Term {
+fn ret_term(
+    ret_id: ken_kernel::GlobalId,
+    r_type: Term,
+    r_val: Term,
+) -> Term {
     Term::app(Term::app(Term::constructor(ret_id, vec![]), r_type), r_val)
 }
 
 /// Helper: `Vis_R k` = `App(App(Constructor(vis), R), k)`.
-fn vis_term(vis_id: ken_kernel::GlobalId, r_type: Term, k_val: Term) -> Term {
+fn vis_term(
+    vis_id: ken_kernel::GlobalId,
+    r_type: Term,
+    k_val: Term,
+) -> Term {
     Term::app(Term::app(Term::constructor(vis_id, vec![]), r_type), k_val)
 }
 
@@ -1333,16 +1318,10 @@ fn lower_elim_itree_ret_kernel_accepts() {
     let mv = Term::lam(
         Term::pi(
             Term::indformer(nat_id, vec![]),
-            Term::app(
-                Term::indformer(itree_id, vec![]),
-                Term::indformer(nat_id, vec![]),
-            ),
+            Term::app(Term::indformer(itree_id, vec![]), Term::indformer(nat_id, vec![])),
         ),
         Term::lam(
-            Term::pi(
-                Term::indformer(nat_id, vec![]),
-                Term::indformer(nat_id, vec![]),
-            ),
+            Term::pi(Term::indformer(nat_id, vec![]), Term::indformer(nat_id, vec![])),
             Term::constructor(zero_id, vec![]),
         ),
     );
@@ -1354,14 +1333,9 @@ fn lower_elim_itree_ret_kernel_accepts() {
 
     // Computation: ⇝ mr zero = suc zero (ι fires; kernel processed the term).
     let result = normalize(&env, &ctx, &elim);
-    let expected = whnf(
-        &env,
-        &ctx,
-        &Term::app(
-            Term::constructor(suc_id, vec![]),
-            Term::constructor(zero_id, vec![]),
-        ),
-    );
+    let expected = whnf(&env, &ctx, &Term::app(
+        Term::constructor(suc_id, vec![]), Term::constructor(zero_id, vec![]),
+    ));
     assert_eq!(result, expected, "elim_ITree M mr mv (Ret zero) ⇝ suc zero");
 }
 
@@ -1381,10 +1355,7 @@ fn lower_elim_itree_wrong_method_count_rejected() {
         Term::app(Term::indformer(itree_id, vec![]), r.clone()),
         Term::indformer(nat_id, vec![]),
     );
-    let mr = Term::lam(
-        Term::indformer(nat_id, vec![]),
-        Term::constructor(zero_id, vec![]),
-    );
+    let mr = Term::lam(Term::indformer(nat_id, vec![]), Term::constructor(zero_id, vec![]));
     let scrut = ret_term(ret_id, r.clone(), Term::constructor(zero_id, vec![]));
 
     // Mis-lowering: only one method (Vis method missing)
@@ -1398,10 +1369,7 @@ fn lower_elim_itree_wrong_method_count_rejected() {
         scrut: Box::new(scrut),
     };
     let ty = kernel_infer(&env, &ctx, &bad_elim);
-    assert!(
-        ty.is_err(),
-        "mis-lowering (1 method for 2-ctor ITree) must be rejected"
-    );
+    assert!(ty.is_err(), "mis-lowering (1 method for 2-ctor ITree) must be rejected");
 }
 
 /// EFF-LOW3: `lower_bind` with `R = S = Nat` — emits a `Term::Elim` that
@@ -1437,22 +1405,11 @@ fn lower_bind_ret_kernel_checks_and_reduces() {
 
     // Computation: bind (Ret zero) f ⇝ f zero = Ret Nat (suc zero).
     let result = normalize(&env, &ctx, &bind_term);
-    let expected = whnf(
-        &env,
-        &ctx,
-        &ret_term(
-            ret_id,
-            nat.clone(),
-            Term::app(
-                Term::constructor(suc_id, vec![]),
-                Term::constructor(zero_id, vec![]),
-            ),
-        ),
-    );
-    assert_eq!(
-        result, expected,
-        "bind(Ret zero)(λr.Ret(suc r)) ⇝ Ret(suc zero)"
-    );
+    let expected = whnf(&env, &ctx, &ret_term(
+        ret_id, nat.clone(),
+        Term::app(Term::constructor(suc_id, vec![]), Term::constructor(zero_id, vec![])),
+    ));
+    assert_eq!(result, expected, "bind(Ret zero)(λr.Ret(suc r)) ⇝ Ret(suc zero)");
 }
 
 /// EFF-LOW4 (discriminating): `lower_bind` with swapped methods (mr↔mv) →
@@ -1476,78 +1433,42 @@ fn lower_bind_swapped_methods_rejected() {
     let f = Term::lam(
         nat.clone(),
         ret_term(
-            ret_id,
-            nat.clone(),
+            ret_id, nat.clone(),
             Term::app(Term::constructor(suc_id, vec![]), Term::var(0)),
         ),
     );
     let t = ret_term(ret_id, nat.clone(), Term::constructor(zero_id, vec![]));
-    let correct = lower_bind(
-        itree_id,
-        nat_id,
-        vis_id,
-        nat.clone(),
-        nat.clone(),
-        t.clone(),
-        f.clone(),
-    );
+    let correct = lower_bind(itree_id, nat_id, vis_id, nat.clone(), nat.clone(), t.clone(), f.clone());
 
     // Compute the correct result
     let result_correct = normalize(&env, &ctx, &correct);
-    let expected = whnf(
-        &env,
-        &ctx,
-        &ret_term(
-            ret_id,
-            nat.clone(),
-            Term::app(
-                Term::constructor(suc_id, vec![]),
-                Term::constructor(zero_id, vec![]),
-            ),
-        ),
-    );
-    assert_eq!(
-        result_correct, expected,
-        "EFF-LOW3 sanity: correct gives Ret(suc zero)"
-    );
+    let expected = whnf(&env, &ctx, &ret_term(
+        ret_id, nat.clone(),
+        Term::app(Term::constructor(suc_id, vec![]), Term::constructor(zero_id, vec![])),
+    ));
+    assert_eq!(result_correct, expected, "EFF-LOW3 sanity: correct gives Ret(suc zero)");
 
     // Swap methods and compute — must give a different value
-    if let Term::Elim {
-        fam,
-        level_args,
-        params,
-        motive,
-        methods,
-        indices,
-        scrut,
-    } = correct
-    {
+    if let Term::Elim { fam, level_args, params, motive, methods, indices, scrut } = correct {
         assert_eq!(methods.len(), 2);
         let swapped = Term::Elim {
-            fam,
-            level_args,
-            params,
+            fam, level_args, params,
             motive,
             methods: vec![methods[1].clone(), methods[0].clone()], // swap mr ↔ mv
             indices,
             scrut,
         };
         let result_swapped = normalize(&env, &ctx, &swapped);
-        assert_ne!(
-            result_correct, result_swapped,
-            "swapped Ret/Vis methods must compute a DIFFERENT value (verdict flip)"
-        );
+        assert_ne!(result_correct, result_swapped,
+            "swapped Ret/Vis methods must compute a DIFFERENT value (verdict flip)");
         // Extra structural assertion: swapped result is not a Ret node.
         // Correct is Ret(suc zero); swapped fires the Vis method on `zero`
         // (a Nat, not a function) → β-residue is a Lam, not a Ret application.
-        assert!(
-            !matches!(&result_swapped,
+        assert!(!matches!(&result_swapped,
             Term::App(fun, _) if matches!(fun.as_ref(),
                 Term::App(head, _) if matches!(head.as_ref(),
                     Term::Constructor { id, .. } if *id == ret_id))),
-            "swapped result must not be a Ret node: {:?}",
-            result_swapped
-        );
+            "swapped result must not be a Ret node: {:?}", result_swapped);
     } else {
         panic!("lower_bind must produce a Term::Elim");
     }
@@ -1567,10 +1488,7 @@ fn lower_bind_vis_kernel_checks_vis_reduct() {
     let nat = Term::indformer(nat_id, vec![]);
 
     // k = λ_:Nat. Ret Nat zero
-    let k = Term::lam(
-        nat.clone(),
-        ret_term(ret_id, nat.clone(), Term::constructor(zero_id, vec![])),
-    );
+    let k = Term::lam(nat.clone(), ret_term(ret_id, nat.clone(), Term::constructor(zero_id, vec![])));
     // t = Vis Nat k
     let t = vis_term(vis_id, nat.clone(), k);
     // f = λ(r:Nat). Ret Nat r  (identity)
@@ -1584,11 +1502,7 @@ fn lower_bind_vis_kernel_checks_vis_reduct() {
         Term::App(fun, _) if matches!(fun.as_ref(), Term::App(head, _)
             if matches!(head.as_ref(), Term::Constructor { id, .. } if *id == vis_id))
     );
-    assert!(
-        is_vis,
-        "bind(Vis k)(id) must reduce to a Vis node (W-ι fires): {:?}",
-        nf
-    );
+    assert!(is_vis, "bind(Vis k)(id) must reduce to a Vis node (W-ι fires): {:?}", nf);
 }
 
 /// EFF-LOW6: `lower_handler_fold_uniform` — computes correctly via W-ι + IH.
@@ -1618,10 +1532,8 @@ fn lower_handler_fold_uniform_kernel_checks_and_reduces() {
     //   W-ι → ih zero → elim_ITree … (k zero) → elim_ITree … (Ret zero) → Ret zero.
     let result = normalize(&env, &ctx, &fold);
     let expected = whnf(&env, &ctx, &ret_term(ret_id, nat.clone(), zero.clone()));
-    assert_eq!(
-        result, expected,
-        "handler_fold_uniform(Vis(λ_.Ret zero), 0) ⇝ Ret zero"
-    );
+    assert_eq!(result, expected,
+        "handler_fold_uniform(Vis(λ_.Ret zero), 0) ⇝ Ret zero");
 }
 
 // ============================================================
@@ -1654,18 +1566,11 @@ fn classify_telescope_identifies_hof_effectful_params() {
     assert_eq!(classified.len(), 3, "one entry per param");
     assert_eq!(classified[0], ("x".to_string(), None), "Base → no RowVar");
     assert!(classified[1].1.is_some(), "HofEffectful → gets RowVar");
-    assert_eq!(
-        classified[2],
-        ("g".to_string(), None),
-        "HofPure → no RowVar"
-    );
+    assert_eq!(classified[2], ("g".to_string(), None), "HofPure → no RowVar");
 
     // Exactly one RowVar across the whole telescope.
     let rv_count = classified.iter().filter(|(_, rv)| rv.is_some()).count();
-    assert_eq!(
-        rv_count, 1,
-        "exactly 1 HOF-effectful param → exactly 1 RowVar"
-    );
+    assert_eq!(rv_count, 1, "exactly 1 HOF-effectful param → exactly 1 RowVar");
 
     // EffectDecl gets exactly 1 param_row (for f).
     let decl = build_decl_from_telescope("test_fn", &classified);
@@ -1680,13 +1585,13 @@ fn classify_telescope_identifies_hof_effectful_params() {
 /// wired, params whose types are not yet resolved must not silently infer ∅.
 #[test]
 fn classify_telescope_unknown_is_conservative() {
-    let telescope = vec![("h", ParamTy::Unknown)];
+    let telescope = vec![
+        ("h", ParamTy::Unknown),
+    ];
     let mut alloc = RowVarAllocator::new();
     let classified = classify_telescope(&telescope, &mut alloc);
-    assert!(
-        classified[0].1.is_some(),
-        "Unknown param must get a RowVar (fail-closed against unresolved types)"
-    );
+    assert!(classified[0].1.is_some(),
+        "Unknown param must get a RowVar (fail-closed against unresolved types)");
 }
 
 /// EFF-EXTRACT3 (fail-closed, discriminating): correct classification catches
@@ -1716,36 +1621,35 @@ fn classify_telescope_hof_effectful_cannot_be_silently_dropped() {
     let rv_f = classified[0].1.expect("HofEffectful must get a RowVar");
 
     let param_rows_correct = vec![rv_f];
-    let inferred_correct = infer_row_poly(&Default::default(), &[], &[], &param_rows_correct);
+    let inferred_correct = infer_row_poly(
+        &Default::default(), &[], &[], &param_rows_correct,
+    );
     // Declared: ∅ (pure). ρ_f's latent effects escape declared-∅ → reject.
     let declared_empty = RowType::Concrete(Default::default());
-    let r_correct = check_row_poly_escape("fn_a", &inferred_correct, Some(&declared_empty), None);
-    assert!(
-        r_correct.is_err(),
-        "correct: ρ_f escapes declared-∅ → rejects"
+    let r_correct = check_row_poly_escape(
+        "fn_a", &inferred_correct, Some(&declared_empty), None,
     );
+    assert!(r_correct.is_err(),
+        "correct: ρ_f escapes declared-∅ → rejects");
 
     // Misclassified: f classified as HofPure (the only remaining escape path).
     let telescope_wrong = vec![("f", ParamTy::HofPure)];
     let mut alloc2 = RowVarAllocator::new();
     let classified_wrong = classify_telescope(&telescope_wrong, &mut alloc2);
-    assert!(
-        classified_wrong[0].1.is_none(),
-        "HofPure → no RowVar assigned"
-    );
+    assert!(classified_wrong[0].1.is_none(), "HofPure → no RowVar assigned");
 
-    let inferred_wrong = infer_row_poly(&Default::default(), &[], &[], &[]);
-    let r_wrong = check_row_poly_escape("fn_a", &inferred_wrong, Some(&declared_empty), None);
-    assert!(
-        r_wrong.is_ok(),
-        "misclassified HofPure: no RowVar → inferred ∅ → accepts spuriously"
+    let inferred_wrong = infer_row_poly(
+        &Default::default(), &[], &[], &[],
     );
+    let r_wrong = check_row_poly_escape(
+        "fn_a", &inferred_wrong, Some(&declared_empty), None,
+    );
+    assert!(r_wrong.is_ok(),
+        "misclassified HofPure: no RowVar → inferred ∅ → accepts spuriously");
 
     // Verdict flip confirmed: correct=Err (escape caught), wrong=Ok (missed).
-    assert!(
-        r_correct.is_err() && r_wrong.is_ok(),
-        "verdict must flip: by-construction catches what misclassification misses"
-    );
+    assert!(r_correct.is_err() && r_wrong.is_ok(),
+        "verdict must flip: by-construction catches what misclassification misses");
 }
 
 // ============================================================

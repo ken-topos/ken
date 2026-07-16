@@ -4466,10 +4466,7 @@ mod tests {
 
             let mut cursor = CanonicalCursor::new(&bytes);
             let decoded = decode_int_lit(&mut cursor).expect("decode_int_lit must not fail");
-            assert_eq!(
-                decoded, n,
-                "round-trip must preserve the exact BigInt value"
-            );
+            assert_eq!(decoded, n, "round-trip must preserve the exact BigInt value");
             assert_eq!(
                 cursor.remaining(),
                 0,

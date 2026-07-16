@@ -136,10 +136,7 @@ fn shape_a_accepts_and_evaluates_correctly() {
                 .or_insert_with(|| ken_interp::eval::EvalVal::from(*n));
         }
     }
-    let result_id = *env
-        .globals
-        .get("result")
-        .expect("result should be a global");
+    let result_id = *env.globals.get("result").expect("result should be a global");
     let body = match env.env.lookup(result_id) {
         Some(ken_kernel::Decl::Transparent { body, .. }) => body.clone(),
         other => panic!("result should be Transparent, got {other:?}"),

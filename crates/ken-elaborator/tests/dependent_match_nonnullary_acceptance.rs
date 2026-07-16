@@ -63,11 +63,7 @@ fn ac1_list_hypothesis_threading_elaborates_and_narrows_structurally() {
         )
         .expect("tailGoal (non-nullary dependent match, AC1) elaborates and kernel-checks");
 
-    let body = env
-        .env
-        .transparent_body(id)
-        .expect("tailGoal is transparent")
-        .1;
+    let body = env.env.transparent_body(id).expect("tailGoal is transparent").1;
     // Peel the function's own `xs` parameter lambda to reach the match.
     let mut inner = &body;
     while let Term::Lam(_, b) = inner {
@@ -77,15 +73,8 @@ fn ac1_list_hypothesis_threading_elaborates_and_narrows_structurally() {
         Term::Elim { fam, methods, .. } => (*fam, methods),
         other => panic!("tailGoal's match must lower to a real Term::Elim, got {other:?}"),
     };
-    assert_eq!(
-        fam, env.globals["List"],
-        "must eliminate over the real List family"
-    );
-    assert_eq!(
-        methods.len(),
-        2,
-        "List has exactly 2 constructors (Nil, Cons)"
-    );
+    assert_eq!(fam, env.globals["List"], "must eliminate over the real List family");
+    assert_eq!(methods.len(), 2, "List has exactly 2 constructors (Nil, Cons)");
 
     // Cons method (index 1): `λ(b:Bool).λ(bs:List Bool).λ(ih:allTrue bs ->
     // Prop).λ(h:<narrowed goal>). body`. Peel the 2 field lambdas + the 1 IH
@@ -112,10 +101,7 @@ fn ac1_list_hypothesis_threading_elaborates_and_narrows_structurally() {
             let expected_concrete = Term::app(
                 Term::app(
                     Term::app(
-                        Term::Constructor {
-                            id: cons_id,
-                            level_args: vec![],
-                        },
+                        Term::Constructor { id: cons_id, level_args: vec![] },
                         Term::indformer(bool_id, vec![]),
                     ),
                     Term::var(2),
@@ -160,11 +146,7 @@ fn ac1_tree_two_recursive_fields_elaborates_and_narrows_structurally() {
         )
         .expect("leftGoal (Tree, non-nullary dependent match, AC1) elaborates and kernel-checks");
 
-    let body = env
-        .env
-        .transparent_body(id)
-        .expect("leftGoal is transparent")
-        .1;
+    let body = env.env.transparent_body(id).expect("leftGoal is transparent").1;
     let mut inner = &body;
     while let Term::Lam(_, b) = inner {
         inner = b;
@@ -173,15 +155,8 @@ fn ac1_tree_two_recursive_fields_elaborates_and_narrows_structurally() {
         Term::Elim { fam, methods, .. } => (*fam, methods),
         other => panic!("leftGoal's match must lower to a real Term::Elim, got {other:?}"),
     };
-    assert_eq!(
-        fam, env.globals["Tree"],
-        "must eliminate over the real Tree family"
-    );
-    assert_eq!(
-        methods.len(),
-        2,
-        "Tree has exactly 2 constructors (Leaf, Node)"
-    );
+    assert_eq!(fam, env.globals["Tree"], "must eliminate over the real Tree family");
+    assert_eq!(methods.len(), 2, "Tree has exactly 2 constructors (Leaf, Node)");
 
     // Node method (index 1): `λ(l:Tree Nat).λ(k:Nat).λ(r:Tree Nat).
     // λ(ih_l:allPos l).λ(ih_r:allPos r).λ(h:<narrowed goal>). body` — 3
@@ -205,10 +180,7 @@ fn ac1_tree_two_recursive_fields_elaborates_and_narrows_structurally() {
                 Term::app(
                     Term::app(
                         Term::app(
-                            Term::Constructor {
-                                id: node_id,
-                                level_args: vec![],
-                            },
+                            Term::Constructor { id: node_id, level_args: vec![] },
                             Term::indformer(nat_id, vec![]),
                         ),
                         Term::var(4),

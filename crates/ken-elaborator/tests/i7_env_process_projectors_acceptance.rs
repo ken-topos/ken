@@ -274,10 +274,7 @@ fn working_directory_round_trip_preserves_argv_and_environment() {
 fn i7_adds_zero_trusted_base_and_no_forbidden_mechanism() {
     for (name, source) in [
         ("Capability.Process.Environment", ENVIRONMENT_KEN_MD),
-        (
-            "Capability.Process.WorkingDirectory",
-            WORKING_DIRECTORY_KEN_MD,
-        ),
+        ("Capability.Process.WorkingDirectory", WORKING_DIRECTORY_KEN_MD),
     ] {
         let extracted = ken_elaborator::literate::extract_ken_md(source)
             .unwrap_or_else(|error| panic!("{name} must extract: {error}"));

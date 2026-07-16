@@ -7,7 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use ken_elaborator::lexer::{Lexer, Token};
 use ken_elaborator::{
-    parser, BoundaryHeader, BoundaryKind, CapabilityDecl, Decl, ElabEnv, ElabError,
+    parser, BoundaryHeader, BoundaryKind, CapabilityDecl, Decl, ElabEnv,
+    ElabError,
 };
 
 static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
@@ -120,8 +121,8 @@ fn boundary_keywords_are_reserved_and_four_program_shapes_are_independent() {
 
 #[test]
 fn boundary_header_is_accepted_before_imports_and_rejected_after_them() {
-    let decls =
-        parser::parse_decls("program\nimport P").expect("unit-head boundary precedes imports");
+    let decls = parser::parse_decls("program\nimport P")
+        .expect("unit-head boundary precedes imports");
     assert!(matches!(decls.first(), Some(Decl::BoundaryDecl { .. })));
     assert!(matches!(decls.get(1), Some(Decl::ImportDecl { .. })));
 

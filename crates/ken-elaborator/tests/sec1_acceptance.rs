@@ -12,13 +12,15 @@
 
 use ken_elaborator::{
     attempt_obligation, attempt_with_cert,
-    error::Span,
     extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
+    error::Span,
     ifc::{
-        check_declassify_in_delta, check_no_laundering, check_reduction_faithfulness, CtHook,
-        CtLabel, DeclassifyCap, FlowCtx, LeakageSink, RelationalClaim, BOTTOM, INTERNAL, PUBLIC,
-        SECRET, TRIGGER_REL_DEFERRED, TRIGGER_SEC1CT, TRIGGER_SEC1_DUAL, TRIGGER_SEC1_LAUNDER,
-        TRIGGER_SEC1_REDUCE, TRIGGER_WARD, TRUSTED, UNTRUSTED,
+        check_declassify_in_delta, check_no_laundering,
+        check_reduction_faithfulness, CtHook, CtLabel, DeclassifyCap, FlowCtx,
+        LeakageSink, RelationalClaim, BOTTOM, INTERNAL, PUBLIC, SECRET,
+        TRIGGER_REL_DEFERRED, TRIGGER_SEC1CT, TRIGGER_SEC1_DUAL,
+        TRIGGER_SEC1_LAUNDER, TRIGGER_SEC1_REDUCE, TRIGGER_WARD,
+        TRUSTED, UNTRUSTED,
     },
     prover::{Countermodel, ProverResult, Verdict},
 };
@@ -28,20 +30,10 @@ use ken_kernel::{declare_postulate, GlobalEnv, Level, Term};
 
 fn make_env_pq() -> (GlobalEnv, Term, Term) {
     let mut env = GlobalEnv::new();
-    let p_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::omega(Level::zero()),
-    )
-    .expect("P : Omega_0");
-    let q_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::omega(Level::zero()),
-    )
-    .expect("Q : Omega_0");
+    let p_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
+        .expect("P : Omega_0");
+    let q_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
+        .expect("Q : Omega_0");
     (env, Term::const_(p_id, vec![]), Term::const_(q_id, vec![]))
 }
 
@@ -53,10 +45,7 @@ fn closed_triple(env: &mut GlobalEnv, id: &str, phi: Term) -> ObligationTriple {
         context: vec![],
         phi: phi.clone(),
         goal_closed: phi,
-        provenance: Provenance {
-            kind: ProvKind::Prove,
-            span: Span::zero(),
-        },
+        provenance: Provenance { kind: ProvKind::Prove, span: Span::zero() },
     }
 }
 
@@ -74,17 +63,12 @@ fn synthetic_disproved(
         context: vec![],
         phi: phi.clone(),
         goal_closed: phi,
-        provenance: Provenance {
-            kind: ProvKind::Prove,
-            span: Span::zero(),
-        },
+        provenance: Provenance { kind: ProvKind::Prove, span: Span::zero() },
     };
     let result = ProverResult {
         obligation_id: ObligationId(id.to_owned()),
         verdict: Verdict::Disproved {
-            countermodel: Countermodel {
-                description: description.to_owned(),
-            },
+            countermodel: Countermodel { description: description.to_owned() },
         },
     };
     (result, triple)
@@ -131,10 +115,7 @@ fn integrity_taint_rejected() {
     // `exec (cmd : String @ Untrusted)` into Shell(Trusted): Untrusted=⊤ ⋢ ⊥=Trusted.
     // Scalar-correct: flows_to(2, 0) = false → Reject.
     let reject = ctx.l_sink(UNTRUSTED, TRUSTED, "shell.exec");
-    assert!(
-        reject.is_reject(),
-        "Untrusted @ Trusted sink must reject (scalar-correct)"
-    );
+    assert!(reject.is_reject(), "Untrusted @ Trusted sink must reject (scalar-correct)");
     let err = reject.error().unwrap();
     assert_eq!(err.data_label, UNTRUSTED);
     assert_eq!(err.sink_clearance, TRUSTED);
@@ -145,10 +126,7 @@ fn integrity_taint_rejected() {
 
     // Cross-check: Trusted CAN flow to Untrusted context (flows_to(0,2)=true).
     let accept_down = ctx.l_sink(TRUSTED, UNTRUSTED, "log.any");
-    assert!(
-        accept_down.is_accept(),
-        "Trusted flows to Untrusted context (downgrade OK)"
-    );
+    assert!(accept_down.is_accept(), "Trusted flows to Untrusted context (downgrade OK)");
 
     // [Sec1-dual] trigger — stub named, not silent.
     assert_eq!(TRIGGER_SEC1_DUAL, "[Sec1-dual]");
@@ -162,33 +140,21 @@ fn implicit_flow_pc_rejected() {
     // L-OBSERVE: branching on secret raises pc to ⊥ ⊔ Secret = Secret
     let ctx = FlowCtx::new(); // pc = ⊥
     let ctx_branch = ctx.l_observe(SECRET); // pc = Secret (inside if-branches)
-    assert_eq!(
-        ctx_branch.pc, SECRET,
-        "pc raised to Secret after observing secret"
-    );
+    assert_eq!(ctx_branch.pc, SECRET, "pc raised to Secret after observing secret");
 
     // L-SINK inside branch: sent value is Public, but (Public ⊔ Secret) ⋢ Public
     let reject = ctx_branch.l_sink(PUBLIC, PUBLIC, "send.s");
-    assert!(
-        reject.is_reject(),
-        "implicit flow: (Public ⊔ pc=Secret) ⋢ Public → reject"
-    );
+    assert!(reject.is_reject(), "implicit flow: (Public ⊔ pc=Secret) ⋢ Public → reject");
 
     // Flip-bug: if pc is NOT raised (bug drops l_observe), pc stays ⊥ → wrongly accepts
     let buggy_ctx = FlowCtx::with_pc(BOTTOM); // pc stays ⊥ (bug: l_observe dropped)
     let wrongly_accept = buggy_ctx.l_sink(PUBLIC, PUBLIC, "send.s");
-    assert!(
-        wrongly_accept.is_accept(),
-        "bug: dropped pc-raise → wrongly accepts (green-vs-red)"
-    );
+    assert!(wrongly_accept.is_accept(), "bug: dropped pc-raise → wrongly accepts (green-vs-red)");
 
     // Contrast: `secret : Bool @ Public` → no implicit flow, accept
     let ctx_public_branch = ctx.l_observe(PUBLIC); // pc = ⊥ ⊔ Public = Public
     let accept = ctx_public_branch.l_sink(PUBLIC, PUBLIC, "send.s");
-    assert!(
-        accept.is_accept(),
-        "branching on Public value: no implicit flow"
-    );
+    assert!(accept.is_accept(), "branching on Public value: no implicit flow");
 }
 
 /// A4. L-COMBINE raises the label: computing on Secret×Public gives Secret.
@@ -203,34 +169,22 @@ fn combine_raises_label() {
 
     // L-SINK: Secret result → Public sink → Reject
     let reject = ctx.l_sink(combined, PUBLIC, "write.out");
-    assert!(
-        reject.is_reject(),
-        "Secret combined result @ Public sink → reject"
-    );
+    assert!(reject.is_reject(), "Secret combined result @ Public sink → reject");
 
     // Flip (correct clearance): Secret result → Secret sink → Accept
     let accept = ctx.l_sink(combined, SECRET, "write.sec");
-    assert!(
-        accept.is_accept(),
-        "Secret combined result @ Secret sink → accept"
-    );
+    assert!(accept.is_accept(), "Secret combined result @ Secret sink → accept");
 
     // Flip-bug: a COMBINE that takes ⊓ (meet) instead of ⊔ (join)
     let buggy_combined = ken_elaborator::ifc::meet(SECRET, PUBLIC); // = ⊓ = Public
     assert_eq!(buggy_combined, PUBLIC, "bug: meet(Secret, Public) = Public");
     let wrongly_accept = ctx.l_sink(buggy_combined, PUBLIC, "write.out");
-    assert!(
-        wrongly_accept.is_accept(),
-        "bug: meet-instead-of-join → wrongly accepts"
-    );
+    assert!(wrongly_accept.is_accept(), "bug: meet-instead-of-join → wrongly accepts");
 
     // Also: pc propagation into combine
     let ctx_raised = FlowCtx::with_pc(INTERNAL);
     let combined_with_pc = ctx_raised.l_combine(PUBLIC, PUBLIC);
-    assert_eq!(
-        combined_with_pc, INTERNAL,
-        "L-COMBINE includes pc: Public ⊔ Public ⊔ Internal = Internal"
-    );
+    assert_eq!(combined_with_pc, INTERNAL, "L-COMBINE includes pc: Public ⊔ Public ⊔ Internal = Internal");
 }
 
 // ─── B. Declassification — the only downgrade (AC1) ──────────────────────────
@@ -240,19 +194,11 @@ fn combine_raises_label() {
 fn declassify_authorised_accepts_and_listed() {
     use ken_elaborator::ifc::check_declassify;
     let cap = DeclassifyCap::new(SECRET, PUBLIC);
-    assert!(
-        cap.is_valid(),
-        "Cap_declassify[Secret→Public] is valid (to ⊑ from)"
-    );
+    assert!(cap.is_valid(), "Cap_declassify[Secret→Public] is valid (to ⊑ from)");
 
     let result = check_declassify(Some(&cap), SECRET, SECRET, PUBLIC);
     assert!(
-        matches!(
-            result,
-            ken_elaborator::ifc::DeclassifyResult::Accept {
-                downgraded_label: PUBLIC
-            }
-        ),
+        matches!(result, ken_elaborator::ifc::DeclassifyResult::Accept { downgraded_label: PUBLIC }),
         "authorised declassify Secret→Public → accept with downgraded label Public"
     );
 
@@ -278,10 +224,8 @@ fn declassify_without_capability_rejected() {
     // Flip against B1: same downgrade, cap present → accept
     let cap = DeclassifyCap::new(SECRET, PUBLIC);
     let accept = check_declassify(Some(&cap), SECRET, SECRET, PUBLIC);
-    assert!(
-        matches!(accept, ken_elaborator::ifc::DeclassifyResult::Accept { .. }),
-        "cap present → accepts (B1/B2 capability discriminator)"
-    );
+    assert!(matches!(accept, ken_elaborator::ifc::DeclassifyResult::Accept { .. }),
+        "cap present → accepts (B1/B2 capability discriminator)");
 }
 
 /// B3. Package performs an authorised declassify but OMITS it from the delta.
@@ -295,10 +239,7 @@ fn declassify_absent_from_delta_is_infidelity() {
     // but OMITTED it from the delta (infidelity).
     let empty_delta: Vec<String> = vec![];
     let listed = check_declassify_in_delta(authority_id, &empty_delta);
-    assert!(
-        !listed,
-        "authority absent from delta → honesty-guard violation (infidelity)"
-    );
+    assert!(!listed, "authority absent from delta → honesty-guard violation (infidelity)");
 
     // Flip: same package with the authority PRESENT → listed (B1 covers this)
     let full_delta = vec![authority_id.to_owned()];
@@ -380,13 +321,9 @@ fn related_pair_proved() {
 
     assert!(
         matches!(result.verdict, Verdict::Proved { .. }),
-        "related pair → proved: {:?}",
-        result.verdict
+        "related pair → proved: {:?}", result.verdict
     );
-    assert!(
-        !claim.has_deferred_trigger(),
-        "D1: no deferred trigger — proved"
-    );
+    assert!(!claim.has_deferred_trigger(), "D1: no deferred trigger — proved");
     // Cross-case: a proved result is NEVER from check_reduction_faithfulness (which checks Disproved)
     assert!(
         !check_reduction_faithfulness(&result.verdict),
@@ -412,8 +349,7 @@ fn distinguishing_pair_disproved_with_witness() {
 
     assert!(
         matches!(result.verdict, Verdict::Disproved { .. }),
-        "distinguishing pair → disproved: {:?}",
-        result.verdict
+        "distinguishing pair → disproved: {:?}", result.verdict
     );
     // The distinguishing pair is the leak-witness — NOT unknown
     assert!(
@@ -442,8 +378,7 @@ fn unprovable_relational_incomplete_never_false_proved() {
 
     assert!(
         matches!(result.verdict, Verdict::Unknown { .. }),
-        "unprovable relational obligation → incomplete(hole): {:?}",
-        result.verdict
+        "unprovable relational obligation → incomplete(hole): {:?}", result.verdict
     );
     // NEVER a false proved — the honesty guard (23 §1.3) in the relational domain.
     assert!(
@@ -525,8 +460,7 @@ fn reduction_faithfulness_interfering_disproved() {
 
     assert!(
         matches!(result.verdict, Verdict::Disproved { .. }),
-        "synthetic disproved verdict is Disproved: {:?}",
-        result.verdict
+        "synthetic disproved verdict is Disproved: {:?}", result.verdict
     );
 
     // Structural check: check_reduction_faithfulness returns true for Disproved.
@@ -537,12 +471,8 @@ fn reduction_faithfulness_interfering_disproved() {
     );
 
     // The predicate rejects Proved and Unknown verdicts:
-    assert!(
-        !check_reduction_faithfulness(&Verdict::Unknown {
-            hole_id: env.fresh_id()
-        }),
-        "D5: Unknown does not satisfy faithfulness predicate"
-    );
+    assert!(!check_reduction_faithfulness(&Verdict::Unknown { hole_id: env.fresh_id() }),
+        "D5: Unknown does not satisfy faithfulness predicate");
 
     assert!(!claim.has_deferred_trigger());
 
@@ -590,7 +520,7 @@ fn forged_label_or_cert_kernel_rejected() {
 /// Flip: the same value NOT @ct → accepts. Full coverage absorbed into sec1ct_acceptance.rs.
 #[test]
 fn ct_value_steers_leakage_sink_rejected() {
-    use ken_elaborator::ifc::{CT_BOT, CT_TOP};
+    use ken_elaborator::ifc::{CT_TOP, CT_BOT};
     let ctx = FlowCtx::new();
 
     // `branch_on k` where k is @ct (ct⊤): L-CT-SINK checks (k.ct ⊔ pc.ct) = ct⊤ ⋢ ct⊥.
@@ -600,17 +530,11 @@ fn ct_value_steers_leakage_sink_rejected() {
     assert_eq!(err.rule, "L-CT-SINK");
 
     // Covers all three sealed-set members.
-    assert!(ctx
-        .l_ct_sink(&CT_TOP, &LeakageSink::MemoryIndex, "mem_at")
-        .is_reject());
-    assert!(ctx
-        .l_ct_sink(&CT_TOP, &LeakageSink::VarTimePrimitive, "div_s")
-        .is_reject());
+    assert!(ctx.l_ct_sink(&CT_TOP, &LeakageSink::MemoryIndex,    "mem_at").is_reject());
+    assert!(ctx.l_ct_sink(&CT_TOP, &LeakageSink::VarTimePrimitive, "div_s").is_reject());
 
     // Flip: ct⊥ value at the same sink → accepts.
-    assert!(ctx
-        .l_ct_sink(&CT_BOT, &LeakageSink::BranchGuard, "branch_on")
-        .is_accept());
+    assert!(ctx.l_ct_sink(&CT_BOT, &LeakageSink::BranchGuard, "branch_on").is_accept());
 
     // Flip: @ct value at an ordinary (non-LeakSink) write → l_sink not triggered.
     assert!(ctx.l_sink(PUBLIC, PUBLIC, "log.out").is_accept());
@@ -626,15 +550,8 @@ fn ct_label_parses_carries_and_defers_timing() {
     assert_eq!(hook.ct_label, CtLabel(true));
 
     // Reify-trigger present — now [Ward] (Sec1ct landed; timing deferred to Ward).
-    assert!(
-        hook.has_reify_trigger(),
-        "[Ward] reify-trigger must be present for @ct values"
-    );
-    assert_eq!(
-        hook.deferred_timing,
-        Some(TRIGGER_WARD),
-        "deferred trigger is [Ward]"
-    );
+    assert!(hook.has_reify_trigger(), "[Ward] reify-trigger must be present for @ct values");
+    assert_eq!(hook.deferred_timing, Some(TRIGGER_WARD), "deferred trigger is [Ward]");
 
     let hook_nct = CtHook::new(false);
     assert!(!hook_nct.label_carries());
@@ -672,13 +589,8 @@ fn deferred_machinery_carries_reify_trigger() {
     // Not silently omitted: a claim WITHOUT a trigger that CANNOT be proved would
     // be an honesty-guard violation (the N2-analog for G1).
     let fresh_phi = {
-        let id = declare_postulate(
-            &mut env,
-            "test postulate".to_string(),
-            vec![],
-            Term::omega(Level::zero()),
-        )
-        .expect("fresh Omega postulate");
+        let id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
+            .expect("fresh Omega postulate");
         Term::const_(id, vec![])
     };
     let g1_silent_triple = closed_triple(&mut env, "ob:ni:G1.1", fresh_phi);
@@ -742,56 +654,29 @@ fn by_proof_trichotomy_cross_case_sweep() {
     // D1 verdict class: related → Proved (non-interfering never Disproved)
     let d1_triple = closed_triple(&mut env, "ob:sweep:D1", Term::pi(p.clone(), p.clone()));
     let d1 = attempt_obligation(&mut env, &d1_triple);
-    assert!(
-        matches!(d1.verdict, Verdict::Proved { .. }),
-        "D1 class: proved"
-    );
+    assert!(matches!(d1.verdict, Verdict::Proved { .. }), "D1 class: proved");
 
     // D2 verdict class: distinguishing pair → Disproved (with witness)
     let (d2_result, _) = synthetic_disproved(&mut env, "ob:sweep:D2", q.clone(), "leak-witness");
-    assert!(
-        matches!(d2_result.verdict, Verdict::Disproved { .. }),
-        "D2 class: disproved"
-    );
+    assert!(matches!(d2_result.verdict, Verdict::Disproved { .. }), "D2 class: disproved");
 
     // D3 verdict class: undischargeable → Unknown (honesty guard: never false Proved)
     let d3_triple = closed_triple(&mut env, "ob:sweep:D3", q.clone());
     let d3 = attempt_obligation(&mut env, &d3_triple);
-    assert!(
-        matches!(d3.verdict, Verdict::Unknown { .. }),
-        "D3 class: unknown (incomplete-hole)"
-    );
-    assert!(
-        !matches!(d3.verdict, Verdict::Proved { .. }),
-        "D3: NEVER a false proved"
-    );
+    assert!(matches!(d3.verdict, Verdict::Unknown { .. }), "D3 class: unknown (incomplete-hole)");
+    assert!(!matches!(d3.verdict, Verdict::Proved { .. }), "D3: NEVER a false proved");
 
     // Boundary invariant 1: a non-interfering program is NEVER Disproved.
-    assert!(
-        !check_reduction_faithfulness(&d1.verdict),
-        "D1 (proved) is not Disproved"
-    );
+    assert!(!check_reduction_faithfulness(&d1.verdict), "D1 (proved) is not Disproved");
 
     // Boundary invariant 2: an undischargeable obligation is Unknown, NEVER Proved.
-    assert!(
-        !matches!(d3.verdict, Verdict::Proved { .. }),
-        "D3 (unknown) is not Proved"
-    );
+    assert!(!matches!(d3.verdict, Verdict::Proved { .. }), "D3 (unknown) is not Proved");
 
     // D5 shape: the faithfulness predicate correctly classifies verdict classes.
     // (This is shape coverage, not N2 coverage — see [Sec1-reduce].)
-    assert!(
-        check_reduction_faithfulness(&d2_result.verdict),
-        "D2/D5: Disproved passes shape predicate"
-    );
-    assert!(
-        !check_reduction_faithfulness(&d1.verdict),
-        "D1: Proved does not pass faithfulness predicate"
-    );
-    assert!(
-        !check_reduction_faithfulness(&d3.verdict),
-        "D3: Unknown does not pass faithfulness predicate"
-    );
+    assert!(check_reduction_faithfulness(&d2_result.verdict), "D2/D5: Disproved passes shape predicate");
+    assert!(!check_reduction_faithfulness(&d1.verdict), "D1: Proved does not pass faithfulness predicate");
+    assert!(!check_reduction_faithfulness(&d3.verdict), "D3: Unknown does not pass faithfulness predicate");
 }
 
 /// Honest limits: N1/N2 stub gaps carry named reify-triggers — never silent.

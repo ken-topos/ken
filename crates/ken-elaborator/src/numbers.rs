@@ -19,11 +19,11 @@
 
 use std::collections::HashMap;
 
-use ken_kernel::env::PrimReduction;
 use ken_kernel::{
     declare_deceq_certificate, declare_postulate, declare_primitive, GlobalEnv, GlobalId, Level,
     Term,
 };
+use ken_kernel::env::PrimReduction;
 
 use crate::error::ElabError;
 
@@ -39,10 +39,7 @@ pub enum NumericLitVal {
     Int(i128),
     Float(f64),
     Float32(f32),
-    Decimal {
-        coeff: i64,
-        exp: i32,
-    },
+    Decimal { coeff: i64, exp: i32 },
     /// NFC-normalized UTF-8 string literal (`37 §2.1`, VAL1-surface).
     Str(String),
 }
@@ -86,18 +83,18 @@ pub struct BinOpEntry {
 /// All GlobalIds and dispatch tables for the numeric tower (`35 §2`).
 pub struct NumericEnv {
     // --- type ids (for infer/check dispatch) ---
-    pub int_id: GlobalId,
-    pub int8_id: GlobalId,
-    pub int16_id: GlobalId,
-    pub int32_id: GlobalId,
-    pub int64_id: GlobalId,
-    pub uint8_id: GlobalId,
-    pub uint16_id: GlobalId,
-    pub uint32_id: GlobalId,
-    pub uint64_id: GlobalId,
-    pub usize_id: GlobalId,
-    pub isize_id: GlobalId,
-    pub cint_id: GlobalId,
+    pub int_id:     GlobalId,
+    pub int8_id:    GlobalId,
+    pub int16_id:   GlobalId,
+    pub int32_id:   GlobalId,
+    pub int64_id:   GlobalId,
+    pub uint8_id:   GlobalId,
+    pub uint16_id:  GlobalId,
+    pub uint32_id:  GlobalId,
+    pub uint64_id:  GlobalId,
+    pub usize_id:   GlobalId,
+    pub isize_id:   GlobalId,
+    pub cint_id:    GlobalId,
     /// Derived (`18a §5.6`) — filled in by `decimal_char::register_decimal_char`
     /// after `register_numeric_env` returns; not a primitive registration here.
     /// `Term::Const`-shaped (the transparent `Decimal := DecimalPair` alias).
@@ -108,11 +105,11 @@ pub struct NumericEnv {
     /// decimalpair_id}`, never `Term::Const{id: decimal_id}`. Also filled in
     /// by `decimal_char::register_decimal_char`.
     pub decimalpair_id: GlobalId,
-    pub float_id: GlobalId,
+    pub float_id:   GlobalId,
     pub float32_id: GlobalId,
-    pub bool_id: GlobalId,
+    pub bool_id:    GlobalId,
     /// Derived (`18a §5.9`) — filled in by `decimal_char::register_decimal_char`.
-    pub char_id: GlobalId,
+    pub char_id:    GlobalId,
     /// `uint8_int_retract`, SUB-1b's single conversion-layer postulate.
     /// Filled by `conversions::register_conversions` after the two existing
     /// `UInt8`/`Int` primitive operations have been registered.
@@ -208,24 +205,24 @@ impl NumericEnv {
     /// Numeric type GlobalId by surface name.
     pub fn id_for(&self, name: &str) -> Option<GlobalId> {
         match name {
-            "Int" => Some(self.int_id),
-            "Int8" => Some(self.int8_id),
-            "Int16" => Some(self.int16_id),
-            "Int32" => Some(self.int32_id),
-            "Int64" => Some(self.int64_id),
-            "UInt8" => Some(self.uint8_id),
-            "UInt16" => Some(self.uint16_id),
-            "UInt32" => Some(self.uint32_id),
-            "UInt64" => Some(self.uint64_id),
-            "USize" => Some(self.usize_id),
-            "ISize" => Some(self.isize_id),
-            "CInt" => Some(self.cint_id),
+            "Int"     => Some(self.int_id),
+            "Int8"    => Some(self.int8_id),
+            "Int16"   => Some(self.int16_id),
+            "Int32"   => Some(self.int32_id),
+            "Int64"   => Some(self.int64_id),
+            "UInt8"   => Some(self.uint8_id),
+            "UInt16"  => Some(self.uint16_id),
+            "UInt32"  => Some(self.uint32_id),
+            "UInt64"  => Some(self.uint64_id),
+            "USize"   => Some(self.usize_id),
+            "ISize"   => Some(self.isize_id),
+            "CInt"    => Some(self.cint_id),
             "Decimal" => Some(self.decimal_id),
-            "Float" => Some(self.float_id),
+            "Float"   => Some(self.float_id),
             "Float32" => Some(self.float32_id),
-            "Bool" => Some(self.bool_id),
-            "Char" => Some(self.char_id),
-            _ => None,
+            "Bool"    => Some(self.bool_id),
+            "Char"    => Some(self.char_id),
+            _         => None,
         }
     }
 }
@@ -251,9 +248,7 @@ pub fn register_numeric_env(
                 existing_id
             } else {
                 let id = declare_primitive(env, vec![], type0.clone(), PrimReduction::OpaqueType)
-                    .map_err(|e| {
-                    ElabError::Internal(format!("prim {} failed: {}", $name, e))
-                })?;
+                    .map_err(|e| ElabError::Internal(format!("prim {} failed: {}", $name, e)))?;
                 globals.insert($name.to_string(), id);
                 id
             }
@@ -295,7 +290,10 @@ pub fn register_numeric_env(
     macro_rules! reg_novf {
         ($name:expr, $ty_id:expr) => {{
             let ty_const = Term::const_($ty_id, vec![]);
-            let novf_ty = Term::pi(ty_const.clone(), Term::pi(ty_const.clone(), omega0.clone()));
+            let novf_ty = Term::pi(
+                ty_const.clone(),
+                Term::pi(ty_const.clone(), omega0.clone()),
+            );
             // Opaque proposition — the prover (V3) discharges it statically.
             let id = declare_postulate(env, $name.to_string(), vec![], novf_ty)
                 .map_err(|e| ElabError::Internal(format!("no-ovf {} failed: {}", $name, e)))?;
@@ -305,49 +303,51 @@ pub fn register_numeric_env(
     }
 
     // ---- types ----
-    let int_id = reg_ty!("Int");
-    let int8_id = reg_ty!("Int8");
-    let int16_id = reg_ty!("Int16");
-    let int32_id = reg_ty!("Int32");
-    let int64_id = reg_ty!("Int64");
-    let uint8_id = reg_ty!("UInt8");
-    let uint16_id = reg_ty!("UInt16");
-    let uint32_id = reg_ty!("UInt32");
-    let uint64_id = reg_ty!("UInt64");
+    let int_id     = reg_ty!("Int");
+    let int8_id    = reg_ty!("Int8");
+    let int16_id   = reg_ty!("Int16");
+    let int32_id   = reg_ty!("Int32");
+    let int64_id   = reg_ty!("Int64");
+    let uint8_id   = reg_ty!("UInt8");
+    let uint16_id  = reg_ty!("UInt16");
+    let uint32_id  = reg_ty!("UInt32");
+    let uint64_id  = reg_ty!("UInt64");
     let abi_trusted_before: std::collections::BTreeSet<_> =
         env.trusted_base().into_iter().collect();
-    let usize_id = reg_ty!("USize");
-    let isize_id = reg_ty!("ISize");
-    let cint_id = reg_ty!("CInt");
-    let abi_trusted_after: std::collections::BTreeSet<_> = env.trusted_base().into_iter().collect();
+    let usize_id   = reg_ty!("USize");
+    let isize_id   = reg_ty!("ISize");
+    let cint_id    = reg_ty!("CInt");
+    let abi_trusted_after: std::collections::BTreeSet<_> =
+        env.trusted_base().into_iter().collect();
     let abi_scalar_type_trusted_delta: Vec<_> = abi_trusted_after
         .difference(&abi_trusted_before)
         .copied()
         .collect();
     let actual_abi_type_delta: std::collections::BTreeSet<_> =
         abi_scalar_type_trusted_delta.iter().copied().collect();
-    let expected_abi_type_delta = std::collections::BTreeSet::from([usize_id, isize_id, cint_id]);
+    let expected_abi_type_delta =
+        std::collections::BTreeSet::from([usize_id, isize_id, cint_id]);
     if actual_abi_type_delta != expected_abi_type_delta {
         return Err(ElabError::Internal(format!(
             "PX3 ABI scalar trusted-base delta must be exactly USize/ISize/CInt: expected {expected_abi_type_delta:?}, got {actual_abi_type_delta:?}"
         )));
     }
-    let float_id = reg_ty!("Float");
+    let float_id   = reg_ty!("Float");
     let float32_id = reg_ty!("Float32");
-    let bool_id = reg_ty!("Bool");
+    let bool_id    = reg_ty!("Bool");
     // `decimal_id`/`decimalpair_id`/`char_id` are derived (`18a §5.6`/`§5.9`)
     // — placeholder zeroed here, filled in by
     // `decimal_char::register_decimal_char` once it runs (needs
     // `Int`/`Bool`/`leq_int`/etc. from this function first).
     let decimal_id = GlobalId(0);
     let decimalpair_id = GlobalId(0);
-    let char_id = GlobalId(0);
+    let char_id    = GlobalId(0);
 
     // ---- Int ops (total, no obligation) ----
     let add_int_id = reg_binop!("add_int", int_id);
     let sub_int_id = reg_binop!("sub_int", int_id);
     let mul_int_id = reg_binop!("mul_int", int_id);
-    let eq_int_id = reg_cmpop!("eq_int", int_id, bool_id);
+    let eq_int_id  = reg_cmpop!("eq_int", int_id, bool_id);
 
     // Register `Int`'s decidable-equality certificate
     // (`docs/adr/0013-int-decidable-equality-kernel-posture.md` Layer 1):
@@ -438,185 +438,100 @@ pub fn register_numeric_env(
     // ---- Bool ops ----
     {
         let bool_ty = Term::indformer(bool_id, vec![]);
-        let not_ty = Term::pi(bool_ty.clone(), bool_ty.clone());
-        let _not_id = declare_primitive(
-            env,
-            vec![],
-            not_ty,
-            PrimReduction::Op { symbol: "not_bool" },
-        )
-        .map_err(|e| ElabError::Internal(format!("prim not_bool failed: {}", e)))?;
+        let not_ty  = Term::pi(bool_ty.clone(), bool_ty.clone());
+        let _not_id = declare_primitive(env, vec![], not_ty, PrimReduction::Op { symbol: "not_bool" })
+            .map_err(|e| ElabError::Internal(format!("prim not_bool failed: {}", e)))?;
         globals.insert("not_bool".to_string(), _not_id);
         let and_ty = Term::pi(bool_ty.clone(), Term::pi(bool_ty.clone(), bool_ty.clone()));
-        let _and_id = declare_primitive(
-            env,
-            vec![],
-            and_ty.clone(),
-            PrimReduction::Op { symbol: "and_bool" },
-        )
-        .map_err(|e| ElabError::Internal(format!("prim and_bool failed: {}", e)))?;
+        let _and_id = declare_primitive(env, vec![], and_ty.clone(), PrimReduction::Op { symbol: "and_bool" })
+            .map_err(|e| ElabError::Internal(format!("prim and_bool failed: {}", e)))?;
         globals.insert("and_bool".to_string(), _and_id);
-        let _or_id =
-            declare_primitive(env, vec![], and_ty, PrimReduction::Op { symbol: "or_bool" })
-                .map_err(|e| ElabError::Internal(format!("prim or_bool failed: {}", e)))?;
+        let _or_id = declare_primitive(env, vec![], and_ty, PrimReduction::Op { symbol: "or_bool" })
+            .map_err(|e| ElabError::Internal(format!("prim or_bool failed: {}", e)))?;
         globals.insert("or_bool".to_string(), _or_id);
     }
 
     // ── build dispatch tables ───────────────────────────────────────────────
 
     let mut add_table = HashMap::new();
-    let mut eq_table = HashMap::new();
+    let mut eq_table  = HashMap::new();
 
     // Int: total
-    add_table.insert(
-        int_id,
-        AddEntry {
-            op_id: add_int_id,
-            wrapping_id: None,
-            no_ovf_id: None,
-            result_id: int_id,
-        },
-    );
+    add_table.insert(int_id, AddEntry {
+        op_id: add_int_id,
+        wrapping_id: None,
+        no_ovf_id: None,
+        result_id: int_id,
+    });
 
     // Fixed-width signed: obligation-generating
     for (ty_id, op_id, wrap_id, novf_id) in &[
-        (int8_id, add_int8_id, wrap_add_int8_id, novf_add_int8_id),
+        (int8_id,  add_int8_id,  wrap_add_int8_id,  novf_add_int8_id),
         (int16_id, add_int16_id, wrap_add_int16_id, novf_add_int16_id),
         (int32_id, add_int32_id, wrap_add_int32_id, novf_add_int32_id),
         (int64_id, add_int64_id, wrap_add_int64_id, novf_add_int64_id),
     ] {
-        add_table.insert(
-            *ty_id,
-            AddEntry {
-                op_id: *op_id,
-                wrapping_id: Some(*wrap_id),
-                no_ovf_id: Some(*novf_id),
-                result_id: *ty_id,
-            },
-        );
+        add_table.insert(*ty_id, AddEntry {
+            op_id: *op_id,
+            wrapping_id: Some(*wrap_id),
+            no_ovf_id: Some(*novf_id),
+            result_id: *ty_id,
+        });
     }
 
     // Fixed-width unsigned: obligation-generating
     for (ty_id, op_id, wrap_id, novf_id) in &[
-        (uint8_id, add_uint8_id, wrap_add_uint8_id, novf_add_uint8_id),
-        (
-            uint16_id,
-            add_uint16_id,
-            wrap_add_uint16_id,
-            novf_add_uint16_id,
-        ),
-        (
-            uint32_id,
-            add_uint32_id,
-            wrap_add_uint32_id,
-            novf_add_uint32_id,
-        ),
-        (
-            uint64_id,
-            add_uint64_id,
-            wrap_add_uint64_id,
-            novf_add_uint64_id,
-        ),
+        (uint8_id,  add_uint8_id,  wrap_add_uint8_id,  novf_add_uint8_id),
+        (uint16_id, add_uint16_id, wrap_add_uint16_id, novf_add_uint16_id),
+        (uint32_id, add_uint32_id, wrap_add_uint32_id, novf_add_uint32_id),
+        (uint64_id, add_uint64_id, wrap_add_uint64_id, novf_add_uint64_id),
     ] {
-        add_table.insert(
-            *ty_id,
-            AddEntry {
-                op_id: *op_id,
-                wrapping_id: Some(*wrap_id),
-                no_ovf_id: Some(*novf_id),
-                result_id: *ty_id,
-            },
-        );
+        add_table.insert(*ty_id, AddEntry {
+            op_id: *op_id,
+            wrapping_id: Some(*wrap_id),
+            no_ovf_id: Some(*novf_id),
+            result_id: *ty_id,
+        });
     }
 
     // Decimal: DEMOTE→derived — `decimal_char::register_decimal_char` inserts
     // the `add_table`/`eq_table` entries once `decimal_id` is a real id.
 
     // Float: total (IEEE, may lose precision)
-    add_table.insert(
-        float_id,
-        AddEntry {
-            op_id: add_float_id,
-            wrapping_id: None,
-            no_ovf_id: None,
-            result_id: float_id,
-        },
-    );
+    add_table.insert(float_id, AddEntry {
+        op_id: add_float_id,
+        wrapping_id: None,
+        no_ovf_id: None,
+        result_id: float_id,
+    });
 
     // Float32: total
-    add_table.insert(
-        float32_id,
-        AddEntry {
-            op_id: add_float32_id,
-            wrapping_id: None,
-            no_ovf_id: None,
-            result_id: float32_id,
-        },
-    );
+    add_table.insert(float32_id, AddEntry {
+        op_id: add_float32_id,
+        wrapping_id: None,
+        no_ovf_id: None,
+        result_id: float32_id,
+    });
 
     // == dispatch (Decimal's entry is inserted by `register_decimal_char`)
-    eq_table.insert(int_id, EqEntry { op_id: eq_int_id });
-    eq_table.insert(float_id, EqEntry { op_id: eq_float_id });
-    eq_table.insert(
-        float32_id,
-        EqEntry {
-            op_id: eq_float32_id,
-        },
-    );
+    eq_table.insert(int_id,     EqEntry { op_id: eq_int_id });
+    eq_table.insert(float_id,   EqEntry { op_id: eq_float_id });
+    eq_table.insert(float32_id, EqEntry { op_id: eq_float32_id });
 
     // -/* dispatch (VAL2 #11) — scoped to the types that already carry a
     // total `sub_*`/`mul_*` primitive (`Int`, `Float`); fixed-width and
     // `Decimal` are out of scope (no obligation-generating variant here).
     let mut sub_table = HashMap::new();
     let mut mul_table = HashMap::new();
-    sub_table.insert(
-        int_id,
-        BinOpEntry {
-            op_id: sub_int_id,
-            result_id: int_id,
-        },
-    );
-    mul_table.insert(
-        int_id,
-        BinOpEntry {
-            op_id: mul_int_id,
-            result_id: int_id,
-        },
-    );
-    sub_table.insert(
-        float_id,
-        BinOpEntry {
-            op_id: sub_float_id,
-            result_id: float_id,
-        },
-    );
-    mul_table.insert(
-        float_id,
-        BinOpEntry {
-            op_id: mul_float_id,
-            result_id: float_id,
-        },
-    );
+    sub_table.insert(int_id,   BinOpEntry { op_id: sub_int_id,   result_id: int_id });
+    mul_table.insert(int_id,   BinOpEntry { op_id: mul_int_id,   result_id: int_id });
+    sub_table.insert(float_id, BinOpEntry { op_id: sub_float_id, result_id: float_id });
+    mul_table.insert(float_id, BinOpEntry { op_id: mul_float_id, result_id: float_id });
 
     Ok(NumericEnv {
-        int_id,
-        int8_id,
-        int16_id,
-        int32_id,
-        int64_id,
-        uint8_id,
-        uint16_id,
-        uint32_id,
-        uint64_id,
-        usize_id,
-        isize_id,
-        cint_id,
-        decimal_id,
-        decimalpair_id,
-        float_id,
-        float32_id,
-        bool_id,
-        char_id,
+        int_id, int8_id, int16_id, int32_id, int64_id,
+        uint8_id, uint16_id, uint32_id, uint64_id, usize_id, isize_id, cint_id,
+        decimal_id, decimalpair_id, float_id, float32_id, bool_id, char_id,
         uint8_int_retract_id: GlobalId(0),
         uint8_retract_trusted_delta: Vec::new(),
         abi_scalar_type_trusted_delta,
@@ -642,25 +557,15 @@ pub fn int_lit_val(n: i128, ty: &Term, nenv: &NumericEnv) -> NumericLitVal {
             return NumericLitVal::Int(n);
         }
         // Fixed-width: store the truncated value as i64 (EvalVal::Int)
-        let truncated = if *id == nenv.int8_id {
-            (n as i8) as i128
-        } else if *id == nenv.int16_id {
-            (n as i16) as i128
-        } else if *id == nenv.int32_id {
-            (n as i32) as i128
-        } else if *id == nenv.int64_id {
-            (n as i64) as i128
-        } else if *id == nenv.uint8_id {
-            (n as u8) as i128
-        } else if *id == nenv.uint16_id {
-            (n as u16) as i128
-        } else if *id == nenv.uint32_id {
-            (n as u32) as i128
-        } else if *id == nenv.uint64_id {
-            (n as u64) as i128
-        } else {
-            n
-        };
+        let truncated = if *id == nenv.int8_id  { (n as i8) as i128 }
+            else if *id == nenv.int16_id { (n as i16) as i128 }
+            else if *id == nenv.int32_id { (n as i32) as i128 }
+            else if *id == nenv.int64_id { (n as i64) as i128 }
+            else if *id == nenv.uint8_id  { (n as u8) as i128 }
+            else if *id == nenv.uint16_id { (n as u16) as i128 }
+            else if *id == nenv.uint32_id { (n as u32) as i128 }
+            else if *id == nenv.uint64_id { (n as u64) as i128 }
+            else { n };
         return NumericLitVal::Int(truncated);
     }
     NumericLitVal::Int(n)

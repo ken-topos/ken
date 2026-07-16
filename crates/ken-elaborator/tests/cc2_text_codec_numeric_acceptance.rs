@@ -11,21 +11,18 @@ use ken_elaborator::{ElabEnv, NumericLitVal};
 use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
-const TRANSPORT_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
-const DIAGNOSTIC_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
+const DIAGNOSTIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Diagnostics/Core.ken.md");
 const STRING_BIJECTION_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Text/StringBijection.ken.md");
 const STRING_KEYS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Text/StringKeys.ken.md");
 const CODEC_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Text/Codec.ken.md");
-const NUMERIC_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Capability/Parsing/Numeric.ken.md");
+const NUMERIC_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Numeric.ken.md");
 const NUMERIC_SEED: &str = include_str!("../../../conformance/stdlib/text/seed-text-numeric.md");
 
 fn dependency_env() -> ElabEnv {

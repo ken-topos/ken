@@ -35,24 +35,12 @@ fn coproduct_is_the_live_two_param_effect_signature_type() {
         .env
         .inductive(coproduct_id)
         .expect("Coproduct must be a real inductive");
-    assert_eq!(
-        ind.params.len(),
-        2,
-        "Coproduct a b takes exactly two params"
-    );
+    assert_eq!(ind.params.len(), 2, "Coproduct a b takes exactly two params");
     assert_eq!(ind.constructors.len(), 2, "InL | InR — exactly two ctors");
     assert_eq!(ind.constructors[0].id, inl_id);
     assert_eq!(ind.constructors[1].id, inr_id);
-    assert_eq!(
-        ind.constructors[0].args.len(),
-        1,
-        "InL : a -> Coproduct a b"
-    );
-    assert_eq!(
-        ind.constructors[1].args.len(),
-        1,
-        "InR : b -> Coproduct a b"
-    );
+    assert_eq!(ind.constructors[0].args.len(), 1, "InL : a -> Coproduct a b");
+    assert_eq!(ind.constructors[1].args.len(), 1, "InR : b -> Coproduct a b");
 
     // `Sum` itself is fully vacated as a type name — freed for the future
     // `Data.Functor.Sum` (the WP's stated AC).

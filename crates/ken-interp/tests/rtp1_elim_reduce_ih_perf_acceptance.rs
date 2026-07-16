@@ -94,11 +94,7 @@ fn single_self_reference_stays_linear_at_depth_40() {
     );
     let (dt, v, env) = run(&src);
     let suc_id = *env.globals.get("Suc").unwrap();
-    assert_eq!(
-        nat_depth(&v, suc_id),
-        40,
-        "single(n) must equal n exactly — value-preservation"
-    );
+    assert_eq!(nat_depth(&v, suc_id), 40, "single(n) must equal n exactly — value-preservation");
     assert!(
         dt < BUDGET,
         "single(40) took {dt:?}, budget {BUDGET:?} — the eager-IH exponential blowup may have returned"
@@ -217,11 +213,7 @@ fn natToDecimal (n : Nat) : String =
 const main : String = natToDecimal (natGcd twelve eight)
 "#;
     let (dt, v, _env) = run(src);
-    assert_eq!(
-        v,
-        EvalVal::Str("4".to_string()),
-        "natToDecimal(natGcd 12 8) must be \"4\""
-    );
+    assert_eq!(v, EvalVal::Str("4".to_string()), "natToDecimal(natGcd 12 8) must be \"4\"");
     assert!(
         dt < BUDGET,
         "natGcd+natToDecimal repro took {dt:?}, budget {BUDGET:?} — the eager-IH blowup may have returned"

@@ -20,10 +20,7 @@ fn explicit_family_zero_ctor_data_elaborates_and_eliminates() {
 
     env.elaborate_decl("data Void : Type where { }")
         .expect("a surface-authored zero-constructor explicit data must elaborate");
-    assert!(
-        env.globals.contains_key("Void"),
-        "Void must be a registered global"
-    );
+    assert!(env.globals.contains_key("Void"), "Void must be a registered global");
 
     // The general Type-sorted eliminator (empty `match`, large elim) must
     // work over this surface-declared type, not just the prelude's `Empty`.
@@ -39,10 +36,7 @@ fn legacy_zero_ctor_data_elaborates_and_eliminates() {
 
     env.elaborate_decl("data Nope =")
         .expect("a surface-authored legacy zero-constructor data must elaborate");
-    assert!(
-        env.globals.contains_key("Nope"),
-        "Nope must be a registered global"
-    );
+    assert!(env.globals.contains_key("Nope"), "Nope must be a registered global");
 
     env.elaborate_decl("fn absurdNope (C : Type) (e : Nope) : C = match e { }")
         .expect("empty-match eliminator must elaborate over a surface-declared Nope");

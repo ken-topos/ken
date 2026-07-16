@@ -173,7 +173,11 @@ pub fn serialize_countermodel(cm: &KripkeCountermodel, actions: &[SuggestedActio
         DiagnosticTag::Unknown => "unknown",
     };
     let worlds: Vec<Value> = cm.worlds.iter().map(|w| json!(w.0)).collect();
-    let order: Vec<Value> = cm.order.iter().map(|(a, b)| json!([a.0, b.0])).collect();
+    let order: Vec<Value> = cm
+        .order
+        .iter()
+        .map(|(a, b)| json!([a.0, b.0]))
+        .collect();
 
     // forcing: BTreeMap<world → [atoms]> (sorted for determinism)
     let mut forcing_map: std::collections::BTreeMap<String, Vec<String>> =
@@ -182,10 +186,7 @@ pub fn serialize_countermodel(cm: &KripkeCountermodel, actions: &[SuggestedActio
         forcing_map.insert(w.0.clone(), vec![]);
     }
     for (world, atom) in &cm.forcing {
-        forcing_map
-            .entry(world.0.clone())
-            .or_default()
-            .push(atom.0.clone());
+        forcing_map.entry(world.0.clone()).or_default().push(atom.0.clone());
     }
     let forcing = serde_json::to_value(forcing_map).unwrap_or(json!({}));
 
@@ -280,12 +281,18 @@ pub fn serialize_diagnostic(diag: &Diagnostic, obligation_id: &ObligationId) -> 
         (None, None) => {
             // No backend data; emit based on region (honest placeholder).
             match diag.region {
-                Region::Refuted => {
-                    serialize_decomposition("", "[countermodel pending V4-backend]", "", actions)
-                }
-                Region::Unknown => {
-                    serialize_slice("[pending V4-backend]", "add as precondition", true, actions)
-                }
+                Region::Refuted => serialize_decomposition(
+                    "",
+                    "[countermodel pending V4-backend]",
+                    "",
+                    actions,
+                ),
+                Region::Unknown => serialize_slice(
+                    "[pending V4-backend]",
+                    "add as precondition",
+                    true,
+                    actions,
+                ),
                 Region::Proved => Value::Null,
             }
         }
@@ -404,7 +411,8 @@ pub fn validate_document(doc: &Value) -> Result<(), String> {
         .ok_or("missing required field: schema")?;
 
     // target required
-    doc.get("target").ok_or("missing required field: target")?;
+    doc.get("target")
+        .ok_or("missing required field: target")?;
 
     // status required ∈ {proved, disproved, incomplete}
     let status_str = doc
@@ -481,12 +489,15 @@ fn validate_obligation(ob: &Value, idx: usize) -> Result<(), String> {
 
 fn validate_diagnostic(diag: &Value, ob_idx: usize) -> Result<(), String> {
     // kind required ∈ {countermodel, hole, decomposition, slice}
-    let kind = diag.get("kind").and_then(Value::as_str).ok_or_else(|| {
-        format!(
-            "obligations[{}].diagnostic: missing required field: kind",
-            ob_idx
-        )
-    })?;
+    let kind = diag
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "obligations[{}].diagnostic: missing required field: kind",
+                ob_idx
+            )
+        })?;
     if !["countermodel", "hole", "decomposition", "slice"].contains(&kind) {
         return Err(format!(
             "obligations[{}].diagnostic: kind must be in \
@@ -497,13 +508,16 @@ fn validate_diagnostic(diag: &Value, ob_idx: usize) -> Result<(), String> {
 
     if kind == "countermodel" {
         // verdict required ∈ {false, unknown} (stable discriminator field)
-        let verdict = diag.get("verdict").and_then(Value::as_str).ok_or_else(|| {
-            format!(
-                "obligations[{}].diagnostic: countermodel missing required stable \
+        let verdict = diag
+            .get("verdict")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                format!(
+                    "obligations[{}].diagnostic: countermodel missing required stable \
                      field: verdict",
-                ob_idx
-            )
-        })?;
+                    ob_idx
+                )
+            })?;
         if !["false", "unknown"].contains(&verdict) {
             return Err(format!(
                 "obligations[{}].diagnostic: verdict must be in {{false,unknown}}, got: {}",
@@ -514,12 +528,14 @@ fn validate_diagnostic(diag: &Value, ob_idx: usize) -> Result<(), String> {
 
     if kind == "hole" {
         // hole_id required (stable field)
-        diag.get("hole_id").and_then(Value::as_str).ok_or_else(|| {
-            format!(
-                "obligations[{}].diagnostic: hole missing required stable field: hole_id",
-                ob_idx
-            )
-        })?;
+        diag.get("hole_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                format!(
+                    "obligations[{}].diagnostic: hole missing required stable field: hole_id",
+                    ob_idx
+                )
+            })?;
     }
 
     // suggested_actions: each entry must have kind + region ∈ {false,unknown}

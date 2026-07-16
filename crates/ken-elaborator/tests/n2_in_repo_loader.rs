@@ -140,7 +140,10 @@ fn dotted_module_path_maps_to_its_unique_leaf_file() {
         "Entry.ken",
         "import Data.Collections.Flag\nconst answer : Bool = Data.Collections.Flag.value",
     );
-    root.write("Data/Collections/Flag.ken", "pub const value : Bool = True");
+    root.write(
+        "Data/Collections/Flag.ken",
+        "pub const value : Bool = True",
+    );
 
     let mut env = ElabEnv::new().expect("base environment");
     let roots = vec![root.path().to_path_buf()];

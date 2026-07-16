@@ -18,8 +18,7 @@ const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
-const TRANSPORT_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 
 fn mk_env_with_package() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
@@ -71,10 +70,7 @@ fn deceq_char_transports_from_deceq_int_not_a_fresh_postulate() {
     let env = mk_env_with_package();
     let id = env.globals["DecEq_instance_Char"];
     let dec_eq_int_id = env.globals["DecEq_instance_Int"];
-    assert!(matches!(
-        env.env.lookup(id),
-        Some(KernelDecl::Transparent { .. })
-    ));
+    assert!(matches!(env.env.lookup(id), Some(KernelDecl::Transparent { .. })));
     let (_, body) = env
         .env
         .transparent_body(id)

@@ -61,18 +61,12 @@ fn star_binds_tighter_than_plus_and_minus() {
     let mut env = fresh_env();
     // 2 + 3 * 4 = 2 + 12 = 14, NOT (2 + 3) * 4 = 20.
     let v = eval_int_decl(&mut env, "const r : Int = 2 + 3 * 4");
-    assert_eq!(
-        v, 14,
-        "'*' must bind tighter than '+' (conventional precedence)"
-    );
+    assert_eq!(v, 14, "'*' must bind tighter than '+' (conventional precedence)");
 
     let mut env2 = fresh_env();
     // 20 - 3 * 4 = 20 - 12 = 8, NOT (20 - 3) * 4 = 68.
     let v2 = eval_int_decl(&mut env2, "const r : Int = 20 - 3 * 4");
-    assert_eq!(
-        v2, 8,
-        "'*' must bind tighter than '-' (conventional precedence)"
-    );
+    assert_eq!(v2, 8, "'*' must bind tighter than '-' (conventional precedence)");
 }
 
 #[test]

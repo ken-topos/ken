@@ -51,7 +51,9 @@ fn user_deceq_instance_keys_map_via_real_search() {
     elab(&mut env_a, "instance DecEq K { }").unwrap();
     // The constraint `where DecEq K` fires instance_search("DecEq", "K") →
     // Some(id); body `k` has type `K` matching the return type.
-    let r_a = env_a.elaborate_decl("fn mapKey (k : K) : K where DecEq K = k");
+    let r_a = env_a.elaborate_decl(
+        "fn mapKey (k : K) : K where DecEq K = k",
+    );
     assert!(
         r_a.is_ok(),
         "AC1(a): user DecEq K instance → const with `where DecEq K` must accept; \
@@ -70,7 +72,9 @@ fn user_deceq_instance_keys_map_via_real_search() {
     elab(&mut env_b, "class DecEq A { }").unwrap();
     elab(&mut env_b, "data K = MkK").unwrap();
     // No `instance DecEq K` declared.
-    let r_b = env_b.elaborate_decl("fn mapKey (k : K) : K where DecEq K = k");
+    let r_b = env_b.elaborate_decl(
+        "fn mapKey (k : K) : K where DecEq K = k",
+    );
     assert!(
         matches!(r_b, Err(ElabError::NoInstance { .. })),
         "AC1(b): absent instance DecEq K → NoInstance (not silent fallback); \
@@ -100,7 +104,9 @@ fn user_ord_instance_drives_verified_sort() {
     elab(&mut env_a, "instance Ord K { }").unwrap();
     // view `where Ord K` fires instance_search("Ord", "K") → Some(id).
     // Body `xs` returns `List K` (the identity on the list).
-    let r_a = env_a.elaborate_decl("fn sortK (xs : List K) : List K where Ord K = xs");
+    let r_a = env_a.elaborate_decl(
+        "fn sortK (xs : List K) : List K where Ord K = xs",
+    );
     assert!(
         r_a.is_ok(),
         "AC2(a): user Ord K instance → const with `where Ord K` must accept; \
@@ -113,7 +119,9 @@ fn user_ord_instance_drives_verified_sort() {
     elab(&mut env_b, "class Ord A { }").unwrap();
     elab(&mut env_b, "data K = MkK").unwrap();
     // No `instance Ord K`.
-    let r_b = env_b.elaborate_decl("fn sortK (xs : List K) : List K where Ord K = xs");
+    let r_b = env_b.elaborate_decl(
+        "fn sortK (xs : List K) : List K where Ord K = xs",
+    );
     assert!(
         matches!(r_b, Err(ElabError::NoInstance { .. })),
         "AC2(b): absent instance Ord K → NoInstance; got {:?}",
@@ -163,7 +171,9 @@ fn user_ord_sort_emits_both_conjuncts() {
              { ys : List K | And (is_sorted K (\\_ _. True) ys) (Perm K ys xs) } \
              where Ord K = Nil K",
         )
-        .expect("AC3: sort-shaped const with user Ord K + refinement must elaborate");
+        .expect(
+            "AC3: sort-shaped const with user Ord K + refinement must elaborate",
+        );
 
     // The conjoined Ensures obligation must be emitted.
     let obl = res
@@ -222,7 +232,9 @@ fn user_deceq_keyed_map_canonical_identity() {
 
     // (a) Map key op with `where DecEq K` only → accepts (byte-order canonical;
     //     DecEq is the identity gate, not Ord).
-    let r_a = env.elaborate_decl("fn mapIdentity (k : K) : K where DecEq K = k");
+    let r_a = env.elaborate_decl(
+        "fn mapIdentity (k : K) : K where DecEq K = k",
+    );
     assert!(
         r_a.is_ok(),
         "AC4(a): Map with `where DecEq K` only must accept \
@@ -233,7 +245,9 @@ fn user_deceq_keyed_map_canonical_identity() {
     // (b) Ord-gated const fails → Ord is NOT required for Map identity.
     // If Ord were the identity gate, this would need to accept; its rejection
     // proves the gate is DecEq alone.
-    let r_b = env.elaborate_decl("fn ordGatedOp (k : K) : K where Ord K = k");
+    let r_b = env.elaborate_decl(
+        "fn ordGatedOp (k : K) : K where Ord K = k",
+    );
     assert!(
         matches!(r_b, Err(ElabError::NoInstance { .. })),
         "AC4(b): `where Ord K` with no Ord instance → NoInstance \
@@ -259,14 +273,10 @@ fn term_mentions_const(term: &Term, id: GlobalId) -> bool {
                 || term_mentions_const(val, id)
                 || term_mentions_const(body, id)
         }
-        Term::Ascript(e, t) => term_mentions_const(e, id) || term_mentions_const(t, id),
-        Term::Elim {
-            motive,
-            methods,
-            scrut,
-            params,
-            ..
-        } => {
+        Term::Ascript(e, t) => {
+            term_mentions_const(e, id) || term_mentions_const(t, id)
+        }
+        Term::Elim { motive, methods, scrut, params, .. } => {
             term_mentions_const(motive, id)
                 || methods.iter().any(|m| term_mentions_const(m, id))
                 || term_mentions_const(scrut, id)

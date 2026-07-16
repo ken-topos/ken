@@ -50,10 +50,7 @@ fn real_int_literal_elaborates_to_intlit_and_tt_checks_end_to_end() {
     let id = env
         .elaborate_decl("lemma int_5_eq_5 : Equal Int five five = Proved")
         .expect("Proved must check against the reduced Top goal");
-    let (_, ty) = env
-        .env
-        .const_type(id)
-        .expect("declared type must be recorded");
+    let (_, ty) = env.env.const_type(id).expect("declared type must be recorded");
     let ctx = Context::new();
     let reduced = whnf(&env.env, &ctx, &ty);
     assert!(
