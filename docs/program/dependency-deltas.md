@@ -5,6 +5,27 @@ Per-addition records for external crates curated into the tool-chain (ADR
 documents the vetting the merge Decision checked, so the addition to the
 tool-chain's own trusted computing base is legible and re-checkable on update.
 
+## PX16 — Effective-user home account database (`ken-host`)
+
+PX16 adds a direct Linux-target dependency on
+`libc = { version = "=0.2.186", default-features = false }` for the single
+`getpwuid_r` account-database operation. The Rust crate binding is exact-pinned
+and Cargo checksum-locked by the same `0.2.186` checksum recorded in the PX1
+all-target table below. No libc type crosses the private
+`ken-host::account_db_v1` module.
+
+This pin makes the Rust declarations reproducible; it does **not** pin the
+dynamically linked system libc, NSS configuration, selected NSS modules, or
+account record. Those remain delegated host policy and may block without a
+wall-clock bound. The new surface is runtime-trusted and
+discriminator-tested, never kernel-proved. It does not enable rustix's libc
+backend: the existing filesystem and euid operations remain on `linux_raw`.
+The dependency already existed in the all-target lockfile union through
+rustix's excluded fallback graph, but PX16 makes it a direct target-selected
+`ken-host` dependency; the `Cargo.lock` package dependency edge changes
+accordingly. The generated `TargetAbi` closure therefore grows from three to
+four target-selected crates: `rustix`, `bitflags`, `linux-raw-sys`, and `libc`.
+
 ## PX1 — Linux host boundary (`ken-host`)
 
 PX1 retires six Ken-authored Linux ABI declarations. Five filesystem

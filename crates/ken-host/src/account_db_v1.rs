@@ -18,32 +18,36 @@ impl AccountHomeLookupV1 for LibcAccountHomeLookupV1 {
         &self,
         uid: EffectiveUidSnapshotV1,
     ) -> Result<Vec<u8>, HomeRootResolutionFailureV1> {
-        resolve_effective_user_home(uid)
+        resolve_with_backend(uid, &LibcPasswdBackendV1)
     }
 }
 
-/// Resolve the executing effective UID through the system account database.
-///
-/// The returned bytes are owned. No libc pointer, borrow, or type crosses this
-/// module boundary.
-fn resolve_effective_user_home(
-    uid: EffectiveUidSnapshotV1,
-) -> Result<Vec<u8>, HomeRootResolutionFailureV1> {
-    #[cfg(target_os = "linux")]
-    {
-        const INITIAL: usize = 1024;
-        const LIMIT: usize = 1024 * 1024;
-        let mut capacity = INITIAL;
-        loop {
-            let mut buffer = vec![0_u8; capacity];
+enum LookupAttemptV1 {
+    Range,
+    NoAccountRecord,
+    BackendError(i32),
+    InvalidRecord,
+    Record { uid: u32, directory_offset: usize },
+}
+
+trait PasswdBackendV1 {
+    fn lookup(&self, uid: u32, buffer: &mut [u8]) -> LookupAttemptV1;
+}
+
+struct LibcPasswdBackendV1;
+
+impl PasswdBackendV1 for LibcPasswdBackendV1 {
+    fn lookup(&self, uid: u32, buffer: &mut [u8]) -> LookupAttemptV1 {
+        #[cfg(target_os = "linux")]
+        {
             let mut record = std::mem::MaybeUninit::<libc::passwd>::zeroed();
             let mut result = std::ptr::null_mut();
             // SAFETY: `record`, `result`, and the initialized byte buffer are
-            // valid for the call. All returned pointers are validated and
-            // copied before either local allocation is dropped.
+            // valid for the call. The result pointer is compared with the
+            // supplied record before any field is read.
             let status = unsafe {
                 libc::getpwuid_r(
-                    uid.raw(),
+                    uid,
                     record.as_mut_ptr(),
                     buffer.as_mut_ptr().cast(),
                     buffer.len(),
@@ -51,65 +55,219 @@ fn resolve_effective_user_home(
                 )
             };
             if status == libc::ERANGE {
+                return LookupAttemptV1::Range;
+            }
+            if status != 0 {
+                return LookupAttemptV1::BackendError(status);
+            }
+            if result.is_null() {
+                return LookupAttemptV1::NoAccountRecord;
+            }
+            if result != record.as_mut_ptr() {
+                return LookupAttemptV1::InvalidRecord;
+            }
+            // SAFETY: success returned exactly the supplied initialized record.
+            let record = unsafe { record.assume_init() };
+            if record.pw_dir.is_null() {
+                return LookupAttemptV1::InvalidRecord;
+            }
+            LookupAttemptV1::Record {
+                uid: record.pw_uid,
+                directory_offset: (record.pw_dir as usize).wrapping_sub(buffer.as_ptr() as usize),
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (uid, buffer);
+            LookupAttemptV1::BackendError(-1)
+        }
+    }
+}
+
+fn resolve_with_backend(
+    uid: EffectiveUidSnapshotV1,
+    backend: &impl PasswdBackendV1,
+) -> Result<Vec<u8>, HomeRootResolutionFailureV1> {
+    const INITIAL: usize = 1024;
+    const LIMIT: usize = 1024 * 1024;
+    let mut capacity = INITIAL;
+    loop {
+        let mut buffer = vec![0_u8; capacity];
+        let (record_uid, offset) = match backend.lookup(uid.raw(), &mut buffer) {
+            LookupAttemptV1::Range => {
                 if capacity == LIMIT {
                     return Err(HomeRootResolutionFailureV1::BufferCapacityExceeded);
                 }
                 capacity = (capacity * 2).min(LIMIT);
                 continue;
             }
-            if status != 0 {
+            LookupAttemptV1::NoAccountRecord => {
+                return Err(HomeRootResolutionFailureV1::NoAccountRecord);
+            }
+            LookupAttemptV1::BackendError(status) => {
                 return Err(HomeRootResolutionFailureV1::NssError(status));
             }
-            if result.is_null() {
-                return Err(HomeRootResolutionFailureV1::NoEntry);
-            }
-            if result != record.as_mut_ptr() {
+            LookupAttemptV1::InvalidRecord => {
                 return Err(HomeRootResolutionFailureV1::InvalidHomeDirectory);
             }
-            // SAFETY: a successful call returned exactly the supplied record.
-            let record = unsafe { record.assume_init() };
-            if record.pw_uid != uid.raw() || record.pw_dir.is_null() {
-                return Err(HomeRootResolutionFailureV1::InvalidHomeDirectory);
-            }
-            let start = buffer.as_ptr() as usize;
-            let end = start
-                .checked_add(buffer.len())
-                .ok_or(HomeRootResolutionFailureV1::InvalidHomeDirectory)?;
-            let directory = record.pw_dir as usize;
-            if directory < start || directory >= end {
-                return Err(HomeRootResolutionFailureV1::InvalidHomeDirectory);
-            }
-            let offset = directory - start;
-            let tail = &buffer[offset..];
-            let length = tail
-                .iter()
-                .position(|byte| *byte == 0)
-                .ok_or(HomeRootResolutionFailureV1::InvalidHomeDirectory)?;
-            let bytes = &tail[..length];
-            if bytes.is_empty() || bytes[0] != b'/' {
-                return Err(HomeRootResolutionFailureV1::InvalidHomeDirectory);
-            }
-            return Ok(bytes.to_vec());
+            LookupAttemptV1::Record {
+                uid,
+                directory_offset,
+            } => (uid, directory_offset),
+        };
+        if record_uid != uid.raw() || offset >= buffer.len() {
+            return Err(HomeRootResolutionFailureV1::InvalidHomeDirectory);
         }
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = uid;
-        Err(HomeRootResolutionFailureV1::NssError(-1))
+        let tail = &buffer[offset..];
+        let length = tail
+            .iter()
+            .position(|byte| *byte == 0)
+            .ok_or(HomeRootResolutionFailureV1::InvalidHomeDirectory)?;
+        let bytes = &tail[..length];
+        if bytes.is_empty() || bytes[0] != b'/' {
+            return Err(HomeRootResolutionFailureV1::InvalidHomeDirectory);
+        }
+        return Ok(bytes.to_vec());
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::{Cell, RefCell};
+    use std::collections::VecDeque;
+
+    struct ScriptedBackend {
+        attempts: RefCell<VecDeque<LookupAttemptV1>>,
+        directory: Vec<u8>,
+        calls: Cell<usize>,
+    }
+
+    impl PasswdBackendV1 for ScriptedBackend {
+        fn lookup(&self, _uid: u32, buffer: &mut [u8]) -> LookupAttemptV1 {
+            self.calls.set(self.calls.get() + 1);
+            let attempt = self.attempts.borrow_mut().pop_front().unwrap();
+            if let LookupAttemptV1::Record {
+                directory_offset, ..
+            } = attempt
+            {
+                let end = directory_offset.saturating_add(self.directory.len());
+                if end <= buffer.len() {
+                    buffer[directory_offset..end].copy_from_slice(&self.directory);
+                }
+            }
+            attempt
+        }
+    }
+
+    fn backend(attempts: Vec<LookupAttemptV1>, directory: &[u8]) -> ScriptedBackend {
+        ScriptedBackend {
+            attempts: RefCell::new(attempts.into()),
+            directory: directory.to_vec(),
+            calls: Cell::new(0),
+        }
+    }
+
+    #[test]
+    fn scripted_backend_covers_growth_cap_and_record_validation() {
+        let uid = EffectiveUidSnapshotV1::scripted(1000);
+        let success = backend(
+            vec![
+                LookupAttemptV1::Range,
+                LookupAttemptV1::Record {
+                    uid: 1000,
+                    directory_offset: 7,
+                },
+            ],
+            b"/accounts/test\0",
+        );
+        assert_eq!(
+            resolve_with_backend(uid, &success).unwrap(),
+            b"/accounts/test"
+        );
+        assert_eq!(success.calls.get(), 2);
+
+        let capped = backend(
+            std::iter::repeat_with(|| LookupAttemptV1::Range)
+                .take(11)
+                .collect(),
+            b"",
+        );
+        assert_eq!(
+            resolve_with_backend(uid, &capped),
+            Err(HomeRootResolutionFailureV1::BufferCapacityExceeded)
+        );
+        for (attempt, expected) in [
+            (
+                LookupAttemptV1::NoAccountRecord,
+                HomeRootResolutionFailureV1::NoAccountRecord,
+            ),
+            (
+                LookupAttemptV1::BackendError(5),
+                HomeRootResolutionFailureV1::NssError(5),
+            ),
+            (
+                LookupAttemptV1::InvalidRecord,
+                HomeRootResolutionFailureV1::InvalidHomeDirectory,
+            ),
+            (
+                LookupAttemptV1::Record {
+                    uid: 1001,
+                    directory_offset: 0,
+                },
+                HomeRootResolutionFailureV1::InvalidHomeDirectory,
+            ),
+            (
+                LookupAttemptV1::Record {
+                    uid: 1000,
+                    directory_offset: usize::MAX,
+                },
+                HomeRootResolutionFailureV1::InvalidHomeDirectory,
+            ),
+        ] {
+            assert_eq!(
+                resolve_with_backend(uid, &backend(vec![attempt], b"/ok\0")),
+                Err(expected)
+            );
+        }
+        for directory in [b"\0".as_slice(), b"relative\0"] {
+            assert_eq!(
+                resolve_with_backend(
+                    uid,
+                    &backend(
+                        vec![LookupAttemptV1::Record {
+                            uid: 1000,
+                            directory_offset: 0,
+                        }],
+                        directory,
+                    ),
+                ),
+                Err(HomeRootResolutionFailureV1::InvalidHomeDirectory)
+            );
+        }
+        let unterminated = vec![b'/'; 1024];
+        assert_eq!(
+            resolve_with_backend(
+                uid,
+                &backend(
+                    vec![LookupAttemptV1::Record {
+                        uid: 1000,
+                        directory_offset: 0,
+                    }],
+                    &unterminated,
+                ),
+            ),
+            Err(HomeRootResolutionFailureV1::InvalidHomeDirectory)
+        );
+    }
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn production_lookup_is_owned_and_is_success_or_exact_no_entry() {
+    fn production_lookup_is_owned_and_is_success_or_exact_no_record() {
         let uid = crate::observe_effective_uid_v1().expect("Linux euid snapshot");
-        match resolve_effective_user_home(uid) {
+        match resolve_with_backend(uid, &LibcPasswdBackendV1) {
             Ok(home) => assert!(home.starts_with(b"/") && !home.contains(&0)),
-            Err(HomeRootResolutionFailureV1::NoEntry) => {}
+            Err(HomeRootResolutionFailureV1::NoAccountRecord) => {}
             Err(error) => panic!("unexpected account-database result: {error:?}"),
         }
     }

@@ -306,7 +306,7 @@ pub fn encode_linked_effect_trace_v1(
             put_u8(&mut out, 2);
             match failure {
                 crate::HomeRootResolutionFailureV1::BufferCapacityExceeded => put_u8(&mut out, 0),
-                crate::HomeRootResolutionFailureV1::NoEntry => put_u8(&mut out, 1),
+                crate::HomeRootResolutionFailureV1::NoAccountRecord => put_u8(&mut out, 1),
                 crate::HomeRootResolutionFailureV1::InvalidHomeDirectory => put_u8(&mut out, 2),
                 crate::HomeRootResolutionFailureV1::NssError(status) => {
                     put_u8(&mut out, 3);
@@ -597,7 +597,7 @@ pub fn decode_linked_effect_trace_v1(
         2 => Some(crate::TerminalErrorV1::HomeRootResolutionFailed(
             match cursor.u8()? {
                 0 => crate::HomeRootResolutionFailureV1::BufferCapacityExceeded,
-                1 => crate::HomeRootResolutionFailureV1::NoEntry,
+                1 => crate::HomeRootResolutionFailureV1::NoAccountRecord,
                 2 => crate::HomeRootResolutionFailureV1::InvalidHomeDirectory,
                 3 => crate::HomeRootResolutionFailureV1::NssError(cursor.i32()?),
                 4 => crate::HomeRootResolutionFailureV1::RootOpen,

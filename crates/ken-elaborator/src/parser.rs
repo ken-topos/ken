@@ -306,7 +306,7 @@ impl Parser {
                     let bytes = root.into_bytes();
                     if ken_host::FsRootSpec::parse_declared(&bytes).is_none() {
                         return Err(ElabError::ParseError {
-                            msg: "FS root must be absolute or begin with './'".to_string(),
+                            msg: "FS root must be absolute or begin with './' or '~/'".to_string(),
                             span: root_span,
                         });
                     }

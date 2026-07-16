@@ -1,8 +1,10 @@
 //! Audited host-ABI boundary for Ken's Linux runtime.
 //!
 //! This crate is a tested and target-validated TCB extension around `rustix`;
-//! its host guarantees are never Ken proofs. `rustix` and raw descriptors stay
-//! private. The kernel is unaffected and retains its own unsafe-code ban.
+//! its host guarantees are never Ken proofs. PX16 adds one separately confined
+//! libc/NSS account-database lookup for effective-user home roots. Dependency
+//! types, raw pointers, and descriptors stay private. The kernel is unaffected
+//! and retains its own unsafe-code ban.
 //! PX14 also snapshots `rustix::process::geteuid` once at startup; that root
 //! posture is discriminator-tested runtime evidence, never a confinement proof.
 //! The generated target manifest dual-sources the numeric filesystem ABI from
@@ -523,19 +525,23 @@ fn resolve_fs_root_spec_with_lookup_v1(
                     .map_err(FsRootResolveError::HomeRootResolution)?;
                 let path = PathBuf::from(std::ffi::OsString::from_vec(home));
                 let path = RootPath::new(path).map_err(|_| {
-                    FsRootResolveError::HomeRootResolution(
-                        HomeRootResolutionFailureV1::RootOpen,
-                    )
+                    FsRootResolveError::HomeRootResolution(HomeRootResolutionFailureV1::RootOpen)
                 })?;
                 let handle = open_root(&path).map_err(|_| {
-                    FsRootResolveError::HomeRootResolution(
-                        HomeRootResolutionFailureV1::RootOpen,
-                    )
+                    FsRootResolveError::HomeRootResolution(HomeRootResolutionFailureV1::RootOpen)
                 })?;
                 (handle, suffix.as_slice())
             }
         };
-        let root_metadata = metadata(&handle)?;
+        let home_root = matches!(spec, FsRootSpec::EffectiveUserHome(_));
+        let map_root_error = |error: HostError| {
+            if home_root {
+                FsRootResolveError::HomeRootResolution(HomeRootResolutionFailureV1::RootOpen)
+            } else {
+                FsRootResolveError::from(error)
+            }
+        };
+        let root_metadata = metadata(&handle).map_err(map_root_error)?;
         let mut lineage = vec![FsIdentity::Posix {
             device: root_metadata.identity.device,
             inode: root_metadata.identity.inode,
@@ -552,23 +558,21 @@ fn resolve_fs_root_spec_with_lookup_v1(
                     _ => FsRootResolveError::ScopeEscape,
                 });
             }
-            let component = PathComponent::new(component)?;
+            let component = PathComponent::new(component).map_err(map_root_error)?;
             match open_at(&handle, &component, OpenRequest::ReadDirectory) {
                 Ok(next) => handle = next,
                 Err(error) if readlink_at(&handle, &component).is_ok() => {
                     let _ = error;
                     return Err(match spec {
-                        FsRootSpec::EffectiveUserHome(_) => {
-                            FsRootResolveError::HomeRootResolution(
-                                HomeRootResolutionFailureV1::SymlinkDenied,
-                            )
-                        }
+                        FsRootSpec::EffectiveUserHome(_) => FsRootResolveError::HomeRootResolution(
+                            HomeRootResolutionFailureV1::SymlinkDenied,
+                        ),
                         _ => FsRootResolveError::SymlinkDenied,
                     });
                 }
-                Err(error) => return Err(error.into()),
+                Err(error) => return Err(map_root_error(error)),
             }
-            let metadata = metadata(&handle)?;
+            let metadata = metadata(&handle).map_err(map_root_error)?;
             lineage.push(FsIdentity::Posix {
                 device: metadata.identity.device,
                 inode: metadata.identity.inode,
@@ -584,7 +588,14 @@ fn resolve_fs_root_spec_with_lookup_v1(
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (spec, execution_start_cwd, effective_uid, rights, symlink, home_lookup);
+        let _ = (
+            spec,
+            execution_start_cwd,
+            effective_uid,
+            rights,
+            symlink,
+            home_lookup,
+        );
         Err(FsRootResolveError::Io(io::Error::from(
             io::ErrorKind::Unsupported,
         )))
@@ -761,6 +772,24 @@ pub fn rename(
 mod tests {
     use super::*;
 
+    #[derive(Clone)]
+    struct ScriptedHomeLookup {
+        expected_uid: EffectiveUidSnapshotV1,
+        result: Result<Vec<u8>, HomeRootResolutionFailureV1>,
+        calls: std::rc::Rc<std::cell::Cell<usize>>,
+    }
+
+    impl account_db_v1::AccountHomeLookupV1 for ScriptedHomeLookup {
+        fn resolve_effective_user_home(
+            &self,
+            uid: EffectiveUidSnapshotV1,
+        ) -> Result<Vec<u8>, HomeRootResolutionFailureV1> {
+            assert_eq!(uid, self.expected_uid);
+            self.calls.set(self.calls.get() + 1);
+            self.result.clone()
+        }
+    }
+
     #[cfg(target_os = "linux")]
     mod build_support {
         include!(concat!(env!("CARGO_MANIFEST_DIR"), "/build_support.rs"));
@@ -771,7 +800,7 @@ mod tests {
     fn generated_manifest_is_closed_and_probe_comparison_discriminates() {
         assert_eq!(TARGET_ABI.fact_count, 23);
         assert_eq!(TARGET_ABI.fact_count, TARGET_ABI.facts.len());
-        assert_eq!(TARGET_ABI.dependencies.len(), 3);
+        assert_eq!(TARGET_ABI.dependencies.len(), 4);
         assert_eq!(
             TARGET_ABI
                 .dependencies
@@ -782,14 +811,13 @@ mod tests {
                 ("rustix", "1.1.4", &["std", "fs", "process"][..]),
                 ("bitflags", "2.13.0", &[][..]),
                 ("linux-raw-sys", "0.12.1", &["std", "general", "errno"][..]),
+                ("libc", "0.2.186", &[][..]),
             ]
         );
-        assert!(
-            TARGET_ABI
-                .dependencies
-                .iter()
-                .all(|dependency| dependency.checksum.len() == 64)
-        );
+        assert!(TARGET_ABI
+            .dependencies
+            .iter()
+            .all(|dependency| dependency.checksum.len() == 64));
         assert_eq!(TARGET_ABI.backend, "linux_raw");
         assert!(!TARGET_ABI_CANONICAL.contains("SIG"));
 
@@ -1079,5 +1107,111 @@ mod tests {
         ));
 
         std::fs::remove_dir_all(parent).expect("remove PX15 tree");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn scripted_home_lookup_binds_isolated_roots_once_and_preserves_denials() {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::symlink;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let parent =
+            std::env::temp_dir().join(format!("ken-host-px16-{}-{unique}", std::process::id()));
+        let cwd_path = parent.join("cwd");
+        let home_a = parent.join("home-a");
+        let home_b = parent.join("home-b");
+        for (home, bytes) in [(&home_a, b"A".as_slice()), (&home_b, b"B".as_slice())] {
+            std::fs::create_dir_all(home.join("data")).unwrap();
+            std::fs::write(home.join("data/value"), bytes).unwrap();
+        }
+        std::fs::create_dir_all(&cwd_path).unwrap();
+        symlink(&parent, home_a.join("link")).unwrap();
+        let cwd = open_root(&RootPath::new(&cwd_path).unwrap()).unwrap();
+        let uid_a = EffectiveUidSnapshotV1::scripted(1001);
+        let uid_b = EffectiveUidSnapshotV1::scripted(1002);
+
+        for (uid, home, expected) in [
+            (uid_a, &home_a, b"A".as_slice()),
+            (uid_b, &home_b, b"B".as_slice()),
+        ] {
+            let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+            let lookup = ScriptedHomeLookup {
+                expected_uid: uid,
+                result: Ok(home.as_os_str().as_bytes().to_vec()),
+                calls: calls.clone(),
+            };
+            let scope = resolve_fs_root_spec_with_lookup_v1(
+                &FsRootSpec::EffectiveUserHome(b"data".to_vec()),
+                &cwd,
+                uid,
+                RightSet::READ,
+                SymlinkPolicy::NoFollow,
+                &lookup,
+            )
+            .unwrap();
+            assert_eq!(calls.get(), 1, "one account lookup per initialization");
+            let FsHandle::Posix(root) = scope.root else {
+                panic!("home root must be descriptor-backed")
+            };
+            let value = open_at(
+                &root,
+                &PathComponent::new(b"value").unwrap(),
+                OpenRequest::Read,
+            )
+            .unwrap();
+            assert_eq!(read(&value).unwrap(), expected);
+        }
+
+        let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+        let lookup = ScriptedHomeLookup {
+            expected_uid: uid_a,
+            result: Ok(home_a.as_os_str().as_bytes().to_vec()),
+            calls,
+        };
+        assert!(matches!(
+            resolve_fs_root_spec_with_lookup_v1(
+                &FsRootSpec::EffectiveUserHome(b"../escape".to_vec()),
+                &cwd,
+                uid_a,
+                RightSet::READ,
+                SymlinkPolicy::NoFollow,
+                &lookup,
+            ),
+            Err(FsRootResolveError::HomeRootResolution(
+                HomeRootResolutionFailureV1::ScopeEscape
+            ))
+        ));
+        assert!(matches!(
+            resolve_fs_root_spec_with_lookup_v1(
+                &FsRootSpec::EffectiveUserHome(b"link".to_vec()),
+                &cwd,
+                uid_a,
+                RightSet::READ,
+                SymlinkPolicy::NoFollow,
+                &lookup,
+            ),
+            Err(FsRootResolveError::HomeRootResolution(
+                HomeRootResolutionFailureV1::SymlinkDenied
+            ))
+        ));
+        assert!(matches!(
+            resolve_fs_root_spec_with_lookup_v1(
+                &FsRootSpec::EffectiveUserHome(b"missing".to_vec()),
+                &cwd,
+                uid_a,
+                RightSet::READ,
+                SymlinkPolicy::NoFollow,
+                &lookup,
+            ),
+            Err(FsRootResolveError::HomeRootResolution(
+                HomeRootResolutionFailureV1::RootOpen
+            ))
+        ));
+        std::fs::remove_dir_all(parent).unwrap();
     }
 }

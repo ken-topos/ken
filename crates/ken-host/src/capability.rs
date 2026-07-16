@@ -61,7 +61,7 @@ impl FsRootSpec {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HomeRootResolutionFailureV1 {
     BufferCapacityExceeded,
-    NoEntry,
+    NoAccountRecord,
     InvalidHomeDirectory,
     NssError(i32),
     RootOpen,

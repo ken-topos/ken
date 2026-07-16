@@ -69,6 +69,41 @@ fn output_dir(name: &str) -> std::path::PathBuf {
     path
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn linked_home_root_uses_only_production_account_database_boundary() {
+    let dir = output_dir("px16-home-root");
+    let source = r#"program capabilities FS APartial "~/", RootExecution Allow
+fn main (_input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode = host_exit APartial Success
+"#;
+    let output =
+        ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px16-home-root", &dir)
+            .expect("checked ~/ root reaches a linked artifact");
+    let observation = ken_runtime::run_bound_process_effect_observation_v1(
+        &output.artifact,
+        &ken_runtime::NativeEffectRunOptionsV1 {
+            arguments: Vec::new(),
+            environment: Vec::new(),
+            cwd: dir.clone(),
+            plan_hash: output.plan_transport_hash,
+        },
+    )
+    .expect("linked child emits a complete startup observation");
+    match observation.terminal_error {
+        None => assert_eq!(observation.exit_status, 0),
+        Some(ken_runtime::TerminalErrorV1::HomeRootResolutionFailed(
+            ken_runtime::HomeRootResolutionFailureV1::NoAccountRecord,
+        )) => assert_ne!(observation.exit_status, 0),
+        other => panic!("unexpected production account-database result: {other:?}"),
+    }
+    assert!(observation.stdout.is_empty());
+    assert!(observation.stderr.is_empty());
+    assert!(observation.filesystem_delta.is_empty());
+    assert!(observation.effect_trace.is_empty());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn real_source_builds_one_identity_bound_linked_process_artifact() {
     let dir = output_dir("pure");

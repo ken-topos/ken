@@ -52,10 +52,13 @@
   **startup-terminal** observation via **PX14's** no-context startup writer
   (`write_startup_terminal_observation_v1`) — **NO wall-clock bound** (NSS may
   block; do not add a timeout).
-- **Verify seam:** a private `AccountHomeLookupV1` trait/seam with a **production
-  libc impl** and a **scripted test impl**; **no env/CLI/ProcessInput home
-  injection** anywhere. PX6's twin-root differential stays **lane-local** on the
-  resolved handle (inject at the `AccountHomeLookupV1` seam, never a prod env).
+- **Verify seam (Architect carrier ruling `evt_302e43e52x7j9`):** a private
+  `AccountHomeLookupV1` trait/seam with a **production libc impl** and a
+  **scripted in-process test impl**. The script drives the real private
+  init/resolution helper; it never crosses `exec`. PX6's twin-root differential
+  stays **lane-local after resolution**, and a separate linked-artifact
+  integration exercises the real child libc/NSS lookup. **No
+  env/CLI/ProcessInput/artifact/observation home injection** exists.
 - **`$HOME` is REJECTED outright** (forgeable). Do not read it, anywhere.
 - **Honesty boundary (ADR-0017):** home is **NSS policy, not a kernel fact** —
   runtime-trusted + discriminator-tested, never kernel-proved. State the new
@@ -110,10 +113,16 @@ any kernel/spec/conformance change.
 
 ## Acceptance criteria (testable)
 
-- **AC1 — `~/` resolves + runs, interp == native.** A `ProgramCaps` with a
-  `~/data` FS root, under a **scripted** `AccountHomeLookupV1` returning a twin
-  home root, runs an FS op through both executors with identical
-  `EffectObservationV1`; the op reaches the node beneath the resolved home.
+- **AC1 — three-face home-root evidence (carrier-ruling amendment).** (1) A
+  scripted in-process `AccountHomeLookupV1` drives the real private
+  init/resolution helper with two UID/home roots and proves isolated,
+  exactly-once lookup/open, suffix resolution, mint-after-resolution, and
+  relative spelling. (2) PX6 retains its real post-resolution
+  interpreter/native twin-root equality over lane-local handles; it makes no
+  claim about equal NSS records. (3) a real checked `~/` linked artifact uses
+  the child process's production euid + `getpwuid_r`, accepting only successful
+  startup or exact `HomeRootResolutionFailed(NoAccountRecord)` with empty
+  stdout/stderr/trace/delta. No scripted value crosses `exec`.
 - **AC2 — snapshot-once + euid-bound.** The home resolves from **PX14's** euid
   snapshot (structural: no second `geteuid` on the path — `git grep` shows the
   sole `geteuid` remains PX14's); a cwd/uid change after init does not re-resolve.
@@ -123,11 +132,13 @@ any kernel/spec/conformance change.
   `~/`-rooted op is byte-identical to the same op under an absolute root at the
   same directory; the home spelling never enters an observation. PX6 twin-root
   passes.
-- **AC5 — failure is a clean startup-terminal.** Each `HomeRootResolutionFailureV1`
-  cause (buffer-cap exceeded, no-entry, invalid `pw_dir`, NSS error) maps to
-  `TerminalErrorV1::HomeRootResolutionFailed` with empty trace/delta/leaves via
-  PX14's no-context writer and the shared exit mapper; a scripted seam drives
-  each cause. No wall-clock bound anywhere on the path.
+- **AC5 — failure is a clean startup-terminal.** The same private injectable
+  initialization helper drives each `HomeRootResolutionFailureV1` cause
+  (buffer-cap exceeded, no account record, invalid `pw_dir`, NSS error) through
+  the real pre-context writer and shared exit mapper to
+  `TerminalErrorV1::HomeRootResolutionFailed`, with empty
+  trace/delta/leaves. The separate linked integration proves the produced child
+  reaches the production boundary. No wall-clock bound exists on the path.
 - **AC6 — `$HOME` absent; confined unsafe.** `git grep` clean of `$HOME`/`env`
   home reads; the **only** `#![allow(unsafe_code)]` is inside `account_db_v1`
   (crate stays `#![deny]`); no `libc` type crosses the facade. `libc` is an
