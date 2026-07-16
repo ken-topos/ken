@@ -14,7 +14,37 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ## ⚡⚡ RESUME NEXT (2026-07-16 ~13:2x) — ✅ **PX13 CLOSED** (merged `bbb0eca2`, PR #740) · ✅ **PX14 RELEASED** — handoff gate done (ring compacted, verified "Context compacted" ×3), kickoff `evt_6pw225rz8zwye` posted, leader Working (re-orienting→picks up kickoff) · ▶ EVENT-DRIVEN: PX14 build → QA → Architect-only §14 (STRAND risk) → publish → close → release PX15(`./`) · ✅ PX16/`~` RULED (ADR-0020) · ⧗ tracker-sync doc-PR to main pending
+> ## ⚡⚡ RESUME NEXT (2026-07-16 ~11:4x) — 🏁 **NATIVE CAPABILITY-MODEL CAMPAIGN COMPLETE** (PX13→PX14→PX15→PX16 all MERGED+CLOSED; absolute/`./`/`~/` FS-authority roots all land). **PX16(`~/`) CLOSED** — merged `origin/main @ 6fe038eb` (PR #744, squash of §14-approved `fa3faa9c`; `dec_48e5vah1nd5r6` verified resolved APPROVE), content-verified on main (`EffectiveUserHome(Vec<u8>)` `capability.rs:17` wire-tag 2; `account_db_v1.rs` confined `#![allow(unsafe_code)]`+`getpwuid_r`; seven-case `HomeRootResolutionFailureV1`; `TerminalErrorV1::HomeRootResolutionFailed` host+cli; `libc="=0.2.186"`), all 3 §10 retros in (leader `evt_4vcj36jjwz7xk`, impl `evt_2jswbaa68mcpd`, qa `evt_1vvp1rpymbj5v`). Ring stood down (`evt_2xtwdvyehv0yq`).
+> >
+> > **▶▶ NEXT: PX7 (Resource/Bracket) — NOT held, operator-approved; design ruling IN FLIGHT.** Architect Working on a self-contained ruling for 6 axes + Runtime/Foundation branch seam (query `evt_2jqh6hf0tyxfx`, thread `thr_7khkh82ybdpzv`; architect confirmed pickup `evt_5bbb3ds4b0nqs`). Survey done (agent findings): generation-table precedent `CapabilityTokenV1`/`CapabilityTableV1` (`ken-host/src/effect_v1.rs:317-376`, mints gen=1 never bumps); current model path-based/stateless (no Ken handle/close op); **Ward = one-way data-only export** (`ken-elaborator/src/export.rs` T-channel, `temporal.rs`); no `System.*` surface yet; `RightSet(u8)` 1 free bit. **ON RULING:** author shovel-ready PX7 frame(s) (settled inputs pinned: affine-in-Rust→lift→Ward, NO Ken affine types until proven; anchors on `origin/main`), then handoff-gate the Runtime ring + Foundation-share and kick. Runtime is one-ring (was PX16); Foundation idle → can start its share once framed. **⚠ my worktree `steward/work` is STALE vs main — read landed code via `git show origin/main:…`, not the working tree.**
+> >
+> > **THEN doc-sync main** (bundle PX14/PX15/PX16-close tracker/catalog/window-log into ONE `--doc-only` PR; main docs behind since `412d4b80`, code current through `6fe038eb`). **⚖ AC1/AC5 AMENDED mid-build (Architect ruling `evt_302e43e52x7j9`, 10:49):** original AC1 was internally contradictory — a process-local scripted `AccountHomeLookupV1` seam CANNOT cross `exec` to drive the real linked child artifact (implementer HARD-STOPPED at held scaffold `365d1bcf`). Architect ruled the **three-face split** (frame correction, NOT ADR-0020 reopen): (1) in-process scripted-resolver discriminator over the private seam (twin UID/home A/B + all failure causes); (2) post-resolution PX6 interp==native differential over lane-local resolved handles; (3) production linked-artifact integration (no override, accepts ONLY real success OR exact `HomeRootResolutionFailed(NoAccountRecord)` startup-terminal). NO child carrier — env/CLI/ProcessInput/artifact-meta/observation-channel all remain OUT. Implementer resumed 10:49:40, amending AC1/AC5+verify-seam prose on the branch then building. **QA gates the AMENDED 3-face AC set, not the original AC1.** [lesson saved: [[frame-ac-cannot-require-process-local-seam-to-drive-cross-exec-child]]] · kickoff `evt_4ggkvmhr53q94`, thread `thr_1956vnqsqc2jj`; frame on `wp/px16-home-root-account-db` (was `@9678d27b`; branch now advanced)
+> >
+> > **⟳ SELF-COMPACTING at this clean PX16-building seam** (all work checkpointed; PX16 handback→§14→publish→close is
+> > better entered fresh). **ON RESUME:** re-orient (SessionStart) → read this block → `get_recent_context since
+> > evt_4ggkvmhr53q94` + capture-pane runtime seats → continue EVENT-DRIVEN. **PX16 pipeline:** leader frames team WP →
+> > implementer builds `wp/px16-home-root-account-db @ 9678d27b` (rebase onto current main; anchors fresh off
+> > `e4475143`) → runtime-qa gates RELEASED SHA (press AC2 no-2nd-geteuid + AC5 each failure-cause startup-terminal +
+> > AC6 confined-unsafe/`$HOME`-grep-clean) → runtime-leader opens §14 Decision → **Architect-only §14** (⚠ diff MOVES
+> > `Cargo.toml`/`Cargo.lock` for the new libc dep, but NO spec/conformance → CV still NOT in route; §14 request may
+> > STRAND on architect pane — Monitor bp808a7mu, bare-Enter) → on genuine `resolved` APPROVE: publish EXACT SHA via
+> > `scripts/scripted-pr-automerge.sh` (standing authority; verify Decision `status:resolved` w/ Architect vote — not
+> > prose; NO tracker commit on candidate) → content-verify on main (`EffectiveUserHome` variant + `account_db_v1` +
+> > `getpwuid_r` + `HomeRootResolutionFailed`) → relay 3 §10 retros → CLOSE = **native cap-model campaign COMPLETE**
+> > (`./`/`~/`/absolute all land). CI-red → route failing job to Runtime for fresh SHA+Decision.
+> > **THEN doc-sync main** (bundle PX14/PX15/PX16-close tracker/catalog/window-log into ONE `--doc-only` PR; main docs
+> > behind since `412d4b80`, code current through e4475143). **✅ PX7 IS *NOT* HELD (operator corrected 2026-07-16):**
+> > the "don't ask me again" was STRATEGY-SETTLED (Pat originated + repeatedly approved PX7), NOT a hold — I had wrongly
+> > conflated my own scheduling deferral (PX7 sat behind the cap campaign on the one-at-a-time Runtime ring) with an
+> > operator hold. **NO HOLD.** PX7 strategy (settled, do NOT re-litigate): resources needing affine types → do the
+> > affine enforcement IN RUST (Rust has affine types), lift a reasonable interface to Ken, **discharge the
+> > exactly-once-release obligations to Ward** to be checked. Honest boundary = real (Rust affinity + Ward-checked
+> > obligations), NOT a Ken-level affine claim, NOT untested-runtime. **PX7 does NOT wait on R2** (Ken-level affine
+> > types) — buildable now. **SEQUENCING:** PX7 (Runtime + Foundation, L) becomes the next major WP AFTER PX16 closes
+> > (Runtime is one ring → waits for PX16; Foundation ring idle → can start its share). **→ author shovel-ready PX7
+> > frame (Steward T1) while PX16 finishes §14, so the pipeline stays full.** **STANDING:** PX16 ruled (do NOT re-ask
+> > operator — libc/NSS sanctioned); verify Decisions genuinely `resolved`; publish EXACT SHA. **DO NOT cancel the
+> > watchdog after PX16** — PX7 is live next work, fleet is NOT going quiescent.
 >
 > > **✅✅ ALL THREE READY CAP-MODEL FRAMES AUTHORED + on branches (off origin/main 3368c3a3, frame-only):**
 > > • **PX13** `wp/px13-fs-chmod-mode-capability @ 34f967c4` — **RELEASED, Runtime building** (kickoff
