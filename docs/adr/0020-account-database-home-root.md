@@ -32,13 +32,14 @@ handle-backed `FsScope`. No home spelling or bytes enter `ProgramCaps`,
 `ProcessInput`, operation paths, canonical observations, or artifact hashes.
 
 The account lookup is confined to a private `ken-host::account_db_v1` module.
-That module alone permits unsafe Rust and exposes a safe owned-byte facade. Its
-Linux implementation uses exact-pinned `libc::getpwuid_r`: a 1 KiB initialized
-buffer doubles only after `ERANGE` up to a 1 MiB hard cap. Success requires the
-returned pointer to equal the supplied record, matching UID, an in-buffer
-`pw_dir`, a bounded terminating NUL, a nonempty value, and an absolute path.
-Bytes are copied before the buffer drops. No libc type, pointer, or borrow
-crosses the module boundary.
+PX16's new libc/NSS unsafe allowance is confined to that module, which exposes
+a safe owned-byte facade. The pre-existing audited `abi_v1` unsafe boundary
+remains separate and unchanged. The Linux implementation uses exact-pinned
+`libc::getpwuid_r`: a 1 KiB initialized buffer doubles only after `ERANGE` up to
+a 1 MiB hard cap. Success requires the returned pointer to equal the supplied
+record, matching UID, an in-buffer `pw_dir`, a bounded terminating NUL, a
+nonempty value, and an absolute path. Bytes are copied before the buffer drops.
+No libc type, pointer, or borrow crosses the module boundary.
 
 Lookup and binding failures are exact
 `HomeRootResolutionFailureV1` values. Native startup maps them to

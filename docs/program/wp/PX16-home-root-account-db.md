@@ -140,18 +140,21 @@ any kernel/spec/conformance change.
   trace/delta/leaves. The separate linked integration proves the produced child
   reaches the production boundary. No wall-clock bound exists on the path.
 - **AC6 — `$HOME` absent; confined unsafe.** `git grep` clean of `$HOME`/`env`
-  home reads; the **only** `#![allow(unsafe_code)]` is inside `account_db_v1`
-  (crate stays `#![deny]`); no `libc` type crosses the facade. `libc` is an
-  exact-pinned, default-features-off, Linux-target dep; dependency-delta doc
-  updated. **No-regression = green in CI**, never a local `--workspace` run.
+  home reads; the **only new** `#![allow(unsafe_code)]` introduced by PX16 is
+  inside `account_db_v1`, while the crate stays `#![deny]` and the pre-existing
+  audited `abi_v1` unsafe boundary remains separate and unchanged. No `libc`
+  type crosses the facade. `libc` is an exact-pinned, default-features-off,
+  Linux-target dep; dependency-delta doc updated. **No-regression = green in
+  CI**, never a local `--workspace` run.
 
 ## Do-not-reopen guards
 
 - Do NOT add a second `geteuid` — consume PX14's `EffectiveUidSnapshotV1`.
 - Do NOT read `$HOME`/env, add a wall-clock timeout, enable rustix's libc
   backend, add an NSS crate, or hand-write C.
-- Do NOT let a `libc` type escape `account_db_v1`, or relax the crate's
-  `#![deny(unsafe_code)]` outside that one module.
+- Do NOT let a `libc` type escape `account_db_v1`, add any other PX16 unsafe
+  allowance, or relax the crate's `#![deny(unsafe_code)]`. The inherited
+  audited `abi_v1` unsafe boundary remains separate and unchanged.
 - Do NOT change `ScopeEscape`/`SymlinkDenied`, ADR-0018 §4 canonicalization, or
   PX15's `./`/absolute behavior; do NOT let the home spelling leak into an
   observation.
