@@ -1805,6 +1805,22 @@ fn create_policy_tag(value: &Lowered) -> Option<i64> {
     }
 }
 
+fn resource_open_mode_tag(value: &Lowered) -> Option<i64> {
+    let Lowered::Constructor { constructor, args } = value else {
+        return None;
+    };
+    if !args.is_empty() {
+        return None;
+    }
+    if constructor.ends_with("::ResourceRead") {
+        Some(0)
+    } else if constructor.ends_with("::ResourceMetadata") {
+        Some(1)
+    } else {
+        None
+    }
+}
+
 fn lowered_char_list(value: &Lowered) -> Option<Vec<u8>> {
     let Lowered::Constructor { constructor, args } = value else {
         return None;
@@ -3428,13 +3444,14 @@ impl<'a> Lowering<'a> {
                     let mode = builder.ins().select(in_range, narrowed, invalid);
                     builder.ins().stack_store(mode, request, request_offset(3));
                 } else if operation == ken_host::HostOpV1::FsOpen {
-                    let Lowered::Int { value: mode, .. } = lowered
+                    let mode = lowered
                         .get(1)
-                        .ok_or_else(|| unsupported("Effect", "FS.Open is missing its mode"))?
-                    else {
-                        return Err(unsupported("Effect", "FS.Open mode is not an Int"));
-                    };
-                    builder.ins().stack_store(*mode, request, request_offset(3));
+                        .and_then(resource_open_mode_tag)
+                        .ok_or_else(|| {
+                            unsupported("Effect", "FS.Open has a malformed ResourceOpenMode")
+                        })?;
+                    let mode = builder.ins().iconst(types::I64, mode);
+                    builder.ins().stack_store(mode, request, request_offset(3));
                 }
             }
             ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease => {
