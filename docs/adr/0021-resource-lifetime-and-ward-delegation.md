@@ -226,6 +226,25 @@ cleanup failures as an ordered secondary canonical observation, neither
 overwritten nor dropped. This requires a versioned observation/wire
 discriminator.
 
+**Native reply projection (PX7-F, Architect-ruled `evt_648wsvp2w33yg`).** So the
+public checked-Ken interp↔linked-native differential can *distinguish* these
+identities rather than fall back to trace-only evidence, PX7-F adds ONE additive
+`REPLY_RESOURCE_ERROR` reply tag carrying a fixed `ResourceErrorReplyV1 {
+schema_version, resource_kind, identity, io, required, held }` payload, with
+`detail` equal to the exact resource-error discriminator. The existing
+`REPLY_ERROR/detail 6` (`io.InvalidInput`) semantics are unchanged and never
+reinterpreted as a resource error; the post-acquisition metadata-backend I/O
+branch surfaces as `HostIO`, kept distinct from a resource-table error. The
+surface error sum is `HostIO | Closed | MalformedResource | RightNotHeld(required,
+held) | ReleaseFailed(resource_kind, identity, io)` (identity preserving all 64
+bits, no fd exposed). Each variant fully initializes its payload and fails closed
+on any malformed field; the C probe and Rust record agree on every offset, and the
+coordinated ABI-surface files (catalog, binding registry, `HostEffectWireLayoutV1`,
+ABI hash, observer, Cranelift consumer, symbol resolution, mutation tests) move
+together. This is a **companion projection only** — `ResourceTableV1`, generation,
+token, invalidation-before-close, no-retry, and close ownership are byte-for-byte
+untouched.
+
 ## Trust statement
 
 Resource lifetime is **runtime-enforced and discriminator-tested**, and the

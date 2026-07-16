@@ -60,6 +60,86 @@
   **not** add `program capabilities Resource …` and does **not** broaden the
   FS-only capability declaration grammar. `System.Resource` is the **first
   `System.*` namespace** but changes no declaration grammar.
+- **Surface error sum + authorized native ABI projection (Architect-ruled,
+  `evt_648wsvp2w33yg`).** Post-acquisition operations use ONE explicit Ken error
+  sum, and the native reply gets ONE additive projection so the public
+  checked-Ken interp↔native differential distinguishes the variants (**never**
+  trace-only evidence). The reachable V1 roster is fixed; `ResourceKindMismatch`
+  stays deferred (no V1 producer).
+  - **Fixed Ken surface** — post-acquisition error sum. `required`/`held` are the
+    exact widened `u8` right masks; `ReleaseFailed` exposes **no fd** — its
+    surface fields are the ADR-0021 identity (kind + acquisition-order trace
+    identity + host-neutral I/O identity); the internal wire schema version is
+    validated **before** construction and is NOT a user field;
+    `ResourceTraceIdentity` preserves ALL 64 bits via an opaque module-private
+    two-`u32`-limb constructor — do **not** narrow to signed Ken `Int`;
+    `MalformedResource` is a total/fail-closed case but is **not** claimed
+    reachable from valid public Ken (`Resource k` has no public constructor):
+
+    ```text
+    ResourceError =
+        HostIO(IOError)
+      | Closed
+      | MalformedResource
+      | RightNotHeld(required: Int, held: Int)
+      | ReleaseFailed(resource_kind: ResourceKind,
+                      identity: ResourceTraceIdentity,
+                      io: IOError)
+
+    ResourceKind = FsHandle
+    ```
+
+    The separately-reachable metadata-backend I/O branch is `HostIO(IOError)` — it
+    must **not** be confused with a resource-table error.
+  - **Fixed native ABI projection** — keep existing `REPLY_ERROR/detail`
+    UNCHANGED for generic I/O/file/capability errors (detail `6` remains
+    `io.InvalidInput`, **never** reinterpreted as a resource error). Add a
+    DISTINCT generated reply tag + a fixed, probed payload:
+
+    ```text
+    tag|reply.resource_error|6
+    error|resource.Closed|0
+    error|resource.MalformedResource|1
+    error|resource.RightNotHeld|2
+    error|resource.ReleaseFailed|3
+    tag|resource_kind.FsHandle|0
+    lifetime|resource_error_reply_schema|1
+
+    ResourceErrorReplyV1 { schema_version: u64, resource_kind: u64,
+                           identity: u64, io: u64, required: u64, held: u64 }
+    HostReplyV1 { tag: u64, detail: u64, bytes: SliceV1,
+                  resource_error: ResourceErrorReplyV1 }
+    ```
+
+    For `REPLY_RESOURCE_ERROR`, `detail` is EXACTLY the resource-error
+    discriminator; the payload is always fully initialized —
+    `Closed`/`MalformedResource` zero every field, `RightNotHeld` sets only schema
+    + required/held, `ReleaseFailed` sets schema + kind + identity + the existing
+    packed `IoErrorIdentityV1` and zeros required/held. FAIL CLOSED on an unknown
+    discriminator, wrong schema, unknown kind, invalid I/O tag, out-of-range
+    rights, or noncanonical nonzero unused fields. The C probe + Rust record agree
+    on size/alignment/every offset; the catalog, generated binding registry,
+    `HostEffectWireLayoutV1`, ABI hash, observer, Cranelift consumer, compiler
+    symbol resolution, and mutation tests all move TOGETHER. Cranelift accepts:
+    `FsOpen` → resource success or existing generic file error only;
+    `FsHandleMetadata` → metadata success, existing generic I/O error → `HostIO`,
+    or the new resource-error reply; `ResourceRelease` → unit success or the new
+    resource-error reply only.
+  - **Companion projection, NOT a substrate redesign.** `ResourceTableV1`,
+    token/generation rules, invalidation-before-close, no-retry, and close
+    ownership remain **byte-for-byte untouched**. The "consume without modifying
+    PX7-R" guard is amended to authorize ONLY the ABI/projection files needed for
+    this closed mapping.
+  - **Evidence boundary.** The deterministic public checked-Ken
+    interp↔linked-native controls MUST reach success, escaped/double-release
+    `Closed`, and `RightNotHeld` with exact surface constructors + canonical
+    observations. A valid public program CANNOT manufacture `MalformedResource` →
+    do **not** demand a fake reaching case. Real OS-close failure is
+    nondeterministic → keep the caller-control label: test `ReleaseFailed`
+    construction, ABI encode/decode/field-preservation, closed-after-error,
+    no-retry, and multi-fault ordering with the PRIVATE injected close result —
+    but do **not** call that an observed linked-artifact OS-close failure, and do
+    **not** add an env/TLS/script carrier across `exec` to force it.
 - **Ward integration = the Spec-owned `ResourceLifetimeObligationV1` schema.**
   The target emitter generates **exactly one** delegated obligation whenever its
   reachable `Σ` contains a resource acquisition; status stays `delegated`,
@@ -100,8 +180,14 @@ the opaque `Resource k`, the bracket result/error shape, `withResource`, use
 combinators, and optional early `release`; the delayed-`body` acquisition →
 settlement sequencing over PX7-R's `FsOpen`/handle-metadata/`ResourceRelease`;
 the controlled-trap settlement path (trap reaches the runtime as a controlled
-terminal outcome); the surface `Closed` / `MalformedResource` /
-`RightNotHeld` / `ReleaseFailed` result shapes lifted from PX7-R; the
+terminal outcome); the surface error sum `HostIO` / `Closed` /
+`MalformedResource` / `RightNotHeld` / `ReleaseFailed` lifted from PX7-R; **the
+authorized additive native `REPLY_RESOURCE_ERROR` ABI projection** (a distinct
+generated reply tag + `ResourceErrorReplyV1` payload, per the Architect ruling) so
+the public checked-Ken interp↔native differential distinguishes the resource-error
+variants, with its coordinated ABI-surface files (catalog / generated binding
+registry / `HostEffectWireLayoutV1` / ABI hash / observer / Cranelift consumer /
+compiler symbol resolution / C-probe + mutation tests) moving together; the
 generated `ResourceLifetimeObligationV1` delegated T-obligation emitted into
 `export.rs` (per the pinned Spec schema) whenever `Σ` reaches a resource
 acquisition; the trap-primary + ordered-cleanup-failure secondary observation
@@ -109,18 +195,29 @@ acquisition; the trap-primary + ordered-cleanup-failure secondary observation
 statements; and end-to-end success/error/controlled-trap/escape controls.
 
 **Out of scope:** any change to PX7-R's `ResourceTableV1` / generation discipline
-/ table RAII / native enforcement (consume, do not re-implement); the schema
-**definition** (Spec-owned, pinned); read/write/seek ops (PX8); any Ken-level
-affine/linear type; a new capability family or `RightSet` bit; any kernel change.
+/ table RAII / native enforcement / token / close ownership (consume, do not
+re-implement — these stay **byte-for-byte untouched**; the ONLY authorized
+`crates/**` movement beyond the new surface + emitter is the closed additive
+`REPLY_RESOURCE_ERROR` ABI/projection mapping above); the schema **definition**
+(Spec-owned, pinned); read/write/seek ops (PX8); any Ken-level affine/linear type;
+a new capability family or `RightSet` bit; any kernel change.
 
 ## Mandated deliverable outline — each section ends in a concrete choice
 
-1. **`System.Resource` module surface.** The first `System.*` module: opaque
-   `Resource k` (no Ken constructor; minted only via `withResource`), the bracket
-   result/error type carrying the lifted `Closed` / `MalformedResource` /
-   `RightNotHeld` / `ReleaseFailed` identities, `withResource`, the
-   handle-metadata use combinator (over PX7-R's real consumer), and optional
-   early `release`. No declaration-grammar change.
+1. **`System.Resource` module surface + native ABI projection.** The first
+   `System.*` module: opaque `Resource k` (no Ken constructor; minted only via
+   `withResource`), the post-acquisition **error sum** `HostIO` / `Closed` /
+   `MalformedResource` / `RightNotHeld(required, held)` / `ReleaseFailed(kind,
+   identity, io)` exactly as fixed above (identity keeps all 64 bits; no fd on
+   `ReleaseFailed`; `MalformedResource` total-but-not-publicly-reachable),
+   `withResource`, the handle-metadata use combinator (over PX7-R's real
+   consumer), and optional early `release`. **Plus** the additive native
+   `REPLY_RESOURCE_ERROR` projection (distinct reply tag; `ResourceErrorReplyV1`
+   fully-initialized payload; `detail` = the exact discriminator; fail-closed on
+   every malformed field) with the C-probe/Rust-record offset agreement and the
+   coordinated ABI-surface files moving together — the substrate untouched. No
+   declaration-grammar change; existing `REPLY_ERROR/detail 6` semantics
+   unchanged.
 2. **`withResource acquire body` sequencing.** `body` is a delayed function.
    Acquire (via `FsOpen`) runs first; `body` runs with the copyable `Resource k`;
    settlement runs after `body`'s returned value/error. The private
@@ -155,22 +252,34 @@ affine/linear type; a new capability family or `RightSet` bit; any kernel change
   no Ken constructor for `Resource k`. `System.Resource` adds no
   declaration-grammar change (`parser.rs` cap parse unchanged) and no
   `program capabilities Resource` family.
-- **AC2 — copyable value, escape → `Closed`.** A `Resource k` passed through
-  ordinary `body` computation works while live; a handle copied/returned so it
-  escapes the bracket returns `Closed` on every later use (assert the `Closed`
-  variant specifically). The `System/Resource` source text states escape is legal
-  but stale — verified by reading the shipped source, not a comment.
+- **AC2 — copyable value, escape → `Closed`; public differential reaches the
+  distinguishable variants.** A `Resource k` passed through ordinary `body`
+  computation works while live; a handle copied/returned so it escapes the bracket
+  returns `Closed` on every later use (assert the `Closed` variant specifically).
+  The **deterministic public checked-Ken interp↔linked-native controls** reach
+  **success, escaped/double-release `Closed`, and `RightNotHeld`** with the exact
+  surface constructors and canonical observations **through the new
+  `REPLY_RESOURCE_ERROR` reply tag** (not trace-only evidence, and not a
+  `detail 6` reinterpretation). `MalformedResource` is a total surface case but is
+  **not** demanded as a reaching case (no public constructor for `Resource k`).
+  The `System/Resource` source text states escape is legal but stale — verified by
+  reading the shipped source, not a comment.
 - **AC3 — settlement on normal/error/controlled-trap.** Normal return, returned
   error, and a controlled Ken trap each run settlement exactly once. Early
   `release` in `body` + bracket exit does not double-close (no second OS close);
   public `release` twice → `Closed` on the second. The trap reaches the runtime
   as a controlled terminal outcome (an aborting trap is not exercised as success
   — it is a rejected shape).
-- **AC4 — multi-fault ordering.** body-success + release-failure → bracket
-  result is the `ReleaseFailed`; body-error + release-failure → both preserved;
-  controlled-trap + cleanup-failure → trap primary + ordered cleanup-failure list
-  secondary, neither dropped nor overwritten (over PX7-R's versioned
-  discriminator). Assert the exact canonical observation.
+- **AC4 — multi-fault ordering + `ReleaseFailed` via private injection.**
+  body-success + release-failure → bracket result is the `ReleaseFailed`;
+  body-error + release-failure → both preserved; controlled-trap + cleanup-failure
+  → trap primary + ordered cleanup-failure list secondary, neither dropped nor
+  overwritten (over PX7-R's versioned discriminator). Assert the exact canonical
+  observation. `ReleaseFailed` construction, ABI encode/decode + field
+  preservation, closed-after-error, and no-retry are exercised with the **private
+  injected close result** (the caller-control label) — **not** claimed as an
+  observed linked-artifact OS-close failure, and **no** env/TLS/script carrier is
+  added across `exec` to force one (real OS-close failure is nondeterministic).
 - **AC5 — exactly-one delegated obligation, correlated.** A program whose
   reachable `Σ` contains a resource acquisition emits **exactly one**
   `ResourceLifetimeObligationV1` into `export.rs`'s `T` channel, status
@@ -186,15 +295,39 @@ affine/linear type; a new capability family or `RightSet` bit; any kernel change
   obligation validates against the Spec-owned conformance route for
   `ResourceLifetimeObligationV1`; no schema field is Foundation-invented. **No
   merge before the schema is pinned.**
-- **AC8 — no substrate regression, CI-green.** PX7-R's `ResourceTableV1` /
-  generation discipline / native enforcement are consumed unchanged (`git grep`
-  shows no re-implementation); interpreter/native differential stays green.
-  **No-regression = green in CI**, never a local `--workspace` run.
+- **AC8 — substrate byte-for-byte untouched, CI-green.** PX7-R's `ResourceTableV1`
+  / generation discipline / token / invalidation-before-close / no-retry / close
+  ownership / native enforcement are **byte-for-byte unchanged** (`git grep` shows
+  no re-implementation); the ONLY `crates/**` movement beyond the new surface +
+  emitter is the authorized additive `REPLY_RESOURCE_ERROR` projection (AC9);
+  interpreter/native differential stays green. **No-regression = green in CI**,
+  never a local `--workspace` run.
+- **AC9 — additive `REPLY_RESOURCE_ERROR` ABI projection, closed + fail-closed.**
+  A DISTINCT generated reply tag carries `ResourceErrorReplyV1` with `detail` =
+  exactly the resource-error discriminator; the existing `REPLY_ERROR/detail 6`
+  (`io.InvalidInput`) semantics are **unchanged** and never reinterpreted as a
+  resource error. The payload is always fully initialized per variant
+  (`Closed`/`MalformedResource` all-zero; `RightNotHeld` schema + required/held;
+  `ReleaseFailed` schema + kind + identity + packed `IoErrorIdentityV1`, zero
+  required/held) and **fails closed** on unknown discriminator / wrong schema /
+  unknown kind / invalid I/O tag / out-of-range rights / noncanonical nonzero
+  unused fields. The C probe and Rust record agree on size/alignment/every offset,
+  and the catalog, generated binding registry, `HostEffectWireLayoutV1`, ABI hash,
+  observer, Cranelift consumer, compiler symbol resolution, and mutation tests all
+  move together (assert the Cranelift accept-set per op). `ResourceTraceIdentity`
+  preserves all 64 bits end-to-end.
 
 ## Do-not-reopen guards
 
-- Do NOT re-implement or modify PX7-R's runtime substrate — consume it through
-  its public boundary.
+- Do NOT re-implement or modify PX7-R's runtime substrate
+  (`ResourceTableV1`/generation/token/invalidation-before-close/no-retry/close
+  ownership) — consume it through its public boundary; it stays byte-for-byte
+  untouched. The ONLY authorized exception is the closed additive
+  `REPLY_RESOURCE_ERROR` ABI/projection mapping (Architect-ruled
+  `evt_648wsvp2w33yg`): the reply tag + `ResourceErrorReplyV1` payload + its
+  coordinated ABI-surface files (catalog / binding registry /
+  `HostEffectWireLayoutV1` / ABI hash / observer / Cranelift consumer / symbol
+  resolution / C-probe + mutation tests). Nothing else in `crates/ken-host` moves.
 - Do NOT author, guess, or extend the `ResourceLifetimeObligationV1` schema — it
   is Spec-owned and pinned; implement it.
 - Do NOT add a Ken-level affine/linear type; `Resource k` is copyable and
@@ -219,9 +352,19 @@ affine/linear type; a new capability family or `RightSet` bit; any kernel change
 
 - PX7-R substrate (consume): `ResourceTableV1` / `ResourceTokenV1` /
   `ResourceTraceIdentityV1` / `HostOpV1::{FsOpen, <handle-metadata>,
-  ResourceRelease}` / `ReleaseFailed` / the versioned observation discriminator —
-  all in `crates/ken-host/src/effect_v1.rs` + `abi_v1.rs` as landed by PX7-R
-  (re-ground exact lines on the merged PX7-R head).
+  ResourceRelease}` / `ResourceErrorV1::{Closed, MalformedResource,
+  RightNotHeld{required,held}, ReleaseFailed{schema_version, resource_kind,
+  identity, io}}` (`crates/ken-host/src/effect_v1.rs:465`) / the versioned
+  observation discriminator — all in `crates/ken-host/src/effect_v1.rs` +
+  `abi_v1.rs` as landed by PX7-R (re-ground exact lines on the merged PX7-R head).
+- ABI projection site (extend — the ONLY authorized substrate-adjacent edit):
+  `crates/ken-host/src/abi_v1.rs:869–879` currently collapses every
+  `SemanticErrorV1::Resource(_)` to `REPLY_ERROR/detail 6`; add the distinct
+  `REPLY_RESOURCE_ERROR` tag + `ResourceErrorReplyV1` payload here + the
+  coordinated ABI-surface files (catalog / generated binding registry /
+  `HostEffectWireLayoutV1` / ABI hash / observer / Cranelift consumer / compiler
+  symbol resolution / C-probe + mutation tests). Leave `detail 6` =
+  `io.InvalidInput`.
 - Ward assumption boundary (emit into): `TEntry { formula: Temporal }`
   `crates/ken-elaborator/src/export.rs:119`; delegated status constant
   `export.rs:440`; `TemporalObligation` `crates/ken-elaborator/src/temporal.rs:232`;
@@ -237,9 +380,10 @@ affine/linear type; a new capability family or `RightSet` bit; any kernel change
 
 ## Diff scope / review route
 
-Touches `crates/**` (Foundation surface + emitter) + the pinned `spec/` +
-`conformance/` route for `ResourceLifetimeObligationV1` → **Architect §14 + CV**
-(the spec/conformance touch puts CV in the route). One branch
+Touches `crates/**` (Foundation surface + emitter + the authorized additive
+`REPLY_RESOURCE_ERROR` ABI/projection files, substrate untouched) + the pinned
+`spec/` + `conformance/` route for `ResourceLifetimeObligationV1` → **Architect §14
++ CV** (the spec/conformance touch puts CV in the route). One branch
 (`wp/px7f-system-resource-bracket`), one Decision. **Gated on PX7-R merge + the
 Spec schema pin** — do not kick until both hold. Full locked CI + conformance run
 on GitHub, not locally.
