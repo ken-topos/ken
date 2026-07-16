@@ -561,24 +561,32 @@ pub fn compile_native_program_sources(
         .effect_rows
         .get("main")
         .is_some_and(|row| !row.concrete_effects().is_empty());
-    let (symbols, _) = stable_symbols_for_env(package_name, &env, true);
+    let (symbols, symbol_table) = stable_symbols_for_env(package_name, &env, true);
     let plan =
         native_entrypoint_plan(&checked, &symbols).map_err(NativeProgramBuildError::Driver)?;
     let plan_bytes = canonical_native_entrypoint_plan_bytes(&plan);
     let plan_transport_hash = fingerprint(&plan_bytes);
+    let host_spine = checked_host_spine_v1(&env, &symbols)
+        .map_err(NativeProgramBuildError::Driver)?;
+    let host_spine_bytes = canonical_checked_host_spine_v1_bytes(&host_spine);
     // The production package owns the exact live-environment closure, including
     // prelude definitions referenced by `main`; source-only generic packages
     // deliberately retain their narrower historical emission surface.
     admitted_ids.extend(env.env.decls().map(Decl::id));
     admitted_ids.sort();
     admitted_ids.dedup();
-    let package = emit_package_from_env(&manifest, &sources, &env, &admitted_ids, Some(plan_bytes))
+    let mut package = emit_package_from_env(&manifest, &sources, &env, &admitted_ids, Some(plan_bytes))
         .map_err(NativeProgramBuildError::Driver)?;
     if main_has_host_effect {
-        return Err(NativeProgramBuildError::Unavailable(UnavailableLane::new(
-            "host_effect_lowering_unavailable",
-            "checked main contains a host Vis; PX5 owns executable host-effect lowering",
-        )));
+        let symbol = StableSymbol::new(
+            SymbolNamespace::Metadata,
+            vec![package_name.to_string(), "HostEffectSpineV1".to_string()],
+        );
+        package.artifact.semantic.symbols.insert(symbol.clone());
+        package.artifact.semantic.metadata.insert(symbol, host_spine_bytes);
+        package = emit_checked_core_package(package.header.clone(), package.artifact.clone())
+            .map_err(CompilerDriverError::from)
+            .map_err(NativeProgramBuildError::Driver)?;
     }
     let selector = TargetSelector::StableSymbol {
         package_identity: package.header.package_identity.clone(),
@@ -617,9 +625,54 @@ pub fn compile_native_program_sources(
     // and linked artifact. Source admission is deliberately not a reachability
     // signal; an unused sibling must not enter native production.
     let executable_closure = closure.reachable_declarations.clone();
-    let mut runtime_program =
+    let mut runtime_program = if main_has_host_effect {
+        let mut normalized = package.clone();
+        let declaration = env.env.lookup(checked.main).ok_or_else(|| {
+            NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
+                id: checked.main,
+            })
+        })?;
+        let Decl::Transparent {
+            id,
+            level_params,
+            ty,
+            body,
+        } = declaration
+        else {
+            unreachable!("checked main admission requires a transparent declaration")
+        };
+        let normalized_main = Decl::Transparent {
+            id: *id,
+            level_params: level_params.clone(),
+            ty: ty.clone(),
+            body: ken_kernel::normalize(&env.env, &ken_kernel::Context::new(), body),
+        };
+        let bytes = canonical_decl_bytes(&normalized_main, &symbol_table)
+            .map_err(|_| NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol { id: checked.main }))?;
+        normalized
+            .artifact
+            .semantic
+            .declarations
+            .insert(plan.main.clone(), bytes);
+        normalized = emit_checked_core_package(normalized.header.clone(), normalized.artifact.clone())
+            .map_err(CompilerDriverError::from)
+            .map_err(NativeProgramBuildError::Driver)?;
+        let mut program = crate::erasure::erase_checked_host_package_for_target(
+            &normalized,
+            executable_closure.iter(),
+            &plan.main,
+            &host_spine,
+        )
+        .map_err(NativeProgramBuildError::Erasure)?;
+        // Normalization changes only the private producer view, never the
+        // checked package identity bound into the artifact.
+        program.core_semantic_hash = package.core_semantic_hash;
+        program.artifact_hash = package.artifact_hash;
+        program
+    } else {
         crate::erasure::erase_checked_core_package_for_target(&package, executable_closure.iter())
-            .map_err(NativeProgramBuildError::Erasure)?;
+            .map_err(NativeProgramBuildError::Erasure)?
+    };
     let runtime_targets = runtime_program
         .declarations
         .iter()
@@ -1208,6 +1261,79 @@ fn native_entrypoint_plan(
         prod_constructor: resolve(checked.prod_constructor)?,
         authority_name: checked.authority_name.clone(),
     })
+}
+
+fn checked_host_spine_v1(
+    env: &ElabEnv,
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+) -> Result<crate::erasure::CheckedHostSpineV1, CompilerDriverError> {
+    let resolve = |name: &'static str| {
+        let id = env
+            .globals
+            .get(name)
+            .copied()
+            .ok_or(CompilerDriverError::MissingStableSymbol { id: GlobalId(u32::MAX) })?;
+        symbols
+            .get(&id)
+            .cloned()
+            .ok_or(CompilerDriverError::MissingStableSymbol { id })
+    };
+    let mut operations = BTreeMap::new();
+    for (name, operation) in [
+        ("Read", ken_host::HostOpV1::ConsoleRead),
+        ("Write", ken_host::HostOpV1::ConsoleWrite),
+        ("Flush", ken_host::HostOpV1::ConsoleFlush),
+        ("IsTerminal", ken_host::HostOpV1::ConsoleIsTerminal),
+        ("WallNow", ken_host::HostOpV1::ClockWallNow),
+        ("ReadFile", ken_host::HostOpV1::FsReadFile),
+        ("WriteFile", ken_host::HostOpV1::FsWriteFile),
+        ("AppendFile", ken_host::HostOpV1::FsAppendFile),
+        ("Metadata", ken_host::HostOpV1::FsMetadata),
+        ("ReadDirectory", ken_host::HostOpV1::FsReadDirectory),
+        ("CreateDirectory", ken_host::HostOpV1::FsCreateDirectory),
+        ("RemoveFile", ken_host::HostOpV1::FsRemoveFile),
+        ("RemoveDirectory", ken_host::HostOpV1::FsRemoveDirectory),
+        ("Rename", ken_host::HostOpV1::FsRename),
+    ] {
+        operations.insert(resolve(name)?, operation);
+    }
+    Ok(crate::erasure::CheckedHostSpineV1 {
+        ret: resolve("Ret")?,
+        vis: resolve("Vis")?,
+        in_l: resolve("InL")?,
+        in_r: resolve("InR")?,
+        fs_family: resolve("FSOp")?,
+        console_family: resolve("ConsoleOp")?,
+        clock_family: resolve("ClockOp")?,
+        operations,
+    })
+}
+
+fn canonical_checked_host_spine_v1_bytes(
+    spine: &crate::erasure::CheckedHostSpineV1,
+) -> Vec<u8> {
+    let mut out = b"HostEffectSpineV1\0".to_vec();
+    for symbol in [
+        &spine.ret,
+        &spine.vis,
+        &spine.in_l,
+        &spine.in_r,
+        &spine.fs_family,
+        &spine.console_family,
+        &spine.clock_family,
+    ] {
+        let field = symbol.to_string();
+        out.extend_from_slice(&(field.len() as u64).to_le_bytes());
+        out.extend_from_slice(field.as_bytes());
+    }
+    out.extend_from_slice(&(spine.operations.len() as u64).to_le_bytes());
+    for (symbol, operation) in &spine.operations {
+        let field = symbol.to_string();
+        out.extend_from_slice(&(field.len() as u64).to_le_bytes());
+        out.extend_from_slice(field.as_bytes());
+        out.extend_from_slice(&(*operation as u16).to_le_bytes());
+    }
+    out
 }
 
 fn canonical_native_entrypoint_plan_bytes(plan: &NativeEntrypointPlanV1) -> Vec<u8> {

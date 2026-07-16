@@ -79,6 +79,14 @@ pub fn erase_checked_core_package_for_target<'a>(
     target_closure: impl IntoIterator<Item = &'a StableSymbol>,
 ) -> Result<RuntimeProgram, ErasureError> {
     let targets: Vec<StableSymbol> = target_closure.into_iter().cloned().collect();
+    erase_checked_package_with_host_root(package, targets, None)
+}
+
+fn erase_checked_package_with_host_root(
+    package: &CheckedCorePackage,
+    targets: Vec<StableSymbol>,
+    host_root: Option<(&StableSymbol, &CheckedHostSpineV1)>,
+) -> Result<RuntimeProgram, ErasureError> {
     validate_checked_core_package(package)?;
     consume_checked_core_package_for_target(package, targets.iter())?;
     reject_reachable_unsupported(package, &targets)?;
@@ -108,7 +116,15 @@ pub fn erase_checked_core_package_for_target<'a>(
 
     let mut declarations = Vec::new();
     for target in &targets {
-        declarations.push(lower_symbol(package, &targets, target)?);
+        if let Some((root, spine)) = host_root.filter(|(root, _)| *root == target) {
+            declarations.push(RuntimeDeclaration {
+                symbol: target.to_string(),
+                kind: lower_checked_host_root(package, &targets, root, spine)?,
+                metadata: metadata_for_symbol(package, target),
+            });
+        } else {
+            declarations.push(lower_symbol(package, &targets, target)?);
+        }
     }
 
     Ok(RuntimeProgram {
@@ -126,6 +142,202 @@ pub fn erase_checked_core_package_for_target<'a>(
         declarations,
         examples: nc5_seed_examples(),
     })
+}
+
+/// Elaborator-private identities for the checked Program-I HostIO spine.
+///
+/// Values are resolved from the same live environment and stable-symbol table
+/// as the entrypoint plan.  No source spelling is accepted at this boundary.
+#[derive(Clone, Debug)]
+pub(crate) struct CheckedHostSpineV1 {
+    pub ret: StableSymbol,
+    pub vis: StableSymbol,
+    pub in_l: StableSymbol,
+    pub in_r: StableSymbol,
+    pub fs_family: StableSymbol,
+    pub console_family: StableSymbol,
+    pub clock_family: StableSymbol,
+    pub operations: BTreeMap<StableSymbol, ken_host::HostOpV1>,
+}
+
+/// Deforest an identity-checked HostIO tree while erasing the selected target.
+/// The tree does not survive into the artifact: every `Vis op k` becomes an
+/// ordinary response-producing `Effect`, immediately bound by `Let` to the
+/// recursively lowered continuation.
+pub(crate) fn erase_checked_host_package_for_target<'a>(
+    package: &CheckedCorePackage,
+    target_closure: impl IntoIterator<Item = &'a StableSymbol>,
+    root: &StableSymbol,
+    spine: &CheckedHostSpineV1,
+) -> Result<RuntimeProgram, ErasureError> {
+    let targets: Vec<StableSymbol> = target_closure.into_iter().cloned().collect();
+    erase_checked_package_with_host_root(package, targets, Some((root, spine)))
+}
+
+fn lower_checked_host_root(
+    package: &CheckedCorePackage,
+    target_closure: &[StableSymbol],
+    root: &StableSymbol,
+    spine: &CheckedHostSpineV1,
+) -> Result<RuntimeDeclarationKind, ErasureError> {
+    let semantic = &package.artifact.semantic;
+    let reachable_declarations = target_closure
+        .iter()
+        .filter(|candidate| semantic.declarations.contains_key(*candidate) && !has_runtime_metadata(semantic, candidate))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let selection = CheckedCoreBodyViewSelection {
+        package_identity: package.header.package_identity.clone(),
+        package_core_semantic_hash: package.core_semantic_hash,
+        package_artifact_hash: package.artifact_hash,
+        target_symbol: root.clone(),
+        reachable_declarations,
+        external_symbols: external_declaration_symbols(semantic),
+        dependency_semantic_hashes: semantic.dependency_semantic_hashes.clone(),
+    };
+    let view = checked_core_body_view_for_selection(package, &selection)
+        .map_err(|error| expression_view_error(root, error))?;
+    let declaration = view.declarations.get(root).ok_or_else(|| {
+        expression_lowering_error(root, "missing_host_root", "checked host body view omitted its root")
+    })?;
+    let CheckedCoreBodyTerm::Lambda { body, .. } = &declaration.body else {
+        return Err(expression_lowering_error(root, "host_root_abi_shape", "checked host root must accept ProcessInput"));
+    };
+    let CheckedCoreBodyTerm::Lambda { body, .. } = body.as_ref() else {
+        return Err(expression_lowering_error(root, "host_root_abi_shape", "checked host root must accept ProgramCaps"));
+    };
+    let mut stack = vec![root.clone()];
+    let lowered = lower_checked_host_computation(
+        body,
+        &view.declarations,
+        semantic,
+        &mut stack,
+        root,
+        2,
+        spine,
+    )?;
+    Ok(RuntimeDeclarationKind::Transparent {
+        body: RuntimeExpr::Closure {
+            captures: Vec::new(),
+            params: vec!["process_input".to_string(), "program_caps".to_string()],
+            body: Box::new(lowered),
+        },
+    })
+}
+
+fn lower_checked_host_computation(
+    term: &CheckedCoreBodyTerm,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+    stack: &mut Vec<StableSymbol>,
+    root: &StableSymbol,
+    context_depth: usize,
+    spine: &CheckedHostSpineV1,
+) -> Result<RuntimeExpr, ErasureError> {
+    if let Some((constructor, args)) = constructor_application_spine(term) {
+        if constructor.symbol == spine.ret {
+            let value = args.last().ok_or_else(|| expression_lowering_error(root, "host_ret_arity", "Ret is missing its value"))?;
+            return lower_body_term_inner(value, declarations, semantic, stack, root, context_depth, None);
+        }
+        if constructor.symbol == spine.vis {
+            if args.len() < 2 {
+                return Err(expression_lowering_error(root, "host_vis_arity", "Vis is missing its operation or continuation"));
+            }
+            let operation_term = args[args.len() - 2];
+            let continuation = args[args.len() - 1];
+            let decoded = decode_checked_host_operation(operation_term, spine, root)?;
+            let runtime_args = &decoded.args[decoded.constructor.family_parameter_count..];
+            let (capability, semantic_args) = if decoded.operation.is_ambient() {
+                (None, runtime_args)
+            } else {
+                let (cap, rest) = runtime_args.split_first().ok_or_else(|| {
+                    expression_lowering_error(root, "host_capability_shape", "FS operation is missing its live capability operand")
+                })?;
+                let value = lower_body_term_inner(cap, declarations, semantic, stack, root, context_depth, None)?;
+                (Some(RuntimeCapabilityUse { identity: decoded.constructor.symbol.to_string(), value: Box::new(value) }), rest)
+            };
+            let args = semantic_args
+                .iter()
+                .map(|argument| lower_body_term_inner(argument, declarations, semantic, stack, root, context_depth, None))
+                .collect::<Result<Vec<_>, _>>()?;
+            let CheckedCoreBodyTerm::Lambda { body, .. } = continuation else {
+                return Err(expression_lowering_error(root, "host_continuation_shape", "Vis continuation must be a checked lambda"));
+            };
+            let body = lower_checked_host_computation(
+                body,
+                declarations,
+                semantic,
+                stack,
+                root,
+                context_depth + 1,
+                spine,
+            )?;
+            return Ok(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::Effect {
+                    family: decoded.constructor.family_symbol.to_string(),
+                    operation: decoded.operation,
+                    capability,
+                    args,
+                }),
+                body: Box::new(body),
+            });
+        }
+    }
+    Err(expression_lowering_error(
+        root,
+        "unrecognized_checked_host_computation",
+        "normalized HostIO body is neither identity-checked Ret nor Vis",
+    ))
+}
+
+struct DecodedCheckedHostOperation<'a> {
+    operation: ken_host::HostOpV1,
+    constructor: &'a checked_core::CheckedCoreConstructorView,
+    args: Vec<&'a CheckedCoreBodyTerm>,
+}
+
+fn decode_checked_host_operation<'a>(
+    term: &'a CheckedCoreBodyTerm,
+    spine: &CheckedHostSpineV1,
+    root: &StableSymbol,
+) -> Result<DecodedCheckedHostOperation<'a>, ErasureError> {
+    let (outer, outer_args) = constructor_application_spine(term).ok_or_else(|| {
+        expression_lowering_error(root, "host_coproduct_shape", "HostIO operation is not a checked coproduct constructor")
+    })?;
+    let leaf = if outer.symbol == spine.in_l {
+        outer_args.last().copied()
+    } else if outer.symbol == spine.in_r {
+        let ambient = outer_args.last().copied().ok_or_else(|| expression_lowering_error(root, "host_coproduct_arity", "ambient coproduct arm is empty"))?;
+        let (inner, inner_args) = constructor_application_spine(ambient).ok_or_else(|| expression_lowering_error(root, "host_coproduct_shape", "ambient operation is not a checked coproduct constructor"))?;
+        if inner.symbol != spine.in_l && inner.symbol != spine.in_r {
+            return Err(expression_lowering_error(root, "host_coproduct_identity", "ambient coproduct constructor identity changed"));
+        }
+        inner_args.last().copied()
+    } else {
+        return Err(expression_lowering_error(root, "host_coproduct_identity", "HostIO coproduct constructor identity changed"));
+    }
+    .ok_or_else(|| expression_lowering_error(root, "host_coproduct_arity", "coproduct arm is empty"))?;
+    let (constructor, args) = constructor_application_spine(leaf).ok_or_else(|| {
+        expression_lowering_error(root, "host_operation_shape", "host operation is not a checked constructor application")
+    })?;
+    let operation = spine.operations.get(&constructor.symbol).copied().ok_or_else(|| {
+        expression_lowering_error(root, "unknown_host_operation_identity", format!("unrecognized checked host operation {}", constructor.symbol))
+    })?;
+    let expected_family = if operation == ken_host::HostOpV1::ClockWallNow {
+        &spine.clock_family
+    } else if operation.is_ambient() {
+        &spine.console_family
+    } else {
+        &spine.fs_family
+    };
+    if &constructor.family_symbol != expected_family {
+        return Err(expression_lowering_error(root, "host_operation_family_identity", "host operation constructor belongs to the wrong checked family"));
+    }
+    let expected = constructor.family_parameter_count + constructor.argument_count;
+    if args.len() != expected {
+        return Err(expression_lowering_error(root, "host_operation_arity", format!("{} expects {expected} operands, got {}", constructor.symbol, args.len())));
+    }
+    Ok(DecodedCheckedHostOperation { operation, constructor, args })
 }
 
 pub fn emit_proof_erasure_boundary_witness(

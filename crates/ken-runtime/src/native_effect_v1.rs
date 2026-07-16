@@ -11,56 +11,17 @@ use ken_host::{
     HOST_EFFECT_ABI_V1_HASH, TARGET_ABI_MANIFEST_HASH,
 };
 
-use crate::fnv1a_64;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeEntrypointPlanV1 {
-    pub process_input_identity: String,
-    pub program_caps_identity: String,
-    pub program_caps_constructor_identity: String,
-    pub capability_identity: String,
-    pub declared_authority_identity: String,
-    pub host_io_identity: String,
-    pub exit_code_identity: String,
-    pub target_abi_hash: [u8; 32],
-    pub host_effect_abi_hash: [u8; 32],
-}
-
-impl NativeEntrypointPlanV1 {
-    pub fn canonical_bytes(&self) -> Vec<u8> {
-        let mut bytes = b"ken-native-entrypoint-plan-v1\0".to_vec();
-        for field in [
-            &self.process_input_identity,
-            &self.program_caps_identity,
-            &self.program_caps_constructor_identity,
-            &self.capability_identity,
-            &self.declared_authority_identity,
-            &self.host_io_identity,
-            &self.exit_code_identity,
-        ] {
-            bytes.extend_from_slice(&(field.len() as u64).to_le_bytes());
-            bytes.extend_from_slice(field.as_bytes());
-        }
-        bytes.extend_from_slice(&self.target_abi_hash);
-        bytes.extend_from_slice(&self.host_effect_abi_hash);
-        bytes
-    }
-
-    pub fn adjacent_hash(&self) -> u64 {
-        fnv1a_64(&self.canonical_bytes())
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeEntrypointBindingsV1 {
     pub native_entrypoint_plan_hash: u64,
     pub core_semantic_hash: u64,
     pub artifact_hash: u64,
+    pub target_abi_hash: [u8; 32],
+    pub host_effect_abi_hash: [u8; 32],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeEffectCallV1 {
-    pub family: String,
     pub operation: HostOpV1,
     pub capability: Option<(String, CapabilityTokenV1)>,
     pub request: CanonicalRequestV1,
@@ -86,7 +47,6 @@ impl ResponseArenaV1 {
 /// Host-owned, call-scoped state. It is never represented as ordinary Ken
 /// data, and its capability table cannot be read by generated code.
 pub struct KenNativeInvocationV1<B> {
-    pub plan: NativeEntrypointPlanV1,
     pub bindings: NativeEntrypointBindingsV1,
     pub backend: B,
     pub capabilities: CapabilityTableV1,
@@ -96,19 +56,20 @@ pub struct KenNativeInvocationV1<B> {
 
 impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
     pub fn initialize(
-        plan: NativeEntrypointPlanV1,
         bindings: NativeEntrypointBindingsV1,
         backend: B,
         capabilities: CapabilityTableV1,
     ) -> Result<Self, TerminalErrorV1> {
-        assert_target_abi_identity(plan.target_abi_hash)
+        assert_target_abi_identity(bindings.target_abi_hash)
             .map_err(|_| TerminalErrorV1::TargetAbiMismatch)?;
-        assert_host_effect_abi_identity(plan.host_effect_abi_hash)?;
-        if bindings.native_entrypoint_plan_hash != plan.adjacent_hash() {
+        assert_host_effect_abi_identity(bindings.host_effect_abi_hash)?;
+        if bindings.native_entrypoint_plan_hash == 0
+            || bindings.core_semantic_hash == 0
+            || bindings.artifact_hash == 0
+        {
             return Err(TerminalErrorV1::MalformedHostAbiField);
         }
         Ok(Self {
-            plan,
             bindings,
             backend,
             capabilities,
@@ -125,11 +86,6 @@ impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
     }
 
     pub fn dispatch(&mut self, call: NativeEffectCallV1) -> Result<usize, TerminalErrorV1> {
-        if call.family != "Console" && call.family != "FS" {
-            return Err(TerminalErrorV1::UnknownFamily {
-                family: call.family,
-            });
-        }
         let (trace_identity, token) = match call.capability {
             Some((identity, token)) => (Some(identity), Some(token)),
             None => (None, None),
@@ -150,22 +106,6 @@ impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
             outcome: reply.outcome.clone(),
         });
         Ok(self.response_arena.append(reply))
-    }
-}
-
-pub fn default_native_entrypoint_plan_v1(
-    declared_authority_identity: String,
-) -> NativeEntrypointPlanV1 {
-    NativeEntrypointPlanV1 {
-        process_input_identity: "prelude::ProcessInput".to_string(),
-        program_caps_identity: "prelude::ProgramCaps".to_string(),
-        program_caps_constructor_identity: "prelude::MkProgramCaps".to_string(),
-        capability_identity: "prelude::Cap".to_string(),
-        declared_authority_identity,
-        host_io_identity: "prelude::HostIO".to_string(),
-        exit_code_identity: "prelude::ExitCode".to_string(),
-        target_abi_hash: TARGET_ABI_MANIFEST_HASH,
-        host_effect_abi_hash: HOST_EFFECT_ABI_V1_HASH,
     }
 }
 
@@ -231,11 +171,12 @@ mod tests {
     }
 
     fn invocation(rights: u8) -> (KenNativeInvocationV1<MockHost>, CapabilityTokenV1) {
-        let plan = default_native_entrypoint_plan_v1("APartial".to_string());
         let bindings = NativeEntrypointBindingsV1 {
-            native_entrypoint_plan_hash: plan.adjacent_hash(),
+            native_entrypoint_plan_hash: 3,
             core_semantic_hash: 1,
             artifact_hash: 2,
+            target_abi_hash: TARGET_ABI_MANIFEST_HASH,
+            host_effect_abi_hash: HOST_EFFECT_ABI_V1_HASH,
         };
         let mut capabilities = CapabilityTableV1::default();
         let token = capabilities.insert(CapabilityGrantV1 {
@@ -252,7 +193,7 @@ mod tests {
             ),
         });
         (
-            KenNativeInvocationV1::initialize(plan, bindings, MockHost::default(), capabilities)
+            KenNativeInvocationV1::initialize(bindings, MockHost::default(), capabilities)
                 .unwrap(),
             token,
         )
@@ -260,15 +201,14 @@ mod tests {
 
     #[test]
     fn checked_plan_identity_fails_before_host_construction() {
-        let plan = default_native_entrypoint_plan_v1("APartial".to_string());
-        let mut bindings = NativeEntrypointBindingsV1 {
-            native_entrypoint_plan_hash: plan.adjacent_hash(),
+        let bindings = NativeEntrypointBindingsV1 {
+            native_entrypoint_plan_hash: 0,
             core_semantic_hash: 1,
             artifact_hash: 2,
+            target_abi_hash: TARGET_ABI_MANIFEST_HASH,
+            host_effect_abi_hash: HOST_EFFECT_ABI_V1_HASH,
         };
-        bindings.native_entrypoint_plan_hash ^= 1;
         let result = KenNativeInvocationV1::initialize(
-            plan,
             bindings,
             MockHost::default(),
             CapabilityTableV1::default(),
@@ -284,7 +224,6 @@ mod tests {
         let (mut invocation, token) = invocation(RIGHT_READ_V1 | RIGHT_WRITE_V1);
         let write = invocation
             .dispatch(NativeEffectCallV1 {
-                family: "FS".to_string(),
                 operation: HostOpV1::FsWriteFile,
                 capability: Some(("fsCap".to_string(), token)),
                 request: CanonicalRequestV1::FsWriteFile {
@@ -296,7 +235,6 @@ mod tests {
             .unwrap();
         let read = invocation
             .dispatch(NativeEffectCallV1 {
-                family: "FS".to_string(),
                 operation: HostOpV1::FsReadFile,
                 capability: Some(("fsCap".to_string(), token)),
                 request: CanonicalRequestV1::FsReadFile {
@@ -321,7 +259,6 @@ mod tests {
         let (mut invocation, token) = invocation(RIGHT_READ_V1);
         invocation
             .dispatch(NativeEffectCallV1 {
-                family: "FS".to_string(),
                 operation: HostOpV1::FsWriteFile,
                 capability: Some(("fsCap".to_string(), token)),
                 request: CanonicalRequestV1::FsWriteFile {
