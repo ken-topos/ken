@@ -15,7 +15,7 @@
 //! opt-out. A future non-Rust-standard-runtime embedding must re-establish the
 //! SIGPIPE contract at its own entrypoint before calling Ken.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub mod capability;
+mod abi_v1;
 mod effect_v1;
 
 pub use capability::*;

@@ -176,14 +176,18 @@ pub(crate) fn erase_checked_host_package_for_target<'a>(
 
 fn lower_checked_host_root(
     package: &CheckedCorePackage,
-    target_closure: &[StableSymbol],
+    _target_closure: &[StableSymbol],
     root: &StableSymbol,
     spine: &CheckedHostSpineV1,
 ) -> Result<RuntimeDeclarationKind, ErasureError> {
     let semantic = &package.artifact.semantic;
-    let reachable_declarations = target_closure
-        .iter()
-        .filter(|candidate| semantic.declarations.contains_key(*candidate) && !has_runtime_metadata(semantic, candidate))
+    // The checked recognizer may inspect transparent semantic helpers while
+    // normalizing the HostIO spine.  They remain view inputs, not executable
+    // runtime declarations.
+    let reachable_declarations = semantic
+        .declarations
+        .keys()
+        .filter(|candidate| !has_runtime_metadata(semantic, candidate))
         .cloned()
         .collect::<BTreeSet<_>>();
     let selection = CheckedCoreBodyViewSelection {
@@ -195,11 +199,9 @@ fn lower_checked_host_root(
         external_symbols: external_declaration_symbols(semantic),
         dependency_semantic_hashes: semantic.dependency_semantic_hashes.clone(),
     };
-    let view = checked_core_body_view_for_selection(package, &selection)
+    let declaration = checked_core::checked_core_declaration_body_view(package, &selection, root)
         .map_err(|error| expression_view_error(root, error))?;
-    let declaration = view.declarations.get(root).ok_or_else(|| {
-        expression_lowering_error(root, "missing_host_root", "checked host body view omitted its root")
-    })?;
+    let declarations = BTreeMap::from([(root.clone(), declaration.clone())]);
     let CheckedCoreBodyTerm::Lambda { body, .. } = &declaration.body else {
         return Err(expression_lowering_error(root, "host_root_abi_shape", "checked host root must accept ProcessInput"));
     };
@@ -209,7 +211,7 @@ fn lower_checked_host_root(
     let mut stack = vec![root.clone()];
     let lowered = lower_checked_host_computation(
         body,
-        &view.declarations,
+        &declarations,
         semantic,
         &mut stack,
         root,

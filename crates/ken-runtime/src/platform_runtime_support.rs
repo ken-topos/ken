@@ -6,7 +6,7 @@
 //! runtime support without exposing a stable ABI, object, linker, library, or
 //! host-effect claim.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt;
 
 use crate::{

@@ -8,7 +8,6 @@ use ken_host::{
     assert_host_effect_abi_identity, assert_target_abi_identity, dispatch_host_op_v1,
     CanonicalRequestV1, CapabilityTableV1, CapabilityTokenV1, EffectEventV1, EffectObservationV1,
     FsDeltaV1, HostDispatchReplyV1, HostEffectBackendV1, HostOpV1, TerminalErrorV1,
-    HOST_EFFECT_ABI_V1_HASH, TARGET_ABI_MANIFEST_HASH,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -114,7 +113,8 @@ mod tests {
     use super::*;
     use ken_host::{
         CanonicalOutcomeV1, CanonicalReplyV1, CapabilityGrantV1, CapabilityTraceIdentity,
-        CreatePolicyV1, FileErrorCauseV1, IoErrorIdentityV1, RIGHT_READ_V1, RIGHT_WRITE_V1,
+        CreatePolicyV1, FileErrorCauseV1, IoErrorIdentityV1, HOST_EFFECT_ABI_V1_HASH,
+        RIGHT_READ_V1, RIGHT_WRITE_V1, TARGET_ABI_MANIFEST_HASH,
     };
 
     #[derive(Default)]

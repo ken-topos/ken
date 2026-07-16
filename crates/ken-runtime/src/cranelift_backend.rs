@@ -10,7 +10,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::mem;
 
-use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, MemFlags, UserFuncName};
+use cranelift_codegen::ir::{
+    types, AbiParam, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
+    UserFuncName,
+};
 use cranelift_codegen::isa::OwnedTargetIsa;
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_codegen::verify_function;
@@ -1296,8 +1299,29 @@ fn compile_expr_into_module<'a, M: Module>(
     let func_id = module
         .declare_function(function_name, linkage, &sig)
         .map_err(|err| backend_module(err.to_string()))?;
+    let host_dispatch = if process_mode {
+        let mut host_sig = module.make_signature();
+        host_sig
+            .params
+            .push(AbiParam::new(module.target_config().pointer_type()));
+        host_sig.params.push(AbiParam::new(types::I64));
+        host_sig
+            .params
+            .push(AbiParam::new(module.target_config().pointer_type()));
+        host_sig.params.push(AbiParam::new(types::I64));
+        host_sig.params.push(AbiParam::new(types::I64));
+        host_sig.returns.push(AbiParam::new(types::I64));
+        Some(
+            module
+                .declare_function("ken_host_dispatch_v1", Linkage::Import, &host_sig)
+                .map_err(|err| backend_module(err.to_string()))?,
+        )
+    } else {
+        None
+    };
     let mut ctx = module.make_context();
     ctx.func = Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), sig);
+    let host_dispatch = host_dispatch.map(|id| module.declare_func_in_func(id, &mut ctx.func));
 
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
@@ -1312,6 +1336,8 @@ fn compile_expr_into_module<'a, M: Module>(
         process_symbols: process_symbols
             .cloned()
             .unwrap_or_else(crate::NativeProcessSymbols::legacy_prelude),
+        host_dispatch,
+        invocation_pointer: None,
     };
     let (maybe_trap, decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
@@ -1320,9 +1346,9 @@ fn compile_expr_into_module<'a, M: Module>(
         builder.switch_to_block(block);
         let mut initial_env = Vec::new();
         if process_mode {
-            initial_env.push(Lowered::BorrowedNativeValue {
-                pointer: builder.block_params(block)[0],
-            });
+            let pointer = builder.block_params(block)[0];
+            compiler.invocation_pointer = Some(pointer);
+            initial_env.push(Lowered::BorrowedNativeValue { pointer });
         }
         if let Some(value) = staged_process_input {
             initial_env.push(compiler.lower_value(&mut builder, value)?);
@@ -1413,6 +1439,8 @@ struct Lowering<'a> {
     unsupported: Vec<String>,
     process_object: bool,
     process_symbols: crate::NativeProcessSymbols,
+    host_dispatch: Option<FuncRef>,
+    invocation_pointer: Option<cranelift_codegen::ir::Value>,
 }
 
 #[derive(Clone)]
@@ -1449,6 +1477,51 @@ enum Lowered {
         body: RuntimeExpr,
     },
     Trap(RuntimeTrap),
+}
+
+fn console_stream_tag(value: &Lowered) -> Option<i64> {
+    let Lowered::Constructor { constructor, args } = value else {
+        return None;
+    };
+    if !args.is_empty() {
+        return None;
+    }
+    if constructor.ends_with("::Stdin") {
+        Some(0)
+    } else if constructor.ends_with("::Stdout") {
+        Some(1)
+    } else if constructor.ends_with("::Stderr") {
+        Some(2)
+    } else {
+        None
+    }
+}
+
+fn lowered_bytes(value: &Lowered) -> Option<&[u8]> {
+    match value {
+        Lowered::Bytes(bytes) => Some(bytes),
+        Lowered::String(value) => Some(value.as_bytes()),
+        _ => None,
+    }
+}
+
+fn lowered_char_list(value: &Lowered) -> Option<Vec<u8>> {
+    let Lowered::Constructor { constructor, args } = value else {
+        return None;
+    };
+    if constructor.ends_with("::Nil") && args.is_empty() {
+        return Some(Vec::new());
+    }
+    if !constructor.ends_with("::Cons") || args.len() != 2 {
+        return None;
+    }
+    let Lowered::Int { known: Some(head), .. } = &args[0] else {
+        return None;
+    };
+    let head = u8::try_from(*head).ok()?;
+    let mut tail = lowered_char_list(&args[1])?;
+    tail.insert(0, head);
+    Some(tail)
 }
 
 impl<'a> Lowering<'a> {
@@ -1692,14 +1765,109 @@ impl<'a> Lowering<'a> {
             }
             RuntimeExpr::Trap(trap) => Ok(Lowered::Trap(trap.clone())),
             RuntimeExpr::Effect {
-                family, operation, ..
-            } => Err(unsupported(
+                family,
+                operation,
+                capability,
+                args,
+            } if self.process_object => {
+                self.lower_process_host_effect(builder, family, *operation, capability.as_ref(), args, env)
+            }
+            RuntimeExpr::Effect { family, operation, .. } => Err(unsupported(
                 "Effect",
                 format!(
                     "effect {family}.{} is not modeled in the supported native subset",
                     *operation as u16
                 ),
             )),
+        }
+    }
+
+    fn lower_process_host_effect(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        family: &RuntimeSymbol,
+        operation: ken_host::HostOpV1,
+        capability: Option<&crate::RuntimeCapabilityUse>,
+        args: &[RuntimeExpr],
+        env: &[Lowered],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if capability.is_some() {
+            return Err(unsupported(
+                "Effect",
+                format!("capability-bearing effect {family}.{} awaits the token lane", operation as u16),
+            ));
+        }
+        if !matches!(
+            operation,
+            ken_host::HostOpV1::ConsoleWrite
+                | ken_host::HostOpV1::ConsoleFlush
+                | ken_host::HostOpV1::ConsoleIsTerminal
+        ) {
+            return Err(unsupported(
+                "Effect",
+                format!("effect {family}.{} is a represented unavailable lane", operation as u16),
+            ));
+        }
+        let lowered = args
+            .iter()
+            .map(|argument| self.lower_expr(builder, argument, env))
+            .collect::<Result<Vec<_>, _>>()?;
+        let stream = lowered.first().and_then(console_stream_tag).ok_or_else(|| {
+            unsupported("Effect", "Console operation has a malformed Stream operand")
+        })?;
+        let pointer_type = builder.func.dfg.value_type(
+            self.invocation_pointer
+                .expect("process effect lowering owns an invocation pointer"),
+        );
+        let (data, len) = if operation == ken_host::HostOpV1::ConsoleWrite {
+            let bytes = lowered.get(1).and_then(lowered_bytes).ok_or_else(|| {
+                unsupported("Effect", "Console.Write requires a closed Bytes operand")
+            })?;
+            if bytes.is_empty() {
+                (builder.ins().iconst(pointer_type, 0), 0)
+            } else {
+                let size = u32::try_from(bytes.len())
+                    .map_err(|_| unsupported("Effect", "Console.Write bytes exceed u32"))?;
+                let slot = builder.create_sized_stack_slot(StackSlotData::new(
+                    StackSlotKind::ExplicitSlot,
+                    size,
+                    0,
+                ));
+                for (offset, byte) in bytes.iter().enumerate() {
+                    let value = builder.ins().iconst(types::I8, i64::from(*byte));
+                    builder.ins().stack_store(value, slot, offset as i32);
+                }
+                (builder.ins().stack_addr(pointer_type, slot, 0), bytes.len() as i64)
+            }
+        } else {
+            (builder.ins().iconst(pointer_type, 0), 0)
+        };
+        let invocation = self
+            .invocation_pointer
+            .expect("process effect lowering owns an invocation pointer");
+        let op = builder.ins().iconst(types::I64, operation as i64);
+        let len = builder.ins().iconst(types::I64, len);
+        let stream = builder.ins().iconst(types::I64, stream);
+        let call = builder.ins().call(
+            self.host_dispatch
+                .expect("process effect lowering owns one host dispatch import"),
+            &[invocation, op, data, len, stream],
+        );
+        let status = builder.inst_results(call)[0];
+        if operation == ken_host::HostOpV1::ConsoleIsTerminal {
+            Ok(Lowered::Bool {
+                value: status,
+                known: None,
+            })
+        } else {
+            // The exact Result/Unit response constructors are carried by the
+            // checked response binder.  A continuation which does not inspect
+            // the response can consume this scalar directly; response-shape
+            // construction is enforced before enabling dependent continuations.
+            Ok(Lowered::Int {
+                value: status,
+                known: None,
+            })
         }
     }
 
@@ -2148,6 +2316,18 @@ impl<'a> Lowering<'a> {
             "bytes_concat" => self.lower_bytes_concat(lowered_args),
             "bytes_encode" => self.lower_bytes_encode(lowered_args),
             "bytes_decode" => self.lower_bytes_decode(lowered_args, &primitive.partiality),
+            "list_char_to_string" => {
+                let [value]: [Lowered; 1] = lowered_args.try_into().map_err(|args: Vec<_>| {
+                    unsupported("PrimitiveCall", format!("list_char_to_string expects one argument, got {}", args.len()))
+                })?;
+                let bytes = lowered_char_list(&value).ok_or_else(|| {
+                    unsupported("PrimitiveCall", "list_char_to_string requires a closed List Char")
+                })?;
+                let value = String::from_utf8(bytes).map_err(|_| {
+                    unsupported("PrimitiveCall", "list_char_to_string received non-UTF-8 Char values")
+                })?;
+                Ok(Lowered::String(value))
+            }
             "byte_length" => self.lower_string_byte_length(builder, lowered_args),
             "char_length" => self.lower_string_char_length(builder, lowered_args),
             other => Err(unsupported(

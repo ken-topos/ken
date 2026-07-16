@@ -299,6 +299,7 @@ pub fn package_starter_executable_artifact_with_options(
         &object_path,
         &stub_path,
         &executable_path,
+        None,
     )?;
 
     let executable_bytes = fs::read(&executable_path).map_err(|err| {
@@ -397,6 +398,7 @@ fn build_process_starter_executable_artifact(
         &object_path,
         &stub_path,
         &executable_path,
+        None,
     )?;
     Ok(executable_path)
 }
@@ -434,17 +436,21 @@ pub fn build_bound_process_starter_executable_artifact(
         }),
         args: vec![caps, RuntimeExpr::Var(0)],
     };
-    let adapter = RuntimeExpr::Match {
-        scrutinee: Box::new(tree),
-        cases: vec![crate::RuntimeMatchCase {
-            constructor: entrypoint.ret_constructor.clone(),
-            binders: 1,
-            body: RuntimeExpr::Var(0),
-        }],
-        default: crate::RuntimeTrap {
-            code: crate::RuntimeTrapCode::PatternMatchFailure,
-            message: "effect-free native entrypoint returned Vis".to_string(),
-        },
+    let adapter = if runtime_expr_contains_effect(&tree, program) {
+        tree
+    } else {
+        RuntimeExpr::Match {
+            scrutinee: Box::new(tree),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: entrypoint.ret_constructor.clone(),
+                binders: 1,
+                body: RuntimeExpr::Var(0),
+            }],
+            default: crate::RuntimeTrap {
+                code: crate::RuntimeTrapCode::PatternMatchFailure,
+                message: "effect-free native entrypoint returned Vis".to_string(),
+            },
+        }
     };
 
     let options = ObjectLinkerPackagingOptions::starter_host();
@@ -491,6 +497,7 @@ pub fn build_bound_process_starter_executable_artifact(
         &object_path,
         &stub_path,
         &executable_path,
+        Some(&ken_host_staticlib()?),
     )?;
     let executable_bytes = fs::read(&executable_path).map_err(|err| {
         packaging_error(
@@ -505,6 +512,55 @@ pub fn build_bound_process_starter_executable_artifact(
         executable_path,
         executable_hash: fnv1a_64(&executable_bytes),
     })
+}
+
+fn runtime_expr_contains_effect(expr: &RuntimeExpr, program: &RuntimeProgram) -> bool {
+    match expr {
+        RuntimeExpr::Effect { .. } => true,
+        RuntimeExpr::Let { value, body } => {
+            runtime_expr_contains_effect(value, program)
+                || runtime_expr_contains_effect(body, program)
+        }
+        RuntimeExpr::If { scrutinee, then_expr, else_expr } => {
+            runtime_expr_contains_effect(scrutinee, program)
+                || runtime_expr_contains_effect(then_expr, program)
+                || runtime_expr_contains_effect(else_expr, program)
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => args
+            .iter()
+            .any(|argument| runtime_expr_contains_effect(argument, program)),
+        RuntimeExpr::Call { callee, args } => {
+            runtime_expr_contains_effect(callee, program)
+                || args
+                    .iter()
+                    .any(|argument| runtime_expr_contains_effect(argument, program))
+        }
+        RuntimeExpr::Match { scrutinee, cases, .. } => {
+            runtime_expr_contains_effect(scrutinee, program)
+                || cases
+                    .iter()
+                    .any(|case| runtime_expr_contains_effect(&case.body, program))
+        }
+        RuntimeExpr::Record { fields } => fields
+            .iter()
+            .any(|(_, value)| runtime_expr_contains_effect(value, program)),
+        RuntimeExpr::Project { record, .. } => runtime_expr_contains_effect(record, program),
+        RuntimeExpr::Closure { body, .. } => runtime_expr_contains_effect(body, program),
+        RuntimeExpr::DeclarationRef { symbol } => program
+            .declarations
+            .iter()
+            .find(|declaration| declaration.symbol == *symbol)
+            .is_some_and(|declaration| match &declaration.kind {
+                crate::RuntimeDeclarationKind::Transparent { body } => {
+                    runtime_expr_contains_effect(body, program)
+                }
+                _ => false,
+            }),
+        RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::Trap(_) => false,
+    }
 }
 
 pub fn object_linker_executable_package_hash(package: &ObjectLinkerExecutablePackage) -> u64 {
@@ -758,13 +814,18 @@ fn link_starter_executable(
     object_path: &Path,
     stub_path: &Path,
     executable_path: &Path,
+    static_library: Option<&Path>,
 ) -> Result<(), ObjectLinkerPackagingError> {
-    let output = Command::new(linker)
-        .arg(object_path)
-        .arg(stub_path)
-        .arg("-o")
-        .arg(executable_path)
-        .output()
+    let mut command = Command::new(linker);
+    command.arg(object_path).arg(stub_path);
+    if let Some(static_library) = static_library {
+        command
+            .arg(static_library)
+            .arg("-ldl")
+            .arg("-lpthread")
+            .arg("-lm");
+    }
+    let output = command.arg("-o").arg(executable_path).output()
         .map_err(|err| {
             packaging_error(
                 ObjectLinkerPackagingStage::Toolchain,
@@ -783,6 +844,27 @@ fn link_starter_executable(
         ));
     }
     Ok(())
+}
+
+fn ken_host_staticlib() -> Result<std::path::PathBuf, ObjectLinkerPackagingError> {
+    let executable = std::env::current_exe().map_err(|error| {
+        packaging_error(
+            ObjectLinkerPackagingStage::Toolchain,
+            "ken_host_staticlib",
+            format!("cannot locate current Cargo target directory: {error}"),
+        )
+    })?;
+    for directory in executable.ancestors().take(4) {
+        let candidate = directory.join("libken_host.a");
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    Err(packaging_error(
+        ObjectLinkerPackagingStage::Toolchain,
+        "ken_host_staticlib",
+        "Cargo did not materialize the required ken-host static runtime",
+    ))
 }
 
 fn smoke_executable(

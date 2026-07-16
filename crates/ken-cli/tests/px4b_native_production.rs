@@ -215,23 +215,25 @@ fn authority_mismatch_fails_before_any_artifact_is_written() {
 }
 
 #[test]
-fn one_vis_reaches_the_named_px5_lane() {
+fn one_vis_reaches_the_px5_native_host_dispatch() {
     let dir = output_dir("vis");
     let source = r#"program capabilities FS APartial
 proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
   : HostIO APartial ExitCode visits [Console] =
   host_program APartial (print_line "px5")
 "#;
-    let error = ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px4b-vis", &dir)
-        .expect_err("base producer must stop at the PX5 effect lane");
-    assert!(
-        matches!(
-            error,
-            ken_elaborator::compiler_driver::NativeProgramBuildError::Unavailable(ref lane)
-                if lane.lane == "host_effect_lowering_unavailable"
-        ),
-        "unexpected error: {error:?}"
-    );
+    let output = ken_cli::build_native_program(
+        source,
+        ken_cli::SourceFormat::Ken,
+        "px5-vis",
+        &dir,
+    )
+    .expect("checked Vis reaches the PX5 artifact lane");
+    let ran = Command::new(&output.artifact.executable_path)
+        .output()
+        .expect("linked host-effect artifact runs");
+    assert_eq!(ran.status.code(), Some(0), "stderr: {:?}", ran.stderr);
+    assert_eq!(ran.stdout, b"px5\n");
     let _ = std::fs::remove_dir_all(dir);
 }
 

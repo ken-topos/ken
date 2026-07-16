@@ -602,12 +602,27 @@ pub fn compile_native_program_sources(
     }
     let closures =
         build_target_closures(&package, &selected).map_err(NativeProgramBuildError::Driver)?;
-    let closure = closures
+    let mut closure = closures
         .into_iter()
         .next()
         .expect("one exact checked-main selector produces one closure");
-    let executable_entrypoint = package_executable_entrypoint_mode(&package, &closure, true)
+    if main_has_host_effect {
+        // ITree/Coproduct/operation declarations are checked semantic
+        // dependencies of the recognizer, not runtime declarations.  The
+        // normalized root is self-contained after deforestation.
+        closure.reachable_declarations = BTreeSet::from([plan.main.clone()]);
+        closure.report.reachable_declarations = closure.reachable_declarations.clone();
+    }
+    let mut executable_entrypoint = package_executable_entrypoint_mode(&package, &closure, true)
         .map_err(NativeProgramBuildError::Driver)?;
+    if main_has_host_effect {
+        for lanes in executable_entrypoint.unsupported_lanes.values_mut() {
+            lanes.retain(|lane| lane.lane != "host_effect_lowering_unavailable");
+        }
+        executable_entrypoint
+            .unsupported_lanes
+            .retain(|_, lanes| !lanes.is_empty());
+    }
     if let Some(lane) = executable_entrypoint
         .unsupported_lanes
         .values()
@@ -1397,6 +1412,9 @@ fn stable_symbols_for_env(
                     ken_kernel::PrimReduction::Op { symbol } => Some((*symbol).to_string()),
                     ken_kernel::PrimReduction::Literal => match env.num_values.get(id) {
                         Some(crate::NumericLitVal::Int(value)) => Some(format!("lit_int_{value}")),
+                        Some(crate::NumericLitVal::Str(value)) => {
+                            Some(format!("lit_string_{value}"))
+                        }
                         _ => None,
                     },
                     ken_kernel::PrimReduction::OpaqueType => None,
@@ -1452,6 +1470,10 @@ fn add_native_primitive_metadata(
             ken_kernel::PrimReduction::Literal => match env.num_values.get(id) {
                 Some(crate::NumericLitVal::Int(value)) => (
                     format!("lit_int_{value}"),
+                    PrimitiveReductionMetadata::Literal,
+                ),
+                Some(crate::NumericLitVal::Str(value)) => (
+                    format!("lit_string_{value}"),
                     PrimitiveReductionMetadata::Literal,
                 ),
                 _ => continue,
