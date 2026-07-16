@@ -250,6 +250,8 @@ contain raw pointers, capability table slots, file descriptors, inode/device
 numbers, absolute temporary-root paths, allocation addresses, or debug text.
 `CapabilityTraceIdentity` is the stable declared ProgramCaps field identity,
 not a credential.
+For v1's sole FS `ProgramCaps` field, the canonical trace identity is the exact
+byte string `FS`; executor/substrate prefixes are forbidden.
 
 Semantic error identity is an enum, not a message string. It preserves:
 

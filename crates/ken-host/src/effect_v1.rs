@@ -671,6 +671,12 @@ pub enum CreatePolicyV1 {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CapabilityTraceIdentity(pub String);
 
+pub const PROGRAM_CAPS_FS_TRACE_IDENTITY_V1: &str = "FS";
+
+pub fn program_caps_fs_trace_identity_v1() -> CapabilityTraceIdentity {
+    CapabilityTraceIdentity(PROGRAM_CAPS_FS_TRACE_IDENTITY_V1.to_string())
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CanonicalRequestV1 {
     ConsoleRead {

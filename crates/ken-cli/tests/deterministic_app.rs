@@ -132,7 +132,7 @@ fn checked_application_exposes_the_real_dispatch_observation() {
             .capability
             .as_ref()
             .map(|identity| identity.0.as_str()),
-        Some("interpreter:FS")
+        Some("FS")
     );
     assert!(matches!(
         &observation.effect_trace[0].request,
@@ -144,6 +144,7 @@ fn checked_application_exposes_the_real_dispatch_observation() {
         observation.effect_trace[1].operation,
         ken_runtime::HostOpV1::ConsoleWrite
     );
+    assert_eq!(observation.effect_trace[1].capability, None);
     assert_eq!(host.stdout(), b"fixed argv");
     assert_eq!(
         host.fs_nodes().get(b"sandbox/output".as_slice()),

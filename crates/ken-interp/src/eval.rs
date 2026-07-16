@@ -4250,7 +4250,7 @@ fn fs_dispatch<H: HostHandler>(
     let mut capabilities = ken_host::CapabilityTableV1::default();
     let token = match args.get(1) {
         Some(EvalVal::Cap(capability)) => Some(capabilities.insert(ken_host::CapabilityGrantV1 {
-            identity: ken_host::CapabilityTraceIdentity("interpreter:FS".to_string()),
+            identity: ken_host::program_caps_fs_trace_identity_v1(),
             capability: capability.clone(),
         })),
         _ => None,
@@ -5069,6 +5069,13 @@ mod px5b_effect_observation_tests {
             .expect("second read reifies");
 
         assert_eq!(recorder.events.len(), 2);
+        assert!(recorder.events.iter().all(|event| {
+            event
+                .capability
+                .as_ref()
+                .map(|identity| identity.0.as_str())
+                == Some(ken_host::PROGRAM_CAPS_FS_TRACE_IDENTITY_V1)
+        }));
         assert_eq!(recorder.events[0].sequence, 0);
         assert_eq!(recorder.events[1].sequence, 1);
         assert_eq!(
@@ -5187,6 +5194,12 @@ mod px5b_effect_observation_tests {
             ]
         );
         assert_eq!(host.stdout(), b"out");
+        assert!(
+            recorder
+                .events
+                .iter()
+                .all(|event| event.capability.is_none())
+        );
     }
 
     #[test]

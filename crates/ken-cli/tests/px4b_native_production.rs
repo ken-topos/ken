@@ -503,6 +503,21 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
     assert_eq!(std::fs::read(dir.join("px5.bin")).unwrap(), b"retained");
     assert_eq!(observation.effect_trace.len(), 3);
     assert_eq!(
+        observation.effect_trace[0]
+            .capability
+            .as_ref()
+            .map(|identity| identity.0.as_str()),
+        Some("FS")
+    );
+    assert_eq!(
+        observation.effect_trace[1]
+            .capability
+            .as_ref()
+            .map(|identity| identity.0.as_str()),
+        Some("FS")
+    );
+    assert_eq!(observation.effect_trace[2].capability, None);
+    assert_eq!(
         observation.filesystem_delta,
         vec![ken_runtime::FsDeltaV1::Created {
             relative_path: b"px5.bin".to_vec(),
@@ -513,6 +528,103 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
             },
         }]
     );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn canonical_fs_identity_exactly_matches_across_real_producers_and_drift_fails() {
+    let dir = output_dir("fs-identity-cross-lane");
+    let path = b"shared.bin";
+    let contents = vec![17, 0xff, 0];
+    std::fs::write(dir.join("shared.bin"), &contents).unwrap();
+    let source = r#"program capabilities FS APartial
+proc main (input : ProcessInput) (caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [FS, Console] =
+  match input {
+    MkProcessInput arguments _environment _cwd |-> match arguments {
+      Nil |-> host_exit APartial (Failure 40) ;
+      Cons _argv0 rest |-> match rest {
+        Nil |-> host_exit APartial (Failure 41) ;
+        Cons path _ |-> match caps {
+          MkProgramCaps cap |->
+            bind (Coproduct (FSOp APartial) AmbientOp)
+              (resp_coproduct (FSOp APartial) AmbientOp
+                (fs_resp APartial) ambient_resp)
+              (Result FileError Bytes) ExitCode
+              (inject_l (FSOp APartial) AmbientOp
+                (fs_resp APartial) ambient_resp
+                (Result FileError Bytes) (readFile APartial cap path))
+              (\read. match read {
+                Err _ |-> host_exit APartial (Failure 42) ;
+                Ok bytes |-> match bytes_at bytes 0 {
+                  None |-> host_exit APartial (Failure 43) ;
+                  Some byte |-> host_exit APartial (Failure byte)
+                }
+              })
+        }
+      }
+    }
+  }
+"#;
+
+    let output = ken_cli::build_native_program(
+        source,
+        ken_cli::SourceFormat::Ken,
+        "px5c-fs-identity",
+        &dir,
+    )
+    .expect("same checked source reaches the native producer");
+    let native = ken_runtime::run_bound_process_effect_observation_v1(
+        &output.artifact,
+        &ken_runtime::NativeEffectRunOptionsV1 {
+            arguments: vec![std::ffi::OsString::from("shared.bin")],
+            environment: Vec::new(),
+            cwd: dir.clone(),
+            plan_hash: output.plan_transport_hash,
+        },
+    )
+    .expect("native producer returns its real observation");
+
+    let mut host = ken_interp::CaptureHost::new(Vec::new());
+    host.insert_file(path.to_vec(), contents);
+    let interpreted = ken_cli::run_program_effect_observation_v1(
+        source,
+        ken_cli::SourceFormat::Ken,
+        &[b"ken".to_vec(), path.to_vec()],
+        &[],
+        b"/",
+        &mut host,
+    )
+    .expect("interpreter producer returns its real observation");
+
+    assert_eq!(interpreted, native);
+    assert_eq!(interpreted.effect_trace.len(), 1);
+    assert_eq!(
+        interpreted.effect_trace[0]
+            .capability
+            .as_ref()
+            .map(|identity| identity.0.as_str()),
+        Some("FS")
+    );
+
+    for drift in ["interpreter:FS", "declared:FS", "other:FS"] {
+        let mut interpreter_drift = interpreted.clone();
+        interpreter_drift.effect_trace[0]
+            .capability
+            .as_mut()
+            .expect("successful FS event has an identity")
+            .0 = drift.to_string();
+        assert_ne!(interpreter_drift, native, "interpreter seed drift must fail");
+
+        let mut native_drift = native.clone();
+        native_drift.effect_trace[0]
+            .capability
+            .as_mut()
+            .expect("successful FS event has an identity")
+            .0 = drift.to_string();
+        assert_ne!(interpreted, native_drift, "native seed drift must fail");
+    }
+
     let _ = std::fs::remove_dir_all(dir);
 }
 

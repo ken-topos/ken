@@ -11,11 +11,11 @@ use std::fs::OpenOptions;
 use std::io::{self, Write};
 
 use crate::{
-    dispatch_host_op_v1, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, Cap,
-    CapabilityGrantV1, CapabilityTableV1, CapabilityTokenV1, CapabilityTraceIdentity,
-    ConsoleStreamV1, CreatePolicyV1, EffectEventV1, FileErrorCauseV1, FsHandle, FsIdentity,
-    FsScope, HostEffectBackendV1, HostOpV1, IoErrorIdentityV1, OpenRequest, PathComponent,
-    RootPath, RootedHandle, SymlinkPolicy, AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
+    AUTH_FULL, AUTH_NONE, AUTH_PARTIAL, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1,
+    Cap, CapabilityGrantV1, CapabilityTableV1, CapabilityTokenV1, ConsoleStreamV1, CreatePolicyV1,
+    EffectEventV1, FileErrorCauseV1, FsHandle, FsIdentity, FsScope, HostEffectBackendV1, HostOpV1,
+    IoErrorIdentityV1, OpenRequest, PathComponent, RootPath, RootedHandle, SymlinkPolicy,
+    dispatch_host_op_v1,
 };
 
 #[cfg(target_os = "linux")]
@@ -462,7 +462,7 @@ fn initialize_process_context(
     );
     let mut capabilities = CapabilityTableV1::default();
     let capability = capabilities.insert(CapabilityGrantV1 {
-        identity: CapabilityTraceIdentity("declared:FS".to_string()),
+        identity: crate::program_caps_fs_trace_identity_v1(),
         capability: cap,
     });
     let observation = if observation_path.is_empty() {
@@ -997,6 +997,18 @@ mod tests {
         assert_eq!(reply.tag, REPLY_ERROR);
         assert_eq!(reply.detail, 2);
         assert!(!directory.join("must-not-be-read").exists());
+        let context = unsafe { &*initialized.context.cast::<ProcessContext>() };
+        let [event] = context.effect_trace.as_slice() else {
+            panic!("one denied dispatch must emit exactly one event")
+        };
+        assert_eq!(event.capability, None);
+        assert!(matches!(
+            &event.outcome,
+            CanonicalOutcomeV1::Error(crate::SemanticErrorV1::File(crate::FileErrorIdentityV1 {
+                cause: FileErrorCauseV1::Capability(crate::CapabilityDeniedV1::MalformedCapability),
+                ..
+            }))
+        ));
         unsafe { ken_host_invocation_v1_destroy(initialized.context) };
         let _ = std::fs::remove_dir_all(directory);
     }
