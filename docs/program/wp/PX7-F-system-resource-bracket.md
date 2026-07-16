@@ -76,21 +76,31 @@
     `MalformedResource` is a total/fail-closed case but is **not** claimed
     reachable from valid public Ken (`Resource k` has no public constructor):
 
-    ```text
-    ResourceError =
-        HostIO(IOError)
-      | Closed
-      | MalformedResource
-      | RightNotHeld(required: Int, held: Int)
-      | ReleaseFailed(resource_kind: ResourceKind,
-                      identity: ResourceTraceIdentity,
-                      io: IOError)
+    ```ken
+    data ResourceError where {
+      ResourceHostIO : IOError → ResourceError
+      Closed         : ResourceError
+      MalformedResource : ResourceError
+      RightNotHeld   : Int → Int → ResourceError
+      ReleaseFailed  : ResourceKind → ResourceTraceIdentity → IOError → ResourceError
+    }
 
     ResourceKind = FsHandle
     ```
 
-    The separately-reachable metadata-backend I/O branch is `HostIO(IOError)` — it
-    must **not** be confused with a resource-table error.
+    The separately-reachable metadata-backend I/O branch surfaces as
+    `ResourceHostIO(IOError)` — it must **not** be confused with a resource-table
+    error. **Canonical spelling is `ResourceHostIO`, not `HostIO`
+    (Architect-ruled `evt_6nn91ne7063af`):** the landed prelude type former
+    `HostIO : Auth → Type → Type` (`crates/ken-elaborator/src/prelude.rs:1485`,
+    broad live use) already owns the `HostIO` global, and `elaborate_data`
+    registers formers + constructors into one flat `globals` map with
+    unconditional `insert` (`data.rs:~98–111`), so a `HostIO` constructor would
+    **destructively shadow** the former in either load order. The collision is
+    resolved by the **surface rename only** — preserve the `HostIO` former
+    untouched; introduce **no** namespace / parser / module / global-registration
+    mechanism in PX7-F. Metadata-backend `io.InvalidInput` maps to
+    `ResourceHostIO`.
   - **Fixed native ABI projection** — keep existing `REPLY_ERROR/detail`
     UNCHANGED for generic I/O/file/capability errors (detail `6` remains
     `io.InvalidInput`, **never** reinterpreted as a resource error). Add a
@@ -122,9 +132,9 @@
     `HostEffectWireLayoutV1`, ABI hash, observer, Cranelift consumer, compiler
     symbol resolution, and mutation tests all move TOGETHER. Cranelift accepts:
     `FsOpen` → resource success or existing generic file error only;
-    `FsHandleMetadata` → metadata success, existing generic I/O error → `HostIO`,
-    or the new resource-error reply; `ResourceRelease` → unit success or the new
-    resource-error reply only.
+    `FsHandleMetadata` → metadata success, existing generic I/O error →
+    `ResourceHostIO`, or the new resource-error reply; `ResourceRelease` → unit
+    success or the new resource-error reply only.
   - **Companion projection, NOT a substrate redesign.** `ResourceTableV1`,
     token/generation rules, invalidation-before-close, no-retry, and close
     ownership remain **byte-for-byte untouched**. The "consume without modifying
@@ -180,7 +190,7 @@ the opaque `Resource k`, the bracket result/error shape, `withResource`, use
 combinators, and optional early `release`; the delayed-`body` acquisition →
 settlement sequencing over PX7-R's `FsOpen`/handle-metadata/`ResourceRelease`;
 the controlled-trap settlement path (trap reaches the runtime as a controlled
-terminal outcome); the surface error sum `HostIO` / `Closed` /
+terminal outcome); the surface error sum `ResourceHostIO` / `Closed` /
 `MalformedResource` / `RightNotHeld` / `ReleaseFailed` lifted from PX7-R; **the
 authorized additive native `REPLY_RESOURCE_ERROR` ABI projection** (a distinct
 generated reply tag + `ResourceErrorReplyV1` payload, per the Architect ruling) so
@@ -206,8 +216,8 @@ a new capability family or `RightSet` bit; any kernel change.
 
 1. **`System.Resource` module surface + native ABI projection.** The first
    `System.*` module: opaque `Resource k` (no Ken constructor; minted only via
-   `withResource`), the post-acquisition **error sum** `HostIO` / `Closed` /
-   `MalformedResource` / `RightNotHeld(required, held)` / `ReleaseFailed(kind,
+   `withResource`), the post-acquisition **error sum** `ResourceHostIO` / `Closed`
+   / `MalformedResource` / `RightNotHeld(required, held)` / `ReleaseFailed(kind,
    identity, io)` exactly as fixed above (identity keeps all 64 bits; no fd on
    `ReleaseFailed`; `MalformedResource` total-but-not-publicly-reachable),
    `withResource`, the handle-metadata use combinator (over PX7-R's real
@@ -316,6 +326,17 @@ a new capability family or `RightSet` bit; any kernel change.
   observer, Cranelift consumer, compiler symbol resolution, and mutation tests all
   move together (assert the Cranelift accept-set per op). `ResourceTraceIdentity`
   preserves all 64 bits end-to-end.
+- **AC10 — `ResourceHostIO` two-identity closure (no destructive shadow).** Before
+  declaring `ResourceError`, prove the constructor spelling `ResourceHostIO` is
+  **absent** from the closed production/global-name inventory. After the real
+  prelude **plus** the PX7-F surface load, prove both identities resolve
+  **simultaneously and distinctly**: `HostIO` → the existing program-tree type
+  former (`prelude.rs:1485`, unchanged), and `ResourceHostIO` → the `ResourceError`
+  constructor. Add an **opposite mutation** that declares the arm with the spelling
+  `HostIO` and assert it **fails** this two-identity closure (destructive shadow in
+  either load order). No namespace / parser / module / global-registration
+  mechanism is introduced — the collision is resolved by the surface spelling
+  alone.
 
 ## Do-not-reopen guards
 
@@ -335,6 +356,11 @@ a new capability family or `RightSet` bit; any kernel change.
 - Do NOT export raw acquire; `withResource` is the sole public route.
 - Do NOT add a `program capabilities Resource` family, spend a `RightSet` bit,
   or broaden the FS-only declaration grammar.
+- Do NOT rename, move, or shadow the landed `HostIO` type former
+  (`prelude.rs:1485`); the surface constructor is spelled `ResourceHostIO`
+  (Architect-ruled `evt_6nn91ne7063af`). Do NOT introduce a constructor
+  namespace, parser change, module system, or any change to `elaborate_data`'s
+  global registration to "fix" the collision — the surface spelling resolves it.
 - Do NOT surface a `ResourceKindMismatch` identity — PX7-R fixed V1 as
   **single-kind** (`ResourceKindV1::FsHandle`) and ADR-0021 / the PX7-R frame
   **defer** the mismatch identity to the first WP that adds a second production

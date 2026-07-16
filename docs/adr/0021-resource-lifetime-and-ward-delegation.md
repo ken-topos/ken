@@ -234,10 +234,17 @@ schema_version, resource_kind, identity, io, required, held }` payload, with
 `detail` equal to the exact resource-error discriminator. The existing
 `REPLY_ERROR/detail 6` (`io.InvalidInput`) semantics are unchanged and never
 reinterpreted as a resource error; the post-acquisition metadata-backend I/O
-branch surfaces as `HostIO`, kept distinct from a resource-table error. The
-surface error sum is `HostIO | Closed | MalformedResource | RightNotHeld(required,
-held) | ReleaseFailed(resource_kind, identity, io)` (identity preserving all 64
-bits, no fd exposed). Each variant fully initializes its payload and fails closed
+branch surfaces as `ResourceHostIO`, kept distinct from a resource-table error. The
+surface error sum is `ResourceHostIO | Closed | MalformedResource |
+RightNotHeld(required, held) | ReleaseFailed(resource_kind, identity, io)`
+(identity preserving all 64 bits, no fd exposed). The constructor is spelled
+`ResourceHostIO`, not `HostIO` (Architect-ruled `evt_6nn91ne7063af`): the landed
+prelude type former `HostIO : Auth → Type → Type` owns the `HostIO` global and
+`elaborate_data` registers formers + constructors into one flat `globals` map with
+unconditional `insert`, so a `HostIO` constructor would destructively shadow the
+former in either load order. The collision is resolved by surface spelling alone —
+the former is preserved and PX7-F introduces no namespace/parser/global-registration
+mechanism. Each variant fully initializes its payload and fails closed
 on any malformed field; the C probe and Rust record agree on every offset, and the
 coordinated ABI-surface files (catalog, binding registry, `HostEffectWireLayoutV1`,
 ABI hash, observer, Cranelift consumer, symbol resolution, mutation tests) move
