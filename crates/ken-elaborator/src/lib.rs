@@ -68,7 +68,8 @@ pub use prover::{
 };
 pub use export::{
     emit_export, serialize_export, BehavioralExport, ExportError, GEntry, PEntry, PStatus, QEntry,
-    TEntry,
+    ResourceLifetimeCorrelationV1, ResourceLifetimeObligationV1, TEntry,
+    WardResourceLifetimeMonitorV1,
 };
 pub use temporal::{
     closed, elaborate_temporal_expr, temporal_hoas_inductive_spec, temporal_inductive_spec,

@@ -26,7 +26,20 @@ struct FsRenameRequestV1 { uint64_t capability; struct SliceV1 source; struct Sl
 struct FsChangeModeRequestV1 { uint64_t capability; struct SliceV1 path; uint16_t mode; };
 struct FsOpenRequestV1 { uint64_t capability; struct SliceV1 path; uint64_t mode; };
 struct ResourceRequestV1 { uint64_t resource; };
-struct HostReplyV1 { uint64_t tag; uint64_t detail; struct SliceV1 bytes; };
+struct ResourceErrorReplyV1 {
+    uint64_t schema_version;
+    uint64_t resource_kind;
+    uint64_t identity;
+    uint64_t io;
+    uint64_t required;
+    uint64_t held;
+};
+struct HostReplyV1 {
+    uint64_t tag;
+    uint64_t detail;
+    struct SliceV1 bytes;
+    struct ResourceErrorReplyV1 resource_error;
+};
 
 #define FACT_SIZE(T) printf("SIZE_%s=%zu\n", #T, sizeof(struct T))
 #define FACT_ALIGN(T) printf("ALIGN_%s=%zu\n", #T, _Alignof(struct T))
@@ -52,6 +65,7 @@ int main(void) {
     FACT_SIZE(FsChangeModeRequestV1); FACT_ALIGN(FsChangeModeRequestV1); FACT_OFFSET(FsChangeModeRequestV1, capability); FACT_OFFSET(FsChangeModeRequestV1, path); FACT_OFFSET(FsChangeModeRequestV1, mode);
     FACT_SIZE(FsOpenRequestV1); FACT_ALIGN(FsOpenRequestV1); FACT_OFFSET(FsOpenRequestV1, capability); FACT_OFFSET(FsOpenRequestV1, path); FACT_OFFSET(FsOpenRequestV1, mode);
     FACT_SIZE(ResourceRequestV1); FACT_ALIGN(ResourceRequestV1); FACT_OFFSET(ResourceRequestV1, resource);
-    FACT_SIZE(HostReplyV1); FACT_ALIGN(HostReplyV1); FACT_OFFSET(HostReplyV1, tag); FACT_OFFSET(HostReplyV1, detail); FACT_OFFSET(HostReplyV1, bytes);
+    FACT_SIZE(ResourceErrorReplyV1); FACT_ALIGN(ResourceErrorReplyV1); FACT_OFFSET(ResourceErrorReplyV1, schema_version); FACT_OFFSET(ResourceErrorReplyV1, resource_kind); FACT_OFFSET(ResourceErrorReplyV1, identity); FACT_OFFSET(ResourceErrorReplyV1, io); FACT_OFFSET(ResourceErrorReplyV1, required); FACT_OFFSET(ResourceErrorReplyV1, held);
+    FACT_SIZE(HostReplyV1); FACT_ALIGN(HostReplyV1); FACT_OFFSET(HostReplyV1, tag); FACT_OFFSET(HostReplyV1, detail); FACT_OFFSET(HostReplyV1, bytes); FACT_OFFSET(HostReplyV1, resource_error);
     return 0;
 }

@@ -37,6 +37,13 @@ pub struct NativeProcessSymbols {
     pub file_operation_write: RuntimeSymbol,
     pub file_operation_change_mode: RuntimeSymbol,
     pub io_errors: Vec<RuntimeSymbol>,
+    pub resource_host_io: RuntimeSymbol,
+    pub resource_closed: RuntimeSymbol,
+    pub resource_malformed: RuntimeSymbol,
+    pub resource_right_not_held: RuntimeSymbol,
+    pub resource_release_failed: RuntimeSymbol,
+    pub resource_kind_fs_handle: RuntimeSymbol,
+    pub resource_trace_identity: RuntimeSymbol,
     pub unit: RuntimeSymbol,
     pub bool_false: RuntimeSymbol,
     pub bool_true: RuntimeSymbol,
@@ -75,6 +82,14 @@ impl NativeProcessSymbols {
             .into_iter()
             .map(|name| format!("ctor:prelude::IOError::{name}"))
             .collect(),
+            resource_host_io: "ctor:prelude::ResourceError::ResourceHostIO".to_string(),
+            resource_closed: "ctor:prelude::ResourceError::Closed".to_string(),
+            resource_malformed: "ctor:prelude::ResourceError::MalformedResource".to_string(),
+            resource_right_not_held: "ctor:prelude::ResourceError::RightNotHeld".to_string(),
+            resource_release_failed: "ctor:prelude::ResourceError::ReleaseFailed".to_string(),
+            resource_kind_fs_handle: "ctor:prelude::ResourceKind::FsHandle".to_string(),
+            resource_trace_identity:
+                "ctor:prelude::ResourceTraceIdentity::PrivateResourceTraceIdentity".to_string(),
             unit: "ctor:prelude::Unit::MkUnit".to_string(),
             bool_false: "ctor:prelude::Bool::False".to_string(),
             bool_true: "ctor:prelude::Bool::True".to_string(),

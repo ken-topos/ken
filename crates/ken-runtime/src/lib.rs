@@ -40,7 +40,7 @@ pub use ken_host::{
     CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, ConsoleStreamV1, EffectEventV1,
     EffectObservationV1, EffectiveUidSnapshotV1, FsDeltaV1, FsNodeKindV1, FsNodeObservationV1,
     HomeRootResolutionFailureV1, HostOpV1, IoErrorIdentityV1, RootExecutionDeniedV1,
-    SemanticErrorV1, TerminalErrorV1,
+    ResourceErrorV1, SemanticErrorV1, TerminalErrorV1,
 };
 pub use native_execution_differential::*;
 pub use native_process_entrypoint::*;

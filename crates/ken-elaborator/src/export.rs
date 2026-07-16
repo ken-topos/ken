@@ -124,6 +124,79 @@ pub struct TEntry {
     pub formula: crate::temporal::Temporal,
 }
 
+/// The static correlation descriptor for a V1 resource lifetime (`71 §2.2`).
+///
+/// This value deliberately contains no runtime resource identity. Ward binds
+/// that identity from the successful `FsOpen` event selected by `bind_at` and
+/// requires the same event field on the use and settlement operations.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ResourceLifetimeCorrelationV1 {
+    pub identity_type: &'static str,
+    pub event_field: &'static str,
+    pub bind_at: &'static str,
+    pub require_same_at: [ken_host::HostOpV1; 2],
+}
+
+/// The four fixed checks compiled by Ward for each runtime identity selected
+/// by [`ResourceLifetimeCorrelationV1`].
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WardResourceLifetimeMonitorV1 {
+    pub successful_acquire_settles_exactly_once: bool,
+    pub forbid_successful_use_after_settlement: bool,
+    pub require_no_live_resource_on: [&'static str; 3],
+    pub retain_settlement_outcome: bool,
+}
+
+/// The additional correlated body admitted by the behavioral export's `T`
+/// channel (`71 §2.2`). It is one target-level monitor template, not one entry
+/// per operation or per dynamically minted resource.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ResourceLifetimeObligationV1 {
+    pub schema_version: u16,
+    pub body_kind: &'static str,
+    pub obligation_id: &'static str,
+    pub status: &'static str,
+    pub correlation: ResourceLifetimeCorrelationV1,
+    pub acquire_op: ken_host::HostOpV1,
+    pub use_op: ken_host::HostOpV1,
+    pub settle_op: ken_host::HostOpV1,
+    pub monitor_template: WardResourceLifetimeMonitorV1,
+}
+
+impl ResourceLifetimeObligationV1 {
+    /// The Spec-owned descriptor, reproduced without extension or inference.
+    pub const fn pinned() -> Self {
+        Self {
+            schema_version: 1,
+            body_kind: "ResourceLifetimeObligationV1",
+            obligation_id: "resource-lifetime-v1",
+            status: "delegated",
+            correlation: ResourceLifetimeCorrelationV1 {
+                identity_type: "ResourceTraceIdentityV1",
+                event_field: "EffectEventV1.resource",
+                bind_at: "Successful(FsOpen)",
+                require_same_at: [
+                    ken_host::HostOpV1::FsHandleMetadata,
+                    ken_host::HostOpV1::ResourceRelease,
+                ],
+            },
+            acquire_op: ken_host::HostOpV1::FsOpen,
+            use_op: ken_host::HostOpV1::FsHandleMetadata,
+            settle_op: ken_host::HostOpV1::ResourceRelease,
+            monitor_template: WardResourceLifetimeMonitorV1 {
+                successful_acquire_settles_exactly_once: true,
+                forbid_successful_use_after_settlement: true,
+                require_no_live_resource_on: [
+                    "NormalReturn",
+                    "ReturnedError",
+                    "ControlledTrap",
+                ],
+                retain_settlement_outcome: true,
+            },
+        }
+    }
+}
+
 /// Generator support structure — partition + boundaries + case decomposition
 /// from refinement predicates and `match` arms (`71 §4`).
 ///
@@ -167,6 +240,10 @@ pub struct BehavioralExport {
     /// B2 fills the `Temporal` value body (`TEntry::formula`, `72 §5`); B1
     /// provided the channel.
     pub obligations: Vec<TEntry>,
+    /// The optional correlated resource-lifetime body in `T`. Presence is
+    /// derived solely from reachable `Σ`: exactly one when `FsOpen` occurs,
+    /// none otherwise. Ordinary `Temporal` entries remain unchanged above.
+    pub resource_lifetime_obligation: Option<ResourceLifetimeObligationV1>,
     /// `G` — generator support: partition + boundaries from refinement/match.
     /// No measure (I5 — structural seal, §4.1).
     pub generators: Vec<GEntry>,
@@ -309,12 +386,17 @@ pub fn emit_export(
     // BTreeSet internals, but we take ownership here).
     let alphabet_set: BTreeSet<String> = alphabet.effects().cloned().collect();
 
+    let resource_lifetime_obligation = alphabet_set
+        .contains("FsOpen")
+        .then(ResourceLifetimeObligationV1::pinned);
+
     let hash = compute_hash(
         target_name,
         &guarantees,
         &assumptions,
         &alphabet_set,
         &obligations,
+        resource_lifetime_obligation.as_ref(),
         &gens,
     );
 
@@ -324,6 +406,7 @@ pub fn emit_export(
         assumptions,
         alphabet: alphabet_set,
         obligations,
+        resource_lifetime_obligation,
         generators: gens,
         hash,
     })
@@ -349,6 +432,7 @@ fn compute_hash(
     assumptions: &[PEntry],
     alphabet: &BTreeSet<String>,
     obligations: &[TEntry],
+    resource_lifetime_obligation: Option<&ResourceLifetimeObligationV1>,
     generators: &[GEntry],
 ) -> String {
     // Build a canonical representation using BTreeMap (sorted keys).
@@ -381,6 +465,16 @@ fn compute_hash(
         .map(|e| format!("{}:{:?}", e.obligation_id, e.formula))
         .collect();
     root.insert("obligations", t_repr.join("|"));
+
+    // The structured descriptor participates in T's content hash. Runtime
+    // identity `r` is absent by construction; every static descriptor field is
+    // present, so changing any one of them changes the export hash.
+    root.insert(
+        "resource_lifetime_obligation",
+        resource_lifetime_obligation
+            .map(canonical_resource_lifetime_obligation)
+            .unwrap_or_default(),
+    );
 
     // G entries: source + sorted conditions.
     let g_repr: Vec<String> = generators
@@ -434,13 +528,16 @@ pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
 
     let alphabet: Vec<&String> = export.alphabet.iter().collect();
 
-    let obligations: Vec<Value> = export.obligations.iter().map(|e| {
+    let mut obligations: Vec<Value> = export.obligations.iter().map(|e| {
         json!({
             "obligation_id": e.obligation_id,    // (oracle)
             "status": "delegated",              // constant (`72 §5`); never proved/tested/unknown
             "formula": format!("{:?}", e.formula) // (oracle): Ward-facing spelling deferred
         })
     }).collect();
+    if let Some(resource) = &export.resource_lifetime_obligation {
+        obligations.push(serialize_resource_lifetime_obligation(resource));
+    }
 
     let generators: Vec<Value> = export.generators.iter().map(|e| {
         json!({
@@ -459,5 +556,66 @@ pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
         "obligations": obligations,              // T — (oracle): "obligations" / "T"
         "generators": generators,                // G — (oracle): "generators" / "G"
         "hash": export.hash
+    })
+}
+
+fn host_op_name(operation: ken_host::HostOpV1) -> &'static str {
+    match operation {
+        ken_host::HostOpV1::FsOpen => "FsOpen",
+        ken_host::HostOpV1::FsHandleMetadata => "FsHandleMetadata",
+        ken_host::HostOpV1::ResourceRelease => "ResourceRelease",
+        _ => unreachable!("resource-lifetime V1 contains only its pinned three operations"),
+    }
+}
+
+fn canonical_resource_lifetime_obligation(value: &ResourceLifetimeObligationV1) -> String {
+    format!(
+        "schema_version={};body_kind={};obligation_id={};status={};identity_type={};event_field={};bind_at={};require_same_at=[{},{}];acquire_op={};use_op={};settle_op={};successful_acquire_settles_exactly_once={};forbid_successful_use_after_settlement={};require_no_live_resource_on=[{},{},{}];retain_settlement_outcome={}",
+        value.schema_version,
+        value.body_kind,
+        value.obligation_id,
+        value.status,
+        value.correlation.identity_type,
+        value.correlation.event_field,
+        value.correlation.bind_at,
+        host_op_name(value.correlation.require_same_at[0]),
+        host_op_name(value.correlation.require_same_at[1]),
+        host_op_name(value.acquire_op),
+        host_op_name(value.use_op),
+        host_op_name(value.settle_op),
+        value.monitor_template.successful_acquire_settles_exactly_once,
+        value.monitor_template.forbid_successful_use_after_settlement,
+        value.monitor_template.require_no_live_resource_on[0],
+        value.monitor_template.require_no_live_resource_on[1],
+        value.monitor_template.require_no_live_resource_on[2],
+        value.monitor_template.retain_settlement_outcome,
+    )
+}
+
+fn serialize_resource_lifetime_obligation(
+    value: &ResourceLifetimeObligationV1,
+) -> serde_json::Value {
+    use serde_json::json;
+
+    json!({
+        "schema_version": value.schema_version,
+        "body_kind": value.body_kind,
+        "obligation_id": value.obligation_id,
+        "status": value.status,
+        "correlation": {
+            "identity_type": value.correlation.identity_type,
+            "event_field": value.correlation.event_field,
+            "bind_at": value.correlation.bind_at,
+            "require_same_at": value.correlation.require_same_at.map(host_op_name),
+        },
+        "acquire_op": host_op_name(value.acquire_op),
+        "use_op": host_op_name(value.use_op),
+        "settle_op": host_op_name(value.settle_op),
+        "monitor_template": {
+            "successful_acquire_settles_exactly_once": value.monitor_template.successful_acquire_settles_exactly_once,
+            "forbid_successful_use_after_settlement": value.monitor_template.forbid_successful_use_after_settlement,
+            "require_no_live_resource_on": value.monitor_template.require_no_live_resource_on,
+            "retain_settlement_outcome": value.monitor_template.retain_settlement_outcome,
+        }
     })
 }

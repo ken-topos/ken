@@ -3503,7 +3503,68 @@ impl<'a> Lowering<'a> {
                 ken_host::HostOpV1::FsHandleMetadata => wire.reply_metadata_tag,
                 _ => wire.reply_unit_tag,
             } as i64;
-            Self::require_one_of_i64(builder, tag, &[success_tag, wire.reply_error_tag as i64]);
+            let accepted_tags = match operation {
+                ken_host::HostOpV1::FsHandleMetadata => vec![
+                    success_tag,
+                    wire.reply_error_tag as i64,
+                    wire.reply_resource_error_tag as i64,
+                ],
+                ken_host::HostOpV1::ResourceRelease => {
+                    vec![success_tag, wire.reply_resource_error_tag as i64]
+                }
+                _ => vec![success_tag, wire.reply_error_tag as i64],
+            };
+            Self::require_one_of_i64(builder, tag, &accepted_tags);
+            let resource_schema = builder.ins().stack_load(
+                types::I64,
+                reply,
+                i32::try_from(wire.reply_resource_error_schema_offset)
+                    .expect("resource error schema offset is u32"),
+            );
+            let resource_kind = builder.ins().stack_load(
+                types::I64,
+                reply,
+                i32::try_from(wire.reply_resource_error_kind_offset)
+                    .expect("resource error kind offset is u32"),
+            );
+            let resource_identity = builder.ins().stack_load(
+                types::I64,
+                reply,
+                i32::try_from(wire.reply_resource_error_identity_offset)
+                    .expect("resource error identity offset is u32"),
+            );
+            let resource_io = builder.ins().stack_load(
+                types::I64,
+                reply,
+                i32::try_from(wire.reply_resource_error_io_offset)
+                    .expect("resource error io offset is u32"),
+            );
+            let resource_required = builder.ins().stack_load(
+                types::I64,
+                reply,
+                i32::try_from(wire.reply_resource_error_required_offset)
+                    .expect("resource error required offset is u32"),
+            );
+            let resource_held = builder.ins().stack_load(
+                types::I64,
+                reply,
+                i32::try_from(wire.reply_resource_error_held_offset)
+                    .expect("resource error held offset is u32"),
+            );
+            Self::validate_resource_error_reply(
+                builder,
+                tag,
+                wire.reply_resource_error_tag,
+                detail,
+                resource_schema,
+                resource_kind,
+                resource_identity,
+                resource_io,
+                resource_required,
+                resource_held,
+                wire.resource_error_reply_schema,
+                wire.resource_kind_fs_handle,
+            );
             let payload = builder.ins().sshr_imm(detail, 32);
             let last = self.process_symbols.io_errors.len().saturating_sub(1);
             let io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
@@ -3566,6 +3627,108 @@ impl<'a> Lowering<'a> {
                         io_error,
                     ],
                 }
+            } else if matches!(
+                operation,
+                ken_host::HostOpV1::FsHandleMetadata
+                    | ken_host::HostOpV1::ResourceRelease
+            ) {
+                let generic = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    tag,
+                    wire.reply_error_tag as i64,
+                );
+                let zero = builder.ins().iconst(types::I64, 0);
+                let resource_surface_tag = builder.ins().iadd_imm(detail, 1);
+                let surface_tag = builder.ins().select(generic, zero, resource_surface_tag);
+                let surface_io = builder.ins().select(generic, detail, resource_io);
+                let surface_io_payload = builder.ins().sshr_imm(surface_io, 32);
+                let surface_io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
+                    discriminator: builder.ins().band_imm(surface_io, 0xff),
+                    alternatives: self
+                        .process_symbols
+                        .io_errors
+                        .iter()
+                        .enumerate()
+                        .map(|(tag, constructor)| DynamicConstructorAlternativeV1 {
+                            tag: tag as i64,
+                            constructor: constructor.clone(),
+                            fields: (tag == last)
+                                .then(|| {
+                                    vec![Lowered::Int {
+                                        value: surface_io_payload,
+                                        known: None,
+                                    }]
+                                })
+                                .unwrap_or_default(),
+                        })
+                        .collect(),
+                });
+                let identity_low = builder.ins().band_imm(resource_identity, 0xffff_ffff);
+                let identity_high = builder.ins().ushr_imm(resource_identity, 32);
+                Lowered::DynamicConstructor(DynamicConstructorV1 {
+                    discriminator: surface_tag,
+                    alternatives: vec![
+                        DynamicConstructorAlternativeV1 {
+                            tag: 0,
+                            constructor: self.process_symbols.resource_host_io.clone(),
+                            fields: vec![surface_io_error.clone()],
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 1,
+                            constructor: self.process_symbols.resource_closed.clone(),
+                            fields: Vec::new(),
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 2,
+                            constructor: self.process_symbols.resource_malformed.clone(),
+                            fields: Vec::new(),
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 3,
+                            constructor: self.process_symbols.resource_right_not_held.clone(),
+                            fields: vec![
+                                Lowered::Int {
+                                    value: resource_required,
+                                    known: None,
+                                },
+                                Lowered::Int {
+                                    value: resource_held,
+                                    known: None,
+                                },
+                            ],
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 4,
+                            constructor: self.process_symbols.resource_release_failed.clone(),
+                            fields: vec![
+                                Lowered::Constructor {
+                                    constructor: self
+                                        .process_symbols
+                                        .resource_kind_fs_handle
+                                        .clone(),
+                                    args: Vec::new(),
+                                },
+                                Lowered::Constructor {
+                                    constructor: self
+                                        .process_symbols
+                                        .resource_trace_identity
+                                        .clone(),
+                                    args: vec![
+                                        Lowered::Int {
+                                            value: identity_low,
+                                            known: None,
+                                        },
+                                        Lowered::Int {
+                                            value: identity_high,
+                                            known: None,
+                                        },
+                                    ],
+                                },
+                                surface_io_error,
+                            ],
+                        },
+                    ],
+                })
             } else {
                 io_error
             };
@@ -3758,6 +3921,124 @@ impl<'a> Lowering<'a> {
         let failure = builder.ins().iconst(types::I64, -1);
         builder.ins().return_(&[failure]);
         builder.switch_to_block(valid);
+    }
+
+    fn require_u8(builder: &mut FunctionBuilder<'_>, value: cranelift_codegen::ir::Value) {
+        let valid = builder.create_block();
+        let invalid = builder.create_block();
+        let in_range = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
+            value,
+            i64::from(u8::MAX),
+        );
+        builder.ins().brif(in_range, valid, &[], invalid, &[]);
+        builder.switch_to_block(invalid);
+        let failure = builder.ins().iconst(types::I64, -1);
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(valid);
+    }
+
+    fn validate_resource_io(
+        builder: &mut FunctionBuilder<'_>,
+        encoded: cranelift_codegen::ir::Value,
+    ) {
+        let discriminator = builder.ins().band_imm(encoded, 0xff);
+        let other = builder.create_block();
+        let ordinary = builder.create_block();
+        let valid = builder.create_block();
+        let is_other = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            discriminator,
+            11,
+        );
+        builder.ins().brif(is_other, other, &[], ordinary, &[]);
+        builder.switch_to_block(other);
+        let middle = builder.ins().band_imm(encoded, 0x0000_0000_ffff_ff00u64 as i64);
+        Self::require_i64(builder, middle, 0);
+        builder.ins().jump(valid, &[]);
+        builder.switch_to_block(ordinary);
+        let upper = builder.ins().ushr_imm(encoded, 8);
+        Self::require_i64(builder, upper, 0);
+        Self::require_one_of_i64(builder, discriminator, &[0, 1, 3, 4, 5, 6, 7, 8, 9, 10]);
+        builder.ins().jump(valid, &[]);
+        builder.switch_to_block(valid);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn validate_resource_error_reply(
+        builder: &mut FunctionBuilder<'_>,
+        reply_tag: cranelift_codegen::ir::Value,
+        resource_reply_tag: u64,
+        discriminator: cranelift_codegen::ir::Value,
+        schema: cranelift_codegen::ir::Value,
+        kind: cranelift_codegen::ir::Value,
+        identity: cranelift_codegen::ir::Value,
+        io: cranelift_codegen::ir::Value,
+        required: cranelift_codegen::ir::Value,
+        held: cranelift_codegen::ir::Value,
+        expected_schema: u64,
+        expected_kind: u64,
+    ) {
+        let resource = builder.create_block();
+        let done = builder.create_block();
+        let is_resource = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            reply_tag,
+            resource_reply_tag as i64,
+        );
+        builder.ins().brif(is_resource, resource, &[], done, &[]);
+        builder.switch_to_block(resource);
+        let arms = [
+            builder.create_block(),
+            builder.create_block(),
+            builder.create_block(),
+            builder.create_block(),
+        ];
+        let mut test = builder
+            .current_block()
+            .expect("resource reply validation block");
+        for (index, arm) in arms.into_iter().enumerate() {
+            let next = builder.create_block();
+            if builder.current_block() != Some(test) {
+                builder.switch_to_block(test);
+            }
+            let selected = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                discriminator,
+                index as i64,
+            );
+            builder.ins().brif(selected, arm, &[], next, &[]);
+            builder.switch_to_block(arm);
+            match index {
+                0 | 1 => {
+                    for field in [schema, kind, identity, io, required, held] {
+                        Self::require_i64(builder, field, 0);
+                    }
+                }
+                2 => {
+                    Self::require_i64(builder, schema, expected_schema as i64);
+                    Self::require_i64(builder, kind, 0);
+                    Self::require_i64(builder, identity, 0);
+                    Self::require_i64(builder, io, 0);
+                    Self::require_u8(builder, required);
+                    Self::require_u8(builder, held);
+                }
+                3 => {
+                    Self::require_i64(builder, schema, expected_schema as i64);
+                    Self::require_i64(builder, kind, expected_kind as i64);
+                    Self::require_i64(builder, required, 0);
+                    Self::require_i64(builder, held, 0);
+                    Self::validate_resource_io(builder, io);
+                }
+                _ => unreachable!(),
+            }
+            builder.ins().jump(done, &[]);
+            test = next;
+        }
+        builder.switch_to_block(test);
+        let failure = builder.ins().iconst(types::I64, -1);
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(done);
     }
 
     fn lower_borrowed_match(
@@ -6853,6 +7134,45 @@ mod tests {
             mutations.push(changed);
             let mut changed = layout.clone();
             changed.reply_error_tag ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_resource_error_tag ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_resource_error_schema_offset ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_resource_error_kind_offset ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_resource_error_identity_offset ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_resource_error_io_offset ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_resource_error_required_offset ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_resource_error_held_offset ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.resource_error_closed ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.resource_error_malformed ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.resource_error_right_not_held ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.resource_error_release_failed ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.resource_kind_fs_handle ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.resource_error_reply_schema ^= 1;
             mutations.push(changed);
             let mut changed = layout.clone();
             changed.reply_unit_tag ^= 1;
