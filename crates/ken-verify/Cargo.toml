@@ -1,0 +1,17 @@
+[package]
+name = "ken-verify"
+description = "Independent interpreter/native external-effect differential harness."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ken-cli = { path = "../ken-cli" }
+ken-elaborator = { path = "../ken-elaborator" }
+ken-host = { path = "../ken-host" }
+ken-interp = { path = "../ken-interp" }
+ken-runtime = { path = "../ken-runtime" }
+num-bigint = "=0.4.6"

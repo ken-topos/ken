@@ -8,6 +8,7 @@ members = [
     "crates/ken-foundation",
     "crates/ken-runtime",
     "crates/ken-host",
+    "crates/ken-verify",
 ]
 
 # Shared package metadata. Individual crates inherit with `field.workspace = true`.
