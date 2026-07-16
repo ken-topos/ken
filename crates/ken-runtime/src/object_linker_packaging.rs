@@ -6,7 +6,8 @@
 //! target. Native bytes and linker success remain evidence artifacts, not Ken
 //! semantic authority or proof evidence.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -28,7 +29,8 @@ use crate::{
 pub struct BoundProcessEntrypoint {
     pub target_symbol: RuntimeSymbol,
     pub program_caps_constructor: RuntimeSymbol,
-    pub cap_symbol: RuntimeSymbol,
+    pub authority: u8,
+    pub plan_hash: u64,
     pub ret_constructor: RuntimeSymbol,
     pub process_symbols: crate::NativeProcessSymbols,
 }
@@ -39,6 +41,214 @@ pub struct BoundProcessExecutableArtifact {
     pub target_symbol: RuntimeSymbol,
     pub executable_path: PathBuf,
     pub executable_hash: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeEffectRunOptionsV1 {
+    pub arguments: Vec<OsString>,
+    pub environment: Vec<(OsString, OsString)>,
+    pub cwd: PathBuf,
+    pub plan_hash: u64,
+}
+
+#[derive(Debug)]
+pub enum NativeEffectRunErrorV1 {
+    Io(std::io::Error),
+    MalformedTrace,
+    BindingMismatch,
+    ObservationBoundaryUnavailable,
+}
+
+impl fmt::Display for NativeEffectRunErrorV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(error) => write!(formatter, "native effect launcher I/O failed: {error}"),
+            Self::MalformedTrace => formatter.write_str("native effect trace is malformed"),
+            Self::BindingMismatch => {
+                formatter.write_str("native effect trace binding does not match the artifact")
+            }
+            Self::ObservationBoundaryUnavailable => formatter.write_str(
+                "native effect observation sink cannot be placed outside the capability root",
+            ),
+        }
+    }
+}
+
+impl std::error::Error for NativeEffectRunErrorV1 {}
+
+impl From<std::io::Error> for NativeEffectRunErrorV1 {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+fn snapshot_effect_root_v1(
+    root: &Path,
+) -> Result<BTreeMap<Vec<u8>, ken_host::FsNodeObservationV1>, std::io::Error> {
+    fn walk(
+        root: &Path,
+        relative: &Path,
+        output: &mut BTreeMap<Vec<u8>, ken_host::FsNodeObservationV1>,
+    ) -> Result<(), std::io::Error> {
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStrExt;
+
+        let directory = root.join(relative);
+        let mut entries = fs::read_dir(&directory)?.collect::<Result<Vec<_>, _>>()?;
+        entries.sort_by(|left, right| {
+            #[cfg(unix)]
+            {
+                left.file_name()
+                    .as_bytes()
+                    .cmp(right.file_name().as_bytes())
+            }
+            #[cfg(not(unix))]
+            {
+                left.file_name().cmp(&right.file_name())
+            }
+        });
+        for entry in entries {
+            let child = relative.join(entry.file_name());
+            let path = root.join(&child);
+            let metadata = fs::symlink_metadata(&path)?;
+            #[cfg(unix)]
+            let key = child.as_os_str().as_bytes().to_vec();
+            #[cfg(not(unix))]
+            let key = child.to_string_lossy().as_bytes().to_vec();
+            let node = if metadata.file_type().is_symlink() {
+                let target = fs::read_link(&path)?;
+                #[cfg(unix)]
+                let target = target.as_os_str().as_bytes().to_vec();
+                #[cfg(not(unix))]
+                let target = target.to_string_lossy().as_bytes().to_vec();
+                ken_host::FsNodeObservationV1 {
+                    kind: ken_host::FsNodeKindV1::Symlink,
+                    file_bytes: None,
+                    symlink_target: Some(target),
+                }
+            } else if metadata.is_dir() {
+                ken_host::FsNodeObservationV1 {
+                    kind: ken_host::FsNodeKindV1::Directory,
+                    file_bytes: None,
+                    symlink_target: None,
+                }
+            } else if metadata.is_file() {
+                ken_host::FsNodeObservationV1 {
+                    kind: ken_host::FsNodeKindV1::File,
+                    file_bytes: Some(fs::read(&path)?),
+                    symlink_target: None,
+                }
+            } else {
+                ken_host::FsNodeObservationV1 {
+                    kind: ken_host::FsNodeKindV1::Other,
+                    file_bytes: None,
+                    symlink_target: None,
+                }
+            };
+            output.insert(key, node);
+            if metadata.is_dir() {
+                walk(root, &child, output)?;
+            }
+        }
+        Ok(())
+    }
+
+    let mut output = BTreeMap::new();
+    walk(root, Path::new(""), &mut output)?;
+    Ok(output)
+}
+
+fn filesystem_delta_v1(
+    before: &BTreeMap<Vec<u8>, ken_host::FsNodeObservationV1>,
+    after: &BTreeMap<Vec<u8>, ken_host::FsNodeObservationV1>,
+) -> Vec<ken_host::FsDeltaV1> {
+    let keys = before
+        .keys()
+        .chain(after.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    keys.into_iter()
+        .filter_map(
+            |relative_path| match (before.get(&relative_path), after.get(&relative_path)) {
+                (None, Some(node)) => Some(ken_host::FsDeltaV1::Created {
+                    relative_path,
+                    node: node.clone(),
+                }),
+                (Some(node), None) => Some(ken_host::FsDeltaV1::Removed {
+                    relative_path,
+                    node: node.clone(),
+                }),
+                (Some(before), Some(after)) if before != after => {
+                    Some(ken_host::FsDeltaV1::Modified {
+                        relative_path,
+                        before: before.clone(),
+                        after: after.clone(),
+                    })
+                }
+                _ => None,
+            },
+        )
+        .collect()
+}
+
+/// Runs the linked checked-source artifact and returns its complete canonical
+/// observation. The trace sink is launcher-owned and outside the capability
+/// root; stdout/stderr and filesystem deltas are observed by this same call.
+pub fn run_bound_process_effect_observation_v1(
+    artifact: &BoundProcessExecutableArtifact,
+    options: &NativeEffectRunOptionsV1,
+) -> Result<ken_host::EffectObservationV1, NativeEffectRunErrorV1> {
+    let cwd = fs::canonicalize(&options.cwd)?;
+    let observation_root = cwd
+        .parent()
+        .ok_or(NativeEffectRunErrorV1::ObservationBoundaryUnavailable)?;
+    let before = snapshot_effect_root_v1(&cwd)?;
+    let trace_path = observation_root.join(format!(
+        "ken-effect-observation-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| NativeEffectRunErrorV1::MalformedTrace)?
+            .as_nanos()
+    ));
+    let output = Command::new(&artifact.executable_path)
+        .args(&options.arguments)
+        .env_clear()
+        .envs(options.environment.iter().cloned())
+        .env("KEN_HOST_OBSERVATION_PATH", &trace_path)
+        .current_dir(&cwd)
+        .output()?;
+    let after = snapshot_effect_root_v1(&cwd)?;
+    let trace_bytes = fs::read(&trace_path)?;
+    let _ = fs::remove_file(&trace_path);
+    let trace = ken_host::decode_linked_effect_trace_v1(&trace_bytes)
+        .map_err(|_| NativeEffectRunErrorV1::MalformedTrace)?;
+    if trace.plan_hash != options.plan_hash
+        || trace.target_abi_hash != ken_host::TARGET_ABI_MANIFEST_HASH
+        || trace.host_effect_abi_hash != ken_host::HOST_EFFECT_ABI_V1_HASH
+    {
+        return Err(NativeEffectRunErrorV1::BindingMismatch);
+    }
+    let exit_status = output.status.code().unwrap_or(1);
+    let terminal_error = if output.status.code().is_none() {
+        Some(ken_host::TerminalErrorV1::DriverFailure)
+    } else if trace.terminal_value < 0 {
+        Some(ken_host::TerminalErrorV1::RuntimeTrap(
+            u16::try_from(-trace.terminal_value).unwrap_or(u16::MAX),
+        ))
+    } else if trace.terminal_value != i64::from(exit_status) {
+        Some(ken_host::TerminalErrorV1::MalformedHostAbiField)
+    } else {
+        None
+    };
+    Ok(ken_host::EffectObservationV1 {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        filesystem_delta: filesystem_delta_v1(&before, &after),
+        terminal_error,
+        effect_trace: trace.effect_trace,
+        exit_status,
+    })
 }
 
 pub const OBJECT_LINKER_PACKAGE_KIND: &str = "KenObjectLinkerExecutablePackage";
@@ -299,6 +509,7 @@ pub fn package_starter_executable_artifact_with_options(
         &object_path,
         &stub_path,
         &executable_path,
+        None,
     )?;
 
     let executable_bytes = fs::read(&executable_path).map_err(|err| {
@@ -397,6 +608,7 @@ fn build_process_starter_executable_artifact(
         &object_path,
         &stub_path,
         &executable_path,
+        Some(&ken_host_staticlib()?),
     )?;
     Ok(executable_path)
 }
@@ -421,10 +633,7 @@ pub fn build_bound_process_starter_executable_artifact(
     }
     let caps = RuntimeExpr::Construct {
         constructor: entrypoint.program_caps_constructor.clone(),
-        args: vec![RuntimeExpr::Construct {
-            constructor: entrypoint.cap_symbol.clone(),
-            args: Vec::new(),
-        }],
+        args: vec![RuntimeExpr::Var(1)],
     };
     // Checked-core binders are de Bruijn-indexed, so the closest binder
     // (`ProgramCaps`) is runtime argument zero and `ProcessInput` is one.
@@ -434,17 +643,21 @@ pub fn build_bound_process_starter_executable_artifact(
         }),
         args: vec![caps, RuntimeExpr::Var(0)],
     };
-    let adapter = RuntimeExpr::Match {
-        scrutinee: Box::new(tree),
-        cases: vec![crate::RuntimeMatchCase {
-            constructor: entrypoint.ret_constructor.clone(),
-            binders: 1,
-            body: RuntimeExpr::Var(0),
-        }],
-        default: crate::RuntimeTrap {
-            code: crate::RuntimeTrapCode::PatternMatchFailure,
-            message: "effect-free native entrypoint returned Vis".to_string(),
-        },
+    let adapter = if runtime_expr_contains_effect(&tree, program) {
+        tree
+    } else {
+        RuntimeExpr::Match {
+            scrutinee: Box::new(tree),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: entrypoint.ret_constructor.clone(),
+                binders: 1,
+                body: RuntimeExpr::Var(0),
+            }],
+            default: crate::RuntimeTrap {
+                code: crate::RuntimeTrapCode::PatternMatchFailure,
+                message: "effect-free native entrypoint returned Vis".to_string(),
+            },
+        }
     };
 
     let options = ObjectLinkerPackagingOptions::starter_host();
@@ -478,7 +691,11 @@ pub fn build_bound_process_starter_executable_artifact(
         )
     })?;
     let stub_path = output_dir.join(&options.stub_relative_path);
-    fs::write(&stub_path, process_starter_c_stub()).map_err(|err| {
+    fs::write(
+        &stub_path,
+        process_starter_c_stub_for_authority(entrypoint.authority, entrypoint.plan_hash),
+    )
+    .map_err(|err| {
         packaging_error(
             ObjectLinkerPackagingStage::LinkerOrFinalizer,
             "stub_path",
@@ -491,6 +708,7 @@ pub fn build_bound_process_starter_executable_artifact(
         &object_path,
         &stub_path,
         &executable_path,
+        Some(&ken_host_staticlib()?),
     )?;
     let executable_bytes = fs::read(&executable_path).map_err(|err| {
         packaging_error(
@@ -505,6 +723,61 @@ pub fn build_bound_process_starter_executable_artifact(
         executable_path,
         executable_hash: fnv1a_64(&executable_bytes),
     })
+}
+
+fn runtime_expr_contains_effect(expr: &RuntimeExpr, program: &RuntimeProgram) -> bool {
+    match expr {
+        RuntimeExpr::Effect { .. } => true,
+        RuntimeExpr::Let { value, body } => {
+            runtime_expr_contains_effect(value, program)
+                || runtime_expr_contains_effect(body, program)
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            runtime_expr_contains_effect(scrutinee, program)
+                || runtime_expr_contains_effect(then_expr, program)
+                || runtime_expr_contains_effect(else_expr, program)
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => args
+            .iter()
+            .any(|argument| runtime_expr_contains_effect(argument, program)),
+        RuntimeExpr::Call { callee, args } => {
+            runtime_expr_contains_effect(callee, program)
+                || args
+                    .iter()
+                    .any(|argument| runtime_expr_contains_effect(argument, program))
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            runtime_expr_contains_effect(scrutinee, program)
+                || cases
+                    .iter()
+                    .any(|case| runtime_expr_contains_effect(&case.body, program))
+        }
+        RuntimeExpr::Record { fields } => fields
+            .iter()
+            .any(|(_, value)| runtime_expr_contains_effect(value, program)),
+        RuntimeExpr::Project { record, .. } => runtime_expr_contains_effect(record, program),
+        RuntimeExpr::Closure { body, .. } => runtime_expr_contains_effect(body, program),
+        RuntimeExpr::DeclarationRef { symbol } => program
+            .declarations
+            .iter()
+            .find(|declaration| declaration.symbol == *symbol)
+            .is_some_and(|declaration| match &declaration.kind {
+                crate::RuntimeDeclarationKind::Transparent { body } => {
+                    runtime_expr_contains_effect(body, program)
+                }
+                _ => false,
+            }),
+        RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::Trap(_) => false,
+    }
 }
 
 pub fn object_linker_executable_package_hash(package: &ObjectLinkerExecutablePackage) -> u64 {
@@ -758,10 +1031,18 @@ fn link_starter_executable(
     object_path: &Path,
     stub_path: &Path,
     executable_path: &Path,
+    static_library: Option<&Path>,
 ) -> Result<(), ObjectLinkerPackagingError> {
-    let output = Command::new(linker)
-        .arg(object_path)
-        .arg(stub_path)
+    let mut command = Command::new(linker);
+    command.arg(object_path).arg(stub_path);
+    if let Some(static_library) = static_library {
+        command
+            .arg(static_library)
+            .arg("-ldl")
+            .arg("-lpthread")
+            .arg("-lm");
+    }
+    let output = command
         .arg("-o")
         .arg(executable_path)
         .output()
@@ -783,6 +1064,44 @@ fn link_starter_executable(
         ));
     }
     Ok(())
+}
+
+fn ken_host_staticlib() -> Result<std::path::PathBuf, ObjectLinkerPackagingError> {
+    let executable = std::env::current_exe().map_err(|error| {
+        packaging_error(
+            ObjectLinkerPackagingStage::Toolchain,
+            "ken_host_staticlib",
+            format!("cannot locate current Cargo target directory: {error}"),
+        )
+    })?;
+    let mut candidates = Vec::new();
+    for directory in executable.ancestors().take(4) {
+        for search in [directory.to_path_buf(), directory.join("deps")] {
+            if let Ok(entries) = fs::read_dir(search) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                        continue;
+                    };
+                    if (name == "libken_host.a"
+                        || (name.starts_with("libken_host-") && name.ends_with(".a")))
+                        && path.is_file()
+                    {
+                        candidates.push(path);
+                    }
+                }
+            }
+        }
+    }
+    candidates.sort_by_key(|path| fs::metadata(path).and_then(|meta| meta.modified()).ok());
+    if let Some(candidate) = candidates.pop() {
+        return Ok(candidate);
+    }
+    Err(packaging_error(
+        ObjectLinkerPackagingStage::Toolchain,
+        "ken_host_staticlib",
+        "Cargo did not materialize the required ken-host static runtime",
+    ))
 }
 
 fn smoke_executable(
@@ -1287,7 +1606,12 @@ int main(void) {
 "#
 }
 
-pub(crate) fn process_starter_c_stub() -> &'static str {
+#[cfg(test)]
+pub(crate) fn process_starter_c_stub() -> String {
+    process_starter_c_stub_for_authority(1, 1)
+}
+
+fn process_starter_c_stub_for_authority(authority: u8, plan_hash: u64) -> String {
     r#"#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1310,7 +1634,36 @@ struct KenArena {
     size_t capacity;
 };
 
-extern long long ken_nc23_entrypoint(const struct KenBorrowedValue *root);
+struct KenNativeInvocationV1 {
+    const struct KenBorrowedValue *process_input;
+    void *host_context;
+    uint64_t capability;
+};
+
+struct KenHostInitResultV1 {
+    void *context;
+    uint64_t capability;
+    uint64_t plan_hash;
+};
+
+extern long long ken_nc23_entrypoint(const struct KenNativeInvocationV1 *invocation);
+extern long long ken_host_invocation_v1_init(
+    const unsigned char *cwd,
+    size_t len,
+    uint64_t authority,
+    uint64_t plan_hash,
+    const unsigned char *target_abi_hash,
+    const unsigned char *host_effect_abi_hash,
+    const unsigned char *observation_path,
+    size_t observation_path_len,
+    struct KenHostInitResultV1 *result
+);
+extern void ken_host_invocation_v1_destroy(void *context);
+extern long long ken_host_invocation_v1_finish(void *context, long long terminal_value);
+
+static const unsigned char KEN_TARGET_ABI_HASH[32] = { __KEN_TARGET_HASH__ };
+static const unsigned char KEN_HOST_EFFECT_ABI_HASH[32] = { __KEN_EFFECT_HASH__ };
+static const uint64_t KEN_ENTRYPOINT_PLAN_HASH = __KEN_PLAN_HASH__;
 
 static int constructor(
     struct KenArena *arena,
@@ -1363,7 +1716,13 @@ static int environment(
 ) {
     for (; index < count; ++index) {
         char *separator = strchr(envp[index], '=');
-        if (separator == NULL || !constructor(arena, value, KEN_CONS, 2)) return 0;
+        if (separator == NULL) return 0;
+        size_t key_len = (size_t)(separator - envp[index]);
+        if (key_len == sizeof("KEN_HOST_OBSERVATION_PATH") - 1 &&
+            memcmp(envp[index], "KEN_HOST_OBSERVATION_PATH", key_len) == 0) {
+            continue;
+        }
+        if (!constructor(arena, value, KEN_CONS, 2)) return 0;
         struct KenBorrowedValue *fields = (struct KenBorrowedValue *)value->data;
         if (!constructor(arena, &fields[0], KEN_PROD, 2)) return 0;
         struct KenBorrowedValue *pair = (struct KenBorrowedValue *)fields[0].data;
@@ -1377,14 +1736,24 @@ static int environment(
 int main(int argc, char **argv, char **envp) {
     size_t argument_count = argc < 0 ? 0 : (size_t)argc;
     size_t environment_count = 0;
-    while (envp[environment_count] != NULL) ++environment_count;
+    size_t process_environment_count = 0;
+    while (envp[environment_count] != NULL) {
+        char *separator = strchr(envp[environment_count], '=');
+        if (separator == NULL) return 1;
+        size_t key_len = (size_t)(separator - envp[environment_count]);
+        if (key_len != sizeof("KEN_HOST_OBSERVATION_PATH") - 1 ||
+            memcmp(envp[environment_count], "KEN_HOST_OBSERVATION_PATH", key_len) != 0) {
+            ++process_environment_count;
+        }
+        ++environment_count;
+    }
     char *cwd = getcwd(NULL, 0);
     if (cwd == NULL) return 1;
     if (argument_count > (SIZE_MAX - 4) / 2 ||
-        environment_count > (SIZE_MAX - 4 - 2 * argument_count) / 4) {
+        process_environment_count > (SIZE_MAX - 4 - 2 * argument_count) / 4) {
         free(cwd); return 1;
     }
-    size_t capacity = 4 + 2 * argument_count + 4 * environment_count;
+    size_t capacity = 4 + 2 * argument_count + 4 * process_environment_count;
     struct KenBorrowedValue *pool = calloc(capacity, sizeof(*pool));
     if (pool == NULL) { free(cwd); return 1; }
     struct KenArena arena = { .values = pool, .next = 1, .capacity = capacity };
@@ -1397,9 +1766,34 @@ int main(int argc, char **argv, char **envp) {
     }
     bytes(&fields[2], (const unsigned char *)cwd, strlen(cwd));
     if (arena.next != arena.capacity) { free(pool); free(cwd); return 1; }
-    long long value = ken_nc23_entrypoint(root);
+    const char *observation_path = getenv("KEN_HOST_OBSERVATION_PATH");
+    size_t observation_path_len = observation_path == NULL ? 0 : strlen(observation_path);
+    struct KenHostInitResultV1 host_init = {0};
+    long long init_status = ken_host_invocation_v1_init(
+        (const unsigned char *)cwd,
+        strlen(cwd),
+        __KEN_AUTHORITY__,
+        KEN_ENTRYPOINT_PLAN_HASH,
+        KEN_TARGET_ABI_HASH,
+        KEN_HOST_EFFECT_ABI_HASH,
+        (const unsigned char *)observation_path,
+        observation_path_len,
+        &host_init
+    );
+    if (init_status != 0 || host_init.context == NULL || host_init.capability == 0 ||
+        host_init.plan_hash != KEN_ENTRYPOINT_PLAN_HASH) {
+        free(pool); free(cwd); return 1;
+    }
+    struct KenNativeInvocationV1 invocation = {
+        .process_input = root,
+        .host_context = host_init.context,
+        .capability = host_init.capability
+    };
+    long long value = ken_nc23_entrypoint(&invocation);
+    long long finish_status = ken_host_invocation_v1_finish(host_init.context, value);
     free(cwd);
     free(pool);
+    if (finish_status != 0) return 1;
     if (value == -1) fputs("ken native trap: malformed borrowed process input\n", stderr);
     else if (value == -2) fputs("ken native trap: entrypoint returned a malformed ExitCode\n", stderr);
     else if (value == -3) fputs("ken native trap: malformed ExitCode::Failure payload\n", stderr);
@@ -1409,6 +1803,24 @@ int main(int argc, char **argv, char **envp) {
     return (int)value;
 }
 "#
+    .replace("__KEN_AUTHORITY__", &authority.to_string())
+    .replace("__KEN_PLAN_HASH__", &plan_hash.to_string())
+    .replace(
+        "__KEN_TARGET_HASH__",
+        &ken_host::TARGET_ABI_MANIFEST_HASH
+            .iter()
+            .map(|byte| byte.to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+    )
+    .replace(
+        "__KEN_EFFECT_HASH__",
+        &ken_host::HOST_EFFECT_ABI_V1_HASH
+            .iter()
+            .map(|byte| byte.to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+    )
 }
 
 fn executable_name(stem: &str) -> String {

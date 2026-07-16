@@ -6,7 +6,7 @@
 //! runtime support without exposing a stable ABI, object, linker, library, or
 //! host-effect claim.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt;
 
 use crate::{
@@ -732,10 +732,15 @@ fn collect_runtime_support_for_expr(
             }
             Ok(())
         }
-        RuntimeExpr::Effect { effect, .. } => Err(platform_error(
+        RuntimeExpr::Effect {
+            family, operation, ..
+        } => Err(platform_error(
             PlatformRuntimeSupportStage::RuntimeExpressionSupport,
             "Effect",
-            format!("host effect {effect} is unavailable for NC21 executable runtime support"),
+            format!(
+                "host effect {family}.{} is unavailable for NC21 executable runtime support",
+                *operation as u16
+            ),
         )),
         RuntimeExpr::Trap(trap) => {
             collect_runtime_support_for_trap(trap, shapes);
@@ -1152,6 +1157,8 @@ fn platform_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
+
     use crate::{
         evaluate_runtime_ir_example, executable_artifact_contract_for_runtime_report,
         executable_entrypoint_metadata_hash, executable_entrypoint_package_for_runtime_contract,

@@ -10,6 +10,9 @@ const SCHEMA_VERSION: u32 = 1;
 
 fn main() {
     println!("cargo:rerun-if-changed=abi_probe.c");
+    println!("cargo:rerun-if-changed=effect_abi_probe.c");
+    println!("cargo:rerun-if-changed=effect_abi_v1.catalog");
+    println!("cargo:rerun-if-changed=src/abi_v1/sigpipe.c");
     println!("cargo:rerun-if-changed=build_support.rs");
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rerun-if-changed=../ken-interp/src/eval.rs");
@@ -20,6 +23,12 @@ fn main() {
     let target = env::var("TARGET").expect("Cargo provides TARGET");
     let host = env::var("HOST").expect("Cargo provides HOST");
     let target_os = env::var("CARGO_CFG_TARGET_OS").expect("Cargo provides target OS");
+    if target_os != "linux" || target != host {
+        panic!(
+            "HostEffectAbiV1 layout generation is unavailable for target {target}; \
+             cross-target or non-Linux effect ABI generation fails closed"
+        );
+    }
     let encoded_rustflags = env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_default();
     let rustflags = env::var("RUSTFLAGS").unwrap_or_default();
     assert!(
@@ -47,6 +56,10 @@ fn main() {
         package_identity(&lock, "linux-raw-sys", "0.12.1", "std,general,errno"),
     ];
 
+    if target_os == "linux" {
+        compile_abi_v1_companion(&target, &host);
+    }
+
     let (backend, facts): (&str, Vec<(&str, u64)>) = if target_os == "linux" && target == host {
         let facts = linux_raw_facts();
         verify_boundary_inventory(&facts);
@@ -57,6 +70,10 @@ fn main() {
     } else {
         ("unavailable-non-linux", Vec::new())
     };
+
+    let effect_layout = run_effect_abi_probe(&target, &host);
+    let effect_catalog = parse_effect_catalog();
+    write_host_effect_generated(&target, &effect_catalog, &effect_layout);
 
     let canonical = canonical_manifest(&target, &target_os, backend, &dependencies, &facts);
     let hash: [u8; 32] = Sha256::digest(canonical.as_bytes()).into();
@@ -69,6 +86,218 @@ fn main() {
         &canonical,
         &hash,
     );
+}
+
+#[derive(Clone, Debug)]
+struct EffectOp {
+    name: String,
+    id: u16,
+    availability: String,
+    request: String,
+    request_arity: u8,
+    reply: String,
+    reply_arity: u8,
+}
+
+#[derive(Clone, Debug)]
+struct EffectCatalog {
+    operations: Vec<EffectOp>,
+    bindings: Vec<(String, String, u64)>,
+}
+
+fn parse_effect_catalog() -> EffectCatalog {
+    let source = fs::read_to_string("effect_abi_v1.catalog").expect("read effect ABI catalog");
+    let mut operations = Vec::new();
+    let mut bindings = Vec::new();
+    for line in source.lines().filter(|line| !line.trim().is_empty()) {
+        let fields = line.split('|').collect::<Vec<_>>();
+        match fields[0] {
+            "operation" => {
+                assert_eq!(fields.len(), 8, "effect operation rows have eight fields");
+                operations.push(EffectOp {
+                    name: fields[1].to_string(),
+                    id: u16::from_str_radix(fields[2], 16).expect("effect op id is hex"),
+                    availability: fields[3].to_string(),
+                    request: fields[4].to_string(),
+                    request_arity: fields[5].parse().expect("request arity is u8"),
+                    reply: fields[6].to_string(),
+                    reply_arity: fields[7].parse().expect("reply arity is u8"),
+                });
+                let operation = operations.last().unwrap();
+                assert!(
+                    matches!(operation.availability.as_str(), "native" | "unavailable"),
+                    "effect availability is closed"
+                );
+                assert!(
+                    operation.request.ends_with("RequestV1")
+                        && operation.reply.ends_with("ReplyV1"),
+                    "effect wire records are named V1 records"
+                );
+            }
+            "schema" => {
+                assert_eq!(fields.len(), 2, "effect schema row has two fields");
+                bindings.push((
+                    fields[0].to_string(),
+                    "version".to_string(),
+                    fields[1].parse().expect("effect schema is u64"),
+                ));
+            }
+            "lifetime" | "tag" | "error" => {
+                assert_eq!(fields.len(), 3, "effect binding rows have three fields");
+                bindings.push((
+                    fields[0].to_string(),
+                    fields[1].to_string(),
+                    fields[2].parse().expect("effect binding is u64"),
+                ));
+            }
+            kind => panic!("unknown effect catalog row {kind}"),
+        }
+    }
+    assert_eq!(operations.len(), 14, "HostOpV1 catalog is closed at 14");
+    let mut ids = operations
+        .iter()
+        .map(|operation| operation.id)
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), operations.len(), "effect op ids are unique");
+    let mut names = operations
+        .iter()
+        .map(|operation| operation.name.as_str())
+        .collect::<Vec<_>>();
+    names.sort_unstable();
+    names.dedup();
+    assert_eq!(names.len(), operations.len(), "effect op names are unique");
+    let mut binding_keys = bindings
+        .iter()
+        .map(|(kind, name, _)| (kind, name))
+        .collect::<Vec<_>>();
+    binding_keys.sort_unstable();
+    binding_keys.dedup();
+    assert_eq!(
+        binding_keys.len(),
+        bindings.len(),
+        "effect bindings are unique"
+    );
+    EffectCatalog {
+        operations,
+        bindings,
+    }
+}
+
+fn run_effect_abi_probe(target: &str, host: &str) -> Vec<(String, u64)> {
+    assert_eq!(target, host, "effect ABI headers attest only their target");
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let executable = out_dir.join("ken-host-effect-abi-probe");
+    let compiler = cc::Build::new().target(target).host(host).get_compiler();
+    let mut compile = compiler.to_command();
+    compile
+        .arg("-Wall")
+        .arg("-Wextra")
+        .arg("-Werror")
+        .arg("effect_abi_probe.c")
+        .arg("-o")
+        .arg(&executable);
+    assert!(compile
+        .status()
+        .expect("compile effect ABI probe")
+        .success());
+    let output = Command::new(executable)
+        .output()
+        .expect("run effect ABI probe");
+    assert!(output.status.success(), "effect ABI probe failed closed");
+    let stdout = String::from_utf8(output.stdout).expect("effect probe protocol is ASCII");
+    let mut facts = stdout
+        .lines()
+        .map(|line| {
+            let (name, value) = line
+                .split_once('=')
+                .expect("effect ABI probe emits NAME=INTEGER");
+            assert!(
+                !name.is_empty()
+                    && name
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'),
+                "effect ABI fact name is closed ASCII"
+            );
+            (
+                name.to_string(),
+                value.parse::<u64>().expect("effect ABI fact is u64"),
+            )
+        })
+        .collect::<Vec<_>>();
+    facts.sort_by(|left, right| left.0.cmp(&right.0));
+    facts
+}
+
+fn write_host_effect_generated(target: &str, catalog: &EffectCatalog, facts: &[(String, u64)]) {
+    let mut canonical = format!("target={target}\n");
+    for (kind, name, value) in &catalog.bindings {
+        canonical.push_str(&format!("{kind}={name}|{value}\n"));
+    }
+    for operation in &catalog.operations {
+        canonical.push_str(&format!(
+            "operation={}|{:04x}|{}|{}|{}|{}|{}\n",
+            operation.name,
+            operation.id,
+            operation.availability,
+            operation.request,
+            operation.request_arity,
+            operation.reply,
+            operation.reply_arity
+        ));
+    }
+    for (name, value) in facts {
+        canonical.push_str(&format!("layout={name}|{value}\n"));
+    }
+    let hash: [u8; 32] = Sha256::digest(canonical.as_bytes()).into();
+    let fact_source = facts
+        .iter()
+        .map(|(name, value)| format!("({name:?}, {value}),"))
+        .collect::<String>();
+    let catalog_source = catalog
+        .operations
+        .iter()
+        .map(|operation| {
+            format!(
+                "({:?}, {}, {:?}, {:?}, {}, {:?}, {}),",
+                operation.name,
+                operation.id,
+                operation.availability,
+                operation.request,
+                operation.request_arity,
+                operation.reply,
+                operation.reply_arity
+            )
+        })
+        .collect::<String>();
+    let binding_source = catalog
+        .bindings
+        .iter()
+        .map(|(kind, name, value)| format!("({kind:?}, {name:?}, {value}),"))
+        .collect::<String>();
+    let generated = format!(
+        "pub const HOST_EFFECT_ABI_V1_CANONICAL: &str = {canonical:?};\n\
+         pub const HOST_EFFECT_ABI_V1_HASH: [u8; 32] = {hash:?};\n\
+         pub const HOST_EFFECT_ABI_V1_FACTS: &[(&str, u64)] = &[{fact_source}];\n\
+         pub const HOST_EFFECT_ABI_V1_CATALOG: &[(&str, u16, &str, &str, u8, &str, u8)] = &[{catalog_source}];\n\
+         pub const HOST_EFFECT_ABI_V1_BINDINGS: &[(&str, &str, u64)] = &[{binding_source}];\n"
+    );
+    fs::write(
+        PathBuf::from(env::var("OUT_DIR").unwrap()).join("host_effect_abi_v1.rs"),
+        generated,
+    )
+    .expect("write generated host effect ABI");
+}
+
+fn compile_abi_v1_companion(target: &str, host: &str) {
+    cc::Build::new()
+        .target(target)
+        .host(host)
+        .file("src/abi_v1/sigpipe.c")
+        .warnings(true)
+        .warnings_into_errors(true)
+        .compile("ken_host_abi_v1_posture");
 }
 
 fn verify_boundary_inventory(facts: &[(&str, u64)]) {

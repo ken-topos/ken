@@ -10,7 +10,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::mem;
 
-use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, MemFlags, UserFuncName};
+use cranelift_codegen::ir::{
+    types, AbiParam, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
+    UserFuncName,
+};
 use cranelift_codegen::isa::OwnedTargetIsa;
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_codegen::verify_function;
@@ -29,6 +32,14 @@ use crate::{
     RuntimeObservation, RuntimePartiality, RuntimePrimitive, RuntimeProgram, RuntimeSymbol,
     RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
+
+const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 5] = [
+    ken_host::HostOpV1::ConsoleWrite,
+    ken_host::HostOpV1::ConsoleFlush,
+    ken_host::HostOpV1::ConsoleIsTerminal,
+    ken_host::HostOpV1::FsReadFile,
+    ken_host::HostOpV1::FsWriteFile,
+];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CraneliftRunReport {
@@ -1296,8 +1307,29 @@ fn compile_expr_into_module<'a, M: Module>(
     let func_id = module
         .declare_function(function_name, linkage, &sig)
         .map_err(|err| backend_module(err.to_string()))?;
+    let host_dispatch = if process_mode {
+        let mut host_sig = module.make_signature();
+        host_sig
+            .params
+            .push(AbiParam::new(module.target_config().pointer_type()));
+        host_sig.params.push(AbiParam::new(types::I64));
+        host_sig
+            .params
+            .push(AbiParam::new(module.target_config().pointer_type()));
+        host_sig.params.push(AbiParam::new(types::I64));
+        host_sig.params.push(AbiParam::new(types::I64));
+        host_sig.returns.push(AbiParam::new(types::I64));
+        Some(
+            module
+                .declare_function("ken_host_dispatch_v1", Linkage::Import, &host_sig)
+                .map_err(|err| backend_module(err.to_string()))?,
+        )
+    } else {
+        None
+    };
     let mut ctx = module.make_context();
     ctx.func = Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), sig);
+    let host_dispatch = host_dispatch.map(|id| module.declare_func_in_func(id, &mut ctx.func));
 
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
@@ -1312,6 +1344,8 @@ fn compile_expr_into_module<'a, M: Module>(
         process_symbols: process_symbols
             .cloned()
             .unwrap_or_else(crate::NativeProcessSymbols::legacy_prelude),
+        host_dispatch,
+        invocation_pointer: None,
     };
     let (maybe_trap, decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
@@ -1320,9 +1354,21 @@ fn compile_expr_into_module<'a, M: Module>(
         builder.switch_to_block(block);
         let mut initial_env = Vec::new();
         if process_mode {
+            let invocation = builder.block_params(block)[0];
+            compiler.invocation_pointer = Some(invocation);
+            let pointer_type = builder.func.dfg.value_type(invocation);
+            let process_input =
+                builder
+                    .ins()
+                    .load(pointer_type, MemFlags::trusted(), invocation, 0);
+            Lowering::require_nonzero(&mut builder, process_input);
+            let capability = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), invocation, 16);
             initial_env.push(Lowered::BorrowedNativeValue {
-                pointer: builder.block_params(block)[0],
+                pointer: process_input,
             });
+            initial_env.push(Lowered::CapabilityToken { value: capability });
         }
         if let Some(value) = staged_process_input {
             initial_env.push(compiler.lower_value(&mut builder, value)?);
@@ -1413,6 +1459,8 @@ struct Lowering<'a> {
     unsupported: Vec<String>,
     process_object: bool,
     process_symbols: crate::NativeProcessSymbols,
+    host_dispatch: Option<FuncRef>,
+    invocation_pointer: Option<cranelift_codegen::ir::Value>,
 }
 
 #[derive(Clone)]
@@ -1424,6 +1472,28 @@ enum Lowered {
     Bool {
         value: cranelift_codegen::ir::Value,
         known: Option<bool>,
+    },
+    ProcessExitStatus {
+        value: cranelift_codegen::ir::Value,
+    },
+    CapabilityToken {
+        value: cranelift_codegen::ir::Value,
+    },
+    ResponseBytes {
+        pointer: cranelift_codegen::ir::Value,
+        len: cranelift_codegen::ir::Value,
+    },
+    HostResult {
+        success: cranelift_codegen::ir::Value,
+        error: Box<Lowered>,
+        ok: Box<Lowered>,
+        err_constructor: String,
+        ok_constructor: String,
+    },
+    DynamicNullaryConstructor {
+        tag: cranelift_codegen::ir::Value,
+        payload: Option<cranelift_codegen::ir::Value>,
+        constructors: Vec<String>,
     },
     Bytes(Vec<u8>),
     BorrowedNativeValue {
@@ -1451,7 +1521,102 @@ enum Lowered {
     Trap(RuntimeTrap),
 }
 
+fn console_stream_tag(value: &Lowered) -> Option<i64> {
+    let Lowered::Constructor { constructor, args } = value else {
+        return None;
+    };
+    if !args.is_empty() {
+        return None;
+    }
+    if constructor.ends_with("::Stdin") {
+        Some(0)
+    } else if constructor.ends_with("::Stdout") {
+        Some(1)
+    } else if constructor.ends_with("::Stderr") {
+        Some(2)
+    } else {
+        None
+    }
+}
+
+fn create_policy_tag(value: &Lowered) -> Option<i64> {
+    let Lowered::Constructor { constructor, args } = value else {
+        return None;
+    };
+    if !args.is_empty() {
+        return None;
+    }
+    if constructor.ends_with("::CreateNew") {
+        Some(0)
+    } else if constructor.ends_with("::CreateOrTruncate") {
+        Some(1)
+    } else if constructor.ends_with("::CreateOrKeep") {
+        Some(2)
+    } else {
+        None
+    }
+}
+
+fn lowered_char_list(value: &Lowered) -> Option<Vec<u8>> {
+    let Lowered::Constructor { constructor, args } = value else {
+        return None;
+    };
+    if constructor.ends_with("::Nil") && args.is_empty() {
+        return Some(Vec::new());
+    }
+    if !constructor.ends_with("::Cons") || args.len() != 2 {
+        return None;
+    }
+    let Lowered::Int {
+        known: Some(head), ..
+    } = &args[0]
+    else {
+        return None;
+    };
+    let head = u8::try_from(*head).ok()?;
+    let mut tail = lowered_char_list(&args[1])?;
+    tail.insert(0, head);
+    Some(tail)
+}
+
 impl<'a> Lowering<'a> {
+    fn merge_branch_value(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        lowered: Lowered,
+        construct: &'static str,
+    ) -> Result<(cranelift_codegen::ir::Value, bool), CraneliftBackendError> {
+        match lowered {
+            Lowered::Int { value, .. } => Ok((value, false)),
+            Lowered::ProcessExitStatus { value } => Ok((value, true)),
+            lowered if self.process_object => {
+                Ok((self.emit_process_exit_status(builder, lowered), true))
+            }
+            _ => Err(unsupported(
+                construct,
+                "dynamic native arms must produce scalar Int values",
+            )),
+        }
+    }
+
+    fn record_merge_kind(
+        construct: &'static str,
+        expected: &mut Option<bool>,
+        exit_status: bool,
+    ) -> Result<(), CraneliftBackendError> {
+        match expected {
+            Some(expected) if *expected != exit_status => Err(unsupported(
+                construct,
+                "dynamic native arms disagree on scalar versus ExitCode result",
+            )),
+            Some(_) => Ok(()),
+            None => {
+                *expected = Some(exit_status);
+                Ok(())
+            }
+        }
+    }
+
     fn lower_expr(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -1547,6 +1712,41 @@ impl<'a> Lowering<'a> {
                         builder, present, value, &none, &some, cases, default, env,
                     );
                 }
+                if let Lowered::HostResult {
+                    success,
+                    error,
+                    ok,
+                    err_constructor,
+                    ok_constructor,
+                } = lowered_scrutinee
+                {
+                    return self.lower_dynamic_host_result_match(
+                        builder,
+                        success,
+                        *error,
+                        *ok,
+                        &err_constructor,
+                        &ok_constructor,
+                        cases,
+                        env,
+                    );
+                }
+                if let Lowered::DynamicNullaryConstructor {
+                    tag,
+                    payload,
+                    constructors,
+                } =
+                    lowered_scrutinee
+                {
+                    return self.lower_dynamic_nullary_match(
+                        builder,
+                        tag,
+                        payload,
+                        &constructors,
+                        cases,
+                        env,
+                    );
+                }
                 if let Lowered::Bool { value, known } = lowered_scrutinee {
                     let true_case = cases.iter().find(|case| {
                         case.binders == 0 && case.constructor.ends_with("::Bool::True")
@@ -1574,23 +1774,23 @@ impl<'a> Lowering<'a> {
                     builder
                         .ins()
                         .brif(value, true_block, &[], false_block, &[]);
+                    let mut exit_merge = None;
                     for (block, case) in
                         [(true_block, true_case), (false_block, false_case)]
                     {
                         builder.switch_to_block(block);
                         let lowered = self.lower_expr(builder, &case.body, env)?;
-                        let Lowered::Int { value, .. } = lowered else {
-                            return Err(unsupported(
-                                "Match",
-                                "dynamic native Bool match arms must produce scalar Int values",
-                            ));
-                        };
+                        let (value, is_exit) =
+                            self.merge_branch_value(builder, lowered, "Match")?;
+                        Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
                         builder.ins().jump(merge, &[value.into()]);
                     }
                     builder.switch_to_block(merge);
-                    return Ok(Lowered::Int {
-                        value: builder.block_params(merge)[0],
-                        known: None,
+                    let value = builder.block_params(merge)[0];
+                    return Ok(if exit_merge == Some(true) {
+                        Lowered::ProcessExitStatus { value }
+                    } else {
+                        Lowered::Int { value, known: None }
                     });
                 }
                 let Lowered::Constructor { constructor, args } = lowered_scrutinee else {
@@ -1691,10 +1891,304 @@ impl<'a> Lowering<'a> {
                 self.lower_expr(builder, &body, &call_env)
             }
             RuntimeExpr::Trap(trap) => Ok(Lowered::Trap(trap.clone())),
-            RuntimeExpr::Effect { effect, .. } => Err(unsupported(
+            RuntimeExpr::Effect {
+                family,
+                operation,
+                capability,
+                args,
+            } if self.process_object => {
+                self.lower_process_host_effect(builder, family, *operation, capability.as_ref(), args, env)
+            }
+            RuntimeExpr::Effect { family, operation, .. } => Err(unsupported(
                 "Effect",
-                format!("effect {effect} is not modeled in the supported native subset"),
+                format!(
+                    "effect {family}.{} is not modeled in the supported native subset",
+                    *operation as u16
+                ),
             )),
+        }
+    }
+
+    fn lower_process_host_effect(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        family: &RuntimeSymbol,
+        operation: ken_host::HostOpV1,
+        capability: Option<&crate::RuntimeCapabilityUse>,
+        args: &[RuntimeExpr],
+        env: &[Lowered],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if !CRANELIFT_HOST_EFFECT_CONSUMERS_V1.contains(&operation) {
+            return Err(unsupported(
+                "Effect",
+                format!(
+                    "effect {family}.{} is a represented unavailable lane",
+                    operation as u16
+                ),
+            ));
+        }
+        let lowered = args
+            .iter()
+            .map(|argument| self.lower_expr(builder, argument, env))
+            .collect::<Result<Vec<_>, _>>()?;
+        let pointer_type = builder.func.dfg.value_type(
+            self.invocation_pointer
+                .expect("process effect lowering owns an invocation pointer"),
+        );
+        let wire = ken_host::host_effect_wire_layout_v1(operation).map_err(|error| {
+            unsupported(
+                "Effect",
+                format!("generated HostEffectAbiV1 layout rejected: {error:?}"),
+            )
+        })?;
+        let request_offset = |index: usize| {
+            i32::try_from(wire.request_offsets[index])
+                .expect("C-probed request offset was checked as u32")
+        };
+        let request = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            wire.request_size,
+            wire.request_align_shift,
+        ));
+        match operation {
+            ken_host::HostOpV1::ConsoleWrite
+            | ken_host::HostOpV1::ConsoleFlush
+            | ken_host::HostOpV1::ConsoleIsTerminal => {
+                if capability.is_some() {
+                    return Err(unsupported(
+                        "Effect",
+                        "ambient Console carried a capability",
+                    ));
+                }
+                let stream = lowered
+                    .first()
+                    .and_then(console_stream_tag)
+                    .ok_or_else(|| {
+                        unsupported("Effect", "Console operation has a malformed Stream operand")
+                    })?;
+                let stream = builder.ins().iconst(types::I64, stream);
+                builder
+                    .ins()
+                    .stack_store(stream, request, request_offset(0));
+                if operation == ken_host::HostOpV1::ConsoleWrite {
+                    let (data, len) = self.wire_bytes(
+                        builder,
+                        lowered.get(1).ok_or_else(|| {
+                            unsupported("Effect", "Console.Write is missing Bytes")
+                        })?,
+                    )?;
+                    builder.ins().stack_store(data, request, request_offset(1));
+                    builder.ins().stack_store(len, request, request_offset(2));
+                }
+            }
+            ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsWriteFile => {
+                let capability = capability
+                    .ok_or_else(|| unsupported("Effect", "FS operation has no live capability"))?;
+                let Lowered::CapabilityToken { value: token } =
+                    self.lower_expr(builder, &capability.value, env)?
+                else {
+                    return Err(unsupported(
+                        "Effect",
+                        "FS capability operand is not the opaque invocation token",
+                    ));
+                };
+                builder.ins().stack_store(token, request, request_offset(0));
+                let (path, path_len) = self.wire_bytes(
+                    builder,
+                    lowered
+                        .first()
+                        .ok_or_else(|| unsupported("Effect", "FS operation is missing its path"))?,
+                )?;
+                builder.ins().stack_store(path, request, request_offset(1));
+                builder
+                    .ins()
+                    .stack_store(path_len, request, request_offset(2));
+                if operation == ken_host::HostOpV1::FsWriteFile {
+                    let policy = lowered.get(1).and_then(create_policy_tag).ok_or_else(|| {
+                        unsupported("Effect", "FS.WriteFile has a malformed CreatePolicy")
+                    })?;
+                    let (bytes, bytes_len) = self.wire_bytes(
+                        builder,
+                        lowered.get(2).ok_or_else(|| {
+                            unsupported("Effect", "FS.WriteFile is missing contents")
+                        })?,
+                    )?;
+                    let policy = builder.ins().iconst(types::I64, policy);
+                    builder
+                        .ins()
+                        .stack_store(policy, request, request_offset(3));
+                    builder.ins().stack_store(bytes, request, request_offset(4));
+                    builder
+                        .ins()
+                        .stack_store(bytes_len, request, request_offset(5));
+                }
+            }
+            _ => unreachable!("availability was checked above"),
+        }
+        let reply = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            wire.reply_size,
+            wire.reply_align_shift,
+        ));
+        let invocation = self
+            .invocation_pointer
+            .expect("process effect lowering owns an invocation pointer");
+        let op = builder.ins().iconst(types::I64, operation as i64);
+        let request_pointer = builder.ins().stack_addr(pointer_type, request, 0);
+        let request_size = builder
+            .ins()
+            .iconst(types::I64, i64::from(wire.request_size));
+        let reply_pointer = builder.ins().stack_addr(pointer_type, reply, 0);
+        let call = builder.ins().call(
+            self.host_dispatch
+                .expect("process effect lowering owns one host dispatch import"),
+            &[invocation, op, request_pointer, request_size, reply_pointer],
+        );
+        let status = builder.inst_results(call)[0];
+        Self::require_i64(builder, status, 0);
+        let tag = builder.ins().stack_load(
+            types::I64,
+            reply,
+            i32::try_from(wire.reply_tag_offset).expect("reply tag offset is u32"),
+        );
+        let detail = builder.ins().stack_load(
+            types::I64,
+            reply,
+            i32::try_from(wire.reply_detail_offset).expect("reply detail offset is u32"),
+        );
+        if operation == ken_host::HostOpV1::ConsoleIsTerminal {
+            Self::require_i64(builder, tag, wire.reply_bool_tag as i64);
+            Ok(Lowered::Bool {
+                value: detail,
+                known: None,
+            })
+        } else {
+            let success_tag = if operation == ken_host::HostOpV1::FsReadFile {
+                wire.reply_bytes_tag
+            } else {
+                wire.reply_unit_tag
+            } as i64;
+            Self::require_one_of_i64(builder, tag, &[success_tag, wire.reply_error_tag as i64]);
+            let io_error = Lowered::DynamicNullaryConstructor {
+                tag: builder.ins().band_imm(detail, 0xff),
+                payload: Some(builder.ins().sshr_imm(detail, 32)),
+                constructors: self.process_symbols.io_errors.clone(),
+            };
+            let error = if matches!(
+                operation,
+                ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsWriteFile
+            ) {
+                let path = lowered
+                    .first()
+                    .cloned()
+                    .expect("validated FS operation has a path");
+                Lowered::Constructor {
+                    constructor: self.process_symbols.file_error.clone(),
+                    args: vec![
+                        Lowered::Constructor {
+                            constructor: if operation == ken_host::HostOpV1::FsReadFile {
+                                self.process_symbols.file_operation_read.clone()
+                            } else {
+                                self.process_symbols.file_operation_write.clone()
+                            },
+                            args: Vec::new(),
+                        },
+                        Lowered::Constructor {
+                            constructor: self.process_symbols.option_some.clone(),
+                            args: vec![path],
+                        },
+                        io_error,
+                    ],
+                }
+            } else {
+                io_error
+            };
+            let ok = if operation == ken_host::HostOpV1::FsReadFile {
+                Lowered::ResponseBytes {
+                    pointer: builder.ins().stack_load(
+                        pointer_type,
+                        reply,
+                        i32::try_from(wire.reply_bytes_data_offset)
+                            .expect("reply bytes data offset is u32"),
+                    ),
+                    len: builder.ins().stack_load(
+                        types::I64,
+                        reply,
+                        i32::try_from(wire.reply_bytes_len_offset)
+                            .expect("reply bytes len offset is u32"),
+                    ),
+                }
+            } else {
+                Lowered::Constructor {
+                    constructor: self.process_symbols.unit.clone(),
+                    args: Vec::new(),
+                }
+            };
+            let success = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                success_tag,
+            );
+            Ok(Lowered::HostResult {
+                success,
+                error: Box::new(error),
+                ok: Box::new(ok),
+                err_constructor: self.process_symbols.result_err.clone(),
+                ok_constructor: self.process_symbols.result_ok.clone(),
+            })
+        }
+    }
+
+    fn wire_bytes(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: &Lowered,
+    ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
+    {
+        let pointer_type = builder.func.dfg.value_type(
+            self.invocation_pointer
+                .expect("process byte lowering owns an invocation pointer"),
+        );
+        match value {
+            Lowered::BorrowedNativeValue { pointer } => {
+                let kind = builder
+                    .ins()
+                    .load(types::I64, MemFlags::trusted(), *pointer, 0);
+                Self::require_i64(builder, kind, 1);
+                Ok((
+                    builder
+                        .ins()
+                        .load(pointer_type, MemFlags::trusted(), *pointer, 16),
+                    builder
+                        .ins()
+                        .load(types::I64, MemFlags::trusted(), *pointer, 24),
+                ))
+            }
+            Lowered::ResponseBytes { pointer, len } => Ok((*pointer, *len)),
+            Lowered::Bytes(bytes) => {
+                if bytes.is_empty() {
+                    return Ok((
+                        builder.ins().iconst(pointer_type, 0),
+                        builder.ins().iconst(types::I64, 0),
+                    ));
+                }
+                let size = u32::try_from(bytes.len())
+                    .map_err(|_| unsupported("Effect", "Bytes exceed native stack slot"))?;
+                let slot = builder.create_sized_stack_slot(StackSlotData::new(
+                    StackSlotKind::ExplicitSlot,
+                    size,
+                    0,
+                ));
+                for (offset, byte) in bytes.iter().enumerate() {
+                    let byte = builder.ins().iconst(types::I8, i64::from(*byte));
+                    builder.ins().stack_store(byte, slot, offset as i32);
+                }
+                Ok((
+                    builder.ins().stack_addr(pointer_type, slot, 0),
+                    builder.ins().iconst(types::I64, bytes.len() as i64),
+                ))
+            }
+            _ => Err(unsupported("Effect", "operand is not a Bytes value")),
         }
     }
 
@@ -1745,6 +2239,33 @@ impl<'a> Lowering<'a> {
             actual,
             expected,
         );
+        builder.ins().brif(matches, valid, &[], invalid, &[]);
+        builder.switch_to_block(invalid);
+        let failure = builder.ins().iconst(types::I64, -1);
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(valid);
+    }
+
+    fn require_one_of_i64(
+        builder: &mut FunctionBuilder<'_>,
+        actual: cranelift_codegen::ir::Value,
+        expected: &[i64],
+    ) {
+        let valid = builder.create_block();
+        let invalid = builder.create_block();
+        let mut matches = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            actual,
+            expected[0],
+        );
+        for expected in &expected[1..] {
+            let next = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                actual,
+                *expected,
+            );
+            matches = builder.ins().bor(matches, next);
+        }
         builder.ins().brif(matches, valid, &[], invalid, &[]);
         builder.switch_to_block(invalid);
         let failure = builder.ins().iconst(types::I64, -1);
@@ -1831,6 +2352,7 @@ impl<'a> Lowering<'a> {
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
         let mut test_block = builder.current_block().expect("borrowed match block");
+        let mut exit_merge = None;
         for case in cases {
             let (expected_tag, expected_arity) =
                 borrowed_constructor_identity(&self.process_symbols, &case.constructor)
@@ -1870,12 +2392,8 @@ impl<'a> Lowering<'a> {
                 .collect::<Vec<_>>();
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
-            let Lowered::Int { value, .. } = lowered else {
-                return Err(unsupported(
-                    "Match",
-                    "borrowed ingress arms must produce a scalar Int",
-                ));
-            };
+            let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
+            Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
             builder.ins().jump(merge, &[value.into()]);
             test_block = next;
         }
@@ -1883,9 +2401,11 @@ impl<'a> Lowering<'a> {
         let failure = builder.ins().iconst(types::I64, -1);
         builder.ins().return_(&[failure]);
         builder.switch_to_block(merge);
-        Ok(Lowered::Int {
-            value: builder.block_params(merge)[0],
-            known: None,
+        let value = builder.block_params(merge)[0];
+        Ok(if exit_merge == Some(true) {
+            Lowered::ProcessExitStatus { value }
+        } else {
+            Lowered::Int { value, known: None }
         })
     }
 
@@ -1904,6 +2424,7 @@ impl<'a> Lowering<'a> {
         builder.append_block_param(merge, types::I64);
         let some_block = builder.create_block();
         let none_block = builder.create_block();
+        let mut exit_merge = None;
         builder
             .ins()
             .brif(present, some_block, &[], none_block, &[]);
@@ -1924,18 +2445,129 @@ impl<'a> Lowering<'a> {
             let mut arm_env = fields;
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
-            let Lowered::Int { value, .. } = lowered else {
-                return Err(unsupported(
-                    "Match",
-                    "borrowed Option arms must produce a scalar Int",
-                ));
-            };
+            let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
+            Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
             builder.ins().jump(merge, &[value.into()]);
         }
         builder.switch_to_block(merge);
-        Ok(Lowered::Int {
-            value: builder.block_params(merge)[0],
-            known: None,
+        let value = builder.block_params(merge)[0];
+        Ok(if exit_merge == Some(true) {
+            Lowered::ProcessExitStatus { value }
+        } else {
+            Lowered::Int { value, known: None }
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn lower_dynamic_host_result_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        success: cranelift_codegen::ir::Value,
+        error: Lowered,
+        ok: Lowered,
+        err_constructor: &str,
+        ok_constructor: &str,
+        cases: &[crate::RuntimeMatchCase],
+        env: &[Lowered],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        let ok_block = builder.create_block();
+        let err_block = builder.create_block();
+        let mut exit_merge = None;
+        builder.ins().brif(success, ok_block, &[], err_block, &[]);
+        for (block, constructor, payload) in [
+            (ok_block, ok_constructor, ok),
+            (err_block, err_constructor, error),
+        ] {
+            builder.switch_to_block(block);
+            let Some(case) = cases
+                .iter()
+                .find(|case| case.constructor == constructor && case.binders == 1)
+            else {
+                let failure = builder.ins().iconst(types::I64, -1);
+                builder.ins().return_(&[failure]);
+                continue;
+            };
+            let mut arm_env = vec![payload];
+            arm_env.extend_from_slice(env);
+            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
+            let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
+            Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
+            builder.ins().jump(merge, &[value.into()]);
+        }
+        builder.switch_to_block(merge);
+        let value = builder.block_params(merge)[0];
+        Ok(if exit_merge == Some(true) {
+            Lowered::ProcessExitStatus { value }
+        } else {
+            Lowered::Int { value, known: None }
+        })
+    }
+
+    fn lower_dynamic_nullary_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag: cranelift_codegen::ir::Value,
+        payload: Option<cranelift_codegen::ir::Value>,
+        constructors: &[String],
+        cases: &[crate::RuntimeMatchCase],
+        env: &[Lowered],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        let mut test_block = builder
+            .current_block()
+            .expect("dynamic constructor match block");
+        let mut exit_merge = None;
+        for (index, constructor) in constructors.iter().enumerate() {
+            let arm = builder.create_block();
+            let next = builder.create_block();
+            if builder.current_block() != Some(test_block) {
+                builder.switch_to_block(test_block);
+            }
+            let selected = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                index as i64,
+            );
+            builder.ins().brif(selected, arm, &[], next, &[]);
+            builder.switch_to_block(arm);
+            let expected_binders =
+                usize::from(index + 1 == constructors.len() && payload.is_some());
+            let Some(case) = cases
+                .iter()
+                .find(|case| case.constructor == *constructor && case.binders == expected_binders)
+            else {
+                let failure = builder.ins().iconst(types::I64, -1);
+                builder.ins().return_(&[failure]);
+                test_block = next;
+                continue;
+            };
+            let mut arm_env = if expected_binders == 1 {
+                vec![Lowered::Int {
+                    value: payload.expect("one-binder dynamic constructor has a payload"),
+                    known: None,
+                }]
+            } else {
+                Vec::new()
+            };
+            arm_env.extend_from_slice(env);
+            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
+            let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
+            Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
+            builder.ins().jump(merge, &[value.into()]);
+            test_block = next;
+        }
+        builder.switch_to_block(test_block);
+        let failure = builder.ins().iconst(types::I64, -1);
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(merge);
+        let value = builder.block_params(merge)[0];
+        Ok(if exit_merge == Some(true) {
+            Lowered::ProcessExitStatus { value }
+        } else {
+            Lowered::Int { value, known: None }
         })
     }
 
@@ -2143,6 +2775,30 @@ impl<'a> Lowering<'a> {
             "bytes_concat" => self.lower_bytes_concat(lowered_args),
             "bytes_encode" => self.lower_bytes_encode(lowered_args),
             "bytes_decode" => self.lower_bytes_decode(lowered_args, &primitive.partiality),
+            "list_char_to_string" => {
+                let [value]: [Lowered; 1] = lowered_args.try_into().map_err(|args: Vec<_>| {
+                    unsupported(
+                        "PrimitiveCall",
+                        format!(
+                            "list_char_to_string expects one argument, got {}",
+                            args.len()
+                        ),
+                    )
+                })?;
+                let bytes = lowered_char_list(&value).ok_or_else(|| {
+                    unsupported(
+                        "PrimitiveCall",
+                        "list_char_to_string requires a closed List Char",
+                    )
+                })?;
+                let value = String::from_utf8(bytes).map_err(|_| {
+                    unsupported(
+                        "PrimitiveCall",
+                        "list_char_to_string received non-UTF-8 Char values",
+                    )
+                })?;
+                Ok(Lowered::String(value))
+            }
             "byte_length" => self.lower_string_byte_length(builder, lowered_args),
             "char_length" => self.lower_string_char_length(builder, lowered_args),
             other => Err(unsupported(
@@ -2300,6 +2956,12 @@ impl<'a> Lowering<'a> {
                 format!("bytes_length expects 1 arg, got {}", args.len()),
             )
         })?;
+        if let Lowered::ResponseBytes { len, .. } = arg {
+            return Ok(Lowered::Int {
+                value: len,
+                known: None,
+            });
+        }
         if let Lowered::BorrowedNativeValue { pointer } = arg {
             let kind = builder
                 .ins()
@@ -2353,6 +3015,41 @@ impl<'a> Lowering<'a> {
                 "bytes_at requires a statically known Int index",
             ));
         };
+        if let Lowered::ResponseBytes { pointer: data, len } = bytes {
+            let index_value = builder.ins().iconst(types::I64, index);
+            let present = builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThan,
+                index_value,
+                len,
+            );
+            let in_bounds = builder.create_block();
+            let out_of_bounds = builder.create_block();
+            let merge = builder.create_block();
+            builder.append_block_param(merge, types::I64);
+            builder.append_block_param(merge, types::I64);
+            builder
+                .ins()
+                .brif(present, in_bounds, &[], out_of_bounds, &[]);
+            builder.switch_to_block(in_bounds);
+            let address = builder.ins().iadd_imm(data, index);
+            let byte = builder
+                .ins()
+                .load(types::I8, MemFlags::trusted(), address, 0);
+            let yes = builder.ins().iconst(types::I64, 1);
+            let byte = builder.ins().uextend(types::I64, byte);
+            builder.ins().jump(merge, &[yes.into(), byte.into()]);
+            builder.switch_to_block(out_of_bounds);
+            let no = builder.ins().iconst(types::I64, 0);
+            let zero = builder.ins().iconst(types::I64, 0);
+            builder.ins().jump(merge, &[no.into(), zero.into()]);
+            builder.switch_to_block(merge);
+            return Ok(Lowered::BorrowedOption {
+                present: builder.block_params(merge)[0],
+                value: builder.block_params(merge)[1],
+                none: none.clone(),
+                some: some.clone(),
+            });
+        }
         if let Lowered::BorrowedNativeValue { pointer } = bytes {
             let kind = builder
                 .ins()
@@ -2604,10 +3301,11 @@ impl<'a> Lowering<'a> {
         value: Lowered,
     ) -> Result<(cranelift_codegen::ir::Value, ResultDecoder), CraneliftBackendError> {
         if self.process_object {
-            return Ok((
-                self.emit_process_exit_status(builder, value),
-                ResultDecoder::Int,
-            ));
+            let value = match value {
+                Lowered::ProcessExitStatus { value } => value,
+                value => self.emit_process_exit_status(builder, value),
+            };
+            return Ok((value, ResultDecoder::Int));
         }
         match value {
             Lowered::Int { value, .. } => Ok((value, ResultDecoder::Int)),
@@ -2700,13 +3398,20 @@ impl<'a> Lowering<'a> {
                 "Result",
                 "native aggregate result contains a non-constant Bool field",
             )),
+            Lowered::ProcessExitStatus { .. } => Err(unsupported(
+                "Result",
+                "process exit status cannot escape a native process call",
+            )),
             Lowered::Bytes(value) => Ok(RuntimeGroundValue::Bytes(value)),
-            Lowered::BorrowedNativeValue { .. } | Lowered::BorrowedOption { .. } => {
-                Err(unsupported(
-                    "Result",
-                    "borrowed ingress values cannot escape the native call",
-                ))
-            }
+            Lowered::BorrowedNativeValue { .. }
+            | Lowered::BorrowedOption { .. }
+            | Lowered::ResponseBytes { .. }
+            | Lowered::CapabilityToken { .. }
+            | Lowered::HostResult { .. }
+            | Lowered::DynamicNullaryConstructor { .. } => Err(unsupported(
+                "Result",
+                "borrowed ingress values cannot escape the native call",
+            )),
             Lowered::String(value) => Ok(RuntimeGroundValue::String(value)),
             Lowered::Constructor { constructor, args } => Ok(RuntimeGroundValue::Constructor {
                 constructor,
@@ -2804,6 +3509,59 @@ mod tests {
         len: usize,
     }
 
+    #[repr(C)]
+    struct NativeInvocationFixture {
+        process_input: *const BorrowedFixtureValue,
+        host_context: *mut std::ffi::c_void,
+        capability: u64,
+    }
+
+    #[test]
+    fn live_effect_emitter_inventory_and_generated_layout_mutations_are_closed() {
+        assert_eq!(
+            CRANELIFT_HOST_EFFECT_CONSUMERS_V1,
+            ken_host::PX5_PLANNED_NATIVE_TARGETS
+        );
+        for operation in CRANELIFT_HOST_EFFECT_CONSUMERS_V1 {
+            let layout = ken_host::host_effect_wire_layout_v1(operation).unwrap();
+            assert_eq!(
+                ken_host::verify_host_effect_wire_layout_v1(operation, &layout),
+                Ok(())
+            );
+            let mut mutations = Vec::new();
+            let mut changed = layout.clone();
+            changed.request_size ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.request_align_shift ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.request_offsets[0] ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_size ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_tag_offset ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_error_tag ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_unit_tag ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_bool_tag ^= 1;
+            mutations.push(changed);
+            let mut changed = layout.clone();
+            changed.reply_bytes_tag ^= 1;
+            mutations.push(changed);
+            for mutation in mutations {
+                assert!(ken_host::verify_host_effect_wire_layout_v1(operation, &mutation).is_err());
+            }
+        }
+    }
+
     fn run_borrowed_fixture(expr: &RuntimeExpr, root: &BorrowedFixtureValue) -> i64 {
         let compiled = compile_expr_into_module(
             new_jit_module().expect("JIT module"),
@@ -2817,8 +3575,13 @@ mod tests {
             None,
         )
         .expect("borrowed fixture lowers");
+        let invocation = NativeInvocationFixture {
+            process_input: root,
+            host_context: std::ptr::null_mut(),
+            capability: 1_u64 << 32,
+        };
         compiled
-            .run(Some(root as *const _ as *const std::ffi::c_void))
+            .run(Some((&invocation as *const NativeInvocationFixture).cast()))
             .expect("borrowed fixture runs")
             .1
             .expect("borrowed fixture returns scalar")
@@ -4185,8 +4948,9 @@ mod tests {
             name: "unsupported-effect".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::Effect {
-                effect: "Console".to_string(),
-                capability: Some("cap:Console".to_string()),
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleRead,
+                capability: None,
                 args: vec![],
             },
             observation: RuntimeObservation::Trapped(RuntimeTrap {

@@ -14,8 +14,6 @@
 //!   interface + transitivity/boundary property; the runtime membrane and
 //!   audit-record emission are DEFERRED to `40-runtime`/`Ward`.
 
-use std::fmt;
-
 use ken_kernel::{declare_postulate, GlobalEnv, Level, Term};
 
 use crate::effects::check::{check_capabilities, EffectError};
@@ -25,241 +23,26 @@ use crate::extract::ObligationId;
 use crate::ifc::{FlowCtx, FlowError, FlowResult, Label};
 use crate::prover::{attempt_with_cert, ProverResult};
 
-// ── §2 Authority lattice ──────────────────────────────────────────────────────
+pub use ken_host::capability::{
+    authority_flows_to, authority_meet, rights_for_authority, Authority, Cap, FsHandle, FsIdentity,
+    FsScope, RightSet, SymlinkPolicy, AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
+};
 
-/// Authority level on a scalar lattice: `⊥=0 ≤ 1 ≤ ⊤=2`.
-/// **More authority = higher value; attenuation moves DOWN.**
-/// `⊑` = "has at most this authority" (restricted ⊑ full).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Authority(pub u8);
-
-pub const AUTH_NONE:    Authority = Authority(0); // ⊥ — no access
-pub const AUTH_PARTIAL: Authority = Authority(1); // restricted (e.g. read-only, single dir)
-pub const AUTH_FULL:    Authority = Authority(2); // ⊤ — full access
-
-/// `a ⊓ b` — meet; takes the lesser authority (attenuation bound).
-pub fn authority_meet(a: Authority, b: Authority) -> Authority {
-    Authority(a.0.min(b.0))
-}
-
-/// `a ⊑ b` — does `a` have at most `b`'s authority?
-/// Equivalently: `a` is at most as powerful as `b`.
-pub fn authority_flows_to(a: Authority, b: Authority) -> bool {
-    a.0 <= b.0
-}
-
-// ── §2.2 Capability token ─────────────────────────────────────────────────────
-
-/// Filesystem operation rights carried inside the opaque capability value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RightSet(u8);
-
-impl RightSet {
-    pub const NONE: Self = Self(0);
-    pub const READ: Self = Self(1 << 0);
-    pub const WRITE: Self = Self(1 << 1);
-    pub const CREATE: Self = Self(1 << 2);
-    pub const DELETE: Self = Self(1 << 3);
-    pub const ENUMERATE: Self = Self(1 << 4);
-    pub const METADATA: Self = Self(1 << 5);
-    pub const ALL: Self = Self((1 << 6) - 1);
-
-    pub const fn union(self, other: Self) -> Self {
-        Self(self.0 | other.0)
-    }
-    pub const fn intersect(self, other: Self) -> Self {
-        Self(self.0 & other.0)
-    }
-    pub const fn contains(self, right: Self) -> bool {
-        self.0 & right.0 == right.0
-    }
-    pub const fn is_subset_of(self, other: Self) -> bool {
-        self.0 & !other.0 == 0
-    }
-    pub const fn bits(self) -> u8 {
-        self.0
-    }
-}
-
-/// Symlink-following policy. `NoFollow` is the narrower element.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SymlinkPolicy {
-    NoFollow,
-    FollowWithinScope,
-}
-
-/// Host-owned filesystem handle carried by a capability or resolution.
-/// Neither variant contains path bytes.
-#[derive(Clone)]
-pub enum FsHandle {
-    Posix(ken_host::RootedHandle),
-    Virtual(u64),
-}
-
-impl fmt::Debug for FsHandle {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Posix(handle) => f.debug_tuple("Posix").field(handle).finish(),
-            Self::Virtual(id) => f.debug_tuple("Virtual").field(id).finish(),
-        }
-    }
-}
-
-impl PartialEq for FsHandle {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Posix(left), Self::Posix(right)) => left == right,
-            (Self::Virtual(left), Self::Virtual(right)) => left == right,
-            #[allow(unreachable_patterns)]
-            _ => false,
-        }
-    }
-}
-
-impl Eq for FsHandle {}
-
-/// Stable identity chain from the grant root through the scoped root.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FsIdentity {
-    Posix { device: u64, inode: u64 },
-    Virtual(u64),
-}
-
-/// Runtime-only scope refinement stored inside the opaque `Cap` value.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FsScope {
-    pub rights: RightSet,
-    pub root: FsHandle,
-    pub lineage: Vec<FsIdentity>,
-    pub symlink: SymlinkPolicy,
-    pub empty: bool,
-}
-
-impl FsScope {
-    pub fn root(
-        rights: RightSet,
-        root: FsHandle,
-        identity: FsIdentity,
-        symlink: SymlinkPolicy,
-    ) -> Self {
-        Self {
-            rights,
-            root,
-            lineage: vec![identity],
-            symlink,
-            empty: false,
-        }
-    }
-
-    pub fn child(
-        &self,
-        rights: RightSet,
-        root: FsHandle,
-        identity: FsIdentity,
-        symlink: SymlinkPolicy,
-    ) -> Self {
-        let mut lineage = self.lineage.clone();
-        lineage.push(identity);
-        Self {
-            rights,
-            root,
-            lineage,
-            symlink,
-            empty: self.empty,
-        }
-    }
-}
-
-fn rights_for_authority(authority: Authority) -> RightSet {
-    if authority == AUTH_FULL {
-        RightSet::ALL
-    } else if authority == AUTH_PARTIAL {
-        RightSet::READ
-            .union(RightSet::ENUMERATE)
-            .union(RightSet::METADATA)
-    } else {
-        RightSet::NONE
-    }
-}
-
-/// An unforgeable capability token: authority level + the effect it gates
-/// (`62 §2`, `36 §2.5`).
-///
-/// Tokens are minted by handlers (via `mint`) or derived via `attenuate`.
-/// There is no `strengthen` or `amplify` — authority is monotone-downward
-/// by construction. The surface language's elaboration discipline prevents
-/// user-code forgery; `mint` is accessible to handlers and test crates.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Cap {
-    authority_val: Authority,
-    pub effect: EffectName,
-    scope: FsScope,
-}
-
-impl Cap {
-    /// Mint a root capability. Called by effect handlers and conformance tests.
-    /// The surface language's elaboration discipline (`62 §2.2`) prevents
-    /// user-code forgery — `mint` is not callable from Ken's surface language.
-    pub fn mint(authority: Authority, effect: impl Into<EffectName>) -> Self {
-        let scope = FsScope::root(
-            rights_for_authority(authority),
-            FsHandle::Virtual(0),
-            FsIdentity::Virtual(0),
-            SymlinkPolicy::NoFollow,
-        );
-        Cap {
-            authority_val: authority,
-            effect: effect.into(),
-            scope,
-        }
-    }
-
-    /// Mint at a host-provided root handle. Not exposed to Ken source.
-    pub fn mint_scoped(
-        authority: Authority,
-        effect: impl Into<EffectName>,
-        scope: FsScope,
-    ) -> Self {
-        Cap {
-            authority_val: authority,
-            effect: effect.into(),
-            scope,
-        }
-    }
-
-    pub fn scope(&self) -> &FsScope {
-        &self.scope
-    }
-}
-
-/// Return the authority carried by a capability (the only public authority reader).
 pub fn authority(cap: &Cap) -> Authority {
-    cap.authority_val
+    cap.authority()
 }
 
-// ── §3.1 Sink-authority sufficiency check ────────────────────────────────────
-
-/// Check that `cap` satisfies a sink demanding `required` authority.
-///
-/// **Correct check:** `required ⊑ authority(cap)` — the sink's demand must be
-/// ≤ the cap's authority (the cap must be AT LEAST as powerful as required).
-///
-/// **`[Sec2-dual]` orientation:** a weakened cap has LOWER authority; a strong
-/// sink (demanding the parent's full authority) REJECTS it. Getting `⊑`
-/// backwards (`authority(cap) ⊑ required`) would silently invert — weakened
-/// caps would pass strong sinks (privilege escalation). The C1↔C2 pair nets it.
 pub fn check_authority_sufficient(
     cap: &Cap,
     required: Authority,
     site: &str,
 ) -> Result<(), CapError> {
-    if authority_flows_to(required, cap.authority_val) {
-        // required ⊑ cap.authority — sink's demand is ≤ cap's authority → ok
+    if authority_flows_to(required, cap.authority()) {
         Ok(())
     } else {
         Err(CapError::AuthorityInsufficient {
             required,
-            available: cap.authority_val,
+            available: cap.authority(),
             site: site.to_owned(),
         })
     }
@@ -275,11 +58,11 @@ pub fn check_authority_sufficient(
 /// elaborator-chosen, so this is not an independent kernel meet check.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttenuationObligation {
-    pub child_authority:  Authority,
+    pub child_authority: Authority,
     pub parent_authority: Authority,
-    pub window:           Authority,
+    pub window: Authority,
     /// Precomputed `parent_authority ⊓ window` — the attenuation bound.
-    pub bound:            Authority,
+    pub bound: Authority,
     pub child_rights: RightSet,
     pub parent_rights: RightSet,
     pub window_rights: RightSet,
@@ -369,32 +152,28 @@ fn scope_meet(parent: &FsScope, window: Option<&FsScope>) -> FsScope {
 /// operand). There is no path to amplify authority.
 pub fn attenuate<W: Into<AttenuationWindow>>(cap: &Cap, window: W) -> (Cap, AttenuationObligation) {
     let window = window.into();
-    let bound = authority_meet(cap.authority_val, window.authority);
-    let bound_rights = cap.scope.rights.intersect(window.rights);
-    let mut bound_scope = scope_meet(&cap.scope, window.scope.as_ref());
+    let bound = authority_meet(cap.authority(), window.authority);
+    let bound_rights = cap.scope().rights.intersect(window.rights);
+    let mut bound_scope = scope_meet(cap.scope(), window.scope.as_ref());
     bound_scope.rights = bound_rights;
-    let bound_symlink = symlink_meet(cap.scope.symlink, window.symlink);
+    let bound_symlink = symlink_meet(cap.scope().symlink, window.symlink);
     bound_scope.symlink = bound_symlink;
-    let child = Cap {
-        authority_val: bound,
-        effect: cap.effect.clone(),
-        scope: bound_scope.clone(),
-    };
+    let child = Cap::mint_scoped(bound, cap.effect(), bound_scope.clone());
     let obl = AttenuationObligation {
-        child_authority:  bound,
-        parent_authority: cap.authority_val,
+        child_authority: bound,
+        parent_authority: cap.authority(),
         window: window.authority,
         bound,
         child_rights: bound_rights,
-        parent_rights: cap.scope.rights,
+        parent_rights: cap.scope().rights,
         window_rights: window.rights,
         bound_rights,
         child_scope: bound_scope.clone(),
-        parent_scope: cap.scope.clone(),
+        parent_scope: cap.scope().clone(),
         window_scope: window.scope,
         bound_scope,
         child_symlink: bound_symlink,
-        parent_symlink: cap.scope.symlink,
+        parent_symlink: cap.scope().symlink,
         window_symlink: window.symlink,
         bound_symlink,
     };
@@ -560,9 +339,9 @@ pub fn check_authority_and_flow(
 pub enum CapError {
     /// Sink demands more authority than the cap carries.
     AuthorityInsufficient {
-        required:  Authority,
+        required: Authority,
         available: Authority,
-        site:      String,
+        site: String,
     },
 }
 
