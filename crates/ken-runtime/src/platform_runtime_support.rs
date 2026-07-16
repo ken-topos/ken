@@ -1157,6 +1157,8 @@ fn platform_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
+
     use crate::{
         evaluate_runtime_ir_example, executable_artifact_contract_for_runtime_report,
         executable_entrypoint_metadata_hash, executable_entrypoint_package_for_runtime_contract,
