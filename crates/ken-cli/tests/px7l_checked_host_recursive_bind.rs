@@ -52,6 +52,35 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
   host_program APartial (print_line "static")
 "#;
 
+const CONSUMED_RUNTIME_RESPONSE: &str = r#"program capabilities FS APartial
+proc selected_result (terminal : Bool) (message : String)
+  : Unit -> HostIO APartial (Result IOError Unit) visits [Console] =
+  \_. match terminal {
+    False |-> host_console APartial (Result IOError Unit)
+      (write Stdout (bytes_encode message)) ;
+    True |-> host_console APartial (Result IOError Unit) (flush Stdout)
+  }
+
+proc delayed_result (body : Unit -> HostIO APartial (Result IOError Unit))
+  : HostIO APartial ExitCode visits [Console] =
+  bind (Coproduct (FSOp APartial) AmbientOp)
+    (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
+    (Result IOError Unit) ExitCode
+    (body MkUnit)
+    (\written. match written {
+      Err _ |-> host_program APartial (print_line "write-error") ;
+      Ok _ |-> host_program APartial (print_line "write-ok")
+    })
+
+proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [Console] =
+  bind (Coproduct (FSOp APartial) AmbientOp)
+    (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
+    Bool ExitCode
+    (host_console APartial Bool (is_terminal Stdout))
+    (\terminal. delayed_result (selected_result terminal "probe"))
+"#;
+
 fn contains_recursive_bind_ir(expr: &ken_runtime::RuntimeExpr) -> bool {
     use ken_runtime::RuntimeExpr;
     match expr {
@@ -148,6 +177,55 @@ fn delayed_capturing_generic_bind_agrees_across_real_executors() {
             ken_runtime::HostOpV1::ConsoleIsTerminal,
             ken_runtime::HostOpV1::ConsoleWrite,
             ken_runtime::HostOpV1::ConsoleFlush,
+        ]
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn runtime_selected_non_unit_response_is_consumed_across_real_executors() {
+    let dir = output_dir("consumed-response");
+    let output = ken_cli::build_native_program(
+        CONSUMED_RUNTIME_RESPONSE,
+        ken_cli::SourceFormat::Ken,
+        "px7l-consumed-runtime-response",
+        &dir,
+    )
+    .expect("runtime-selected Result response reaches the linked artifact");
+    let native = ken_runtime::run_bound_process_effect_observation_v1(
+        &output.artifact,
+        &ken_runtime::NativeEffectRunOptionsV1 {
+            arguments: Vec::new(),
+            environment: Vec::new(),
+            cwd: dir.clone(),
+            plan_hash: output.plan_transport_hash,
+        },
+    )
+    .expect("linked artifact consumes its runtime-selected response");
+
+    let mut host = ken_interp::CaptureHost::new(Vec::new());
+    let interpreted = ken_cli::run_program_effect_observation_v1(
+        CONSUMED_RUNTIME_RESPONSE,
+        ken_cli::SourceFormat::Ken,
+        &[b"ken".to_vec()],
+        &[],
+        b"/",
+        &mut host,
+    )
+    .expect("interpreter consumes the same runtime-selected response");
+    assert_eq!(native, interpreted);
+    assert_eq!(native.exit_status, 0);
+    assert_eq!(native.stdout, b"probewrite-ok\n");
+    assert_eq!(
+        native
+            .effect_trace
+            .iter()
+            .map(|event| event.operation)
+            .collect::<Vec<_>>(),
+        vec![
+            ken_runtime::HostOpV1::ConsoleIsTerminal,
+            ken_runtime::HostOpV1::ConsoleWrite,
+            ken_runtime::HostOpV1::ConsoleWrite,
         ]
     );
     let _ = std::fs::remove_dir_all(dir);

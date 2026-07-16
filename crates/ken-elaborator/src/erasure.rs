@@ -711,7 +711,7 @@ fn lower_runtime_selected_host_operation(
                     body: Box::new(shift_runtime_vars(
                         continuation_body.clone(),
                         enclosing_binders + argument_shift,
-                        0,
+                        1,
                     )),
                 },
             });
@@ -3325,6 +3325,28 @@ mod px7l_tests {
             under_lambda.runtime_index(2),
             under_lambda.runtime_index(3),
             "capture-order swap is discriminating"
+        );
+    }
+
+    #[test]
+    fn runtime_selected_response_binder_is_not_shifted_with_its_free_environment() {
+        let continuation = RuntimeExpr::Construct {
+            constructor: "px7l::ResponseAndOuter".to_string(),
+            args: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)],
+        };
+        let corrected = shift_runtime_vars(continuation.clone(), 3, 1);
+        assert_eq!(
+            corrected,
+            RuntimeExpr::Construct {
+                constructor: "px7l::ResponseAndOuter".to_string(),
+                args: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(4)],
+            },
+            "response Var(0) stays bound while only the free environment shifts"
+        );
+        assert_ne!(
+            shift_runtime_vars(continuation, 3, 0),
+            corrected,
+            "the rejected cutoff-0 mutation moves the live response binder"
         );
     }
 
