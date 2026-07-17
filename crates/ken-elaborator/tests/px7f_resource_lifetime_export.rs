@@ -4,7 +4,7 @@ use ken_elaborator::temporal::{Pred, Temporal};
 use ken_elaborator::{
     compiler_driver::{compile_checked_target_denotation, CompilerSource},
     emit_checked_target_export, serialize_export, try_serialize_export, BehavioralExport,
-    ExportError, ResourceLifetimeObligationV1, TEntry,
+    ExportError, ResourceLifetimeObligation, ResourceLifetimeObligationV1, TEntry,
 };
 
 const RESOURCE_PRODUCER: &str = r#"
@@ -70,7 +70,9 @@ fn checked_resource_producer_emits_exactly_one_pinned_correlated_t_body() {
     assert!(export.alphabet.contains("FsOpen"));
     assert_eq!(
         export.resource_lifetime_obligation,
-        Some(ResourceLifetimeObligationV1::pinned())
+        Some(ResourceLifetimeObligation::V1(
+            ResourceLifetimeObligationV1::pinned()
+        ))
     );
 
     let wire = serialize_export(&export);
@@ -146,6 +148,9 @@ fn independent_event_lookalike_is_rejected_before_t_or_hash_emission() {
         .resource_lifetime_obligation
         .as_mut()
         .expect("resource body");
+    let ResourceLifetimeObligation::V1(malformed) = malformed else {
+        panic!("no-buffer resource target must retain V1")
+    };
     malformed.correlation.event_field = "EffectEventV1.operation";
 
     assert_eq!(

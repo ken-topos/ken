@@ -143,7 +143,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-file-buffer-bindings-validate
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route + Ward V2 consumer**
+- status: **RED-UNTIL-PX8-R producer + PX8-V export route + PX8-F/Ward consumer**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC1; Architect PX8 ruling,
   “Buffer ownership and lifetime”; ADR 0021, “Expressibility prerequisite”
 - given: a checked full-inventory two-resource target whose exact reachable
@@ -166,7 +166,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-missing-buffer-role-rejected
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route + Ward V2 consumer**
+- status: **RED-UNTIL-PX8-R producer + PX8-V export route + PX8-F/Ward consumer**
 - spec: `71 §2.3`; PX8-T D1/AC6
 - given: the RB-A observation and lifetime body, changing only the `FsReadAt`
   binding to `[(File, file_r)]`
@@ -181,7 +181,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-swapped-role-labels-rejected
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route + Ward V2 consumer**
+- status: **RED-UNTIL-PX8-R producer + PX8-V export route + PX8-F/Ward consumer**
 - spec: `71 §2.3`; PX8-T D1/AC6
 - given: the RB-A observation and lifetime body, changing only the two role
   labels to `[(Buffer, file_r), (File, buffer_r)]`
@@ -196,7 +196,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-out-of-order-pair-rejected
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route + Ward V2 consumer**
+- status: **RED-UNTIL-PX8-R producer + PX8-V export route + PX8-F/Ward consumer**
 - spec: `71 §2.3`; PX8-T D1/AC6
 - given: the RB-A observation and lifetime body, preserving both labelled
   tuples but reversing their sequence to
@@ -211,7 +211,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-independent-single-resource-atoms-rejected
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route + Ward V2 consumer**
+- status: **RED-UNTIL-PX8-R producer + PX8-V export route + PX8-F/Ward consumer**
 - spec: `71 §2.3`; PX8-T D1/AC6
 - given: the RB-A target and identities, replacing its one
   `FsReadAt -> [(File, file_r), (Buffer, buffer_r)]` observation with two
@@ -227,7 +227,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-buffer-identity-must-correlate
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route + Ward V2 consumer**
+- status: **RED-UNTIL-PX8-R producer + PX8-V export route + PX8-F/Ward consumer**
 - spec: `71 §2.3`; PX8-T D1/AC6
 - given: hold operation, role order, file identity, plans, and monitor policy
   fixed; compare:
@@ -248,7 +248,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-route-is-additive-for-no-buffer-targets
 
-- status: **RED-UNTIL-PX8-F export route**
+- status: **RED-UNTIL-PX8-V export route**
 - spec: `71 §2.3/§3.3`; PX8-T D1/AC2
 - given: run the landed checked `RESOURCE_PRODUCER`, target
   `px7f_export_resource`, from
@@ -273,7 +273,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-wrong-schema-version-rejected-pre-export
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-V export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC6
 - given: the exact RB-A static target and body, changing only
   `schema_version: 2` to `schema_version: 1`
@@ -286,7 +286,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-wrong-correlation-descriptor-rejected-pre-export
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-V export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC6
 - given: the exact RB-A static target and body, changing only
   `event_field: EffectEventV2.resource_bindings` to
@@ -300,7 +300,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-missing-reachable-buffer-plan-rejected-pre-export
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-V export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC6; `71 §3.1` I3
 - given: the exact RB-A target and body, whose `Σ` contains both acquisitions,
   changing only `plans` by removing the Buffer plan
@@ -313,7 +313,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-plan-order-rejected-pre-export
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-V export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC6
 - given: the exact RB-A target and body, preserving both complete plans but
   reversing them to Buffer then FsHandle
@@ -326,7 +326,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-buffer-only-plan-is-sigma-specialized
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-V export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC1; `71 §3.1` I3
 - given: a checked buffer-only target whose exact reachable alphabet `Σ` is
   `{BufferAllocate, BufferFreeze, ResourceRelease}`
@@ -343,7 +343,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-read-only-positioned-plan-is-sigma-specialized
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-V export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC1; `71 §3.1` I3
 - given: a checked positioned-read target whose exact reachable alphabet `Σ`
   is `{FsOpen, BufferAllocate, FsReadAt, ResourceRelease}`
@@ -360,7 +360,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-extra-unreachable-operation-rejected-pre-export
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-V export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC6; `71 §3.1` I3
 - given: the RB-L buffer-only target and specialized body, changing only the
   Buffer `require_same_at` by inserting `(FsWriteAt, Buffer)`, which is absent
@@ -374,7 +374,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-duplicated-runtime-role-binding-rejected
 
-- status: **RED-UNTIL-PX8-R + PX8-F export route + Ward V2 consumer**
+- status: **RED-UNTIL-PX8-R producer + PX8-V export route + PX8-F/Ward consumer**
 - spec: `71 §2.3`; PX8-T D1/AC6
 - given: the RB-A observation and lifetime body, changing only the `FsReadAt`
   binding sequence to
@@ -615,12 +615,12 @@ or a result that claims success with a nonempty remainder does not conform.
   minted by the two real acquisition paths, not fabricated encodings. Their
   same-kind controls must succeed. A malformed token has its separate existing
   `MalformedResource` route and cannot satisfy either case.
-- **Reachability gates are explicit.** PX8-R owns `Buffer`, both acquisition
-  paths, positioned host operations, progress/error production, mismatch, and
-  admission enforcement. PX8-F owns `withBuffer`, the surface sums, the
-  derived-Ken `writeAll`, and the export emitter. Ward owns V2 monitor
-  execution. Until those producers land, these are RED contract roots, not
-  current green claims.
+- **Reachability gates are explicit.** Runtime owns observation production,
+  including `Buffer`, both acquisition paths, positioned host operations,
+  progress/error production, mismatch, and admission enforcement. Verify owns
+  the static export projection. Foundation owns `withBuffer`, the surface sums,
+  the derived-Ken `writeAll`, and the Ward consumer. Until those producers land,
+  these are RED contract roots, not current green claims.
 - **V1 preservation is byte-level and resource-producing.** RB-G reuses the
   landed checked `px7f_export_resource` producer and compares its complete V1
   body, canonical export bytes, and hash before/after V2 enablement. Its

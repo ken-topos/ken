@@ -23,10 +23,12 @@ fn system_resource_is_opaque_and_only_the_bracket_mints_it() {
     for private in [
         "PrivateFsOpen",
         "PrivateFsHandleMetadata",
+        "PrivateBufferAllocate",
         "PrivateResourceRelease",
         "PrivateResourceTraceIdentity",
         "private_resource_acquire",
         "private_with_resource_after_open",
+        "private_with_buffer_after_allocate",
         "release_if_live",
     ] {
         assert!(
@@ -34,7 +36,7 @@ fn system_resource_is_opaque_and_only_the_bracket_mints_it() {
             "private representation/protocol identity `{private}` escaped"
         );
     }
-    for public in ["withResource", "resourceMetadata", "release"] {
+    for public in ["withResource", "withBuffer", "resourceMetadata", "release"] {
         let id = env.globals[public];
         assert!(
             env.env.transparent_body(id).is_some(),

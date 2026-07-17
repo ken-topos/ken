@@ -12,8 +12,8 @@ checked-source controlled-trap producer yet, so public checked-Ken reachability
 of that face is deferred. The guarantee excludes external process destruction,
 abort, fatal signal, and machine failure.
 
-`withResource` is the sole public acquisition route. Its body is a delayed
-function, so acquisition happens before the body and `release_if_live`
+`withResource` is the sole public filesystem acquisition route. Its body is a
+delayed function, so acquisition happens before the body and `release_if_live`
 settlement happens afterward. `release` is deliberately non-idempotent; an
 early release invalidates every copy, while the bracket's private finalizer
 treats the resulting `Closed` as already settled rather than closing the OS

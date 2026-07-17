@@ -3752,6 +3752,7 @@ pub struct FSIds {
     pub change_mode_id: GlobalId,
     pub private_fs_open_id: GlobalId,
     pub private_fs_handle_metadata_id: GlobalId,
+    pub private_buffer_allocate_id: GlobalId,
     pub private_resource_release_id: GlobalId,
     pub resource_read_id: GlobalId,
     pub resource_metadata_mode_id: GlobalId,
@@ -3809,6 +3810,7 @@ impl FSIds {
             change_mode_id: get("ChangeMode")?,
             private_fs_open_id: elab.prelude_env.private_fs_open_id,
             private_fs_handle_metadata_id: elab.prelude_env.private_fs_handle_metadata_id,
+            private_buffer_allocate_id: elab.prelude_env.private_buffer_allocate_id,
             private_resource_release_id: elab.prelude_env.private_resource_release_id,
             resource_read_id: get("ResourceRead")?,
             resource_metadata_mode_id: get("ResourceMetadata")?,
@@ -4542,6 +4544,15 @@ fn fs_dispatch<H: HostHandler>(
             ken_host::CanonicalRequestV1::FsHandleMetadata,
             fs.op_metadata_id,
         )
+    } else if op_id == fs.private_buffer_allocate_id {
+        let capacity = eval_to_bigint(args.get(1)?)
+            .and_then(|capacity| capacity.to_u64())
+            .unwrap_or(0);
+        (
+            ken_host::HostOpV1::BufferAllocate,
+            ken_host::CanonicalRequestV1::BufferAllocate { capacity },
+            fs.op_metadata_id,
+        )
     } else if op_id == fs.private_resource_release_id {
         (
             ken_host::HostOpV1::ResourceRelease,
@@ -4555,7 +4566,9 @@ fn fs_dispatch<H: HostHandler>(
     let mut capabilities = ken_host::CapabilityTableV1::default();
     let token = if matches!(
         operation,
-        ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
+        ken_host::HostOpV1::FsHandleMetadata
+            | ken_host::HostOpV1::BufferAllocate
+            | ken_host::HostOpV1::ResourceRelease
     ) {
         None
     } else {
@@ -4569,11 +4582,13 @@ fn fs_dispatch<H: HostHandler>(
             _ => None,
         }
     };
-    let resource = if matches!(
-        operation,
-        ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
-    ) {
+    let resource = if operation == ken_host::HostOpV1::FsHandleMetadata {
         match args.get(1) {
+            Some(EvalVal::ResourceToken(token)) => Some(*token),
+            _ => None,
+        }
+    } else if operation == ken_host::HostOpV1::ResourceRelease {
+        match args.get(2) {
             Some(EvalVal::ResourceToken(token)) => Some(*token),
             _ => None,
         }
@@ -5532,6 +5547,7 @@ mod px5b_effect_observation_tests {
             change_mode_id: id(),
             private_fs_open_id: id(),
             private_fs_handle_metadata_id: id(),
+            private_buffer_allocate_id: id(),
             private_resource_release_id: id(),
             resource_read_id: id(),
             resource_metadata_mode_id: id(),

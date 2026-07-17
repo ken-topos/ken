@@ -2066,6 +2066,10 @@ fn checked_host_spine_v1(
             ken_host::HostOpV1::FsHandleMetadata,
         ),
         (
+            env.prelude_env.private_buffer_allocate_id,
+            ken_host::HostOpV1::BufferAllocate,
+        ),
+        (
             env.prelude_env.private_resource_release_id,
             ken_host::HostOpV1::ResourceRelease,
         ),
