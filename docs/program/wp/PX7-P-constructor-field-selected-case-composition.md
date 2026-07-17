@@ -191,10 +191,12 @@ deforestation principle as PX7-L/M/N/O, one producer form further (the
   controls, exact default and arity/binder failures, bridge-removal regression,
   and PX7-L/M/N/O compatibility. Before terminal review, an evidence-only PX7-F
   overlay supplies the minimal adapter and makes both exact held
-  `px7f_resource_native` fixtures green; an ordinary-only producer-continuation
-  mutation must recreate the current failure. The adapter is never committed to
-  PX7-P. No-regression = **green in CI** (targeted `-p ken-runtime` / `-p ken-cli
-  --test <name>` locally only; **NEVER `--workspace`**).
+  `px7f_resource_native` fixtures green. A committed linked-artifact
+  differential consumes a generic-carrier payload under the active frames; an
+  ordinary-only producer-continuation mutation must turn that exact test red.
+  The adapter is never committed to PX7-P. No-regression = **green in CI**
+  (targeted `-p ken-runtime` / `-p ken-cli --test <name>` locally only; **NEVER
+  `--workspace`**).
 
 ## Do-not-reopen guards
 
