@@ -8,6 +8,44 @@
 > it. When it does not, reason from these.** They are priors for judgment, not a
 > substitute for it.
 
+---
+
+> ### ⏳ Transient principle T — no backwards compatibility during initial development
+>
+> **This is a *time-bound* principle, not a permanent charter value.** It holds
+> only while Ken is in initial development with **no real users and no consumers
+> of its outputs**, and it will be revised or retired the moment either exists.
+> Until this block is rewritten, treat it as binding.
+>
+> **Ken is in initial development. There is no backwards compatibility to preserve
+> and no existing use to protect. Do not keep an old or superseded form in
+> parallel with an improved one** — no `V1` retained "byte-identical" beside a
+> `V2`, no second wire codec kept alongside its replacement, no legacy arm held
+> "just in case." The *only* thing a parallel old form can buy is compatibility,
+> and there is **no one to be compatible with**: no users of the language, no
+> consumers of its outputs. So a preserved old form is pure duplication — extra
+> code, extra TCB, extra audit surface — bought for a beneficiary that does not
+> exist. When a form is improved, **replace it and delete the old one in the same
+> change.**
+>
+> *In practice:* the effect-observation schema collapses to a **single**
+> versionless form — one `EffectEvent` carrying role-labelled resource bindings
+> (the single-resource case is the degenerate one), one observation/wire encoding,
+> one obligation — rather than a `V1` schema preserved beside an additive `V2`
+> (operator ruling, 2026-07-17). The additive "keep the prior WP's types
+> byte-identical" tactic that keeps an individual merge small is legitimate
+> *within* a work package, but the parallel forms it creates must be **subsumed
+> before the arc closes**, never shipped as the resting state.
+>
+> *Relationship to the permanent principles:* this is #7 (subsume, don't
+> proliferate) and #4 (correct over expedient) with their one standing
+> exception — backwards compatibility — **removed for the duration**. Once Ken has
+> users or output consumers, compatibility becomes a real value and this block is
+> rewritten to say when parallel forms *are* warranted. Until then, "should we
+> keep the old form too?" is already answered: **no.**
+
+---
+
 Each principle is stated, justified in a line, and shown *in practice* — the
 concrete decisions it produced — so you can pattern-match your own situation
 against it.
