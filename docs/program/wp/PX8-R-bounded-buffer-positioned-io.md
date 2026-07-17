@@ -93,20 +93,22 @@ Settled, not forks:
   wire/surface identity** — **not** collapsed into `MalformedResource` — plus the
   **real reversed cross-kind pair** (a buffer op on a file handle and a file op on
   a buffer handle both reject with the correctly-oriented mismatch).
-- **R-D5 — V2 role-labelled `resource_bindings` runtime event emission.** Emit
+- **R-D5 — the canonical Runtime-owned V2 observation vocabulary + real ordered
+  event emission** (Architect ruling `evt_3xs94r12c8fvg`). **Define** (Runtime owns
+  these; PX8-V/Verify and PX8-F/Foundation **consume** them, never redefine
+  privately): the new host-operation identities, `ResourceKindV1::Buffer`,
+  `ResourceBindingRoleV2 = File | Buffer | Target`, and the runtime
   `EffectEventV2.resource_bindings : [(ResourceBindingRoleV2,
-  ResourceTraceIdentityV1)]` (`ResourceBindingRoleV2 = File | Buffer | Target`)
-  at the successful operations, matching the **pinned §71 canonical table**
-  (e.g. successful `BufferAllocate` → `[(Target, buffer)]`, file acquire `FsOpen`,
-  settlement generic `ResourceRelease`). This is the **runtime event** the
-  assumption-boundary export projects into the pinned
-  `ResourceLifetimeObligationV2`; **consume the pinned schema, emit conformant
-  bytes — do not define a second schema.** The Σ-gated plan-inclusion rule
-  (include the `Buffer` plan iff `BufferAllocate ∈ Σ`; no plan names an
-  acquisition/use absent from Σ) is the export's job (B1) — your obligation is to
-  emit the correct events. **If the pinned static export machinery (B1, Verify)
-  cannot project your V2 events without a base-emitter change, hard-stop to me**
-  (the PX7-L/M/N / B1-EXACT escalation pattern — that seam is Verify-owned).
+  ResourceTraceIdentityV1)]` carrier. **Emit** the real **ordered**
+  `resource_bindings` at the successful operations, matching the **pinned §71
+  canonical table**: `BufferAllocate` → `[(Target, buffer)]`;
+  `FsReadAt`/`FsWriteAt` → `[(File, file), (Buffer, buffer)]`; `BufferFreeze` →
+  `[(Target, buffer)]`; `ResourceRelease` → `[(Target, released)]`; file acquire
+  `FsOpen`. **This deliverable ENDS at the real observation producer.** The static
+  V2 export projection into `ResourceLifetimeObligationV2` (exact-Σ plan
+  selection, validation, canonicalization, hash participation) is **PX8-V
+  (Verify), a downstream WP that consumes this vocabulary — you neither build it
+  nor block on it.** Do **not** define a second/private observation schema.
 - **R-D6 — `withResource` capability-gated write/create mode** (truncate **once**
   at acquisition, **never** on a positioned write). Positioned writes never
   truncate.
@@ -141,9 +143,11 @@ Settled, not forks:
   EOF = progress; write-zero = `NoProgress` error (discriminators 1–3, reaching).
 - **AC3** — bounded + positioned-isolation + cross-kind-mismatch + PX7-fail-closed
   all hold (discriminators 4–7).
-- **AC4** — emitted V2 `resource_bindings` are byte-conformant to the **pinned**
-  PX8-T §71 schema + buffer-io seed (discriminator 8); **no second schema**
-  invented; the Σ-gated projection is left to B1.
+- **AC4** — the real canonical `EffectEventV2.resource_bindings` producer emits the
+  pinned §71 ordered vocabulary with correct **byte/order** through the real
+  runtime op path (discriminator 8); **no second schema** invented. AC4 **ends at
+  the observation producer** — it does **not** require the static V2 `T` projection
+  or Ward consumption (those are PX8-V / PX8-F).
 - **AC5** — **no-regression = GREEN IN CI** (never a local `--workspace` run;
   COORDINATION §12). Build/test **targeted only** (`scripts/ken-cargo -p
   ken-interp …` / `--test <name>`); the frozen-corpus/`--locked` gates run in CI.
@@ -152,17 +156,24 @@ Settled, not forks:
 
 - Do **not** add an all-or-nothing `write` primitive, a seek primitive, a file
   cursor, or any in-language mutable reference (R2 + fixed inputs).
-- Do **not** define a second Ward/observation schema — consume the pinned PX8-T
-  `resource_bindings`/`ResourceLifetimeObligationV2`; a base-export-emitter change
-  is a **Verify hard-stop to me**, not a local PX8-R fix.
+- Do **not** touch the B1 static export emitter (`crates/ken-elaborator/src/export.rs`)
+  — the static V2 projection (`ResourceLifetimeObligationV2`, exact-Σ plan
+  selection, validation/canonicalization/hash) is **PX8-V (Verify)**, an explicit
+  **downstream** dependency; PX8-R produces the observation vocabulary PX8-V
+  consumes and does **not** block on it. (The original probe-and-stop guard served
+  its diagnostic purpose — Architect `evt_3xs94r12c8fvg`.)
 - Do **not** make the buffer growable, expose the mutable region, or truncate on a
   positioned write.
 - Do **not** start PX8-F work here (it consumes this; separate owner + WP).
 
 ## Sequencing
 
-PX8-T (pinned `d69819ca`) → **PX8-R** (this) → **PX8-F** (Foundation `System.*`
-surface + derived `writeAll` Omega proofs + `freeze/spanBytes` + Ward V2 seam
-consumption; authored + kicked **after** PX8-R lands, against the real runtime
-substrate) → **Phase-C exit** (`cat`/`cp`/`wc` native over a larger-than-memory
-file, interpreter ↔ native external-delta equality via the PX6 harness).
+PX8-T (pinned `d69819ca`) → **PX8-R** (this — runtime observation producer) →
+**PX8-V** (Verify — static V2 export projection in `export.rs`, one versioned
+`V1 | V2` sum, exact-Σ selection, V1-preserving so `px7f`/no-acquire
+`6360c2cb74f78f7e` stay byte-identical; framed now, implemented against the
+**landed** PX8-R vocabulary) → **PX8-F** (Foundation `System.*` surface + derived
+`writeAll` Omega proofs + `freeze/spanBytes` + Ward V2 consumer; **blocked until
+BOTH PX8-R and PX8-V land**) → **Phase-C exit** (`cat`/`cp`/`wc` native over a
+larger-than-memory file, interpreter ↔ native external-delta equality via the PX6
+harness).
