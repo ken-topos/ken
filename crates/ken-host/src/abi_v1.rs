@@ -917,7 +917,9 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
                     FileErrorCauseV1::Capability(_) => 2,
                 },
                 crate::SemanticErrorV1::Capability(_) => 2,
-                crate::SemanticErrorV1::Resource(_) => unreachable!("resource errors have a distinct reply tag"),
+                crate::SemanticErrorV1::Resource(_) => {
+                    unreachable!("resource errors have a distinct reply tag")
+                }
             };
         }
         CanonicalOutcomeV1::Success(_) => reply.tag = REPLY_ERROR,
@@ -978,26 +980,22 @@ fn decode_resource_error_reply(
     match discriminator {
         0 if all_zero => Some(crate::ResourceErrorV1::Closed),
         1 if all_zero => Some(crate::ResourceErrorV1::MalformedResource),
-        2
-            if payload.schema_version
-                == u64::from(crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1)
-                && payload.resource_kind == 0
-                && payload.identity == 0
-                && payload.io == 0
-                && payload.required <= u64::from(u8::MAX)
-                && payload.held <= u64::from(u8::MAX) =>
+        2 if payload.schema_version == u64::from(crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1)
+            && payload.resource_kind == 0
+            && payload.identity == 0
+            && payload.io == 0
+            && payload.required <= u64::from(u8::MAX)
+            && payload.held <= u64::from(u8::MAX) =>
         {
             Some(crate::ResourceErrorV1::RightNotHeld {
                 required: payload.required as u8,
                 held: payload.held as u8,
             })
         }
-        3
-            if payload.schema_version
-                == u64::from(crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1)
-                && payload.resource_kind == 0
-                && payload.required == 0
-                && payload.held == 0 =>
+        3 if payload.schema_version == u64::from(crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1)
+            && payload.resource_kind == 0
+            && payload.required == 0
+            && payload.held == 0 =>
         {
             Some(crate::ResourceErrorV1::ReleaseFailed {
                 schema_version: crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
@@ -1365,7 +1363,10 @@ mod tests {
         assert_eq!(effect_binding("tag", "reply.error"), REPLY_ERROR);
         assert_eq!(effect_binding("tag", "reply.resource"), REPLY_RESOURCE);
         assert_eq!(effect_binding("tag", "reply.metadata"), REPLY_METADATA);
-        assert_eq!(effect_binding("tag", "reply.resource_error"), REPLY_RESOURCE_ERROR);
+        assert_eq!(
+            effect_binding("tag", "reply.resource_error"),
+            REPLY_RESOURCE_ERROR
+        );
         assert_eq!(effect_binding("error", "resource.Closed"), 0);
         assert_eq!(effect_binding("error", "resource.MalformedResource"), 1);
         assert_eq!(effect_binding("error", "resource.RightNotHeld"), 2);
@@ -1434,18 +1435,78 @@ mod tests {
 
         for invalid in [
             (4, zero),
-            (0, ResourceErrorReplyV1 { schema_version: 1, ..zero }),
-            (1, ResourceErrorReplyV1 { identity: 1, ..zero }),
-            (2, ResourceErrorReplyV1 { schema_version: 2, ..rights }),
-            (2, ResourceErrorReplyV1 { resource_kind: 1, ..rights }),
-            (2, ResourceErrorReplyV1 { required: 256, ..rights }),
-            (2, ResourceErrorReplyV1 { held: 256, ..rights }),
+            (
+                0,
+                ResourceErrorReplyV1 {
+                    schema_version: 1,
+                    ..zero
+                },
+            ),
+            (
+                1,
+                ResourceErrorReplyV1 {
+                    identity: 1,
+                    ..zero
+                },
+            ),
+            (
+                2,
+                ResourceErrorReplyV1 {
+                    schema_version: 2,
+                    ..rights
+                },
+            ),
+            (
+                2,
+                ResourceErrorReplyV1 {
+                    resource_kind: 1,
+                    ..rights
+                },
+            ),
+            (
+                2,
+                ResourceErrorReplyV1 {
+                    required: 256,
+                    ..rights
+                },
+            ),
+            (
+                2,
+                ResourceErrorReplyV1 {
+                    held: 256,
+                    ..rights
+                },
+            ),
             (2, ResourceErrorReplyV1 { io: 1, ..rights }),
-            (3, ResourceErrorReplyV1 { schema_version: 2, ..release }),
-            (3, ResourceErrorReplyV1 { resource_kind: 1, ..release }),
+            (
+                3,
+                ResourceErrorReplyV1 {
+                    schema_version: 2,
+                    ..release
+                },
+            ),
+            (
+                3,
+                ResourceErrorReplyV1 {
+                    resource_kind: 1,
+                    ..release
+                },
+            ),
             (3, ResourceErrorReplyV1 { io: 2, ..release }),
-            (3, ResourceErrorReplyV1 { io: 0x100, ..release }),
-            (3, ResourceErrorReplyV1 { required: 1, ..release }),
+            (
+                3,
+                ResourceErrorReplyV1 {
+                    io: 0x100,
+                    ..release
+                },
+            ),
+            (
+                3,
+                ResourceErrorReplyV1 {
+                    required: 1,
+                    ..release
+                },
+            ),
             (3, ResourceErrorReplyV1 { held: 1, ..release }),
         ] {
             assert_eq!(decode_resource_error_reply(invalid.0, invalid.1), None);

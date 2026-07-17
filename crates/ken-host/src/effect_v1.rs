@@ -317,10 +317,7 @@ pub fn host_effect_wire_layout_v1(
         resource_error_right_not_held: generated_binding("error", "resource.RightNotHeld")?,
         resource_error_release_failed: generated_binding("error", "resource.ReleaseFailed")?,
         resource_kind_fs_handle: generated_binding("tag", "resource_kind.FsHandle")?,
-        resource_error_reply_schema: generated_binding(
-            "lifetime",
-            "resource_error_reply_schema",
-        )?,
+        resource_error_reply_schema: generated_binding("lifetime", "resource_error_reply_schema")?,
     })
 }
 

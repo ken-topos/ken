@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::effects::row::EffectRow;
-use ken_elaborator::{ResourceLifetimeObligationV1, emit_export, serialize_export};
+use ken_elaborator::{emit_export, serialize_export, ResourceLifetimeObligationV1};
 
 fn export_with(alphabet: EffectRow) -> ken_elaborator::BehavioralExport {
     emit_export(
@@ -29,7 +29,11 @@ fn fs_open_reachability_emits_exactly_one_pinned_correlated_obligation() {
 
     let wire = serialize_export(&export);
     let obligations = wire["obligations"].as_array().expect("T array");
-    assert_eq!(obligations.len(), 1, "one target-level template, not three atoms");
+    assert_eq!(
+        obligations.len(),
+        1,
+        "one target-level template, not three atoms"
+    );
     assert_eq!(
         obligations[0],
         serde_json::json!({
@@ -74,12 +78,10 @@ fn no_reachable_acquire_emits_no_resource_lifetime_obligation() {
         "ResourceRelease".to_string(),
     ]));
     assert!(export.resource_lifetime_obligation.is_none());
-    assert!(
-        serialize_export(&export)["obligations"]
-            .as_array()
-            .expect("T array")
-            .is_empty()
-    );
+    assert!(serialize_export(&export)["obligations"]
+        .as_array()
+        .expect("T array")
+        .is_empty());
 }
 
 #[test]

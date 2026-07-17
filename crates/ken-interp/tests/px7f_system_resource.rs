@@ -3,9 +3,7 @@
 use std::path::PathBuf;
 
 use ken_elaborator::capabilities::AUTH_FULL;
-use ken_interp::{
-    apply, eval, ConsoleIds, CoproductIds, EvalStore, EvalVal, FSIds, PosixHost,
-};
+use ken_interp::{apply, eval, ConsoleIds, CoproductIds, EvalStore, EvalVal, FSIds, PosixHost};
 use ken_kernel::{Decl, Term};
 
 fn repo_root() -> PathBuf {

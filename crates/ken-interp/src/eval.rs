@@ -3809,9 +3809,7 @@ impl FSIds {
             right_not_held_id: elab.prelude_env.right_not_held_id,
             release_failed_id: elab.prelude_env.release_failed_id,
             fs_handle_id: elab.prelude_env.fs_handle_id,
-            private_resource_trace_identity_id: elab
-                .prelude_env
-                .private_resource_trace_identity_id,
+            private_resource_trace_identity_id: elab.prelude_env.private_resource_trace_identity_id,
             create_new_id: get("CreateNew")?,
             create_or_truncate_id: get("CreateOrTruncate")?,
             create_or_keep_id: get("CreateOrKeep")?,
@@ -4638,12 +4636,12 @@ fn reify_host_reply_v1(
                 make_ctor(fs.cons_id, vec![EvalVal::Unknown, value, tail], store)
             },
         ),
-        ken_host::CanonicalOutcomeV1::Success(
-            ken_host::CanonicalReplyV1::ResourceAcquired { .. },
-        ) => EvalVal::ResourceToken(resource_token.ok_or(())?),
-        ken_host::CanonicalOutcomeV1::Success(
-            ken_host::CanonicalReplyV1::ResourceSettlement(_),
-        ) => make_ctor(ids.unit_id, vec![], store),
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::ResourceAcquired {
+            ..
+        }) => EvalVal::ResourceToken(resource_token.ok_or(())?),
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::ResourceSettlement(
+            _,
+        )) => make_ctor(ids.unit_id, vec![], store),
         ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::File(error)) => {
             let cause = match error.cause {
                 ken_host::FileErrorCauseV1::Io(error) => io_error_identity_value(error, ids, store),
@@ -4667,7 +4665,10 @@ fn reify_host_reply_v1(
                 }
                 ken_host::ResourceErrorV1::RightNotHeld { required, held } => make_ctor(
                     fs.right_not_held_id,
-                    vec![EvalVal::Int(i64::from(required)), EvalVal::Int(i64::from(held))],
+                    vec![
+                        EvalVal::Int(i64::from(required)),
+                        EvalVal::Int(i64::from(held)),
+                    ],
                     store,
                 ),
                 ken_host::ResourceErrorV1::ReleaseFailed {
@@ -4929,197 +4930,201 @@ fn run_io_with_effect_recorder<H: HostHandler>(
     // constructors without first repairing the interpreter's state lifetime.
     let mut resources = ken_host::ResourceTableV1::default();
     let result = (|| {
-      loop {
-        let next = match tree {
-            EvalVal::Unknown => return Err(RunIoError::UnknownTree),
-            EvalVal::Ctor { id, args, .. } => {
-                if id == ids.ret_id {
-                    // Ret r → done
-                    return Ok(args.get(m).cloned().unwrap_or(EvalVal::Unknown));
-                } else if id == ids.vis_id {
-                    // Guard args access — a malformed Vis returns Err rather than panic.
-                    let op = match args.get(m).cloned() {
-                        Some(v) => v,
-                        None => {
-                            return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
-                                id,
-                                args,
-                                slot: NULL_SLOT,
-                            }));
-                        }
-                    };
-                    let k = match args.get(m + 1).cloned() {
-                        Some(v) => v,
-                        None => {
-                            return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
-                                id,
-                                args: Rc::new(vec![op]),
-                                slot: NULL_SLOT,
-                            }));
-                        }
-                    };
-                    // D3 coproduct peel: strip InL/InR down to the innermost
-                    // base tag BEFORE dispatch — effect-blind, a no-op when
-                    // `coproduct_ids` is absent or the op carries no wrapper.
-                    let op = peel_coproduct(op, coproduct_ids);
-                    // Dispatch on every constructor in the sealed host floor.
-                    // Unknown tags fail loudly below.
-                    let resp = match &op {
-                        EvalVal::Ctor {
-                            id: op_id,
-                            args: op_args,
-                            ..
-                        } if *op_id == ids.read_id => {
-                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
-                            else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            let Some(limit) = op_args.get(1).and_then(read_limit) else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            ambient_dispatch(
-                                ken_host::HostOpV1::ConsoleRead,
-                                ken_host::CanonicalRequestV1::ConsoleRead {
-                                    stream: to_console_stream_v1(stream),
-                                    limit: limit as u64,
-                                },
-                                handler,
-                                &mut resources,
-                                ids,
-                                clock_ids,
-                                store,
-                                recorder.as_deref_mut(),
-                            )
-                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
-                        }
-                        EvalVal::Ctor {
-                            id: op_id,
-                            args: op_args,
-                            ..
-                        } if *op_id == ids.write_id => {
-                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
-                            else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            let Some(EvalVal::Bytes(bytes)) = op_args.get(1) else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            ambient_dispatch(
-                                ken_host::HostOpV1::ConsoleWrite,
-                                ken_host::CanonicalRequestV1::ConsoleWrite {
-                                    stream: to_console_stream_v1(stream),
-                                    bytes: bytes.clone(),
-                                },
-                                handler,
-                                &mut resources,
-                                ids,
-                                clock_ids,
-                                store,
-                                recorder.as_deref_mut(),
-                            )
-                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
-                        }
-                        EvalVal::Ctor {
-                            id: op_id,
-                            args: op_args,
-                            ..
-                        } if *op_id == ids.flush_id => {
-                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
-                            else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            ambient_dispatch(
-                                ken_host::HostOpV1::ConsoleFlush,
-                                ken_host::CanonicalRequestV1::ConsoleFlush {
-                                    stream: to_console_stream_v1(stream),
-                                },
-                                handler,
-                                &mut resources,
-                                ids,
-                                clock_ids,
-                                store,
-                                recorder.as_deref_mut(),
-                            )
-                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
-                        }
-                        EvalVal::Ctor {
-                            id: op_id,
-                            args: op_args,
-                            ..
-                        } if *op_id == ids.is_terminal_id => {
-                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
-                            else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            ambient_dispatch(
-                                ken_host::HostOpV1::ConsoleIsTerminal,
-                                ken_host::CanonicalRequestV1::ConsoleIsTerminal {
-                                    stream: to_console_stream_v1(stream),
-                                },
-                                handler,
-                                &mut resources,
-                                ids,
-                                clock_ids,
-                                store,
-                                recorder.as_deref_mut(),
-                            )
-                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
-                        }
-                        EvalVal::Ctor {
-                            id: op_id,
-                            args: op_args,
-                            ..
-                        } => {
-                            if let Some(clock) = clock_ids
-                                .filter(|clock| *op_id == clock.wall_now_id && op_args.is_empty())
-                            {
+        loop {
+            let next = match tree {
+                EvalVal::Unknown => return Err(RunIoError::UnknownTree),
+                EvalVal::Ctor { id, args, .. } => {
+                    if id == ids.ret_id {
+                        // Ret r → done
+                        return Ok(args.get(m).cloned().unwrap_or(EvalVal::Unknown));
+                    } else if id == ids.vis_id {
+                        // Guard args access — a malformed Vis returns Err rather than panic.
+                        let op = match args.get(m).cloned() {
+                            Some(v) => v,
+                            None => {
+                                return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
+                                    id,
+                                    args,
+                                    slot: NULL_SLOT,
+                                }));
+                            }
+                        };
+                        let k = match args.get(m + 1).cloned() {
+                            Some(v) => v,
+                            None => {
+                                return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
+                                    id,
+                                    args: Rc::new(vec![op]),
+                                    slot: NULL_SLOT,
+                                }));
+                            }
+                        };
+                        // D3 coproduct peel: strip InL/InR down to the innermost
+                        // base tag BEFORE dispatch — effect-blind, a no-op when
+                        // `coproduct_ids` is absent or the op carries no wrapper.
+                        let op = peel_coproduct(op, coproduct_ids);
+                        // Dispatch on every constructor in the sealed host floor.
+                        // Unknown tags fail loudly below.
+                        let resp = match &op {
+                            EvalVal::Ctor {
+                                id: op_id,
+                                args: op_args,
+                                ..
+                            } if *op_id == ids.read_id => {
+                                let Some(stream) =
+                                    op_args.first().and_then(|v| decode_stream(v, ids))
+                                else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
+                                let Some(limit) = op_args.get(1).and_then(read_limit) else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
                                 ambient_dispatch(
-                                    ken_host::HostOpV1::ClockWallNow,
-                                    ken_host::CanonicalRequestV1::ClockWallNow,
+                                    ken_host::HostOpV1::ConsoleRead,
+                                    ken_host::CanonicalRequestV1::ConsoleRead {
+                                        stream: to_console_stream_v1(stream),
+                                        limit: limit as u64,
+                                    },
                                     handler,
                                     &mut resources,
                                     ids,
-                                    Some(clock),
+                                    clock_ids,
                                     store,
                                     recorder.as_deref_mut(),
                                 )
                                 .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
-                            } else {
-                                match fs_ids.and_then(|fs| {
-                                    fs_dispatch(
-                                        *op_id,
-                                        op_args,
+                            }
+                            EvalVal::Ctor {
+                                id: op_id,
+                                args: op_args,
+                                ..
+                            } if *op_id == ids.write_id => {
+                                let Some(stream) =
+                                    op_args.first().and_then(|v| decode_stream(v, ids))
+                                else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
+                                let Some(EvalVal::Bytes(bytes)) = op_args.get(1) else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
+                                ambient_dispatch(
+                                    ken_host::HostOpV1::ConsoleWrite,
+                                    ken_host::CanonicalRequestV1::ConsoleWrite {
+                                        stream: to_console_stream_v1(stream),
+                                        bytes: bytes.clone(),
+                                    },
+                                    handler,
+                                    &mut resources,
+                                    ids,
+                                    clock_ids,
+                                    store,
+                                    recorder.as_deref_mut(),
+                                )
+                                .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
+                            }
+                            EvalVal::Ctor {
+                                id: op_id,
+                                args: op_args,
+                                ..
+                            } if *op_id == ids.flush_id => {
+                                let Some(stream) =
+                                    op_args.first().and_then(|v| decode_stream(v, ids))
+                                else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
+                                ambient_dispatch(
+                                    ken_host::HostOpV1::ConsoleFlush,
+                                    ken_host::CanonicalRequestV1::ConsoleFlush {
+                                        stream: to_console_stream_v1(stream),
+                                    },
+                                    handler,
+                                    &mut resources,
+                                    ids,
+                                    clock_ids,
+                                    store,
+                                    recorder.as_deref_mut(),
+                                )
+                                .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
+                            }
+                            EvalVal::Ctor {
+                                id: op_id,
+                                args: op_args,
+                                ..
+                            } if *op_id == ids.is_terminal_id => {
+                                let Some(stream) =
+                                    op_args.first().and_then(|v| decode_stream(v, ids))
+                                else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
+                                ambient_dispatch(
+                                    ken_host::HostOpV1::ConsoleIsTerminal,
+                                    ken_host::CanonicalRequestV1::ConsoleIsTerminal {
+                                        stream: to_console_stream_v1(stream),
+                                    },
+                                    handler,
+                                    &mut resources,
+                                    ids,
+                                    clock_ids,
+                                    store,
+                                    recorder.as_deref_mut(),
+                                )
+                                .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
+                            }
+                            EvalVal::Ctor {
+                                id: op_id,
+                                args: op_args,
+                                ..
+                            } => {
+                                if let Some(clock) = clock_ids.filter(|clock| {
+                                    *op_id == clock.wall_now_id && op_args.is_empty()
+                                }) {
+                                    ambient_dispatch(
+                                        ken_host::HostOpV1::ClockWallNow,
+                                        ken_host::CanonicalRequestV1::ClockWallNow,
                                         handler,
                                         &mut resources,
-                                        fs,
                                         ids,
+                                        Some(clock),
                                         store,
                                         recorder.as_deref_mut(),
                                     )
-                                }) {
-                                    Some(Ok(response)) => response,
-                                    Some(Err(())) | None => {
-                                        return Err(RunIoError::UnknownEffect(op));
+                                    .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
+                                } else {
+                                    match fs_ids.and_then(|fs| {
+                                        fs_dispatch(
+                                            *op_id,
+                                            op_args,
+                                            handler,
+                                            &mut resources,
+                                            fs,
+                                            ids,
+                                            store,
+                                            recorder.as_deref_mut(),
+                                        )
+                                    }) {
+                                        Some(Ok(response)) => response,
+                                        Some(Err(())) | None => {
+                                            return Err(RunIoError::UnknownEffect(op));
+                                        }
                                     }
                                 }
                             }
-                        }
-                        _ => return Err(RunIoError::UnknownEffect(op)),
-                    };
-                    apply(k, resp, globals, store)
-                } else {
-                    // Unrecognised ITree constructor
-                    return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
-                        id,
-                        args,
-                        slot: NULL_SLOT,
-                    }));
+                            _ => return Err(RunIoError::UnknownEffect(op)),
+                        };
+                        apply(k, resp, globals, store)
+                    } else {
+                        // Unrecognised ITree constructor
+                        return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
+                            id,
+                            args,
+                            slot: NULL_SLOT,
+                        }));
+                    }
                 }
-            }
-            other => return Err(RunIoError::NotAnIOTree(other)),
-        };
-        tree = next;
-      }
+                other => return Err(RunIoError::NotAnIOTree(other)),
+            };
+            tree = next;
+        }
     })();
     let mut backend = InterpreterHostBackend { handler };
     let settlements = resources.finalize_all_with(|owner| {

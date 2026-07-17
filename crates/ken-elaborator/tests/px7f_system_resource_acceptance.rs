@@ -3,9 +3,8 @@
 use ken_elaborator::ElabEnv;
 use ken_kernel::{env::PrimReduction, Decl};
 
-const RESOURCE_KEN_MD: &str = include_str!(
-    "../../../catalog/packages/Capability/System/Resource.ken.md"
-);
+const RESOURCE_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Capability/System/Resource.ken.md");
 
 #[test]
 fn system_resource_is_opaque_and_only_the_bracket_mints_it() {

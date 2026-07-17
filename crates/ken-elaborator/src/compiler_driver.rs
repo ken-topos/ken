@@ -1451,9 +1451,7 @@ fn checked_host_spine_v1(
         resource_right_not_held: resolve_id(env.prelude_env.right_not_held_id)?,
         resource_release_failed: resolve_id(env.prelude_env.release_failed_id)?,
         resource_kind_fs_handle: resolve_id(env.prelude_env.fs_handle_id)?,
-        resource_trace_identity: resolve_id(
-            env.prelude_env.private_resource_trace_identity_id,
-        )?,
+        resource_trace_identity: resolve_id(env.prelude_env.private_resource_trace_identity_id)?,
         unit: resolve("MkUnit")?,
         bool_false: resolve("False")?,
         bool_true: resolve("True")?,

@@ -1325,12 +1325,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .get("FsHandle")
         .copied()
         .ok_or_else(|| ElabError::Internal("prelude: FsHandle missing".into()))?;
-    elab.elaborate_decl(
-        "data ResourceTraceIdentity = PrivateResourceTraceIdentity Int Int",
-    )
-    .map_err(|e| {
-        ElabError::Internal(format!("prelude ResourceTraceIdentity failed: {e}"))
-    })?;
+    elab.elaborate_decl("data ResourceTraceIdentity = PrivateResourceTraceIdentity Int Int")
+        .map_err(|e| ElabError::Internal(format!("prelude ResourceTraceIdentity failed: {e}")))?;
     let private_resource_trace_identity_id = elab
         .globals
         .get("PrivateResourceTraceIdentity")
@@ -1362,9 +1358,11 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "data ResourceError = ResourceHostIO IOError | Closed | MalformedResource | RightNotHeld Int Int | ReleaseFailed ResourceKind ResourceTraceIdentity IOError",
     )
     .map_err(|e| ElabError::Internal(format!("prelude ResourceError failed: {e}")))?;
-    let resource_host_io_id = elab.globals.get("ResourceHostIO").copied().ok_or_else(|| {
-        ElabError::Internal("prelude: ResourceHostIO missing".into())
-    })?;
+    let resource_host_io_id = elab
+        .globals
+        .get("ResourceHostIO")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: ResourceHostIO missing".into()))?;
     let closed_id = elab
         .globals
         .get("Closed")
@@ -1385,10 +1383,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .get("ReleaseFailed")
         .copied()
         .ok_or_else(|| ElabError::Internal("prelude: ReleaseFailed missing".into()))?;
-    elab.elaborate_decl(
-        "data ResourceBodyResult e a = ResourceBodyOk a | ResourceBodyErr e",
-    )
-    .map_err(|e| ElabError::Internal(format!("prelude ResourceBodyResult failed: {e}")))?;
+    elab.elaborate_decl("data ResourceBodyResult e a = ResourceBodyOk a | ResourceBodyErr e")
+        .map_err(|e| ElabError::Internal(format!("prelude ResourceBodyResult failed: {e}")))?;
     elab.elaborate_decl(
         "data ResourceBracketResult e a = ResourceBracketOk a | ResourceBracketBodyError e | ResourceBracketReleaseError ResourceError | ResourceBracketBodyAndReleaseError e ResourceError",
     )
@@ -1734,7 +1730,9 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
          }",
     )
     .map_err(|e| {
-        ElabError::Internal(format!("prelude private_with_resource_after_open failed: {e}"))
+        ElabError::Internal(format!(
+            "prelude private_with_resource_after_open failed: {e}"
+        ))
     })?;
     elab.elaborate_decl(
         "proc withResource (a : Auth) (e : Type) (r : Type) \

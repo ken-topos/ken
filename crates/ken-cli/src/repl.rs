@@ -15,9 +15,9 @@
 use std::io::{self, BufRead, Write};
 
 use ken_elaborator::{
-    ElabEnv, ElabError,
     extract::v2_extract,
     prover::{attempt_obligation, Countermodel, Verdict},
+    ElabEnv, ElabError,
 };
 use ken_interp::eval::{eval, EvalStore, EvalVal};
 use ken_kernel::Term;
@@ -73,7 +73,9 @@ fn is_decl_start(s: &str) -> bool {
 fn show_verdict(v: &Verdict) -> String {
     match v {
         Verdict::Proved { .. } => "proved (Q) — kernel-certified".to_owned(),
-        Verdict::Disproved { countermodel: Countermodel { description } } => {
+        Verdict::Disproved {
+            countermodel: Countermodel { description },
+        } => {
             format!("refuted — countermodel: {}", description)
         }
         Verdict::Unknown { .. } => "unknown — open goal".to_owned(),
@@ -185,7 +187,10 @@ fn do_eval(session: &mut Session, expr_src: &str) {
 
 /// Infer and print the type of an expression.
 fn do_type(session: &mut Session, expr_src: &str) {
-    match session.env.elaborate_expr("ken repl type query", expr_src.trim()) {
+    match session
+        .env
+        .elaborate_expr("ken repl type query", expr_src.trim())
+    {
         Ok((_term, ty)) => println!("  : {}", show_term(&ty)),
         Err(e) => println!("  error: {}", e),
     }
