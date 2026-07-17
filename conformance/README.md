@@ -411,6 +411,11 @@ claim with no conformance case is a claim no one can rely on
   `ResourceTraceIdentityV1` correlation binder, the Ward monitor template,
   `delegated` status, content-hash participation, a conforming-vs-uncorrelated
   verdict flip, and the unchanged ordinary-`Temporal` control.
+- `behavioral/buffer-io/seed-buffer-io.md` — PX8-T's role-labelled
+  multi-resource V2 and positioned-buffer contract: canonical File/Buffer
+  bindings, delegated per-kind Ward plans, exact progress sums, four reaching
+  `writeAll` branches, the reversed `ResourceKindMismatch` pair, deterministic
+  `BufferLimitsV1`, and byte-preserved no-buffer exports.
 - `behavioral/agentic/seed-agentic.md` — B4 the agentic boundary (WS-B capstone,
   `74`): assuring an embedded agent's outputs **reduces to the existing seam**
   aimed at a maximally-nondeterministic component (agent = maximal `P`) — **no
