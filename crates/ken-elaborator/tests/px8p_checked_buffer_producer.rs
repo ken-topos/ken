@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::compiler_driver::{compile_checked_target_denotation, CompilerSource};
-use ken_elaborator::{emit_checked_target_export, ElabEnv};
+use ken_elaborator::{emit_checked_target_export, ElabEnv, ResourceLifetimeObligation};
 
 const BUFFER_ONLY_PRODUCER: &str = r#"
 fn px8p_buffer_body (_resource : Resource Buffer)
@@ -78,8 +78,21 @@ fn real_checked_buffer_bracket_emits_exact_allocate_and_release_sigma() {
         export.alphabet,
         BTreeSet::from(["BufferAllocate".to_string(), "ResourceRelease".to_string(),])
     );
-    assert!(
-        export.resource_lifetime_obligation.is_none(),
-        "PX8-P remains non-mergeable until PX8-V supplies the V2 lifetime body"
+    let Some(ResourceLifetimeObligation::V2(obligation)) = export.resource_lifetime_obligation
+    else {
+        panic!("the combined PX8-P + PX8-V train must emit V2")
+    };
+    assert_eq!(obligation.status, "delegated");
+    assert_eq!(obligation.plans.len(), 1);
+    assert_eq!(
+        obligation.plans[0].resource_kind,
+        ken_host::ResourceKindV1::Buffer
+    );
+    assert_eq!(
+        obligation.plans[0].require_same_at,
+        vec![ken_elaborator::ResourceLifetimeBindingPointV2 {
+            operation: ken_host::HostOpV1::ResourceRelease,
+            role: ken_host::ResourceBindingRoleV2::Target,
+        }]
     );
 }

@@ -195,6 +195,66 @@ impl ResourceLifetimeObligationV1 {
     }
 }
 
+/// One role-labelled operation site in a V2 resource-lifetime plan.
+///
+/// The role is the static selector for the corresponding entry in the landed
+/// `EffectEventV2.resource_bindings` carrier. Runtime resource identities are
+/// deliberately absent from this target-level descriptor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResourceLifetimeBindingPointV2 {
+    pub operation: ken_host::HostOpV1,
+    pub role: ken_host::ResourceBindingRoleV2,
+}
+
+/// The static correlation descriptor for role-labelled V2 effect events.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceLifetimeCorrelationV2 {
+    pub identity_type: &'static str,
+    pub event_field: &'static str,
+    pub role_type: &'static str,
+    pub canonical_order: &'static str,
+}
+
+/// One target-specialized acquire/use/settle plan for a resource kind.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceLifetimePlanV2 {
+    pub resource_kind: ken_host::ResourceKindV1,
+    pub bind_at: ResourceLifetimeBindingPointV2,
+    pub require_same_at: Vec<ResourceLifetimeBindingPointV2>,
+}
+
+/// The fixed Ward checks applied to every identity bound by a V2 plan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WardResourceLifetimeMonitorV2 {
+    pub correlate_every_role_binding: bool,
+    pub successful_acquire_settles_exactly_once: bool,
+    pub forbid_successful_use_after_settlement: bool,
+    pub require_no_live_bracket_owned_identity_on: [&'static str; 3],
+    pub retain_settlement_outcome: bool,
+}
+
+/// The pinned §71 role-labelled, target-specialized resource obligation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceLifetimeObligationV2 {
+    pub schema_version: u16,
+    pub body_kind: &'static str,
+    pub obligation_id: &'static str,
+    pub status: &'static str,
+    pub correlation: ResourceLifetimeCorrelationV2,
+    pub plans: Vec<ResourceLifetimePlanV2>,
+    pub monitor_template: WardResourceLifetimeMonitorV2,
+}
+
+/// The one optional resource-lifetime body supported by the export transaction.
+///
+/// This sum is internal only. Each variant serializes its body directly into
+/// the existing `T` sequence, without an outer version tag or wrapper.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResourceLifetimeObligation {
+    V1(ResourceLifetimeObligationV1),
+    V2(ResourceLifetimeObligationV2),
+}
+
 /// Generator support structure — partition + boundaries + case decomposition
 /// from refinement predicates and `match` arms (`71 §4`).
 ///
@@ -281,10 +341,10 @@ pub struct BehavioralExport {
     /// B2 fills the `Temporal` value body (`TEntry::formula`, `72 §5`); B1
     /// provided the channel.
     pub obligations: Vec<TEntry>,
-    /// The optional correlated resource-lifetime body in `T`. Presence is
-    /// derived solely from reachable `Σ`: exactly one when `FsOpen` occurs,
-    /// none otherwise. Ordinary `Temporal` entries remain unchanged above.
-    pub resource_lifetime_obligation: Option<ResourceLifetimeObligationV1>,
+    /// The optional correlated resource-lifetime body in `T`. Selection is
+    /// derived solely from reachable `Σ`: V2 when `BufferAllocate` occurs,
+    /// otherwise V1 when `FsOpen` occurs, otherwise none.
+    pub resource_lifetime_obligation: Option<ResourceLifetimeObligation>,
     /// `G` — generator support: partition + boundaries from refinement/match.
     /// No measure (I5 — structural seal, §4.1).
     pub generators: Vec<GEntry>,
@@ -306,10 +366,21 @@ pub enum ExportError {
     /// This build is **not shippable** — the claim must be fixed before export.
     /// The claim is absent from all export fields; the build fails here.
     DisproovedClaim { obligation_id: String },
-    /// The correlated resource body is not the exact Spec-owned V1 schema.
+    /// The correlated resource body is not the exact selected Spec-owned schema.
     /// Validation happens before either a `T` wire entry or a content hash is
     /// emitted, so an independent-event lookalike cannot become shippable.
     InvalidResourceLifetimeObligation,
+    /// A reachable resource use has no reachable acquisition for its kind.
+    ResourceLifetimeUseWithoutAcquire {
+        resource_kind: ken_host::ResourceKindV1,
+        operation: ken_host::HostOpV1,
+    },
+    /// A reachable acquisition is not represented by its required V2 plan.
+    MissingResourceLifetimePlan {
+        resource_kind: ken_host::ResourceKindV1,
+    },
+    /// A V2 plan names an operation outside the exact checked alphabet.
+    ResourceLifetimeOperationOutsideAlphabet { operation: ken_host::HostOpV1 },
     /// The selected checked target did not yield a finite, exhaustive graph.
     /// No declared-row or whole-family widening is permitted.
     NonClosedPerformInventory { reason: String },
@@ -468,19 +539,9 @@ fn assemble_checked_export(
         validate_temporal_signature_atoms(&obligation.formula, &alphabet_set)?;
     }
 
-    let resource_lifetime_obligation = alphabet_set
-        .contains("FsOpen")
-        .then(ResourceLifetimeObligationV1::pinned);
+    let resource_lifetime_obligation = project_resource_lifetime_obligation(&alphabet_set)?;
 
-    if let Some(resource) = resource_lifetime_obligation.as_ref() {
-        validate_resource_lifetime_obligation(resource)?;
-        for operation in [resource.acquire_op, resource.use_op, resource.settle_op] {
-            let symbol = canonical_host_perform_signature_v1(operation).to_string();
-            if !alphabet_set.contains(&symbol) {
-                return Err(ExportError::TemporalSymbolOutsideAlphabet { symbol });
-            }
-        }
-    }
+    validate_resource_lifetime_selection(resource_lifetime_obligation.as_ref(), &alphabet_set)?;
 
     let hash = compute_hash(
         denotation.target_name(),
@@ -736,7 +797,7 @@ fn compute_hash(
     assumptions: &[PEntry],
     alphabet: &BTreeSet<String>,
     obligations: &[TEntry],
-    resource_lifetime_obligation: Option<&ResourceLifetimeObligationV1>,
+    resource_lifetime_obligation: Option<&ResourceLifetimeObligation>,
     generators: &[GEntry],
 ) -> String {
     // Build a canonical representation using BTreeMap (sorted keys).
@@ -779,7 +840,7 @@ fn compute_hash(
     // representation below.  When it is absent we append nothing, preserving
     // the byte-for-byte pre-PX7-F canonical input and hash.
     if let Some(resource) = resource_lifetime_obligation {
-        t_repr.push(canonical_resource_lifetime_obligation(resource));
+        t_repr.push(canonical_versioned_resource_lifetime_obligation(resource));
     }
     root.insert("obligations", t_repr.join("|"));
 
@@ -817,9 +878,10 @@ fn compute_hash(
 pub fn try_serialize_export(export: &BehavioralExport) -> Result<serde_json::Value, ExportError> {
     use serde_json::{json, Value};
 
-    if let Some(resource) = export.resource_lifetime_obligation.as_ref() {
-        validate_resource_lifetime_obligation(resource)?;
-    }
+    validate_resource_lifetime_selection(
+        export.resource_lifetime_obligation.as_ref(),
+        &export.alphabet,
+    )?;
 
     let guarantees: Vec<Value> = export
         .guarantees
@@ -859,7 +921,7 @@ pub fn try_serialize_export(export: &BehavioralExport) -> Result<serde_json::Val
         })
         .collect();
     if let Some(resource) = &export.resource_lifetime_obligation {
-        obligations.push(serialize_resource_lifetime_obligation(resource));
+        obligations.push(serialize_versioned_resource_lifetime_obligation(resource));
     }
 
     let generators: Vec<Value> = export
@@ -891,6 +953,282 @@ pub fn try_serialize_export(export: &BehavioralExport) -> Result<serde_json::Val
 /// callers that need to inspect that rejection use [`try_serialize_export`].
 pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
     try_serialize_export(export).expect("BehavioralExport contains an invalid resource schema")
+}
+
+const FS_HANDLE_REQUIRE_SAME_AT_V2: [ResourceLifetimeBindingPointV2; 4] = [
+    ResourceLifetimeBindingPointV2 {
+        operation: ken_host::HostOpV1::FsHandleMetadata,
+        role: ken_host::ResourceBindingRoleV2::Target,
+    },
+    ResourceLifetimeBindingPointV2 {
+        operation: ken_host::HostOpV1::FsReadAt,
+        role: ken_host::ResourceBindingRoleV2::File,
+    },
+    ResourceLifetimeBindingPointV2 {
+        operation: ken_host::HostOpV1::FsWriteAt,
+        role: ken_host::ResourceBindingRoleV2::File,
+    },
+    ResourceLifetimeBindingPointV2 {
+        operation: ken_host::HostOpV1::ResourceRelease,
+        role: ken_host::ResourceBindingRoleV2::Target,
+    },
+];
+
+const BUFFER_REQUIRE_SAME_AT_V2: [ResourceLifetimeBindingPointV2; 4] = [
+    ResourceLifetimeBindingPointV2 {
+        operation: ken_host::HostOpV1::FsReadAt,
+        role: ken_host::ResourceBindingRoleV2::Buffer,
+    },
+    ResourceLifetimeBindingPointV2 {
+        operation: ken_host::HostOpV1::FsWriteAt,
+        role: ken_host::ResourceBindingRoleV2::Buffer,
+    },
+    ResourceLifetimeBindingPointV2 {
+        operation: ken_host::HostOpV1::BufferFreeze,
+        role: ken_host::ResourceBindingRoleV2::Target,
+    },
+    ResourceLifetimeBindingPointV2 {
+        operation: ken_host::HostOpV1::ResourceRelease,
+        role: ken_host::ResourceBindingRoleV2::Target,
+    },
+];
+
+fn alphabet_contains_host_op(alphabet: &BTreeSet<String>, operation: ken_host::HostOpV1) -> bool {
+    alphabet.contains(canonical_host_perform_signature_v1(operation))
+}
+
+fn first_reachable_operation(
+    alphabet: &BTreeSet<String>,
+    operations: &[ken_host::HostOpV1],
+) -> Option<ken_host::HostOpV1> {
+    operations
+        .iter()
+        .copied()
+        .find(|operation| alphabet_contains_host_op(alphabet, *operation))
+}
+
+fn validate_resource_use_acquisitions(alphabet: &BTreeSet<String>) -> Result<(), ExportError> {
+    if !alphabet_contains_host_op(alphabet, ken_host::HostOpV1::BufferAllocate) {
+        if let Some(operation) = first_reachable_operation(
+            alphabet,
+            &[
+                ken_host::HostOpV1::FsReadAt,
+                ken_host::HostOpV1::FsWriteAt,
+                ken_host::HostOpV1::BufferFreeze,
+            ],
+        ) {
+            return Err(ExportError::ResourceLifetimeUseWithoutAcquire {
+                resource_kind: ken_host::ResourceKindV1::Buffer,
+                operation,
+            });
+        }
+    }
+
+    if !alphabet_contains_host_op(alphabet, ken_host::HostOpV1::FsOpen) {
+        if let Some(operation) = first_reachable_operation(
+            alphabet,
+            &[
+                ken_host::HostOpV1::FsHandleMetadata,
+                ken_host::HostOpV1::FsReadAt,
+                ken_host::HostOpV1::FsWriteAt,
+            ],
+        ) {
+            return Err(ExportError::ResourceLifetimeUseWithoutAcquire {
+                resource_kind: ken_host::ResourceKindV1::FsHandle,
+                operation,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn project_resource_lifetime_obligation(
+    alphabet: &BTreeSet<String>,
+) -> Result<Option<ResourceLifetimeObligation>, ExportError> {
+    validate_resource_use_acquisitions(alphabet)?;
+
+    if alphabet_contains_host_op(alphabet, ken_host::HostOpV1::BufferAllocate) {
+        Ok(Some(ResourceLifetimeObligation::V2(
+            project_resource_lifetime_obligation_v2(alphabet),
+        )))
+    } else if alphabet_contains_host_op(alphabet, ken_host::HostOpV1::FsOpen) {
+        Ok(Some(ResourceLifetimeObligation::V1(
+            ResourceLifetimeObligationV1::pinned(),
+        )))
+    } else {
+        Ok(None)
+    }
+}
+
+fn project_resource_lifetime_obligation_v2(
+    alphabet: &BTreeSet<String>,
+) -> ResourceLifetimeObligationV2 {
+    let reachable = |inventory: &[ResourceLifetimeBindingPointV2]| {
+        inventory
+            .iter()
+            .copied()
+            .filter(|point| alphabet_contains_host_op(alphabet, point.operation))
+            .collect()
+    };
+
+    let mut plans = Vec::new();
+    if alphabet_contains_host_op(alphabet, ken_host::HostOpV1::FsOpen) {
+        plans.push(ResourceLifetimePlanV2 {
+            resource_kind: ken_host::ResourceKindV1::FsHandle,
+            bind_at: ResourceLifetimeBindingPointV2 {
+                operation: ken_host::HostOpV1::FsOpen,
+                role: ken_host::ResourceBindingRoleV2::Target,
+            },
+            require_same_at: reachable(&FS_HANDLE_REQUIRE_SAME_AT_V2),
+        });
+    }
+    if alphabet_contains_host_op(alphabet, ken_host::HostOpV1::BufferAllocate) {
+        plans.push(ResourceLifetimePlanV2 {
+            resource_kind: ken_host::ResourceKindV1::Buffer,
+            bind_at: ResourceLifetimeBindingPointV2 {
+                operation: ken_host::HostOpV1::BufferAllocate,
+                role: ken_host::ResourceBindingRoleV2::Target,
+            },
+            require_same_at: reachable(&BUFFER_REQUIRE_SAME_AT_V2),
+        });
+    }
+
+    ResourceLifetimeObligationV2 {
+        schema_version: 2,
+        body_kind: "ResourceLifetimeObligationV2",
+        obligation_id: "resource-lifetime-v2",
+        status: "delegated",
+        correlation: ResourceLifetimeCorrelationV2 {
+            identity_type: "ResourceTraceIdentityV1",
+            event_field: "EffectEventV2.resource_bindings",
+            role_type: "ResourceBindingRoleV2",
+            canonical_order: "OperationDefined",
+        },
+        plans,
+        monitor_template: WardResourceLifetimeMonitorV2 {
+            correlate_every_role_binding: true,
+            successful_acquire_settles_exactly_once: true,
+            forbid_successful_use_after_settlement: true,
+            require_no_live_bracket_owned_identity_on: [
+                "NormalReturn",
+                "ReturnedError",
+                "ControlledTrap",
+            ],
+            retain_settlement_outcome: true,
+        },
+    }
+}
+
+fn validate_versioned_resource_lifetime_obligation(
+    value: &ResourceLifetimeObligation,
+    alphabet: &BTreeSet<String>,
+) -> Result<(), ExportError> {
+    match value {
+        ResourceLifetimeObligation::V1(value) => {
+            // Load-bearing compatibility path: the V1 validator and its exact
+            // operation-closure checks are unchanged.
+            validate_resource_lifetime_obligation(value)?;
+            for operation in [value.acquire_op, value.use_op, value.settle_op] {
+                let symbol = canonical_host_perform_signature_v1(operation).to_string();
+                if !alphabet.contains(&symbol) {
+                    return Err(ExportError::TemporalSymbolOutsideAlphabet { symbol });
+                }
+            }
+            Ok(())
+        }
+        ResourceLifetimeObligation::V2(value) => {
+            validate_resource_lifetime_obligation_v2(value, alphabet)
+        }
+    }
+}
+
+fn validate_resource_lifetime_selection(
+    value: Option<&ResourceLifetimeObligation>,
+    alphabet: &BTreeSet<String>,
+) -> Result<(), ExportError> {
+    validate_resource_use_acquisitions(alphabet)?;
+    let has_buffer = alphabet_contains_host_op(alphabet, ken_host::HostOpV1::BufferAllocate);
+    let has_file = alphabet_contains_host_op(alphabet, ken_host::HostOpV1::FsOpen);
+
+    match (has_buffer, has_file, value) {
+        (true, _, Some(value @ ResourceLifetimeObligation::V2(_))) => {
+            validate_versioned_resource_lifetime_obligation(value, alphabet)
+        }
+        (true, _, _) => Err(ExportError::MissingResourceLifetimePlan {
+            resource_kind: ken_host::ResourceKindV1::Buffer,
+        }),
+        (false, true, Some(value @ ResourceLifetimeObligation::V1(_))) => {
+            validate_versioned_resource_lifetime_obligation(value, alphabet)
+        }
+        (false, true, None) => Err(ExportError::MissingResourceLifetimePlan {
+            resource_kind: ken_host::ResourceKindV1::FsHandle,
+        }),
+        (false, true, Some(ResourceLifetimeObligation::V2(_))) | (false, false, Some(_)) => {
+            Err(ExportError::InvalidResourceLifetimeObligation)
+        }
+        (false, false, None) => Ok(()),
+    }
+}
+
+fn validate_resource_lifetime_obligation_v2(
+    value: &ResourceLifetimeObligationV2,
+    alphabet: &BTreeSet<String>,
+) -> Result<(), ExportError> {
+    validate_resource_use_acquisitions(alphabet)?;
+    let expected = project_resource_lifetime_obligation_v2(alphabet);
+
+    for resource_kind in [
+        ken_host::ResourceKindV1::FsHandle,
+        ken_host::ResourceKindV1::Buffer,
+    ] {
+        let acquisition = match resource_kind {
+            ken_host::ResourceKindV1::FsHandle => ken_host::HostOpV1::FsOpen,
+            ken_host::ResourceKindV1::Buffer => ken_host::HostOpV1::BufferAllocate,
+        };
+        if alphabet_contains_host_op(alphabet, acquisition)
+            && !value
+                .plans
+                .iter()
+                .any(|plan| plan.resource_kind == resource_kind)
+        {
+            return Err(ExportError::MissingResourceLifetimePlan { resource_kind });
+        }
+    }
+
+    for plan in &value.plans {
+        for point in std::iter::once(&plan.bind_at).chain(plan.require_same_at.iter()) {
+            if !alphabet_contains_host_op(alphabet, point.operation) {
+                return Err(ExportError::ResourceLifetimeOperationOutsideAlphabet {
+                    operation: point.operation,
+                });
+            }
+        }
+    }
+
+    if value == &expected {
+        Ok(())
+    } else {
+        Err(ExportError::InvalidResourceLifetimeObligation)
+    }
+}
+
+fn canonical_versioned_resource_lifetime_obligation(value: &ResourceLifetimeObligation) -> String {
+    match value {
+        // The frozen V1 canonicalizer remains the direct arm implementation.
+        ResourceLifetimeObligation::V1(value) => canonical_resource_lifetime_obligation(value),
+        ResourceLifetimeObligation::V2(value) => canonical_resource_lifetime_obligation_v2(value),
+    }
+}
+
+fn serialize_versioned_resource_lifetime_obligation(
+    value: &ResourceLifetimeObligation,
+) -> serde_json::Value {
+    match value {
+        // The frozen V1 serializer remains the direct arm implementation.
+        ResourceLifetimeObligation::V1(value) => serialize_resource_lifetime_obligation(value),
+        ResourceLifetimeObligation::V2(value) => serialize_resource_lifetime_obligation_v2(value),
+    }
 }
 
 fn validate_resource_lifetime_obligation(
@@ -955,6 +1293,138 @@ fn serialize_resource_lifetime_obligation(
     })
 }
 
+const fn canonical_resource_kind_v1(value: ken_host::ResourceKindV1) -> &'static str {
+    match value {
+        ken_host::ResourceKindV1::FsHandle => "FsHandle",
+        ken_host::ResourceKindV1::Buffer => "Buffer",
+    }
+}
+
+const fn canonical_resource_binding_role_v2(
+    value: ken_host::ResourceBindingRoleV2,
+) -> &'static str {
+    match value {
+        ken_host::ResourceBindingRoleV2::File => "File",
+        ken_host::ResourceBindingRoleV2::Buffer => "Buffer",
+        ken_host::ResourceBindingRoleV2::Target => "Target",
+    }
+}
+
+fn canonical_resource_binding_point_v2(value: ResourceLifetimeBindingPointV2) -> String {
+    format!(
+        "({},{})",
+        canonical_host_perform_signature_v1(value.operation),
+        canonical_resource_binding_role_v2(value.role)
+    )
+}
+
+fn canonical_resource_lifetime_plan_v2(value: &ResourceLifetimePlanV2) -> String {
+    let require_same_at = value
+        .require_same_at
+        .iter()
+        .copied()
+        .map(canonical_resource_binding_point_v2)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "resource_kind={};bind_at=Successful{};require_same_at=[{}]",
+        canonical_resource_kind_v1(value.resource_kind),
+        canonical_resource_binding_point_v2(value.bind_at),
+        require_same_at,
+    )
+}
+
+fn canonical_resource_lifetime_obligation_v2(value: &ResourceLifetimeObligationV2) -> String {
+    let plans = value
+        .plans
+        .iter()
+        .map(canonical_resource_lifetime_plan_v2)
+        .collect::<Vec<_>>()
+        .join("|");
+    format!(
+        "schema_version={};body_kind={};obligation_id={};status={};identity_type={};event_field={};role_type={};canonical_order={};plans=[{}];correlate_every_role_binding={};successful_acquire_settles_exactly_once={};forbid_successful_use_after_settlement={};require_no_live_bracket_owned_identity_on=[{},{},{}];retain_settlement_outcome={}",
+        value.schema_version,
+        value.body_kind,
+        value.obligation_id,
+        value.status,
+        value.correlation.identity_type,
+        value.correlation.event_field,
+        value.correlation.role_type,
+        value.correlation.canonical_order,
+        plans,
+        value.monitor_template.correlate_every_role_binding,
+        value
+            .monitor_template
+            .successful_acquire_settles_exactly_once,
+        value
+            .monitor_template
+            .forbid_successful_use_after_settlement,
+        value
+            .monitor_template
+            .require_no_live_bracket_owned_identity_on[0],
+        value
+            .monitor_template
+            .require_no_live_bracket_owned_identity_on[1],
+        value
+            .monitor_template
+            .require_no_live_bracket_owned_identity_on[2],
+        value.monitor_template.retain_settlement_outcome,
+    )
+}
+
+fn serialize_resource_lifetime_obligation_v2(
+    value: &ResourceLifetimeObligationV2,
+) -> serde_json::Value {
+    use serde_json::{json, Value};
+
+    let plans: Vec<Value> = value
+        .plans
+        .iter()
+        .map(|plan| {
+            let require_same_at: Vec<Value> = plan
+                .require_same_at
+                .iter()
+                .map(|point| {
+                    json!([
+                        canonical_host_perform_signature_v1(point.operation),
+                        canonical_resource_binding_role_v2(point.role),
+                    ])
+                })
+                .collect();
+            json!({
+                "resource_kind": canonical_resource_kind_v1(plan.resource_kind),
+                "bind_at": format!(
+                    "Successful({}, {})",
+                    canonical_host_perform_signature_v1(plan.bind_at.operation),
+                    canonical_resource_binding_role_v2(plan.bind_at.role),
+                ),
+                "require_same_at": require_same_at,
+            })
+        })
+        .collect();
+
+    json!({
+        "schema_version": value.schema_version,
+        "body_kind": value.body_kind,
+        "obligation_id": value.obligation_id,
+        "status": value.status,
+        "correlation": {
+            "identity_type": value.correlation.identity_type,
+            "event_field": value.correlation.event_field,
+            "role_type": value.correlation.role_type,
+            "canonical_order": value.correlation.canonical_order,
+        },
+        "plans": plans,
+        "monitor_template": {
+            "correlate_every_role_binding": value.monitor_template.correlate_every_role_binding,
+            "successful_acquire_settles_exactly_once": value.monitor_template.successful_acquire_settles_exactly_once,
+            "forbid_successful_use_after_settlement": value.monitor_template.forbid_successful_use_after_settlement,
+            "require_no_live_bracket_owned_identity_on": value.monitor_template.require_no_live_bracket_owned_identity_on,
+            "retain_settlement_outcome": value.monitor_template.retain_settlement_outcome,
+        }
+    })
+}
+
 #[cfg(test)]
 mod resource_lifetime_hash_tests {
     use super::*;
@@ -967,17 +1437,106 @@ mod resource_lifetime_hash_tests {
         let alphabet = BTreeSet::from(["FsOpen".to_string()]);
 
         let hash = |resource: &ResourceLifetimeObligationV1| {
+            let resource = ResourceLifetimeObligation::V1(resource.clone());
             compute_hash(
                 "resource-target",
                 &[],
                 &[],
                 &alphabet,
                 &[],
-                Some(resource),
+                Some(&resource),
                 &[],
             )
         };
         assert_ne!(hash(&pinned), hash(&independent_event_lookalike));
+    }
+
+    #[test]
+    fn v2_descriptor_participates_in_hash_and_specializes_in_canonical_order() {
+        let alphabet = BTreeSet::from([
+            "BufferAllocate".to_string(),
+            "BufferFreeze".to_string(),
+            "FsOpen".to_string(),
+            "FsReadAt".to_string(),
+            "ResourceRelease".to_string(),
+        ]);
+        let projected = project_resource_lifetime_obligation_v2(&alphabet);
+        assert_eq!(
+            projected
+                .plans
+                .iter()
+                .map(|plan| plan.resource_kind)
+                .collect::<Vec<_>>(),
+            vec![
+                ken_host::ResourceKindV1::FsHandle,
+                ken_host::ResourceKindV1::Buffer,
+            ]
+        );
+        assert_eq!(
+            projected.plans[0].require_same_at,
+            vec![
+                ResourceLifetimeBindingPointV2 {
+                    operation: ken_host::HostOpV1::FsReadAt,
+                    role: ken_host::ResourceBindingRoleV2::File,
+                },
+                ResourceLifetimeBindingPointV2 {
+                    operation: ken_host::HostOpV1::ResourceRelease,
+                    role: ken_host::ResourceBindingRoleV2::Target,
+                },
+            ]
+        );
+        assert_eq!(
+            projected.plans[1].require_same_at,
+            vec![
+                ResourceLifetimeBindingPointV2 {
+                    operation: ken_host::HostOpV1::FsReadAt,
+                    role: ken_host::ResourceBindingRoleV2::Buffer,
+                },
+                ResourceLifetimeBindingPointV2 {
+                    operation: ken_host::HostOpV1::BufferFreeze,
+                    role: ken_host::ResourceBindingRoleV2::Target,
+                },
+                ResourceLifetimeBindingPointV2 {
+                    operation: ken_host::HostOpV1::ResourceRelease,
+                    role: ken_host::ResourceBindingRoleV2::Target,
+                },
+            ]
+        );
+        let mut reversed = projected.clone();
+        reversed.plans.reverse();
+        assert_eq!(
+            validate_resource_lifetime_obligation_v2(&reversed, &alphabet),
+            Err(ExportError::InvalidResourceLifetimeObligation),
+            "FsHandle then Buffer is the only canonical plan order"
+        );
+
+        let hash = |resource: ResourceLifetimeObligationV2| {
+            let resource = ResourceLifetimeObligation::V2(resource);
+            compute_hash(
+                "v2-resource-target",
+                &[],
+                &[],
+                &alphabet,
+                &[],
+                Some(&resource),
+                &[],
+            )
+        };
+        let mut wrong_status = projected.clone();
+        wrong_status.status = "proved";
+        assert_ne!(hash(projected), hash(wrong_status));
+    }
+
+    #[test]
+    fn buffer_use_without_acquire_is_a_named_pre_export_error() {
+        let alphabet = BTreeSet::from(["BufferFreeze".to_string(), "ResourceRelease".to_string()]);
+        assert_eq!(
+            project_resource_lifetime_obligation(&alphabet),
+            Err(ExportError::ResourceLifetimeUseWithoutAcquire {
+                resource_kind: ken_host::ResourceKindV1::Buffer,
+                operation: ken_host::HostOpV1::BufferFreeze,
+            })
+        );
     }
 }
 

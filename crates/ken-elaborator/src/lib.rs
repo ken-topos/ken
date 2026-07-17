@@ -64,8 +64,10 @@ pub use export::{
     canonical_host_perform_signature_v1, canonical_l5_perform_signature_v1,
     canonical_perform_node_signature_v1, emit_checked_target_export, serialize_export,
     try_serialize_export, BehavioralExport, ExportError, GEntry, PEntry, PStatus,
-    PerformNodeInventoryV1, PerformNodeSignatureV1, QEntry, ResourceLifetimeCorrelationV1,
-    ResourceLifetimeObligationV1, TEntry, WardResourceLifetimeMonitorV1,
+    PerformNodeInventoryV1, PerformNodeSignatureV1, QEntry, ResourceLifetimeBindingPointV2,
+    ResourceLifetimeCorrelationV1, ResourceLifetimeCorrelationV2, ResourceLifetimeObligation,
+    ResourceLifetimeObligationV1, ResourceLifetimeObligationV2, ResourceLifetimePlanV2, TEntry,
+    WardResourceLifetimeMonitorV1, WardResourceLifetimeMonitorV2,
 };
 pub use extract::{
     v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,
