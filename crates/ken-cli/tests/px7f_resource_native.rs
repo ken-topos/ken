@@ -115,7 +115,12 @@ fn right_masks (error : ResourceError) : Bool =
         True |-> eq_int held 1;
         False |-> False
       };
-    ReleaseFailed kind identity io |-> False
+    ReleaseFailed kind identity io |-> False;
+    ResourceKindMismatch expected actual |-> False;
+    BufferLimit |-> False;
+    InvalidOffset |-> False;
+    InvalidBounds |-> False;
+    NoProgress |-> False
   }
 
 fn bracket_has_right_denial (bracket : ResourceBracketResult ResourceError Unit) : Bool =
@@ -151,6 +156,13 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 "#;
 
 const DOUBLE_RELEASE: &str = r#"program capabilities FS AFull
+fn double_release_unexpected (error : ResourceError)
+  : HostIO AFull (ResourceBodyResult ResourceError Unit) =
+  Ret (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (ResourceBodyResult ResourceError Unit)
+    (ResourceBodyErr ResourceError Unit error)
+
 fn double_release_second_error (error : ResourceError)
   : HostIO AFull (ResourceBodyResult ResourceError Unit) =
   match error {
@@ -173,7 +185,13 @@ fn double_release_second_error (error : ResourceError)
     ReleaseFailed kind identity io |-> Ret (Coproduct (FSOp AFull) AmbientOp)
       (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
       (ResourceBodyResult ResourceError Unit)
-      (ResourceBodyErr ResourceError Unit (ReleaseFailed kind identity io))
+      (ResourceBodyErr ResourceError Unit (ReleaseFailed kind identity io));
+    ResourceKindMismatch expected actual |->
+      double_release_unexpected (ResourceKindMismatch expected actual);
+    BufferLimit |-> double_release_unexpected BufferLimit;
+    InvalidOffset |-> double_release_unexpected InvalidOffset;
+    InvalidBounds |-> double_release_unexpected InvalidBounds;
+    NoProgress |-> double_release_unexpected NoProgress
   }
 
 fn double_release_after_second (outcome : Result ResourceError Unit)

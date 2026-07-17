@@ -598,7 +598,10 @@ fn host_operation_family(operation: ken_host::HostOpV1) -> (&'static str, &'stat
         | ken_host::HostOpV1::FsChangeMode
         | ken_host::HostOpV1::FsOpen
         | ken_host::HostOpV1::FsHandleMetadata
+        | ken_host::HostOpV1::FsReadAt
+        | ken_host::HostOpV1::FsWriteAt
         | ken_host::HostOpV1::ResourceRelease => ("FSOp", "FS"),
+        ken_host::HostOpV1::BufferAllocate | ken_host::HostOpV1::BufferFreeze => ("FSOp", "FS"),
     }
 }
 
@@ -654,7 +657,11 @@ pub const fn canonical_host_perform_signature_v1(operation: ken_host::HostOpV1) 
         ken_host::HostOpV1::FsChangeMode => "FsChangeMode",
         ken_host::HostOpV1::FsOpen => "FsOpen",
         ken_host::HostOpV1::FsHandleMetadata => "FsHandleMetadata",
+        ken_host::HostOpV1::FsReadAt => "FsReadAt",
+        ken_host::HostOpV1::FsWriteAt => "FsWriteAt",
         ken_host::HostOpV1::ResourceRelease => "ResourceRelease",
+        ken_host::HostOpV1::BufferAllocate => "BufferAllocate",
+        ken_host::HostOpV1::BufferFreeze => "BufferFreeze",
     }
 }
 
@@ -1073,5 +1080,92 @@ proc second (_value : Unit)
         legacy_wire.as_object_mut().unwrap().remove("alphabet");
         legacy_wire.as_object_mut().unwrap().remove("hash");
         assert_eq!(current_wire, legacy_wire);
+    }
+
+    #[test]
+    fn px8_runtime_operations_have_exact_fs_family_and_injective_spellings() {
+        let new_operations = [
+            (ken_host::HostOpV1::FsReadAt, "FsReadAt"),
+            (ken_host::HostOpV1::FsWriteAt, "FsWriteAt"),
+            (ken_host::HostOpV1::BufferAllocate, "BufferAllocate"),
+            (ken_host::HostOpV1::BufferFreeze, "BufferFreeze"),
+        ];
+        let all_spellings = ken_host::HostOpV1::ALL
+            .into_iter()
+            .map(canonical_host_perform_signature_v1)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(all_spellings.len(), ken_host::HostOpV1::ALL.len());
+        for (operation, spelling) in new_operations {
+            assert_eq!(host_operation_family(operation), ("FSOp", "FS"));
+            assert_eq!(canonical_host_perform_signature_v1(operation), spelling);
+            let accepted = canonical_perform_node_signature_v1(&PerformNodeSignatureV1::Host {
+                family_symbol: "FSOp".to_string(),
+                operation,
+            })
+            .expect("PX8 runtime operation belongs to FSOp");
+            assert_eq!(accepted, spelling);
+            assert_ne!(
+                spelling,
+                canonical_l5_perform_signature_v1("FSOp", spelling),
+                "Host and L5 identity namespaces cannot alias"
+            );
+            for wrong_family in ["ConsoleOp", "ClockOp", "BufferOp"] {
+                assert!(matches!(
+                    canonical_perform_node_signature_v1(&PerformNodeSignatureV1::Host {
+                        family_symbol: wrong_family.to_string(),
+                        operation,
+                    }),
+                    Err(ExportError::NonClosedPerformInventory { .. })
+                ));
+            }
+        }
+        let legacy = [
+            (ken_host::HostOpV1::ConsoleRead, 0x0101, "ConsoleRead"),
+            (ken_host::HostOpV1::ConsoleWrite, 0x0102, "ConsoleWrite"),
+            (ken_host::HostOpV1::ConsoleFlush, 0x0103, "ConsoleFlush"),
+            (
+                ken_host::HostOpV1::ConsoleIsTerminal,
+                0x0104,
+                "ConsoleIsTerminal",
+            ),
+            (ken_host::HostOpV1::ClockWallNow, 0x0201, "ClockWallNow"),
+            (ken_host::HostOpV1::FsReadFile, 0x0301, "FsReadFile"),
+            (ken_host::HostOpV1::FsWriteFile, 0x0302, "FsWriteFile"),
+            (ken_host::HostOpV1::FsAppendFile, 0x0303, "FsAppendFile"),
+            (ken_host::HostOpV1::FsMetadata, 0x0304, "FsMetadata"),
+            (
+                ken_host::HostOpV1::FsReadDirectory,
+                0x0305,
+                "FsReadDirectory",
+            ),
+            (
+                ken_host::HostOpV1::FsCreateDirectory,
+                0x0306,
+                "FsCreateDirectory",
+            ),
+            (ken_host::HostOpV1::FsRemoveFile, 0x0307, "FsRemoveFile"),
+            (
+                ken_host::HostOpV1::FsRemoveDirectory,
+                0x0308,
+                "FsRemoveDirectory",
+            ),
+            (ken_host::HostOpV1::FsRename, 0x0309, "FsRename"),
+            (ken_host::HostOpV1::FsChangeMode, 0x030a, "FsChangeMode"),
+            (ken_host::HostOpV1::FsOpen, 0x030b, "FsOpen"),
+            (
+                ken_host::HostOpV1::FsHandleMetadata,
+                0x030c,
+                "FsHandleMetadata",
+            ),
+            (
+                ken_host::HostOpV1::ResourceRelease,
+                0x0401,
+                "ResourceRelease",
+            ),
+        ];
+        for (operation, discriminant, spelling) in legacy {
+            assert_eq!(operation as u16, discriminant);
+            assert_eq!(canonical_host_perform_signature_v1(operation), spelling);
+        }
     }
 }

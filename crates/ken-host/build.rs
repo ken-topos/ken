@@ -147,7 +147,7 @@ fn parse_effect_catalog() -> EffectCatalog {
                     fields[1].parse().expect("effect schema is u64"),
                 ));
             }
-            "lifetime" | "tag" | "error" => {
+            "lifetime" | "limit" | "tag" | "error" => {
                 assert_eq!(fields.len(), 3, "effect binding rows have three fields");
                 bindings.push((
                     fields[0].to_string(),
@@ -158,7 +158,7 @@ fn parse_effect_catalog() -> EffectCatalog {
             kind => panic!("unknown effect catalog row {kind}"),
         }
     }
-    assert_eq!(operations.len(), 18, "HostOpV1 catalog is closed at 18");
+    assert_eq!(operations.len(), 22, "HostOpV1 catalog is closed at 22");
     let mut ids = operations
         .iter()
         .map(|operation| operation.id)

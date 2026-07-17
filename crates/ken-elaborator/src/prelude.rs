@@ -1318,7 +1318,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // generation-checked resource table is its sole interpreter. The trace
     // identity has one private two-u32-limb constructor so the native reply
     // can preserve all 64 bits without narrowing through signed Ken `Int`.
-    elab.elaborate_decl("data ResourceKind = FsHandle")
+    elab.elaborate_decl("data ResourceKind = FsHandle | Buffer")
         .map_err(|e| ElabError::Internal(format!("prelude ResourceKind failed: {e}")))?;
     let fs_handle_id = elab
         .globals
@@ -1355,7 +1355,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         ));
     }
     elab.elaborate_decl(
-        "data ResourceError = ResourceHostIO IOError | Closed | MalformedResource | RightNotHeld Int Int | ReleaseFailed ResourceKind ResourceTraceIdentity IOError",
+        "data ResourceError = ResourceHostIO IOError | Closed | MalformedResource | RightNotHeld Int Int | ReleaseFailed ResourceKind ResourceTraceIdentity IOError | ResourceKindMismatch ResourceKind ResourceKind | BufferLimit | InvalidOffset | InvalidBounds | NoProgress",
     )
     .map_err(|e| ElabError::Internal(format!("prelude ResourceError failed: {e}")))?;
     let resource_host_io_id = elab
@@ -1645,7 +1645,12 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            Closed |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketOk e r value); \
            MalformedResource |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r MalformedResource); \
            RightNotHeld required held |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (RightNotHeld required held)); \
-           ReleaseFailed kind identity io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ReleaseFailed kind identity io)) \
+           ReleaseFailed kind identity io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ReleaseFailed kind identity io)); \
+           ResourceKindMismatch expected actual |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ResourceKindMismatch expected actual)); \
+           BufferLimit |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r BufferLimit); \
+           InvalidOffset |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r InvalidOffset); \
+           InvalidBounds |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r InvalidBounds); \
+           NoProgress |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r NoProgress) \
          }",
     )
     .map_err(|e| {
@@ -1660,7 +1665,12 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            Closed |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyError e r body_error); \
            MalformedResource |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error MalformedResource); \
            RightNotHeld required held |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (RightNotHeld required held)); \
-           ReleaseFailed kind identity io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ReleaseFailed kind identity io)) \
+           ReleaseFailed kind identity io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ReleaseFailed kind identity io)); \
+           ResourceKindMismatch expected actual |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ResourceKindMismatch expected actual)); \
+           BufferLimit |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error BufferLimit); \
+           InvalidOffset |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error InvalidOffset); \
+           InvalidBounds |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error InvalidBounds); \
+           NoProgress |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error NoProgress) \
          }",
     )
     .map_err(|e| {
