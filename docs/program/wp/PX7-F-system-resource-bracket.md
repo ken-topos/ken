@@ -11,9 +11,12 @@
   route `withResource acquire body`, use combinators, an optional early
   `release`, and the source-level honesty statements — with the generated
   **`ResourceLifetimeObligationV1`** delegated T-obligation wired into the
-  `export.rs` assumption boundary, and end-to-end success/error/**controlled
-  trap**/escape controls. This is the **follow** WP of PX7; it consumes a stable
-  substrate and adds no new runtime enforcement.
+  `export.rs` assumption boundary, end-to-end success/error/escape controls,
+  and private caller-controlled evidence for controlled-trap settlement
+  ordering. The public checked-source controlled-trap producer and end-to-end
+  fixture are **DEFERRED** to the tracked Language/Runtime prerequisite. This is
+  the **follow** WP of PX7; it consumes a stable substrate and adds no new
+  runtime enforcement.
 - **Depends on:** **PX7-R merged** (the `ResourceTableV1` / `ResourceTokenV1` /
   `ResourceTraceIdentityV1` / `FsOpen` / handle-metadata / `ResourceRelease` /
   versioned discriminator substrate this consumes) **AND** the **Spec enclave's
@@ -58,11 +61,14 @@
   `Closed`**. **State exactly that in `System/Resource`; do NOT say the type
   prevents escape.**
 - **`body` is a DELAYED function** so acquisition precedes it and settlement
-  follows its returned value/error. Normal return, returned error, and a
-  **controlled Ken trap** all run settlement. **External kill/abort/fatal
-  signal/machine failure are OUTSIDE the guarantee and must be named as such.** A
-  Ken trap must reach the runtime as a **controlled terminal outcome**; an
-  aborting trap is **not** an acceptable AC.
+  follows its returned value/error. The fixed runtime contract settles normal
+  return, returned error, and a **controlled runtime trap**. This candidate
+  proves the trap-ordering seam through private caller-control; the public
+  checked-source producer and public end-to-end fixture are **DEFERRED** to the
+  tracked Language/Runtime prerequisite. **External kill/abort/fatal
+  signal/machine failure are OUTSIDE the guarantee and must be named as such.**
+  The eventual public trap must be a **controlled terminal outcome**; an
+  aborting trap is **not** an acceptable substitute.
 - **Optional early `release` inside `body`** invalidates all copies. The bracket
   owns a private `release_if_live` finalizer, so early release + bracket exit does
   **not** double-close. Public `release` is **non-idempotent** (2nd call →
@@ -189,7 +195,9 @@
   bracket returns the release failure; body-error + release-failure → preserve
   both; **controlled trap + cleanup-failure → trap primary + ordered
   cleanup-failure list secondary**, neither overwritten nor dropped (over PX7-R's
-  versioned discriminator).
+  versioned discriminator). This candidate exercises the trap arm only through
+  the private caller-controlled settlement proof; public checked-source
+  reachability and its end-to-end fixture are **DEFERRED**.
 - **Source-level honesty (ADR-0017), in the Ken source itself — not just a Rust
   comment or this frame:** handles are runtime-enforced and Ward-checked; Ken
   does **not** make them affine; escaped copies become `Closed`; the guarantee
@@ -201,8 +209,8 @@
 the opaque `Resource k`, the bracket result/error shape, `withResource`, use
 combinators, and optional early `release`; the delayed-`body` acquisition →
 settlement sequencing over PX7-R's `FsOpen`/handle-metadata/`ResourceRelease`;
-the controlled-trap settlement path (trap reaches the runtime as a controlled
-terminal outcome); the surface error sum `ResourceHostIO` / `Closed` /
+the controlled-trap runtime settlement semantics and private caller-controlled
+ordering proof; the surface error sum `ResourceHostIO` / `Closed` /
 `MalformedResource` / `RightNotHeld` / `ReleaseFailed` lifted from PX7-R; **the
 authorized additive native `REPLY_RESOURCE_ERROR` ABI projection** (a distinct
 generated reply tag + `ResourceErrorReplyV1` payload, per the Architect ruling) so
@@ -213,8 +221,11 @@ compiler symbol resolution / C-probe + mutation tests) moving together; the
 generated `ResourceLifetimeObligationV1` delegated T-obligation emitted into
 `export.rs` (per the pinned Spec schema) whenever `Σ` reaches a resource
 acquisition; the trap-primary + ordered-cleanup-failure secondary observation
-(surface half of the versioned discriminator); the source-level honesty
-statements; and end-to-end success/error/controlled-trap/escape controls.
+(surface half of the versioned discriminator), evidenced privately under
+caller-control; the source-level honesty statements; and end-to-end
+success/error/escape controls. The public checked-source controlled-trap
+producer and public end-to-end fixture are **DEFERRED** to the tracked
+Language/Runtime prerequisite.
 
 **Out of scope:** any change to PX7-R's `ResourceTableV1` / generation discipline
 / table RAII / native enforcement / token / close ownership (consume, do not
@@ -245,11 +256,14 @@ a new capability family or `RightSet` bit; any kernel change.
    settlement runs after `body`'s returned value/error. The private
    `release_if_live` finalizer settles once — early `release` in `body` +
    bracket exit does not double-close; public `release` is non-idempotent.
-3. **Controlled-trap settlement.** A Ken trap inside `body` reaches the runtime
-   as a **controlled terminal outcome** that still runs settlement (trap primary,
-   ordered cleanup-failure list secondary). An aborting trap is not acceptable —
-   the trap path is the controlled one. External kill/abort/signal/machine
-   failure are documented as outside the guarantee.
+3. **Controlled-trap settlement semantics + private ordering proof.** A
+   controlled runtime trap presented at the invocation-settlement boundary keeps
+   the trap primary and appends the ordered cleanup-failure list secondary. This
+   candidate proves that ordering with a private caller-controlled fixture. The
+   public checked-source producer and public acquire→body→settlement fixture are
+   **DEFERRED** to the tracked Language/Runtime prerequisite. An abort is not an
+   acceptable substitute; external kill/abort/signal/machine failure remain
+   outside the guarantee.
 4. **Escape semantics + source honesty.** A `Resource k` copied/returned out of
    the bracket is legal Ken but every later use returns `Closed`. The
    `System/Resource` **source** states this and the full honesty set
@@ -262,10 +276,13 @@ a new capability family or `RightSet` bit; any kernel change.
    `Σ` contains a resource acquisition, carrying the acquire/use/settle op set +
    identity-correlation policy. It correlates acquisition identity with
    settlement — **not** two uncorrelated `Pred::Event` atoms.
-6. **End-to-end controls.** Success, returned-error, controlled-trap, and escape
-   scenarios each drive the full acquire→body→settlement path and assert the
-   exact surface result + the exact emitted obligation + the exact canonical
-   observation (including multi-fault ordering).
+6. **End-to-end controls.** Success, returned-error, and escape scenarios drive
+   the full acquire→body→settlement path and assert the exact surface result +
+   the exact emitted obligation + the exact canonical observation. The private
+   caller-controlled trap fixture asserts invocation-settlement multi-fault
+   ordering only. The public checked-source controlled-trap producer and public
+   end-to-end fixture are **DEFERRED** to the tracked Language/Runtime
+   prerequisite.
 
 ## Acceptance criteria (testable)
 
@@ -288,23 +305,23 @@ a new capability family or `RightSet` bit; any kernel change.
   reading the shipped source, not a comment. **✅ satisfied in this candidate —
   runs via the landed PX7-P dynamic-constructor carrier/dispatcher + this
   resource adapter (`origin/main @ 473e5d51`).**
-- **AC3 — settlement on normal/error/controlled-trap.** Normal return, returned
-  error, and a controlled Ken trap each run settlement exactly once. Early
-  `release` in `body` + bracket exit does not double-close (no second OS close);
-  public `release` twice → `Closed` on the second. The trap reaches the runtime
-  as a controlled terminal outcome (an aborting trap is not exercised as success
-  — it is a rejected shape). Normal/error settlement and public double-release
-  are satisfied in this candidate. **DEFERRED:** public checked-Ken
-  controlled-trap reachability awaits the tracked Language/Runtime
-  checked-source trap-producer prerequisite; the private caller-controlled
-  trap-primary + cleanup-secondary fixture proves only invocation-settlement
-  ordering and is not the public face.
+- **AC3 — settlement on normal/error/controlled-trap.** The runtime settlement
+  contract handles normal return, returned error, and a controlled trap exactly
+  once. Early `release` in `body` + bracket exit does not double-close (no second
+  OS close); public `release` twice → `Closed` on the second. Normal/error
+  settlement and public double-release are satisfied in this candidate. The
+  private caller-controlled trap-primary + cleanup-secondary fixture proves only
+  invocation-settlement ordering and is not the public face. **DEFERRED:** public
+  checked-Ken controlled-trap reachability awaits the tracked Language/Runtime
+  checked-source trap-producer prerequisite; an abort remains a rejected proxy.
 - **AC4 — multi-fault ordering + `ReleaseFailed` via private injection.**
   body-success + release-failure → bracket result is the `ReleaseFailed`;
-  body-error + release-failure → both preserved; controlled-trap + cleanup-failure
-  → trap primary + ordered cleanup-failure list secondary, neither dropped nor
-  overwritten (over PX7-R's versioned discriminator). Assert the exact canonical
-  observation. `ReleaseFailed` construction, ABI encode/decode + field
+  body-error + release-failure → both preserved; the private caller-controlled
+  controlled-trap + cleanup-failure fixture keeps the trap primary and the
+  cleanup-failure list ordered, neither dropped nor overwritten (over PX7-R's
+  versioned discriminator). This is invocation-settlement evidence, not the
+  deferred public checked-source face. Assert the exact canonical observation.
+  `ReleaseFailed` construction, ABI encode/decode + field
   preservation, closed-after-error, and no-retry are exercised with the **private
   injected close result** (the caller-control label) — **not** claimed as an
   observed linked-artifact OS-close failure, and **no** env/TLS/script carrier is
@@ -386,8 +403,10 @@ a new capability family or `RightSet` bit; any kernel change.
   resource kind. Lift only the reachable V1 roster from `ResourceErrorV1`:
   `{ Closed, MalformedResource, RightNotHeld, ReleaseFailed }` (grounded at
   `crates/ken-host/src/effect_v1.rs:465`).
-- Do NOT accept an aborting trap as a settlement path; the controlled trap is the
-  guaranteed one. Do NOT claim external process destruction is covered.
+- Do NOT use an aborting trap as a proxy for the deferred public checked-source
+  face; the eventual public producer must yield a controlled terminal outcome.
+  This candidate proves trap settlement ordering only through private
+  caller-control. Do NOT claim external process destruction is covered.
 - Do NOT emit the two-atom `Pred::Event("acquire")`/`"release"` form as the
   exactly-once proxy.
 - Do NOT merge before PX7-R is merged and the Spec schema is pinned.
