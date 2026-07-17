@@ -108,6 +108,15 @@ sections; seeded opportunistically as core sections are written.)
 
 ## Next action
 
+**Incremental normative pins:** PX8-T specifies the additive
+`ResourceLifetimeObligationV2` body and role-labelled
+`EffectEventV2.resource_bindings` observation for targets that use buffers,
+while preserving the no-buffer V1 export bytes exactly. It also pins the closed
+positioned-I/O progress sums, the write-zero `NoProgress` boundary, primitive
+positivity/bounds, `BufferLimitsV1`, `ResourceKindMismatch`, and the formal
+derived-`writeAll` termination/completeness/error-prefix contract. PX8-R and
+PX8-F implement against these fixed identities.
+
 **Incremental normative pins:** PX7-T specifies the additive
 `ResourceLifetimeObligationV1` body in the behavioral export's `T` channel: one
 `ResourceTraceIdentityV1`-correlated acquire/use/settle obligation, status

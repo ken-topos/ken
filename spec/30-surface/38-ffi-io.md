@@ -1,9 +1,12 @@
 # Bytes, I/O, and the FFI
 
-> Status: **§1 impl-ready (L6); §2–§4 impl-ready (L7)** — elaborated to
-> team-ready rigor; normative for the *trust and effect discipline*. **§1
-> (`Bytes` + binary I/O, L6)** is built against the **landed** kernel/runtime
-> (`14 §5` primitives, `41 §3a` encoding, `36 §1` effect rows). **§2–§4 (the
+> Status: **§1.1–§1.6 impl-ready (L6); §1.7 contract-pinned (PX8-T); §2–§4
+> impl-ready (L7)** — elaborated to team-ready rigor and normative for the
+> *trust and effect discipline*. **§1.1–§1.6 (`Bytes` + binary I/O, L6)** are
+> built against the **landed** kernel/runtime (`14 §5` primitives, `41 §3a`
+> encoding, `36 §1` effect rows). **§1.7** pins the contract that PX8-R/PX8-F
+> must implement; it does not claim that substrate or surface is landed.
+> **§2–§4 (the
 > `foreign` FFI + the trust boundary, L7)** are elaborated below: the `foreign`
 > declaration + C-ABI marshalling (§2), the trust-boundary discipline
 > (foreign-as-listed-postulate, `pure`-as-claim, runtime contracts at the edge,
@@ -302,6 +305,200 @@ effect-tracking cases route a **real** I/O signature through the **actual** `36
 (The L7 `foreign`/trust-boundary cases live separately under
 `../../conformance/surface/ffi-io/`, `§5`.)
 
+### 1.7 Positioned buffer I/O and total `writeAll` (PX8-T)
+
+PX8 adds a bounded mutable-buffer floor without making ordinary Ken values
+mutable or affine. `Buffer` is a second runtime resource kind beside
+`FsHandle`; its opaque, copyable handle is acquired only through the public
+`withBuffer` bracket. Capacity is fixed, strictly positive, and non-growing for
+the handle's lifetime. The runtime invalidates escaped copies when the bracket
+settles, exactly as for file resources. Allocation consumes no ambient
+capability right. It is admitted against one deterministic policy:
+
+```text
+BufferLimitsV1 {
+  per_buffer_max_capacity: Int,
+  invocation_max_live_capacity: Int,
+}
+```
+
+Both maxima are positive. The first bounds every allocation; the second bounds
+the sum of live buffer capacities in one invocation. The complete policy is
+bound into the checked/native plan. Reading either limit from an environment
+variable, silently growing a buffer, or placing buffers in the capability table
+is non-conforming.
+
+The closed resource-kind inventory becomes `FsHandle | Buffer`. Supplying a
+live token of the wrong kind produces the distinct fail-visible identity
+
+```text
+ResourceKindMismatch {
+  expected: ResourceKindV1,
+  actual: ResourceKindV1,
+}
+```
+
+under its own surface constructor and canonical wire discriminator. It is not
+`MalformedResource`: the token is valid and live, but belongs to the other
+kind. A buffer passed to an Fs-handle-only operation reports
+`{ expected: FsHandle, actual: Buffer }`; a file handle passed to a
+buffer-only operation reports the reversed payload. Valid same-kind controls
+succeed. These two rejecting directions and the two accepting controls are one
+non-degenerate conformance unit.
+
+#### 1.7.1 Buffer views and positioned single transfers
+
+There is no hidden file cursor and no mutable buffer cursor. The runtime tracks
+one initialized live window per buffer, while Ken observes only:
+
+- the opaque buffer handle;
+- an immutable `BufferWindow` request descriptor;
+- a constructor-private immutable `BufferSpan` for the exact current live
+  subrange; and
+- scalar projections, including span length.
+
+No pointer, borrowed slice, file descriptor, mutable reference, or backing
+region crosses the boundary. `spanBytes` (also called `freeze`) validates a
+current span and may copy that bounded span to immutable `Bytes`; it cannot
+expose the backing region. A `BufferSpan` carries a constructor-private
+structural `Nat` attempt budget equal to its byte length. User code can neither
+forge the budget nor choose a different one.
+
+The primitive floor consists of exactly one explicitly positioned transfer per
+direction:
+
+```text
+readAt file fileOffset buffer window
+writeAt file fileOffset buffer span
+```
+
+`fileOffset` is nonnegative, and target offset-plus-length arithmetic is checked
+for overflow before host I/O. Neither operation mutates a file-description
+cursor. Sequential reads, writes, copies, and seek-like state are derived code
+that explicitly threads `fileOffset + transferred`; PX8 adds neither a seek
+primitive nor vectored I/O.
+
+A window start in the closed range `0 ≤ start ≤ capacity` with a length beyond
+the available tail is capped to that tail, producing ordinary short progress.
+A negative start or one greater than capacity is an invalid-bounds error. A
+zero-length effective public request is handled by a derived wrapper without
+invoking either positive-length primitive.
+
+A mutating read invalidates the prior live window before the host operation.
+Positive success installs exactly the bytes actually read. EOF or error leaves
+the live window empty, so a short read cannot make stale bytes current.
+
+#### 1.7.2 The exact progress partition
+
+Progress is represented by operation-specific closed sums:
+
+```text
+data ReadProgress
+  = ReadSome BufferSpan TransferCount
+  | ReadEof
+
+data WriteProgress
+  = Wrote TransferCount
+```
+
+`TransferCount` is constructor-private, strictly positive, and bounded by the
+effective request. It has an `Int` projection. `ReadSome`'s `BufferSpan` and
+count are minted together, and the span length equals the count by
+construction. `Complete` and `Partial` are derived comparisons between the
+count and effective request; they are not runtime constructors or statuses.
+The checked view of a count carries its positivity and upper-bound witnesses;
+user code cannot detach those witnesses from the value or construct a count
+that violates them. The downstream proof therefore eliminates the checked
+result structure rather than postulating a fact about an arbitrary `Int`.
+
+For a positive effective request, the partition is exact:
+
+| Host observation | Result |
+|---|---|
+| read returns zero | `ReadEof` |
+| read returns `0 < n ≤ requested` | `ReadSome span n`, including a short read |
+| write returns `0 < n ≤ requested` | `Wrote n`, including a short write |
+| write returns zero | error `NoProgress`, never `Wrote` |
+
+`NoProgress` is the surface identity for the write-zero condition (also called
+`WriteZero` at a host boundary); it is not a successful progress value.
+
+The following are errors, never progress: `Closed`, `MalformedResource`,
+`ResourceKindMismatch`, `RightNotHeld`, invalid offset/window/bounds,
+buffer-limit or allocation failure, unsupported/nonblocking posture, and host
+I/O failure. `Interrupted` is a named error unless a separately specified and
+tested backend retry policy consumes it internally. `WouldBlock` belongs to
+PX12 and is not a PX8 progress status. PX9 may refine error payloads but must not
+change this progress partition.
+
+The primitive contracts exposed to checked Ken code include these propositions:
+
+- **write positivity/bounds:** successful `writeAt` on positive remaining bytes
+  yields `Wrote n` with `0 < n ≤ remaining`;
+- **read positivity/bounds:** successful `readAt` on a positive effective
+  request yields either `ReadEof` or `ReadSome span n` with
+  `0 < n ≤ requested` and `length span = n`;
+- **position and bounds:** every transfer uses the explicit nonnegative file
+  offset and an overflow-checked effective range; and
+- **tail capping:** a request that starts in range but extends beyond the buffer
+  tail uses the capped effective range, while an out-of-range start fails.
+
+The positivity propositions are reasonable-from contracts of the opaque
+runtime operation. They are fixed, audited primitive guarantees rather than a
+fresh `Axiom` at each caller. In particular, the `writeAll` proof below consumes
+write positivity; it does not assume progress from a runtime hope.
+
+#### 1.7.3 Derived `writeAll` and its theorem
+
+`writeAll` is transparent checked Ken code, not a host primitive. It takes a
+positioned file handle and `BufferSpan`, derives structural `Nat` fuel from the
+span's constructor-private attempt budget, and calls `writeAt` until the span is
+empty or the first transfer error occurs. The fuel is never caller-supplied.
+
+Let `B` be the initial span's bytes, `L` its byte length, and
+`n₁, …, nₖ` the counts returned by successful primitive calls in source order.
+Let `N = n₁ + … + nₖ`. The required theorem is the conjunction of:
+
+1. **termination:** `writeAll` performs at most `L` primitive calls and always
+   returns;
+2. **exact-prefix invariant:** after every successful-call prefix,
+   `0 ≤ N ≤ L`, the file offset and span start have both advanced by `N`, the
+   remaining length is `L - N`, and the bytes written are exactly `B[0..N)`;
+3. **success completeness:** `writeAll` returns success only when `N = L`, so
+   the entire input span has been written;
+4. **first-error preservation:** if the next primitive call returns transfer
+   error `e`, including `NoProgress`, `writeAll` returns that same first `e`
+   after exactly the prefix `B[0..N)` and makes no claim about bytes after that
+   prefix; and
+5. **all-success corollary:** if every primitive call succeeds, `writeAll`
+   returns success and writes all of `B`.
+
+The executable helper matches the structural budget. Empty input succeeds
+without a host call. In the `Suc fuel` branch it performs one positive-length
+`writeAt`; `Wrote n` advances offset and span by `n`, decreases remaining bytes
+strictly, and recurses with `fuel`; an error returns unchanged. Since every
+successful count is positive and at most the remaining length, no more than the
+original byte length successful steps are possible. Fuel exhaustion with bytes
+remaining is excluded by the positivity lemma and is not a user-visible error.
+
+PX8-F must supply real kernel-checked terms that consume the checked
+positivity/bounds witnesses and prove strict decrease, fuel sufficiency,
+success-implies-full-transfer, and error-prefix preservation. None may be an
+`Axiom` or a postulated `writeAll` theorem. Ward owns the resource-lifetime
+property of `71 §2.3`; it is not the termination proof.
+
+The conformance route has four independently reaching observations:
+
+1. all full writes return success with the whole span written;
+2. at least one positive short write still reaches success with exact prefix
+   accounting;
+3. a write-zero reaches and returns `NoProgress`; and
+4. a mid-stream transfer error returns that exact error after the exact written
+   prefix.
+
+Each seed must prove that its named branch was reached. A suite-green result or
+an output shared by a different branch is not evidence for this contract.
+
 ## 2. The FFI surface — the `foreign` declaration
 
 A **`foreign`** declaration binds a Ken name to an external (C-ABI) symbol,
@@ -547,9 +744,13 @@ goal of the whole chapter is that the unverified surface of any program is
 
 ## 6. What WS-L must deliver here (L6, L7)
 
+This WS-L accounting covers §1.1–§1.6 and §2–§5. The additive §1.7
+contract is PX8-R/PX8-F work and is not represented here as an L6/L7 delivery.
+
 `Bytes` + binary I/O (effect-tracked, encode/decode to `String`) — **elaborated
-in §1, the L6 deliverable**; lawful, derivable serialization with a provable
-round-trip (the **law/interface in §1.5**; the generic derivation is L8). And
+in §1.1–§1.6, the L6 deliverable**; lawful, derivable serialization with a
+provable round-trip (the **law/interface in §1.5**; the generic derivation is
+L8). And
 (**L7**, §2–§5): a **general** `foreign` FFI with typed/effect-rowed bindings
 and C-ABI marshalling (§2); the trust-boundary discipline — foreign-as-listed-
 postulate (§3.1), `pure`-as-claim-not-`Q` (§3.2), runtime contracts at the edge
