@@ -1650,6 +1650,16 @@ fn ordinary_match_continuation<'a>(
     matches!(scrutinee.as_ref(), RuntimeExpr::Var(0)).then_some((cases, default))
 }
 
+fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
+    matches!(
+        expr,
+        RuntimeExpr::Match { .. }
+            | RuntimeExpr::ComputationalMatch { .. }
+            | RuntimeExpr::If { .. }
+            | RuntimeExpr::Call { .. }
+    )
+}
+
 fn select_ordinary_case<'a>(
     eliminator: OrdinaryEliminatorFrame<'a>,
     constructor: &str,
@@ -1745,7 +1755,7 @@ impl<'a> Lowering<'a> {
                         "tree producer callee is not a closure",
                     ));
                 };
-                if args.len() == 1 {
+                if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
                     if let Some((cases, default)) = ordinary_match_continuation(&params, &body) {
                         let mut frame_env = captures;
                         frame_env.extend_from_slice(producer_env);
@@ -2208,13 +2218,7 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
             } => {
-                if matches!(
-                    scrutinee.as_ref(),
-                    RuntimeExpr::Match { .. }
-                        | RuntimeExpr::ComputationalMatch { .. }
-                        | RuntimeExpr::If { .. }
-                        | RuntimeExpr::Call { .. }
-                ) {
+                if requires_heterogeneous_deforestation(scrutinee) {
                     return self.lower_computational_producer_expr(
                         builder,
                         scrutinee,
@@ -2429,7 +2433,7 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     } => {
-                        if args.len() == 1 {
+                        if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
                             if let Some((cases, default)) =
                                 ordinary_match_continuation(&params, &body)
                             {
@@ -4648,6 +4652,52 @@ mod tests {
             "ken_px7o_well_formed",
         )
         .expect("dynamic producer composes through both ordinary frames");
+    }
+
+    #[test]
+    fn direct_host_result_closure_match_keeps_established_dynamic_lane() {
+        let exit_success = || RuntimeExpr::Construct {
+            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+            args: Vec::new(),
+        };
+        let direct_host_result = RuntimeExpr::Call {
+            callee: Box::new(ordinary_match_closure(
+                vec![
+                    RuntimeMatchCase {
+                        constructor: "ctor:prelude::Result::Err".to_string(),
+                        binders: 1,
+                        body: exit_success(),
+                    },
+                    RuntimeMatchCase {
+                        constructor: "ctor:prelude::Result::Ok".to_string(),
+                        binders: 1,
+                        body: exit_success(),
+                    },
+                ],
+                RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "direct HostResult default".to_string(),
+                },
+            )),
+            args: vec![RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleWrite,
+                capability: None,
+                args: vec![
+                    RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                        args: Vec::new(),
+                    },
+                    RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec())),
+                ],
+            }],
+        };
+
+        emit_process_entrypoint_object_with_cranelift(
+            &direct_host_result,
+            "ken_px7o_direct_host_result_closure_match",
+        )
+        .expect("direct HostResult remains owned by ordinary dynamic matching");
     }
 
     #[test]
