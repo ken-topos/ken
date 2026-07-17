@@ -1616,6 +1616,8 @@ struct ComputationalEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeComputationalMatchCase],
     default: &'a RuntimeTrap,
     env: &'a [Lowered],
+    retained_scrutinee_index: Option<usize>,
+    deferred_constructor_case: Option<&'a DeferredConstructorCaseEnvironment<'a>>,
 }
 
 #[derive(Clone, Copy)]
@@ -1623,13 +1625,67 @@ struct OrdinaryEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeMatchCase],
     default: &'a RuntimeTrap,
     env: &'a [Lowered],
-    retain_scrutinee: bool,
+    retained_scrutinee_index: Option<usize>,
+    deferred_constructor_case: Option<&'a DeferredConstructorCaseEnvironment<'a>>,
 }
 
 #[derive(Clone, Copy)]
 enum EliminatorFrame<'a> {
     Computational(ComputationalEliminatorFrame<'a>),
     Ordinary(OrdinaryEliminatorFrame<'a>),
+}
+
+struct DeferredConstructorCaseEnvironment<'a> {
+    constructor: &'a str,
+    lowered_prefix: &'a [Lowered],
+    selected_field: usize,
+    trailing_fields: &'a [RuntimeExpr],
+    producer_env: &'a [Lowered],
+    outer_eliminator: EliminatorFrame<'a>,
+}
+
+#[derive(Clone, Copy)]
+enum ImmediateBinderEliminator<'a> {
+    Computational {
+        cases: &'a [crate::RuntimeComputationalMatchCase],
+        default: &'a RuntimeTrap,
+    },
+    Ordinary {
+        cases: &'a [crate::RuntimeMatchCase],
+        default: &'a RuntimeTrap,
+    },
+}
+
+fn immediate_binder_eliminator(
+    body: &RuntimeExpr,
+    argument_binder_offset: usize,
+    argument_binders: usize,
+) -> Option<(usize, ImmediateBinderEliminator<'_>)> {
+    let (scrutinee, eliminator) = match body {
+        RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases,
+            default,
+        } => (
+            scrutinee.as_ref(),
+            ImmediateBinderEliminator::Computational { cases, default },
+        ),
+        RuntimeExpr::Match {
+            scrutinee,
+            cases,
+            default,
+        } => (
+            scrutinee.as_ref(),
+            ImmediateBinderEliminator::Ordinary { cases, default },
+        ),
+        _ => return None,
+    };
+    let RuntimeExpr::Var(index) = scrutinee else {
+        return None;
+    };
+    let index = usize::try_from(*index).ok()?;
+    let field = index.checked_sub(argument_binder_offset)?;
+    (field < argument_binders).then_some((field, eliminator))
 }
 
 fn ordinary_match_continuation<'a>(
@@ -1782,6 +1838,8 @@ impl<'a> Lowering<'a> {
                     cases,
                     default,
                     env: eliminator_env,
+                    retained_scrutinee_index: None,
+                    deferred_constructor_case: None,
                 },
             )],
         )
@@ -1829,7 +1887,8 @@ impl<'a> Lowering<'a> {
                                     cases,
                                     default,
                                     env: &frame_env,
-                                    retain_scrutinee: true,
+                                    retained_scrutinee_index: Some(0),
+                                    deferred_constructor_case: None,
                                 }));
                                 composed.extend_from_slice(eliminators);
                                 return self.lower_computational_producer_expr(
@@ -1902,6 +1961,8 @@ impl<'a> Lowering<'a> {
                                 cases: &cases,
                                 default: &default,
                                 env: &outer_env,
+                                retained_scrutinee_index: None,
+                                deferred_constructor_case: None,
                             },
                         ));
                         composed.extend_from_slice(eliminators);
@@ -1912,6 +1973,131 @@ impl<'a> Lowering<'a> {
                         "tree producer callee is not a closure",
                     )),
                 }
+            }
+            RuntimeExpr::Construct { constructor, args } => {
+                let eliminator = eliminators[0];
+                let (case_body, argument_binder_offset) = match eliminator {
+                    EliminatorFrame::Computational(eliminator) => {
+                        let case = match eliminator
+                            .cases
+                            .iter()
+                            .find(|case| case.constructor == *constructor)
+                        {
+                            Some(case) => case,
+                            None => return Ok(Lowered::Trap(eliminator.default.clone())),
+                        };
+                        if case.argument_binders != args.len() {
+                            return Err(unsupported(
+                                "ComputationalMatch",
+                                format!(
+                                    "case {} expects {} constructor arguments but value has {}",
+                                    case.constructor,
+                                    case.argument_binders,
+                                    args.len()
+                                ),
+                            ));
+                        }
+                        let mut seen = BTreeSet::new();
+                        for position in case.recursive_positions.iter().copied() {
+                            if !seen.insert(position) || position >= args.len() {
+                                return Err(unsupported(
+                                    "ComputationalMatch",
+                                    format!(
+                                        "case {} has malformed recursive position {position}",
+                                        case.constructor
+                                    ),
+                                ));
+                            }
+                        }
+                        (&case.body, case.recursive_positions.len())
+                    }
+                    EliminatorFrame::Ordinary(eliminator) => {
+                        let case = match select_ordinary_case(eliminator, constructor) {
+                            Ok(case) => case,
+                            Err(trap) => return Ok(Lowered::Trap(trap)),
+                        };
+                        if case.binders != args.len() {
+                            return Err(unsupported(
+                                "Match",
+                                format!(
+                                    "case {} expects {} binders but constructor has {} args",
+                                    case.constructor,
+                                    case.binders,
+                                    args.len()
+                                ),
+                            ));
+                        }
+                        (&case.body, 0)
+                    }
+                };
+
+                let bridge =
+                    immediate_binder_eliminator(case_body, argument_binder_offset, args.len());
+                let bridge =
+                    bridge.filter(|(field, _)| requires_heterogeneous_deforestation(&args[*field]));
+
+                if let Some((field, consumer)) = bridge {
+                    let lowered_prefix = args[..field]
+                        .iter()
+                        .map(|arg| self.lower_expr(builder, arg, producer_env))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    if let Some(Lowered::Trap(trap)) = lowered_prefix
+                        .iter()
+                        .find(|value| matches!(value, Lowered::Trap(_)))
+                    {
+                        return Ok(Lowered::Trap(trap.clone()));
+                    }
+
+                    let deferred = DeferredConstructorCaseEnvironment {
+                        constructor,
+                        lowered_prefix: &lowered_prefix,
+                        selected_field: field,
+                        trailing_fields: &args[field + 1..],
+                        producer_env,
+                        outer_eliminator: eliminator,
+                    };
+                    let mut composed = Vec::with_capacity(eliminators.len());
+                    composed.push(match consumer {
+                        ImmediateBinderEliminator::Computational { cases, default } => {
+                            EliminatorFrame::Computational(ComputationalEliminatorFrame {
+                                cases,
+                                default,
+                                env: &[],
+                                retained_scrutinee_index: None,
+                                deferred_constructor_case: Some(&deferred),
+                            })
+                        }
+                        ImmediateBinderEliminator::Ordinary { cases, default } => {
+                            EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
+                                cases,
+                                default,
+                                env: &[],
+                                retained_scrutinee_index: None,
+                                deferred_constructor_case: Some(&deferred),
+                            })
+                        }
+                    });
+                    composed.extend_from_slice(&eliminators[1..]);
+                    return self.lower_computational_producer_expr(
+                        builder,
+                        &args[field],
+                        producer_env,
+                        &composed,
+                    );
+                }
+
+                let lowered_args = args
+                    .iter()
+                    .map(|arg| self.lower_expr(builder, arg, producer_env))
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.lower_computational_match_value_composed(
+                    builder,
+                    Lowered::Constructor {
+                        constructor: constructor.clone(),
+                        args: lowered_args,
+                    },
+                    eliminators,
+                )
             }
             RuntimeExpr::Match {
                 scrutinee,
@@ -2060,6 +2246,8 @@ impl<'a> Lowering<'a> {
                         cases: inner_cases,
                         default: inner_default,
                         env: producer_env,
+                        retained_scrutinee_index: None,
+                        deferred_constructor_case: None,
                     },
                 ));
                 composed.extend_from_slice(eliminators);
@@ -2142,6 +2330,10 @@ impl<'a> Lowering<'a> {
                 "scrutinee is not a constructor value after ordinary expression lowering",
             ));
         };
+        let retained_scrutinee = Lowered::Constructor {
+            constructor: constructor.clone(),
+            args: args.clone(),
+        };
         let remaining_eliminators = &eliminators[1..];
         let (body, case_env) = match eliminator {
             EliminatorFrame::Computational(eliminator) => {
@@ -2184,7 +2376,15 @@ impl<'a> Lowering<'a> {
                 }
                 let mut case_env = induction_hypotheses;
                 case_env.extend(args);
-                case_env.extend_from_slice(eliminator.env);
+                let frame_env = match self.materialize_eliminator_frame_env(
+                    builder,
+                    EliminatorFrame::Computational(eliminator),
+                    &retained_scrutinee,
+                )? {
+                    Ok(env) => env,
+                    Err(trap) => return Ok(Lowered::Trap(trap)),
+                };
+                case_env.extend(frame_env);
                 (&case.body, case_env)
             }
             EliminatorFrame::Ordinary(eliminator) => {
@@ -2204,13 +2404,15 @@ impl<'a> Lowering<'a> {
                     ));
                 }
                 let mut case_env = args;
-                if eliminator.retain_scrutinee {
-                    case_env.push(Lowered::Constructor {
-                        constructor,
-                        args: case_env.clone(),
-                    });
-                }
-                case_env.extend_from_slice(eliminator.env);
+                let frame_env = match self.materialize_eliminator_frame_env(
+                    builder,
+                    EliminatorFrame::Ordinary(eliminator),
+                    &retained_scrutinee,
+                )? {
+                    Ok(env) => env,
+                    Err(trap) => return Ok(Lowered::Trap(trap)),
+                };
+                case_env.extend(frame_env);
                 (&case.body, case_env)
             }
         };
@@ -2218,6 +2420,134 @@ impl<'a> Lowering<'a> {
             self.lower_expr(builder, body, &case_env)
         } else {
             self.lower_computational_producer_expr(builder, body, &case_env, remaining_eliminators)
+        }
+    }
+
+    fn materialize_eliminator_frame_env(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        eliminator: EliminatorFrame<'_>,
+        retained_scrutinee: &Lowered,
+    ) -> Result<Result<Vec<Lowered>, RuntimeTrap>, CraneliftBackendError> {
+        let (env, retained_index, deferred, construct) = match eliminator {
+            EliminatorFrame::Computational(frame) => (
+                frame.env,
+                frame.retained_scrutinee_index,
+                frame.deferred_constructor_case,
+                "ComputationalMatch",
+            ),
+            EliminatorFrame::Ordinary(frame) => (
+                frame.env,
+                frame.retained_scrutinee_index,
+                frame.deferred_constructor_case,
+                "Match",
+            ),
+        };
+        let Some(deferred) = deferred else {
+            let mut env = env.to_vec();
+            if let Some(index) = retained_index {
+                if index > env.len() {
+                    return Err(unsupported(
+                        construct,
+                        "retained scrutinee index exceeds the frame environment",
+                    ));
+                }
+                env.insert(index, retained_scrutinee.clone());
+            }
+            return Ok(Ok(env));
+        };
+        if deferred.lowered_prefix.len() != deferred.selected_field {
+            return Err(unsupported(
+                "Construct",
+                "selected constructor field prefix does not match its binder index",
+            ));
+        }
+
+        let mut constructor_args = deferred.lowered_prefix.to_vec();
+        constructor_args.push(retained_scrutinee.clone());
+        for field in deferred.trailing_fields {
+            let lowered = self.lower_expr(builder, field, deferred.producer_env)?;
+            if let Lowered::Trap(trap) = lowered {
+                return Ok(Err(trap));
+            }
+            constructor_args.push(lowered);
+        }
+        let outer_scrutinee = Lowered::Constructor {
+            constructor: deferred.constructor.to_string(),
+            args: constructor_args.clone(),
+        };
+        let outer_tail = match self.materialize_eliminator_frame_env(
+            builder,
+            deferred.outer_eliminator,
+            &outer_scrutinee,
+        )? {
+            Ok(env) => env,
+            Err(trap) => return Ok(Err(trap)),
+        };
+
+        match deferred.outer_eliminator {
+            EliminatorFrame::Computational(frame) => {
+                let case = match frame
+                    .cases
+                    .iter()
+                    .find(|case| case.constructor == deferred.constructor)
+                {
+                    Some(case) => case,
+                    None => return Ok(Err(frame.default.clone())),
+                };
+                if case.argument_binders != constructor_args.len() {
+                    return Err(unsupported(
+                        "ComputationalMatch",
+                        format!(
+                            "case {} expects {} constructor arguments but value has {}",
+                            case.constructor,
+                            case.argument_binders,
+                            constructor_args.len()
+                        ),
+                    ));
+                }
+                let mut seen = BTreeSet::new();
+                let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
+                for position in case.recursive_positions.iter().rev().copied() {
+                    if !seen.insert(position) || position >= constructor_args.len() {
+                        return Err(unsupported(
+                            "ComputationalMatch",
+                            format!(
+                                "case {} has malformed recursive position {position}",
+                                case.constructor
+                            ),
+                        ));
+                    }
+                    induction_hypotheses.push(Lowered::ComputationalRecursorClosure {
+                        recursive: Box::new(constructor_args[position].clone()),
+                        cases: frame.cases.to_vec(),
+                        default: frame.default.clone(),
+                        outer_env: outer_tail.clone(),
+                    });
+                }
+                induction_hypotheses.extend(constructor_args);
+                induction_hypotheses.extend(outer_tail);
+                Ok(Ok(induction_hypotheses))
+            }
+            EliminatorFrame::Ordinary(frame) => {
+                let case = match select_ordinary_case(frame, deferred.constructor) {
+                    Ok(case) => case,
+                    Err(trap) => return Ok(Err(trap)),
+                };
+                if case.binders != constructor_args.len() {
+                    return Err(unsupported(
+                        "Match",
+                        format!(
+                            "case {} expects {} binders but constructor has {} args",
+                            case.constructor,
+                            case.binders,
+                            constructor_args.len()
+                        ),
+                    ));
+                }
+                constructor_args.extend(outer_tail);
+                Ok(Ok(constructor_args))
+            }
         }
     }
 
@@ -2347,7 +2677,8 @@ impl<'a> Lowering<'a> {
                             cases,
                             default,
                             env,
-                            retain_scrutinee: false,
+                            retained_scrutinee_index: None,
+                            deferred_constructor_case: None,
                         })],
                     );
                 }
@@ -2567,7 +2898,8 @@ impl<'a> Lowering<'a> {
                                         cases,
                                         default,
                                         env: &frame_env,
-                                        retain_scrutinee: true,
+                                        retained_scrutinee_index: Some(0),
+                                        deferred_constructor_case: None,
                                     })],
                                 );
                             }
@@ -4628,6 +4960,83 @@ mod tests {
         }
     }
 
+    fn constructor_field_aggregate() -> RuntimeExpr {
+        RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleIsTerminal,
+                capability: None,
+                args: vec![RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                    args: Vec::new(),
+                }],
+            }),
+            cases: [
+                ("ctor:prelude::Bool::True", "ctor:prelude::Result::Ok", 7),
+                ("ctor:prelude::Bool::False", "ctor:prelude::Result::Err", 9),
+            ]
+            .into_iter()
+            .map(|(constructor, result, payload)| RuntimeMatchCase {
+                constructor: constructor.to_string(),
+                binders: 0,
+                body: RuntimeExpr::Construct {
+                    constructor: result.to_string(),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(payload))],
+                },
+            })
+            .collect(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "px7p aggregate producer default".to_string(),
+            },
+        }
+    }
+
+    fn constructor_field_selected_case_fixture(
+        selected_binders: usize,
+        selected_field_var: u32,
+    ) -> RuntimeExpr {
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Int(41)),
+                    constructor_field_aggregate(),
+                ],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: selected_binders,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(selected_field_var)),
+                    cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+                        .into_iter()
+                        .map(|constructor| RuntimeMatchCase {
+                            constructor: constructor.to_string(),
+                            binders: 1,
+                            body: RuntimeExpr::PrimitiveCall {
+                                primitive: RuntimePrimitive {
+                                    symbol: "sub_int".to_string(),
+                                    partiality: RuntimePartiality::Total,
+                                },
+                                args: vec![RuntimeExpr::Var(1), RuntimeExpr::Var(0)],
+                            },
+                        })
+                        .collect(),
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p selected field default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p exact outer default".to_string(),
+            },
+        }
+    }
+
     #[test]
     fn dynamic_host_result_producer_missing_case_routes_to_default() {
         assert!(
@@ -4772,6 +5181,363 @@ mod tests {
             "ken_px7o_well_formed",
         )
         .expect("dynamic producer composes through both ordinary frames");
+    }
+
+    #[test]
+    fn constructor_field_selected_case_composes_before_field_lowering() {
+        emit_process_entrypoint_object_with_cranelift(
+            &constructor_field_selected_case_fixture(2, 1),
+            "ken_px7p_constructor_field_selected_case",
+        )
+        .expect("the selected trailing field remains structural through its ordinary consumer");
+    }
+
+    #[test]
+    fn constructor_field_composes_through_computational_consumer() {
+        let leaf = "ctor:fixture::FieldTree::Leaf".to_string();
+        let field = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleIsTerminal,
+                capability: None,
+                args: vec![RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                    args: Vec::new(),
+                }],
+            }),
+            cases: ["ctor:prelude::Bool::True", "ctor:prelude::Bool::False"]
+                .into_iter()
+                .map(|constructor| RuntimeMatchCase {
+                    constructor: constructor.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Construct {
+                        constructor: leaf.clone(),
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                    },
+                })
+                .collect(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "px7p computational field default".to_string(),
+            },
+        };
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(41)), field],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: 2,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::ComputationalMatch {
+                    scrutinee: Box::new(RuntimeExpr::Var(1)),
+                    cases: vec![crate::RuntimeComputationalMatchCase {
+                        constructor: leaf,
+                        argument_binders: 1,
+                        recursive_positions: Vec::new(),
+                        body: RuntimeExpr::PrimitiveCall {
+                            primitive: RuntimePrimitive {
+                                symbol: "sub_int".to_string(),
+                                partiality: RuntimePartiality::Total,
+                            },
+                            args: vec![RuntimeExpr::Var(1), RuntimeExpr::Var(0)],
+                        },
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p computational consumer default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p computational outer default".to_string(),
+            },
+        };
+        emit_process_entrypoint_object_with_cranelift(
+            &expr,
+            "ken_px7p_constructor_field_computational_consumer",
+        )
+        .expect("the selected field also composes through a computational consumer");
+    }
+
+    #[test]
+    fn constructor_field_recursive_ih_offset_selects_argument_binder() {
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Recursive".to_string(),
+                args: vec![constructor_field_aggregate()],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Recursive".to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(1)),
+                    cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+                        .into_iter()
+                        .map(|constructor| RuntimeMatchCase {
+                            constructor: constructor.to_string(),
+                            binders: 1,
+                            body: RuntimeExpr::Var(0),
+                        })
+                        .collect(),
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p recursive selected-field default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p recursive outer default".to_string(),
+            },
+        };
+        emit_process_entrypoint_object_with_cranelift(
+            &expr,
+            "ken_px7p_constructor_field_recursive_offset",
+        )
+        .expect("the recursive IH prefix does not change the selected argument field");
+    }
+
+    #[test]
+    fn constructor_field_middle_binder_preserves_trailing_environment_order() {
+        let aggregate = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            cases: ["ctor:prelude::Bool::True", "ctor:prelude::Bool::False"]
+                .into_iter()
+                .map(|constructor| RuntimeMatchCase {
+                    constructor: constructor.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Result::Ok".to_string(),
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                    },
+                })
+                .collect(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "px7p middle producer default".to_string(),
+            },
+        };
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Int(13)),
+                    aggregate,
+                    RuntimeExpr::Value(RuntimeValue::Int(41)),
+                ],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: 3,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(1)),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: "ctor:prelude::Result::Ok".to_string(),
+                        binders: 1,
+                        body: RuntimeExpr::PrimitiveCall {
+                            primitive: RuntimePrimitive {
+                                symbol: "sub_int".to_string(),
+                                partiality: RuntimePartiality::Total,
+                            },
+                            args: vec![RuntimeExpr::Var(3), RuntimeExpr::Var(0)],
+                        },
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p middle consumer default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p middle outer default".to_string(),
+            },
+        };
+        let compiled = compile_expr(&expr, &NativeSeedEnvironment::empty())
+            .expect("the selected middle field composes without moving its trailing sibling");
+        assert_eq!(
+            compiled.run(None).expect("middle-field fixture runs").0,
+            RuntimeObservation::Returned(RuntimeGroundValue::Int(34))
+        );
+    }
+
+    #[test]
+    fn constructor_field_binder_shift_mutation_recovers_exact_refusal() {
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &constructor_field_selected_case_fixture(2, 0),
+            "ken_px7p_constructor_field_wrong_binder",
+        )
+        .expect_err("the aggregate-looking sibling is not the selected field consumer");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "Match",
+                reason,
+            }) if reason == "scrutinee is not a constructor value"
+        ));
+    }
+
+    #[test]
+    fn constructor_field_bridge_removal_recovers_exact_refusal() {
+        let fixture = constructor_field_selected_case_fixture(2, 1);
+        let RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases,
+            default,
+        } = fixture
+        else {
+            panic!("PX7-P fixture outer shape changed");
+        };
+        let eagerly_materialized = RuntimeExpr::Let {
+            value: scrutinee,
+            body: Box::new(RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(RuntimeExpr::Var(0)),
+                cases,
+                default,
+            }),
+        };
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &eagerly_materialized,
+            "ken_px7p_constructor_field_bridge_removed",
+        )
+        .expect_err("eager field lowering must recover the pre-PX7-P boundary");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "Match",
+                reason,
+            }) if reason == "scrutinee is not a constructor value"
+        ));
+    }
+
+    #[test]
+    fn constructor_field_outer_arity_rejects_before_field_lowering() {
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &constructor_field_selected_case_fixture(1, 1),
+            "ken_px7p_constructor_field_outer_arity",
+        )
+        .expect_err("the selected constructor case must bind every field exactly");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "ComputationalMatch",
+                reason,
+            }) if reason == "case ctor:fixture::Envelope::Wrap expects 1 constructor arguments but value has 2"
+        ));
+    }
+
+    #[test]
+    fn constructor_field_missing_case_owns_default_before_fields() {
+        let default = RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "px7p exact missing constructor default".to_string(),
+        };
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Missing".to_string(),
+                args: vec![RuntimeExpr::Var(999)],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: 1,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Var(0),
+            }],
+            default: default.clone(),
+        };
+        let compiled = compile_expr(&expr, &NativeSeedEnvironment::empty())
+            .expect("a missing constructor selects its frame-owned default");
+        assert_eq!(
+            compiled.run(None).expect("default trap is observable").0,
+            RuntimeObservation::Trapped(default)
+        );
+    }
+
+    #[test]
+    fn constructor_field_aggregate_unconsumed_sibling_stays_ordinary() {
+        let prefix = RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Prefix::Keep".to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(41))],
+        };
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                args: vec![prefix, constructor_field_aggregate()],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: 2,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: "ctor:fixture::Prefix::Keep".to_string(),
+                        binders: 1,
+                        body: RuntimeExpr::Var(0),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p prefix default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p outer default".to_string(),
+            },
+        };
+        emit_process_entrypoint_object_with_cranelift(
+            &expr,
+            "ken_px7p_aggregate_unconsumed_sibling",
+        )
+        .expect("an unconsumed aggregate-looking field retains ordinary lowering");
+    }
+
+    #[test]
+    fn constructor_field_host_result_stays_on_ordinary_dynamic_match() {
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                args: vec![console_write_effect()],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: 1,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+                        .into_iter()
+                        .map(|constructor| RuntimeMatchCase {
+                            constructor: constructor.to_string(),
+                            binders: 1,
+                            body: RuntimeExpr::Construct {
+                                constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                                args: Vec::new(),
+                            },
+                        })
+                        .collect(),
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p HostResult default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p outer default".to_string(),
+            },
+        };
+        emit_process_entrypoint_object_with_cranelift(
+            &expr,
+            "ken_px7p_constructor_field_host_result",
+        )
+        .expect("HostResult fields remain owned by ordinary dynamic matching");
     }
 
     fn host_result_closure_match(argument: RuntimeExpr) -> RuntimeExpr {
@@ -5160,7 +5926,8 @@ mod tests {
                 cases: &first_cases,
                 default: &first_default,
                 env: &[],
-                retain_scrutinee: false,
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
             "ctor:fixture::Inner::Missing",
         )
@@ -5189,7 +5956,8 @@ mod tests {
                 cases: &later_cases,
                 default: &later_default,
                 env: &[],
-                retain_scrutinee: false,
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
             "ctor:fixture::Outer::Missing",
         )
@@ -5275,11 +6043,15 @@ mod tests {
                 cases: &inner_cases,
                 default: &inner_default,
                 env: &[],
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
             ComputationalEliminatorFrame {
                 cases: &outer_cases,
                 default: &outer_default,
                 env: &[],
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
         ];
 
@@ -5320,11 +6092,15 @@ mod tests {
                 cases: &inner_cases,
                 default: &inner_default,
                 env: &[],
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
             ComputationalEliminatorFrame {
                 cases: &outer_cases,
                 default: &outer_default,
                 env: &[],
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
         ];
 
