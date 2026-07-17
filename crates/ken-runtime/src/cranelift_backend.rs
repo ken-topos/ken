@@ -1651,13 +1651,18 @@ fn ordinary_match_continuation<'a>(
 }
 
 fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
-    matches!(
-        expr,
+    match expr {
         RuntimeExpr::Match { .. }
-            | RuntimeExpr::ComputationalMatch { .. }
-            | RuntimeExpr::If { .. }
-            | RuntimeExpr::Call { .. }
-    )
+        | RuntimeExpr::ComputationalMatch { .. }
+        | RuntimeExpr::If { .. } => true,
+        RuntimeExpr::Call { callee, .. } => match callee.as_ref() {
+            RuntimeExpr::Closure { body, .. } | RuntimeExpr::LexicalClosure { body, .. } => {
+                requires_heterogeneous_deforestation(body)
+            }
+            _ => false,
+        },
+        _ => false,
+    }
 }
 
 fn select_ordinary_case<'a>(
@@ -4654,13 +4659,12 @@ mod tests {
         .expect("dynamic producer composes through both ordinary frames");
     }
 
-    #[test]
-    fn direct_host_result_closure_match_keeps_established_dynamic_lane() {
+    fn host_result_closure_match(argument: RuntimeExpr) -> RuntimeExpr {
         let exit_success = || RuntimeExpr::Construct {
             constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
             args: Vec::new(),
         };
-        let direct_host_result = RuntimeExpr::Call {
+        RuntimeExpr::Call {
             callee: Box::new(ordinary_match_closure(
                 vec![
                     RuntimeMatchCase {
@@ -4679,25 +4683,50 @@ mod tests {
                     message: "direct HostResult default".to_string(),
                 },
             )),
-            args: vec![RuntimeExpr::Effect {
-                family: "Console".to_string(),
-                operation: ken_host::HostOpV1::ConsoleWrite,
-                capability: None,
-                args: vec![
-                    RuntimeExpr::Construct {
-                        constructor: "ctor:prelude::Stream::Stdout".to_string(),
-                        args: Vec::new(),
-                    },
-                    RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec())),
-                ],
-            }],
-        };
+            args: vec![argument],
+        }
+    }
 
+    fn console_write_effect() -> RuntimeExpr {
+        RuntimeExpr::Effect {
+            family: "Console".to_string(),
+            operation: ken_host::HostOpV1::ConsoleWrite,
+            capability: None,
+            args: vec![
+                RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                    args: Vec::new(),
+                },
+                RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec())),
+            ],
+        }
+    }
+
+    #[test]
+    fn direct_host_result_closure_match_keeps_established_dynamic_lane() {
         emit_process_entrypoint_object_with_cranelift(
-            &direct_host_result,
+            &host_result_closure_match(console_write_effect()),
             "ken_px7o_direct_host_result_closure_match",
         )
         .expect("direct HostResult remains owned by ordinary dynamic matching");
+    }
+
+    #[test]
+    fn call_returned_host_result_keeps_established_dynamic_lane() {
+        let effect_call = RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["ignored".to_string()],
+                body: Box::new(console_write_effect()),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
+        };
+
+        emit_process_entrypoint_object_with_cranelift(
+            &host_result_closure_match(effect_call),
+            "ken_px7o_call_returned_host_result_closure_match",
+        )
+        .expect("call-returned HostResult remains owned by ordinary dynamic matching");
     }
 
     #[test]
