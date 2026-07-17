@@ -127,6 +127,14 @@ pub struct TraceContract {
     pub hash: String,
 }
 
+/// A runtime event could not be projected through the selected B1 export.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TraceContractError {
+    /// The event names no member of the one B1-derived alphabet.  B3 does not
+    /// derive or widen an alphabet of its own.
+    EventOutsideAlphabet { effect: String },
+}
+
 // ─── Emitter ─────────────────────────────────────────────────────────────────
 
 /// Emit the trace contract from runtime events + the B1 export.
@@ -150,6 +158,28 @@ pub fn emit_trace_contract(
     events: Vec<TraceEvent>,
     export: &BehavioralExport,
 ) -> TraceContract {
+    try_emit_trace_contract(target_name, events, export)
+        .expect("runtime event is outside the checked B1 alphabet")
+}
+
+/// Checked form of [`emit_trace_contract`].
+///
+/// Every B3 event is accepted only as an image of the alphabet already carried
+/// by the B1 export.  This is a closure check, not a second derivation rule.
+pub fn try_emit_trace_contract(
+    target_name: &str,
+    events: Vec<TraceEvent>,
+    export: &BehavioralExport,
+) -> Result<TraceContract, TraceContractError> {
+    if let Some(event) = events
+        .iter()
+        .find(|event| !export.alphabet.contains(&event.effect))
+    {
+        return Err(TraceContractError::EventOutsideAlphabet {
+            effect: event.effect.clone(),
+        });
+    }
+
     // Project assertion points from Q (→ WatchedInvariant) and P (→ ConfirmHeld).
     // These change when the export's Q/P change — they are the export's image.
     let mut assertion_points: Vec<AssertionPoint> = Vec::new();
@@ -178,13 +208,13 @@ pub fn emit_trace_contract(
 
     let hash = compute_trace_hash(target_name, &events, &assertion_points, &monitor);
 
-    TraceContract {
+    Ok(TraceContract {
         target_name: target_name.to_string(),
         events,
         assertion_points,
         monitor,
         hash,
-    }
+    })
 }
 
 // ─── Canonical hash (inherited from 71 §3.3 discipline) ──────────────────────

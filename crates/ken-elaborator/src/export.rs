@@ -17,17 +17,20 @@
 //! EX-A1/EX-A2 is the sole net for this discriminator.
 //!
 //! **One-way gate (I4):** there is no code path from a `Ward`/classical/
-//! delegated result to `proved` status. The emitter takes only
+//! delegated result to `proved` status. The checked emitter takes only
 //! kernel-produced `Verdict` values and the kernel's `trusted_base()` — no
 //! external discharge result can enter here and write a `Q` entry. The gate
-//! is structural: `QEntry` can only be constructed inside `emit_export`, and
+//! is structural: `QEntry` can only be constructed inside the checked-target
+//! export transaction, and
 //! only when `trusted_base()` does not contain the hole.
 //!
 //! **Disproved boundary (71 §2.1):** a refuted claim is never exported. The
 //! build is non-shippable when any obligation is `disproved`.
 //!
-//! **Σ = L5 perform-node signatures (I3):** the alphabet is the `EffectRow`
-//! from the effects elaborator — reuse, not reinvention.
+//! **Σ = L5 perform-node signatures (I3):** the alphabet is derived from the
+//! selected checked target's closed, target-neutral denotation graph.  The
+//! declared effect row remains an admission upper bound and is never an
+//! alphabet source or fallback.
 //!
 //! **G carries support, never measure (I5):** `GEntry` has NO weight/
 //! likelihood/probability field. The structural absence makes a measure
@@ -45,8 +48,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ken_kernel::GlobalId;
-
-use crate::effects::row::EffectRow;
+use crate::compiler_driver::{CheckedPerformNodeV1, CheckedTargetDenotationV1};
 use crate::extract::{ObligationTriple, ProvKind};
 use crate::prover::Verdict;
 
@@ -82,7 +84,7 @@ impl PStatus {
 ///
 /// Invariant: the corresponding hole is ABSENT from `trusted_base()` at
 /// emission time (discharged via `upgrade_to_transparent`). Only constructible
-/// inside `emit_export` — the one-way gate holds structurally.
+/// inside the checked-target export transaction — the one-way gate holds structurally.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct QEntry {
     /// Stable obligation id (`22 §1`).
@@ -114,7 +116,7 @@ pub struct PEntry {
 /// in [`serialize_export`], never `proved`/`tested`/`unknown`). No Ward/classical
 /// result may ever promote a `T` entry to `Q` — that path does not exist
 /// (I4 / EX-E1): `QEntry` is built only in the `Verdict::Proved` arm of
-/// [`emit_export`]; the `temporal` parameter flows straight into `T`.
+/// [`emit_checked_target_export`]; the `temporal` parameter flows straight into `T`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TEntry {
     /// Stable obligation id (`22 §1`).
@@ -212,6 +214,49 @@ pub struct GEntry {
     // NO weight: f64 — structurally absent; measure is unrepresentable here.
 }
 
+// ─── Exact perform-node inventory ───────────────────────────────────────────
+
+/// A typed perform identity recovered from the closed checked denotation.
+///
+/// `Host` is identity-checked against the closed `HostOpV1` catalog. `L5`
+/// reserves the general non-host operation form rather than pretending the
+/// host catalog is the whole language. Current lowering fails closed before
+/// export when such a node has not yet reached a typed runtime representation.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PerformNodeSignatureV1 {
+    Host {
+        family_symbol: String,
+        operation: ken_host::HostOpV1,
+    },
+    L5 {
+        family_symbol: String,
+        operation_symbol: String,
+    },
+}
+
+/// Canonical exact inventory, bound to one target and one checked semantic
+/// artifact. Its fields and constructor are producer-private; callers cannot
+/// hand the exporter a provenance-free set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PerformNodeInventoryV1 {
+    target_symbol: String,
+    package_identity: String,
+    core_semantic_hash: u64,
+    artifact_hash: u64,
+    closure_identity: u64,
+    nodes: BTreeSet<PerformNodeSignatureV1>,
+}
+
+impl PerformNodeInventoryV1 {
+    pub fn target_symbol(&self) -> &str {
+        &self.target_symbol
+    }
+
+    pub fn nodes(&self) -> &BTreeSet<PerformNodeSignatureV1> {
+        &self.nodes
+    }
+}
+
 // ─── The export contract ──────────────────────────────────────────────────────
 
 /// The five-part assume-guarantee export contract (`71 §2.1`).
@@ -265,22 +310,32 @@ pub enum ExportError {
     /// Validation happens before either a `T` wire entry or a content hash is
     /// emitted, so an independent-event lookalike cannot become shippable.
     InvalidResourceLifetimeObligation,
+    /// The selected checked target did not yield a finite, exhaustive graph.
+    /// No declared-row or whole-family widening is permitted.
+    NonClosedPerformInventory { reason: String },
+    /// The producer-created inventory does not belong to this exact target and
+    /// semantic artifact, or its node set was changed after derivation.
+    PerformInventoryBindingMismatch,
+    /// A structural perform node is not covered by the separately retained
+    /// declared-row upper bound (`ρ_inf ⊆ ρ_decl`).
+    PerformedEffectOutsideDeclaredRow { effect: String },
+    /// A `T` or correlated-resource symbol is not in the exact B1 alphabet.
+    TemporalSymbolOutsideAlphabet { symbol: String },
 }
 
 // ─── The emitter (the sole constructor for Q entries) ────────────────────────
 
-/// Emit the behavioral export contract from verified content (`71 §2.1`).
+/// Emit the behavioral export contract from one selected checked target
+/// (`71 §2.1`, Architect ruling `evt_21ads3za1z4a9`).
 ///
 /// # Parameters
-/// - `target_name`: the checked declaration's name.
+/// - `denotation`: producer-created, identity-bound closed target denotation.
 /// - `results`: pairs of `(ObligationTriple, Verdict)` — the V2→V3 pairs
 ///   for each obligation. The `hole_id` in each triple is the V1 kernel
 ///   postulate; its presence/absence in `trusted_base_set` is the honesty
 ///   discriminator.
 /// - `trusted_base_set`: the kernel's current `trusted_base()` at emission.
 ///   Collect via `env.trusted_base().into_iter().collect()`.
-/// - `alphabet`: the program's L5 effect row (`36 §2`). Pass the result of
-///   `infer_all` or the declared row for the target.
 /// - `generators`: support structure from refinement predicates and match arms.
 ///   No measure field — structural seal.
 /// - `temporal`: delegated `Temporal` obligations (B2 fills the body —
@@ -302,14 +357,35 @@ pub enum ExportError {
 /// # Errors
 /// Returns `ExportError::DisproovedClaim` if any obligation is `Disproved`.
 /// The caller must not produce a shippable export in that case.
-pub fn emit_export(
-    target_name: &str,
+pub fn emit_checked_target_export(
+    denotation: &CheckedTargetDenotationV1,
     results: &[(ObligationTriple, Verdict)],
     trusted_base_set: &BTreeSet<GlobalId>,
-    alphabet: EffectRow,
     generators: Vec<GEntry>,
     temporal: Vec<TEntry>,
 ) -> Result<BehavioralExport, ExportError> {
+    let inventory = derive_perform_inventory(denotation)?;
+    assemble_checked_export(
+        denotation,
+        &inventory,
+        results,
+        trusted_base_set,
+        generators,
+        temporal,
+    )
+}
+
+fn assemble_checked_export(
+    denotation: &CheckedTargetDenotationV1,
+    inventory: &PerformNodeInventoryV1,
+    results: &[(ObligationTriple, Verdict)],
+    trusted_base_set: &BTreeSet<GlobalId>,
+    generators: Vec<GEntry>,
+    temporal: Vec<TEntry>,
+) -> Result<BehavioralExport, ExportError> {
+    if inventory != &derive_perform_inventory(denotation)? {
+        return Err(ExportError::PerformInventoryBindingMismatch);
+    }
     let mut guarantees: Vec<QEntry> = Vec::new();
     let mut assumptions: Vec<PEntry> = Vec::new();
 
@@ -383,10 +459,10 @@ pub fn emit_export(
         g.conditions.sort();
     }
 
-    // Σ: alphabet = the L5 effect row's perform-node signatures.
-    // BTreeSet gives canonical order (already deterministic via EffectRow's
-    // BTreeSet internals, but we take ownership here).
-    let alphabet_set: BTreeSet<String> = alphabet.effects().cloned().collect();
+    // Σ is solely the canonical wire projection of the producer-created exact
+    // perform inventory. The declared row has already been checked separately;
+    // it is never read here as a source or fallback.
+    let alphabet_set = project_inventory_alphabet(inventory);
 
     let resource_lifetime_obligation = alphabet_set
         .contains("FsOpen")
@@ -394,10 +470,16 @@ pub fn emit_export(
 
     if let Some(resource) = resource_lifetime_obligation.as_ref() {
         validate_resource_lifetime_obligation(resource)?;
+        for operation in [resource.acquire_op, resource.use_op, resource.settle_op] {
+            let symbol = host_op_name(operation).to_string();
+            if !alphabet_set.contains(&symbol) {
+                return Err(ExportError::TemporalSymbolOutsideAlphabet { symbol });
+            }
+        }
     }
 
     let hash = compute_hash(
-        target_name,
+        denotation.target_name(),
         &guarantees,
         &assumptions,
         &alphabet_set,
@@ -407,7 +489,7 @@ pub fn emit_export(
     );
 
     Ok(BehavioralExport {
-        target_name: target_name.to_string(),
+        target_name: denotation.target_name().to_string(),
         guarantees,
         assumptions,
         alphabet: alphabet_set,
@@ -416,6 +498,130 @@ pub fn emit_export(
         generators: gens,
         hash,
     })
+}
+
+fn derive_perform_inventory(
+    denotation: &CheckedTargetDenotationV1,
+) -> Result<PerformNodeInventoryV1, ExportError> {
+    if denotation.package.header.package_identity != denotation.package_identity
+        || denotation.package.core_semantic_hash != denotation.core_semantic_hash
+        || denotation.package.artifact_hash != denotation.artifact_hash
+    {
+        return Err(ExportError::PerformInventoryBindingMismatch);
+    }
+    let nodes = denotation
+        .perform_nodes
+        .iter()
+        .map(|node| match node {
+            CheckedPerformNodeV1::Host {
+                family_symbol,
+                operation,
+            } => PerformNodeSignatureV1::Host {
+                family_symbol: family_symbol.to_string(),
+                operation: *operation,
+            },
+            CheckedPerformNodeV1::L5 {
+                family_symbol,
+                operation_symbol,
+            } => PerformNodeSignatureV1::L5 {
+                family_symbol: family_symbol.to_string(),
+                operation_symbol: operation_symbol.to_string(),
+            },
+        })
+        .collect::<BTreeSet<_>>();
+
+    for node in &nodes {
+        let effect = match node {
+            PerformNodeSignatureV1::Host {
+                family_symbol,
+                operation,
+            } => {
+                if canonical_symbol_tail(family_symbol) != host_operation_family(*operation).0 {
+                    return Err(ExportError::NonClosedPerformInventory {
+                        reason: format!(
+                            "typed host operation {operation:?} is bound to the wrong family {family_symbol}"
+                        ),
+                    });
+                }
+                host_operation_family(*operation).1.to_string()
+            }
+            PerformNodeSignatureV1::L5 { family_symbol, .. } => {
+                effect_label_for_family(family_symbol)
+            }
+        };
+        if !denotation.declared_effects.contains(&effect) {
+            return Err(ExportError::PerformedEffectOutsideDeclaredRow { effect });
+        }
+    }
+
+    Ok(PerformNodeInventoryV1 {
+        target_symbol: denotation.target_symbol.to_string(),
+        package_identity: denotation.package_identity.to_string(),
+        core_semantic_hash: denotation.core_semantic_hash,
+        artifact_hash: denotation.artifact_hash,
+        closure_identity: denotation.closure_identity,
+        nodes,
+    })
+}
+
+fn canonical_symbol_tail(symbol: &str) -> &str {
+    symbol.rsplit("::").next().unwrap_or(symbol)
+}
+
+fn effect_label_for_family(symbol: &str) -> String {
+    canonical_symbol_tail(symbol)
+        .strip_suffix("Op")
+        .unwrap_or_else(|| canonical_symbol_tail(symbol))
+        .to_string()
+}
+
+fn host_operation_family(operation: ken_host::HostOpV1) -> (&'static str, &'static str) {
+    match operation {
+        ken_host::HostOpV1::ConsoleRead
+        | ken_host::HostOpV1::ConsoleWrite
+        | ken_host::HostOpV1::ConsoleFlush
+        | ken_host::HostOpV1::ConsoleIsTerminal => ("ConsoleOp", "Console"),
+        ken_host::HostOpV1::ClockWallNow => ("ClockOp", "Clock"),
+        ken_host::HostOpV1::FsReadFile
+        | ken_host::HostOpV1::FsWriteFile
+        | ken_host::HostOpV1::FsAppendFile
+        | ken_host::HostOpV1::FsMetadata
+        | ken_host::HostOpV1::FsReadDirectory
+        | ken_host::HostOpV1::FsCreateDirectory
+        | ken_host::HostOpV1::FsRemoveFile
+        | ken_host::HostOpV1::FsRemoveDirectory
+        | ken_host::HostOpV1::FsRename
+        | ken_host::HostOpV1::FsChangeMode
+        | ken_host::HostOpV1::FsOpen
+        | ken_host::HostOpV1::FsHandleMetadata
+        | ken_host::HostOpV1::ResourceRelease => ("FSOp", "FS"),
+    }
+}
+
+fn project_inventory_alphabet(inventory: &PerformNodeInventoryV1) -> BTreeSet<String> {
+    let mut alphabet = BTreeSet::new();
+    for node in &inventory.nodes {
+        match node {
+            PerformNodeSignatureV1::Host { operation, .. } => {
+                alphabet.insert(host_operation_family(*operation).1.to_string());
+                if matches!(
+                    operation,
+                    ken_host::HostOpV1::FsOpen
+                        | ken_host::HostOpV1::FsHandleMetadata
+                        | ken_host::HostOpV1::ResourceRelease
+                ) {
+                    alphabet.insert(host_op_name(*operation).to_string());
+                }
+            }
+            PerformNodeSignatureV1::L5 {
+                family_symbol,
+                operation_symbol: _,
+            } => {
+                alphabet.insert(effect_label_for_family(family_symbol));
+            }
+        }
+    }
+    alphabet
 }
 
 // ─── Canonical hash (§3.3) ───────────────────────────────────────────────────
@@ -689,5 +895,141 @@ mod resource_lifetime_hash_tests {
             )
         };
         assert_ne!(hash(&pinned), hash(&independent_event_lookalike));
+    }
+}
+
+#[cfg(test)]
+mod exact_inventory_tests {
+    use super::*;
+    use crate::compiler_driver::{
+        compile_checked_target_denotation, CompilerSource,
+    };
+
+    fn denotation(target: &str) -> CheckedTargetDenotationV1 {
+        compile_checked_target_denotation(
+            "b1_inventory_binding",
+            CompilerSource::new(
+                "binding.ken",
+                r#"
+proc first (_value : Unit)
+  : HostIO AFull (Result IOError Unit) visits [Console] =
+  host_console AFull (Result IOError Unit) (flush Stdout)
+
+proc second (_value : Unit)
+  : HostIO AFull (Result IOError Unit) visits [Console] =
+  host_console AFull (Result IOError Unit) (flush Stdout)
+"#,
+            ),
+            target,
+        )
+        .expect("checked binding fixture")
+    }
+
+    fn rejects(
+        denotation: &CheckedTargetDenotationV1,
+        inventory: &PerformNodeInventoryV1,
+    ) {
+        assert!(matches!(
+            assemble_checked_export(
+                denotation,
+                inventory,
+                &[],
+                &BTreeSet::new(),
+                vec![],
+                vec![],
+            ),
+            Err(ExportError::PerformInventoryBindingMismatch)
+        ));
+    }
+
+    #[test]
+    fn target_semantic_and_node_mutations_reject_before_hash() {
+        let first = denotation("first");
+        let canonical = derive_perform_inventory(&first).expect("canonical inventory");
+
+        let other_target = derive_perform_inventory(&denotation("second"))
+            .expect("other target inventory");
+        rejects(&first, &other_target);
+
+        let mut other_semantic_identity = canonical.clone();
+        other_semantic_identity.core_semantic_hash ^= 1;
+        rejects(&first, &other_semantic_identity);
+
+        let mut omitted_node = canonical.clone();
+        omitted_node.nodes.pop_first();
+        rejects(&first, &omitted_node);
+
+        let mut added_node = canonical;
+        added_node.nodes.insert(PerformNodeSignatureV1::L5 {
+            family_symbol: "fixture::SyntheticOp".to_string(),
+            operation_symbol: "fixture::Synthetic".to_string(),
+        });
+        rejects(&first, &added_node);
+    }
+
+    #[test]
+    fn exact_fixture_preserves_hash_and_headroom_changes_only_alphabet() {
+        let exact = compile_checked_target_denotation(
+            "b1_compat_exact",
+            CompilerSource::new(
+                "exact.ken",
+                "fn target (value : Unit) : Unit = value",
+            ),
+            "target",
+        )
+        .expect("exact pure target");
+        let exact_export = emit_checked_target_export(
+            &exact,
+            &[],
+            &BTreeSet::new(),
+            vec![],
+            vec![],
+        )
+        .expect("exact export");
+        assert_eq!(
+            exact_export.hash,
+            compute_hash("target", &[], &[], &BTreeSet::new(), &[], None, &[]),
+            "an already-exact legacy alphabet retains its canonical hash"
+        );
+
+        let headroom = compile_checked_target_denotation(
+            "b1_compat_headroom",
+            CompilerSource::new(
+                "headroom.ken",
+                "proc target (value : Unit) : Unit visits [Console] = value",
+            ),
+            "target",
+        )
+        .expect("legal headroom target");
+        let current = emit_checked_target_export(
+            &headroom,
+            &[],
+            &BTreeSet::new(),
+            vec![],
+            vec![],
+        )
+        .expect("headroom export");
+        let legacy_alphabet = BTreeSet::from(["Console".to_string()]);
+        let legacy_hash = compute_hash(
+            "target",
+            &[],
+            &[],
+            &legacy_alphabet,
+            &[],
+            None,
+            &[],
+        );
+        assert!(current.alphabet.is_empty());
+        assert_ne!(current.hash, legacy_hash);
+
+        let mut current_wire = serialize_export(&current);
+        let mut legacy_wire = current_wire.clone();
+        legacy_wire["alphabet"] = serde_json::json!(["Console"]);
+        legacy_wire["hash"] = serde_json::json!(legacy_hash);
+        current_wire.as_object_mut().unwrap().remove("alphabet");
+        current_wire.as_object_mut().unwrap().remove("hash");
+        legacy_wire.as_object_mut().unwrap().remove("alphabet");
+        legacy_wire.as_object_mut().unwrap().remove("hash");
+        assert_eq!(current_wire, legacy_wire);
     }
 }

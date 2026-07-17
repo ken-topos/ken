@@ -8,7 +8,7 @@
 //! **QA gate (build-qa lesson):** synthetic export literals guard nothing.
 //! Every case here:
 //! 1. Constructs a real kernel environment with actual obligations.
-//! 2. Runs the actual emitter (`emit_export`).
+//! 2. Runs the actual checked-target emitter (`emit_checked_target_export`).
 //! 3. Asserts a structural property of the emitted contract.
 //!
 //! **Discriminating-pair discipline:** EX-A1 and EX-A2 are the NON-DEGENERATE
@@ -20,7 +20,9 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::{
-    emit_export, serialize_export, ExportError, GEntry, Pred, PStatus, TEntry, Temporal,
+    emit_checked_target_export, serialize_export, ExportError, GEntry, Pred, PStatus, TEntry,
+    Temporal,
+    compiler_driver::{compile_checked_target_denotation, CompilerSource},
     effects::row::EffectRow,
     extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     error::Span,
@@ -81,6 +83,34 @@ fn closed_triple(
 /// Collect `trusted_base()` into a `BTreeSet` for O(log n) membership checks.
 fn trusted_base_set(env: &GlobalEnv) -> BTreeSet<GlobalId> {
     env.trusted_base().into_iter().collect()
+}
+
+fn emit_export(
+    target_name: &str,
+    results: &[(ObligationTriple, Verdict)],
+    trusted_base: &BTreeSet<GlobalId>,
+    legacy_alphabet: EffectRow,
+    generators: Vec<GEntry>,
+    temporal: Vec<TEntry>,
+) -> Result<ken_elaborator::BehavioralExport, ExportError> {
+    assert!(
+        legacy_alphabet.effects().next().is_none(),
+        "alphabet-bearing cases must use a real perform producer"
+    );
+    let source = format!("fn {target_name} (value : Unit) : Unit = value");
+    let denotation = compile_checked_target_denotation(
+        &format!("b1_acceptance_{target_name}"),
+        CompilerSource::new("fixture.ken", source),
+        target_name,
+    )
+    .expect("pure checked target denotation");
+    emit_checked_target_export(
+        &denotation,
+        results,
+        trusted_base,
+        generators,
+        temporal,
+    )
 }
 
 // ─── EX-A. The status → field projection — the no-over-claim pair (AC2/I1) ──
@@ -278,36 +308,46 @@ fn removing_assume_shrinks_p_and_changes_hash() {
 /// cannot hide a dropped node.
 #[test]
 fn alphabet_equals_perform_node_signatures() {
-    // Two distinct effects: Console.Write and State.Get.
-    let alpha = EffectRow::from_effects(vec![
-        "Console.Write".to_string(),
-        "State.Get".to_string(),
-    ]);
+    let source = r#"
+proc after_flush (_outcome : Result IOError Unit)
+  : HostIO AFull Instant visits [Clock] =
+  host_clock AFull Instant wall_now
 
-    // A simple program: no obligations, just the alphabet.
-    let result = emit_export(
+proc h (_value : Unit) : HostIO AFull Instant visits [Console, Clock] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result IOError Unit) Instant
+    (host_console AFull (Result IOError Unit) (flush Stdout))
+    (\outcome. after_flush outcome)
+"#;
+    let denotation = compile_checked_target_denotation(
+        "b1_acceptance_alphabet",
+        CompilerSource::new("alphabet.ken", source),
         "h",
+    )
+    .expect("checked two-effect target");
+    let result = emit_checked_target_export(
+        &denotation,
         &[],
         &BTreeSet::new(),
-        alpha,
         vec![],
         vec![],
-    ).expect("export with alphabet");
+    )
+    .expect("export with exact alphabet");
 
-    // Σ must equal exactly {Console.Write, State.Get} — structural equality.
-    let expected: BTreeSet<String> = ["Console.Write", "State.Get"]
+    let expected: BTreeSet<String> = ["Console", "Clock"]
         .iter()
         .map(|s| s.to_string())
         .collect();
     assert_eq!(
         result.alphabet, expected,
-        "Σ must equal the L5 perform-node signatures exactly"
+        "Σ must equal the checked perform-node projection exactly"
     );
 
     // No orphan symbol: each member of Σ is a real perform-node.
-    assert!(result.alphabet.contains("Console.Write"));
-    assert!(result.alphabet.contains("State.Get"));
-    assert!(!result.alphabet.contains("Net.Fetch"), "orphan symbol must not appear");
+    assert!(result.alphabet.contains("Console"));
+    assert!(result.alphabet.contains("Clock"));
+    assert!(!result.alphabet.contains("FS"), "unused sibling effect must not appear");
 
     // Closure: alphabet is not missing any declared node.
     assert_eq!(result.alphabet.len(), 2, "no missing node");

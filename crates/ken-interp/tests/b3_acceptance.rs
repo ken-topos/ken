@@ -8,8 +8,9 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::{
-    emit_export, emit_trace_contract,
-    AssertionPoint, Pred, TEntry, Temporal, TraceEvent,
+    emit_checked_target_export, emit_trace_contract, try_emit_trace_contract,
+    compiler_driver::{compile_checked_target_denotation, CompilerSource},
+    AssertionPoint, ExportError, GEntry, Pred, TEntry, Temporal, TraceContractError, TraceEvent,
 };
 use ken_elaborator::effects::EffectRow;
 use ken_elaborator::error::Span;
@@ -91,7 +92,7 @@ fn op1_term() -> Term {
     Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(Term::var(0)))
 }
 
-/// op2 (State): body = Type(0) — constant closure
+/// op2 (Clock): body = Type(0) — constant closure
 fn op2_term() -> Term {
     Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(Term::Type(Level::zero())))
 }
@@ -104,8 +105,8 @@ fn decode_op(val: &EvalVal) -> (String, String, String) {
         EvalVal::Closure { body, .. } if matches!(**body, Term::Var(0)) => {
             ("Console".to_string(), "Write".to_string(), "\"hello\"".to_string())
         }
-        // anything else → State.Get (op2_term has body = Type(0))
-        _ => ("State".to_string(), "Get".to_string(), "()".to_string()),
+        // anything else → Clock.WallNow (op2_term has body = Type(0))
+        _ => ("Clock".to_string(), "WallNow".to_string(), "()".to_string()),
     }
 }
 
@@ -130,7 +131,44 @@ fn content_address(msg: &str) -> String {
 
 /// B1 Σ for the two test effects.
 fn test_alphabet() -> EffectRow {
-    EffectRow::from_effects(vec!["Console".to_string(), "State".to_string()])
+    EffectRow::from_effects(vec!["Console".to_string(), "Clock".to_string()])
+}
+
+fn emit_export(
+    target_name: &str,
+    results: &[(ObligationTriple, Verdict)],
+    trusted_base: &BTreeSet<GlobalId>,
+    legacy_alphabet: EffectRow,
+    generators: Vec<GEntry>,
+    temporal: Vec<TEntry>,
+) -> Result<ken_elaborator::BehavioralExport, ExportError> {
+    assert_eq!(legacy_alphabet, test_alphabet());
+    let source = format!(r#"
+proc after_flush (_outcome : Result IOError Unit)
+  : HostIO AFull Instant visits [Clock] =
+  host_clock AFull Instant wall_now
+
+proc {target_name} (_value : Unit)
+  : HostIO AFull Instant visits [Console, Clock] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result IOError Unit) Instant
+    (host_console AFull (Result IOError Unit) (flush Stdout))
+    (\outcome. after_flush outcome)
+"#);
+    let denotation = compile_checked_target_denotation(
+        &format!("b3_acceptance_{target_name}"),
+        CompilerSource::new("fixture.ken", source),
+        target_name,
+    )
+    .expect("checked B3 alphabet producer");
+    emit_checked_target_export(
+        &denotation,
+        results,
+        trusted_base,
+        generators,
+        temporal,
+    )
 }
 
 /// Run a 2-Vis tree (op1 then op2) through `drive_h_instrumented` and return
@@ -349,8 +387,8 @@ fn correlated_events_link_uncorrelated_dont() {
             &mut |s, e, r, p| raw.push((s, e, r, p)),
         );
         raw.into_iter().map(|(sid, _, r, pos)| TraceEvent {
-            effect: "State".to_string(),
-            op: "Get".to_string(),
+            effect: "Clock".to_string(),
+            op: "WallNow".to_string(),
             op_arg: "()".to_string(),
             response: decode_resp(&r),
             space_id: sid,
@@ -596,4 +634,33 @@ fn monitor_verdict_never_promoted_to_proved() {
             .all(|ap| !matches!(ap, AssertionPoint::WatchedInvariant { .. })),
         "TR-F: re-running does not promote T to Q (no ingest path)"
     );
+}
+
+#[test]
+fn trace_events_are_checked_against_the_one_b1_alphabet() {
+    let mut env = GlobalEnv::new();
+    let it = mk_itree(&mut env);
+    let mut store = EvalStore::new();
+    let events = run_two_effect_tree("space", &mut store, &env, &it);
+    let export = emit_export(
+        "prog",
+        &[],
+        &BTreeSet::new(),
+        test_alphabet(),
+        vec![],
+        vec![],
+    )
+    .expect("B1 checked export");
+
+    try_emit_trace_contract("prog", events.clone(), &export)
+        .expect("real events are images of B1 Σ");
+
+    let mut outside = events;
+    outside[0].effect = "FS".to_string();
+    assert!(matches!(
+        try_emit_trace_contract("prog", outside, &export),
+        Err(TraceContractError::EventOutsideAlphabet {
+            effect,
+        }) if effect == "FS"
+    ), "B3 must reject rather than derive or widen a second alphabet");
 }

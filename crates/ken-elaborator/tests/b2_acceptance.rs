@@ -17,7 +17,7 @@
 //! - **TE-D** — a surface `temporal{}` block elaborates to the §3 constructors,
 //!   tagged `delegated`, human-visible (verbatim source, not erased).
 //! - **TE-E** — a real `temporal{}` value routed through the real B1 emitter
-//!   (`emit_export`) lands in `T`/`delegated`, never `Q`/`P`; the one-way gate
+//!   (`emit_checked_target_export`) lands in `T`/`delegated`, never `Q`/`P`; the one-way gate
 //!   holds even beside a real `Verdict::Proved` (no promotion edge).
 //! - **TE-F** — `closed` (the `elim_Temporal` analog) computes the bound/free
 //!   verdict flip (reason-*about*); and the obligation is **not dischargeable
@@ -29,14 +29,40 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::{
-    closed, elaborate_temporal_expr, emit_export, serialize_export,
+    closed, elaborate_temporal_expr, emit_checked_target_export, serialize_export,
     temporal_hoas_inductive_spec, temporal_inductive_spec,
+    compiler_driver::{compile_checked_target_denotation, CompilerSource},
     effects::row::EffectRow,
     error::Span,
     extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     prover::Verdict,
-    ElabEnv, Pred, TEntry, Temporal, TemporalExpr, Var,
+    ElabEnv, ExportError, GEntry, Pred, TEntry, Temporal, TemporalExpr, Var,
 };
+
+fn emit_export(
+    target_name: &str,
+    results: &[(ObligationTriple, Verdict)],
+    trusted_base: &BTreeSet<GlobalId>,
+    legacy_alphabet: EffectRow,
+    generators: Vec<GEntry>,
+    temporal: Vec<TEntry>,
+) -> Result<ken_elaborator::BehavioralExport, ExportError> {
+    assert!(legacy_alphabet.effects().next().is_none());
+    let source = format!("fn {target_name} (value : Unit) : Unit = value");
+    let denotation = compile_checked_target_denotation(
+        &format!("b2_acceptance_{target_name}"),
+        CompilerSource::new("fixture.ken", source),
+        target_name,
+    )
+    .expect("pure checked target denotation");
+    emit_checked_target_export(
+        &denotation,
+        results,
+        trusted_base,
+        generators,
+        temporal,
+    )
+}
 use ken_kernel::{
     inductive::{check_positivity, method_type, peel_app, peel_pi, recursive_args},
     declare_inductive, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, KernelError, Level, Term,
@@ -715,6 +741,47 @@ fn cross_case_verdict_mapping_is_constant() {
             src
         );
     }
+}
+
+#[test]
+fn temporal_symbols_consume_the_one_checked_b1_alphabet() {
+    let denotation = compile_checked_target_denotation(
+        "b2_consumer_closure",
+        CompilerSource::new(
+            "consumer.ken",
+            r#"
+proc target (_value : Unit)
+  : HostIO AFull (Result IOError Unit) visits [Console] =
+  host_console AFull (Result IOError Unit) (flush Stdout)
+"#,
+        ),
+        "target",
+    )
+    .expect("checked B1 producer");
+    let export = emit_checked_target_export(
+        &denotation,
+        &[],
+        &BTreeSet::new(),
+        vec![],
+        vec![TEntry {
+            obligation_id: "console-eventual".to_string(),
+            formula: Temporal::eventually(&Temporal::Atom(Pred::Event(
+                "Console".to_string(),
+            ))),
+        }],
+    )
+    .expect("B2 consumes checked B1 export");
+
+    let Temporal::Until(_, eventual) = &export.obligations[0].formula else {
+        panic!("eventually encoding");
+    };
+    let Temporal::Atom(Pred::Event(symbol)) = eventual.as_ref() else {
+        panic!("event symbol");
+    };
+    assert!(
+        export.alphabet.contains(symbol),
+        "B2's T symbol is a member of the B1-derived Σ; B2 derives no second set"
+    );
 }
 
 // ─── Sanity: the kernel spec helpers build well-formed InductiveSpecs ────────

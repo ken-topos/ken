@@ -2,38 +2,51 @@ use std::collections::BTreeSet;
 
 use ken_elaborator::temporal::{Pred, Temporal};
 use ken_elaborator::{
-    emit_export, serialize_export, try_serialize_export, BehavioralExport, ElabEnv, ExportError,
-    ResourceLifetimeObligationV1, TEntry,
+    compiler_driver::{compile_checked_target_denotation, CompilerSource},
+    emit_checked_target_export, serialize_export, try_serialize_export, BehavioralExport,
+    ExportError, ResourceLifetimeObligationV1, TEntry,
 };
 
 const RESOURCE_PRODUCER: &str = r#"
-fn px7f_export_body (resource : Resource FsHandle)
+fn px7f_after_metadata (outcome : Result ResourceError FileMetadata)
   : HostIO AFull (ResourceBodyResult Unit Unit) =
-  Ret (Coproduct (FSOp AFull) AmbientOp)
+  match outcome {
+    Err _ |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (ResourceBodyOk Unit Unit MkUnit);
+    Ok _ |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult Unit Unit) (ResourceBodyOk Unit Unit MkUnit)
+  }
+
+proc px7f_export_body (resource : Resource FsHandle)
+  : HostIO AFull (ResourceBodyResult Unit Unit)
+    visits [FS, FsHandleMetadata] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
-    (ResourceBodyResult Unit Unit)
-    (ResourceBodyOk Unit Unit MkUnit)
+    (Result ResourceError FileMetadata) (ResourceBodyResult Unit Unit)
+    (resourceMetadata AFull resource) (\outcome. px7f_after_metadata outcome)
 
 proc px7f_export_resource (cap : Cap AFull) (path : Bytes)
   : HostIO AFull (Result FileError (ResourceBracketResult Unit Unit))
-    visits [FS, FsOpen] =
+    visits [FS, FsOpen, FsHandleMetadata, ResourceRelease] =
   withResource AFull Unit Unit cap path ResourceMetadata px7f_export_body
 "#;
 
 const ORDINARY_PRODUCER: &str = r#"
-proc px7f_export_ordinary (value : Unit) : Unit visits [Console] = value
+proc px7f_export_ordinary (_value : Unit)
+  : HostIO AFull (Result IOError Unit) visits [Console] =
+  host_console AFull (Result IOError Unit) (flush Stdout)
 "#;
 
 fn checked_export(source: &str, target: &str, temporal: Vec<TEntry>) -> BehavioralExport {
-    let mut env = ElabEnv::empty().expect("PX7-F prelude");
-    env.elaborate_file(source)
-        .expect("checked producer must elaborate");
-    let row = env
-        .effect_rows
-        .get(target)
-        .unwrap_or_else(|| panic!("checked producer row for {target}"))
-        .concrete_effects();
-    emit_export(target, &[], &BTreeSet::new(), row, vec![], temporal)
+    let denotation = compile_checked_target_denotation(
+        "px7f_resource_lifetime_export",
+        CompilerSource::new("fixture.ken", source),
+        target,
+    )
+    .expect("checked producer denotation");
+    emit_checked_target_export(&denotation, &[], &BTreeSet::new(), vec![], temporal)
         .expect("checked producer export")
 }
 
