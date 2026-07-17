@@ -101,6 +101,7 @@ pub fn empty_prelude_env() -> PreludeEnv {
         inject_r_id: z,
         private_fs_open_id: z,
         private_fs_handle_metadata_id: z,
+        private_buffer_allocate_id: z,
         private_resource_release_id: z,
         private_resource_trace_identity_id: z,
         fs_handle_id: z,
@@ -221,6 +222,7 @@ pub struct PreludeEnv {
     /// resolve them through this immutable prelude record.
     pub private_fs_open_id: GlobalId,
     pub private_fs_handle_metadata_id: GlobalId,
+    pub private_buffer_allocate_id: GlobalId,
     pub private_resource_release_id: GlobalId,
     /// Module-private two-limb constructor for the opaque trace identity.
     pub private_resource_trace_identity_id: GlobalId,
@@ -1393,6 +1395,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         Term::const_(resource_id, vec![]),
         Term::constructor(fs_handle_id, vec![]),
     );
+    let resource_kind_t = Term::indformer(resource_kind_id, vec![]);
+    let resource_of_latest_kind_t = Term::app(Term::const_(resource_id, vec![]), Term::var(0));
     let resource_open_mode_t = elab
         .globals
         .get("ResourceOpenMode")
@@ -1425,10 +1429,11 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
                 named(vec![cap_a(), bytes_t.clone()]),
                 named(vec![cap_a(), bool_t, bytes_t.clone()]),
                 named(vec![cap_a(), bytes_t.clone(), bytes_t.clone()]),
-                named(vec![cap_a(), bytes_t.clone(), int_t]),
+                named(vec![cap_a(), bytes_t.clone(), int_t.clone()]),
                 named(vec![cap_a(), bytes_t.clone(), resource_open_mode_t]),
                 named(vec![resource_fs_handle_t.clone()]),
-                named(vec![resource_fs_handle_t.clone()]),
+                named(vec![resource_kind_t, resource_of_latest_kind_t]),
+                named(vec![int_t]),
             ]
         },
     })
@@ -1456,6 +1461,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "PrivateFsOpen",
         "PrivateFsHandleMetadata",
         "PrivateResourceRelease",
+        "PrivateBufferAllocate",
     ]
     .into_iter()
     .zip(fs_ctor_ids)
@@ -1465,6 +1471,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let private_fs_open_id = elab.globals["PrivateFsOpen"];
     let private_fs_handle_metadata_id = elab.globals["PrivateFsHandleMetadata"];
     let private_resource_release_id = elab.globals["PrivateResourceRelease"];
+    let private_buffer_allocate_id = elab.globals["PrivateBufferAllocate"];
 
     // `fs_resp : (a : Auth) -> FSOp a -> Type` is a genuine non-constant
     // large elimination. Every arm returns a total `Result FileError _`, with
@@ -1483,7 +1490,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            ChangeMode cap path mode |-> Result FileError Unit; \
            PrivateFsOpen cap path mode |-> Result FileError (Resource FsHandle); \
            PrivateFsHandleMetadata resource |-> Result ResourceError FileMetadata; \
-           PrivateResourceRelease resource |-> Result ResourceError Unit \
+           PrivateResourceRelease kind resource |-> Result ResourceError Unit; \
+           PrivateBufferAllocate capacity |-> Result ResourceError (Resource Buffer) \
          }",
     )
     .map_err(|e| ElabError::Internal(format!("prelude fs_resp failed: {}", e)))?;
@@ -1600,9 +1608,9 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     )
     .map_err(|e| ElabError::Internal(format!("prelude host_fs failed: {e}")))?;
 
-    // PX7-F private resource protocol nodes. Only the checked bracket below
-    // names the acquire producer; all three constructor spellings and the raw
-    // acquire helper are removed from the public global-name map afterward.
+    // Private resource protocol nodes. Only the checked brackets below name
+    // acquisition producers; all private constructor spellings and raw
+    // acquisition helpers are removed from the public global-name map afterward.
     elab.elaborate_decl(
         "proc private_resource_acquire (a : Auth) (cap : Cap a) (path : Bytes) (mode : ResourceOpenMode) : HostIO a (Result FileError (Resource FsHandle)) visits [FS] = \
          Vis (Coproduct (FSOp a) AmbientOp) \
@@ -1630,70 +1638,109 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
          Vis (Coproduct (FSOp a) AmbientOp) \
            (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
            (Result ResourceError Unit) \
-           (InL (FSOp a) AmbientOp (PrivateResourceRelease a resource)) \
+           (InL (FSOp a) AmbientOp (PrivateResourceRelease a FsHandle resource)) \
            (\\r. Ret (Coproduct (FSOp a) AmbientOp) \
              (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
              (Result ResourceError Unit) r)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude release failed: {e}")))?;
     elab.elaborate_decl(
-        "fn resource_settle_ok_error (e : Type) (r : Type) (value : r) \
+        "fn resource_settle_ok_error_for (o : Type) (e : Type) (r : Type) (value : r) \
            (release_error : ResourceError) \
-           : Result FileError (ResourceBracketResult e r) = \
+           : Result o (ResourceBracketResult e r) = \
          match release_error { \
-           ResourceHostIO io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ResourceHostIO io)); \
-           Closed |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketOk e r value); \
-           MalformedResource |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r MalformedResource); \
-           RightNotHeld required held |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (RightNotHeld required held)); \
-           ReleaseFailed kind identity io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ReleaseFailed kind identity io)); \
-           ResourceKindMismatch expected actual |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ResourceKindMismatch expected actual)); \
-           BufferLimit |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r BufferLimit); \
-           InvalidOffset |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r InvalidOffset); \
-           InvalidBounds |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r InvalidBounds); \
-           NoProgress |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r NoProgress) \
+           ResourceHostIO io |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ResourceHostIO io)); \
+           Closed |-> Ok o (ResourceBracketResult e r) (ResourceBracketOk e r value); \
+           MalformedResource |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r MalformedResource); \
+           RightNotHeld required held |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r (RightNotHeld required held)); \
+           ReleaseFailed kind identity io |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ReleaseFailed kind identity io)); \
+           ResourceKindMismatch expected actual |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ResourceKindMismatch expected actual)); \
+           BufferLimit |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r BufferLimit); \
+           InvalidOffset |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r InvalidOffset); \
+           InvalidBounds |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r InvalidBounds); \
+           NoProgress |-> Ok o (ResourceBracketResult e r) (ResourceBracketReleaseError e r NoProgress) \
          }",
     )
     .map_err(|e| {
-        ElabError::Internal(format!("prelude resource_settle_ok_error failed: {e}"))
+        ElabError::Internal(format!("prelude resource_settle_ok_error_for failed: {e}"))
     })?;
+    elab.elaborate_decl(
+        "fn resource_settle_body_error_for (o : Type) (e : Type) (r : Type) (body_error : e) \
+           (release_error : ResourceError) \
+           : Result o (ResourceBracketResult e r) = \
+         match release_error { \
+           ResourceHostIO io |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ResourceHostIO io)); \
+           Closed |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyError e r body_error); \
+           MalformedResource |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error MalformedResource); \
+           RightNotHeld required held |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (RightNotHeld required held)); \
+           ReleaseFailed kind identity io |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ReleaseFailed kind identity io)); \
+           ResourceKindMismatch expected actual |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ResourceKindMismatch expected actual)); \
+           BufferLimit |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error BufferLimit); \
+           InvalidOffset |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error InvalidOffset); \
+           InvalidBounds |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error InvalidBounds); \
+           NoProgress |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error NoProgress) \
+         }",
+    )
+    .map_err(|e| {
+        ElabError::Internal(format!("prelude resource_settle_body_error_for failed: {e}"))
+    })?;
+    elab.elaborate_decl(
+        "fn resource_settle_ok_for (o : Type) (e : Type) (r : Type) (value : r) \
+           (settled : Result ResourceError Unit) \
+           : Result o (ResourceBracketResult e r) = \
+         match settled { \
+           Ok unit |-> Ok o (ResourceBracketResult e r) (ResourceBracketOk e r value); \
+           Err release_error |-> resource_settle_ok_error_for o e r value release_error \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude resource_settle_ok_for failed: {e}")))?;
+    elab.elaborate_decl(
+        "fn resource_settle_err_for (o : Type) (e : Type) (r : Type) (body_error : e) \
+           (settled : Result ResourceError Unit) \
+           : Result o (ResourceBracketResult e r) = \
+         match settled { \
+           Ok unit |-> Ok o (ResourceBracketResult e r) (ResourceBracketBodyError e r body_error); \
+           Err release_error |-> resource_settle_body_error_for o e r body_error release_error \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude resource_settle_err_for failed: {e}")))?;
+    elab.elaborate_decl(
+        "fn resource_settle_result_for (o : Type) (e : Type) (r : Type) \
+           (body_result : ResourceBodyResult e r) \
+           (settled : Result ResourceError Unit) \
+           : Result o (ResourceBracketResult e r) = \
+         match body_result { \
+           ResourceBodyOk value |-> resource_settle_ok_for o e r value settled; \
+           ResourceBodyErr body_error |-> resource_settle_err_for o e r body_error settled \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude resource_settle_result_for failed: {e}")))?;
+    elab.elaborate_decl(
+        "fn resource_settle_ok_error (e : Type) (r : Type) (value : r) \
+           (release_error : ResourceError) \
+           : Result FileError (ResourceBracketResult e r) = \
+         resource_settle_ok_error_for FileError e r value release_error",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude resource_settle_ok_error failed: {e}")))?;
     elab.elaborate_decl(
         "fn resource_settle_body_error (e : Type) (r : Type) (body_error : e) \
            (release_error : ResourceError) \
            : Result FileError (ResourceBracketResult e r) = \
-         match release_error { \
-           ResourceHostIO io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ResourceHostIO io)); \
-           Closed |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyError e r body_error); \
-           MalformedResource |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error MalformedResource); \
-           RightNotHeld required held |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (RightNotHeld required held)); \
-           ReleaseFailed kind identity io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ReleaseFailed kind identity io)); \
-           ResourceKindMismatch expected actual |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ResourceKindMismatch expected actual)); \
-           BufferLimit |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error BufferLimit); \
-           InvalidOffset |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error InvalidOffset); \
-           InvalidBounds |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error InvalidBounds); \
-           NoProgress |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error NoProgress) \
-         }",
+         resource_settle_body_error_for FileError e r body_error release_error",
     )
-    .map_err(|e| {
-        ElabError::Internal(format!("prelude resource_settle_body_error failed: {e}"))
-    })?;
+    .map_err(|e| ElabError::Internal(format!("prelude resource_settle_body_error failed: {e}")))?;
     elab.elaborate_decl(
         "fn resource_settle_ok (e : Type) (r : Type) (value : r) \
            (settled : Result ResourceError Unit) \
            : Result FileError (ResourceBracketResult e r) = \
-         match settled { \
-           Ok unit |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketOk e r value); \
-           Err release_error |-> resource_settle_ok_error e r value release_error \
-         }",
+         resource_settle_ok_for FileError e r value settled",
     )
     .map_err(|e| ElabError::Internal(format!("prelude resource_settle_ok failed: {e}")))?;
     elab.elaborate_decl(
         "fn resource_settle_err (e : Type) (r : Type) (body_error : e) \
            (settled : Result ResourceError Unit) \
            : Result FileError (ResourceBracketResult e r) = \
-         match settled { \
-           Ok unit |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyError e r body_error); \
-           Err release_error |-> resource_settle_body_error e r body_error release_error \
-         }",
+         resource_settle_err_for FileError e r body_error settled",
     )
     .map_err(|e| ElabError::Internal(format!("prelude resource_settle_err failed: {e}")))?;
     elab.elaborate_decl(
@@ -1701,24 +1748,22 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            (body_result : ResourceBodyResult e r) \
            (settled : Result ResourceError Unit) \
            : Result FileError (ResourceBracketResult e r) = \
-         match body_result { \
-           ResourceBodyOk value |-> resource_settle_ok e r value settled; \
-           ResourceBodyErr body_error |-> resource_settle_err e r body_error settled \
-         }",
+         resource_settle_result_for FileError e r body_result settled",
     )
     .map_err(|e| ElabError::Internal(format!("prelude resource_settle_result failed: {e}")))?;
     elab.elaborate_decl(
-        "proc release_if_live (a : Auth) (e : Type) (r : Type) \
-           (resource : Resource FsHandle) (body_result : ResourceBodyResult e r) \
-           : HostIO a (Result FileError (ResourceBracketResult e r)) visits [FS] = \
+        "proc release_if_live (a : Auth) (o : Type) (e : Type) (r : Type) \
+           (kind : ResourceKind) (resource : Resource kind) \
+           (body_result : ResourceBodyResult e r) \
+           : HostIO a (Result o (ResourceBracketResult e r)) visits [FS] = \
          Vis (Coproduct (FSOp a) AmbientOp) \
            (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
-           (Result FileError (ResourceBracketResult e r)) \
-           (InL (FSOp a) AmbientOp (PrivateResourceRelease a resource)) \
+           (Result o (ResourceBracketResult e r)) \
+           (InL (FSOp a) AmbientOp (PrivateResourceRelease a kind resource)) \
            (\\settled. Ret (Coproduct (FSOp a) AmbientOp) \
              (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
-             (Result FileError (ResourceBracketResult e r)) \
-             (resource_settle_result e r body_result settled))",
+             (Result o (ResourceBracketResult e r)) \
+             (resource_settle_result_for o e r body_result settled))",
     )
     .map_err(|e| ElabError::Internal(format!("prelude release_if_live failed: {e}")))?;
     elab.elaborate_decl(
@@ -1736,7 +1781,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
              (ResourceBodyResult e r) \
              (Result FileError (ResourceBracketResult e r)) \
              (body resource) \
-             (\\body_result. release_if_live a e r resource body_result) \
+             (\\body_result. release_if_live a FileError e r FsHandle resource body_result) \
          }",
     )
     .map_err(|e| {
@@ -1756,6 +1801,40 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            (\\acquired. private_with_resource_after_open a e r body acquired)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude withResource failed: {e}")))?;
+    elab.elaborate_decl(
+        "proc private_with_buffer_after_allocate (a : Auth) (e : Type) (r : Type) \
+           (body : Resource Buffer -> HostIO a (ResourceBodyResult e r)) \
+           (acquired : Result ResourceError (Resource Buffer)) \
+           : HostIO a (Result ResourceError (ResourceBracketResult e r)) visits [FS] = \
+         match acquired { \
+           Err allocate_error |-> Ret (Coproduct (FSOp a) AmbientOp) \
+             (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+             (Result ResourceError (ResourceBracketResult e r)) \
+             (Err ResourceError (ResourceBracketResult e r) allocate_error); \
+           Ok resource |-> bind (Coproduct (FSOp a) AmbientOp) \
+             (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+             (ResourceBodyResult e r) \
+             (Result ResourceError (ResourceBracketResult e r)) \
+             (body resource) \
+             (\\body_result. release_if_live a ResourceError e r Buffer resource body_result) \
+         }",
+    )
+    .map_err(|e| {
+        ElabError::Internal(format!(
+            "prelude private_with_buffer_after_allocate failed: {e}"
+        ))
+    })?;
+    elab.elaborate_decl(
+        "proc withBuffer (a : Auth) (e : Type) (r : Type) (capacity : Int) \
+           (body : Resource Buffer -> HostIO a (ResourceBodyResult e r)) \
+           : HostIO a (Result ResourceError (ResourceBracketResult e r)) visits [FS] = \
+         Vis (Coproduct (FSOp a) AmbientOp) \
+           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+           (Result ResourceError (ResourceBracketResult e r)) \
+           (InL (FSOp a) AmbientOp (PrivateBufferAllocate a capacity)) \
+           (\\acquired. private_with_buffer_after_allocate a e r body acquired)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude withBuffer failed: {e}")))?;
 
     // No raw acquire or representation constructor is a public Ken identity.
     // Their GlobalIds remain reachable only through the checked definitions
@@ -1763,10 +1842,17 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     for private_name in [
         "PrivateFsOpen",
         "PrivateFsHandleMetadata",
+        "PrivateBufferAllocate",
         "PrivateResourceRelease",
         "PrivateResourceTraceIdentity",
         "private_resource_acquire",
         "private_with_resource_after_open",
+        "private_with_buffer_after_allocate",
+        "resource_settle_ok_error_for",
+        "resource_settle_body_error_for",
+        "resource_settle_ok_for",
+        "resource_settle_err_for",
+        "resource_settle_result_for",
         "release_if_live",
     ] {
         elab.globals.remove(private_name);
@@ -1926,6 +2012,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         inject_r_id,
         private_fs_open_id,
         private_fs_handle_metadata_id,
+        private_buffer_allocate_id,
         private_resource_release_id,
         private_resource_trace_identity_id,
         fs_handle_id,

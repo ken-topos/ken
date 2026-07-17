@@ -469,6 +469,21 @@ fn lower_checked_host_computation(
                 } else {
                     (None, runtime_args)
                 };
+            // `PrivateResourceRelease` is indexed by its resource kind in the
+            // checked family, but that index is type-level protocol evidence,
+            // not a second runtime operand.  The canonical host operation still
+            // receives exactly the opaque resource token it has always used.
+            let semantic_args = if decoded.operation == ken_host::HostOpV1::ResourceRelease {
+                semantic_args.get(1..).ok_or_else(|| {
+                    expression_lowering_error(
+                        root,
+                        "resource_release_shape",
+                        "ResourceRelease is missing its indexed resource operand",
+                    )
+                })?
+            } else {
+                semantic_args
+            };
             let args = semantic_args
                 .iter()
                 .map(|argument| {
@@ -633,7 +648,9 @@ const fn static_host_operation_requires_capability(operation: ken_host::HostOpV1
     !operation.is_ambient()
         && !matches!(
             operation,
-            ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
+            ken_host::HostOpV1::FsHandleMetadata
+                | ken_host::HostOpV1::BufferAllocate
+                | ken_host::HostOpV1::ResourceRelease
         )
 }
 
@@ -643,7 +660,9 @@ const fn runtime_selected_host_operation_requires_capability(
     !operation.is_ambient()
         && !matches!(
             operation,
-            ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
+            ken_host::HostOpV1::FsHandleMetadata
+                | ken_host::HostOpV1::BufferAllocate
+                | ken_host::HostOpV1::ResourceRelease
         )
 }
 
@@ -722,6 +741,15 @@ fn lower_runtime_selected_host_operation(
                         }),
                         args.collect(),
                     )
+                } else if host_operation == ken_host::HostOpV1::ResourceRelease {
+                    let resource = runtime_args.get(1).cloned().ok_or_else(|| {
+                        expression_lowering_error(
+                            root,
+                            "resource_release_shape",
+                            "ResourceRelease is missing its indexed resource operand",
+                        )
+                    })?;
+                    (None, vec![resource])
                 } else {
                     (None, runtime_args)
                 };
@@ -3443,7 +3471,9 @@ mod px7l_tests {
             let expected = !operation.is_ambient()
                 && !matches!(
                     operation,
-                    ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
+                    ken_host::HostOpV1::FsHandleMetadata
+                        | ken_host::HostOpV1::BufferAllocate
+                        | ken_host::HostOpV1::ResourceRelease
                 );
             assert_eq!(
                 static_host_operation_requires_capability(operation),
