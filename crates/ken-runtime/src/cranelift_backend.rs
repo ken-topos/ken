@@ -1652,16 +1652,35 @@ fn ordinary_match_continuation<'a>(
 
 fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
     match expr {
-        RuntimeExpr::Match { .. }
-        | RuntimeExpr::ComputationalMatch { .. }
-        | RuntimeExpr::If { .. } => true,
+        RuntimeExpr::Match { cases, .. } => {
+            !cases.is_empty()
+                && cases
+                    .iter()
+                    .all(|case| produces_deforestable_aggregate(&case.body))
+        }
+        RuntimeExpr::ComputationalMatch { .. } => true,
+        RuntimeExpr::If {
+            then_expr,
+            else_expr,
+            ..
+        } => {
+            produces_deforestable_aggregate(then_expr) && produces_deforestable_aggregate(else_expr)
+        }
         RuntimeExpr::Call { callee, .. } => match callee.as_ref() {
             RuntimeExpr::Closure { body, .. } | RuntimeExpr::LexicalClosure { body, .. } => {
-                requires_heterogeneous_deforestation(body)
+                produces_deforestable_aggregate(body)
             }
             _ => false,
         },
         _ => false,
+    }
+}
+
+fn produces_deforestable_aggregate(expr: &RuntimeExpr) -> bool {
+    match expr {
+        RuntimeExpr::Construct { .. } => true,
+        RuntimeExpr::Let { body, .. } => produces_deforestable_aggregate(body),
+        _ => requires_heterogeneous_deforestation(expr),
     }
 }
 
@@ -4727,6 +4746,41 @@ mod tests {
             "ken_px7o_call_returned_host_result_closure_match",
         )
         .expect("call-returned HostResult remains owned by ordinary dynamic matching");
+    }
+
+    #[test]
+    fn match_selected_call_returned_host_result_keeps_established_dynamic_lane() {
+        let effect_call = RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["ignored".to_string()],
+                body: Box::new(RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Bool::True".to_string(),
+                        args: Vec::new(),
+                    }),
+                    cases: ["ctor:prelude::Bool::True", "ctor:prelude::Bool::False"]
+                        .into_iter()
+                        .map(|constructor| RuntimeMatchCase {
+                            constructor: constructor.to_string(),
+                            binders: 0,
+                            body: console_write_effect(),
+                        })
+                        .collect(),
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "static Bool default".to_string(),
+                    },
+                }),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
+        };
+
+        emit_process_entrypoint_object_with_cranelift(
+            &host_result_closure_match(effect_call),
+            "ken_px7o_match_selected_call_returned_host_result",
+        )
+        .expect("match-selected HostResult remains owned by ordinary dynamic matching");
     }
 
     #[test]
