@@ -47,10 +47,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ken_kernel::GlobalId;
 use crate::compiler_driver::{CheckedPerformNodeV1, CheckedTargetDenotationV1};
 use crate::extract::{ObligationTriple, ProvKind};
 use crate::prover::Verdict;
+use ken_kernel::GlobalId;
 
 // ─── Status types ────────────────────────────────────────────────────────────
 
@@ -901,9 +901,7 @@ mod resource_lifetime_hash_tests {
 #[cfg(test)]
 mod exact_inventory_tests {
     use super::*;
-    use crate::compiler_driver::{
-        compile_checked_target_denotation, CompilerSource,
-    };
+    use crate::compiler_driver::{compile_checked_target_denotation, CompilerSource};
 
     fn denotation(target: &str) -> CheckedTargetDenotationV1 {
         compile_checked_target_denotation(
@@ -925,19 +923,9 @@ proc second (_value : Unit)
         .expect("checked binding fixture")
     }
 
-    fn rejects(
-        denotation: &CheckedTargetDenotationV1,
-        inventory: &PerformNodeInventoryV1,
-    ) {
+    fn rejects(denotation: &CheckedTargetDenotationV1, inventory: &PerformNodeInventoryV1) {
         assert!(matches!(
-            assemble_checked_export(
-                denotation,
-                inventory,
-                &[],
-                &BTreeSet::new(),
-                vec![],
-                vec![],
-            ),
+            assemble_checked_export(denotation, inventory, &[], &BTreeSet::new(), vec![], vec![],),
             Err(ExportError::PerformInventoryBindingMismatch)
         ));
     }
@@ -947,8 +935,8 @@ proc second (_value : Unit)
         let first = denotation("first");
         let canonical = derive_perform_inventory(&first).expect("canonical inventory");
 
-        let other_target = derive_perform_inventory(&denotation("second"))
-            .expect("other target inventory");
+        let other_target =
+            derive_perform_inventory(&denotation("second")).expect("other target inventory");
         rejects(&first, &other_target);
 
         let mut other_semantic_identity = canonical.clone();
@@ -971,21 +959,13 @@ proc second (_value : Unit)
     fn exact_fixture_preserves_hash_and_headroom_changes_only_alphabet() {
         let exact = compile_checked_target_denotation(
             "b1_compat_exact",
-            CompilerSource::new(
-                "exact.ken",
-                "fn target (value : Unit) : Unit = value",
-            ),
+            CompilerSource::new("exact.ken", "fn target (value : Unit) : Unit = value"),
             "target",
         )
         .expect("exact pure target");
-        let exact_export = emit_checked_target_export(
-            &exact,
-            &[],
-            &BTreeSet::new(),
-            vec![],
-            vec![],
-        )
-        .expect("exact export");
+        let exact_export =
+            emit_checked_target_export(&exact, &[], &BTreeSet::new(), vec![], vec![])
+                .expect("exact export");
         assert_eq!(
             exact_export.hash,
             compute_hash("target", &[], &[], &BTreeSet::new(), &[], None, &[]),
@@ -1001,24 +981,10 @@ proc second (_value : Unit)
             "target",
         )
         .expect("legal headroom target");
-        let current = emit_checked_target_export(
-            &headroom,
-            &[],
-            &BTreeSet::new(),
-            vec![],
-            vec![],
-        )
-        .expect("headroom export");
+        let current = emit_checked_target_export(&headroom, &[], &BTreeSet::new(), vec![], vec![])
+            .expect("headroom export");
         let legacy_alphabet = BTreeSet::from(["Console".to_string()]);
-        let legacy_hash = compute_hash(
-            "target",
-            &[],
-            &[],
-            &legacy_alphabet,
-            &[],
-            None,
-            &[],
-        );
+        let legacy_hash = compute_hash("target", &[], &[], &legacy_alphabet, &[], None, &[]);
         assert!(current.alphabet.is_empty());
         assert_ne!(current.hash, legacy_hash);
 

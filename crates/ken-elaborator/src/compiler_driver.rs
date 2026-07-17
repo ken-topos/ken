@@ -182,7 +182,10 @@ impl fmt::Display for CheckedTargetDenotationError {
                 write!(f, "checked export target {symbol} is not transparent")
             }
             Self::NonClosedPerformGraph { reason } => {
-                write!(f, "checked export target has no closed perform graph: {reason}")
+                write!(
+                    f,
+                    "checked export target has no closed perform graph: {reason}"
+                )
             }
         }
     }
@@ -641,8 +644,7 @@ pub fn compile_checked_target_denotation(
         .env
         .lookup(target_id)
         .ok_or(CompilerDriverError::MissingStableSymbol { id: target_id })?;
-    let Decl::Transparent { body, .. } = declaration
-    else {
+    let Decl::Transparent { body, .. } = declaration else {
         return Err(CheckedTargetDenotationError::NonTransparentTarget {
             symbol: target_symbol,
         });
@@ -827,16 +829,16 @@ fn collect_checked_perform_nodes(
                             operation,
                         });
                     } else {
-                        let (family, _) = self.env.env.constructor(constructor).ok_or_else(|| {
-                            Self::fail(format!(
-                                "operation {operation_symbol} has no admitted inductive family"
-                            ))
-                        })?;
-                        let family_symbol = self
-                            .symbols
-                            .get(&family.id)
-                            .cloned()
-                            .ok_or(CompilerDriverError::MissingStableSymbol { id: family.id })?;
+                        let (family, _) =
+                            self.env.env.constructor(constructor).ok_or_else(|| {
+                                Self::fail(format!(
+                                    "operation {operation_symbol} has no admitted inductive family"
+                                ))
+                            })?;
+                        let family_symbol =
+                            self.symbols.get(&family.id).cloned().ok_or(
+                                CompilerDriverError::MissingStableSymbol { id: family.id },
+                            )?;
                         self.nodes.insert(CheckedPerformNodeV1::L5 {
                             family_symbol,
                             operation_symbol,
@@ -856,9 +858,7 @@ fn collect_checked_perform_nodes(
                     self.visit_decl(*id)
                 }
                 Term::Const { .. } => Ok(()),
-                Term::Elim {
-                    methods, scrut, ..
-                } => {
+                Term::Elim { methods, scrut, .. } => {
                     self.visit(scrut)?;
                     for method in methods {
                         self.visit(method)?;
@@ -875,9 +875,10 @@ fn collect_checked_perform_nodes(
                     self.visit(left)?;
                     self.visit(right)
                 }
-                Term::Proj1(pair) | Term::Proj2(pair) | Term::Refl(pair) | Term::TruncProj(pair) => {
-                    self.visit(pair)
-                }
+                Term::Proj1(pair)
+                | Term::Proj2(pair)
+                | Term::Refl(pair)
+                | Term::TruncProj(pair) => self.visit(pair),
                 Term::Let { val, body, .. } => {
                     self.visit(val)?;
                     self.visit(body)
@@ -916,27 +917,23 @@ fn collect_checked_perform_nodes(
             &self,
             term: &Term,
         ) -> Result<Option<GlobalId>, CheckedTargetDenotationError> {
-            let normalized = ken_kernel::normalize(
-                &self.env.env,
-                &ken_kernel::Context::new(),
-                term,
-            );
+            let normalized =
+                ken_kernel::normalize(&self.env.env, &ken_kernel::Context::new(), term);
             if matches!(normalized, Term::Var(_)) {
                 return Ok(None);
             }
             if let Term::Constructor { id, .. } = &normalized {
                 return Ok(Some(*id));
             }
-            let (outer, outer_args) = term_application_spine(&normalized)
-                .ok_or_else(|| {
-                    Self::fail(format!(
-                        "Vis operation is not a constructor application in {:?}: {normalized:?}",
-                        self.active_declarations
-                            .iter()
-                            .filter_map(|id| self.symbols.get(id))
-                            .collect::<Vec<_>>()
-                    ))
-                })?;
+            let (outer, outer_args) = term_application_spine(&normalized).ok_or_else(|| {
+                Self::fail(format!(
+                    "Vis operation is not a constructor application in {:?}: {normalized:?}",
+                    self.active_declarations
+                        .iter()
+                        .filter_map(|id| self.symbols.get(id))
+                        .collect::<Vec<_>>()
+                ))
+            })?;
             let Term::Constructor { id: outer_id, .. } = outer else {
                 return Err(Self::fail(
                     format!(
@@ -1072,8 +1069,7 @@ fn validate_export_root_inputs(
         .iter()
         .filter_map(|(id, symbol)| {
             let tail = symbol.components.last()?;
-            (tail == "ITree" || tail == "Coproduct" || tail.ends_with("Op"))
-                .then_some(*id)
+            (tail == "ITree" || tail == "Coproduct" || tail.ends_with("Op")).then_some(*id)
         })
         .collect::<BTreeSet<_>>();
     let contains_dynamic_family = |term: &Term| {
@@ -1091,14 +1087,9 @@ fn validate_export_root_inputs(
 
     let mut cursor = body;
     while let Term::Lam(parameter_type, next) = cursor {
-        let normalized_type = ken_kernel::normalize(
-            &env.env,
-            &ken_kernel::Context::new(),
-            parameter_type,
-        );
-        if matches!(normalized_type, Term::Pi(_, _))
-            || contains_dynamic_family(&normalized_type)
-        {
+        let normalized_type =
+            ken_kernel::normalize(&env.env, &ken_kernel::Context::new(), parameter_type);
+        if matches!(normalized_type, Term::Pi(_, _)) || contains_dynamic_family(&normalized_type) {
             return Err(CheckedTargetDenotationError::NonClosedPerformGraph {
                 reason: format!(
                     "target input type {normalized_type:?} can inject a dynamic perform tree, operation, or callback"

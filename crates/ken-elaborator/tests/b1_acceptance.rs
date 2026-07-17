@@ -20,13 +20,13 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::{
-    emit_checked_target_export, serialize_export, ExportError, GEntry, Pred, PStatus, TEntry,
-    Temporal,
     compiler_driver::{compile_checked_target_denotation, CompilerSource},
     effects::row::EffectRow,
-    extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
+    emit_checked_target_export,
     error::Span,
+    extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     prover::{attempt_with_cert, Verdict},
+    serialize_export, ExportError, GEntry, PStatus, Pred, TEntry, Temporal,
 };
 use ken_kernel::{declare_postulate, GlobalEnv, GlobalId, Level, Term};
 
@@ -47,10 +47,20 @@ struct KernEnv {
 
 fn make_kern_env() -> KernEnv {
     let mut env = GlobalEnv::new();
-    let p_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
-        .expect("P postulate");
-    let q_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero()))
-        .expect("Q postulate");
+    let p_id = declare_postulate(
+        &mut env,
+        "test postulate".to_string(),
+        vec![],
+        Term::omega(Level::zero()),
+    )
+    .expect("P postulate");
+    let q_id = declare_postulate(
+        &mut env,
+        "test postulate".to_string(),
+        vec![],
+        Term::omega(Level::zero()),
+    )
+    .expect("Q postulate");
     KernEnv {
         p_term: Term::const_(p_id, vec![]),
         q_term: Term::const_(q_id, vec![]),
@@ -64,19 +74,17 @@ fn make_kern_env() -> KernEnv {
 ///
 /// `hole_id` is the V1 kernel postulate for this obligation — the same id
 /// that `trusted_base()` membership tests check (the honesty discriminator).
-fn closed_triple(
-    hole_id: GlobalId,
-    id: &str,
-    phi: Term,
-    prov: ProvKind,
-) -> ObligationTriple {
+fn closed_triple(hole_id: GlobalId, id: &str, phi: Term, prov: ProvKind) -> ObligationTriple {
     ObligationTriple {
         id: ObligationId(id.to_owned()),
         hole_id,
         context: vec![],
         phi: phi.clone(),
         goal_closed: phi,
-        provenance: Provenance { kind: prov, span: Span::zero() },
+        provenance: Provenance {
+            kind: prov,
+            span: Span::zero(),
+        },
     }
 }
 
@@ -104,13 +112,7 @@ fn emit_export(
         target_name,
     )
     .expect("pure checked target denotation");
-    emit_checked_target_export(
-        &denotation,
-        results,
-        trusted_base,
-        generators,
-        temporal,
-    )
+    emit_checked_target_export(&denotation, results, trusted_base, generators, temporal)
 }
 
 // ─── EX-A. The status → field projection — the no-over-claim pair (AC2/I1) ──
@@ -131,27 +133,44 @@ fn proved_postcondition_projects_to_q() {
     let phi = Term::pi(ke.p_term.clone(), ke.p_term.clone()); // P → P
 
     // V1 elaboration registers the goal as a hole postulate.
-    let hole_id = declare_postulate(&mut ke.env, "test postulate".to_string(), vec![], phi.clone())
-        .expect("V1 hole postulate");
+    let hole_id = declare_postulate(
+        &mut ke.env,
+        "test postulate".to_string(),
+        vec![],
+        phi.clone(),
+    )
+    .expect("V1 hole postulate");
 
     // The hole is now in trusted_base.
-    assert!(ke.env.trusted_base().contains(&hole_id), "V1 hole in trusted_base pre-discharge");
+    assert!(
+        ke.env.trusted_base().contains(&hole_id),
+        "V1 hole in trusted_base pre-discharge"
+    );
 
     // Build the V2 obligation triple.
-    let triple = closed_triple(hole_id, "view_f.ensures.0", phi.clone(), ProvKind::Ensures { index: 0 });
+    let triple = closed_triple(
+        hole_id,
+        "view_f.ensures.0",
+        phi.clone(),
+        ProvKind::Ensures { index: 0 },
+    );
 
     // V3 prover cert: lam(P, Var(0)) = λx:P.x proves P → P.
     let cert = Term::lam(ke.p_term.clone(), Term::var(0));
     let verdict = attempt_with_cert(&mut ke.env, &phi, cert.clone());
     assert!(
         matches!(verdict, Verdict::Proved { .. }),
-        "lam(P,Var(0)) should prove Pi(P,P), got {:?}", verdict
+        "lam(P,Var(0)) should prove Pi(P,P), got {:?}",
+        verdict
     );
 
     // Discharge the V1 hole: upgrade it to a transparent definition.
     // After this, hole_id is no longer Opaque → absent from trusted_base().
     let discharged = ke.env.upgrade_to_transparent(hole_id, cert.clone());
-    assert!(discharged, "upgrade_to_transparent must succeed for an Opaque hole");
+    assert!(
+        discharged,
+        "upgrade_to_transparent must succeed for an Opaque hole"
+    );
     assert!(
         !ke.env.trusted_base().contains(&hole_id),
         "hole must be absent from trusted_base after discharge"
@@ -166,15 +185,22 @@ fn proved_postcondition_projects_to_q() {
         EffectRow::empty(),
         vec![],
         vec![],
-    ).expect("export must succeed for proved content");
+    )
+    .expect("export must succeed for proved content");
 
     // Postcondition projects into Q.
     assert_eq!(result.guarantees.len(), 1, "Q must have one entry");
     assert_eq!(result.guarantees[0].obligation_id, "view_f.ensures.0");
     // P must be empty — the claim is NOT in assumptions.
-    assert!(result.assumptions.is_empty(), "proved claim must be absent from P");
+    assert!(
+        result.assumptions.is_empty(),
+        "proved claim must be absent from P"
+    );
     // T must be empty.
-    assert!(result.obligations.is_empty(), "proved claim must be absent from T");
+    assert!(
+        result.obligations.is_empty(),
+        "proved claim must be absent from T"
+    );
 }
 
 /// EX-A2: export/open-hole-postcondition-rides-P-as-unknown  (soundness)
@@ -195,11 +221,21 @@ fn open_hole_postcondition_rides_p_as_unknown() {
     let phi = Term::pi(ke.p_term.clone(), ke.p_term.clone());
 
     // V1 elaboration registers the hole.
-    let hole_id = declare_postulate(&mut ke.env, "test postulate".to_string(), vec![], phi.clone())
-        .expect("V1 hole postulate");
+    let hole_id = declare_postulate(
+        &mut ke.env,
+        "test postulate".to_string(),
+        vec![],
+        phi.clone(),
+    )
+    .expect("V1 hole postulate");
 
     // Build the V2 triple — same id structure as EX-A1 to reinforce same-postcondition.
-    let triple = closed_triple(hole_id, "view_f.ensures.0", phi.clone(), ProvKind::Ensures { index: 0 });
+    let triple = closed_triple(
+        hole_id,
+        "view_f.ensures.0",
+        phi.clone(),
+        ProvKind::Ensures { index: 0 },
+    );
 
     // We do NOT discharge the hole — leave it open.
     // Simulate the prover returning Unknown (hole stays in trusted_base).
@@ -220,10 +256,14 @@ fn open_hole_postcondition_rides_p_as_unknown() {
         EffectRow::empty(),
         vec![],
         vec![],
-    ).expect("export must succeed (no disproved verdict)");
+    )
+    .expect("export must succeed (no disproved verdict)");
 
     // Claim projects into P — NEVER Q.
-    assert!(result.guarantees.is_empty(), "open hole must NOT appear in Q (no-over-claim)");
+    assert!(
+        result.guarantees.is_empty(),
+        "open hole must NOT appear in Q (no-over-claim)"
+    );
     assert_eq!(result.assumptions.len(), 1, "P must have one entry");
     assert_eq!(result.assumptions[0].status, PStatus::Unknown);
     assert_eq!(result.assumptions[0].obligation_id, "view_f.ensures.0");
@@ -247,8 +287,13 @@ fn removing_assume_shrinks_p_and_changes_hash() {
     let phi = Term::pi(ke.p_term.clone(), ke.p_term.clone()); // P → P
 
     // Register as a Prove-kind hole (explicit statement — models `assume P → P`).
-    let hole_id = declare_postulate(&mut ke.env, "test postulate".to_string(), vec![], phi.clone())
-        .expect("assume-like hole");
+    let hole_id = declare_postulate(
+        &mut ke.env,
+        "test postulate".to_string(),
+        vec![],
+        phi.clone(),
+    )
+    .expect("assume-like hole");
 
     let triple = closed_triple(hole_id, "f.prove", phi.clone(), ProvKind::Prove);
 
@@ -262,10 +307,15 @@ fn removing_assume_shrinks_p_and_changes_hash() {
         EffectRow::empty(),
         vec![],
         vec![],
-    ).expect("export with assumption");
+    )
+    .expect("export with assumption");
 
     // P entry present, tagged Tested (Prove provenance).
-    assert_eq!(export_with.assumptions.len(), 1, "P must contain the assumption");
+    assert_eq!(
+        export_with.assumptions.len(),
+        1,
+        "P must contain the assumption"
+    );
     assert_eq!(export_with.assumptions[0].status, PStatus::Tested);
     let hash_with = export_with.hash.clone();
 
@@ -285,7 +335,8 @@ fn removing_assume_shrinks_p_and_changes_hash() {
         EffectRow::empty(),
         vec![],
         vec![],
-    ).expect("export after discharge");
+    )
+    .expect("export after discharge");
 
     // P entry is gone.
     assert!(
@@ -326,19 +377,10 @@ proc h (_value : Unit) : HostIO AFull Instant visits [Console, Clock] =
         "h",
     )
     .expect("checked two-effect target");
-    let result = emit_checked_target_export(
-        &denotation,
-        &[],
-        &BTreeSet::new(),
-        vec![],
-        vec![],
-    )
-    .expect("export with exact alphabet");
+    let result = emit_checked_target_export(&denotation, &[], &BTreeSet::new(), vec![], vec![])
+        .expect("export with exact alphabet");
 
-    let expected: BTreeSet<String> = ["Console", "Clock"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let expected: BTreeSet<String> = ["Console", "Clock"].iter().map(|s| s.to_string()).collect();
     assert_eq!(
         result.alphabet, expected,
         "Σ must equal the checked perform-node projection exactly"
@@ -347,7 +389,10 @@ proc h (_value : Unit) : HostIO AFull Instant visits [Console, Clock] =
     // No orphan symbol: each member of Σ is a real perform-node.
     assert!(result.alphabet.contains("Console"));
     assert!(result.alphabet.contains("Clock"));
-    assert!(!result.alphabet.contains("FS"), "unused sibling effect must not appear");
+    assert!(
+        !result.alphabet.contains("FS"),
+        "unused sibling effect must not appear"
+    );
 
     // Closure: alphabet is not missing any declared node.
     assert_eq!(result.alphabet.len(), 2, "no missing node");
@@ -382,7 +427,8 @@ fn generators_carry_support_not_measure() {
         EffectRow::empty(),
         vec![g],
         vec![],
-    ).expect("export with generator");
+    )
+    .expect("export with generator");
 
     assert_eq!(result.generators.len(), 1);
     let emitted_g = &result.generators[0];
@@ -398,8 +444,14 @@ fn generators_carry_support_not_measure() {
     let serialized = serialize_export(&result);
     let g_json = &serialized["generators"][0];
     assert!(g_json.get("weight").is_none(), "no weight in serialized G");
-    assert!(g_json.get("likelihood").is_none(), "no likelihood in serialized G");
-    assert!(g_json.get("probability").is_none(), "no probability in serialized G");
+    assert!(
+        g_json.get("likelihood").is_none(),
+        "no likelihood in serialized G"
+    );
+    assert!(
+        g_json.get("probability").is_none(),
+        "no probability in serialized G"
+    );
 }
 
 // ─── EX-E. The one-way gate — no promotion path (AC6/I4) ─────────────────────
@@ -427,12 +479,13 @@ fn delegated_obligation_never_promoted_to_proved() {
     // We pass it as `temporal` to emit_export — it stays in T.
     let result = emit_export(
         "f",
-        &[],           // no kernel-proved obligations
+        &[], // no kernel-proved obligations
         &BTreeSet::new(),
         EffectRow::empty(),
         vec![],
         vec![t_entry.clone()],
-    ).expect("export with temporal entry");
+    )
+    .expect("export with temporal entry");
 
     // T: contains the delegated entry.
     assert_eq!(result.obligations.len(), 1);
@@ -475,10 +528,20 @@ fn disproved_claim_never_exported() {
 
     // An unprovable goal — force a Disproved verdict synthetically.
     let phi = ke.p_term.clone();
-    let hole_id = declare_postulate(&mut ke.env, "test postulate".to_string(), vec![], phi.clone())
-        .expect("hole");
+    let hole_id = declare_postulate(
+        &mut ke.env,
+        "test postulate".to_string(),
+        vec![],
+        phi.clone(),
+    )
+    .expect("hole");
 
-    let triple = closed_triple(hole_id, "f.ensures.0", phi.clone(), ProvKind::Ensures { index: 0 });
+    let triple = closed_triple(
+        hole_id,
+        "f.ensures.0",
+        phi.clone(),
+        ProvKind::Ensures { index: 0 },
+    );
 
     // Synthesize a disproved verdict (countermodel for P — P is abstract, so
     // "refuted" means a model where P doesn't hold; the test just needs the
@@ -502,7 +565,8 @@ fn disproved_claim_never_exported() {
     // The emitter must return an error — build is non-shippable.
     assert!(
         matches!(err, Err(ExportError::DisproovedClaim { .. })),
-        "disproved claim must cause non-shippable error, got: {:?}", err
+        "disproved claim must cause non-shippable error, got: {:?}",
+        err
     );
 
     // The claim appears in no export field (error prevents any export).
@@ -521,15 +585,28 @@ fn same_program_same_export_hash() {
     let mut ke = make_kern_env();
 
     let phi = Term::pi(ke.p_term.clone(), ke.p_term.clone()); // P → P
-    let hole_id = declare_postulate(&mut ke.env, "test postulate".to_string(), vec![], phi.clone())
-        .expect("hole");
+    let hole_id = declare_postulate(
+        &mut ke.env,
+        "test postulate".to_string(),
+        vec![],
+        phi.clone(),
+    )
+    .expect("hole");
 
-    let triple = closed_triple(hole_id, "f.ensures.0", phi.clone(), ProvKind::Ensures { index: 0 });
+    let triple = closed_triple(
+        hole_id,
+        "f.ensures.0",
+        phi.clone(),
+        ProvKind::Ensures { index: 0 },
+    );
 
     // Discharge the hole.
     let cert = Term::lam(ke.p_term.clone(), Term::var(0));
     let verdict_check = attempt_with_cert(&mut ke.env, &phi, cert.clone());
-    assert!(matches!(verdict_check, Verdict::Proved { .. }), "cert must prove phi");
+    assert!(
+        matches!(verdict_check, Verdict::Proved { .. }),
+        "cert must prove phi"
+    );
     let discharged = ke.env.upgrade_to_transparent(hole_id, cert.clone());
     assert!(discharged);
 
@@ -544,7 +621,8 @@ fn same_program_same_export_hash() {
         EffectRow::empty(),
         vec![],
         vec![],
-    ).expect("first export");
+    )
+    .expect("first export");
 
     // Run 2 (same inputs).
     let export2 = emit_export(
@@ -554,7 +632,8 @@ fn same_program_same_export_hash() {
         EffectRow::empty(),
         vec![],
         vec![],
-    ).expect("second export");
+    )
+    .expect("second export");
 
     // Both runs must yield the identical hash.
     assert_eq!(

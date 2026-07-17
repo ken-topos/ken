@@ -29,14 +29,15 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::{
-    closed, elaborate_temporal_expr, emit_checked_target_export, serialize_export,
-    temporal_hoas_inductive_spec, temporal_inductive_spec,
+    closed,
     compiler_driver::{compile_checked_target_denotation, CompilerSource},
     effects::row::EffectRow,
+    elaborate_temporal_expr, emit_checked_target_export,
     error::Span,
     extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     prover::Verdict,
-    ElabEnv, ExportError, GEntry, Pred, TEntry, Temporal, TemporalExpr, Var,
+    serialize_export, temporal_hoas_inductive_spec, temporal_inductive_spec, ElabEnv, ExportError,
+    GEntry, Pred, TEntry, Temporal, TemporalExpr, Var,
 };
 
 fn emit_export(
@@ -55,17 +56,12 @@ fn emit_export(
         target_name,
     )
     .expect("pure checked target denotation");
-    emit_checked_target_export(
-        &denotation,
-        results,
-        trusted_base,
-        generators,
-        temporal,
-    )
+    emit_checked_target_export(&denotation, results, trusted_base, generators, temporal)
 }
 use ken_kernel::{
+    declare_inductive,
     inductive::{check_positivity, method_type, peel_app, peel_pi, recursive_args},
-    declare_inductive, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, KernelError, Level, Term,
+    CtorSpec, GlobalEnv, GlobalId, InductiveSpec, KernelError, Level, Term,
 };
 
 // ─── TE-A. `Temporal` is ordinary inert data — admitted by K1 (AC1) ──────────
@@ -119,7 +115,11 @@ fn ordinary_inductive_admitted_by_k1() {
         "the witness former has exactly the two small type parameters P and V"
     );
     let (former_params, former_result) = peel_pi(&ind.former_type);
-    assert_eq!(former_params.len(), 2, "Temporal's former has two parameters");
+    assert_eq!(
+        former_params.len(),
+        2,
+        "Temporal's former has two parameters"
+    );
     assert_eq!(
         former_result,
         Term::ty(Level::zero()),
@@ -153,22 +153,9 @@ fn ordinary_inductive_admitted_by_k1() {
     // No K1.5 W-style admission path: every recursive arg is **direct** (an
     // empty branching telescope). `recursive_args` returns the Π-bound
     // (branching) telescope per recursive arg; empty ⇒ plain K1, not K1.5.
-    let expected_recursive_positions: &[&[usize]] = &[
-        &[],
-        &[0],
-        &[0, 1],
-        &[0, 1],
-        &[0],
-        &[0, 1],
-        &[1],
-        &[1],
-        &[],
-    ];
-    for (c, expected_positions) in ind
-        .constructors
-        .iter()
-        .zip(expected_recursive_positions)
-    {
+    let expected_recursive_positions: &[&[usize]] =
+        &[&[], &[0], &[0, 1], &[0, 1], &[0], &[0, 1], &[1], &[1], &[]];
+    for (c, expected_positions) in ind.constructors.iter().zip(expected_recursive_positions) {
         let recursive = recursive_args(c, d_id, 2);
         assert_eq!(
             recursive.iter().map(|(pos, _, _)| *pos).collect::<Vec<_>>(),
@@ -307,9 +294,9 @@ fn inert_to_conversion() {
 /// dedicated `eventually`/`diamond` constructor (no such constructor exists).
 #[test]
 fn eventually_elaborates_to_until_true() {
-    let t = elaborate_temporal_expr(&TemporalExpr::Eventually(Box::new(
-        TemporalExpr::Atom("p".into()),
-    )));
+    let t = elaborate_temporal_expr(&TemporalExpr::Eventually(Box::new(TemporalExpr::Atom(
+        "p".into(),
+    ))));
     let expected = Temporal::Until(
         Box::new(Temporal::Atom(Pred::Top)),
         Box::new(Temporal::Atom(Pred::Event("p".into()))),
@@ -324,16 +311,19 @@ fn eventually_elaborates_to_until_true() {
 /// primitive-`□` bug (head `box`) is undetected by TE-C1 alone.
 #[test]
 fn always_elaborates_to_not_until_not() {
-    let t = elaborate_temporal_expr(&TemporalExpr::Always(Box::new(
-        TemporalExpr::Atom("p".into()),
-    )));
+    let t = elaborate_temporal_expr(&TemporalExpr::Always(Box::new(TemporalExpr::Atom(
+        "p".into(),
+    ))));
     let expected = Temporal::Not(Box::new(Temporal::Until(
         Box::new(Temporal::Atom(Pred::Top)),
         Box::new(Temporal::Not(Box::new(Temporal::Atom(Pred::Event(
             "p".into(),
         ))))),
     )));
-    assert_eq!(t, expected, "□φ := not (until (atom ⊤) (not φ)) — head `not`");
+    assert_eq!(
+        t, expected,
+        "□φ := not (until (atom ⊤) (not φ)) — head `not`"
+    );
 }
 
 /// TE-C3: temporal/leadsto-elaborates-to-box-of-or-diamond (AC2)
@@ -467,8 +457,14 @@ fn value_projects_to_t_delegated_never_q() {
     assert_eq!(export.obligations.len(), 1, "the temporal value lands in T");
     assert_eq!(export.obligations[0].obligation_id, obl.id);
     // Absent from Q (guarantees) and P (assumptions).
-    assert!(export.guarantees.is_empty(), "never Q — a delegated property is not a guarantee");
-    assert!(export.assumptions.is_empty(), "never P — a delegated property is not an assumption");
+    assert!(
+        export.guarantees.is_empty(),
+        "never Q — a delegated property is not a guarantee"
+    );
+    assert!(
+        export.assumptions.is_empty(),
+        "never P — a delegated property is not an assumption"
+    );
 
     let ser = serialize_export(&export);
     assert_eq!(
@@ -523,7 +519,12 @@ fn ward_green_keeps_delegated_never_promoted() {
             span: Span::zero(),
         },
     };
-    let results = vec![(proved, Verdict::Proved { cert: Term::omega(Level::zero()) })];
+    let results = vec![(
+        proved,
+        Verdict::Proved {
+            cert: Term::omega(Level::zero()),
+        },
+    )];
     let export = emit_export(
         "f",
         &results,
@@ -536,7 +537,10 @@ fn ward_green_keeps_delegated_never_promoted() {
 
     // The proved obligation IS in Q (the honest path works).
     assert!(
-        export.guarantees.iter().any(|q| q.obligation_id == "g1.ensures.0"),
+        export
+            .guarantees
+            .iter()
+            .any(|q| q.obligation_id == "g1.ensures.0"),
         "the real proved obligation projects to Q"
     );
     // The temporal obligation stays in T — never promoted to Q.
@@ -587,7 +591,10 @@ fn closedness_metatheorem_typechecks_via_elim() {
 
     // Free: `var X` with no enclosing binder → not closed. The verdict FLIPS.
     let free = Temporal::Var(Var("X".into()));
-    assert!(!closed(&free), "a free var is not closed (the flip pins that `closed` inspects structure)");
+    assert!(
+        !closed(&free),
+        "a free var is not closed (the flip pins that `closed` inspects structure)"
+    );
 
     // `nu` binds too (the greatest-fixpoint binder).
     let bound_nu = Temporal::Nu {
@@ -601,13 +608,19 @@ fn closedness_metatheorem_typechecks_via_elim() {
         var: Var("W".into()),
         body: Box::new(Temporal::eventually(&Temporal::Var(Var("W".into())))),
     };
-    assert!(closed(&nested), "a var bound by an outer mu, referenced inside `eventually`, is closed");
+    assert!(
+        closed(&nested),
+        "a var bound by an outer mu, referenced inside `eventually`, is closed"
+    );
 
     // A surface formula with no fixpoint vars is closed.
     let closed_formula = elaborate_temporal_expr(&TemporalExpr::Eventually(Box::new(
         TemporalExpr::Atom("p".into()),
     )));
-    assert!(closed(&closed_formula), "a formula with no fixpoint vars is closed");
+    assert!(
+        closed(&closed_formula),
+        "a formula with no fixpoint vars is closed"
+    );
 
     // Preservation: `closed(eventually(φ))` == `closed(φ)` — derived/structural
     // ops build `closed` from `closed`.
@@ -666,13 +679,19 @@ fn obligation_not_dischargeable_in_ken() {
         vec![tentry],
     )
     .expect("export");
-    assert_eq!(export.obligations.len(), 1, "the obligation is delegated (T)");
+    assert_eq!(
+        export.obligations.len(),
+        1,
+        "the obligation is delegated (T)"
+    );
     assert!(
         export.guarantees.is_empty(),
         "never Q — the obligation is not dischargeable in Ken"
     );
     assert_eq!(
-        serialize_export(&export)["obligations"][0]["status"].as_str().unwrap(),
+        serialize_export(&export)["obligations"][0]["status"]
+            .as_str()
+            .unwrap(),
         "delegated",
         "the discharge arrives only out-of-band (delegated)"
     );
@@ -735,7 +754,9 @@ fn cross_case_verdict_mapping_is_constant() {
         assert!(export.guarantees.is_empty(), "{}: never Q", src);
         assert!(export.assumptions.is_empty(), "{}: never P", src);
         assert_eq!(
-            serialize_export(&export)["obligations"][0]["status"].as_str().unwrap(),
+            serialize_export(&export)["obligations"][0]["status"]
+                .as_str()
+                .unwrap(),
             "delegated",
             "{}: status is the constant `delegated`",
             src
@@ -765,9 +786,7 @@ proc target (_value : Unit)
         vec![],
         vec![TEntry {
             obligation_id: "console-eventual".to_string(),
-            formula: Temporal::eventually(&Temporal::Atom(Pred::Event(
-                "Console".to_string(),
-            ))),
+            formula: Temporal::eventually(&Temporal::Atom(Pred::Event("Console".to_string()))),
         }],
     )
     .expect("B2 consumes checked B1 export");
@@ -805,5 +824,9 @@ fn temporal_spec_constructor_shape() {
         assert!(c.target_indices.is_empty(), "Temporal is non-indexed");
     }
     let hoas = temporal_hoas_inductive_spec(d);
-    assert_eq!(hoas.constructors.len(), 9, "HOAS variant keeps the 9-ctor count");
+    assert_eq!(
+        hoas.constructors.len(),
+        9,
+        "HOAS variant keeps the 9-ctor count"
+    );
 }

@@ -7,15 +7,15 @@
 
 use std::collections::BTreeSet;
 
-use ken_elaborator::{
-    emit_checked_target_export, emit_trace_contract, try_emit_trace_contract,
-    compiler_driver::{compile_checked_target_denotation, CompilerSource},
-    AssertionPoint, ExportError, GEntry, Pred, TEntry, Temporal, TraceContractError, TraceEvent,
-};
 use ken_elaborator::effects::EffectRow;
 use ken_elaborator::error::Span;
 use ken_elaborator::extract::{ObligationId, ObligationTriple, ProvKind, Provenance};
 use ken_elaborator::prover::Verdict;
+use ken_elaborator::{
+    compiler_driver::{compile_checked_target_denotation, CompilerSource},
+    emit_checked_target_export, emit_trace_contract, try_emit_trace_contract, AssertionPoint,
+    ExportError, GEntry, Pred, TEntry, Temporal, TraceContractError, TraceEvent,
+};
 use ken_interp::eval::{drive_h_instrumented, eval, EvalStore, EvalVal, ITreeIds};
 use ken_kernel::{
     declare_inductive, declare_postulate, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, Level, Term,
@@ -34,8 +34,13 @@ struct ITreeEnv {
 fn mk_itree(env: &mut GlobalEnv) -> ITreeEnv {
     // This integration test owns a distinct GlobalEnv, so its carrier must be
     // declared here rather than borrowing an ID from a sibling test module.
-    let carrier =
-        declare_postulate(env, "test postulate".to_string(), vec![], Term::Type(Level::zero())).expect("ITree test carrier");
+    let carrier = declare_postulate(
+        env,
+        "test postulate".to_string(),
+        vec![],
+        Term::Type(Level::zero()),
+    )
+    .expect("ITree test carrier");
     let carrier_t = Term::const_(carrier, vec![]);
     let itree = declare_inductive(env, |ind_id| InductiveSpec {
         level_params: vec![],
@@ -67,18 +72,36 @@ fn mk_itree(env: &mut GlobalEnv) -> ITreeEnv {
     .expect("ITree");
     let ret_id = env.inductive(itree).unwrap().constructors[0].id;
     let vis_id = env.inductive(itree).unwrap().constructors[1].id;
-    let ids = ITreeIds { ret_id, vis_id, params_len: 0 };
-    ITreeEnv { itree, ret_id, vis_id, ids }
+    let ids = ITreeIds {
+        ret_id,
+        vis_id,
+        params_len: 0,
+    };
+    ITreeEnv {
+        itree,
+        ret_id,
+        vis_id,
+        ids,
+    }
 }
 
 fn mk_ret(val: Term, ret_id: GlobalId) -> Term {
-    Term::App(Box::new(Term::Constructor { id: ret_id, level_args: vec![] }), Box::new(val))
+    Term::App(
+        Box::new(Term::Constructor {
+            id: ret_id,
+            level_args: vec![],
+        }),
+        Box::new(val),
+    )
 }
 
 fn mk_vis(op: Term, k: Term, vis_id: GlobalId) -> Term {
     Term::App(
         Box::new(Term::App(
-            Box::new(Term::Constructor { id: vis_id, level_args: vec![] }),
+            Box::new(Term::Constructor {
+                id: vis_id,
+                level_args: vec![],
+            }),
             Box::new(op),
         )),
         Box::new(k),
@@ -94,7 +117,10 @@ fn op1_term() -> Term {
 
 /// op2 (Clock): body = Type(0) — constant closure
 fn op2_term() -> Term {
-    Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(Term::Type(Level::zero())))
+    Term::Lam(
+        Box::new(Term::Type(Level::zero())),
+        Box::new(Term::Type(Level::zero())),
+    )
 }
 
 /// Decode an EvalVal closure to (effect, op, op_arg) using the body term as
@@ -102,9 +128,11 @@ fn op2_term() -> Term {
 fn decode_op(val: &EvalVal) -> (String, String, String) {
     match val {
         // body = Var(0): identity closure → Console.Write (op1_term)
-        EvalVal::Closure { body, .. } if matches!(**body, Term::Var(0)) => {
-            ("Console".to_string(), "Write".to_string(), "\"hello\"".to_string())
-        }
+        EvalVal::Closure { body, .. } if matches!(**body, Term::Var(0)) => (
+            "Console".to_string(),
+            "Write".to_string(),
+            "\"hello\"".to_string(),
+        ),
         // anything else → Clock.WallNow (op2_term has body = Type(0))
         _ => ("Clock".to_string(), "WallNow".to_string(), "()".to_string()),
     }
@@ -143,7 +171,8 @@ fn emit_export(
     temporal: Vec<TEntry>,
 ) -> Result<ken_elaborator::BehavioralExport, ExportError> {
     assert_eq!(legacy_alphabet, test_alphabet());
-    let source = format!(r#"
+    let source = format!(
+        r#"
 proc after_flush (_outcome : Result IOError Unit)
   : HostIO AFull Instant visits [Clock] =
   host_clock AFull Instant wall_now
@@ -155,20 +184,15 @@ proc {target_name} (_value : Unit)
     (Result IOError Unit) Instant
     (host_console AFull (Result IOError Unit) (flush Stdout))
     (\outcome. after_flush outcome)
-"#);
+"#
+    );
     let denotation = compile_checked_target_denotation(
         &format!("b3_acceptance_{target_name}"),
         CompilerSource::new("fixture.ken", source),
         target_name,
     )
     .expect("checked B3 alphabet producer");
-    emit_checked_target_export(
-        &denotation,
-        results,
-        trusted_base,
-        generators,
-        temporal,
-    )
+    emit_checked_target_export(&denotation, results, trusted_base, generators, temporal)
 }
 
 /// Run a 2-Vis tree (op1 then op2) through `drive_h_instrumented` and return
@@ -208,18 +232,20 @@ fn run_two_effect_tree(
         &mut |sid, e, r, pos| raw.push((sid, e, r, pos)),
     );
 
-    raw.into_iter().map(|(sid, e, r, pos)| {
-        let (eff, op, arg) = decode_op(&e);
-        TraceEvent {
-            effect: eff,
-            op,
-            op_arg: arg,
-            response: decode_resp(&r),
-            space_id: sid,
-            message_provenance: None,
-            sequence_pos: pos,
-        }
-    }).collect()
+    raw.into_iter()
+        .map(|(sid, e, r, pos)| {
+            let (eff, op, arg) = decode_op(&e);
+            TraceEvent {
+                effect: eff,
+                op,
+                op_arg: arg,
+                response: decode_resp(&r),
+                space_id: sid,
+                message_provenance: None,
+                sequence_pos: pos,
+            }
+        })
+        .collect()
 }
 
 // ── kernel obligation triple helpers ─────────────────────────────────────────
@@ -231,7 +257,10 @@ fn closed_triple(hole_id: GlobalId, id: &str, phi: Term, kind: ProvKind) -> Obli
         context: vec![],
         goal_closed: phi.clone(),
         phi,
-        provenance: Provenance { kind, span: Span::zero() },
+        provenance: Provenance {
+            kind,
+            span: Span::zero(),
+        },
     }
 }
 
@@ -267,19 +296,27 @@ fn sigma_event_concretizes_sigma_member() {
         assert!(
             sigma.contains(&ev.effect),
             "TC1 violation: event.effect '{}' ∉ B1.Σ {:?}",
-            ev.effect, sigma
+            ev.effect,
+            sigma
         );
     }
 
     // TC1-b: every Σ member appears in the trace (no orphan)
     let emitted: BTreeSet<&String> = events.iter().map(|e| &e.effect).collect();
     for label in &sigma {
-        assert!(emitted.contains(label), "TC1 violation: Σ member '{}' is an orphan", label);
+        assert!(
+            emitted.contains(label),
+            "TC1 violation: Σ member '{}' is an orphan",
+            label
+        );
     }
 
     // Structural: 2 Vis → 2 events, 2 distinct effects
     assert_eq!(events.len(), 2, "exactly 2 events for 2-Vis tree");
-    assert_ne!(events[0].effect, events[1].effect, "two distinct effect labels");
+    assert_ne!(
+        events[0].effect, events[1].effect,
+        "two distinct effect labels"
+    );
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -299,12 +336,22 @@ fn no_event_outside_perform_point() {
     // K=0: Ret only → 0 events
     {
         let mut store = EvalStore::new();
-        let ret_tree = eval(&[], &mk_ret(Term::Type(Level::zero()), it.ret_id), &env, &mut store);
+        let ret_tree = eval(
+            &[],
+            &mk_ret(Term::Type(Level::zero()), it.ret_id),
+            &env,
+            &mut store,
+        );
         let mut events: Vec<(String, EvalVal, EvalVal, u64)> = Vec::new();
         let mut seq = 0u64;
         drive_h_instrumented(
-            ret_tree, &mut |e| e, &it.ids, &env, &mut store,
-            "space", &mut seq,
+            ret_tree,
+            &mut |e| e,
+            &it.ids,
+            &env,
+            &mut store,
+            "space",
+            &mut seq,
             &mut |s, e, r, p| events.push((s, e, r, p)),
         );
         assert_eq!(events.len(), 0, "TC2: Ret-only tree must emit 0 events");
@@ -325,8 +372,13 @@ fn no_event_outside_perform_point() {
         let mut events: Vec<(String, EvalVal, EvalVal, u64)> = Vec::new();
         let mut seq = 0u64;
         drive_h_instrumented(
-            tree_val, &mut |_| EvalVal::Bool(true), &it.ids, &env, &mut store,
-            "space", &mut seq,
+            tree_val,
+            &mut |_| EvalVal::Bool(true),
+            &it.ids,
+            &env,
+            &mut store,
+            "space",
+            &mut seq,
             &mut |s, e, r, p| events.push((s, e, r, p)),
         );
         assert_eq!(events.len(), 1, "TC2: 1-Vis tree must emit exactly 1 event");
@@ -336,9 +388,16 @@ fn no_event_outside_perform_point() {
     {
         let mut store = EvalStore::new();
         let events = run_two_effect_tree("space", &mut store, &env, &it);
-        assert_eq!(events.len(), 2, "TC2: 2-Vis tree must emit exactly 2 events");
+        assert_eq!(
+            events.len(),
+            2,
+            "TC2: 2-Vis tree must emit exactly 2 events"
+        );
         assert_eq!(events[0].sequence_pos, 0, "first Vis → seq=0");
-        assert_eq!(events[1].sequence_pos, 1, "second Vis → seq=1 (no gaps from pure steps)");
+        assert_eq!(
+            events[1].sequence_pos, 1,
+            "second Vis → seq=1 (no gaps from pure steps)"
+        );
     }
 }
 
@@ -382,24 +441,34 @@ fn correlated_events_link_uncorrelated_dont() {
         let mut raw: Vec<(String, EvalVal, EvalVal, u64)> = Vec::new();
         let mut seq = 0u64;
         drive_h_instrumented(
-            tree_val, &mut |_| EvalVal::Bool(false), &it.ids, &env, &mut store,
-            "space_b", &mut seq,
+            tree_val,
+            &mut |_| EvalVal::Bool(false),
+            &it.ids,
+            &env,
+            &mut store,
+            "space_b",
+            &mut seq,
             &mut |s, e, r, p| raw.push((s, e, r, p)),
         );
-        raw.into_iter().map(|(sid, _, r, pos)| TraceEvent {
-            effect: "Clock".to_string(),
-            op: "WallNow".to_string(),
-            op_arg: "()".to_string(),
-            response: decode_resp(&r),
-            space_id: sid,
-            message_provenance: Some(prov.clone()), // receive: linked to A's send
-            sequence_pos: pos,
-        }).collect::<Vec<_>>()
+        raw.into_iter()
+            .map(|(sid, _, r, pos)| TraceEvent {
+                effect: "Clock".to_string(),
+                op: "WallNow".to_string(),
+                op_arg: "()".to_string(),
+                response: decode_resp(&r),
+                space_id: sid,
+                message_provenance: Some(prov.clone()), // receive: linked to A's send
+                sequence_pos: pos,
+            })
+            .collect::<Vec<_>>()
     };
 
     // TC3-a: every event carries space_id
     for ev in events_a.iter().chain(events_b.iter()) {
-        assert!(!ev.space_id.is_empty(), "TC3: every event must carry space_id");
+        assert!(
+            !ev.space_id.is_empty(),
+            "TC3: every event must carry space_id"
+        );
     }
 
     // TC3-b: correlated send/receive share message_provenance
@@ -407,10 +476,16 @@ fn correlated_events_link_uncorrelated_dont() {
         events_a[1].message_provenance, events_b[0].message_provenance,
         "TC3: send and receive must share message_provenance"
     );
-    assert!(events_a[1].message_provenance.is_some(), "TC3: cross-space event must have provenance");
+    assert!(
+        events_a[1].message_provenance.is_some(),
+        "TC3: cross-space event must have provenance"
+    );
 
     // TC3-c: unrelated event has no provenance
-    assert_eq!(events_a[0].message_provenance, None, "TC3: local event must have no provenance");
+    assert_eq!(
+        events_a[0].message_provenance, None,
+        "TC3: local event must have no provenance"
+    );
 
     // Discriminating pair: correlated link, uncorrelated don't
     assert_ne!(
@@ -442,29 +517,47 @@ fn q_p_assertion_points_project_from_export() {
     let phi = Term::pi(Term::Omega(Level::zero()), Term::Omega(Level::zero()));
 
     // Q hole: declare, then discharge (absent from trusted_base after upgrade)
-    let q_hole = declare_postulate(&mut env, "test postulate".to_string(), vec![], phi.clone()).expect("Q hole");
+    let q_hole = declare_postulate(&mut env, "test postulate".to_string(), vec![], phi.clone())
+        .expect("Q hole");
     let q_cert = Term::lam(Term::Omega(Level::zero()), Term::var(0));
     env.upgrade_to_transparent(q_hole, q_cert.clone());
 
     // P hole: undischarged (still in trusted_base)
-    let p_hole = declare_postulate(&mut env, "test postulate".to_string(), vec![], phi.clone()).expect("P hole");
+    let p_hole = declare_postulate(&mut env, "test postulate".to_string(), vec![], phi.clone())
+        .expect("P hole");
 
-    let q_triple = closed_triple(q_hole, "f.ensures.0", phi.clone(), ProvKind::Ensures { index: 0 });
-    let p_triple = closed_triple(p_hole, "f.ensures.1", phi.clone(), ProvKind::Ensures { index: 1 });
+    let q_triple = closed_triple(
+        q_hole,
+        "f.ensures.0",
+        phi.clone(),
+        ProvKind::Ensures { index: 0 },
+    );
+    let p_triple = closed_triple(
+        p_hole,
+        "f.ensures.1",
+        phi.clone(),
+        ProvKind::Ensures { index: 1 },
+    );
 
     // Export1: q_hole discharged → Q; p_hole unknown → P
     let tb1 = trusted_base_set(&env);
     let export1 = emit_export(
         "prog",
         &[
-            (q_triple.clone(), Verdict::Proved { cert: q_cert.clone() }),
+            (
+                q_triple.clone(),
+                Verdict::Proved {
+                    cert: q_cert.clone(),
+                },
+            ),
             (p_triple.clone(), Verdict::Unknown { hole_id: p_hole }),
         ],
         &tb1,
         test_alphabet(),
         vec![],
         vec![],
-    ).expect("export1");
+    )
+    .expect("export1");
 
     assert_eq!(export1.guarantees.len(), 1, "export1: one Q entry");
     assert_eq!(export1.assumptions.len(), 1, "export1: one P entry");
@@ -472,11 +565,17 @@ fn q_p_assertion_points_project_from_export() {
     let contract1 = emit_trace_contract("prog", events.clone(), &export1);
 
     assert!(
-        contract1.assertion_points.iter().any(|ap| matches!(ap, AssertionPoint::WatchedInvariant { .. })),
+        contract1
+            .assertion_points
+            .iter()
+            .any(|ap| matches!(ap, AssertionPoint::WatchedInvariant { .. })),
         "TR-D: proved Q must project to WatchedInvariant"
     );
     assert!(
-        contract1.assertion_points.iter().any(|ap| matches!(ap, AssertionPoint::ConfirmHeld { .. })),
+        contract1
+            .assertion_points
+            .iter()
+            .any(|ap| matches!(ap, AssertionPoint::ConfirmHeld { .. })),
         "TR-D: boundary P must project to ConfirmHeld"
     );
 
@@ -494,19 +593,25 @@ fn q_p_assertion_points_project_from_export() {
         test_alphabet(),
         vec![],
         vec![],
-    ).expect("export2");
+    )
+    .expect("export2");
 
     assert_eq!(export2.guarantees.len(), 2, "export2: both entries in Q");
     assert_eq!(export2.assumptions.len(), 0, "export2: no P entries");
 
     let contract2 = emit_trace_contract("prog", events.clone(), &export2);
 
-    let watched2 = contract2.assertion_points.iter()
+    let watched2 = contract2
+        .assertion_points
+        .iter()
         .filter(|ap| matches!(ap, AssertionPoint::WatchedInvariant { .. }))
         .count();
     assert_eq!(watched2, 2, "export2: 2 WatchedInvariant (both Q)");
     assert!(
-        !contract2.assertion_points.iter().any(|ap| matches!(ap, AssertionPoint::ConfirmHeld { .. })),
+        !contract2
+            .assertion_points
+            .iter()
+            .any(|ap| matches!(ap, AssertionPoint::ConfirmHeld { .. })),
         "export2: no ConfirmHeld when P is empty"
     );
 
@@ -537,26 +642,44 @@ fn monitor_changes_when_t_changes() {
 
     // Export1: one T obligation (delegated temporal)
     let export1 = emit_export(
-        "prog", &[], &BTreeSet::new(), test_alphabet(), vec![],
+        "prog",
+        &[],
+        &BTreeSet::new(),
+        test_alphabet(),
+        vec![],
         vec![TEntry {
             obligation_id: "f.temporal.0".to_string(),
             formula: Temporal::Atom(Pred::Event("f0".into())),
         }],
-    ).expect("export1");
+    )
+    .expect("export1");
     assert_eq!(export1.obligations.len(), 1, "export1: one T entry");
 
     // Export2: no T obligations
     let export2 = emit_export(
-        "prog", &[], &BTreeSet::new(), test_alphabet(), vec![], vec![],
-    ).expect("export2");
+        "prog",
+        &[],
+        &BTreeSet::new(),
+        test_alphabet(),
+        vec![],
+        vec![],
+    )
+    .expect("export2");
     assert_eq!(export2.obligations.len(), 0, "export2: no T entries");
 
     let contract1 = emit_trace_contract("prog", events.clone(), &export1);
     let contract2 = emit_trace_contract("prog", events.clone(), &export2);
 
-    assert_eq!(contract1.monitor.delegated_obligations.len(), 1, "monitor1: one delegated");
+    assert_eq!(
+        contract1.monitor.delegated_obligations.len(),
+        1,
+        "monitor1: one delegated"
+    );
     assert_eq!(contract1.monitor.delegated_obligations[0], "f.temporal.0");
-    assert!(contract2.monitor.is_empty(), "monitor2: empty when T is empty");
+    assert!(
+        contract2.monitor.is_empty(),
+        "monitor2: empty when T is empty"
+    );
 
     // TC4 / TR-E: monitor changed when T changed (projection, not authoring)
     assert_ne!(
@@ -567,7 +690,10 @@ fn monitor_changes_when_t_changes() {
     // Atom check: events come from the real driver (not a synthetic model)
     let sigma: BTreeSet<String> = test_alphabet().effects().cloned().collect();
     for ev in &events {
-        assert!(sigma.contains(&ev.effect), "AC1 cross-check: event.effect ∈ Σ");
+        assert!(
+            sigma.contains(&ev.effect),
+            "AC1 cross-check: event.effect ∈ Σ"
+        );
     }
     // (oracle): concrete Büchi acceptance deferred to B2; structural binding holds.
 }
@@ -593,27 +719,38 @@ fn monitor_verdict_never_promoted_to_proved() {
 
     // B1 export with one delegated T, no Q/P
     let export = emit_export(
-        "prog", &[], &BTreeSet::new(), test_alphabet(), vec![],
+        "prog",
+        &[],
+        &BTreeSet::new(),
+        test_alphabet(),
+        vec![],
         vec![TEntry {
             obligation_id: "f.temporal.0".to_string(),
             formula: Temporal::Atom(Pred::Event("f0".into())),
         }],
-    ).expect("export");
+    )
+    .expect("export");
 
     assert_eq!(export.obligations.len(), 1, "one delegated T");
-    assert!(export.guarantees.is_empty(), "Q must be empty before monitor");
+    assert!(
+        export.guarantees.is_empty(),
+        "Q must be empty before monitor"
+    );
 
     // Even with a "green" run, T stays delegated
     let contract = emit_trace_contract("prog", events.clone(), &export);
 
     // TC5-a: T stays delegated, NOT promoted to Q
     assert_eq!(
-        contract.monitor.delegated_obligations.len(), 1,
+        contract.monitor.delegated_obligations.len(),
+        1,
         "TR-F: T stays delegated after run"
     );
 
     // TC5-b: no WatchedInvariant from T (monitor accept ≠ proved)
-    let watched = contract.assertion_points.iter()
+    let watched = contract
+        .assertion_points
+        .iter()
         .filter(|ap| matches!(ap, AssertionPoint::WatchedInvariant { .. }))
         .count();
     assert_eq!(watched, 0, "TR-F: no WatchedInvariant from a delegated T");
@@ -622,15 +759,23 @@ fn monitor_verdict_never_promoted_to_proved() {
     let serialized = ken_elaborator::serialize_trace_contract(&contract);
     let events_json = serialized["events"].as_array().expect("events array");
     for ev in events_json {
-        assert!(ev.get("status").is_none(), "TR-F: no 'status' field in trace event");
-        assert!(ev.get("proved").is_none(), "TR-F: no 'proved' field in trace event");
+        assert!(
+            ev.get("status").is_none(),
+            "TR-F: no 'status' field in trace event"
+        );
+        assert!(
+            ev.get("proved").is_none(),
+            "TR-F: no 'proved' field in trace event"
+        );
     }
 
     // TC5-d: structural absence — re-running the contract with the same export
     // does NOT promote T to Q (no ingest path from on_event data to guarantees).
     let contract_re = emit_trace_contract("prog", contract.events.clone(), &export);
     assert!(
-        contract_re.assertion_points.iter()
+        contract_re
+            .assertion_points
+            .iter()
             .all(|ap| !matches!(ap, AssertionPoint::WatchedInvariant { .. })),
         "TR-F: re-running does not promote T to Q (no ingest path)"
     );
@@ -657,10 +802,13 @@ fn trace_events_are_checked_against_the_one_b1_alphabet() {
 
     let mut outside = events;
     outside[0].effect = "FS".to_string();
-    assert!(matches!(
-        try_emit_trace_contract("prog", outside, &export),
-        Err(TraceContractError::EventOutsideAlphabet {
-            effect,
-        }) if effect == "FS"
-    ), "B3 must reject rather than derive or widen a second alphabet");
+    assert!(
+        matches!(
+            try_emit_trace_contract("prog", outside, &export),
+            Err(TraceContractError::EventOutsideAlphabet {
+                effect,
+            }) if effect == "FS"
+        ),
+        "B3 must reject rather than derive or widen a second alphabet"
+    );
 }

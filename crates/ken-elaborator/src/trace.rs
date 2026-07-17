@@ -62,15 +62,9 @@ pub struct TraceEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssertionPoint {
     /// From a `Q` (proved) entry: the downstream engine watches this invariant.
-    WatchedInvariant {
-        obligation_id: String,
-        goal: String,
-    },
+    WatchedInvariant { obligation_id: String, goal: String },
     /// From a `P` (assumption) entry: the engine confirms the assumption held.
-    ConfirmHeld {
-        obligation_id: String,
-        goal: String,
-    },
+    ConfirmHeld { obligation_id: String, goal: String },
 }
 
 // ─── Monitor projection (73 §2.4) ────────────────────────────────────────────
@@ -200,7 +194,8 @@ pub fn try_emit_trace_contract(
     // It changes when T changes (TC4 / TR-E discriminator).
     // (oracle): concrete Temporal formula + compile signature deferred to B2.
     let monitor = MonitorProjection {
-        delegated_obligations: export.obligations
+        delegated_obligations: export
+            .obligations
             .iter()
             .map(|t| t.obligation_id.clone())
             .collect(),
@@ -228,26 +223,36 @@ fn compute_trace_hash(
     let mut root: BTreeMap<&str, String> = BTreeMap::new();
     root.insert("target", target_name.to_string());
 
-    let events_repr: Vec<String> = events.iter().map(|e| {
-        format!(
-            "{}:{}:{}:{}:{}:{}:{}",
-            e.effect,
-            e.op,
-            e.op_arg,
-            e.response,
-            e.space_id,
-            e.message_provenance.as_deref().unwrap_or(""),
-            e.sequence_pos
-        )
-    }).collect();
+    let events_repr: Vec<String> = events
+        .iter()
+        .map(|e| {
+            format!(
+                "{}:{}:{}:{}:{}:{}:{}",
+                e.effect,
+                e.op,
+                e.op_arg,
+                e.response,
+                e.space_id,
+                e.message_provenance.as_deref().unwrap_or(""),
+                e.sequence_pos
+            )
+        })
+        .collect();
     root.insert("events", events_repr.join("|"));
 
-    let ap_repr: Vec<String> = assertion_points.iter().map(|ap| match ap {
-        AssertionPoint::WatchedInvariant { obligation_id, goal } =>
-            format!("Q:{}:{}", obligation_id, goal),
-        AssertionPoint::ConfirmHeld { obligation_id, goal } =>
-            format!("P:{}:{}", obligation_id, goal),
-    }).collect();
+    let ap_repr: Vec<String> = assertion_points
+        .iter()
+        .map(|ap| match ap {
+            AssertionPoint::WatchedInvariant {
+                obligation_id,
+                goal,
+            } => format!("Q:{}:{}", obligation_id, goal),
+            AssertionPoint::ConfirmHeld {
+                obligation_id,
+                goal,
+            } => format!("P:{}:{}", obligation_id, goal),
+        })
+        .collect();
     root.insert("assertion_points", ap_repr.join("|"));
 
     root.insert("monitor", monitor.delegated_obligations.join(","));
@@ -277,36 +282,50 @@ fn compute_trace_hash(
 pub fn serialize_trace_contract(contract: &TraceContract) -> serde_json::Value {
     use serde_json::{json, Value};
 
-    let events: Vec<Value> = contract.events.iter().map(|e| {
-        let mut obj = json!({
-            "effect":       e.effect,       // (oracle): field key
-            "op":           e.op,           // (oracle): field key
-            "op_arg":       e.op_arg,       // (oracle): field key
-            "response":     e.response,     // (oracle): field key
-            "space_id":     e.space_id,     // (oracle): field key
-            "sequence_pos": e.sequence_pos,
-        });
-        if let Some(prov) = &e.message_provenance {
-            // (oracle): field key for message provenance
-            obj["message_provenance"] = json!(prov);
-        }
-        obj
-    }).collect();
+    let events: Vec<Value> = contract
+        .events
+        .iter()
+        .map(|e| {
+            let mut obj = json!({
+                "effect":       e.effect,       // (oracle): field key
+                "op":           e.op,           // (oracle): field key
+                "op_arg":       e.op_arg,       // (oracle): field key
+                "response":     e.response,     // (oracle): field key
+                "space_id":     e.space_id,     // (oracle): field key
+                "sequence_pos": e.sequence_pos,
+            });
+            if let Some(prov) = &e.message_provenance {
+                // (oracle): field key for message provenance
+                obj["message_provenance"] = json!(prov);
+            }
+            obj
+        })
+        .collect();
 
-    let assertion_points: Vec<Value> = contract.assertion_points.iter().map(|ap| {
-        match ap {
-            AssertionPoint::WatchedInvariant { obligation_id, goal } => json!({
-                "kind":           "watched_invariant",  // (oracle): field key
-                "obligation_id":  obligation_id,        // (oracle)
-                "goal":           goal,
-            }),
-            AssertionPoint::ConfirmHeld { obligation_id, goal } => json!({
-                "kind":           "confirm_held",       // (oracle): field key
-                "obligation_id":  obligation_id,        // (oracle)
-                "goal":           goal,
-            }),
-        }
-    }).collect();
+    let assertion_points: Vec<Value> = contract
+        .assertion_points
+        .iter()
+        .map(|ap| {
+            match ap {
+                AssertionPoint::WatchedInvariant {
+                    obligation_id,
+                    goal,
+                } => json!({
+                    "kind":           "watched_invariant",  // (oracle): field key
+                    "obligation_id":  obligation_id,        // (oracle)
+                    "goal":           goal,
+                }),
+                AssertionPoint::ConfirmHeld {
+                    obligation_id,
+                    goal,
+                } => json!({
+                    "kind":           "confirm_held",       // (oracle): field key
+                    "obligation_id":  obligation_id,        // (oracle)
+                    "goal":           goal,
+                }),
+            }
+        })
+        .collect();
 
     json!({
         "schema": "ken.trace/v0",               // (oracle): version token
