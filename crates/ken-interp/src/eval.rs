@@ -2727,7 +2727,10 @@ impl HostHandler for PosixHost {
             let request = match policy {
                 HostCreatePolicy::CreateNew => HostOpenRequest::CreateNew,
                 HostCreatePolicy::CreateOrTruncate => HostOpenRequest::CreateOrTruncate,
-                HostCreatePolicy::CreateOrKeep => HostOpenRequest::CreateOrKeep,
+                // Resolution already observed this leaf as missing.  The
+                // create must remain exclusive so a concurrently appearing
+                // file is preserved rather than opened and overwritten.
+                HostCreatePolicy::CreateOrKeep => HostOpenRequest::CreateNew,
             };
             match openat_handle(parent, leaf, request) {
                 Ok(handle) => Ok(ken_host::write_new(&handle, bytes)?),
@@ -5329,6 +5332,43 @@ fn prim_arity(symbol: &str) -> usize {
 }
 
 // ── capacity conformance tests ────────────────────────────────────────────────
+
+#[cfg(all(test, target_os = "linux"))]
+mod px8r_create_or_keep_race_tests {
+    use super::*;
+
+    #[test]
+    fn posix_whole_file_create_or_keep_preserves_an_already_appeared_leaf() {
+        let root = std::env::temp_dir().join(format!(
+            "ken-px8r-interp-create-or-keep-race-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let mut host = PosixHost::new_at(&root);
+        let parent = host.root.clone();
+
+        // Model the resolver/create gap: the resolver returned Parent, then a
+        // competitor installed the leaf before fs_create_file_at ran.
+        std::fs::write(root.join("appeared.bin"), b"competitor").unwrap();
+        host.fs_create_file_at(
+            &parent,
+            b"appeared.bin",
+            HostCreatePolicy::CreateOrKeep,
+            b"ours",
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read(root.join("appeared.bin")).unwrap(),
+            b"competitor"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
 
 #[cfg(test)]
 mod px0_target_classification_tests {

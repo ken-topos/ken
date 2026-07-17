@@ -363,6 +363,32 @@ impl ProcessHost {
         Self::reject_symlink(&current, &leaf)?;
         Ok((current, leaf))
     }
+
+    fn create_missing_file(
+        parent: &RootedHandle,
+        leaf: &PathComponent,
+        policy: CreatePolicyV1,
+        bytes: &[u8],
+    ) -> Result<(), FileErrorCauseV1> {
+        let request = match policy {
+            CreatePolicyV1::CreateNew => OpenRequest::CreateNew,
+            CreatePolicyV1::CreateOrTruncate => OpenRequest::CreateOrTruncate,
+            // This is the second phase after observing NotFound. Keep it
+            // exclusive so a file created by a competing process between
+            // observation and open is never overwritten.
+            CreatePolicyV1::CreateOrKeep => OpenRequest::CreateNew,
+        };
+        match crate::open_at(parent, leaf, request) {
+            Ok(handle) => crate::write_new(&handle, bytes).map_err(host_error),
+            Err(error)
+                if policy == CreatePolicyV1::CreateOrKeep
+                    && error.kind() == io::ErrorKind::AlreadyExists =>
+            {
+                Ok(())
+            }
+            Err(error) => Err(host_error(error)),
+        }
+    }
 }
 
 impl HostEffectBackendV1 for ProcessHost {
@@ -426,21 +452,7 @@ impl HostEffectBackendV1 for ProcessHost {
                 }
             },
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                let request = match policy {
-                    CreatePolicyV1::CreateNew => OpenRequest::CreateNew,
-                    CreatePolicyV1::CreateOrTruncate => OpenRequest::CreateOrTruncate,
-                    CreatePolicyV1::CreateOrKeep => OpenRequest::CreateOrKeep,
-                };
-                match crate::open_at(&parent, &leaf, request) {
-                    Ok(handle) => crate::write_new(&handle, bytes).map_err(host_error),
-                    Err(error)
-                        if policy == CreatePolicyV1::CreateOrKeep
-                            && error.kind() == io::ErrorKind::AlreadyExists =>
-                    {
-                        Ok(())
-                    }
-                    Err(error) => Err(host_error(error)),
-                }
+                Self::create_missing_file(&parent, &leaf, policy, bytes)
             }
             Err(error) => Err(host_error(error)),
         }
@@ -1438,6 +1450,35 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whole_file_create_or_keep_preserves_a_concurrently_appearing_file() {
+        let root = std::env::temp_dir().join(format!(
+            "ken-px8r-native-create-or-keep-race-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let root_path = crate::RootPath::new(&root).unwrap();
+        let parent = crate::open_root(&root_path).unwrap();
+        let leaf = crate::PathComponent::new(b"appeared.bin").unwrap();
+
+        // Model the race boundary exactly: resolution observed NotFound, then
+        // a competitor installed the leaf before the create phase began.
+        std::fs::write(root.join("appeared.bin"), b"competitor").unwrap();
+        ProcessHost::create_missing_file(&parent, &leaf, CreatePolicyV1::CreateOrKeep, b"ours")
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read(root.join("appeared.bin")).unwrap(),
+            b"competitor"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     fn effect_fact(name: &str) -> u64 {
         crate::HOST_EFFECT_ABI_V1_FACTS
