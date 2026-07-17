@@ -21,6 +21,39 @@
   additive `T`-body extension; Foundation implements it, does not invent it).
   **PX7-F CANNOT merge without the pinned schema.** Also on ADR-0021 (landed with
   PX7-R). **Gate:** G-Ward-seam, G-Sec.
+- **⚠ Depends on THREE Runtime compiler prerequisites — PX7-L (MERGED
+  `736a9ef5`), PX7-M (MERGED `origin/main @ 0920adea`), AND PX7-N (Architect-ruled
+  `evt_7aynkstwtkg3n` + `evt_4nsnbj80e9d3w` + `evt_1nz919gmq6cwn`):** each PX7-F
+  rebase onto the latest checked-host lowering cleared one boundary and exposed
+  the next, one composition level deeper. `PX7-L` (merged) added checked-host
+  lowering for computational recursive `ITree.bind` (a runtime-selected host op).
+  `PX7-M` (merged `0920adea`) added the dynamic `HostResult` match inside a
+  computational *tree producer*. Rebasing onto `0920adea` then exposed a **third,
+  deeper** gap now owned by **`PX7-N`** (**nested computational-eliminator
+  composition/fusion**): an **outer** computational eliminator whose **producer**
+  is a nested `RuntimeExpr::ComputationalMatch` returning an **intermediate
+  aggregate `Result`** has no composition arm, so the fallback ordinary-lowers
+  the inner eliminator and `merge_branch_value` prematurely collapses the
+  intermediate `Result` to `Lowered::ProcessExitStatus` (via
+  `emit_process_exit_status`), which the later ordinary `Result` match correctly
+  refuses (`Match: scrutinee is not a constructor value`). **The deferred native
+  evidence below (AC2/AC3 public linked-native controls) CANNOT be produced until
+  PX7-N merges** — deferred AGAIN, NOT removed and NOT weakened to trace-only. On
+  PX7-N merge, Foundation rebases this branch onto the new `origin/main`,
+  **drops its duplicate diagnostic copy** (the `erasure.rs` capability repair +
+  the minimized red/green pair now folded into PX7-N), reapplies the retained
+  mode projection, and runs the exact deferred controls. PX7-L/PX7-M/PX7-N are
+  all Runtime-owned and resource-independent; PX7-F is their first consumer.
+- **⚙ Retained PX7-F companion repair (Architect-blessed `evt_4nsnbj80e9d3w`):**
+  a **narrow branch-local native projection** `resource_open_mode_tag` (exactly
+  analogous to the landed `create_policy_tag`) maps the checked nullary
+  `ResourceRead` constructor → wire tag `0`/`FsOpenModeV1::Read` and
+  `ResourceMetadata` → `1`/`Metadata`, rejecting every other or non-nullary
+  value. This resolves `FsOpen`'s `Int`-mode expectation **without** supplying an
+  `Int` at the Ken surface (which would leak the wire representation and weaken
+  the closed two-constructor contract). Keep the typed surface enum. This
+  projection **stays with PX7-F** (it is NOT part of PX7-M); commit it durably on
+  the parked branch so a future handoff-gate reset preserves it.
 - **Feeds:** completes PX7 (Ken-visible resource handles + `System.Resource`
   bracket, generation-checked, fail-visible, Ward-delegated). Opens the
   `System.*` namespace for later modules; PX8 may add read/write/seek ops on the
@@ -273,13 +306,27 @@ a new capability family or `RightSet` bit; any kernel change.
   `detail 6` reinterpretation). `MalformedResource` is a total surface case but is
   **not** demanded as a reaching case (no public constructor for `Resource k`).
   The `System/Resource` source text states escape is legal but stale — verified by
-  reading the shipped source, not a comment.
+  reading the shipped source, not a comment. **⏸ DEFERRED TO PX7-N (PX7-L and
+  PX7-M are MERGED; the remaining blocker is PX7-N — Architect-ruled
+  `evt_7aynkstwtkg3n` + `evt_4nsnbj80e9d3w` + `evt_1nz919gmq6cwn`):** the public
+  *linked-native* half of this differential clears PX7-L's recursive-`ITree.bind`
+  and PX7-M's dynamic-`HostResult`-producer boundaries but then stops at the
+  **nested computational-eliminator composition** boundary owned by PX7-N (the
+  intermediate aggregate `Result` is prematurely collapsed to
+  `Lowered::ProcessExitStatus`). The interpreter-side controls run now; the
+  linked-native success/`Closed`/`RightNotHeld` controls are run on the
+  **post-PX7-N** rebase (with the retained `resource_open_mode_tag` projection
+  reapplied and the duplicate diagnostic copy dropped). This is a deferral, NOT a
+  downgrade to trace-only or interp-only evidence.
 - **AC3 — settlement on normal/error/controlled-trap.** Normal return, returned
   error, and a controlled Ken trap each run settlement exactly once. Early
   `release` in `body` + bracket exit does not double-close (no second OS close);
   public `release` twice → `Closed` on the second. The trap reaches the runtime
   as a controlled terminal outcome (an aborting trap is not exercised as success
-  — it is a rejected shape).
+  — it is a rejected shape). **⏸ The public linked-native settlement controls
+  (controlled-trap + cleanup-failure ordering observed through the native lane)
+  are DEFERRED TO PX7-N** (PX7-L + PX7-M merged; PX7-N is the remaining blocker)
+  on the same basis as AC2; interpreter-side settlement controls run now.
 - **AC4 — multi-fault ordering + `ReleaseFailed` via private injection.**
   body-success + release-failure → bracket result is the `ReleaseFailed`;
   body-error + release-failure → both preserved; controlled-trap + cleanup-failure
