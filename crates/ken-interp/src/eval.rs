@@ -3758,6 +3758,12 @@ pub struct FSIds {
     pub right_not_held_id: GlobalId,
     pub release_failed_id: GlobalId,
     pub fs_handle_id: GlobalId,
+    pub buffer_id: GlobalId,
+    pub resource_kind_mismatch_id: GlobalId,
+    pub buffer_limit_id: GlobalId,
+    pub invalid_offset_id: GlobalId,
+    pub invalid_bounds_id: GlobalId,
+    pub no_progress_id: GlobalId,
     pub private_resource_trace_identity_id: GlobalId,
     pub create_new_id: GlobalId,
     pub create_or_truncate_id: GlobalId,
@@ -3809,6 +3815,12 @@ impl FSIds {
             right_not_held_id: elab.prelude_env.right_not_held_id,
             release_failed_id: elab.prelude_env.release_failed_id,
             fs_handle_id: elab.prelude_env.fs_handle_id,
+            buffer_id: get("Buffer")?,
+            resource_kind_mismatch_id: get("ResourceKindMismatch")?,
+            buffer_limit_id: get("BufferLimit")?,
+            invalid_offset_id: get("InvalidOffset")?,
+            invalid_bounds_id: get("InvalidBounds")?,
+            no_progress_id: get("NoProgress")?,
             private_resource_trace_identity_id: elab.prelude_env.private_resource_trace_identity_id,
             create_new_id: get("CreateNew")?,
             create_or_truncate_id: get("CreateOrTruncate")?,
@@ -4309,7 +4321,7 @@ impl<H: HostHandler> ken_host::HostEffectBackendV1 for InterpreterHostBackend<'_
         &mut self,
         grant: &ken_host::CapabilityGrantV1,
         path: &[u8],
-        _mode: ken_host::FsOpenModeV1,
+        mode: ken_host::FsOpenModeV1,
     ) -> Result<ken_host::ResourceHandleV1, ken_host::FileErrorCauseV1> {
         let components = fs_target_components(path)
             .map_err(|error| ken_host::FileErrorCauseV1::Capability(map_denial_v1(error)))?;
@@ -4340,7 +4352,21 @@ impl<H: HostHandler> ken_host::HostEffectBackendV1 for InterpreterHostBackend<'_
                 ken_host::CapabilityDeniedV1::SymlinkDenied,
             ));
         }
-        ken_host::open_resource_at_v1(&parent, &leaf, ken_host::OpenRequest::Read)
+        let request = match mode {
+            ken_host::FsOpenModeV1::Read | ken_host::FsOpenModeV1::Metadata => {
+                ken_host::OpenRequest::Read
+            }
+            ken_host::FsOpenModeV1::WriteCreate(ken_host::CreatePolicyV1::CreateNew) => {
+                ken_host::OpenRequest::CreateNew
+            }
+            ken_host::FsOpenModeV1::WriteCreate(ken_host::CreatePolicyV1::CreateOrTruncate) => {
+                ken_host::OpenRequest::CreateOrTruncate
+            }
+            ken_host::FsOpenModeV1::WriteCreate(ken_host::CreatePolicyV1::CreateOrKeep) => {
+                ken_host::OpenRequest::CreateOrKeep
+            }
+        };
+        ken_host::open_resource_at_v1(&parent, &leaf, request)
             .map_err(|error| host_error_v1(error.into_io_error()))
     }
 }
@@ -4558,7 +4584,10 @@ fn fs_dispatch<H: HostHandler>(
         resources,
         operation,
         token,
-        resource,
+        resource.map_or(
+            ken_host::ResourceInputsV1::None,
+            ken_host::ResourceInputsV1::Target,
+        ),
         &request,
     )
     .map_err(|_| ());
@@ -4681,6 +4710,7 @@ fn reify_host_reply_v1(
                         ken_host::ResourceKindV1::FsHandle => {
                             make_ctor(fs.fs_handle_id, vec![], store)
                         }
+                        ken_host::ResourceKindV1::Buffer => make_ctor(fs.buffer_id, vec![], store),
                     };
                     let trace = make_ctor(
                         fs.private_resource_trace_identity_id,
@@ -4692,6 +4722,29 @@ fn reify_host_reply_v1(
                     );
                     let io = io_error_identity_value(io, ids, store);
                     make_ctor(fs.release_failed_id, vec![kind, trace, io], store)
+                }
+                ken_host::ResourceErrorV1::ResourceKindMismatch { expected, actual } => {
+                    let kind = |kind, store: &mut EvalStore| match kind {
+                        ken_host::ResourceKindV1::FsHandle => {
+                            make_ctor(fs.fs_handle_id, vec![], store)
+                        }
+                        ken_host::ResourceKindV1::Buffer => make_ctor(fs.buffer_id, vec![], store),
+                    };
+                    let expected = kind(expected, store);
+                    let actual = kind(actual, store);
+                    make_ctor(fs.resource_kind_mismatch_id, vec![expected, actual], store)
+                }
+                ken_host::ResourceErrorV1::BufferLimit => {
+                    make_ctor(fs.buffer_limit_id, vec![], store)
+                }
+                ken_host::ResourceErrorV1::InvalidOffset => {
+                    make_ctor(fs.invalid_offset_id, vec![], store)
+                }
+                ken_host::ResourceErrorV1::InvalidBounds => {
+                    make_ctor(fs.invalid_bounds_id, vec![], store)
+                }
+                ken_host::ResourceErrorV1::NoProgress => {
+                    make_ctor(fs.no_progress_id, vec![], store)
                 }
             };
             return Ok(make_result(false, error, ids, store));
@@ -4718,7 +4771,7 @@ fn ambient_dispatch<H: HostHandler>(
         resources,
         operation,
         None,
-        None,
+        ken_host::ResourceInputsV1::None,
         &request,
     )
     .map_err(|_| ())?;
@@ -4800,6 +4853,7 @@ pub fn run_io<H: HostHandler>(
 #[derive(Default)]
 struct EffectTraceRecorderV1 {
     events: Vec<ken_host::EffectEventV1>,
+    events_v2: Vec<ken_host::EffectEventV2>,
 }
 
 impl EffectTraceRecorderV1 {
@@ -4809,6 +4863,12 @@ impl EffectTraceRecorderV1 {
         request: ken_host::CanonicalRequestV1,
         reply: &ken_host::HostDispatchReplyV1,
     ) {
+        self.events_v2.push(ken_host::effect_event_v2_from_dispatch(
+            self.events_v2.len() as u64,
+            operation,
+            request.clone(),
+            reply,
+        ));
         self.events.push(ken_host::EffectEventV1 {
             sequence: self.events.len() as u64,
             operation,
@@ -5156,6 +5216,10 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                     capability_identity: None,
                     resource_identity: Some(settlement.identity),
                     resource_token: None,
+                    resource_bindings: vec![(
+                        ken_host::ResourceBindingRoleV2::Target,
+                        settlement.identity,
+                    )],
                     outcome,
                 },
             );
@@ -5437,6 +5501,12 @@ mod px5b_effect_observation_tests {
             right_not_held_id: id(),
             release_failed_id: id(),
             fs_handle_id: id(),
+            buffer_id: id(),
+            resource_kind_mismatch_id: id(),
+            buffer_limit_id: id(),
+            invalid_offset_id: id(),
+            invalid_bounds_id: id(),
+            no_progress_id: id(),
             private_resource_trace_identity_id: id(),
             create_new_id: id(),
             create_or_truncate_id: id(),
@@ -5633,6 +5703,21 @@ mod px5b_effect_observation_tests {
             .events
             .iter()
             .all(|event| event.capability.is_none()));
+        assert_eq!(
+            recorder
+                .events_v2
+                .iter()
+                .map(|event| (event.sequence, event.operation))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, ken_host::HostOpV1::ConsoleWrite),
+                (1, ken_host::HostOpV1::ClockWallNow),
+            ]
+        );
+        assert!(recorder
+            .events_v2
+            .iter()
+            .all(|event| event.resource_bindings.is_empty()));
     }
 
     #[test]

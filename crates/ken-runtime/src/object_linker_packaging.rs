@@ -2710,7 +2710,7 @@ mod tests {
             &mut resources,
             ken_host::HostOpV1::FsOpen,
             Some(capability),
-            None,
+            ken_host::ResourceInputsV1::None,
             &open_request,
         )
         .unwrap();
@@ -2743,7 +2743,7 @@ mod tests {
                 &mut resources,
                 operation,
                 None,
-                Some(token),
+                ken_host::ResourceInputsV1::Target(token),
                 &request,
             )
             .unwrap();

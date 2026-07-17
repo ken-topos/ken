@@ -1014,7 +1014,7 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
             &mut resources,
             HostOpV1::FsReadFile,
             Some(wrong_token),
-            None,
+            ken_host::ResourceInputsV1::None,
             &request,
         )
         .expect("malformed token is a typed canonical reply");

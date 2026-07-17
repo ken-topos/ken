@@ -158,11 +158,43 @@ fn put_request(
                 match mode {
                     FsOpenModeV1::Read => 0,
                     FsOpenModeV1::Metadata => 1,
+                    FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateNew) => 2,
+                    FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrTruncate) => 3,
+                    FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrKeep) => 4,
                 },
             );
         }
         CanonicalRequestV1::FsHandleMetadata => put_u8(out, 16),
         CanonicalRequestV1::ResourceRelease => put_u8(out, 17),
+        CanonicalRequestV1::FsReadAt {
+            file_offset,
+            buffer_start,
+            length,
+        } => {
+            put_u8(out, 18);
+            put_u64(out, *file_offset);
+            put_u64(out, *buffer_start);
+            put_u64(out, *length);
+        }
+        CanonicalRequestV1::FsWriteAt {
+            file_offset,
+            buffer_start,
+            length,
+        } => {
+            put_u8(out, 19);
+            put_u64(out, *file_offset);
+            put_u64(out, *buffer_start);
+            put_u64(out, *length);
+        }
+        CanonicalRequestV1::BufferAllocate { capacity } => {
+            put_u8(out, 20);
+            put_u64(out, *capacity);
+        }
+        CanonicalRequestV1::BufferFreeze { start, length } => {
+            put_u8(out, 21);
+            put_u64(out, *start);
+            put_u64(out, *length);
+        }
     }
     Ok(())
 }
@@ -229,6 +261,22 @@ fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTr
             put_u8(out, 9);
             put_settlement(out, settlement);
         }
+        CanonicalReplyV1::ReadProgress(progress) => {
+            put_u8(out, 10);
+            match progress {
+                crate::ReadProgressV1::ReadSome { span, transferred } => {
+                    put_u8(out, 0);
+                    put_u64(out, span.start());
+                    put_u64(out, span.length());
+                    put_u64(out, transferred.get());
+                }
+                crate::ReadProgressV1::ReadEof => put_u8(out, 1),
+            }
+        }
+        CanonicalReplyV1::WriteProgress(crate::WriteProgressV1::Wrote(transferred)) => {
+            put_u8(out, 11);
+            put_u64(out, transferred.get());
+        }
     }
     Ok(())
 }
@@ -236,6 +284,7 @@ fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTr
 fn put_resource_kind(out: &mut Vec<u8>, kind: ResourceKindV1) {
     match kind {
         ResourceKindV1::FsHandle => put_u8(out, 0),
+        ResourceKindV1::Buffer => put_u8(out, 1),
     }
 }
 
@@ -356,6 +405,15 @@ fn put_error(out: &mut Vec<u8>, error: &SemanticErrorV1) -> Result<(), EffectTra
                     put_u64(out, identity.0);
                     put_io_error(out, *io);
                 }
+                ResourceErrorV1::ResourceKindMismatch { expected, actual } => {
+                    put_u8(out, 4);
+                    put_resource_kind(out, *expected);
+                    put_resource_kind(out, *actual);
+                }
+                ResourceErrorV1::BufferLimit => put_u8(out, 5),
+                ResourceErrorV1::InvalidOffset => put_u8(out, 6),
+                ResourceErrorV1::InvalidBounds => put_u8(out, 7),
+                ResourceErrorV1::NoProgress => put_u8(out, 8),
             }
         }
     }
@@ -567,11 +625,31 @@ fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTrac
             mode: match cursor.u8()? {
                 0 => FsOpenModeV1::Read,
                 1 => FsOpenModeV1::Metadata,
+                2 => FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateNew),
+                3 => FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrTruncate),
+                4 => FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrKeep),
                 _ => return Err(EffectTraceWireErrorV1),
             },
         },
         16 => CanonicalRequestV1::FsHandleMetadata,
         17 => CanonicalRequestV1::ResourceRelease,
+        18 => CanonicalRequestV1::FsReadAt {
+            file_offset: cursor.u64()?,
+            buffer_start: cursor.u64()?,
+            length: cursor.u64()?,
+        },
+        19 => CanonicalRequestV1::FsWriteAt {
+            file_offset: cursor.u64()?,
+            buffer_start: cursor.u64()?,
+            length: cursor.u64()?,
+        },
+        20 => CanonicalRequestV1::BufferAllocate {
+            capacity: cursor.u64()?,
+        },
+        21 => CanonicalRequestV1::BufferFreeze {
+            start: cursor.u64()?,
+            length: cursor.u64()?,
+        },
         _ => return Err(EffectTraceWireErrorV1),
     })
 }
@@ -608,6 +686,34 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
             identity: ResourceTraceIdentityV1(cursor.u64()?),
         },
         9 => CanonicalReplyV1::ResourceSettlement(get_settlement(cursor)?),
+        10 => {
+            let progress = match cursor.u8()? {
+                0 => {
+                    let start = cursor.u64()?;
+                    let length = cursor.u64()?;
+                    let transferred = cursor.u64()?;
+                    if length != transferred || transferred == 0 {
+                        return Err(EffectTraceWireErrorV1);
+                    }
+                    crate::ReadProgressV1::ReadSome {
+                        span: crate::BufferSpanV1 { start, length },
+                        transferred: crate::TransferCountV1(transferred),
+                    }
+                }
+                1 => crate::ReadProgressV1::ReadEof,
+                _ => return Err(EffectTraceWireErrorV1),
+            };
+            CanonicalReplyV1::ReadProgress(progress)
+        }
+        11 => {
+            let count = cursor.u64()?;
+            if count == 0 {
+                return Err(EffectTraceWireErrorV1);
+            }
+            CanonicalReplyV1::WriteProgress(crate::WriteProgressV1::Wrote(crate::TransferCountV1(
+                count,
+            )))
+        }
         _ => return Err(EffectTraceWireErrorV1),
     })
 }
@@ -615,6 +721,7 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
 fn get_resource_kind(cursor: &mut Cursor<'_>) -> Result<ResourceKindV1, EffectTraceWireErrorV1> {
     match cursor.u8()? {
         0 => Ok(ResourceKindV1::FsHandle),
+        1 => Ok(ResourceKindV1::Buffer),
         _ => Err(EffectTraceWireErrorV1),
     }
 }
@@ -713,6 +820,14 @@ fn get_error(cursor: &mut Cursor<'_>) -> Result<SemanticErrorV1, EffectTraceWire
                 identity: ResourceTraceIdentityV1(cursor.u64()?),
                 io: get_io_error(cursor)?,
             },
+            4 => ResourceErrorV1::ResourceKindMismatch {
+                expected: get_resource_kind(cursor)?,
+                actual: get_resource_kind(cursor)?,
+            },
+            5 => ResourceErrorV1::BufferLimit,
+            6 => ResourceErrorV1::InvalidOffset,
+            7 => ResourceErrorV1::InvalidBounds,
+            8 => ResourceErrorV1::NoProgress,
             _ => return Err(EffectTraceWireErrorV1),
         }),
         _ => return Err(EffectTraceWireErrorV1),
@@ -868,6 +983,66 @@ mod tests {
                             io: IoErrorIdentityV1::Other(5),
                         },
                     )),
+                },
+                EffectEventV1 {
+                    sequence: 5,
+                    operation: HostOpV1::BufferAllocate,
+                    capability: None,
+                    resource: Some(ResourceTraceIdentityV1(2)),
+                    request: CanonicalRequestV1::BufferAllocate { capacity: 8 },
+                    outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::ResourceAcquired {
+                        schema_version: 1,
+                        resource_kind: ResourceKindV1::Buffer,
+                        identity: ResourceTraceIdentityV1(2),
+                    }),
+                },
+                EffectEventV1 {
+                    sequence: 6,
+                    operation: HostOpV1::FsReadAt,
+                    capability: None,
+                    resource: None,
+                    request: CanonicalRequestV1::FsReadAt {
+                        file_offset: 9,
+                        buffer_start: 1,
+                        length: 4,
+                    },
+                    outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
+                        crate::ReadProgressV1::ReadSome {
+                            span: crate::BufferSpanV1 {
+                                start: 1,
+                                length: 2,
+                            },
+                            transferred: crate::TransferCountV1(2),
+                        },
+                    )),
+                },
+                EffectEventV1 {
+                    sequence: 7,
+                    operation: HostOpV1::FsWriteAt,
+                    capability: None,
+                    resource: None,
+                    request: CanonicalRequestV1::FsWriteAt {
+                        file_offset: u64::MAX,
+                        buffer_start: 0,
+                        length: 1,
+                    },
+                    outcome: CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(
+                        ResourceErrorV1::ResourceKindMismatch {
+                            expected: ResourceKindV1::FsHandle,
+                            actual: ResourceKindV1::Buffer,
+                        },
+                    )),
+                },
+                EffectEventV1 {
+                    sequence: 8,
+                    operation: HostOpV1::BufferFreeze,
+                    capability: None,
+                    resource: Some(ResourceTraceIdentityV1(2)),
+                    request: CanonicalRequestV1::BufferFreeze {
+                        start: 1,
+                        length: 2,
+                    },
+                    outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(vec![0xff, 0])),
                 },
             ],
         }

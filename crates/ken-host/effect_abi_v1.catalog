@@ -4,6 +4,8 @@ lifetime|trace_schema|1
 lifetime|filesystem_observation_schema|2
 lifetime|resource_observation_schema|1
 lifetime|resource_error_reply_schema|1
+limit|buffer.per_buffer_max_capacity|1048576
+limit|buffer.invocation_max_live_capacity|16777216
 tag|reply.unit|0
 tag|reply.bool|1
 tag|reply.bytes|2
@@ -11,11 +13,19 @@ tag|reply.error|3
 tag|reply.resource|4
 tag|reply.metadata|5
 tag|reply.resource_error|6
+tag|reply.read_progress|7
+tag|reply.write_progress|8
 error|resource.Closed|0
 error|resource.MalformedResource|1
 error|resource.RightNotHeld|2
 error|resource.ReleaseFailed|3
+error|resource.ResourceKindMismatch|4
+error|resource.BufferLimit|5
+error|resource.InvalidOffset|6
+error|resource.InvalidBounds|7
+error|resource.NoProgress|8
 tag|resource_kind.FsHandle|0
+tag|resource_kind.Buffer|1
 tag|stream.stdin|0
 tag|stream.stdout|1
 tag|stream.stderr|2
@@ -53,4 +63,8 @@ operation|FsRename|0309|unavailable|FsRenameRequestV1|3|HostReplyV1|1
 operation|FsChangeMode|030A|native|FsChangeModeRequestV1|3|HostReplyV1|1
 operation|FsOpen|030B|native|FsOpenRequestV1|3|HostReplyV1|1
 operation|FsHandleMetadata|030C|native|ResourceRequestV1|1|HostReplyV1|1
+operation|FsReadAt|030D|unavailable|FsPositionedRequestV1|5|HostReplyV1|1
+operation|FsWriteAt|030E|unavailable|FsPositionedRequestV1|5|HostReplyV1|1
 operation|ResourceRelease|0401|native|ResourceRequestV1|1|HostReplyV1|1
+operation|BufferAllocate|0402|unavailable|BufferAllocateRequestV1|1|HostReplyV1|1
+operation|BufferFreeze|0403|unavailable|BufferFreezeRequestV1|3|HostReplyV1|1

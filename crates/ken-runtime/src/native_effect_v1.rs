@@ -9,8 +9,8 @@
 use ken_host::{
     assert_host_effect_abi_identity, assert_target_abi_identity, dispatch_host_op_v1,
     CanonicalRequestV1, CapabilityTableV1, CapabilityTokenV1, EffectEventV1, EffectObservationV1,
-    FsDeltaV1, HostDispatchReplyV1, HostEffectBackendV1, HostOpV1, ResourceTableV1,
-    TerminalErrorV1,
+    FsDeltaV1, HostDispatchReplyV1, HostEffectBackendV1, HostOpV1, ResourceInputsV1,
+    ResourceTableV1, TerminalErrorV1,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,6 +26,7 @@ pub struct NativeEntrypointBindingsV1 {
 pub struct NativeEffectCallV1 {
     pub operation: HostOpV1,
     pub capability: Option<(String, CapabilityTokenV1)>,
+    pub resources: ResourceInputsV1,
     pub request: CanonicalRequestV1,
 }
 
@@ -55,6 +56,7 @@ pub struct KenNativeInvocationV1<B> {
     pub resources: ResourceTableV1,
     pub response_arena: ResponseArenaV1,
     pub observation: EffectObservationV1,
+    pub effect_trace_v2: Vec<ken_host::EffectEventV2>,
 }
 
 impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
@@ -86,6 +88,7 @@ impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
                 effect_trace: Vec::new(),
                 exit_status: 1,
             },
+            effect_trace_v2: Vec::new(),
         })
     }
 
@@ -100,10 +103,17 @@ impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
             &mut self.resources,
             call.operation,
             token,
-            None,
+            call.resources,
             &call.request,
         )?;
         let sequence = self.observation.effect_trace.len() as u64;
+        self.effect_trace_v2
+            .push(ken_host::effect_event_v2_from_dispatch(
+                self.effect_trace_v2.len() as u64,
+                call.operation,
+                call.request.clone(),
+                &reply,
+            ));
         self.observation.effect_trace.push(EffectEventV1 {
             sequence,
             operation: call.operation,
@@ -233,6 +243,7 @@ mod tests {
             .dispatch(NativeEffectCallV1 {
                 operation: HostOpV1::FsWriteFile,
                 capability: Some(("fsCap".to_string(), token)),
+                resources: ResourceInputsV1::None,
                 request: CanonicalRequestV1::FsWriteFile {
                     path: b"a".to_vec(),
                     create_policy: CreatePolicyV1::CreateOrTruncate,
@@ -244,6 +255,7 @@ mod tests {
             .dispatch(NativeEffectCallV1 {
                 operation: HostOpV1::FsReadFile,
                 capability: Some(("fsCap".to_string(), token)),
+                resources: ResourceInputsV1::None,
                 request: CanonicalRequestV1::FsReadFile {
                     path: b"a".to_vec(),
                 },
@@ -268,6 +280,7 @@ mod tests {
             .dispatch(NativeEffectCallV1 {
                 operation: HostOpV1::FsWriteFile,
                 capability: Some(("fsCap".to_string(), token)),
+                resources: ResourceInputsV1::None,
                 request: CanonicalRequestV1::FsWriteFile {
                     path: b"a".to_vec(),
                     create_policy: CreatePolicyV1::CreateNew,

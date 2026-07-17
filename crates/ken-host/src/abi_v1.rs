@@ -237,6 +237,27 @@ struct ResourceRequestV1 {
 }
 
 #[repr(C)]
+struct FsPositionedRequestV1 {
+    file: u64,
+    buffer: u64,
+    file_offset: u64,
+    buffer_start: u64,
+    length: u64,
+}
+
+#[repr(C)]
+struct BufferAllocateRequestV1 {
+    capacity: u64,
+}
+
+#[repr(C)]
+struct BufferFreezeRequestV1 {
+    resource: u64,
+    start: u64,
+    length: u64,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct ResourceErrorReplyV1 {
     schema_version: u64,
@@ -245,6 +266,8 @@ struct ResourceErrorReplyV1 {
     io: u64,
     required: u64,
     held: u64,
+    expected_kind: u64,
+    actual_kind: u64,
 }
 
 #[repr(C)]
@@ -262,6 +285,8 @@ const REPLY_ERROR: u64 = 3;
 const REPLY_RESOURCE: u64 = 4;
 const REPLY_METADATA: u64 = 5;
 const REPLY_RESOURCE_ERROR: u64 = 6;
+const REPLY_READ_PROGRESS: u64 = 7;
+const REPLY_WRITE_PROGRESS: u64 = 8;
 
 struct ProcessContext {
     _posture: ProcessPostureV1,
@@ -270,6 +295,7 @@ struct ProcessContext {
     resources: crate::ResourceTableV1,
     response_arena: Vec<Box<[u8]>>,
     effect_trace: Vec<EffectEventV1>,
+    effect_trace_v2: Vec<crate::EffectEventV2>,
     observation: Option<std::fs::File>,
     plan_hash: u64,
     capability: CapabilityTokenV1,
@@ -435,10 +461,21 @@ impl HostEffectBackendV1 for ProcessHost {
         &mut self,
         grant: &CapabilityGrantV1,
         path: &[u8],
-        _mode: crate::FsOpenModeV1,
+        mode: crate::FsOpenModeV1,
     ) -> Result<crate::ResourceHandleV1, FileErrorCauseV1> {
         let (parent, leaf) = Self::parent(grant, path)?;
-        crate::open_resource_at_v1(&parent, &leaf, OpenRequest::Read).map_err(host_error)
+        let request = match mode {
+            crate::FsOpenModeV1::Read => OpenRequest::Read,
+            crate::FsOpenModeV1::Metadata => OpenRequest::Read,
+            crate::FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateNew) => OpenRequest::CreateNew,
+            crate::FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrTruncate) => {
+                OpenRequest::CreateOrTruncate
+            }
+            crate::FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrKeep) => {
+                OpenRequest::CreateOrKeep
+            }
+        };
+        crate::open_resource_at_v1(&parent, &leaf, request).map_err(host_error)
     }
 }
 
@@ -713,6 +750,7 @@ fn initialize_process_context_with_lookup(
         resources: crate::ResourceTableV1::default(),
         response_arena: Vec::new(),
         effect_trace: Vec::new(),
+        effect_trace_v2: Vec::new(),
         observation,
         plan_hash,
         capability,
@@ -835,6 +873,28 @@ impl ProcessContext {
                 request: CanonicalRequestV1::ResourceRelease,
                 outcome,
             });
+            let reply = crate::HostDispatchReplyV1 {
+                capability_identity: None,
+                resource_identity: Some(settlement.identity),
+                resource_token: None,
+                resource_bindings: vec![(
+                    crate::ResourceBindingRoleV2::Target,
+                    settlement.identity,
+                )],
+                outcome: self
+                    .effect_trace
+                    .last()
+                    .expect("settlement event just recorded")
+                    .outcome
+                    .clone(),
+            };
+            self.effect_trace_v2
+                .push(crate::effect_event_v2_from_dispatch(
+                    self.effect_trace_v2.len() as u64,
+                    HostOpV1::ResourceRelease,
+                    CanonicalRequestV1::ResourceRelease,
+                    &reply,
+                ));
         }
     }
 }
@@ -888,6 +948,23 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
         CanonicalOutcomeV1::Success(CanonicalReplyV1::ResourceSettlement(_)) => {
             reply.tag = REPLY_UNIT;
         }
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(progress)) => match progress {
+            crate::ReadProgressV1::ReadSome { span, transferred } => {
+                reply.tag = REPLY_READ_PROGRESS;
+                reply.detail = transferred.get();
+                reply.bytes.data = std::ptr::null();
+                reply.bytes.len = span.start() as usize;
+            }
+            crate::ReadProgressV1::ReadEof => {
+                reply.tag = REPLY_READ_PROGRESS;
+                reply.detail = 0;
+            }
+        },
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::WriteProgress(progress)) => {
+            let crate::WriteProgressV1::Wrote(transferred) = progress;
+            reply.tag = REPLY_WRITE_PROGRESS;
+            reply.detail = transferred.get();
+        }
         CanonicalOutcomeV1::Success(CanonicalReplyV1::FileMetadata(metadata)) => {
             reply.tag = REPLY_METADATA;
             reply.detail = metadata.size;
@@ -920,10 +997,26 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
                     reply.resource_error.schema_version = u64::from(schema_version);
                     reply.resource_error.resource_kind = match resource_kind {
                         crate::ResourceKindV1::FsHandle => 0,
+                        crate::ResourceKindV1::Buffer => 1,
                     };
                     reply.resource_error.identity = identity.0;
                     reply.resource_error.io = io_error_tag(io);
                 }
+                crate::ResourceErrorV1::ResourceKindMismatch { expected, actual } => {
+                    reply.detail = 4;
+                    reply.resource_error.expected_kind = match expected {
+                        crate::ResourceKindV1::FsHandle => 0,
+                        crate::ResourceKindV1::Buffer => 1,
+                    };
+                    reply.resource_error.actual_kind = match actual {
+                        crate::ResourceKindV1::FsHandle => 0,
+                        crate::ResourceKindV1::Buffer => 1,
+                    };
+                }
+                crate::ResourceErrorV1::BufferLimit => reply.detail = 5,
+                crate::ResourceErrorV1::InvalidOffset => reply.detail = 6,
+                crate::ResourceErrorV1::InvalidBounds => reply.detail = 7,
+                crate::ResourceErrorV1::NoProgress => reply.detail = 8,
             }
         }
         CanonicalOutcomeV1::Error(error) => {
@@ -994,6 +1087,11 @@ fn decode_resource_error_reply(
     discriminator: u64,
     payload: ResourceErrorReplyV1,
 ) -> Option<crate::ResourceErrorV1> {
+    let kind = |tag| match tag {
+        0 => Some(crate::ResourceKindV1::FsHandle),
+        1 => Some(crate::ResourceKindV1::Buffer),
+        _ => None,
+    };
     let all_zero = payload == ResourceErrorReplyV1::default();
     match discriminator {
         0 if all_zero => Some(crate::ResourceErrorV1::Closed),
@@ -1011,17 +1109,35 @@ fn decode_resource_error_reply(
             })
         }
         3 if payload.schema_version == u64::from(crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1)
-            && payload.resource_kind == 0
             && payload.required == 0
-            && payload.held == 0 =>
+            && payload.held == 0
+            && payload.expected_kind == 0
+            && payload.actual_kind == 0 =>
         {
             Some(crate::ResourceErrorV1::ReleaseFailed {
                 schema_version: crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
-                resource_kind: crate::ResourceKindV1::FsHandle,
+                resource_kind: kind(payload.resource_kind)?,
                 identity: crate::ResourceTraceIdentityV1(payload.identity),
                 io: io_error_from_tag(payload.io)?,
             })
         }
+        4 if payload.schema_version == 0
+            && payload.resource_kind == 0
+            && payload.identity == 0
+            && payload.io == 0
+            && payload.required == 0
+            && payload.held == 0
+            && payload.expected_kind != payload.actual_kind =>
+        {
+            Some(crate::ResourceErrorV1::ResourceKindMismatch {
+                expected: kind(payload.expected_kind)?,
+                actual: kind(payload.actual_kind)?,
+            })
+        }
+        5 if all_zero => Some(crate::ResourceErrorV1::BufferLimit),
+        6 if all_zero => Some(crate::ResourceErrorV1::InvalidOffset),
+        7 if all_zero => Some(crate::ResourceErrorV1::InvalidBounds),
+        8 if all_zero => Some(crate::ResourceErrorV1::NoProgress),
         _ => None,
     }
 }
@@ -1073,7 +1189,7 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             };
             (
                 None,
-                None,
+                crate::ResourceInputsV1::None,
                 CanonicalRequestV1::ConsoleWrite {
                     stream,
                     bytes: bytes.to_vec(),
@@ -1095,7 +1211,7 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             } else {
                 CanonicalRequestV1::ConsoleIsTerminal { stream }
             };
-            (None, None, request)
+            (None, crate::ResourceInputsV1::None, request)
         }
         HostOpV1::FsReadFile if request_size == std::mem::size_of::<FsReadFileRequestV1>() => {
             if !request.cast::<FsReadFileRequestV1>().is_aligned() {
@@ -1107,7 +1223,7 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             };
             (
                 Some(CapabilityTokenV1::from_erased_identity(wire.capability)),
-                None,
+                crate::ResourceInputsV1::None,
                 CanonicalRequestV1::FsReadFile {
                     path: path.to_vec(),
                 },
@@ -1131,7 +1247,7 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             };
             (
                 Some(CapabilityTokenV1::from_erased_identity(wire.capability)),
-                None,
+                crate::ResourceInputsV1::None,
                 CanonicalRequestV1::FsWriteFile {
                     path: path.to_vec(),
                     create_policy: policy,
@@ -1164,7 +1280,7 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             }
             (
                 Some(CapabilityTokenV1::from_erased_identity(wire.capability)),
-                None,
+                crate::ResourceInputsV1::None,
                 CanonicalRequestV1::FsChangeMode {
                     path: path.to_vec(),
                     mode: wire.mode,
@@ -1182,11 +1298,14 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             let mode = match wire.mode {
                 0 => crate::FsOpenModeV1::Read,
                 1 => crate::FsOpenModeV1::Metadata,
+                2 => crate::FsOpenModeV1::WriteCreate(crate::CreatePolicyV1::CreateNew),
+                3 => crate::FsOpenModeV1::WriteCreate(crate::CreatePolicyV1::CreateOrTruncate),
+                4 => crate::FsOpenModeV1::WriteCreate(crate::CreatePolicyV1::CreateOrKeep),
                 _ => return -1,
             };
             (
                 Some(CapabilityTokenV1::from_erased_identity(wire.capability)),
-                None,
+                crate::ResourceInputsV1::None,
                 CanonicalRequestV1::FsOpen {
                     path: path.to_vec(),
                     mode,
@@ -1207,8 +1326,70 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
             };
             (
                 None,
-                Some(crate::ResourceTokenV1::from_erased_identity(wire.resource)),
+                crate::ResourceInputsV1::Target(crate::ResourceTokenV1::from_erased_identity(
+                    wire.resource,
+                )),
                 request,
+            )
+        }
+        HostOpV1::FsReadAt | HostOpV1::FsWriteAt
+            if request_size == std::mem::size_of::<FsPositionedRequestV1>() =>
+        {
+            if !request.cast::<FsPositionedRequestV1>().is_aligned() {
+                return -1;
+            }
+            let wire = unsafe { &*(request.cast::<FsPositionedRequestV1>()) };
+            let request = if op == HostOpV1::FsReadAt {
+                CanonicalRequestV1::FsReadAt {
+                    file_offset: wire.file_offset,
+                    buffer_start: wire.buffer_start,
+                    length: wire.length,
+                }
+            } else {
+                CanonicalRequestV1::FsWriteAt {
+                    file_offset: wire.file_offset,
+                    buffer_start: wire.buffer_start,
+                    length: wire.length,
+                }
+            };
+            (
+                None,
+                crate::ResourceInputsV1::FileBuffer {
+                    file: crate::ResourceTokenV1::from_erased_identity(wire.file),
+                    buffer: crate::ResourceTokenV1::from_erased_identity(wire.buffer),
+                },
+                request,
+            )
+        }
+        HostOpV1::BufferAllocate
+            if request_size == std::mem::size_of::<BufferAllocateRequestV1>() =>
+        {
+            if !request.cast::<BufferAllocateRequestV1>().is_aligned() {
+                return -1;
+            }
+            let wire = unsafe { &*(request.cast::<BufferAllocateRequestV1>()) };
+            (
+                None,
+                crate::ResourceInputsV1::None,
+                CanonicalRequestV1::BufferAllocate {
+                    capacity: wire.capacity,
+                },
+            )
+        }
+        HostOpV1::BufferFreeze if request_size == std::mem::size_of::<BufferFreezeRequestV1>() => {
+            if !request.cast::<BufferFreezeRequestV1>().is_aligned() {
+                return -1;
+            }
+            let wire = unsafe { &*(request.cast::<BufferFreezeRequestV1>()) };
+            (
+                None,
+                crate::ResourceInputsV1::Target(crate::ResourceTokenV1::from_erased_identity(
+                    wire.resource,
+                )),
+                CanonicalRequestV1::BufferFreeze {
+                    start: wire.start,
+                    length: wire.length,
+                },
             )
         }
         _ => return -3,
@@ -1225,10 +1406,18 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
     let Ok(result) = result else {
         return -3;
     };
+    context
+        .effect_trace_v2
+        .push(crate::effect_event_v2_from_dispatch(
+            context.effect_trace_v2.len() as u64,
+            op,
+            request.clone(),
+            &result,
+        ));
     context.effect_trace.push(EffectEventV1 {
         sequence: context.effect_trace.len() as u64,
         operation: op,
-        capability: result.capability_identity,
+        capability: result.capability_identity.clone(),
         resource: result.resource_identity,
         request,
         outcome: result.outcome.clone(),
@@ -1289,6 +1478,7 @@ mod tests {
             resources: crate::ResourceTableV1::default(),
             response_arena: Vec::new(),
             effect_trace: Vec::new(),
+            effect_trace_v2: Vec::new(),
             observation: None,
             plan_hash: 7,
             capability: CapabilityTokenV1::from_erased_identity(0),
@@ -1359,6 +1549,9 @@ mod tests {
         size_align!("FsChangeModeRequestV1", FsChangeModeRequestV1);
         size_align!("FsOpenRequestV1", FsOpenRequestV1);
         size_align!("ResourceRequestV1", ResourceRequestV1);
+        size_align!("FsPositionedRequestV1", FsPositionedRequestV1);
+        size_align!("BufferAllocateRequestV1", BufferAllocateRequestV1);
+        size_align!("BufferFreezeRequestV1", BufferFreezeRequestV1);
         size_align!("ResourceErrorReplyV1", ResourceErrorReplyV1);
         size_align!("HostReplyV1", HostReplyV1);
         macro_rules! offset {
@@ -1421,11 +1614,13 @@ mod tests {
         offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, io);
         offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, required);
         offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, held);
+        offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, expected_kind);
+        offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, actual_kind);
         offset!("HostReplyV1", HostReplyV1, tag);
         offset!("HostReplyV1", HostReplyV1, detail);
         offset!("HostReplyV1", HostReplyV1, bytes);
         offset!("HostReplyV1", HostReplyV1, resource_error);
-        assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 18);
+        assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 22);
         for operation in HostOpV1::ALL {
             let row = crate::HOST_EFFECT_ABI_V1_CATALOG
                 .iter()
@@ -1450,8 +1645,22 @@ mod tests {
         assert_eq!(effect_binding("error", "resource.MalformedResource"), 1);
         assert_eq!(effect_binding("error", "resource.RightNotHeld"), 2);
         assert_eq!(effect_binding("error", "resource.ReleaseFailed"), 3);
+        assert_eq!(effect_binding("error", "resource.ResourceKindMismatch"), 4);
+        assert_eq!(effect_binding("error", "resource.BufferLimit"), 5);
+        assert_eq!(effect_binding("error", "resource.InvalidOffset"), 6);
+        assert_eq!(effect_binding("error", "resource.InvalidBounds"), 7);
+        assert_eq!(effect_binding("error", "resource.NoProgress"), 8);
         assert_eq!(effect_binding("tag", "resource_kind.FsHandle"), 0);
+        assert_eq!(effect_binding("tag", "resource_kind.Buffer"), 1);
         assert_eq!(effect_binding("lifetime", "resource_error_reply_schema"), 1);
+        assert_eq!(
+            effect_binding("limit", "buffer.per_buffer_max_capacity"),
+            crate::DEFAULT_BUFFER_LIMITS_V1.per_buffer_max_capacity
+        );
+        assert_eq!(
+            effect_binding("limit", "buffer.invocation_max_live_capacity"),
+            crate::DEFAULT_BUFFER_LIMITS_V1.invocation_max_live_capacity
+        );
         assert_eq!(effect_binding("error", "io.BrokenPipe"), 3);
         assert_eq!(effect_binding("error", "io.Other"), 11);
     }
@@ -1501,6 +1710,8 @@ mod tests {
             io: io_error_tag(crate::IoErrorIdentityV1::Other(-5)),
             required: 0,
             held: 0,
+            expected_kind: 0,
+            actual_kind: 0,
         };
         assert_eq!(
             decode_resource_error_reply(3, release),
@@ -1511,6 +1722,26 @@ mod tests {
                 io: crate::IoErrorIdentityV1::Other(-5),
             })
         );
+        let mismatch = ResourceErrorReplyV1 {
+            expected_kind: 0,
+            actual_kind: 1,
+            ..zero
+        };
+        assert_eq!(
+            decode_resource_error_reply(4, mismatch),
+            Some(crate::ResourceErrorV1::ResourceKindMismatch {
+                expected: crate::ResourceKindV1::FsHandle,
+                actual: crate::ResourceKindV1::Buffer,
+            })
+        );
+        for (tag, expected) in [
+            (5, crate::ResourceErrorV1::BufferLimit),
+            (6, crate::ResourceErrorV1::InvalidOffset),
+            (7, crate::ResourceErrorV1::InvalidBounds),
+            (8, crate::ResourceErrorV1::NoProgress),
+        ] {
+            assert_eq!(decode_resource_error_reply(tag, zero), Some(expected));
+        }
 
         for invalid in [
             (4, zero),
@@ -1567,7 +1798,7 @@ mod tests {
             (
                 3,
                 ResourceErrorReplyV1 {
-                    resource_kind: 1,
+                    resource_kind: 2,
                     ..release
                 },
             ),
@@ -1615,6 +1846,8 @@ mod tests {
                 io: u64::MAX,
                 required: u64::MAX,
                 held: u64::MAX,
+                expected_kind: u64::MAX,
+                actual_kind: u64::MAX,
             },
         };
 
@@ -1667,9 +1900,37 @@ mod tests {
                     io: io_error_tag(crate::IoErrorIdentityV1::Other(-9)),
                     required: 0,
                     held: 0,
+                    expected_kind: 0,
+                    actual_kind: 0,
                 },
             )
         );
+        assert_eq!(
+            project(crate::ResourceErrorV1::ResourceKindMismatch {
+                expected: crate::ResourceKindV1::Buffer,
+                actual: crate::ResourceKindV1::FsHandle,
+            }),
+            (
+                REPLY_RESOURCE_ERROR,
+                4,
+                ResourceErrorReplyV1 {
+                    expected_kind: 1,
+                    actual_kind: 0,
+                    ..ResourceErrorReplyV1::default()
+                },
+            )
+        );
+        for (error, tag) in [
+            (crate::ResourceErrorV1::BufferLimit, 5),
+            (crate::ResourceErrorV1::InvalidOffset, 6),
+            (crate::ResourceErrorV1::InvalidBounds, 7),
+            (crate::ResourceErrorV1::NoProgress, 8),
+        ] {
+            assert_eq!(
+                project(error),
+                (REPLY_RESOURCE_ERROR, tag, ResourceErrorReplyV1::default())
+            );
+        }
 
         set_reply(
             &mut reply,
@@ -2229,12 +2490,21 @@ mod tests {
 
         let context = unsafe { &*initialized.context.cast::<ProcessContext>() };
         assert_eq!(context.effect_trace.len(), 4);
+        assert_eq!(context.effect_trace_v2.len(), 4);
         let identities = context
             .effect_trace
             .iter()
             .filter_map(|event| event.resource)
             .collect::<Vec<_>>();
         assert_eq!(identities, vec![crate::ResourceTraceIdentityV1(1); 4]);
+        assert!(context.effect_trace_v2[..3].iter().all(|event| {
+            event.resource_bindings
+                == vec![(
+                    crate::ResourceBindingRoleV2::Target,
+                    crate::ResourceTraceIdentityV1(1),
+                )]
+        }));
+        assert!(context.effect_trace_v2[3].resource_bindings.is_empty());
         assert!(matches!(
             context.effect_trace[3].outcome,
             CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Resource(

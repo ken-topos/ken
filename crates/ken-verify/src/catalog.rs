@@ -111,10 +111,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn imported_catalog_has_exact_nine_native_and_nine_named_unavailable() {
-        assert_eq!(HostOpV1::ALL.len(), 18);
+    fn imported_catalog_has_exact_nine_native_and_thirteen_named_unavailable() {
+        assert_eq!(HostOpV1::ALL.len(), 22);
         assert_eq!(native_tested_lanes(), ken_host::NATIVE_TESTED_TARGETS_V1);
-        assert_eq!(deferred_named_lanes().len(), 9);
+        assert_eq!(deferred_named_lanes().len(), 13);
         assert!(deferred_named_lanes().into_iter().all(|operation| {
             operation.availability() == HostOpAvailabilityV1::RepresentedUnavailable
                 && !ken_host::NATIVE_TESTED_TARGETS_V1.contains(&operation)

@@ -147,9 +147,7 @@ mod linux {
             OpenRequest::CreateOrTruncate => {
                 OFlags::WRONLY | OFlags::CREATE | OFlags::TRUNC | OFlags::NOFOLLOW
             }
-            OpenRequest::CreateOrKeep => {
-                OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW
-            }
+            OpenRequest::CreateOrKeep => OFlags::WRONLY | OFlags::CREATE | OFlags::NOFOLLOW,
             OpenRequest::AppendOrCreate => {
                 OFlags::WRONLY | OFlags::CREATE | OFlags::APPEND | OFlags::NOFOLLOW
             }
@@ -179,9 +177,7 @@ mod linux {
             OpenRequest::CreateOrTruncate => {
                 OFlags::WRONLY | OFlags::CREATE | OFlags::TRUNC | OFlags::NOFOLLOW
             }
-            OpenRequest::CreateOrKeep => {
-                OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW
-            }
+            OpenRequest::CreateOrKeep => OFlags::WRONLY | OFlags::CREATE | OFlags::NOFOLLOW,
             OpenRequest::AppendOrCreate => {
                 OFlags::WRONLY | OFlags::CREATE | OFlags::APPEND | OFlags::NOFOLLOW
             }
@@ -261,6 +257,24 @@ mod linux {
                 inode: metadata.ino(),
             },
         })
+    }
+
+    pub(super) fn resource_read_at(
+        handle: &ResourceHandle,
+        offset: u64,
+        bytes: &mut [u8],
+    ) -> io::Result<usize> {
+        use std::os::unix::fs::FileExt;
+        File::from(handle.0.try_clone()?).read_at(bytes, offset)
+    }
+
+    pub(super) fn resource_write_at(
+        handle: &ResourceHandle,
+        offset: u64,
+        bytes: &[u8],
+    ) -> io::Result<usize> {
+        use std::os::unix::fs::FileExt;
+        File::from(handle.0.try_clone()?).write_at(bytes, offset)
     }
 
     pub(super) fn read(handle: &Handle) -> io::Result<Vec<u8>> {
@@ -731,6 +745,40 @@ pub fn resource_metadata_v1(handle: &ResourceHandleV1) -> HostResult<Metadata> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = handle;
+        unsupported()
+    }
+}
+
+pub fn resource_read_at_v1(
+    handle: &ResourceHandleV1,
+    offset: u64,
+    bytes: &mut [u8],
+) -> HostResult<usize> {
+    assert_current_target_abi()?;
+    #[cfg(target_os = "linux")]
+    {
+        linux::resource_read_at(&handle.inner, offset, bytes).map_err(Into::into)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (handle, offset, bytes);
+        unsupported()
+    }
+}
+
+pub fn resource_write_at_v1(
+    handle: &ResourceHandleV1,
+    offset: u64,
+    bytes: &[u8],
+) -> HostResult<usize> {
+    assert_current_target_abi()?;
+    #[cfg(target_os = "linux")]
+    {
+        linux::resource_write_at(&handle.inner, offset, bytes).map_err(Into::into)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (handle, offset, bytes);
         unsupported()
     }
 }

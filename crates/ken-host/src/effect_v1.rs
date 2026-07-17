@@ -31,11 +31,15 @@ pub enum HostOpV1 {
     FsChangeMode = 0x030A,
     FsOpen = 0x030B,
     FsHandleMetadata = 0x030C,
+    FsReadAt = 0x030D,
+    FsWriteAt = 0x030E,
     ResourceRelease = 0x0401,
+    BufferAllocate = 0x0402,
+    BufferFreeze = 0x0403,
 }
 
 impl HostOpV1 {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 22] = [
         Self::ConsoleRead,
         Self::ConsoleWrite,
         Self::ConsoleFlush,
@@ -53,7 +57,11 @@ impl HostOpV1 {
         Self::FsChangeMode,
         Self::FsOpen,
         Self::FsHandleMetadata,
+        Self::FsReadAt,
+        Self::FsWriteAt,
         Self::ResourceRelease,
+        Self::BufferAllocate,
+        Self::BufferFreeze,
     ];
 
     pub const fn availability(self) -> HostOpAvailabilityV1 {
@@ -126,6 +134,7 @@ pub struct HostEffectAbiV1 {
     pub trace_schema_version: u16,
     pub filesystem_observation_schema_version: u16,
     pub resource_observation_schema_version: u16,
+    pub buffer_limits: BufferLimitsV1,
     pub manifest_hash: [u8; 32],
 }
 
@@ -141,6 +150,7 @@ pub const HOST_EFFECT_ABI_V1: HostEffectAbiV1 = HostEffectAbiV1 {
     trace_schema_version: 1,
     filesystem_observation_schema_version: 2,
     resource_observation_schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+    buffer_limits: DEFAULT_BUFFER_LIMITS_V1,
     manifest_hash: HOST_EFFECT_ABI_V1_HASH,
 };
 
@@ -161,6 +171,8 @@ pub struct HostEffectWireLayoutV1 {
     pub reply_resource_error_io_offset: u32,
     pub reply_resource_error_required_offset: u32,
     pub reply_resource_error_held_offset: u32,
+    pub reply_resource_error_expected_kind_offset: u32,
+    pub reply_resource_error_actual_kind_offset: u32,
     pub reply_unit_tag: u64,
     pub reply_bool_tag: u64,
     pub reply_bytes_tag: u64,
@@ -168,11 +180,19 @@ pub struct HostEffectWireLayoutV1 {
     pub reply_resource_tag: u64,
     pub reply_metadata_tag: u64,
     pub reply_resource_error_tag: u64,
+    pub reply_read_progress_tag: u64,
+    pub reply_write_progress_tag: u64,
     pub resource_error_closed: u64,
     pub resource_error_malformed: u64,
     pub resource_error_right_not_held: u64,
     pub resource_error_release_failed: u64,
+    pub resource_error_kind_mismatch: u64,
+    pub resource_error_buffer_limit: u64,
+    pub resource_error_invalid_offset: u64,
+    pub resource_error_invalid_bounds: u64,
+    pub resource_error_no_progress: u64,
     pub resource_kind_fs_handle: u64,
+    pub resource_kind_buffer: u64,
     pub resource_error_reply_schema: u64,
 }
 
@@ -272,6 +292,19 @@ pub fn host_effect_wire_layout_v1(
         HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease => {
             vec![checked_u32(field("resource")?)?]
         }
+        HostOpV1::FsReadAt | HostOpV1::FsWriteAt => vec![
+            checked_u32(field("file")?)?,
+            checked_u32(field("buffer")?)?,
+            checked_u32(field("file_offset")?)?,
+            checked_u32(field("buffer_start")?)?,
+            checked_u32(field("length")?)?,
+        ],
+        HostOpV1::BufferAllocate => vec![checked_u32(field("capacity")?)?],
+        HostOpV1::BufferFreeze => vec![
+            checked_u32(field("resource")?)?,
+            checked_u32(field("start")?)?,
+            checked_u32(field("length")?)?,
+        ],
         _ => return Err(TerminalErrorV1::OperationUnavailable(operation)),
     };
     let reply_bytes = offset("HostReplyV1", "bytes")?;
@@ -305,6 +338,12 @@ pub fn host_effect_wire_layout_v1(
         reply_resource_error_held_offset: checked_u32(
             reply_resource_error + resource_error_field("held")?,
         )?,
+        reply_resource_error_expected_kind_offset: checked_u32(
+            reply_resource_error + resource_error_field("expected_kind")?,
+        )?,
+        reply_resource_error_actual_kind_offset: checked_u32(
+            reply_resource_error + resource_error_field("actual_kind")?,
+        )?,
         reply_unit_tag: generated_binding("tag", "reply.unit")?,
         reply_bool_tag: generated_binding("tag", "reply.bool")?,
         reply_bytes_tag: generated_binding("tag", "reply.bytes")?,
@@ -312,11 +351,19 @@ pub fn host_effect_wire_layout_v1(
         reply_resource_tag: generated_binding("tag", "reply.resource")?,
         reply_metadata_tag: generated_binding("tag", "reply.metadata")?,
         reply_resource_error_tag: generated_binding("tag", "reply.resource_error")?,
+        reply_read_progress_tag: generated_binding("tag", "reply.read_progress")?,
+        reply_write_progress_tag: generated_binding("tag", "reply.write_progress")?,
         resource_error_closed: generated_binding("error", "resource.Closed")?,
         resource_error_malformed: generated_binding("error", "resource.MalformedResource")?,
         resource_error_right_not_held: generated_binding("error", "resource.RightNotHeld")?,
         resource_error_release_failed: generated_binding("error", "resource.ReleaseFailed")?,
+        resource_error_kind_mismatch: generated_binding("error", "resource.ResourceKindMismatch")?,
+        resource_error_buffer_limit: generated_binding("error", "resource.BufferLimit")?,
+        resource_error_invalid_offset: generated_binding("error", "resource.InvalidOffset")?,
+        resource_error_invalid_bounds: generated_binding("error", "resource.InvalidBounds")?,
+        resource_error_no_progress: generated_binding("error", "resource.NoProgress")?,
         resource_kind_fs_handle: generated_binding("tag", "resource_kind.FsHandle")?,
+        resource_kind_buffer: generated_binding("tag", "resource_kind.Buffer")?,
         resource_error_reply_schema: generated_binding("lifetime", "resource_error_reply_schema")?,
     })
 }
@@ -474,6 +521,7 @@ impl ResourceTokenV1 {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ResourceKindV1 {
     FsHandle,
+    Buffer,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -483,6 +531,7 @@ pub struct ResourceTraceIdentityV1(pub u64);
 pub enum FsOpenModeV1 {
     Read,
     Metadata,
+    WriteCreate(CreatePolicyV1),
 }
 
 impl FsOpenModeV1 {
@@ -490,6 +539,7 @@ impl FsOpenModeV1 {
         match self {
             Self::Read => crate::RightSet::READ,
             Self::Metadata => crate::RightSet::METADATA,
+            Self::WriteCreate(_) => crate::RightSet::WRITE.union(crate::RightSet::CREATE),
         }
     }
 
@@ -497,6 +547,7 @@ impl FsOpenModeV1 {
         match self {
             Self::Read => crate::FsCapabilityOperation::Read,
             Self::Metadata => crate::FsCapabilityOperation::Metadata,
+            Self::WriteCreate(_) => crate::FsCapabilityOperation::Write,
         }
     }
 }
@@ -505,6 +556,10 @@ impl FsOpenModeV1 {
 pub enum ResourceErrorV1 {
     Closed,
     MalformedResource,
+    ResourceKindMismatch {
+        expected: ResourceKindV1,
+        actual: ResourceKindV1,
+    },
     RightNotHeld {
         required: u8,
         held: u8,
@@ -515,6 +570,97 @@ pub enum ResourceErrorV1 {
         identity: ResourceTraceIdentityV1,
         io: IoErrorIdentityV1,
     },
+    BufferLimit,
+    InvalidOffset,
+    InvalidBounds,
+    NoProgress,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BufferLimitsV1 {
+    pub per_buffer_max_capacity: u64,
+    pub invocation_max_live_capacity: u64,
+}
+
+pub const DEFAULT_BUFFER_LIMITS_V1: BufferLimitsV1 = BufferLimitsV1 {
+    per_buffer_max_capacity: 1024 * 1024,
+    invocation_max_live_capacity: 16 * 1024 * 1024,
+};
+
+impl BufferLimitsV1 {
+    pub const fn new(
+        per_buffer_max_capacity: u64,
+        invocation_max_live_capacity: u64,
+    ) -> Option<Self> {
+        if per_buffer_max_capacity == 0
+            || invocation_max_live_capacity == 0
+            || per_buffer_max_capacity > invocation_max_live_capacity
+        {
+            None
+        } else {
+            Some(Self {
+                per_buffer_max_capacity,
+                invocation_max_live_capacity,
+            })
+        }
+    }
+}
+
+impl Default for BufferLimitsV1 {
+    fn default() -> Self {
+        DEFAULT_BUFFER_LIMITS_V1
+    }
+}
+
+#[derive(Debug)]
+pub struct BufferRegionV1 {
+    bytes: Vec<u8>,
+    initialized_start: usize,
+    initialized_len: usize,
+}
+
+impl BufferRegionV1 {
+    fn new(capacity: usize) -> Self {
+        Self {
+            bytes: vec![0; capacity],
+            initialized_start: 0,
+            initialized_len: 0,
+        }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.bytes.len()
+    }
+
+    fn clear_window(&mut self) {
+        self.initialized_start = 0;
+        self.initialized_len = 0;
+    }
+
+    fn install_window(&mut self, start: usize, len: usize) {
+        self.initialized_start = start;
+        self.initialized_len = len;
+    }
+
+    fn initialized_slice(&self, start: usize, len: usize) -> Result<&[u8], ResourceErrorV1> {
+        let end = start
+            .checked_add(len)
+            .ok_or(ResourceErrorV1::InvalidBounds)?;
+        let live_end = self
+            .initialized_start
+            .checked_add(self.initialized_len)
+            .ok_or(ResourceErrorV1::InvalidBounds)?;
+        if start < self.initialized_start || end > live_end {
+            return Err(ResourceErrorV1::InvalidBounds);
+        }
+        Ok(&self.bytes[start..end])
+    }
+}
+
+#[derive(Debug)]
+pub enum ResourceOwnerV1 {
+    FsHandle(crate::ResourceHandleV1),
+    Buffer(BufferRegionV1),
 }
 
 pub const RESOURCE_OBSERVATION_SCHEMA_VERSION_V1: u16 = 1;
@@ -536,7 +682,7 @@ pub struct ResourceSettlementObservationV1 {
 #[derive(Debug)]
 enum ResourceSlotStateV1 {
     Live {
-        owner: crate::ResourceHandleV1,
+        owner: ResourceOwnerV1,
         kind: ResourceKindV1,
         rights: crate::RightSet,
         identity: ResourceTraceIdentityV1,
@@ -559,19 +705,31 @@ struct ResourceSlotV1 {
 pub struct ResourceTableV1 {
     slots: Vec<ResourceSlotV1>,
     next_acquisition_identity: u64,
+    buffer_limits: BufferLimitsV1,
+    live_buffer_capacity: u64,
 }
 
 #[derive(Debug)]
 pub struct PendingResourceCloseV1 {
-    owner: crate::ResourceHandleV1,
+    owner: ResourceOwnerV1,
     kind: ResourceKindV1,
     identity: ResourceTraceIdentityV1,
 }
 
 impl ResourceTableV1 {
-    pub fn insert_fs_handle(
+    pub fn with_buffer_limits(limits: BufferLimitsV1) -> Self {
+        Self {
+            slots: Vec::new(),
+            next_acquisition_identity: 0,
+            buffer_limits: limits,
+            live_buffer_capacity: 0,
+        }
+    }
+
+    fn insert_owner(
         &mut self,
-        owner: crate::ResourceHandleV1,
+        owner: ResourceOwnerV1,
+        kind: ResourceKindV1,
         rights: crate::RightSet,
     ) -> (ResourceTokenV1, ResourceTraceIdentityV1) {
         self.next_acquisition_identity = self
@@ -587,7 +745,7 @@ impl ResourceTableV1 {
         {
             slot.state = ResourceSlotStateV1::Live {
                 owner,
-                kind: ResourceKindV1::FsHandle,
+                kind,
                 rights,
                 identity,
             };
@@ -605,12 +763,48 @@ impl ResourceTableV1 {
             generation,
             state: ResourceSlotStateV1::Live {
                 owner,
-                kind: ResourceKindV1::FsHandle,
+                kind,
                 rights,
                 identity,
             },
         });
         (ResourceTokenV1 { slot, generation }, identity)
+    }
+
+    pub fn insert_fs_handle(
+        &mut self,
+        owner: crate::ResourceHandleV1,
+        rights: crate::RightSet,
+    ) -> (ResourceTokenV1, ResourceTraceIdentityV1) {
+        self.insert_owner(
+            ResourceOwnerV1::FsHandle(owner),
+            ResourceKindV1::FsHandle,
+            rights,
+        )
+    }
+
+    pub fn insert_buffer(
+        &mut self,
+        capacity: u64,
+    ) -> Result<(ResourceTokenV1, ResourceTraceIdentityV1), ResourceErrorV1> {
+        let total = self
+            .live_buffer_capacity
+            .checked_add(capacity)
+            .ok_or(ResourceErrorV1::BufferLimit)?;
+        if capacity == 0
+            || capacity > self.buffer_limits.per_buffer_max_capacity
+            || total > self.buffer_limits.invocation_max_live_capacity
+        {
+            return Err(ResourceErrorV1::BufferLimit);
+        }
+        let capacity = usize::try_from(capacity).map_err(|_| ResourceErrorV1::BufferLimit)?;
+        let inserted = self.insert_owner(
+            ResourceOwnerV1::Buffer(BufferRegionV1::new(capacity)),
+            ResourceKindV1::Buffer,
+            crate::RightSet::from_bits(0),
+        );
+        self.live_buffer_capacity = total;
+        Ok(inserted)
     }
 
     pub fn resolve_fs_handle(
@@ -619,23 +813,60 @@ impl ResourceTableV1 {
         required: crate::RightSet,
     ) -> Result<(&crate::ResourceHandleV1, ResourceTraceIdentityV1), ResourceErrorV1> {
         let slot = self.lookup(token)?;
-        let (owner, rights, identity) = match &slot.state {
+        let (owner, kind, rights, identity) = match &slot.state {
             ResourceSlotStateV1::Live {
                 owner,
+                kind,
                 rights,
                 identity,
                 ..
-            } => (owner, rights, identity),
+            } => (owner, kind, rights, identity),
             ResourceSlotStateV1::Vacant { .. } => return Err(ResourceErrorV1::MalformedResource),
             ResourceSlotStateV1::Retired { .. } => return Err(ResourceErrorV1::Closed),
         };
+        if *kind != ResourceKindV1::FsHandle {
+            return Err(ResourceErrorV1::ResourceKindMismatch {
+                expected: ResourceKindV1::FsHandle,
+                actual: *kind,
+            });
+        }
         if !rights.contains(required) {
             return Err(ResourceErrorV1::RightNotHeld {
                 required: required.bits(),
                 held: rights.bits(),
             });
         }
+        let ResourceOwnerV1::FsHandle(owner) = owner else {
+            return Err(ResourceErrorV1::MalformedResource);
+        };
         Ok((owner, *identity))
+    }
+
+    pub fn resolve_buffer(
+        &self,
+        token: ResourceTokenV1,
+    ) -> Result<(&BufferRegionV1, ResourceTraceIdentityV1), ResourceErrorV1> {
+        let slot = self.lookup(token)?;
+        let (owner, kind, identity) = match &slot.state {
+            ResourceSlotStateV1::Live {
+                owner,
+                kind,
+                identity,
+                ..
+            } => (owner, kind, identity),
+            ResourceSlotStateV1::Vacant { .. } => return Err(ResourceErrorV1::MalformedResource),
+            ResourceSlotStateV1::Retired { .. } => return Err(ResourceErrorV1::Closed),
+        };
+        if *kind != ResourceKindV1::Buffer {
+            return Err(ResourceErrorV1::ResourceKindMismatch {
+                expected: ResourceKindV1::Buffer,
+                actual: *kind,
+            });
+        }
+        let ResourceOwnerV1::Buffer(buffer) = owner else {
+            return Err(ResourceErrorV1::MalformedResource);
+        };
+        Ok((buffer, *identity))
     }
 
     pub fn identity(
@@ -726,6 +957,12 @@ impl ResourceTableV1 {
         else {
             return Err(ResourceErrorV1::Closed);
         };
+        if let ResourceOwnerV1::Buffer(buffer) = &owner {
+            self.live_buffer_capacity = self
+                .live_buffer_capacity
+                .checked_sub(buffer.capacity() as u64)
+                .expect("live buffer capacity accounting underflow");
+        }
         match slot.generation.checked_add(1) {
             Some(next) => {
                 slot.generation = next;
@@ -755,7 +992,11 @@ impl ResourceTableV1 {
             kind,
             identity,
         } = pending;
-        match close(owner) {
+        let closed = match owner {
+            ResourceOwnerV1::FsHandle(handle) => close(handle),
+            ResourceOwnerV1::Buffer(_) => Ok(()),
+        };
+        match closed {
             Ok(()) => Ok(ResourceSettlementObservationV1 {
                 schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
                 resource_kind: kind,
@@ -792,7 +1033,11 @@ impl ResourceTableV1 {
                 let pending = self.begin_release(token).ok()?;
                 let kind = pending.kind;
                 let identity = pending.identity;
-                Some(match close(pending.owner) {
+                let closed = match pending.owner {
+                    ResourceOwnerV1::FsHandle(handle) => close(handle),
+                    ResourceOwnerV1::Buffer(_) => Ok(()),
+                };
+                Some(match closed {
                     Ok(()) => ResourceSettlementObservationV1 {
                         schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
                         resource_kind: kind,
@@ -808,6 +1053,110 @@ impl ResourceTableV1 {
                 })
             })
             .collect()
+    }
+
+    fn two_live_slots_mut(
+        &mut self,
+        first: ResourceTokenV1,
+        second: ResourceTokenV1,
+    ) -> Result<(&mut ResourceSlotV1, &mut ResourceSlotV1), ResourceErrorV1> {
+        self.lookup(first)?;
+        self.lookup(second)?;
+        if first.slot == second.slot {
+            let slot = &self.slots[first.slot as usize];
+            let ResourceSlotStateV1::Live { kind: actual, .. } = &slot.state else {
+                return Err(ResourceErrorV1::Closed);
+            };
+            return Err(ResourceErrorV1::ResourceKindMismatch {
+                expected: if *actual == ResourceKindV1::FsHandle {
+                    ResourceKindV1::Buffer
+                } else {
+                    ResourceKindV1::FsHandle
+                },
+                actual: *actual,
+            });
+        }
+        let (low, high, swapped) = if first.slot < second.slot {
+            (first, second, false)
+        } else {
+            (second, first, true)
+        };
+        let (left, right) = self.slots.split_at_mut(high.slot as usize);
+        let low_slot = &mut left[low.slot as usize];
+        let high_slot = &mut right[0];
+        if swapped {
+            Ok((high_slot, low_slot))
+        } else {
+            Ok((low_slot, high_slot))
+        }
+    }
+
+    pub fn with_fs_and_buffer_mut<R>(
+        &mut self,
+        file: ResourceTokenV1,
+        file_right: crate::RightSet,
+        buffer: ResourceTokenV1,
+        f: impl FnOnce(
+            &crate::ResourceHandleV1,
+            ResourceTraceIdentityV1,
+            &mut BufferRegionV1,
+            ResourceTraceIdentityV1,
+        ) -> Result<R, SemanticErrorV1>,
+    ) -> Result<R, SemanticErrorV1> {
+        let (file_slot, buffer_slot) = self
+            .two_live_slots_mut(file, buffer)
+            .map_err(SemanticErrorV1::Resource)?;
+        let ResourceSlotStateV1::Live {
+            owner: file_owner,
+            kind: file_kind,
+            rights,
+            identity: file_identity,
+        } = &mut file_slot.state
+        else {
+            return Err(SemanticErrorV1::Resource(ResourceErrorV1::Closed));
+        };
+        if *file_kind != ResourceKindV1::FsHandle {
+            return Err(SemanticErrorV1::Resource(
+                ResourceErrorV1::ResourceKindMismatch {
+                    expected: ResourceKindV1::FsHandle,
+                    actual: *file_kind,
+                },
+            ));
+        }
+        if !rights.contains(file_right) {
+            return Err(SemanticErrorV1::Resource(ResourceErrorV1::RightNotHeld {
+                required: file_right.bits(),
+                held: rights.bits(),
+            }));
+        }
+        let ResourceOwnerV1::FsHandle(file_owner) = file_owner else {
+            return Err(SemanticErrorV1::Resource(
+                ResourceErrorV1::MalformedResource,
+            ));
+        };
+        let ResourceSlotStateV1::Live {
+            owner: buffer_owner,
+            kind: buffer_kind,
+            identity: buffer_identity,
+            ..
+        } = &mut buffer_slot.state
+        else {
+            return Err(SemanticErrorV1::Resource(ResourceErrorV1::Closed));
+        };
+        if *buffer_kind != ResourceKindV1::Buffer {
+            return Err(SemanticErrorV1::Resource(
+                ResourceErrorV1::ResourceKindMismatch {
+                    expected: ResourceKindV1::Buffer,
+                    actual: *buffer_kind,
+                },
+            ));
+        }
+        let ResourceOwnerV1::Buffer(buffer_owner) = buffer_owner else {
+            return Err(SemanticErrorV1::Resource(
+                ResourceErrorV1::MalformedResource,
+            ));
+        };
+        f(file_owner, *file_identity, buffer_owner, *buffer_identity)
     }
 
     #[cfg(test)]
@@ -944,6 +1293,26 @@ pub trait HostEffectBackendV1 {
             .map_err(|error| io_error_identity_v1(&error.into_io_error()))
     }
 
+    fn fs_resource_read_at(
+        &mut self,
+        handle: &crate::ResourceHandleV1,
+        offset: u64,
+        bytes: &mut [u8],
+    ) -> Result<usize, IoErrorIdentityV1> {
+        crate::resource_read_at_v1(handle, offset, bytes)
+            .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+    }
+
+    fn fs_resource_write_at(
+        &mut self,
+        handle: &crate::ResourceHandleV1,
+        offset: u64,
+        bytes: &[u8],
+    ) -> Result<usize, IoErrorIdentityV1> {
+        crate::resource_write_at_v1(handle, offset, bytes)
+            .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+    }
+
     fn resource_close(&mut self, handle: crate::ResourceHandleV1) -> Result<(), IoErrorIdentityV1> {
         crate::close_resource_v1(handle)
             .map_err(|error| io_error_identity_v1(&error.into_io_error()))
@@ -955,7 +1324,18 @@ pub struct HostDispatchReplyV1 {
     pub capability_identity: Option<CapabilityTraceIdentity>,
     pub resource_identity: Option<ResourceTraceIdentityV1>,
     pub resource_token: Option<ResourceTokenV1>,
+    pub resource_bindings: Vec<(ResourceBindingRoleV2, ResourceTraceIdentityV1)>,
     pub outcome: CanonicalOutcomeV1,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResourceInputsV1 {
+    None,
+    Target(ResourceTokenV1),
+    FileBuffer {
+        file: ResourceTokenV1,
+        buffer: ResourceTokenV1,
+    },
 }
 
 /// The only V1 semantic operation switch. Validation and capability denial
@@ -966,7 +1346,7 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
     resources: &mut ResourceTableV1,
     operation: HostOpV1,
     capability: Option<CapabilityTokenV1>,
-    resource: Option<ResourceTokenV1>,
+    resource: ResourceInputsV1,
     request: &CanonicalRequestV1,
 ) -> Result<HostDispatchReplyV1, TerminalErrorV1> {
     let required = match operation {
@@ -996,7 +1376,14 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             let CanonicalRequestV1::FsOpen { mode, .. } = request else {
                 return Err(TerminalErrorV1::MalformedHostAbiField);
             };
-            Some((mode.capability_operation(), crate::AUTH_PARTIAL))
+            Some((
+                mode.capability_operation(),
+                if matches!(mode, FsOpenModeV1::WriteCreate(_)) {
+                    crate::AUTH_FULL
+                } else {
+                    crate::AUTH_PARTIAL
+                },
+            ))
         }
         _ => None,
     };
@@ -1021,22 +1408,36 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             Err(error) => return Ok(denied(operation, request, error)),
         },
     };
-    if matches!(
-        operation,
-        HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease
-    ) != resource.is_some()
-    {
-        return Ok(resource_denied(
-            operation,
-            request,
-            ResourceErrorV1::MalformedResource,
-        ));
-    }
-    if !matches!(
-        operation,
-        HostOpV1::FsHandleMetadata | HostOpV1::ResourceRelease
-    ) && resource.is_some()
-    {
+    let resource_shape_matches = matches!(
+        (operation, resource),
+        (
+            HostOpV1::FsHandleMetadata | HostOpV1::BufferFreeze | HostOpV1::ResourceRelease,
+            ResourceInputsV1::Target(_)
+        ) | (
+            HostOpV1::FsReadAt | HostOpV1::FsWriteAt,
+            ResourceInputsV1::FileBuffer { .. }
+        ) | (
+            HostOpV1::BufferAllocate
+                | HostOpV1::ConsoleRead
+                | HostOpV1::ConsoleWrite
+                | HostOpV1::ConsoleFlush
+                | HostOpV1::ConsoleIsTerminal
+                | HostOpV1::ClockWallNow
+                | HostOpV1::FsReadFile
+                | HostOpV1::FsWriteFile
+                | HostOpV1::FsAppendFile
+                | HostOpV1::FsMetadata
+                | HostOpV1::FsReadDirectory
+                | HostOpV1::FsCreateDirectory
+                | HostOpV1::FsRemoveFile
+                | HostOpV1::FsRemoveDirectory
+                | HostOpV1::FsRename
+                | HostOpV1::FsChangeMode
+                | HostOpV1::FsOpen,
+            ResourceInputsV1::None
+        )
+    );
+    if !resource_shape_matches {
         return Ok(resource_denied(
             operation,
             request,
@@ -1045,6 +1446,7 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
     }
     let mut resource_identity = None;
     let mut minted_resource = None;
+    let mut resource_bindings = Vec::new();
     let outcome = match (operation, request) {
         (HostOpV1::ConsoleRead, CanonicalRequestV1::ConsoleRead { stream, limit }) => backend
             .console_read(*stream, *limit)
@@ -1133,6 +1535,7 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                 let (token, identity) = resources.insert_fs_handle(owner, mode.required_right());
                 resource_identity = Some(identity);
                 minted_resource = Some(token);
+                resource_bindings.push((ResourceBindingRoleV2::Target, identity));
                 CanonicalReplyV1::ResourceAcquired {
                     schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
                     resource_kind: ResourceKindV1::FsHandle,
@@ -1141,28 +1544,182 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             })
             .map_err(|cause| file_error(operation, path, cause)),
         (HostOpV1::FsHandleMetadata, CanonicalRequestV1::FsHandleMetadata) => {
-            let token = resource.expect("validated resource token");
+            let ResourceInputsV1::Target(token) = resource else {
+                unreachable!("resource shape validated")
+            };
             resource_identity = resources.identity(token).ok();
             match resources.resolve_fs_handle(token, crate::RightSet::METADATA) {
                 Ok((handle, identity)) => {
                     resource_identity = Some(identity);
                     backend
                         .fs_resource_metadata(handle)
-                        .map(CanonicalReplyV1::FileMetadata)
+                        .map(|metadata| {
+                            resource_bindings.push((ResourceBindingRoleV2::Target, identity));
+                            CanonicalReplyV1::FileMetadata(metadata)
+                        })
                         .map_err(SemanticErrorV1::Io)
                 }
                 Err(error) => Err(SemanticErrorV1::Resource(error)),
             }
         }
+        (HostOpV1::BufferAllocate, CanonicalRequestV1::BufferAllocate { capacity }) => {
+            match resources.insert_buffer(*capacity) {
+                Ok((token, identity)) => {
+                    resource_identity = Some(identity);
+                    minted_resource = Some(token);
+                    resource_bindings.push((ResourceBindingRoleV2::Target, identity));
+                    Ok(CanonicalReplyV1::ResourceAcquired {
+                        schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                        resource_kind: ResourceKindV1::Buffer,
+                        identity,
+                    })
+                }
+                Err(error) => Err(SemanticErrorV1::Resource(error)),
+            }
+        }
+        (HostOpV1::BufferFreeze, CanonicalRequestV1::BufferFreeze { start, length }) => {
+            let ResourceInputsV1::Target(token) = resource else {
+                unreachable!("resource shape validated")
+            };
+            resource_identity = resources.identity(token).ok();
+            match resources.resolve_buffer(token) {
+                Ok((buffer, identity)) => {
+                    resource_identity = Some(identity);
+                    let start = usize::try_from(*start).map_err(|_| ResourceErrorV1::InvalidBounds);
+                    let length =
+                        usize::try_from(*length).map_err(|_| ResourceErrorV1::InvalidBounds);
+                    match start.and_then(|start| length.map(|length| (start, length))) {
+                        Ok((start, length)) => buffer
+                            .initialized_slice(start, length)
+                            .map(|bytes| {
+                                resource_bindings.push((ResourceBindingRoleV2::Target, identity));
+                                CanonicalReplyV1::Bytes(bytes.to_vec())
+                            })
+                            .map_err(SemanticErrorV1::Resource),
+                        Err(error) => Err(SemanticErrorV1::Resource(error)),
+                    }
+                }
+                Err(error) => Err(SemanticErrorV1::Resource(error)),
+            }
+        }
+        (
+            HostOpV1::FsReadAt,
+            CanonicalRequestV1::FsReadAt {
+                file_offset,
+                buffer_start,
+                length,
+            },
+        ) => {
+            let ResourceInputsV1::FileBuffer { file, buffer } = resource else {
+                unreachable!("resource shape validated")
+            };
+            resources.with_fs_and_buffer_mut(
+                file,
+                crate::RightSet::READ,
+                buffer,
+                |handle, file_identity, region, buffer_identity| {
+                    let (start, effective) =
+                        checked_buffer_range(region.capacity(), *buffer_start, *length)
+                            .map_err(SemanticErrorV1::Resource)?;
+                    file_offset
+                        .checked_add(effective as u64)
+                        .ok_or(ResourceErrorV1::InvalidOffset)
+                        .map_err(SemanticErrorV1::Resource)?;
+                    region.clear_window();
+                    let read = backend
+                        .fs_resource_read_at(
+                            handle,
+                            *file_offset,
+                            &mut region.bytes[start..start + effective],
+                        )
+                        .map_err(|error| {
+                            region.clear_window();
+                            SemanticErrorV1::Io(error)
+                        })?;
+                    if read > effective {
+                        region.clear_window();
+                        return Err(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds));
+                    }
+                    resource_bindings.extend([
+                        (ResourceBindingRoleV2::File, file_identity),
+                        (ResourceBindingRoleV2::Buffer, buffer_identity),
+                    ]);
+                    if read == 0 {
+                        Ok(CanonicalReplyV1::ReadProgress(ReadProgressV1::ReadEof))
+                    } else {
+                        region.install_window(start, read);
+                        Ok(CanonicalReplyV1::ReadProgress(ReadProgressV1::ReadSome {
+                            span: BufferSpanV1 {
+                                start: start as u64,
+                                length: read as u64,
+                            },
+                            transferred: TransferCountV1::new(read as u64, effective as u64)
+                                .expect("positive bounded backend read"),
+                        }))
+                    }
+                },
+            )
+        }
+        (
+            HostOpV1::FsWriteAt,
+            CanonicalRequestV1::FsWriteAt {
+                file_offset,
+                buffer_start,
+                length,
+            },
+        ) => {
+            let ResourceInputsV1::FileBuffer { file, buffer } = resource else {
+                unreachable!("resource shape validated")
+            };
+            resources.with_fs_and_buffer_mut(
+                file,
+                crate::RightSet::WRITE,
+                buffer,
+                |handle, file_identity, region, buffer_identity| {
+                    let (start, effective) =
+                        checked_buffer_range(region.capacity(), *buffer_start, *length)
+                            .map_err(SemanticErrorV1::Resource)?;
+                    file_offset
+                        .checked_add(effective as u64)
+                        .ok_or(ResourceErrorV1::InvalidOffset)
+                        .map_err(SemanticErrorV1::Resource)?;
+                    let bytes = region
+                        .initialized_slice(start, effective)
+                        .map_err(SemanticErrorV1::Resource)?;
+                    let written = backend
+                        .fs_resource_write_at(handle, *file_offset, bytes)
+                        .map_err(SemanticErrorV1::Io)?;
+                    if written == 0 {
+                        return Err(SemanticErrorV1::Resource(ResourceErrorV1::NoProgress));
+                    }
+                    if written > effective {
+                        return Err(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds));
+                    }
+                    resource_bindings.extend([
+                        (ResourceBindingRoleV2::File, file_identity),
+                        (ResourceBindingRoleV2::Buffer, buffer_identity),
+                    ]);
+                    Ok(CanonicalReplyV1::WriteProgress(WriteProgressV1::Wrote(
+                        TransferCountV1::new(written as u64, effective as u64)
+                            .expect("positive bounded backend write"),
+                    )))
+                },
+            )
+        }
         (HostOpV1::ResourceRelease, CanonicalRequestV1::ResourceRelease) => {
-            let token = resource.expect("validated resource token");
+            let ResourceInputsV1::Target(token) = resource else {
+                unreachable!("resource shape validated")
+            };
             resource_identity = resources.identity(token).ok();
             match resources.begin_release(token) {
-                Ok(pending) => ResourceTableV1::finish_release_with(pending, |owner| {
-                    backend.resource_close(owner)
-                })
-                .map(CanonicalReplyV1::ResourceSettlement)
-                .map_err(SemanticErrorV1::Resource),
+                Ok(pending) => {
+                    resource_bindings.push((ResourceBindingRoleV2::Target, pending.identity));
+                    ResourceTableV1::finish_release_with(pending, |owner| {
+                        backend.resource_close(owner)
+                    })
+                    .map(CanonicalReplyV1::ResourceSettlement)
+                    .map_err(SemanticErrorV1::Resource)
+                }
                 Err(error) => Err(SemanticErrorV1::Resource(error)),
             }
         }
@@ -1172,11 +1729,29 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
         capability_identity: grant.map(|grant| grant.identity.clone()),
         resource_identity,
         resource_token: minted_resource,
+        resource_bindings,
         outcome: match outcome {
             Ok(reply) => CanonicalOutcomeV1::Success(reply),
             Err(error) => CanonicalOutcomeV1::Error(error),
         },
     })
+}
+
+fn checked_buffer_range(
+    capacity: usize,
+    start: u64,
+    length: u64,
+) -> Result<(usize, usize), ResourceErrorV1> {
+    let start = usize::try_from(start).map_err(|_| ResourceErrorV1::InvalidBounds)?;
+    if start > capacity {
+        return Err(ResourceErrorV1::InvalidBounds);
+    }
+    let requested = usize::try_from(length).unwrap_or(usize::MAX);
+    let effective = requested.min(capacity - start);
+    if effective == 0 {
+        return Err(ResourceErrorV1::InvalidBounds);
+    }
+    Ok((start, effective))
 }
 
 fn map_capability_denial(error: crate::CapabilityDenied) -> CapabilityDeniedV1 {
@@ -1246,6 +1821,7 @@ fn denied(
         capability_identity: None,
         resource_identity: None,
         resource_token: None,
+        resource_bindings: Vec::new(),
         outcome: CanonicalOutcomeV1::Error(file_error(
             operation,
             &path,
@@ -1263,6 +1839,7 @@ fn resource_denied(
         capability_identity: None,
         resource_identity: None,
         resource_token: None,
+        resource_bindings: Vec::new(),
         outcome: CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(error)),
     }
 }
@@ -1349,6 +1926,23 @@ pub enum CanonicalRequestV1 {
         mode: FsOpenModeV1,
     },
     FsHandleMetadata,
+    FsReadAt {
+        file_offset: u64,
+        buffer_start: u64,
+        length: u64,
+    },
+    FsWriteAt {
+        file_offset: u64,
+        buffer_start: u64,
+        length: u64,
+    },
+    BufferAllocate {
+        capacity: u64,
+    },
+    BufferFreeze {
+        start: u64,
+        length: u64,
+    },
     ResourceRelease,
 }
 
@@ -1449,6 +2043,51 @@ pub enum CanonicalReplyV1 {
         identity: ResourceTraceIdentityV1,
     },
     ResourceSettlement(ResourceSettlementObservationV1),
+    ReadProgress(ReadProgressV1),
+    WriteProgress(WriteProgressV1),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BufferSpanV1 {
+    pub(crate) start: u64,
+    pub(crate) length: u64,
+}
+
+impl BufferSpanV1 {
+    pub fn start(self) -> u64 {
+        self.start
+    }
+
+    pub fn length(self) -> u64 {
+        self.length
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TransferCountV1(pub(crate) u64);
+
+impl TransferCountV1 {
+    fn new(value: u64, upper_bound: u64) -> Option<Self> {
+        (value > 0 && value <= upper_bound).then_some(Self(value))
+    }
+
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReadProgressV1 {
+    ReadSome {
+        span: BufferSpanV1,
+        transferred: TransferCountV1,
+    },
+    ReadEof,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WriteProgressV1 {
+    Wrote(TransferCountV1),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1477,6 +2116,41 @@ pub struct EffectEventV1 {
     pub resource: Option<ResourceTraceIdentityV1>,
     pub request: CanonicalRequestV1,
     pub outcome: CanonicalOutcomeV1,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ResourceBindingRoleV2 {
+    File,
+    Buffer,
+    Target,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EffectEventV2 {
+    pub sequence: u64,
+    pub operation: HostOpV1,
+    pub capability: Option<CapabilityTraceIdentity>,
+    pub resource_bindings: Vec<(ResourceBindingRoleV2, ResourceTraceIdentityV1)>,
+    pub request: CanonicalRequestV1,
+    pub outcome: CanonicalOutcomeV1,
+}
+
+/// Construct the canonical V2 runtime event after semantic dispatch has
+/// produced its reply and before an executor reifies that reply.
+pub fn effect_event_v2_from_dispatch(
+    sequence: u64,
+    operation: HostOpV1,
+    request: CanonicalRequestV1,
+    reply: &HostDispatchReplyV1,
+) -> EffectEventV2 {
+    EffectEventV2 {
+        sequence,
+        operation,
+        capability: reply.capability_identity.clone(),
+        resource_bindings: reply.resource_bindings.clone(),
+        request,
+        outcome: reply.outcome.clone(),
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1790,7 +2464,7 @@ mod tests {
                 &mut resources,
                 operation,
                 capability,
-                None,
+                ResourceInputsV1::None,
                 &request,
             )
             .unwrap();
@@ -1800,7 +2474,7 @@ mod tests {
 
     #[test]
     fn catalog_is_closed_and_availability_is_exact() {
-        assert_eq!(HostOpV1::ALL.len(), 18);
+        assert_eq!(HostOpV1::ALL.len(), 22);
         assert_eq!(
             HostOpV1::ALL
                 .into_iter()
@@ -1922,20 +2596,28 @@ mod tests {
             "FsChangeMode|030a|native|FsChangeModeRequestV1|3|HostReplyV1|1",
             "FsOpen|030b|native|FsOpenRequestV1|3|HostReplyV1|1",
             "FsHandleMetadata|030c|native|ResourceRequestV1|1|HostReplyV1|1",
+            "FsReadAt|030d|unavailable|FsPositionedRequestV1|5|HostReplyV1|1",
+            "FsWriteAt|030e|unavailable|FsPositionedRequestV1|5|HostReplyV1|1",
             "ResourceRelease|0401|native|ResourceRequestV1|1|HostReplyV1|1",
+            "BufferAllocate|0402|unavailable|BufferAllocateRequestV1|1|HostReplyV1|1",
+            "BufferFreeze|0403|unavailable|BufferFreezeRequestV1|3|HostReplyV1|1",
             "lifetime=filesystem_observation_schema|2",
             "lifetime=resource_observation_schema|1",
             "lifetime=resource_error_reply_schema|1",
+            "limit=buffer.per_buffer_max_capacity|1048576",
+            "limit=buffer.invocation_max_live_capacity|16777216",
             "layout=OFFSET_FsChangeModeRequestV1_mode|24",
             "layout=OFFSET_ResourceRequestV1_resource|0",
             "layout=SIZE_HostReplyV1|",
-            "layout=SIZE_ResourceErrorReplyV1|48",
+            "layout=SIZE_ResourceErrorReplyV1|64",
             "layout=OFFSET_HostReplyV1_resource_error|32",
             "error=io.BrokenPipe|3",
             "error=resource.ReleaseFailed|3",
+            "error=resource.ResourceKindMismatch|4",
             "tag=reply.error|3",
             "tag=reply.resource_error|6",
             "tag=resource_kind.FsHandle|0",
+            "tag=resource_kind.Buffer|1",
         ] {
             assert!(HOST_EFFECT_ABI_V1_CANONICAL.contains(needle));
             let mutated = HOST_EFFECT_ABI_V1_CANONICAL.replacen(needle, "MUTATED", 1);
@@ -2381,7 +3063,7 @@ mod tests {
             &mut resources,
             HostOpV1::FsOpen,
             Some(capability),
-            None,
+            ResourceInputsV1::None,
             &open_request,
         )
         .unwrap();
@@ -2412,7 +3094,7 @@ mod tests {
                 &mut resources,
                 operation,
                 None,
-                Some(token),
+                ResourceInputsV1::Target(token),
                 &request,
             )
             .unwrap();
@@ -2471,7 +3153,7 @@ mod tests {
             &mut resources,
             HostOpV1::FsOpen,
             Some(capability),
-            None,
+            ResourceInputsV1::None,
             &request,
         )
         .unwrap();
@@ -2522,7 +3204,7 @@ mod tests {
             &mut resources,
             HostOpV1::FsOpen,
             Some(capability),
-            None,
+            ResourceInputsV1::None,
             &CanonicalRequestV1::FsOpen {
                 path: b"held.bin".to_vec(),
                 mode: FsOpenModeV1::Read,
@@ -2536,7 +3218,7 @@ mod tests {
             &mut resources,
             HostOpV1::FsHandleMetadata,
             None,
-            Some(token),
+            ResourceInputsV1::Target(token),
             &CanonicalRequestV1::FsHandleMetadata,
         )
         .unwrap();
@@ -2553,7 +3235,7 @@ mod tests {
             &mut resources,
             HostOpV1::ResourceRelease,
             None,
-            Some(token),
+            ResourceInputsV1::Target(token),
             &CanonicalRequestV1::ResourceRelease,
         )
         .unwrap();
@@ -2561,6 +3243,509 @@ mod tests {
             released.outcome,
             CanonicalOutcomeV1::Success(CanonicalReplyV1::ResourceSettlement(_))
         ));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    struct PositionedBackend {
+        root: crate::RootedHandle,
+        write_limit: Option<usize>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl HostEffectBackendV1 for PositionedBackend {
+        fn console_write(&mut self, _: ConsoleStreamV1, _: &[u8]) -> Result<(), IoErrorIdentityV1> {
+            unreachable!()
+        }
+
+        fn console_flush(&mut self, _: ConsoleStreamV1) -> Result<(), IoErrorIdentityV1> {
+            unreachable!()
+        }
+
+        fn console_is_terminal(&mut self, _: ConsoleStreamV1) -> bool {
+            unreachable!()
+        }
+
+        fn fs_read_file(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+        ) -> Result<Vec<u8>, FileErrorCauseV1> {
+            unreachable!()
+        }
+
+        fn fs_write_file(
+            &mut self,
+            _: &CapabilityGrantV1,
+            _: &[u8],
+            _: CreatePolicyV1,
+            _: &[u8],
+        ) -> Result<(), FileErrorCauseV1> {
+            unreachable!()
+        }
+
+        fn fs_open_resource(
+            &mut self,
+            _: &CapabilityGrantV1,
+            path: &[u8],
+            mode: FsOpenModeV1,
+        ) -> Result<crate::ResourceHandleV1, FileErrorCauseV1> {
+            let leaf = crate::PathComponent::new(path).map_err(|error| {
+                FileErrorCauseV1::Io(io_error_identity_v1(&error.into_io_error()))
+            })?;
+            let request = match mode {
+                FsOpenModeV1::Read | FsOpenModeV1::Metadata => crate::OpenRequest::Read,
+                FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateNew) => {
+                    crate::OpenRequest::CreateNew
+                }
+                FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrTruncate) => {
+                    crate::OpenRequest::CreateOrTruncate
+                }
+                FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrKeep) => {
+                    crate::OpenRequest::CreateOrKeep
+                }
+            };
+            crate::open_resource_at_v1(&self.root, &leaf, request)
+                .map_err(|error| FileErrorCauseV1::Io(io_error_identity_v1(&error.into_io_error())))
+        }
+
+        fn fs_resource_write_at(
+            &mut self,
+            handle: &crate::ResourceHandleV1,
+            offset: u64,
+            bytes: &[u8],
+        ) -> Result<usize, IoErrorIdentityV1> {
+            let limit = self.write_limit.unwrap_or(bytes.len()).min(bytes.len());
+            if limit == 0 {
+                return Ok(0);
+            }
+            crate::resource_write_at_v1(handle, offset, &bytes[..limit])
+                .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn bounded_positioned_io_reaches_progress_mismatch_and_v2_bindings() {
+        let root = std::env::temp_dir().join(format!("ken-px8r-positioned-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("source.bin"), b"abcdefghij").unwrap();
+        std::fs::write(root.join("target.bin"), b"0123456789").unwrap();
+        let rooted = crate::open_root(&crate::RootPath::new(&root).unwrap()).unwrap();
+        let metadata = crate::metadata(&rooted).unwrap();
+        let cap = crate::Cap::mint_scoped(
+            crate::AUTH_FULL,
+            "FS",
+            crate::FsScope::root(
+                crate::RightSet::ALL,
+                crate::FsHandle::Posix(rooted.clone()),
+                crate::FsIdentity::Posix {
+                    device: metadata.identity.device,
+                    inode: metadata.identity.inode,
+                },
+                crate::SymlinkPolicy::NoFollow,
+            ),
+        );
+        let mut capabilities = CapabilityTableV1::default();
+        let capability = capabilities.insert(CapabilityGrantV1 {
+            identity: crate::program_caps_fs_trace_identity_v1(),
+            capability: cap,
+        });
+        let mut resources = ResourceTableV1::with_buffer_limits(BufferLimitsV1::new(4, 6).unwrap());
+        let mut backend = PositionedBackend {
+            root: rooted,
+            write_limit: None,
+        };
+
+        let source = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"source.bin".to_vec(),
+                mode: FsOpenModeV1::Read,
+            },
+        )
+        .unwrap();
+        let source_token = source.resource_token.unwrap();
+        let source_identity = source.resource_identity.unwrap();
+        let buffer = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::BufferAllocate,
+            None,
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::BufferAllocate { capacity: 4 },
+        )
+        .unwrap();
+        let buffer_token = buffer.resource_token.unwrap();
+        let buffer_identity = buffer.resource_identity.unwrap();
+        assert_eq!(
+            buffer.resource_bindings,
+            vec![(ResourceBindingRoleV2::Target, buffer_identity)]
+        );
+        let over_limit = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::BufferAllocate,
+            None,
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::BufferAllocate { capacity: 3 },
+        )
+        .unwrap();
+        assert_eq!(
+            over_limit.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::BufferLimit))
+        );
+        assert!(over_limit.resource_bindings.is_empty());
+
+        let read_request = CanonicalRequestV1::FsReadAt {
+            file_offset: 3,
+            buffer_start: 0,
+            length: 8,
+        };
+        let read = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsReadAt,
+            None,
+            ResourceInputsV1::FileBuffer {
+                file: source_token,
+                buffer: buffer_token,
+            },
+            &read_request,
+        )
+        .unwrap();
+        assert!(matches!(
+            read.outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
+                ReadProgressV1::ReadSome { ref span, ref transferred }
+            )) if span.start == 0 && span.length == 4 && transferred.get() == 4
+        ));
+        assert_eq!(
+            read.resource_bindings,
+            vec![
+                (ResourceBindingRoleV2::File, source_identity),
+                (ResourceBindingRoleV2::Buffer, buffer_identity),
+            ]
+        );
+        let event = effect_event_v2_from_dispatch(7, HostOpV1::FsReadAt, read_request, &read);
+        assert_eq!(event.sequence, 7);
+        assert_eq!(event.resource_bindings, read.resource_bindings);
+
+        let freeze = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::BufferFreeze,
+            None,
+            ResourceInputsV1::Target(buffer_token),
+            &CanonicalRequestV1::BufferFreeze {
+                start: 0,
+                length: 4,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            freeze.outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(b"defg".to_vec()))
+        );
+
+        let target = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"target.bin".to_vec(),
+                mode: FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrKeep),
+            },
+        )
+        .unwrap();
+        let target_token = target
+            .resource_token
+            .unwrap_or_else(|| panic!("target open failed: {:?}", target.outcome));
+        let target_identity = target.resource_identity.unwrap();
+        let write_request = CanonicalRequestV1::FsWriteAt {
+            file_offset: 2,
+            buffer_start: 0,
+            length: 4,
+        };
+        let full_write = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsWriteAt,
+            None,
+            ResourceInputsV1::FileBuffer {
+                file: target_token,
+                buffer: buffer_token,
+            },
+            &write_request,
+        )
+        .unwrap();
+        assert!(matches!(
+            full_write.outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::WriteProgress(
+                WriteProgressV1::Wrote(ref count)
+            )) if count.get() == 4
+        ));
+        assert_eq!(
+            full_write.resource_bindings,
+            vec![
+                (ResourceBindingRoleV2::File, target_identity),
+                (ResourceBindingRoleV2::Buffer, buffer_identity),
+            ]
+        );
+        assert_eq!(
+            std::fs::read(root.join("target.bin")).unwrap(),
+            b"01defg6789"
+        );
+
+        std::fs::write(root.join("truncate.bin"), b"must-disappear").unwrap();
+        let truncate = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsOpen,
+            Some(capability),
+            ResourceInputsV1::None,
+            &CanonicalRequestV1::FsOpen {
+                path: b"truncate.bin".to_vec(),
+                mode: FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrTruncate),
+            },
+        )
+        .unwrap();
+        let truncate_token = truncate.resource_token.unwrap();
+        assert!(std::fs::read(root.join("truncate.bin")).unwrap().is_empty());
+        for (file_offset, buffer_start) in [(0, 0), (2, 2)] {
+            let reply = dispatch_host_op_v1(
+                &mut backend,
+                &capabilities,
+                &mut resources,
+                HostOpV1::FsWriteAt,
+                None,
+                ResourceInputsV1::FileBuffer {
+                    file: truncate_token,
+                    buffer: buffer_token,
+                },
+                &CanonicalRequestV1::FsWriteAt {
+                    file_offset,
+                    buffer_start,
+                    length: 2,
+                },
+            )
+            .unwrap();
+            assert!(matches!(
+                reply.outcome,
+                CanonicalOutcomeV1::Success(CanonicalReplyV1::WriteProgress(
+                    WriteProgressV1::Wrote(count)
+                )) if count.get() == 2
+            ));
+        }
+        assert_eq!(std::fs::read(root.join("truncate.bin")).unwrap(), b"defg");
+
+        backend.write_limit = Some(2);
+        let short_write = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsWriteAt,
+            None,
+            ResourceInputsV1::FileBuffer {
+                file: target_token,
+                buffer: buffer_token,
+            },
+            &CanonicalRequestV1::FsWriteAt {
+                file_offset: 6,
+                buffer_start: 0,
+                length: 4,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            short_write.outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::WriteProgress(
+                WriteProgressV1::Wrote(ref count)
+            )) if count.get() == 2
+        ));
+        backend.write_limit = Some(0);
+        let zero_write = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsWriteAt,
+            None,
+            ResourceInputsV1::FileBuffer {
+                file: target_token,
+                buffer: buffer_token,
+            },
+            &CanonicalRequestV1::FsWriteAt {
+                file_offset: 8,
+                buffer_start: 0,
+                length: 4,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            zero_write.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::NoProgress))
+        );
+        assert!(zero_write.resource_bindings.is_empty());
+
+        let short_read = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsReadAt,
+            None,
+            ResourceInputsV1::FileBuffer {
+                file: source_token,
+                buffer: buffer_token,
+            },
+            &CanonicalRequestV1::FsReadAt {
+                file_offset: 9,
+                buffer_start: 0,
+                length: 4,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            short_read.outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
+                ReadProgressV1::ReadSome { ref transferred, .. }
+            )) if transferred.get() == 1
+        ));
+        let eof = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsReadAt,
+            None,
+            ResourceInputsV1::FileBuffer {
+                file: source_token,
+                buffer: buffer_token,
+            },
+            &CanonicalRequestV1::FsReadAt {
+                file_offset: 10,
+                buffer_start: 0,
+                length: 4,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            eof.outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(ReadProgressV1::ReadEof))
+        );
+
+        let buffer_on_file = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::BufferFreeze,
+            None,
+            ResourceInputsV1::Target(source_token),
+            &CanonicalRequestV1::BufferFreeze {
+                start: 0,
+                length: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            buffer_on_file.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(
+                ResourceErrorV1::ResourceKindMismatch {
+                    expected: ResourceKindV1::Buffer,
+                    actual: ResourceKindV1::FsHandle,
+                }
+            ))
+        );
+        assert!(buffer_on_file.resource_bindings.is_empty());
+        let file_on_buffer = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsHandleMetadata,
+            None,
+            ResourceInputsV1::Target(buffer_token),
+            &CanonicalRequestV1::FsHandleMetadata,
+        )
+        .unwrap();
+        assert_eq!(
+            file_on_buffer.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(
+                ResourceErrorV1::ResourceKindMismatch {
+                    expected: ResourceKindV1::FsHandle,
+                    actual: ResourceKindV1::Buffer,
+                }
+            ))
+        );
+        assert!(file_on_buffer.resource_bindings.is_empty());
+        let right_denied = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::FsWriteAt,
+            None,
+            ResourceInputsV1::FileBuffer {
+                file: source_token,
+                buffer: buffer_token,
+            },
+            &write_request,
+        )
+        .unwrap();
+        assert!(matches!(
+            right_denied.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(
+                ResourceErrorV1::RightNotHeld { .. }
+            ))
+        ));
+
+        let released = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::ResourceRelease,
+            None,
+            ResourceInputsV1::Target(buffer_token),
+            &CanonicalRequestV1::ResourceRelease,
+        )
+        .unwrap();
+        assert_eq!(
+            released.resource_bindings,
+            vec![(ResourceBindingRoleV2::Target, buffer_identity)]
+        );
+        let closed = dispatch_host_op_v1(
+            &mut backend,
+            &capabilities,
+            &mut resources,
+            HostOpV1::BufferFreeze,
+            None,
+            ResourceInputsV1::Target(buffer_token),
+            &CanonicalRequestV1::BufferFreeze {
+                start: 0,
+                length: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            closed.outcome,
+            CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::Closed))
+        );
+        assert!(closed.resource_bindings.is_empty());
+        resources.finalize_all_with(|owner| {
+            crate::close_resource_v1(owner)
+                .map_err(|error| io_error_identity_v1(&error.into_io_error()))
+        });
         std::fs::remove_dir_all(root).unwrap();
     }
 }
