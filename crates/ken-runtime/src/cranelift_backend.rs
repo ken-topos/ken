@@ -553,6 +553,45 @@ pub(crate) fn emit_process_entrypoint_object_with_cranelift(
     })
 }
 
+#[cfg(test)]
+fn emit_process_entrypoint_object_with_symbols(
+    entrypoint: &RuntimeExpr,
+    symbols: &crate::NativeProcessSymbols,
+    entry_symbol: &str,
+) -> Result<CraneliftObjectArtifact, CraneliftBackendError> {
+    let compiled = compile_expr_into_module(
+        new_object_module("ken-runtime-process-entrypoint")?,
+        entry_symbol,
+        Linkage::Export,
+        entrypoint,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(symbols),
+    )?;
+    let verifier_passed = compiled.verifier_passed;
+    let assumptions = compiled.assumptions.clone();
+    let unsupported = compiled.unsupported.clone();
+    let object_bytes = compiled
+        .module
+        .finish()
+        .emit()
+        .map_err(|err| backend_module(err.to_string()))?;
+    let object_hash = fnv1a_64(&object_bytes);
+    Ok(CraneliftObjectArtifact {
+        example: "native-process-entrypoint".to_string(),
+        entry_symbol: entry_symbol.to_string(),
+        object_bytes,
+        object_hash,
+        platform_target: native_platform_target_name(),
+        backend_name: "Cranelift process object".to_string(),
+        verifier_passed,
+        assumptions,
+        unsupported,
+    })
+}
+
 pub(crate) fn emit_bound_process_program_object_with_cranelift(
     program: &RuntimeProgram,
     entrypoint: &RuntimeExpr,
@@ -1269,6 +1308,118 @@ fn compile_expr_with_declarations_and_process_input<'a>(
     )
 }
 
+#[cfg(test)]
+fn run_dynamic_constructor_dispatch_fixture(
+    discriminator: i64,
+    selected_tags: &[i64],
+) -> Result<i64, CraneliftBackendError> {
+    let mut module = new_jit_module()?;
+    let mut signature = module.make_signature();
+    signature
+        .params
+        .push(AbiParam::new(module.target_config().pointer_type()));
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function("px7p_dynamic_dispatch", Linkage::Local, &signature)
+        .map_err(|error| backend_module(error.to_string()))?;
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = Lowering {
+        seed_env: &seed_env,
+        declarations: BTreeMap::new(),
+        declaration_stack: Vec::new(),
+        result_table: BTreeMap::new(),
+        next_token: 0,
+        assumptions: BTreeSet::new(),
+        unsupported: Vec::new(),
+        process_object: false,
+        process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
+        host_dispatch: None,
+        invocation_pointer: None,
+    };
+    let mut function_context = FunctionBuilderContext::new();
+    {
+        let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+        let entry = builder.create_block();
+        builder.append_block_params_for_function_params(entry);
+        builder.switch_to_block(entry);
+        let dynamic = DynamicConstructorV1 {
+            discriminator: builder.ins().iconst(types::I64, discriminator),
+            alternatives: vec![
+                DynamicConstructorAlternativeV1 {
+                    tag: 0,
+                    constructor: "ctor:fixture::Dynamic::Zero".to_string(),
+                    fields: Vec::new(),
+                },
+                DynamicConstructorAlternativeV1 {
+                    tag: 1,
+                    constructor: "ctor:fixture::Dynamic::One".to_string(),
+                    fields: vec![Lowered::Int {
+                        value: builder.ins().iconst(types::I64, 7),
+                        known: Some(7),
+                    }],
+                },
+            ],
+        };
+        let cases = [
+            (0, "ctor:fixture::Dynamic::Zero", 0, 40),
+            (1, "ctor:fixture::Dynamic::One", 1, 41),
+        ]
+        .into_iter()
+        .filter(|(tag, ..)| selected_tags.contains(tag))
+        .map(
+            |(_, constructor, binders, result)| crate::RuntimeMatchCase {
+                constructor: constructor.to_string(),
+                binders,
+                body: RuntimeExpr::Value(RuntimeValue::Int(result)),
+            },
+        )
+        .collect::<Vec<_>>();
+        let default = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "px7p exact dynamic source default".to_string(),
+        };
+        let lowered = compiler.lower_dynamic_constructor_match(
+            &mut builder,
+            dynamic,
+            DynamicConstructorContinuation::Ordinary {
+                cases: &cases,
+                default: &default,
+                env: &[],
+            },
+        )?;
+        let value = match lowered {
+            Lowered::Trap(trap) => {
+                assert_eq!(trap, default);
+                builder.ins().iconst(types::I64, -4)
+            }
+            value => compiler.emit_result(&mut builder, value)?.0,
+        };
+        builder.ins().return_(&[value]);
+        builder.seal_all_blocks();
+        builder.finalize();
+    }
+    verify_cranelift_function(&context.func, module.isa())?;
+    module
+        .define_function(func_id, &mut context)
+        .map_err(|error| backend_module(error.to_string()))?;
+    let compiled = CompiledModule {
+        module,
+        func_id,
+        decoder: Some(ResultDecoder::Int),
+        result_table: compiler.result_table,
+        trap: None,
+        verifier_passed: true,
+        assumptions: compiler.assumptions,
+        unsupported: compiler.unsupported,
+    };
+    compiled
+        .run(None)
+        .map(|(_, token)| token.expect("fixture returns one scalar"))
+}
+
 fn compile_program_expr_object(
     program: &RuntimeProgram,
     expr: &RuntimeExpr,
@@ -1497,11 +1648,7 @@ enum Lowered {
         err_constructor: String,
         ok_constructor: String,
     },
-    DynamicNullaryConstructor {
-        tag: cranelift_codegen::ir::Value,
-        payload: Option<cranelift_codegen::ir::Value>,
-        constructors: Vec<String>,
-    },
+    DynamicConstructor(DynamicConstructorV1),
     Bytes(Vec<u8>),
     BorrowedNativeValue {
         pointer: cranelift_codegen::ir::Value,
@@ -1532,6 +1679,94 @@ enum Lowered {
         outer_env: Vec<Lowered>,
     },
     Trap(RuntimeTrap),
+}
+
+#[derive(Clone)]
+struct DynamicConstructorV1 {
+    discriminator: cranelift_codegen::ir::Value,
+    alternatives: Vec<DynamicConstructorAlternativeV1>,
+}
+
+#[derive(Clone)]
+struct DynamicConstructorAlternativeV1 {
+    tag: i64,
+    constructor: RuntimeSymbol,
+    fields: Vec<Lowered>,
+}
+
+const MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS: i64 = -3;
+
+fn validate_dynamic_constructor_alternatives<'a>(
+    alternatives: impl IntoIterator<Item = (i64, &'a str)>,
+) -> Result<(), CraneliftBackendError> {
+    let mut tags = BTreeSet::new();
+    let mut constructors = BTreeSet::new();
+    let mut count = 0;
+    for (tag, constructor) in alternatives {
+        count += 1;
+        if !tags.insert(tag) {
+            return Err(unsupported(
+                "DynamicConstructor",
+                format!("duplicate alternative tag {tag}"),
+            ));
+        }
+        if !constructors.insert(constructor) {
+            return Err(unsupported(
+                "DynamicConstructor",
+                format!("duplicate alternative constructor {constructor}"),
+            ));
+        }
+    }
+    if count == 0 {
+        return Err(unsupported(
+            "DynamicConstructor",
+            "closed alternative table is empty",
+        ));
+    }
+    Ok(())
+}
+
+fn select_dynamic_constructor_case<'a>(
+    cases: &'a [crate::RuntimeMatchCase],
+    alternative: &DynamicConstructorAlternativeV1,
+    default: &'a RuntimeTrap,
+) -> Result<Result<&'a crate::RuntimeMatchCase, &'a RuntimeTrap>, CraneliftBackendError> {
+    let mut selected = cases
+        .iter()
+        .filter(|case| case.constructor == alternative.constructor);
+    let Some(case) = selected.next() else {
+        return Ok(Err(default));
+    };
+    if selected.next().is_some() {
+        return Err(unsupported(
+            "DynamicConstructor",
+            format!(
+                "source match duplicates constructor {}",
+                alternative.constructor
+            ),
+        ));
+    }
+    if case.binders != alternative.fields.len() {
+        return Err(unsupported(
+            "DynamicConstructor",
+            format!(
+                "case {} expects {} binders but alternative has {} fields",
+                case.constructor,
+                case.binders,
+                alternative.fields.len()
+            ),
+        ));
+    }
+    Ok(Ok(case))
+}
+
+fn materialize_dynamic_constructor_env(
+    alternative: &DynamicConstructorAlternativeV1,
+    env: &[Lowered],
+) -> Vec<Lowered> {
+    let mut arm_env = alternative.fields.clone();
+    arm_env.extend_from_slice(env);
+    arm_env
 }
 
 fn console_stream_tag(value: &Lowered) -> Option<i64> {
@@ -1616,6 +1851,8 @@ struct ComputationalEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeComputationalMatchCase],
     default: &'a RuntimeTrap,
     env: &'a [Lowered],
+    retained_scrutinee_index: Option<usize>,
+    deferred_constructor_case: Option<&'a DeferredConstructorCaseEnvironment<'a>>,
 }
 
 #[derive(Clone, Copy)]
@@ -1623,13 +1860,89 @@ struct OrdinaryEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeMatchCase],
     default: &'a RuntimeTrap,
     env: &'a [Lowered],
-    retain_scrutinee: bool,
+    retained_scrutinee_index: Option<usize>,
+    deferred_constructor_case: Option<&'a DeferredConstructorCaseEnvironment<'a>>,
 }
 
 #[derive(Clone, Copy)]
 enum EliminatorFrame<'a> {
     Computational(ComputationalEliminatorFrame<'a>),
     Ordinary(OrdinaryEliminatorFrame<'a>),
+}
+
+#[derive(Clone, Copy)]
+enum DynamicConstructorContinuation<'a> {
+    Ordinary {
+        cases: &'a [crate::RuntimeMatchCase],
+        default: &'a RuntimeTrap,
+        env: &'a [Lowered],
+    },
+    Producer {
+        cases: &'a [crate::RuntimeMatchCase],
+        default: &'a RuntimeTrap,
+        env: &'a [Lowered],
+        eliminators: &'a [EliminatorFrame<'a>],
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScalarMergeKind {
+    Int,
+    Bool,
+    ExitCode,
+}
+
+struct DeferredConstructorCaseEnvironment<'a> {
+    constructor: &'a str,
+    lowered_prefix: &'a [Lowered],
+    selected_field: usize,
+    trailing_fields: &'a [RuntimeExpr],
+    producer_env: &'a [Lowered],
+    outer_eliminator: EliminatorFrame<'a>,
+}
+
+#[derive(Clone, Copy)]
+enum ImmediateBinderEliminator<'a> {
+    Computational {
+        cases: &'a [crate::RuntimeComputationalMatchCase],
+        default: &'a RuntimeTrap,
+    },
+    Ordinary {
+        cases: &'a [crate::RuntimeMatchCase],
+        default: &'a RuntimeTrap,
+    },
+}
+
+fn immediate_binder_eliminator(
+    body: &RuntimeExpr,
+    argument_binder_offset: usize,
+    argument_binders: usize,
+) -> Option<(usize, ImmediateBinderEliminator<'_>)> {
+    let (scrutinee, eliminator) = match body {
+        RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases,
+            default,
+        } => (
+            scrutinee.as_ref(),
+            ImmediateBinderEliminator::Computational { cases, default },
+        ),
+        RuntimeExpr::Match {
+            scrutinee,
+            cases,
+            default,
+        } => (
+            scrutinee.as_ref(),
+            ImmediateBinderEliminator::Ordinary { cases, default },
+        ),
+        _ => return None,
+    };
+    let RuntimeExpr::Var(index) = scrutinee else {
+        return None;
+    };
+    let index = usize::try_from(*index).ok()?;
+    let field = index.checked_sub(argument_binder_offset)?;
+    (field < argument_binders).then_some((field, eliminator))
 }
 
 fn ordinary_match_continuation<'a>(
@@ -1782,6 +2095,8 @@ impl<'a> Lowering<'a> {
                     cases,
                     default,
                     env: eliminator_env,
+                    retained_scrutinee_index: None,
+                    deferred_constructor_case: None,
                 },
             )],
         )
@@ -1829,7 +2144,8 @@ impl<'a> Lowering<'a> {
                                     cases,
                                     default,
                                     env: &frame_env,
-                                    retain_scrutinee: true,
+                                    retained_scrutinee_index: Some(0),
+                                    deferred_constructor_case: None,
                                 }));
                                 composed.extend_from_slice(eliminators);
                                 return self.lower_computational_producer_expr(
@@ -1902,6 +2218,8 @@ impl<'a> Lowering<'a> {
                                 cases: &cases,
                                 default: &default,
                                 env: &outer_env,
+                                retained_scrutinee_index: None,
+                                deferred_constructor_case: None,
                             },
                         ));
                         composed.extend_from_slice(eliminators);
@@ -1912,6 +2230,131 @@ impl<'a> Lowering<'a> {
                         "tree producer callee is not a closure",
                     )),
                 }
+            }
+            RuntimeExpr::Construct { constructor, args } => {
+                let eliminator = eliminators[0];
+                let (case_body, argument_binder_offset) = match eliminator {
+                    EliminatorFrame::Computational(eliminator) => {
+                        let case = match eliminator
+                            .cases
+                            .iter()
+                            .find(|case| case.constructor == *constructor)
+                        {
+                            Some(case) => case,
+                            None => return Ok(Lowered::Trap(eliminator.default.clone())),
+                        };
+                        if case.argument_binders != args.len() {
+                            return Err(unsupported(
+                                "ComputationalMatch",
+                                format!(
+                                    "case {} expects {} constructor arguments but value has {}",
+                                    case.constructor,
+                                    case.argument_binders,
+                                    args.len()
+                                ),
+                            ));
+                        }
+                        let mut seen = BTreeSet::new();
+                        for position in case.recursive_positions.iter().copied() {
+                            if !seen.insert(position) || position >= args.len() {
+                                return Err(unsupported(
+                                    "ComputationalMatch",
+                                    format!(
+                                        "case {} has malformed recursive position {position}",
+                                        case.constructor
+                                    ),
+                                ));
+                            }
+                        }
+                        (&case.body, case.recursive_positions.len())
+                    }
+                    EliminatorFrame::Ordinary(eliminator) => {
+                        let case = match select_ordinary_case(eliminator, constructor) {
+                            Ok(case) => case,
+                            Err(trap) => return Ok(Lowered::Trap(trap)),
+                        };
+                        if case.binders != args.len() {
+                            return Err(unsupported(
+                                "Match",
+                                format!(
+                                    "case {} expects {} binders but constructor has {} args",
+                                    case.constructor,
+                                    case.binders,
+                                    args.len()
+                                ),
+                            ));
+                        }
+                        (&case.body, 0)
+                    }
+                };
+
+                let bridge =
+                    immediate_binder_eliminator(case_body, argument_binder_offset, args.len());
+                let bridge =
+                    bridge.filter(|(field, _)| requires_heterogeneous_deforestation(&args[*field]));
+
+                if let Some((field, consumer)) = bridge {
+                    let lowered_prefix = args[..field]
+                        .iter()
+                        .map(|arg| self.lower_expr(builder, arg, producer_env))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    if let Some(Lowered::Trap(trap)) = lowered_prefix
+                        .iter()
+                        .find(|value| matches!(value, Lowered::Trap(_)))
+                    {
+                        return Ok(Lowered::Trap(trap.clone()));
+                    }
+
+                    let deferred = DeferredConstructorCaseEnvironment {
+                        constructor,
+                        lowered_prefix: &lowered_prefix,
+                        selected_field: field,
+                        trailing_fields: &args[field + 1..],
+                        producer_env,
+                        outer_eliminator: eliminator,
+                    };
+                    let mut composed = Vec::with_capacity(eliminators.len());
+                    composed.push(match consumer {
+                        ImmediateBinderEliminator::Computational { cases, default } => {
+                            EliminatorFrame::Computational(ComputationalEliminatorFrame {
+                                cases,
+                                default,
+                                env: &[],
+                                retained_scrutinee_index: None,
+                                deferred_constructor_case: Some(&deferred),
+                            })
+                        }
+                        ImmediateBinderEliminator::Ordinary { cases, default } => {
+                            EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
+                                cases,
+                                default,
+                                env: &[],
+                                retained_scrutinee_index: None,
+                                deferred_constructor_case: Some(&deferred),
+                            })
+                        }
+                    });
+                    composed.extend_from_slice(&eliminators[1..]);
+                    return self.lower_computational_producer_expr(
+                        builder,
+                        &args[field],
+                        producer_env,
+                        &composed,
+                    );
+                }
+
+                let lowered_args = args
+                    .iter()
+                    .map(|arg| self.lower_expr(builder, arg, producer_env))
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.lower_computational_match_value_composed(
+                    builder,
+                    Lowered::Constructor {
+                        constructor: constructor.clone(),
+                        args: lowered_args,
+                    },
+                    eliminators,
+                )
             }
             RuntimeExpr::Match {
                 scrutinee,
@@ -2019,6 +2462,18 @@ impl<'a> Lowering<'a> {
                         Lowered::Int { value, known: None }
                     });
                 }
+                if let Lowered::DynamicConstructor(dynamic) = selected {
+                    return self.lower_dynamic_constructor_match(
+                        builder,
+                        dynamic,
+                        DynamicConstructorContinuation::Producer {
+                            cases: producer_cases,
+                            default: producer_default,
+                            env: producer_env,
+                            eliminators,
+                        },
+                    );
+                }
                 let Lowered::Constructor { constructor, args } = selected else {
                     return Err(unsupported(
                         "ComputationalMatch",
@@ -2060,6 +2515,8 @@ impl<'a> Lowering<'a> {
                         cases: inner_cases,
                         default: inner_default,
                         env: producer_env,
+                        retained_scrutinee_index: None,
+                        deferred_constructor_case: None,
                     },
                 ));
                 composed.extend_from_slice(eliminators);
@@ -2142,6 +2599,10 @@ impl<'a> Lowering<'a> {
                 "scrutinee is not a constructor value after ordinary expression lowering",
             ));
         };
+        let retained_scrutinee = Lowered::Constructor {
+            constructor: constructor.clone(),
+            args: args.clone(),
+        };
         let remaining_eliminators = &eliminators[1..];
         let (body, case_env) = match eliminator {
             EliminatorFrame::Computational(eliminator) => {
@@ -2184,7 +2645,15 @@ impl<'a> Lowering<'a> {
                 }
                 let mut case_env = induction_hypotheses;
                 case_env.extend(args);
-                case_env.extend_from_slice(eliminator.env);
+                let frame_env = match self.materialize_eliminator_frame_env(
+                    builder,
+                    EliminatorFrame::Computational(eliminator),
+                    &retained_scrutinee,
+                )? {
+                    Ok(env) => env,
+                    Err(trap) => return Ok(Lowered::Trap(trap)),
+                };
+                case_env.extend(frame_env);
                 (&case.body, case_env)
             }
             EliminatorFrame::Ordinary(eliminator) => {
@@ -2204,13 +2673,15 @@ impl<'a> Lowering<'a> {
                     ));
                 }
                 let mut case_env = args;
-                if eliminator.retain_scrutinee {
-                    case_env.push(Lowered::Constructor {
-                        constructor,
-                        args: case_env.clone(),
-                    });
-                }
-                case_env.extend_from_slice(eliminator.env);
+                let frame_env = match self.materialize_eliminator_frame_env(
+                    builder,
+                    EliminatorFrame::Ordinary(eliminator),
+                    &retained_scrutinee,
+                )? {
+                    Ok(env) => env,
+                    Err(trap) => return Ok(Lowered::Trap(trap)),
+                };
+                case_env.extend(frame_env);
                 (&case.body, case_env)
             }
         };
@@ -2218,6 +2689,134 @@ impl<'a> Lowering<'a> {
             self.lower_expr(builder, body, &case_env)
         } else {
             self.lower_computational_producer_expr(builder, body, &case_env, remaining_eliminators)
+        }
+    }
+
+    fn materialize_eliminator_frame_env(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        eliminator: EliminatorFrame<'_>,
+        retained_scrutinee: &Lowered,
+    ) -> Result<Result<Vec<Lowered>, RuntimeTrap>, CraneliftBackendError> {
+        let (env, retained_index, deferred, construct) = match eliminator {
+            EliminatorFrame::Computational(frame) => (
+                frame.env,
+                frame.retained_scrutinee_index,
+                frame.deferred_constructor_case,
+                "ComputationalMatch",
+            ),
+            EliminatorFrame::Ordinary(frame) => (
+                frame.env,
+                frame.retained_scrutinee_index,
+                frame.deferred_constructor_case,
+                "Match",
+            ),
+        };
+        let Some(deferred) = deferred else {
+            let mut env = env.to_vec();
+            if let Some(index) = retained_index {
+                if index > env.len() {
+                    return Err(unsupported(
+                        construct,
+                        "retained scrutinee index exceeds the frame environment",
+                    ));
+                }
+                env.insert(index, retained_scrutinee.clone());
+            }
+            return Ok(Ok(env));
+        };
+        if deferred.lowered_prefix.len() != deferred.selected_field {
+            return Err(unsupported(
+                "Construct",
+                "selected constructor field prefix does not match its binder index",
+            ));
+        }
+
+        let mut constructor_args = deferred.lowered_prefix.to_vec();
+        constructor_args.push(retained_scrutinee.clone());
+        for field in deferred.trailing_fields {
+            let lowered = self.lower_expr(builder, field, deferred.producer_env)?;
+            if let Lowered::Trap(trap) = lowered {
+                return Ok(Err(trap));
+            }
+            constructor_args.push(lowered);
+        }
+        let outer_scrutinee = Lowered::Constructor {
+            constructor: deferred.constructor.to_string(),
+            args: constructor_args.clone(),
+        };
+        let outer_tail = match self.materialize_eliminator_frame_env(
+            builder,
+            deferred.outer_eliminator,
+            &outer_scrutinee,
+        )? {
+            Ok(env) => env,
+            Err(trap) => return Ok(Err(trap)),
+        };
+
+        match deferred.outer_eliminator {
+            EliminatorFrame::Computational(frame) => {
+                let case = match frame
+                    .cases
+                    .iter()
+                    .find(|case| case.constructor == deferred.constructor)
+                {
+                    Some(case) => case,
+                    None => return Ok(Err(frame.default.clone())),
+                };
+                if case.argument_binders != constructor_args.len() {
+                    return Err(unsupported(
+                        "ComputationalMatch",
+                        format!(
+                            "case {} expects {} constructor arguments but value has {}",
+                            case.constructor,
+                            case.argument_binders,
+                            constructor_args.len()
+                        ),
+                    ));
+                }
+                let mut seen = BTreeSet::new();
+                let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
+                for position in case.recursive_positions.iter().rev().copied() {
+                    if !seen.insert(position) || position >= constructor_args.len() {
+                        return Err(unsupported(
+                            "ComputationalMatch",
+                            format!(
+                                "case {} has malformed recursive position {position}",
+                                case.constructor
+                            ),
+                        ));
+                    }
+                    induction_hypotheses.push(Lowered::ComputationalRecursorClosure {
+                        recursive: Box::new(constructor_args[position].clone()),
+                        cases: frame.cases.to_vec(),
+                        default: frame.default.clone(),
+                        outer_env: outer_tail.clone(),
+                    });
+                }
+                induction_hypotheses.extend(constructor_args);
+                induction_hypotheses.extend(outer_tail);
+                Ok(Ok(induction_hypotheses))
+            }
+            EliminatorFrame::Ordinary(frame) => {
+                let case = match select_ordinary_case(frame, deferred.constructor) {
+                    Ok(case) => case,
+                    Err(trap) => return Ok(Err(trap)),
+                };
+                if case.binders != constructor_args.len() {
+                    return Err(unsupported(
+                        "Match",
+                        format!(
+                            "case {} expects {} binders but constructor has {} args",
+                            case.constructor,
+                            case.binders,
+                            constructor_args.len()
+                        ),
+                    ));
+                }
+                constructor_args.extend(outer_tail);
+                Ok(Ok(constructor_args))
+            }
         }
     }
 
@@ -2236,6 +2835,40 @@ impl<'a> Lowering<'a> {
             _ => Err(unsupported(
                 construct,
                 "dynamic native arms must produce scalar Int values",
+            )),
+        }
+    }
+
+    fn merge_scalar_branch(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        lowered: Lowered,
+        construct: &'static str,
+    ) -> Result<(cranelift_codegen::ir::Value, ScalarMergeKind), CraneliftBackendError> {
+        match lowered {
+            Lowered::Int { value, .. } => Ok((value, ScalarMergeKind::Int)),
+            Lowered::Bool { value, .. } => Ok((value, ScalarMergeKind::Bool)),
+            Lowered::Constructor { constructor, args }
+                if args.is_empty()
+                    && (constructor == self.process_symbols.bool_true
+                        || constructor == self.process_symbols.bool_false) =>
+            {
+                Ok((
+                    builder.ins().iconst(
+                        types::I64,
+                        i64::from(constructor == self.process_symbols.bool_true),
+                    ),
+                    ScalarMergeKind::Bool,
+                ))
+            }
+            Lowered::ProcessExitStatus { value } => Ok((value, ScalarMergeKind::ExitCode)),
+            lowered if self.process_object => Ok((
+                self.emit_process_exit_status(builder, lowered),
+                ScalarMergeKind::ExitCode,
+            )),
+            _ => Err(unsupported(
+                construct,
+                "dynamic arms must produce scalar Int or Bool values",
             )),
         }
     }
@@ -2347,7 +2980,8 @@ impl<'a> Lowering<'a> {
                             cases,
                             default,
                             env,
-                            retain_scrutinee: false,
+                            retained_scrutinee_index: None,
+                            deferred_constructor_case: None,
                         })],
                     );
                 }
@@ -2385,20 +3019,15 @@ impl<'a> Lowering<'a> {
                         env,
                     );
                 }
-                if let Lowered::DynamicNullaryConstructor {
-                    tag,
-                    payload,
-                    constructors,
-                } =
-                    lowered_scrutinee
-                {
-                    return self.lower_dynamic_nullary_match(
+                if let Lowered::DynamicConstructor(dynamic) = lowered_scrutinee {
+                    return self.lower_dynamic_constructor_match(
                         builder,
-                        tag,
-                        payload,
-                        &constructors,
-                        cases,
-                        env,
+                        dynamic,
+                        DynamicConstructorContinuation::Ordinary {
+                            cases,
+                            default,
+                            env,
+                        },
                     );
                 }
                 if let Lowered::Bool { value, known } = lowered_scrutinee {
@@ -2428,23 +3057,35 @@ impl<'a> Lowering<'a> {
                     builder
                         .ins()
                         .brif(value, true_block, &[], false_block, &[]);
-                    let mut exit_merge = None;
+                    let mut merge_kind = None;
                     for (block, case) in
                         [(true_block, true_case), (false_block, false_case)]
                     {
                         builder.switch_to_block(block);
                         let lowered = self.lower_expr(builder, &case.body, env)?;
-                        let (value, is_exit) =
-                            self.merge_branch_value(builder, lowered, "Match")?;
-                        Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
+                        let (value, branch_kind) =
+                            self.merge_scalar_branch(builder, lowered, "Match")?;
+                        match merge_kind {
+                            Some(expected) if expected != branch_kind => {
+                                return Err(unsupported(
+                                    "Match",
+                                    "Bool match arms disagree on Int, Bool, or ExitCode result",
+                                ));
+                            }
+                            Some(_) => {}
+                            None => merge_kind = Some(branch_kind),
+                        }
                         builder.ins().jump(merge, &[value.into()]);
                     }
                     builder.switch_to_block(merge);
                     let value = builder.block_params(merge)[0];
-                    return Ok(if exit_merge == Some(true) {
-                        Lowered::ProcessExitStatus { value }
-                    } else {
-                        Lowered::Int { value, known: None }
+                    return Ok(match merge_kind {
+                        Some(ScalarMergeKind::ExitCode) => {
+                            Lowered::ProcessExitStatus { value }
+                        }
+                        Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
+                        Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
+                        None => unreachable!("Bool match emits both closed alternatives"),
                     });
                 }
                 let Lowered::Constructor { constructor, args } = lowered_scrutinee else {
@@ -2567,7 +3208,8 @@ impl<'a> Lowering<'a> {
                                         cases,
                                         default,
                                         env: &frame_env,
-                                        retain_scrutinee: true,
+                                        retained_scrutinee_index: Some(0),
+                                        deferred_constructor_case: None,
                                     })],
                                 );
                             }
@@ -2862,11 +3504,29 @@ impl<'a> Lowering<'a> {
                 _ => wire.reply_unit_tag,
             } as i64;
             Self::require_one_of_i64(builder, tag, &[success_tag, wire.reply_error_tag as i64]);
-            let io_error = Lowered::DynamicNullaryConstructor {
-                tag: builder.ins().band_imm(detail, 0xff),
-                payload: Some(builder.ins().sshr_imm(detail, 32)),
-                constructors: self.process_symbols.io_errors.clone(),
-            };
+            let payload = builder.ins().sshr_imm(detail, 32);
+            let last = self.process_symbols.io_errors.len().saturating_sub(1);
+            let io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
+                discriminator: builder.ins().band_imm(detail, 0xff),
+                alternatives: self
+                    .process_symbols
+                    .io_errors
+                    .iter()
+                    .enumerate()
+                    .map(|(tag, constructor)| DynamicConstructorAlternativeV1 {
+                        tag: tag as i64,
+                        constructor: constructor.clone(),
+                        fields: (tag == last)
+                            .then(|| {
+                                vec![Lowered::Int {
+                                    value: payload,
+                                    known: None,
+                                }]
+                            })
+                            .unwrap_or_default(),
+                    })
+                    .collect(),
+            });
             let error = if matches!(
                 operation,
                 ken_host::HostOpV1::FsReadFile
@@ -3287,7 +3947,7 @@ impl<'a> Lowering<'a> {
         builder.append_block_param(merge, types::I64);
         let ok_block = builder.create_block();
         let err_block = builder.create_block();
-        let mut exit_merge = None;
+        let mut merge_kind = None;
         builder.ins().brif(success, ok_block, &[], err_block, &[]);
         for (block, constructor, payload) in [
             (ok_block, ok_constructor, ok),
@@ -3305,35 +3965,61 @@ impl<'a> Lowering<'a> {
             let mut arm_env = vec![payload];
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
-            let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
-            Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
+            let (value, branch_kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
+            match merge_kind {
+                Some(expected) if expected != branch_kind => {
+                    return Err(unsupported(
+                        "Match",
+                        "dynamic HostResult arms disagree on Int, Bool, or ExitCode result",
+                    ));
+                }
+                Some(_) => {}
+                None => merge_kind = Some(branch_kind),
+            }
             builder.ins().jump(merge, &[value.into()]);
         }
         builder.switch_to_block(merge);
         let value = builder.block_params(merge)[0];
-        Ok(if exit_merge == Some(true) {
-            Lowered::ProcessExitStatus { value }
-        } else {
-            Lowered::Int { value, known: None }
+        Ok(match merge_kind {
+            Some(ScalarMergeKind::ExitCode) => Lowered::ProcessExitStatus { value },
+            Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
+            Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
+            None => unreachable!("HostResult emits both closed alternatives"),
         })
     }
 
-    fn lower_dynamic_nullary_match(
+    fn lower_dynamic_constructor_match(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        tag: cranelift_codegen::ir::Value,
-        payload: Option<cranelift_codegen::ir::Value>,
-        constructors: &[String],
-        cases: &[crate::RuntimeMatchCase],
-        env: &[Lowered],
+        dynamic: DynamicConstructorV1,
+        continuation: DynamicConstructorContinuation<'_>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let merge = builder.create_block();
-        builder.append_block_param(merge, types::I64);
+        validate_dynamic_constructor_alternatives(
+            dynamic
+                .alternatives
+                .iter()
+                .map(|alternative| (alternative.tag, alternative.constructor.as_str())),
+        )?;
+
+        let (source_cases, source_default) = match continuation {
+            DynamicConstructorContinuation::Ordinary { cases, default, .. }
+            | DynamicConstructorContinuation::Producer { cases, default, .. } => (cases, default),
+        };
+        let has_selected_case = dynamic.alternatives.iter().any(|alternative| {
+            source_cases
+                .iter()
+                .any(|case| case.constructor == alternative.constructor)
+        });
+        let merge = has_selected_case.then(|| {
+            let merge = builder.create_block();
+            builder.append_block_param(merge, types::I64);
+            merge
+        });
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor match block");
-        let mut exit_merge = None;
-        for (index, constructor) in constructors.iter().enumerate() {
+        let mut merge_kind = None;
+        for alternative in dynamic.alternatives {
             let arm = builder.create_block();
             let next = builder.create_block();
             if builder.current_block() != Some(test_block) {
@@ -3341,46 +4027,81 @@ impl<'a> Lowering<'a> {
             }
             let selected = builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::Equal,
-                tag,
-                index as i64,
+                dynamic.discriminator,
+                alternative.tag,
             );
             builder.ins().brif(selected, arm, &[], next, &[]);
             builder.switch_to_block(arm);
-            let expected_binders =
-                usize::from(index + 1 == constructors.len() && payload.is_some());
-            let Some(case) = cases
-                .iter()
-                .find(|case| case.constructor == *constructor && case.binders == expected_binders)
-            else {
-                let failure = builder.ins().iconst(types::I64, -1);
-                builder.ins().return_(&[failure]);
-                test_block = next;
-                continue;
+            let (cases, default, env) = match continuation {
+                DynamicConstructorContinuation::Ordinary {
+                    cases,
+                    default,
+                    env,
+                }
+                | DynamicConstructorContinuation::Producer {
+                    cases,
+                    default,
+                    env,
+                    ..
+                } => (cases, default, env),
             };
-            let mut arm_env = if expected_binders == 1 {
-                vec![Lowered::Int {
-                    value: payload.expect("one-binder dynamic constructor has a payload"),
-                    known: None,
-                }]
-            } else {
-                Vec::new()
+            let case = match select_dynamic_constructor_case(cases, &alternative, default)? {
+                Ok(case) => case,
+                Err(_owned_default) => {
+                    let failure = builder.ins().iconst(types::I64, -4);
+                    builder.ins().return_(&[failure]);
+                    test_block = next;
+                    continue;
+                }
             };
-            arm_env.extend_from_slice(env);
-            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
-            let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
-            Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
-            builder.ins().jump(merge, &[value.into()]);
+            let arm_env = materialize_dynamic_constructor_env(&alternative, env);
+            let lowered = match continuation {
+                DynamicConstructorContinuation::Ordinary { .. } => {
+                    self.lower_expr(builder, &case.body, &arm_env)?
+                }
+                DynamicConstructorContinuation::Producer { eliminators, .. } => self
+                    .lower_computational_producer_expr(
+                        builder,
+                        &case.body,
+                        &arm_env,
+                        eliminators,
+                    )?,
+            };
+            let (value, branch_kind) =
+                self.merge_scalar_branch(builder, lowered, "DynamicConstructor")?;
+            match merge_kind {
+                Some(expected) if expected != branch_kind => {
+                    return Err(unsupported(
+                        "DynamicConstructor",
+                        "dynamic constructor arms disagree on Int, Bool, or ExitCode result",
+                    ));
+                }
+                Some(_) => {}
+                None => merge_kind = Some(branch_kind),
+            }
+            builder.ins().jump(
+                merge.expect("a selected dynamic constructor case owns the merge"),
+                &[value.into()],
+            );
             test_block = next;
         }
         builder.switch_to_block(test_block);
-        let failure = builder.ins().iconst(types::I64, -1);
-        builder.ins().return_(&[failure]);
+        let malformed = builder
+            .ins()
+            .iconst(types::I64, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
+        builder.ins().return_(&[malformed]);
+        let Some(merge) = merge else {
+            let unreachable_continuation = builder.create_block();
+            builder.switch_to_block(unreachable_continuation);
+            return Ok(Lowered::Trap(source_default.clone()));
+        };
         builder.switch_to_block(merge);
         let value = builder.block_params(merge)[0];
-        Ok(if exit_merge == Some(true) {
-            Lowered::ProcessExitStatus { value }
-        } else {
-            Lowered::Int { value, known: None }
+        Ok(match merge_kind {
+            Some(ScalarMergeKind::ExitCode) => Lowered::ProcessExitStatus { value },
+            Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
+            Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
+            None => unreachable!("a selected dynamic constructor case emits one arm"),
         })
     }
 
@@ -4222,7 +4943,7 @@ impl<'a> Lowering<'a> {
             | Lowered::CapabilityToken { .. }
             | Lowered::ResourceToken { .. }
             | Lowered::HostResult { .. }
-            | Lowered::DynamicNullaryConstructor { .. } => Err(unsupported(
+            | Lowered::DynamicConstructor(_) => Err(unsupported(
                 "Result",
                 "borrowed ingress values cannot escape the native call",
             )),
@@ -4628,6 +5349,83 @@ mod tests {
         }
     }
 
+    fn constructor_field_aggregate() -> RuntimeExpr {
+        RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleIsTerminal,
+                capability: None,
+                args: vec![RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                    args: Vec::new(),
+                }],
+            }),
+            cases: [
+                ("ctor:prelude::Bool::True", "ctor:prelude::Result::Ok", 7),
+                ("ctor:prelude::Bool::False", "ctor:prelude::Result::Err", 9),
+            ]
+            .into_iter()
+            .map(|(constructor, result, payload)| RuntimeMatchCase {
+                constructor: constructor.to_string(),
+                binders: 0,
+                body: RuntimeExpr::Construct {
+                    constructor: result.to_string(),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(payload))],
+                },
+            })
+            .collect(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "px7p aggregate producer default".to_string(),
+            },
+        }
+    }
+
+    fn constructor_field_selected_case_fixture(
+        selected_binders: usize,
+        selected_field_var: u32,
+    ) -> RuntimeExpr {
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Int(41)),
+                    constructor_field_aggregate(),
+                ],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: selected_binders,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(selected_field_var)),
+                    cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+                        .into_iter()
+                        .map(|constructor| RuntimeMatchCase {
+                            constructor: constructor.to_string(),
+                            binders: 1,
+                            body: RuntimeExpr::PrimitiveCall {
+                                primitive: RuntimePrimitive {
+                                    symbol: "sub_int".to_string(),
+                                    partiality: RuntimePartiality::Total,
+                                },
+                                args: vec![RuntimeExpr::Var(1), RuntimeExpr::Var(0)],
+                            },
+                        })
+                        .collect(),
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p selected field default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p exact outer default".to_string(),
+            },
+        }
+    }
+
     #[test]
     fn dynamic_host_result_producer_missing_case_routes_to_default() {
         assert!(
@@ -4774,6 +5572,363 @@ mod tests {
         .expect("dynamic producer composes through both ordinary frames");
     }
 
+    #[test]
+    fn constructor_field_selected_case_composes_before_field_lowering() {
+        emit_process_entrypoint_object_with_cranelift(
+            &constructor_field_selected_case_fixture(2, 1),
+            "ken_px7p_constructor_field_selected_case",
+        )
+        .expect("the selected trailing field remains structural through its ordinary consumer");
+    }
+
+    #[test]
+    fn constructor_field_composes_through_computational_consumer() {
+        let leaf = "ctor:fixture::FieldTree::Leaf".to_string();
+        let field = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleIsTerminal,
+                capability: None,
+                args: vec![RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                    args: Vec::new(),
+                }],
+            }),
+            cases: ["ctor:prelude::Bool::True", "ctor:prelude::Bool::False"]
+                .into_iter()
+                .map(|constructor| RuntimeMatchCase {
+                    constructor: constructor.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Construct {
+                        constructor: leaf.clone(),
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                    },
+                })
+                .collect(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "px7p computational field default".to_string(),
+            },
+        };
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(41)), field],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: 2,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::ComputationalMatch {
+                    scrutinee: Box::new(RuntimeExpr::Var(1)),
+                    cases: vec![crate::RuntimeComputationalMatchCase {
+                        constructor: leaf,
+                        argument_binders: 1,
+                        recursive_positions: Vec::new(),
+                        body: RuntimeExpr::PrimitiveCall {
+                            primitive: RuntimePrimitive {
+                                symbol: "sub_int".to_string(),
+                                partiality: RuntimePartiality::Total,
+                            },
+                            args: vec![RuntimeExpr::Var(1), RuntimeExpr::Var(0)],
+                        },
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p computational consumer default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p computational outer default".to_string(),
+            },
+        };
+        emit_process_entrypoint_object_with_cranelift(
+            &expr,
+            "ken_px7p_constructor_field_computational_consumer",
+        )
+        .expect("the selected field also composes through a computational consumer");
+    }
+
+    #[test]
+    fn constructor_field_recursive_ih_offset_selects_argument_binder() {
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Recursive".to_string(),
+                args: vec![constructor_field_aggregate()],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Recursive".to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(1)),
+                    cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+                        .into_iter()
+                        .map(|constructor| RuntimeMatchCase {
+                            constructor: constructor.to_string(),
+                            binders: 1,
+                            body: RuntimeExpr::Var(0),
+                        })
+                        .collect(),
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p recursive selected-field default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p recursive outer default".to_string(),
+            },
+        };
+        emit_process_entrypoint_object_with_cranelift(
+            &expr,
+            "ken_px7p_constructor_field_recursive_offset",
+        )
+        .expect("the recursive IH prefix does not change the selected argument field");
+    }
+
+    #[test]
+    fn constructor_field_middle_binder_preserves_trailing_environment_order() {
+        let aggregate = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            cases: ["ctor:prelude::Bool::True", "ctor:prelude::Bool::False"]
+                .into_iter()
+                .map(|constructor| RuntimeMatchCase {
+                    constructor: constructor.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Result::Ok".to_string(),
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                    },
+                })
+                .collect(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "px7p middle producer default".to_string(),
+            },
+        };
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Int(13)),
+                    aggregate,
+                    RuntimeExpr::Value(RuntimeValue::Int(41)),
+                ],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: 3,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(1)),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: "ctor:prelude::Result::Ok".to_string(),
+                        binders: 1,
+                        body: RuntimeExpr::PrimitiveCall {
+                            primitive: RuntimePrimitive {
+                                symbol: "sub_int".to_string(),
+                                partiality: RuntimePartiality::Total,
+                            },
+                            args: vec![RuntimeExpr::Var(3), RuntimeExpr::Var(0)],
+                        },
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p middle consumer default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p middle outer default".to_string(),
+            },
+        };
+        let compiled = compile_expr(&expr, &NativeSeedEnvironment::empty())
+            .expect("the selected middle field composes without moving its trailing sibling");
+        assert_eq!(
+            compiled.run(None).expect("middle-field fixture runs").0,
+            RuntimeObservation::Returned(RuntimeGroundValue::Int(34))
+        );
+    }
+
+    #[test]
+    fn constructor_field_binder_shift_mutation_recovers_exact_refusal() {
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &constructor_field_selected_case_fixture(2, 0),
+            "ken_px7p_constructor_field_wrong_binder",
+        )
+        .expect_err("the aggregate-looking sibling is not the selected field consumer");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "Match",
+                reason,
+            }) if reason == "scrutinee is not a constructor value"
+        ));
+    }
+
+    #[test]
+    fn constructor_field_bridge_removal_recovers_exact_refusal() {
+        let fixture = constructor_field_selected_case_fixture(2, 1);
+        let RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases,
+            default,
+        } = fixture
+        else {
+            panic!("PX7-P fixture outer shape changed");
+        };
+        let eagerly_materialized = RuntimeExpr::Let {
+            value: scrutinee,
+            body: Box::new(RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(RuntimeExpr::Var(0)),
+                cases,
+                default,
+            }),
+        };
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &eagerly_materialized,
+            "ken_px7p_constructor_field_bridge_removed",
+        )
+        .expect_err("eager field lowering must recover the pre-PX7-P boundary");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "Match",
+                reason,
+            }) if reason == "scrutinee is not a constructor value"
+        ));
+    }
+
+    #[test]
+    fn constructor_field_outer_arity_rejects_before_field_lowering() {
+        let err = emit_process_entrypoint_object_with_cranelift(
+            &constructor_field_selected_case_fixture(1, 1),
+            "ken_px7p_constructor_field_outer_arity",
+        )
+        .expect_err("the selected constructor case must bind every field exactly");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "ComputationalMatch",
+                reason,
+            }) if reason == "case ctor:fixture::Envelope::Wrap expects 1 constructor arguments but value has 2"
+        ));
+    }
+
+    #[test]
+    fn constructor_field_missing_case_owns_default_before_fields() {
+        let default = RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "px7p exact missing constructor default".to_string(),
+        };
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Missing".to_string(),
+                args: vec![RuntimeExpr::Var(999)],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: 1,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Var(0),
+            }],
+            default: default.clone(),
+        };
+        let compiled = compile_expr(&expr, &NativeSeedEnvironment::empty())
+            .expect("a missing constructor selects its frame-owned default");
+        assert_eq!(
+            compiled.run(None).expect("default trap is observable").0,
+            RuntimeObservation::Trapped(default)
+        );
+    }
+
+    #[test]
+    fn constructor_field_aggregate_unconsumed_sibling_stays_ordinary() {
+        let prefix = RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Prefix::Keep".to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(41))],
+        };
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                args: vec![prefix, constructor_field_aggregate()],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: 2,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: "ctor:fixture::Prefix::Keep".to_string(),
+                        binders: 1,
+                        body: RuntimeExpr::Var(0),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p prefix default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p outer default".to_string(),
+            },
+        };
+        emit_process_entrypoint_object_with_cranelift(
+            &expr,
+            "ken_px7p_aggregate_unconsumed_sibling",
+        )
+        .expect("an unconsumed aggregate-looking field retains ordinary lowering");
+    }
+
+    #[test]
+    fn constructor_field_host_result_stays_on_ordinary_dynamic_match() {
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                args: vec![console_write_effect()],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Envelope::Wrap".to_string(),
+                argument_binders: 1,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+                        .into_iter()
+                        .map(|constructor| RuntimeMatchCase {
+                            constructor: constructor.to_string(),
+                            binders: 1,
+                            body: RuntimeExpr::Construct {
+                                constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                                args: Vec::new(),
+                            },
+                        })
+                        .collect(),
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "px7p HostResult default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "px7p outer default".to_string(),
+            },
+        };
+        emit_process_entrypoint_object_with_cranelift(
+            &expr,
+            "ken_px7p_constructor_field_host_result",
+        )
+        .expect("HostResult fields remain owned by ordinary dynamic matching");
+    }
+
     fn host_result_closure_match(argument: RuntimeExpr) -> RuntimeExpr {
         let exit_success = || RuntimeExpr::Construct {
             constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
@@ -4815,6 +5970,324 @@ mod tests {
                 RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec())),
             ],
         }
+    }
+
+    fn fs_read_effect() -> RuntimeExpr {
+        RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::FsReadFile,
+            capability: Some(crate::RuntimeCapabilityUse {
+                identity: "program_caps.fs".to_string(),
+                value: Box::new(RuntimeExpr::Var(1)),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bytes(
+                b"dynamic-constructor.bin".to_vec(),
+            ))],
+        }
+    }
+
+    fn dynamic_io_error_match(producer: bool, ordinary_bool: bool) -> RuntimeExpr {
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        let tree = "ctor:fixture::DynamicConstructorTree::Code";
+        let producer_tree = |code: RuntimeExpr| RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleIsTerminal,
+                capability: None,
+                args: vec![RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                    args: Vec::new(),
+                }],
+            }),
+            cases: ["ctor:prelude::Bool::True", "ctor:prelude::Bool::False"]
+                .into_iter()
+                .map(|constructor| RuntimeMatchCase {
+                    constructor: constructor.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Construct {
+                        constructor: tree.to_string(),
+                        args: vec![code.clone()],
+                    },
+                })
+                .collect(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "dynamic constructor producer default".to_string(),
+            },
+        };
+        let io_cases = symbols
+            .io_errors
+            .iter()
+            .enumerate()
+            .map(|(tag, constructor)| {
+                let binders = usize::from(tag + 1 == symbols.io_errors.len());
+                let code = if binders == 1 {
+                    RuntimeExpr::Var(0)
+                } else {
+                    RuntimeExpr::Value(RuntimeValue::Int(tag as i64 + 1))
+                };
+                RuntimeMatchCase {
+                    constructor: constructor.clone(),
+                    binders,
+                    body: if producer {
+                        producer_tree(code)
+                    } else if ordinary_bool {
+                        RuntimeExpr::Value(RuntimeValue::Bool(tag % 2 == 0))
+                    } else {
+                        RuntimeExpr::Construct {
+                            constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+                            args: vec![code],
+                        }
+                    },
+                }
+            })
+            .collect();
+        let error = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![RuntimeMatchCase {
+                constructor: symbols.file_error.clone(),
+                binders: 3,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(2)),
+                    cases: io_cases,
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "dynamic IOError match default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "dynamic FileError match default".to_string(),
+            },
+        };
+        let result = RuntimeExpr::Match {
+            scrutinee: Box::new(fs_read_effect()),
+            cases: vec![
+                RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: error,
+                },
+                RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: if producer {
+                        RuntimeExpr::Construct {
+                            constructor: tree.to_string(),
+                            args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
+                        }
+                    } else if ordinary_bool {
+                        RuntimeExpr::Value(RuntimeValue::Bool(false))
+                    } else {
+                        RuntimeExpr::Construct {
+                            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                            args: Vec::new(),
+                        }
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "dynamic Result match default".to_string(),
+            },
+        };
+        if producer {
+            RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(result),
+                cases: vec![crate::RuntimeComputationalMatchCase {
+                    constructor: tree.to_string(),
+                    argument_binders: 1,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+                        args: vec![RuntimeExpr::Var(0)],
+                    },
+                }],
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::ExplicitTrap,
+                    message: "dynamic producer consumer default".to_string(),
+                },
+            }
+        } else if ordinary_bool {
+            RuntimeExpr::Match {
+                scrutinee: Box::new(result),
+                cases: [
+                    ("ctor:prelude::Bool::True", crate::EXIT_SUCCESS_CONSTRUCTOR),
+                    ("ctor:prelude::Bool::False", crate::EXIT_FAILURE_CONSTRUCTOR),
+                ]
+                .into_iter()
+                .map(|(constructor, exit)| RuntimeMatchCase {
+                    constructor: constructor.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Construct {
+                        constructor: exit.to_string(),
+                        args: (exit == crate::EXIT_FAILURE_CONSTRUCTOR)
+                            .then(|| RuntimeExpr::Value(RuntimeValue::Int(1)))
+                            .into_iter()
+                            .collect(),
+                    },
+                })
+                .collect(),
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "dynamic Bool consumer default".to_string(),
+                },
+            }
+        } else {
+            result
+        }
+    }
+
+    #[test]
+    fn dynamic_constructor_dispatches_ordinary_continuation_with_mixed_arities() {
+        emit_process_entrypoint_object_with_cranelift(
+            &dynamic_io_error_match(false, false),
+            "ken_px7p_dynamic_constructor_ordinary",
+        )
+        .expect("the shared dispatcher lowers ordinary nullary and unary alternatives");
+    }
+
+    #[test]
+    fn dynamic_constructor_dispatches_producer_continuation_with_all_frames() {
+        emit_process_entrypoint_object_with_cranelift(
+            &dynamic_io_error_match(true, false),
+            "ken_px7p_dynamic_constructor_producer",
+        )
+        .expect("the shared dispatcher preserves the active computational frame");
+    }
+
+    #[test]
+    fn dynamic_constructor_ordinary_continuation_preserves_bool_kind() {
+        emit_process_entrypoint_object_with_cranelift(
+            &dynamic_io_error_match(false, true),
+            "ken_px7p_dynamic_constructor_bool",
+        )
+        .expect("a dynamic Bool remains available to its enclosing Bool consumer");
+    }
+
+    #[test]
+    fn dynamic_constructor_duplicate_tag_and_identity_reject_exactly() {
+        let duplicate_tag = validate_dynamic_constructor_alternatives([
+            (0, "ctor:fixture::Dynamic::A"),
+            (0, "ctor:fixture::Dynamic::B"),
+        ])
+        .expect_err("closed alternatives require unique tags");
+        assert!(matches!(
+            duplicate_tag,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "DynamicConstructor",
+                reason,
+            }) if reason == "duplicate alternative tag 0"
+        ));
+
+        let duplicate_identity = validate_dynamic_constructor_alternatives([
+            (0, "ctor:fixture::Dynamic::A"),
+            (1, "ctor:fixture::Dynamic::A"),
+        ])
+        .expect_err("closed alternatives require unique constructor identities");
+        assert!(matches!(
+            duplicate_identity,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "DynamicConstructor",
+                reason,
+            }) if reason == "duplicate alternative constructor ctor:fixture::Dynamic::A"
+        ));
+    }
+
+    #[test]
+    fn dynamic_constructor_fields_precede_outer_environment_in_declaration_order() {
+        let alternative = DynamicConstructorAlternativeV1 {
+            tag: 7,
+            constructor: "ctor:fixture::Dynamic::Pair".to_string(),
+            fields: vec![
+                Lowered::Bytes(b"first".to_vec()),
+                Lowered::String("second".to_string()),
+            ],
+        };
+        let env =
+            materialize_dynamic_constructor_env(&alternative, &[Lowered::Bytes(b"outer".to_vec())]);
+        assert!(matches!(&env[0], Lowered::Bytes(value) if value == b"first"));
+        assert!(matches!(&env[1], Lowered::String(value) if value == "second"));
+        assert!(matches!(&env[2], Lowered::Bytes(value) if value == b"outer"));
+    }
+
+    #[test]
+    fn dynamic_constructor_known_omission_owns_source_default() {
+        let alternative = DynamicConstructorAlternativeV1 {
+            tag: 0,
+            constructor: "ctor:fixture::Dynamic::Missing".to_string(),
+            fields: Vec::new(),
+        };
+        let owned = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "exact source match default".to_string(),
+        };
+        let unrelated = RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "unrelated outer default".to_string(),
+        };
+        let selected = select_dynamic_constructor_case(&[], &alternative, &owned)
+            .expect("a well-formed omission selects the source default")
+            .expect_err("the constructor is intentionally omitted");
+        assert_eq!(selected, &owned);
+        assert_ne!(selected, &unrelated);
+    }
+
+    #[test]
+    fn dynamic_constructor_all_known_omitted_runs_source_default_without_panic() {
+        assert_eq!(
+            run_dynamic_constructor_dispatch_fixture(0, &[])
+                .expect("all-omitted dispatcher executes"),
+            -4
+        );
+        assert_eq!(
+            run_dynamic_constructor_dispatch_fixture(1, &[])
+                .expect("every known alternative owns the source default"),
+            -4
+        );
+    }
+
+    #[test]
+    fn dynamic_constructor_mixed_present_and_omitted_keeps_default_distinct() {
+        assert_eq!(
+            run_dynamic_constructor_dispatch_fixture(0, &[1])
+                .expect("known omitted tag executes the source default"),
+            -4
+        );
+        assert_eq!(
+            run_dynamic_constructor_dispatch_fixture(1, &[1])
+                .expect("present unary alternative executes its selected case"),
+            41
+        );
+    }
+
+    #[test]
+    fn dynamic_constructor_unknown_tag_runs_malformed_not_source_default() {
+        let malformed = run_dynamic_constructor_dispatch_fixture(2, &[])
+            .expect("unknown-tag dispatcher executes");
+        assert_eq!(malformed, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
+        assert_eq!(malformed, -3);
+        assert_ne!(malformed, -4);
+    }
+
+    #[test]
+    fn dynamic_constructor_binder_arity_rejects_exactly() {
+        let mut symbols = crate::NativeProcessSymbols::legacy_prelude();
+        symbols.io_errors.rotate_right(1);
+        let err = emit_process_entrypoint_object_with_symbols(
+            &dynamic_io_error_match(false, false),
+            &symbols,
+            "ken_px7p_dynamic_constructor_arity",
+        )
+        .expect_err("constructor identity, not table position, owns binder arity");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "DynamicConstructor",
+                reason,
+            }) if reason == "case ctor:prelude::IOError::Other expects 1 binders but alternative has 0 fields"
+        ));
     }
 
     #[test]
@@ -5160,7 +6633,8 @@ mod tests {
                 cases: &first_cases,
                 default: &first_default,
                 env: &[],
-                retain_scrutinee: false,
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
             "ctor:fixture::Inner::Missing",
         )
@@ -5189,7 +6663,8 @@ mod tests {
                 cases: &later_cases,
                 default: &later_default,
                 env: &[],
-                retain_scrutinee: false,
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
             "ctor:fixture::Outer::Missing",
         )
@@ -5275,11 +6750,15 @@ mod tests {
                 cases: &inner_cases,
                 default: &inner_default,
                 env: &[],
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
             ComputationalEliminatorFrame {
                 cases: &outer_cases,
                 default: &outer_default,
                 env: &[],
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
         ];
 
@@ -5320,11 +6799,15 @@ mod tests {
                 cases: &inner_cases,
                 default: &inner_default,
                 env: &[],
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
             ComputationalEliminatorFrame {
                 cases: &outer_cases,
                 default: &outer_default,
                 env: &[],
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
             },
         ];
 
