@@ -116,9 +116,12 @@ hand-authored assertion one parameter right).
    case exactly once as a set; no catch-all or whole-family widening.
 5. **Binding mutation** — an inventory from another target or semantic identity, or
    an omitted/added node, rejects before hash.
-6. **Compatibility** — a no-headroom B1 fixture and the PX7 no-resource fixture
-   retain bytes/hash; a headroom fixture changes only because its former orphan
-   alphabet member disappears.
+6. **Compatibility** — an export whose old wire alphabet already contained the
+   exact operation signatures retains bytes/hash; a headroom fixture changes only
+   because its former orphan alphabet member disappears. The PX7 no-resource
+   fixture's legacy `{Console}` alphabet plus unconstrained `ordinary-event` atom
+   was not I3-authoritative: it migrates to `{ConsoleFlush}` / `ConsoleFlush` and
+   the corrected frozen hash `ken-export-v0:6360c2cb74f78f7e`.
 7. **Consumer closure** — B2 T symbols and B3 trace events remain subsets/images of
    the corrected B1 Σ, with no second alphabet.
 
@@ -131,8 +134,11 @@ hand-authored assertion one parameter right).
   (reaching, non-vacuous — the declared-headroom and generality negatives are the
   load-bearing I3 controls).
 - **AC3** — hash migration is correct: headroom exports change (orphan member
-  drops), exact-match exports (incl. the PX7 no-resource fixture) preserve bytes.
-  B2/B3 frozen hashes reconciled; no second alphabet mechanism.
+  drops), and exports whose prior wire alphabet already equals the exact operation
+  signatures preserve bytes. The PX7 no-resource legacy family/unconstrained-event
+  fixture is explicitly reconciled to `ConsoleFlush` and
+  `ken-export-v0:6360c2cb74f78f7e`; B2/B3 frozen hashes are reconciled and no
+  second alphabet mechanism exists.
 - **AC4** — no dummy perform, no I3 weakening, no `visits`-made-exact; Q/P/T/G not
   redesigned; `ρ_inf ⊆ ρ_decl` admission law intact.
 - **AC5** — green in **CI** (never a local `--workspace` run); the B1/B2/B3
