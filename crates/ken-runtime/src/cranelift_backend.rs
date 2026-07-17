@@ -1651,36 +1651,80 @@ fn ordinary_match_continuation<'a>(
 }
 
 fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
+    matches!(
+        expr,
+        RuntimeExpr::Match { .. }
+            | RuntimeExpr::ComputationalMatch { .. }
+            | RuntimeExpr::If { .. }
+            | RuntimeExpr::Call { .. }
+    ) && produces_deforestable_aggregate_with_ih(expr, &BTreeSet::new())
+}
+
+fn shifted_aggregate_ihs(aggregate_ihs: &BTreeSet<usize>, by: usize) -> BTreeSet<usize> {
+    aggregate_ihs.iter().map(|index| index + by).collect()
+}
+
+fn produces_deforestable_aggregate_with_ih(
+    expr: &RuntimeExpr,
+    aggregate_ihs: &BTreeSet<usize>,
+) -> bool {
     match expr {
+        RuntimeExpr::Construct { .. } => true,
+        RuntimeExpr::Let { body, .. } => {
+            produces_deforestable_aggregate_with_ih(body, &shifted_aggregate_ihs(aggregate_ihs, 1))
+        }
         RuntimeExpr::Match { cases, .. } => {
             !cases.is_empty()
-                && cases
-                    .iter()
-                    .all(|case| produces_deforestable_aggregate(&case.body))
+                && cases.iter().all(|case| {
+                    produces_deforestable_aggregate_with_ih(
+                        &case.body,
+                        &shifted_aggregate_ihs(aggregate_ihs, case.binders),
+                    )
+                })
         }
-        RuntimeExpr::ComputationalMatch { .. } => true,
+        RuntimeExpr::ComputationalMatch { cases, .. } => {
+            !cases.is_empty()
+                && cases.iter().all(|case| {
+                    let mut case_ihs = (0..case.recursive_positions.len()).collect::<BTreeSet<_>>();
+                    case_ihs.extend(aggregate_ihs.iter().map(|index| {
+                        index + case.recursive_positions.len() + case.argument_binders
+                    }));
+                    produces_deforestable_aggregate_with_ih(&case.body, &case_ihs)
+                })
+        }
         RuntimeExpr::If {
             then_expr,
             else_expr,
             ..
         } => {
-            produces_deforestable_aggregate(then_expr) && produces_deforestable_aggregate(else_expr)
+            produces_deforestable_aggregate_with_ih(then_expr, aggregate_ihs)
+                && produces_deforestable_aggregate_with_ih(else_expr, aggregate_ihs)
         }
-        RuntimeExpr::Call { callee, .. } => match callee.as_ref() {
-            RuntimeExpr::Closure { body, .. } | RuntimeExpr::LexicalClosure { body, .. } => {
-                produces_deforestable_aggregate(body)
+        RuntimeExpr::Call { callee, .. } => {
+            if let RuntimeExpr::Var(index) = callee.as_ref() {
+                return usize::try_from(*index).is_ok_and(|index| aggregate_ihs.contains(&index));
             }
-            _ => false,
-        },
+            match callee.as_ref() {
+                RuntimeExpr::Closure {
+                    captures,
+                    params,
+                    body,
+                } => produces_deforestable_aggregate_with_ih(
+                    body,
+                    &shifted_aggregate_ihs(aggregate_ihs, params.len() + captures.len()),
+                ),
+                RuntimeExpr::LexicalClosure {
+                    captures,
+                    params,
+                    body,
+                } => produces_deforestable_aggregate_with_ih(
+                    body,
+                    &shifted_aggregate_ihs(aggregate_ihs, params.len() + captures.len()),
+                ),
+                _ => false,
+            }
+        }
         _ => false,
-    }
-}
-
-fn produces_deforestable_aggregate(expr: &RuntimeExpr) -> bool {
-    match expr {
-        RuntimeExpr::Construct { .. } => true,
-        RuntimeExpr::Let { body, .. } => produces_deforestable_aggregate(body),
-        _ => requires_heterogeneous_deforestation(expr),
     }
 }
 
@@ -4781,6 +4825,56 @@ mod tests {
             "ken_px7o_match_selected_call_returned_host_result",
         )
         .expect("match-selected HostResult remains owned by ordinary dynamic matching");
+    }
+
+    #[test]
+    fn recursive_computational_host_result_keeps_established_dynamic_lane() {
+        let node = "ctor:fixture::RecursiveTree::Node";
+        let leaf = "ctor:fixture::RecursiveTree::Leaf";
+        let recursive_child = RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["unit".to_string()],
+            body: Box::new(RuntimeExpr::Construct {
+                constructor: leaf.to_string(),
+                args: Vec::new(),
+            }),
+        };
+        let recursive_host_result = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: node.to_string(),
+                args: vec![recursive_child],
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: node.to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::Var(0)),
+                        args: vec![RuntimeExpr::Construct {
+                            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                            args: Vec::new(),
+                        }],
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: leaf.to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: console_write_effect(),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "recursive tree default".to_string(),
+            },
+        };
+
+        emit_process_entrypoint_object_with_cranelift(
+            &host_result_closure_match(recursive_host_result),
+            "ken_px7o_recursive_computational_host_result",
+        )
+        .expect("recursive computational HostResult remains on ordinary dynamic matching");
     }
 
     #[test]
