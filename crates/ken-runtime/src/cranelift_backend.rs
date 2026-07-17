@@ -553,6 +553,45 @@ pub(crate) fn emit_process_entrypoint_object_with_cranelift(
     })
 }
 
+#[cfg(test)]
+fn emit_process_entrypoint_object_with_symbols(
+    entrypoint: &RuntimeExpr,
+    symbols: &crate::NativeProcessSymbols,
+    entry_symbol: &str,
+) -> Result<CraneliftObjectArtifact, CraneliftBackendError> {
+    let compiled = compile_expr_into_module(
+        new_object_module("ken-runtime-process-entrypoint")?,
+        entry_symbol,
+        Linkage::Export,
+        entrypoint,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(symbols),
+    )?;
+    let verifier_passed = compiled.verifier_passed;
+    let assumptions = compiled.assumptions.clone();
+    let unsupported = compiled.unsupported.clone();
+    let object_bytes = compiled
+        .module
+        .finish()
+        .emit()
+        .map_err(|err| backend_module(err.to_string()))?;
+    let object_hash = fnv1a_64(&object_bytes);
+    Ok(CraneliftObjectArtifact {
+        example: "native-process-entrypoint".to_string(),
+        entry_symbol: entry_symbol.to_string(),
+        object_bytes,
+        object_hash,
+        platform_target: native_platform_target_name(),
+        backend_name: "Cranelift process object".to_string(),
+        verifier_passed,
+        assumptions,
+        unsupported,
+    })
+}
+
 pub(crate) fn emit_bound_process_program_object_with_cranelift(
     program: &RuntimeProgram,
     entrypoint: &RuntimeExpr,
@@ -1497,11 +1536,7 @@ enum Lowered {
         err_constructor: String,
         ok_constructor: String,
     },
-    DynamicNullaryConstructor {
-        tag: cranelift_codegen::ir::Value,
-        payload: Option<cranelift_codegen::ir::Value>,
-        constructors: Vec<String>,
-    },
+    DynamicConstructor(DynamicConstructorV1),
     Bytes(Vec<u8>),
     BorrowedNativeValue {
         pointer: cranelift_codegen::ir::Value,
@@ -1532,6 +1567,94 @@ enum Lowered {
         outer_env: Vec<Lowered>,
     },
     Trap(RuntimeTrap),
+}
+
+#[derive(Clone)]
+struct DynamicConstructorV1 {
+    discriminator: cranelift_codegen::ir::Value,
+    alternatives: Vec<DynamicConstructorAlternativeV1>,
+}
+
+#[derive(Clone)]
+struct DynamicConstructorAlternativeV1 {
+    tag: i64,
+    constructor: RuntimeSymbol,
+    fields: Vec<Lowered>,
+}
+
+const MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS: i64 = -3;
+
+fn validate_dynamic_constructor_alternatives<'a>(
+    alternatives: impl IntoIterator<Item = (i64, &'a str)>,
+) -> Result<(), CraneliftBackendError> {
+    let mut tags = BTreeSet::new();
+    let mut constructors = BTreeSet::new();
+    let mut count = 0;
+    for (tag, constructor) in alternatives {
+        count += 1;
+        if !tags.insert(tag) {
+            return Err(unsupported(
+                "DynamicConstructor",
+                format!("duplicate alternative tag {tag}"),
+            ));
+        }
+        if !constructors.insert(constructor) {
+            return Err(unsupported(
+                "DynamicConstructor",
+                format!("duplicate alternative constructor {constructor}"),
+            ));
+        }
+    }
+    if count == 0 {
+        return Err(unsupported(
+            "DynamicConstructor",
+            "closed alternative table is empty",
+        ));
+    }
+    Ok(())
+}
+
+fn select_dynamic_constructor_case<'a>(
+    cases: &'a [crate::RuntimeMatchCase],
+    alternative: &DynamicConstructorAlternativeV1,
+    default: &'a RuntimeTrap,
+) -> Result<Result<&'a crate::RuntimeMatchCase, &'a RuntimeTrap>, CraneliftBackendError> {
+    let mut selected = cases
+        .iter()
+        .filter(|case| case.constructor == alternative.constructor);
+    let Some(case) = selected.next() else {
+        return Ok(Err(default));
+    };
+    if selected.next().is_some() {
+        return Err(unsupported(
+            "DynamicConstructor",
+            format!(
+                "source match duplicates constructor {}",
+                alternative.constructor
+            ),
+        ));
+    }
+    if case.binders != alternative.fields.len() {
+        return Err(unsupported(
+            "DynamicConstructor",
+            format!(
+                "case {} expects {} binders but alternative has {} fields",
+                case.constructor,
+                case.binders,
+                alternative.fields.len()
+            ),
+        ));
+    }
+    Ok(Ok(case))
+}
+
+fn materialize_dynamic_constructor_env(
+    alternative: &DynamicConstructorAlternativeV1,
+    env: &[Lowered],
+) -> Vec<Lowered> {
+    let mut arm_env = alternative.fields.clone();
+    arm_env.extend_from_slice(env);
+    arm_env
 }
 
 fn console_stream_tag(value: &Lowered) -> Option<i64> {
@@ -1633,6 +1756,21 @@ struct OrdinaryEliminatorFrame<'a> {
 enum EliminatorFrame<'a> {
     Computational(ComputationalEliminatorFrame<'a>),
     Ordinary(OrdinaryEliminatorFrame<'a>),
+}
+
+#[derive(Clone, Copy)]
+enum DynamicConstructorContinuation<'a> {
+    Ordinary {
+        cases: &'a [crate::RuntimeMatchCase],
+        default: &'a RuntimeTrap,
+        env: &'a [Lowered],
+    },
+    Producer {
+        cases: &'a [crate::RuntimeMatchCase],
+        default: &'a RuntimeTrap,
+        env: &'a [Lowered],
+        eliminators: &'a [EliminatorFrame<'a>],
+    },
 }
 
 struct DeferredConstructorCaseEnvironment<'a> {
@@ -2205,6 +2343,18 @@ impl<'a> Lowering<'a> {
                         Lowered::Int { value, known: None }
                     });
                 }
+                if let Lowered::DynamicConstructor(dynamic) = selected {
+                    return self.lower_dynamic_constructor_match(
+                        builder,
+                        dynamic,
+                        DynamicConstructorContinuation::Producer {
+                            cases: producer_cases,
+                            default: producer_default,
+                            env: producer_env,
+                            eliminators,
+                        },
+                    );
+                }
                 let Lowered::Constructor { constructor, args } = selected else {
                     return Err(unsupported(
                         "ComputationalMatch",
@@ -2716,20 +2866,15 @@ impl<'a> Lowering<'a> {
                         env,
                     );
                 }
-                if let Lowered::DynamicNullaryConstructor {
-                    tag,
-                    payload,
-                    constructors,
-                } =
-                    lowered_scrutinee
-                {
-                    return self.lower_dynamic_nullary_match(
+                if let Lowered::DynamicConstructor(dynamic) = lowered_scrutinee {
+                    return self.lower_dynamic_constructor_match(
                         builder,
-                        tag,
-                        payload,
-                        &constructors,
-                        cases,
-                        env,
+                        dynamic,
+                        DynamicConstructorContinuation::Ordinary {
+                            cases,
+                            default,
+                            env,
+                        },
                     );
                 }
                 if let Lowered::Bool { value, known } = lowered_scrutinee {
@@ -3194,11 +3339,29 @@ impl<'a> Lowering<'a> {
                 _ => wire.reply_unit_tag,
             } as i64;
             Self::require_one_of_i64(builder, tag, &[success_tag, wire.reply_error_tag as i64]);
-            let io_error = Lowered::DynamicNullaryConstructor {
-                tag: builder.ins().band_imm(detail, 0xff),
-                payload: Some(builder.ins().sshr_imm(detail, 32)),
-                constructors: self.process_symbols.io_errors.clone(),
-            };
+            let payload = builder.ins().sshr_imm(detail, 32);
+            let last = self.process_symbols.io_errors.len().saturating_sub(1);
+            let io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
+                discriminator: builder.ins().band_imm(detail, 0xff),
+                alternatives: self
+                    .process_symbols
+                    .io_errors
+                    .iter()
+                    .enumerate()
+                    .map(|(tag, constructor)| DynamicConstructorAlternativeV1 {
+                        tag: tag as i64,
+                        constructor: constructor.clone(),
+                        fields: (tag == last)
+                            .then(|| {
+                                vec![Lowered::Int {
+                                    value: payload,
+                                    known: None,
+                                }]
+                            })
+                            .unwrap_or_default(),
+                    })
+                    .collect(),
+            });
             let error = if matches!(
                 operation,
                 ken_host::HostOpV1::FsReadFile
@@ -3650,22 +3813,26 @@ impl<'a> Lowering<'a> {
         })
     }
 
-    fn lower_dynamic_nullary_match(
+    fn lower_dynamic_constructor_match(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        tag: cranelift_codegen::ir::Value,
-        payload: Option<cranelift_codegen::ir::Value>,
-        constructors: &[String],
-        cases: &[crate::RuntimeMatchCase],
-        env: &[Lowered],
+        dynamic: DynamicConstructorV1,
+        continuation: DynamicConstructorContinuation<'_>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        validate_dynamic_constructor_alternatives(
+            dynamic
+                .alternatives
+                .iter()
+                .map(|alternative| (alternative.tag, alternative.constructor.as_str())),
+        )?;
+
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor match block");
         let mut exit_merge = None;
-        for (index, constructor) in constructors.iter().enumerate() {
+        for alternative in dynamic.alternatives {
             let arm = builder.create_block();
             let next = builder.create_block();
             if builder.current_block() != Some(test_block) {
@@ -3673,40 +3840,70 @@ impl<'a> Lowering<'a> {
             }
             let selected = builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::Equal,
-                tag,
-                index as i64,
+                dynamic.discriminator,
+                alternative.tag,
             );
             builder.ins().brif(selected, arm, &[], next, &[]);
             builder.switch_to_block(arm);
-            let expected_binders =
-                usize::from(index + 1 == constructors.len() && payload.is_some());
-            let Some(case) = cases
-                .iter()
-                .find(|case| case.constructor == *constructor && case.binders == expected_binders)
-            else {
-                let failure = builder.ins().iconst(types::I64, -1);
-                builder.ins().return_(&[failure]);
-                test_block = next;
-                continue;
+            let (cases, default, env) = match continuation {
+                DynamicConstructorContinuation::Ordinary {
+                    cases,
+                    default,
+                    env,
+                }
+                | DynamicConstructorContinuation::Producer {
+                    cases,
+                    default,
+                    env,
+                    ..
+                } => (cases, default, env),
             };
-            let mut arm_env = if expected_binders == 1 {
-                vec![Lowered::Int {
-                    value: payload.expect("one-binder dynamic constructor has a payload"),
-                    known: None,
-                }]
-            } else {
-                Vec::new()
+            let case = match select_dynamic_constructor_case(cases, &alternative, default)? {
+                Ok(case) => case,
+                Err(_owned_default) => {
+                    let failure = builder.ins().iconst(types::I64, -4);
+                    builder.ins().return_(&[failure]);
+                    test_block = next;
+                    continue;
+                }
             };
-            arm_env.extend_from_slice(env);
-            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
-            let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
-            Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
+            let arm_env = materialize_dynamic_constructor_env(&alternative, env);
+            let lowered = match continuation {
+                DynamicConstructorContinuation::Ordinary { .. } => {
+                    self.lower_expr(builder, &case.body, &arm_env)?
+                }
+                DynamicConstructorContinuation::Producer { eliminators, .. } => self
+                    .lower_computational_producer_expr(
+                        builder,
+                        &case.body,
+                        &arm_env,
+                        eliminators,
+                    )?,
+            };
+            let (value, is_exit) = self.merge_branch_value(
+                builder,
+                lowered,
+                match continuation {
+                    DynamicConstructorContinuation::Ordinary { .. } => "Match",
+                    DynamicConstructorContinuation::Producer { .. } => "ComputationalMatch",
+                },
+            )?;
+            Self::record_merge_kind(
+                match continuation {
+                    DynamicConstructorContinuation::Ordinary { .. } => "Match",
+                    DynamicConstructorContinuation::Producer { .. } => "ComputationalMatch",
+                },
+                &mut exit_merge,
+                is_exit,
+            )?;
             builder.ins().jump(merge, &[value.into()]);
             test_block = next;
         }
         builder.switch_to_block(test_block);
-        let failure = builder.ins().iconst(types::I64, -1);
-        builder.ins().return_(&[failure]);
+        let malformed = builder
+            .ins()
+            .iconst(types::I64, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
+        builder.ins().return_(&[malformed]);
         builder.switch_to_block(merge);
         let value = builder.block_params(merge)[0];
         Ok(if exit_merge == Some(true) {
@@ -4554,7 +4751,7 @@ impl<'a> Lowering<'a> {
             | Lowered::CapabilityToken { .. }
             | Lowered::ResourceToken { .. }
             | Lowered::HostResult { .. }
-            | Lowered::DynamicNullaryConstructor { .. } => Err(unsupported(
+            | Lowered::DynamicConstructor(_) => Err(unsupported(
                 "Result",
                 "borrowed ingress values cannot escape the native call",
             )),
@@ -5581,6 +5778,232 @@ mod tests {
                 RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec())),
             ],
         }
+    }
+
+    fn fs_read_effect() -> RuntimeExpr {
+        RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::FsReadFile,
+            capability: Some(crate::RuntimeCapabilityUse {
+                identity: "program_caps.fs".to_string(),
+                value: Box::new(RuntimeExpr::Var(1)),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bytes(
+                b"dynamic-constructor.bin".to_vec(),
+            ))],
+        }
+    }
+
+    fn dynamic_io_error_match(producer: bool) -> RuntimeExpr {
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        let tree = "ctor:fixture::DynamicConstructorTree::Code";
+        let io_cases = symbols
+            .io_errors
+            .iter()
+            .enumerate()
+            .map(|(tag, constructor)| {
+                let binders = usize::from(tag + 1 == symbols.io_errors.len());
+                let code = if binders == 1 {
+                    RuntimeExpr::Var(0)
+                } else {
+                    RuntimeExpr::Value(RuntimeValue::Int(tag as i64 + 1))
+                };
+                RuntimeMatchCase {
+                    constructor: constructor.clone(),
+                    binders,
+                    body: if producer {
+                        RuntimeExpr::Construct {
+                            constructor: tree.to_string(),
+                            args: vec![code],
+                        }
+                    } else {
+                        RuntimeExpr::Construct {
+                            constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+                            args: vec![code],
+                        }
+                    },
+                }
+            })
+            .collect();
+        let error = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![RuntimeMatchCase {
+                constructor: symbols.file_error.clone(),
+                binders: 3,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(2)),
+                    cases: io_cases,
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "dynamic IOError match default".to_string(),
+                    },
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "dynamic FileError match default".to_string(),
+            },
+        };
+        let result = RuntimeExpr::Match {
+            scrutinee: Box::new(fs_read_effect()),
+            cases: vec![
+                RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: error,
+                },
+                RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: if producer {
+                        RuntimeExpr::Construct {
+                            constructor: tree.to_string(),
+                            args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
+                        }
+                    } else {
+                        RuntimeExpr::Construct {
+                            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                            args: Vec::new(),
+                        }
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "dynamic Result match default".to_string(),
+            },
+        };
+        if producer {
+            RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(result),
+                cases: vec![crate::RuntimeComputationalMatchCase {
+                    constructor: tree.to_string(),
+                    argument_binders: 1,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+                        args: vec![RuntimeExpr::Var(0)],
+                    },
+                }],
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::ExplicitTrap,
+                    message: "dynamic producer consumer default".to_string(),
+                },
+            }
+        } else {
+            result
+        }
+    }
+
+    #[test]
+    fn dynamic_constructor_dispatches_ordinary_continuation_with_mixed_arities() {
+        emit_process_entrypoint_object_with_cranelift(
+            &dynamic_io_error_match(false),
+            "ken_px7p_dynamic_constructor_ordinary",
+        )
+        .expect("the shared dispatcher lowers ordinary nullary and unary alternatives");
+    }
+
+    #[test]
+    fn dynamic_constructor_dispatches_producer_continuation_with_all_frames() {
+        emit_process_entrypoint_object_with_cranelift(
+            &dynamic_io_error_match(true),
+            "ken_px7p_dynamic_constructor_producer",
+        )
+        .expect("the shared dispatcher preserves the active computational frame");
+    }
+
+    #[test]
+    fn dynamic_constructor_duplicate_tag_and_identity_reject_exactly() {
+        let duplicate_tag = validate_dynamic_constructor_alternatives([
+            (0, "ctor:fixture::Dynamic::A"),
+            (0, "ctor:fixture::Dynamic::B"),
+        ])
+        .expect_err("closed alternatives require unique tags");
+        assert!(matches!(
+            duplicate_tag,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "DynamicConstructor",
+                reason,
+            }) if reason == "duplicate alternative tag 0"
+        ));
+
+        let duplicate_identity = validate_dynamic_constructor_alternatives([
+            (0, "ctor:fixture::Dynamic::A"),
+            (1, "ctor:fixture::Dynamic::A"),
+        ])
+        .expect_err("closed alternatives require unique constructor identities");
+        assert!(matches!(
+            duplicate_identity,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "DynamicConstructor",
+                reason,
+            }) if reason == "duplicate alternative constructor ctor:fixture::Dynamic::A"
+        ));
+    }
+
+    #[test]
+    fn dynamic_constructor_fields_precede_outer_environment_in_declaration_order() {
+        let alternative = DynamicConstructorAlternativeV1 {
+            tag: 7,
+            constructor: "ctor:fixture::Dynamic::Pair".to_string(),
+            fields: vec![
+                Lowered::Bytes(b"first".to_vec()),
+                Lowered::String("second".to_string()),
+            ],
+        };
+        let env =
+            materialize_dynamic_constructor_env(&alternative, &[Lowered::Bytes(b"outer".to_vec())]);
+        assert!(matches!(&env[0], Lowered::Bytes(value) if value == b"first"));
+        assert!(matches!(&env[1], Lowered::String(value) if value == "second"));
+        assert!(matches!(&env[2], Lowered::Bytes(value) if value == b"outer"));
+    }
+
+    #[test]
+    fn dynamic_constructor_known_omission_owns_source_default() {
+        let alternative = DynamicConstructorAlternativeV1 {
+            tag: 0,
+            constructor: "ctor:fixture::Dynamic::Missing".to_string(),
+            fields: Vec::new(),
+        };
+        let owned = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "exact source match default".to_string(),
+        };
+        let unrelated = RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "unrelated outer default".to_string(),
+        };
+        let selected = select_dynamic_constructor_case(&[], &alternative, &owned)
+            .expect("a well-formed omission selects the source default")
+            .expect_err("the constructor is intentionally omitted");
+        assert_eq!(selected, &owned);
+        assert_ne!(selected, &unrelated);
+    }
+
+    #[test]
+    fn dynamic_constructor_unknown_tag_has_malformed_status_not_match_default() {
+        assert_eq!(MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS, -3);
+        assert_ne!(MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS, -4);
+    }
+
+    #[test]
+    fn dynamic_constructor_binder_arity_rejects_exactly() {
+        let mut symbols = crate::NativeProcessSymbols::legacy_prelude();
+        symbols.io_errors.rotate_right(1);
+        let err = emit_process_entrypoint_object_with_symbols(
+            &dynamic_io_error_match(false),
+            &symbols,
+            "ken_px7p_dynamic_constructor_arity",
+        )
+        .expect_err("constructor identity, not table position, owns binder arity");
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "DynamicConstructor",
+                reason,
+            }) if reason == "case ctor:prelude::IOError::Other expects 1 binders but alternative has 0 fields"
+        ));
     }
 
     #[test]

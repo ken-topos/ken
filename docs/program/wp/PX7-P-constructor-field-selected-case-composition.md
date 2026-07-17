@@ -30,6 +30,70 @@
   **explicitly deferred until the public linked-artifact pair is green on the
   landed PX7-P** (do not mark them satisfied before).
 
+## Same-WP amendment — closed dynamic-constructor producer seam
+
+The Architect's follow-up ruling (`evt_6qk7606adaf8x`) and the Steward's scope
+call (`evt_4c4chdwekpfwp`) retain the constructor-field bridge below and extend
+this same WP with the resource-independent producer seam that bridge exposed.
+This is not a new prerequisite and carries no PX7-F or Resource vocabulary.
+
+Ordinary lowering already owns closed dynamic-sum matchers, but computational
+producer lowering recognized only separately hard-coded dynamic carriers. PX7-P
+therefore generalizes the landed nullary dynamic-constructor lane to this closed
+carrier:
+
+```rust
+DynamicConstructorV1 {
+    discriminator: Value,
+    alternatives: Vec<DynamicConstructorAlternativeV1>,
+}
+
+DynamicConstructorAlternativeV1 {
+    tag: i64,
+    constructor: CanonicalIdentity,
+    fields: Vec<Lowered>,
+}
+```
+
+One shared selected-case dispatcher consumes that carrier in two modes:
+
+- ordinary mode lowers the selected source case with `lower_expr`;
+- producer mode lowers it with `lower_computational_producer_expr` under every
+  active ordered eliminator frame.
+
+Both modes share tag selection, exact constructor lookup, binder-arity
+validation, declaration-order field/environment materialization, source-match
+default ownership, and branch-value merging. `HostResult` may retain its
+existing specialized lane.
+
+The amended fail-closed bounds are binding:
+
+1. Alternatives have unique tags and canonical constructor identities.
+2. Fields are installed in declaration order and dominate the selected branch.
+3. A known alternative omitted by the source match takes that match's own
+   default.
+4. A discriminator outside the closed alternative table is malformed
+   runtime/ABI input, not a silently selected case.
+5. Binder arity is exact.
+6. Producer mode preserves every active eliminator frame and never lowers the
+   intermediate aggregate to `ProcessExitStatus`.
+7. Ordinary `Match` remains unable to consume `ProcessExitStatus`.
+8. PX7-P production and committed proof remain free of Resource/PX7-F names.
+
+The committed proof uses non-resource constructors of differing arities in both
+continuation modes and covers middle-field/trailing-environment order,
+recursive-IH offsets, missing/default, unknown tag, duplicate tag and identity,
+arity/binder, unconsumed/scalar fields, and established `HostResult`
+compatibility. PX7-L/M/N/O remain green.
+
+The former requirement to commit both real PX7-F fixtures as PX7-P proof is
+replaced by an evidence-only pre-review overlay. That overlay may add the
+minimal five-constructor PX7-F adapter, must make both exact held
+`px7f_resource_native` fixtures green, and must reproduce the current failure
+when producer continuation is mutated back to ordinary-only. The adapter is not
+PX7-P content; PX7-F owns its reply/tag/schema validation and the translation
+from decoded resource reply into this generic carrier.
+
 ## Why this exists (the boundary, Architect-ruled `evt_5v45spvc0ec3w`)
 
 Rebasing PX7-F onto merged PX7-O (`origin/main @ f2d3cf77`) cleared the
@@ -114,19 +178,17 @@ deforestation principle as PX7-L/M/N/O, one producer form further (the
   **must continue to reject `Lowered::ProcessExitStatus`** — no terminal-status
   propagation, no surface computational relabeling, no resource intrinsic, **no
   PX7-F program rewrite.**
-- **AC7 — the proof net.** The **positive proof** is the **immutable reaching
-  minimized pair** PLUS **both real PX7-F linked-artifact fixtures**
-  (`px7f_resource_native`: `linked_public_escape_is_exact_closed` +
-  `linked_public_right_denial_preserves_exact_masks`) going green. **Controls
-  must include:** the ignored twin (stays green, never enters the bridge); an
-  **aggregate-looking constructor field NOT consumed by the selected case**
-  (stays ordinary); a **scalar/`HostResult` field** (stays ordinary); **exact
-  missing-case default ownership**; an **arity/binder-shift mutation** (recreates
-  the exact failure); and **preservation of PX7-L/M/N/O compatibility suites.**
-  A bridge-removal mutation must recreate the exact
-  `Match: scrutinee is not a constructor value` boundary. No-regression = **green
-  in CI** (targeted `-p ken-runtime` / `-p ken-cli --test <name>` locally only;
-  **NEVER `--workspace`**).
+- **AC7 — the amended proof net.** Committed proof covers the generic carrier
+  with non-resource constructors of differing arities in both continuation
+  modes and all eight amended bounds above. It retains the immutable reaching /
+  ignored constructor-field pair, aggregate-unconsumed and scalar/`HostResult`
+  controls, exact default and arity/binder failures, bridge-removal regression,
+  and PX7-L/M/N/O compatibility. Before terminal review, an evidence-only PX7-F
+  overlay supplies the minimal adapter and makes both exact held
+  `px7f_resource_native` fixtures green; an ordinary-only producer-continuation
+  mutation must recreate the current failure. The adapter is never committed to
+  PX7-P. No-regression = **green in CI** (targeted `-p ken-runtime` / `-p ken-cli
+  --test <name>` locally only; **NEVER `--workspace`**).
 
 ## Do-not-reopen guards
 
