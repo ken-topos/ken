@@ -1308,6 +1308,118 @@ fn compile_expr_with_declarations_and_process_input<'a>(
     )
 }
 
+#[cfg(test)]
+fn run_dynamic_constructor_dispatch_fixture(
+    discriminator: i64,
+    selected_tags: &[i64],
+) -> Result<i64, CraneliftBackendError> {
+    let mut module = new_jit_module()?;
+    let mut signature = module.make_signature();
+    signature
+        .params
+        .push(AbiParam::new(module.target_config().pointer_type()));
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function("px7p_dynamic_dispatch", Linkage::Local, &signature)
+        .map_err(|error| backend_module(error.to_string()))?;
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = Lowering {
+        seed_env: &seed_env,
+        declarations: BTreeMap::new(),
+        declaration_stack: Vec::new(),
+        result_table: BTreeMap::new(),
+        next_token: 0,
+        assumptions: BTreeSet::new(),
+        unsupported: Vec::new(),
+        process_object: false,
+        process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
+        host_dispatch: None,
+        invocation_pointer: None,
+    };
+    let mut function_context = FunctionBuilderContext::new();
+    {
+        let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+        let entry = builder.create_block();
+        builder.append_block_params_for_function_params(entry);
+        builder.switch_to_block(entry);
+        let dynamic = DynamicConstructorV1 {
+            discriminator: builder.ins().iconst(types::I64, discriminator),
+            alternatives: vec![
+                DynamicConstructorAlternativeV1 {
+                    tag: 0,
+                    constructor: "ctor:fixture::Dynamic::Zero".to_string(),
+                    fields: Vec::new(),
+                },
+                DynamicConstructorAlternativeV1 {
+                    tag: 1,
+                    constructor: "ctor:fixture::Dynamic::One".to_string(),
+                    fields: vec![Lowered::Int {
+                        value: builder.ins().iconst(types::I64, 7),
+                        known: Some(7),
+                    }],
+                },
+            ],
+        };
+        let cases = [
+            (0, "ctor:fixture::Dynamic::Zero", 0, 40),
+            (1, "ctor:fixture::Dynamic::One", 1, 41),
+        ]
+        .into_iter()
+        .filter(|(tag, ..)| selected_tags.contains(tag))
+        .map(
+            |(_, constructor, binders, result)| crate::RuntimeMatchCase {
+                constructor: constructor.to_string(),
+                binders,
+                body: RuntimeExpr::Value(RuntimeValue::Int(result)),
+            },
+        )
+        .collect::<Vec<_>>();
+        let default = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "px7p exact dynamic source default".to_string(),
+        };
+        let lowered = compiler.lower_dynamic_constructor_match(
+            &mut builder,
+            dynamic,
+            DynamicConstructorContinuation::Ordinary {
+                cases: &cases,
+                default: &default,
+                env: &[],
+            },
+        )?;
+        let value = match lowered {
+            Lowered::Trap(trap) => {
+                assert_eq!(trap, default);
+                builder.ins().iconst(types::I64, -4)
+            }
+            value => compiler.emit_result(&mut builder, value)?.0,
+        };
+        builder.ins().return_(&[value]);
+        builder.seal_all_blocks();
+        builder.finalize();
+    }
+    verify_cranelift_function(&context.func, module.isa())?;
+    module
+        .define_function(func_id, &mut context)
+        .map_err(|error| backend_module(error.to_string()))?;
+    let compiled = CompiledModule {
+        module,
+        func_id,
+        decoder: Some(ResultDecoder::Int),
+        result_table: compiler.result_table,
+        trap: None,
+        verifier_passed: true,
+        assumptions: compiler.assumptions,
+        unsupported: compiler.unsupported,
+    };
+    compiled
+        .run(None)
+        .map(|(_, token)| token.expect("fixture returns one scalar"))
+}
+
 fn compile_program_expr_object(
     program: &RuntimeProgram,
     expr: &RuntimeExpr,
@@ -3889,8 +4001,20 @@ impl<'a> Lowering<'a> {
                 .map(|alternative| (alternative.tag, alternative.constructor.as_str())),
         )?;
 
-        let merge = builder.create_block();
-        builder.append_block_param(merge, types::I64);
+        let (source_cases, source_default) = match continuation {
+            DynamicConstructorContinuation::Ordinary { cases, default, .. }
+            | DynamicConstructorContinuation::Producer { cases, default, .. } => (cases, default),
+        };
+        let has_selected_case = dynamic.alternatives.iter().any(|alternative| {
+            source_cases
+                .iter()
+                .any(|case| case.constructor == alternative.constructor)
+        });
+        let merge = has_selected_case.then(|| {
+            let merge = builder.create_block();
+            builder.append_block_param(merge, types::I64);
+            merge
+        });
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor match block");
@@ -3955,7 +4079,10 @@ impl<'a> Lowering<'a> {
                 Some(_) => {}
                 None => merge_kind = Some(branch_kind),
             }
-            builder.ins().jump(merge, &[value.into()]);
+            builder.ins().jump(
+                merge.expect("a selected dynamic constructor case owns the merge"),
+                &[value.into()],
+            );
             test_block = next;
         }
         builder.switch_to_block(test_block);
@@ -3963,13 +4090,18 @@ impl<'a> Lowering<'a> {
             .ins()
             .iconst(types::I64, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
         builder.ins().return_(&[malformed]);
+        let Some(merge) = merge else {
+            let unreachable_continuation = builder.create_block();
+            builder.switch_to_block(unreachable_continuation);
+            return Ok(Lowered::Trap(source_default.clone()));
+        };
         builder.switch_to_block(merge);
         let value = builder.block_params(merge)[0];
         Ok(match merge_kind {
             Some(ScalarMergeKind::ExitCode) => Lowered::ProcessExitStatus { value },
             Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
             Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
-            None => unreachable!("a nonempty dynamic constructor table emits one arm"),
+            None => unreachable!("a selected dynamic constructor case emits one arm"),
         })
     }
 
@@ -6103,9 +6235,40 @@ mod tests {
     }
 
     #[test]
-    fn dynamic_constructor_unknown_tag_has_malformed_status_not_match_default() {
-        assert_eq!(MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS, -3);
-        assert_ne!(MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS, -4);
+    fn dynamic_constructor_all_known_omitted_runs_source_default_without_panic() {
+        assert_eq!(
+            run_dynamic_constructor_dispatch_fixture(0, &[])
+                .expect("all-omitted dispatcher executes"),
+            -4
+        );
+        assert_eq!(
+            run_dynamic_constructor_dispatch_fixture(1, &[])
+                .expect("every known alternative owns the source default"),
+            -4
+        );
+    }
+
+    #[test]
+    fn dynamic_constructor_mixed_present_and_omitted_keeps_default_distinct() {
+        assert_eq!(
+            run_dynamic_constructor_dispatch_fixture(0, &[1])
+                .expect("known omitted tag executes the source default"),
+            -4
+        );
+        assert_eq!(
+            run_dynamic_constructor_dispatch_fixture(1, &[1])
+                .expect("present unary alternative executes its selected case"),
+            41
+        );
+    }
+
+    #[test]
+    fn dynamic_constructor_unknown_tag_runs_malformed_not_source_default() {
+        let malformed = run_dynamic_constructor_dispatch_fixture(2, &[])
+            .expect("unknown-tag dispatcher executes");
+        assert_eq!(malformed, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
+        assert_eq!(malformed, -3);
+        assert_ne!(malformed, -4);
     }
 
     #[test]

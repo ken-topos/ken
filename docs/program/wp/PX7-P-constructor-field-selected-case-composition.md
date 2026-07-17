@@ -189,9 +189,12 @@ deforestation principle as PX7-L/M/N/O, one producer form further (the
   modes and all eight amended bounds above. It retains the immutable reaching /
   ignored constructor-field pair, aggregate-unconsumed and scalar/`HostResult`
   controls, exact default and arity/binder failures, bridge-removal regression,
-  and PX7-L/M/N/O compatibility. Before terminal review, an evidence-only PX7-F
-  overlay supplies the minimal adapter and makes both exact held
-  `px7f_resource_native` fixtures green. A committed linked-artifact
+  and PX7-L/M/N/O compatibility. Live dispatcher controls cover all known
+  alternatives omitted, mixed present/omitted alternatives, and an unknown
+  discriminator: known omissions take the source match's exact default without
+  panic, while unknown input remains malformed. Before terminal review, an
+  evidence-only PX7-F overlay supplies the minimal adapter and makes both exact
+  held `px7f_resource_native` fixtures green. A committed linked-artifact
   differential consumes a generic-carrier payload under the active frames; an
   ordinary-only producer-continuation mutation must turn that exact test red.
   The adapter is never committed to PX7-P. No-regression = **green in CI**
