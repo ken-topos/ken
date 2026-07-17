@@ -66,6 +66,12 @@ validation, declaration-order field/environment materialization, source-match
 default ownership, and branch-value merging. `HostResult` may retain its
 existing specialized lane.
 
+Branch merging retains the closed scalar kind (`Int`, `Bool`, or `ExitCode`)
+instead of converting an intermediate `Bool` to `ProcessExitStatus`. Canonical
+nullary Bool constructors and primitive-produced Bool values meet at that same
+merge boundary; mixed kinds reject. The specialized `HostResult` lane reuses
+this scalar-kind preservation but is not migrated into the generic carrier.
+
 The amended fail-closed bounds are binding:
 
 1. Alternatives have unique tags and canonical constructor identities.
