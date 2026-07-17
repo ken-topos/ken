@@ -1623,6 +1623,7 @@ struct OrdinaryEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeMatchCase],
     default: &'a RuntimeTrap,
     env: &'a [Lowered],
+    retain_scrutinee: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -1753,6 +1754,7 @@ impl<'a> Lowering<'a> {
                             cases,
                             default,
                             env: &frame_env,
+                            retain_scrutinee: true,
                         }));
                         composed.extend_from_slice(eliminators);
                         return self.lower_computational_producer_expr(
@@ -2071,12 +2073,13 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
-                let retained_scrutinee = Lowered::Constructor {
-                    constructor,
-                    args: args.clone(),
-                };
                 let mut case_env = args;
-                case_env.push(retained_scrutinee);
+                if eliminator.retain_scrutinee {
+                    case_env.push(Lowered::Constructor {
+                        constructor,
+                        args: case_env.clone(),
+                    });
+                }
                 case_env.extend_from_slice(eliminator.env);
                 (&case.body, case_env)
             }
@@ -2205,6 +2208,25 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
             } => {
+                if matches!(
+                    scrutinee.as_ref(),
+                    RuntimeExpr::Match { .. }
+                        | RuntimeExpr::ComputationalMatch { .. }
+                        | RuntimeExpr::If { .. }
+                        | RuntimeExpr::Call { .. }
+                ) {
+                    return self.lower_computational_producer_expr(
+                        builder,
+                        scrutinee,
+                        env,
+                        &[EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
+                            cases,
+                            default,
+                            env,
+                            retain_scrutinee: false,
+                        })],
+                    );
+                }
                 let lowered_scrutinee = self.lower_expr(builder, scrutinee, env)?;
                 if let Lowered::BorrowedNativeValue { pointer } = lowered_scrutinee {
                     return self.lower_borrowed_match(builder, pointer, cases, default, env);
@@ -2421,6 +2443,7 @@ impl<'a> Lowering<'a> {
                                         cases,
                                         default,
                                         env: &frame_env,
+                                        retain_scrutinee: true,
                                     })],
                                 );
                             }
@@ -4839,6 +4862,7 @@ mod tests {
                 cases: &first_cases,
                 default: &first_default,
                 env: &[],
+                retain_scrutinee: false,
             },
             "ctor:fixture::Inner::Missing",
         )
@@ -4867,6 +4891,7 @@ mod tests {
                 cases: &later_cases,
                 default: &later_default,
                 env: &[],
+                retain_scrutinee: false,
             },
             "ctor:fixture::Outer::Missing",
         )

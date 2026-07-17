@@ -24,33 +24,7 @@ proc write_then_exit (bytes : Bytes) (code : ExitCode)
       (host_console APartial (Result IOError Unit) (flush Stdout))
       (\_. host_exit APartial code))
 
-proc produce (as_ok : Bool)
-  : HostIO APartial (Result Unit (Result Bytes Bytes)) visits [Console] =
-  bind (Coproduct (FSOp APartial) AmbientOp)
-    (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-    (Result IOError Unit) (Result Unit (Result Bytes Bytes))
-    (host_console APartial (Result IOError Unit)
-      (write Stdout (bytes_encode "seed:")))
-    (\written. match written {
-      Err _ |-> Ret (Coproduct (FSOp APartial) AmbientOp)
-        (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-        (Result Unit (Result Bytes Bytes))
-        (Err Unit (Result Bytes Bytes) MkUnit);
-      Ok _ |-> match as_ok {
-        False |-> Ret (Coproduct (FSOp APartial) AmbientOp)
-          (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-          (Result Unit (Result Bytes Bytes))
-          (Ok Unit (Result Bytes Bytes)
-            (Err Bytes Bytes (bytes_encode "err-payload")));
-        True |-> Ret (Coproduct (FSOp APartial) AmbientOp)
-          (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-          (Result Unit (Result Bytes Bytes))
-          (Ok Unit (Result Bytes Bytes)
-            (Ok Bytes Bytes (bytes_encode "ok-payload")))
-      }
-    })
-
-proc finish (outer : Result Unit (Result Bytes Bytes))
+proc finish (outer : Result IOError (Result Bytes Bytes))
   : HostIO APartial ExitCode visits [Console] =
   match outer {
     Err _ |-> write_then_exit (bytes_encode "outer-error") (Failure 91);
@@ -60,18 +34,30 @@ proc finish (outer : Result Unit (Result Bytes Bytes))
     }
   }
 
+proc run_case (as_ok : Bool) : HostIO APartial ExitCode visits [Console] =
+  bind (Coproduct (FSOp APartial) AmbientOp)
+    (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
+    (Result IOError Unit) ExitCode
+    (host_console APartial (Result IOError Unit)
+      (write Stdout (bytes_encode "seed:")))
+    (\written. finish (match written {
+      Err io |-> Err IOError (Result Bytes Bytes) io;
+      Ok _ |-> match as_ok {
+        False |-> Ok IOError (Result Bytes Bytes)
+          (Err Bytes Bytes (bytes_encode "err-payload"));
+        True |-> Ok IOError (Result Bytes Bytes)
+          (Ok Bytes Bytes (bytes_encode "ok-payload"))
+      }
+    }))
+
 proc main (input : ProcessInput) (_caps : ProgramCaps APartial)
   : HostIO APartial ExitCode visits [Console] =
   match input {
     MkProcessInput arguments _environment _cwd |-> match arguments {
       Nil |-> host_exit APartial (Failure 99);
       Cons _ tail |-> match tail {
-        Nil |-> bind (Coproduct (FSOp APartial) AmbientOp)
-          (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-          (Result Unit (Result Bytes Bytes)) ExitCode (produce True) finish;
-        Cons _ _ |-> bind (Coproduct (FSOp APartial) AmbientOp)
-          (resp_coproduct (FSOp APartial) AmbientOp (fs_resp APartial) ambient_resp)
-          (Result Unit (Result Bytes Bytes)) ExitCode (produce False) finish
+        Nil |-> run_case True;
+        Cons _ _ |-> run_case False
       }
     }
   }
