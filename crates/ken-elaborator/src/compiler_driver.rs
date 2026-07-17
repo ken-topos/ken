@@ -785,6 +785,13 @@ pub fn compile_native_program_sources(
                     .iter()
                     .map(ToString::to_string)
                     .collect(),
+                resource_host_io: host_spine.resource_host_io.to_string(),
+                resource_closed: host_spine.resource_closed.to_string(),
+                resource_malformed: host_spine.resource_malformed.to_string(),
+                resource_right_not_held: host_spine.resource_right_not_held.to_string(),
+                resource_release_failed: host_spine.resource_release_failed.to_string(),
+                resource_kind_fs_handle: host_spine.resource_kind_fs_handle.to_string(),
+                resource_trace_identity: host_spine.resource_trace_identity.to_string(),
                 unit: host_spine.unit.to_string(),
                 bool_false: host_spine.bool_false.to_string(),
                 bool_true: host_spine.bool_true.to_string(),
@@ -1363,6 +1370,12 @@ fn checked_host_spine_v1(
             .cloned()
             .ok_or(CompilerDriverError::MissingStableSymbol { id })
     };
+    let resolve_id = |id: GlobalId| {
+        symbols
+            .get(&id)
+            .cloned()
+            .ok_or(CompilerDriverError::MissingStableSymbol { id })
+    };
     let mut operations = BTreeMap::new();
     for (name, operation) in [
         ("Read", ken_host::HostOpV1::ConsoleRead),
@@ -1382,6 +1395,22 @@ fn checked_host_spine_v1(
         ("ChangeMode", ken_host::HostOpV1::FsChangeMode),
     ] {
         operations.insert(resolve(name)?, operation);
+    }
+    for (id, operation) in [
+        (
+            env.prelude_env.private_fs_open_id,
+            ken_host::HostOpV1::FsOpen,
+        ),
+        (
+            env.prelude_env.private_fs_handle_metadata_id,
+            ken_host::HostOpV1::FsHandleMetadata,
+        ),
+        (
+            env.prelude_env.private_resource_release_id,
+            ken_host::HostOpV1::ResourceRelease,
+        ),
+    ] {
+        operations.insert(resolve_id(id)?, operation);
     }
     Ok(crate::erasure::CheckedHostSpineV1 {
         ret: resolve("Ret")?,
@@ -1416,6 +1445,13 @@ fn checked_host_spine_v1(
         .into_iter()
         .map(resolve)
         .collect::<Result<Vec<_>, _>>()?,
+        resource_host_io: resolve_id(env.prelude_env.resource_host_io_id)?,
+        resource_closed: resolve_id(env.prelude_env.closed_id)?,
+        resource_malformed: resolve_id(env.prelude_env.malformed_resource_id)?,
+        resource_right_not_held: resolve_id(env.prelude_env.right_not_held_id)?,
+        resource_release_failed: resolve_id(env.prelude_env.release_failed_id)?,
+        resource_kind_fs_handle: resolve_id(env.prelude_env.fs_handle_id)?,
+        resource_trace_identity: resolve_id(env.prelude_env.private_resource_trace_identity_id)?,
         unit: resolve("MkUnit")?,
         bool_false: resolve("False")?,
         bool_true: resolve("True")?,

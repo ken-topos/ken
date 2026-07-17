@@ -155,12 +155,25 @@ pub struct HostEffectWireLayoutV1 {
     pub reply_detail_offset: u32,
     pub reply_bytes_data_offset: u32,
     pub reply_bytes_len_offset: u32,
+    pub reply_resource_error_schema_offset: u32,
+    pub reply_resource_error_kind_offset: u32,
+    pub reply_resource_error_identity_offset: u32,
+    pub reply_resource_error_io_offset: u32,
+    pub reply_resource_error_required_offset: u32,
+    pub reply_resource_error_held_offset: u32,
     pub reply_unit_tag: u64,
     pub reply_bool_tag: u64,
     pub reply_bytes_tag: u64,
     pub reply_error_tag: u64,
     pub reply_resource_tag: u64,
     pub reply_metadata_tag: u64,
+    pub reply_resource_error_tag: u64,
+    pub resource_error_closed: u64,
+    pub resource_error_malformed: u64,
+    pub resource_error_right_not_held: u64,
+    pub resource_error_release_failed: u64,
+    pub resource_kind_fs_handle: u64,
+    pub resource_error_reply_schema: u64,
 }
 
 fn generated_layout_fact(name: &str) -> Result<u64, TerminalErrorV1> {
@@ -262,6 +275,8 @@ pub fn host_effect_wire_layout_v1(
         _ => return Err(TerminalErrorV1::OperationUnavailable(operation)),
     };
     let reply_bytes = offset("HostReplyV1", "bytes")?;
+    let reply_resource_error = offset("HostReplyV1", "resource_error")?;
+    let resource_error_field = |name: &str| offset("ResourceErrorReplyV1", name);
     Ok(HostEffectWireLayoutV1 {
         request_size: checked_u32(size(request)?)?,
         request_align_shift: align_shift(align(request)?)?,
@@ -272,12 +287,37 @@ pub fn host_effect_wire_layout_v1(
         reply_detail_offset: checked_u32(offset("HostReplyV1", "detail")?)?,
         reply_bytes_data_offset: checked_u32(reply_bytes + slice_data)?,
         reply_bytes_len_offset: checked_u32(reply_bytes + slice_len)?,
+        reply_resource_error_schema_offset: checked_u32(
+            reply_resource_error + resource_error_field("schema_version")?,
+        )?,
+        reply_resource_error_kind_offset: checked_u32(
+            reply_resource_error + resource_error_field("resource_kind")?,
+        )?,
+        reply_resource_error_identity_offset: checked_u32(
+            reply_resource_error + resource_error_field("identity")?,
+        )?,
+        reply_resource_error_io_offset: checked_u32(
+            reply_resource_error + resource_error_field("io")?,
+        )?,
+        reply_resource_error_required_offset: checked_u32(
+            reply_resource_error + resource_error_field("required")?,
+        )?,
+        reply_resource_error_held_offset: checked_u32(
+            reply_resource_error + resource_error_field("held")?,
+        )?,
         reply_unit_tag: generated_binding("tag", "reply.unit")?,
         reply_bool_tag: generated_binding("tag", "reply.bool")?,
         reply_bytes_tag: generated_binding("tag", "reply.bytes")?,
         reply_error_tag: generated_binding("tag", "reply.error")?,
         reply_resource_tag: generated_binding("tag", "reply.resource")?,
         reply_metadata_tag: generated_binding("tag", "reply.metadata")?,
+        reply_resource_error_tag: generated_binding("tag", "reply.resource_error")?,
+        resource_error_closed: generated_binding("error", "resource.Closed")?,
+        resource_error_malformed: generated_binding("error", "resource.MalformedResource")?,
+        resource_error_right_not_held: generated_binding("error", "resource.RightNotHeld")?,
+        resource_error_release_failed: generated_binding("error", "resource.ReleaseFailed")?,
+        resource_kind_fs_handle: generated_binding("tag", "resource_kind.FsHandle")?,
+        resource_error_reply_schema: generated_binding("lifetime", "resource_error_reply_schema")?,
     })
 }
 
@@ -1885,11 +1925,17 @@ mod tests {
             "ResourceRelease|0401|native|ResourceRequestV1|1|HostReplyV1|1",
             "lifetime=filesystem_observation_schema|2",
             "lifetime=resource_observation_schema|1",
+            "lifetime=resource_error_reply_schema|1",
             "layout=OFFSET_FsChangeModeRequestV1_mode|24",
             "layout=OFFSET_ResourceRequestV1_resource|0",
             "layout=SIZE_HostReplyV1|",
+            "layout=SIZE_ResourceErrorReplyV1|48",
+            "layout=OFFSET_HostReplyV1_resource_error|32",
             "error=io.BrokenPipe|3",
+            "error=resource.ReleaseFailed|3",
             "tag=reply.error|3",
+            "tag=reply.resource_error|6",
+            "tag=resource_kind.FsHandle|0",
         ] {
             assert!(HOST_EFFECT_ABI_V1_CANONICAL.contains(needle));
             let mutated = HOST_EFFECT_ABI_V1_CANONICAL.replacen(needle, "MUTATED", 1);

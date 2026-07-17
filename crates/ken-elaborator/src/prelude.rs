@@ -99,6 +99,16 @@ pub fn empty_prelude_env() -> PreludeEnv {
         put_fn_id: z,
         inject_l_id: z,
         inject_r_id: z,
+        private_fs_open_id: z,
+        private_fs_handle_metadata_id: z,
+        private_resource_release_id: z,
+        private_resource_trace_identity_id: z,
+        fs_handle_id: z,
+        resource_host_io_id: z,
+        closed_id: z,
+        malformed_resource_id: z,
+        right_not_held_id: z,
+        release_failed_id: z,
     }
 }
 
@@ -206,6 +216,20 @@ pub struct PreludeEnv {
     pub inject_l_id: GlobalId,
     /// `inject_r` — the mirror inclusion, `h ↪ Coproduct g h`.
     pub inject_r_id: GlobalId,
+    /// Private PX7-F operation identities. Their source spellings are removed
+    /// from `globals` after the checked public bracket is installed; drivers
+    /// resolve them through this immutable prelude record.
+    pub private_fs_open_id: GlobalId,
+    pub private_fs_handle_metadata_id: GlobalId,
+    pub private_resource_release_id: GlobalId,
+    /// Module-private two-limb constructor for the opaque trace identity.
+    pub private_resource_trace_identity_id: GlobalId,
+    pub fs_handle_id: GlobalId,
+    pub resource_host_io_id: GlobalId,
+    pub closed_id: GlobalId,
+    pub malformed_resource_id: GlobalId,
+    pub right_not_held_id: GlobalId,
+    pub release_failed_id: GlobalId,
 }
 
 /// Register the L3 prelude in `elab` (called from `ElabEnv::empty`).
@@ -1288,6 +1312,93 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .copied()
         .map(|id| Term::const_(id, vec![]))
         .ok_or_else(|| ElabError::Internal("prelude: Int missing".into()))?;
+
+    // PX7-F's checked public surface. `Resource k` is an opaque, copyable
+    // ordinary value type: the host driver is its sole producer and the
+    // generation-checked resource table is its sole interpreter. The trace
+    // identity has one private two-u32-limb constructor so the native reply
+    // can preserve all 64 bits without narrowing through signed Ken `Int`.
+    elab.elaborate_decl("data ResourceKind = FsHandle")
+        .map_err(|e| ElabError::Internal(format!("prelude ResourceKind failed: {e}")))?;
+    let fs_handle_id = elab
+        .globals
+        .get("FsHandle")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: FsHandle missing".into()))?;
+    elab.elaborate_decl("data ResourceTraceIdentity = PrivateResourceTraceIdentity Int Int")
+        .map_err(|e| ElabError::Internal(format!("prelude ResourceTraceIdentity failed: {e}")))?;
+    let private_resource_trace_identity_id = elab
+        .globals
+        .get("PrivateResourceTraceIdentity")
+        .copied()
+        .ok_or_else(|| {
+            ElabError::Internal("prelude: PrivateResourceTraceIdentity missing".into())
+        })?;
+    let resource_kind_id = elab
+        .globals
+        .get("ResourceKind")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: ResourceKind missing".into()))?;
+    let resource_id = declare_primitive(
+        &mut elab.env,
+        vec![],
+        Term::pi(Term::indformer(resource_kind_id, vec![]), type0.clone()),
+        PrimReduction::OpaqueType,
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude Resource failed: {e}")))?;
+    elab.globals.insert("Resource".to_string(), resource_id);
+    elab.elaborate_decl("data ResourceOpenMode = ResourceRead | ResourceMetadata")
+        .map_err(|e| ElabError::Internal(format!("prelude ResourceOpenMode failed: {e}")))?;
+    if elab.globals.contains_key("ResourceHostIO") {
+        return Err(ElabError::Internal(
+            "prelude: ResourceHostIO must be absent before ResourceError registration".into(),
+        ));
+    }
+    elab.elaborate_decl(
+        "data ResourceError = ResourceHostIO IOError | Closed | MalformedResource | RightNotHeld Int Int | ReleaseFailed ResourceKind ResourceTraceIdentity IOError",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude ResourceError failed: {e}")))?;
+    let resource_host_io_id = elab
+        .globals
+        .get("ResourceHostIO")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: ResourceHostIO missing".into()))?;
+    let closed_id = elab
+        .globals
+        .get("Closed")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: Closed missing".into()))?;
+    let malformed_resource_id = elab
+        .globals
+        .get("MalformedResource")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: MalformedResource missing".into()))?;
+    let right_not_held_id = elab
+        .globals
+        .get("RightNotHeld")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: RightNotHeld missing".into()))?;
+    let release_failed_id = elab
+        .globals
+        .get("ReleaseFailed")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: ReleaseFailed missing".into()))?;
+    elab.elaborate_decl("data ResourceBodyResult e a = ResourceBodyOk a | ResourceBodyErr e")
+        .map_err(|e| ElabError::Internal(format!("prelude ResourceBodyResult failed: {e}")))?;
+    elab.elaborate_decl(
+        "data ResourceBracketResult e a = ResourceBracketOk a | ResourceBracketBodyError e | ResourceBracketReleaseError ResourceError | ResourceBracketBodyAndReleaseError e ResourceError",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude ResourceBracketResult failed: {e}")))?;
+    let resource_fs_handle_t = Term::app(
+        Term::const_(resource_id, vec![]),
+        Term::constructor(fs_handle_id, vec![]),
+    );
+    let resource_open_mode_t = elab
+        .globals
+        .get("ResourceOpenMode")
+        .copied()
+        .map(|id| Term::indformer(id, vec![]))
+        .ok_or_else(|| ElabError::Internal("prelude: ResourceOpenMode missing".into()))?;
     let fsop_id = declare_inductive(&mut elab.env, |_fsop_id| InductiveSpec {
         level_params: vec![],
         params: vec![auth_t.clone()],
@@ -1315,6 +1426,9 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
                 named(vec![cap_a(), bool_t, bytes_t.clone()]),
                 named(vec![cap_a(), bytes_t.clone(), bytes_t.clone()]),
                 named(vec![cap_a(), bytes_t.clone(), int_t]),
+                named(vec![cap_a(), bytes_t.clone(), resource_open_mode_t]),
+                named(vec![resource_fs_handle_t.clone()]),
+                named(vec![resource_fs_handle_t.clone()]),
             ]
         },
     })
@@ -1339,12 +1453,18 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "RemoveDirectory",
         "Rename",
         "ChangeMode",
+        "PrivateFsOpen",
+        "PrivateFsHandleMetadata",
+        "PrivateResourceRelease",
     ]
     .into_iter()
     .zip(fs_ctor_ids)
     {
         elab.globals.insert(name.to_string(), id);
     }
+    let private_fs_open_id = elab.globals["PrivateFsOpen"];
+    let private_fs_handle_metadata_id = elab.globals["PrivateFsHandleMetadata"];
+    let private_resource_release_id = elab.globals["PrivateResourceRelease"];
 
     // `fs_resp : (a : Auth) -> FSOp a -> Type` is a genuine non-constant
     // large elimination. Every arm returns a total `Result FileError _`, with
@@ -1360,7 +1480,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            RemoveFile cap path |-> Result FileError Unit; \
            RemoveDirectory cap recursive path |-> Result FileError Unit; \
            Rename cap from to |-> Result FileError Unit; \
-           ChangeMode cap path mode |-> Result FileError Unit \
+           ChangeMode cap path mode |-> Result FileError Unit; \
+           PrivateFsOpen cap path mode |-> Result FileError (Resource FsHandle); \
+           PrivateFsHandleMetadata resource |-> Result ResourceError FileMetadata; \
+           PrivateResourceRelease resource |-> Result ResourceError Unit \
          }",
     )
     .map_err(|e| ElabError::Internal(format!("prelude fs_resp failed: {}", e)))?;
@@ -1454,6 +1577,191 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     )
     .map_err(|e| ElabError::Internal(format!("prelude change_mode failed: {}", e)))?;
 
+    // The resource bracket is a HostIO surface rather than a nested FS tree:
+    // the delayed body may compose ambient effects while the private resource
+    // operations remain ordinary FS-family nodes in the existing coproduct.
+    elab.elaborate_decl("const AmbientOp : Type = Coproduct ConsoleOp ClockOp")
+        .map_err(|e| ElabError::Internal(format!("prelude AmbientOp failed: {}", e)))?;
+    elab.elaborate_decl(
+        "fn ambient_resp (op : AmbientOp) : Type = \
+         resp_coproduct ConsoleOp ClockOp console_resp clock_resp op",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude ambient_resp failed: {}", e)))?;
+    elab.elaborate_decl(
+        "fn HostIO (a : Auth) (r : Type) : Type = \
+         ITree (Coproduct (FSOp a) AmbientOp) \
+           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) r",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude HostIO failed: {}", e)))?;
+    elab.elaborate_decl(
+        "proc host_fs (a : Auth) (r : Type) (action : FS a r) \
+         : HostIO a r visits [FS] = \
+         inject_l (FSOp a) AmbientOp (fs_resp a) ambient_resp r action",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude host_fs failed: {e}")))?;
+
+    // PX7-F private resource protocol nodes. Only the checked bracket below
+    // names the acquire producer; all three constructor spellings and the raw
+    // acquire helper are removed from the public global-name map afterward.
+    elab.elaborate_decl(
+        "proc private_resource_acquire (a : Auth) (cap : Cap a) (path : Bytes) (mode : ResourceOpenMode) : HostIO a (Result FileError (Resource FsHandle)) visits [FS] = \
+         Vis (Coproduct (FSOp a) AmbientOp) \
+           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+           (Result FileError (Resource FsHandle)) \
+           (InL (FSOp a) AmbientOp (PrivateFsOpen a cap path mode)) \
+           (\\r. Ret (Coproduct (FSOp a) AmbientOp) \
+             (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+             (Result FileError (Resource FsHandle)) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude resource acquire failed: {e}")))?;
+    elab.elaborate_decl(
+        "proc resourceMetadata (a : Auth) (resource : Resource FsHandle) : HostIO a (Result ResourceError FileMetadata) visits [FS] = \
+         Vis (Coproduct (FSOp a) AmbientOp) \
+           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+           (Result ResourceError FileMetadata) \
+           (InL (FSOp a) AmbientOp (PrivateFsHandleMetadata a resource)) \
+           (\\r. Ret (Coproduct (FSOp a) AmbientOp) \
+             (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+             (Result ResourceError FileMetadata) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude resourceMetadata failed: {e}")))?;
+    elab.elaborate_decl(
+        "proc release (a : Auth) (resource : Resource FsHandle) : HostIO a (Result ResourceError Unit) visits [FS] = \
+         Vis (Coproduct (FSOp a) AmbientOp) \
+           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+           (Result ResourceError Unit) \
+           (InL (FSOp a) AmbientOp (PrivateResourceRelease a resource)) \
+           (\\r. Ret (Coproduct (FSOp a) AmbientOp) \
+             (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+             (Result ResourceError Unit) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude release failed: {e}")))?;
+    elab.elaborate_decl(
+        "fn resource_settle_ok_error (e : Type) (r : Type) (value : r) \
+           (release_error : ResourceError) \
+           : Result FileError (ResourceBracketResult e r) = \
+         match release_error { \
+           ResourceHostIO io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ResourceHostIO io)); \
+           Closed |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketOk e r value); \
+           MalformedResource |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r MalformedResource); \
+           RightNotHeld required held |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (RightNotHeld required held)); \
+           ReleaseFailed kind identity io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketReleaseError e r (ReleaseFailed kind identity io)) \
+         }",
+    )
+    .map_err(|e| {
+        ElabError::Internal(format!("prelude resource_settle_ok_error failed: {e}"))
+    })?;
+    elab.elaborate_decl(
+        "fn resource_settle_body_error (e : Type) (r : Type) (body_error : e) \
+           (release_error : ResourceError) \
+           : Result FileError (ResourceBracketResult e r) = \
+         match release_error { \
+           ResourceHostIO io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ResourceHostIO io)); \
+           Closed |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyError e r body_error); \
+           MalformedResource |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error MalformedResource); \
+           RightNotHeld required held |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (RightNotHeld required held)); \
+           ReleaseFailed kind identity io |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyAndReleaseError e r body_error (ReleaseFailed kind identity io)) \
+         }",
+    )
+    .map_err(|e| {
+        ElabError::Internal(format!("prelude resource_settle_body_error failed: {e}"))
+    })?;
+    elab.elaborate_decl(
+        "fn resource_settle_ok (e : Type) (r : Type) (value : r) \
+           (settled : Result ResourceError Unit) \
+           : Result FileError (ResourceBracketResult e r) = \
+         match settled { \
+           Ok unit |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketOk e r value); \
+           Err release_error |-> resource_settle_ok_error e r value release_error \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude resource_settle_ok failed: {e}")))?;
+    elab.elaborate_decl(
+        "fn resource_settle_err (e : Type) (r : Type) (body_error : e) \
+           (settled : Result ResourceError Unit) \
+           : Result FileError (ResourceBracketResult e r) = \
+         match settled { \
+           Ok unit |-> Ok FileError (ResourceBracketResult e r) (ResourceBracketBodyError e r body_error); \
+           Err release_error |-> resource_settle_body_error e r body_error release_error \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude resource_settle_err failed: {e}")))?;
+    elab.elaborate_decl(
+        "fn resource_settle_result (e : Type) (r : Type) \
+           (body_result : ResourceBodyResult e r) \
+           (settled : Result ResourceError Unit) \
+           : Result FileError (ResourceBracketResult e r) = \
+         match body_result { \
+           ResourceBodyOk value |-> resource_settle_ok e r value settled; \
+           ResourceBodyErr body_error |-> resource_settle_err e r body_error settled \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude resource_settle_result failed: {e}")))?;
+    elab.elaborate_decl(
+        "proc release_if_live (a : Auth) (e : Type) (r : Type) \
+           (resource : Resource FsHandle) (body_result : ResourceBodyResult e r) \
+           : HostIO a (Result FileError (ResourceBracketResult e r)) visits [FS] = \
+         Vis (Coproduct (FSOp a) AmbientOp) \
+           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+           (Result FileError (ResourceBracketResult e r)) \
+           (InL (FSOp a) AmbientOp (PrivateResourceRelease a resource)) \
+           (\\settled. Ret (Coproduct (FSOp a) AmbientOp) \
+             (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+             (Result FileError (ResourceBracketResult e r)) \
+             (resource_settle_result e r body_result settled))",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude release_if_live failed: {e}")))?;
+    elab.elaborate_decl(
+        "proc private_with_resource_after_open (a : Auth) (e : Type) (r : Type) \
+           (body : Resource FsHandle -> HostIO a (ResourceBodyResult e r)) \
+           (acquired : Result FileError (Resource FsHandle)) \
+           : HostIO a (Result FileError (ResourceBracketResult e r)) visits [FS] = \
+         match acquired { \
+           Err open_error |-> Ret (Coproduct (FSOp a) AmbientOp) \
+             (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+             (Result FileError (ResourceBracketResult e r)) \
+             (Err FileError (ResourceBracketResult e r) open_error); \
+           Ok resource |-> bind (Coproduct (FSOp a) AmbientOp) \
+             (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+             (ResourceBodyResult e r) \
+             (Result FileError (ResourceBracketResult e r)) \
+             (body resource) \
+             (\\body_result. release_if_live a e r resource body_result) \
+         }",
+    )
+    .map_err(|e| {
+        ElabError::Internal(format!(
+            "prelude private_with_resource_after_open failed: {e}"
+        ))
+    })?;
+    elab.elaborate_decl(
+        "proc withResource (a : Auth) (e : Type) (r : Type) \
+           (cap : Cap a) (path : Bytes) (mode : ResourceOpenMode) \
+           (body : Resource FsHandle -> HostIO a (ResourceBodyResult e r)) \
+           : HostIO a (Result FileError (ResourceBracketResult e r)) visits [FS] = \
+         Vis (Coproduct (FSOp a) AmbientOp) \
+           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) \
+           (Result FileError (ResourceBracketResult e r)) \
+           (InL (FSOp a) AmbientOp (PrivateFsOpen a cap path mode)) \
+           (\\acquired. private_with_resource_after_open a e r body acquired)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude withResource failed: {e}")))?;
+
+    // No raw acquire or representation constructor is a public Ken identity.
+    // Their GlobalIds remain reachable only through the checked definitions
+    // above and the immutable `PreludeEnv` driver record.
+    for private_name in [
+        "PrivateFsOpen",
+        "PrivateFsHandleMetadata",
+        "PrivateResourceRelease",
+        "PrivateResourceTraceIdentity",
+        "private_resource_acquire",
+        "private_with_resource_after_open",
+        "release_if_live",
+    ] {
+        elab.globals.remove(private_name);
+    }
+
     // Program-I I-1 entrypoint ABI. These are ordinary, kernel-checked Ken
     // declarations: the host runner knows their fixed shape, but no kernel
     // rule or trusted primitive is added for them.
@@ -1489,19 +1797,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.globals
         .insert("MkProgramCaps".into(), program_caps_ctor);
 
-    elab.elaborate_decl("const AmbientOp : Type = Coproduct ConsoleOp ClockOp")
-        .map_err(|e| ElabError::Internal(format!("prelude AmbientOp failed: {}", e)))?;
-    elab.elaborate_decl(
-        "fn ambient_resp (op : AmbientOp) : Type = \
-         resp_coproduct ConsoleOp ClockOp console_resp clock_resp op",
-    )
-    .map_err(|e| ElabError::Internal(format!("prelude ambient_resp failed: {}", e)))?;
-    elab.elaborate_decl(
-        "fn HostIO (a : Auth) (r : Type) : Type = \
-         ITree (Coproduct (FSOp a) AmbientOp) \
-           (resp_coproduct (FSOp a) AmbientOp (fs_resp a) ambient_resp) r",
-    )
-    .map_err(|e| ElabError::Internal(format!("prelude HostIO failed: {}", e)))?;
     elab.elaborate_decl(
         "fn host_exit (a : Auth) (code : ExitCode) : HostIO a ExitCode = \
          Ret (Coproduct (FSOp a) AmbientOp) \
@@ -1619,5 +1914,15 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         put_fn_id,
         inject_l_id,
         inject_r_id,
+        private_fs_open_id,
+        private_fs_handle_metadata_id,
+        private_resource_release_id,
+        private_resource_trace_identity_id,
+        fs_handle_id,
+        resource_host_io_id,
+        closed_id,
+        malformed_resource_id,
+        right_not_held_id,
+        release_failed_id,
     })
 }

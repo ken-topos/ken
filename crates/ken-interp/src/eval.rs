@@ -187,6 +187,9 @@ pub enum EvalVal {
     /// surface term ever synthesizes one. `authorizes` (below) fail-closes
     /// on any other `EvalVal` shape.
     Cap(capabilities::Cap),
+    /// Opaque generation-checked PX7 resource token. Ken may copy this value,
+    /// but every use resolves it through the invocation-scoped resource table.
+    ResourceToken(ken_host::ResourceTokenV1),
     // `Decimal` is DEMOTE→derived (`18a §5.6.1`): a `Ctor{id:mkdecimalpair_id}`
     // value over two `Int`/`BigInt` fields, not a scalar immediate — no
     // `DecimalVal` case here anymore (the native primitive was removed).
@@ -3744,6 +3747,18 @@ pub struct FSIds {
     pub removedirectory_id: GlobalId,
     pub rename_id: GlobalId,
     pub change_mode_id: GlobalId,
+    pub private_fs_open_id: GlobalId,
+    pub private_fs_handle_metadata_id: GlobalId,
+    pub private_resource_release_id: GlobalId,
+    pub resource_read_id: GlobalId,
+    pub resource_metadata_mode_id: GlobalId,
+    pub resource_host_io_id: GlobalId,
+    pub closed_id: GlobalId,
+    pub malformed_resource_id: GlobalId,
+    pub right_not_held_id: GlobalId,
+    pub release_failed_id: GlobalId,
+    pub fs_handle_id: GlobalId,
+    pub private_resource_trace_identity_id: GlobalId,
     pub create_new_id: GlobalId,
     pub create_or_truncate_id: GlobalId,
     pub create_or_keep_id: GlobalId,
@@ -3783,6 +3798,18 @@ impl FSIds {
             removedirectory_id: get("RemoveDirectory")?,
             rename_id: get("Rename")?,
             change_mode_id: get("ChangeMode")?,
+            private_fs_open_id: elab.prelude_env.private_fs_open_id,
+            private_fs_handle_metadata_id: elab.prelude_env.private_fs_handle_metadata_id,
+            private_resource_release_id: elab.prelude_env.private_resource_release_id,
+            resource_read_id: get("ResourceRead")?,
+            resource_metadata_mode_id: get("ResourceMetadata")?,
+            resource_host_io_id: elab.prelude_env.resource_host_io_id,
+            closed_id: elab.prelude_env.closed_id,
+            malformed_resource_id: elab.prelude_env.malformed_resource_id,
+            right_not_held_id: elab.prelude_env.right_not_held_id,
+            release_failed_id: elab.prelude_env.release_failed_id,
+            fs_handle_id: elab.prelude_env.fs_handle_id,
+            private_resource_trace_identity_id: elab.prelude_env.private_resource_trace_identity_id,
             create_new_id: get("CreateNew")?,
             create_or_truncate_id: get("CreateOrTruncate")?,
             create_or_keep_id: get("CreateOrKeep")?,
@@ -4277,6 +4304,45 @@ impl<H: HostHandler> ken_host::HostEffectBackendV1 for InterpreterHostBackend<'_
             .fs_change_mode_at(&handle, mode)
             .map_err(host_error_v1)
     }
+
+    fn fs_open_resource(
+        &mut self,
+        grant: &ken_host::CapabilityGrantV1,
+        path: &[u8],
+        _mode: ken_host::FsOpenModeV1,
+    ) -> Result<ken_host::ResourceHandleV1, ken_host::FileErrorCauseV1> {
+        let components = fs_target_components(path)
+            .map_err(|error| ken_host::FileErrorCauseV1::Capability(map_denial_v1(error)))?;
+        let (leaf, parents) = components.split_last().ok_or_else(|| {
+            ken_host::FileErrorCauseV1::Io(ken_host::IoErrorIdentityV1::InvalidInput)
+        })?;
+        let capabilities::FsHandle::Posix(mut parent) = grant.capability.scope().root.clone()
+        else {
+            return Err(ken_host::FileErrorCauseV1::Capability(
+                ken_host::CapabilityDeniedV1::ScopeEscape,
+            ));
+        };
+        for component in parents {
+            let component = ken_host::PathComponent::new(component)
+                .map_err(|error| host_error_v1(error.into_io_error()))?;
+            if ken_host::readlink_at(&parent, &component).is_ok() {
+                return Err(ken_host::FileErrorCauseV1::Capability(
+                    ken_host::CapabilityDeniedV1::SymlinkDenied,
+                ));
+            }
+            parent = ken_host::open_at(&parent, &component, ken_host::OpenRequest::ReadDirectory)
+                .map_err(|error| host_error_v1(error.into_io_error()))?;
+        }
+        let leaf = ken_host::PathComponent::new(leaf)
+            .map_err(|error| host_error_v1(error.into_io_error()))?;
+        if ken_host::readlink_at(&parent, &leaf).is_ok() {
+            return Err(ken_host::FileErrorCauseV1::Capability(
+                ken_host::CapabilityDeniedV1::SymlinkDenied,
+            ));
+        }
+        ken_host::open_resource_at_v1(&parent, &leaf, ken_host::OpenRequest::Read)
+            .map_err(|error| host_error_v1(error.into_io_error()))
+    }
 }
 
 fn from_console_stream_v1(stream: ken_host::ConsoleStreamV1) -> ConsoleStream {
@@ -4423,17 +4489,67 @@ fn fs_dispatch<H: HostHandler>(
             ken_host::CanonicalRequestV1::FsChangeMode { path, mode },
             fs.op_change_mode_id,
         )
+    } else if op_id == fs.private_fs_open_id {
+        let mode = match args.get(3) {
+            Some(EvalVal::Ctor { id, .. }) if *id == fs.resource_read_id => {
+                ken_host::FsOpenModeV1::Read
+            }
+            Some(EvalVal::Ctor { id, .. }) if *id == fs.resource_metadata_mode_id => {
+                ken_host::FsOpenModeV1::Metadata
+            }
+            _ => return Some(Err(())),
+        };
+        (
+            ken_host::HostOpV1::FsOpen,
+            ken_host::CanonicalRequestV1::FsOpen {
+                path: bytes_at(2)?,
+                mode,
+            },
+            fs.op_read_file_id,
+        )
+    } else if op_id == fs.private_fs_handle_metadata_id {
+        (
+            ken_host::HostOpV1::FsHandleMetadata,
+            ken_host::CanonicalRequestV1::FsHandleMetadata,
+            fs.op_metadata_id,
+        )
+    } else if op_id == fs.private_resource_release_id {
+        (
+            ken_host::HostOpV1::ResourceRelease,
+            ken_host::CanonicalRequestV1::ResourceRelease,
+            fs.op_metadata_id,
+        )
     } else {
         return None;
     };
 
     let mut capabilities = ken_host::CapabilityTableV1::default();
-    let token = match args.get(1) {
-        Some(EvalVal::Cap(capability)) => Some(capabilities.insert(ken_host::CapabilityGrantV1 {
-            identity: ken_host::program_caps_fs_trace_identity_v1(),
-            capability: capability.clone(),
-        })),
-        _ => None,
+    let token = if matches!(
+        operation,
+        ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
+    ) {
+        None
+    } else {
+        match args.get(1) {
+            Some(EvalVal::Cap(capability)) => {
+                Some(capabilities.insert(ken_host::CapabilityGrantV1 {
+                    identity: ken_host::program_caps_fs_trace_identity_v1(),
+                    capability: capability.clone(),
+                }))
+            }
+            _ => None,
+        }
+    };
+    let resource = if matches!(
+        operation,
+        ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
+    ) {
+        match args.get(1) {
+            Some(EvalVal::ResourceToken(token)) => Some(*token),
+            _ => None,
+        }
+    } else {
+        None
     };
     let mut backend = InterpreterHostBackend { handler };
     let reply = ken_host::dispatch_host_op_v1(
@@ -4442,7 +4558,7 @@ fn fs_dispatch<H: HostHandler>(
         resources,
         operation,
         token,
-        None,
+        resource,
         &request,
     )
     .map_err(|_| ());
@@ -4457,13 +4573,21 @@ fn fs_dispatch<H: HostHandler>(
                 backend.handler.fs_denied(from_denial_v1(denial));
             }
         }
-        reify_host_reply_v1(reply.outcome, operation_id, fs, ids, store)
+        reify_host_reply_v1(
+            reply.outcome,
+            reply.resource_token,
+            operation_id,
+            fs,
+            ids,
+            store,
+        )
     });
     Some(reply)
 }
 
 fn reify_host_reply_v1(
     outcome: ken_host::CanonicalOutcomeV1,
+    resource_token: Option<ken_host::ResourceTokenV1>,
     operation_id: GlobalId,
     fs: &FSIds,
     ids: &ConsoleIds,
@@ -4512,6 +4636,12 @@ fn reify_host_reply_v1(
                 make_ctor(fs.cons_id, vec![EvalVal::Unknown, value, tail], store)
             },
         ),
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::ResourceAcquired {
+            ..
+        }) => EvalVal::ResourceToken(resource_token.ok_or(())?),
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::ResourceSettlement(
+            _,
+        )) => make_ctor(ids.unit_id, vec![], store),
         ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::File(error)) => {
             let cause = match error.cause {
                 ken_host::FileErrorCauseV1::Io(error) => io_error_identity_value(error, ids, store),
@@ -4521,6 +4651,50 @@ fn reify_host_reply_v1(
             };
             let file_error = file_error_value(operation_id, &error.relative_path, cause, fs, store);
             return Ok(make_result(false, file_error, ids, store));
+        }
+        ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::Io(error)) => {
+            let io = io_error_identity_value(error, ids, store);
+            let error = make_ctor(fs.resource_host_io_id, vec![io], store);
+            return Ok(make_result(false, error, ids, store));
+        }
+        ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::Resource(error)) => {
+            let error = match error {
+                ken_host::ResourceErrorV1::Closed => make_ctor(fs.closed_id, vec![], store),
+                ken_host::ResourceErrorV1::MalformedResource => {
+                    make_ctor(fs.malformed_resource_id, vec![], store)
+                }
+                ken_host::ResourceErrorV1::RightNotHeld { required, held } => make_ctor(
+                    fs.right_not_held_id,
+                    vec![
+                        EvalVal::Int(i64::from(required)),
+                        EvalVal::Int(i64::from(held)),
+                    ],
+                    store,
+                ),
+                ken_host::ResourceErrorV1::ReleaseFailed {
+                    resource_kind,
+                    identity,
+                    io,
+                    ..
+                } => {
+                    let kind = match resource_kind {
+                        ken_host::ResourceKindV1::FsHandle => {
+                            make_ctor(fs.fs_handle_id, vec![], store)
+                        }
+                    };
+                    let trace = make_ctor(
+                        fs.private_resource_trace_identity_id,
+                        vec![
+                            EvalVal::Int(i64::from(identity.0 as u32)),
+                            EvalVal::Int(i64::from((identity.0 >> 32) as u32)),
+                        ],
+                        store,
+                    );
+                    let io = io_error_identity_value(io, ids, store);
+                    make_ctor(fs.release_failed_id, vec![kind, trace, io], store)
+                }
+            };
+            return Ok(make_result(false, error, ids, store));
         }
         _ => return Err(()),
     };
@@ -4755,197 +4929,239 @@ fn run_io_with_effect_recorder<H: HostHandler>(
     // Resource liveness is invocation-scoped. PX7-F can add public resource
     // constructors without first repairing the interpreter's state lifetime.
     let mut resources = ken_host::ResourceTableV1::default();
-    loop {
-        let next = match tree {
-            EvalVal::Unknown => return Err(RunIoError::UnknownTree),
-            EvalVal::Ctor { id, args, .. } => {
-                if id == ids.ret_id {
-                    // Ret r → done
-                    return Ok(args.get(m).cloned().unwrap_or(EvalVal::Unknown));
-                } else if id == ids.vis_id {
-                    // Guard args access — a malformed Vis returns Err rather than panic.
-                    let op = match args.get(m).cloned() {
-                        Some(v) => v,
-                        None => {
-                            return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
-                                id,
-                                args,
-                                slot: NULL_SLOT,
-                            }));
-                        }
-                    };
-                    let k = match args.get(m + 1).cloned() {
-                        Some(v) => v,
-                        None => {
-                            return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
-                                id,
-                                args: Rc::new(vec![op]),
-                                slot: NULL_SLOT,
-                            }));
-                        }
-                    };
-                    // D3 coproduct peel: strip InL/InR down to the innermost
-                    // base tag BEFORE dispatch — effect-blind, a no-op when
-                    // `coproduct_ids` is absent or the op carries no wrapper.
-                    let op = peel_coproduct(op, coproduct_ids);
-                    // Dispatch on every constructor in the sealed host floor.
-                    // Unknown tags fail loudly below.
-                    let resp = match &op {
-                        EvalVal::Ctor {
-                            id: op_id,
-                            args: op_args,
-                            ..
-                        } if *op_id == ids.read_id => {
-                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
-                            else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            let Some(limit) = op_args.get(1).and_then(read_limit) else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            ambient_dispatch(
-                                ken_host::HostOpV1::ConsoleRead,
-                                ken_host::CanonicalRequestV1::ConsoleRead {
-                                    stream: to_console_stream_v1(stream),
-                                    limit: limit as u64,
-                                },
-                                handler,
-                                &mut resources,
-                                ids,
-                                clock_ids,
-                                store,
-                                recorder.as_deref_mut(),
-                            )
-                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
-                        }
-                        EvalVal::Ctor {
-                            id: op_id,
-                            args: op_args,
-                            ..
-                        } if *op_id == ids.write_id => {
-                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
-                            else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            let Some(EvalVal::Bytes(bytes)) = op_args.get(1) else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            ambient_dispatch(
-                                ken_host::HostOpV1::ConsoleWrite,
-                                ken_host::CanonicalRequestV1::ConsoleWrite {
-                                    stream: to_console_stream_v1(stream),
-                                    bytes: bytes.clone(),
-                                },
-                                handler,
-                                &mut resources,
-                                ids,
-                                clock_ids,
-                                store,
-                                recorder.as_deref_mut(),
-                            )
-                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
-                        }
-                        EvalVal::Ctor {
-                            id: op_id,
-                            args: op_args,
-                            ..
-                        } if *op_id == ids.flush_id => {
-                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
-                            else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            ambient_dispatch(
-                                ken_host::HostOpV1::ConsoleFlush,
-                                ken_host::CanonicalRequestV1::ConsoleFlush {
-                                    stream: to_console_stream_v1(stream),
-                                },
-                                handler,
-                                &mut resources,
-                                ids,
-                                clock_ids,
-                                store,
-                                recorder.as_deref_mut(),
-                            )
-                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
-                        }
-                        EvalVal::Ctor {
-                            id: op_id,
-                            args: op_args,
-                            ..
-                        } if *op_id == ids.is_terminal_id => {
-                            let Some(stream) = op_args.first().and_then(|v| decode_stream(v, ids))
-                            else {
-                                return Err(RunIoError::UnknownEffect(op));
-                            };
-                            ambient_dispatch(
-                                ken_host::HostOpV1::ConsoleIsTerminal,
-                                ken_host::CanonicalRequestV1::ConsoleIsTerminal {
-                                    stream: to_console_stream_v1(stream),
-                                },
-                                handler,
-                                &mut resources,
-                                ids,
-                                clock_ids,
-                                store,
-                                recorder.as_deref_mut(),
-                            )
-                            .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
-                        }
-                        EvalVal::Ctor {
-                            id: op_id,
-                            args: op_args,
-                            ..
-                        } => {
-                            if let Some(clock) = clock_ids
-                                .filter(|clock| *op_id == clock.wall_now_id && op_args.is_empty())
-                            {
+    let result = (|| {
+        loop {
+            let next = match tree {
+                EvalVal::Unknown => return Err(RunIoError::UnknownTree),
+                EvalVal::Ctor { id, args, .. } => {
+                    if id == ids.ret_id {
+                        // Ret r → done
+                        return Ok(args.get(m).cloned().unwrap_or(EvalVal::Unknown));
+                    } else if id == ids.vis_id {
+                        // Guard args access — a malformed Vis returns Err rather than panic.
+                        let op = match args.get(m).cloned() {
+                            Some(v) => v,
+                            None => {
+                                return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
+                                    id,
+                                    args,
+                                    slot: NULL_SLOT,
+                                }));
+                            }
+                        };
+                        let k = match args.get(m + 1).cloned() {
+                            Some(v) => v,
+                            None => {
+                                return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
+                                    id,
+                                    args: Rc::new(vec![op]),
+                                    slot: NULL_SLOT,
+                                }));
+                            }
+                        };
+                        // D3 coproduct peel: strip InL/InR down to the innermost
+                        // base tag BEFORE dispatch — effect-blind, a no-op when
+                        // `coproduct_ids` is absent or the op carries no wrapper.
+                        let op = peel_coproduct(op, coproduct_ids);
+                        // Dispatch on every constructor in the sealed host floor.
+                        // Unknown tags fail loudly below.
+                        let resp = match &op {
+                            EvalVal::Ctor {
+                                id: op_id,
+                                args: op_args,
+                                ..
+                            } if *op_id == ids.read_id => {
+                                let Some(stream) =
+                                    op_args.first().and_then(|v| decode_stream(v, ids))
+                                else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
+                                let Some(limit) = op_args.get(1).and_then(read_limit) else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
                                 ambient_dispatch(
-                                    ken_host::HostOpV1::ClockWallNow,
-                                    ken_host::CanonicalRequestV1::ClockWallNow,
+                                    ken_host::HostOpV1::ConsoleRead,
+                                    ken_host::CanonicalRequestV1::ConsoleRead {
+                                        stream: to_console_stream_v1(stream),
+                                        limit: limit as u64,
+                                    },
                                     handler,
                                     &mut resources,
                                     ids,
-                                    Some(clock),
+                                    clock_ids,
                                     store,
                                     recorder.as_deref_mut(),
                                 )
                                 .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
-                            } else {
-                                match fs_ids.and_then(|fs| {
-                                    fs_dispatch(
-                                        *op_id,
-                                        op_args,
+                            }
+                            EvalVal::Ctor {
+                                id: op_id,
+                                args: op_args,
+                                ..
+                            } if *op_id == ids.write_id => {
+                                let Some(stream) =
+                                    op_args.first().and_then(|v| decode_stream(v, ids))
+                                else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
+                                let Some(EvalVal::Bytes(bytes)) = op_args.get(1) else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
+                                ambient_dispatch(
+                                    ken_host::HostOpV1::ConsoleWrite,
+                                    ken_host::CanonicalRequestV1::ConsoleWrite {
+                                        stream: to_console_stream_v1(stream),
+                                        bytes: bytes.clone(),
+                                    },
+                                    handler,
+                                    &mut resources,
+                                    ids,
+                                    clock_ids,
+                                    store,
+                                    recorder.as_deref_mut(),
+                                )
+                                .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
+                            }
+                            EvalVal::Ctor {
+                                id: op_id,
+                                args: op_args,
+                                ..
+                            } if *op_id == ids.flush_id => {
+                                let Some(stream) =
+                                    op_args.first().and_then(|v| decode_stream(v, ids))
+                                else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
+                                ambient_dispatch(
+                                    ken_host::HostOpV1::ConsoleFlush,
+                                    ken_host::CanonicalRequestV1::ConsoleFlush {
+                                        stream: to_console_stream_v1(stream),
+                                    },
+                                    handler,
+                                    &mut resources,
+                                    ids,
+                                    clock_ids,
+                                    store,
+                                    recorder.as_deref_mut(),
+                                )
+                                .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
+                            }
+                            EvalVal::Ctor {
+                                id: op_id,
+                                args: op_args,
+                                ..
+                            } if *op_id == ids.is_terminal_id => {
+                                let Some(stream) =
+                                    op_args.first().and_then(|v| decode_stream(v, ids))
+                                else {
+                                    return Err(RunIoError::UnknownEffect(op));
+                                };
+                                ambient_dispatch(
+                                    ken_host::HostOpV1::ConsoleIsTerminal,
+                                    ken_host::CanonicalRequestV1::ConsoleIsTerminal {
+                                        stream: to_console_stream_v1(stream),
+                                    },
+                                    handler,
+                                    &mut resources,
+                                    ids,
+                                    clock_ids,
+                                    store,
+                                    recorder.as_deref_mut(),
+                                )
+                                .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
+                            }
+                            EvalVal::Ctor {
+                                id: op_id,
+                                args: op_args,
+                                ..
+                            } => {
+                                if let Some(clock) = clock_ids.filter(|clock| {
+                                    *op_id == clock.wall_now_id && op_args.is_empty()
+                                }) {
+                                    ambient_dispatch(
+                                        ken_host::HostOpV1::ClockWallNow,
+                                        ken_host::CanonicalRequestV1::ClockWallNow,
                                         handler,
                                         &mut resources,
-                                        fs,
                                         ids,
+                                        Some(clock),
                                         store,
                                         recorder.as_deref_mut(),
                                     )
-                                }) {
-                                    Some(Ok(response)) => response,
-                                    Some(Err(())) | None => {
-                                        return Err(RunIoError::UnknownEffect(op));
+                                    .map_err(|()| RunIoError::UnknownEffect(op.clone()))?
+                                } else {
+                                    match fs_ids.and_then(|fs| {
+                                        fs_dispatch(
+                                            *op_id,
+                                            op_args,
+                                            handler,
+                                            &mut resources,
+                                            fs,
+                                            ids,
+                                            store,
+                                            recorder.as_deref_mut(),
+                                        )
+                                    }) {
+                                        Some(Ok(response)) => response,
+                                        Some(Err(())) | None => {
+                                            return Err(RunIoError::UnknownEffect(op));
+                                        }
                                     }
                                 }
                             }
-                        }
-                        _ => return Err(RunIoError::UnknownEffect(op)),
-                    };
-                    apply(k, resp, globals, store)
-                } else {
-                    // Unrecognised ITree constructor
-                    return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
-                        id,
-                        args,
-                        slot: NULL_SLOT,
-                    }));
+                            _ => return Err(RunIoError::UnknownEffect(op)),
+                        };
+                        apply(k, resp, globals, store)
+                    } else {
+                        // Unrecognised ITree constructor
+                        return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
+                            id,
+                            args,
+                            slot: NULL_SLOT,
+                        }));
+                    }
                 }
-            }
-            other => return Err(RunIoError::NotAnIOTree(other)),
-        };
-        tree = next;
+                other => return Err(RunIoError::NotAnIOTree(other)),
+            };
+            tree = next;
+        }
+    })();
+    let mut backend = InterpreterHostBackend { handler };
+    let settlements = resources.finalize_all_with(|owner| {
+        ken_host::HostEffectBackendV1::resource_close(&mut backend, owner)
+    });
+    if let Some(recorder) = recorder.as_deref_mut() {
+        for settlement in settlements {
+            let outcome = match settlement.outcome {
+                ken_host::ResourceSettlementOutcomeV1::Released => {
+                    ken_host::CanonicalOutcomeV1::Success(
+                        ken_host::CanonicalReplyV1::ResourceSettlement(settlement.clone()),
+                    )
+                }
+                ken_host::ResourceSettlementOutcomeV1::ReleaseFailed(io) => {
+                    ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::Resource(
+                        ken_host::ResourceErrorV1::ReleaseFailed {
+                            schema_version: settlement.schema_version,
+                            resource_kind: settlement.resource_kind,
+                            identity: settlement.identity,
+                            io,
+                        },
+                    ))
+                }
+            };
+            recorder.record(
+                ken_host::HostOpV1::ResourceRelease,
+                ken_host::CanonicalRequestV1::ResourceRelease,
+                &ken_host::HostDispatchReplyV1 {
+                    capability_identity: None,
+                    resource_identity: Some(settlement.identity),
+                    resource_token: None,
+                    outcome,
+                },
+            );
+        }
     }
+    result
 }
 
 /// Instrumented variant of `drive_h` — emits a trace event at each `Vis` firing
@@ -5210,6 +5426,18 @@ mod px5b_effect_observation_tests {
             removedirectory_id: id(),
             rename_id: id(),
             change_mode_id: id(),
+            private_fs_open_id: id(),
+            private_fs_handle_metadata_id: id(),
+            private_resource_release_id: id(),
+            resource_read_id: id(),
+            resource_metadata_mode_id: id(),
+            resource_host_io_id: id(),
+            closed_id: id(),
+            malformed_resource_id: id(),
+            right_not_held_id: id(),
+            release_failed_id: id(),
+            fs_handle_id: id(),
+            private_resource_trace_identity_id: id(),
             create_new_id: id(),
             create_or_truncate_id: id(),
             create_or_keep_id: id(),

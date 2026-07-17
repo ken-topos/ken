@@ -237,10 +237,22 @@ struct ResourceRequestV1 {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ResourceErrorReplyV1 {
+    schema_version: u64,
+    resource_kind: u64,
+    identity: u64,
+    io: u64,
+    required: u64,
+    held: u64,
+}
+
+#[repr(C)]
 struct HostReplyV1 {
     tag: u64,
     detail: u64,
     bytes: SliceV1,
+    resource_error: ResourceErrorReplyV1,
 }
 
 const REPLY_UNIT: u64 = 0;
@@ -249,6 +261,7 @@ const REPLY_BYTES: u64 = 2;
 const REPLY_ERROR: u64 = 3;
 const REPLY_RESOURCE: u64 = 4;
 const REPLY_METADATA: u64 = 5;
+const REPLY_RESOURCE_ERROR: u64 = 6;
 
 struct ProcessContext {
     _posture: ProcessPostureV1,
@@ -779,9 +792,27 @@ pub unsafe extern "C" fn ken_host_invocation_v1_finish(
 
 impl ProcessContext {
     fn finalize_resources(&mut self) {
-        let settlements = self
-            .resources
-            .finalize_all_with(|owner| self.host.resource_close(owner));
+        let settlements = {
+            let host = &mut self.host;
+            self.resources
+                .finalize_all_with(|owner| host.resource_close(owner))
+        };
+        self.record_resource_settlements(settlements);
+    }
+
+    #[cfg(test)]
+    fn finalize_resources_with(
+        &mut self,
+        close: impl FnMut(crate::ResourceHandleV1) -> Result<(), IoErrorIdentityV1>,
+    ) {
+        let settlements = self.resources.finalize_all_with(close);
+        self.record_resource_settlements(settlements);
+    }
+
+    fn record_resource_settlements(
+        &mut self,
+        settlements: Vec<crate::ResourceSettlementObservationV1>,
+    ) {
         for settlement in settlements {
             let outcome = match &settlement.outcome {
                 crate::ResourceSettlementOutcomeV1::Released => CanonicalOutcomeV1::Success(
@@ -832,6 +863,7 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
         data: std::ptr::null(),
         len: 0,
     };
+    reply.resource_error = ResourceErrorReplyV1::default();
     match outcome {
         CanonicalOutcomeV1::Success(CanonicalReplyV1::Unit) => reply.tag = REPLY_UNIT,
         CanonicalOutcomeV1::Success(CanonicalReplyV1::Bool(value)) => {
@@ -866,6 +898,34 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
                 crate::FsNodeKindV1::Other => 3,
             };
         }
+        CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Resource(error)) => {
+            reply.tag = REPLY_RESOURCE_ERROR;
+            match error {
+                crate::ResourceErrorV1::Closed => reply.detail = 0,
+                crate::ResourceErrorV1::MalformedResource => reply.detail = 1,
+                crate::ResourceErrorV1::RightNotHeld { required, held } => {
+                    reply.detail = 2;
+                    reply.resource_error.schema_version =
+                        u64::from(crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1);
+                    reply.resource_error.required = u64::from(required);
+                    reply.resource_error.held = u64::from(held);
+                }
+                crate::ResourceErrorV1::ReleaseFailed {
+                    schema_version,
+                    resource_kind,
+                    identity,
+                    io,
+                } => {
+                    reply.detail = 3;
+                    reply.resource_error.schema_version = u64::from(schema_version);
+                    reply.resource_error.resource_kind = match resource_kind {
+                        crate::ResourceKindV1::FsHandle => 0,
+                    };
+                    reply.resource_error.identity = identity.0;
+                    reply.resource_error.io = io_error_tag(io);
+                }
+            }
+        }
         CanonicalOutcomeV1::Error(error) => {
             reply.tag = REPLY_ERROR;
             reply.detail = match error {
@@ -875,7 +935,9 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
                     FileErrorCauseV1::Capability(_) => 2,
                 },
                 crate::SemanticErrorV1::Capability(_) => 2,
-                crate::SemanticErrorV1::Resource(_) => 6,
+                crate::SemanticErrorV1::Resource(_) => {
+                    unreachable!("resource errors have a distinct reply tag")
+                }
             };
         }
         CanonicalOutcomeV1::Success(_) => reply.tag = REPLY_ERROR,
@@ -895,6 +957,72 @@ fn io_error_tag(error: IoErrorIdentityV1) -> u64 {
         IoErrorIdentityV1::NotEmpty => 9,
         IoErrorIdentityV1::Unsupported => 10,
         IoErrorIdentityV1::Other(raw) => (u64::from(raw as u32) << 32) | 11,
+    }
+}
+
+#[cfg(test)]
+fn io_error_from_tag(encoded: u64) -> Option<IoErrorIdentityV1> {
+    let discriminator = encoded & 0xff;
+    if discriminator == 11 {
+        if encoded & 0x0000_0000_ffff_ff00 != 0 {
+            return None;
+        }
+        return Some(IoErrorIdentityV1::Other((encoded >> 32) as u32 as i32));
+    }
+    if encoded >> 8 != 0 {
+        return None;
+    }
+    Some(match discriminator {
+        0 => IoErrorIdentityV1::NotFound,
+        1 => IoErrorIdentityV1::PermissionDenied,
+        3 => IoErrorIdentityV1::BrokenPipe,
+        4 => IoErrorIdentityV1::Interrupted,
+        5 => IoErrorIdentityV1::AlreadyExists,
+        6 => IoErrorIdentityV1::InvalidInput,
+        7 => IoErrorIdentityV1::IsDirectory,
+        8 => IoErrorIdentityV1::NotDirectory,
+        9 => IoErrorIdentityV1::NotEmpty,
+        10 => IoErrorIdentityV1::Unsupported,
+        _ => return None,
+    })
+}
+
+/// Canonical fail-closed decoder shared by the projection mutation oracle.
+/// The linked consumer emits equivalent guards from the generated layout.
+#[cfg(test)]
+fn decode_resource_error_reply(
+    discriminator: u64,
+    payload: ResourceErrorReplyV1,
+) -> Option<crate::ResourceErrorV1> {
+    let all_zero = payload == ResourceErrorReplyV1::default();
+    match discriminator {
+        0 if all_zero => Some(crate::ResourceErrorV1::Closed),
+        1 if all_zero => Some(crate::ResourceErrorV1::MalformedResource),
+        2 if payload.schema_version == u64::from(crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1)
+            && payload.resource_kind == 0
+            && payload.identity == 0
+            && payload.io == 0
+            && payload.required <= u64::from(u8::MAX)
+            && payload.held <= u64::from(u8::MAX) =>
+        {
+            Some(crate::ResourceErrorV1::RightNotHeld {
+                required: payload.required as u8,
+                held: payload.held as u8,
+            })
+        }
+        3 if payload.schema_version == u64::from(crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1)
+            && payload.resource_kind == 0
+            && payload.required == 0
+            && payload.held == 0 =>
+        {
+            Some(crate::ResourceErrorV1::ReleaseFailed {
+                schema_version: crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                resource_kind: crate::ResourceKindV1::FsHandle,
+                identity: crate::ResourceTraceIdentityV1(payload.identity),
+                io: io_error_from_tag(payload.io)?,
+            })
+        }
+        _ => None,
     }
 }
 
@@ -1138,6 +1266,67 @@ mod tests {
             .unwrap_or_else(|| panic!("missing generated effect ABI binding {kind}:{name}"))
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    /// Caller-control only: the closure is invocation-local and does not claim
+    /// an observed OS close failure or use an env/TLS/script carrier.
+    fn caller_control_trap_keeps_terminal_primary_and_appends_cleanup_failure() {
+        let root = std::env::temp_dir().join(format!(
+            "ken-px7f-controlled-trap-settlement-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("held.bin"), b"resource").unwrap();
+        let root_path = crate::RootPath::new(&root).unwrap();
+        let parent = crate::open_root(&root_path).unwrap();
+        let leaf = crate::PathComponent::new(b"held.bin").unwrap();
+        let owner = crate::open_resource_at_v1(&parent, &leaf, crate::OpenRequest::Read).unwrap();
+
+        let mut context = ProcessContext {
+            _posture: ProcessPostureV1(()),
+            host: ProcessHost,
+            capabilities: CapabilityTableV1::default(),
+            resources: crate::ResourceTableV1::default(),
+            response_arena: Vec::new(),
+            effect_trace: Vec::new(),
+            observation: None,
+            plan_hash: 7,
+            capability: CapabilityTokenV1::from_erased_identity(0),
+        };
+        let (_, identity) = context
+            .resources
+            .insert_fs_handle(owner, crate::RightSet::METADATA);
+        let close_calls = std::cell::Cell::new(0);
+        context.finalize_resources_with(|owner| {
+            close_calls.set(close_calls.get() + 1);
+            drop(owner);
+            Err(IoErrorIdentityV1::Other(5))
+        });
+
+        let mut encoded = Vec::new();
+        write_observation_v1(&mut encoded, &context, -4).unwrap();
+        let trace = crate::decode_linked_effect_trace_v1(&encoded).unwrap();
+        assert_eq!(trace.terminal_value, -4, "controlled trap stays primary");
+        assert_eq!(trace.terminal_error, None);
+        assert_eq!(close_calls.get(), 1);
+        assert_eq!(trace.effect_trace.len(), 1);
+        assert_eq!(trace.effect_trace[0].operation, HostOpV1::ResourceRelease);
+        assert_eq!(trace.effect_trace[0].resource, Some(identity));
+        assert!(matches!(
+            trace.effect_trace[0].outcome,
+            CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Resource(
+                crate::ResourceErrorV1::ReleaseFailed {
+                    schema_version: crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                    resource_kind: crate::ResourceKindV1::FsHandle,
+                    identity: got_identity,
+                    io: IoErrorIdentityV1::Other(5),
+                }
+            )) if got_identity == identity
+        ));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn generated_effect_layout_matches_every_live_wire_record() {
         macro_rules! size_align {
@@ -1170,6 +1359,7 @@ mod tests {
         size_align!("FsChangeModeRequestV1", FsChangeModeRequestV1);
         size_align!("FsOpenRequestV1", FsOpenRequestV1);
         size_align!("ResourceRequestV1", ResourceRequestV1);
+        size_align!("ResourceErrorReplyV1", ResourceErrorReplyV1);
         size_align!("HostReplyV1", HostReplyV1);
         macro_rules! offset {
             ($record:literal, $ty:ty, $field:ident) => {
@@ -1225,9 +1415,16 @@ mod tests {
         offset!("FsOpenRequestV1", FsOpenRequestV1, path);
         offset!("FsOpenRequestV1", FsOpenRequestV1, mode);
         offset!("ResourceRequestV1", ResourceRequestV1, resource);
+        offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, schema_version);
+        offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, resource_kind);
+        offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, identity);
+        offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, io);
+        offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, required);
+        offset!("ResourceErrorReplyV1", ResourceErrorReplyV1, held);
         offset!("HostReplyV1", HostReplyV1, tag);
         offset!("HostReplyV1", HostReplyV1, detail);
         offset!("HostReplyV1", HostReplyV1, bytes);
+        offset!("HostReplyV1", HostReplyV1, resource_error);
         assert_eq!(crate::HOST_EFFECT_ABI_V1_CATALOG.len(), 18);
         for operation in HostOpV1::ALL {
             let row = crate::HOST_EFFECT_ABI_V1_CATALOG
@@ -1245,6 +1442,16 @@ mod tests {
         assert_eq!(effect_binding("tag", "reply.error"), REPLY_ERROR);
         assert_eq!(effect_binding("tag", "reply.resource"), REPLY_RESOURCE);
         assert_eq!(effect_binding("tag", "reply.metadata"), REPLY_METADATA);
+        assert_eq!(
+            effect_binding("tag", "reply.resource_error"),
+            REPLY_RESOURCE_ERROR
+        );
+        assert_eq!(effect_binding("error", "resource.Closed"), 0);
+        assert_eq!(effect_binding("error", "resource.MalformedResource"), 1);
+        assert_eq!(effect_binding("error", "resource.RightNotHeld"), 2);
+        assert_eq!(effect_binding("error", "resource.ReleaseFailed"), 3);
+        assert_eq!(effect_binding("tag", "resource_kind.FsHandle"), 0);
+        assert_eq!(effect_binding("lifetime", "resource_error_reply_schema"), 1);
         assert_eq!(effect_binding("error", "io.BrokenPipe"), 3);
         assert_eq!(effect_binding("error", "io.Other"), 11);
     }
@@ -1261,6 +1468,222 @@ mod tests {
                 assert_eq!(rejected, operation);
             }
         }
+    }
+
+    #[test]
+    fn resource_error_reply_decoder_is_canonical_and_fail_closed() {
+        let zero = ResourceErrorReplyV1::default();
+        assert_eq!(
+            decode_resource_error_reply(0, zero),
+            Some(crate::ResourceErrorV1::Closed)
+        );
+        assert_eq!(
+            decode_resource_error_reply(1, zero),
+            Some(crate::ResourceErrorV1::MalformedResource)
+        );
+        let rights = ResourceErrorReplyV1 {
+            schema_version: 1,
+            required: 4,
+            held: 1,
+            ..zero
+        };
+        assert_eq!(
+            decode_resource_error_reply(2, rights),
+            Some(crate::ResourceErrorV1::RightNotHeld {
+                required: 4,
+                held: 1,
+            })
+        );
+        let release = ResourceErrorReplyV1 {
+            schema_version: 1,
+            resource_kind: 0,
+            identity: u64::MAX,
+            io: io_error_tag(crate::IoErrorIdentityV1::Other(-5)),
+            required: 0,
+            held: 0,
+        };
+        assert_eq!(
+            decode_resource_error_reply(3, release),
+            Some(crate::ResourceErrorV1::ReleaseFailed {
+                schema_version: 1,
+                resource_kind: crate::ResourceKindV1::FsHandle,
+                identity: crate::ResourceTraceIdentityV1(u64::MAX),
+                io: crate::IoErrorIdentityV1::Other(-5),
+            })
+        );
+
+        for invalid in [
+            (4, zero),
+            (
+                0,
+                ResourceErrorReplyV1 {
+                    schema_version: 1,
+                    ..zero
+                },
+            ),
+            (
+                1,
+                ResourceErrorReplyV1 {
+                    identity: 1,
+                    ..zero
+                },
+            ),
+            (
+                2,
+                ResourceErrorReplyV1 {
+                    schema_version: 2,
+                    ..rights
+                },
+            ),
+            (
+                2,
+                ResourceErrorReplyV1 {
+                    resource_kind: 1,
+                    ..rights
+                },
+            ),
+            (
+                2,
+                ResourceErrorReplyV1 {
+                    required: 256,
+                    ..rights
+                },
+            ),
+            (
+                2,
+                ResourceErrorReplyV1 {
+                    held: 256,
+                    ..rights
+                },
+            ),
+            (2, ResourceErrorReplyV1 { io: 1, ..rights }),
+            (
+                3,
+                ResourceErrorReplyV1 {
+                    schema_version: 2,
+                    ..release
+                },
+            ),
+            (
+                3,
+                ResourceErrorReplyV1 {
+                    resource_kind: 1,
+                    ..release
+                },
+            ),
+            (3, ResourceErrorReplyV1 { io: 2, ..release }),
+            (
+                3,
+                ResourceErrorReplyV1 {
+                    io: 0x100,
+                    ..release
+                },
+            ),
+            (
+                3,
+                ResourceErrorReplyV1 {
+                    required: 1,
+                    ..release
+                },
+            ),
+            (3, ResourceErrorReplyV1 { held: 1, ..release }),
+        ] {
+            assert_eq!(decode_resource_error_reply(invalid.0, invalid.1), None);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn resource_errors_use_the_distinct_fully_initialized_reply_projection() {
+        let directory =
+            std::env::temp_dir().join(format!("ken-px7f-resource-reply-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        let initialized = context(&directory);
+        let context = unsafe { &mut *initialized.context.cast::<ProcessContext>() };
+        let mut reply = HostReplyV1 {
+            tag: u64::MAX,
+            detail: u64::MAX,
+            bytes: SliceV1 {
+                data: std::ptr::dangling(),
+                len: usize::MAX,
+            },
+            resource_error: ResourceErrorReplyV1 {
+                schema_version: u64::MAX,
+                resource_kind: u64::MAX,
+                identity: u64::MAX,
+                io: u64::MAX,
+                required: u64::MAX,
+                held: u64::MAX,
+            },
+        };
+
+        let mut project = |error| {
+            set_reply(
+                &mut reply,
+                CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Resource(error)),
+                context,
+            );
+            (reply.tag, reply.detail, reply.resource_error)
+        };
+        assert_eq!(
+            project(crate::ResourceErrorV1::Closed),
+            (REPLY_RESOURCE_ERROR, 0, ResourceErrorReplyV1::default())
+        );
+        assert_eq!(
+            project(crate::ResourceErrorV1::MalformedResource),
+            (REPLY_RESOURCE_ERROR, 1, ResourceErrorReplyV1::default())
+        );
+        assert_eq!(
+            project(crate::ResourceErrorV1::RightNotHeld {
+                required: 0x80,
+                held: 0x04,
+            }),
+            (
+                REPLY_RESOURCE_ERROR,
+                2,
+                ResourceErrorReplyV1 {
+                    schema_version: 1,
+                    required: 0x80,
+                    held: 0x04,
+                    ..ResourceErrorReplyV1::default()
+                },
+            )
+        );
+        assert_eq!(
+            project(crate::ResourceErrorV1::ReleaseFailed {
+                schema_version: 1,
+                resource_kind: crate::ResourceKindV1::FsHandle,
+                identity: crate::ResourceTraceIdentityV1(0xfedc_ba98_7654_3210),
+                io: crate::IoErrorIdentityV1::Other(-9),
+            }),
+            (
+                REPLY_RESOURCE_ERROR,
+                3,
+                ResourceErrorReplyV1 {
+                    schema_version: 1,
+                    resource_kind: 0,
+                    identity: 0xfedc_ba98_7654_3210,
+                    io: io_error_tag(crate::IoErrorIdentityV1::Other(-9)),
+                    required: 0,
+                    held: 0,
+                },
+            )
+        );
+
+        set_reply(
+            &mut reply,
+            CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Io(
+                crate::IoErrorIdentityV1::InvalidInput,
+            )),
+            context,
+        );
+        assert_eq!(reply.tag, REPLY_ERROR);
+        assert_eq!(reply.detail, 6);
+        assert_eq!(reply.resource_error, ResourceErrorReplyV1::default());
+
+        unsafe { ken_host_invocation_v1_destroy(initialized.context) };
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     fn context(directory: &std::path::Path) -> HostInitResultV1 {
@@ -1656,6 +2079,7 @@ mod tests {
                 data: std::ptr::null(),
                 len: 0,
             },
+            resource_error: ResourceErrorReplyV1::default(),
         };
         let status = unsafe {
             ken_host_dispatch_v1(
@@ -1715,6 +2139,7 @@ mod tests {
                 data: std::ptr::null(),
                 len: 0,
             },
+            resource_error: ResourceErrorReplyV1::default(),
         };
         let status = unsafe {
             ken_host_dispatch_v1(
@@ -1767,6 +2192,7 @@ mod tests {
                 data: std::ptr::null(),
                 len: 0,
             },
+            resource_error: ResourceErrorReplyV1::default(),
         };
         let status = unsafe {
             ken_host_dispatch_v1(
@@ -1797,7 +2223,9 @@ mod tests {
         assert_eq!(dispatch_resource(HostOpV1::ResourceRelease, &mut reply), 0);
         assert_eq!(reply.tag, REPLY_UNIT);
         assert_eq!(dispatch_resource(HostOpV1::FsHandleMetadata, &mut reply), 0);
-        assert_eq!(reply.tag, REPLY_ERROR);
+        assert_eq!(reply.tag, REPLY_RESOURCE_ERROR);
+        assert_eq!(reply.detail, 0);
+        assert_eq!(reply.resource_error, ResourceErrorReplyV1::default());
 
         let context = unsafe { &*initialized.context.cast::<ProcessContext>() };
         assert_eq!(context.effect_trace.len(), 4);

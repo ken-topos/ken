@@ -2570,7 +2570,10 @@ mod tests {
                 }),
                 args: vec![
                     RuntimeExpr::Value(RuntimeValue::Bytes(b"held.bin".to_vec())),
-                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::ResourceOpenMode::ResourceMetadata".to_string(),
+                        args: Vec::new(),
+                    },
                 ],
             }),
             cases: vec![
