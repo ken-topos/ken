@@ -273,7 +273,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-wrong-schema-version-rejected-pre-export
 
-- status: **RED-UNTIL-PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-F export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC6
 - given: the exact RB-A static target and body, changing only
   `schema_version: 2` to `schema_version: 1`
@@ -286,7 +286,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-wrong-correlation-descriptor-rejected-pre-export
 
-- status: **RED-UNTIL-PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-F export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC6
 - given: the exact RB-A static target and body, changing only
   `event_field: EffectEventV2.resource_bindings` to
@@ -300,7 +300,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-missing-reachable-buffer-plan-rejected-pre-export
 
-- status: **RED-UNTIL-PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-F export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC6; `71 §3.1` I3
 - given: the exact RB-A target and body, whose `Σ` contains both acquisitions,
   changing only `plans` by removing the Buffer plan
@@ -313,7 +313,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-plan-order-rejected-pre-export
 
-- status: **RED-UNTIL-PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-F export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC6
 - given: the exact RB-A target and body, preserving both complete plans but
   reversing them to Buffer then FsHandle
@@ -326,7 +326,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-buffer-only-plan-is-sigma-specialized
 
-- status: **RED-UNTIL-PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-F export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC1; `71 §3.1` I3
 - given: a checked buffer-only target whose exact reachable alphabet `Σ` is
   `{BufferAllocate, BufferFreeze, ResourceRelease}`
@@ -360,7 +360,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/v2-extra-unreachable-operation-rejected-pre-export
 
-- status: **RED-UNTIL-PX8-F export route**
+- status: **RED-UNTIL-PX8-R + PX8-F export route**
 - spec: `71 §2.3/§3.1/§3.3`; PX8-T D1/AC6; `71 §3.1` I3
 - given: the RB-L buffer-only target and specialized body, changing only the
   Buffer `require_same_at` by inserting `(FsWriteAt, Buffer)`, which is absent
