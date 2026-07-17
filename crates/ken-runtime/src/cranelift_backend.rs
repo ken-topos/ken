@@ -1773,6 +1773,13 @@ enum DynamicConstructorContinuation<'a> {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScalarMergeKind {
+    Int,
+    Bool,
+    ExitCode,
+}
+
 struct DeferredConstructorCaseEnvironment<'a> {
     constructor: &'a str,
     lowered_prefix: &'a [Lowered],
@@ -2720,6 +2727,40 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn merge_scalar_branch(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        lowered: Lowered,
+        construct: &'static str,
+    ) -> Result<(cranelift_codegen::ir::Value, ScalarMergeKind), CraneliftBackendError> {
+        match lowered {
+            Lowered::Int { value, .. } => Ok((value, ScalarMergeKind::Int)),
+            Lowered::Bool { value, .. } => Ok((value, ScalarMergeKind::Bool)),
+            Lowered::Constructor { constructor, args }
+                if args.is_empty()
+                    && (constructor == self.process_symbols.bool_true
+                        || constructor == self.process_symbols.bool_false) =>
+            {
+                Ok((
+                    builder.ins().iconst(
+                        types::I64,
+                        i64::from(constructor == self.process_symbols.bool_true),
+                    ),
+                    ScalarMergeKind::Bool,
+                ))
+            }
+            Lowered::ProcessExitStatus { value } => Ok((value, ScalarMergeKind::ExitCode)),
+            lowered if self.process_object => Ok((
+                self.emit_process_exit_status(builder, lowered),
+                ScalarMergeKind::ExitCode,
+            )),
+            _ => Err(unsupported(
+                construct,
+                "dynamic arms must produce scalar Int or Bool values",
+            )),
+        }
+    }
+
     fn record_merge_kind(
         construct: &'static str,
         expected: &mut Option<bool>,
@@ -2904,23 +2945,35 @@ impl<'a> Lowering<'a> {
                     builder
                         .ins()
                         .brif(value, true_block, &[], false_block, &[]);
-                    let mut exit_merge = None;
+                    let mut merge_kind = None;
                     for (block, case) in
                         [(true_block, true_case), (false_block, false_case)]
                     {
                         builder.switch_to_block(block);
                         let lowered = self.lower_expr(builder, &case.body, env)?;
-                        let (value, is_exit) =
-                            self.merge_branch_value(builder, lowered, "Match")?;
-                        Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
+                        let (value, branch_kind) =
+                            self.merge_scalar_branch(builder, lowered, "Match")?;
+                        match merge_kind {
+                            Some(expected) if expected != branch_kind => {
+                                return Err(unsupported(
+                                    "Match",
+                                    "Bool match arms disagree on Int, Bool, or ExitCode result",
+                                ));
+                            }
+                            Some(_) => {}
+                            None => merge_kind = Some(branch_kind),
+                        }
                         builder.ins().jump(merge, &[value.into()]);
                     }
                     builder.switch_to_block(merge);
                     let value = builder.block_params(merge)[0];
-                    return Ok(if exit_merge == Some(true) {
-                        Lowered::ProcessExitStatus { value }
-                    } else {
-                        Lowered::Int { value, known: None }
+                    return Ok(match merge_kind {
+                        Some(ScalarMergeKind::ExitCode) => {
+                            Lowered::ProcessExitStatus { value }
+                        }
+                        Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
+                        Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
+                        None => unreachable!("Bool match emits both closed alternatives"),
                     });
                 }
                 let Lowered::Constructor { constructor, args } = lowered_scrutinee else {
@@ -3782,7 +3835,7 @@ impl<'a> Lowering<'a> {
         builder.append_block_param(merge, types::I64);
         let ok_block = builder.create_block();
         let err_block = builder.create_block();
-        let mut exit_merge = None;
+        let mut merge_kind = None;
         builder.ins().brif(success, ok_block, &[], err_block, &[]);
         for (block, constructor, payload) in [
             (ok_block, ok_constructor, ok),
@@ -3800,16 +3853,26 @@ impl<'a> Lowering<'a> {
             let mut arm_env = vec![payload];
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
-            let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
-            Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
+            let (value, branch_kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
+            match merge_kind {
+                Some(expected) if expected != branch_kind => {
+                    return Err(unsupported(
+                        "Match",
+                        "dynamic HostResult arms disagree on Int, Bool, or ExitCode result",
+                    ));
+                }
+                Some(_) => {}
+                None => merge_kind = Some(branch_kind),
+            }
             builder.ins().jump(merge, &[value.into()]);
         }
         builder.switch_to_block(merge);
         let value = builder.block_params(merge)[0];
-        Ok(if exit_merge == Some(true) {
-            Lowered::ProcessExitStatus { value }
-        } else {
-            Lowered::Int { value, known: None }
+        Ok(match merge_kind {
+            Some(ScalarMergeKind::ExitCode) => Lowered::ProcessExitStatus { value },
+            Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
+            Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
+            None => unreachable!("HostResult emits both closed alternatives"),
         })
     }
 
@@ -3831,7 +3894,7 @@ impl<'a> Lowering<'a> {
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor match block");
-        let mut exit_merge = None;
+        let mut merge_kind = None;
         for alternative in dynamic.alternatives {
             let arm = builder.create_block();
             let next = builder.create_block();
@@ -3880,22 +3943,18 @@ impl<'a> Lowering<'a> {
                         eliminators,
                     )?,
             };
-            let (value, is_exit) = self.merge_branch_value(
-                builder,
-                lowered,
-                match continuation {
-                    DynamicConstructorContinuation::Ordinary { .. } => "Match",
-                    DynamicConstructorContinuation::Producer { .. } => "ComputationalMatch",
-                },
-            )?;
-            Self::record_merge_kind(
-                match continuation {
-                    DynamicConstructorContinuation::Ordinary { .. } => "Match",
-                    DynamicConstructorContinuation::Producer { .. } => "ComputationalMatch",
-                },
-                &mut exit_merge,
-                is_exit,
-            )?;
+            let (value, branch_kind) =
+                self.merge_scalar_branch(builder, lowered, "DynamicConstructor")?;
+            match merge_kind {
+                Some(expected) if expected != branch_kind => {
+                    return Err(unsupported(
+                        "DynamicConstructor",
+                        "dynamic constructor arms disagree on Int, Bool, or ExitCode result",
+                    ));
+                }
+                Some(_) => {}
+                None => merge_kind = Some(branch_kind),
+            }
             builder.ins().jump(merge, &[value.into()]);
             test_block = next;
         }
@@ -3906,10 +3965,11 @@ impl<'a> Lowering<'a> {
         builder.ins().return_(&[malformed]);
         builder.switch_to_block(merge);
         let value = builder.block_params(merge)[0];
-        Ok(if exit_merge == Some(true) {
-            Lowered::ProcessExitStatus { value }
-        } else {
-            Lowered::Int { value, known: None }
+        Ok(match merge_kind {
+            Some(ScalarMergeKind::ExitCode) => Lowered::ProcessExitStatus { value },
+            Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
+            Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
+            None => unreachable!("a nonempty dynamic constructor table emits one arm"),
         })
     }
 
@@ -5794,9 +5854,35 @@ mod tests {
         }
     }
 
-    fn dynamic_io_error_match(producer: bool) -> RuntimeExpr {
+    fn dynamic_io_error_match(producer: bool, ordinary_bool: bool) -> RuntimeExpr {
         let symbols = crate::NativeProcessSymbols::legacy_prelude();
         let tree = "ctor:fixture::DynamicConstructorTree::Code";
+        let producer_tree = |code: RuntimeExpr| RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleIsTerminal,
+                capability: None,
+                args: vec![RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                    args: Vec::new(),
+                }],
+            }),
+            cases: ["ctor:prelude::Bool::True", "ctor:prelude::Bool::False"]
+                .into_iter()
+                .map(|constructor| RuntimeMatchCase {
+                    constructor: constructor.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Construct {
+                        constructor: tree.to_string(),
+                        args: vec![code.clone()],
+                    },
+                })
+                .collect(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "dynamic constructor producer default".to_string(),
+            },
+        };
         let io_cases = symbols
             .io_errors
             .iter()
@@ -5812,10 +5898,9 @@ mod tests {
                     constructor: constructor.clone(),
                     binders,
                     body: if producer {
-                        RuntimeExpr::Construct {
-                            constructor: tree.to_string(),
-                            args: vec![code],
-                        }
+                        producer_tree(code)
+                    } else if ordinary_bool {
+                        RuntimeExpr::Value(RuntimeValue::Bool(tag % 2 == 0))
                     } else {
                         RuntimeExpr::Construct {
                             constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
@@ -5860,6 +5945,8 @@ mod tests {
                             constructor: tree.to_string(),
                             args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
                         }
+                    } else if ordinary_bool {
+                        RuntimeExpr::Value(RuntimeValue::Bool(false))
                     } else {
                         RuntimeExpr::Construct {
                             constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
@@ -5890,6 +5977,31 @@ mod tests {
                     message: "dynamic producer consumer default".to_string(),
                 },
             }
+        } else if ordinary_bool {
+            RuntimeExpr::Match {
+                scrutinee: Box::new(result),
+                cases: [
+                    ("ctor:prelude::Bool::True", crate::EXIT_SUCCESS_CONSTRUCTOR),
+                    ("ctor:prelude::Bool::False", crate::EXIT_FAILURE_CONSTRUCTOR),
+                ]
+                .into_iter()
+                .map(|(constructor, exit)| RuntimeMatchCase {
+                    constructor: constructor.to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Construct {
+                        constructor: exit.to_string(),
+                        args: (exit == crate::EXIT_FAILURE_CONSTRUCTOR)
+                            .then(|| RuntimeExpr::Value(RuntimeValue::Int(1)))
+                            .into_iter()
+                            .collect(),
+                    },
+                })
+                .collect(),
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "dynamic Bool consumer default".to_string(),
+                },
+            }
         } else {
             result
         }
@@ -5898,7 +6010,7 @@ mod tests {
     #[test]
     fn dynamic_constructor_dispatches_ordinary_continuation_with_mixed_arities() {
         emit_process_entrypoint_object_with_cranelift(
-            &dynamic_io_error_match(false),
+            &dynamic_io_error_match(false, false),
             "ken_px7p_dynamic_constructor_ordinary",
         )
         .expect("the shared dispatcher lowers ordinary nullary and unary alternatives");
@@ -5907,10 +6019,19 @@ mod tests {
     #[test]
     fn dynamic_constructor_dispatches_producer_continuation_with_all_frames() {
         emit_process_entrypoint_object_with_cranelift(
-            &dynamic_io_error_match(true),
+            &dynamic_io_error_match(true, false),
             "ken_px7p_dynamic_constructor_producer",
         )
         .expect("the shared dispatcher preserves the active computational frame");
+    }
+
+    #[test]
+    fn dynamic_constructor_ordinary_continuation_preserves_bool_kind() {
+        emit_process_entrypoint_object_with_cranelift(
+            &dynamic_io_error_match(false, true),
+            "ken_px7p_dynamic_constructor_bool",
+        )
+        .expect("a dynamic Bool remains available to its enclosing Bool consumer");
     }
 
     #[test]
@@ -5992,7 +6113,7 @@ mod tests {
         let mut symbols = crate::NativeProcessSymbols::legacy_prelude();
         symbols.io_errors.rotate_right(1);
         let err = emit_process_entrypoint_object_with_symbols(
-            &dynamic_io_error_match(false),
+            &dynamic_io_error_match(false, false),
             &symbols,
             "ken_px7p_dynamic_constructor_arity",
         )
