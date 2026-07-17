@@ -462,7 +462,11 @@ fn assemble_checked_export(
     // Σ is solely the canonical wire projection of the producer-created exact
     // perform inventory. The declared row has already been checked separately;
     // it is never read here as a source or fallback.
-    let alphabet_set = project_inventory_alphabet(inventory);
+    let alphabet_set = project_inventory_alphabet(inventory)?;
+
+    for obligation in &obligations {
+        validate_temporal_signature_atoms(&obligation.formula, &alphabet_set)?;
+    }
 
     let resource_lifetime_obligation = alphabet_set
         .contains("FsOpen")
@@ -471,7 +475,7 @@ fn assemble_checked_export(
     if let Some(resource) = resource_lifetime_obligation.as_ref() {
         validate_resource_lifetime_obligation(resource)?;
         for operation in [resource.acquire_op, resource.use_op, resource.settle_op] {
-            let symbol = host_op_name(operation).to_string();
+            let symbol = canonical_host_perform_signature_v1(operation).to_string();
             if !alphabet_set.contains(&symbol) {
                 return Err(ExportError::TemporalSymbolOutsideAlphabet { symbol });
             }
@@ -598,30 +602,111 @@ fn host_operation_family(operation: ken_host::HostOpV1) -> (&'static str, &'stat
     }
 }
 
-fn project_inventory_alphabet(inventory: &PerformNodeInventoryV1) -> BTreeSet<String> {
+/// Injective canonical wire spelling for one typed perform identity.
+///
+/// Host operations retain their pinned V1 names. Non-host L5 identities carry
+/// both stable family and constructor symbols with length prefixes, so neither
+/// namespace separators nor same-family siblings can collide.
+pub fn canonical_perform_node_signature_v1(
+    node: &PerformNodeSignatureV1,
+) -> Result<String, ExportError> {
+    match node {
+        PerformNodeSignatureV1::Host {
+            family_symbol,
+            operation,
+        } => {
+            if canonical_symbol_tail(family_symbol) != host_operation_family(*operation).0 {
+                return Err(ExportError::NonClosedPerformInventory {
+                    reason: format!(
+                        "typed host operation {operation:?} is bound to the wrong family {family_symbol}"
+                    ),
+                });
+            }
+            Ok(canonical_host_perform_signature_v1(*operation).to_string())
+        }
+        PerformNodeSignatureV1::L5 {
+            family_symbol,
+            operation_symbol,
+        } => Ok(canonical_l5_perform_signature_v1(
+            family_symbol,
+            operation_symbol,
+        )),
+    }
+}
+
+/// Canonical HostOpV1 signature. The exhaustive match is the wire vocabulary.
+pub const fn canonical_host_perform_signature_v1(operation: ken_host::HostOpV1) -> &'static str {
+    match operation {
+        ken_host::HostOpV1::ConsoleRead => "ConsoleRead",
+        ken_host::HostOpV1::ConsoleWrite => "ConsoleWrite",
+        ken_host::HostOpV1::ConsoleFlush => "ConsoleFlush",
+        ken_host::HostOpV1::ConsoleIsTerminal => "ConsoleIsTerminal",
+        ken_host::HostOpV1::ClockWallNow => "ClockWallNow",
+        ken_host::HostOpV1::FsReadFile => "FsReadFile",
+        ken_host::HostOpV1::FsWriteFile => "FsWriteFile",
+        ken_host::HostOpV1::FsAppendFile => "FsAppendFile",
+        ken_host::HostOpV1::FsMetadata => "FsMetadata",
+        ken_host::HostOpV1::FsReadDirectory => "FsReadDirectory",
+        ken_host::HostOpV1::FsCreateDirectory => "FsCreateDirectory",
+        ken_host::HostOpV1::FsRemoveFile => "FsRemoveFile",
+        ken_host::HostOpV1::FsRemoveDirectory => "FsRemoveDirectory",
+        ken_host::HostOpV1::FsRename => "FsRename",
+        ken_host::HostOpV1::FsChangeMode => "FsChangeMode",
+        ken_host::HostOpV1::FsOpen => "FsOpen",
+        ken_host::HostOpV1::FsHandleMetadata => "FsHandleMetadata",
+        ken_host::HostOpV1::ResourceRelease => "ResourceRelease",
+    }
+}
+
+/// Canonical non-host L5 signature with an unambiguous pair encoding.
+pub fn canonical_l5_perform_signature_v1(family_symbol: &str, operation_symbol: &str) -> String {
+    format!(
+        "L5:{}:{}:{}:{}",
+        family_symbol.len(),
+        family_symbol,
+        operation_symbol.len(),
+        operation_symbol
+    )
+}
+
+fn project_inventory_alphabet(
+    inventory: &PerformNodeInventoryV1,
+) -> Result<BTreeSet<String>, ExportError> {
     let mut alphabet = BTreeSet::new();
     for node in &inventory.nodes {
-        match node {
-            PerformNodeSignatureV1::Host { operation, .. } => {
-                alphabet.insert(host_operation_family(*operation).1.to_string());
-                if matches!(
-                    operation,
-                    ken_host::HostOpV1::FsOpen
-                        | ken_host::HostOpV1::FsHandleMetadata
-                        | ken_host::HostOpV1::ResourceRelease
-                ) {
-                    alphabet.insert(host_op_name(*operation).to_string());
-                }
-            }
-            PerformNodeSignatureV1::L5 {
-                family_symbol,
-                operation_symbol: _,
-            } => {
-                alphabet.insert(effect_label_for_family(family_symbol));
+        alphabet.insert(canonical_perform_node_signature_v1(node)?);
+    }
+    Ok(alphabet)
+}
+
+fn validate_temporal_signature_atoms(
+    formula: &crate::temporal::Temporal,
+    alphabet: &BTreeSet<String>,
+) -> Result<(), ExportError> {
+    use crate::temporal::{Pred, Temporal};
+
+    match formula {
+        Temporal::Atom(Pred::Event(symbol)) => {
+            if alphabet.contains(symbol) {
+                Ok(())
+            } else {
+                Err(ExportError::TemporalSymbolOutsideAlphabet {
+                    symbol: symbol.clone(),
+                })
             }
         }
+        Temporal::Atom(_) | Temporal::Var(_) => Ok(()),
+        Temporal::Not(inner) | Temporal::Next(inner) => {
+            validate_temporal_signature_atoms(inner, alphabet)
+        }
+        Temporal::And(left, right) | Temporal::Or(left, right) | Temporal::Until(left, right) => {
+            validate_temporal_signature_atoms(left, alphabet)?;
+            validate_temporal_signature_atoms(right, alphabet)
+        }
+        Temporal::Mu { body, .. } | Temporal::Nu { body, .. } => {
+            validate_temporal_signature_atoms(body, alphabet)
+        }
     }
-    alphabet
 }
 
 // ─── Canonical hash (§3.3) ───────────────────────────────────────────────────
@@ -811,15 +896,6 @@ fn validate_resource_lifetime_obligation(
     }
 }
 
-fn host_op_name(operation: ken_host::HostOpV1) -> &'static str {
-    match operation {
-        ken_host::HostOpV1::FsOpen => "FsOpen",
-        ken_host::HostOpV1::FsHandleMetadata => "FsHandleMetadata",
-        ken_host::HostOpV1::ResourceRelease => "ResourceRelease",
-        _ => unreachable!("resource-lifetime V1 contains only its pinned three operations"),
-    }
-}
-
 fn canonical_resource_lifetime_obligation(value: &ResourceLifetimeObligationV1) -> String {
     format!(
         "schema_version={};body_kind={};obligation_id={};status={};identity_type={};event_field={};bind_at={};require_same_at=[{},{}];acquire_op={};use_op={};settle_op={};successful_acquire_settles_exactly_once={};forbid_successful_use_after_settlement={};require_no_live_resource_on=[{},{},{}];retain_settlement_outcome={}",
@@ -830,11 +906,11 @@ fn canonical_resource_lifetime_obligation(value: &ResourceLifetimeObligationV1) 
         value.correlation.identity_type,
         value.correlation.event_field,
         value.correlation.bind_at,
-        host_op_name(value.correlation.require_same_at[0]),
-        host_op_name(value.correlation.require_same_at[1]),
-        host_op_name(value.acquire_op),
-        host_op_name(value.use_op),
-        host_op_name(value.settle_op),
+        canonical_host_perform_signature_v1(value.correlation.require_same_at[0]),
+        canonical_host_perform_signature_v1(value.correlation.require_same_at[1]),
+        canonical_host_perform_signature_v1(value.acquire_op),
+        canonical_host_perform_signature_v1(value.use_op),
+        canonical_host_perform_signature_v1(value.settle_op),
         value.monitor_template.successful_acquire_settles_exactly_once,
         value.monitor_template.forbid_successful_use_after_settlement,
         value.monitor_template.require_no_live_resource_on[0],
@@ -858,11 +934,11 @@ fn serialize_resource_lifetime_obligation(
             "identity_type": value.correlation.identity_type,
             "event_field": value.correlation.event_field,
             "bind_at": value.correlation.bind_at,
-            "require_same_at": value.correlation.require_same_at.map(host_op_name),
+            "require_same_at": value.correlation.require_same_at.map(canonical_host_perform_signature_v1),
         },
-        "acquire_op": host_op_name(value.acquire_op),
-        "use_op": host_op_name(value.use_op),
-        "settle_op": host_op_name(value.settle_op),
+        "acquire_op": canonical_host_perform_signature_v1(value.acquire_op),
+        "use_op": canonical_host_perform_signature_v1(value.use_op),
+        "settle_op": canonical_host_perform_signature_v1(value.settle_op),
         "monitor_template": {
             "successful_acquire_settles_exactly_once": value.monitor_template.successful_acquire_settles_exactly_once,
             "forbid_successful_use_after_settlement": value.monitor_template.forbid_successful_use_after_settlement,

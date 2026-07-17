@@ -756,7 +756,7 @@ impl Parser {
                 self.expect(&Token::RParen)?;
                 Ok(e)
             }
-            Token::Ident(s) => {
+            Token::Ident(s) | Token::ConId(s) => {
                 if is_temporal_operator(&s) {
                     return Err(ElabError::ParseError {
                         msg: format!("unexpected temporal operator '{}' in atom position", s),

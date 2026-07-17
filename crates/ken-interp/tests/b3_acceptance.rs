@@ -12,10 +12,12 @@ use ken_elaborator::error::Span;
 use ken_elaborator::extract::{ObligationId, ObligationTriple, ProvKind, Provenance};
 use ken_elaborator::prover::Verdict;
 use ken_elaborator::{
+    canonical_host_perform_signature_v1, canonical_l5_perform_signature_v1,
     compiler_driver::{compile_checked_target_denotation, CompilerSource},
     emit_checked_target_export, emit_trace_contract, try_emit_trace_contract, AssertionPoint,
     ExportError, GEntry, Pred, TEntry, Temporal, TraceContractError, TraceEvent,
 };
+use ken_host::HostOpV1;
 use ken_interp::eval::{drive_h_instrumented, eval, EvalStore, EvalVal, ITreeIds};
 use ken_kernel::{
     declare_inductive, declare_postulate, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, Level, Term,
@@ -127,14 +129,18 @@ fn op2_term() -> Term {
 /// the discriminant — independent of store-local code_ids.
 fn decode_op(val: &EvalVal) -> (String, String, String) {
     match val {
-        // body = Var(0): identity closure → Console.Write (op1_term)
+        // body = Var(0): identity closure → Console.Flush (op1_term)
         EvalVal::Closure { body, .. } if matches!(**body, Term::Var(0)) => (
-            "Console".to_string(),
-            "Write".to_string(),
-            "\"hello\"".to_string(),
+            canonical_host_perform_signature_v1(HostOpV1::ConsoleFlush).to_string(),
+            "Flush".to_string(),
+            "Stdout".to_string(),
         ),
         // anything else → Clock.WallNow (op2_term has body = Type(0))
-        _ => ("Clock".to_string(), "WallNow".to_string(), "()".to_string()),
+        _ => (
+            canonical_host_perform_signature_v1(HostOpV1::ClockWallNow).to_string(),
+            "WallNow".to_string(),
+            "()".to_string(),
+        ),
     }
 }
 
@@ -289,7 +295,16 @@ fn sigma_event_concretizes_sigma_member() {
 
     let events = run_two_effect_tree("space_a", &mut store, &env, &it);
 
-    let sigma: BTreeSet<String> = test_alphabet().effects().cloned().collect();
+    let sigma = emit_export(
+        "prog",
+        &[],
+        &BTreeSet::new(),
+        test_alphabet(),
+        vec![],
+        vec![],
+    )
+    .expect("B1 checked export")
+    .alphabet;
 
     // TC1-a: every event.effect ∈ B1.Σ (no second alphabet)
     for ev in &events {
@@ -311,11 +326,11 @@ fn sigma_event_concretizes_sigma_member() {
         );
     }
 
-    // Structural: 2 Vis → 2 events, 2 distinct effects
+    // Structural: 2 Vis → 2 events, 2 distinct perform signatures
     assert_eq!(events.len(), 2, "exactly 2 events for 2-Vis tree");
     assert_ne!(
         events[0].effect, events[1].effect,
-        "two distinct effect labels"
+        "two distinct perform signatures"
     );
 }
 
@@ -452,7 +467,7 @@ fn correlated_events_link_uncorrelated_dont() {
         );
         raw.into_iter()
             .map(|(sid, _, r, pos)| TraceEvent {
-                effect: "Clock".to_string(),
+                effect: canonical_host_perform_signature_v1(HostOpV1::ClockWallNow).to_string(),
                 op: "WallNow".to_string(),
                 op_arg: "()".to_string(),
                 response: decode_resp(&r),
@@ -649,7 +664,9 @@ fn monitor_changes_when_t_changes() {
         vec![],
         vec![TEntry {
             obligation_id: "f.temporal.0".to_string(),
-            formula: Temporal::Atom(Pred::Event("f0".into())),
+            formula: Temporal::Atom(Pred::Event(
+                canonical_host_perform_signature_v1(HostOpV1::ConsoleFlush).into(),
+            )),
         }],
     )
     .expect("export1");
@@ -688,7 +705,7 @@ fn monitor_changes_when_t_changes() {
     );
 
     // Atom check: events come from the real driver (not a synthetic model)
-    let sigma: BTreeSet<String> = test_alphabet().effects().cloned().collect();
+    let sigma = export1.alphabet.clone();
     for ev in &events {
         assert!(
             sigma.contains(&ev.effect),
@@ -726,7 +743,9 @@ fn monitor_verdict_never_promoted_to_proved() {
         vec![],
         vec![TEntry {
             obligation_id: "f.temporal.0".to_string(),
-            formula: Temporal::Atom(Pred::Event("f0".into())),
+            formula: Temporal::Atom(Pred::Event(
+                canonical_host_perform_signature_v1(HostOpV1::ConsoleFlush).into(),
+            )),
         }],
     )
     .expect("export");
@@ -801,14 +820,65 @@ fn trace_events_are_checked_against_the_one_b1_alphabet() {
         .expect("real events are images of B1 Σ");
 
     let mut outside = events;
-    outside[0].effect = "FS".to_string();
+    let sibling = canonical_host_perform_signature_v1(HostOpV1::ConsoleIsTerminal);
+    outside[0].effect = sibling.to_string();
     assert!(
         matches!(
             try_emit_trace_contract("prog", outside, &export),
             Err(TraceContractError::EventOutsideAlphabet {
                 effect,
-            }) if effect == "FS"
+            }) if effect == sibling
         ),
         "B3 must reject rather than derive or widen a second alphabet"
     );
+}
+
+#[test]
+fn non_host_trace_event_uses_exact_b1_signature_and_rejects_sibling() {
+    let denotation = compile_checked_target_denotation(
+        "b3_l5_consumer_closure",
+        CompilerSource::new(
+            "consumer.ken",
+            r#"
+data LocalOp = Ping | Pong
+fn local_resp (_op : LocalOp) : Type = Unit
+proc target (_value : Unit)
+  : ITree LocalOp local_resp Unit visits [Local] =
+  Vis LocalOp local_resp Unit Ping
+    (\_response. Ret LocalOp local_resp Unit MkUnit)
+"#,
+        ),
+        "target",
+    )
+    .expect("checked non-host B1 producer");
+    let export = emit_checked_target_export(&denotation, &[], &BTreeSet::new(), vec![], vec![])
+        .expect("non-host export");
+
+    let family = "decl:b3_l5_consumer_closure::LocalOp";
+    let performed =
+        canonical_l5_perform_signature_v1(family, "ctor:b3_l5_consumer_closure::LocalOp::Ping");
+    let sibling =
+        canonical_l5_perform_signature_v1(family, "ctor:b3_l5_consumer_closure::LocalOp::Pong");
+    assert_eq!(
+        export.alphabet,
+        BTreeSet::from([performed.clone()]),
+        "B3 uses the same canonical L5 projection as B1"
+    );
+
+    let mut env = GlobalEnv::new();
+    let it = mk_itree(&mut env);
+    let mut store = EvalStore::new();
+    let mut event = run_two_effect_tree("space", &mut store, &env, &it)
+        .into_iter()
+        .next()
+        .expect("real instrumented event");
+    event.effect = performed;
+    try_emit_trace_contract("target", vec![event.clone()], &export)
+        .expect("performed full L5 signature is accepted");
+
+    event.effect = sibling.clone();
+    assert!(matches!(
+        try_emit_trace_contract("target", vec![event], &export),
+        Err(TraceContractError::EventOutsideAlphabet { effect }) if effect == sibling
+    ));
 }

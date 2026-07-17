@@ -763,6 +763,26 @@ fn collect_checked_perform_nodes(
             }
         }
 
+        fn dynamic_operation(&self) -> Result<Option<GlobalId>, CheckedTargetDenotationError> {
+            if self
+                .active_declarations
+                .last()
+                .is_some_and(|id| self.source_declarations.contains(id))
+            {
+                Err(Self::fail(format!(
+                    "source Vis operation remains dynamic in {:?}",
+                    self.active_declarations
+                        .iter()
+                        .filter_map(|id| self.symbols.get(id))
+                        .collect::<Vec<_>>()
+                )))
+            } else {
+                // Prelude bind/injection combinators only forward the operation
+                // inventoried at their closed source caller.
+                Ok(None)
+            }
+        }
+
         fn visit_decl(&mut self, id: GlobalId) -> Result<(), CheckedTargetDenotationError> {
             if !self.expanded.insert(id) {
                 return Ok(());
@@ -920,7 +940,7 @@ fn collect_checked_perform_nodes(
             let normalized =
                 ken_kernel::normalize(&self.env.env, &ken_kernel::Context::new(), term);
             if matches!(normalized, Term::Var(_)) {
-                return Ok(None);
+                return self.dynamic_operation();
             }
             if let Term::Constructor { id, .. } = &normalized {
                 return Ok(Some(*id));
@@ -950,7 +970,7 @@ fn collect_checked_perform_nodes(
                     .copied()
                     .ok_or_else(|| Self::fail("ambient coproduct arm is empty"))?;
                 if matches!(ambient, Term::Var(_)) {
-                    return Ok(None);
+                    return self.dynamic_operation();
                 }
                 let (inner, inner_args) = term_application_spine(ambient)
                     .ok_or_else(|| Self::fail("ambient op is not a constructor application"))?;
@@ -975,7 +995,7 @@ fn collect_checked_perform_nodes(
                 // as a bound variable.  They introduce no operation identity of
                 // their own; the closed caller graph supplies the constructor
                 // that is inventoried at its source `Vis`.
-                return Ok(None);
+                return self.dynamic_operation();
             }
             match leaf {
                 Term::Constructor { id, .. } => Ok(Some(*id)),
@@ -1073,23 +1093,52 @@ fn validate_export_root_inputs(
         })
         .collect::<BTreeSet<_>>();
     let contains_dynamic_family = |term: &Term| {
-        fn go(term: &Term, families: &BTreeSet<GlobalId>) -> bool {
+        fn go(
+            term: &Term,
+            env: &ElabEnv,
+            families: &BTreeSet<GlobalId>,
+            visiting_inductives: &mut BTreeSet<GlobalId>,
+        ) -> bool {
             let here = match term {
                 Term::Const { id, .. }
                 | Term::IndFormer { id, .. }
                 | Term::Constructor { id, .. } => families.contains(id),
+                Term::Pi(_, _) => true,
                 _ => false,
             };
-            here || term.children().into_iter().any(|child| go(child, families))
+            if here {
+                return true;
+            }
+
+            if let Term::IndFormer { id, .. } = term {
+                if visiting_inductives.insert(*id) {
+                    let carries_dynamic = env.env.inductive(*id).is_some_and(|inductive| {
+                        inductive.constructors.iter().any(|constructor| {
+                            constructor
+                                .args
+                                .iter()
+                                .any(|argument| go(argument, env, families, visiting_inductives))
+                        })
+                    });
+                    visiting_inductives.remove(id);
+                    if carries_dynamic {
+                        return true;
+                    }
+                }
+            }
+
+            term.children()
+                .into_iter()
+                .any(|child| go(child, env, families, visiting_inductives))
         }
-        go(term, &dynamic_families)
+        go(term, env, &dynamic_families, &mut BTreeSet::new())
     };
 
     let mut cursor = body;
     while let Term::Lam(parameter_type, next) = cursor {
         let normalized_type =
             ken_kernel::normalize(&env.env, &ken_kernel::Context::new(), parameter_type);
-        if matches!(normalized_type, Term::Pi(_, _)) || contains_dynamic_family(&normalized_type) {
+        if contains_dynamic_family(&normalized_type) {
             return Err(CheckedTargetDenotationError::NonClosedPerformGraph {
                 reason: format!(
                     "target input type {normalized_type:?} can inject a dynamic perform tree, operation, or callback"

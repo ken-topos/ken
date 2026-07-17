@@ -380,15 +380,18 @@ proc h (_value : Unit) : HostIO AFull Instant visits [Console, Clock] =
     let result = emit_checked_target_export(&denotation, &[], &BTreeSet::new(), vec![], vec![])
         .expect("export with exact alphabet");
 
-    let expected: BTreeSet<String> = ["Console", "Clock"].iter().map(|s| s.to_string()).collect();
+    let expected: BTreeSet<String> = ["ConsoleFlush", "ClockWallNow"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     assert_eq!(
         result.alphabet, expected,
         "Σ must equal the checked perform-node projection exactly"
     );
 
     // No orphan symbol: each member of Σ is a real perform-node.
-    assert!(result.alphabet.contains("Console"));
-    assert!(result.alphabet.contains("Clock"));
+    assert!(result.alphabet.contains("ConsoleFlush"));
+    assert!(result.alphabet.contains("ClockWallNow"));
     assert!(
         !result.alphabet.contains("FS"),
         "unused sibling effect must not appear"
@@ -471,7 +474,7 @@ fn delegated_obligation_never_promoted_to_proved() {
     // A delegated Temporal obligation.
     let t_entry = TEntry {
         obligation_id: "f.temporal.ltl_safety".to_string(),
-        formula: Temporal::Atom(Pred::Event("ltl_safety".into())),
+        formula: Temporal::Atom(Pred::Top),
     };
 
     // Ward "discharges" it — but the result re-enters only as a TEntry

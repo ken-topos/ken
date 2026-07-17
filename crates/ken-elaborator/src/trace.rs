@@ -30,12 +30,11 @@ use crate::export::BehavioralExport;
 /// promotion (TC5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraceEvent {
-    /// Which `Σ` member fired — an effect label from B1's `BTreeSet<String>`.
-    /// Locked concept; literal field key `(oracle)`.
+    /// Which `Σ` member fired — the exact canonical perform-node signature
+    /// from B1's `BTreeSet<String>`. Locked concept; literal field key `(oracle)`.
     pub effect: String,
-    /// The `Op` tag within the effect (`Console.Write`, `State.Get`, …).
-    /// Concretizes the per-op signature B1's `Σ` abstracts at label granularity.
-    /// Literal key `(oracle)`.
+    /// The display `Op` tag within the already-exact perform signature. This is
+    /// runtime witness detail and is not a second alphabet key. Literal key `(oracle)`.
     pub op: String,
     /// The argument value the op carries — an ITF witness, no status.
     /// Literal key `(oracle)`.
@@ -124,7 +123,7 @@ pub struct TraceContract {
 /// A runtime event could not be projected through the selected B1 export.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TraceContractError {
-    /// The event names no member of the one B1-derived alphabet.  B3 does not
+    /// The event's exact perform signature names no member of the one B1-derived alphabet. B3 does not
     /// derive or widen an alphabet of its own.
     EventOutsideAlphabet { effect: String },
 }
@@ -136,7 +135,7 @@ pub enum TraceContractError {
 /// # Projection sources (TC4)
 /// - `events`: collected by `drive_h_instrumented` at the effect boundary (TC2).
 ///   The caller decodes raw (effect_val, response_val) to `TraceEvent` structs
-///   with effect labels from B1's `Σ` (TC1 closure check).
+///   with exact perform signatures from B1's `Σ` (TC1 closure check).
 /// - `export`: the B1 export — `Q` projects to `WatchedInvariant`, `P` to
 ///   `ConfirmHeld`, `T` to `MonitorProjection`. The assertion-point set and
 ///   the monitor change when the export changes (TC4 / TR-D, TR-E).

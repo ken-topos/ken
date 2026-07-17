@@ -49,13 +49,27 @@ fn emit_export(
     temporal: Vec<TEntry>,
 ) -> Result<ken_elaborator::BehavioralExport, ExportError> {
     assert!(legacy_alphabet.effects().next().is_none());
-    let source = format!("fn {target_name} (value : Unit) : Unit = value");
+    let source = format!(
+        r#"
+proc after_flush (_outcome : Result IOError Unit)
+  : HostIO AFull Instant visits [Clock] =
+  host_clock AFull Instant wall_now
+
+proc {target_name} (_value : Unit)
+  : HostIO AFull Instant visits [Console, Clock] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result IOError Unit) Instant
+    (host_console AFull (Result IOError Unit) (flush Stdout))
+    (\outcome. after_flush outcome)
+"#
+    );
     let denotation = compile_checked_target_denotation(
         &format!("b2_acceptance_{target_name}"),
         CompilerSource::new("fixture.ken", source),
         target_name,
     )
-    .expect("pure checked target denotation");
+    .expect("checked B2 signature producer");
     emit_checked_target_export(&denotation, results, trusted_base, generators, temporal)
 }
 use ken_kernel::{
@@ -369,7 +383,7 @@ fn leadsto_elaborates_to_box_of_or_diamond() {
 fn block_elaborates_delegated_and_visible() {
     let mut elab = ElabEnv::new().expect("ElabEnv");
     let result = elab
-        .elaborate_decl_v1("temporal safety { eventually settled }")
+        .elaborate_decl_v1("temporal safety { eventually ConsoleFlush }")
         .expect("elaborate temporal block");
     assert_eq!(
         result.temporal_obligations.len(),
@@ -383,14 +397,14 @@ fn block_elaborates_delegated_and_visible() {
         obl.formula,
         Temporal::Until(
             Box::new(Temporal::Atom(Pred::Top)),
-            Box::new(Temporal::Atom(Pred::Event("settled".into()))),
+            Box::new(Temporal::Atom(Pred::Event("ConsoleFlush".into()))),
         ),
         "the derived `◇` elaborates to the `until` core"
     );
 
     // Human-visible: the verbatim formula text is carried (not erased, `72 §4`).
     assert!(
-        obl.source.contains("eventually") && obl.source.contains("settled"),
+        obl.source.contains("eventually") && obl.source.contains("ConsoleFlush"),
         "human-visible source carried verbatim: {:?}",
         obl.source
     );
@@ -434,7 +448,7 @@ fn block_elaborates_delegated_and_visible() {
 fn value_projects_to_t_delegated_never_q() {
     let mut elab = ElabEnv::new().expect("ElabEnv");
     let result = elab
-        .elaborate_decl_v1("temporal ltl_safety { always not crashed }")
+        .elaborate_decl_v1("temporal ltl_safety { always not ClockWallNow }")
         .expect("elaborate");
     let obl = &result.temporal_obligations[0];
 
@@ -497,7 +511,7 @@ fn value_projects_to_t_delegated_never_q() {
 fn ward_green_keeps_delegated_never_promoted() {
     let mut elab = ElabEnv::new().expect("ElabEnv");
     let result = elab
-        .elaborate_decl_v1("temporal liveness { eventually done }")
+        .elaborate_decl_v1("temporal liveness { eventually ConsoleFlush }")
         .expect("elaborate");
     let obl = &result.temporal_obligations[0];
     let tentry = TEntry {
@@ -646,8 +660,8 @@ fn closedness_metatheorem_typechecks_via_elim() {
 #[test]
 fn obligation_not_dischargeable_in_ken() {
     // `□(req → ◇resp)` = `always (not req or eventually resp)`.
-    let req = Temporal::Atom(Pred::Event("req".into()));
-    let resp = Temporal::Atom(Pred::Event("resp".into()));
+    let req = Temporal::Atom(Pred::Event("ConsoleFlush".into()));
+    let resp = Temporal::Atom(Pred::Event("ClockWallNow".into()));
     let liveness = Temporal::always(&Temporal::Or(
         Box::new(Temporal::Not(Box::new(req))),
         Box::new(Temporal::eventually(&resp)),
@@ -723,10 +737,10 @@ fn obligation_not_dischargeable_in_ken() {
 fn cross_case_verdict_mapping_is_constant() {
     let mut elab = ElabEnv::new().expect("ElabEnv");
     let formulas = [
-        "temporal a { eventually settled }",
-        "temporal b { always not crashed }",
-        "temporal c { req leadsto resp }",
-        "temporal d { next req }",
+        "temporal a { eventually ConsoleFlush }",
+        "temporal b { always not ClockWallNow }",
+        "temporal c { ConsoleFlush leadsto ClockWallNow }",
+        "temporal d { next ConsoleFlush }",
     ];
     for src in formulas {
         let result = elab.elaborate_decl_v1(src).expect("elaborate");
@@ -786,7 +800,7 @@ proc target (_value : Unit)
         vec![],
         vec![TEntry {
             obligation_id: "console-eventual".to_string(),
-            formula: Temporal::eventually(&Temporal::Atom(Pred::Event("Console".to_string()))),
+            formula: Temporal::eventually(&Temporal::Atom(Pred::Event("ConsoleFlush".to_string()))),
         }],
     )
     .expect("B2 consumes checked B1 export");
@@ -801,6 +815,70 @@ proc target (_value : Unit)
         export.alphabet.contains(symbol),
         "B2's T symbol is a member of the B1-derived Σ; B2 derives no second set"
     );
+
+    assert!(matches!(
+        emit_checked_target_export(
+            &denotation,
+            &[],
+            &BTreeSet::new(),
+            vec![],
+            vec![TEntry {
+                obligation_id: "console-sibling".to_string(),
+                formula: Temporal::Atom(Pred::Event("ConsoleIsTerminal".to_string())),
+            }],
+        ),
+        Err(ExportError::TemporalSymbolOutsideAlphabet { symbol })
+            if symbol == "ConsoleIsTerminal"
+    ));
+}
+
+#[test]
+fn temporal_non_host_signature_rejects_same_family_sibling() {
+    let denotation = compile_checked_target_denotation(
+        "b2_l5_consumer_closure",
+        CompilerSource::new(
+            "consumer.ken",
+            r#"
+data LocalOp = Ping | Pong
+fn local_resp (_op : LocalOp) : Type = Unit
+proc target (_value : Unit)
+  : ITree LocalOp local_resp Unit visits [Local] =
+  Vis LocalOp local_resp Unit Ping
+    (\_response. Ret LocalOp local_resp Unit MkUnit)
+"#,
+        ),
+        "target",
+    )
+    .expect("checked non-host B1 producer");
+    let base = emit_checked_target_export(&denotation, &[], &BTreeSet::new(), vec![], vec![])
+        .expect("non-host export");
+    let performed = base.alphabet.first().expect("Ping signature").clone();
+    let sibling = performed.replacen("Ping", "Pong", 1);
+
+    emit_checked_target_export(
+        &denotation,
+        &[],
+        &BTreeSet::new(),
+        vec![],
+        vec![TEntry {
+            obligation_id: "ping".to_string(),
+            formula: Temporal::Atom(Pred::Event(performed)),
+        }],
+    )
+    .expect("performed L5 signature is accepted");
+    assert!(matches!(
+        emit_checked_target_export(
+            &denotation,
+            &[],
+            &BTreeSet::new(),
+            vec![],
+            vec![TEntry {
+                obligation_id: "pong".to_string(),
+                formula: Temporal::Atom(Pred::Event(sibling.clone())),
+            }],
+        ),
+        Err(ExportError::TemporalSymbolOutsideAlphabet { symbol }) if symbol == sibling
+    ));
 }
 
 // ─── Sanity: the kernel spec helpers build well-formed InductiveSpecs ────────

@@ -53,7 +53,14 @@ fn checked_export(source: &str, target: &str, temporal: Vec<TEntry>) -> Behavior
 fn ordinary_temporal() -> TEntry {
     TEntry {
         obligation_id: "ordinary-temporal".to_string(),
-        formula: Temporal::Atom(Pred::Event("ordinary-event".to_string())),
+        formula: Temporal::Atom(Pred::Event("ConsoleFlush".to_string())),
+    }
+}
+
+fn resource_temporal() -> TEntry {
+    TEntry {
+        obligation_id: "ordinary-temporal".to_string(),
+        formula: Temporal::Atom(Pred::Event("FsOpen".to_string())),
     }
 }
 
@@ -121,8 +128,8 @@ fn checked_no_acquire_producer_preserves_the_pre_px7f_t_hash_route() {
     assert!(export.resource_lifetime_obligation.is_none());
     assert_eq!(export.obligations, vec![temporal]);
     assert_eq!(
-        export.hash, "ken-export-v0:d33cc2d42ce8c446",
-        "fixed regression for the exact pre-PX7-F canonical input"
+        export.hash, "ken-export-v0:6360c2cb74f78f7e",
+        "fixed regression for the exact corrected B1 canonical input"
     );
 
     let wire = serialize_export(&export);
@@ -153,7 +160,7 @@ fn correlated_body_is_one_member_of_the_same_t_sequence() {
     let export = checked_export(
         RESOURCE_PRODUCER,
         "px7f_export_resource",
-        vec![ordinary_temporal()],
+        vec![resource_temporal()],
     );
     let wire = serialize_export(&export);
     assert!(wire.get("resource_lifetime_obligation").is_none());
