@@ -3444,12 +3444,13 @@ impl<'a> Lowering<'a> {
                     let mode = builder.ins().select(in_range, narrowed, invalid);
                     builder.ins().stack_store(mode, request, request_offset(3));
                 } else if operation == ken_host::HostOpV1::FsOpen {
-                    let mode = lowered
-                        .get(1)
-                        .and_then(resource_open_mode_tag)
-                        .ok_or_else(|| {
-                            unsupported("Effect", "FS.Open has a malformed ResourceOpenMode")
-                        })?;
+                    let mode =
+                        lowered
+                            .get(1)
+                            .and_then(resource_open_mode_tag)
+                            .ok_or_else(|| {
+                                unsupported("Effect", "FS.Open has a malformed ResourceOpenMode")
+                            })?;
                     let mode = builder.ins().iconst(types::I64, mode);
                     builder.ins().stack_store(mode, request, request_offset(3));
                 }
@@ -3646,8 +3647,7 @@ impl<'a> Lowering<'a> {
                 }
             } else if matches!(
                 operation,
-                ken_host::HostOpV1::FsHandleMetadata
-                    | ken_host::HostOpV1::ResourceRelease
+                ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
             ) {
                 let generic = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -3970,7 +3970,9 @@ impl<'a> Lowering<'a> {
         );
         builder.ins().brif(is_other, other, &[], ordinary, &[]);
         builder.switch_to_block(other);
-        let middle = builder.ins().band_imm(encoded, 0x0000_0000_ffff_ff00u64 as i64);
+        let middle = builder
+            .ins()
+            .band_imm(encoded, 0x0000_0000_ffff_ff00u64 as i64);
         Self::require_i64(builder, middle, 0);
         builder.ins().jump(valid, &[]);
         builder.switch_to_block(ordinary);
