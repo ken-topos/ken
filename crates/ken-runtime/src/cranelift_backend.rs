@@ -1812,54 +1812,106 @@ impl<'a> Lowering<'a> {
             }
             RuntimeExpr::Call { callee, args } => {
                 let callee = self.lower_expr(builder, callee, producer_env)?;
-                let Lowered::Closure {
-                    captures,
-                    params,
-                    body,
-                } = callee
-                else {
-                    return Err(unsupported(
+                match callee {
+                    Lowered::Closure {
+                        captures,
+                        params,
+                        body,
+                    } => {
+                        if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
+                            if let Some((cases, default)) =
+                                ordinary_match_continuation(&params, &body)
+                            {
+                                let mut frame_env = captures;
+                                frame_env.extend_from_slice(producer_env);
+                                let mut composed = Vec::with_capacity(eliminators.len() + 1);
+                                composed.push(EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
+                                    cases,
+                                    default,
+                                    env: &frame_env,
+                                    retain_scrutinee: true,
+                                }));
+                                composed.extend_from_slice(eliminators);
+                                return self.lower_computational_producer_expr(
+                                    builder,
+                                    &args[0],
+                                    producer_env,
+                                    &composed,
+                                );
+                            }
+                        }
+                        if params.len() != args.len() {
+                            return Err(unsupported(
+                                "ComputationalMatch",
+                                format!(
+                                    "tree producer expects {} args but call provides {}",
+                                    params.len(),
+                                    args.len()
+                                ),
+                            ));
+                        }
+                        let mut call_env = args
+                            .iter()
+                            .map(|arg| self.lower_expr(builder, arg, producer_env))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        call_env.extend(captures);
+                        call_env.extend_from_slice(producer_env);
+                        self.lower_computational_producer_expr(
+                            builder,
+                            &body,
+                            &call_env,
+                            eliminators,
+                        )
+                    }
+                    Lowered::ComputationalRecursorClosure {
+                        recursive,
+                        cases,
+                        default,
+                        outer_env,
+                    } => {
+                        let Lowered::Closure {
+                            captures,
+                            params,
+                            body,
+                        } = *recursive
+                        else {
+                            return Err(unsupported(
+                                "ComputationalMatch",
+                                "recursive constructor field is not a closure",
+                            ));
+                        };
+                        if params.len() != args.len() {
+                            return Err(unsupported(
+                                "ComputationalMatch",
+                                format!(
+                                    "recursive field expects {} args but call provides {}",
+                                    params.len(),
+                                    args.len()
+                                ),
+                            ));
+                        }
+                        let mut call_env = args
+                            .iter()
+                            .map(|arg| self.lower_expr(builder, arg, producer_env))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        call_env.extend(captures);
+                        call_env.extend_from_slice(producer_env);
+                        let mut composed = Vec::with_capacity(eliminators.len() + 1);
+                        composed.push(EliminatorFrame::Computational(
+                            ComputationalEliminatorFrame {
+                                cases: &cases,
+                                default: &default,
+                                env: &outer_env,
+                            },
+                        ));
+                        composed.extend_from_slice(eliminators);
+                        self.lower_computational_producer_expr(builder, &body, &call_env, &composed)
+                    }
+                    _ => Err(unsupported(
                         "ComputationalMatch",
                         "tree producer callee is not a closure",
-                    ));
-                };
-                if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
-                    if let Some((cases, default)) = ordinary_match_continuation(&params, &body) {
-                        let mut frame_env = captures;
-                        frame_env.extend_from_slice(producer_env);
-                        let mut composed = Vec::with_capacity(eliminators.len() + 1);
-                        composed.push(EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
-                            cases,
-                            default,
-                            env: &frame_env,
-                            retain_scrutinee: true,
-                        }));
-                        composed.extend_from_slice(eliminators);
-                        return self.lower_computational_producer_expr(
-                            builder,
-                            &args[0],
-                            producer_env,
-                            &composed,
-                        );
-                    }
+                    )),
                 }
-                if params.len() != args.len() {
-                    return Err(unsupported(
-                        "ComputationalMatch",
-                        format!(
-                            "tree producer expects {} args but call provides {}",
-                            params.len(),
-                            args.len()
-                        ),
-                    ));
-                }
-                let mut call_env = args
-                    .iter()
-                    .map(|arg| self.lower_expr(builder, arg, producer_env))
-                    .collect::<Result<Vec<_>, _>>()?;
-                call_env.extend(captures);
-                call_env.extend_from_slice(producer_env);
-                self.lower_computational_producer_expr(builder, &body, &call_env, eliminators)
             }
             RuntimeExpr::Match {
                 scrutinee,
@@ -4827,8 +4879,7 @@ mod tests {
         .expect("match-selected HostResult remains owned by ordinary dynamic matching");
     }
 
-    #[test]
-    fn recursive_computational_host_result_keeps_established_dynamic_lane() {
+    fn recursive_computational_result(leaf_body: RuntimeExpr) -> RuntimeExpr {
         let node = "ctor:fixture::RecursiveTree::Node";
         let leaf = "ctor:fixture::RecursiveTree::Leaf";
         let recursive_child = RuntimeExpr::LexicalClosure {
@@ -4839,7 +4890,7 @@ mod tests {
                 args: Vec::new(),
             }),
         };
-        let recursive_host_result = RuntimeExpr::ComputationalMatch {
+        RuntimeExpr::ComputationalMatch {
             scrutinee: Box::new(RuntimeExpr::Construct {
                 constructor: node.to_string(),
                 args: vec![recursive_child],
@@ -4861,20 +4912,40 @@ mod tests {
                     constructor: leaf.to_string(),
                     argument_binders: 0,
                     recursive_positions: Vec::new(),
-                    body: console_write_effect(),
+                    body: leaf_body,
                 },
             ],
             default: RuntimeTrap {
                 code: RuntimeTrapCode::PatternMatchFailure,
                 message: "recursive tree default".to_string(),
             },
-        };
+        }
+    }
 
+    #[test]
+    fn recursive_computational_host_result_keeps_established_dynamic_lane() {
         emit_process_entrypoint_object_with_cranelift(
-            &host_result_closure_match(recursive_host_result),
+            &host_result_closure_match(recursive_computational_result(console_write_effect())),
             "ken_px7o_recursive_computational_host_result",
         )
         .expect("recursive computational HostResult remains on ordinary dynamic matching");
+    }
+
+    #[test]
+    fn recursive_computational_aggregate_traverses_ordinary_frame() {
+        let aggregate = RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Result::Ok".to_string(),
+            args: vec![RuntimeExpr::Construct {
+                constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                args: Vec::new(),
+            }],
+        };
+
+        emit_process_entrypoint_object_with_cranelift(
+            &host_result_closure_match(recursive_computational_result(aggregate)),
+            "ken_px7o_recursive_computational_aggregate",
+        )
+        .expect("recursive aggregate traverses the active ordinary frame");
     }
 
     #[test]
