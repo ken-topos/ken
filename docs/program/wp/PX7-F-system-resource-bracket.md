@@ -293,9 +293,12 @@ a new capability family or `RightSet` bit; any kernel change.
   `release` in `body` + bracket exit does not double-close (no second OS close);
   public `release` twice → `Closed` on the second. The trap reaches the runtime
   as a controlled terminal outcome (an aborting trap is not exercised as success
-  — it is a rejected shape). **✅ satisfied in this candidate — runs via the
-  landed PX7-P dynamic-constructor carrier/dispatcher + this resource adapter
-  (`origin/main @ 473e5d51`).**
+  — it is a rejected shape). Normal/error settlement and public double-release
+  are satisfied in this candidate. **DEFERRED:** public checked-Ken
+  controlled-trap reachability awaits the tracked Language/Runtime
+  checked-source trap-producer prerequisite; the private caller-controlled
+  trap-primary + cleanup-secondary fixture proves only invocation-settlement
+  ordering and is not the public face.
 - **AC4 — multi-fault ordering + `ReleaseFailed` via private injection.**
   body-success + release-failure → bracket result is the `ReleaseFailed`;
   body-error + release-failure → both preserved; controlled-trap + cleanup-failure

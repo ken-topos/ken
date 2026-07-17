@@ -261,6 +261,10 @@ pub enum ExportError {
     /// This build is **not shippable** — the claim must be fixed before export.
     /// The claim is absent from all export fields; the build fails here.
     DisproovedClaim { obligation_id: String },
+    /// The correlated resource body is not the exact Spec-owned V1 schema.
+    /// Validation happens before either a `T` wire entry or a content hash is
+    /// emitted, so an independent-event lookalike cannot become shippable.
+    InvalidResourceLifetimeObligation,
 }
 
 // ─── The emitter (the sole constructor for Q entries) ────────────────────────
@@ -388,6 +392,10 @@ pub fn emit_export(
         .contains("FsOpen")
         .then(ResourceLifetimeObligationV1::pinned);
 
+    if let Some(resource) = resource_lifetime_obligation.as_ref() {
+        validate_resource_lifetime_obligation(resource)?;
+    }
+
     let hash = compute_hash(
         target_name,
         &guarantees,
@@ -465,21 +473,17 @@ fn compute_hash(
 
     // T entries: id + the delegated `Temporal` formula body (content-addressed
     // — a different formula yields a different hash, `71 §3.3`).
-    let t_repr: Vec<String> = obligations
+    let mut t_repr: Vec<String> = obligations
         .iter()
         .map(|e| format!("{}:{:?}", e.obligation_id, e.formula))
         .collect();
+    // The structured descriptor is a member of T, exactly like its wire
+    // representation below.  When it is absent we append nothing, preserving
+    // the byte-for-byte pre-PX7-F canonical input and hash.
+    if let Some(resource) = resource_lifetime_obligation {
+        t_repr.push(canonical_resource_lifetime_obligation(resource));
+    }
     root.insert("obligations", t_repr.join("|"));
-
-    // The structured descriptor participates in T's content hash. Runtime
-    // identity `r` is absent by construction; every static descriptor field is
-    // present, so changing any one of them changes the export hash.
-    root.insert(
-        "resource_lifetime_obligation",
-        resource_lifetime_obligation
-            .map(canonical_resource_lifetime_obligation)
-            .unwrap_or_default(),
-    );
 
     // G entries: source + sorted conditions.
     let g_repr: Vec<String> = generators
@@ -512,8 +516,12 @@ fn compute_hash(
 ///
 /// Field key spellings are `(oracle)`-tagged — Ward finalizes the wire tokens.
 /// The value-set and cross-field invariants are normative (locked).
-pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
+pub fn try_serialize_export(export: &BehavioralExport) -> Result<serde_json::Value, ExportError> {
     use serde_json::{json, Value};
+
+    if let Some(resource) = export.resource_lifetime_obligation.as_ref() {
+        validate_resource_lifetime_obligation(resource)?;
+    }
 
     let guarantees: Vec<Value> = export
         .guarantees
@@ -568,7 +576,7 @@ pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
         })
         .collect();
 
-    json!({
+    Ok(json!({
         "schema": "ken.export/v0",               // (oracle): version token
         "target": export.target_name,
         "guarantees": guarantees,                // Q — (oracle): "guarantees" / "Q"
@@ -577,7 +585,24 @@ pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
         "obligations": obligations,              // T — (oracle): "obligations" / "T"
         "generators": generators,                // G — (oracle): "generators" / "G"
         "hash": export.hash
-    })
+    }))
+}
+
+/// Serialize a schema-valid export using the established infallible API.
+/// Malformed correlated resource bodies fail closed before producing a value;
+/// callers that need to inspect that rejection use [`try_serialize_export`].
+pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
+    try_serialize_export(export).expect("BehavioralExport contains an invalid resource schema")
+}
+
+fn validate_resource_lifetime_obligation(
+    value: &ResourceLifetimeObligationV1,
+) -> Result<(), ExportError> {
+    if value == &ResourceLifetimeObligationV1::pinned() {
+        Ok(())
+    } else {
+        Err(ExportError::InvalidResourceLifetimeObligation)
+    }
 }
 
 fn host_op_name(operation: ken_host::HostOpV1) -> &'static str {
@@ -639,4 +664,30 @@ fn serialize_resource_lifetime_obligation(
             "retain_settlement_outcome": value.monitor_template.retain_settlement_outcome,
         }
     })
+}
+
+#[cfg(test)]
+mod resource_lifetime_hash_tests {
+    use super::*;
+
+    #[test]
+    fn one_descriptor_field_mutation_changes_the_t_hash() {
+        let pinned = ResourceLifetimeObligationV1::pinned();
+        let mut independent_event_lookalike = pinned.clone();
+        independent_event_lookalike.correlation.event_field = "EffectEventV1.operation";
+        let alphabet = BTreeSet::from(["FsOpen".to_string()]);
+
+        let hash = |resource: &ResourceLifetimeObligationV1| {
+            compute_hash(
+                "resource-target",
+                &[],
+                &[],
+                &alphabet,
+                &[],
+                Some(resource),
+                &[],
+            )
+        };
+        assert_ne!(hash(&pinned), hash(&independent_event_lookalike));
+    }
 }

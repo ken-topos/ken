@@ -196,6 +196,84 @@ fn result_payload<'a>(env: &ken_elaborator::ElabEnv, value: &'a EvalVal) -> &'a 
     }
 }
 
+fn type_value(env: &ken_elaborator::ElabEnv, store: &mut EvalStore, name: &str) -> EvalVal {
+    eval(
+        &[],
+        &Term::indformer(env.globals[name], vec![]),
+        &env.env,
+        store,
+    )
+}
+
+fn apply_many(
+    env: &ken_elaborator::ElabEnv,
+    store: &mut EvalStore,
+    name: &str,
+    values: impl IntoIterator<Item = EvalVal>,
+) -> EvalVal {
+    values
+        .into_iter()
+        .fold(eval_global(env, store, name), |f, value| {
+            apply(f, value, &env.env, store)
+        })
+}
+
+fn apply_constructor_many(
+    env: &ken_elaborator::ElabEnv,
+    store: &mut EvalStore,
+    name: &str,
+    values: impl IntoIterator<Item = EvalVal>,
+) -> EvalVal {
+    values.into_iter().fold(ctor(env, store, name), |f, value| {
+        apply(f, value, &env.env, store)
+    })
+}
+
+fn injected_release_failure(env: &ken_elaborator::ElabEnv, store: &mut EvalStore) -> EvalVal {
+    let identity = {
+        let constructor = eval(
+            &[],
+            &Term::constructor(env.prelude_env.private_resource_trace_identity_id, vec![]),
+            &env.env,
+            store,
+        );
+        let constructor = apply(constructor, EvalVal::Int(0), &env.env, store);
+        apply(constructor, EvalVal::Int(7), &env.env, store)
+    };
+    let io = apply_constructor_many(env, store, "Other", [EvalVal::Int(5)]);
+    let kind = ctor(env, store, "FsHandle");
+    apply_constructor_many(env, store, "ReleaseFailed", [kind, identity, io])
+}
+
+fn injected_release_result(env: &ken_elaborator::ElabEnv, store: &mut EvalStore) -> EvalVal {
+    let error_type = type_value(env, store, "ResourceError");
+    let unit_type = type_value(env, store, "Unit");
+    let failure = injected_release_failure(env, store);
+    apply_constructor_many(env, store, "Err", [error_type, unit_type, failure])
+}
+
+fn assert_injected_release_failure(env: &ken_elaborator::ElabEnv, value: &EvalVal) {
+    let EvalVal::Ctor { id, args, .. } = value else {
+        panic!("expected ReleaseFailed, got {value:?}");
+    };
+    assert_eq!(*id, env.globals["ReleaseFailed"]);
+    assert!(matches!(
+        &args[0],
+        EvalVal::Ctor { id, .. } if *id == env.globals["FsHandle"]
+    ));
+    assert!(matches!(
+        &args[1],
+        EvalVal::Ctor { id, args, .. }
+            if *id == env.prelude_env.private_resource_trace_identity_id
+                && args.as_ref() == &[EvalVal::Int(0), EvalVal::Int(7)]
+    ));
+    assert!(matches!(
+        &args[2],
+        EvalVal::Ctor { id, args, .. }
+            if *id == env.globals["Other"] && args.as_ref() == &[EvalVal::Int(5)]
+    ));
+}
+
 #[test]
 fn public_bracket_success_and_early_release_settle_once() {
     let env = env();
@@ -256,4 +334,56 @@ fn escaped_copy_is_legal_but_every_later_use_is_closed() {
         &args[2],
         EvalVal::Ctor { id, .. } if *id == env.globals["Closed"]
     ));
+}
+
+#[test]
+/// Caller-control only: these exact injected results exercise the bracket's
+/// checked settlement functions; they do not claim an observed OS failure.
+fn caller_control_release_failure_preserves_success_and_body_error_ordering() {
+    let env = env();
+
+    let mut success_store = EvalStore::new();
+    let success_error_type = type_value(&env, &mut success_store, "ResourceError");
+    let success_unit_type = type_value(&env, &mut success_store, "Unit");
+    let success_unit = ctor(&env, &mut success_store, "MkUnit");
+    let success_release = injected_release_result(&env, &mut success_store);
+    let success = apply_many(
+        &env,
+        &mut success_store,
+        "resource_settle_ok",
+        [
+            success_error_type,
+            success_unit_type,
+            success_unit,
+            success_release,
+        ],
+    );
+    let success_bracket = result_payload(&env, &success);
+    let EvalVal::Ctor { id, args, .. } = success_bracket else {
+        panic!("expected bracket constructor, got {success_bracket:?}");
+    };
+    assert_eq!(*id, env.globals["ResourceBracketReleaseError"]);
+    assert_injected_release_failure(&env, &args[2]);
+
+    let mut error_store = EvalStore::new();
+    let body_error = ctor(&env, &mut error_store, "MalformedResource");
+    let error_type = type_value(&env, &mut error_store, "ResourceError");
+    let error_unit_type = type_value(&env, &mut error_store, "Unit");
+    let error_release = injected_release_result(&env, &mut error_store);
+    let combined = apply_many(
+        &env,
+        &mut error_store,
+        "resource_settle_err",
+        [error_type, error_unit_type, body_error, error_release],
+    );
+    let combined_bracket = result_payload(&env, &combined);
+    let EvalVal::Ctor { id, args, .. } = combined_bracket else {
+        panic!("expected bracket constructor, got {combined_bracket:?}");
+    };
+    assert_eq!(*id, env.globals["ResourceBracketBodyAndReleaseError"]);
+    assert!(matches!(
+        &args[2],
+        EvalVal::Ctor { id, .. } if *id == env.globals["MalformedResource"]
+    ));
+    assert_injected_release_failure(&env, &args[3]);
 }

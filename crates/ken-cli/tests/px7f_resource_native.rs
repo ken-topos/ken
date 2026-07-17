@@ -150,6 +150,79 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
   }
 "#;
 
+const DOUBLE_RELEASE: &str = r#"program capabilities FS AFull
+fn double_release_second_error (error : ResourceError)
+  : HostIO AFull (ResourceBodyResult ResourceError Unit) =
+  match error {
+    Closed |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult ResourceError Unit)
+      (ResourceBodyOk ResourceError Unit MkUnit);
+    ResourceHostIO io |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult ResourceError Unit)
+      (ResourceBodyErr ResourceError Unit (ResourceHostIO io));
+    MalformedResource |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult ResourceError Unit)
+      (ResourceBodyErr ResourceError Unit MalformedResource);
+    RightNotHeld required held |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult ResourceError Unit)
+      (ResourceBodyErr ResourceError Unit (RightNotHeld required held));
+    ReleaseFailed kind identity io |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult ResourceError Unit)
+      (ResourceBodyErr ResourceError Unit (ReleaseFailed kind identity io))
+  }
+
+fn double_release_after_second (outcome : Result ResourceError Unit)
+  : HostIO AFull (ResourceBodyResult ResourceError Unit) =
+  match outcome {
+    Err error |-> double_release_second_error error;
+    Ok unit |-> Ret (Coproduct (FSOp AFull) AmbientOp)
+      (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+      (ResourceBodyResult ResourceError Unit)
+      (ResourceBodyErr ResourceError Unit MalformedResource)
+  }
+
+proc double_release_after_first
+  (resource : Resource FsHandle) (first : Result ResourceError Unit)
+  : HostIO AFull (ResourceBodyResult ResourceError Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError Unit) (ResourceBodyResult ResourceError Unit)
+    (release AFull resource) (\second. double_release_after_second second)
+
+proc double_release_body (resource : Resource FsHandle)
+  : HostIO AFull (ResourceBodyResult ResourceError Unit) visits [FS] =
+  bind (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (Result ResourceError Unit) (ResourceBodyResult ResourceError Unit)
+    (release AFull resource) (\first. double_release_after_first resource first)
+
+fn double_release_done
+  (outcome : Result FileError (ResourceBracketResult ResourceError Unit))
+  : HostIO AFull ExitCode =
+  match outcome {
+    Ok (ResourceBracketOk unit) |-> host_exit AFull Success;
+    Ok bracket |-> host_exit AFull (Failure 74);
+    Err error |-> host_exit AFull (Failure 75)
+  }
+
+proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
+  : HostIO AFull ExitCode visits [FS] =
+  match caps {
+    MkProgramCaps cap |->
+      bind (Coproduct (FSOp AFull) AmbientOp)
+        (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+        (Result FileError (ResourceBracketResult ResourceError Unit)) ExitCode
+        (withResource AFull ResourceError Unit cap (bytes_encode "held.bin")
+          ResourceMetadata double_release_body)
+        (\outcome. double_release_done outcome)
+  }
+"#;
+
 #[cfg(target_os = "linux")]
 #[test]
 fn linked_public_escape_is_exact_closed() {
@@ -189,4 +262,47 @@ fn linked_public_right_denial_preserves_exact_masks() {
             }
         ))
     )));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linked_public_second_release_is_closed_and_the_handle_closes_once() {
+    let observation = run("double-release", DOUBLE_RELEASE);
+    assert_eq!(observation.exit_status, 0, "{observation:?}");
+    assert_eq!(observation.terminal_error, None);
+    let releases = observation
+        .effect_trace
+        .iter()
+        .filter(|event| event.operation == ken_runtime::HostOpV1::ResourceRelease)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        releases.len(),
+        3,
+        "two public calls plus bracket settlement"
+    );
+    assert!(matches!(
+        releases[0].outcome,
+        ken_runtime::CanonicalOutcomeV1::Success(
+            ken_runtime::CanonicalReplyV1::ResourceSettlement(_)
+        )
+    ));
+    assert!(matches!(
+        releases[1].outcome,
+        ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Resource(
+            ken_runtime::ResourceErrorV1::Closed
+        ))
+    ));
+    assert_eq!(
+        releases
+            .iter()
+            .filter(|event| matches!(
+                event.outcome,
+                ken_runtime::CanonicalOutcomeV1::Success(
+                    ken_runtime::CanonicalReplyV1::ResourceSettlement(_)
+                )
+            ))
+            .count(),
+        1,
+        "the owned descriptor is actually closed exactly once"
+    );
 }

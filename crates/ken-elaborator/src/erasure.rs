@@ -3228,6 +3228,25 @@ mod px7l_tests {
                 "ChangeMode",
             ),
             io_errors: Vec::new(),
+            resource_host_io: StableSymbol::constructor(&family("ResourceError"), "ResourceHostIO"),
+            resource_closed: StableSymbol::constructor(&family("ResourceError"), "Closed"),
+            resource_malformed: StableSymbol::constructor(
+                &family("ResourceError"),
+                "MalformedResource",
+            ),
+            resource_right_not_held: StableSymbol::constructor(
+                &family("ResourceError"),
+                "RightNotHeld",
+            ),
+            resource_release_failed: StableSymbol::constructor(
+                &family("ResourceError"),
+                "ReleaseFailed",
+            ),
+            resource_kind_fs_handle: StableSymbol::constructor(&family("ResourceKind"), "FsHandle"),
+            resource_trace_identity: StableSymbol::constructor(
+                &family("ResourceTraceIdentity"),
+                "PrivateResourceTraceIdentity",
+            ),
             unit: StableSymbol::constructor(&family("Unit"), "MkUnit"),
             bool_false: StableSymbol::constructor(&family("Bool"), "False"),
             bool_true: StableSymbol::constructor(&family("Bool"), "True"),

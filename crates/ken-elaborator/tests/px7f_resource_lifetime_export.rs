@@ -1,27 +1,53 @@
 use std::collections::BTreeSet;
 
-use ken_elaborator::effects::row::EffectRow;
-use ken_elaborator::{emit_export, serialize_export, ResourceLifetimeObligationV1};
+use ken_elaborator::temporal::{Pred, Temporal};
+use ken_elaborator::{
+    emit_export, serialize_export, try_serialize_export, BehavioralExport, ElabEnv, ExportError,
+    ResourceLifetimeObligationV1, TEntry,
+};
 
-fn export_with(alphabet: EffectRow) -> ken_elaborator::BehavioralExport {
-    emit_export(
-        "px7f-resource-target",
-        &[],
-        &BTreeSet::new(),
-        alphabet,
-        vec![],
-        vec![],
-    )
-    .expect("resource export")
+const RESOURCE_PRODUCER: &str = r#"
+fn px7f_export_body (resource : Resource FsHandle)
+  : HostIO AFull (ResourceBodyResult Unit Unit) =
+  Ret (Coproduct (FSOp AFull) AmbientOp)
+    (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
+    (ResourceBodyResult Unit Unit)
+    (ResourceBodyOk Unit Unit MkUnit)
+
+proc px7f_export_resource (cap : Cap AFull) (path : Bytes)
+  : HostIO AFull (Result FileError (ResourceBracketResult Unit Unit))
+    visits [FS, FsOpen] =
+  withResource AFull Unit Unit cap path ResourceMetadata px7f_export_body
+"#;
+
+const ORDINARY_PRODUCER: &str = r#"
+proc px7f_export_ordinary (value : Unit) : Unit visits [Console] = value
+"#;
+
+fn checked_export(source: &str, target: &str, temporal: Vec<TEntry>) -> BehavioralExport {
+    let mut env = ElabEnv::empty().expect("PX7-F prelude");
+    env.elaborate_file(source)
+        .expect("checked producer must elaborate");
+    let row = env
+        .effect_rows
+        .get(target)
+        .unwrap_or_else(|| panic!("checked producer row for {target}"))
+        .concrete_effects();
+    emit_export(target, &[], &BTreeSet::new(), row, vec![], temporal)
+        .expect("checked producer export")
+}
+
+fn ordinary_temporal() -> TEntry {
+    TEntry {
+        obligation_id: "ordinary-temporal".to_string(),
+        formula: Temporal::Atom(Pred::Event("ordinary-event".to_string())),
+    }
 }
 
 #[test]
-fn fs_open_reachability_emits_exactly_one_pinned_correlated_obligation() {
-    let export = export_with(EffectRow::from_effects([
-        "FsOpen".to_string(),
-        "FsHandleMetadata".to_string(),
-        "ResourceRelease".to_string(),
-    ]));
+fn checked_resource_producer_emits_exactly_one_pinned_correlated_t_body() {
+    let export = checked_export(RESOURCE_PRODUCER, "px7f_export_resource", vec![]);
+    assert!(export.alphabet.contains("FsOpen"));
     assert_eq!(
         export.resource_lifetime_obligation,
         Some(ResourceLifetimeObligationV1::pinned())
@@ -32,7 +58,7 @@ fn fs_open_reachability_emits_exactly_one_pinned_correlated_obligation() {
     assert_eq!(
         obligations.len(),
         1,
-        "one target-level template, not three atoms"
+        "one target-level template, not three synthetic atoms"
     );
     assert_eq!(
         obligations[0],
@@ -71,36 +97,55 @@ fn fs_open_reachability_emits_exactly_one_pinned_correlated_obligation() {
 }
 
 #[test]
-fn no_reachable_acquire_emits_no_resource_lifetime_obligation() {
-    let export = export_with(EffectRow::from_effects([
-        "ConsoleWrite".to_string(),
-        "FsHandleMetadata".to_string(),
-        "ResourceRelease".to_string(),
-    ]));
+fn checked_no_acquire_producer_preserves_the_pre_px7f_t_hash_route() {
+    let temporal = ordinary_temporal();
+    let export = checked_export(
+        ORDINARY_PRODUCER,
+        "px7f_export_ordinary",
+        vec![temporal.clone()],
+    );
+    assert!(!export.alphabet.contains("FsOpen"));
     assert!(export.resource_lifetime_obligation.is_none());
-    assert!(serialize_export(&export)["obligations"]
-        .as_array()
-        .expect("T array")
-        .is_empty());
+    assert_eq!(export.obligations, vec![temporal]);
+    assert_eq!(
+        export.hash, "ken-export-v0:d33cc2d42ce8c446",
+        "fixed regression for the exact pre-PX7-F canonical input"
+    );
+
+    let wire = serialize_export(&export);
+    let obligations = wire["obligations"].as_array().expect("T array");
+    assert_eq!(obligations.len(), 1);
+    assert_eq!(obligations[0]["obligation_id"], "ordinary-temporal");
+    assert_eq!(wire["hash"], export.hash);
 }
 
 #[test]
-fn correlated_descriptor_participates_in_the_export_hash() {
-    let without = export_with(EffectRow::from_effects([
-        "FsHandleMetadata".to_string(),
-        "ResourceRelease".to_string(),
-    ]));
-    let with = export_with(EffectRow::from_effects([
-        "FsOpen".to_string(),
-        "FsHandleMetadata".to_string(),
-        "ResourceRelease".to_string(),
-    ]));
-    assert_ne!(without.hash, with.hash);
+fn independent_event_lookalike_is_rejected_before_t_or_hash_emission() {
+    let mut export = checked_export(RESOURCE_PRODUCER, "px7f_export_resource", vec![]);
+    let malformed = export
+        .resource_lifetime_obligation
+        .as_mut()
+        .expect("resource body");
+    malformed.correlation.event_field = "EffectEventV1.operation";
 
-    let repeated = export_with(EffectRow::from_effects([
-        "ResourceRelease".to_string(),
-        "FsOpen".to_string(),
-        "FsHandleMetadata".to_string(),
-    ]));
-    assert_eq!(with.hash, repeated.hash, "canonical ordering is stable");
+    assert_eq!(
+        try_serialize_export(&export),
+        Err(ExportError::InvalidResourceLifetimeObligation),
+        "RL-B returns no wire object, hence no T entry and no emitted hash"
+    );
+}
+
+#[test]
+fn correlated_body_is_one_member_of_the_same_t_sequence() {
+    let export = checked_export(
+        RESOURCE_PRODUCER,
+        "px7f_export_resource",
+        vec![ordinary_temporal()],
+    );
+    let wire = serialize_export(&export);
+    assert!(wire.get("resource_lifetime_obligation").is_none());
+    let obligations = wire["obligations"].as_array().expect("T array");
+    assert_eq!(obligations.len(), 2);
+    assert_eq!(obligations[0]["obligation_id"], "ordinary-temporal");
+    assert_eq!(obligations[1]["obligation_id"], "resource-lifetime-v1");
 }

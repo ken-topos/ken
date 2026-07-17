@@ -61,8 +61,8 @@ pub use diagnostics::{
 pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, ObligationKind};
 pub use error::{ElabError, Span};
 pub use export::{
-    emit_export, serialize_export, BehavioralExport, ExportError, GEntry, PEntry, PStatus, QEntry,
-    ResourceLifetimeCorrelationV1, ResourceLifetimeObligationV1, TEntry,
+    emit_export, serialize_export, try_serialize_export, BehavioralExport, ExportError, GEntry,
+    PEntry, PStatus, QEntry, ResourceLifetimeCorrelationV1, ResourceLifetimeObligationV1, TEntry,
     WardResourceLifetimeMonitorV1,
 };
 pub use extract::{

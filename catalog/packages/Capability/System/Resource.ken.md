@@ -4,9 +4,13 @@
 filesystem resource table. Resource handles are ordinary copyable Ken values:
 Ken does not make them affine. Liveness is runtime-enforced and Ward-checked.
 An escaped copy is legal, but after its bracket settles every later use returns
-`Closed`. Settlement covers normal return, returned error, and controlled Ken
-traps; external process destruction, abort, fatal signal, and machine failure
-are outside that guarantee.
+`Closed`; insufficient authority returns `RightNotHeld`. The bracket acquires
+before its delayed body and settles on normal return, returned error, and a
+controlled runtime trap. Trap-primary/cleanup-secondary ordering is currently
+exercised by a private caller-controlled runtime fixture; Ken has no
+checked-source controlled-trap producer yet, so public checked-Ken reachability
+of that face is deferred. The settlement guarantee excludes external process
+destruction, abort, fatal signal, and machine failure.
 
 `withResource` is the sole public acquisition route. Its body is a delayed
 function, so acquisition happens before the body and `release_if_live`

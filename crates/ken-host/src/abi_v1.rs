@@ -792,9 +792,27 @@ pub unsafe extern "C" fn ken_host_invocation_v1_finish(
 
 impl ProcessContext {
     fn finalize_resources(&mut self) {
-        let settlements = self
-            .resources
-            .finalize_all_with(|owner| self.host.resource_close(owner));
+        let settlements = {
+            let host = &mut self.host;
+            self.resources
+                .finalize_all_with(|owner| host.resource_close(owner))
+        };
+        self.record_resource_settlements(settlements);
+    }
+
+    #[cfg(test)]
+    fn finalize_resources_with(
+        &mut self,
+        close: impl FnMut(crate::ResourceHandleV1) -> Result<(), IoErrorIdentityV1>,
+    ) {
+        let settlements = self.resources.finalize_all_with(close);
+        self.record_resource_settlements(settlements);
+    }
+
+    fn record_resource_settlements(
+        &mut self,
+        settlements: Vec<crate::ResourceSettlementObservationV1>,
+    ) {
         for settlement in settlements {
             let outcome = match &settlement.outcome {
                 crate::ResourceSettlementOutcomeV1::Released => CanonicalOutcomeV1::Success(
@@ -1246,6 +1264,67 @@ mod tests {
                 (*bound_kind == kind && *bound_name == name).then_some(*value)
             })
             .unwrap_or_else(|| panic!("missing generated effect ABI binding {kind}:{name}"))
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    /// Caller-control only: the closure is invocation-local and does not claim
+    /// an observed OS close failure or use an env/TLS/script carrier.
+    fn caller_control_trap_keeps_terminal_primary_and_appends_cleanup_failure() {
+        let root = std::env::temp_dir().join(format!(
+            "ken-px7f-controlled-trap-settlement-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("held.bin"), b"resource").unwrap();
+        let root_path = crate::RootPath::new(&root).unwrap();
+        let parent = crate::open_root(&root_path).unwrap();
+        let leaf = crate::PathComponent::new(b"held.bin").unwrap();
+        let owner = crate::open_resource_at_v1(&parent, &leaf, crate::OpenRequest::Read).unwrap();
+
+        let mut context = ProcessContext {
+            _posture: ProcessPostureV1(()),
+            host: ProcessHost,
+            capabilities: CapabilityTableV1::default(),
+            resources: crate::ResourceTableV1::default(),
+            response_arena: Vec::new(),
+            effect_trace: Vec::new(),
+            observation: None,
+            plan_hash: 7,
+            capability: CapabilityTokenV1::from_erased_identity(0),
+        };
+        let (_, identity) = context
+            .resources
+            .insert_fs_handle(owner, crate::RightSet::METADATA);
+        let close_calls = std::cell::Cell::new(0);
+        context.finalize_resources_with(|owner| {
+            close_calls.set(close_calls.get() + 1);
+            drop(owner);
+            Err(IoErrorIdentityV1::Other(5))
+        });
+
+        let mut encoded = Vec::new();
+        write_observation_v1(&mut encoded, &context, -4).unwrap();
+        let trace = crate::decode_linked_effect_trace_v1(&encoded).unwrap();
+        assert_eq!(trace.terminal_value, -4, "controlled trap stays primary");
+        assert_eq!(trace.terminal_error, None);
+        assert_eq!(close_calls.get(), 1);
+        assert_eq!(trace.effect_trace.len(), 1);
+        assert_eq!(trace.effect_trace[0].operation, HostOpV1::ResourceRelease);
+        assert_eq!(trace.effect_trace[0].resource, Some(identity));
+        assert!(matches!(
+            trace.effect_trace[0].outcome,
+            CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Resource(
+                crate::ResourceErrorV1::ReleaseFailed {
+                    schema_version: crate::RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
+                    resource_kind: crate::ResourceKindV1::FsHandle,
+                    identity: got_identity,
+                    io: IoErrorIdentityV1::Other(5),
+                }
+            )) if got_identity == identity
+        ));
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
