@@ -26,7 +26,9 @@ fn resource_body_success (e : Type) (a : Type) (value : a) : ResourceBodyResult 
 fn resource_body_failure (e : Type) (a : Type) (error : e) : ResourceBodyResult e a =
   ResourceBodyErr e a error
 
-fn resource_bracket_succeeded (e : Type) (a : Type) (outcome : ResourceBracketResult e a) : Bool =
+fn resource_bracket_succeeded
+      (e : Type) (a : Type) (outcome : ResourceBracketResult e a)
+    : Bool =
   match outcome {
     ResourceBracketOk value ↦ True;
     ResourceBracketBodyError error ↦ False;
