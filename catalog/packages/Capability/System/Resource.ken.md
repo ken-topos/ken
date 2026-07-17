@@ -9,8 +9,8 @@ before its delayed body and settles on normal return, returned error, and a
 controlled runtime trap. Trap-primary/cleanup-secondary ordering is currently
 exercised by a private caller-controlled runtime fixture; Ken has no
 checked-source controlled-trap producer yet, so public checked-Ken reachability
-of that face is deferred. The settlement guarantee excludes external process
-destruction, abort, fatal signal, and machine failure.
+of that face is deferred. The guarantee excludes external process destruction,
+abort, fatal signal, and machine failure.
 
 `withResource` is the sole public acquisition route. Its body is a delayed
 function, so acquisition happens before the body and `release_if_live`
