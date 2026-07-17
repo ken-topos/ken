@@ -30,12 +30,11 @@ use crate::export::BehavioralExport;
 /// promotion (TC5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraceEvent {
-    /// Which `Σ` member fired — an effect label from B1's `BTreeSet<String>`.
-    /// Locked concept; literal field key `(oracle)`.
+    /// Which `Σ` member fired — the exact canonical perform-node signature
+    /// from B1's `BTreeSet<String>`. Locked concept; literal field key `(oracle)`.
     pub effect: String,
-    /// The `Op` tag within the effect (`Console.Write`, `State.Get`, …).
-    /// Concretizes the per-op signature B1's `Σ` abstracts at label granularity.
-    /// Literal key `(oracle)`.
+    /// The display `Op` tag within the already-exact perform signature. This is
+    /// runtime witness detail and is not a second alphabet key. Literal key `(oracle)`.
     pub op: String,
     /// The argument value the op carries — an ITF witness, no status.
     /// Literal key `(oracle)`.
@@ -62,15 +61,9 @@ pub struct TraceEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssertionPoint {
     /// From a `Q` (proved) entry: the downstream engine watches this invariant.
-    WatchedInvariant {
-        obligation_id: String,
-        goal: String,
-    },
+    WatchedInvariant { obligation_id: String, goal: String },
     /// From a `P` (assumption) entry: the engine confirms the assumption held.
-    ConfirmHeld {
-        obligation_id: String,
-        goal: String,
-    },
+    ConfirmHeld { obligation_id: String, goal: String },
 }
 
 // ─── Monitor projection (73 §2.4) ────────────────────────────────────────────
@@ -127,6 +120,14 @@ pub struct TraceContract {
     pub hash: String,
 }
 
+/// A runtime event could not be projected through the selected B1 export.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TraceContractError {
+    /// The event's exact perform signature names no member of the one B1-derived alphabet. B3 does not
+    /// derive or widen an alphabet of its own.
+    EventOutsideAlphabet { effect: String },
+}
+
 // ─── Emitter ─────────────────────────────────────────────────────────────────
 
 /// Emit the trace contract from runtime events + the B1 export.
@@ -134,7 +135,7 @@ pub struct TraceContract {
 /// # Projection sources (TC4)
 /// - `events`: collected by `drive_h_instrumented` at the effect boundary (TC2).
 ///   The caller decodes raw (effect_val, response_val) to `TraceEvent` structs
-///   with effect labels from B1's `Σ` (TC1 closure check).
+///   with exact perform signatures from B1's `Σ` (TC1 closure check).
 /// - `export`: the B1 export — `Q` projects to `WatchedInvariant`, `P` to
 ///   `ConfirmHeld`, `T` to `MonitorProjection`. The assertion-point set and
 ///   the monitor change when the export changes (TC4 / TR-D, TR-E).
@@ -150,6 +151,28 @@ pub fn emit_trace_contract(
     events: Vec<TraceEvent>,
     export: &BehavioralExport,
 ) -> TraceContract {
+    try_emit_trace_contract(target_name, events, export)
+        .expect("runtime event is outside the checked B1 alphabet")
+}
+
+/// Checked form of [`emit_trace_contract`].
+///
+/// Every B3 event is accepted only as an image of the alphabet already carried
+/// by the B1 export.  This is a closure check, not a second derivation rule.
+pub fn try_emit_trace_contract(
+    target_name: &str,
+    events: Vec<TraceEvent>,
+    export: &BehavioralExport,
+) -> Result<TraceContract, TraceContractError> {
+    if let Some(event) = events
+        .iter()
+        .find(|event| !export.alphabet.contains(&event.effect))
+    {
+        return Err(TraceContractError::EventOutsideAlphabet {
+            effect: event.effect.clone(),
+        });
+    }
+
     // Project assertion points from Q (→ WatchedInvariant) and P (→ ConfirmHeld).
     // These change when the export's Q/P change — they are the export's image.
     let mut assertion_points: Vec<AssertionPoint> = Vec::new();
@@ -170,7 +193,8 @@ pub fn emit_trace_contract(
     // It changes when T changes (TC4 / TR-E discriminator).
     // (oracle): concrete Temporal formula + compile signature deferred to B2.
     let monitor = MonitorProjection {
-        delegated_obligations: export.obligations
+        delegated_obligations: export
+            .obligations
             .iter()
             .map(|t| t.obligation_id.clone())
             .collect(),
@@ -178,13 +202,13 @@ pub fn emit_trace_contract(
 
     let hash = compute_trace_hash(target_name, &events, &assertion_points, &monitor);
 
-    TraceContract {
+    Ok(TraceContract {
         target_name: target_name.to_string(),
         events,
         assertion_points,
         monitor,
         hash,
-    }
+    })
 }
 
 // ─── Canonical hash (inherited from 71 §3.3 discipline) ──────────────────────
@@ -198,26 +222,36 @@ fn compute_trace_hash(
     let mut root: BTreeMap<&str, String> = BTreeMap::new();
     root.insert("target", target_name.to_string());
 
-    let events_repr: Vec<String> = events.iter().map(|e| {
-        format!(
-            "{}:{}:{}:{}:{}:{}:{}",
-            e.effect,
-            e.op,
-            e.op_arg,
-            e.response,
-            e.space_id,
-            e.message_provenance.as_deref().unwrap_or(""),
-            e.sequence_pos
-        )
-    }).collect();
+    let events_repr: Vec<String> = events
+        .iter()
+        .map(|e| {
+            format!(
+                "{}:{}:{}:{}:{}:{}:{}",
+                e.effect,
+                e.op,
+                e.op_arg,
+                e.response,
+                e.space_id,
+                e.message_provenance.as_deref().unwrap_or(""),
+                e.sequence_pos
+            )
+        })
+        .collect();
     root.insert("events", events_repr.join("|"));
 
-    let ap_repr: Vec<String> = assertion_points.iter().map(|ap| match ap {
-        AssertionPoint::WatchedInvariant { obligation_id, goal } =>
-            format!("Q:{}:{}", obligation_id, goal),
-        AssertionPoint::ConfirmHeld { obligation_id, goal } =>
-            format!("P:{}:{}", obligation_id, goal),
-    }).collect();
+    let ap_repr: Vec<String> = assertion_points
+        .iter()
+        .map(|ap| match ap {
+            AssertionPoint::WatchedInvariant {
+                obligation_id,
+                goal,
+            } => format!("Q:{}:{}", obligation_id, goal),
+            AssertionPoint::ConfirmHeld {
+                obligation_id,
+                goal,
+            } => format!("P:{}:{}", obligation_id, goal),
+        })
+        .collect();
     root.insert("assertion_points", ap_repr.join("|"));
 
     root.insert("monitor", monitor.delegated_obligations.join(","));
@@ -247,36 +281,50 @@ fn compute_trace_hash(
 pub fn serialize_trace_contract(contract: &TraceContract) -> serde_json::Value {
     use serde_json::{json, Value};
 
-    let events: Vec<Value> = contract.events.iter().map(|e| {
-        let mut obj = json!({
-            "effect":       e.effect,       // (oracle): field key
-            "op":           e.op,           // (oracle): field key
-            "op_arg":       e.op_arg,       // (oracle): field key
-            "response":     e.response,     // (oracle): field key
-            "space_id":     e.space_id,     // (oracle): field key
-            "sequence_pos": e.sequence_pos,
-        });
-        if let Some(prov) = &e.message_provenance {
-            // (oracle): field key for message provenance
-            obj["message_provenance"] = json!(prov);
-        }
-        obj
-    }).collect();
+    let events: Vec<Value> = contract
+        .events
+        .iter()
+        .map(|e| {
+            let mut obj = json!({
+                "effect":       e.effect,       // (oracle): field key
+                "op":           e.op,           // (oracle): field key
+                "op_arg":       e.op_arg,       // (oracle): field key
+                "response":     e.response,     // (oracle): field key
+                "space_id":     e.space_id,     // (oracle): field key
+                "sequence_pos": e.sequence_pos,
+            });
+            if let Some(prov) = &e.message_provenance {
+                // (oracle): field key for message provenance
+                obj["message_provenance"] = json!(prov);
+            }
+            obj
+        })
+        .collect();
 
-    let assertion_points: Vec<Value> = contract.assertion_points.iter().map(|ap| {
-        match ap {
-            AssertionPoint::WatchedInvariant { obligation_id, goal } => json!({
-                "kind":           "watched_invariant",  // (oracle): field key
-                "obligation_id":  obligation_id,        // (oracle)
-                "goal":           goal,
-            }),
-            AssertionPoint::ConfirmHeld { obligation_id, goal } => json!({
-                "kind":           "confirm_held",       // (oracle): field key
-                "obligation_id":  obligation_id,        // (oracle)
-                "goal":           goal,
-            }),
-        }
-    }).collect();
+    let assertion_points: Vec<Value> = contract
+        .assertion_points
+        .iter()
+        .map(|ap| {
+            match ap {
+                AssertionPoint::WatchedInvariant {
+                    obligation_id,
+                    goal,
+                } => json!({
+                    "kind":           "watched_invariant",  // (oracle): field key
+                    "obligation_id":  obligation_id,        // (oracle)
+                    "goal":           goal,
+                }),
+                AssertionPoint::ConfirmHeld {
+                    obligation_id,
+                    goal,
+                } => json!({
+                    "kind":           "confirm_held",       // (oracle): field key
+                    "obligation_id":  obligation_id,        // (oracle)
+                    "goal":           goal,
+                }),
+            }
+        })
+        .collect();
 
     json!({
         "schema": "ken.trace/v0",               // (oracle): version token

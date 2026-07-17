@@ -121,6 +121,102 @@ pub struct CompilerDriverOutput {
     pub executable_entrypoints: Vec<ExecutableEntrypointPackage>,
 }
 
+/// Closed, backend-neutral denotation selected for one B1 export transaction.
+///
+/// Construction is deliberately confined to [`compile_checked_target_denotation`]:
+/// callers can inspect the selected identity but cannot manufacture a graph,
+/// declared row, or closure binding independently.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedTargetDenotationV1 {
+    pub(crate) target_name: String,
+    pub(crate) target_symbol: StableSymbol,
+    pub(crate) package_identity: StableSymbol,
+    pub(crate) core_semantic_hash: u64,
+    pub(crate) artifact_hash: u64,
+    pub(crate) closure_identity: u64,
+    pub(crate) declared_effects: crate::effects::EffectRow,
+    pub(crate) package: CheckedCorePackage,
+    pub(crate) perform_nodes: BTreeSet<CheckedPerformNodeV1>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum CheckedPerformNodeV1 {
+    Host {
+        family_symbol: StableSymbol,
+        operation: ken_host::HostOpV1,
+    },
+    L5 {
+        family_symbol: StableSymbol,
+        operation_symbol: StableSymbol,
+    },
+}
+
+impl CheckedTargetDenotationV1 {
+    pub fn target_name(&self) -> &str {
+        &self.target_name
+    }
+
+    pub fn target_symbol(&self) -> &StableSymbol {
+        &self.target_symbol
+    }
+}
+
+#[derive(Debug)]
+pub enum CheckedTargetDenotationError {
+    Driver(CompilerDriverError),
+    Erasure(crate::erasure::ErasureError),
+    MissingSourceTarget { name: String },
+    NonTransparentTarget { symbol: StableSymbol },
+    NonClosedPerformGraph { reason: String },
+}
+
+impl fmt::Display for CheckedTargetDenotationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Driver(error) => error.fmt(f),
+            Self::Erasure(error) => error.fmt(f),
+            Self::MissingSourceTarget { name } => {
+                write!(f, "checked export target {name} is not admitted")
+            }
+            Self::NonTransparentTarget { symbol } => {
+                write!(f, "checked export target {symbol} is not transparent")
+            }
+            Self::NonClosedPerformGraph { reason } => {
+                write!(
+                    f,
+                    "checked export target has no closed perform graph: {reason}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for CheckedTargetDenotationError {}
+
+impl From<CompilerDriverError> for CheckedTargetDenotationError {
+    fn from(value: CompilerDriverError) -> Self {
+        Self::Driver(value)
+    }
+}
+
+impl From<crate::erasure::ErasureError> for CheckedTargetDenotationError {
+    fn from(value: crate::erasure::ErasureError) -> Self {
+        Self::Erasure(value)
+    }
+}
+
+impl From<ElabError> for CheckedTargetDenotationError {
+    fn from(value: ElabError) -> Self {
+        Self::Driver(CompilerDriverError::Elaboration(value))
+    }
+}
+
+impl From<CheckedCorePackageError> for CheckedTargetDenotationError {
+    fn from(value: CheckedCorePackageError) -> Self {
+        Self::Driver(CompilerDriverError::Package(value))
+    }
+}
+
 /// Hash-free semantic entrypoint plan. Construction is confined to the
 /// checked native-production transaction below.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -488,6 +584,570 @@ pub fn compile_ken_source(
 ) -> Result<CompilerDriverOutput, CompilerDriverError> {
     let manifest = CompilerManifest::new(package_name, Vec::new());
     compile_ken_package_sources(&manifest, vec![source], selector)
+}
+
+/// Produce the exact closed denotation consumed by the B1 export transaction.
+///
+/// This walks the checked interaction-tree declaration graph before runtime
+/// lowering; no Cranelift or linker artifact participates. The selected target
+/// is resolved from the live admitted environment, and operation subterms are
+/// decoded with the same identity-checked HostIO vocabulary used by production.
+pub fn compile_checked_target_denotation(
+    package_name: &str,
+    source: CompilerSource,
+    target_name: &str,
+) -> Result<CheckedTargetDenotationV1, CheckedTargetDenotationError> {
+    if package_name.is_empty() {
+        return Err(CompilerDriverError::EmptyPackageName.into());
+    }
+
+    let manifest = CompilerManifest::new(package_name, Vec::new());
+    let mut env = ElabEnv::new()?;
+    let mut admitted = if source.name.ends_with(".ken.md") {
+        env.elaborate_ken_md_file(&source.text)?
+    } else {
+        env.elaborate_file(&source.text)?
+    };
+    let source_declarations = admitted.iter().copied().collect::<BTreeSet<_>>();
+    let target_id = env.globals.get(target_name).copied().ok_or_else(|| {
+        CheckedTargetDenotationError::MissingSourceTarget {
+            name: target_name.to_string(),
+        }
+    })?;
+    let declared_effects = env
+        .effect_rows
+        .get(target_name)
+        .map(|row| row.concrete_effects())
+        .unwrap_or_else(crate::effects::EffectRow::empty);
+
+    // The exact host-operation decoder is part of this producer artifact.  Its
+    // stable primitive identities must match the checked package it consumes.
+    let (symbols, _) = stable_symbols_for_env(package_name, &env, true);
+    let target_symbol = symbols
+        .get(&target_id)
+        .cloned()
+        .ok_or(CompilerDriverError::MissingStableSymbol { id: target_id })?;
+    let host_spine = checked_host_spine_v1(&env, &symbols)?;
+
+    admitted.extend(env.env.decls().map(Decl::id));
+    admitted.sort();
+    admitted.dedup();
+    let package = emit_package_from_env(
+        &manifest,
+        std::slice::from_ref(&source),
+        &env,
+        &admitted,
+        Some(b"B1CheckedTargetDenotationV1".to_vec()),
+    )?;
+
+    let declaration = env
+        .env
+        .lookup(target_id)
+        .ok_or(CompilerDriverError::MissingStableSymbol { id: target_id })?;
+    let Decl::Transparent { body, .. } = declaration else {
+        return Err(CheckedTargetDenotationError::NonTransparentTarget {
+            symbol: target_symbol,
+        });
+    };
+    validate_export_root_inputs(body, &env, &symbols)?;
+    // Keep the checked declaration graph in its admitted recursive form.  A
+    // whole-target normal form would erase callee boundaries and cannot be
+    // computed for a structurally recursive target without a scrutinee.  The
+    // package already carries canonical checked terms; operation nodes alone
+    // are normalized locally during inventory decoding.
+    let selected = select_targets(
+        &manifest,
+        &package,
+        TargetSelector::StableSymbol {
+            package_identity: package.header.package_identity.clone(),
+            symbol: target_symbol.clone(),
+            kind: CompilerTargetKind::Executable,
+        },
+    )?;
+    let closure = build_target_closures(&package, &selected)?
+        .into_iter()
+        .next()
+        .expect("one stable target selector produces one closure");
+    if !closure.external_symbols.is_empty() {
+        return Err(CheckedTargetDenotationError::NonClosedPerformGraph {
+            reason: format!(
+                "selected closure contains unresolved/imported symbols: {:?}",
+                closure.external_symbols
+            ),
+        });
+    }
+    let closure_source_declarations = source_declarations
+        .iter()
+        .copied()
+        .filter(|id| {
+            symbols
+                .get(id)
+                .is_some_and(|symbol| closure.reachable_declarations.contains(symbol))
+        })
+        .collect::<BTreeSet<_>>();
+    let (perform_nodes, visited_declarations) = collect_checked_perform_nodes(
+        &env,
+        &symbols,
+        &host_spine,
+        target_id,
+        &closure_source_declarations,
+    )?;
+    let visited_symbols = visited_declarations
+        .into_iter()
+        .map(|id| {
+            symbols
+                .get(&id)
+                .cloned()
+                .ok_or(CompilerDriverError::MissingStableSymbol { id })
+        })
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    let source_symbols = closure_source_declarations
+        .iter()
+        .filter_map(|id| symbols.get(id).cloned())
+        .collect::<BTreeSet<_>>();
+    let expected_source_closure = closure
+        .reachable_declarations
+        .intersection(&source_symbols)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if visited_symbols != expected_source_closure {
+        return Err(CheckedTargetDenotationError::NonClosedPerformGraph {
+            reason: format!(
+                "denotation traversal disagrees with the selected source closure: visited={visited_symbols:?}, closure={expected_source_closure:?}",
+            ),
+        });
+    }
+
+    Ok(CheckedTargetDenotationV1 {
+        target_name: target_name.to_string(),
+        target_symbol,
+        package_identity: package.header.package_identity.clone(),
+        core_semantic_hash: package.core_semantic_hash,
+        artifact_hash: package.artifact_hash,
+        closure_identity: closure.closure_identity,
+        declared_effects,
+        package,
+        perform_nodes,
+    })
+}
+
+fn collect_checked_perform_nodes(
+    env: &ElabEnv,
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+    spine: &crate::erasure::CheckedHostSpineV1,
+    target: GlobalId,
+    source_declarations: &BTreeSet<GlobalId>,
+) -> Result<(BTreeSet<CheckedPerformNodeV1>, BTreeSet<GlobalId>), CheckedTargetDenotationError> {
+    struct Collector<'a> {
+        env: &'a ElabEnv,
+        symbols: &'a BTreeMap<GlobalId, StableSymbol>,
+        operations: BTreeMap<GlobalId, ken_host::HostOpV1>,
+        vis: GlobalId,
+        in_l: GlobalId,
+        in_r: GlobalId,
+        fs_family: StableSymbol,
+        console_family: StableSymbol,
+        clock_family: StableSymbol,
+        followable_declarations: BTreeSet<GlobalId>,
+        source_declarations: BTreeSet<GlobalId>,
+        nodes: BTreeSet<CheckedPerformNodeV1>,
+        expanded: BTreeSet<GlobalId>,
+        visited: BTreeSet<GlobalId>,
+        active_declarations: Vec<GlobalId>,
+    }
+
+    impl Collector<'_> {
+        fn fail(reason: impl Into<String>) -> CheckedTargetDenotationError {
+            CheckedTargetDenotationError::NonClosedPerformGraph {
+                reason: reason.into(),
+            }
+        }
+
+        fn dynamic_operation(&self) -> Result<Option<GlobalId>, CheckedTargetDenotationError> {
+            if self
+                .active_declarations
+                .last()
+                .is_some_and(|id| self.source_declarations.contains(id))
+            {
+                Err(Self::fail(format!(
+                    "source Vis operation remains dynamic in {:?}",
+                    self.active_declarations
+                        .iter()
+                        .filter_map(|id| self.symbols.get(id))
+                        .collect::<Vec<_>>()
+                )))
+            } else {
+                // Prelude bind/injection combinators only forward the operation
+                // inventoried at their closed source caller.
+                Ok(None)
+            }
+        }
+
+        fn visit_decl(&mut self, id: GlobalId) -> Result<(), CheckedTargetDenotationError> {
+            if !self.expanded.insert(id) {
+                return Ok(());
+            }
+            if self.source_declarations.contains(&id) {
+                self.visited.insert(id);
+            }
+            match self.env.env.lookup(id) {
+                Some(Decl::Transparent { body, .. }) => {
+                    self.active_declarations.push(id);
+                    // Walk the admitted graph itself.  Whole-body normalization
+                    // would unfold a structurally recursive declaration without
+                    // a concrete scrutinee forever; operation subterms are
+                    // normalized locally by `decode_operation` instead.
+                    let result = self.visit(body);
+                    self.active_declarations.pop();
+                    result
+                }
+                Some(Decl::Primitive { .. })
+                | Some(Decl::Inductive(_))
+                | Some(Decl::Opaque { .. }) => Ok(()),
+                None => Err(Self::fail(format!(
+                    "reachable declaration {id} is absent from the admitted environment"
+                ))),
+            }
+        }
+
+        fn visit(&mut self, term: &Term) -> Result<(), CheckedTargetDenotationError> {
+            if let Some((Term::Constructor { id, .. }, args)) = term_application_spine(term) {
+                let vis_arity = self
+                    .env
+                    .env
+                    .constructor(self.vis)
+                    .map(|(family, index)| {
+                        family.params.len() + family.constructors[index].args.len()
+                    })
+                    .ok_or_else(|| Self::fail("checked Vis constructor identity is absent"))?;
+                if *id == self.vis && args.len() == vis_arity {
+                    let operation = args[args.len() - 2];
+                    let Some(constructor) = self.decode_operation(operation)? else {
+                        // A closed generic combinator such as `bind` forwards the
+                        // same operation variable it received from a structurally
+                        // visited subtree. It contributes no new signature and is
+                        // never widened to a family. Root operation/tree/callback
+                        // inputs were rejected before traversal, so no external
+                        // dynamic population can enter through this case.
+                        return self.visit_children(term);
+                    };
+                    let operation_symbol = self
+                        .symbols
+                        .get(&constructor)
+                        .cloned()
+                        .ok_or(CompilerDriverError::MissingStableSymbol { id: constructor })?;
+                    if let Some(operation) = self.operations.get(&constructor).copied() {
+                        let family_symbol = if operation == ken_host::HostOpV1::ClockWallNow {
+                            self.clock_family.clone()
+                        } else if operation.is_ambient() {
+                            self.console_family.clone()
+                        } else {
+                            self.fs_family.clone()
+                        };
+                        self.nodes.insert(CheckedPerformNodeV1::Host {
+                            family_symbol,
+                            operation,
+                        });
+                    } else {
+                        let (family, _) =
+                            self.env.env.constructor(constructor).ok_or_else(|| {
+                                Self::fail(format!(
+                                    "operation {operation_symbol} has no admitted inductive family"
+                                ))
+                            })?;
+                        let family_symbol =
+                            self.symbols.get(&family.id).cloned().ok_or(
+                                CompilerDriverError::MissingStableSymbol { id: family.id },
+                            )?;
+                        self.nodes.insert(CheckedPerformNodeV1::L5 {
+                            family_symbol,
+                            operation_symbol,
+                        });
+                    }
+                }
+            }
+
+            match term {
+                Term::Type(_)
+                | Term::Omega(_)
+                | Term::Var(_)
+                | Term::IntLit(_)
+                | Term::IndFormer { .. }
+                | Term::Constructor { .. } => Ok(()),
+                Term::Const { id, .. } if self.followable_declarations.contains(id) => {
+                    self.visit_decl(*id)
+                }
+                Term::Const { .. } => Ok(()),
+                Term::Elim { methods, scrut, .. } => {
+                    self.visit(scrut)?;
+                    for method in methods {
+                        self.visit(method)?;
+                    }
+                    Ok(())
+                }
+                Term::Pi(_, _) | Term::Sigma(_, _) => Ok(()),
+                Term::Lam(_, body) => self.visit(body),
+                Term::App(function, argument) => {
+                    self.visit(function)?;
+                    self.visit(argument)
+                }
+                Term::Pair(left, right) => {
+                    self.visit(left)?;
+                    self.visit(right)
+                }
+                Term::Proj1(pair)
+                | Term::Proj2(pair)
+                | Term::Refl(pair)
+                | Term::TruncProj(pair) => self.visit(pair),
+                Term::Let { val, body, .. } => {
+                    self.visit(val)?;
+                    self.visit(body)
+                }
+                Term::Ascript(value, _) => self.visit(value),
+                Term::Eq(_, left, right) | Term::Quot(left, right) => {
+                    self.visit(left)?;
+                    self.visit(right)
+                }
+                Term::Cast(_, _, equality, value) => {
+                    self.visit(equality)?;
+                    self.visit(value)
+                }
+                Term::J(motive, method, equality) => {
+                    self.visit(motive)?;
+                    self.visit(method)?;
+                    self.visit(equality)
+                }
+                Term::QuotClass(value) => self.visit(value),
+                Term::QuotElim {
+                    method,
+                    respect,
+                    scrut,
+                    ..
+                } => {
+                    self.visit(method)?;
+                    self.visit(respect)?;
+                    self.visit(scrut)
+                }
+                Term::Trunc(value) => self.visit(value),
+                Term::Absurd(_, proof) => self.visit(proof),
+            }
+        }
+
+        fn decode_operation(
+            &self,
+            term: &Term,
+        ) -> Result<Option<GlobalId>, CheckedTargetDenotationError> {
+            let normalized =
+                ken_kernel::normalize(&self.env.env, &ken_kernel::Context::new(), term);
+            if matches!(normalized, Term::Var(_)) {
+                return self.dynamic_operation();
+            }
+            if let Term::Constructor { id, .. } = &normalized {
+                return Ok(Some(*id));
+            }
+            let (outer, outer_args) = term_application_spine(&normalized).ok_or_else(|| {
+                Self::fail(format!(
+                    "Vis operation is not a constructor application in {:?}: {normalized:?}",
+                    self.active_declarations
+                        .iter()
+                        .filter_map(|id| self.symbols.get(id))
+                        .collect::<Vec<_>>()
+                ))
+            })?;
+            let Term::Constructor { id: outer_id, .. } = outer else {
+                return Err(Self::fail(
+                    format!(
+                        "dynamic Vis operation has no finite structural inventory in {:?}: {normalized:?}",
+                        self.active_declarations
+                    ),
+                ));
+            };
+            let leaf = if *outer_id == self.in_l {
+                outer_args.last().copied()
+            } else if *outer_id == self.in_r {
+                let ambient = outer_args
+                    .last()
+                    .copied()
+                    .ok_or_else(|| Self::fail("ambient coproduct arm is empty"))?;
+                if matches!(ambient, Term::Var(_)) {
+                    return self.dynamic_operation();
+                }
+                let (inner, inner_args) = term_application_spine(ambient)
+                    .ok_or_else(|| Self::fail("ambient op is not a constructor application"))?;
+                let Term::Constructor { id: inner_id, .. } = inner else {
+                    return Err(Self::fail("ambient op has dynamic coproduct identity"));
+                };
+                if *inner_id != self.in_l && *inner_id != self.in_r {
+                    return Err(Self::fail("ambient coproduct identity is not admitted"));
+                }
+                inner_args.last().copied()
+            } else {
+                // A closed target can expose the operation at either the final
+                // HostIO injection or the source effect's own `Vis`.  Both are
+                // nodes in the target-rooted checked graph and must resolve to
+                // the same constructor identity; the set inventory deduplicates
+                // that representation-preserving path.
+                return Ok(Some(*outer_id));
+            }
+            .ok_or_else(|| Self::fail("coproduct operation arm is empty"))?;
+            if matches!(leaf, Term::Var(_)) {
+                // Generic injection/forwarding combinators retain the operation
+                // as a bound variable.  They introduce no operation identity of
+                // their own; the closed caller graph supplies the constructor
+                // that is inventoried at its source `Vis`.
+                return self.dynamic_operation();
+            }
+            match leaf {
+                Term::Constructor { id, .. } => Ok(Some(*id)),
+                _ => {
+                    let (head, args) = term_application_spine(leaf).ok_or_else(|| {
+                        Self::fail(format!(
+                            "perform operation is not a constructor application: {leaf:?}"
+                        ))
+                    })?;
+                    let Term::Constructor { id, .. } = head else {
+                        return Err(Self::fail(
+                            "dynamic perform operation has no finite structural inventory",
+                        ));
+                    };
+                    let _ = args;
+                    Ok(Some(*id))
+                }
+            }
+        }
+
+        fn visit_children(&mut self, term: &Term) -> Result<(), CheckedTargetDenotationError> {
+            match term {
+                Term::App(function, argument) => {
+                    self.visit(function)?;
+                    self.visit(argument)
+                }
+                _ => Ok(()),
+            }
+        }
+    }
+
+    let reverse = symbols
+        .iter()
+        .map(|(id, symbol)| (symbol.clone(), *id))
+        .collect::<BTreeMap<_, _>>();
+    let resolve = |symbol: &StableSymbol| {
+        reverse
+            .get(symbol)
+            .copied()
+            .ok_or(CompilerDriverError::MissingStableSymbol {
+                id: GlobalId(u32::MAX),
+            })
+    };
+    let operations = spine
+        .operations
+        .iter()
+        .map(|(symbol, operation)| Ok((resolve(symbol)?, *operation)))
+        .collect::<Result<BTreeMap<_, _>, CompilerDriverError>>()?;
+    let mut collector = Collector {
+        env,
+        symbols,
+        operations,
+        vis: resolve(&spine.vis)?,
+        in_l: resolve(&spine.in_l)?,
+        in_r: resolve(&spine.in_r)?,
+        fs_family: spine.fs_family.clone(),
+        console_family: spine.console_family.clone(),
+        clock_family: spine.clock_family.clone(),
+        followable_declarations: env
+            .env
+            .decls()
+            .filter_map(|decl| matches!(decl, Decl::Transparent { .. }).then_some(decl.id()))
+            .collect(),
+        source_declarations: source_declarations.clone(),
+        nodes: BTreeSet::new(),
+        expanded: BTreeSet::new(),
+        visited: BTreeSet::new(),
+        active_declarations: Vec::new(),
+    };
+    collector.visit_decl(target)?;
+    Ok((collector.nodes, collector.visited))
+}
+
+fn term_application_spine(term: &Term) -> Option<(&Term, Vec<&Term>)> {
+    let mut head = term;
+    let mut args = Vec::new();
+    while let Term::App(function, argument) = head {
+        args.push(argument.as_ref());
+        head = function.as_ref();
+    }
+    args.reverse();
+    (!args.is_empty()).then_some((head, args))
+}
+
+fn validate_export_root_inputs(
+    body: &Term,
+    env: &ElabEnv,
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+) -> Result<(), CheckedTargetDenotationError> {
+    let dynamic_families = symbols
+        .iter()
+        .filter_map(|(id, symbol)| {
+            let tail = symbol.components.last()?;
+            (tail == "ITree" || tail == "Coproduct" || tail.ends_with("Op")).then_some(*id)
+        })
+        .collect::<BTreeSet<_>>();
+    let contains_dynamic_family = |term: &Term| {
+        fn go(
+            term: &Term,
+            env: &ElabEnv,
+            families: &BTreeSet<GlobalId>,
+            visiting_inductives: &mut BTreeSet<GlobalId>,
+        ) -> bool {
+            let here = match term {
+                Term::Const { id, .. }
+                | Term::IndFormer { id, .. }
+                | Term::Constructor { id, .. } => families.contains(id),
+                Term::Pi(_, _) => true,
+                _ => false,
+            };
+            if here {
+                return true;
+            }
+
+            if let Term::IndFormer { id, .. } = term {
+                if visiting_inductives.insert(*id) {
+                    let carries_dynamic = env.env.inductive(*id).is_some_and(|inductive| {
+                        inductive.constructors.iter().any(|constructor| {
+                            constructor
+                                .args
+                                .iter()
+                                .any(|argument| go(argument, env, families, visiting_inductives))
+                        })
+                    });
+                    visiting_inductives.remove(id);
+                    if carries_dynamic {
+                        return true;
+                    }
+                }
+            }
+
+            term.children()
+                .into_iter()
+                .any(|child| go(child, env, families, visiting_inductives))
+        }
+        go(term, env, &dynamic_families, &mut BTreeSet::new())
+    };
+
+    let mut cursor = body;
+    while let Term::Lam(parameter_type, next) = cursor {
+        let normalized_type =
+            ken_kernel::normalize(&env.env, &ken_kernel::Context::new(), parameter_type);
+        if contains_dynamic_family(&normalized_type) {
+            return Err(CheckedTargetDenotationError::NonClosedPerformGraph {
+                reason: format!(
+                    "target input type {normalized_type:?} can inject a dynamic perform tree, operation, or callback"
+                ),
+            });
+        }
+        cursor = next;
+    }
+    Ok(())
 }
 
 pub fn compile_ken_file(
