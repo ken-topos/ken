@@ -2334,6 +2334,10 @@ enum SourceContinuation<'a> {
         env: Vec<Lowered>,
         next: Box<SourceContinuation<'a>>,
     },
+    ApplyRecursorLayers {
+        remaining: Vec<ComputationalRecursorLayer>,
+        next: Box<SourceContinuation<'a>>,
+    },
     IfScrutinee {
         then_expr: RuntimeExpr,
         else_expr: RuntimeExpr,
@@ -4384,6 +4388,7 @@ impl<'a> Lowering<'a> {
                 Some(edge.expected_outer)
             }
             SourceContinuation::LetBody { next, .. }
+            | SourceContinuation::ApplyRecursorLayers { next, .. }
             | SourceContinuation::IfScrutinee { next, .. }
             | SourceContinuation::ConstructArgument { next, .. }
             | SourceContinuation::MatchScrutinee { next, .. }
@@ -4408,6 +4413,7 @@ impl<'a> Lowering<'a> {
                 | SourceContinuationTerminal::JumpToJoin(_),
             ) => None,
             SourceContinuation::LetBody { next, .. }
+            | SourceContinuation::ApplyRecursorLayers { next, .. }
             | SourceContinuation::IfScrutinee { next, .. }
             | SourceContinuation::ConstructArgument { next, .. }
             | SourceContinuation::MatchScrutinee { next, .. }
@@ -4450,6 +4456,12 @@ impl<'a> Lowering<'a> {
                 env: env.clone(),
                 next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
             },
+            SourceContinuation::ApplyRecursorLayers { remaining, next } => {
+                SourceContinuation::ApplyRecursorLayers {
+                    remaining: remaining.clone(),
+                    next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+                }
+            }
             SourceContinuation::IfScrutinee {
                 then_expr,
                 else_expr,
@@ -4736,6 +4748,18 @@ impl<'a> Lowering<'a> {
                                 env: body_env,
                                 continuation: *next,
                             }
+                        }
+                    }
+                    SourceContinuation::ApplyRecursorLayers { remaining, next } => {
+                        let mut frames = recursor_eliminator_frames(&remaining);
+                        frames.push(EliminatorFrame::InvocationReturn);
+                        SourceMachineState::Value {
+                            value: self.lower_computational_match_value_composed(
+                                builder,
+                                value,
+                                &frames,
+                            )?,
+                            continuation: *next,
                         }
                     }
                     SourceContinuation::ConstructArgument {
@@ -5193,16 +5217,34 @@ impl<'a> Lowering<'a> {
                     suspended: continuation,
                     expected_outer,
                 };
-                let mut frames = recursor_eliminator_frames(&invocation.owned_layers);
-                frames.push(EliminatorFrame::InvocationReturn);
-                let returned = if let Lowered::BoundedNat(predecessor) = base {
+                if armed.expected_outer
+                    != Self::source_continuation_outer(&armed.suspended)
+                        .expect("armed invocation has an outer cursor")
+                {
+                    return Err(unsupported(
+                        "ComputationalRecursor",
+                        "armed invocation endpoint changed outer cursor",
+                    ));
+                }
+                if let Lowered::BoundedNat(predecessor) = base {
                     if !args.is_empty() {
                         return Err(unsupported(
                             "BoundedNat",
                             "structural Nat recursive hypothesis takes no arguments",
                         ));
                     }
-                    self.lower_bounded_nat_computational(builder, predecessor, false, &frames)?
+                    let mut frames = recursor_eliminator_frames(&invocation.owned_layers);
+                    frames.push(EliminatorFrame::InvocationReturn);
+                    let returned = self.lower_bounded_nat_computational(
+                        builder,
+                        predecessor,
+                        false,
+                        &frames,
+                    )?;
+                    return Ok(SourceMachineState::Value {
+                        value: returned,
+                        continuation: armed.suspended,
+                    });
                 } else {
                     let Lowered::Closure {
                         captures,
@@ -5228,26 +5270,15 @@ impl<'a> Lowering<'a> {
                     let mut call_env = args;
                     call_env.extend(captures);
                     call_env.extend(env);
-                    self.lower_computational_producer_expr(
-                        builder,
-                        &body,
-                        &call_env,
-                        &frames,
-                    )?
-                };
-                if armed.expected_outer
-                    != Self::source_continuation_outer(&armed.suspended)
-                        .expect("armed invocation has an outer cursor")
-                {
-                    return Err(unsupported(
-                        "ComputationalRecursor",
-                        "armed invocation endpoint changed outer cursor",
-                    ));
+                    return Ok(SourceMachineState::Eval {
+                        expr: body,
+                        env: call_env,
+                        continuation: SourceContinuation::ApplyRecursorLayers {
+                            remaining: invocation.owned_layers,
+                            next: Box::new(armed.suspended),
+                        },
+                    });
                 }
-                Ok(SourceMachineState::Value {
-                    value: returned,
-                    continuation: armed.suspended,
-                })
             }
             _ => Err(unsupported("Call", "callee is not a closure")),
         }
