@@ -258,6 +258,7 @@ fn lower_checked_host_declaration(
         parameter_count,
         spine,
         None,
+        &[1],
         join_plan,
     )?;
     Ok(RuntimeDeclaration {
@@ -390,6 +391,7 @@ fn runtime_declaration_refs_in_kind(kind: &RuntimeDeclarationKind) -> Vec<String
 
 fn collect_runtime_declaration_refs(expr: &RuntimeExpr, output: &mut BTreeSet<String>) {
     match expr {
+        RuntimeExpr::CheckedJoinSite { body, .. } => collect_runtime_declaration_refs(body, output),
         RuntimeExpr::DeclarationRef { symbol } => {
             output.insert(symbol.clone());
         }
@@ -543,10 +545,20 @@ impl NativeJoinPlanCollector {
             .next_site_id
             .checked_add(1)
             .expect("compiler-private join site identity exhausted");
+        let path = vec![0];
+        let type_fp = ken_runtime::fnv1a_64(checked_type);
         self.sites.push(ken_runtime::NativeJoinPlanSiteV1 {
             site_id,
             declaration: root.to_string(),
-            checked_result_type_fingerprint: ken_runtime::fnv1a_64(checked_type),
+            checked_occurrence_path: path.clone(),
+            checked_result_type_fingerprint: type_fp,
+            occurrence_binding_fingerprint:
+                ken_runtime::compiler_private_join_occurrence_binding_fingerprint(
+                    site_id,
+                    &root.to_string(),
+                    &path,
+                    type_fp,
+                ),
             runtime_frame_fingerprint: ken_runtime::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
             answer_kind: ken_runtime::NativeJoinAnswerKindV1::ExitCode,
         });
@@ -555,22 +567,23 @@ impl NativeJoinPlanCollector {
     fn record_match(
         &mut self,
         owner: &StableSymbol,
+        path: &[u64],
         view: &checked_core::CheckedCoreMatchView,
         runtime: &RuntimeExpr,
-    ) -> Result<(), ErasureError> {
+    ) -> Result<Option<u64>, ErasureError> {
         let Some(result_type) = checked_core::checked_constant_motive_result_type(&view.motive)
             .map_err(|reason| {
                 expression_lowering_error(owner, "native_join_plan_motive", reason)
             })?
         else {
-            return Ok(());
+            return Ok(None);
         };
         let Some(head) =
             checked_core::checked_type_head_symbol(&result_type).map_err(|reason| {
                 expression_lowering_error(owner, "native_join_plan_result_type", reason)
             })?
         else {
-            return Ok(());
+            return Ok(None);
         };
         let answer_kind = if head == self.answer_symbols.int {
             ken_runtime::NativeJoinAnswerKindV1::Int
@@ -581,7 +594,7 @@ impl NativeJoinPlanCollector {
         } else if head == self.answer_symbols.exit_code {
             ken_runtime::NativeJoinAnswerKindV1::ExitCode
         } else {
-            return Ok(());
+            return Ok(None);
         };
         let runtime_frame_fingerprint = match runtime {
             RuntimeExpr::Match { cases, default, .. } => {
@@ -597,14 +610,23 @@ impl NativeJoinPlanCollector {
             .next_site_id
             .checked_add(1)
             .expect("compiler-private join site identity exhausted");
+        let type_fp = ken_runtime::fnv1a_64(&result_type);
         self.sites.push(ken_runtime::NativeJoinPlanSiteV1 {
             site_id,
             declaration: owner.to_string(),
-            checked_result_type_fingerprint: ken_runtime::fnv1a_64(&result_type),
+            checked_occurrence_path: path.to_vec(),
+            checked_result_type_fingerprint: type_fp,
+            occurrence_binding_fingerprint:
+                ken_runtime::compiler_private_join_occurrence_binding_fingerprint(
+                    site_id,
+                    &owner.to_string(),
+                    path,
+                    type_fp,
+                ),
             runtime_frame_fingerprint,
             answer_kind,
         });
-        Ok(())
+        Ok(Some(site_id))
     }
 }
 
@@ -696,6 +718,7 @@ fn lower_checked_host_root(
         2,
         spine,
         None,
+        &[1],
         join_plan,
     )?;
     Ok(RuntimeDeclarationKind::Transparent {
@@ -716,6 +739,7 @@ fn lower_checked_host_computation(
     context_depth: usize,
     spine: &CheckedHostSpineV1,
     branch_remap: Option<&BranchBinderRemap>,
+    path: &[u64],
     mut join_plan: Option<&mut NativeJoinPlanCollector>,
 ) -> Result<RuntimeExpr, ErasureError> {
     if let CheckedCoreBodyTerm::Match(view) = term {
@@ -738,7 +762,7 @@ fn lower_checked_host_computation(
         )?;
         let computational = match_uses_computational_recursive_hypothesis(view, root)?;
         let mut cases = Vec::with_capacity(view.branches.len());
-        for branch in &view.branches {
+        for (branch_index, branch) in view.branches.iter().enumerate() {
             let constructor = &branch.constructor;
             reject_level_args(root, &constructor.level_args)?;
             require_expression_supported(
@@ -782,6 +806,11 @@ fn lower_checked_host_computation(
                 context_depth + source_binders,
                 spine,
                 Some(&remap),
+                &{
+                    let mut p = path.to_vec();
+                    p.extend([1, branch_index as u64]);
+                    p
+                },
                 join_plan.as_deref_mut(),
             )?;
             cases.push((constructor, body));
@@ -818,10 +847,17 @@ fn lower_checked_host_computation(
                 default,
             }
         };
-        if let Some(join_plan) = join_plan.as_deref_mut() {
-            join_plan.record_match(root, view, &runtime)?;
-        }
-        return Ok(runtime);
+        return if let Some(join_plan) = join_plan.as_deref_mut() {
+            Ok(match join_plan.record_match(root, path, view, &runtime)? {
+                Some(site_id) => RuntimeExpr::CheckedJoinSite {
+                    site_id,
+                    body: Box::new(runtime),
+                },
+                None => runtime,
+            })
+        } else {
+            Ok(runtime)
+        };
     }
     if let Some((symbol, level_args, arguments)) = direct_application_spine(term) {
         reject_level_args(root, level_args)?;
@@ -864,6 +900,11 @@ fn lower_checked_host_computation(
                     context_depth + parameter_count,
                     spine,
                     inner_remap.as_ref(),
+                    &{
+                        let mut p = path.to_vec();
+                        p.extend([2, ken_runtime::fnv1a_64(symbol.to_string().as_bytes())]);
+                        p
+                    },
                     join_plan.as_deref_mut(),
                 );
                 stack.pop();
@@ -913,6 +954,11 @@ fn lower_checked_host_computation(
                     context_depth + 1,
                     spine,
                     branch_remap.map(BranchBinderRemap::enter_binding).as_ref(),
+                    &{
+                        let mut p = path.to_vec();
+                        p.push(3);
+                        p
+                    },
                     join_plan.as_deref_mut(),
                 )?
             } else {
@@ -2084,6 +2130,10 @@ fn lower_body_term_inner(
 
 fn shift_runtime_vars(expr: RuntimeExpr, by: u32, cutoff: u32) -> RuntimeExpr {
     match expr {
+        RuntimeExpr::CheckedJoinSite { site_id, body } => RuntimeExpr::CheckedJoinSite {
+            site_id,
+            body: Box::new(shift_runtime_vars(*body, by, cutoff)),
+        },
         RuntimeExpr::Var(index) if index >= cutoff => RuntimeExpr::Var(index + by),
         RuntimeExpr::Var(_)
         | RuntimeExpr::Value(_)

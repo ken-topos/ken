@@ -648,6 +648,9 @@ fn collect_runtime_support_for_expr(
     visiting: &mut BTreeSet<RuntimeSymbol>,
 ) -> Result<(), PlatformRuntimeSupportError> {
     match expr {
+        RuntimeExpr::CheckedJoinSite { body, .. } => {
+            collect_runtime_support_for_expr(program, body, shapes, visiting)
+        }
         RuntimeExpr::Value(value) => collect_runtime_support_for_value(value, shapes),
         RuntimeExpr::Var(_) => Ok(()),
         RuntimeExpr::Let { value, body } => {

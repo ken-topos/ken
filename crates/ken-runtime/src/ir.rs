@@ -335,6 +335,11 @@ pub enum RuntimePartiality {
 /// Backend-neutral runtime expression language.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeExpr {
+    #[doc(hidden)]
+    CheckedJoinSite {
+        site_id: u64,
+        body: Box<RuntimeExpr>,
+    },
     Value(RuntimeValue),
     Var(u32),
     Let {

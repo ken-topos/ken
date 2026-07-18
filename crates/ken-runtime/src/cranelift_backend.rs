@@ -1393,6 +1393,7 @@ fn run_checked_bounded_nat_fixture(
         next_source_join: 0,
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
+        active_join_site: None,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1584,6 +1585,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         next_source_join: 0,
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
+        active_join_site: None,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1755,6 +1757,7 @@ fn compile_expr_into_module<'a, M: Module>(
         next_source_join: 0,
         native_join_plan,
         consumed_join_sites: BTreeSet::new(),
+        active_join_site: None,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: process_mode,
@@ -1881,6 +1884,7 @@ struct Lowering<'a> {
     next_source_join: u64,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,
+    active_join_site: Option<u64>,
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
     process_object: bool,
@@ -2577,6 +2581,9 @@ fn produces_deforestable_aggregate_with_ih(
     aggregate_ihs: &BTreeSet<usize>,
 ) -> bool {
     match expr {
+        RuntimeExpr::CheckedJoinSite { body, .. } => {
+            produces_deforestable_aggregate_with_ih(body, aggregate_ihs)
+        }
         RuntimeExpr::Construct { .. } => true,
         RuntimeExpr::Let { body, .. } => {
             produces_deforestable_aggregate_with_ih(body, &shifted_aggregate_ihs(aggregate_ihs, 1))
@@ -2669,6 +2676,7 @@ fn produces_recursive_deforestable_aggregate(expr: &RuntimeExpr, symbol: &str) -
 
 fn collect_runtime_declaration_refs(expr: &RuntimeExpr, output: &mut BTreeSet<RuntimeSymbol>) {
     match expr {
+        RuntimeExpr::CheckedJoinSite { body, .. } => collect_runtime_declaration_refs(body, output),
         RuntimeExpr::DeclarationRef { symbol } => {
             output.insert(symbol.clone());
         }
@@ -4352,13 +4360,38 @@ impl<'a> Lowering<'a> {
         let matches = plan
             .sites
             .iter()
-            .filter(|site| site.runtime_frame_fingerprint == fingerprint)
+            .filter(|site| {
+                self.active_join_site
+                    .map_or(site.runtime_frame_fingerprint == fingerprint, |id| {
+                        site.site_id == id
+                    })
+            })
             .cloned()
             .collect::<Vec<_>>();
         match matches.as_slice() {
             [] => Ok(None),
             [site] => {
-                self.consumed_join_sites.insert(site.site_id);
+                if site.runtime_frame_fingerprint != fingerprint
+                    || site.occurrence_binding_fingerprint
+                        != crate::compiler_private_join_occurrence_binding_fingerprint(
+                            site.site_id,
+                            &site.declaration,
+                            &site.checked_occurrence_path,
+                            site.checked_result_type_fingerprint,
+                        )
+                {
+                    return Err(unsupported(
+                        "NativeJoinPlanV1",
+                        "checked join occurrence binding is stale or inconsistent",
+                    ));
+                }
+                if !self.consumed_join_sites.insert(site.site_id) {
+                    return Err(unsupported(
+                        "NativeJoinPlanV1",
+                        "checked join occurrence was consumed twice",
+                    ));
+                }
+                self.active_join_site = None;
                 Ok(Some(site.clone()))
             }
             _ => Err(unsupported(
@@ -5833,6 +5866,12 @@ impl<'a> Lowering<'a> {
     ) -> Result<Lowered, CraneliftBackendError> {
         match expr {
             RuntimeExpr::Value(value) => self.lower_value(builder, value),
+            RuntimeExpr::CheckedJoinSite { site_id, body } => {
+                if self.active_join_site.replace(*site_id).is_some() { return Err(unsupported("NativeJoinPlanV1", "nested checked join occurrence marker")); }
+                let result = self.lower_expr(builder, body, env);
+                if self.active_join_site.is_some() { self.active_join_site = None; }
+                result
+            }
             RuntimeExpr::Var(index) => env
                 .get(*index as usize)
                 .cloned()
