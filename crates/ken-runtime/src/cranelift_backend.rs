@@ -2568,6 +2568,104 @@ fn reaches_environment_computational_recursor(
         && !produces_deforestable_aggregate_with_ih(expr, &BTreeSet::new())
 }
 
+fn calls_environment_computational_recursor(
+    expr: &RuntimeExpr,
+    env: &[Lowered],
+    introduced_binders: usize,
+) -> bool {
+    let resolves_recursor = |index: u32| {
+        usize::try_from(index)
+            .ok()
+            .and_then(|index| index.checked_sub(introduced_binders))
+            .and_then(|index| env.get(index))
+            .is_some_and(|value| matches!(value, Lowered::ComputationalRecursorClosure { .. }))
+    };
+    match expr {
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => false,
+        RuntimeExpr::Let { value, body } => {
+            calls_environment_computational_recursor(value, env, introduced_binders)
+                || calls_environment_computational_recursor(body, env, introduced_binders + 1)
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            calls_environment_computational_recursor(scrutinee, env, introduced_binders)
+                || calls_environment_computational_recursor(then_expr, env, introduced_binders)
+                || calls_environment_computational_recursor(else_expr, env, introduced_binders)
+        }
+        RuntimeExpr::PrimitiveCall { args, .. }
+        | RuntimeExpr::Construct { args, .. }
+        | RuntimeExpr::Effect { args, .. } => args
+            .iter()
+            .any(|arg| calls_environment_computational_recursor(arg, env, introduced_binders)),
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            calls_environment_computational_recursor(scrutinee, env, introduced_binders)
+                || cases.iter().any(|case| {
+                    calls_environment_computational_recursor(
+                        &case.body,
+                        env,
+                        introduced_binders + case.binders,
+                    )
+                })
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            calls_environment_computational_recursor(scrutinee, env, introduced_binders)
+                || cases.iter().any(|case| {
+                    calls_environment_computational_recursor(
+                        &case.body,
+                        env,
+                        introduced_binders + case.recursive_positions.len() + case.argument_binders,
+                    )
+                })
+        }
+        RuntimeExpr::Record { fields } => fields.iter().any(|(_, field)| {
+            calls_environment_computational_recursor(field, env, introduced_binders)
+        }),
+        RuntimeExpr::Project { record, .. } => {
+            calls_environment_computational_recursor(record, env, introduced_binders)
+        }
+        RuntimeExpr::Closure {
+            captures,
+            params,
+            body,
+        } => calls_environment_computational_recursor(
+            body,
+            env,
+            introduced_binders + captures.len() + params.len(),
+        ),
+        RuntimeExpr::LexicalClosure {
+            captures,
+            params,
+            body,
+        } => {
+            captures.iter().any(|capture| {
+                calls_environment_computational_recursor(capture, env, introduced_binders)
+            }) || calls_environment_computational_recursor(
+                body,
+                env,
+                introduced_binders + captures.len() + params.len(),
+            )
+        }
+        RuntimeExpr::Call { callee, args } => {
+            matches!(callee.as_ref(), RuntimeExpr::Var(index) if resolves_recursor(*index))
+                || calls_environment_computational_recursor(callee, env, introduced_binders)
+                || args.iter().any(|arg| {
+                    calls_environment_computational_recursor(arg, env, introduced_binders)
+                })
+        }
+    }
+}
+
 fn shifted_aggregate_ihs(aggregate_ihs: &BTreeSet<usize>, by: usize) -> BTreeSet<usize> {
     aggregate_ihs.iter().map(|index| index + by).collect()
 }
@@ -3771,7 +3869,23 @@ impl<'a> Lowering<'a> {
                     Err(trap) => return Ok(Lowered::Trap(trap)),
                 };
                 case_env.extend(frame_env);
-                return self.lower_source_machine(builder, &case.body, &case_env, &active_state);
+                if calls_environment_computational_recursor(&case.body, &case_env, 0) {
+                    return self.lower_source_machine(
+                        builder,
+                        &case.body,
+                        &case_env,
+                        &active_state,
+                    );
+                }
+                if remaining_eliminators.is_empty() {
+                    return self.lower_expr(builder, &case.body, &case_env);
+                }
+                return self.lower_computational_producer_expr(
+                    builder,
+                    &case.body,
+                    &case_env,
+                    remaining_eliminators,
+                );
             }
             EliminatorFrame::Ordinary(eliminator) => {
                 let case = match select_ordinary_case(eliminator, &constructor) {
@@ -9969,6 +10083,7 @@ mod tests {
             None,
             true,
             Some(&symbols),
+            None,
         )
         .unwrap();
         let input = BorrowedFixtureValue {
@@ -11869,6 +11984,7 @@ mod tests {
             None,
             true,
             None,
+            None,
         )
         .expect("borrowed fixture lowers");
         let invocation = NativeInvocationFixture {
@@ -12139,6 +12255,7 @@ mod tests {
             declarations,
             None,
             true,
+            None,
             None,
         );
         let error = match result {
