@@ -2150,16 +2150,9 @@ struct OrdinaryEliminatorFrame<'a> {
 }
 
 #[derive(Clone, Copy)]
-struct OrdinaryContinuationFrame<'a> {
-    body: &'a RuntimeExpr,
-    env: &'a [Lowered],
-}
-
-#[derive(Clone, Copy)]
 enum EliminatorFrame<'a> {
     Computational(ComputationalEliminatorFrame<'a>),
     Ordinary(OrdinaryEliminatorFrame<'a>),
-    OrdinaryContinuation(OrdinaryContinuationFrame<'a>),
 }
 
 #[derive(Clone, Copy)]
@@ -2257,25 +2250,6 @@ fn ordinary_match_continuation<'a>(
     matches!(scrutinee.as_ref(), RuntimeExpr::Var(0)).then_some((cases, default))
 }
 
-fn unary_wrapped_ordinary_continuation(params: &[String], body: &RuntimeExpr) -> bool {
-    if params.len() != 1 {
-        return false;
-    }
-    let ordinary_parameter_match = |expr: &RuntimeExpr| {
-        matches!(
-            expr,
-            RuntimeExpr::Match { scrutinee, .. }
-                if matches!(scrutinee.as_ref(), RuntimeExpr::Var(0))
-        )
-    };
-    ordinary_parameter_match(body)
-        || matches!(
-            body,
-            RuntimeExpr::Construct { args, .. }
-                if args.len() == 1 && ordinary_parameter_match(&args[0])
-        )
-}
-
 fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
     matches!(
         expr,
@@ -2286,27 +2260,30 @@ fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
     ) && produces_deforestable_aggregate_with_ih(expr, &BTreeSet::new())
 }
 
-fn requires_value_aware_heterogeneous_deforestation(expr: &RuntimeExpr, env: &[Lowered]) -> bool {
+fn requires_value_aware_heterogeneous_deforestation(
+    expr: &RuntimeExpr,
+    env: &[Lowered],
+) -> bool {
     if requires_heterogeneous_deforestation(expr) {
         return true;
     }
-    if !matches!(
-        expr,
-        RuntimeExpr::Match { .. }
-            | RuntimeExpr::ComputationalMatch { .. }
-            | RuntimeExpr::If { .. }
-            | RuntimeExpr::Call { .. }
-    ) {
+    environment_resolves_computational_recursor_call(expr, env)
+}
+
+fn environment_resolves_computational_recursor_call(
+    expr: &RuntimeExpr,
+    env: &[Lowered],
+) -> bool {
+    let RuntimeExpr::Call { callee, .. } = expr else {
         return false;
-    }
-    let aggregate_ihs = env
-        .iter()
-        .enumerate()
-        .filter_map(|(index, value)| {
-            matches!(value, Lowered::ComputationalRecursorClosure { .. }).then_some(index)
-        })
-        .collect();
-    produces_deforestable_aggregate_with_ih(expr, &aggregate_ihs)
+    };
+    let RuntimeExpr::Var(index) = callee.as_ref() else {
+        return false;
+    };
+    usize::try_from(*index)
+        .ok()
+        .and_then(|index| env.get(index))
+        .is_some_and(|callee| matches!(callee, Lowered::ComputationalRecursorClosure { .. }))
 }
 
 fn shifted_aggregate_ihs(aggregate_ihs: &BTreeSet<usize>, by: usize) -> BTreeSet<usize> {
@@ -2554,24 +2531,6 @@ impl<'a> Lowering<'a> {
                 "nested computational producer has no eliminator",
             ));
         }
-        if let EliminatorFrame::OrdinaryContinuation(continuation) = eliminators[0] {
-            let value = self.lower_expr(builder, scrutinee, producer_env)?;
-            if let Lowered::Trap(trap) = value {
-                return Ok(Lowered::Trap(trap));
-            }
-            let mut continuation_env = vec![value];
-            continuation_env.extend_from_slice(continuation.env);
-            return if eliminators.len() == 1 {
-                self.lower_expr(builder, continuation.body, &continuation_env)
-            } else {
-                self.lower_computational_producer_expr(
-                    builder,
-                    continuation.body,
-                    &continuation_env,
-                    &eliminators[1..],
-                )
-            };
-        }
         match scrutinee {
             RuntimeExpr::Let { value, body } => {
                 let value = self.lower_expr(builder, value, producer_env)?;
@@ -2605,12 +2564,7 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     } => {
-                        if args.len() == 1
-                            && requires_value_aware_heterogeneous_deforestation(
-                                &args[0],
-                                producer_env,
-                            )
-                        {
+                        if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
                             if let Some((cases, default)) =
                                 ordinary_match_continuation(&params, &body)
                             {
@@ -2722,27 +2676,6 @@ impl<'a> Lowering<'a> {
                                 ),
                             ));
                         }
-                        if args.len() == 1
-                            && unary_wrapped_ordinary_continuation(&params, &body)
-                        {
-                            let mut continuation_env = captures;
-                            continuation_env.extend_from_slice(producer_env);
-                            composed.insert(
-                                layers.len(),
-                                EliminatorFrame::OrdinaryContinuation(
-                                    OrdinaryContinuationFrame {
-                                        body: &body,
-                                        env: &continuation_env,
-                                    },
-                                ),
-                            );
-                            return self.lower_computational_producer_expr(
-                                builder,
-                                &args[0],
-                                producer_env,
-                                &composed,
-                            );
-                        }
                         let mut call_env = args
                             .iter()
                             .map(|arg| self.lower_expr(builder, arg, producer_env))
@@ -2770,9 +2703,6 @@ impl<'a> Lowering<'a> {
                         .cases
                         .iter()
                         .any(|case| case.constructor.contains("::ITree::")),
-                    EliminatorFrame::OrdinaryContinuation(_) => {
-                        unreachable!("ordinary continuations are consumed before producer dispatch")
-                    }
                 };
                 if terminal_exit && itree_frame {
                     let lowered_args = args
@@ -2837,16 +2767,12 @@ impl<'a> Lowering<'a> {
                         }
                         (&case.body, 0)
                     }
-                    EliminatorFrame::OrdinaryContinuation(_) => {
-                        unreachable!("ordinary continuations are consumed before producer dispatch")
-                    }
                 };
 
                 let bridge =
                     immediate_binder_eliminator(case_body, argument_binder_offset, args.len());
-                let bridge = bridge.filter(|(field, _)| {
-                    requires_value_aware_heterogeneous_deforestation(&args[*field], producer_env)
-                });
+                let bridge =
+                    bridge.filter(|(field, _)| requires_heterogeneous_deforestation(&args[*field]));
 
                 if let Some((field, consumer)) = bridge {
                     let lowered_prefix = args[..field]
@@ -2916,6 +2842,23 @@ impl<'a> Lowering<'a> {
                 cases: producer_cases,
                 default: producer_default,
             } => {
+                if environment_resolves_computational_recursor_call(scrutinee, producer_env) {
+                    let mut composed = Vec::with_capacity(eliminators.len() + 1);
+                    composed.push(EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
+                        cases: producer_cases,
+                        default: producer_default,
+                        env: producer_env,
+                        retained_scrutinee_index: None,
+                        deferred_constructor_case: None,
+                    }));
+                    composed.extend_from_slice(eliminators);
+                    return self.lower_computational_producer_expr(
+                        builder,
+                        scrutinee,
+                        producer_env,
+                        &composed,
+                    );
+                }
                 let selected = self.lower_expr(builder, scrutinee, producer_env)?;
                 if let Lowered::Bool { value, known } = selected {
                     let true_case = producer_cases.iter().find(|case| {
@@ -3268,9 +3211,6 @@ impl<'a> Lowering<'a> {
                 case_env.extend(frame_env);
                 (&case.body, case_env)
             }
-            EliminatorFrame::OrdinaryContinuation(_) => {
-                unreachable!("ordinary continuations are consumed before value composition")
-            }
         };
         if remaining_eliminators.is_empty() {
             self.lower_expr(builder, body, &case_env)
@@ -3322,9 +3262,6 @@ impl<'a> Lowering<'a> {
                     ));
                 };
                 (&zero.body, &suc.body, false)
-            }
-            EliminatorFrame::OrdinaryContinuation(_) => {
-                unreachable!("ordinary continuations are consumed before Nat composition")
             }
         };
 
@@ -3523,9 +3460,6 @@ impl<'a> Lowering<'a> {
                 frame.deferred_constructor_case,
                 "Match",
             ),
-            EliminatorFrame::OrdinaryContinuation(_) => {
-                unreachable!("ordinary continuations do not materialize case environments")
-            }
         };
         let Some(deferred) = deferred else {
             let mut env = env.to_vec();
@@ -3631,9 +3565,6 @@ impl<'a> Lowering<'a> {
                 }
                 constructor_args.extend(outer_tail);
                 Ok(Ok(constructor_args))
-            }
-            EliminatorFrame::OrdinaryContinuation(_) => {
-                unreachable!("ordinary continuations cannot be deferred constructor frames")
             }
         }
     }
@@ -4126,9 +4057,7 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     } => {
-                        if args.len() == 1
-                            && requires_value_aware_heterogeneous_deforestation(&args[0], env)
-                        {
+                        if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
                             if let Some((cases, default)) =
                                 ordinary_match_continuation(&params, &body)
                             {
@@ -5270,31 +5199,6 @@ impl<'a> Lowering<'a> {
         producer_env: &[Lowered],
         eliminators: Option<&[EliminatorFrame<'_>]>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        if args.len() == 1
-            && requires_value_aware_heterogeneous_deforestation(&args[0], producer_env)
-        {
-            if let Some((cases, default)) = ordinary_match_continuation(params, body) {
-                let mut frame_env = captures.to_vec();
-                frame_env.extend_from_slice(producer_env);
-                let mut composed = Vec::with_capacity(eliminators.map_or(1, |frames| frames.len() + 1));
-                composed.push(EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
-                    cases,
-                    default,
-                    env: &frame_env,
-                    retained_scrutinee_index: Some(0),
-                    deferred_constructor_case: None,
-                }));
-                if let Some(eliminators) = eliminators {
-                    composed.extend_from_slice(eliminators);
-                }
-                return self.lower_computational_producer_expr(
-                    builder,
-                    &args[0],
-                    producer_env,
-                    &composed,
-                );
-            }
-        }
         let lowered_args = args
             .iter()
             .map(|arg| self.lower_expr(builder, arg, producer_env))
