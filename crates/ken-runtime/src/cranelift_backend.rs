@@ -3138,11 +3138,11 @@ impl<'a> Lowering<'a> {
                         })?;
                         let _resume = find_continuation_cursor(current, invocation.resume_cursor)
                             .ok_or_else(|| {
-                                unsupported(
-                                    "ComputationalRecursor",
-                                    "recursive producer invocation cursor is not active",
-                                )
-                            })?;
+                            unsupported(
+                                "ComputationalRecursor",
+                                "recursive producer invocation cursor is not active",
+                            )
+                        })?;
                         let mut composed = recursor_eliminator_frames(&invocation.owned_layers);
                         composed.push(EliminatorFrame::InvocationReturn);
                         if let Lowered::BoundedNat(predecessor) = base {
@@ -3192,10 +3192,7 @@ impl<'a> Lowering<'a> {
                         call_env.extend(captures);
                         call_env.extend_from_slice(producer_env);
                         let returned = self.lower_computational_producer_expr(
-                            builder,
-                            &body,
-                            &call_env,
-                            &composed,
+                            builder, &body, &call_env, &composed,
                         )?;
                         self.lower_computational_match_value_composed(
                             builder,
@@ -4328,14 +4325,9 @@ impl<'a> Lowering<'a> {
                 )
             }
             EliminatorFrame::Ordinary(frame) => {
-                crate::compiler_private_ordinary_match_frame_fingerprint(
-                    frame.cases,
-                    frame.default,
-                )
+                crate::compiler_private_ordinary_match_frame_fingerprint(frame.cases, frame.default)
             }
-            EliminatorFrame::InvocationReturn => {
-                crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
-            }
+            EliminatorFrame::InvocationReturn => crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
             EliminatorFrame::PendingLet(_) | EliminatorFrame::Active(_) => return Ok(None),
         };
         let Some(plan) = &self.native_join_plan else {
@@ -4376,9 +4368,7 @@ impl<'a> Lowering<'a> {
         match kind {
             ScalarMergeKind::Int => Lowered::Int { value, known: None },
             ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
-            ScalarMergeKind::StructuralNat => {
-                Lowered::StructuralNat(StructuralNatV1 { value })
-            }
+            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 { value }),
             ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
             ScalarMergeKind::RecursiveBackedge => {
                 unreachable!("a checked join plan never carries RecursiveBackedge")
@@ -4444,8 +4434,7 @@ impl<'a> Lowering<'a> {
                 ..
             }) => Some(**active),
             SourceContinuation::Terminal(
-                SourceContinuationTerminal::ReturnValue
-                | SourceContinuationTerminal::JumpToJoin(_),
+                SourceContinuationTerminal::ReturnValue | SourceContinuationTerminal::JumpToJoin(_),
             ) => None,
             SourceContinuation::LetBody { next, .. }
             | SourceContinuation::ApplyRecursorLayers { next, .. }
@@ -4455,9 +4444,7 @@ impl<'a> Lowering<'a> {
             | SourceContinuation::ComputationalMatchScrutinee { next, .. }
             | SourceContinuation::ProjectRecord { next, .. }
             | SourceContinuation::CallCallee { next, .. }
-            | SourceContinuation::CallArgument { next, .. } => {
-                Self::source_terminal_active(next)
-            }
+            | SourceContinuation::CallArgument { next, .. } => Self::source_terminal_active(next),
         }
     }
 
@@ -4479,8 +4466,7 @@ impl<'a> Lowering<'a> {
                 SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge))
             }
             SourceContinuation::Terminal(
-                SourceContinuationTerminal::ReturnValue
-                | SourceContinuationTerminal::JumpToJoin(_),
+                SourceContinuationTerminal::ReturnValue | SourceContinuationTerminal::JumpToJoin(_),
             ) => {
                 return Err(unsupported(
                     "NativeJoinPlanV1",
@@ -4492,10 +4478,7 @@ impl<'a> Lowering<'a> {
                 env: env.clone(),
                 next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
             },
-            SourceContinuation::ApplyRecursorLayers {
-                remaining,
-                next,
-            } => {
+            SourceContinuation::ApplyRecursorLayers { remaining, next } => {
                 SourceContinuation::ApplyRecursorLayers {
                     remaining: remaining.clone(),
                     next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
@@ -4555,13 +4538,11 @@ impl<'a> Lowering<'a> {
                     next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
                 }
             }
-            SourceContinuation::CallCallee { args, env, next } => {
-                SourceContinuation::CallCallee {
-                    args: args.clone(),
-                    env: env.clone(),
-                    next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
-                }
-            }
+            SourceContinuation::CallCallee { args, env, next } => SourceContinuation::CallCallee {
+                args: args.clone(),
+                env: env.clone(),
+                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+            },
             SourceContinuation::CallArgument {
                 callee,
                 remaining,
@@ -4631,12 +4612,10 @@ impl<'a> Lowering<'a> {
         active: &ActiveContinuationFrame<'_>,
     ) -> Result<Lowered, CraneliftBackendError> {
         let control = SourceControl {
-            continuation: SourceContinuation::Terminal(
-                SourceContinuationTerminal::ResumeOuter {
-                    expected: active.cursor,
-                    active,
-                },
-            ),
+            continuation: SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
+                expected: active.cursor,
+                active,
+            }),
             selected: SourceSelectedContinuation {
                 activation: active.activation,
                 cursor: active.cursor,
@@ -4646,12 +4625,7 @@ impl<'a> Lowering<'a> {
             },
             terminal_outer: active.cursor,
         };
-        self.lower_source_machine_with_continuation(
-            builder,
-            expr.clone(),
-            env.to_vec(),
-            control,
-        )
+        self.lower_source_machine_with_continuation(builder, expr.clone(), env.to_vec(), control)
     }
 
     fn lower_source_machine_with_continuation<'b>(
@@ -4661,11 +4635,7 @@ impl<'a> Lowering<'a> {
         env: Vec<Lowered>,
         control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let mut state = SourceMachineState::Eval {
-            expr,
-            env,
-            control,
-        };
+        let mut state = SourceMachineState::Eval { expr, env, control };
         loop {
             state = match state {
                 SourceMachineState::Eval {
@@ -4695,10 +4665,17 @@ impl<'a> Lowering<'a> {
                             control,
                         }
                     }
-                    RuntimeExpr::Construct { constructor, mut args } => {
+                    RuntimeExpr::Construct {
+                        constructor,
+                        mut args,
+                    } => {
                         if args.is_empty() {
                             SourceMachineState::Value {
-                                value: self.finish_source_constructor(builder, constructor, vec![])?,
+                                value: self.finish_source_constructor(
+                                    builder,
+                                    constructor,
+                                    vec![],
+                                )?,
                                 control,
                             }
                         } else {
@@ -4751,14 +4728,13 @@ impl<'a> Lowering<'a> {
                         cases,
                         default,
                     } => {
-                        control.continuation =
-                            SourceContinuation::ComputationalMatchScrutinee {
-                                cases,
-                                default,
-                                env: env.clone(),
-                                provenance: self.mint_recursor_frame_provenance(),
-                                next: Box::new(control.continuation),
-                            };
+                        control.continuation = SourceContinuation::ComputationalMatchScrutinee {
+                            cases,
+                            default,
+                            env: env.clone(),
+                            provenance: self.mint_recursor_frame_provenance(),
+                            next: Box::new(control.continuation),
+                        };
                         SourceMachineState::Eval {
                             expr: *scrutinee,
                             env,
@@ -4770,16 +4746,14 @@ impl<'a> Lowering<'a> {
                         control,
                     },
                 },
-                SourceMachineState::Value {
-                    value,
-                    mut control,
-                } => match control.continuation {
+                SourceMachineState::Value { value, mut control } => match control.continuation {
                     SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => {
                         return Ok(value);
                     }
-                    SourceContinuation::Terminal(
-                        SourceContinuationTerminal::ResumeOuter { expected, active },
-                    ) => {
+                    SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
+                        expected,
+                        active,
+                    }) => {
                         if active.cursor != expected {
                             return Err(unsupported(
                                 "ComputationalRecursor",
@@ -4794,11 +4768,7 @@ impl<'a> Lowering<'a> {
                         } else {
                             let mut prefix = edge.prefix;
                             prefix.push(EliminatorFrame::InvocationReturn);
-                            self.lower_computational_match_value_composed(
-                                builder,
-                                value,
-                                &prefix,
-                            )?
+                            self.lower_computational_match_value_composed(builder, value, &prefix)?
                         };
                         let (value, actual_kind) =
                             self.merge_scalar_branch(builder, value, "NativeJoinPlanV1")?;
@@ -4819,15 +4789,9 @@ impl<'a> Lowering<'a> {
                     SourceContinuation::LetBody { body, env, next } => {
                         control.continuation = *next;
                         if matches!(value, Lowered::RecursiveBackedge) {
-                            SourceMachineState::Value {
-                                value,
-                                control,
-                            }
+                            SourceMachineState::Value { value, control }
                         } else if matches!(value, Lowered::Trap(_)) {
-                            SourceMachineState::Value {
-                                value,
-                                control,
-                            }
+                            SourceMachineState::Value { value, control }
                         } else {
                             let mut body_env = vec![value];
                             body_env.extend(env);
@@ -4838,19 +4802,14 @@ impl<'a> Lowering<'a> {
                             }
                         }
                     }
-                    SourceContinuation::ApplyRecursorLayers {
-                        remaining,
-                        next,
-                    } => {
+                    SourceContinuation::ApplyRecursorLayers { remaining, next } => {
                         let mut frames = recursor_eliminator_frames(&remaining);
                         frames.push(EliminatorFrame::Active(control.selected.as_active()));
                         frames.push(EliminatorFrame::InvocationReturn);
                         control.continuation = *next;
                         SourceMachineState::Value {
                             value: self.lower_computational_match_value_composed(
-                                builder,
-                                value,
-                                &frames,
+                                builder, value, &frames,
                             )?,
                             control,
                         }
@@ -4896,64 +4855,98 @@ impl<'a> Lowering<'a> {
                         next,
                     } => {
                         control.continuation = *next;
-                        if let Lowered::HostResult {
-                            success,
-                            error,
-                            ok,
-                            err_constructor,
-                            ok_constructor,
-                        } = value
-                        {
-                            return self.lower_source_dynamic_host_result_match(
-                                builder,
+                        match value {
+                            Lowered::Bool { value, known } => {
+                                let true_case = cases.iter().find(|case| {
+                                    case.binders == 0 && case.constructor.ends_with("::Bool::True")
+                                });
+                                let false_case = cases.iter().find(|case| {
+                                    case.binders == 0 && case.constructor.ends_with("::Bool::False")
+                                });
+                                let (Some(true_case), Some(false_case)) = (true_case, false_case)
+                                else {
+                                    return Err(unsupported(
+                                        "Match",
+                                        "Bool match requires zero-binder True and False cases",
+                                    ));
+                                };
+                                if let Some(selected) = known {
+                                    SourceMachineState::Eval {
+                                        expr: if selected {
+                                            true_case.body.clone()
+                                        } else {
+                                            false_case.body.clone()
+                                        },
+                                        env,
+                                        control,
+                                    }
+                                } else {
+                                    return self.lower_source_dynamic_bool_match(
+                                        builder,
+                                        value,
+                                        &true_case.body,
+                                        &false_case.body,
+                                        &env,
+                                        control,
+                                    );
+                                }
+                            }
+                            Lowered::HostResult {
                                 success,
-                                *error,
-                                *ok,
-                                &err_constructor,
-                                &ok_constructor,
-                                &cases,
-                                default,
-                                &env,
-                                control,
-                            );
-                        }
-                        if let Lowered::DynamicConstructor(dynamic) = value {
-                            return self.lower_source_dynamic_constructor_match(
-                                builder,
-                                dynamic,
-                                &cases,
-                                &default,
-                                &env,
-                                control,
-                            );
-                        }
-                        let Lowered::Constructor { constructor, args } = value else {
-                            return Err(unsupported(
-                                "Match",
-                                "scrutinee is not a constructor value",
-                            ));
-                        };
-                        let Some(case) = cases.iter().find(|case| case.constructor == constructor)
-                        else {
-                            return Ok(Lowered::Trap(default));
-                        };
-                        if case.binders != args.len() {
-                            return Err(unsupported(
-                                "Match",
-                                format!(
+                                error,
+                                ok,
+                                err_constructor,
+                                ok_constructor,
+                            } => {
+                                return self.lower_source_dynamic_host_result_match(
+                                    builder,
+                                    success,
+                                    *error,
+                                    *ok,
+                                    &err_constructor,
+                                    &ok_constructor,
+                                    &cases,
+                                    default,
+                                    &env,
+                                    control,
+                                );
+                            }
+                            Lowered::DynamicConstructor(dynamic) => {
+                                return self.lower_source_dynamic_constructor_match(
+                                    builder, dynamic, &cases, &default, &env, control,
+                                );
+                            }
+                            Lowered::Constructor { constructor, args } => {
+                                let Some(case) =
+                                    cases.iter().find(|case| case.constructor == constructor)
+                                else {
+                                    return Ok(Lowered::Trap(default));
+                                };
+                                if case.binders != args.len() {
+                                    return Err(unsupported(
+                                        "Match",
+                                        format!(
                                     "case {} expects {} binders but constructor has {} args",
                                     case.constructor,
                                     case.binders,
                                     args.len()
                                 ),
-                            ));
-                        }
-                        let mut case_env = args;
-                        case_env.extend(env);
-                        SourceMachineState::Eval {
-                            expr: case.body.clone(),
-                            env: case_env,
-                            control,
+                                    ));
+                                }
+                                let mut case_env = args;
+                                case_env.extend(env);
+                                SourceMachineState::Eval {
+                                    expr: case.body.clone(),
+                                    env: case_env,
+                                    control,
+                                }
+                            }
+                            _ => {
+                                return Err(unsupported(
+                                    "Match",
+                                    "scrutinee is not a constructor value",
+                                ));
+                            }
                         }
                     }
                     SourceContinuation::ComputationalMatchScrutinee {
@@ -4973,9 +4966,7 @@ impl<'a> Lowering<'a> {
                             constructor: constructor.clone(),
                             args: args.clone(),
                         };
-                        let Some(case) = cases
-                            .iter()
-                            .find(|case| case.constructor == constructor)
+                        let Some(case) = cases.iter().find(|case| case.constructor == constructor)
                         else {
                             return Ok(Lowered::Trap(default));
                         };
@@ -5121,6 +5112,78 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn lower_source_dynamic_bool_match<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        condition: cranelift_codegen::ir::Value,
+        true_body: &RuntimeExpr,
+        false_body: &RuntimeExpr,
+        env: &[Lowered],
+        suffix_control: SourceControl<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let active = suffix_control.selected.as_active();
+        let (prefix, suffix_pending, required_kind, site_id) =
+            self.planned_active_scalar_cut(active)?;
+        let suffix_pending = suffix_pending.to_vec();
+        let join_id = self.next_source_join;
+        self.next_source_join = self
+            .next_source_join
+            .checked_add(1)
+            .expect("compiler-private source join identity exhausted");
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        let true_block = builder.create_block();
+        let false_block = builder.create_block();
+        builder
+            .ins()
+            .brif(condition, true_block, &[], false_block, &[]);
+        for (predecessor_id, block, body) in
+            [(0, true_block, true_body), (1, false_block, false_body)]
+        {
+            builder.switch_to_block(block);
+            let edge = SourceJoinEdge {
+                join_id,
+                predecessor_id,
+                target: merge,
+                expected_outer: suffix_control.terminal_outer,
+                required_kind,
+                prefix: prefix.clone(),
+            };
+            let continuation =
+                Self::instantiate_source_prefix_to_join(&suffix_control.continuation, edge)?;
+            let branch_control = SourceControl {
+                continuation,
+                selected: suffix_control.selected.clone(),
+                terminal_outer: suffix_control.terminal_outer,
+            };
+            let lowered = self.lower_source_machine_with_continuation(
+                builder,
+                body.clone(),
+                env.to_vec(),
+                branch_control,
+            )?;
+            if !matches!(lowered, Lowered::RecursiveBackedge) {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    format!(
+                        "Bool predecessor {predecessor_id} for checked site {site_id} did not seal its affine join edge"
+                    ),
+                ));
+            }
+        }
+        builder.switch_to_block(merge);
+        let merged =
+            Self::reconstruct_scalar_join_value(required_kind, builder.block_params(merge)[0]);
+        let suffix_active = ActiveContinuationFrame {
+            activation: suffix_control.selected.activation,
+            cursor: suffix_control.selected.cursor,
+            parent: suffix_control.selected.parent,
+            pending: &suffix_pending,
+            selected_ancestry: &suffix_control.selected.selected_ancestry,
+        };
+        self.resume_active_continuation(builder, merged, suffix_active)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn lower_source_dynamic_host_result_match<'b>(
         &mut self,
@@ -5202,10 +5265,8 @@ impl<'a> Lowering<'a> {
         }
 
         builder.switch_to_block(merge);
-        let merged = Self::reconstruct_scalar_join_value(
-            required_kind,
-            builder.block_params(merge)[0],
-        );
+        let merged =
+            Self::reconstruct_scalar_join_value(required_kind, builder.block_params(merge)[0]);
         let suffix_active = ActiveContinuationFrame {
             activation: suffix_control.selected.activation,
             cursor: suffix_control.selected.cursor,
@@ -5277,9 +5338,9 @@ impl<'a> Lowering<'a> {
             };
             let arm_env = materialize_dynamic_constructor_env(&alternative, env);
             let control = SourceControl {
-                continuation: SourceContinuation::Terminal(
-                    SourceContinuationTerminal::JumpToJoin(edge),
-                ),
+                continuation: SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(
+                    edge,
+                )),
                 selected: suffix_control.selected.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
@@ -5445,12 +5506,8 @@ impl<'a> Lowering<'a> {
                         armed.suspended.selected.as_active(),
                     ));
                     frames.push(EliminatorFrame::InvocationReturn);
-                    let returned = self.lower_bounded_nat_computational(
-                        builder,
-                        predecessor,
-                        false,
-                        &frames,
-                    )?;
+                    let returned =
+                        self.lower_bounded_nat_computational(builder, predecessor, false, &frames)?;
                     return Ok(SourceMachineState::Value {
                         value: returned,
                         control: armed.suspended,
