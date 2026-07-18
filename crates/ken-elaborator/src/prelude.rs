@@ -102,6 +102,11 @@ pub fn empty_prelude_env() -> PreludeEnv {
         private_fs_open_id: z,
         private_fs_handle_metadata_id: z,
         private_buffer_allocate_id: z,
+        private_fs_read_at_id: z,
+        private_fs_write_at_id: z,
+        private_buffer_freeze_id: z,
+        private_buffer_span_id: z,
+        private_transfer_count_id: z,
         private_resource_release_id: z,
         private_resource_trace_identity_id: z,
         fs_handle_id: z,
@@ -223,6 +228,11 @@ pub struct PreludeEnv {
     pub private_fs_open_id: GlobalId,
     pub private_fs_handle_metadata_id: GlobalId,
     pub private_buffer_allocate_id: GlobalId,
+    pub private_fs_read_at_id: GlobalId,
+    pub private_fs_write_at_id: GlobalId,
+    pub private_buffer_freeze_id: GlobalId,
+    pub private_buffer_span_id: GlobalId,
+    pub private_transfer_count_id: GlobalId,
     pub private_resource_release_id: GlobalId,
     /// Module-private two-limb constructor for the opaque trace identity.
     pub private_resource_trace_identity_id: GlobalId,
@@ -1385,6 +1395,19 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .get("ReleaseFailed")
         .copied()
         .ok_or_else(|| ElabError::Internal("prelude: ReleaseFailed missing".into()))?;
+    // PX8-N's result vocabulary is ordinary checked data, but the constructors
+    // carrying the compact native Nat remain module-private. Public PX8-F
+    // wrappers and laws are deliberately outside this compiler prerequisite.
+    elab.elaborate_decl("data BufferSpan = PrivateBufferSpan Int Nat")
+        .map_err(|e| ElabError::Internal(format!("prelude BufferSpan failed: {e}")))?;
+    elab.elaborate_decl("data TransferCount = PrivateTransferCount Nat Nat")
+        .map_err(|e| ElabError::Internal(format!("prelude TransferCount failed: {e}")))?;
+    elab.elaborate_decl("data ReadProgress = ReadSome BufferSpan TransferCount | ReadEof")
+        .map_err(|e| ElabError::Internal(format!("prelude ReadProgress failed: {e}")))?;
+    elab.elaborate_decl("data WriteProgress = Wrote TransferCount")
+        .map_err(|e| ElabError::Internal(format!("prelude WriteProgress failed: {e}")))?;
+    let private_buffer_span_id = elab.globals["PrivateBufferSpan"];
+    let private_transfer_count_id = elab.globals["PrivateTransferCount"];
     elab.elaborate_decl("data ResourceBodyResult e a = ResourceBodyOk a | ResourceBodyErr e")
         .map_err(|e| ElabError::Internal(format!("prelude ResourceBodyResult failed: {e}")))?;
     elab.elaborate_decl(
@@ -1394,6 +1417,15 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let resource_fs_handle_t = Term::app(
         Term::const_(resource_id, vec![]),
         Term::constructor(fs_handle_id, vec![]),
+    );
+    let buffer_id = elab
+        .globals
+        .get("Buffer")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: Buffer missing".into()))?;
+    let resource_buffer_t = Term::app(
+        Term::const_(resource_id, vec![]),
+        Term::constructor(buffer_id, vec![]),
     );
     let resource_kind_t = Term::indformer(resource_kind_id, vec![]);
     let resource_of_latest_kind_t = Term::app(Term::const_(resource_id, vec![]), Term::var(0));
@@ -1433,7 +1465,22 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
                 named(vec![cap_a(), bytes_t.clone(), resource_open_mode_t]),
                 named(vec![resource_fs_handle_t.clone()]),
                 named(vec![resource_kind_t, resource_of_latest_kind_t]),
-                named(vec![int_t]),
+                named(vec![int_t.clone()]),
+                named(vec![
+                    resource_fs_handle_t.clone(),
+                    int_t.clone(),
+                    resource_buffer_t.clone(),
+                    int_t.clone(),
+                    int_t.clone(),
+                ]),
+                named(vec![
+                    resource_fs_handle_t,
+                    int_t.clone(),
+                    resource_buffer_t.clone(),
+                    int_t.clone(),
+                    int_t.clone(),
+                ]),
+                named(vec![resource_buffer_t, int_t.clone(), int_t]),
             ]
         },
     })
@@ -1462,6 +1509,9 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "PrivateFsHandleMetadata",
         "PrivateResourceRelease",
         "PrivateBufferAllocate",
+        "PrivateFsReadAt",
+        "PrivateFsWriteAt",
+        "PrivateBufferFreeze",
     ]
     .into_iter()
     .zip(fs_ctor_ids)
@@ -1472,6 +1522,9 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let private_fs_handle_metadata_id = elab.globals["PrivateFsHandleMetadata"];
     let private_resource_release_id = elab.globals["PrivateResourceRelease"];
     let private_buffer_allocate_id = elab.globals["PrivateBufferAllocate"];
+    let private_fs_read_at_id = elab.globals["PrivateFsReadAt"];
+    let private_fs_write_at_id = elab.globals["PrivateFsWriteAt"];
+    let private_buffer_freeze_id = elab.globals["PrivateBufferFreeze"];
 
     // `fs_resp : (a : Auth) -> FSOp a -> Type` is a genuine non-constant
     // large elimination. Every arm returns a total `Result FileError _`, with
@@ -1491,7 +1544,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            PrivateFsOpen cap path mode |-> Result FileError (Resource FsHandle); \
            PrivateFsHandleMetadata resource |-> Result ResourceError FileMetadata; \
            PrivateResourceRelease kind resource |-> Result ResourceError Unit; \
-           PrivateBufferAllocate capacity |-> Result ResourceError (Resource Buffer) \
+           PrivateBufferAllocate capacity |-> Result ResourceError (Resource Buffer); \
+           PrivateFsReadAt file file_offset buffer buffer_start length |-> Result ResourceError ReadProgress; \
+           PrivateFsWriteAt file file_offset buffer buffer_start length |-> Result ResourceError WriteProgress; \
+           PrivateBufferFreeze buffer start length |-> Result ResourceError Bytes \
          }",
     )
     .map_err(|e| ElabError::Internal(format!("prelude fs_resp failed: {}", e)))?;
@@ -1843,6 +1899,11 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "PrivateFsOpen",
         "PrivateFsHandleMetadata",
         "PrivateBufferAllocate",
+        "PrivateFsReadAt",
+        "PrivateFsWriteAt",
+        "PrivateBufferFreeze",
+        "PrivateBufferSpan",
+        "PrivateTransferCount",
         "PrivateResourceRelease",
         "PrivateResourceTraceIdentity",
         "private_resource_acquire",
@@ -2013,6 +2074,11 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         private_fs_open_id,
         private_fs_handle_metadata_id,
         private_buffer_allocate_id,
+        private_fs_read_at_id,
+        private_fs_write_at_id,
+        private_buffer_freeze_id,
+        private_buffer_span_id,
+        private_transfer_count_id,
         private_resource_release_id,
         private_resource_trace_identity_id,
         fs_handle_id,

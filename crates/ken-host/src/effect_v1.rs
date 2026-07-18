@@ -76,6 +76,10 @@ impl HostOpV1 {
                 | Self::FsOpen
                 | Self::FsHandleMetadata
                 | Self::ResourceRelease
+                | Self::FsReadAt
+                | Self::FsWriteAt
+                | Self::BufferAllocate
+                | Self::BufferFreeze
         ) {
             HostOpAvailabilityV1::NativeTested
         } else {
@@ -106,7 +110,7 @@ pub const PX5_PLANNED_NATIVE_TARGETS: [HostOpV1; 5] = [
     HostOpV1::FsWriteFile,
 ];
 
-pub const NATIVE_TESTED_TARGETS_V1: [HostOpV1; 9] = [
+pub const NATIVE_TESTED_TARGETS_V1: [HostOpV1; 13] = [
     HostOpV1::ConsoleWrite,
     HostOpV1::ConsoleFlush,
     HostOpV1::ConsoleIsTerminal,
@@ -115,7 +119,11 @@ pub const NATIVE_TESTED_TARGETS_V1: [HostOpV1; 9] = [
     HostOpV1::FsChangeMode,
     HostOpV1::FsOpen,
     HostOpV1::FsHandleMetadata,
+    HostOpV1::FsReadAt,
+    HostOpV1::FsWriteAt,
     HostOpV1::ResourceRelease,
+    HostOpV1::BufferAllocate,
+    HostOpV1::BufferFreeze,
 ];
 
 pub const HOST_EFFECT_ABI_V1_SCHEMA_VERSION: u32 = 1;
@@ -2594,11 +2602,11 @@ mod tests {
             "FsChangeMode|030a|native|FsChangeModeRequestV1|3|HostReplyV1|1",
             "FsOpen|030b|native|FsOpenRequestV1|3|HostReplyV1|1",
             "FsHandleMetadata|030c|native|ResourceRequestV1|1|HostReplyV1|1",
-            "FsReadAt|030d|unavailable|FsPositionedRequestV1|5|HostReplyV1|1",
-            "FsWriteAt|030e|unavailable|FsPositionedRequestV1|5|HostReplyV1|1",
+            "FsReadAt|030d|native|FsPositionedRequestV1|5|HostReplyV1|1",
+            "FsWriteAt|030e|native|FsPositionedRequestV1|5|HostReplyV1|1",
             "ResourceRelease|0401|native|ResourceRequestV1|1|HostReplyV1|1",
-            "BufferAllocate|0402|unavailable|BufferAllocateRequestV1|1|HostReplyV1|1",
-            "BufferFreeze|0403|unavailable|BufferFreezeRequestV1|3|HostReplyV1|1",
+            "BufferAllocate|0402|native|BufferAllocateRequestV1|1|HostReplyV1|1",
+            "BufferFreeze|0403|native|BufferFreezeRequestV1|3|HostReplyV1|1",
             "lifetime=filesystem_observation_schema|2",
             "lifetime=resource_observation_schema|1",
             "lifetime=resource_error_reply_schema|1",
