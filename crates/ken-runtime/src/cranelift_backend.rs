@@ -1796,6 +1796,8 @@ fn compile_expr_into_module<'a, M: Module>(
             initial_env.push(compiler.lower_value(&mut builder, value)?);
         }
         let lowered = compiler.lower_expr(&mut builder, expr, &initial_env)?;
+        compiler.consume_distinguished_root_join_site()?;
+        compiler.require_complete_join_plan_consumption()?;
         let result = match lowered {
             Lowered::Trap(trap) => {
                 let status = builder
@@ -4357,17 +4359,29 @@ impl<'a> Lowering<'a> {
         let Some(plan) = &self.native_join_plan else {
             return Ok(None);
         };
-        let matches = plan
-            .sites
-            .iter()
-            .filter(|site| {
-                self.active_join_site
-                    .map_or(site.runtime_frame_fingerprint == fingerprint, |id| {
-                        site.site_id == id
-                    })
-            })
-            .cloned()
-            .collect::<Vec<_>>();
+        let matches = match frame {
+            EliminatorFrame::InvocationReturn => plan
+                .sites
+                .iter()
+                .filter(|site| {
+                    site.runtime_frame_fingerprint == crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+                        && site.checked_occurrence_path == [0]
+                        && site.answer_kind == crate::NativeJoinAnswerKindV1::ExitCode
+                })
+                .cloned()
+                .collect::<Vec<_>>(),
+            EliminatorFrame::Computational(_) | EliminatorFrame::Ordinary(_) => {
+                let Some(site_id) = self.active_join_site else {
+                    return Ok(None);
+                };
+                plan.sites
+                    .iter()
+                    .filter(|site| site.site_id == site_id)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            }
+            EliminatorFrame::PendingLet(_) | EliminatorFrame::Active(_) => unreachable!(),
+        };
         match matches.as_slice() {
             [] if self.active_join_site.is_some() => Err(unsupported(
                 "NativeJoinPlanV1",
@@ -4389,7 +4403,9 @@ impl<'a> Lowering<'a> {
                         "checked join occurrence binding is stale or inconsistent",
                     ));
                 }
-                if !self.consumed_join_sites.insert(site.site_id) {
+                if !self.consumed_join_sites.insert(site.site_id)
+                    && !matches!(frame, EliminatorFrame::InvocationReturn)
+                {
                     return Err(unsupported(
                         "NativeJoinPlanV1",
                         "checked join occurrence was consumed twice",
@@ -4400,9 +4416,71 @@ impl<'a> Lowering<'a> {
             }
             _ => Err(unsupported(
                 "NativeJoinPlanV1",
-                "equal erased frame shapes make a checked cut occurrence ambiguous",
+                "checked cut identity resolves to multiple plan sites",
             )),
         }
+    }
+
+    fn require_complete_join_plan_consumption(&self) -> Result<(), CraneliftBackendError> {
+        let Some(plan) = &self.native_join_plan else {
+            return Ok(());
+        };
+        let planned = plan
+            .sites
+            .iter()
+            .map(|site| site.site_id)
+            .collect::<BTreeSet<_>>();
+        if planned != self.consumed_join_sites {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                format!(
+                    "checked join plan contains an unconsumed or orphan site: planned {planned:?}, consumed {:?}",
+                    self.consumed_join_sites
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    fn consume_distinguished_root_join_site(&mut self) -> Result<(), CraneliftBackendError> {
+        let Some(plan) = &self.native_join_plan else {
+            return Ok(());
+        };
+        let roots = plan
+            .sites
+            .iter()
+            .filter(|site| {
+                site.runtime_frame_fingerprint == crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+                    && site.checked_occurrence_path == [0]
+                    && site.answer_kind == crate::NativeJoinAnswerKindV1::ExitCode
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let site = match roots.as_slice() {
+            [] => return Ok(()),
+            [site] => site,
+            _ => {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    "checked package contains multiple distinguished root join sites",
+                ));
+            }
+        };
+        if site.occurrence_binding_fingerprint
+            != crate::compiler_private_join_occurrence_binding_fingerprint(
+                site.site_id,
+                &site.declaration,
+                &site.checked_occurrence_path,
+                site.checked_result_type_fingerprint,
+            )
+        {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "distinguished root join occurrence binding is stale or inconsistent",
+            ));
+        }
+        self.consumed_join_sites.insert(site.site_id);
+        Ok(())
     }
 
     fn scalar_kind_from_plan(kind: crate::NativeJoinAnswerKindV1) -> ScalarMergeKind {
@@ -12254,6 +12332,133 @@ mod tests {
                 construct: "NativeJoinPlanV1",
                 reason,
             }) if reason.contains("marker was not consumed")
+        ));
+    }
+
+    fn self_consistent_join_site(
+        site_id: u64,
+        runtime_frame_fingerprint: u64,
+    ) -> crate::NativeJoinPlanSiteV1 {
+        let declaration = "decl:fixture::PX8H::main".to_string();
+        let checked_occurrence_path = vec![1, site_id];
+        let checked_result_type_fingerprint = 17;
+        crate::NativeJoinPlanSiteV1 {
+            site_id,
+            occurrence_binding_fingerprint:
+                crate::compiler_private_join_occurrence_binding_fingerprint(
+                    site_id,
+                    &declaration,
+                    &checked_occurrence_path,
+                    checked_result_type_fingerprint,
+                ),
+            declaration,
+            checked_occurrence_path,
+            checked_result_type_fingerprint,
+            runtime_frame_fingerprint,
+            answer_kind: crate::NativeJoinAnswerKindV1::Int,
+        }
+    }
+
+    fn self_consistent_root_join_site(site_id: u64) -> crate::NativeJoinPlanSiteV1 {
+        let declaration = "decl:fixture::PX8H::main".to_string();
+        let checked_occurrence_path = vec![0];
+        let checked_result_type_fingerprint = 19;
+        crate::NativeJoinPlanSiteV1 {
+            site_id,
+            occurrence_binding_fingerprint:
+                crate::compiler_private_join_occurrence_binding_fingerprint(
+                    site_id,
+                    &declaration,
+                    &checked_occurrence_path,
+                    checked_result_type_fingerprint,
+                ),
+            declaration,
+            checked_occurrence_path,
+            checked_result_type_fingerprint,
+            runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
+            answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
+        }
+    }
+
+    #[test]
+    fn unmarked_equal_shape_frame_cannot_consume_retained_join_site() {
+        let cases = vec![RuntimeMatchCase {
+            constructor: "ctor:fixture::PX8H::Only".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(7)),
+        }];
+        let default = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "px8h unmarked equal-shape default".to_string(),
+        };
+        let fingerprint =
+            crate::compiler_private_ordinary_match_frame_fingerprint(&cases, &default);
+        let expression = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::PX8H::Only".to_string(),
+                args: Vec::new(),
+            }),
+            cases,
+            default,
+        };
+        let result = compile_expr_into_module(
+            new_object_module("px8h-unmarked-equal-shape").unwrap(),
+            "ken_px8h_unmarked_equal_shape",
+            Linkage::Export,
+            &expression,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            false,
+            None,
+            Some(crate::NativeJoinPlanV1 {
+                representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+                sites: vec![self_consistent_join_site(51, fingerprint)],
+            }),
+        );
+        let error = match result {
+            Ok(_) => panic!("an unmarked equal-shape frame must not consume a plan row"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "NativeJoinPlanV1",
+                reason,
+            }) if reason.contains("unconsumed or orphan site")
+        ));
+    }
+
+    #[test]
+    fn self_consistent_appended_orphan_join_site_rejects_before_emission() {
+        let result = compile_expr_into_module(
+            new_object_module("px8h-orphan-join-site").unwrap(),
+            "ken_px8h_orphan_join_site",
+            Linkage::Export,
+            &RuntimeExpr::Value(RuntimeValue::Int(7)),
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            false,
+            None,
+            Some(crate::NativeJoinPlanV1 {
+                representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+                sites: vec![
+                    self_consistent_root_join_site(0),
+                    self_consistent_join_site(52, 23),
+                ],
+            }),
+        );
+        let error = match result {
+            Ok(_) => panic!("a self-consistent orphan plan row must reject"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "NativeJoinPlanV1",
+                reason,
+            }) if reason.contains("unconsumed or orphan site")
         ));
     }
 
