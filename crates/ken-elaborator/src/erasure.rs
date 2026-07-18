@@ -10,12 +10,12 @@ use std::fmt;
 use ken_runtime::*;
 
 use crate::checked_core::{
-    self, checked_core_body_view_for_selection, consume_checked_core_package_for_target,
-    validate_checked_core_package, CheckedCoreBodyTerm, CheckedCoreBodyViewError,
-    CheckedCoreBodyViewSelection, CheckedCoreLevelView, CheckedCorePackage,
-    CheckedCorePackageError, ClassInstanceKind, ClassInstanceMetadata, DataMetadata,
-    EffectBoundary, EffectsForeignMetadata, LowerabilityStatus, PartialityMetadata,
-    PrimitiveMetadata, RecordSigmaMetadata, RecursionMetadata, StableSymbol,
+    self, consume_checked_core_package_for_target, validate_checked_core_package,
+    CheckedCoreBodyTerm, CheckedCoreBodyViewError, CheckedCoreBodyViewSelection,
+    CheckedCoreLevelView, CheckedCorePackage, CheckedCorePackageError, ClassInstanceKind,
+    ClassInstanceMetadata, DataMetadata, EffectBoundary, EffectsForeignMetadata,
+    LowerabilityStatus, PartialityMetadata, PrimitiveMetadata, RecordSigmaMetadata,
+    RecursionMetadata, StableSymbol,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -111,7 +111,19 @@ fn erase_checked_package_with_host_root(
                 continue;
             }
             let declaration =
-                lower_checked_host_declaration(package, &requested_targets, &symbol, spine)?;
+                match lower_checked_host_declaration(package, &requested_targets, &symbol, spine) {
+                    Ok(declaration) => declaration,
+                    Err(error)
+                        if matches!(
+                            &error,
+                            ErasureError::ExpressionLowering { lane, .. }
+                                if *lane == "unrecognized_checked_host_computation"
+                        ) =>
+                    {
+                        lower_symbol(package, &requested_targets, &symbol)?
+                    }
+                    Err(error) => return Err(error),
+                };
             queue.extend(
                 runtime_declaration_refs_in_kind(&declaration.kind)
                     .into_iter()
@@ -1418,9 +1430,8 @@ fn lower_transparent_declaration(
         external_symbols: external_declaration_symbols(&package.artifact.semantic),
         dependency_semantic_hashes: package.artifact.semantic.dependency_semantic_hashes.clone(),
     };
-    let view = checked_core_body_view_for_selection(package, &selection)
-        .map_err(|err| expression_view_error(symbol, err))?;
-    let declaration = view.declarations.get(symbol).ok_or_else(|| {
+    let declarations = checked_host_declaration_closure(package, &selection, symbol)?;
+    let declaration = declarations.get(symbol).ok_or_else(|| {
         expression_lowering_error(
             symbol,
             "missing_expression_body_view",
@@ -1430,7 +1441,7 @@ fn lower_transparent_declaration(
     let mut stack = vec![symbol.clone()];
     let body = lower_top_level_body(
         &declaration.body,
-        &view.declarations,
+        &declarations,
         semantic,
         &mut stack,
         symbol,
