@@ -11,6 +11,17 @@
 > compiler WP** from the PX8-X observation/schema train — the Architect ruled the
 > two are kept split (independent failure modes) and **may run in parallel**, each
 > with its own QA + §14. Ward remains external throughout.
+>
+> **Architect correction `evt_4kh6gz18tvzs6` (2026-07-18).** The original
+> test-class-3 premise was factually wrong: the preserved `px8f_buffer_native.rs`
+> is a positioned-**read** (`FsReadAt`) reachability fixture — it contains **no**
+> `writeAll`, and the transparent-`writeAll` surface exists only in held PX8-F
+> `60a481b5`. **Disposition (B):** PX8-N must **not** import or transiently
+> re-author the held `writeAll` surface; the transparent-`writeAll` linked-native
+> proof belongs to **PX8-F**, where that surface is owned. N-T3 is corrected to a
+> PX8-N-owned **`FsWriteAt` lowering-arm** reaching test (non-vacuity
+> strengthening). PX8-N still owns N-D1–N-D4 + the full lowering of all four ops;
+> only the downstream surface-composition claim is narrowed.
 
 - **ID:** PX8-N · **Owner:** **Team Runtime** (leader `agt_37reqrd72cg00` /
   implementer `agt_37reqg3nync00` / qa `agt_37reqvb6ce400`) · **Size:** M ·
@@ -37,12 +48,15 @@ reifying a validated host reply at the checked-result boundary, whose ordinary
 `Zero | Suc predecessor` elimination and computational recursion over a strictly
 decreasing predecessor are **observationally the source `Nat`** — so the checked
 buffer surface's constructor-private `BufferSpan` structural-`Nat` budget (and the
-`TransferCount` projections) can be constructed from the host's scalar reply, and
-transparent `writeAll` can eliminate it in real native execution. Admit **and
-completely lower** the four settled host ops (`BufferAllocate`, `BufferFreeze`,
-`FsReadAt`, `FsWriteAt`) so their checked results are constructible on the native
-lane, not merely represented-available. **This is a general checked-host result
-mechanism, not a `writeAll` intrinsic or a resource-specific rewrite.**
+`TransferCount` projections) can be constructed from the host's scalar reply on
+the native lane. Admit **and completely lower** the four settled host ops
+(`BufferAllocate`, `BufferFreeze`, `FsReadAt`, `FsWriteAt`) so their checked
+results are constructible on the native lane, not merely represented-available.
+**The transparent-`writeAll` linked-native proof itself belongs to PX8-F**, which
+owns that surface; PX8-N delivers the `FsWriteAt` checked-host lowering arm that
+proof stands on (Architect correction `evt_4kh6gz18tvzs6`). **This is a general
+checked-host result mechanism, not a `writeAll` intrinsic or a resource-specific
+rewrite.**
 
 ## Fixed inputs — DO NOT REOPEN (settled; do not re-ask the operator/Architect)
 
@@ -94,8 +108,10 @@ mechanism, not a `writeAll` intrinsic or a resource-specific rewrite.**
   - **The represented-unavailable native gap:** the checked-native consumer list
     rejects the four ops; the first red is `cranelift_backend.rs:3323-3330`
     (`FSOp.1026` / `FsReadAt` "represented unavailable lane"). The minimized
-    reaching fixture is Foundation's `crates/ken-cli/tests/px8f_buffer_native.rs`
-    (preserved at `preserved/px8f-held-60a481b5`; see PX8-F).
+    **`FsReadAt` reachability** fixture is Foundation's
+    `crates/ken-cli/tests/px8f_buffer_native.rs` (preserved at
+    `preserved/px8f-held-60a481b5`; positioned-**read** only — **no** `writeAll`;
+    see PX8-F).
   - **Host op ids (landed):** `FsReadAt=0x030D`, `FsWriteAt=0x030E`,
     `BufferAllocate=0x0402`, `BufferFreeze=0x0403` (`effect_v1.rs:34-38`); real
     `pread`/`pwrite` dispatch with progress; **write-zero→`NoProgress`**.
@@ -136,8 +152,10 @@ mechanism, not a `writeAll` intrinsic or a resource-specific rewrite.**
 - **N-D4 — interpreter/native agreement.** The native carrier + mint agree with
   the landed interpreter `Nat`-minting reference on the same host reply
   (count/order/terminal outcome), so a checked program produces the **same**
-  structural-`Nat`-eliminating result on both lanes. This is what makes the PX8-F
-  `writeAll` native witness reachable (evidence-only overlay in N-T3 below).
+  structural-`Nat`-eliminating result on both lanes — **including the `FsWriteAt`
+  arm**. The transparent-`writeAll` native witness itself is **PX8-F's terminal
+  obligation**, not PX8-N's (Architect correction `evt_4kh6gz18tvzs6`); PX8-N
+  discharges the `FsWriteAt` lowering arm that witness will stand on (see N-T3).
 
 ## Required test classes (Architect-mandated; each independently reaching; §7)
 
@@ -153,12 +171,22 @@ The Architect fixed **four** test classes — all four are required:
    progress rejected** (zero write ⇒ `NoProgress` not a minted count; count >
    request rejected; `start+length` outside admitted buffer rejected). Assert the
    **specific** outcome/variant, never `is_err`.
-3. **N-T3 — the real PX8-F linked-native fixture as an evidence-only overlay.**
-   Include Foundation's minimized `px8f_buffer_native` fixture (from
-   `preserved/px8f-held-60a481b5`) as **evidence only**, showing transparent
-   `writeAll` recursion **reaches native execution and agrees with the
-   interpreter**. This is a reachability witness for N-D3/N-D4, **not** PX8-F's
-   terminal gate (PX8-F rebases + re-proves after PX8-N + the PX8-X train land).
+3. **N-T3 — real linked-native reachability, PX8-N-owned (corrected,
+   `evt_4kh6gz18tvzs6`).** Two parts, both reaching real native execution:
+   **(a)** keep Foundation's minimized `px8f_buffer_native.rs` (from
+   `preserved/px8f-held-60a481b5`) **unchanged**, used **only** as the
+   linked-native **`FsReadAt`** reachability witness; and **(b)** add a
+   **PX8-N-owned reaching test for the actual `FsWriteAt` checked-host lowering
+   arm** — a positive short `Wrote` reply must **construct the checked result from
+   the validated scalar** and make the structural-`Nat`
+   **predecessor/remaining observations load-bearing**; a **zero write** produces
+   exact **`NoProgress`**; **over-bound** progress is **rejected before minting**.
+   N-T1/N-T2's resource-independent mint helper does **not** by itself discharge
+   this if it never reaches the `FsWriteAt` operation arm. **Do not** import the
+   held `60a481b5` prelude/surface code, author a shadow public `writeAll`, or land
+   the disposable `tmp/px8n-px8f-overlay`: a prerequisite must not depend on its
+   held downstream consumer (that reverses the split). The transparent-`writeAll`
+   linked-native proof is **PX8-F's terminal obligation**, not N-T3.
 4. **N-T4 — decrement/scalar-substitution discriminator.** A mutation that
    **breaks the strictly-decreasing decrement** or **substitutes the raw scalar**
    for the structural eliminator makes the exact result/proof fixture **fail to
@@ -175,9 +203,13 @@ The Architect fixed **four** test classes — all four are required:
   outside N-D2** (grep the construction sites; the carrier type's constructors are
   private to the lowering module).
 - **AC3** — all **four** test classes green: N-T1 units, N-T2 boundary
-  positives/negatives (asserting exact variants), N-T3 evidence overlay reaching
-  native + agreeing with the interpreter, N-T4 discriminator failing on
-  broken-decrement / raw-scalar substitution.
+  positives/negatives (asserting exact variants), N-T3 = the preserved
+  `px8f_buffer_native.rs` **`FsReadAt`** reachability witness (unchanged) **plus** a
+  PX8-N-owned **`FsWriteAt`** lowering-arm reaching test (short `Wrote` constructs
+  the checked result with **load-bearing** structural-`Nat`; zero write ⇒
+  `NoProgress`; over-bound rejected before mint), N-T4 discriminator failing on
+  broken-decrement / raw-scalar substitution. **No** held-PX8-F import / shadow
+  `writeAll` / landed `tmp/px8n-px8f-overlay`.
 - **AC4** — **host-effect ABI bytes unchanged** (no ABI expansion); the
   `HostReplyV1` scalar layout is untouched.
 - **AC5** — **no-regression = GREEN IN CI** (never a local `--workspace` run;
@@ -202,6 +234,12 @@ The Architect fixed **four** test classes — all four are required:
   lowering only.
 - Do **not** "admit the op ids" without constructing the checked result — that
   moves the failure, it does not solve it (the exact PX8-F hard-stop).
+- Do **not** import the held PX8-F `60a481b5` prelude/surface code, author a shadow
+  public `writeAll`, or land the disposable `tmp/px8n-px8f-overlay` — a
+  prerequisite must not depend on its held downstream consumer (Architect
+  correction `evt_4kh6gz18tvzs6`); the transparent-`writeAll` native proof is
+  PX8-F's terminal obligation. PX8-N's write-side evidence is the `FsWriteAt`
+  lowering-arm reaching test (N-T3b), not the `writeAll` surface.
 - If the bounded-`Nat` carrier cannot be minted soundly from the validated scalar
   reply without an ABI change or a surface primitive, **HARD-STOP to the Steward**
   rather than weakening the mechanism.
@@ -214,6 +252,10 @@ running in parallel (own branch, own QA, own §14, own Decision). **Both
 must land before PX8-F resumes:** Foundation then rebases the preserved
 candidate
 (`preserved/px8f-held-60a481b5`) onto the combined main, removes obsolete
-V1-obligation assertions, reruns the reaching linked-native `writeAll` proof
-(now constructible because PX8-N supplies the native structural-`Nat`), and takes
-fresh QA/§14/CV. Ward is external throughout.
+V1-obligation assertions, and **authors the first real linked checked `writeAll`
+native fixture** (Architect correction `evt_4kh6gz18tvzs6` — **not** a "rerun" of a
+fixture that never existed): it invokes the actual held/public `writeAll`, forces
+**at least one positive short write** so recursion/decrement is observed, and
+asserts exact completion/prefix behavior **plus interpreter↔native agreement** —
+now constructible because PX8-N supplies the native structural-`Nat` (`FsWriteAt`)
+lowering arm. Then fresh QA/§14/CV. Ward is external throughout.
