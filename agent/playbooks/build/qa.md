@@ -237,6 +237,74 @@ load and follow it after this generic archetype.
      cases; **Block** a suite that only exercises mid-range magnitudes.
 4. **No gate regression:** a passed roadmap gate (G0–G8) still holds.
 
+## Test design: conformance → *durable* tests (anti-fossilization gate)
+
+**Authoritative reference:** `research/qa-conformance-to-rust-test-guidelines.md`
+(operator-commissioned, 2026-07-18). Read it once; it holds the full 10-step
+conformance-to-test workflow, the oracle ranking, and the Rust assertion
+patterns (evolving partitions, negative conformance, one-axis discriminators,
+canonical bytes). This section is the **gate you apply every WP**; the reference
+is the how.
+
+The failure that motivated this: a `ken-verify` catalog test asserting *"exactly
+nine native and thirteen unavailable"* went CI-red when a later WP legitimately
+promoted 4 ops to native — a **milestone census frozen as a permanent
+invariant**. The red was maintenance noise, not a real regression; only
+full-workspace CI caught it because the count was mirrored across crates. QA's
+job is to make full-workspace surprises **semantic, not incidental**.
+
+**Every conformance-derived test declares one promise class — if you cannot
+classify it, it is not ready (Block):**
+- **Durable invariant** — survives *all* intended extensions that preserve the
+  contract. Prefer relations, set equality, disjointness/exhaustiveness, typed
+  variants, exhaustive matches. (e.g. "native ∪ unavailable == `HostOpV1::ALL`,
+  disjoint, and native == the authoritative `NATIVE_TESTED_TARGETS_V1`" — *not*
+  "there are 13 unavailable".)
+- **Normative compatibility vector** — pins exact bytes/values *because those
+  values are the contract* (ABI op identities, field order, canonical hashes,
+  known-answer vectors, grammar arity). Changing one requires a contract
+  decision, not a snapshot update.
+- **Transition sentinel** — *intentionally* fails when a planned extension
+  happens, to force review. Legal **only if labelled honestly**: named for the
+  boundary (not the current count), states why extension stops here, names the
+  event that retires it, sits beside the authoritative owner, and enumerates its
+  blast-radius consumers.
+
+**The ten hard gates (apply at review; judgment, not syntax — §9 of the
+reference):**
+1. **Traceability** — every test names its spec/conformance source and promise
+   class.
+2. **Reachability** — ≥1 test reaches the *real* production mechanism ("if the
+   mechanism were deleted, would this exact test still pass?" → if yes, it's a
+   proxy/hand-fed; Block as sole evidence).
+3. **Discrimination** — every boundary has an opposite-observable pair; every
+   load-bearing guard/field exercised *independently* (one big malformed fixture
+   can't show which checks are live).
+4. **Oracle independence** — expected values aren't produced by the same logic
+   under test, *unless* "consumer == authoritative producer" is the property.
+   Round-trips prove self-consistency, not truth — pair with an exact structural
+   or independent vector.
+5. **Assertion stability** — typed structure/relations over literals; **classify
+   every literal** (contract? fixed-fixture? derived? or merely today's repo
+   state?). Contract/fixture literals OK; derived values computed or compared
+   relationally; **repo-state literals belong only in labelled sentinels**.
+6. **Completeness** — sealed enums exhaustive by construction; **cross-crate
+   consumer closure explicitly reviewed** (search consumers of the *element and
+   its obligation* — producer, serializer/parser, interp + native, verify/diff,
+   docs/manifest, conformance + Rust tests — compare complete sets, never mirror
+   counts).
+7. **No phantom coverage** — ignored/empty/zero-count/placeholder/success-only
+   tests do not count as conformance.
+8. **Causality** — before Approve, demonstrate breaking the claimed mechanism at
+   its seam makes the unchanged test fail with the expected opposite (scratch
+   mutation / prior-commit run / test-only selector; don't keep the mutation).
+9. **Maintenance** — the test states which intended extensions stay green and
+   which incompatible changes go red. If both answers are "any change," it's a
+   snapshot/sentinel, not an invariant — label it.
+10. **Targeted execution** — affected tests/packages via `scripts/ken-cargo`,
+    nonzero test count, inspect the message; **never the workspace locally** —
+    full-workspace consumer surprises stay CI's job.
+
 ## Verdict discipline
 
 Your verdict is **binary: Approved or Blocked** — never "looks good." A Blocked
