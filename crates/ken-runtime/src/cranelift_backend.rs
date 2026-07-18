@@ -2256,7 +2256,8 @@ fn active_recursor_frame<'a>(
         EliminatorFrame::Active(frame) => Some(frame),
         EliminatorFrame::Computational(_)
         | EliminatorFrame::Ordinary(_)
-        | EliminatorFrame::PendingLet(_) => None,
+        | EliminatorFrame::PendingLet(_)
+        | EliminatorFrame::InvocationReturn => None,
     })
 }
 
@@ -2278,6 +2279,7 @@ enum EliminatorFrame<'a> {
     Computational(ComputationalEliminatorFrame<'a>),
     Ordinary(OrdinaryEliminatorFrame<'a>),
     PendingLet(PendingLetContinuationFrame<'a>),
+    InvocationReturn,
     Active(ActiveContinuationFrame<'a>),
 }
 
@@ -2794,6 +2796,9 @@ impl<'a> Lowering<'a> {
                 "nested computational producer has no eliminator",
             ));
         }
+        if matches!(eliminators[0], EliminatorFrame::InvocationReturn) {
+            return self.lower_expr(builder, scrutinee, producer_env);
+        }
         if let EliminatorFrame::PendingLet(continuation) = eliminators[0] {
             let value = self.lower_expr(builder, scrutinee, producer_env)?;
             if matches!(value, Lowered::RecursiveBackedge) {
@@ -2848,7 +2853,7 @@ impl<'a> Lowering<'a> {
                                                 "recursive invocation has no active continuation",
                                             )
                                         })?;
-                                    let resume = find_continuation_cursor(current, resume_cursor)
+                                    let _resume = find_continuation_cursor(current, resume_cursor)
                                         .ok_or_else(|| {
                                             unsupported(
                                                 "ComputationalRecursor",
@@ -2866,12 +2871,17 @@ impl<'a> Lowering<'a> {
                                         },
                                     ));
                                     composed.extend(frames);
-                                    composed.push(EliminatorFrame::Active(*resume));
-                                    return self.lower_computational_producer_expr(
+                                    composed.push(EliminatorFrame::InvocationReturn);
+                                    let returned = self.lower_computational_producer_expr(
                                         builder,
                                         value,
                                         producer_env,
                                         &composed,
+                                    )?;
+                                    return self.lower_computational_match_value_composed(
+                                        builder,
+                                        returned,
+                                        eliminators,
                                     );
                                 }
                             }
@@ -2965,7 +2975,7 @@ impl<'a> Lowering<'a> {
                                 "recursive producer invocation has no active continuation",
                             )
                         })?;
-                        let resume = find_continuation_cursor(current, invocation.resume_cursor)
+                        let _resume = find_continuation_cursor(current, invocation.resume_cursor)
                             .ok_or_else(|| {
                                 unsupported(
                                     "ComputationalRecursor",
@@ -2973,7 +2983,7 @@ impl<'a> Lowering<'a> {
                                 )
                             })?;
                         let mut composed = recursor_eliminator_frames(&invocation.owned_layers);
-                        composed.push(EliminatorFrame::Active(*resume));
+                        composed.push(EliminatorFrame::InvocationReturn);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(
@@ -2981,11 +2991,16 @@ impl<'a> Lowering<'a> {
                                     "structural Nat recursive hypothesis takes no arguments",
                                 ));
                             }
-                            return self.lower_bounded_nat_computational(
+                            let returned = self.lower_bounded_nat_computational(
                                 builder,
                                 predecessor,
                                 false,
                                 &composed,
+                            )?;
+                            return self.lower_computational_match_value_composed(
+                                builder,
+                                returned,
+                                eliminators,
                             );
                         }
                         let Lowered::Closure {
@@ -3015,7 +3030,17 @@ impl<'a> Lowering<'a> {
                             .collect::<Result<Vec<_>, _>>()?;
                         call_env.extend(captures);
                         call_env.extend_from_slice(producer_env);
-                        self.lower_computational_producer_expr(builder, &body, &call_env, &composed)
+                        let returned = self.lower_computational_producer_expr(
+                            builder,
+                            &body,
+                            &call_env,
+                            &composed,
+                        )?;
+                        self.lower_computational_match_value_composed(
+                            builder,
+                            returned,
+                            eliminators,
+                        )
                     }
                     _ => Err(unsupported(
                         "ComputationalMatch",
@@ -3038,6 +3063,9 @@ impl<'a> Lowering<'a> {
                         .any(|case| case.constructor.contains("::ITree::")),
                     EliminatorFrame::PendingLet(_) => {
                         unreachable!("pending Let continuations are consumed before dispatch")
+                    }
+                    EliminatorFrame::InvocationReturn => {
+                        unreachable!("invocation returns are consumed before dispatch")
                     }
                     EliminatorFrame::Active(_) => {
                         unreachable!("active continuation cursors do not consume constructors")
@@ -3108,6 +3136,9 @@ impl<'a> Lowering<'a> {
                     }
                     EliminatorFrame::PendingLet(_) => {
                         unreachable!("pending Let continuations are consumed before dispatch")
+                    }
+                    EliminatorFrame::InvocationReturn => {
+                        unreachable!("invocation returns are consumed before dispatch")
                     }
                     EliminatorFrame::Active(_) => {
                         unreachable!("active continuation cursors do not consume constructors")
@@ -3477,6 +3508,9 @@ impl<'a> Lowering<'a> {
                 "nested computational producer has no eliminator",
             ));
         };
+        if matches!(eliminator, EliminatorFrame::InvocationReturn) {
+            return Ok(scrutinee);
+        }
         if let Lowered::BoundedNat(nat) = scrutinee {
             return self.lower_bounded_nat_computational(builder, nat, false, eliminators);
         }
@@ -3617,6 +3651,9 @@ impl<'a> Lowering<'a> {
             EliminatorFrame::PendingLet(_) => {
                 unreachable!("pending Let continuations are consumed before value composition")
             }
+            EliminatorFrame::InvocationReturn => {
+                unreachable!("invocation returns are consumed before value composition")
+            }
             EliminatorFrame::Active(active) => {
                 return self.resume_active_continuation(builder, retained_scrutinee, active);
             }
@@ -3636,6 +3673,13 @@ impl<'a> Lowering<'a> {
         eliminators: &[EliminatorFrame<'_>],
     ) -> Result<Lowered, CraneliftBackendError> {
         let eliminator = eliminators[0];
+        if matches!(eliminator, EliminatorFrame::InvocationReturn) {
+            return Ok(if structural {
+                Lowered::StructuralNat(StructuralNatV1 { value: nat.value })
+            } else {
+                Lowered::BoundedNat(nat)
+            });
+        }
         if let EliminatorFrame::Active(active) = eliminator {
             let value = if structural {
                 Lowered::StructuralNat(StructuralNatV1 { value: nat.value })
@@ -3682,6 +3726,9 @@ impl<'a> Lowering<'a> {
             }
             EliminatorFrame::PendingLet(_) => {
                 unreachable!("pending Let continuations are consumed before Nat composition")
+            }
+            EliminatorFrame::InvocationReturn => {
+                unreachable!("invocation returns are consumed before Nat composition")
             }
             EliminatorFrame::Active(_) => {
                 unreachable!("active continuation cursors do not consume Nat values")
@@ -3886,6 +3933,9 @@ impl<'a> Lowering<'a> {
             EliminatorFrame::PendingLet(_) => {
                 unreachable!("pending Let continuations do not materialize environments")
             }
+            EliminatorFrame::InvocationReturn => {
+                unreachable!("invocation returns do not materialize environments")
+            }
             EliminatorFrame::Active(_) => {
                 unreachable!("active continuation cursors do not materialize environments")
             }
@@ -4003,6 +4053,9 @@ impl<'a> Lowering<'a> {
             }
             EliminatorFrame::PendingLet(_) => {
                 unreachable!("pending Let continuations cannot be deferred constructor frames")
+            }
+            EliminatorFrame::InvocationReturn => {
+                unreachable!("invocation returns cannot be deferred constructor frames")
             }
             EliminatorFrame::Active(_) => {
                 unreachable!("active continuation cursors cannot be deferred constructor frames")
@@ -4541,8 +4594,9 @@ impl<'a> Lowering<'a> {
                         let (_, invocation) = boundary.expect(
                             "recursor closure carries an invocation segment",
                         );
-                        let frames =
+                        let mut frames =
                             recursor_eliminator_frames(&invocation.owned_layers);
+                        frames.push(EliminatorFrame::InvocationReturn);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(
