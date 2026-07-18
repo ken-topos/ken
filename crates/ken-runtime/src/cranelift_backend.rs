@@ -1320,6 +1320,14 @@ enum BoundedNatFixtureObservation {
     ComputationalCount,
 }
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BoundedNatLoweringMutation {
+    Exact,
+    BrokenDecrement,
+    RawScalarPredecessor,
+}
+
 /// Exercise the checked-reply mint without involving any resource operation.
 /// The fixture deliberately enters through `mint_validated_progress_nat`, so
 /// tests cannot manufacture the compact carrier through a second constructor.
@@ -1330,6 +1338,7 @@ fn run_checked_bounded_nat_fixture(
     request_length: u64,
     reply_start: u64,
     observation: BoundedNatFixtureObservation,
+    mutation: BoundedNatLoweringMutation,
 ) -> Result<i64, CraneliftBackendError> {
     let mut module = new_jit_module()?;
     let mut signature = module.make_signature();
@@ -1356,6 +1365,7 @@ fn run_checked_bounded_nat_fixture(
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         host_dispatch: None,
         invocation_pointer: None,
+        bounded_nat_mutation: mutation,
     };
     let mut function_context = FunctionBuilderContext::new();
     {
@@ -1434,17 +1444,38 @@ fn run_checked_bounded_nat_fixture(
                         argument_binders: 1,
                         recursive_positions: vec![0],
                         body: RuntimeExpr::Match {
-                            scrutinee: Box::new(RuntimeExpr::Var(0)),
+                            scrutinee: Box::new(RuntimeExpr::Var(1)),
                             cases: vec![
                                 crate::RuntimeMatchCase {
-                                    constructor: compiler.process_symbols.bool_false.clone(),
-                                    binders: 0,
-                                    body: RuntimeExpr::Value(RuntimeValue::Bool(true)),
-                                },
-                                crate::RuntimeMatchCase {
-                                    constructor: compiler.process_symbols.bool_true.clone(),
+                                    constructor: compiler.process_symbols.nat_zero.clone(),
                                     binders: 0,
                                     body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
+                                },
+                                crate::RuntimeMatchCase {
+                                    constructor: compiler.process_symbols.nat_suc.clone(),
+                                    binders: 1,
+                                    body: RuntimeExpr::Match {
+                                        scrutinee: Box::new(RuntimeExpr::Var(1)),
+                                        cases: vec![
+                                            crate::RuntimeMatchCase {
+                                                constructor: compiler
+                                                    .process_symbols
+                                                    .bool_false
+                                                    .clone(),
+                                                binders: 0,
+                                                body: RuntimeExpr::Value(RuntimeValue::Bool(true)),
+                                            },
+                                            crate::RuntimeMatchCase {
+                                                constructor: compiler
+                                                    .process_symbols
+                                                    .bool_true
+                                                    .clone(),
+                                                binders: 0,
+                                                body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
+                                            },
+                                        ],
+                                        default: default.clone(),
+                                    },
                                 },
                             ],
                             default: default.clone(),
@@ -1517,6 +1548,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         host_dispatch: None,
         invocation_pointer: None,
+        bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
     let mut function_context = FunctionBuilderContext::new();
     {
@@ -1680,6 +1712,8 @@ fn compile_expr_into_module<'a, M: Module>(
             .unwrap_or_else(crate::NativeProcessSymbols::legacy_prelude),
         host_dispatch,
         invocation_pointer: None,
+        #[cfg(test)]
+        bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
     let (maybe_trap, decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
@@ -1795,6 +1829,8 @@ struct Lowering<'a> {
     process_symbols: crate::NativeProcessSymbols,
     host_dispatch: Option<FuncRef>,
     invocation_pointer: Option<cranelift_codegen::ir::Value>,
+    #[cfg(test)]
+    bounded_nat_mutation: BoundedNatLoweringMutation,
 }
 
 #[derive(Clone)]
@@ -3003,16 +3039,54 @@ impl<'a> Lowering<'a> {
         let loop_block = builder.create_block();
         let step_block = builder.create_block();
         let done_block = builder.create_block();
+        #[cfg(test)]
+        let break_decrement =
+            self.bounded_nat_mutation == BoundedNatLoweringMutation::BrokenDecrement;
+        #[cfg(not(test))]
+        let break_decrement = false;
+        #[cfg(test)]
+        let expose_raw_predecessor =
+            self.bounded_nat_mutation == BoundedNatLoweringMutation::RawScalarPredecessor;
+        #[cfg(not(test))]
+        let expose_raw_predecessor = false;
         builder.append_block_param(loop_block, types::I64);
         builder.append_block_param(loop_block, types::I64);
+        if break_decrement {
+            builder.append_block_param(loop_block, types::I64);
+        }
         builder.append_block_param(done_block, types::I64);
-        builder
-            .ins()
-            .jump(loop_block, &[zero_value.into(), initial.into()]);
+        if break_decrement {
+            builder.ins().jump(
+                loop_block,
+                &[zero_value.into(), initial.into(), zero_value.into()],
+            );
+        } else {
+            builder
+                .ins()
+                .jump(loop_block, &[zero_value.into(), initial.into()]);
+        }
 
         builder.switch_to_block(loop_block);
         let predecessor_value = builder.block_params(loop_block)[0];
         let induction_value = builder.block_params(loop_block)[1];
+        if break_decrement {
+            let fuel = builder.block_params(loop_block)[2];
+            let compare_block = builder.create_block();
+            let exhausted = builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::UnsignedGreaterThan,
+                fuel,
+                nat.value,
+            );
+            let nontermination = builder.ins().iconst(types::I64, -2);
+            builder.ins().brif(
+                exhausted,
+                done_block,
+                &[nontermination.into()],
+                compare_block,
+                &[],
+            );
+            builder.switch_to_block(compare_block);
+        }
         let complete = builder.ins().icmp(
             cranelift_codegen::ir::condcodes::IntCC::Equal,
             predecessor_value,
@@ -3027,9 +3101,18 @@ impl<'a> Lowering<'a> {
         );
 
         builder.switch_to_block(step_block);
-        let successor_value = builder.ins().iadd_imm(predecessor_value, 1);
+        let successor_value = if break_decrement {
+            predecessor_value
+        } else {
+            builder.ins().iadd_imm(predecessor_value, 1)
+        };
+        let observed_predecessor = if expose_raw_predecessor {
+            nat.value
+        } else {
+            predecessor_value
+        };
         let predecessor =
-            Lowered::BoundedNat(BoundedNatV1::derived_from_validated(predecessor_value));
+            Lowered::BoundedNat(BoundedNatV1::derived_from_validated(observed_predecessor));
         let retained = Lowered::BoundedNat(BoundedNatV1::derived_from_validated(successor_value));
         let frame_env =
             match self.materialize_eliminator_frame_env(builder, eliminator, &retained)? {
@@ -3067,9 +3150,18 @@ impl<'a> Lowering<'a> {
                 "recursive Suc result disagrees with the Zero result kind",
             ));
         }
-        builder
-            .ins()
-            .jump(loop_block, &[successor_value.into(), next.into()]);
+        if break_decrement {
+            let fuel = builder.block_params(loop_block)[2];
+            let next_fuel = builder.ins().iadd_imm(fuel, 1);
+            builder.ins().jump(
+                loop_block,
+                &[successor_value.into(), next.into(), next_fuel.into()],
+            );
+        } else {
+            builder
+                .ins()
+                .jump(loop_block, &[successor_value.into(), next.into()]);
+        }
 
         builder.switch_to_block(done_block);
         let value = builder.block_params(done_block)[0];
@@ -6259,6 +6351,7 @@ mod tests {
                 3,
                 7,
                 BoundedNatFixtureObservation::OrdinaryRemaining,
+                BoundedNatLoweringMutation::Exact,
             )
             .unwrap(),
             10,
@@ -6271,6 +6364,7 @@ mod tests {
                 5,
                 7,
                 BoundedNatFixtureObservation::OrdinaryCount,
+                BoundedNatLoweringMutation::Exact,
             )
             .unwrap(),
             22,
@@ -6283,10 +6377,11 @@ mod tests {
                 5,
                 7,
                 BoundedNatFixtureObservation::ComputationalCount,
+                BoundedNatLoweringMutation::Exact,
             )
             .unwrap(),
-            1,
-            "three recursive Suc steps toggle the retained IH false→true→false→true",
+            0,
+            "the recursive Suc case consumes the ordered predecessor and retained IH",
         );
     }
 
@@ -6305,6 +6400,7 @@ mod tests {
                     length,
                     reply_start,
                     BoundedNatFixtureObservation::OrdinaryCount,
+                    BoundedNatLoweringMutation::Exact,
                 )
                 .unwrap(),
                 -1,
@@ -6315,41 +6411,29 @@ mod tests {
 
     #[test]
     fn px8n_decrement_and_raw_scalar_mutations_fail_the_structural_oracle() {
-        fn mutated_observation(
-            value: u64,
-            break_decrement: bool,
-            expose_raw_predecessor: bool,
-        ) -> Option<(u64, bool)> {
-            let predecessor = if expose_raw_predecessor {
-                value
-            } else {
-                value.checked_sub(1)?
-            };
-            let mut remaining = value;
-            let mut induction = false;
-            for _ in 0..=value {
-                if remaining == 0 {
-                    return Some((predecessor, induction));
-                }
-                induction = !induction;
-                if !break_decrement {
-                    remaining -= 1;
-                }
-            }
-            None
-        }
+        let run = |mutation| {
+            run_checked_bounded_nat_fixture(
+                3,
+                7,
+                5,
+                7,
+                BoundedNatFixtureObservation::ComputationalCount,
+                mutation,
+            )
+            .unwrap()
+        };
 
-        let exact = mutated_observation(3, false, false);
-        assert_eq!(exact, Some((2, true)));
+        let exact = run(BoundedNatLoweringMutation::Exact);
+        assert_eq!(exact, 0);
         assert_eq!(
-            mutated_observation(3, true, false),
-            None,
-            "a non-decreasing recursive argument cannot complete the exact fixture",
+            run(BoundedNatLoweringMutation::BrokenDecrement),
+            -2,
+            "the live production loop's test-only fuel guard detects nontermination",
         );
-        assert_ne!(
-            mutated_observation(3, false, true),
-            exact,
-            "substituting the raw scalar changes the observed Suc predecessor",
+        assert_eq!(
+            run(BoundedNatLoweringMutation::RawScalarPredecessor),
+            1,
+            "the live producer exposes the exact wrong result when its Suc binder receives the raw scalar",
         );
     }
 
