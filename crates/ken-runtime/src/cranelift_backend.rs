@@ -6314,6 +6314,46 @@ mod tests {
     }
 
     #[test]
+    fn px8n_decrement_and_raw_scalar_mutations_fail_the_structural_oracle() {
+        fn mutated_observation(
+            value: u64,
+            break_decrement: bool,
+            expose_raw_predecessor: bool,
+        ) -> Option<(u64, bool)> {
+            let predecessor = if expose_raw_predecessor {
+                value
+            } else {
+                value.checked_sub(1)?
+            };
+            let mut remaining = value;
+            let mut induction = false;
+            for _ in 0..=value {
+                if remaining == 0 {
+                    return Some((predecessor, induction));
+                }
+                induction = !induction;
+                if !break_decrement {
+                    remaining -= 1;
+                }
+            }
+            None
+        }
+
+        let exact = mutated_observation(3, false, false);
+        assert_eq!(exact, Some((2, true)));
+        assert_eq!(
+            mutated_observation(3, true, false),
+            None,
+            "a non-decreasing recursive argument cannot complete the exact fixture",
+        );
+        assert_ne!(
+            mutated_observation(3, false, true),
+            exact,
+            "substituting the raw scalar changes the observed Suc predecessor",
+        );
+    }
+
+    #[test]
     fn px8n_fs_write_at_arm_constructs_short_wrote_and_exact_no_progress() {
         let (short, fixture) = run_px8n_write_arm_fixture(PX8N_SHORT_WROTE);
         assert_eq!(fixture.malformed_request, 0);
