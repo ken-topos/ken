@@ -2099,12 +2099,13 @@ fn resource_open_mode_tag(value: &Lowered) -> Option<i64> {
     let Lowered::Constructor { constructor, args } = value else {
         return None;
     };
-    if constructor.ends_with("::ResourceRead") && args.is_empty() {
+    if !args.is_empty() {
+        return None;
+    }
+    if constructor.ends_with("::ResourceRead") {
         Some(0)
-    } else if constructor.ends_with("::ResourceMetadata") && args.is_empty() {
+    } else if constructor.ends_with("::ResourceMetadata") {
         Some(1)
-    } else if constructor.ends_with("::ResourceWriteCreate") && args.len() == 1 {
-        create_policy_tag(&args[0]).map(|tag| tag + 2)
     } else {
         None
     }
