@@ -5292,6 +5292,19 @@ impl<'a> Lowering<'a> {
                 .iter()
                 .map(|alternative| (alternative.tag, alternative.constructor.as_str())),
         )?;
+        if !matches!(
+            &suffix_control.continuation,
+            SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(_))
+        ) {
+            return self.lower_source_planned_dynamic_constructor_match(
+                builder,
+                dynamic,
+                cases,
+                default,
+                env,
+                suffix_control,
+            );
+        }
         let SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(outer_edge)) =
             suffix_control.continuation
         else {
@@ -5367,6 +5380,101 @@ impl<'a> Lowering<'a> {
         let value = builder.block_params(merge)[0];
         builder.ins().jump(outer_edge.target, &[value.into()]);
         Ok(Lowered::RecursiveBackedge)
+    }
+
+    fn lower_source_planned_dynamic_constructor_match<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        dynamic: DynamicConstructorV1,
+        cases: &[crate::RuntimeMatchCase],
+        default: &RuntimeTrap,
+        env: &[Lowered],
+        suffix_control: SourceControl<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let active = suffix_control.selected.as_active();
+        let (prefix, suffix_pending, required_kind, site_id) =
+            self.planned_active_scalar_cut(active)?;
+        let suffix_pending = suffix_pending.to_vec();
+        let join_id = self.next_source_join;
+        self.next_source_join = self
+            .next_source_join
+            .checked_add(1)
+            .expect("compiler-private source join identity exhausted");
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        let mut test_block = builder
+            .current_block()
+            .expect("dynamic constructor source match block");
+        for (predecessor_id, alternative) in dynamic.alternatives.into_iter().enumerate() {
+            let arm = builder.create_block();
+            let next = builder.create_block();
+            if builder.current_block() != Some(test_block) {
+                builder.switch_to_block(test_block);
+            }
+            let selected = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                dynamic.discriminator,
+                alternative.tag,
+            );
+            builder.ins().brif(selected, arm, &[], next, &[]);
+            builder.switch_to_block(arm);
+            let case = match select_dynamic_constructor_case(cases, &alternative, default)? {
+                Ok(case) => case,
+                Err(_) => {
+                    let failure = builder.ins().iconst(types::I64, -4);
+                    builder.ins().return_(&[failure]);
+                    test_block = next;
+                    continue;
+                }
+            };
+            let edge = SourceJoinEdge {
+                join_id,
+                predecessor_id: u32::try_from(predecessor_id)
+                    .map_err(|_| unsupported("NativeJoinPlanV1", "too many predecessors"))?,
+                target: merge,
+                expected_outer: suffix_control.terminal_outer,
+                required_kind,
+                prefix: prefix.clone(),
+            };
+            let continuation =
+                Self::instantiate_source_prefix_to_join(&suffix_control.continuation, edge)?;
+            let control = SourceControl {
+                continuation,
+                selected: suffix_control.selected.clone(),
+                terminal_outer: suffix_control.terminal_outer,
+            };
+            let lowered = self.lower_source_machine_with_continuation(
+                builder,
+                case.body.clone(),
+                materialize_dynamic_constructor_env(&alternative, env),
+                control,
+            )?;
+            if !matches!(lowered, Lowered::RecursiveBackedge) {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    format!(
+                        "dynamic-constructor predecessor {predecessor_id} for checked site {site_id} did not seal its affine join edge"
+                    ),
+                ));
+            }
+            test_block = next;
+        }
+        builder.switch_to_block(test_block);
+        let malformed = builder
+            .ins()
+            .iconst(types::I64, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
+        builder.ins().return_(&[malformed]);
+        builder.switch_to_block(merge);
+        let merged =
+            Self::reconstruct_scalar_join_value(required_kind, builder.block_params(merge)[0]);
+        let suffix_active = ActiveContinuationFrame {
+            activation: suffix_control.selected.activation,
+            cursor: suffix_control.selected.cursor,
+            parent: suffix_control.selected.parent,
+            pending: &suffix_pending,
+            selected_ancestry: &suffix_control.selected.selected_ancestry,
+        };
+        self.resume_active_continuation(builder, merged, suffix_active)
     }
 
     fn finish_source_constructor(
