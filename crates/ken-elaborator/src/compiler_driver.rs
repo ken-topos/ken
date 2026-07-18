@@ -2152,78 +2152,47 @@ fn collect_term_constants(term: &Term, output: &mut BTreeSet<GlobalId>) {
         Term::Const { id, .. } => {
             output.insert(*id);
         }
-        Term::Var(_) | Term::Type(_) | Term::Omega(_) | Term::IntLit(_) => {}
-        Term::Pi(left, right)
-        | Term::Lam(left, right)
-        | Term::Sigma(left, right)
-        | Term::Pair(left, right)
-        | Term::App(left, right)
-        | Term::Quot(left, right) => {
+        Term::Var(_)
+        | Term::Type(_)
+        | Term::Omega(_)
+        | Term::IntLit(_)
+        | Term::Pi(_, _)
+        | Term::Sigma(_, _)
+        | Term::Eq(_, _, _)
+        | Term::Refl(_)
+        | Term::Quot(_, _)
+        | Term::QuotClass(_)
+        | Term::IndFormer { .. }
+        | Term::Constructor { .. } => {}
+        Term::Lam(_, body) => collect_term_constants(body, output),
+        Term::Pair(left, right) | Term::App(left, right) => {
             collect_term_constants(left, output);
             collect_term_constants(right, output);
         }
-        Term::Proj1(value)
-        | Term::Proj2(value)
-        | Term::Trunc(value)
-        | Term::TruncProj(value)
-        | Term::Refl(value)
-        | Term::QuotClass(value) => collect_term_constants(value, output),
-        Term::Ascript(value, ty) => {
-            collect_term_constants(value, output);
-            collect_term_constants(ty, output);
+        Term::Proj1(value) | Term::Proj2(value) | Term::Trunc(value) | Term::TruncProj(value) => {
+            collect_term_constants(value, output)
         }
-        Term::Eq(ty, left, right) | Term::J(ty, left, right) => {
-            collect_term_constants(ty, output);
-            collect_term_constants(left, output);
-            collect_term_constants(right, output);
+        Term::Ascript(value, _) => collect_term_constants(value, output),
+        Term::J(_, method, equality) => {
+            collect_term_constants(method, output);
+            collect_term_constants(equality, output);
         }
-        Term::Cast(a, b, c, d) => {
-            collect_term_constants(a, output);
-            collect_term_constants(b, output);
-            collect_term_constants(c, output);
-            collect_term_constants(d, output);
-        }
-        Term::Let { ty, val, body } => {
-            collect_term_constants(ty, output);
+        Term::Cast(_, _, _, value) => collect_term_constants(value, output),
+        Term::Let { val, body, .. } => {
             collect_term_constants(val, output);
             collect_term_constants(body, output);
         }
-        Term::Elim {
-            params,
-            motive,
-            methods,
-            indices,
-            scrut,
-            ..
-        } => {
-            for value in params {
-                collect_term_constants(value, output);
-            }
-            collect_term_constants(motive, output);
+        Term::Elim { methods, scrut, .. } => {
             for value in methods {
                 collect_term_constants(value, output);
             }
-            for value in indices {
-                collect_term_constants(value, output);
-            }
             collect_term_constants(scrut, output);
         }
-        Term::IndFormer { .. } | Term::Constructor { .. } => {}
-        Term::QuotElim {
-            motive,
-            method,
-            respect,
-            scrut,
-        } => {
-            collect_term_constants(motive, output);
+        Term::QuotElim { method, scrut, .. } => {
             collect_term_constants(method, output);
-            collect_term_constants(respect, output);
             collect_term_constants(scrut, output);
         }
-        Term::Absurd(motive, proof) => {
-            collect_term_constants(motive, output);
-            collect_term_constants(proof, output);
-        }
+        Term::Absurd(_, proof) => collect_term_constants(proof, output),
     }
 }
 
