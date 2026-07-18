@@ -1908,14 +1908,19 @@ enum Lowered {
         default: RuntimeTrap,
         outer_env: Vec<Lowered>,
     },
+    /// A tail-recursive edge already emitted as a CFG jump. The current block
+    /// is predecessor-free; enclosing scalar combinators propagate this
+    /// marker so it cannot be confused with an ordinary or terminal value.
+    RecursiveBackedge,
     Trap(RuntimeTrap),
 }
 
 #[derive(Clone)]
 struct ActiveRecursiveDeclarationV1 {
     symbol: RuntimeSymbol,
-    header: cranelift_codegen::ir::Block,
+    header: Option<cranelift_codegen::ir::Block>,
     argument_templates: Vec<Lowered>,
+    induction: Option<Lowered>,
 }
 
 #[derive(Clone, Copy)]
@@ -2171,6 +2176,7 @@ enum ScalarMergeKind {
     Bool,
     StructuralNat,
     ExitCode,
+    RecursiveBackedge,
 }
 
 struct DeferredConstructorCaseEnvironment<'a> {
@@ -2317,6 +2323,37 @@ fn produces_deforestable_aggregate_with_ih(
                 ),
                 _ => false,
             }
+        }
+        _ => false,
+    }
+}
+
+fn produces_recursive_deforestable_aggregate(expr: &RuntimeExpr, symbol: &str) -> bool {
+    match expr {
+        RuntimeExpr::Construct { .. } => true,
+        RuntimeExpr::Let { body, .. } => produces_recursive_deforestable_aggregate(body, symbol),
+        RuntimeExpr::Match { cases, .. } => {
+            !cases.is_empty()
+                && cases
+                    .iter()
+                    .all(|case| produces_recursive_deforestable_aggregate(&case.body, symbol))
+        }
+        RuntimeExpr::ComputationalMatch { cases, .. } => {
+            !cases.is_empty()
+                && cases
+                    .iter()
+                    .all(|case| produces_recursive_deforestable_aggregate(&case.body, symbol))
+        }
+        RuntimeExpr::If {
+            then_expr,
+            else_expr,
+            ..
+        } => {
+            produces_recursive_deforestable_aggregate(then_expr, symbol)
+                && produces_recursive_deforestable_aggregate(else_expr, symbol)
+        }
+        RuntimeExpr::Call { callee, .. } => {
+            matches!(callee.as_ref(), RuntimeExpr::DeclarationRef { symbol: callee } if callee == symbol)
         }
         _ => false,
     }
@@ -2557,6 +2594,28 @@ impl<'a> Lowering<'a> {
             }
             RuntimeExpr::Construct { constructor, args } => {
                 let eliminator = eliminators[0];
+                let terminal_exit = constructor == &self.process_symbols.exit_success
+                    || constructor == &self.process_symbols.exit_failure;
+                let itree_frame = match eliminator {
+                    EliminatorFrame::Computational(frame) => frame
+                        .cases
+                        .iter()
+                        .any(|case| case.constructor.contains("::ITree::")),
+                    EliminatorFrame::Ordinary(frame) => frame
+                        .cases
+                        .iter()
+                        .any(|case| case.constructor.contains("::ITree::")),
+                };
+                if terminal_exit && itree_frame {
+                    let lowered_args = args
+                        .iter()
+                        .map(|arg| self.lower_expr(builder, arg, producer_env))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    return Ok(Lowered::Constructor {
+                        constructor: constructor.clone(),
+                        args: lowered_args,
+                    });
+                }
                 let (case_body, argument_binder_offset) = match eliminator {
                     EliminatorFrame::Computational(eliminator) => {
                         let case = match eliminator
@@ -3219,6 +3278,9 @@ impl<'a> Lowering<'a> {
             ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus {
                 value: induction_value,
             },
+            ScalarMergeKind::RecursiveBackedge => {
+                unreachable!("the computational Nat base case is not a backedge")
+            }
         };
         let mut suc_env = Vec::new();
         if computational {
@@ -3258,6 +3320,9 @@ impl<'a> Lowering<'a> {
             ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
             ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 { value }),
             ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
+            ScalarMergeKind::RecursiveBackedge => {
+                unreachable!("the computational Nat base case is not a backedge")
+            }
         })
     }
 
@@ -3415,6 +3480,10 @@ impl<'a> Lowering<'a> {
         construct: &'static str,
     ) -> Result<(cranelift_codegen::ir::Value, ScalarMergeKind), CraneliftBackendError> {
         match lowered {
+            Lowered::RecursiveBackedge => Ok((
+                builder.ins().iconst(types::I64, 0),
+                ScalarMergeKind::RecursiveBackedge,
+            )),
             Lowered::Int { value, .. } => Ok((value, ScalarMergeKind::Int)),
             Lowered::Bool { value, .. } => Ok((value, ScalarMergeKind::Bool)),
             Lowered::StructuralNat(nat) => Ok((nat.value, ScalarMergeKind::StructuralNat)),
@@ -3461,6 +3530,50 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn record_scalar_merge_kind(
+        construct: &'static str,
+        expected: &mut Option<ScalarMergeKind>,
+        kind: ScalarMergeKind,
+    ) -> Result<(), CraneliftBackendError> {
+        if kind == ScalarMergeKind::RecursiveBackedge {
+            return Ok(());
+        }
+        match expected {
+            Some(expected) if *expected != kind => Err(unsupported(
+                construct,
+                "dynamic native arms disagree on scalar result kind",
+            )),
+            Some(_) => Ok(()),
+            None => {
+                *expected = Some(kind);
+                Ok(())
+            }
+        }
+    }
+
+    fn declaration_call_produces_deforestable_aggregate(&self, expr: &RuntimeExpr) -> bool {
+        let RuntimeExpr::Call { callee, .. } = expr else {
+            return false;
+        };
+        let RuntimeExpr::DeclarationRef { symbol } = callee.as_ref() else {
+            return false;
+        };
+        let Some(declaration) = self.declarations.get(symbol.as_str()).copied() else {
+            return false;
+        };
+        let RuntimeDeclarationKind::Transparent {
+            body:
+                RuntimeExpr::Closure {
+                    body: declaration_body,
+                    ..
+                },
+        } = &declaration.kind
+        else {
+            return false;
+        };
+        produces_recursive_deforestable_aggregate(declaration_body, symbol)
+    }
+
     fn lower_expr(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -3478,6 +3591,9 @@ impl<'a> Lowering<'a> {
             }
             RuntimeExpr::Let { value, body } => {
                 let lowered_value = self.lower_expr(builder, value, env)?;
+                if matches!(lowered_value, Lowered::RecursiveBackedge) {
+                    return Ok(Lowered::RecursiveBackedge);
+                }
                 if let Lowered::Trap(trap) = lowered_value {
                     return Ok(Lowered::Trap(trap));
                 }
@@ -3491,6 +3607,9 @@ impl<'a> Lowering<'a> {
                 else_expr,
             } => {
                 let lowered_scrutinee = self.lower_expr(builder, scrutinee, env)?;
+                if matches!(lowered_scrutinee, Lowered::RecursiveBackedge) {
+                    return Ok(Lowered::RecursiveBackedge);
+                }
                 let Lowered::Bool { value, known } = lowered_scrutinee else {
                     return Err(unsupported(
                         "If",
@@ -3531,6 +3650,12 @@ impl<'a> Lowering<'a> {
                     .iter()
                     .map(|arg| self.lower_expr(builder, arg, env))
                     .collect::<Result<Vec<_>, _>>()?;
+                if lowered_args
+                    .iter()
+                    .any(|arg| matches!(arg, Lowered::RecursiveBackedge))
+                {
+                    return Ok(Lowered::RecursiveBackedge);
+                }
                 if lowered_args.is_empty()
                     && (constructor == &self.process_symbols.bool_true
                         || constructor == &self.process_symbols.bool_false)
@@ -3563,7 +3688,9 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
             } => {
-                if requires_heterogeneous_deforestation(scrutinee) {
+                if requires_heterogeneous_deforestation(scrutinee)
+                    || self.declaration_call_produces_deforestable_aggregate(scrutinee)
+                {
                     return self.lower_computational_producer_expr(
                         builder,
                         scrutinee,
@@ -3670,16 +3797,11 @@ impl<'a> Lowering<'a> {
                         let lowered = self.lower_expr(builder, &case.body, env)?;
                         let (value, branch_kind) =
                             self.merge_scalar_branch(builder, lowered, "Match")?;
-                        match merge_kind {
-                            Some(expected) if expected != branch_kind => {
-                                return Err(unsupported(
-                                    "Match",
-                                    "Bool match arms disagree on Int, Bool, or ExitCode result",
-                                ));
-                            }
-                            Some(_) => {}
-                            None => merge_kind = Some(branch_kind),
-                        }
+                        Self::record_scalar_merge_kind(
+                            "Match",
+                            &mut merge_kind,
+                            branch_kind,
+                        )?;
                         builder.ins().jump(merge, &[value.into()]);
                     }
                     builder.switch_to_block(merge);
@@ -3692,6 +3814,9 @@ impl<'a> Lowering<'a> {
                         Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
                         Some(ScalarMergeKind::StructuralNat) => {
                             Lowered::StructuralNat(StructuralNatV1 { value })
+                        }
+                        Some(ScalarMergeKind::RecursiveBackedge) => {
+                            unreachable!("backedges do not establish a merge result kind")
                         }
                         None => unreachable!("Bool match emits both closed alternatives"),
                     });
@@ -4787,6 +4912,139 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn lower_unary_recursive_nat_fold(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        symbol: &RuntimeSymbol,
+        captures: &[Lowered],
+        argument: Lowered,
+        zero_body: &RuntimeExpr,
+        suc_body: &RuntimeExpr,
+        producer_env: &[Lowered],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let (target, structural) = match argument {
+            Lowered::StructuralNat(nat) => (nat.value, true),
+            Lowered::BoundedNat(nat) => (nat.value, false),
+            _ => {
+                return Err(unsupported(
+                    "DeclarationRef",
+                    "unary Nat recursion received a non-Nat representation",
+                ));
+            }
+        };
+        let zero = builder.ins().iconst(types::I64, 0);
+        let zero_nat = if structural {
+            Lowered::StructuralNat(StructuralNatV1 { value: zero })
+        } else {
+            Lowered::BoundedNat(BoundedNatV1::derived_from_validated(zero))
+        };
+        let mut zero_env = vec![zero_nat];
+        zero_env.extend_from_slice(captures);
+        zero_env.extend_from_slice(producer_env);
+        let zero_lowered = self.lower_expr(builder, zero_body, &zero_env)?;
+        let (initial, result_kind) =
+            self.merge_scalar_branch(builder, zero_lowered, "DeclarationRef")?;
+        if result_kind == ScalarMergeKind::RecursiveBackedge {
+            return Err(unsupported(
+                "DeclarationRef",
+                "unary Nat recursion has no finite base result",
+            ));
+        }
+
+        let loop_block = builder.create_block();
+        let step_block = builder.create_block();
+        let done_block = builder.create_block();
+        builder.append_block_param(loop_block, types::I64);
+        builder.append_block_param(loop_block, types::I64);
+        builder.append_block_param(done_block, types::I64);
+        builder
+            .ins()
+            .jump(loop_block, &[zero.into(), initial.into()]);
+        builder.switch_to_block(loop_block);
+        let predecessor_value = builder.block_params(loop_block)[0];
+        let induction_value = builder.block_params(loop_block)[1];
+        let complete = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            predecessor_value,
+            target,
+        );
+        builder.ins().brif(
+            complete,
+            done_block,
+            &[induction_value.into()],
+            step_block,
+            &[],
+        );
+
+        builder.switch_to_block(step_block);
+        let successor_value = builder.ins().iadd_imm(predecessor_value, 1);
+        let predecessor = if structural {
+            Lowered::StructuralNat(StructuralNatV1 {
+                value: predecessor_value,
+            })
+        } else {
+            Lowered::BoundedNat(BoundedNatV1::derived_from_validated(predecessor_value))
+        };
+        let successor = if structural {
+            Lowered::StructuralNat(StructuralNatV1 {
+                value: successor_value,
+            })
+        } else {
+            Lowered::BoundedNat(BoundedNatV1::derived_from_validated(successor_value))
+        };
+        let induction = match result_kind {
+            ScalarMergeKind::Int => Lowered::Int {
+                value: induction_value,
+                known: None,
+            },
+            ScalarMergeKind::Bool => Lowered::Bool {
+                value: induction_value,
+                known: None,
+            },
+            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 {
+                value: induction_value,
+            }),
+            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus {
+                value: induction_value,
+            },
+            ScalarMergeKind::RecursiveBackedge => unreachable!(),
+        };
+        self.active_recursive_declarations
+            .push(ActiveRecursiveDeclarationV1 {
+                symbol: symbol.clone(),
+                header: None,
+                argument_templates: vec![predecessor.clone()],
+                induction: Some(induction),
+            });
+        // A Suc case sees its predecessor first, followed by the retained
+        // scrutinee and the declaration's outer environment.
+        let mut suc_env = vec![predecessor, successor];
+        suc_env.extend_from_slice(captures);
+        suc_env.extend_from_slice(producer_env);
+        let next = self.lower_expr(builder, suc_body, &suc_env);
+        self.active_recursive_declarations.pop();
+        let (next, next_kind) = self.merge_scalar_branch(builder, next?, "DeclarationRef")?;
+        if next_kind != result_kind {
+            return Err(unsupported(
+                "DeclarationRef",
+                "unary Nat recursion changes its native result representation",
+            ));
+        }
+        builder
+            .ins()
+            .jump(loop_block, &[successor_value.into(), next.into()]);
+        builder.switch_to_block(done_block);
+        let value = builder.block_params(done_block)[0];
+        Ok(match result_kind {
+            ScalarMergeKind::Int => Lowered::Int { value, known: None },
+            ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
+            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 { value }),
+            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
+            ScalarMergeKind::RecursiveBackedge => unreachable!(),
+        })
+    }
+
     fn lower_recursive_declaration_call(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -4837,10 +5095,15 @@ impl<'a> Lowering<'a> {
                     ),
                 ));
             }
+            if let Some(induction) = active.induction {
+                return Ok(induction);
+            }
             let mut values = Vec::new();
             append_recursive_argument_values(&lowered_args, &mut values)?;
             builder.ins().jump(
-                active.header,
+                active
+                    .header
+                    .expect("tail-recursive declarations own a loop header"),
                 &values.into_iter().map(Into::into).collect::<Vec<_>>(),
             );
 
@@ -4849,9 +5112,37 @@ impl<'a> Lowering<'a> {
             // returns directly to the loop header.
             let unreachable = builder.create_block();
             builder.switch_to_block(unreachable);
-            return Ok(Lowered::ProcessExitStatus {
-                value: builder.ins().iconst(types::I64, -2),
-            });
+            return Ok(Lowered::RecursiveBackedge);
+        }
+
+        if eliminators.is_none() && params.len() == 1 && lowered_args.len() == 1 {
+            if let RuntimeExpr::Match {
+                scrutinee, cases, ..
+            } = body
+            {
+                if matches!(scrutinee.as_ref(), RuntimeExpr::Var(0)) {
+                    let zero = cases.iter().find(|case| {
+                        case.constructor == self.process_symbols.nat_zero && case.binders == 0
+                    });
+                    let suc = cases.iter().find(|case| {
+                        case.constructor == self.process_symbols.nat_suc && case.binders == 1
+                    });
+                    if let (Some(zero), Some(suc)) = (zero, suc) {
+                        return self.lower_unary_recursive_nat_fold(
+                            builder,
+                            symbol,
+                            captures,
+                            lowered_args
+                                .into_iter()
+                                .next()
+                                .expect("unary recursion owns one argument"),
+                            &zero.body,
+                            &suc.body,
+                            producer_env,
+                        );
+                    }
+                }
+            }
         }
 
         let header = builder.create_block();
@@ -4886,8 +5177,9 @@ impl<'a> Lowering<'a> {
         self.active_recursive_declarations
             .push(ActiveRecursiveDeclarationV1 {
                 symbol: symbol.clone(),
-                header,
+                header: Some(header),
                 argument_templates: lowered_args,
+                induction: None,
             });
         // Runtime environments are de Bruijn-nearest first: source arguments
         // are evaluated left-to-right, then installed in reverse binder order,
@@ -4902,14 +5194,45 @@ impl<'a> Lowering<'a> {
         };
         self.active_recursive_declarations.pop();
         let lowered = lowered?;
-        let (value, exit_status) = self.merge_branch_value(builder, lowered, "DeclarationRef")?;
+        let (value, result_kind) = if eliminators.is_some() {
+            let (value, exit_status) =
+                self.merge_branch_value(builder, lowered, "DeclarationRef")?;
+            (
+                value,
+                if exit_status {
+                    ScalarMergeKind::ExitCode
+                } else {
+                    ScalarMergeKind::Int
+                },
+            )
+        } else {
+            match lowered {
+                Lowered::Int { value, .. } => (value, ScalarMergeKind::Int),
+                Lowered::Bool { value, .. } => (value, ScalarMergeKind::Bool),
+                Lowered::StructuralNat(nat) => (nat.value, ScalarMergeKind::StructuralNat),
+                Lowered::ProcessExitStatus { value } => (value, ScalarMergeKind::ExitCode),
+                other => {
+                    return Err(unsupported(
+                        "DeclarationRef",
+                        format!(
+                            "recursive declaration {symbol} must produce Int, Bool, structural Nat, or entrypoint ExitCode; got {}",
+                            lowered_value_kind(&other)
+                        ),
+                    ));
+                }
+            }
+        };
         builder.ins().jump(done, &[value.into()]);
         builder.switch_to_block(done);
         let value = builder.block_params(done)[0];
-        Ok(if exit_status {
-            Lowered::ProcessExitStatus { value }
-        } else {
-            Lowered::Int { value, known: None }
+        Ok(match result_kind {
+            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
+            ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
+            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 { value }),
+            ScalarMergeKind::Int => Lowered::Int { value, known: None },
+            ScalarMergeKind::RecursiveBackedge => {
+                unreachable!("a recursive declaration base establishes its result kind")
+            }
         })
     }
 
@@ -5384,16 +5707,7 @@ impl<'a> Lowering<'a> {
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
             let (value, kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
-            match merge_kind {
-                Some(expected) if expected != kind => {
-                    return Err(unsupported(
-                        "Match",
-                        "borrowed match arms disagree on native scalar result kind",
-                    ));
-                }
-                Some(_) => {}
-                None => merge_kind = Some(kind),
-            }
+            Self::record_scalar_merge_kind("Match", &mut merge_kind, kind)?;
             builder.ins().jump(merge, &[value.into()]);
             test_block = next;
         }
@@ -5409,6 +5723,9 @@ impl<'a> Lowering<'a> {
                 Lowered::StructuralNat(StructuralNatV1 { value })
             }
             Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
+            Some(ScalarMergeKind::RecursiveBackedge) => {
+                unreachable!("backedges do not establish a merge result kind")
+            }
             None => unreachable!("borrowed match emits at least one case"),
         })
     }
@@ -5497,16 +5814,7 @@ impl<'a> Lowering<'a> {
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
             let (value, branch_kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
-            match merge_kind {
-                Some(expected) if expected != branch_kind => {
-                    return Err(unsupported(
-                        "Match",
-                        "dynamic HostResult arms disagree on Int, Bool, or ExitCode result",
-                    ));
-                }
-                Some(_) => {}
-                None => merge_kind = Some(branch_kind),
-            }
+            Self::record_scalar_merge_kind("Match", &mut merge_kind, branch_kind)?;
             builder.ins().jump(merge, &[value.into()]);
         }
         builder.switch_to_block(merge);
@@ -5517,6 +5825,9 @@ impl<'a> Lowering<'a> {
             Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
             Some(ScalarMergeKind::StructuralNat) => {
                 Lowered::StructuralNat(StructuralNatV1 { value })
+            }
+            Some(ScalarMergeKind::RecursiveBackedge) => {
+                unreachable!("backedges do not establish a merge result kind")
             }
             None => unreachable!("HostResult emits both closed alternatives"),
         })
@@ -5573,16 +5884,7 @@ impl<'a> Lowering<'a> {
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
             let (value, kind) = self.merge_scalar_branch(builder, lowered, "BoundedNat")?;
-            match merge_kind {
-                Some(expected) if expected != kind => {
-                    return Err(unsupported(
-                        "BoundedNat",
-                        "Zero and Suc arms disagree on result kind",
-                    ));
-                }
-                Some(_) => {}
-                None => merge_kind = Some(kind),
-            }
+            Self::record_scalar_merge_kind("BoundedNat", &mut merge_kind, kind)?;
             builder.ins().jump(merge, &[value.into()]);
         }
         builder.switch_to_block(merge);
@@ -5593,6 +5895,9 @@ impl<'a> Lowering<'a> {
                 ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
                 ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 { value }),
                 ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
+                ScalarMergeKind::RecursiveBackedge => {
+                    unreachable!("backedges do not establish a merge result kind")
+                }
             },
         )
     }
@@ -5678,16 +5983,7 @@ impl<'a> Lowering<'a> {
             };
             let (value, branch_kind) =
                 self.merge_scalar_branch(builder, lowered, "DynamicConstructor")?;
-            match merge_kind {
-                Some(expected) if expected != branch_kind => {
-                    return Err(unsupported(
-                        "DynamicConstructor",
-                        "dynamic constructor arms disagree on Int, Bool, or ExitCode result",
-                    ));
-                }
-                Some(_) => {}
-                None => merge_kind = Some(branch_kind),
-            }
+            Self::record_scalar_merge_kind("DynamicConstructor", &mut merge_kind, branch_kind)?;
             builder.ins().jump(
                 merge.expect("a selected dynamic constructor case owns the merge"),
                 &[value.into()],
@@ -5712,6 +6008,9 @@ impl<'a> Lowering<'a> {
             Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
             Some(ScalarMergeKind::StructuralNat) => {
                 Lowered::StructuralNat(StructuralNatV1 { value })
+            }
+            Some(ScalarMergeKind::RecursiveBackedge) => {
+                unreachable!("backedges do not establish a merge result kind")
             }
             None => unreachable!("a selected dynamic constructor case emits one arm"),
         })
@@ -5816,6 +6115,12 @@ impl<'a> Lowering<'a> {
             .iter()
             .map(|arg| self.lower_expr(builder, arg, env))
             .collect::<Result<Vec<_>, _>>()?;
+        if lowered_args
+            .iter()
+            .any(|arg| matches!(arg, Lowered::RecursiveBackedge))
+        {
+            return Ok(Lowered::RecursiveBackedge);
+        }
 
         match &primitive.partiality {
             RuntimePartiality::Total => {}
@@ -6583,6 +6888,10 @@ impl<'a> Lowering<'a> {
                 "ComputationalMatch",
                 "recursive hypotheses are callable but not observable ground values",
             )),
+            Lowered::RecursiveBackedge => Err(unsupported(
+                "DeclarationRef",
+                "a recursive CFG edge cannot escape as a ground value",
+            )),
             Lowered::Trap(trap) => Err(unsupported(
                 "Trap",
                 format!("trap result must be reported as trapped: {}", trap.message),
@@ -6668,6 +6977,7 @@ fn lowered_value_kind(value: &Lowered) -> &'static str {
         Lowered::Closure { .. } => "Closure",
         Lowered::DeclarationClosure { .. } => "DeclarationClosure",
         Lowered::ComputationalRecursorClosure { .. } => "ComputationalRecursorClosure",
+        Lowered::RecursiveBackedge => "RecursiveBackedge",
         Lowered::Trap(_) => "Trap",
     }
 }
