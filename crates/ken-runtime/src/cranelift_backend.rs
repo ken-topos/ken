@@ -4890,6 +4890,23 @@ impl<'a> Lowering<'a> {
                     } => {
                         control.continuation = *next;
                         match value {
+                            Lowered::BoundedNat(nat) => SourceMachineState::Value {
+                                value: self.lower_bounded_nat_match(
+                                    builder, nat, false, &cases, &default, &env,
+                                )?,
+                                control,
+                            },
+                            Lowered::StructuralNat(nat) => SourceMachineState::Value {
+                                value: self.lower_bounded_nat_match(
+                                    builder,
+                                    BoundedNatV1::derived_from_validated(nat.value),
+                                    true,
+                                    &cases,
+                                    &default,
+                                    &env,
+                                )?,
+                                control,
+                            },
                             Lowered::Bool { value, known } => {
                                 let true_case = cases.iter().find(|case| {
                                     case.binders == 0 && case.constructor.ends_with("::Bool::True")
