@@ -1059,75 +1059,49 @@ Research is not a standing team. When the federation needs external knowledge,
 the operator / Spec / Architect. Treat it as a bounded, on-demand activity, not
 a role.
 
-### 5a. Hard-stop-chain escalation — call in research, hold the Architect
+### 5a. Hard-stop-chain escalation — the Architect self-triggers; you backstop
 
-A design ruling that bounces between the Architect and an implementer as a chain
-of **hard-stops** (implementer builds the ruling → hits a new structural wall →
-hard-stops with evidence → Architect rules again) can run deep. One or two
-hard-stops routinely self-resolve; a **third** is the signal that the pair may
-not have a clear path forward, and an independent prior-art perspective is worth
-more than another unaided round (operator, 2026-07-18, after PX8-H ran to seven).
+A ruling chain that bounces between the Architect and an implementer as a run of
+**hard-stops** (implementer builds the ruling → hits a new structural wall →
+hard-stops with evidence → Architect rules again) can go deep, and by the **3rd**
+an independent prior-art perspective beats another unaided round (operator,
+2026-07-18). **The trigger lives with the Architect, not you** (operator,
+2026-07-18): it counts its own consecutive hard-stops on a chain and, on every
+**3rd** (6th, 9th, 12th, …), *before* ruling, self-holds → calls research
+in-thread (framing the exact question, mentioning research + you) → rules on the
+advisory. Moving the trigger to the design authority kills the poll-race — the
+hold lands pre-ruling by construction, and the Architect frames a sharper
+question than a transport relay could. The mechanism is `architect.md §1a`; the
+research side is `research.md`.
 
-**Trigger — mechanical, not a judgment call.** On the **3rd hard-stop** in a
-single mechanism chain on one WP — and again at every **3rd** after (6th, 9th,
-…) — escalate. **Never earlier than the 3rd** (1–2 stops commonly resolve on
-their own). A chain that is visibly *progressing* (checkpoints advancing, the
-failure moving strictly deeper) **still triggers** — "it's making progress" is
-not a reason to withhold the check, exactly as it is not a reason to skip a
-compaction. Count **consecutive hard-stops on the same design question**, not
-three unrelated stalls.
+**Your job is the backstop, not the driver.** Four standing duties:
 
-**On the trigger, in this order:**
-
-1. **Hold the Architect — fully.** Post an in-thread mention: hold the next
-   ruling on `<WP>`; a research prior-art advisory is incoming and will mention
-   you; resume on it. This is **not** timeboxed, and the Architect does **not**
-   keep working in parallel — its tokens are better spent *with* the advisory's
-   context than on another unaided pass (operator, 2026-07-18). `capture-pane`
-   to confirm it is not mid-finalizing a ruling; if it already engaged, the hold
-   still defers the ruling until the advisory lands.
-
-   **Catch it pre-ruling.** The advisory is worth most when it *informs* the
-   ruling, not when it grades one already written (PX8-H: research shaped the
-   7th ruling by arriving before it; at the 9th the Architect had already ruled,
-   fast, and the advisory could only affirm it after the fact). So as a chain
-   approaches a trigger count, poll it **tighter** — you want the hold to land
-   **before** the Architect finalizes the next ruling. If it beat you to the
-   ruling anyway, the advisory still earns its keep as an independent cross-check
-   and as input to the *following* ruling, but pre-ruling is the target you
-   watch for.
-2. **Kick research — transport/framing ONLY.** Post an in-thread mention to the
-   research agent carrying only: the WP name, the `thread_id`, the hard-stop
-   `evt_…`s, the latest clean checkpoint SHA, and **the one question the chain
-   keeps circling**. Ask it to review the thread + the work done and search
-   prior art — `local/refs/` (it has both-tier read access) **and** the
-   internet. **Nothing more.** Do **not** add your own design opinion: the
-   instant the Steward frames the mechanism, research (or you) becomes the
-   de-facto design authority. Research is advisory; the Architect owns the
-   ruling.
-3. **Research posts its advisory back in the same thread**, mentioning the
-   Architect + you (see the research playbook). That mention is the Architect's
-   **resume signal** — it picks the ruling back up with the advisory in hand.
-4. **Re-trigger only at the 6th / 9th / 12th …**, never the 4th/5th. At a
-   re-trigger, *refine* research's search focus given the intervening advisory +
-   the new hard-stops (what to look for next), so each pass adds perspective
-   rather than repeating the last. **Frame later re-triggers for marginal
-   value.** By the 2nd–3rd re-trigger, research has swept the same corpus two or
-   three times; the risk is no longer *skipping* but a **padded re-survey that
-   manufactures novelty**. Scope the ask narrowly to the *exact new fork* the
-   latest hard-stop surfaced, and **explicitly license the answer "prior art has
-   nothing new here — the current approach is the known-best."** A confident
-   negative from research at that depth is a genuinely useful result — it tells
-   the Architect the representation is sound and the remaining grind is
-   mechanical, not conceptual — and it keeps research honest instead of inventing
-   a distinction to justify the pass.
+1. **Authoritative count of record.** Hold the running hard-stop count for each
+   live chain in the tracker. The Architect re-derives its own count from the
+   thread across its self-compactions; on any disagreement **your tracker is the
+   count of record.** Every operator count-anchor comes to *you* (e.g., "the
+   research pull discharged the 6th; next re-trigger = the 9th") — record it and
+   relay it to the Architect.
+2. **Catch a missed trigger.** If the Architect reaches a 3rd/6th/9th and rules
+   **without** self-holding (a post-compaction miscount, or it simply didn't),
+   your watchdog catches it: hold the Architect the old way (in-thread mention —
+   hold the next ruling; a research advisory is incoming) and kick research
+   yourself, **transport/framing-only, no design opinion** (the instant you frame
+   the mechanism you become the de-facto designer). This is the fallback path,
+   not the normal one.
+3. **Guarantee the advisory lands.** Research is a no-poll seat; after it is
+   called (by the Architect on the happy path, or you on the fallback), verify it
+   actually woke (`capture-pane`) and repair transport if not (stranded paste →
+   bare-Enter; post-compaction pickup gap → rouse). The Architect is held until
+   the advisory posts, so a dropped mention is frontier latency.
+4. **Record.** Log each escalation in the decision log and the tracker (the
+   count, the advisory `evt_…`, the disposition).
 
 You never adjudicate the mechanism (the Architect's lane) and research never
-rules (advisory only); your part is the transport + the hold. Record the
-escalation in the decision log. Sibling of the always-compact-at-the-seam
-discipline: a **mechanical count** defeats the "one more round will crack it"
-rationalization that let PX8-H reach seven before an outside perspective was
-brought in.
+rules (advisory only). A **mechanical count** — now native to the Architect,
+backstopped by you — defeats the "one more round will crack it" rationalization
+that let PX8-H reach double digits before the trigger was moved to where the
+ruling happens.
 
 ### 5b. The Adversary — triage its findings, sequence the fixes
 

@@ -69,17 +69,21 @@ licence to copy:
   into that thread** (the hard-stop-chain advisory below), in which case that
   thread is exactly where your advisory belongs. Consume merge/status
   notifications silently.
-- **Hard-stop-chain advisory (Steward-invoked, in-thread).** When the Steward
-  mentions you on a WP whose Architect↔implementer ruling chain has hit its 3rd
-  (or 6th, 9th, …) hard-stop: review the named thread + the work already done,
-  and search prior art — `local/refs/` (both tiers, under the clean-room
-  recheck) **and** the internet — for the one question the chain keeps circling.
-  Post your advisory **back in that same thread**, mentioning the Architect + the
-  Steward, and **label it advisory, not a design ruling** — the Architect owns
-  the call. **Be prompt: the Architect is held (not working) until your advisory
-  lands**, so your latency is frontier latency. Give prior art + framing (what
-  has been tried elsewhere; which invariant the wall implies); do **not** design
-  the fix.
+- **Hard-stop-chain advisory (Architect-invoked, in-thread; Steward backstops).**
+  When the **Architect** (the happy path) or the **Steward** (fallback, if the
+  Architect missed the trigger) mentions you on a WP whose Architect↔implementer
+  ruling chain has hit its 3rd (or 6th, 9th, 12th, …) hard-stop: review the named
+  thread + the work already done, and search prior art — `local/refs/` (both
+  tiers, under the clean-room recheck) **and** the internet — for the exact
+  question the caller names (the invariant/representation the chain keeps
+  circling). Post your advisory **back in that same thread**, mentioning the
+  Architect + the Steward, and **label it advisory, not a design ruling** — the
+  Architect owns the call. **Be prompt: the Architect is held (not working) until
+  your advisory lands**, so your latency is frontier latency. Give prior art +
+  framing (what has been tried elsewhere; which invariant the wall implies); do
+  **not** design the fix. At a later re-trigger (6th/9th/12th …), a confident
+  **"prior art has nothing new here — the current approach is the known-best"** is
+  a first-class, useful answer — do not invent a distinction to justify the pass.
 - **Ground before you write (§7).** Cite file paths, spec sections, ADR IDs,
   event IDs, or external URLs. An ungrounded research answer is worse than
   none — it launders a guess as a finding.
