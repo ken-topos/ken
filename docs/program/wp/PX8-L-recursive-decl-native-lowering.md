@@ -1,6 +1,7 @@
 # PX8-L — checked-native recursive-declaration lowering
 
-> **Prerequisite for PX8-F, opened by Architect ruling `evt_2vgt1s790vaee`
+> **Prerequisite for PX8-H and then PX8-F, opened by Architect ruling
+> `evt_2vgt1s790vaee`
 > (2026-07-18).** PX8-F hard-stopped on a genuine checked-native compiler
 > boundary: compiling the public transparent **recursive** `writeAll` fixture
 > overflows a 256 MiB-stack thread during `build_native_program`, before any
@@ -20,11 +21,15 @@
 > declarations admitted by SCT are a language feature.
 >
 > **★ The immutable downstream discriminator is `wp/px8f-buffer-io-surface @
-> c8b8cdb7` (on origin).** After PX8-L merges, PX8-F rebases onto it and the
-> **unchanged** real transparent `writeAll` fixture must compile, link, and pass
-> behaviorally in **both** the interpreter and native lanes. Do NOT edit that
-> fixture, rewrite `writeAll`, add a host/buffer intrinsic, weaken transparency,
-> or treat a larger thread stack as a fix (all forbidden by the ruling).
+> c8b8cdb7` (on origin).** Architect ruling `evt_3tcjvkcsz02fa` established that
+> this overlay exposes a distinct recursive-IH × ordinary-continuation
+> composition seam owned by **PX8-H**. It is therefore expected to remain red
+> after PX8-L alone and is not PX8-L acceptance evidence. After PX8-H lands,
+> PX8-F rebases the **unchanged** real transparent `writeAll` fixture and
+> requires it to compile, link, and pass behaviorally in both interpreter and
+> native lanes. Do NOT edit that fixture, rewrite `writeAll`, add a host/buffer
+> intrinsic, weaken transparency, or treat a larger thread stack as a fix (all
+> forbidden by the rulings).
 
 - **ID:** PX8-L · **Owner:** **Team Runtime** (leader `agt_37reqrd72cg00` /
   implementer `agt_37reqg3nync00` / qa `agt_37reqvb6ce400`) · **Size:** L ·
@@ -57,8 +62,10 @@ stack/memory and lowers to correct native code — implementing the capability t
 backend currently punts as "requires NC22+ recursive lowering". This is a
 **general language-mechanism** fix (any recursive transparent `HostIO`/computational
 declaration), proven on a resource-independent recursive program, **not** a
-`writeAll`/buffer-specific patch. PX8-F is unblocked as a downstream consequence,
-not as this WP's deliverable.
+`writeAll`/buffer-specific patch. This finite recursive-declaration mechanism is
+bankable on its own acceptance evidence. It unblocks PX8-H; PX8-H then unblocks
+PX8-F. The heterogeneous recursive-IH × ordinary-continuation composition seam
+is explicitly excluded from this WP.
 
 ## Fixed inputs — DO NOT REOPEN (Architect ruling `evt_2vgt1s790vaee`; settled)
 
@@ -103,10 +110,14 @@ not as this WP's deliverable.
 - `crates/ken-elaborator/src/erasure.rs`: the erasure path that must preserve the
   recursive declaration group finitely (Architect examined
   `match_uses_computational_recursive_hypothesis` / `erased_count` here).
-- **Downstream discriminator (do NOT modify):** `wp/px8f-buffer-io-surface @
+- **Downstream PX8-H/PX8-F discriminator (do NOT modify):**
+  `wp/px8f-buffer-io-surface @
   c8b8cdb7026eb39f92bbde29329b0c0ae0d0a2a8` — the real transparent recursive
-  `writeAll` red. GREEN boundary `-p ken-elaborator --test px8f_buffer_io_surface`
-  (2/2); RED `-p ken-cli --test px8f_buffer_native` (SIGABRT).
+  `writeAll` red. The preparatory surface test
+  `-p ken-elaborator --test px8f_buffer_io_surface` passes 2/2; the native lane
+  remains RED after PX8-L because its
+  recursive-IH × ordinary-continuation composition is PX8-H scope under
+  `evt_3tcjvkcsz02fa`.
 
 ## Mandated deliverables (each ends in a concrete implementable choice)
 
@@ -160,11 +171,10 @@ not as this WP's deliverable.
    recursive body execution.
 5. **Fail-closed (L-D3):** a non-decreasing cycle stays rejected; an unsupported
    recursive shape returns the **typed compiler boundary** (assert the variant).
-6. **Downstream discriminator (verification, at handback — NOT a deliverable
-   edit):** on a throwaway rebase of `c8b8cdb7` onto the PX8-L tip, the
-   **unchanged** `px8f_buffer_native` real-`writeAll` fixture compiles, links, and
-   passes behaviorally in both lanes. (PX8-F's own re-kick does the real rebase;
-   this is only PX8-L's evidence that the boundary is truly gone.)
+6. **Scope-boundary honesty:** keep `c8b8cdb7` unchanged and record its result
+   as downstream evidence only. Its recursive-IH × ordinary-continuation
+   native failure is expected until PX8-H and must not be counted as a PX8-L
+   failure or weakened into a PX8-L acceptance claim.
 
 ## Acceptance criteria (testable)
 
@@ -187,9 +197,10 @@ not as this WP's deliverable.
   the `ken-cli` native-compile suites the recursive-lowering change implicates
   before release (a compile-pipeline change can break checked-program consumers
   only full CI catches — the PX8-N lesson).
-- **AC6** — downstream discriminator (discriminator 6): on a throwaway rebase of
-  `c8b8cdb7`, the unchanged real `writeAll` fixture compiles+links+passes both
-  lanes. Report the evidence; do **not** modify `c8b8cdb7`.
+- **AC6** — the PX8-L/PX8-H boundary is reported honestly (discriminator 6):
+  `c8b8cdb7` remains immutable downstream evidence and is not required to pass
+  PX8-L. Its recursive-IH × ordinary-continuation composition belongs to PX8-H;
+  no PX8-H or PX8-F mechanism is added here.
 
 ## Do-not-reopen guard
 
@@ -210,15 +221,16 @@ not as this WP's deliverable.
 
 ## Sequencing
 
-**PX8-N ✅ (`ace72db7`) → PX8-L (this) → PX8-F rebased terminal gate → Phase-C
-exit (Ken side).**
+**PX8-N ✅ (`ace72db7`) → PX8-L (this) → PX8-H → PX8-F rebased terminal
+gate → Phase-C exit (Ken side).**
 
-- PX8-F is **held at `c8b8cdb7`** (immutable downstream discriminator) until PX8-L
-  lands. On PX8-L merge: Steward re-kicks PX8-F — Foundation rebases the preserved
-  surface onto the combined main and requires the **unchanged** real `writeAll`
-  fixture to compile+link+pass in both lanes (that becomes PX8-F's native
-  evidence).
+- PX8-F is **held at `c8b8cdb7`** as an immutable downstream discriminator.
+  PX8-L can bank while that overlay remains red. After PX8-L lands, PX8-H owns
+  and closes recursive-IH × ordinary-continuation composition. Only then does
+  Steward re-kick PX8-F: Foundation rebases the preserved surface onto combined
+  main and requires the **unchanged** real `writeAll` fixture to
+  compile+link+pass in both lanes (that becomes PX8-F's native evidence).
 - **Phase-C exit** (`cat`/`cp`/`wc` native over a larger-than-memory file,
   interpreter↔native external-delta equality via the PX6 harness) needs PX8-L +
-  PX8-F (rebased) landed — the Ken buffer-IO floor. Ward remains external
-  throughout (no in-Ken monitor).
+  PX8-H + PX8-F (rebased) landed — the Ken buffer-IO floor. Ward remains
+  external throughout (no in-Ken monitor).
