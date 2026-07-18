@@ -4369,6 +4369,10 @@ impl<'a> Lowering<'a> {
             .cloned()
             .collect::<Vec<_>>();
         match matches.as_slice() {
+            [] if self.active_join_site.is_some() => Err(unsupported(
+                "NativeJoinPlanV1",
+                "runtime occurrence has no exact checked join site",
+            )),
             [] => Ok(None),
             [site] => {
                 if site.runtime_frame_fingerprint != fingerprint
@@ -5867,9 +5871,19 @@ impl<'a> Lowering<'a> {
         match expr {
             RuntimeExpr::Value(value) => self.lower_value(builder, value),
             RuntimeExpr::CheckedJoinSite { site_id, body } => {
-                if self.active_join_site.replace(*site_id).is_some() { return Err(unsupported("NativeJoinPlanV1", "nested checked join occurrence marker")); }
+                if self.active_join_site.replace(*site_id).is_some() {
+                    return Err(unsupported(
+                        "NativeJoinPlanV1",
+                        "nested checked join occurrence marker",
+                    ));
+                }
                 let result = self.lower_expr(builder, body, env);
-                if self.active_join_site.is_some() { self.active_join_site = None; }
+                if self.active_join_site.take().is_some() {
+                    return Err(unsupported(
+                        "NativeJoinPlanV1",
+                        "checked join occurrence marker was not consumed",
+                    ));
+                }
                 result
             }
             RuntimeExpr::Var(index) => env
@@ -12209,6 +12223,37 @@ mod tests {
                 construct: "DeclarationRef",
                 reason,
             }) if reason.contains("changes its native argument representation")
+        ));
+    }
+
+    #[test]
+    fn checked_join_marker_without_exact_plan_site_rejects_before_emission() {
+        let expression = RuntimeExpr::CheckedJoinSite {
+            site_id: 41,
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(7))),
+        };
+        let result = compile_expr_into_module(
+            new_object_module("px8h-missing-join-site").unwrap(),
+            "ken_px8h_missing_join_site",
+            Linkage::Export,
+            &expression,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            false,
+            None,
+            None,
+        );
+        let error = match result {
+            Ok(_) => panic!("a live checked occurrence without its plan site must reject"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "NativeJoinPlanV1",
+                reason,
+            }) if reason.contains("marker was not consumed")
         ));
     }
 
