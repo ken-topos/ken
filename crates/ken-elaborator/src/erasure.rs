@@ -3305,10 +3305,7 @@ mod px7l_tests {
                 &family("ResourceError"),
                 "InvalidBounds",
             ),
-            resource_no_progress: StableSymbol::constructor(
-                &family("ResourceError"),
-                "NoProgress",
-            ),
+            resource_no_progress: StableSymbol::constructor(&family("ResourceError"), "NoProgress"),
             resource_kind_fs_handle: StableSymbol::constructor(&family("ResourceKind"), "FsHandle"),
             resource_kind_buffer: StableSymbol::constructor(&family("ResourceKind"), "Buffer"),
             resource_trace_identity: StableSymbol::constructor(

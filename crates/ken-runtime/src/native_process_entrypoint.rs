@@ -100,8 +100,7 @@ impl NativeProcessSymbols {
             resource_malformed: "ctor:prelude::ResourceError::MalformedResource".to_string(),
             resource_right_not_held: "ctor:prelude::ResourceError::RightNotHeld".to_string(),
             resource_release_failed: "ctor:prelude::ResourceError::ReleaseFailed".to_string(),
-            resource_kind_mismatch:
-                "ctor:prelude::ResourceError::ResourceKindMismatch".to_string(),
+            resource_kind_mismatch: "ctor:prelude::ResourceError::ResourceKindMismatch".to_string(),
             resource_buffer_limit: "ctor:prelude::ResourceError::BufferLimit".to_string(),
             resource_invalid_offset: "ctor:prelude::ResourceError::InvalidOffset".to_string(),
             resource_invalid_bounds: "ctor:prelude::ResourceError::InvalidBounds".to_string(),
@@ -113,8 +112,7 @@ impl NativeProcessSymbols {
             nat_zero: "ctor:prelude::Nat::Zero".to_string(),
             nat_suc: "ctor:prelude::Nat::Suc".to_string(),
             private_buffer_span: "ctor:prelude::BufferSpan::PrivateBufferSpan".to_string(),
-            private_transfer_count:
-                "ctor:prelude::TransferCount::PrivateTransferCount".to_string(),
+            private_transfer_count: "ctor:prelude::TransferCount::PrivateTransferCount".to_string(),
             read_some: "ctor:prelude::ReadProgress::ReadSome".to_string(),
             read_eof: "ctor:prelude::ReadProgress::ReadEof".to_string(),
             wrote: "ctor:prelude::WriteProgress::Wrote".to_string(),
