@@ -26,7 +26,7 @@ The PX8-X train supplies the sole observation and export route:
   denotation-derived alphabet `{FsOpen, FsHandleMetadata, ResourceRelease}`
   (and not `FS`) plus the coherent direct body required by I3; and
 - the checked buffer-only producer in
-  `crates/ken-elaborator/tests/px8v_static_v2_export_projection.rs` has the
+  `crates/ken-elaborator/tests/px8x_static_export_projection.rs` has the
   direct Buffer plan and export hash
   `ken-export-v0:47f2f35b7a825ca3`; and
 - the exact checked no-acquire regression producer has export hash

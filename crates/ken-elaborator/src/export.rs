@@ -264,9 +264,10 @@ pub struct BehavioralExport {
     /// B2 fills the `Temporal` value body (`TEntry::formula`, `72 §5`); B1
     /// provided the channel.
     pub obligations: Vec<TEntry>,
-    /// The optional correlated resource-lifetime body in `T`. Selection is
-    /// derived solely from reachable `Σ`: V2 when `BufferAllocate` occurs,
-    /// otherwise V1 when `FsOpen` occurs, otherwise none.
+    /// The optional direct, unversioned resource-lifetime body in `T`, derived
+    /// solely from exact reachable `Σ`. File-only yields one `FsHandle` plan;
+    /// buffer-only yields one `Buffer` plan; positioned yields ordered
+    /// `FsHandle` then `Buffer` plans; no acquisition yields `None`.
     pub resource_lifetime_obligation: Option<ResourceLifetimeObligation>,
     /// `G` — generator support: partition + boundaries from refinement/match.
     /// No measure (I5 — structural seal, §4.1).
@@ -298,11 +299,11 @@ pub enum ExportError {
         resource_kind: ken_host::ResourceKindV1,
         operation: ken_host::HostOpV1,
     },
-    /// A reachable acquisition is not represented by its required V2 plan.
+    /// A reachable acquisition is not represented by its required plan.
     MissingResourceLifetimePlan {
         resource_kind: ken_host::ResourceKindV1,
     },
-    /// A V2 plan names an operation outside the exact checked alphabet.
+    /// A plan names an operation outside the exact checked alphabet.
     ResourceLifetimeOperationOutsideAlphabet { operation: ken_host::HostOpV1 },
     /// The selected checked target did not yield a finite, exhaustive graph.
     /// No declared-row or whole-family widening is permitted.

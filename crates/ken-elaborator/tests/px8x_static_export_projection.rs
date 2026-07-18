@@ -24,6 +24,8 @@ proc px8v_buffer_only (capacity : Int)
 "#;
 
 fn real_buffer_export() -> BehavioralExport {
+    // Frozen content-addressed fixture identity, not the live Rust test route.
+    // The route rename must not perturb the canonical export hash.
     let denotation = compile_checked_target_denotation(
         "px8v_static_v2_export_projection",
         CompilerSource::new("buffer.ken", BUFFER_ONLY_PRODUCER),
@@ -80,6 +82,8 @@ fn real_checked_buffer_denotation_emits_direct_delegated_body() {
     let entries = wire["obligations"].as_array().expect("existing T sequence");
     assert_eq!(entries.len(), 1, "one direct body");
     assert_eq!(entries[0]["body_kind"], "ResourceLifetimeObligation");
+    // Deleted-family negative controls: the sole direct body must not regain a
+    // version wrapper or either former variant arm.
     assert!(entries[0].get("schema_version").is_none());
     assert_eq!(entries[0]["status"], "delegated");
     assert!(entries[0].get("V1").is_none());
@@ -129,7 +133,7 @@ fn real_body_rejects_missing_plan_and_unreachable_operation_by_named_error() {
 }
 
 #[test]
-fn selection_and_fixed_descriptor_fail_closed_before_wire_output() {
+fn direct_body_and_fixed_descriptor_fail_closed_before_wire_output() {
     let mut absent = real_buffer_export();
     absent.resource_lifetime_obligation = None;
     assert_eq!(
@@ -139,6 +143,8 @@ fn selection_and_fixed_descriptor_fail_closed_before_wire_output() {
         })
     );
 
+    // Deleted-family negative control: the former V2 obligation identity is
+    // malformed under the sole direct schema.
     let mut wrong_id = real_buffer_export();
     wrong_id
         .resource_lifetime_obligation
