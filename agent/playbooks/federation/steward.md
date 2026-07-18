@@ -1110,6 +1110,35 @@ discipline: a **mechanical count** defeats the "one more round will crack it"
 rationalization that let PX8-H reach seven before an outside perspective was
 brought in.
 
+### 5b. The Adversary — triage its findings, sequence the fixes
+
+The **Adversary** (`ken-adversary`, a T1 standing red-team; see its playbook) is
+a librarian-shaped observer that hunts recent changes + their blast radius for
+flaws, gaps, leaky abstractions, and undesirable behavior — the negative-space
+twin of the Librarian's as-built passes. It is **advisory and non-blocking**: it
+does **not** gate merges, and it routes every finding to a **side thread to you**
+(its one outbound edge), never into a team's work thread. **You own the triage.**
+
+For each grounded finding (it must carry a repro + `file:line` + the violated
+invariant — bounce anything that doesn't), decide the disposition:
+
+- **Confirmed defect** → sequence a follow-up WP (or fold into an open one), or,
+  if severe/soundness-adjacent on unreleased work, a **hold**/erratum; route it to
+  the owning team the normal way. A soundness-adjacent finding routes through the
+  Architect like any design question.
+- **Accepted trade-off** → record it as a known limitation (tracker / the
+  relevant doc) so it is not re-filed; tell the Adversary it is accepted.
+- **False alarm** → drop it and say why, so the same shape is not re-surfaced.
+
+Do **not** let its findings become a shadow gate: the publisher path is unchanged
+and merges still turn on QA / CV / Architect §14. The Adversary's leverage is the
+quality of its findings and your triage of them, not a veto. It is a **standing
+seat**, not a per-task dispatch — you do not "kick" it per WP; it is event-driven
+on merge notifications and hunts on its own, escalating findings to you. (Where a
+one-off adversarial pass on a *specific* artifact is wanted, that is either a
+Steward-dispatched adversarial workflow or `/code-review ultra` — distinct from
+the standing seat.)
+
 ## 6. Cadence
 
 Run a periodic synthesis pass (not a busy poll): collect new retros, apply the

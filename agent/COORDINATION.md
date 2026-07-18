@@ -755,8 +755,9 @@ context. Who triggers a compaction is fixed (operator, 2026-06-29):
   done → leader calls for retros in-thread → members post → leader signals the
   Steward "retros in" → Steward reviews → Steward compacts → next WP.
 - **Singletons self-compact.** Agents with no team/leader — **Steward,
-  Architect, Librarian** — self-compact at their own task boundaries (Architect
-  after a review, Librarian after a pass, Steward after a directing cycle) via
+  Architect, Librarian, Research, Adversary** — self-compact at their own task
+  boundaries (Architect after a review, Librarian after a pass, Adversary after a
+  hunt or a triage handoff, Steward after a directing cycle) via
   the `tmux send-keys -t moot-<role> -l '/compact'` path (two-step: `/compact`,
   ~2s, then a **separate** `Enter`). To auto-continue afterward — a self-compact
   otherwise leaves the seat idle at `❯` with nothing to re-invoke it — launch
