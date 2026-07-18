@@ -1360,6 +1360,8 @@ fn run_checked_bounded_nat_fixture(
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
         next_token: 0,
+        next_recursor_frame_provenance: 0,
+        next_continuation_activation: 0,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1490,6 +1492,7 @@ fn run_checked_bounded_nat_fixture(
                         env: &[],
                         retained_scrutinee_index: None,
                         deferred_constructor_case: None,
+                        provenance: compiler.mint_recursor_frame_provenance(),
                     },
                 )];
                 compiler.lower_bounded_nat_computational(&mut builder, nat, false, &frames)?
@@ -1544,6 +1547,8 @@ fn run_dynamic_constructor_dispatch_fixture(
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
         next_token: 0,
+        next_recursor_frame_provenance: 0,
+        next_continuation_activation: 0,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1707,6 +1712,8 @@ fn compile_expr_into_module<'a, M: Module>(
         active_recursive_declarations: Vec::new(),
         result_table: BTreeMap::new(),
         next_token: 0,
+        next_recursor_frame_provenance: 0,
+        next_continuation_activation: 0,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: process_mode,
@@ -1827,6 +1834,8 @@ struct Lowering<'a> {
     active_recursive_declarations: Vec<ActiveRecursiveDeclarationV1>,
     result_table: BTreeMap<i64, RuntimeGroundValue>,
     next_token: i64,
+    next_recursor_frame_provenance: u64,
+    next_continuation_activation: u64,
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
     process_object: bool,
@@ -1836,6 +1845,12 @@ struct Lowering<'a> {
     #[cfg(test)]
     bounded_nat_mutation: BoundedNatLoweringMutation,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RecursorFrameProvenance(u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ContinuationActivationId(u64);
 
 #[derive(Clone)]
 enum Lowered {
@@ -1903,10 +1918,9 @@ enum Lowered {
         body: RuntimeExpr,
     },
     ComputationalRecursorClosure {
-        recursive: Box<Lowered>,
-        cases: Vec<crate::RuntimeComputationalMatchCase>,
-        default: RuntimeTrap,
-        outer_env: Vec<Lowered>,
+        residual: Box<Lowered>,
+        layers: Vec<ComputationalRecursorLayer>,
+        resume_activation: ContinuationActivationId,
     },
     /// A tail-recursive edge already emitted as a CFG jump. The current block
     /// is predecessor-free; enclosing scalar combinators propagate this
@@ -2138,6 +2152,7 @@ struct ComputationalEliminatorFrame<'a> {
     env: &'a [Lowered],
     retained_scrutinee_index: Option<usize>,
     deferred_constructor_case: Option<&'a DeferredConstructorCaseEnvironment<'a>>,
+    provenance: RecursorFrameProvenance,
 }
 
 #[derive(Clone, Copy)]
@@ -2150,9 +2165,91 @@ struct OrdinaryEliminatorFrame<'a> {
 }
 
 #[derive(Clone, Copy)]
+struct PendingLetContinuationFrame<'a> {
+    residual: &'a Lowered,
+    args: &'a [RuntimeExpr],
+    env: &'a [Lowered],
+}
+
+#[derive(Clone, Copy)]
+struct ActiveContinuationFrame<'a> {
+    activation: ContinuationActivationId,
+    parent: Option<&'a ActiveContinuationFrame<'a>>,
+    pending: &'a [EliminatorFrame<'a>],
+    selected_ancestry: &'a [RecursorFrameProvenance],
+}
+
+#[derive(Clone)]
+struct ComputationalRecursorLayer {
+    cases: Vec<crate::RuntimeComputationalMatchCase>,
+    default: RuntimeTrap,
+    outer_env: Vec<Lowered>,
+    provenance: RecursorFrameProvenance,
+}
+
+fn decompose_computational_recursor(
+    value: Lowered,
+) -> (
+    Lowered,
+    Vec<ComputationalRecursorLayer>,
+    Option<ContinuationActivationId>,
+) {
+    match value {
+        Lowered::ComputationalRecursorClosure {
+            residual,
+            layers,
+            resume_activation,
+        } => (*residual, layers, Some(resume_activation)),
+        value => (value, Vec::new(), None),
+    }
+}
+
+fn recursor_eliminator_frames(layers: &[ComputationalRecursorLayer]) -> Vec<EliminatorFrame<'_>> {
+    layers
+        .iter()
+        .map(|layer| {
+            EliminatorFrame::Computational(ComputationalEliminatorFrame {
+                cases: &layer.cases,
+                default: &layer.default,
+                env: &layer.outer_env,
+                retained_scrutinee_index: None,
+                deferred_constructor_case: None,
+                provenance: layer.provenance,
+            })
+        })
+        .collect()
+}
+
+fn active_recursor_frame<'a>(
+    eliminators: &'a [EliminatorFrame<'a>],
+) -> Option<&'a ActiveContinuationFrame<'a>> {
+    eliminators.iter().find_map(|eliminator| match eliminator {
+        EliminatorFrame::Active(frame) => Some(frame),
+        EliminatorFrame::Computational(_)
+        | EliminatorFrame::Ordinary(_)
+        | EliminatorFrame::PendingLet(_) => None,
+    })
+}
+
+fn find_continuation_activation<'a>(
+    active: &'a ActiveContinuationFrame<'a>,
+    activation: ContinuationActivationId,
+) -> Option<&'a ActiveContinuationFrame<'a>> {
+    if active.activation == activation {
+        Some(active)
+    } else {
+        active
+            .parent
+            .and_then(|parent| find_continuation_activation(parent, activation))
+    }
+}
+
+#[derive(Clone, Copy)]
 enum EliminatorFrame<'a> {
     Computational(ComputationalEliminatorFrame<'a>),
     Ordinary(OrdinaryEliminatorFrame<'a>),
+    PendingLet(PendingLetContinuationFrame<'a>),
+    Active(ActiveContinuationFrame<'a>),
 }
 
 #[derive(Clone, Copy)]
@@ -2258,6 +2355,23 @@ fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
             | RuntimeExpr::If { .. }
             | RuntimeExpr::Call { .. }
     ) && produces_deforestable_aggregate_with_ih(expr, &BTreeSet::new())
+}
+
+fn reaches_environment_computational_recursor(
+    expr: &RuntimeExpr,
+    env: &[Lowered],
+    introduced_binders: usize,
+) -> bool {
+    let recursive_hypotheses = env
+        .iter()
+        .enumerate()
+        .filter_map(|(index, value)| {
+            matches!(value, Lowered::ComputationalRecursorClosure { .. })
+                .then_some(index + introduced_binders)
+        })
+        .collect();
+    produces_deforestable_aggregate_with_ih(expr, &recursive_hypotheses)
+        && !produces_deforestable_aggregate_with_ih(expr, &BTreeSet::new())
 }
 
 fn shifted_aggregate_ihs(aggregate_ihs: &BTreeSet<usize>, by: usize) -> BTreeSet<usize> {
@@ -2467,6 +2581,124 @@ fn select_computational_case<'frames, 'data>(
 }
 
 impl<'a> Lowering<'a> {
+    fn mint_recursor_frame_provenance(&mut self) -> RecursorFrameProvenance {
+        let provenance = RecursorFrameProvenance(self.next_recursor_frame_provenance);
+        self.next_recursor_frame_provenance = self
+            .next_recursor_frame_provenance
+            .checked_add(1)
+            .expect("compiler-private recursor provenance exhausted");
+        provenance
+    }
+
+    fn mint_continuation_activation(&mut self) -> ContinuationActivationId {
+        let activation = ContinuationActivationId(self.next_continuation_activation);
+        self.next_continuation_activation = self
+            .next_continuation_activation
+            .checked_add(1)
+            .expect("compiler-private continuation activation exhausted");
+        activation
+    }
+
+    fn make_computational_recursor(
+        &self,
+        recursive: Lowered,
+        cases: Vec<crate::RuntimeComputationalMatchCase>,
+        default: RuntimeTrap,
+        outer_env: Vec<Lowered>,
+        provenance: RecursorFrameProvenance,
+        resume_activation: ContinuationActivationId,
+        caller: Option<&ActiveContinuationFrame<'_>>,
+    ) -> Lowered {
+        let (residual, mut layers, payload_resume) = decompose_computational_recursor(recursive);
+        if payload_resume.is_some_and(|activation| {
+            caller.is_some_and(|active| find_continuation_activation(active, activation).is_some())
+        }) {
+            layers.clear();
+        }
+        layers.push(ComputationalRecursorLayer {
+            cases,
+            default,
+            outer_env,
+            provenance,
+        });
+        Lowered::ComputationalRecursorClosure {
+            residual: Box::new(residual),
+            layers,
+            resume_activation,
+        }
+    }
+
+    fn resume_active_continuation(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: Lowered,
+        active: ActiveContinuationFrame<'_>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let Some((head, tail)) = active.pending.split_first() else {
+            return Ok(value);
+        };
+        let successor = EliminatorFrame::Active(ActiveContinuationFrame {
+            activation: active.activation,
+            parent: active.parent,
+            pending: tail,
+            selected_ancestry: active.selected_ancestry,
+        });
+        self.lower_computational_match_value_composed(builder, value, &[*head, successor])
+    }
+
+    fn lower_recursor_residual_call(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        residual: &Lowered,
+        args: &[RuntimeExpr],
+        argument_env: &[Lowered],
+        saved_producer_env: &[Lowered],
+        outer_eliminators: &[EliminatorFrame<'_>],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if let Lowered::BoundedNat(predecessor) = residual {
+            if !args.is_empty() {
+                return Err(unsupported(
+                    "BoundedNat",
+                    "structural Nat recursive hypothesis takes no arguments",
+                ));
+            }
+            return self.lower_bounded_nat_computational(
+                builder,
+                *predecessor,
+                false,
+                outer_eliminators,
+            );
+        }
+        let Lowered::Closure {
+            captures,
+            params,
+            body,
+        } = residual
+        else {
+            return Err(unsupported(
+                "ComputationalMatch",
+                "recursive constructor field is not a closure",
+            ));
+        };
+        let mut call_env = args
+            .iter()
+            .map(|arg| self.lower_expr(builder, arg, argument_env))
+            .collect::<Result<Vec<_>, _>>()?;
+        if params.len() != call_env.len() {
+            return Err(unsupported(
+                "ComputationalMatch",
+                format!(
+                    "recursive field expects {} args but call provides {}",
+                    params.len(),
+                    call_env.len()
+                ),
+            ));
+        }
+        call_env.extend_from_slice(captures);
+        call_env.extend_from_slice(saved_producer_env);
+        self.lower_computational_producer_expr(builder, body, &call_env, outer_eliminators)
+    }
+
     fn lower_computational_match_expr(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -2476,6 +2708,7 @@ impl<'a> Lowering<'a> {
         producer_env: &[Lowered],
         eliminator_env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
+        let provenance = self.mint_recursor_frame_provenance();
         self.lower_computational_producer_expr(
             builder,
             scrutinee,
@@ -2487,6 +2720,7 @@ impl<'a> Lowering<'a> {
                     env: eliminator_env,
                     retained_scrutinee_index: None,
                     deferred_constructor_case: None,
+                    provenance,
                 },
             )],
         )
@@ -2505,8 +2739,89 @@ impl<'a> Lowering<'a> {
                 "nested computational producer has no eliminator",
             ));
         }
+        if let EliminatorFrame::PendingLet(continuation) = eliminators[0] {
+            let value = self.lower_expr(builder, scrutinee, producer_env)?;
+            if matches!(value, Lowered::RecursiveBackedge) {
+                return Ok(Lowered::RecursiveBackedge);
+            }
+            if let Lowered::Trap(trap) = value {
+                return Ok(Lowered::Trap(trap));
+            }
+            let mut continuation_env = vec![value];
+            continuation_env.extend_from_slice(continuation.env);
+            return self.lower_recursor_residual_call(
+                builder,
+                continuation.residual,
+                continuation.args,
+                &continuation_env,
+                continuation.env,
+                &eliminators[1..],
+            );
+        }
+        if let EliminatorFrame::Active(active) = eliminators[0] {
+            if !matches!(
+                scrutinee,
+                RuntimeExpr::Let { .. }
+                    | RuntimeExpr::Call { .. }
+                    | RuntimeExpr::Match { .. }
+                    | RuntimeExpr::ComputationalMatch { .. }
+                    | RuntimeExpr::If { .. }
+            ) {
+                let value = self.lower_expr(builder, scrutinee, producer_env)?;
+                return self.resume_active_continuation(builder, value, active);
+            }
+        }
         match scrutinee {
             RuntimeExpr::Let { value, body } => {
+                if reaches_environment_computational_recursor(body, producer_env, 1) {
+                    if let RuntimeExpr::Call { callee, args } = body.as_ref() {
+                        if let RuntimeExpr::Var(index) = callee.as_ref() {
+                            if let Some(index) = (*index as usize).checked_sub(1) {
+                                if let Some(callee @ Lowered::ComputationalRecursorClosure { .. }) =
+                                    producer_env.get(index)
+                                {
+                                    let (residual, layers, resume_activation) =
+                                        decompose_computational_recursor(callee.clone());
+                                    let resume_activation = resume_activation.expect(
+                                        "recursor closure carries a continuation delimiter",
+                                    );
+                                    let current =
+                                        active_recursor_frame(eliminators).ok_or_else(|| {
+                                            unsupported(
+                                                "ComputationalRecursor",
+                                                "recursive invocation has no active continuation",
+                                            )
+                                        })?;
+                                    let resume =
+                                        find_continuation_activation(current, resume_activation)
+                                            .ok_or_else(|| {
+                                                unsupported(
+                                                    "ComputationalRecursor",
+                                                    "recursive invocation delimiter is not active",
+                                                )
+                                            })?;
+                                    let frames = recursor_eliminator_frames(&layers);
+                                    let mut composed = Vec::with_capacity(frames.len() + 2);
+                                    composed.push(EliminatorFrame::PendingLet(
+                                        PendingLetContinuationFrame {
+                                            residual: &residual,
+                                            args,
+                                            env: producer_env,
+                                        },
+                                    ));
+                                    composed.extend(frames);
+                                    composed.push(EliminatorFrame::Active(*resume));
+                                    return self.lower_computational_producer_expr(
+                                        builder,
+                                        value,
+                                        producer_env,
+                                        &composed,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
                 let value = self.lower_expr(builder, value, producer_env)?;
                 if let Lowered::Trap(trap) = value {
                     return Ok(Lowered::Trap(trap));
@@ -2584,36 +2899,9 @@ impl<'a> Lowering<'a> {
                             eliminators,
                         )
                     }
-                    Lowered::ComputationalRecursorClosure {
-                        recursive,
-                        cases,
-                        default,
-                        outer_env,
-                    } => {
-                        let mut layers = vec![(cases, default, outer_env)];
-                        let mut base = *recursive;
-                        while let Lowered::ComputationalRecursorClosure {
-                            recursive,
-                            cases,
-                            default,
-                            outer_env,
-                        } = base
-                        {
-                            layers.push((cases, default, outer_env));
-                            base = *recursive;
-                        }
-                        let mut composed = layers
-                            .iter()
-                            .map(|(cases, default, outer_env)| {
-                                EliminatorFrame::Computational(ComputationalEliminatorFrame {
-                                    cases,
-                                    default,
-                                    env: outer_env,
-                                    retained_scrutinee_index: None,
-                                    deferred_constructor_case: None,
-                                })
-                            })
-                            .collect::<Vec<_>>();
+                    callee @ Lowered::ComputationalRecursorClosure { .. } => {
+                        let (base, layers, _) = decompose_computational_recursor(callee);
+                        let mut composed = recursor_eliminator_frames(&layers);
                         composed.extend_from_slice(eliminators);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
@@ -2677,6 +2965,12 @@ impl<'a> Lowering<'a> {
                         .cases
                         .iter()
                         .any(|case| case.constructor.contains("::ITree::")),
+                    EliminatorFrame::PendingLet(_) => {
+                        unreachable!("pending Let continuations are consumed before dispatch")
+                    }
+                    EliminatorFrame::Active(_) => {
+                        unreachable!("active continuation cursors do not consume constructors")
+                    }
                 };
                 if terminal_exit && itree_frame {
                     let lowered_args = args
@@ -2741,6 +3035,12 @@ impl<'a> Lowering<'a> {
                         }
                         (&case.body, 0)
                     }
+                    EliminatorFrame::PendingLet(_) => {
+                        unreachable!("pending Let continuations are consumed before dispatch")
+                    }
+                    EliminatorFrame::Active(_) => {
+                        unreachable!("active continuation cursors do not consume constructors")
+                    }
                 };
 
                 let bridge =
@@ -2777,6 +3077,7 @@ impl<'a> Lowering<'a> {
                                 env: &[],
                                 retained_scrutinee_index: None,
                                 deferred_constructor_case: Some(&deferred),
+                                provenance: self.mint_recursor_frame_provenance(),
                             })
                         }
                         ImmediateBinderEliminator::Ordinary { cases, default } => {
@@ -2929,6 +3230,19 @@ impl<'a> Lowering<'a> {
                         },
                     );
                 }
+                if let Lowered::BoundedNat(nat) = selected {
+                    let frame = OrdinaryEliminatorFrame {
+                        cases: producer_cases,
+                        default: producer_default,
+                        env: producer_env,
+                        retained_scrutinee_index: None,
+                        deferred_constructor_case: None,
+                    };
+                    let mut composed = Vec::with_capacity(eliminators.len() + 1);
+                    composed.push(EliminatorFrame::Ordinary(frame));
+                    composed.extend_from_slice(eliminators);
+                    return self.lower_bounded_nat_computational(builder, nat, false, &composed);
+                }
                 if let Lowered::StructuralNat(nat) = selected {
                     let frame = OrdinaryEliminatorFrame {
                         cases: producer_cases,
@@ -2983,6 +3297,7 @@ impl<'a> Lowering<'a> {
                 // selected case body remains a producer for every outer frame;
                 // no intermediate aggregate is materialized or exit-lowered.
                 let mut composed = Vec::with_capacity(eliminators.len() + 1);
+                let provenance = self.mint_recursor_frame_provenance();
                 composed.push(EliminatorFrame::Computational(
                     ComputationalEliminatorFrame {
                         cases: inner_cases,
@@ -2990,6 +3305,7 @@ impl<'a> Lowering<'a> {
                         env: producer_env,
                         retained_scrutinee_index: None,
                         deferred_constructor_case: None,
+                        provenance,
                     },
                 ));
                 composed.extend_from_slice(eliminators);
@@ -3088,7 +3404,7 @@ impl<'a> Lowering<'a> {
             args: args.clone(),
         };
         let remaining_eliminators = &eliminators[1..];
-        let (body, case_env) = match eliminator {
+        let (body, case_env, selected_provenance) = match eliminator {
             EliminatorFrame::Computational(eliminator) => {
                 let (case, _) = match select_computational_case(
                     std::slice::from_ref(&eliminator),
@@ -3108,6 +3424,8 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
+                let activation = self.mint_continuation_activation();
+                let caller = active_recursor_frame(remaining_eliminators);
                 let mut seen = BTreeSet::new();
                 let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
                 for position in case.recursive_positions.iter().rev().copied() {
@@ -3120,12 +3438,15 @@ impl<'a> Lowering<'a> {
                             ),
                         ));
                     }
-                    induction_hypotheses.push(Lowered::ComputationalRecursorClosure {
-                        recursive: Box::new(args[position].clone()),
-                        cases: eliminator.cases.to_vec(),
-                        default: eliminator.default.clone(),
-                        outer_env: eliminator.env.to_vec(),
-                    });
+                    induction_hypotheses.push(self.make_computational_recursor(
+                        args[position].clone(),
+                        eliminator.cases.to_vec(),
+                        eliminator.default.clone(),
+                        eliminator.env.to_vec(),
+                        eliminator.provenance,
+                        activation,
+                        caller,
+                    ));
                 }
                 let mut case_env = induction_hypotheses;
                 case_env.extend(args);
@@ -3138,7 +3459,11 @@ impl<'a> Lowering<'a> {
                     Err(trap) => return Ok(Lowered::Trap(trap)),
                 };
                 case_env.extend(frame_env);
-                (&case.body, case_env)
+                (
+                    &case.body,
+                    case_env,
+                    Some((eliminator.provenance, activation)),
+                )
             }
             EliminatorFrame::Ordinary(eliminator) => {
                 let case = match select_ordinary_case(eliminator, &constructor) {
@@ -3166,10 +3491,37 @@ impl<'a> Lowering<'a> {
                     Err(trap) => return Ok(Lowered::Trap(trap)),
                 };
                 case_env.extend(frame_env);
-                (&case.body, case_env)
+                (&case.body, case_env, None)
+            }
+            EliminatorFrame::PendingLet(_) => {
+                unreachable!("pending Let continuations are consumed before value composition")
+            }
+            EliminatorFrame::Active(active) => {
+                return self.resume_active_continuation(builder, retained_scrutinee, active);
             }
         };
-        if remaining_eliminators.is_empty() {
+        if let Some((selected_provenance, activation)) = selected_provenance {
+            let inherited = active_recursor_frame(remaining_eliminators);
+            let mut selected_ancestry = inherited
+                .map(|active| active.selected_ancestry.to_vec())
+                .unwrap_or_default();
+            selected_ancestry.push(selected_provenance);
+            let mut pending: Vec<_> = remaining_eliminators
+                .iter()
+                .copied()
+                .filter(|frame| !matches!(frame, EliminatorFrame::Active(_)))
+                .collect();
+            if let Some(active) = inherited {
+                pending.extend_from_slice(active.pending);
+            }
+            let active = EliminatorFrame::Active(ActiveContinuationFrame {
+                activation,
+                parent: inherited,
+                pending: &pending,
+                selected_ancestry: &selected_ancestry,
+            });
+            self.lower_computational_producer_expr(builder, body, &case_env, &[active])
+        } else if remaining_eliminators.is_empty() {
             self.lower_expr(builder, body, &case_env)
         } else {
             self.lower_computational_producer_expr(builder, body, &case_env, remaining_eliminators)
@@ -3184,6 +3536,14 @@ impl<'a> Lowering<'a> {
         eliminators: &[EliminatorFrame<'_>],
     ) -> Result<Lowered, CraneliftBackendError> {
         let eliminator = eliminators[0];
+        if let EliminatorFrame::Active(active) = eliminator {
+            let value = if structural {
+                Lowered::StructuralNat(StructuralNatV1 { value: nat.value })
+            } else {
+                Lowered::BoundedNat(nat)
+            };
+            return self.resume_active_continuation(builder, value, active);
+        }
         let remaining = &eliminators[1..];
         let (zero_body, suc_body, computational) = match eliminator {
             EliminatorFrame::Computational(frame) => {
@@ -3219,6 +3579,12 @@ impl<'a> Lowering<'a> {
                     ));
                 };
                 (&zero.body, &suc.body, false)
+            }
+            EliminatorFrame::PendingLet(_) => {
+                unreachable!("pending Let continuations are consumed before Nat composition")
+            }
+            EliminatorFrame::Active(_) => {
+                unreachable!("active continuation cursors do not consume Nat values")
             }
         };
 
@@ -3417,6 +3783,12 @@ impl<'a> Lowering<'a> {
                 frame.deferred_constructor_case,
                 "Match",
             ),
+            EliminatorFrame::PendingLet(_) => {
+                unreachable!("pending Let continuations do not materialize environments")
+            }
+            EliminatorFrame::Active(_) => {
+                unreachable!("active continuation cursors do not materialize environments")
+            }
         };
         let Some(deferred) = deferred else {
             let mut env = env.to_vec();
@@ -3481,6 +3853,7 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
+                let activation = self.mint_continuation_activation();
                 let mut seen = BTreeSet::new();
                 let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
                 for position in case.recursive_positions.iter().rev().copied() {
@@ -3493,12 +3866,15 @@ impl<'a> Lowering<'a> {
                             ),
                         ));
                     }
-                    induction_hypotheses.push(Lowered::ComputationalRecursorClosure {
-                        recursive: Box::new(constructor_args[position].clone()),
-                        cases: frame.cases.to_vec(),
-                        default: frame.default.clone(),
-                        outer_env: outer_tail.clone(),
-                    });
+                    induction_hypotheses.push(self.make_computational_recursor(
+                        constructor_args[position].clone(),
+                        frame.cases.to_vec(),
+                        frame.default.clone(),
+                        outer_tail.clone(),
+                        frame.provenance,
+                        activation,
+                        None,
+                    ));
                 }
                 induction_hypotheses.extend(constructor_args);
                 induction_hypotheses.extend(outer_tail);
@@ -3522,6 +3898,12 @@ impl<'a> Lowering<'a> {
                 }
                 constructor_args.extend(outer_tail);
                 Ok(Ok(constructor_args))
+            }
+            EliminatorFrame::PendingLet(_) => {
+                unreachable!("pending Let continuations cannot be deferred constructor frames")
+            }
+            EliminatorFrame::Active(_) => {
+                unreachable!("active continuation cursors cannot be deferred constructor frames")
             }
         }
     }
@@ -4052,36 +4434,9 @@ impl<'a> Lowering<'a> {
                         call_env.extend_from_slice(env);
                         self.lower_expr(builder, &body, &call_env)
                     }
-                    Lowered::ComputationalRecursorClosure {
-                        recursive,
-                        cases,
-                        default,
-                        outer_env,
-                    } => {
-                        let mut layers = vec![(cases, default, outer_env)];
-                        let mut base = *recursive;
-                        while let Lowered::ComputationalRecursorClosure {
-                            recursive,
-                            cases,
-                            default,
-                            outer_env,
-                        } = base
-                        {
-                            layers.push((cases, default, outer_env));
-                            base = *recursive;
-                        }
-                        let frames = layers
-                            .iter()
-                            .map(|(cases, default, outer_env)| {
-                                EliminatorFrame::Computational(ComputationalEliminatorFrame {
-                                    cases,
-                                    default,
-                                    env: outer_env,
-                                    retained_scrutinee_index: None,
-                                    deferred_constructor_case: None,
-                                })
-                            })
-                            .collect::<Vec<_>>();
+                    callee @ Lowered::ComputationalRecursorClosure { .. } => {
+                        let (base, layers, _) = decompose_computational_recursor(callee);
+                        let frames = recursor_eliminator_frames(&layers);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(
@@ -9557,6 +9912,7 @@ mod tests {
                 env: &[],
                 retained_scrutinee_index: None,
                 deferred_constructor_case: None,
+                provenance: RecursorFrameProvenance(1),
             },
             ComputationalEliminatorFrame {
                 cases: &outer_cases,
@@ -9564,6 +9920,7 @@ mod tests {
                 env: &[],
                 retained_scrutinee_index: None,
                 deferred_constructor_case: None,
+                provenance: RecursorFrameProvenance(0),
             },
         ];
 
@@ -9606,6 +9963,7 @@ mod tests {
                 env: &[],
                 retained_scrutinee_index: None,
                 deferred_constructor_case: None,
+                provenance: RecursorFrameProvenance(1),
             },
             ComputationalEliminatorFrame {
                 cases: &outer_cases,
@@ -9613,6 +9971,7 @@ mod tests {
                 env: &[],
                 retained_scrutinee_index: None,
                 deferred_constructor_case: None,
+                provenance: RecursorFrameProvenance(0),
             },
         ];
 
