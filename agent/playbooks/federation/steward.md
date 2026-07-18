@@ -1086,6 +1086,16 @@ three unrelated stalls.
    context than on another unaided pass (operator, 2026-07-18). `capture-pane`
    to confirm it is not mid-finalizing a ruling; if it already engaged, the hold
    still defers the ruling until the advisory lands.
+
+   **Catch it pre-ruling.** The advisory is worth most when it *informs* the
+   ruling, not when it grades one already written (PX8-H: research shaped the
+   7th ruling by arriving before it; at the 9th the Architect had already ruled,
+   fast, and the advisory could only affirm it after the fact). So as a chain
+   approaches a trigger count, poll it **tighter** — you want the hold to land
+   **before** the Architect finalizes the next ruling. If it beat you to the
+   ruling anyway, the advisory still earns its keep as an independent cross-check
+   and as input to the *following* ruling, but pre-ruling is the target you
+   watch for.
 2. **Kick research — transport/framing ONLY.** Post an in-thread mention to the
    research agent carrying only: the WP name, the `thread_id`, the hard-stop
    `evt_…`s, the latest clean checkpoint SHA, and **the one question the chain
@@ -1098,10 +1108,19 @@ three unrelated stalls.
 3. **Research posts its advisory back in the same thread**, mentioning the
    Architect + you (see the research playbook). That mention is the Architect's
    **resume signal** — it picks the ruling back up with the advisory in hand.
-4. **Re-trigger only at the 6th / 9th**, never the 4th/5th. At a re-trigger,
-   *refine* research's search focus given the intervening advisory + the new
-   hard-stops (what to look for next), so each pass adds perspective rather than
-   repeating the last.
+4. **Re-trigger only at the 6th / 9th / 12th …**, never the 4th/5th. At a
+   re-trigger, *refine* research's search focus given the intervening advisory +
+   the new hard-stops (what to look for next), so each pass adds perspective
+   rather than repeating the last. **Frame later re-triggers for marginal
+   value.** By the 2nd–3rd re-trigger, research has swept the same corpus two or
+   three times; the risk is no longer *skipping* but a **padded re-survey that
+   manufactures novelty**. Scope the ask narrowly to the *exact new fork* the
+   latest hard-stop surfaced, and **explicitly license the answer "prior art has
+   nothing new here — the current approach is the known-best."** A confident
+   negative from research at that depth is a genuinely useful result — it tells
+   the Architect the representation is sound and the remaining grind is
+   mechanical, not conceptual — and it keeps research honest instead of inventing
+   a distinction to justify the pass.
 
 You never adjudicate the mechanism (the Architect's lane) and research never
 rules (advisory only); your part is the transport + the hold. Record the
