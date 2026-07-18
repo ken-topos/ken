@@ -2336,7 +2336,6 @@ enum SourceContinuation<'a> {
     },
     ApplyRecursorLayers {
         remaining: Vec<ComputationalRecursorLayer>,
-        outer: ActiveContinuationFrame<'a>,
         next: Box<SourceContinuation<'a>>,
     },
     IfScrutinee {
@@ -2363,7 +2362,6 @@ enum SourceContinuation<'a> {
         default: RuntimeTrap,
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
-        outer: ActiveContinuationFrame<'a>,
         next: Box<SourceContinuation<'a>>,
     },
     ProjectRecord {
@@ -2403,19 +2401,46 @@ struct SourceJoinEdge<'a> {
 }
 
 struct ArmedInvocation<'a> {
-    suspended: SourceContinuation<'a>,
-    expected_outer: ContinuationCursorId,
+    suspended: SourceControl<'a>,
+    expected_selected: ContinuationCursorId,
+}
+
+#[derive(Clone)]
+struct SourceSelectedContinuation<'a> {
+    activation: ContinuationActivationId,
+    cursor: ContinuationCursorId,
+    parent: Option<&'a ActiveContinuationFrame<'a>>,
+    pending: Vec<EliminatorFrame<'a>>,
+    selected_ancestry: Vec<RecursorFrameProvenance>,
+}
+
+impl<'a> SourceSelectedContinuation<'a> {
+    fn as_active(&self) -> ActiveContinuationFrame<'_> {
+        ActiveContinuationFrame {
+            activation: self.activation,
+            cursor: self.cursor,
+            parent: self.parent,
+            pending: &self.pending,
+            selected_ancestry: &self.selected_ancestry,
+        }
+    }
+}
+
+struct SourceControl<'a> {
+    continuation: SourceContinuation<'a>,
+    selected: SourceSelectedContinuation<'a>,
+    terminal_outer: ContinuationCursorId,
 }
 
 enum SourceMachineState<'a> {
     Eval {
         expr: RuntimeExpr,
         env: Vec<Lowered>,
-        continuation: SourceContinuation<'a>,
+        control: SourceControl<'a>,
     },
     Value {
         value: Lowered,
-        continuation: SourceContinuation<'a>,
+        control: SourceControl<'a>,
     },
 }
 
@@ -4469,12 +4494,10 @@ impl<'a> Lowering<'a> {
             },
             SourceContinuation::ApplyRecursorLayers {
                 remaining,
-                outer,
                 next,
             } => {
                 SourceContinuation::ApplyRecursorLayers {
                     remaining: remaining.clone(),
-                    outer: *outer,
                     next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
                 }
             }
@@ -4518,14 +4541,12 @@ impl<'a> Lowering<'a> {
                 default,
                 env,
                 provenance,
-                outer,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases: cases.clone(),
                 default: default.clone(),
                 env: env.clone(),
                 provenance: *provenance,
-                outer: *outer,
                 next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
             },
             SourceContinuation::ProjectRecord { field, next } => {
@@ -4609,16 +4630,27 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
         active: &ActiveContinuationFrame<'_>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        self.lower_source_machine_with_continuation(
-            builder,
-            expr.clone(),
-            env.to_vec(),
-            SourceContinuation::Terminal(
+        let control = SourceControl {
+            continuation: SourceContinuation::Terminal(
                 SourceContinuationTerminal::ResumeOuter {
                     expected: active.cursor,
                     active,
                 },
             ),
+            selected: SourceSelectedContinuation {
+                activation: active.activation,
+                cursor: active.cursor,
+                parent: active.parent,
+                pending: active.pending.to_vec(),
+                selected_ancestry: active.selected_ancestry.to_vec(),
+            },
+            terminal_outer: active.cursor,
+        };
+        self.lower_source_machine_with_continuation(
+            builder,
+            expr.clone(),
+            env.to_vec(),
+            control,
         )
     }
 
@@ -4627,57 +4659,61 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         expr: RuntimeExpr,
         env: Vec<Lowered>,
-        continuation: SourceContinuation<'b>,
+        control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
         let mut state = SourceMachineState::Eval {
             expr,
             env,
-            continuation,
+            control,
         };
         loop {
             state = match state {
                 SourceMachineState::Eval {
                     expr,
                     env,
-                    continuation,
+                    mut control,
                 } => match expr {
                     RuntimeExpr::Value(value) => SourceMachineState::Value {
                         value: self.lower_value(builder, &value)?,
-                        continuation,
+                        control,
                     },
                     RuntimeExpr::Var(index) => SourceMachineState::Value {
                         value: env.get(index as usize).cloned().ok_or_else(|| {
                             unsupported("Var", format!("no runtime binding for index {index}"))
                         })?,
-                        continuation,
+                        control,
                     },
-                    RuntimeExpr::Let { value, body } => SourceMachineState::Eval {
-                        expr: *value,
-                        env: env.clone(),
-                        continuation: SourceContinuation::LetBody {
+                    RuntimeExpr::Let { value, body } => {
+                        control.continuation = SourceContinuation::LetBody {
                             body: *body,
-                            env,
-                            next: Box::new(continuation),
-                        },
-                    },
+                            env: env.clone(),
+                            next: Box::new(control.continuation),
+                        };
+                        SourceMachineState::Eval {
+                            expr: *value,
+                            env: env.clone(),
+                            control,
+                        }
+                    }
                     RuntimeExpr::Construct { constructor, mut args } => {
                         if args.is_empty() {
                             SourceMachineState::Value {
                                 value: self.finish_source_constructor(builder, constructor, vec![])?,
-                                continuation,
+                                control,
                             }
                         } else {
                             let first = args.remove(0);
+                            control.continuation = SourceContinuation::ConstructArgument {
+                                constructor,
+                                remaining: args,
+                                lowered: Vec::new(),
+                                env: env.clone(),
+                                next: Box::new(control.continuation),
+                            };
                             SourceMachineState::Eval {
                                 expr: first,
-                                env: env.clone(),
-                                continuation: SourceContinuation::ConstructArgument {
-                                    constructor,
-                                    remaining: args,
-                                    lowered: Vec::new(),
-                                    env,
-                                    next: Box::new(continuation),
-                                },
+                                env,
+                                control,
                             }
                         }
                     }
@@ -4685,58 +4721,59 @@ impl<'a> Lowering<'a> {
                         scrutinee,
                         cases,
                         default,
-                    } => SourceMachineState::Eval {
-                        expr: *scrutinee,
-                        env: env.clone(),
-                        continuation: SourceContinuation::MatchScrutinee {
+                    } => {
+                        control.continuation = SourceContinuation::MatchScrutinee {
                             cases,
                             default,
+                            env: env.clone(),
+                            next: Box::new(control.continuation),
+                        };
+                        SourceMachineState::Eval {
+                            expr: *scrutinee,
                             env,
-                            next: Box::new(continuation),
-                        },
-                    },
-                    RuntimeExpr::Call { callee, args } => SourceMachineState::Eval {
-                        expr: *callee,
-                        env: env.clone(),
-                        continuation: SourceContinuation::CallCallee {
+                            control,
+                        }
+                    }
+                    RuntimeExpr::Call { callee, args } => {
+                        control.continuation = SourceContinuation::CallCallee {
                             args,
+                            env: env.clone(),
+                            next: Box::new(control.continuation),
+                        };
+                        SourceMachineState::Eval {
+                            expr: *callee,
                             env,
-                            next: Box::new(continuation),
-                        },
-                    },
+                            control,
+                        }
+                    }
                     RuntimeExpr::ComputationalMatch {
                         scrutinee,
                         cases,
                         default,
                     } => {
-                        let outer = Self::source_terminal_active(&continuation).ok_or_else(|| {
-                            unsupported(
-                                "ComputationalMatch",
-                                "source computational match has no live outer frame",
-                            )
-                        })?;
-                        SourceMachineState::Eval {
-                            expr: *scrutinee,
-                            env: env.clone(),
-                            continuation: SourceContinuation::ComputationalMatchScrutinee {
+                        control.continuation =
+                            SourceContinuation::ComputationalMatchScrutinee {
                                 cases,
                                 default,
-                                env,
+                                env: env.clone(),
                                 provenance: self.mint_recursor_frame_provenance(),
-                                outer,
-                                next: Box::new(continuation),
-                            },
+                                next: Box::new(control.continuation),
+                            };
+                        SourceMachineState::Eval {
+                            expr: *scrutinee,
+                            env,
+                            control,
                         }
                     }
                     other => SourceMachineState::Value {
                         value: self.lower_expr(builder, &other, &env)?,
-                        continuation,
+                        control,
                     },
                 },
                 SourceMachineState::Value {
                     value,
-                    continuation,
-                } => match continuation {
+                    mut control,
+                } => match control.continuation {
                     SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => {
                         return Ok(value);
                     }
@@ -4780,15 +4817,16 @@ impl<'a> Lowering<'a> {
                         return Ok(Lowered::RecursiveBackedge);
                     }
                     SourceContinuation::LetBody { body, env, next } => {
+                        control.continuation = *next;
                         if matches!(value, Lowered::RecursiveBackedge) {
                             SourceMachineState::Value {
                                 value,
-                                continuation: *next,
+                                control,
                             }
                         } else if matches!(value, Lowered::Trap(_)) {
                             SourceMachineState::Value {
                                 value,
-                                continuation: *next,
+                                control,
                             }
                         } else {
                             let mut body_env = vec![value];
@@ -4796,25 +4834,25 @@ impl<'a> Lowering<'a> {
                             SourceMachineState::Eval {
                                 expr: body,
                                 env: body_env,
-                                continuation: *next,
+                                control,
                             }
                         }
                     }
                     SourceContinuation::ApplyRecursorLayers {
                         remaining,
-                        outer,
                         next,
                     } => {
                         let mut frames = recursor_eliminator_frames(&remaining);
-                        frames.push(EliminatorFrame::Active(outer));
+                        frames.push(EliminatorFrame::Active(control.selected.as_active()));
                         frames.push(EliminatorFrame::InvocationReturn);
+                        control.continuation = *next;
                         SourceMachineState::Value {
                             value: self.lower_computational_match_value_composed(
                                 builder,
                                 value,
                                 &frames,
                             )?,
-                            continuation: *next,
+                            control,
                         }
                     }
                     SourceContinuation::ConstructArgument {
@@ -4825,6 +4863,7 @@ impl<'a> Lowering<'a> {
                         next,
                     } => {
                         lowered.push(value);
+                        control.continuation = *next;
                         if remaining.is_empty() {
                             SourceMachineState::Value {
                                 value: self.finish_source_constructor(
@@ -4832,20 +4871,21 @@ impl<'a> Lowering<'a> {
                                     constructor,
                                     lowered,
                                 )?,
-                                continuation: *next,
+                                control,
                             }
                         } else {
                             let first = remaining.remove(0);
+                            control.continuation = SourceContinuation::ConstructArgument {
+                                constructor,
+                                remaining,
+                                lowered,
+                                env: env.clone(),
+                                next: Box::new(control.continuation),
+                            };
                             SourceMachineState::Eval {
                                 expr: first,
-                                env: env.clone(),
-                                continuation: SourceContinuation::ConstructArgument {
-                                    constructor,
-                                    remaining,
-                                    lowered,
-                                    env,
-                                    next,
-                                },
+                                env,
+                                control,
                             }
                         }
                     }
@@ -4855,6 +4895,7 @@ impl<'a> Lowering<'a> {
                         env,
                         next,
                     } => {
+                        control.continuation = *next;
                         if let Lowered::HostResult {
                             success,
                             error,
@@ -4873,7 +4914,7 @@ impl<'a> Lowering<'a> {
                                 &cases,
                                 default,
                                 &env,
-                                *next,
+                                control,
                             );
                         }
                         if let Lowered::DynamicConstructor(dynamic) = value {
@@ -4883,7 +4924,7 @@ impl<'a> Lowering<'a> {
                                 &cases,
                                 &default,
                                 &env,
-                                *next,
+                                control,
                             );
                         }
                         let Lowered::Constructor { constructor, args } = value else {
@@ -4912,7 +4953,7 @@ impl<'a> Lowering<'a> {
                         SourceMachineState::Eval {
                             expr: case.body.clone(),
                             env: case_env,
-                            continuation: *next,
+                            control,
                         }
                     }
                     SourceContinuation::ComputationalMatchScrutinee {
@@ -4920,9 +4961,47 @@ impl<'a> Lowering<'a> {
                         default,
                         env,
                         provenance,
-                        outer,
                         next,
                     } => {
+                        let Lowered::Constructor { constructor, args } = value else {
+                            return Err(unsupported(
+                                "ComputationalMatch",
+                                "source scrutinee is not a constructor value",
+                            ));
+                        };
+                        let retained = Lowered::Constructor {
+                            constructor: constructor.clone(),
+                            args: args.clone(),
+                        };
+                        let Some(case) = cases
+                            .iter()
+                            .find(|case| case.constructor == constructor)
+                        else {
+                            return Ok(Lowered::Trap(default));
+                        };
+                        if case.argument_binders != args.len() {
+                            return Err(unsupported(
+                                "ComputationalMatch",
+                                format!(
+                                    "case {} expects {} constructor arguments but value has {}",
+                                    case.constructor,
+                                    case.argument_binders,
+                                    args.len()
+                                ),
+                            ));
+                        }
+                        let mut seen = BTreeSet::new();
+                        for position in case.recursive_positions.iter().copied() {
+                            if !seen.insert(position) || position >= args.len() {
+                                return Err(unsupported(
+                                    "ComputationalMatch",
+                                    format!(
+                                        "case {} has malformed recursive position {position}",
+                                        case.constructor
+                                    ),
+                                ));
+                            }
+                        }
                         let frame = ComputationalEliminatorFrame {
                             cases: &cases,
                             default: &default,
@@ -4931,17 +5010,52 @@ impl<'a> Lowering<'a> {
                             deferred_constructor_case: None,
                             provenance,
                         };
-                        SourceMachineState::Value {
-                            value: self.lower_computational_match_value_composed(
-                                builder,
-                                value,
-                                &[
-                                    EliminatorFrame::Computational(frame),
-                                    EliminatorFrame::Active(outer),
-                                    EliminatorFrame::InvocationReturn,
-                                ],
-                            )?,
-                            continuation: *next,
+                        let activation = self.mint_continuation_activation();
+                        let cursor = self.mint_continuation_cursor();
+                        let mut ancestry = control.selected.selected_ancestry.clone();
+                        ancestry.push(provenance);
+                        let mut induction_hypotheses =
+                            Vec::with_capacity(case.recursive_positions.len());
+                        let parent = control.selected.parent;
+                        {
+                            let qold = control.selected.as_active();
+                            for position in case.recursive_positions.iter().rev().copied() {
+                                induction_hypotheses.push(self.make_computational_recursor(
+                                    args[position].clone(),
+                                    cases.clone(),
+                                    default.clone(),
+                                    env.clone(),
+                                    provenance,
+                                    activation,
+                                    cursor,
+                                    Some(&qold),
+                                )?);
+                            }
+                        }
+                        let frame_env = match self.materialize_eliminator_frame_env(
+                            builder,
+                            EliminatorFrame::Computational(frame),
+                            &retained,
+                        )? {
+                            Ok(frame_env) => frame_env,
+                            Err(trap) => return Ok(Lowered::Trap(trap)),
+                        };
+                        let mut case_env = induction_hypotheses;
+                        case_env.extend(args);
+                        case_env.extend(frame_env);
+                        let pending = std::mem::take(&mut control.selected.pending);
+                        control.selected = SourceSelectedContinuation {
+                            activation,
+                            cursor,
+                            parent,
+                            pending,
+                            selected_ancestry: ancestry,
+                        };
+                        control.continuation = *next;
+                        SourceMachineState::Eval {
+                            expr: case.body.clone(),
+                            env: case_env,
+                            control,
                         }
                     }
                     SourceContinuation::CallCallee {
@@ -4949,20 +5063,22 @@ impl<'a> Lowering<'a> {
                         env,
                         next,
                     } => {
+                        control.continuation = *next;
                         if args.is_empty() {
-                            self.source_call_state(builder, value, Vec::new(), env, *next)?
+                            self.source_call_state(builder, value, Vec::new(), env, control)?
                         } else {
                             let first = args.remove(0);
+                            control.continuation = SourceContinuation::CallArgument {
+                                callee: value,
+                                remaining: args,
+                                lowered: Vec::new(),
+                                env: env.clone(),
+                                next: Box::new(control.continuation),
+                            };
                             SourceMachineState::Eval {
                                 expr: first,
-                                env: env.clone(),
-                                continuation: SourceContinuation::CallArgument {
-                                    callee: value,
-                                    remaining: args,
-                                    lowered: Vec::new(),
-                                    env,
-                                    next,
-                                },
+                                env,
+                                control,
                             }
                         }
                     }
@@ -4974,20 +5090,22 @@ impl<'a> Lowering<'a> {
                         next,
                     } => {
                         lowered.push(value);
+                        control.continuation = *next;
                         if remaining.is_empty() {
-                            self.source_call_state(builder, callee, lowered, env, *next)?
+                            self.source_call_state(builder, callee, lowered, env, control)?
                         } else {
                             let first = remaining.remove(0);
+                            control.continuation = SourceContinuation::CallArgument {
+                                callee,
+                                remaining,
+                                lowered,
+                                env: env.clone(),
+                                next: Box::new(control.continuation),
+                            };
                             SourceMachineState::Eval {
                                 expr: first,
-                                env: env.clone(),
-                                continuation: SourceContinuation::CallArgument {
-                                    callee,
-                                    remaining,
-                                    lowered,
-                                    env,
-                                    next,
-                                },
+                                env,
+                                control,
                             }
                         }
                     }
@@ -5015,16 +5133,12 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: RuntimeTrap,
         env: &[Lowered],
-        suffix_source: SourceContinuation<'b>,
+        suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let active = Self::source_terminal_active(&suffix_source).ok_or_else(|| {
-            unsupported(
-                "NativeJoinPlanV1",
-                "dynamic HostResult source join has no exact outer continuation",
-            )
-        })?;
+        let active = suffix_control.selected.as_active();
         let (prefix, suffix_pending, required_kind, site_id) =
             self.planned_active_scalar_cut(active)?;
+        let suffix_pending = suffix_pending.to_vec();
         let join_id = self.next_source_join;
         self.next_source_join = self
             .next_source_join
@@ -5046,12 +5160,17 @@ impl<'a> Lowering<'a> {
                 join_id,
                 predecessor_id,
                 target: merge,
-                expected_outer: active.cursor,
+                expected_outer: suffix_control.terminal_outer,
                 required_kind,
                 prefix: prefix.clone(),
             };
             let continuation =
-                Self::instantiate_source_prefix_to_join(&suffix_source, edge)?;
+                Self::instantiate_source_prefix_to_join(&suffix_control.continuation, edge)?;
+            let branch_control = SourceControl {
+                continuation,
+                selected: suffix_control.selected.clone(),
+                terminal_outer: suffix_control.terminal_outer,
+            };
             let lowered = if let Some(case) = cases
                 .iter()
                 .find(|case| case.constructor == constructor && case.binders == 1)
@@ -5062,14 +5181,14 @@ impl<'a> Lowering<'a> {
                     builder,
                     case.body.clone(),
                     arm_env,
-                    continuation,
+                    branch_control,
                 )?
             } else {
                 self.lower_source_machine_with_continuation(
                     builder,
                     RuntimeExpr::Trap(default.clone()),
                     env.to_vec(),
-                    continuation,
+                    branch_control,
                 )?
             };
             if !matches!(lowered, Lowered::RecursiveBackedge) {
@@ -5088,11 +5207,11 @@ impl<'a> Lowering<'a> {
             builder.block_params(merge)[0],
         );
         let suffix_active = ActiveContinuationFrame {
-            activation: active.activation,
-            cursor: active.cursor,
-            parent: active.parent,
-            pending: suffix_pending,
-            selected_ancestry: active.selected_ancestry,
+            activation: suffix_control.selected.activation,
+            cursor: suffix_control.selected.cursor,
+            parent: suffix_control.selected.parent,
+            pending: &suffix_pending,
+            selected_ancestry: &suffix_control.selected.selected_ancestry,
         };
         self.resume_active_continuation(builder, merged, suffix_active)
     }
@@ -5104,7 +5223,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
         env: &[Lowered],
-        suffix_source: SourceContinuation<'b>,
+        suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
         validate_dynamic_constructor_alternatives(
             dynamic
@@ -5113,7 +5232,7 @@ impl<'a> Lowering<'a> {
                 .map(|alternative| (alternative.tag, alternative.constructor.as_str())),
         )?;
         let SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(outer_edge)) =
-            suffix_source
+            suffix_control.continuation
         else {
             return Err(unsupported(
                 "NativeJoinPlanV1",
@@ -5157,11 +5276,18 @@ impl<'a> Lowering<'a> {
                 prefix: outer_edge.prefix.clone(),
             };
             let arm_env = materialize_dynamic_constructor_env(&alternative, env);
+            let control = SourceControl {
+                continuation: SourceContinuation::Terminal(
+                    SourceContinuationTerminal::JumpToJoin(edge),
+                ),
+                selected: suffix_control.selected.clone(),
+                terminal_outer: suffix_control.terminal_outer,
+            };
             let lowered = self.lower_source_machine_with_continuation(
                 builder,
                 case.body.clone(),
                 arm_env,
-                SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)),
+                control,
             )?;
             if !matches!(lowered, Lowered::RecursiveBackedge) {
                 return Err(unsupported(
@@ -5228,7 +5354,7 @@ impl<'a> Lowering<'a> {
         callee: Lowered,
         args: Vec<Lowered>,
         env: Vec<Lowered>,
-        continuation: SourceContinuation<'b>,
+        control: SourceControl<'b>,
     ) -> Result<SourceMachineState<'b>, CraneliftBackendError> {
         match callee {
             Lowered::Closure {
@@ -5252,7 +5378,7 @@ impl<'a> Lowering<'a> {
                 Ok(SourceMachineState::Eval {
                     expr: body,
                     env: call_env,
-                    continuation,
+                    control,
                 })
             }
             Lowered::DeclarationClosure {
@@ -5278,42 +5404,33 @@ impl<'a> Lowering<'a> {
                 Ok(SourceMachineState::Eval {
                     expr: body,
                     env: call_env,
-                    continuation,
+                    control,
                 })
             }
             recursor @ Lowered::ComputationalRecursorClosure { .. } => {
                 let (base, boundary) = decompose_computational_recursor(recursor);
                 let (_, invocation) =
                     boundary.expect("recursor closure carries an invocation segment");
-                let expected_outer = Self::source_continuation_outer(&continuation).ok_or_else(|| {
-                    unsupported(
-                        "ComputationalRecursor",
-                        "recursive invocation source context has no outer cursor",
-                    )
-                })?;
-                if expected_outer != invocation.resume_cursor {
+                let selected = control.selected.as_active();
+                if find_continuation_cursor(&selected, invocation.resume_cursor).is_none() {
                     return Err(unsupported(
                         "ComputationalRecursor",
-                        "recursive invocation source context has the wrong outer cursor",
+                        "recursive invocation cursor is not live in source control",
                     ));
                 }
-                let outer = Self::source_terminal_active(&continuation).ok_or_else(|| {
-                    unsupported(
-                        "ComputationalRecursor",
-                        "recursive invocation source context has no live outer frame",
-                    )
-                })?;
                 let armed = ArmedInvocation {
-                    suspended: continuation,
-                    expected_outer,
+                    suspended: control,
+                    expected_selected: invocation.resume_cursor,
                 };
-                if armed.expected_outer
-                    != Self::source_continuation_outer(&armed.suspended)
-                        .expect("armed invocation has an outer cursor")
+                if find_continuation_cursor(
+                    &armed.suspended.selected.as_active(),
+                    armed.expected_selected,
+                )
+                .is_none()
                 {
                     return Err(unsupported(
                         "ComputationalRecursor",
-                        "armed invocation endpoint changed outer cursor",
+                        "armed invocation endpoint changed selected cursor",
                     ));
                 }
                 if let Lowered::BoundedNat(predecessor) = base {
@@ -5324,7 +5441,9 @@ impl<'a> Lowering<'a> {
                         ));
                     }
                     let mut frames = recursor_eliminator_frames(&invocation.owned_layers);
-                    frames.push(EliminatorFrame::Active(outer));
+                    frames.push(EliminatorFrame::Active(
+                        armed.suspended.selected.as_active(),
+                    ));
                     frames.push(EliminatorFrame::InvocationReturn);
                     let returned = self.lower_bounded_nat_computational(
                         builder,
@@ -5334,7 +5453,7 @@ impl<'a> Lowering<'a> {
                     )?;
                     return Ok(SourceMachineState::Value {
                         value: returned,
-                        continuation: armed.suspended,
+                        control: armed.suspended,
                     });
                 } else {
                     let Lowered::Closure {
@@ -5361,14 +5480,15 @@ impl<'a> Lowering<'a> {
                     let mut call_env = args;
                     call_env.extend(captures);
                     call_env.extend(env);
+                    let mut suspended = armed.suspended;
+                    suspended.continuation = SourceContinuation::ApplyRecursorLayers {
+                        remaining: invocation.owned_layers,
+                        next: Box::new(suspended.continuation),
+                    };
                     return Ok(SourceMachineState::Eval {
                         expr: body,
                         env: call_env,
-                        continuation: SourceContinuation::ApplyRecursorLayers {
-                            remaining: invocation.owned_layers,
-                            outer,
-                            next: Box::new(armed.suspended),
-                        },
+                        control: suspended,
                     });
                 }
             }
