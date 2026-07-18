@@ -1362,6 +1362,7 @@ fn run_checked_bounded_nat_fixture(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_continuation_activation: 0,
+        next_continuation_cursor: 0,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1549,6 +1550,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_continuation_activation: 0,
+        next_continuation_cursor: 0,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1714,6 +1716,7 @@ fn compile_expr_into_module<'a, M: Module>(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_continuation_activation: 0,
+        next_continuation_cursor: 0,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: process_mode,
@@ -1836,6 +1839,7 @@ struct Lowering<'a> {
     next_token: i64,
     next_recursor_frame_provenance: u64,
     next_continuation_activation: u64,
+    next_continuation_cursor: u64,
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
     process_object: bool,
@@ -1851,6 +1855,9 @@ struct RecursorFrameProvenance(u64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct ContinuationActivationId(u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ContinuationCursorId(u64);
 
 #[derive(Clone)]
 enum Lowered {
@@ -1919,8 +1926,8 @@ enum Lowered {
     },
     ComputationalRecursorClosure {
         residual: Box<Lowered>,
-        layers: Vec<ComputationalRecursorLayer>,
-        resume_activation: ContinuationActivationId,
+        activation: ContinuationActivationId,
+        invocation: RecursorInvocationSegment,
     },
     /// A tail-recursive edge already emitted as a CFG jump. The current block
     /// is predecessor-free; enclosing scalar combinators propagate this
@@ -2174,6 +2181,7 @@ struct PendingLetContinuationFrame<'a> {
 #[derive(Clone, Copy)]
 struct ActiveContinuationFrame<'a> {
     activation: ContinuationActivationId,
+    cursor: ContinuationCursorId,
     parent: Option<&'a ActiveContinuationFrame<'a>>,
     pending: &'a [EliminatorFrame<'a>],
     selected_ancestry: &'a [RecursorFrameProvenance],
@@ -2187,20 +2195,41 @@ struct ComputationalRecursorLayer {
     provenance: RecursorFrameProvenance,
 }
 
+#[derive(Clone)]
+struct RecursorInvocationSegment {
+    owned_layers: Vec<ComputationalRecursorLayer>,
+    resume_cursor: ContinuationCursorId,
+}
+
+impl RecursorInvocationSegment {
+    fn new(
+        owned_layers: Vec<ComputationalRecursorLayer>,
+        resume_cursor: ContinuationCursorId,
+    ) -> Self {
+        assert!(
+            !owned_layers.is_empty(),
+            "recursor invocation segment owns at least one layer"
+        );
+        Self {
+            owned_layers,
+            resume_cursor,
+        }
+    }
+}
+
 fn decompose_computational_recursor(
     value: Lowered,
 ) -> (
     Lowered,
-    Vec<ComputationalRecursorLayer>,
-    Option<ContinuationActivationId>,
+    Option<(ContinuationActivationId, RecursorInvocationSegment)>,
 ) {
     match value {
         Lowered::ComputationalRecursorClosure {
             residual,
-            layers,
-            resume_activation,
-        } => (*residual, layers, Some(resume_activation)),
-        value => (value, Vec::new(), None),
+            activation,
+            invocation,
+        } => (*residual, Some((activation, invocation))),
+        value => (value, None),
     }
 }
 
@@ -2231,16 +2260,16 @@ fn active_recursor_frame<'a>(
     })
 }
 
-fn find_continuation_activation<'a>(
+fn find_continuation_cursor<'a>(
     active: &'a ActiveContinuationFrame<'a>,
-    activation: ContinuationActivationId,
+    cursor: ContinuationCursorId,
 ) -> Option<&'a ActiveContinuationFrame<'a>> {
-    if active.activation == activation {
+    if active.cursor == cursor {
         Some(active)
     } else {
         active
             .parent
-            .and_then(|parent| find_continuation_activation(parent, activation))
+            .and_then(|parent| find_continuation_cursor(parent, cursor))
     }
 }
 
@@ -2283,6 +2312,7 @@ struct DeferredConstructorCaseEnvironment<'a> {
     trailing_fields: &'a [RuntimeExpr],
     producer_env: &'a [Lowered],
     outer_eliminator: EliminatorFrame<'a>,
+    owning_active: Option<&'a ActiveContinuationFrame<'a>>,
 }
 
 #[derive(Clone, Copy)]
@@ -2599,6 +2629,15 @@ impl<'a> Lowering<'a> {
         activation
     }
 
+    fn mint_continuation_cursor(&mut self) -> ContinuationCursorId {
+        let cursor = ContinuationCursorId(self.next_continuation_cursor);
+        self.next_continuation_cursor = self
+            .next_continuation_cursor
+            .checked_add(1)
+            .expect("compiler-private continuation cursor exhausted");
+        cursor
+    }
+
     fn make_computational_recursor(
         &self,
         recursive: Lowered,
@@ -2606,26 +2645,39 @@ impl<'a> Lowering<'a> {
         default: RuntimeTrap,
         outer_env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
-        resume_activation: ContinuationActivationId,
+        activation: ContinuationActivationId,
+        resume_cursor: ContinuationCursorId,
         caller: Option<&ActiveContinuationFrame<'_>>,
-    ) -> Lowered {
-        let (residual, mut layers, payload_resume) = decompose_computational_recursor(recursive);
-        if payload_resume.is_some_and(|activation| {
-            caller.is_some_and(|active| find_continuation_activation(active, activation).is_some())
-        }) {
-            layers.clear();
-        }
-        layers.push(ComputationalRecursorLayer {
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let (residual, payload) = decompose_computational_recursor(recursive);
+        let mut owned_layers = if let Some((_, invocation)) = payload {
+            let caller = caller.ok_or_else(|| {
+                unsupported(
+                    "ComputationalRecursor",
+                    "recursive payload splice has no active continuation",
+                )
+            })?;
+            if find_continuation_cursor(caller, invocation.resume_cursor).is_none() {
+                return Err(unsupported(
+                    "ComputationalRecursor",
+                    "recursive payload resume cursor is not active",
+                ));
+            }
+            invocation.owned_layers
+        } else {
+            Vec::new()
+        };
+        owned_layers.push(ComputationalRecursorLayer {
             cases,
             default,
             outer_env,
             provenance,
         });
-        Lowered::ComputationalRecursorClosure {
+        Ok(Lowered::ComputationalRecursorClosure {
             residual: Box::new(residual),
-            layers,
-            resume_activation,
-        }
+            activation,
+            invocation: RecursorInvocationSegment::new(owned_layers, resume_cursor),
+        })
     }
 
     fn resume_active_continuation(
@@ -2637,9 +2689,11 @@ impl<'a> Lowering<'a> {
         let Some((head, tail)) = active.pending.split_first() else {
             return Ok(value);
         };
+        let cursor = self.mint_continuation_cursor();
         let successor = EliminatorFrame::Active(ActiveContinuationFrame {
             activation: active.activation,
-            parent: active.parent,
+            cursor,
+            parent: Some(&active),
             pending: tail,
             selected_ancestry: active.selected_ancestry,
         });
@@ -2780,11 +2834,12 @@ impl<'a> Lowering<'a> {
                                 if let Some(callee @ Lowered::ComputationalRecursorClosure { .. }) =
                                     producer_env.get(index)
                                 {
-                                    let (residual, layers, resume_activation) =
+                                    let (residual, boundary) =
                                         decompose_computational_recursor(callee.clone());
-                                    let resume_activation = resume_activation.expect(
+                                    let (_, invocation) = boundary.expect(
                                         "recursor closure carries a continuation delimiter",
                                     );
+                                    let resume_cursor = invocation.resume_cursor;
                                     let current =
                                         active_recursor_frame(eliminators).ok_or_else(|| {
                                             unsupported(
@@ -2793,14 +2848,15 @@ impl<'a> Lowering<'a> {
                                             )
                                         })?;
                                     let resume =
-                                        find_continuation_activation(current, resume_activation)
+                                        find_continuation_cursor(current, resume_cursor)
                                             .ok_or_else(|| {
                                                 unsupported(
                                                     "ComputationalRecursor",
-                                                    "recursive invocation delimiter is not active",
+                                                    "recursive invocation cursor is not active",
                                                 )
                                             })?;
-                                    let frames = recursor_eliminator_frames(&layers);
+                                    let frames =
+                                        recursor_eliminator_frames(&invocation.owned_layers);
                                     let mut composed = Vec::with_capacity(frames.len() + 2);
                                     composed.push(EliminatorFrame::PendingLet(
                                         PendingLetContinuationFrame {
@@ -2900,9 +2956,29 @@ impl<'a> Lowering<'a> {
                         )
                     }
                     callee @ Lowered::ComputationalRecursorClosure { .. } => {
-                        let (base, layers, _) = decompose_computational_recursor(callee);
-                        let mut composed = recursor_eliminator_frames(&layers);
-                        composed.extend_from_slice(eliminators);
+                        let (base, boundary) = decompose_computational_recursor(callee);
+                        let (_, invocation) = boundary.expect(
+                            "recursor closure carries an invocation segment",
+                        );
+                        let current = active_recursor_frame(eliminators).ok_or_else(|| {
+                            unsupported(
+                                "ComputationalRecursor",
+                                "recursive producer invocation has no active continuation",
+                            )
+                        })?;
+                        let resume = find_continuation_cursor(
+                            current,
+                            invocation.resume_cursor,
+                        )
+                        .ok_or_else(|| {
+                            unsupported(
+                                "ComputationalRecursor",
+                                "recursive producer invocation cursor is not active",
+                            )
+                        })?;
+                        let mut composed =
+                            recursor_eliminator_frames(&invocation.owned_layers);
+                        composed.push(EliminatorFrame::Active(*resume));
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(
@@ -3067,6 +3143,7 @@ impl<'a> Lowering<'a> {
                         trailing_fields: &args[field + 1..],
                         producer_env,
                         outer_eliminator: eliminator,
+                        owning_active: active_recursor_frame(eliminators),
                     };
                     let mut composed = Vec::with_capacity(eliminators.len());
                     composed.push(match consumer {
@@ -3404,7 +3481,7 @@ impl<'a> Lowering<'a> {
             args: args.clone(),
         };
         let remaining_eliminators = &eliminators[1..];
-        let (body, case_env, selected_provenance) = match eliminator {
+        let (body, case_env) = match eliminator {
             EliminatorFrame::Computational(eliminator) => {
                 let (case, _) = match select_computational_case(
                     std::slice::from_ref(&eliminator),
@@ -3424,11 +3501,8 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
-                let activation = self.mint_continuation_activation();
-                let caller = active_recursor_frame(remaining_eliminators);
                 let mut seen = BTreeSet::new();
-                let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
-                for position in case.recursive_positions.iter().rev().copied() {
+                for position in case.recursive_positions.iter().copied() {
                     if !seen.insert(position) || position >= args.len() {
                         return Err(unsupported(
                             "ComputationalMatch",
@@ -3438,6 +3512,33 @@ impl<'a> Lowering<'a> {
                             ),
                         ));
                     }
+                }
+
+                let inherited = active_recursor_frame(remaining_eliminators);
+                let mut selected_ancestry = inherited
+                    .map(|active| active.selected_ancestry.to_vec())
+                    .unwrap_or_default();
+                selected_ancestry.push(eliminator.provenance);
+                let mut pending: Vec<_> = remaining_eliminators
+                    .iter()
+                    .copied()
+                    .filter(|frame| !matches!(frame, EliminatorFrame::Active(_)))
+                    .collect();
+                if let Some(active) = inherited {
+                    pending.extend_from_slice(active.pending);
+                }
+                let activation = self.mint_continuation_activation();
+                let cursor = self.mint_continuation_cursor();
+                let active_state = ActiveContinuationFrame {
+                    activation,
+                    cursor,
+                    parent: inherited,
+                    pending: &pending,
+                    selected_ancestry: &selected_ancestry,
+                };
+
+                let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
+                for position in case.recursive_positions.iter().rev().copied() {
                     induction_hypotheses.push(self.make_computational_recursor(
                         args[position].clone(),
                         eliminator.cases.to_vec(),
@@ -3445,8 +3546,9 @@ impl<'a> Lowering<'a> {
                         eliminator.env.to_vec(),
                         eliminator.provenance,
                         activation,
-                        caller,
-                    ));
+                        cursor,
+                        Some(&active_state),
+                    )?);
                 }
                 let mut case_env = induction_hypotheses;
                 case_env.extend(args);
@@ -3459,11 +3561,12 @@ impl<'a> Lowering<'a> {
                     Err(trap) => return Ok(Lowered::Trap(trap)),
                 };
                 case_env.extend(frame_env);
-                (
+                return self.lower_computational_producer_expr(
+                    builder,
                     &case.body,
-                    case_env,
-                    Some((eliminator.provenance, activation)),
-                )
+                    &case_env,
+                    &[EliminatorFrame::Active(active_state)],
+                );
             }
             EliminatorFrame::Ordinary(eliminator) => {
                 let case = match select_ordinary_case(eliminator, &constructor) {
@@ -3491,7 +3594,7 @@ impl<'a> Lowering<'a> {
                     Err(trap) => return Ok(Lowered::Trap(trap)),
                 };
                 case_env.extend(frame_env);
-                (&case.body, case_env, None)
+                (&case.body, case_env)
             }
             EliminatorFrame::PendingLet(_) => {
                 unreachable!("pending Let continuations are consumed before value composition")
@@ -3500,28 +3603,7 @@ impl<'a> Lowering<'a> {
                 return self.resume_active_continuation(builder, retained_scrutinee, active);
             }
         };
-        if let Some((selected_provenance, activation)) = selected_provenance {
-            let inherited = active_recursor_frame(remaining_eliminators);
-            let mut selected_ancestry = inherited
-                .map(|active| active.selected_ancestry.to_vec())
-                .unwrap_or_default();
-            selected_ancestry.push(selected_provenance);
-            let mut pending: Vec<_> = remaining_eliminators
-                .iter()
-                .copied()
-                .filter(|frame| !matches!(frame, EliminatorFrame::Active(_)))
-                .collect();
-            if let Some(active) = inherited {
-                pending.extend_from_slice(active.pending);
-            }
-            let active = EliminatorFrame::Active(ActiveContinuationFrame {
-                activation,
-                parent: inherited,
-                pending: &pending,
-                selected_ancestry: &selected_ancestry,
-            });
-            self.lower_computational_producer_expr(builder, body, &case_env, &[active])
-        } else if remaining_eliminators.is_empty() {
+        if remaining_eliminators.is_empty() {
             self.lower_expr(builder, body, &case_env)
         } else {
             self.lower_computational_producer_expr(builder, body, &case_env, remaining_eliminators)
@@ -3855,8 +3937,7 @@ impl<'a> Lowering<'a> {
                 }
                 let activation = self.mint_continuation_activation();
                 let mut seen = BTreeSet::new();
-                let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
-                for position in case.recursive_positions.iter().rev().copied() {
+                for position in case.recursive_positions.iter().copied() {
                     if !seen.insert(position) || position >= constructor_args.len() {
                         return Err(unsupported(
                             "ComputationalMatch",
@@ -3866,6 +3947,21 @@ impl<'a> Lowering<'a> {
                             ),
                         ));
                     }
+                }
+                let terminal_pending = [];
+                let terminal_ancestry = [];
+                let terminal_cursor = self.mint_continuation_cursor();
+                let terminal_active = ActiveContinuationFrame {
+                    activation,
+                    cursor: terminal_cursor,
+                    parent: None,
+                    pending: &terminal_pending,
+                    selected_ancestry: &terminal_ancestry,
+                };
+                let caller = deferred.owning_active.unwrap_or(&terminal_active);
+                let resume_cursor = caller.cursor;
+                let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
+                for position in case.recursive_positions.iter().rev().copied() {
                     induction_hypotheses.push(self.make_computational_recursor(
                         constructor_args[position].clone(),
                         frame.cases.to_vec(),
@@ -3873,8 +3969,9 @@ impl<'a> Lowering<'a> {
                         outer_tail.clone(),
                         frame.provenance,
                         activation,
-                        None,
-                    ));
+                        resume_cursor,
+                        Some(caller),
+                    )?);
                 }
                 induction_hypotheses.extend(constructor_args);
                 induction_hypotheses.extend(outer_tail);
@@ -4435,8 +4532,12 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, &body, &call_env)
                     }
                     callee @ Lowered::ComputationalRecursorClosure { .. } => {
-                        let (base, layers, _) = decompose_computational_recursor(callee);
-                        let frames = recursor_eliminator_frames(&layers);
+                        let (base, boundary) = decompose_computational_recursor(callee);
+                        let (_, invocation) = boundary.expect(
+                            "recursor closure carries an invocation segment",
+                        );
+                        let frames =
+                            recursor_eliminator_frames(&invocation.owned_layers);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(
