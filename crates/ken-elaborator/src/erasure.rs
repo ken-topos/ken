@@ -171,8 +171,21 @@ pub(crate) struct CheckedHostSpineV1 {
     pub resource_malformed: StableSymbol,
     pub resource_right_not_held: StableSymbol,
     pub resource_release_failed: StableSymbol,
+    pub resource_kind_mismatch: StableSymbol,
+    pub resource_buffer_limit: StableSymbol,
+    pub resource_invalid_offset: StableSymbol,
+    pub resource_invalid_bounds: StableSymbol,
+    pub resource_no_progress: StableSymbol,
     pub resource_kind_fs_handle: StableSymbol,
+    pub resource_kind_buffer: StableSymbol,
     pub resource_trace_identity: StableSymbol,
+    pub nat_zero: StableSymbol,
+    pub nat_suc: StableSymbol,
+    pub private_buffer_span: StableSymbol,
+    pub private_transfer_count: StableSymbol,
+    pub read_some: StableSymbol,
+    pub read_eof: StableSymbol,
+    pub wrote: StableSymbol,
     pub unit: StableSymbol,
     pub bool_false: StableSymbol,
     pub bool_true: StableSymbol,
@@ -650,6 +663,9 @@ const fn static_host_operation_requires_capability(operation: ken_host::HostOpV1
             operation,
             ken_host::HostOpV1::FsHandleMetadata
                 | ken_host::HostOpV1::BufferAllocate
+                | ken_host::HostOpV1::FsReadAt
+                | ken_host::HostOpV1::FsWriteAt
+                | ken_host::HostOpV1::BufferFreeze
                 | ken_host::HostOpV1::ResourceRelease
         )
 }
@@ -662,6 +678,9 @@ const fn runtime_selected_host_operation_requires_capability(
             operation,
             ken_host::HostOpV1::FsHandleMetadata
                 | ken_host::HostOpV1::BufferAllocate
+                | ken_host::HostOpV1::FsReadAt
+                | ken_host::HostOpV1::FsWriteAt
+                | ken_host::HostOpV1::BufferFreeze
                 | ken_host::HostOpV1::ResourceRelease
         )
 }
@@ -3270,11 +3289,42 @@ mod px7l_tests {
                 &family("ResourceError"),
                 "ReleaseFailed",
             ),
+            resource_kind_mismatch: StableSymbol::constructor(
+                &family("ResourceError"),
+                "ResourceKindMismatch",
+            ),
+            resource_buffer_limit: StableSymbol::constructor(
+                &family("ResourceError"),
+                "BufferLimit",
+            ),
+            resource_invalid_offset: StableSymbol::constructor(
+                &family("ResourceError"),
+                "InvalidOffset",
+            ),
+            resource_invalid_bounds: StableSymbol::constructor(
+                &family("ResourceError"),
+                "InvalidBounds",
+            ),
+            resource_no_progress: StableSymbol::constructor(&family("ResourceError"), "NoProgress"),
             resource_kind_fs_handle: StableSymbol::constructor(&family("ResourceKind"), "FsHandle"),
+            resource_kind_buffer: StableSymbol::constructor(&family("ResourceKind"), "Buffer"),
             resource_trace_identity: StableSymbol::constructor(
                 &family("ResourceTraceIdentity"),
                 "PrivateResourceTraceIdentity",
             ),
+            nat_zero: StableSymbol::constructor(&family("Nat"), "Zero"),
+            nat_suc: StableSymbol::constructor(&family("Nat"), "Suc"),
+            private_buffer_span: StableSymbol::constructor(
+                &family("BufferSpan"),
+                "PrivateBufferSpan",
+            ),
+            private_transfer_count: StableSymbol::constructor(
+                &family("TransferCount"),
+                "PrivateTransferCount",
+            ),
+            read_some: StableSymbol::constructor(&family("ReadProgress"), "ReadSome"),
+            read_eof: StableSymbol::constructor(&family("ReadProgress"), "ReadEof"),
+            wrote: StableSymbol::constructor(&family("WriteProgress"), "Wrote"),
             unit: StableSymbol::constructor(&family("Unit"), "MkUnit"),
             bool_false: StableSymbol::constructor(&family("Bool"), "False"),
             bool_true: StableSymbol::constructor(&family("Bool"), "True"),
@@ -3473,6 +3523,9 @@ mod px7l_tests {
                     operation,
                     ken_host::HostOpV1::FsHandleMetadata
                         | ken_host::HostOpV1::BufferAllocate
+                        | ken_host::HostOpV1::FsReadAt
+                        | ken_host::HostOpV1::FsWriteAt
+                        | ken_host::HostOpV1::BufferFreeze
                         | ken_host::HostOpV1::ResourceRelease
                 );
             assert_eq!(

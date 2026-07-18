@@ -33,7 +33,7 @@ use crate::{
     RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
 
-const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 9] = [
+const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [
     ken_host::HostOpV1::ConsoleWrite,
     ken_host::HostOpV1::ConsoleFlush,
     ken_host::HostOpV1::ConsoleIsTerminal,
@@ -42,7 +42,11 @@ const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 9] = [
     ken_host::HostOpV1::FsChangeMode,
     ken_host::HostOpV1::FsOpen,
     ken_host::HostOpV1::FsHandleMetadata,
+    ken_host::HostOpV1::FsReadAt,
+    ken_host::HostOpV1::FsWriteAt,
     ken_host::HostOpV1::ResourceRelease,
+    ken_host::HostOpV1::BufferAllocate,
+    ken_host::HostOpV1::BufferFreeze,
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1309,6 +1313,212 @@ fn compile_expr_with_declarations_and_process_input<'a>(
 }
 
 #[cfg(test)]
+#[derive(Clone, Copy)]
+enum BoundedNatFixtureObservation {
+    OrdinaryCount,
+    OrdinaryRemaining,
+    ComputationalCount,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BoundedNatLoweringMutation {
+    Exact,
+    BrokenDecrement,
+    RawScalarPredecessor,
+}
+
+/// Exercise the checked-reply mint without involving any resource operation.
+/// The fixture deliberately enters through `mint_validated_progress_nat`, so
+/// tests cannot manufacture the compact carrier through a second constructor.
+#[cfg(test)]
+fn run_checked_bounded_nat_fixture(
+    count: u64,
+    request_start: u64,
+    request_length: u64,
+    reply_start: u64,
+    observation: BoundedNatFixtureObservation,
+    mutation: BoundedNatLoweringMutation,
+) -> Result<i64, CraneliftBackendError> {
+    let mut module = new_jit_module()?;
+    let mut signature = module.make_signature();
+    signature
+        .params
+        .push(AbiParam::new(module.target_config().pointer_type()));
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function("px8n_checked_bounded_nat", Linkage::Local, &signature)
+        .map_err(|error| backend_module(error.to_string()))?;
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = Lowering {
+        seed_env: &seed_env,
+        declarations: BTreeMap::new(),
+        declaration_stack: Vec::new(),
+        result_table: BTreeMap::new(),
+        next_token: 0,
+        assumptions: BTreeSet::new(),
+        unsupported: Vec::new(),
+        process_object: false,
+        process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
+        host_dispatch: None,
+        invocation_pointer: None,
+        bounded_nat_mutation: mutation,
+    };
+    let mut function_context = FunctionBuilderContext::new();
+    {
+        let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+        let entry = builder.create_block();
+        builder.append_block_params_for_function_params(entry);
+        builder.switch_to_block(entry);
+        let count = builder.ins().iconst(types::I64, count as i64);
+        let request_start = builder.ins().iconst(types::I64, request_start as i64);
+        let request_length = builder.ins().iconst(types::I64, request_length as i64);
+        let reply_start = builder.ins().iconst(types::I64, reply_start as i64);
+        let one = builder.ins().iconst(types::I64, 1);
+        let success =
+            builder
+                .ins()
+                .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, one, 1);
+        let (count, _predecessor, remaining) = Lowering::mint_validated_progress_nat(
+            &mut builder,
+            success,
+            count,
+            request_start,
+            request_length,
+            Some(reply_start),
+        );
+        let nat = match observation {
+            BoundedNatFixtureObservation::OrdinaryCount
+            | BoundedNatFixtureObservation::ComputationalCount => count,
+            BoundedNatFixtureObservation::OrdinaryRemaining => remaining,
+        };
+        let default = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-N exact structural Nat default".to_string(),
+        };
+        let lowered = match observation {
+            BoundedNatFixtureObservation::OrdinaryCount
+            | BoundedNatFixtureObservation::OrdinaryRemaining => {
+                let cases = vec![
+                    crate::RuntimeMatchCase {
+                        constructor: compiler.process_symbols.nat_zero.clone(),
+                        binders: 0,
+                        body: RuntimeExpr::Value(RuntimeValue::Int(10)),
+                    },
+                    crate::RuntimeMatchCase {
+                        constructor: compiler.process_symbols.nat_suc.clone(),
+                        binders: 1,
+                        body: RuntimeExpr::Match {
+                            scrutinee: Box::new(RuntimeExpr::Var(0)),
+                            cases: vec![
+                                crate::RuntimeMatchCase {
+                                    constructor: compiler.process_symbols.nat_zero.clone(),
+                                    binders: 0,
+                                    body: RuntimeExpr::Value(RuntimeValue::Int(21)),
+                                },
+                                crate::RuntimeMatchCase {
+                                    constructor: compiler.process_symbols.nat_suc.clone(),
+                                    binders: 1,
+                                    body: RuntimeExpr::Value(RuntimeValue::Int(22)),
+                                },
+                            ],
+                            default: default.clone(),
+                        },
+                    },
+                ];
+                compiler.lower_bounded_nat_match(&mut builder, nat, &cases, &default, &[])?
+            }
+            BoundedNatFixtureObservation::ComputationalCount => {
+                let cases = vec![
+                    crate::RuntimeComputationalMatchCase {
+                        constructor: compiler.process_symbols.nat_zero.clone(),
+                        argument_binders: 0,
+                        recursive_positions: Vec::new(),
+                        body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
+                    },
+                    crate::RuntimeComputationalMatchCase {
+                        constructor: compiler.process_symbols.nat_suc.clone(),
+                        argument_binders: 1,
+                        recursive_positions: vec![0],
+                        body: RuntimeExpr::Match {
+                            scrutinee: Box::new(RuntimeExpr::Var(1)),
+                            cases: vec![
+                                crate::RuntimeMatchCase {
+                                    constructor: compiler.process_symbols.nat_zero.clone(),
+                                    binders: 0,
+                                    body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
+                                },
+                                crate::RuntimeMatchCase {
+                                    constructor: compiler.process_symbols.nat_suc.clone(),
+                                    binders: 1,
+                                    body: RuntimeExpr::Match {
+                                        scrutinee: Box::new(RuntimeExpr::Var(1)),
+                                        cases: vec![
+                                            crate::RuntimeMatchCase {
+                                                constructor: compiler
+                                                    .process_symbols
+                                                    .bool_false
+                                                    .clone(),
+                                                binders: 0,
+                                                body: RuntimeExpr::Value(RuntimeValue::Bool(true)),
+                                            },
+                                            crate::RuntimeMatchCase {
+                                                constructor: compiler
+                                                    .process_symbols
+                                                    .bool_true
+                                                    .clone(),
+                                                binders: 0,
+                                                body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
+                                            },
+                                        ],
+                                        default: default.clone(),
+                                    },
+                                },
+                            ],
+                            default: default.clone(),
+                        },
+                    },
+                ];
+                let frames = [EliminatorFrame::Computational(
+                    ComputationalEliminatorFrame {
+                        cases: &cases,
+                        default: &default,
+                        env: &[],
+                        retained_scrutinee_index: None,
+                        deferred_constructor_case: None,
+                    },
+                )];
+                compiler.lower_bounded_nat_computational(&mut builder, nat, &frames)?
+            }
+        };
+        let value = compiler.emit_result(&mut builder, lowered)?.0;
+        builder.ins().return_(&[value]);
+        builder.seal_all_blocks();
+        builder.finalize();
+    }
+    verify_cranelift_function(&context.func, module.isa())?;
+    module
+        .define_function(func_id, &mut context)
+        .map_err(|error| backend_module(error.to_string()))?;
+    let compiled = CompiledModule {
+        module,
+        func_id,
+        decoder: Some(ResultDecoder::Int),
+        result_table: compiler.result_table,
+        trap: None,
+        verifier_passed: true,
+        assumptions: compiler.assumptions,
+        unsupported: compiler.unsupported,
+    };
+    compiled
+        .run(None)
+        .map(|(_, value)| value.expect("PX8-N fixture returns one scalar"))
+}
+
+#[cfg(test)]
 fn run_dynamic_constructor_dispatch_fixture(
     discriminator: i64,
     selected_tags: &[i64],
@@ -1338,6 +1548,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         host_dispatch: None,
         invocation_pointer: None,
+        bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
     let mut function_context = FunctionBuilderContext::new();
     {
@@ -1501,6 +1712,8 @@ fn compile_expr_into_module<'a, M: Module>(
             .unwrap_or_else(crate::NativeProcessSymbols::legacy_prelude),
         host_dispatch,
         invocation_pointer: None,
+        #[cfg(test)]
+        bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
     let (maybe_trap, decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
@@ -1616,6 +1829,8 @@ struct Lowering<'a> {
     process_symbols: crate::NativeProcessSymbols,
     host_dispatch: Option<FuncRef>,
     invocation_pointer: Option<cranelift_codegen::ir::Value>,
+    #[cfg(test)]
+    bounded_nat_mutation: BoundedNatLoweringMutation,
 }
 
 #[derive(Clone)]
@@ -1637,6 +1852,7 @@ enum Lowered {
     ResourceToken {
         value: cranelift_codegen::ir::Value,
     },
+    BoundedNat(BoundedNatV1),
     ResponseBytes {
         pointer: cranelift_codegen::ir::Value,
         len: cranelift_codegen::ir::Value,
@@ -1679,6 +1895,28 @@ enum Lowered {
         outer_env: Vec<Lowered>,
     },
     Trap(RuntimeTrap),
+}
+
+/// Compact private observation of a structural Nat minted from a checked host
+/// reply. The scalar never enters Runtime IR or the Ken surface: only the
+/// Zero/Suc eliminators below can observe it.
+#[derive(Clone, Copy)]
+struct BoundedNatV1 {
+    value: cranelift_codegen::ir::Value,
+}
+
+impl BoundedNatV1 {
+    fn mint_after_reply_validation(value: cranelift_codegen::ir::Value) -> Self {
+        Self { value }
+    }
+
+    fn predecessor(self, builder: &mut FunctionBuilder<'_>) -> Self {
+        Self::derived_from_validated(builder.ins().iadd_imm(self.value, -1))
+    }
+
+    fn derived_from_validated(value: cranelift_codegen::ir::Value) -> Self {
+        Self { value }
+    }
 }
 
 #[derive(Clone)]
@@ -2201,11 +2439,49 @@ impl<'a> Lowering<'a> {
                         default,
                         outer_env,
                     } => {
+                        let mut layers = vec![(cases, default, outer_env)];
+                        let mut base = *recursive;
+                        while let Lowered::ComputationalRecursorClosure {
+                            recursive,
+                            cases,
+                            default,
+                            outer_env,
+                        } = base
+                        {
+                            layers.push((cases, default, outer_env));
+                            base = *recursive;
+                        }
+                        let mut composed = layers
+                            .iter()
+                            .map(|(cases, default, outer_env)| {
+                                EliminatorFrame::Computational(ComputationalEliminatorFrame {
+                                    cases,
+                                    default,
+                                    env: outer_env,
+                                    retained_scrutinee_index: None,
+                                    deferred_constructor_case: None,
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        composed.extend_from_slice(eliminators);
+                        if let Lowered::BoundedNat(predecessor) = base {
+                            if !args.is_empty() {
+                                return Err(unsupported(
+                                    "BoundedNat",
+                                    "structural Nat recursive hypothesis takes no arguments",
+                                ));
+                            }
+                            return self.lower_bounded_nat_computational(
+                                builder,
+                                predecessor,
+                                &composed,
+                            );
+                        }
                         let Lowered::Closure {
                             captures,
                             params,
                             body,
-                        } = *recursive
+                        } = base
                         else {
                             return Err(unsupported(
                                 "ComputationalMatch",
@@ -2228,17 +2504,6 @@ impl<'a> Lowering<'a> {
                             .collect::<Result<Vec<_>, _>>()?;
                         call_env.extend(captures);
                         call_env.extend_from_slice(producer_env);
-                        let mut composed = Vec::with_capacity(eliminators.len() + 1);
-                        composed.push(EliminatorFrame::Computational(
-                            ComputationalEliminatorFrame {
-                                cases: &cases,
-                                default: &default,
-                                env: &outer_env,
-                                retained_scrutinee_index: None,
-                                deferred_constructor_case: None,
-                            },
-                        ));
-                        composed.extend_from_slice(eliminators);
                         self.lower_computational_producer_expr(builder, &body, &call_env, &composed)
                     }
                     _ => Err(unsupported(
@@ -2609,6 +2874,9 @@ impl<'a> Lowering<'a> {
                 "nested computational producer has no eliminator",
             ));
         };
+        if let Lowered::BoundedNat(nat) = scrutinee {
+            return self.lower_bounded_nat_computational(builder, nat, eliminators);
+        }
         let Lowered::Constructor { constructor, args } = scrutinee else {
             return Err(unsupported(
                 "ComputationalMatch",
@@ -2706,6 +2974,202 @@ impl<'a> Lowering<'a> {
         } else {
             self.lower_computational_producer_expr(builder, body, &case_env, remaining_eliminators)
         }
+    }
+
+    fn lower_bounded_nat_computational(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        nat: BoundedNatV1,
+        eliminators: &[EliminatorFrame<'_>],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let eliminator = eliminators[0];
+        let remaining = &eliminators[1..];
+        let (zero_body, suc_body, computational) = match eliminator {
+            EliminatorFrame::Computational(frame) => {
+                let zero = frame.cases.iter().find(|case| {
+                    case.constructor == self.process_symbols.nat_zero
+                        && case.argument_binders == 0
+                        && case.recursive_positions.is_empty()
+                });
+                let suc = frame.cases.iter().find(|case| {
+                    case.constructor == self.process_symbols.nat_suc
+                        && case.argument_binders == 1
+                        && case.recursive_positions.as_slice() == [0]
+                });
+                let (Some(zero), Some(suc)) = (zero, suc) else {
+                    return Err(unsupported(
+                        "BoundedNat",
+                        "computational Nat requires Zero and one recursive Suc predecessor",
+                    ));
+                };
+                (&zero.body, &suc.body, true)
+            }
+            EliminatorFrame::Ordinary(frame) => {
+                let zero = frame.cases.iter().find(|case| {
+                    case.constructor == self.process_symbols.nat_zero && case.binders == 0
+                });
+                let suc = frame.cases.iter().find(|case| {
+                    case.constructor == self.process_symbols.nat_suc && case.binders == 1
+                });
+                let (Some(zero), Some(suc)) = (zero, suc) else {
+                    return Err(unsupported(
+                        "BoundedNat",
+                        "ordinary Nat frame requires exact Zero and Suc predecessor arms",
+                    ));
+                };
+                (&zero.body, &suc.body, false)
+            }
+        };
+
+        let zero_value = builder.ins().iconst(types::I64, 0);
+        let zero_nat = Lowered::BoundedNat(BoundedNatV1::derived_from_validated(zero_value));
+        let zero_frame_env =
+            match self.materialize_eliminator_frame_env(builder, eliminator, &zero_nat)? {
+                Ok(env) => env,
+                Err(trap) => return Ok(Lowered::Trap(trap)),
+            };
+        let zero_lowered = if remaining.is_empty() {
+            self.lower_expr(builder, zero_body, &zero_frame_env)?
+        } else {
+            self.lower_computational_producer_expr(builder, zero_body, &zero_frame_env, remaining)?
+        };
+        let (initial, result_kind) =
+            self.merge_scalar_branch(builder, zero_lowered, "BoundedNat")?;
+
+        let loop_block = builder.create_block();
+        let step_block = builder.create_block();
+        let done_block = builder.create_block();
+        #[cfg(test)]
+        let break_decrement =
+            self.bounded_nat_mutation == BoundedNatLoweringMutation::BrokenDecrement;
+        #[cfg(not(test))]
+        let break_decrement = false;
+        #[cfg(test)]
+        let expose_raw_predecessor =
+            self.bounded_nat_mutation == BoundedNatLoweringMutation::RawScalarPredecessor;
+        #[cfg(not(test))]
+        let expose_raw_predecessor = false;
+        builder.append_block_param(loop_block, types::I64);
+        builder.append_block_param(loop_block, types::I64);
+        if break_decrement {
+            builder.append_block_param(loop_block, types::I64);
+        }
+        builder.append_block_param(done_block, types::I64);
+        if break_decrement {
+            builder.ins().jump(
+                loop_block,
+                &[zero_value.into(), initial.into(), zero_value.into()],
+            );
+        } else {
+            builder
+                .ins()
+                .jump(loop_block, &[zero_value.into(), initial.into()]);
+        }
+
+        builder.switch_to_block(loop_block);
+        let predecessor_value = builder.block_params(loop_block)[0];
+        let induction_value = builder.block_params(loop_block)[1];
+        if break_decrement {
+            let fuel = builder.block_params(loop_block)[2];
+            let compare_block = builder.create_block();
+            let exhausted = builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::UnsignedGreaterThan,
+                fuel,
+                nat.value,
+            );
+            let nontermination = builder.ins().iconst(types::I64, -2);
+            builder.ins().brif(
+                exhausted,
+                done_block,
+                &[nontermination.into()],
+                compare_block,
+                &[],
+            );
+            builder.switch_to_block(compare_block);
+        }
+        let complete = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            predecessor_value,
+            nat.value,
+        );
+        builder.ins().brif(
+            complete,
+            done_block,
+            &[induction_value.into()],
+            step_block,
+            &[],
+        );
+
+        builder.switch_to_block(step_block);
+        let successor_value = if break_decrement {
+            predecessor_value
+        } else {
+            builder.ins().iadd_imm(predecessor_value, 1)
+        };
+        let observed_predecessor = if expose_raw_predecessor {
+            nat.value
+        } else {
+            predecessor_value
+        };
+        let predecessor =
+            Lowered::BoundedNat(BoundedNatV1::derived_from_validated(observed_predecessor));
+        let retained = Lowered::BoundedNat(BoundedNatV1::derived_from_validated(successor_value));
+        let frame_env =
+            match self.materialize_eliminator_frame_env(builder, eliminator, &retained)? {
+                Ok(env) => env,
+                Err(trap) => return Ok(Lowered::Trap(trap)),
+            };
+        let induction = match result_kind {
+            ScalarMergeKind::Int => Lowered::Int {
+                value: induction_value,
+                known: None,
+            },
+            ScalarMergeKind::Bool => Lowered::Bool {
+                value: induction_value,
+                known: None,
+            },
+            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus {
+                value: induction_value,
+            },
+        };
+        let mut suc_env = Vec::new();
+        if computational {
+            suc_env.push(induction);
+        }
+        suc_env.push(predecessor);
+        suc_env.extend(frame_env);
+        let suc_lowered = if remaining.is_empty() {
+            self.lower_expr(builder, suc_body, &suc_env)?
+        } else {
+            self.lower_computational_producer_expr(builder, suc_body, &suc_env, remaining)?
+        };
+        let (next, next_kind) = self.merge_scalar_branch(builder, suc_lowered, "BoundedNat")?;
+        if next_kind != result_kind {
+            return Err(unsupported(
+                "BoundedNat",
+                "recursive Suc result disagrees with the Zero result kind",
+            ));
+        }
+        if break_decrement {
+            let fuel = builder.block_params(loop_block)[2];
+            let next_fuel = builder.ins().iadd_imm(fuel, 1);
+            builder.ins().jump(
+                loop_block,
+                &[successor_value.into(), next.into(), next_fuel.into()],
+            );
+        } else {
+            builder
+                .ins()
+                .jump(loop_block, &[successor_value.into(), next.into()]);
+        }
+
+        builder.switch_to_block(done_block);
+        let value = builder.block_params(done_block)[0];
+        Ok(match result_kind {
+            ScalarMergeKind::Int => Lowered::Int { value, known: None },
+            ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
+            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
+        })
     }
 
     fn materialize_eliminator_frame_env(
@@ -3016,6 +3480,9 @@ impl<'a> Lowering<'a> {
                         builder, present, value, &none, &some, cases, default, env,
                     );
                 }
+                if let Lowered::BoundedNat(nat) = lowered_scrutinee {
+                    return self.lower_bounded_nat_match(builder, nat, cases, default, env);
+                }
                 if let Lowered::HostResult {
                     success,
                     error,
@@ -3254,21 +3721,58 @@ impl<'a> Lowering<'a> {
                         default,
                         outer_env,
                     } => {
-                        let mut call_env = args
+                        let mut layers = vec![(cases, default, outer_env)];
+                        let mut base = *recursive;
+                        while let Lowered::ComputationalRecursorClosure {
+                            recursive,
+                            cases,
+                            default,
+                            outer_env,
+                        } = base
+                        {
+                            layers.push((cases, default, outer_env));
+                            base = *recursive;
+                        }
+                        let frames = layers
                             .iter()
-                            .map(|arg| self.lower_expr(builder, arg, env))
-                            .collect::<Result<Vec<_>, _>>()?;
+                            .map(|(cases, default, outer_env)| {
+                                EliminatorFrame::Computational(ComputationalEliminatorFrame {
+                                    cases,
+                                    default,
+                                    env: outer_env,
+                                    retained_scrutinee_index: None,
+                                    deferred_constructor_case: None,
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        if let Lowered::BoundedNat(predecessor) = base {
+                            if !args.is_empty() {
+                                return Err(unsupported(
+                                    "BoundedNat",
+                                    "structural Nat recursive hypothesis takes no arguments",
+                                ));
+                            }
+                            return self.lower_bounded_nat_computational(
+                                builder,
+                                predecessor,
+                                &frames,
+                            );
+                        }
                         let Lowered::Closure {
                             captures,
                             params,
                             body,
-                        } = *recursive
+                        } = base
                         else {
                             return Err(unsupported(
                                 "ComputationalMatch",
                                 "recursive constructor field is not a closure",
                             ));
                         };
+                        let mut call_env = args
+                            .iter()
+                            .map(|arg| self.lower_expr(builder, arg, env))
+                            .collect::<Result<Vec<_>, _>>()?;
                         if params.len() != call_env.len() {
                             return Err(unsupported(
                                 "ComputationalMatch",
@@ -3281,13 +3785,11 @@ impl<'a> Lowering<'a> {
                         }
                         call_env.extend(captures);
                         call_env.extend_from_slice(env);
-                        self.lower_computational_match_expr(
+                        self.lower_computational_producer_expr(
                             builder,
                             &body,
-                            &cases,
-                            &default,
                             &call_env,
-                            &outer_env,
+                            &frames,
                         )
                     }
                     _ => Err(unsupported("Call", "callee is not a closure")),
@@ -3475,6 +3977,95 @@ impl<'a> Lowering<'a> {
                     .ins()
                     .stack_store(*token, request, request_offset(0));
             }
+            ken_host::HostOpV1::BufferAllocate => {
+                if capability.is_some() {
+                    return Err(unsupported(
+                        "Effect",
+                        "buffer allocation carried a capability",
+                    ));
+                }
+                let Lowered::Int {
+                    value: capacity, ..
+                } = lowered.first().ok_or_else(|| {
+                    unsupported("Effect", "BufferAllocate is missing its capacity")
+                })?
+                else {
+                    return Err(unsupported("Effect", "BufferAllocate capacity is not Int"));
+                };
+                builder
+                    .ins()
+                    .stack_store(*capacity, request, request_offset(0));
+            }
+            ken_host::HostOpV1::BufferFreeze => {
+                if capability.is_some() {
+                    return Err(unsupported("Effect", "BufferFreeze carried a capability"));
+                }
+                let Lowered::ResourceToken { value: token } = lowered
+                    .first()
+                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its buffer"))?
+                else {
+                    return Err(unsupported(
+                        "Effect",
+                        "BufferFreeze buffer is not a resource",
+                    ));
+                };
+                let Lowered::Int { value: start, .. } = lowered
+                    .get(1)
+                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its start"))?
+                else {
+                    return Err(unsupported("Effect", "BufferFreeze start is not Int"));
+                };
+                let Lowered::Int { value: length, .. } = lowered
+                    .get(2)
+                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its length"))?
+                else {
+                    return Err(unsupported("Effect", "BufferFreeze length is not Int"));
+                };
+                for (index, value) in [*token, *start, *length].into_iter().enumerate() {
+                    builder
+                        .ins()
+                        .stack_store(value, request, request_offset(index));
+                }
+            }
+            ken_host::HostOpV1::FsReadAt | ken_host::HostOpV1::FsWriteAt => {
+                if capability.is_some() {
+                    return Err(unsupported(
+                        "Effect",
+                        "positioned resource operation carried a capability",
+                    ));
+                }
+                let resource = |index: usize, name: &str| {
+                    let Some(Lowered::ResourceToken { value }) = lowered.get(index) else {
+                        return Err(unsupported(
+                            "Effect",
+                            format!("positioned {name} operand is not a resource"),
+                        ));
+                    };
+                    Ok(*value)
+                };
+                let integer = |index: usize, name: &str| {
+                    let Some(Lowered::Int { value, .. }) = lowered.get(index) else {
+                        return Err(unsupported(
+                            "Effect",
+                            format!("positioned {name} operand is not Int"),
+                        ));
+                    };
+                    Ok(*value)
+                };
+                let file = resource(0, "file")?;
+                let file_offset = integer(1, "file offset")?;
+                let buffer = resource(2, "buffer")?;
+                let buffer_start = integer(3, "buffer start")?;
+                let length = integer(4, "length")?;
+                for (index, value) in [file, buffer, file_offset, buffer_start, length]
+                    .into_iter()
+                    .enumerate()
+                {
+                    builder
+                        .ins()
+                        .stack_store(value, request, request_offset(index));
+                }
+            }
             _ => unreachable!("availability was checked above"),
         }
         let reply = builder.create_sized_stack_slot(StackSlotData::new(
@@ -3519,6 +4110,10 @@ impl<'a> Lowering<'a> {
                 ken_host::HostOpV1::FsReadFile => wire.reply_bytes_tag,
                 ken_host::HostOpV1::FsOpen => wire.reply_resource_tag,
                 ken_host::HostOpV1::FsHandleMetadata => wire.reply_metadata_tag,
+                ken_host::HostOpV1::BufferAllocate => wire.reply_resource_tag,
+                ken_host::HostOpV1::BufferFreeze => wire.reply_bytes_tag,
+                ken_host::HostOpV1::FsReadAt => wire.reply_read_progress_tag,
+                ken_host::HostOpV1::FsWriteAt => wire.reply_write_progress_tag,
                 _ => wire.reply_unit_tag,
             } as i64;
             let accepted_tags = match operation {
@@ -3530,6 +4125,14 @@ impl<'a> Lowering<'a> {
                 ken_host::HostOpV1::ResourceRelease => {
                     vec![success_tag, wire.reply_resource_error_tag as i64]
                 }
+                ken_host::HostOpV1::BufferAllocate | ken_host::HostOpV1::BufferFreeze => {
+                    vec![success_tag, wire.reply_resource_error_tag as i64]
+                }
+                ken_host::HostOpV1::FsReadAt | ken_host::HostOpV1::FsWriteAt => vec![
+                    success_tag,
+                    wire.reply_error_tag as i64,
+                    wire.reply_resource_error_tag as i64,
+                ],
                 _ => vec![success_tag, wire.reply_error_tag as i64],
             };
             Self::require_one_of_i64(builder, tag, &accepted_tags);
@@ -3569,6 +4172,18 @@ impl<'a> Lowering<'a> {
                 i32::try_from(wire.reply_resource_error_held_offset)
                     .expect("resource error held offset is u32"),
             );
+            let resource_expected_kind = builder.ins().stack_load(
+                types::I64,
+                reply,
+                i32::try_from(wire.reply_resource_error_expected_kind_offset)
+                    .expect("resource error expected-kind offset is u32"),
+            );
+            let resource_actual_kind = builder.ins().stack_load(
+                types::I64,
+                reply,
+                i32::try_from(wire.reply_resource_error_actual_kind_offset)
+                    .expect("resource error actual-kind offset is u32"),
+            );
             Self::validate_resource_error_reply(
                 builder,
                 tag,
@@ -3580,8 +4195,11 @@ impl<'a> Lowering<'a> {
                 resource_io,
                 resource_required,
                 resource_held,
+                resource_expected_kind,
+                resource_actual_kind,
                 wire.resource_error_reply_schema,
                 wire.resource_kind_fs_handle,
+                wire.resource_kind_buffer,
             );
             let payload = builder.ins().sshr_imm(detail, 32);
             let last = self.process_symbols.io_errors.len().saturating_sub(1);
@@ -3647,7 +4265,12 @@ impl<'a> Lowering<'a> {
                 }
             } else if matches!(
                 operation,
-                ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease
+                ken_host::HostOpV1::FsHandleMetadata
+                    | ken_host::HostOpV1::ResourceRelease
+                    | ken_host::HostOpV1::BufferAllocate
+                    | ken_host::HostOpV1::BufferFreeze
+                    | ken_host::HostOpV1::FsReadAt
+                    | ken_host::HostOpV1::FsWriteAt
             ) {
                 let generic = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -3682,6 +4305,23 @@ impl<'a> Lowering<'a> {
                 });
                 let identity_low = builder.ins().band_imm(resource_identity, 0xffff_ffff);
                 let identity_high = builder.ins().ushr_imm(resource_identity, 32);
+                let resource_kind_value = |discriminator| {
+                    Lowered::DynamicConstructor(DynamicConstructorV1 {
+                        discriminator,
+                        alternatives: vec![
+                            DynamicConstructorAlternativeV1 {
+                                tag: wire.resource_kind_fs_handle as i64,
+                                constructor: self.process_symbols.resource_kind_fs_handle.clone(),
+                                fields: Vec::new(),
+                            },
+                            DynamicConstructorAlternativeV1 {
+                                tag: wire.resource_kind_buffer as i64,
+                                constructor: self.process_symbols.resource_kind_buffer.clone(),
+                                fields: Vec::new(),
+                            },
+                        ],
+                    })
+                };
                 Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: surface_tag,
                     alternatives: vec![
@@ -3718,13 +4358,7 @@ impl<'a> Lowering<'a> {
                             tag: 4,
                             constructor: self.process_symbols.resource_release_failed.clone(),
                             fields: vec![
-                                Lowered::Constructor {
-                                    constructor: self
-                                        .process_symbols
-                                        .resource_kind_fs_handle
-                                        .clone(),
-                                    args: Vec::new(),
-                                },
+                                resource_kind_value(resource_kind),
                                 Lowered::Constructor {
                                     constructor: self
                                         .process_symbols
@@ -3744,11 +4378,44 @@ impl<'a> Lowering<'a> {
                                 surface_io_error,
                             ],
                         },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 5,
+                            constructor: self.process_symbols.resource_kind_mismatch.clone(),
+                            fields: vec![
+                                resource_kind_value(resource_expected_kind),
+                                resource_kind_value(resource_actual_kind),
+                            ],
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 6,
+                            constructor: self.process_symbols.resource_buffer_limit.clone(),
+                            fields: Vec::new(),
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 7,
+                            constructor: self.process_symbols.resource_invalid_offset.clone(),
+                            fields: Vec::new(),
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 8,
+                            constructor: self.process_symbols.resource_invalid_bounds.clone(),
+                            fields: Vec::new(),
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 9,
+                            constructor: self.process_symbols.resource_no_progress.clone(),
+                            fields: Vec::new(),
+                        },
                     ],
                 })
             } else {
                 io_error
             };
+            let success = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                success_tag,
+            );
             let ok = if operation == ken_host::HostOpV1::FsReadFile {
                 Lowered::ResponseBytes {
                     pointer: builder.ins().stack_load(
@@ -3766,6 +4433,145 @@ impl<'a> Lowering<'a> {
                 }
             } else if operation == ken_host::HostOpV1::FsOpen {
                 Lowered::ResourceToken { value: detail }
+            } else if operation == ken_host::HostOpV1::BufferAllocate {
+                Lowered::ResourceToken { value: detail }
+            } else if operation == ken_host::HostOpV1::BufferFreeze {
+                Lowered::ResponseBytes {
+                    pointer: builder.ins().stack_load(
+                        pointer_type,
+                        reply,
+                        i32::try_from(wire.reply_bytes_data_offset)
+                            .expect("reply bytes data offset is u32"),
+                    ),
+                    len: builder.ins().stack_load(
+                        types::I64,
+                        reply,
+                        i32::try_from(wire.reply_bytes_len_offset)
+                            .expect("reply bytes len offset is u32"),
+                    ),
+                }
+            } else if operation == ken_host::HostOpV1::FsReadAt {
+                let reply_data = builder.ins().stack_load(
+                    pointer_type,
+                    reply,
+                    i32::try_from(wire.reply_bytes_data_offset)
+                        .expect("reply bytes data offset is u32"),
+                );
+                let reply_start = builder.ins().stack_load(
+                    types::I64,
+                    reply,
+                    i32::try_from(wire.reply_bytes_len_offset)
+                        .expect("reply bytes len offset is u32"),
+                );
+                let nonzero = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+                    detail,
+                    0,
+                );
+                let read_some = builder.ins().band(success, nonzero);
+                let zero = builder.ins().iconst(types::I64, 0);
+                let eof_data = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    reply_data,
+                    zero,
+                );
+                let eof_start = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    reply_start,
+                    0,
+                );
+                let eof_valid = builder.ins().band(eof_data, eof_start);
+                let is_zero = builder.ins().bnot(nonzero);
+                let read_eof = builder.ins().band(success, is_zero);
+                Self::require_when(builder, read_eof, eof_valid);
+                Self::require_when(builder, read_some, eof_data);
+                let Lowered::Int {
+                    value: request_start,
+                    ..
+                } = &lowered[3]
+                else {
+                    unreachable!("positioned request start was validated")
+                };
+                let Lowered::Int {
+                    value: request_length,
+                    ..
+                } = &lowered[4]
+                else {
+                    unreachable!("positioned request length was validated")
+                };
+                let (count, predecessor, remaining) = Self::mint_validated_progress_nat(
+                    builder,
+                    read_some,
+                    detail,
+                    *request_start,
+                    *request_length,
+                    Some(reply_start),
+                );
+                let span = Lowered::Constructor {
+                    constructor: self.process_symbols.private_buffer_span.clone(),
+                    args: vec![
+                        Lowered::Int {
+                            value: reply_start,
+                            known: None,
+                        },
+                        Lowered::BoundedNat(count),
+                    ],
+                };
+                let transferred = Lowered::Constructor {
+                    constructor: self.process_symbols.private_transfer_count.clone(),
+                    args: vec![
+                        Lowered::BoundedNat(predecessor),
+                        Lowered::BoundedNat(remaining),
+                    ],
+                };
+                Lowered::DynamicConstructor(DynamicConstructorV1 {
+                    discriminator: builder.ins().uextend(types::I64, nonzero),
+                    alternatives: vec![
+                        DynamicConstructorAlternativeV1 {
+                            tag: 0,
+                            constructor: self.process_symbols.read_eof.clone(),
+                            fields: Vec::new(),
+                        },
+                        DynamicConstructorAlternativeV1 {
+                            tag: 1,
+                            constructor: self.process_symbols.read_some.clone(),
+                            fields: vec![span, transferred],
+                        },
+                    ],
+                })
+            } else if operation == ken_host::HostOpV1::FsWriteAt {
+                let Lowered::Int {
+                    value: request_start,
+                    ..
+                } = &lowered[3]
+                else {
+                    unreachable!("positioned request start was validated")
+                };
+                let Lowered::Int {
+                    value: request_length,
+                    ..
+                } = &lowered[4]
+                else {
+                    unreachable!("positioned request length was validated")
+                };
+                let (_count, predecessor, remaining) = Self::mint_validated_progress_nat(
+                    builder,
+                    success,
+                    detail,
+                    *request_start,
+                    *request_length,
+                    None,
+                );
+                Lowered::Constructor {
+                    constructor: self.process_symbols.wrote.clone(),
+                    args: vec![Lowered::Constructor {
+                        constructor: self.process_symbols.private_transfer_count.clone(),
+                        args: vec![
+                            Lowered::BoundedNat(predecessor),
+                            Lowered::BoundedNat(remaining),
+                        ],
+                    }],
+                }
             } else if operation == ken_host::HostOpV1::FsHandleMetadata {
                 Lowered::Int {
                     value: detail,
@@ -3777,11 +4583,6 @@ impl<'a> Lowering<'a> {
                     args: Vec::new(),
                 }
             };
-            let success = builder.ins().icmp_imm(
-                cranelift_codegen::ir::condcodes::IntCC::Equal,
-                tag,
-                success_tag,
-            );
             Ok(Lowered::HostResult {
                 success,
                 error: Box::new(error),
@@ -3955,6 +4756,91 @@ impl<'a> Lowering<'a> {
         builder.switch_to_block(valid);
     }
 
+    fn require_true(builder: &mut FunctionBuilder<'_>, condition: cranelift_codegen::ir::Value) {
+        let valid = builder.create_block();
+        let invalid = builder.create_block();
+        builder.ins().brif(condition, valid, &[], invalid, &[]);
+        builder.switch_to_block(invalid);
+        let failure = builder.ins().iconst(types::I64, -1);
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(valid);
+    }
+
+    fn require_when(
+        builder: &mut FunctionBuilder<'_>,
+        enabled: cranelift_codegen::ir::Value,
+        condition: cranelift_codegen::ir::Value,
+    ) {
+        let validate = builder.create_block();
+        let done = builder.create_block();
+        builder.ins().brif(enabled, validate, &[], done, &[]);
+        builder.switch_to_block(validate);
+        Self::require_true(builder, condition);
+        builder.ins().jump(done, &[]);
+        builder.switch_to_block(done);
+    }
+
+    fn mint_validated_progress_nat(
+        builder: &mut FunctionBuilder<'_>,
+        success: cranelift_codegen::ir::Value,
+        count: cranelift_codegen::ir::Value,
+        request_start: cranelift_codegen::ir::Value,
+        request_length: cranelift_codegen::ir::Value,
+        reply_start: Option<cranelift_codegen::ir::Value>,
+    ) -> (BoundedNatV1, BoundedNatV1, BoundedNatV1) {
+        let positive = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedGreaterThan,
+            count,
+            0,
+        );
+        let bounded = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
+            count,
+            request_length,
+        );
+        let request_end = builder.ins().iadd(request_start, request_length);
+        let request_no_wrap = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedGreaterThanOrEqual,
+            request_end,
+            request_start,
+        );
+        let span_start = reply_start.unwrap_or(request_start);
+        let span_end = builder.ins().iadd(span_start, count);
+        let span_no_wrap = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedGreaterThanOrEqual,
+            span_end,
+            span_start,
+        );
+        let starts_at_request = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            span_start,
+            request_start,
+        );
+        let inside = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
+            span_end,
+            request_end,
+        );
+        let valid = [
+            positive,
+            bounded,
+            request_no_wrap,
+            span_no_wrap,
+            starts_at_request,
+            inside,
+        ]
+        .into_iter()
+        .reduce(|left, right| builder.ins().band(left, right))
+        .expect("progress validation has fixed clauses");
+        Self::require_when(builder, success, valid);
+
+        let minted = BoundedNatV1::mint_after_reply_validation(count);
+        let predecessor = minted.predecessor(builder);
+        let remaining =
+            BoundedNatV1::derived_from_validated(builder.ins().isub(request_length, count));
+        (minted, predecessor, remaining)
+    }
+
     fn validate_resource_io(
         builder: &mut FunctionBuilder<'_>,
         encoded: cranelift_codegen::ir::Value,
@@ -3995,8 +4881,11 @@ impl<'a> Lowering<'a> {
         io: cranelift_codegen::ir::Value,
         required: cranelift_codegen::ir::Value,
         held: cranelift_codegen::ir::Value,
+        actual_expected_kind: cranelift_codegen::ir::Value,
+        actual_actual_kind: cranelift_codegen::ir::Value,
         expected_schema: u64,
         expected_kind: u64,
+        buffer_kind: u64,
     ) {
         let resource = builder.create_block();
         let done = builder.create_block();
@@ -4007,12 +4896,7 @@ impl<'a> Lowering<'a> {
         );
         builder.ins().brif(is_resource, resource, &[], done, &[]);
         builder.switch_to_block(resource);
-        let arms = [
-            builder.create_block(),
-            builder.create_block(),
-            builder.create_block(),
-            builder.create_block(),
-        ];
+        let arms = (0..9).map(|_| builder.create_block()).collect::<Vec<_>>();
         let mut test = builder
             .current_block()
             .expect("resource reply validation block");
@@ -4030,7 +4914,16 @@ impl<'a> Lowering<'a> {
             builder.switch_to_block(arm);
             match index {
                 0 | 1 => {
-                    for field in [schema, kind, identity, io, required, held] {
+                    for field in [
+                        schema,
+                        kind,
+                        identity,
+                        io,
+                        required,
+                        held,
+                        actual_expected_kind,
+                        actual_actual_kind,
+                    ] {
                         Self::require_i64(builder, field, 0);
                     }
                 }
@@ -4039,15 +4932,58 @@ impl<'a> Lowering<'a> {
                     Self::require_i64(builder, kind, 0);
                     Self::require_i64(builder, identity, 0);
                     Self::require_i64(builder, io, 0);
+                    Self::require_i64(builder, actual_expected_kind, 0);
+                    Self::require_i64(builder, actual_actual_kind, 0);
                     Self::require_u8(builder, required);
                     Self::require_u8(builder, held);
                 }
                 3 => {
                     Self::require_i64(builder, schema, expected_schema as i64);
-                    Self::require_i64(builder, kind, expected_kind as i64);
+                    Self::require_one_of_i64(
+                        builder,
+                        kind,
+                        &[expected_kind as i64, buffer_kind as i64],
+                    );
                     Self::require_i64(builder, required, 0);
                     Self::require_i64(builder, held, 0);
+                    Self::require_i64(builder, actual_expected_kind, 0);
+                    Self::require_i64(builder, actual_actual_kind, 0);
                     Self::validate_resource_io(builder, io);
+                }
+                4 => {
+                    for field in [schema, kind, identity, io, required, held] {
+                        Self::require_i64(builder, field, 0);
+                    }
+                    Self::require_one_of_i64(
+                        builder,
+                        actual_expected_kind,
+                        &[expected_kind as i64, buffer_kind as i64],
+                    );
+                    Self::require_one_of_i64(
+                        builder,
+                        actual_actual_kind,
+                        &[expected_kind as i64, buffer_kind as i64],
+                    );
+                    let distinct = builder.ins().icmp(
+                        cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+                        actual_expected_kind,
+                        actual_actual_kind,
+                    );
+                    Self::require_true(builder, distinct);
+                }
+                5..=8 => {
+                    for field in [
+                        schema,
+                        kind,
+                        identity,
+                        io,
+                        required,
+                        held,
+                        actual_expected_kind,
+                        actual_actual_kind,
+                    ] {
+                        Self::require_i64(builder, field, 0);
+                    }
                 }
                 _ => unreachable!(),
             }
@@ -4286,6 +5222,71 @@ impl<'a> Lowering<'a> {
             Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
             None => unreachable!("HostResult emits both closed alternatives"),
         })
+    }
+
+    fn lower_bounded_nat_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        nat: BoundedNatV1,
+        cases: &[crate::RuntimeMatchCase],
+        _default: &RuntimeTrap,
+        env: &[Lowered],
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let zero = cases
+            .iter()
+            .find(|case| case.constructor == self.process_symbols.nat_zero && case.binders == 0);
+        let suc = cases
+            .iter()
+            .find(|case| case.constructor == self.process_symbols.nat_suc && case.binders == 1);
+        let (Some(zero), Some(suc)) = (zero, suc) else {
+            return Err(unsupported(
+                "BoundedNat",
+                "structural Nat match requires exact Zero and Suc predecessor arms",
+            ));
+        };
+        let zero_block = builder.create_block();
+        let suc_block = builder.create_block();
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        let predecessor = nat.predecessor(builder);
+        let is_zero =
+            builder
+                .ins()
+                .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, nat.value, 0);
+        builder.ins().brif(is_zero, zero_block, &[], suc_block, &[]);
+        let mut merge_kind = None;
+        for (block, case, predecessor) in [
+            (zero_block, zero, None),
+            (suc_block, suc, Some(predecessor)),
+        ] {
+            builder.switch_to_block(block);
+            let mut arm_env = predecessor
+                .map(|predecessor| vec![Lowered::BoundedNat(predecessor)])
+                .unwrap_or_default();
+            arm_env.extend_from_slice(env);
+            let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
+            let (value, kind) = self.merge_scalar_branch(builder, lowered, "BoundedNat")?;
+            match merge_kind {
+                Some(expected) if expected != kind => {
+                    return Err(unsupported(
+                        "BoundedNat",
+                        "Zero and Suc arms disagree on result kind",
+                    ));
+                }
+                Some(_) => {}
+                None => merge_kind = Some(kind),
+            }
+            builder.ins().jump(merge, &[value.into()]);
+        }
+        builder.switch_to_block(merge);
+        let value = builder.block_params(merge)[0];
+        Ok(
+            match merge_kind.expect("both structural Nat arms were emitted") {
+                ScalarMergeKind::Int => Lowered::Int { value, known: None },
+                ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
+                ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
+            },
+        )
     }
 
     fn lower_dynamic_constructor_match(
@@ -5242,6 +6243,7 @@ impl<'a> Lowering<'a> {
             | Lowered::ResponseBytes { .. }
             | Lowered::CapabilityToken { .. }
             | Lowered::ResourceToken { .. }
+            | Lowered::BoundedNat(_)
             | Lowered::HostResult { .. }
             | Lowered::DynamicConstructor(_) => Err(unsupported(
                 "Result",
@@ -5340,6 +6342,158 @@ mod tests {
         RuntimeSymbolMetadata,
     };
 
+    #[test]
+    fn px8n_bounded_nat_observes_exact_zero_successor_and_recursive_order() {
+        assert_eq!(
+            run_checked_bounded_nat_fixture(
+                3,
+                7,
+                3,
+                7,
+                BoundedNatFixtureObservation::OrdinaryRemaining,
+                BoundedNatLoweringMutation::Exact,
+            )
+            .unwrap(),
+            10,
+            "a zero remainder selects the structural Zero arm",
+        );
+        assert_eq!(
+            run_checked_bounded_nat_fixture(
+                3,
+                7,
+                5,
+                7,
+                BoundedNatFixtureObservation::OrdinaryCount,
+                BoundedNatLoweringMutation::Exact,
+            )
+            .unwrap(),
+            22,
+            "Suc exposes predecessor 2 as a second structural successor",
+        );
+        assert_eq!(
+            run_checked_bounded_nat_fixture(
+                3,
+                7,
+                5,
+                7,
+                BoundedNatFixtureObservation::ComputationalCount,
+                BoundedNatLoweringMutation::Exact,
+            )
+            .unwrap(),
+            0,
+            "the recursive Suc case consumes the ordered predecessor and retained IH",
+        );
+    }
+
+    #[test]
+    fn px8n_bounded_nat_rejects_zero_over_bound_misaligned_and_wrapping_progress() {
+        for (count, start, length, reply_start) in [
+            (0, 7, 5, 7),
+            (6, 7, 5, 7),
+            (3, 7, 5, 8),
+            (3, u64::MAX - 1, 5, u64::MAX - 1),
+        ] {
+            assert_eq!(
+                run_checked_bounded_nat_fixture(
+                    count,
+                    start,
+                    length,
+                    reply_start,
+                    BoundedNatFixtureObservation::OrdinaryCount,
+                    BoundedNatLoweringMutation::Exact,
+                )
+                .unwrap(),
+                -1,
+                "invalid checked-host progress returns before carrier mint observation",
+            );
+        }
+    }
+
+    #[test]
+    fn px8n_decrement_and_raw_scalar_mutations_fail_the_structural_oracle() {
+        let run = |mutation| {
+            run_checked_bounded_nat_fixture(
+                3,
+                7,
+                5,
+                7,
+                BoundedNatFixtureObservation::ComputationalCount,
+                mutation,
+            )
+            .unwrap()
+        };
+
+        let exact = run(BoundedNatLoweringMutation::Exact);
+        assert_eq!(exact, 0);
+        assert_eq!(
+            run(BoundedNatLoweringMutation::BrokenDecrement),
+            -2,
+            "the live production loop's test-only fuel guard detects nontermination",
+        );
+        assert_eq!(
+            run(BoundedNatLoweringMutation::RawScalarPredecessor),
+            1,
+            "the live producer exposes the exact wrong result when its Suc binder receives the raw scalar",
+        );
+    }
+
+    #[test]
+    fn px8n_fs_write_at_arm_constructs_short_wrote_and_exact_no_progress() {
+        let (short, fixture) = run_px8n_write_arm_fixture(PX8N_SHORT_WROTE);
+        assert_eq!(fixture.malformed_request, 0);
+        assert_eq!(fixture.call_index, 3);
+        assert_eq!(
+            short, 3,
+            "Wrote 1 of 4 exposes predecessor Zero and remaining structural Nat 3",
+        );
+
+        let (zero, fixture) = run_px8n_write_arm_fixture(PX8N_ZERO_WRITE);
+        assert_eq!(fixture.malformed_request, 0);
+        assert_eq!(fixture.call_index, 3);
+        assert_eq!(
+            zero, 70,
+            "zero write reaches exact ResourceError.NoProgress"
+        );
+    }
+
+    #[test]
+    fn px8n_fs_write_at_arm_rejects_over_bound_reply_before_observation() {
+        let (result, fixture) = run_px8n_write_arm_fixture(PX8N_OVER_BOUND_WRITE);
+        assert_eq!(fixture.malformed_request, 0);
+        assert_eq!(fixture.call_index, 3);
+        assert_eq!(
+            result, -1,
+            "Wrote 5 for an effective request of 4 rejects before a Nat is observable",
+        );
+    }
+
+    #[test]
+    fn px8n_fs_read_at_arm_distinguishes_eof_and_short_read_some() {
+        let (eof, fixture) = run_px8n_read_arm_fixture(PX8N_READ_EOF);
+        assert_eq!(fixture.malformed_request, 0);
+        assert_eq!(fixture.call_index, 3);
+        assert_eq!(eof, 10, "zero read constructs exact ReadEof");
+
+        let (short, fixture) = run_px8n_read_arm_fixture(PX8N_SHORT_READ);
+        assert_eq!(fixture.malformed_request, 0);
+        assert_eq!(fixture.call_index, 3);
+        assert_eq!(
+            short, 12,
+            "ReadSome 1 of 4 carries the same structural Nat 1 in BufferSpan",
+        );
+    }
+
+    #[test]
+    fn px8n_fs_read_at_arm_rejects_over_bound_span_before_observation() {
+        let (result, fixture) = run_px8n_read_arm_fixture(PX8N_OVER_BOUND_READ);
+        assert_eq!(fixture.malformed_request, 0);
+        assert_eq!(fixture.call_index, 3);
+        assert_eq!(
+            result, -1,
+            "ReadSome 5 for an effective request of 4 rejects before a Nat is observable",
+        );
+    }
+
     #[repr(C)]
     struct BorrowedFixtureValue {
         kind: u64,
@@ -5353,6 +6507,442 @@ mod tests {
         process_input: *const BorrowedFixtureValue,
         host_context: *mut std::ffi::c_void,
         capability: u64,
+    }
+
+    #[repr(C)]
+    struct Px8nHostReplyFixture {
+        scenario: u64,
+        call_index: u64,
+        malformed_request: u64,
+    }
+
+    const PX8N_SHORT_WROTE: u64 = 0;
+    const PX8N_ZERO_WRITE: u64 = 1;
+    const PX8N_OVER_BOUND_WRITE: u64 = 2;
+    const PX8N_SHORT_READ: u64 = 3;
+    const PX8N_READ_EOF: u64 = 4;
+    const PX8N_OVER_BOUND_READ: u64 = 5;
+
+    extern "C" fn px8n_scripted_host_dispatch(
+        invocation: *const std::ffi::c_void,
+        operation: i64,
+        request: *const std::ffi::c_void,
+        request_size: i64,
+        reply: *mut std::ffi::c_void,
+    ) -> i64 {
+        // SAFETY: this symbol is installed only into the test JIT below, which
+        // supplies these exact call-scoped fixtures for one synchronous call.
+        let invocation = unsafe { &*(invocation.cast::<NativeInvocationFixture>()) };
+        // SAFETY: `host_context` points to the live fixture for the duration of
+        // the compiled call and is never retained by the dispatcher.
+        let fixture = unsafe { &mut *(invocation.host_context.cast::<Px8nHostReplyFixture>()) };
+        let expected = if fixture.call_index < 2 {
+            ken_host::HostOpV1::BufferAllocate
+        } else if fixture.scenario >= PX8N_SHORT_READ {
+            ken_host::HostOpV1::FsReadAt
+        } else {
+            ken_host::HostOpV1::FsWriteAt
+        };
+        if operation != expected as i64 {
+            fixture.malformed_request = 1;
+            return -1;
+        }
+        let wire = ken_host::host_effect_wire_layout_v1(expected)
+            .expect("PX8-N scripted operation has a generated wire layout");
+        if request_size != i64::from(wire.request_size) {
+            fixture.malformed_request = 2;
+            return -1;
+        }
+        let load = |offset: u32| {
+            // SAFETY: each offset is generated from the target-C layout for
+            // this exact request record and the lowering supplied its size.
+            unsafe { *(request.cast::<u8>().add(offset as usize).cast::<u64>()) }
+        };
+        if expected == ken_host::HostOpV1::BufferAllocate {
+            if load(wire.request_offsets[0]) != 8 {
+                fixture.malformed_request = 3;
+                return -1;
+            }
+        } else if [
+            load(wire.request_offsets[0]),
+            load(wire.request_offsets[1]),
+            load(wire.request_offsets[2]),
+            load(wire.request_offsets[3]),
+            load(wire.request_offsets[4]),
+        ] != [11, 22, 0, 7, 4]
+        {
+            fixture.malformed_request = 4;
+            return -1;
+        }
+        // SAFETY: the reply pointer names the target-C-sized stack record
+        // supplied by the compiled caller for this exact operation.
+        unsafe { std::ptr::write_bytes(reply.cast::<u8>(), 0, wire.reply_size as usize) };
+        let store = |offset: u32, value: u64| {
+            // SAFETY: generated offsets are aligned u64 fields within the
+            // zeroed reply record above.
+            unsafe {
+                *(reply.cast::<u8>().add(offset as usize).cast::<u64>()) = value;
+            }
+        };
+        if expected == ken_host::HostOpV1::BufferAllocate {
+            store(wire.reply_tag_offset, wire.reply_resource_tag);
+            store(
+                wire.reply_detail_offset,
+                if fixture.call_index == 0 { 11 } else { 22 },
+            );
+        } else {
+            match fixture.scenario {
+                PX8N_SHORT_WROTE => {
+                    store(wire.reply_tag_offset, wire.reply_write_progress_tag);
+                    store(wire.reply_detail_offset, 1);
+                }
+                PX8N_ZERO_WRITE => {
+                    store(wire.reply_tag_offset, wire.reply_resource_error_tag);
+                    store(wire.reply_detail_offset, wire.resource_error_no_progress);
+                }
+                PX8N_OVER_BOUND_WRITE => {
+                    store(wire.reply_tag_offset, wire.reply_write_progress_tag);
+                    store(wire.reply_detail_offset, 5);
+                }
+                PX8N_SHORT_READ => {
+                    store(wire.reply_tag_offset, wire.reply_read_progress_tag);
+                    store(wire.reply_detail_offset, 1);
+                    store(wire.reply_bytes_len_offset, 7);
+                }
+                PX8N_READ_EOF => {
+                    store(wire.reply_tag_offset, wire.reply_read_progress_tag);
+                }
+                PX8N_OVER_BOUND_READ => {
+                    store(wire.reply_tag_offset, wire.reply_read_progress_tag);
+                    store(wire.reply_detail_offset, 5);
+                    store(wire.reply_bytes_len_offset, 7);
+                }
+                _ => return -1,
+            }
+        }
+        fixture.call_index += 1;
+        0
+    }
+
+    fn px8n_exact_nat(
+        symbols: &crate::NativeProcessSymbols,
+        nat: RuntimeExpr,
+        depth: usize,
+        exact: RuntimeExpr,
+    ) -> RuntimeExpr {
+        let mismatch = RuntimeExpr::Value(RuntimeValue::Int(99));
+        let cases = if depth == 0 {
+            vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.nat_zero.clone(),
+                    binders: 0,
+                    body: exact,
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.nat_suc.clone(),
+                    binders: 1,
+                    body: mismatch,
+                },
+            ]
+        } else {
+            vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.nat_zero.clone(),
+                    binders: 0,
+                    body: mismatch,
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.nat_suc.clone(),
+                    binders: 1,
+                    body: px8n_exact_nat(symbols, RuntimeExpr::Var(0), depth - 1, exact),
+                },
+            ]
+        };
+        RuntimeExpr::Match {
+            scrutinee: Box::new(nat),
+            cases,
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: format!("PX8-N expected exact structural Nat depth {depth}"),
+            },
+        }
+    }
+
+    fn px8n_failure(symbols: &crate::NativeProcessSymbols, code: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Construct {
+            constructor: symbols.exit_failure.clone(),
+            args: vec![code],
+        }
+    }
+
+    fn px8n_write_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        let trap = || RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-N checked result default".to_string(),
+        };
+        let allocate = || RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::BufferAllocate,
+            capability: None,
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(8))],
+        };
+        let write = RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::FsWriteAt,
+            capability: None,
+            args: vec![
+                RuntimeExpr::Var(1),
+                RuntimeExpr::Value(RuntimeValue::Int(0)),
+                RuntimeExpr::Var(0),
+                RuntimeExpr::Value(RuntimeValue::Int(7)),
+                RuntimeExpr::Value(RuntimeValue::Int(4)),
+            ],
+        };
+        let transfer_observation = px8n_exact_nat(
+            symbols,
+            RuntimeExpr::Var(0),
+            0,
+            px8n_exact_nat(
+                symbols,
+                RuntimeExpr::Var(1),
+                3,
+                RuntimeExpr::Value(RuntimeValue::Int(3)),
+            ),
+        );
+        let success = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: symbols.wrote.clone(),
+                binders: 1,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![crate::RuntimeMatchCase {
+                        constructor: symbols.private_transfer_count.clone(),
+                        binders: 2,
+                        body: px8n_failure(symbols, transfer_observation),
+                    }],
+                    default: trap(),
+                },
+            }],
+            default: trap(),
+        };
+        let error = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: symbols.resource_no_progress.clone(),
+                binders: 0,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(70))),
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "PX8-N expected exact NoProgress".to_string(),
+            },
+        };
+        let write_result = RuntimeExpr::Match {
+            scrutinee: Box::new(write),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: error,
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: success,
+                },
+            ],
+            default: trap(),
+        };
+        let second = RuntimeExpr::Match {
+            scrutinee: Box::new(allocate()),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(81))),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: write_result,
+                },
+            ],
+            default: trap(),
+        };
+        RuntimeExpr::Match {
+            scrutinee: Box::new(allocate()),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(80))),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: second,
+                },
+            ],
+            default: trap(),
+        }
+    }
+
+    fn px8n_read_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        let trap = || RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-N checked read result default".to_string(),
+        };
+        let allocate = || RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::BufferAllocate,
+            capability: None,
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(8))],
+        };
+        let read = RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::FsReadAt,
+            capability: None,
+            args: vec![
+                RuntimeExpr::Var(1),
+                RuntimeExpr::Value(RuntimeValue::Int(0)),
+                RuntimeExpr::Var(0),
+                RuntimeExpr::Value(RuntimeValue::Int(7)),
+                RuntimeExpr::Value(RuntimeValue::Int(4)),
+            ],
+        };
+        let read_some = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![crate::RuntimeMatchCase {
+                constructor: symbols.private_buffer_span.clone(),
+                binders: 2,
+                body: px8n_exact_nat(
+                    symbols,
+                    RuntimeExpr::Var(1),
+                    1,
+                    RuntimeExpr::Value(RuntimeValue::Int(12)),
+                ),
+            }],
+            default: trap(),
+        };
+        let read_some = px8n_failure(symbols, read_some);
+        let progress = RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.read_some.clone(),
+                    binders: 2,
+                    body: read_some,
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.read_eof.clone(),
+                    binders: 0,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(10))),
+                },
+            ],
+            default: trap(),
+        };
+        let read_result = RuntimeExpr::Match {
+            scrutinee: Box::new(read),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(82))),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: progress,
+                },
+            ],
+            default: trap(),
+        };
+        let second = RuntimeExpr::Match {
+            scrutinee: Box::new(allocate()),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(81))),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: read_result,
+                },
+            ],
+            default: trap(),
+        };
+        RuntimeExpr::Match {
+            scrutinee: Box::new(allocate()),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(80))),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: second,
+                },
+            ],
+            default: trap(),
+        }
+    }
+
+    fn run_px8n_arm_fixture(
+        scenario: u64,
+        expression: fn(&crate::NativeProcessSymbols) -> RuntimeExpr,
+    ) -> (i64, Px8nHostReplyFixture) {
+        let isa = native_isa().unwrap();
+        let mut builder = JITBuilder::with_isa(isa, default_libcall_names());
+        builder.symbol(
+            "ken_host_dispatch_v1",
+            px8n_scripted_host_dispatch as *const u8,
+        );
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        let compiled = compile_expr_into_module(
+            JITModule::new(builder),
+            "px8n_fs_write_at",
+            Linkage::Local,
+            &expression(&symbols),
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            true,
+            Some(&symbols),
+        )
+        .unwrap();
+        let input = BorrowedFixtureValue {
+            kind: 1,
+            tag: 0,
+            data: std::ptr::null(),
+            len: 0,
+        };
+        let mut fixture = Px8nHostReplyFixture {
+            scenario,
+            call_index: 0,
+            malformed_request: 0,
+        };
+        let invocation = NativeInvocationFixture {
+            process_input: &input,
+            host_context: (&mut fixture as *mut Px8nHostReplyFixture).cast(),
+            capability: 0,
+        };
+        let (_, result) = compiled
+            .run(Some((&invocation as *const NativeInvocationFixture).cast()))
+            .unwrap();
+        (result.unwrap(), fixture)
+    }
+
+    fn run_px8n_write_arm_fixture(scenario: u64) -> (i64, Px8nHostReplyFixture) {
+        run_px8n_arm_fixture(scenario, px8n_write_arm_fixture)
+    }
+
+    fn run_px8n_read_arm_fixture(scenario: u64) -> (i64, Px8nHostReplyFixture) {
+        run_px8n_arm_fixture(scenario, px8n_read_arm_fixture)
     }
 
     fn host_result_computational_fixture(

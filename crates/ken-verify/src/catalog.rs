@@ -109,15 +109,27 @@ pub fn confirm_native_tested_transition(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     #[test]
-    fn imported_catalog_has_exact_nine_native_and_thirteen_named_unavailable() {
-        assert_eq!(HostOpV1::ALL.len(), 22);
-        assert_eq!(native_tested_lanes(), ken_host::NATIVE_TESTED_TARGETS_V1);
-        assert_eq!(deferred_named_lanes().len(), 13);
-        assert!(deferred_named_lanes().into_iter().all(|operation| {
+    fn imported_catalog_partition_is_exact_and_closed() {
+        let all = HostOpV1::ALL.into_iter().collect::<BTreeSet<_>>();
+        let native = native_tested_lanes().into_iter().collect::<BTreeSet<_>>();
+        let expected_native = ken_host::NATIVE_TESTED_TARGETS_V1
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let unavailable = deferred_named_lanes().into_iter().collect::<BTreeSet<_>>();
+
+        assert_eq!(native, expected_native);
+        assert_eq!(native.len(), ken_host::NATIVE_TESTED_TARGETS_V1.len());
+        assert_eq!(
+            native.union(&unavailable).copied().collect::<BTreeSet<_>>(),
+            all
+        );
+        assert!(native.is_disjoint(&unavailable));
+        assert!(unavailable.into_iter().all(|operation| {
             operation.availability() == HostOpAvailabilityV1::RepresentedUnavailable
-                && !ken_host::NATIVE_TESTED_TARGETS_V1.contains(&operation)
+                && !native.contains(&operation)
         }));
     }
 
