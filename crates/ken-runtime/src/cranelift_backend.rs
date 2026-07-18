@@ -4575,6 +4575,18 @@ impl<'a> Lowering<'a> {
                 ));
             }
         }
+        if active.pending.is_empty() {
+            if let Some(site) =
+                self.planned_join_site_for_frame(EliminatorFrame::InvocationReturn)?
+            {
+                return Ok((
+                    Vec::new(),
+                    active.pending,
+                    Self::scalar_kind_from_plan(site.answer_kind),
+                    site.site_id,
+                ));
+            }
+        }
         Err(unsupported(
             "NativeJoinPlanV1",
             "active checked continuation has no planned scalar cut before its outer suffix",
@@ -4722,19 +4734,17 @@ impl<'a> Lowering<'a> {
                         return self.resume_active_continuation(builder, value, *active);
                     }
                     SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)) => {
-                        if edge.prefix.is_empty() {
-                            return Err(unsupported(
-                                "NativeJoinPlanV1",
-                                "scalar join edge has no branch-local eliminator prefix",
-                            ));
-                        }
-                        let mut prefix = edge.prefix;
-                        prefix.push(EliminatorFrame::InvocationReturn);
-                        let value = self.lower_computational_match_value_composed(
-                            builder,
-                            value,
-                            &prefix,
-                        )?;
+                        let value = if edge.prefix.is_empty() {
+                            value
+                        } else {
+                            let mut prefix = edge.prefix;
+                            prefix.push(EliminatorFrame::InvocationReturn);
+                            self.lower_computational_match_value_composed(
+                                builder,
+                                value,
+                                &prefix,
+                            )?
+                        };
                         let (value, actual_kind) =
                             self.merge_scalar_branch(builder, value, "NativeJoinPlanV1")?;
                         if actual_kind != ScalarMergeKind::RecursiveBackedge
