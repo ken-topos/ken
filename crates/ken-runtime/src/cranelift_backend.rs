@@ -2363,6 +2363,7 @@ enum SourceContinuation<'a> {
         default: RuntimeTrap,
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
+        outer: ActiveContinuationFrame<'a>,
         next: Box<SourceContinuation<'a>>,
     },
     ProjectRecord {
@@ -4517,12 +4518,14 @@ impl<'a> Lowering<'a> {
                 default,
                 env,
                 provenance,
+                outer,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases: cases.clone(),
                 default: default.clone(),
                 env: env.clone(),
                 provenance: *provenance,
+                outer: *outer,
                 next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
             },
             SourceContinuation::ProjectRecord { field, next } => {
@@ -4705,17 +4708,26 @@ impl<'a> Lowering<'a> {
                         scrutinee,
                         cases,
                         default,
-                    } => SourceMachineState::Eval {
-                        expr: *scrutinee,
-                        env: env.clone(),
-                        continuation: SourceContinuation::ComputationalMatchScrutinee {
-                            cases,
-                            default,
-                            env,
-                            provenance: self.mint_recursor_frame_provenance(),
-                            next: Box::new(continuation),
-                        },
-                    },
+                    } => {
+                        let outer = Self::source_terminal_active(&continuation).ok_or_else(|| {
+                            unsupported(
+                                "ComputationalMatch",
+                                "source computational match has no live outer frame",
+                            )
+                        })?;
+                        SourceMachineState::Eval {
+                            expr: *scrutinee,
+                            env: env.clone(),
+                            continuation: SourceContinuation::ComputationalMatchScrutinee {
+                                cases,
+                                default,
+                                env,
+                                provenance: self.mint_recursor_frame_provenance(),
+                                outer,
+                                next: Box::new(continuation),
+                            },
+                        }
+                    }
                     other => SourceMachineState::Value {
                         value: self.lower_expr(builder, &other, &env)?,
                         continuation,
@@ -4908,6 +4920,7 @@ impl<'a> Lowering<'a> {
                         default,
                         env,
                         provenance,
+                        outer,
                         next,
                     } => {
                         let frame = ComputationalEliminatorFrame {
@@ -4924,6 +4937,7 @@ impl<'a> Lowering<'a> {
                                 value,
                                 &[
                                     EliminatorFrame::Computational(frame),
+                                    EliminatorFrame::Active(outer),
                                     EliminatorFrame::InvocationReturn,
                                 ],
                             )?,
