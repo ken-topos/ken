@@ -2357,6 +2357,13 @@ enum SourceContinuation<'a> {
         env: Vec<Lowered>,
         next: Box<SourceContinuation<'a>>,
     },
+    ComputationalMatchScrutinee {
+        cases: Vec<crate::RuntimeComputationalMatchCase>,
+        default: RuntimeTrap,
+        env: Vec<Lowered>,
+        provenance: RecursorFrameProvenance,
+        next: Box<SourceContinuation<'a>>,
+    },
     ProjectRecord {
         field: String,
         next: Box<SourceContinuation<'a>>,
@@ -4392,6 +4399,7 @@ impl<'a> Lowering<'a> {
             | SourceContinuation::IfScrutinee { next, .. }
             | SourceContinuation::ConstructArgument { next, .. }
             | SourceContinuation::MatchScrutinee { next, .. }
+            | SourceContinuation::ComputationalMatchScrutinee { next, .. }
             | SourceContinuation::ProjectRecord { next, .. }
             | SourceContinuation::CallCallee { next, .. }
             | SourceContinuation::CallArgument { next, .. } => {
@@ -4417,6 +4425,7 @@ impl<'a> Lowering<'a> {
             | SourceContinuation::IfScrutinee { next, .. }
             | SourceContinuation::ConstructArgument { next, .. }
             | SourceContinuation::MatchScrutinee { next, .. }
+            | SourceContinuation::ComputationalMatchScrutinee { next, .. }
             | SourceContinuation::ProjectRecord { next, .. }
             | SourceContinuation::CallCallee { next, .. }
             | SourceContinuation::CallArgument { next, .. } => {
@@ -4495,6 +4504,19 @@ impl<'a> Lowering<'a> {
                 cases: cases.clone(),
                 default: default.clone(),
                 env: env.clone(),
+                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+            },
+            SourceContinuation::ComputationalMatchScrutinee {
+                cases,
+                default,
+                env,
+                provenance,
+                next,
+            } => SourceContinuation::ComputationalMatchScrutinee {
+                cases: cases.clone(),
+                default: default.clone(),
+                env: env.clone(),
+                provenance: *provenance,
                 next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
             },
             SourceContinuation::ProjectRecord { field, next } => {
@@ -4665,16 +4687,16 @@ impl<'a> Lowering<'a> {
                         scrutinee,
                         cases,
                         default,
-                    } => SourceMachineState::Value {
-                        value: self.lower_computational_match_expr(
-                            builder,
-                            &scrutinee,
-                            &cases,
-                            &default,
-                            &env,
-                            &env,
-                        )?,
-                        continuation,
+                    } => SourceMachineState::Eval {
+                        expr: *scrutinee,
+                        env: env.clone(),
+                        continuation: SourceContinuation::ComputationalMatchScrutinee {
+                            cases,
+                            default,
+                            env,
+                            provenance: self.mint_recursor_frame_provenance(),
+                            next: Box::new(continuation),
+                        },
                     },
                     other => SourceMachineState::Value {
                         value: self.lower_expr(builder, &other, &env)?,
@@ -4857,6 +4879,33 @@ impl<'a> Lowering<'a> {
                         SourceMachineState::Eval {
                             expr: case.body.clone(),
                             env: case_env,
+                            continuation: *next,
+                        }
+                    }
+                    SourceContinuation::ComputationalMatchScrutinee {
+                        cases,
+                        default,
+                        env,
+                        provenance,
+                        next,
+                    } => {
+                        let frame = ComputationalEliminatorFrame {
+                            cases: &cases,
+                            default: &default,
+                            env: &env,
+                            retained_scrutinee_index: None,
+                            deferred_constructor_case: None,
+                            provenance,
+                        };
+                        SourceMachineState::Value {
+                            value: self.lower_computational_match_value_composed(
+                                builder,
+                                value,
+                                &[
+                                    EliminatorFrame::Computational(frame),
+                                    EliminatorFrame::InvocationReturn,
+                                ],
+                            )?,
                             continuation: *next,
                         }
                     }
