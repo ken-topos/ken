@@ -108,20 +108,20 @@ sections; seeded opportunistically as core sections are written.)
 
 ## Next action
 
-**Incremental normative pins:** PX8-T specifies the additive
-`ResourceLifetimeObligationV2` body and role-labelled
-`EffectEventV2.resource_bindings` observation for targets that use buffers,
-while preserving the no-buffer V1 export bytes exactly. It also pins the closed
-positioned-I/O progress sums, the write-zero `NoProgress` boundary, primitive
-positivity/bounds, `BufferLimitsV1`, `ResourceKindMismatch`, and the formal
-derived-`writeAll` termination/completeness/error-prefix contract. PX8-R and
-PX8-F implement against these fixed identities.
+**Incremental normative pins:** PX8-X collapses the observation and
+resource-lifetime export forks to the sole unversioned `EffectObservation`,
+`TerminalExitClass`, and direct `ResourceLifetimeObligation`. The obligation's
+monitor input is `EffectEvent.resource_bindings`; its complete policy remains
+`delegated`, content-bound in `T`, and consumed only by the external Ward
+project. `ResourceTraceIdentityV1` remains the host-ABI identity vocabulary, not
+a second observation schema. The no-acquire export remains an unchanged negative
+control rather than a compatibility promise.
 
-**Incremental normative pins:** PX7-T specifies the additive
-`ResourceLifetimeObligationV1` body in the behavioral export's `T` channel: one
-`ResourceTraceIdentityV1`-correlated acquire/use/settle obligation, status
-`delegated`, carrying the Ward monitor template and covered by the export hash.
-PX7-F is the corresponding emitter and `System.Resource` implementation work.
+PX8-T also pins the closed positioned-I/O progress sums, the write-zero
+`NoProgress` boundary, primitive positivity/bounds, `BufferLimitsV1`,
+`ResourceKindMismatch`, and the formal derived-`writeAll`
+termination/completeness/error-prefix contract. PX8-R and PX8-F implement those
+fixed surface/runtime identities against the unified PX8-X export.
 
 **Incremental normative pins:** AX-1 specifies the additive `axiom N : T` sugar,
 the checking-mode `Axiom` intercept, stable names for every postulate producer,
