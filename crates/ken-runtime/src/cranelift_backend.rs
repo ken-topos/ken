@@ -4448,6 +4448,29 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn source_terminal_join<'b, 'c>(
+        continuation: &'b SourceContinuation<'c>,
+    ) -> Option<&'b SourceJoinEdge<'c>> {
+        match continuation {
+            SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)) => {
+                Some(edge)
+            }
+            SourceContinuation::Terminal(
+                SourceContinuationTerminal::ReturnValue
+                | SourceContinuationTerminal::ResumeOuter { .. },
+            ) => None,
+            SourceContinuation::LetBody { next, .. }
+            | SourceContinuation::ApplyRecursorLayers { next, .. }
+            | SourceContinuation::IfScrutinee { next, .. }
+            | SourceContinuation::ConstructArgument { next, .. }
+            | SourceContinuation::MatchScrutinee { next, .. }
+            | SourceContinuation::ComputationalMatchScrutinee { next, .. }
+            | SourceContinuation::ProjectRecord { next, .. }
+            | SourceContinuation::CallCallee { next, .. }
+            | SourceContinuation::CallArgument { next, .. } => Self::source_terminal_join(next),
+        }
+    }
+
     fn instantiate_source_prefix_to_join<'b>(
         source: &SourceContinuation<'b>,
         edge: SourceJoinEdge<'b>,
@@ -4465,13 +4488,24 @@ impl<'a> Lowering<'a> {
                 }
                 SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge))
             }
-            SourceContinuation::Terminal(
-                SourceContinuationTerminal::ReturnValue | SourceContinuationTerminal::JumpToJoin(_),
-            ) => {
+            SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => {
                 return Err(unsupported(
                     "NativeJoinPlanV1",
                     "source prefix has no exact outer terminal to replace",
                 ));
+            }
+            SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(existing)) => {
+                if existing.join_id != edge.join_id
+                    || existing.target != edge.target
+                    || existing.expected_outer != edge.expected_outer
+                    || existing.required_kind != edge.required_kind
+                {
+                    return Err(unsupported(
+                        "NativeJoinPlanV1",
+                        "nested source edge does not target the exact planned join",
+                    ));
+                }
+                SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge))
             }
             SourceContinuation::LetBody { body, env, next } => SourceContinuation::LetBody {
                 body: body.clone(),
@@ -5295,6 +5329,20 @@ impl<'a> Lowering<'a> {
         if !matches!(
             &suffix_control.continuation,
             SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(_))
+        ) && Self::source_terminal_join(&suffix_control.continuation).is_some()
+        {
+            return self.lower_source_nested_dynamic_constructor_match(
+                builder,
+                dynamic,
+                cases,
+                default,
+                env,
+                suffix_control,
+            );
+        }
+        if !matches!(
+            &suffix_control.continuation,
+            SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(_))
         ) {
             return self.lower_source_planned_dynamic_constructor_match(
                 builder,
@@ -5379,6 +5427,89 @@ impl<'a> Lowering<'a> {
         builder.switch_to_block(merge);
         let value = builder.block_params(merge)[0];
         builder.ins().jump(outer_edge.target, &[value.into()]);
+        Ok(Lowered::RecursiveBackedge)
+    }
+
+    fn lower_source_nested_dynamic_constructor_match<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        dynamic: DynamicConstructorV1,
+        cases: &[crate::RuntimeMatchCase],
+        default: &RuntimeTrap,
+        env: &[Lowered],
+        suffix_control: SourceControl<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let outer = Self::source_terminal_join(&suffix_control.continuation).ok_or_else(|| {
+            unsupported(
+                "NativeJoinPlanV1",
+                "nested dynamic constructor has no affine terminal edge",
+            )
+        })?;
+        let join_id = outer.join_id;
+        let target = outer.target;
+        let expected_outer = outer.expected_outer;
+        let required_kind = outer.required_kind;
+        let prefix = outer.prefix.clone();
+        let mut test_block = builder
+            .current_block()
+            .expect("dynamic constructor source match block");
+        for (predecessor_id, alternative) in dynamic.alternatives.into_iter().enumerate() {
+            let arm = builder.create_block();
+            let next = builder.create_block();
+            if builder.current_block() != Some(test_block) {
+                builder.switch_to_block(test_block);
+            }
+            let selected = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                dynamic.discriminator,
+                alternative.tag,
+            );
+            builder.ins().brif(selected, arm, &[], next, &[]);
+            builder.switch_to_block(arm);
+            let case = match select_dynamic_constructor_case(cases, &alternative, default)? {
+                Ok(case) => case,
+                Err(_) => {
+                    let failure = builder.ins().iconst(types::I64, -4);
+                    builder.ins().return_(&[failure]);
+                    test_block = next;
+                    continue;
+                }
+            };
+            let edge = SourceJoinEdge {
+                join_id,
+                predecessor_id: u32::try_from(predecessor_id)
+                    .map_err(|_| unsupported("NativeJoinPlanV1", "too many predecessors"))?,
+                target,
+                expected_outer,
+                required_kind,
+                prefix: prefix.clone(),
+            };
+            let continuation =
+                Self::instantiate_source_prefix_to_join(&suffix_control.continuation, edge)?;
+            let control = SourceControl {
+                continuation,
+                selected: suffix_control.selected.clone(),
+                terminal_outer: suffix_control.terminal_outer,
+            };
+            let lowered = self.lower_source_machine_with_continuation(
+                builder,
+                case.body.clone(),
+                materialize_dynamic_constructor_env(&alternative, env),
+                control,
+            )?;
+            if !matches!(lowered, Lowered::RecursiveBackedge) {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    "nested dynamic constructor predecessor did not seal its edge",
+                ));
+            }
+            test_block = next;
+        }
+        builder.switch_to_block(test_block);
+        let malformed = builder
+            .ins()
+            .iconst(types::I64, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
+        builder.ins().return_(&[malformed]);
         Ok(Lowered::RecursiveBackedge)
     }
 
