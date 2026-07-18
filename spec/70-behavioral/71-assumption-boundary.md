@@ -149,14 +149,14 @@ artifact it reads and the function that projects it (no field invents content):
   program's denotation can perform — **not** a re-derived alphabet (AC4 asserts
   structural equality to the denotation's signatures). No second alphabet.
 - **`T` (obligations)** ← claims with status `delegated`: the `Temporal` data
-  values stated in source (`72`, `OQ-temporal`) plus the generated correlated
-  resource-lifetime template of §2.2 or §2.3 when reachable `Σ` contains a
+  values stated in source (`72`, `OQ-temporal`) plus the generated direct
+  resource-lifetime template of §2.2–§2.3 when reachable `Σ` contains a
   resource acquisition.
   Emit each as an obligation tagged `delegated`. B1 structures **the channel**
   (the values + their status + the `Σ` they range over); the `Temporal`
   **datatype** and the `compile` faithfulness lemma are **B2/B3** (§5.2) — emit
-  what exists. The structured V1/V2 resource bodies are distinct
-  correlation-only schemas and do not change the existing `Temporal` body.
+  what exists. The direct structured resource body is a correlation-only
+  schema and does not change the existing `Temporal` body.
 - **`G` (generators)** ← refinement predicates `{x:A | φ}` and `match` arms in
   the checked program. Project the equivalence-class **partition**, the
   **boundaries**, and the **case decomposition** (§4) — **support only**, no
@@ -168,104 +168,24 @@ The ordinary `Temporal` body cannot express the identity correlation required
 by a resource lifetime. In particular, two independent
 `Pred::Event("FsOpen")` and `Pred::Event("ResourceRelease")` atoms do not say
 that the released resource is the one that was acquired. For this correlation
-case, the `T` channel therefore admits the following additional, versioned entry
-shape:
+case, the `T` channel admits one direct `ResourceLifetimeObligation` body. It is
+one obligation template over all resource lifetimes in the target, not one
+unrelated obligation per operation and not one static entry per dynamically
+minted resource.
 
-```text
-ResourceLifetimeObligationV1 {
-  schema_version: 1,
-  body_kind: ResourceLifetimeObligationV1,
-  obligation_id: String,
-  status: delegated,
-  correlation: ResourceLifetimeCorrelationV1 {
-    identity_type: ResourceTraceIdentityV1,
-    event_field: EffectEventV1.resource,
-    bind_at: Successful(FsOpen),
-    require_same_at: [FsHandleMetadata, ResourceRelease],
-  },
-  acquire_op: FsOpen,
-  use_op: FsHandleMetadata,
-  settle_op: ResourceRelease,
-  monitor_template: WardResourceLifetimeMonitorV1 {
-    successful_acquire_settles_exactly_once: true,
-    forbid_successful_use_after_settlement: true,
-    require_no_live_resource_on:
-      [NormalReturn, ReturnedError, ControlledTrap],
-    retain_settlement_outcome: true,
-  },
-}
-```
+The target-level obligation serializes the correlation policy, never a future
+runtime witness. At runtime a successful acquisition binds the event's
+`ResourceTraceIdentityV1` as `r`; each listed use and settlement must carry the
+same `r` at the operation-defined role in `EffectEvent.resource_bindings`.
+`ResourceTraceIdentityV1` is the host-ABI identity vocabulary retained by this
+contract. An fd, resource-table slot or generation, pointer, inode, or executor
+identity is neither a valid key nor a permitted fallback.
 
-This is one obligation template over all resource lifetimes in the target, not
-one unrelated obligation per operation and not one static entry per dynamically
-minted handle. On each successful `FsOpen`, the monitor binds the event's
-`ResourceTraceIdentityV1` as `r`. A matching use or settlement is an event whose
-`EffectEventV1.resource` field carries the same `r`. The serialized obligation
-contains the correlation descriptor above, not a runtime value for `r`:
-`bind_at` selects the successful acquisition event, and `require_same_at`
-selects every operation whose event field must equal the bound value. The
-identity type is the lane-independent, acquisition-order identity carried by
-canonical resource observations; an fd, resource-table slot or generation,
-pointer, inode, or executor identity is neither a valid key nor a permitted
-fallback.
-
-The V1 operation inventory is closed and exact:
-
-- `FsOpen` is the acquisition operation;
-- `FsHandleMetadata` is the one non-release use operation; and
-- `ResourceRelease` is the terminal settlement operation.
-
-The monitor template is the conjunction of these four checks, all quantified by
-the bound identity `r`:
-
-1. every successful acquisition of `r` has exactly one terminal settlement of
-   `r`;
-2. no successful `FsHandleMetadata` use of `r` occurs after that settlement;
-3. normal return, returned error, and a controlled Ken trap leave no resource
-   acquired by that bracket live; and
-4. the settlement outcome for `r`, including release failure, remains present
-   in the canonical trace.
-
-The supported-exit set in check 3 and the settlement outcome in check 4 are
-monitor observations, not additional host operations. External kill, abort,
-fatal signal, and machine failure remain outside this obligation. Ken emits the
-template and leaves its status `delegated`; Ward checks it and may attest the
-result, but no result is ingested as a Ken proof (§5.1).
-
-The emitter produces exactly one `ResourceLifetimeObligationV1` entry when the
-target's reachable `Σ` contains `FsOpen`, and none when it does not. Its
-canonical `T` representation includes a body discriminator and every field
-above, including every field of the canonical correlation descriptor, the exact
-operation inventory, status, and monitor template. The runtime value bound as
-`r` is not part of the target-level export. The descriptor bytes participate in
-the export hash of §3.3; changing any descriptor field changes that hash. There
-is no out-of-band resource-obligation field or independently hashed side
-channel.
-
-This extension is additive. Existing `TEntry { obligation_id, formula:
-Temporal }` values, `TemporalObligation`, their serialization, and their hash
-contribution are unchanged. `ResourceLifetimeObligationV1` supersedes a
-`Temporal` body only when identity correlation across acquire/use/settle is
-required; every other temporal obligation continues to use the existing path.
-
-The locked invariants are:
-
-- **RL1 — one canonical correlation binder.** The descriptor binds
-  `EffectEventV1.resource : ResourceTraceIdentityV1` at successful `FsOpen` and
-  requires the same value at `FsHandleMetadata` and `ResourceRelease`.
-  Removing or altering a descriptor field, serializing a runtime `r`, or
-  supplying independent event atoms is malformed.
-- **RL2 — exact V1 alphabet.** The resource-operation set is exactly
-  `{FsOpen, FsHandleMetadata, ResourceRelease}`, and each is a member of the
-  target's `Σ` (I3). An additional or substituted operation is malformed.
-- **RL3 — delegated only.** Every resource-lifetime entry has status
-  `delegated`, never `proved`, `tested`, or `unknown` (I4).
-- **RL4 — content-bound.** The complete entry is canonicalized with `T` and is
-  covered by the export hash; no field may be omitted from that input.
-- **RL5 — correlation-only supersession.** Existing `Temporal` entries retain
-  their exact body and behavior. The structured body is required only for the
-  resource-correlation case and cannot be represented by two independent event
-  atoms.
+Existing `TEntry { obligation_id, formula: Temporal }` values,
+`TemporalObligation`, their serialization, and their hash contribution are
+unchanged. The structured body is used only when identity correlation across
+acquire/use/settle is required; every other temporal obligation continues to use
+the existing path.
 
 ### 2.3 Role-labelled multi-resource obligations
 
@@ -273,14 +193,13 @@ A positioned file transfer observes two live resources in one operation: the
 file handle and the buffer. Electing either identity as the event's sole
 resource would make the other lifetime uncorrelatable. Encoding either token in
 opaque request bytes would make the contract depend on a private transport
-representation. A multi-resource observation therefore uses this additive V2
-event field:
+representation. The sole `EffectEvent` therefore carries this field:
 
 ```text
 resource_bindings:
-  [(ResourceBindingRoleV2, ResourceTraceIdentityV1)]
+  [(ResourceBindingRole, ResourceTraceIdentityV1)]
 
-ResourceBindingRoleV2 = File | Buffer | Target
+ResourceBindingRole = File | Buffer | Target
 ```
 
 The sequence is ordered, not a map. Its order and roles are canonical for each
@@ -302,19 +221,18 @@ following record is the exact full-inventory specialization for a target whose
 reachable `Σ` contains both acquisitions and every listed use:
 
 ```text
-ResourceLifetimeObligationV2 {
-  schema_version: 2,
-  body_kind: ResourceLifetimeObligationV2,
+ResourceLifetimeObligation {
+  body_kind: ResourceLifetimeObligation,
   obligation_id: String,
   status: delegated,
-  correlation: ResourceLifetimeCorrelationV2 {
+  correlation: ResourceLifetimeCorrelation {
     identity_type: ResourceTraceIdentityV1,
-    event_field: EffectEventV2.resource_bindings,
-    role_type: ResourceBindingRoleV2,
+    event_field: EffectEvent.resource_bindings,
+    role_type: ResourceBindingRole,
     canonical_order: OperationDefined,
   },
   plans: [
-    ResourceLifetimePlanV2 {
+    ResourceLifetimePlan {
       resource_kind: FsHandle,
       bind_at: Successful(FsOpen, Target),
       require_same_at: [
@@ -324,7 +242,7 @@ ResourceLifetimeObligationV2 {
         (ResourceRelease, Target),
       ],
     },
-    ResourceLifetimePlanV2 {
+    ResourceLifetimePlan {
       resource_kind: Buffer,
       bind_at: Successful(BufferAllocate, Target),
       require_same_at: [
@@ -335,7 +253,7 @@ ResourceLifetimeObligationV2 {
       ],
     },
   ],
-  monitor_template: WardResourceLifetimeMonitorV2 {
+  monitor_template: WardResourceLifetimeMonitor {
     correlate_every_role_binding: true,
     successful_acquire_settles_exactly_once: true,
     forbid_successful_use_after_settlement: true,
@@ -345,6 +263,11 @@ ResourceLifetimeObligationV2 {
   },
 }
 ```
+
+There is no schema-version field, versioned body kind, version-dispatch arm, or
+compatibility wrapper. `ResourceLifetimeObligation`,
+`ResourceLifetimeCorrelation`, `ResourceLifetimePlan`, and
+`ResourceLifetimeBindingPoint` are the only resource-lifetime export shapes.
 
 The global per-kind `require_same_at` inventories are the two ordered lists in
 that record:
@@ -366,7 +289,7 @@ The emitted `plans` are target-specialized to the exact reachable `Σ`:
 4. for each included plan, set `require_same_at` to the canonical ordered
    subsequence of that kind's global inventory whose operation is in `Σ`.
 
-No V2 plan may name an acquisition or use absent from `Σ`; within a V2 entry, no
+No plan may name an acquisition or use absent from `Σ`; within an entry, no
 acquisition present in `Σ` may lack its plan. A full-inventory two-resource
 target therefore emits the complete two-plan record above. A buffer-only target
 emits only the Buffer plan and only its reachable uses. A read-only positioned
@@ -374,71 +297,83 @@ target emits both plans, retains `FsReadAt` at its `File` and `Buffer` sites,
 and omits unreachable write, metadata, or freeze sites while preserving the
 remaining global order.
 
-On successful acquisition, Ward binds the identity at the plan's `bind_at`
-role. Every listed use and settlement must carry that same identity at the
-listed role. Thus, when present, `FsReadAt` and `FsWriteAt` are checked once
-against each plan: their `File` binding equals the open file identity, and their
-`Buffer` binding equals the allocated buffer identity. Ward also requires
-exactly one settlement for each identity, forbids successful use after its
-settlement, retains each settlement outcome, and requires that no identity
-owned by either bracket remains live at normal return, returned error, or
-controlled trap. External process destruction remains outside the guarantee.
+The monitor template consumes the sole `EffectObservation`: its events are
+`EffectEvent` values and its terminal observation is the closed
+`TerminalExitClass = NormalReturn | ReturnedError | ControlledTrap`. On
+successful acquisition, the external Ward project binds the identity at the
+plan's `bind_at` role. Every listed use and settlement must carry that same
+identity at the listed role. Thus, when present, `FsReadAt` and `FsWriteAt` are
+checked once against each plan: their `File` binding equals the open file
+identity, and their `Buffer` binding equals the allocated buffer identity.
 
-The emitter produces exactly one `ResourceLifetimeObligationV2` template when a
-buffer resource participates in the target's reachable alphabet. The complete
-static entry, including the correlation descriptor, target-specialized ordered
-plans, status, and monitor template, is canonicalized in `T` and covered by the
-export hash. Runtime-bound file and buffer identities are never serialized in
-the target export.
+The template requires exactly one settlement for each identity, forbids
+successful use after settlement, retains each settlement outcome, and requires
+that no identity owned by either bracket remains live at normal return,
+returned error, or controlled trap. `TerminalExitClass` is computed before exit
+normalization and is an observation, never a Ward verdict. External kill,
+abort, fatal signal, and machine failure remain outside the obligation.
+
+Ken emits the template with status `delegated`; it neither runs the monitor nor
+ingests its verdict. The monitor and any resulting attestation remain external
+Ward behavior, and no such result becomes a Ken proof (§5.1).
+
+The emitter produces exactly one direct `ResourceLifetimeObligation` when the
+target's reachable alphabet contains `FsOpen` or `BufferAllocate`, and none when
+it contains neither acquisition. The complete static entry, including the
+correlation descriptor, target-specialized ordered plans, status, and monitor
+template, is canonicalized in `T` and covered by the export hash. Runtime-bound
+file and buffer identities are never serialized in the target export.
 
 Static-policy validation and runtime-observation validation are separate
-phases. A wrong schema version, body kind, status, correlation field, plan set,
-plan order, `require_same_at` subsequence, monitor field, or an operation absent
-from `Σ` makes the **static descriptor** malformed. The emitter rejects that
-descriptor before publishing `T` or an export hash. By contrast, a missing,
-duplicate, extra, misordered, wrongly labelled, wrongly correlated, or split
+phases. A wrong body kind, status, correlation field, plan set, plan order,
+`require_same_at` subsequence, monitor field, or an operation absent from `Σ`
+makes the **static descriptor** malformed. The emitter rejects that descriptor
+before publishing `T` or an export hash. By contrast, a missing, duplicate,
+extra, misordered, wrongly labelled, wrongly correlated, or split
 `resource_bindings` sequence is a malformed **runtime observation**. It is
-rejected when the observation is validated and when Ward checks the already
-exported policy. That rejection neither changes nor re-emits the canonical
-static `T` bytes or their export hash.
+rejected when the observation is validated and when external Ward checks the
+already exported policy. That rejection neither changes nor re-emits the
+canonical static `T` bytes or their export hash.
 
-V2 supersedes V1 only for a target whose resource-lifetime contract includes a
-buffer. When no buffer participates, the emitter takes the existing V1 path
-unchanged: the `ResourceLifetimeObligationV1` bytes, ordinary `Temporal` bytes,
-and every pre-PX8 export hash remain byte-for-byte identical. A V2 producer must
-not emit a redundant V1 resource-lifetime entry beside the V2 entry. Both
-versions remain status `delegated`; a Ward attestation never becomes a Ken
-proof (§5.1).
+The schema collapse intentionally rebaselines each resource-producing export
+once. The checked file-only `px7f_export_resource` fixture emits the direct
+single-plan body and hash `ken-export-v0:1bf3cb3f5b648ea7`; the checked
+buffer-only fixture emits the direct Buffer plan and hash
+`ken-export-v0:47f2f35b7a825ca3`. Independently, the checked no-acquire fixture
+retains frozen hash `ken-export-v0:6360c2cb74f78f7e`, because it contains no
+resource-lifetime body. That unchanged no-acquire export is a negative control,
+not a compatibility promise.
 
-The concrete V1 preservation fixture is the checked resource-producing target
-`px7f_export_resource` in
-`crates/ken-elaborator/tests/px7f_resource_lifetime_export.rs`. Its exact
-denotation-derived `Σ` is `{FsOpen, FsHandleMetadata, ResourceRelease}`, excludes
-the declared-row family name `FS`, and its pre-PX8 export contains the complete
-`ResourceLifetimeObligationV1` body coherent with RL1–RL3 and I3. Running that
-same checked target through a PX8-capable emitter with no `BufferAllocate` in
-`Σ` must reproduce its complete serialized V1 body, export bytes, and export
-hash byte-for-byte. This with-resource control is structural and does not freeze
-an export-hash literal. Independently, the checked no-acquire fixture retains
-its complete pre-PX8 export bytes and frozen hash
-`ken-export-v0:6360c2cb74f78f7e`; that no-acquire fixture alone is not sufficient
-evidence for this rule.
+The locked invariants are:
 
-The additional locked invariants are:
-
-- **RL6 — role-labelled runtime correlation.** Every V2 lifecycle observation
-  has exactly its operation-defined ordered binding sequence. A request-byte
-  token, an unlabelled identity list, a single elected identity, or any malformed
-  runtime sequence fails observation/Ward validation without changing static
-  `T` or its hash.
-- **RL7 — exact target-specialized plans.** The plan set is selected by
+- **RL1 — one canonical correlation binder.** The descriptor names
+  `EffectEvent.resource_bindings`, `ResourceTraceIdentityV1`,
+  `ResourceBindingRole`, and operation-defined order. Removing or altering a
+  descriptor field, serializing a runtime `r`, or supplying independent event
+  atoms is malformed.
+- **RL2 — exact target-specialized plans.** The plan set is selected by
   acquisitions in reachable `Σ`; each `require_same_at` is the ordered reachable
   subsequence of its global inventory. An absent acquisition, missing plan, or
   extra unreachable operation is a pre-export descriptor error.
-- **RL8 — delegated and content-bound.** The whole V2 entry is `delegated` and
-  participates in the ordinary canonical `T` hash input.
-- **RL9 — byte-preserving additive version.** Absence of a buffer selects the
-  unchanged V1 serialization path; merely supporting V2 cannot perturb it.
+- **RL3 — delegated only.** Every resource-lifetime entry has status
+  `delegated`, never `proved`, `tested`, or `unknown` (I4).
+- **RL4 — content-bound.** The complete entry is canonicalized with `T` and is
+  covered by the export hash; no field may be omitted from that input.
+- **RL5 — correlation-only supersession.** Existing `Temporal` entries retain
+  their exact body and behavior. The structured body is required only for the
+  resource-correlation case and cannot be represented by two independent event
+  atoms.
+- **RL6 — role-labelled runtime correlation.** Every lifecycle observation has
+  exactly its operation-defined ordered binding sequence. A request-byte
+  token, an unlabelled identity list, a single elected identity, or any malformed
+  runtime sequence fails observation/external-Ward validation without changing
+  static `T` or its hash.
+- **RL7 — sole direct schema.** A resource-producing target emits one direct
+  `ResourceLifetimeObligation`; no schema version, versioned body, parallel
+  entry, alias, wrapper, or conversion view exists.
+- **RL8 — no-acquire negative control.** A target with neither acquisition emits
+  no resource-lifetime obligation, so the collapse does not change its bytes or
+  hash.
 
 ## 3. Two layers: Ken-native contract, ITF traces
 
@@ -708,13 +643,13 @@ trusted base and proves nothing new. The implementable deliverables:
 5. **The one-way-flow gate (§5.1)** — no code path promotes a `delegated`/
    `tested` obligation to `proved`; the `compile` lemma is named as B2/B3's,
    with the `T` channel + `Σ` it reuses fixed here (§5.2).
-6. **The correlated resource-lifetime body (§2.2)** — the exact V1 operation
-   inventory, `ResourceTraceIdentityV1` correlation, Ward monitor template,
-   delegated-only status, and hash participation, additive to the existing
+6. **The correlated resource-lifetime body (§2.2)** — one direct
+   `ResourceLifetimeObligation`, `ResourceTraceIdentityV1` correlation policy,
+   delegated-only status, and hash participation alongside the existing
    `Temporal` path.
-7. **The role-labelled multi-resource body (§2.3)** — the exact V2 event
-   bindings, per-kind plans, Ward monitor template, delegated-only status, hash
-   participation, and byte-preserving V1 fallback.
+7. **The role-labelled observation and plans (§2.3)** — the sole
+   `EffectObservation`/`EffectEvent.resource_bindings` shape, exact per-kind
+   plans, closed `TerminalExitClass`, and external Ward monitor template.
 
 **Acceptance criteria.** *Names align with the frame's AC1–AC6.*
 
@@ -751,7 +686,7 @@ its obligation discharges, and under `P` (status `unknown`) when the proof is
 left an open hole — the field flips with `trusted_base()` membership, a
 structural signal, the same program under the two kernel states.
 
-**PX8-T incremental acceptance.** A full V2 positive case carries the canonical
+**PX8-X incremental acceptance.** A full positive case carries the canonical
 `File`/`Buffer` pair on a positioned transfer and is accepted by both complete
 per-kind plans. Buffer-only and read-only-positioned targets assert the exact
 plan/subsequence specialization above; adding one unreachable operation to a
@@ -759,10 +694,11 @@ static plan rejects before export under I3. Runtime controls independently fail
 for a missing role, swapped roles, an out-of-order pair, duplicate/extra
 bindings, and two split uncorrelated single-resource observations, but reproduce
 the positive case's already-emitted static `T` bytes and hash exactly. The
-resource-producing `px7f_export_resource` V1 fixture must reproduce its complete
-pre-PX8 serialized body and export bytes/hash while retaining the exact
-denotation-derived alphabet `{FsOpen, FsHandleMetadata, ResourceRelease}`, no
-`FS` family-name member, and I3 coherence. This with-resource control freezes no
-hash literal. The no-acquire control independently retains frozen hash
-`ken-export-v0:6360c2cb74f78f7e`. These cases assert the complete structured body
-and its `T` hash participation, not merely the presence of a V2 discriminator.
+resource-producing `px7f_export_resource` fixture emits one direct file plan,
+retains exact denotation-derived alphabet
+`{FsOpen, FsHandleMetadata, ResourceRelease}` with no `FS` family-name member,
+and remains I3-coherent. The buffer-only fixture emits one direct Buffer plan.
+The no-acquire control independently retains frozen hash
+`ken-export-v0:6360c2cb74f78f7e`. These cases assert the complete direct body and
+its `T` hash participation; no schema discriminator or compatibility path is
+representable.

@@ -13,12 +13,12 @@ fn output_dir(name: &str) -> std::path::PathBuf {
     path
 }
 
-fn run(name: &str, source: &str) -> ken_runtime::EffectObservationV1 {
+fn run(name: &str, source: &str) -> ken_runtime::EffectObservation {
     let dir = output_dir(name);
     std::fs::write(dir.join("held.bin"), b"held resource").unwrap();
     let output = ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, name, &dir)
         .expect("PX7-F checked program reaches the native resource lane");
-    let observation = ken_runtime::run_bound_process_effect_observation_v1(
+    let observation = ken_runtime::run_bound_process_effect_observation(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {
             arguments: Vec::new(),

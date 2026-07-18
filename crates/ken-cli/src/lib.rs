@@ -90,14 +90,14 @@ pub fn run_program<H: ken_interp::HostHandler>(
 /// The returned filesystem delta is empty because the descriptor-only
 /// interpreter host interface exposes no root snapshot. A differential harness
 /// may fill that field from its independently captured before/after root state.
-pub fn run_program_effect_observation_v1<H: ken_interp::HostHandler>(
+pub fn run_program_effect_observation<H: ken_interp::HostHandler>(
     source: &str,
     format: SourceFormat,
     arguments: &[Vec<u8>],
     environment: &[(Vec<u8>, Vec<u8>)],
     cwd: &[u8],
     host: &mut H,
-) -> Result<ken_runtime::EffectObservationV1, RunError> {
+) -> Result<ken_runtime::EffectObservation, RunError> {
     let effective_uid = ken_runtime::observe_effective_uid_v1()
         .map_err(|_| RunError::RootExecutionObservationUnavailable)?;
     run_program_inner(
@@ -122,7 +122,7 @@ fn run_program_inner<H: ken_interp::HostHandler>(
     host: &mut H,
     observe_effects: bool,
     effective_uid: ken_runtime::EffectiveUidSnapshotV1,
-) -> Result<(ProgramOutcome, Option<ken_runtime::EffectObservationV1>), RunError> {
+) -> Result<(ProgramOutcome, Option<ken_runtime::EffectObservation>), RunError> {
     let mut elab_env = ken_elaborator::ElabEnv::new().map_err(RunError::Initialization)?;
     let elaborated = match format {
         SourceFormat::Ken => elab_env.elaborate_file(source),
@@ -144,12 +144,13 @@ fn run_program_inner<H: ken_interp::HostHandler>(
             ken_runtime::process_exit_status(ken_runtime::ProcessExitCode::Failure(0)).status;
         return Ok((
             ProgramOutcome { exit_status },
-            observe_effects.then_some(ken_runtime::EffectObservationV1 {
+            observe_effects.then_some(ken_runtime::EffectObservation {
                 stdout: Vec::new(),
                 stderr: Vec::new(),
                 filesystem_delta: Vec::new(),
                 terminal_error: Some(ken_runtime::TerminalErrorV1::RootExecutionDenied),
                 effect_trace: Vec::new(),
+                terminal_exit: ken_runtime::TerminalExitClass::ControlledTrap,
                 exit_status,
             }),
         ));
@@ -191,7 +192,7 @@ fn run_program_inner<H: ken_interp::HostHandler>(
                 ken_runtime::process_exit_status(ken_runtime::ProcessExitCode::Failure(0)).status;
             return Ok((
                 ProgramOutcome { exit_status },
-                observe_effects.then_some(ken_runtime::EffectObservationV1 {
+                observe_effects.then_some(ken_runtime::EffectObservation {
                     stdout: Vec::new(),
                     stderr: Vec::new(),
                     filesystem_delta: Vec::new(),
@@ -199,6 +200,7 @@ fn run_program_inner<H: ken_interp::HostHandler>(
                         failure,
                     )),
                     effect_trace: Vec::new(),
+                    terminal_exit: ken_runtime::TerminalExitClass::ControlledTrap,
                     exit_status,
                 }),
             ));
@@ -222,7 +224,7 @@ fn run_program_inner<H: ken_interp::HostHandler>(
     let success_id = get("Success").expect("Success registered");
     let failure_id = get("Failure").expect("Failure registered");
     if observe_effects {
-        let observation = ken_interp::run_io_effect_observation_v1(
+        let observation = ken_interp::run_io_effect_observation(
             tree,
             host,
             &console_ids,
@@ -775,7 +777,7 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
         allow_root: bool,
         arguments: &[Vec<u8>],
         environment: &[(Vec<u8>, Vec<u8>)],
-    ) -> (ken_runtime::EffectObservationV1, ken_interp::CaptureHost) {
+    ) -> (ken_runtime::EffectObservation, ken_interp::CaptureHost) {
         let mut host = ken_interp::CaptureHost::new(Vec::new());
         let (_, observation) = run_program_inner(
             &root_program(allow_root),

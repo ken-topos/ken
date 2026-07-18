@@ -105,7 +105,7 @@ fn assert_agreement(
     let dir = output_dir(name);
     let output = ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, name, &dir)
         .expect("dynamic HostResult producer reaches the linked artifact");
-    let native = ken_runtime::run_bound_process_effect_observation_v1(
+    let native = ken_runtime::run_bound_process_effect_observation(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {
             arguments: Vec::new(),
@@ -117,7 +117,7 @@ fn assert_agreement(
     .expect("linked artifact returns its complete observation");
 
     let mut host = ken_interp::CaptureHost::new(Vec::new());
-    let interpreted = ken_cli::run_program_effect_observation_v1(
+    let interpreted = ken_cli::run_program_effect_observation(
         source,
         ken_cli::SourceFormat::Ken,
         &[b"ken".to_vec()],

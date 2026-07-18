@@ -4,8 +4,9 @@ use ken_elaborator::temporal::{Pred, Temporal};
 use ken_elaborator::{
     compiler_driver::{compile_checked_target_denotation, CompilerSource},
     emit_checked_target_export, serialize_export, try_serialize_export, BehavioralExport,
-    ExportError, ResourceLifetimeObligation, ResourceLifetimeObligationV1, TEntry,
+    ExportError, ResourceLifetimeBindingPoint, TEntry,
 };
+use ken_host::{HostOpV1, ResourceBindingRole, ResourceKindV1};
 
 const RESOURCE_PRODUCER: &str = r#"
 fn px7f_after_metadata (outcome : Result ResourceError FileMetadata)
@@ -65,14 +66,31 @@ fn resource_temporal() -> TEntry {
 }
 
 #[test]
-fn checked_resource_producer_emits_exactly_one_pinned_correlated_t_body() {
+fn checked_resource_producer_emits_exactly_one_correlated_t_body() {
     let export = checked_export(RESOURCE_PRODUCER, "px7f_export_resource", vec![]);
-    assert!(export.alphabet.contains("FsOpen"));
     assert_eq!(
-        export.resource_lifetime_obligation,
-        Some(ResourceLifetimeObligation::V1(
-            ResourceLifetimeObligationV1::pinned()
-        ))
+        export.hash, "ken-export-v0:1bf3cb3f5b648ea7",
+        "PX8-X rebaseline for the direct file-only obligation body"
+    );
+    assert!(export.alphabet.contains("FsOpen"));
+    let obligation = export
+        .resource_lifetime_obligation
+        .as_ref()
+        .expect("resource lifetime body");
+    assert_eq!(obligation.plans.len(), 1);
+    assert_eq!(obligation.plans[0].resource_kind, ResourceKindV1::FsHandle);
+    assert_eq!(
+        obligation.plans[0].require_same_at,
+        vec![
+            ResourceLifetimeBindingPoint {
+                operation: HostOpV1::FsHandleMetadata,
+                role: ResourceBindingRole::Target,
+            },
+            ResourceLifetimeBindingPoint {
+                operation: HostOpV1::ResourceRelease,
+                role: ResourceBindingRole::Target,
+            },
+        ]
     );
 
     let wire = serialize_export(&export);
@@ -85,23 +103,28 @@ fn checked_resource_producer_emits_exactly_one_pinned_correlated_t_body() {
     assert_eq!(
         obligations[0],
         serde_json::json!({
-            "schema_version": 1,
-            "body_kind": "ResourceLifetimeObligationV1",
-            "obligation_id": "resource-lifetime-v1",
+            "body_kind": "ResourceLifetimeObligation",
+            "obligation_id": "resource-lifetime",
             "status": "delegated",
             "correlation": {
                 "identity_type": "ResourceTraceIdentityV1",
-                "event_field": "EffectEventV1.resource",
-                "bind_at": "Successful(FsOpen)",
-                "require_same_at": ["FsHandleMetadata", "ResourceRelease"],
+                "event_field": "EffectEvent.resource_bindings",
+                "role_type": "ResourceBindingRole",
+                "canonical_order": "OperationDefined",
             },
-            "acquire_op": "FsOpen",
-            "use_op": "FsHandleMetadata",
-            "settle_op": "ResourceRelease",
+            "plans": [{
+                "resource_kind": "FsHandle",
+                "bind_at": "Successful(FsOpen, Target)",
+                "require_same_at": [
+                    ["FsHandleMetadata", "Target"],
+                    ["ResourceRelease", "Target"]
+                ],
+            }],
             "monitor_template": {
+                "correlate_every_role_binding": true,
                 "successful_acquire_settles_exactly_once": true,
                 "forbid_successful_use_after_settlement": true,
-                "require_no_live_resource_on": [
+                "require_no_live_bracket_owned_identity_on": [
                     "NormalReturn",
                     "ReturnedError",
                     "ControlledTrap"
@@ -148,10 +171,7 @@ fn independent_event_lookalike_is_rejected_before_t_or_hash_emission() {
         .resource_lifetime_obligation
         .as_mut()
         .expect("resource body");
-    let ResourceLifetimeObligation::V1(malformed) = malformed else {
-        panic!("no-buffer resource target must retain V1")
-    };
-    malformed.correlation.event_field = "EffectEventV1.operation";
+    malformed.correlation.event_field = "EffectEvent.operation";
 
     assert_eq!(
         try_serialize_export(&export),
@@ -172,5 +192,5 @@ fn correlated_body_is_one_member_of_the_same_t_sequence() {
     let obligations = wire["obligations"].as_array().expect("T array");
     assert_eq!(obligations.len(), 2);
     assert_eq!(obligations[0]["obligation_id"], "ordinary-temporal");
-    assert_eq!(obligations[1]["obligation_id"], "resource-lifetime-v1");
+    assert_eq!(obligations[1]["obligation_id"], "resource-lifetime");
 }

@@ -142,7 +142,7 @@ fn delayed_capturing_generic_bind_agrees_across_real_executors() {
         &dir,
     )
     .expect("generic checked HostIO bind reaches the linked artifact");
-    let native = ken_runtime::run_bound_process_effect_observation_v1(
+    let native = ken_runtime::run_bound_process_effect_observation(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {
             arguments: Vec::new(),
@@ -154,7 +154,7 @@ fn delayed_capturing_generic_bind_agrees_across_real_executors() {
     .expect("linked artifact returns its complete observation");
 
     let mut host = ken_interp::CaptureHost::new(Vec::new());
-    let interpreted = ken_cli::run_program_effect_observation_v1(
+    let interpreted = ken_cli::run_program_effect_observation(
         PROGRAM,
         ken_cli::SourceFormat::Ken,
         &[b"ken".to_vec()],
@@ -192,7 +192,7 @@ fn runtime_selected_non_unit_response_is_consumed_across_real_executors() {
         &dir,
     )
     .expect("runtime-selected Result response reaches the linked artifact");
-    let native = ken_runtime::run_bound_process_effect_observation_v1(
+    let native = ken_runtime::run_bound_process_effect_observation(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {
             arguments: Vec::new(),
@@ -204,7 +204,7 @@ fn runtime_selected_non_unit_response_is_consumed_across_real_executors() {
     .expect("linked artifact consumes its runtime-selected response");
 
     let mut host = ken_interp::CaptureHost::new(Vec::new());
-    let interpreted = ken_cli::run_program_effect_observation_v1(
+    let interpreted = ken_cli::run_program_effect_observation(
         CONSUMED_RUNTIME_RESPONSE,
         ken_cli::SourceFormat::Ken,
         &[b"ken".to_vec()],

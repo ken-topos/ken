@@ -1322,9 +1322,8 @@ pub trait HostEffectBackendV1 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HostDispatchReplyV1 {
     pub capability_identity: Option<CapabilityTraceIdentity>,
-    pub resource_identity: Option<ResourceTraceIdentityV1>,
     pub resource_token: Option<ResourceTokenV1>,
-    pub resource_bindings: Vec<(ResourceBindingRoleV2, ResourceTraceIdentityV1)>,
+    pub resource_bindings: Vec<(ResourceBindingRole, ResourceTraceIdentityV1)>,
     pub outcome: CanonicalOutcomeV1,
 }
 
@@ -1444,7 +1443,6 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             ResourceErrorV1::MalformedResource,
         ));
     }
-    let mut resource_identity = None;
     let mut minted_resource = None;
     let mut resource_bindings = Vec::new();
     let outcome = match (operation, request) {
@@ -1533,9 +1531,8 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             .fs_open_resource(grant.expect("validated FS capability"), path, *mode)
             .map(|owner| {
                 let (token, identity) = resources.insert_fs_handle(owner, mode.required_right());
-                resource_identity = Some(identity);
                 minted_resource = Some(token);
-                resource_bindings.push((ResourceBindingRoleV2::Target, identity));
+                resource_bindings.push((ResourceBindingRole::Target, identity));
                 CanonicalReplyV1::ResourceAcquired {
                     schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
                     resource_kind: ResourceKindV1::FsHandle,
@@ -1547,16 +1544,12 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             let ResourceInputsV1::Target(token) = resource else {
                 unreachable!("resource shape validated")
             };
-            resource_identity = resources.identity(token).ok();
             match resources.resolve_fs_handle(token, crate::RightSet::METADATA) {
                 Ok((handle, identity)) => {
-                    resource_identity = Some(identity);
+                    resource_bindings.push((ResourceBindingRole::Target, identity));
                     backend
                         .fs_resource_metadata(handle)
-                        .map(|metadata| {
-                            resource_bindings.push((ResourceBindingRoleV2::Target, identity));
-                            CanonicalReplyV1::FileMetadata(metadata)
-                        })
+                        .map(CanonicalReplyV1::FileMetadata)
                         .map_err(SemanticErrorV1::Io)
                 }
                 Err(error) => Err(SemanticErrorV1::Resource(error)),
@@ -1565,9 +1558,8 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
         (HostOpV1::BufferAllocate, CanonicalRequestV1::BufferAllocate { capacity }) => {
             match resources.insert_buffer(*capacity) {
                 Ok((token, identity)) => {
-                    resource_identity = Some(identity);
                     minted_resource = Some(token);
-                    resource_bindings.push((ResourceBindingRoleV2::Target, identity));
+                    resource_bindings.push((ResourceBindingRole::Target, identity));
                     Ok(CanonicalReplyV1::ResourceAcquired {
                         schema_version: RESOURCE_OBSERVATION_SCHEMA_VERSION_V1,
                         resource_kind: ResourceKindV1::Buffer,
@@ -1581,20 +1573,16 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             let ResourceInputsV1::Target(token) = resource else {
                 unreachable!("resource shape validated")
             };
-            resource_identity = resources.identity(token).ok();
             match resources.resolve_buffer(token) {
                 Ok((buffer, identity)) => {
-                    resource_identity = Some(identity);
+                    resource_bindings.push((ResourceBindingRole::Target, identity));
                     let start = usize::try_from(*start).map_err(|_| ResourceErrorV1::InvalidBounds);
                     let length =
                         usize::try_from(*length).map_err(|_| ResourceErrorV1::InvalidBounds);
                     match start.and_then(|start| length.map(|length| (start, length))) {
                         Ok((start, length)) => buffer
                             .initialized_slice(start, length)
-                            .map(|bytes| {
-                                resource_bindings.push((ResourceBindingRoleV2::Target, identity));
-                                CanonicalReplyV1::Bytes(bytes.to_vec())
-                            })
+                            .map(|bytes| CanonicalReplyV1::Bytes(bytes.to_vec()))
                             .map_err(SemanticErrorV1::Resource),
                         Err(error) => Err(SemanticErrorV1::Resource(error)),
                     }
@@ -1618,6 +1606,10 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                 crate::RightSet::READ,
                 buffer,
                 |handle, file_identity, region, buffer_identity| {
+                    resource_bindings.extend([
+                        (ResourceBindingRole::File, file_identity),
+                        (ResourceBindingRole::Buffer, buffer_identity),
+                    ]);
                     let (start, effective) =
                         checked_buffer_range(region.capacity(), *buffer_start, *length)
                             .map_err(SemanticErrorV1::Resource)?;
@@ -1640,10 +1632,6 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                         region.clear_window();
                         return Err(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds));
                     }
-                    resource_bindings.extend([
-                        (ResourceBindingRoleV2::File, file_identity),
-                        (ResourceBindingRoleV2::Buffer, buffer_identity),
-                    ]);
                     if read == 0 {
                         Ok(CanonicalReplyV1::ReadProgress(ReadProgressV1::ReadEof))
                     } else {
@@ -1676,6 +1664,10 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                 crate::RightSet::WRITE,
                 buffer,
                 |handle, file_identity, region, buffer_identity| {
+                    resource_bindings.extend([
+                        (ResourceBindingRole::File, file_identity),
+                        (ResourceBindingRole::Buffer, buffer_identity),
+                    ]);
                     let (start, effective) =
                         checked_buffer_range(region.capacity(), *buffer_start, *length)
                             .map_err(SemanticErrorV1::Resource)?;
@@ -1695,10 +1687,6 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
                     if written > effective {
                         return Err(SemanticErrorV1::Resource(ResourceErrorV1::InvalidBounds));
                     }
-                    resource_bindings.extend([
-                        (ResourceBindingRoleV2::File, file_identity),
-                        (ResourceBindingRoleV2::Buffer, buffer_identity),
-                    ]);
                     Ok(CanonicalReplyV1::WriteProgress(WriteProgressV1::Wrote(
                         TransferCountV1::new(written as u64, effective as u64)
                             .expect("positive bounded backend write"),
@@ -1710,10 +1698,9 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
             let ResourceInputsV1::Target(token) = resource else {
                 unreachable!("resource shape validated")
             };
-            resource_identity = resources.identity(token).ok();
             match resources.begin_release(token) {
                 Ok(pending) => {
-                    resource_bindings.push((ResourceBindingRoleV2::Target, pending.identity));
+                    resource_bindings.push((ResourceBindingRole::Target, pending.identity));
                     ResourceTableV1::finish_release_with(pending, |owner| {
                         backend.resource_close(owner)
                     })
@@ -1727,7 +1714,6 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
     };
     Ok(HostDispatchReplyV1 {
         capability_identity: grant.map(|grant| grant.identity.clone()),
-        resource_identity,
         resource_token: minted_resource,
         resource_bindings,
         outcome: match outcome {
@@ -1819,7 +1805,6 @@ fn denied(
     };
     HostDispatchReplyV1 {
         capability_identity: None,
-        resource_identity: None,
         resource_token: None,
         resource_bindings: Vec::new(),
         outcome: CanonicalOutcomeV1::Error(file_error(
@@ -1837,7 +1822,6 @@ fn resource_denied(
 ) -> HostDispatchReplyV1 {
     HostDispatchReplyV1 {
         capability_identity: None,
-        resource_identity: None,
         resource_token: None,
         resource_bindings: Vec::new(),
         outcome: CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(error)),
@@ -2108,42 +2092,32 @@ pub enum CanonicalOutcomeV1 {
     Error(SemanticErrorV1),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct EffectEventV1 {
-    pub sequence: u64,
-    pub operation: HostOpV1,
-    pub capability: Option<CapabilityTraceIdentity>,
-    pub resource: Option<ResourceTraceIdentityV1>,
-    pub request: CanonicalRequestV1,
-    pub outcome: CanonicalOutcomeV1,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum ResourceBindingRoleV2 {
+pub enum ResourceBindingRole {
     File,
     Buffer,
     Target,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct EffectEventV2 {
+pub struct EffectEvent {
     pub sequence: u64,
     pub operation: HostOpV1,
     pub capability: Option<CapabilityTraceIdentity>,
-    pub resource_bindings: Vec<(ResourceBindingRoleV2, ResourceTraceIdentityV1)>,
+    pub resource_bindings: Vec<(ResourceBindingRole, ResourceTraceIdentityV1)>,
     pub request: CanonicalRequestV1,
     pub outcome: CanonicalOutcomeV1,
 }
 
-/// Construct the canonical V2 runtime event after semantic dispatch has
+/// Construct the canonical runtime event after semantic dispatch has
 /// produced its reply and before an executor reifies that reply.
-pub fn effect_event_v2_from_dispatch(
+pub fn effect_event_from_dispatch(
     sequence: u64,
     operation: HostOpV1,
     request: CanonicalRequestV1,
     reply: &HostDispatchReplyV1,
-) -> EffectEventV2 {
-    EffectEventV2 {
+) -> EffectEvent {
+    EffectEvent {
         sequence,
         operation,
         capability: reply.capability_identity.clone(),
@@ -2207,13 +2181,37 @@ pub enum TerminalErrorV1 {
     HomeRootResolutionFailed(crate::HomeRootResolutionFailureV1),
 }
 
+/// Observed process termination, computed before exit-code normalization.
+///
+/// This is an exported observation, never a Ward verdict.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TerminalExitClass {
+    NormalReturn,
+    ReturnedError,
+    ControlledTrap,
+}
+
+pub fn terminal_exit_class(
+    terminal_value: i64,
+    terminal_error: Option<&TerminalErrorV1>,
+) -> TerminalExitClass {
+    if terminal_error.is_some() || terminal_value < 0 {
+        TerminalExitClass::ControlledTrap
+    } else if terminal_value == 0 {
+        TerminalExitClass::NormalReturn
+    } else {
+        TerminalExitClass::ReturnedError
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct EffectObservationV1 {
+pub struct EffectObservation {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
     pub filesystem_delta: Vec<FsDeltaV1>,
     pub terminal_error: Option<TerminalErrorV1>,
-    pub effect_trace: Vec<EffectEventV1>,
+    pub effect_trace: Vec<EffectEvent>,
+    pub terminal_exit: TerminalExitClass,
     pub exit_status: i32,
 }
 
@@ -2965,7 +2963,7 @@ mod tests {
             .find("context.finalize_resources();")
             .expect("controlled finish explicitly finalizes resources");
         let observation = finish
-            .find("write_observation_v1")
+            .find("write_observation")
             .expect("controlled finish records its observation");
         assert!(
             finalize < observation,
@@ -3028,7 +3026,7 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
-    fn resource_lane(root: &std::path::Path) -> Vec<EffectEventV1> {
+    fn resource_lane(root: &std::path::Path) -> Vec<EffectEvent> {
         let root_path = crate::RootPath::new(root).unwrap();
         let root_handle = crate::open_root(&root_path).unwrap();
         let metadata = crate::metadata(&root_handle).unwrap();
@@ -3068,14 +3066,12 @@ mod tests {
         )
         .unwrap();
         let token = open.resource_token.unwrap();
-        events.push(EffectEventV1 {
-            sequence: 0,
-            operation: HostOpV1::FsOpen,
-            capability: open.capability_identity,
-            resource: open.resource_identity,
-            request: open_request,
-            outcome: open.outcome,
-        });
+        events.push(effect_event_from_dispatch(
+            0,
+            HostOpV1::FsOpen,
+            open_request,
+            &open,
+        ));
         for (sequence, operation, request) in [
             (
                 1,
@@ -3098,14 +3094,9 @@ mod tests {
                 &request,
             )
             .unwrap();
-            events.push(EffectEventV1 {
-                sequence,
-                operation,
-                capability: reply.capability_identity,
-                resource: reply.resource_identity,
-                request,
-                outcome: reply.outcome,
-            });
+            events.push(effect_event_from_dispatch(
+                sequence, operation, request, &reply,
+            ));
         }
         events
     }
@@ -3126,9 +3117,9 @@ mod tests {
         assert_eq!(
             left_events
                 .iter()
-                .map(|event| event.resource)
+                .map(|event| event.resource_bindings.clone())
                 .collect::<Vec<_>>(),
-            vec![Some(ResourceTraceIdentityV1(1)); 3]
+            vec![vec![(ResourceBindingRole::Target, ResourceTraceIdentityV1(1))]; 3]
         );
         std::fs::remove_dir_all(left).unwrap();
         std::fs::remove_dir_all(right).unwrap();
@@ -3326,7 +3317,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn bounded_positioned_io_reaches_progress_mismatch_and_v2_bindings() {
+    fn bounded_positioned_io_reaches_progress_mismatch_and_ordered_bindings() {
         let root = std::env::temp_dir().join(format!("ken-px8r-positioned-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
@@ -3372,7 +3363,7 @@ mod tests {
         )
         .unwrap();
         let source_token = source.resource_token.unwrap();
-        let source_identity = source.resource_identity.unwrap();
+        let source_identity = source.resource_bindings[0].1;
         let buffer = dispatch_host_op_v1(
             &mut backend,
             &capabilities,
@@ -3384,10 +3375,10 @@ mod tests {
         )
         .unwrap();
         let buffer_token = buffer.resource_token.unwrap();
-        let buffer_identity = buffer.resource_identity.unwrap();
+        let buffer_identity = buffer.resource_bindings[0].1;
         assert_eq!(
             buffer.resource_bindings,
-            vec![(ResourceBindingRoleV2::Target, buffer_identity)]
+            vec![(ResourceBindingRole::Target, buffer_identity)]
         );
         let over_limit = dispatch_host_op_v1(
             &mut backend,
@@ -3432,11 +3423,11 @@ mod tests {
         assert_eq!(
             read.resource_bindings,
             vec![
-                (ResourceBindingRoleV2::File, source_identity),
-                (ResourceBindingRoleV2::Buffer, buffer_identity),
+                (ResourceBindingRole::File, source_identity),
+                (ResourceBindingRole::Buffer, buffer_identity),
             ]
         );
-        let event = effect_event_v2_from_dispatch(7, HostOpV1::FsReadAt, read_request, &read);
+        let event = effect_event_from_dispatch(7, HostOpV1::FsReadAt, read_request, &read);
         assert_eq!(event.sequence, 7);
         assert_eq!(event.resource_bindings, read.resource_bindings);
 
@@ -3474,7 +3465,7 @@ mod tests {
         let target_token = target
             .resource_token
             .unwrap_or_else(|| panic!("target open failed: {:?}", target.outcome));
-        let target_identity = target.resource_identity.unwrap();
+        let target_identity = target.resource_bindings[0].1;
         let write_request = CanonicalRequestV1::FsWriteAt {
             file_offset: 2,
             buffer_start: 0,
@@ -3502,8 +3493,8 @@ mod tests {
         assert_eq!(
             full_write.resource_bindings,
             vec![
-                (ResourceBindingRoleV2::File, target_identity),
-                (ResourceBindingRoleV2::Buffer, buffer_identity),
+                (ResourceBindingRole::File, target_identity),
+                (ResourceBindingRole::Buffer, buffer_identity),
             ]
         );
         assert_eq!(
@@ -3600,7 +3591,13 @@ mod tests {
             zero_write.outcome,
             CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(ResourceErrorV1::NoProgress))
         );
-        assert!(zero_write.resource_bindings.is_empty());
+        assert_eq!(
+            zero_write.resource_bindings,
+            vec![
+                (ResourceBindingRole::File, target_identity),
+                (ResourceBindingRole::Buffer, buffer_identity),
+            ]
+        );
 
         let short_read = dispatch_host_op_v1(
             &mut backend,
@@ -3722,7 +3719,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             released.resource_bindings,
-            vec![(ResourceBindingRoleV2::Target, buffer_identity)]
+            vec![(ResourceBindingRole::Target, buffer_identity)]
         );
         let closed = dispatch_host_op_v1(
             &mut backend,

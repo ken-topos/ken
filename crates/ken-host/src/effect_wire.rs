@@ -2,27 +2,50 @@
 
 use crate::{
     CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, CapabilityDeniedV1,
-    CapabilityTraceIdentity, ConsoleStreamV1, CreatePolicyV1, DirEntryV1, EffectEventV1,
+    CapabilityTraceIdentity, ConsoleStreamV1, CreatePolicyV1, DirEntryV1, EffectEvent,
     FileErrorCauseV1, FileErrorIdentityV1, FileMetadataV1, FsCapabilityOperationV1, FsNodeKindV1,
-    FsOpenModeV1, HostOpV1, IoErrorIdentityV1, ResourceErrorV1, ResourceKindV1,
-    ResourceSettlementObservationV1, ResourceSettlementOutcomeV1, ResourceTraceIdentityV1,
-    SemanticErrorV1,
+    FsOpenModeV1, HostOpV1, IoErrorIdentityV1, ResourceBindingRole, ResourceErrorV1,
+    ResourceKindV1, ResourceSettlementObservationV1, ResourceSettlementOutcomeV1,
+    ResourceTraceIdentityV1, SemanticErrorV1, TerminalExitClass,
 };
 
 const MAGIC: &[u8; 8] = b"KETRACE2";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LinkedEffectTraceV1 {
+pub struct LinkedEffectTrace {
     pub plan_hash: u64,
     pub target_abi_hash: [u8; 32],
     pub host_effect_abi_hash: [u8; 32],
     pub terminal_value: i64,
     pub terminal_error: Option<crate::TerminalErrorV1>,
-    pub effect_trace: Vec<EffectEventV1>,
+    pub effect_trace: Vec<EffectEvent>,
+    pub terminal_exit: TerminalExitClass,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct EffectTraceWireErrorV1;
+pub struct EffectTraceWireError;
+
+fn put_role(out: &mut Vec<u8>, role: ResourceBindingRole) {
+    put_u8(
+        out,
+        match role {
+            ResourceBindingRole::File => 0,
+            ResourceBindingRole::Buffer => 1,
+            ResourceBindingRole::Target => 2,
+        },
+    );
+}
+
+fn put_terminal_exit(out: &mut Vec<u8>, class: TerminalExitClass) {
+    put_u8(
+        out,
+        match class {
+            TerminalExitClass::NormalReturn => 0,
+            TerminalExitClass::ReturnedError => 1,
+            TerminalExitClass::ControlledTrap => 2,
+        },
+    );
+}
 
 fn put_u8(out: &mut Vec<u8>, value: u8) {
     out.push(value);
@@ -44,16 +67,16 @@ fn put_i32(out: &mut Vec<u8>, value: i32) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
-fn put_bytes(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), EffectTraceWireErrorV1> {
+fn put_bytes(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), EffectTraceWireError> {
     put_u64(
         out,
-        u64::try_from(bytes.len()).map_err(|_| EffectTraceWireErrorV1)?,
+        u64::try_from(bytes.len()).map_err(|_| EffectTraceWireError)?,
     );
     out.extend_from_slice(bytes);
     Ok(())
 }
 
-fn put_string(out: &mut Vec<u8>, value: &str) -> Result<(), EffectTraceWireErrorV1> {
+fn put_string(out: &mut Vec<u8>, value: &str) -> Result<(), EffectTraceWireError> {
     put_bytes(out, value.as_bytes())
 }
 
@@ -68,7 +91,7 @@ fn stream_tag(stream: ConsoleStreamV1) -> u8 {
 fn put_request(
     out: &mut Vec<u8>,
     request: &CanonicalRequestV1,
-) -> Result<(), EffectTraceWireErrorV1> {
+) -> Result<(), EffectTraceWireError> {
     match request {
         CanonicalRequestV1::ConsoleRead { stream, limit } => {
             put_u8(out, 0);
@@ -211,7 +234,7 @@ fn put_node_kind(out: &mut Vec<u8>, kind: FsNodeKindV1) {
     );
 }
 
-fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTraceWireErrorV1> {
+fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTraceWireError> {
     match reply {
         CanonicalReplyV1::Unit => put_u8(out, 0),
         CanonicalReplyV1::Bool(value) => {
@@ -240,7 +263,7 @@ fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTr
             put_u8(out, 7);
             put_u64(
                 out,
-                u64::try_from(entries.len()).map_err(|_| EffectTraceWireErrorV1)?,
+                u64::try_from(entries.len()).map_err(|_| EffectTraceWireError)?,
             );
             for entry in entries {
                 put_bytes(out, &entry.name)?;
@@ -367,7 +390,7 @@ fn put_cause(out: &mut Vec<u8>, cause: &FileErrorCauseV1) {
     }
 }
 
-fn put_error(out: &mut Vec<u8>, error: &SemanticErrorV1) -> Result<(), EffectTraceWireErrorV1> {
+fn put_error(out: &mut Vec<u8>, error: &SemanticErrorV1) -> Result<(), EffectTraceWireError> {
     match error {
         SemanticErrorV1::Io(error) => {
             put_u8(out, 0);
@@ -420,9 +443,14 @@ fn put_error(out: &mut Vec<u8>, error: &SemanticErrorV1) -> Result<(), EffectTra
     Ok(())
 }
 
-pub fn encode_linked_effect_trace_v1(
-    trace: &LinkedEffectTraceV1,
-) -> Result<Vec<u8>, EffectTraceWireErrorV1> {
+pub fn encode_linked_effect_trace(
+    trace: &LinkedEffectTrace,
+) -> Result<Vec<u8>, EffectTraceWireError> {
+    if trace.terminal_exit
+        != crate::terminal_exit_class(trace.terminal_value, trace.terminal_error.as_ref())
+    {
+        return Err(EffectTraceWireError);
+    }
     let mut out = Vec::new();
     out.extend_from_slice(MAGIC);
     put_u64(&mut out, trace.plan_hash);
@@ -450,11 +478,12 @@ pub fn encode_linked_effect_trace_v1(
                 crate::HomeRootResolutionFailureV1::SymlinkDenied => put_u8(&mut out, 6),
             }
         }
-        Some(_) => return Err(EffectTraceWireErrorV1),
+        Some(_) => return Err(EffectTraceWireError),
     }
+    put_terminal_exit(&mut out, trace.terminal_exit);
     put_u64(
         &mut out,
-        u64::try_from(trace.effect_trace.len()).map_err(|_| EffectTraceWireErrorV1)?,
+        u64::try_from(trace.effect_trace.len()).map_err(|_| EffectTraceWireError)?,
     );
     for event in &trace.effect_trace {
         put_u64(&mut out, event.sequence);
@@ -466,12 +495,13 @@ pub fn encode_linked_effect_trace_v1(
                 put_string(&mut out, &identity.0)?;
             }
         }
-        match event.resource {
-            None => put_u8(&mut out, 0),
-            Some(identity) => {
-                put_u8(&mut out, 1);
-                put_u64(&mut out, identity.0);
-            }
+        put_u64(
+            &mut out,
+            u64::try_from(event.resource_bindings.len()).map_err(|_| EffectTraceWireError)?,
+        );
+        for (role, identity) in &event.resource_bindings {
+            put_role(&mut out, *role);
+            put_u64(&mut out, identity.0);
         }
         put_request(&mut out, &event.request)?;
         match &event.outcome {
@@ -497,67 +527,80 @@ impl<'a> Cursor<'a> {
         self.bytes.len() - self.position
     }
 
-    fn take(&mut self, len: usize) -> Result<&'a [u8], EffectTraceWireErrorV1> {
-        let end = self
-            .position
-            .checked_add(len)
-            .ok_or(EffectTraceWireErrorV1)?;
+    fn take(&mut self, len: usize) -> Result<&'a [u8], EffectTraceWireError> {
+        let end = self.position.checked_add(len).ok_or(EffectTraceWireError)?;
         let value = self
             .bytes
             .get(self.position..end)
-            .ok_or(EffectTraceWireErrorV1)?;
+            .ok_or(EffectTraceWireError)?;
         self.position = end;
         Ok(value)
     }
-    fn u8(&mut self) -> Result<u8, EffectTraceWireErrorV1> {
+    fn u8(&mut self) -> Result<u8, EffectTraceWireError> {
         Ok(self.take(1)?[0])
     }
-    fn u16(&mut self) -> Result<u16, EffectTraceWireErrorV1> {
+    fn u16(&mut self) -> Result<u16, EffectTraceWireError> {
         Ok(u16::from_le_bytes(self.take(2)?.try_into().unwrap()))
     }
-    fn u64(&mut self) -> Result<u64, EffectTraceWireErrorV1> {
+    fn u64(&mut self) -> Result<u64, EffectTraceWireError> {
         Ok(u64::from_le_bytes(self.take(8)?.try_into().unwrap()))
     }
-    fn i64(&mut self) -> Result<i64, EffectTraceWireErrorV1> {
+    fn i64(&mut self) -> Result<i64, EffectTraceWireError> {
         Ok(i64::from_le_bytes(self.take(8)?.try_into().unwrap()))
     }
-    fn i32(&mut self) -> Result<i32, EffectTraceWireErrorV1> {
+    fn i32(&mut self) -> Result<i32, EffectTraceWireError> {
         Ok(i32::from_le_bytes(self.take(4)?.try_into().unwrap()))
     }
-    fn bytes(&mut self) -> Result<Vec<u8>, EffectTraceWireErrorV1> {
-        let len = usize::try_from(self.u64()?).map_err(|_| EffectTraceWireErrorV1)?;
+    fn bytes(&mut self) -> Result<Vec<u8>, EffectTraceWireError> {
+        let len = usize::try_from(self.u64()?).map_err(|_| EffectTraceWireError)?;
         Ok(self.take(len)?.to_vec())
     }
-    fn string(&mut self) -> Result<String, EffectTraceWireErrorV1> {
-        String::from_utf8(self.bytes()?).map_err(|_| EffectTraceWireErrorV1)
+    fn string(&mut self) -> Result<String, EffectTraceWireError> {
+        String::from_utf8(self.bytes()?).map_err(|_| EffectTraceWireError)
     }
 }
 
-fn get_stream(cursor: &mut Cursor<'_>) -> Result<ConsoleStreamV1, EffectTraceWireErrorV1> {
+fn get_stream(cursor: &mut Cursor<'_>) -> Result<ConsoleStreamV1, EffectTraceWireError> {
     match cursor.u8()? {
         0 => Ok(ConsoleStreamV1::Stdin),
         1 => Ok(ConsoleStreamV1::Stdout),
         2 => Ok(ConsoleStreamV1::Stderr),
-        _ => Err(EffectTraceWireErrorV1),
+        _ => Err(EffectTraceWireError),
     }
 }
-fn get_bool(cursor: &mut Cursor<'_>) -> Result<bool, EffectTraceWireErrorV1> {
+fn get_role(cursor: &mut Cursor<'_>) -> Result<ResourceBindingRole, EffectTraceWireError> {
+    match cursor.u8()? {
+        0 => Ok(ResourceBindingRole::File),
+        1 => Ok(ResourceBindingRole::Buffer),
+        2 => Ok(ResourceBindingRole::Target),
+        _ => Err(EffectTraceWireError),
+    }
+}
+fn get_terminal_exit(cursor: &mut Cursor<'_>) -> Result<TerminalExitClass, EffectTraceWireError> {
+    match cursor.u8()? {
+        0 => Ok(TerminalExitClass::NormalReturn),
+        1 => Ok(TerminalExitClass::ReturnedError),
+        2 => Ok(TerminalExitClass::ControlledTrap),
+        _ => Err(EffectTraceWireError),
+    }
+}
+fn get_bool(cursor: &mut Cursor<'_>) -> Result<bool, EffectTraceWireError> {
     match cursor.u8()? {
         0 => Ok(false),
         1 => Ok(true),
-        _ => Err(EffectTraceWireErrorV1),
+        _ => Err(EffectTraceWireError),
     }
 }
-fn get_node_kind(cursor: &mut Cursor<'_>) -> Result<FsNodeKindV1, EffectTraceWireErrorV1> {
+fn get_node_kind(cursor: &mut Cursor<'_>) -> Result<FsNodeKindV1, EffectTraceWireError> {
     match cursor.u8()? {
         0 => Ok(FsNodeKindV1::File),
         1 => Ok(FsNodeKindV1::Directory),
         2 => Ok(FsNodeKindV1::Symlink),
         3 => Ok(FsNodeKindV1::Other),
-        _ => Err(EffectTraceWireErrorV1),
+        _ => Err(EffectTraceWireError),
     }
 }
-fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTraceWireErrorV1> {
+fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTraceWireError> {
     Ok(match cursor.u8()? {
         0 => CanonicalRequestV1::ConsoleRead {
             stream: get_stream(cursor)?,
@@ -583,7 +626,7 @@ fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTrac
                 0 => CreatePolicyV1::CreateNew,
                 1 => CreatePolicyV1::CreateOrTruncate,
                 2 => CreatePolicyV1::CreateOrKeep,
-                _ => return Err(EffectTraceWireErrorV1),
+                _ => return Err(EffectTraceWireError),
             };
             CanonicalRequestV1::FsWriteFile {
                 path,
@@ -628,7 +671,7 @@ fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTrac
                 2 => FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateNew),
                 3 => FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrTruncate),
                 4 => FsOpenModeV1::WriteCreate(CreatePolicyV1::CreateOrKeep),
-                _ => return Err(EffectTraceWireErrorV1),
+                _ => return Err(EffectTraceWireError),
             },
         },
         16 => CanonicalRequestV1::FsHandleMetadata,
@@ -650,11 +693,11 @@ fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTrac
             start: cursor.u64()?,
             length: cursor.u64()?,
         },
-        _ => return Err(EffectTraceWireErrorV1),
+        _ => return Err(EffectTraceWireError),
     })
 }
 
-fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWireErrorV1> {
+fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWireError> {
     Ok(match cursor.u8()? {
         0 => CanonicalReplyV1::Unit,
         1 => CanonicalReplyV1::Bool(get_bool(cursor)?),
@@ -667,9 +710,9 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
             kind: get_node_kind(cursor)?,
         }),
         7 => {
-            let count = usize::try_from(cursor.u64()?).map_err(|_| EffectTraceWireErrorV1)?;
+            let count = usize::try_from(cursor.u64()?).map_err(|_| EffectTraceWireError)?;
             if count > cursor.remaining() / 9 {
-                return Err(EffectTraceWireErrorV1);
+                return Err(EffectTraceWireError);
             }
             let mut entries = Vec::with_capacity(count);
             for _ in 0..count {
@@ -693,7 +736,7 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
                     let length = cursor.u64()?;
                     let transferred = cursor.u64()?;
                     if length != transferred || transferred == 0 {
-                        return Err(EffectTraceWireErrorV1);
+                        return Err(EffectTraceWireError);
                     }
                     crate::ReadProgressV1::ReadSome {
                         span: crate::BufferSpanV1 { start, length },
@@ -701,41 +744,41 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
                     }
                 }
                 1 => crate::ReadProgressV1::ReadEof,
-                _ => return Err(EffectTraceWireErrorV1),
+                _ => return Err(EffectTraceWireError),
             };
             CanonicalReplyV1::ReadProgress(progress)
         }
         11 => {
             let count = cursor.u64()?;
             if count == 0 {
-                return Err(EffectTraceWireErrorV1);
+                return Err(EffectTraceWireError);
             }
             CanonicalReplyV1::WriteProgress(crate::WriteProgressV1::Wrote(crate::TransferCountV1(
                 count,
             )))
         }
-        _ => return Err(EffectTraceWireErrorV1),
+        _ => return Err(EffectTraceWireError),
     })
 }
 
-fn get_resource_kind(cursor: &mut Cursor<'_>) -> Result<ResourceKindV1, EffectTraceWireErrorV1> {
+fn get_resource_kind(cursor: &mut Cursor<'_>) -> Result<ResourceKindV1, EffectTraceWireError> {
     match cursor.u8()? {
         0 => Ok(ResourceKindV1::FsHandle),
         1 => Ok(ResourceKindV1::Buffer),
-        _ => Err(EffectTraceWireErrorV1),
+        _ => Err(EffectTraceWireError),
     }
 }
 
 fn get_settlement(
     cursor: &mut Cursor<'_>,
-) -> Result<ResourceSettlementObservationV1, EffectTraceWireErrorV1> {
+) -> Result<ResourceSettlementObservationV1, EffectTraceWireError> {
     let schema_version = cursor.u16()?;
     let resource_kind = get_resource_kind(cursor)?;
     let identity = ResourceTraceIdentityV1(cursor.u64()?);
     let outcome = match cursor.u8()? {
         0 => ResourceSettlementOutcomeV1::Released,
         1 => ResourceSettlementOutcomeV1::ReleaseFailed(get_io_error(cursor)?),
-        _ => return Err(EffectTraceWireErrorV1),
+        _ => return Err(EffectTraceWireError),
     };
     Ok(ResourceSettlementObservationV1 {
         schema_version,
@@ -744,7 +787,7 @@ fn get_settlement(
         outcome,
     })
 }
-fn get_io_error(cursor: &mut Cursor<'_>) -> Result<IoErrorIdentityV1, EffectTraceWireErrorV1> {
+fn get_io_error(cursor: &mut Cursor<'_>) -> Result<IoErrorIdentityV1, EffectTraceWireError> {
     Ok(match cursor.u8()? {
         0 => IoErrorIdentityV1::NotFound,
         1 => IoErrorIdentityV1::PermissionDenied,
@@ -757,12 +800,12 @@ fn get_io_error(cursor: &mut Cursor<'_>) -> Result<IoErrorIdentityV1, EffectTrac
         8 => IoErrorIdentityV1::NotEmpty,
         9 => IoErrorIdentityV1::Unsupported,
         10 => IoErrorIdentityV1::Other(cursor.i32()?),
-        _ => return Err(EffectTraceWireErrorV1),
+        _ => return Err(EffectTraceWireError),
     })
 }
 fn get_fs_operation(
     cursor: &mut Cursor<'_>,
-) -> Result<FsCapabilityOperationV1, EffectTraceWireErrorV1> {
+) -> Result<FsCapabilityOperationV1, EffectTraceWireError> {
     match cursor.u8()? {
         0 => Ok(FsCapabilityOperationV1::Read),
         1 => Ok(FsCapabilityOperationV1::Write),
@@ -775,10 +818,10 @@ fn get_fs_operation(
         8 => Ok(FsCapabilityOperationV1::RenameSource),
         9 => Ok(FsCapabilityOperationV1::RenameDestination),
         10 => Ok(FsCapabilityOperationV1::ChangeMode),
-        _ => Err(EffectTraceWireErrorV1),
+        _ => Err(EffectTraceWireError),
     }
 }
-fn get_denial(cursor: &mut Cursor<'_>) -> Result<CapabilityDeniedV1, EffectTraceWireErrorV1> {
+fn get_denial(cursor: &mut Cursor<'_>) -> Result<CapabilityDeniedV1, EffectTraceWireError> {
     Ok(match cursor.u8()? {
         0 => CapabilityDeniedV1::RightNotHeld {
             operation: get_fs_operation(cursor)?,
@@ -788,21 +831,21 @@ fn get_denial(cursor: &mut Cursor<'_>) -> Result<CapabilityDeniedV1, EffectTrace
         2 => CapabilityDeniedV1::ScopeEscape,
         3 => CapabilityDeniedV1::SymlinkDenied,
         4 => CapabilityDeniedV1::MalformedCapability,
-        _ => return Err(EffectTraceWireErrorV1),
+        _ => return Err(EffectTraceWireError),
     })
 }
-fn get_cause(cursor: &mut Cursor<'_>) -> Result<FileErrorCauseV1, EffectTraceWireErrorV1> {
+fn get_cause(cursor: &mut Cursor<'_>) -> Result<FileErrorCauseV1, EffectTraceWireError> {
     match cursor.u8()? {
         0 => Ok(FileErrorCauseV1::Io(get_io_error(cursor)?)),
         1 => Ok(FileErrorCauseV1::Capability(get_denial(cursor)?)),
-        _ => Err(EffectTraceWireErrorV1),
+        _ => Err(EffectTraceWireError),
     }
 }
-fn get_error(cursor: &mut Cursor<'_>) -> Result<SemanticErrorV1, EffectTraceWireErrorV1> {
+fn get_error(cursor: &mut Cursor<'_>) -> Result<SemanticErrorV1, EffectTraceWireError> {
     Ok(match cursor.u8()? {
         0 => SemanticErrorV1::Io(get_io_error(cursor)?),
         1 => SemanticErrorV1::File(FileErrorIdentityV1 {
-            operation: HostOpV1::try_from(cursor.u16()?).map_err(|_| EffectTraceWireErrorV1)?,
+            operation: HostOpV1::try_from(cursor.u16()?).map_err(|_| EffectTraceWireError)?,
             relative_path: cursor.bytes()?,
             cause: get_cause(cursor)?,
         }),
@@ -828,18 +871,16 @@ fn get_error(cursor: &mut Cursor<'_>) -> Result<SemanticErrorV1, EffectTraceWire
             6 => ResourceErrorV1::InvalidOffset,
             7 => ResourceErrorV1::InvalidBounds,
             8 => ResourceErrorV1::NoProgress,
-            _ => return Err(EffectTraceWireErrorV1),
+            _ => return Err(EffectTraceWireError),
         }),
-        _ => return Err(EffectTraceWireErrorV1),
+        _ => return Err(EffectTraceWireError),
     })
 }
 
-pub fn decode_linked_effect_trace_v1(
-    bytes: &[u8],
-) -> Result<LinkedEffectTraceV1, EffectTraceWireErrorV1> {
+pub fn decode_linked_effect_trace(bytes: &[u8]) -> Result<LinkedEffectTrace, EffectTraceWireError> {
     let mut cursor = Cursor { bytes, position: 0 };
     if cursor.take(MAGIC.len())? != MAGIC {
-        return Err(EffectTraceWireErrorV1);
+        return Err(EffectTraceWireError);
     }
     let plan_hash = cursor.u64()?;
     let target_abi_hash = cursor.take(32)?.try_into().unwrap();
@@ -857,54 +898,66 @@ pub fn decode_linked_effect_trace_v1(
                 4 => crate::HomeRootResolutionFailureV1::RootOpen(get_io_error(&mut cursor)?),
                 5 => crate::HomeRootResolutionFailureV1::ScopeEscape,
                 6 => crate::HomeRootResolutionFailureV1::SymlinkDenied,
-                _ => return Err(EffectTraceWireErrorV1),
+                _ => return Err(EffectTraceWireError),
             },
         )),
-        _ => return Err(EffectTraceWireErrorV1),
+        _ => return Err(EffectTraceWireError),
     };
-    let count = usize::try_from(cursor.u64()?).map_err(|_| EffectTraceWireErrorV1)?;
-    if count > cursor.remaining() / 13 {
-        return Err(EffectTraceWireErrorV1);
+    let terminal_exit = get_terminal_exit(&mut cursor)?;
+    let count = usize::try_from(cursor.u64()?).map_err(|_| EffectTraceWireError)?;
+    // Minimum event: sequence + operation + capability tag + binding count +
+    // request tag + outcome tag + reply/error tag.
+    if count > cursor.remaining() / 22 {
+        return Err(EffectTraceWireError);
     }
     let mut effect_trace = Vec::with_capacity(count);
     for _ in 0..count {
         let sequence = cursor.u64()?;
-        let operation = HostOpV1::try_from(cursor.u16()?).map_err(|_| EffectTraceWireErrorV1)?;
+        let operation = HostOpV1::try_from(cursor.u16()?).map_err(|_| EffectTraceWireError)?;
         let capability = match cursor.u8()? {
             0 => None,
             1 => Some(CapabilityTraceIdentity(cursor.string()?)),
-            _ => return Err(EffectTraceWireErrorV1),
+            _ => return Err(EffectTraceWireError),
         };
-        let resource = match cursor.u8()? {
-            0 => None,
-            1 => Some(ResourceTraceIdentityV1(cursor.u64()?)),
-            _ => return Err(EffectTraceWireErrorV1),
-        };
+        let binding_count = usize::try_from(cursor.u64()?).map_err(|_| EffectTraceWireError)?;
+        if binding_count > cursor.remaining() / 9 {
+            return Err(EffectTraceWireError);
+        }
+        let mut resource_bindings = Vec::with_capacity(binding_count);
+        for _ in 0..binding_count {
+            resource_bindings.push((
+                get_role(&mut cursor)?,
+                ResourceTraceIdentityV1(cursor.u64()?),
+            ));
+        }
         let request = get_request(&mut cursor)?;
         let outcome = match cursor.u8()? {
             0 => CanonicalOutcomeV1::Success(get_reply(&mut cursor)?),
             1 => CanonicalOutcomeV1::Error(get_error(&mut cursor)?),
-            _ => return Err(EffectTraceWireErrorV1),
+            _ => return Err(EffectTraceWireError),
         };
-        effect_trace.push(EffectEventV1 {
+        effect_trace.push(EffectEvent {
             sequence,
             operation,
             capability,
-            resource,
+            resource_bindings,
             request,
             outcome,
         });
     }
-    if cursor.position != bytes.len() {
-        return Err(EffectTraceWireErrorV1);
+    if cursor.position != bytes.len()
+        || terminal_exit != crate::terminal_exit_class(terminal_value, terminal_error.as_ref())
+    {
+        return Err(EffectTraceWireError);
     }
-    Ok(LinkedEffectTraceV1 {
+    Ok(LinkedEffectTrace {
         plan_hash,
         target_abi_hash,
         host_effect_abi_hash,
         terminal_value,
         terminal_error,
         effect_trace,
+        terminal_exit,
     })
 }
 
@@ -912,19 +965,20 @@ pub fn decode_linked_effect_trace_v1(
 mod tests {
     use super::*;
 
-    fn representative_trace() -> LinkedEffectTraceV1 {
-        LinkedEffectTraceV1 {
+    fn representative_trace() -> LinkedEffectTrace {
+        LinkedEffectTrace {
             plan_hash: 7,
             target_abi_hash: [3; 32],
             host_effect_abi_hash: [5; 32],
             terminal_value: 61,
             terminal_error: None,
+            terminal_exit: TerminalExitClass::ReturnedError,
             effect_trace: vec![
-                EffectEventV1 {
+                EffectEvent {
                     sequence: 0,
                     operation: HostOpV1::ConsoleWrite,
                     capability: None,
-                    resource: None,
+                    resource_bindings: Vec::new(),
                     request: CanonicalRequestV1::ConsoleWrite {
                         stream: ConsoleStreamV1::Stdout,
                         bytes: vec![0, 0xff],
@@ -933,32 +987,35 @@ mod tests {
                         IoErrorIdentityV1::BrokenPipe,
                     )),
                 },
-                EffectEventV1 {
+                EffectEvent {
                     sequence: 1,
                     operation: HostOpV1::FsReadFile,
                     capability: Some(CapabilityTraceIdentity("declared:FS".into())),
-                    resource: None,
+                    resource_bindings: Vec::new(),
                     request: CanonicalRequestV1::FsReadFile {
                         path: vec![b'f', 0xff],
                     },
                     outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::Bytes(vec![1, 2])),
                 },
-                EffectEventV1 {
+                EffectEvent {
                     sequence: 2,
                     operation: HostOpV1::FsChangeMode,
                     capability: Some(CapabilityTraceIdentity("declared:FS".into())),
-                    resource: None,
+                    resource_bindings: Vec::new(),
                     request: CanonicalRequestV1::FsChangeMode {
                         path: vec![b'm', 0xfe],
                         mode: 0o640,
                     },
                     outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::Unit),
                 },
-                EffectEventV1 {
+                EffectEvent {
                     sequence: 3,
                     operation: HostOpV1::FsOpen,
                     capability: Some(CapabilityTraceIdentity("declared:FS".into())),
-                    resource: Some(ResourceTraceIdentityV1(1)),
+                    resource_bindings: vec![(
+                        ResourceBindingRole::Target,
+                        ResourceTraceIdentityV1(1),
+                    )],
                     request: CanonicalRequestV1::FsOpen {
                         path: vec![b'r', 0xff],
                         mode: FsOpenModeV1::Metadata,
@@ -969,11 +1026,14 @@ mod tests {
                         identity: ResourceTraceIdentityV1(1),
                     }),
                 },
-                EffectEventV1 {
+                EffectEvent {
                     sequence: 4,
                     operation: HostOpV1::ResourceRelease,
                     capability: None,
-                    resource: Some(ResourceTraceIdentityV1(1)),
+                    resource_bindings: vec![(
+                        ResourceBindingRole::Target,
+                        ResourceTraceIdentityV1(1),
+                    )],
                     request: CanonicalRequestV1::ResourceRelease,
                     outcome: CanonicalOutcomeV1::Error(SemanticErrorV1::Resource(
                         ResourceErrorV1::ReleaseFailed {
@@ -984,11 +1044,14 @@ mod tests {
                         },
                     )),
                 },
-                EffectEventV1 {
+                EffectEvent {
                     sequence: 5,
                     operation: HostOpV1::BufferAllocate,
                     capability: None,
-                    resource: Some(ResourceTraceIdentityV1(2)),
+                    resource_bindings: vec![(
+                        ResourceBindingRole::Target,
+                        ResourceTraceIdentityV1(2),
+                    )],
                     request: CanonicalRequestV1::BufferAllocate { capacity: 8 },
                     outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::ResourceAcquired {
                         schema_version: 1,
@@ -996,11 +1059,14 @@ mod tests {
                         identity: ResourceTraceIdentityV1(2),
                     }),
                 },
-                EffectEventV1 {
+                EffectEvent {
                     sequence: 6,
                     operation: HostOpV1::FsReadAt,
                     capability: None,
-                    resource: None,
+                    resource_bindings: vec![
+                        (ResourceBindingRole::File, ResourceTraceIdentityV1(1)),
+                        (ResourceBindingRole::Buffer, ResourceTraceIdentityV1(2)),
+                    ],
                     request: CanonicalRequestV1::FsReadAt {
                         file_offset: 9,
                         buffer_start: 1,
@@ -1016,11 +1082,11 @@ mod tests {
                         },
                     )),
                 },
-                EffectEventV1 {
+                EffectEvent {
                     sequence: 7,
                     operation: HostOpV1::FsWriteAt,
                     capability: None,
-                    resource: None,
+                    resource_bindings: Vec::new(),
                     request: CanonicalRequestV1::FsWriteAt {
                         file_offset: u64::MAX,
                         buffer_start: 0,
@@ -1033,11 +1099,14 @@ mod tests {
                         },
                     )),
                 },
-                EffectEventV1 {
+                EffectEvent {
                     sequence: 8,
                     operation: HostOpV1::BufferFreeze,
                     capability: None,
-                    resource: Some(ResourceTraceIdentityV1(2)),
+                    resource_bindings: vec![(
+                        ResourceBindingRole::Target,
+                        ResourceTraceIdentityV1(2),
+                    )],
                     request: CanonicalRequestV1::BufferFreeze {
                         start: 1,
                         length: 2,
@@ -1051,8 +1120,8 @@ mod tests {
     #[test]
     fn linked_trace_codec_roundtrips_identity_bytes_and_outcomes() {
         let expected = representative_trace();
-        let encoded = encode_linked_effect_trace_v1(&expected).unwrap();
-        assert_eq!(decode_linked_effect_trace_v1(&encoded), Ok(expected));
+        let encoded = encode_linked_effect_trace(&expected).unwrap();
+        assert_eq!(decode_linked_effect_trace(&encoded), Ok(expected));
     }
 
     #[test]
@@ -1061,46 +1130,94 @@ mod tests {
         lookup.terminal_error = Some(crate::TerminalErrorV1::HomeRootResolutionFailed(
             crate::HomeRootResolutionFailureV1::AccountLookup(IoErrorIdentityV1::Other(5)),
         ));
+        lookup.terminal_exit = TerminalExitClass::ControlledTrap;
         let mut root_open = representative_trace();
         root_open.terminal_error = Some(crate::TerminalErrorV1::HomeRootResolutionFailed(
             crate::HomeRootResolutionFailureV1::RootOpen(IoErrorIdentityV1::Other(5)),
         ));
+        root_open.terminal_exit = TerminalExitClass::ControlledTrap;
 
-        let lookup_wire = encode_linked_effect_trace_v1(&lookup).unwrap();
-        let root_open_wire = encode_linked_effect_trace_v1(&root_open).unwrap();
+        let lookup_wire = encode_linked_effect_trace(&lookup).unwrap();
+        let root_open_wire = encode_linked_effect_trace(&root_open).unwrap();
         assert_ne!(lookup_wire, root_open_wire);
-        assert_eq!(decode_linked_effect_trace_v1(&lookup_wire), Ok(lookup));
-        assert_eq!(
-            decode_linked_effect_trace_v1(&root_open_wire),
-            Ok(root_open)
-        );
+        assert_eq!(decode_linked_effect_trace(&lookup_wire), Ok(lookup));
+        assert_eq!(decode_linked_effect_trace(&root_open_wire), Ok(root_open));
     }
 
     #[test]
     fn linked_trace_decoder_rejects_magic_truncation_trailing_and_count_drift() {
-        let encoded = encode_linked_effect_trace_v1(&representative_trace()).unwrap();
+        let encoded = encode_linked_effect_trace(&representative_trace()).unwrap();
 
         let mut wrong_magic = encoded.clone();
         wrong_magic[0] ^= 1;
         assert_eq!(
-            decode_linked_effect_trace_v1(&wrong_magic),
-            Err(EffectTraceWireErrorV1)
+            decode_linked_effect_trace(&wrong_magic),
+            Err(EffectTraceWireError)
         );
         assert_eq!(
-            decode_linked_effect_trace_v1(&encoded[..encoded.len() - 1]),
-            Err(EffectTraceWireErrorV1)
+            decode_linked_effect_trace(&encoded[..encoded.len() - 1]),
+            Err(EffectTraceWireError)
         );
         let mut trailing = encoded.clone();
         trailing.push(0);
         assert_eq!(
-            decode_linked_effect_trace_v1(&trailing),
-            Err(EffectTraceWireErrorV1)
+            decode_linked_effect_trace(&trailing),
+            Err(EffectTraceWireError)
         );
         let mut impossible_count = encoded;
         impossible_count[88..96].copy_from_slice(&u64::MAX.to_le_bytes());
         assert_eq!(
-            decode_linked_effect_trace_v1(&impossible_count),
-            Err(EffectTraceWireErrorV1)
+            decode_linked_effect_trace(&impossible_count),
+            Err(EffectTraceWireError)
+        );
+    }
+
+    #[test]
+    fn sole_codec_rejects_terminal_role_length_and_class_drift() {
+        let trace = LinkedEffectTrace {
+            plan_hash: 7,
+            target_abi_hash: [3; 32],
+            host_effect_abi_hash: [5; 32],
+            terminal_value: 0,
+            terminal_error: None,
+            effect_trace: vec![EffectEvent {
+                sequence: 0,
+                operation: HostOpV1::ResourceRelease,
+                capability: None,
+                resource_bindings: vec![(ResourceBindingRole::Target, ResourceTraceIdentityV1(19))],
+                request: CanonicalRequestV1::ResourceRelease,
+                outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::Unit),
+            }],
+            terminal_exit: TerminalExitClass::NormalReturn,
+        };
+        let encoded = encode_linked_effect_trace(&trace).unwrap();
+
+        let mut wrong_terminal_tag = encoded.clone();
+        wrong_terminal_tag[89] = 3;
+        assert_eq!(
+            decode_linked_effect_trace(&wrong_terminal_tag),
+            Err(EffectTraceWireError)
+        );
+
+        let mut wrong_role = encoded.clone();
+        wrong_role[117] = 3;
+        assert_eq!(
+            decode_linked_effect_trace(&wrong_role),
+            Err(EffectTraceWireError)
+        );
+
+        let mut impossible_bindings = encoded.clone();
+        impossible_bindings[109..117].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert_eq!(
+            decode_linked_effect_trace(&impossible_bindings),
+            Err(EffectTraceWireError)
+        );
+
+        let mut mismatched_class = trace;
+        mismatched_class.terminal_exit = TerminalExitClass::ReturnedError;
+        assert_eq!(
+            encode_linked_effect_trace(&mismatched_class),
+            Err(EffectTraceWireError)
         );
     }
 }

@@ -1,6 +1,6 @@
 //! Evidence-bearing confirmation gate over PX5's sealed catalog.
 
-use ken_host::{EffectObservationV1, HostOpAvailabilityV1, HostOpV1};
+use ken_host::{EffectObservation, HostOpAvailabilityV1, HostOpV1};
 
 use crate::{compare_canonical_exact, CanonicalDifferentialRun};
 
@@ -47,8 +47,8 @@ impl NativeTestedEvidence {
     /// can never manufacture exact-artifact evidence.
     pub fn unit_or_negative_control(
         operation: HostOpV1,
-        interpreter: &EffectObservationV1,
-        subject: &EffectObservationV1,
+        interpreter: &EffectObservation,
+        subject: &EffectObservation,
     ) -> Self {
         Self {
             exact_artifact_executed: false,

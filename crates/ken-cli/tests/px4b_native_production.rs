@@ -80,7 +80,7 @@ fn main (_input : ProcessInput) (_caps : ProgramCaps APartial)
     let output =
         ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px16-home-root", &dir)
             .expect("checked ~/ root reaches a linked artifact");
-    let observation = ken_runtime::run_bound_process_effect_observation_v1(
+    let observation = ken_runtime::run_bound_process_effect_observation(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {
             arguments: Vec::new(),
@@ -290,7 +290,7 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
     let output =
         ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-two-vis", &dir)
             .expect("two checked Vis nodes reach one artifact");
-    let native = ken_runtime::run_bound_process_effect_observation_v1(
+    let native = ken_runtime::run_bound_process_effect_observation(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {
             arguments: Vec::new(),
@@ -314,11 +314,11 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
     let expected_trace = [b"one\n".as_slice(), b"two\n".as_slice()]
         .into_iter()
         .enumerate()
-        .map(|(sequence, bytes)| ken_runtime::EffectEventV1 {
+        .map(|(sequence, bytes)| ken_runtime::EffectEvent {
             sequence: sequence as u64,
             operation: ken_runtime::HostOpV1::ConsoleWrite,
             capability: None,
-            resource: None,
+            resource_bindings: Vec::new(),
             request: ken_runtime::CanonicalRequestV1::ConsoleWrite {
                 stream: ken_runtime::ConsoleStreamV1::Stdout,
                 bytes: bytes.to_vec(),
@@ -326,12 +326,13 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
             outcome: ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::Unit),
         })
         .collect();
-    let interpreted = ken_runtime::EffectObservationV1 {
+    let interpreted = ken_runtime::EffectObservation {
         stdout: host.stdout().to_vec(),
         stderr: host.stderr().to_vec(),
         filesystem_delta: Vec::new(),
         terminal_error: None,
         effect_trace: expected_trace,
+        terminal_exit: ken_runtime::TerminalExitClass::NormalReturn,
         exit_status: interpreted.exit_status,
     };
     assert_eq!(native, interpreted);
@@ -458,7 +459,7 @@ proc main (input : ProcessInput) (_caps : ProgramCaps APartial)
     let status = child.wait().expect("BrokenPipe artifact terminates");
     assert_eq!(status.code(), Some(61));
     let observation = std::fs::read(dir.join("broken-pipe.observation")).unwrap();
-    let observation = ken_runtime::decode_linked_effect_trace_v1(&observation).unwrap();
+    let observation = ken_runtime::decode_linked_effect_trace(&observation).unwrap();
     assert_eq!(observation.effect_trace.len(), 1);
     assert_eq!(
         observation.effect_trace[0].outcome,
@@ -526,7 +527,7 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
     let output =
         ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5-fs-roundtrip", &dir)
             .expect("FS Vis nodes reach the native capability lane");
-    let observation = ken_runtime::run_bound_process_effect_observation_v1(
+    let observation = ken_runtime::run_bound_process_effect_observation(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {
             arguments: vec!["px5.bin".into(), "retained".into()],
@@ -608,7 +609,7 @@ proc main (input : ProcessInput) (caps : ProgramCaps APartial)
     let output =
         ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, "px5c-fs-identity", &dir)
             .expect("same checked source reaches the native producer");
-    let native = ken_runtime::run_bound_process_effect_observation_v1(
+    let native = ken_runtime::run_bound_process_effect_observation(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {
             arguments: vec![std::ffi::OsString::from("shared.bin")],
@@ -621,7 +622,7 @@ proc main (input : ProcessInput) (caps : ProgramCaps APartial)
 
     let mut host = ken_interp::CaptureHost::new(Vec::new());
     host.insert_file(path.to_vec(), contents);
-    let interpreted = ken_cli::run_program_effect_observation_v1(
+    let interpreted = ken_cli::run_program_effect_observation(
         source,
         ken_cli::SourceFormat::Ken,
         &[b"ken".to_vec(), path.to_vec()],

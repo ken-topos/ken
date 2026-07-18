@@ -8,9 +8,9 @@
 
 use ken_host::{
     assert_host_effect_abi_identity, assert_target_abi_identity, dispatch_host_op_v1,
-    CanonicalRequestV1, CapabilityTableV1, CapabilityTokenV1, EffectEventV1, EffectObservationV1,
-    FsDeltaV1, HostDispatchReplyV1, HostEffectBackendV1, HostOpV1, ResourceInputsV1,
-    ResourceTableV1, TerminalErrorV1,
+    CanonicalRequestV1, CapabilityTableV1, CapabilityTokenV1, EffectObservation, FsDeltaV1,
+    HostDispatchReplyV1, HostEffectBackendV1, HostOpV1, ResourceInputsV1, ResourceTableV1,
+    TerminalErrorV1,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,8 +55,7 @@ pub struct KenNativeInvocationV1<B> {
     pub capabilities: CapabilityTableV1,
     pub resources: ResourceTableV1,
     pub response_arena: ResponseArenaV1,
-    pub observation: EffectObservationV1,
-    pub effect_trace_v2: Vec<ken_host::EffectEventV2>,
+    pub observation: EffectObservation,
 }
 
 impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
@@ -80,22 +79,22 @@ impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
             capabilities,
             resources: ResourceTableV1::default(),
             response_arena: ResponseArenaV1::default(),
-            observation: EffectObservationV1 {
+            observation: EffectObservation {
                 stdout: Vec::new(),
                 stderr: Vec::new(),
                 filesystem_delta: Vec::<FsDeltaV1>::new(),
                 terminal_error: None,
                 effect_trace: Vec::new(),
+                terminal_exit: ken_host::TerminalExitClass::ReturnedError,
                 exit_status: 1,
             },
-            effect_trace_v2: Vec::new(),
         })
     }
 
     pub fn dispatch(&mut self, call: NativeEffectCallV1) -> Result<usize, TerminalErrorV1> {
-        let (trace_identity, token) = match call.capability {
-            Some((identity, token)) => (Some(identity), Some(token)),
-            None => (None, None),
+        let token = match call.capability {
+            Some((_, token)) => Some(token),
+            None => None,
         };
         let reply = dispatch_host_op_v1(
             &mut self.backend,
@@ -106,22 +105,14 @@ impl<B: HostEffectBackendV1> KenNativeInvocationV1<B> {
             call.resources,
             &call.request,
         )?;
-        let sequence = self.observation.effect_trace.len() as u64;
-        self.effect_trace_v2
-            .push(ken_host::effect_event_v2_from_dispatch(
-                self.effect_trace_v2.len() as u64,
+        self.observation
+            .effect_trace
+            .push(ken_host::effect_event_from_dispatch(
+                self.observation.effect_trace.len() as u64,
                 call.operation,
-                call.request.clone(),
+                call.request,
                 &reply,
             ));
-        self.observation.effect_trace.push(EffectEventV1 {
-            sequence,
-            operation: call.operation,
-            capability: trace_identity.map(ken_host::CapabilityTraceIdentity),
-            resource: reply.resource_identity,
-            request: call.request,
-            outcome: reply.outcome.clone(),
-        });
         Ok(self.response_arena.append(reply))
     }
 }

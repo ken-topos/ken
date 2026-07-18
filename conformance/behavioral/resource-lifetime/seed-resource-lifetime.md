@@ -1,25 +1,25 @@
 # Resource-lifetime obligation conformance — seed cases (PX7-T)
 
-Format: `../../README.md`. These cases pin the additive
-`ResourceLifetimeObligationV1` body carried by the behavioral export's `T`
-channel. The body expresses one correlated resource lifetime for Ward to
-monitor. It does not make resources affine in Ken, discharge the obligation,
+Format: `../../README.md`. These cases pin the direct file-only
+`ResourceLifetimeObligation` body carried by the behavioral export's `T`
+channel. The body expresses one correlated resource lifetime for external Ward
+to monitor. It does not make resources affine in Ken, discharge the obligation,
 or promote a Ward result to `proved`.
 
 The contract is Spec-owned and is the oracle for the landed PX7-F emitter. The
 PX7-R producer inventory, trace carrier, and PX7-F schema route are real; this
 seed derives its event and identity fields from those producers rather than
-inventing a future source surface. Only RL-C remains deferred, to the Ward
-monitor consumer.
+inventing a future source surface. Only RL-C remains deferred to the external
+Ward monitor consumer; it is Ward-delegated and out of Ken.
 
 ## Producer grounding and locked schema
 
 The landed producer chain is:
 
 - `HostOpV1::{FsOpen, FsHandleMetadata, ResourceRelease}` in
-  `crates/ken-host/src/effect_v1.rs` is the exact V1 operation set;
-- `EffectEventV1.resource : Option<ResourceTraceIdentityV1>` is the common
-  lifetime-identity carrier on all three events;
+  `crates/ken-host/src/effect_v1.rs` is the exact host-ABI operation set;
+- the sole `EffectEvent.resource_bindings` carries exactly
+  `[(Target, r)]` for each of the three file-only lifecycle events;
 - a successful `FsOpen` returns `CanonicalReplyV1::ResourceAcquired` with the
   same `ResourceTraceIdentityV1`;
 - `ResourceRelease` returns a `ResourceSettlementObservationV1`, or a
@@ -30,27 +30,35 @@ The landed producer chain is:
   of fd, slot/generation, inode, pointer, and executor provenance.
 
 The conformance oracle uses this locked schema shape. Field names below are the
-normative schema names of `71 §2.2`, not guesses at a PX7-F source spelling:
+normative schema names of `71 §2.2–§2.3`, not guesses at a PX7-F source
+spelling:
 
 ```text
-ResourceLifetimeObligationV1 {
-  schema_version: 1,
-  body_kind: ResourceLifetimeObligationV1,
+ResourceLifetimeObligation {
+  body_kind: ResourceLifetimeObligation,
   obligation_id: String,
   status: delegated,
-  correlation: ResourceLifetimeCorrelationV1 {
+  correlation: ResourceLifetimeCorrelation {
     identity_type: ResourceTraceIdentityV1,
-    event_field: EffectEventV1.resource,
-    bind_at: Successful(FsOpen),
-    require_same_at: [FsHandleMetadata, ResourceRelease],
+    event_field: EffectEvent.resource_bindings,
+    role_type: ResourceBindingRole,
+    canonical_order: OperationDefined,
   },
-  acquire_op: FsOpen,
-  use_op: FsHandleMetadata,
-  settle_op: ResourceRelease,
-  monitor_template: WardResourceLifetimeMonitorV1 {
+  plans: [
+    ResourceLifetimePlan {
+      resource_kind: FsHandle,
+      bind_at: Successful(FsOpen, Target),
+      require_same_at: [
+        (FsHandleMetadata, Target),
+        (ResourceRelease, Target),
+      ],
+    },
+  ],
+  monitor_template: WardResourceLifetimeMonitor {
+    correlate_every_role_binding: true,
     successful_acquire_settles_exactly_once: true,
     forbid_successful_use_after_settlement: true,
-    require_no_live_resource_on:
+    require_no_live_bracket_owned_identity_on:
       [NormalReturn, ReturnedError, ControlledTrap],
     retain_settlement_outcome: true,
   },
@@ -58,12 +66,13 @@ ResourceLifetimeObligationV1 {
 ```
 
 `correlation` is a binder template, not a concrete identity serialized before
-execution. `bind_at: Successful(FsOpen)` binds one runtime identity `r`; every
-matching metadata-use and settlement event is selected by
-`EffectEventV1.resource = r`. The runtime value `r` is not serialized or hashed;
-the static `ResourceLifetimeCorrelationV1` descriptor is. This is one correlated
-obligation. Independent event predicates mentioning `FsOpen`,
-`FsHandleMetadata`, and `ResourceRelease` are not an alternative encoding.
+execution. `bind_at: Successful(FsOpen, Target)` binds one runtime identity
+`r`; every matching metadata-use and settlement event is selected by
+`EffectEvent.resource_bindings = [(Target, r)]`. The runtime value `r` is not
+serialized or hashed; the static `ResourceLifetimeCorrelation` descriptor is.
+This is one correlated obligation. Independent event predicates mentioning
+`FsOpen`, `FsHandleMetadata`, and `ResourceRelease` are not an alternative
+encoding.
 
 The whole `T` entry, including the resource-lifetime body, participates in the
 existing canonical export hash. Changing an operation, correlation rule, or
@@ -75,25 +84,31 @@ set and values above, not a second out-of-band serialization.
 
 ### resource-lifetime/correlated-body-validates
 
-- spec: `71 §2.2/§3.3/§5.1`;
+- spec: `71 §2.2/§2.3/§3.3/§5.1`;
   `73 §2.4/§2.6`; ADR 0021, "Expressibility prerequisite"
 - given: the real checked `px7f_export_resource` producer, whose
   denotation-derived `Σ` contains `FsOpen`, `FsHandleMetadata`, and
   `ResourceRelease`; run the PX7-F export emitter and obtain its single
   resource-lifetime `T` entry
-- expect: the entry validates against the exact schema above: version `1`, the
-  `ResourceLifetimeObligationV1` body discriminator, a stable obligation id,
-  `status = delegated`, scalar operations `acquire_op = FsOpen`,
-  `use_op = FsHandleMetadata`, and `settle_op = ResourceRelease`; the exact
-  four-field `ResourceLifetimeCorrelationV1` descriptor; and the exact
-  four-field `WardResourceLifetimeMonitorV1` template, including
+- expect: the entry validates against the exact schema above: the direct
+  `ResourceLifetimeObligation` body discriminator, a stable obligation id,
+  `status = delegated`, one `FsHandle` plan with
+  `bind_at = Successful(FsOpen, Target)` and
+  `require_same_at = [(FsHandleMetadata, Target),
+  (ResourceRelease, Target)]`; the exact four-field
+  `ResourceLifetimeCorrelation` descriptor; and the exact five-field
+  `WardResourceLifetimeMonitor` template, including
   `[NormalReturn, ReturnedError, ControlledTrap]`
+- expect: the complete direct file-only body is content-bound in `T` and has
+  the one intentional schema-collapse hash
+  `ken-export-v0:1bf3cb3f5b648ea7`
 - expect: before publishing `T` or its hash, the emitter validates that each of
   the three lifecycle operations named by the body is in that producer-derived
   `Σ`
-- expect: for a runtime instance with acquisition identity `r`, the monitor
-  matches metadata-use and release only when their `EffectEventV1.resource` is
-  the same `r`; a release outcome, including `ReleaseFailed`, remains observable
+- expect: for a runtime instance with acquisition identity `r`, external Ward
+  matches metadata-use and release only when their
+  `EffectEvent.resource_bindings` equal exactly `[(Target, r)]`; a release
+  outcome, including `ReleaseFailed`, remains observable
 - why: this is the positive arm of the correlation discriminator. It proves the
   emitter produced a single identity-bound obligation, not merely that all
   three operation names occur somewhere in `T`.
@@ -102,11 +117,11 @@ set and values above, not a second out-of-band serialization.
 
 ### resource-lifetime/independent-event-atoms-do-not-validate
 
-- spec: `71 §2.2`; ADR 0021, "Expressibility prerequisite"
-- given: the same schema version, body discriminator, obligation id,
-  `delegated` status, three scalar operation fields, and exact four-field
-  `WardResourceLifetimeMonitorV1` value as RL-A, but replace only the canonical
-  `ResourceLifetimeCorrelationV1` descriptor with independent event atoms:
+- spec: `71 §2.2/§2.3`; ADR 0021, "Expressibility prerequisite"
+- given: the same body discriminator, obligation id, `delegated` status,
+  file-only plan, and exact five-field `WardResourceLifetimeMonitor` value as
+  RL-A, but replace only the canonical `ResourceLifetimeCorrelation` descriptor
+  with independent event atoms:
 
 ```text
 event(FsOpen)
@@ -127,8 +142,9 @@ event(ResourceRelease)
 
 ### resource-lifetime/different-settlement-identity-does-not-match
 
-- status: **RED-UNTIL-WARD-MONITOR-CONSUMER**
-- spec: `71 §2.2`; `73 §2.2/§2.4`
+- status: **RED-UNTIL-EXTERNAL-WARD-MONITOR-CONSUMER; Ward-delegated /
+  out-of-Ken**
+- spec: `71 §2.2/§2.3`; `73 §2.2/§2.4`
 - given: one conforming RL-A template and two runtime traces that differ only
   in the release identity:
   - positive: `FsOpen(r1); FsHandleMetadata(r1); ResourceRelease(r1)`;
@@ -144,14 +160,15 @@ event(ResourceRelease)
 
 ## RL-D. Exact landed operation inventory
 
-### resource-lifetime/v1-operation-set-is-closed
+### resource-lifetime/file-only-operation-set-is-closed
 
-- spec: `71 §2.2`; ADR 0021, "Host catalog and
+- spec: `71 §2.2/§2.3`; ADR 0021, "Host catalog and
   fail-visible errors"
 - given: the resource-lifetime body emitted for the PX7-F bracket
-- expect: `acquire_op = FsOpen`, scalar `use_op = FsHandleMetadata`, and
-  `settle_op = ResourceRelease`, exactly; no generic `ResourceAcquire`,
-  `FsClose`, read/write/seek, or second resource-kind operation appears
+- expect: the sole `FsHandle` plan binds at `Successful(FsOpen, Target)` and
+  requires the same identity at exactly `(FsHandleMetadata, Target)` then
+  `(ResourceRelease, Target)`; no generic `ResourceAcquire`, `FsClose`,
+  read/write/seek, or second resource-kind operation appears
 - expect: each body operation is a member of the real producer's
   denotation-derived `Σ`; neither the body nor its monitor may manufacture an
   alphabet member absent from the checked perform graph
@@ -163,19 +180,19 @@ event(ResourceRelease)
 
 ### resource-lifetime/body-participates-in-T-hash
 
-- spec: `71 §2.2/§3.3/§5.1`; `73 §2.5/§2.6`; ADR 0021
+- spec: `71 §2.2/§2.3/§3.3/§5.1`; `73 §2.5/§2.6`; ADR 0021
 - given: emit RL-A twice and inspect the canonical `T` preimage used for its
   export hash; as a hash-sensitivity control, change only one descriptor field
   in that preimage
 - expect: the identical body yields the identical export hash; the canonical
-  preimage contains every field of `ResourceLifetimeCorrelationV1`; changing
+  preimage contains every field of `ResourceLifetimeCorrelation`; changing
   only one descriptor field changes the recomputed hash. The mutated descriptor
   remains schema-invalid and is not accepted as a second emission
 - expect: the body is hashed inside `T`, with no out-of-band resource-lifetime
   field; the runtime-bound value `r` is absent from both export and hash
-- expect: status remains `delegated`; a Ward accept/reject result cannot write
-  `proved`, cannot move the entry to `Q`, and cannot enter kernel or runtime
-  control flow
+- expect: status remains `delegated`; an external-Ward accept/reject result
+  cannot write `proved`, cannot move the entry to `Q`, and cannot enter kernel
+  or runtime control flow
 - why: the first pair rejects a nondeterministic hash; the changed-descriptor
   arm rejects a constant hash or a hash that omits the correlation descriptor.
   The one-way assertion preserves the existing G-Ward seam.
@@ -184,13 +201,14 @@ event(ResourceRelease)
 
 ### resource-lifetime/ordinary-temporal-entry-is-unchanged
 
-- spec: `71 §2.1/§2.2/§3.3`; `72 §5`; PX7-T additive boundary
+- spec: `71 §2.1/§2.2/§2.3/§3.3`; `72 §5`;
+  correlation-only boundary
 - given: an ordinary existing `temporal { ... }` declaration that does not
   express a resource lifetime, emitted before and after enabling the PX7-T
   route
 - expect: it remains the existing `TEntry { formula: Temporal }`, with the same
   `delegated` status, formula projection, canonical representation, and hash;
-  it is not rewritten as `ResourceLifetimeObligationV1`
+  it is not rewritten as `ResourceLifetimeObligation`
 - why: PX7-T supersedes `TemporalObligation` only where acquire/use/settle
   identity correlation is required. A broad replacement weakens or re-spells
   the landed temporal route and fails this control.
@@ -199,7 +217,7 @@ event(ResourceRelease)
 
 ### resource-lifetime/missing-use-operation-is-outside-alphabet
 
-- spec: `71 §2.2/§3.3`; I3 alphabet closure
+- spec: `71 §2.2/§2.3/§3.3`; I3 alphabet closure
 - given: keep the real resource target's declared row byte-identical, including
   `FsHandleMetadata`, but replace its body with a pure return so the checked
   perform graph and denotation-derived `Σ` no longer contain
@@ -219,33 +237,34 @@ event(ResourceRelease)
 | AC1 locked fields, delegated status, Ward template, T hash | RL-A, RL-E |
 | AC2 one correlated obligation, not independent atoms | RL-A, RL-B, RL-C |
 | AC3 positive validates / malformed or uncorrelated rejects | RL-A, RL-B, RL-G |
-| AC4 additive; existing temporal machinery unchanged | RL-F |
-| AC5 exact landed V1 operation set and I3 closure | RL-D, RL-G |
+| AC4 correlation-only; existing temporal machinery unchanged | RL-F |
+| AC5 exact direct file-only operation set and I3 closure | RL-D, RL-G |
 
 ## Cross-case and reachability sweep
 
-- **The build-now verdict flip is non-vacuous.** RL-A and RL-B hold the schema
-  version, body discriminator, obligation id, status, three scalar operation
-  fields, and exact monitor-template value fixed. Only the structural
-  correlation descriptor changes. Correct route: accept/reject.
-  Operation-name-only route: accept/accept.
+- **The build-now verdict flip is non-vacuous.** RL-A and RL-B hold the body
+  discriminator, obligation id, status, exact file-only plan, and exact
+  monitor-template value fixed. Only the structural correlation descriptor
+  changes. Correct route: accept/reject. Operation-name-only route:
+  accept/accept.
 - **The runtime identity flip is isolated.** RL-C holds operations, order, and
   template fixed and varies only `r1` versus `r2`. It is explicitly staged to
-  the Ward monitor consumer rather than presented as PX7-F emitter evidence.
+  the external Ward monitor consumer rather than presented as PX7-F emitter
+  evidence.
 - **The I3 flip reaches the real emitter.** RL-A and RL-G retain the same
   declared row and resource target. RL-G removes only the real metadata perform
   from the body, so `FsHandleMetadata` disappears from denotation-derived `Σ`.
   The correct route accepts RL-A and reaches the named pre-`T`, pre-hash
   rejection for RL-G.
-- **Producer reachability is explicit.** PX7-R already produces all three
-  `EffectEventV1` operations with one `ResourceTraceIdentityV1`. The landed
-  checked PX7-F producer reaches all three in denotation-derived `Σ` and creates
-  the `T` body through the real schema validator. Ward remains the named gate
-  for executing the monitor template. No case claims an unbuilt producer is
-  live.
+- **Producer reachability is explicit.** Runtime produces all three
+  `EffectEvent` operations with one `ResourceTraceIdentityV1` in the exact
+  `[(Target, r)]` binding. The landed checked PX7-F producer reaches all three
+  in denotation-derived `Σ` and creates the `T` body through the real schema
+  validator. Monitor execution and verdicts remain delegated to the external
+  Ward project and never enter Ken. No case claims an unbuilt consumer is live.
 - **No synthetic PX7-F emitter is accepted as evidence.** The build gate must
   drive a checked Ken program through the real PX7-F export emitter. A unit test
-  that constructs `ResourceLifetimeObligationV1` directly is only a schema-unit
+  that constructs `ResourceLifetimeObligation` directly is only a schema-unit
   control and cannot discharge RL-A, RL-D, RL-E, or RL-F.
 - **Existing routes are preserved.** Ordinary `Temporal` export coverage stays
   in `../temporal/seed-temporal.md`; trace projection and the G-Ward one-way gate

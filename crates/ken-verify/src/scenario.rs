@@ -7,7 +7,7 @@ use std::fmt;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 use ken_elaborator::capabilities::{Authority, RightSet, SymlinkPolicy, AUTH_FULL};
-use ken_host::EffectObservationV1;
+use ken_host::EffectObservation;
 use ken_runtime::{
     BoundProcessExecutableArtifact, NativeEffectRunErrorV1, NativeEffectRunOptionsV1,
 };
@@ -60,7 +60,7 @@ pub struct Scenario {
     pub entry: CheckedProgramEntry,
     pub initial_filesystem: Vec<SeedNode>,
     /// Independent execution assertions for the interpreter descriptor calls.
-    /// These values never author or alter an `EffectObservationV1` field.
+    /// These values never author or alter an `EffectObservation` field.
     pub expected_fs: Vec<ExpectedFsEffect>,
 }
 
@@ -114,8 +114,8 @@ impl From<ObservationMismatch> for HarnessError {
 /// gates can alter real launcher inputs after the baseline run.
 pub struct CanonicalDifferentialRun {
     pub scenario_identity: String,
-    pub interpreter: EffectObservationV1,
-    pub native: EffectObservationV1,
+    pub interpreter: EffectObservation,
+    pub native: EffectObservation,
     pub interpreter_actions: LaneActionEvidence,
     pub native_actions: LaneActionEvidence,
     pub exact_artifact_executed: bool,
@@ -150,7 +150,7 @@ impl CanonicalDifferentialRun {
             plan_hash: self.plan_hash ^ 1,
         };
         matches!(
-            ken_runtime::run_bound_process_effect_observation_v1(&self.artifact, &options),
+            ken_runtime::run_bound_process_effect_observation(&self.artifact, &options),
             Err(NativeEffectRunErrorV1::BindingMismatch)
         )
     }
@@ -186,7 +186,7 @@ pub fn run_scenario(scenario: &Scenario) -> Result<CanonicalDifferentialRun, Har
         scenario.expected_fs.clone(),
     )
     .map_err(|error| HarnessError::Interpreter(error.to_string()))?;
-    let mut interpreter = ken_cli::run_program_effect_observation_v1(
+    let mut interpreter = ken_cli::run_program_effect_observation(
         &scenario.entry.source,
         ken_cli::SourceFormat::Ken,
         &arguments,
@@ -227,7 +227,7 @@ pub fn run_scenario(scenario: &Scenario) -> Result<CanonicalDifferentialRun, Har
         cwd: roots.native().to_path_buf(),
         plan_hash: build.plan_transport_hash,
     };
-    let native = ken_runtime::run_bound_process_effect_observation_v1(&build.artifact, &options)
+    let native = ken_runtime::run_bound_process_effect_observation(&build.artifact, &options)
         .map_err(HarnessError::NativeRun)?;
     let native_after = roots.snapshot_native()?;
     let native_actions = LaneActionEvidence {
@@ -967,7 +967,7 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
         let arguments = vec![b"px15".to_vec(), b"x".to_vec(), b"x".to_vec()];
         let cwd_bytes = root.as_os_str().as_bytes();
         let mut cwd_host = ken_interp::PosixHost::new_at(&root);
-        let cwd_observation = ken_cli::run_program_effect_observation_v1(
+        let cwd_observation = ken_cli::run_program_effect_observation(
             &cwd_source,
             ken_cli::SourceFormat::Ken,
             &arguments,
@@ -977,7 +977,7 @@ proc main (input : ProcessInput) (caps : ProgramCaps AFull)
         )
         .expect("cwd-root interpreter observation");
         let mut absolute_host = ken_interp::PosixHost::new_at(&root);
-        let absolute_observation = ken_cli::run_program_effect_observation_v1(
+        let absolute_observation = ken_cli::run_program_effect_observation(
             &absolute_source,
             ken_cli::SourceFormat::Ken,
             &arguments,
@@ -1163,22 +1163,23 @@ proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
         .expect("CaptureHost unit control runs");
         assert_eq!(host.stdout(), b"capture-only\n");
 
-        let observation = EffectObservationV1 {
+        let observation = EffectObservation {
             stdout: host.stdout().to_vec(),
             stderr: host.stderr().to_vec(),
             filesystem_delta: Vec::new(),
             terminal_error: None,
-            effect_trace: vec![ken_host::EffectEventV1 {
+            effect_trace: vec![ken_host::EffectEvent {
                 sequence: 0,
                 operation: HostOpV1::ConsoleWrite,
                 capability: None,
-                resource: None,
+                resource_bindings: Vec::new(),
                 request: ken_host::CanonicalRequestV1::ConsoleWrite {
                     stream: ken_host::ConsoleStreamV1::Stdout,
                     bytes: b"capture-only\n".to_vec(),
                 },
                 outcome: ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::Unit),
             }],
+            terminal_exit: ken_host::TerminalExitClass::NormalReturn,
             exit_status: outcome.exit_status,
         };
         let evidence = NativeTestedEvidence::unit_or_negative_control(
