@@ -124,18 +124,18 @@ fn erase_checked_package_with_host_root(
                 spine,
                 join_plan.as_deref_mut(),
             ) {
-                    Ok(declaration) => declaration,
-                    Err(error)
-                        if matches!(
-                            &error,
-                            ErasureError::ExpressionLowering { lane, .. }
-                                if *lane == "unrecognized_checked_host_computation"
-                        ) =>
-                    {
-                        lower_symbol(package, &requested_targets, &symbol)?
-                    }
-                    Err(error) => return Err(error),
-                };
+                Ok(declaration) => declaration,
+                Err(error)
+                    if matches!(
+                        &error,
+                        ErasureError::ExpressionLowering { lane, .. }
+                            if *lane == "unrecognized_checked_host_computation"
+                    ) =>
+                {
+                    lower_symbol(package, &requested_targets, &symbol)?
+                }
+                Err(error) => return Err(error),
+            };
             queue.extend(
                 runtime_declaration_refs_in_kind(&declaration.kind)
                     .into_iter()
@@ -532,17 +532,12 @@ impl NativeJoinPlanCollector {
 
     fn finish(self) -> ken_runtime::NativeJoinPlanV1 {
         ken_runtime::NativeJoinPlanV1 {
-            representation_rule_version:
-                ken_runtime::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+            representation_rule_version: ken_runtime::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
             sites: self.sites,
         }
     }
 
-    fn record_root_exit_answer(
-        &mut self,
-        root: &StableSymbol,
-        checked_type: &[u8],
-    ) {
+    fn record_root_exit_answer(&mut self, root: &StableSymbol, checked_type: &[u8]) {
         let site_id = self.next_site_id;
         self.next_site_id = self
             .next_site_id
@@ -552,8 +547,7 @@ impl NativeJoinPlanCollector {
             site_id,
             declaration: root.to_string(),
             checked_result_type_fingerprint: ken_runtime::fnv1a_64(checked_type),
-            runtime_frame_fingerprint:
-                ken_runtime::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
+            runtime_frame_fingerprint: ken_runtime::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
             answer_kind: ken_runtime::NativeJoinAnswerKindV1::ExitCode,
         });
     }
@@ -571,9 +565,11 @@ impl NativeJoinPlanCollector {
         else {
             return Ok(());
         };
-        let Some(head) = checked_core::checked_type_head_symbol(&result_type).map_err(|reason| {
-            expression_lowering_error(owner, "native_join_plan_result_type", reason)
-        })? else {
+        let Some(head) =
+            checked_core::checked_type_head_symbol(&result_type).map_err(|reason| {
+                expression_lowering_error(owner, "native_join_plan_result_type", reason)
+            })?
+        else {
             return Ok(());
         };
         let answer_kind = if head == self.answer_symbols.int {
