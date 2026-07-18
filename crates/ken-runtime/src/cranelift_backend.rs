@@ -4359,6 +4359,12 @@ impl<'a> Lowering<'a> {
         let Some(plan) = &self.native_join_plan else {
             return Ok(None);
         };
+        if matches!(frame, EliminatorFrame::InvocationReturn) && self.active_join_site.is_some() {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "distinguished root cannot consume an active match occurrence marker",
+            ));
+        }
         let matches = match frame {
             EliminatorFrame::InvocationReturn => plan
                 .sites
@@ -4411,7 +4417,9 @@ impl<'a> Lowering<'a> {
                         "checked join occurrence was consumed twice",
                     ));
                 }
-                self.active_join_site = None;
+                if !matches!(frame, EliminatorFrame::InvocationReturn) {
+                    self.active_join_site = None;
+                }
                 Ok(Some(site.clone()))
             }
             _ => Err(unsupported(
@@ -12378,6 +12386,89 @@ mod tests {
             runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
             answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
         }
+    }
+
+    #[test]
+    fn distinguished_root_cannot_discharge_missing_match_site_marker() {
+        let seed_env = NativeSeedEnvironment::empty();
+        let mut lowering = Lowering {
+            seed_env: &seed_env,
+            declarations: BTreeMap::new(),
+            declaration_stack: Vec::new(),
+            active_recursive_declarations: Vec::new(),
+            result_table: BTreeMap::new(),
+            next_token: 0,
+            next_recursor_frame_provenance: 0,
+            next_continuation_activation: 0,
+            next_continuation_cursor: 0,
+            next_source_join: 0,
+            native_join_plan: Some(crate::NativeJoinPlanV1 {
+                representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+                sites: vec![self_consistent_root_join_site(0)],
+            }),
+            consumed_join_sites: BTreeSet::new(),
+            active_join_site: Some(41),
+            assumptions: BTreeSet::new(),
+            unsupported: Vec::new(),
+            process_object: false,
+            process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
+            host_dispatch: None,
+            invocation_pointer: None,
+            bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        };
+        let error = lowering
+            .planned_join_site_for_frame(EliminatorFrame::InvocationReturn)
+            .expect_err("the distinguished root must not discharge an unrelated live marker");
+        assert!(
+            matches!(
+                error,
+                CraneliftBackendError::Unsupported(UnsupportedLowering {
+                    construct: "NativeJoinPlanV1",
+                    ref reason,
+                }) if reason.contains("root cannot consume an active match occurrence marker")
+            ),
+            "{error:?}"
+        );
+        assert_eq!(lowering.active_join_site, Some(41));
+        assert!(lowering.consumed_join_sites.is_empty());
+    }
+
+    #[test]
+    fn valid_root_plus_missing_marked_scalar_cut_rejects_before_emission() {
+        let expression = RuntimeExpr::CheckedJoinSite {
+            site_id: 41,
+            body: Box::new(host_result_computational_fixture(1, true, false)),
+        };
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        let result = compile_expr_into_module(
+            new_object_module("px8h-root-marker-class-separation").unwrap(),
+            "ken_px8h_root_marker_class_separation",
+            Linkage::Export,
+            &expression,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            true,
+            Some(&symbols),
+            Some(crate::NativeJoinPlanV1 {
+                representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+                sites: vec![self_consistent_root_join_site(0)],
+            }),
+        );
+        let error = match result {
+            Ok(_) => panic!("the root must not discharge a missing marked scalar-cut site"),
+            Err(error) => error,
+        };
+        assert!(
+            matches!(
+                error,
+                CraneliftBackendError::Unsupported(UnsupportedLowering {
+                    construct: "NativeJoinPlanV1",
+                    ref reason,
+                }) if reason.contains("marker was not consumed")
+            ),
+            "{error:?}"
+        );
     }
 
     #[test]
