@@ -2359,6 +2359,78 @@ fn produces_recursive_deforestable_aggregate(expr: &RuntimeExpr, symbol: &str) -
     }
 }
 
+fn collect_runtime_declaration_refs(expr: &RuntimeExpr, output: &mut BTreeSet<RuntimeSymbol>) {
+    match expr {
+        RuntimeExpr::DeclarationRef { symbol } => {
+            output.insert(symbol.clone());
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for arg in args {
+                collect_runtime_declaration_refs(arg, output);
+            }
+        }
+        RuntimeExpr::Let { value, body } => {
+            collect_runtime_declaration_refs(value, output);
+            collect_runtime_declaration_refs(body, output);
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            collect_runtime_declaration_refs(scrutinee, output);
+            collect_runtime_declaration_refs(then_expr, output);
+            collect_runtime_declaration_refs(else_expr, output);
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            collect_runtime_declaration_refs(scrutinee, output);
+            for case in cases {
+                collect_runtime_declaration_refs(&case.body, output);
+            }
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            collect_runtime_declaration_refs(scrutinee, output);
+            for case in cases {
+                collect_runtime_declaration_refs(&case.body, output);
+            }
+        }
+        RuntimeExpr::Record { fields } => {
+            for (_, field) in fields {
+                collect_runtime_declaration_refs(field, output);
+            }
+        }
+        RuntimeExpr::Project { record, .. }
+        | RuntimeExpr::Closure { body: record, .. }
+        | RuntimeExpr::LexicalClosure { body: record, .. } => {
+            collect_runtime_declaration_refs(record, output);
+        }
+        RuntimeExpr::Call { callee, args } => {
+            collect_runtime_declaration_refs(callee, output);
+            for arg in args {
+                collect_runtime_declaration_refs(arg, output);
+            }
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            if let Some(capability) = capability {
+                collect_runtime_declaration_refs(&capability.value, output);
+            }
+            for arg in args {
+                collect_runtime_declaration_refs(arg, output);
+            }
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => {}
+    }
+}
+
 fn select_ordinary_case<'a>(
     eliminator: OrdinaryEliminatorFrame<'a>,
     constructor: &str,
@@ -5045,6 +5117,34 @@ impl<'a> Lowering<'a> {
         })
     }
 
+    fn declaration_is_recursive(&self, symbol: &RuntimeSymbol) -> bool {
+        let Some(declaration) = self.declarations.get(symbol.as_str()).copied() else {
+            return false;
+        };
+        let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+            return false;
+        };
+
+        let mut frontier = BTreeSet::new();
+        let mut visited = BTreeSet::new();
+        collect_runtime_declaration_refs(body, &mut frontier);
+        while let Some(candidate) = frontier.pop_first() {
+            if candidate == *symbol {
+                return true;
+            }
+            if !visited.insert(candidate.clone()) {
+                continue;
+            }
+            let Some(declaration) = self.declarations.get(candidate.as_str()).copied() else {
+                continue;
+            };
+            if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
+                collect_runtime_declaration_refs(body, &mut frontier);
+            }
+        }
+        false
+    }
+
     fn lower_recursive_declaration_call(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -5113,6 +5213,20 @@ impl<'a> Lowering<'a> {
             let unreachable = builder.create_block();
             builder.switch_to_block(unreachable);
             return Ok(Lowered::RecursiveBackedge);
+        }
+
+        // Only declarations in an actual recursive SCC need the loop/result
+        // closure below. Preserve the established direct-call lowering for
+        // ordinary declarations, including constructor-valued HostIO trees.
+        if !self.declaration_is_recursive(symbol) {
+            let mut call_env = lowered_args.into_iter().rev().collect::<Vec<_>>();
+            call_env.extend_from_slice(captures);
+            call_env.extend_from_slice(producer_env);
+            return if let Some(eliminators) = eliminators {
+                self.lower_computational_producer_expr(builder, body, &call_env, eliminators)
+            } else {
+                self.lower_expr(builder, body, &call_env)
+            };
         }
 
         if eliminators.is_none() && params.len() == 1 && lowered_args.len() == 1 {
