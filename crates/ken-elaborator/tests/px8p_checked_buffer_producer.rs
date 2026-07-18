@@ -53,16 +53,10 @@ proc exact_with_buffer_surface
             "private protocol identity `{private}` escaped"
         );
     }
-    for deferred in ["BufferFreeze", "FsReadAt", "FsWriteAt"] {
+    for deferred in ["BufferFreeze", "FsReadAt", "FsWriteAt", "writeAll"] {
         assert!(
             !env.globals.contains_key(deferred),
             "PX8-P must not expose deferred Buffer use `{deferred}`"
-        );
-    }
-    for public in ["readAt", "writeAt", "spanBytes", "freeze", "writeAll"] {
-        assert!(
-            env.globals.contains_key(public),
-            "PX8-F checked Buffer use `{public}` must be public"
         );
     }
     assert_eq!(ken_host::HostOpV1::BufferAllocate as u16, 0x0402);
