@@ -84,10 +84,51 @@ pub fn erase_checked_core_package_for_target<'a>(
 
 fn erase_checked_package_with_host_root(
     package: &CheckedCorePackage,
-    targets: Vec<StableSymbol>,
+    mut targets: Vec<StableSymbol>,
     host_root: Option<(&StableSymbol, &CheckedHostSpineV1)>,
 ) -> Result<RuntimeProgram, ErasureError> {
     validate_checked_core_package(package)?;
+    let requested_targets = targets.clone();
+    let mut prelowered = BTreeMap::new();
+    if let Some((root, spine)) = host_root {
+        let root_kind = lower_checked_host_root(package, &requested_targets, root, spine)?;
+        let mut executable = BTreeSet::from([root.clone()]);
+        let mut queue = runtime_declaration_refs_in_kind(&root_kind)
+            .into_iter()
+            .filter_map(|reference| {
+                requested_targets
+                    .iter()
+                    .find(|symbol| {
+                        symbol.to_string() == reference
+                            && admitted_recursive_member(&package.artifact.semantic, symbol)
+                    })
+                    .cloned()
+            })
+            .collect::<Vec<_>>();
+        prelowered.insert(root.clone(), root_kind);
+        while let Some(symbol) = queue.pop() {
+            if !executable.insert(symbol.clone()) {
+                continue;
+            }
+            let declaration =
+                lower_checked_host_declaration(package, &requested_targets, &symbol, spine)?;
+            queue.extend(
+                runtime_declaration_refs_in_kind(&declaration.kind)
+                    .into_iter()
+                    .filter_map(|reference| {
+                        requested_targets
+                            .iter()
+                            .find(|symbol| {
+                                symbol.to_string() == reference
+                                    && admitted_recursive_member(&package.artifact.semantic, symbol)
+                            })
+                            .cloned()
+                    }),
+            );
+            prelowered.insert(symbol, declaration.kind);
+        }
+        targets = executable.into_iter().collect();
+    }
     consume_checked_core_package_for_target(package, targets.iter())?;
     reject_reachable_unsupported(package, &targets)?;
 
@@ -116,10 +157,10 @@ fn erase_checked_package_with_host_root(
 
     let mut declarations = Vec::new();
     for target in &targets {
-        if let Some((root, spine)) = host_root.filter(|(root, _)| *root == target) {
+        if let Some(kind) = prelowered.remove(target) {
             declarations.push(RuntimeDeclaration {
                 symbol: target.to_string(),
-                kind: lower_checked_host_root(package, &targets, root, spine)?,
+                kind,
                 metadata: metadata_for_symbol(package, target),
             });
         } else {
@@ -142,6 +183,254 @@ fn erase_checked_package_with_host_root(
         declarations,
         examples: nc5_seed_examples(),
     })
+}
+
+fn lower_checked_host_declaration(
+    package: &CheckedCorePackage,
+    target_closure: &[StableSymbol],
+    symbol: &StableSymbol,
+    spine: &CheckedHostSpineV1,
+) -> Result<RuntimeDeclaration, ErasureError> {
+    let semantic = &package.artifact.semantic;
+    let reachable_declarations = checked_host_body_view_symbols(semantic, target_closure);
+    let selection = CheckedCoreBodyViewSelection {
+        package_identity: package.header.package_identity.clone(),
+        package_core_semantic_hash: package.core_semantic_hash,
+        package_artifact_hash: package.artifact_hash,
+        target_symbol: symbol.clone(),
+        reachable_declarations,
+        external_symbols: external_declaration_symbols(semantic),
+        dependency_semantic_hashes: semantic.dependency_semantic_hashes.clone(),
+    };
+    let declarations = checked_host_declaration_closure(package, &selection, symbol)?;
+    let declaration = declarations.get(symbol).ok_or_else(|| {
+        expression_lowering_error(
+            symbol,
+            "missing_expression_body_view",
+            "body view did not return the recursive checked HostIO declaration",
+        )
+    })?;
+    let mut parameter_count = 0usize;
+    let mut body = &declaration.body;
+    while let CheckedCoreBodyTerm::Lambda { body: inner, .. } = body {
+        parameter_count += 1;
+        body = inner;
+    }
+    if parameter_count == 0 {
+        return Err(expression_lowering_error(
+            symbol,
+            "recursive_host_abi_shape",
+            "recursive checked HostIO declaration must be a function",
+        ));
+    }
+    let mut stack = vec![symbol.clone()];
+    let body = lower_checked_host_computation(
+        body,
+        &declarations,
+        semantic,
+        &mut stack,
+        symbol,
+        parameter_count,
+        spine,
+        None,
+    )?;
+    Ok(RuntimeDeclaration {
+        symbol: symbol.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: (0..parameter_count)
+                    .map(|index| format!("arg{index}"))
+                    .collect(),
+                body: Box::new(body),
+            },
+        },
+        metadata: metadata_for_symbol(package, symbol),
+    })
+}
+
+fn checked_host_declaration_closure(
+    package: &CheckedCorePackage,
+    selection: &CheckedCoreBodyViewSelection,
+    root: &StableSymbol,
+) -> Result<BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>, ErasureError> {
+    let semantic = &package.artifact.semantic;
+    let mut declarations = BTreeMap::new();
+    let mut queue = vec![root.clone()];
+    while let Some(symbol) = queue.pop() {
+        if declarations.contains_key(&symbol) {
+            continue;
+        }
+        let mut declaration_selection = selection.clone();
+        declaration_selection.target_symbol = symbol.clone();
+        let declaration = checked_core::checked_core_declaration_body_view(
+            package,
+            &declaration_selection,
+            &symbol,
+        )
+        .map_err(|error| expression_view_error(root, error))?;
+        let mut references = BTreeSet::new();
+        collect_checked_body_declaration_refs(&declaration.body, &mut references);
+        queue.extend(references.into_iter().filter(|reference| {
+            semantic.declarations.contains_key(reference)
+                && selection.reachable_declarations.contains(reference)
+        }));
+        declarations.insert(symbol, declaration);
+    }
+    Ok(declarations)
+}
+
+fn collect_checked_body_declaration_refs(
+    term: &CheckedCoreBodyTerm,
+    output: &mut BTreeSet<StableSymbol>,
+) {
+    match term {
+        CheckedCoreBodyTerm::DirectDeclarationCall { symbol, .. }
+        | CheckedCoreBodyTerm::RecursiveDeclarationCall(
+            checked_core::CheckedCoreRecursiveCallView { symbol, .. },
+        ) => {
+            output.insert(symbol.clone());
+        }
+        CheckedCoreBodyTerm::Lambda { body, .. } => {
+            collect_checked_body_declaration_refs(body, output);
+        }
+        CheckedCoreBodyTerm::Application { function, argument } => {
+            collect_checked_body_declaration_refs(function, output);
+            collect_checked_body_declaration_refs(argument, output);
+        }
+        CheckedCoreBodyTerm::Let { value, body, .. } => {
+            collect_checked_body_declaration_refs(value, output);
+            collect_checked_body_declaration_refs(body, output);
+        }
+        CheckedCoreBodyTerm::Match(view) => {
+            collect_checked_body_declaration_refs(&view.scrutinee, output);
+            for branch in &view.branches {
+                collect_checked_body_declaration_refs(&branch.method, output);
+            }
+        }
+        CheckedCoreBodyTerm::PrimitiveApplication(view) => {
+            for argument in &view.arguments {
+                collect_checked_body_declaration_refs(argument, output);
+            }
+        }
+        CheckedCoreBodyTerm::RecordSigmaConstruction(view) => {
+            for field in &view.fields {
+                if let checked_core::CheckedCoreRecordSigmaFieldValue::Runtime { value, .. } = field
+                {
+                    collect_checked_body_declaration_refs(value, output);
+                }
+            }
+        }
+        CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
+            collect_checked_body_declaration_refs(&view.base, output);
+        }
+        CheckedCoreBodyTerm::DictionaryConstruction(view) => {
+            for field in &view.fields {
+                if let checked_core::CheckedCoreDictionaryFieldValue::Runtime { value, .. } = field
+                {
+                    collect_checked_body_declaration_refs(value, output);
+                }
+            }
+        }
+        CheckedCoreBodyTerm::Variable { .. }
+        | CheckedCoreBodyTerm::IntegerLiteral { .. }
+        | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
+        | CheckedCoreBodyTerm::PrimitiveLiteral(_)
+        | CheckedCoreBodyTerm::ConstructorReference(_)
+        | CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => {}
+    }
+}
+
+fn admitted_recursive_member(
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+    symbol: &StableSymbol,
+) -> bool {
+    semantic.recursion_metadata.values().any(|metadata| {
+        matches!(
+            metadata.admission,
+            checked_core::RecursionAdmission::AcceptedStructural
+                | checked_core::RecursionAdmission::AcceptedSizeChange
+        ) && metadata.group_members.contains(symbol)
+    })
+}
+
+fn runtime_declaration_refs_in_kind(kind: &RuntimeDeclarationKind) -> Vec<String> {
+    let mut symbols = BTreeSet::new();
+    if let RuntimeDeclarationKind::Transparent { body } = kind {
+        collect_runtime_declaration_refs(body, &mut symbols);
+    }
+    symbols.into_iter().collect()
+}
+
+fn collect_runtime_declaration_refs(expr: &RuntimeExpr, output: &mut BTreeSet<String>) {
+    match expr {
+        RuntimeExpr::DeclarationRef { symbol } => {
+            output.insert(symbol.clone());
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for arg in args {
+                collect_runtime_declaration_refs(arg, output);
+            }
+        }
+        RuntimeExpr::Let { value, body } => {
+            collect_runtime_declaration_refs(value, output);
+            collect_runtime_declaration_refs(body, output);
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            collect_runtime_declaration_refs(scrutinee, output);
+            collect_runtime_declaration_refs(then_expr, output);
+            collect_runtime_declaration_refs(else_expr, output);
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            collect_runtime_declaration_refs(scrutinee, output);
+            for case in cases {
+                collect_runtime_declaration_refs(&case.body, output);
+            }
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            collect_runtime_declaration_refs(scrutinee, output);
+            for case in cases {
+                collect_runtime_declaration_refs(&case.body, output);
+            }
+        }
+        RuntimeExpr::Record { fields } => {
+            for (_, value) in fields {
+                collect_runtime_declaration_refs(value, output);
+            }
+        }
+        RuntimeExpr::Project { record, .. } => collect_runtime_declaration_refs(record, output),
+        RuntimeExpr::Closure { body, .. } | RuntimeExpr::LexicalClosure { body, .. } => {
+            collect_runtime_declaration_refs(body, output);
+        }
+        RuntimeExpr::Call { callee, args } => {
+            collect_runtime_declaration_refs(callee, output);
+            for arg in args {
+                collect_runtime_declaration_refs(arg, output);
+            }
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            if let Some(capability) = capability {
+                collect_runtime_declaration_refs(&capability.value, output);
+            }
+            for arg in args {
+                collect_runtime_declaration_refs(arg, output);
+            }
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => {}
+    }
 }
 
 /// Elaborator-private identities for the checked Program-I HostIO spine.
@@ -208,20 +497,15 @@ pub(crate) fn erase_checked_host_package_for_target<'a>(
 
 fn lower_checked_host_root(
     package: &CheckedCorePackage,
-    _target_closure: &[StableSymbol],
+    target_closure: &[StableSymbol],
     root: &StableSymbol,
     spine: &CheckedHostSpineV1,
 ) -> Result<RuntimeDeclarationKind, ErasureError> {
     let semantic = &package.artifact.semantic;
-    // The checked recognizer may inspect transparent semantic helpers while
-    // normalizing the HostIO spine.  They remain view inputs, not executable
-    // runtime declarations.
-    let reachable_declarations = semantic
-        .declarations
-        .keys()
-        .filter(|candidate| !has_runtime_metadata(semantic, candidate))
-        .cloned()
-        .collect::<BTreeSet<_>>();
+    // Decode exactly the finite executable declaration closure. Recursive
+    // edges remain declaration references; they are never unfolded while the
+    // checked HostIO tree is deforested.
+    let reachable_declarations = checked_host_body_view_symbols(semantic, target_closure);
     let selection = CheckedCoreBodyViewSelection {
         package_identity: package.header.package_identity.clone(),
         package_core_semantic_hash: package.core_semantic_hash,
@@ -231,9 +515,14 @@ fn lower_checked_host_root(
         external_symbols: external_declaration_symbols(semantic),
         dependency_semantic_hashes: semantic.dependency_semantic_hashes.clone(),
     };
-    let declaration = checked_core::checked_core_declaration_body_view(package, &selection, root)
-        .map_err(|error| expression_view_error(root, error))?;
-    let declarations = BTreeMap::from([(root.clone(), declaration.clone())]);
+    let declarations = checked_host_declaration_closure(package, &selection, root)?;
+    let declaration = declarations.get(root).ok_or_else(|| {
+        expression_lowering_error(
+            root,
+            "missing_expression_body_view",
+            "body view did not return the checked host root",
+        )
+    })?;
     let CheckedCoreBodyTerm::Lambda { body, .. } = &declaration.body else {
         return Err(expression_lowering_error(
             root,
@@ -381,6 +670,60 @@ fn lower_checked_host_computation(
             })
         };
     }
+    if let Some((symbol, level_args, arguments)) = direct_application_spine(term) {
+        reject_level_args(root, level_args)?;
+        if let Some(declaration) = declarations.get(symbol) {
+            let mut declaration_body = &declaration.body;
+            let mut parameter_count = 0usize;
+            while parameter_count < arguments.len() {
+                let CheckedCoreBodyTerm::Lambda { body, .. } = declaration_body else {
+                    break;
+                };
+                parameter_count += 1;
+                declaration_body = body;
+            }
+            if parameter_count == arguments.len() && !stack.contains(symbol) {
+                let values = arguments
+                    .iter()
+                    .map(|argument| {
+                        lower_body_term_inner(
+                            argument,
+                            declarations,
+                            semantic,
+                            stack,
+                            root,
+                            context_depth,
+                            branch_remap,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let mut inner_remap = branch_remap.cloned();
+                for _ in 0..parameter_count {
+                    inner_remap = inner_remap.map(|remap| remap.enter_binding());
+                }
+                stack.push(symbol.clone());
+                let lowered = lower_checked_host_computation(
+                    declaration_body,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth + parameter_count,
+                    spine,
+                    inner_remap.as_ref(),
+                );
+                stack.pop();
+                let mut lowered = lowered?;
+                for (index, value) in values.into_iter().enumerate().rev() {
+                    lowered = RuntimeExpr::Let {
+                        value: Box::new(shift_runtime_vars(value, index as u32, 0)),
+                        body: Box::new(lowered),
+                    };
+                }
+                return Ok(lowered);
+            }
+        }
+    }
     if let Some((constructor, args)) = constructor_application_spine(term) {
         if constructor.symbol == spine.ret {
             let value = args.last().ok_or_else(|| {
@@ -522,11 +865,33 @@ fn lower_checked_host_computation(
             });
         }
     }
+    if is_recursive_declaration_application(term) {
+        return lower_body_term_inner(
+            term,
+            declarations,
+            semantic,
+            stack,
+            root,
+            context_depth,
+            branch_remap,
+        );
+    }
     Err(expression_lowering_error(
         root,
         "unrecognized_checked_host_computation",
         "normalized HostIO body is neither identity-checked Ret nor Vis",
     ))
+}
+
+fn is_recursive_declaration_application(term: &CheckedCoreBodyTerm) -> bool {
+    let mut current = term;
+    while let CheckedCoreBodyTerm::Application { function, .. } = current {
+        current = function;
+    }
+    match current {
+        CheckedCoreBodyTerm::RecursiveDeclarationCall(_) => true,
+        _ => false,
+    }
 }
 
 #[derive(Debug)]
@@ -1125,6 +1490,18 @@ fn has_runtime_metadata(
         || semantic.class_instance_metadata.contains_key(symbol)
 }
 
+fn checked_host_body_view_symbols(
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+    _target_closure: &[StableSymbol],
+) -> BTreeSet<StableSymbol> {
+    semantic
+        .declarations
+        .keys()
+        .filter(|symbol| !has_runtime_metadata(semantic, symbol))
+        .cloned()
+        .collect()
+}
+
 fn external_declaration_symbols(
     semantic: &checked_core::CheckedCoreSemanticInputs,
 ) -> BTreeSet<StableSymbol> {
@@ -1268,6 +1645,27 @@ fn lower_body_term_inner(
         .last()
         .expect("expression lowering stack always has an owner")
         .clone();
+    if let Some((view, arguments)) = recursive_application_spine(term) {
+        let callee = lower_recursive_declaration_call(view, declarations, root_symbol)?;
+        let args = arguments
+            .into_iter()
+            .map(|argument| {
+                lower_body_term_inner(
+                    argument,
+                    declarations,
+                    semantic,
+                    stack,
+                    root_symbol,
+                    context_depth,
+                    branch_remap,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(RuntimeExpr::Call {
+            callee: Box::new(callee),
+            args,
+        });
+    }
     if let Some((symbol, level_args, arguments)) = direct_application_spine(term) {
         reject_level_args(root_symbol, level_args)?;
         if let Some(declaration) = declarations.get(symbol) {
@@ -1680,6 +2078,25 @@ fn direct_application_spine<'a>(
     };
     arguments.reverse();
     Some((symbol, level_args, arguments))
+}
+
+fn recursive_application_spine(
+    term: &CheckedCoreBodyTerm,
+) -> Option<(
+    &checked_core::CheckedCoreRecursiveCallView,
+    Vec<&CheckedCoreBodyTerm>,
+)> {
+    let mut arguments = Vec::new();
+    let mut current = term;
+    while let CheckedCoreBodyTerm::Application { function, argument } = current {
+        arguments.push(argument.as_ref());
+        current = function.as_ref();
+    }
+    let CheckedCoreBodyTerm::RecursiveDeclarationCall(view) = current else {
+        return None;
+    };
+    arguments.reverse();
+    Some((view, arguments))
 }
 
 fn lower_recursive_declaration_call(

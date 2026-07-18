@@ -19,7 +19,8 @@ use crate::checked_core::{
     CheckedCoreBodyViewError, CheckedCoreBodyViewSelection, CheckedCorePackage,
     CheckedCorePackageError, CheckedCorePackageHeader, CheckedCoreSemanticInputs,
     ConstructorMetadata, DataMetadata, LowerabilityStatus, PartialityMetadata, PrimitiveMetadata,
-    PrimitiveReductionMetadata, StableSymbol, StableSymbolTable, SymbolNamespace,
+    PrimitiveReductionMetadata, RecursionAdmission, RecursionMetadata, StableSymbol,
+    StableSymbolTable, SymbolNamespace,
 };
 use crate::program_admission::{admit_checked_main, CheckedMainDescriptor, ProgramAdmissionError};
 use crate::{ElabEnv, ElabError};
@@ -1231,10 +1232,10 @@ pub fn compile_native_program_sources(
         admitted_ids.extend(ids);
     }
     let checked = admit_checked_main(&env).map_err(NativeProgramBuildError::Admission)?;
-    let main_has_host_effect = env
-        .effect_rows
-        .get("main")
-        .is_some_and(|row| !row.concrete_effects().is_empty());
+    // Checked-main admission has already proved the exact HostIO ABI. An
+    // empty effect row is still a HostIO computation (`Ret`), so it must use
+    // the same finite checked-host producer boundary as effectful programs.
+    let main_has_host_effect = true;
     let (symbols, symbol_table) = stable_symbols_for_env(package_name, &env, true);
     let plan =
         native_entrypoint_plan(&checked, &symbols).map_err(NativeProgramBuildError::Driver)?;
@@ -1285,14 +1286,26 @@ pub fn compile_native_program_sources(
         .into_iter()
         .next()
         .expect("one exact checked-main selector produces one closure");
-    if main_has_host_effect {
-        // ITree/Coproduct/operation declarations are checked semantic
-        // dependencies of the recognizer, not runtime declarations.  The
-        // normalized root is self-contained after deforestation.
+    let recursive_members = package
+        .artifact
+        .semantic
+        .recursion_metadata
+        .values()
+        .flat_map(|metadata| metadata.group_members.iter())
+        .collect::<BTreeSet<_>>();
+    let has_reachable_recursion = closure
+        .reachable_declarations
+        .iter()
+        .any(|symbol| recursive_members.contains(symbol));
+    // Strong normalization remains a finite convenience only for a closure
+    // proved acyclic by the checked declaration graph. A closure containing an
+    // SCT-admitted recursive member keeps its exact declaration nodes and
+    // edges; using conversion as an inliner there would be unbounded.
+    let normalized_host_package = if has_reachable_recursion {
+        None
+    } else {
         closure.reachable_declarations = BTreeSet::from([plan.main.clone()]);
         closure.report.reachable_declarations = closure.reachable_declarations.clone();
-    }
-    let normalized_host_package = if main_has_host_effect {
         let mut normalized = package.clone();
         let declaration = env.env.lookup(checked.main).ok_or_else(|| {
             NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
@@ -1329,8 +1342,6 @@ pub fn compile_native_program_sources(
                 .map_err(CompilerDriverError::from)
                 .map_err(NativeProgramBuildError::Driver)?,
         )
-    } else {
-        None
     };
     let executable_view = normalized_host_package.as_ref().unwrap_or(&package);
     let mut executable_closure_view = closure.clone();
@@ -1366,16 +1377,12 @@ pub fn compile_native_program_sources(
     let executable_closure = closure.reachable_declarations.clone();
     let mut runtime_program = if main_has_host_effect {
         let mut program = crate::erasure::erase_checked_host_package_for_target(
-            normalized_host_package
-                .as_ref()
-                .expect("host-effect main owns a normalized private view"),
+            executable_view,
             executable_closure.iter(),
             &plan.main,
             &host_spine,
         )
         .map_err(NativeProgramBuildError::Erasure)?;
-        // Normalization changes only the private producer view, never the
-        // checked package identity bound into the artifact.
         program.core_semantic_hash = package.core_semantic_hash;
         program.artifact_hash = package.artifact_hash;
         program
@@ -1950,6 +1957,13 @@ fn emit_package_from_env(
     }
 
     add_data_metadata(env, &symbols, &mut semantic);
+    add_admitted_recursion_metadata(
+        &manifest.package_name,
+        env,
+        admitted,
+        &symbols,
+        &mut semantic,
+    );
     if native_primitives {
         add_native_primitive_metadata(env, &symbols, &mut semantic);
     }
@@ -1991,6 +2005,180 @@ fn emit_package_from_env(
         },
     )?;
     Ok(package)
+}
+
+fn add_admitted_recursion_metadata(
+    package_name: &str,
+    env: &ElabEnv,
+    admitted: &[GlobalId],
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+    semantic: &mut CheckedCoreSemanticInputs,
+) {
+    let admitted = admitted.iter().copied().collect::<BTreeSet<_>>();
+    let mut graph = BTreeMap::<GlobalId, BTreeSet<GlobalId>>::new();
+    for id in &admitted {
+        let Some(Decl::Transparent { body, .. }) = env.env.lookup(*id) else {
+            continue;
+        };
+        let mut references = BTreeSet::new();
+        collect_term_constants(body, &mut references);
+        references.retain(|reference| admitted.contains(reference));
+        graph.insert(*id, references);
+    }
+
+    let mut remaining = graph.keys().copied().collect::<BTreeSet<_>>();
+    let mut scc_index = 0usize;
+    while let Some(seed) = remaining.iter().next().copied() {
+        let forward = reachable_declarations(seed, &graph);
+        let mut reverse_graph = BTreeMap::<GlobalId, BTreeSet<GlobalId>>::new();
+        for (owner, references) in &graph {
+            reverse_graph.entry(*owner).or_default();
+            for reference in references {
+                reverse_graph.entry(*reference).or_default().insert(*owner);
+            }
+        }
+        let reverse = reachable_declarations(seed, &reverse_graph);
+        let component = forward
+            .intersection(&reverse)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        remaining.retain(|id| !component.contains(id));
+        let recursive = component.len() > 1
+            || graph
+                .get(&seed)
+                .is_some_and(|references| references.contains(&seed));
+        if !recursive {
+            continue;
+        }
+        let members = component
+            .iter()
+            .filter_map(|id| symbols.get(id).cloned())
+            .collect::<Vec<_>>();
+        if members.len() != component.len() {
+            continue;
+        }
+        let group = StableSymbol::new(
+            SymbolNamespace::Metadata,
+            vec![
+                package_name.to_string(),
+                format!("AdmittedRecursionScc{scc_index}"),
+            ],
+        );
+        semantic.symbols.insert(group.clone());
+        semantic
+            .lowerability
+            .insert(group.clone(), LowerabilityStatus::Supported);
+        semantic.recursion_metadata.insert(
+            group,
+            RecursionMetadata {
+                group_members: members,
+                // A transparent cyclic SCC can only exist after the kernel's
+                // recursive-group SCT gate accepted it. The emitted artifact
+                // consumes that admission; it does not re-prove termination.
+                admission: RecursionAdmission::AcceptedSizeChange,
+                scc_index,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        scc_index += 1;
+    }
+}
+
+fn reachable_declarations(
+    seed: GlobalId,
+    graph: &BTreeMap<GlobalId, BTreeSet<GlobalId>>,
+) -> BTreeSet<GlobalId> {
+    let mut reached = BTreeSet::new();
+    let mut queue = vec![seed];
+    while let Some(id) = queue.pop() {
+        if !reached.insert(id) {
+            continue;
+        }
+        if let Some(next) = graph.get(&id) {
+            queue.extend(next.iter().copied());
+        }
+    }
+    reached
+}
+
+fn collect_term_constants(term: &Term, output: &mut BTreeSet<GlobalId>) {
+    match term {
+        Term::Const { id, .. } => {
+            output.insert(*id);
+        }
+        Term::Var(_) | Term::Type(_) | Term::Omega(_) | Term::IntLit(_) => {}
+        Term::Pi(left, right)
+        | Term::Lam(left, right)
+        | Term::Sigma(left, right)
+        | Term::Pair(left, right)
+        | Term::App(left, right)
+        | Term::Quot(left, right) => {
+            collect_term_constants(left, output);
+            collect_term_constants(right, output);
+        }
+        Term::Proj1(value)
+        | Term::Proj2(value)
+        | Term::Trunc(value)
+        | Term::TruncProj(value)
+        | Term::Refl(value)
+        | Term::QuotClass(value) => collect_term_constants(value, output),
+        Term::Ascript(value, ty) => {
+            collect_term_constants(value, output);
+            collect_term_constants(ty, output);
+        }
+        Term::Eq(ty, left, right) | Term::J(ty, left, right) => {
+            collect_term_constants(ty, output);
+            collect_term_constants(left, output);
+            collect_term_constants(right, output);
+        }
+        Term::Cast(a, b, c, d) => {
+            collect_term_constants(a, output);
+            collect_term_constants(b, output);
+            collect_term_constants(c, output);
+            collect_term_constants(d, output);
+        }
+        Term::Let { ty, val, body } => {
+            collect_term_constants(ty, output);
+            collect_term_constants(val, output);
+            collect_term_constants(body, output);
+        }
+        Term::Elim {
+            params,
+            motive,
+            methods,
+            indices,
+            scrut,
+            ..
+        } => {
+            for value in params {
+                collect_term_constants(value, output);
+            }
+            collect_term_constants(motive, output);
+            for value in methods {
+                collect_term_constants(value, output);
+            }
+            for value in indices {
+                collect_term_constants(value, output);
+            }
+            collect_term_constants(scrut, output);
+        }
+        Term::IndFormer { .. } | Term::Constructor { .. } => {}
+        Term::QuotElim {
+            motive,
+            method,
+            respect,
+            scrut,
+        } => {
+            collect_term_constants(motive, output);
+            collect_term_constants(method, output);
+            collect_term_constants(respect, output);
+            collect_term_constants(scrut, output);
+        }
+        Term::Absurd(motive, proof) => {
+            collect_term_constants(motive, output);
+            collect_term_constants(proof, output);
+        }
+    }
 }
 
 fn native_entrypoint_plan(
