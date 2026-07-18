@@ -695,30 +695,19 @@ pub fn build_bound_process_starter_executable_artifact(
         constructor: entrypoint.program_caps_constructor.clone(),
         args: vec![RuntimeExpr::Var(1)],
     };
-    // Checked-core binders are de Bruijn-indexed, so the closest binder
-    // (`ProgramCaps`) is runtime argument zero and `ProcessInput` is one.
+    // Calls carry source argument order. Declaration lowering installs them
+    // de Bruijn-nearest first, so `ProgramCaps` becomes runtime binding zero
+    // and `ProcessInput` binding one inside the checked main body.
     let tree = RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::DeclarationRef {
             symbol: entrypoint.target_symbol.clone(),
         }),
-        args: vec![caps, RuntimeExpr::Var(0)],
+        args: vec![RuntimeExpr::Var(0), caps],
     };
-    let adapter = if runtime_expr_contains_effect(&tree, program) {
-        tree
-    } else {
-        RuntimeExpr::Match {
-            scrutinee: Box::new(tree),
-            cases: vec![crate::RuntimeMatchCase {
-                constructor: entrypoint.ret_constructor.clone(),
-                binders: 1,
-                body: RuntimeExpr::Var(0),
-            }],
-            default: crate::RuntimeTrap {
-                code: crate::RuntimeTrapCode::PatternMatchFailure,
-                message: "effect-free native entrypoint returned Vis".to_string(),
-            },
-        }
-    };
+    // Checked-host erasure deforests both `Ret`-only and effectful HostIO
+    // roots. The target call therefore already produces the admitted result;
+    // an effect-free root is not a residual ITree requiring a second match.
+    let adapter = tree;
 
     let options = ObjectLinkerPackagingOptions::starter_host();
     let output_dir = output_dir.as_ref();
@@ -789,71 +778,6 @@ pub fn build_bound_process_starter_executable_artifact(
         executable_path,
         executable_hash: fnv1a_64(&executable_bytes),
     })
-}
-
-fn runtime_expr_contains_effect(expr: &RuntimeExpr, program: &RuntimeProgram) -> bool {
-    match expr {
-        RuntimeExpr::Effect { .. } => true,
-        RuntimeExpr::Let { value, body } => {
-            runtime_expr_contains_effect(value, program)
-                || runtime_expr_contains_effect(body, program)
-        }
-        RuntimeExpr::If {
-            scrutinee,
-            then_expr,
-            else_expr,
-        } => {
-            runtime_expr_contains_effect(scrutinee, program)
-                || runtime_expr_contains_effect(then_expr, program)
-                || runtime_expr_contains_effect(else_expr, program)
-        }
-        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => args
-            .iter()
-            .any(|argument| runtime_expr_contains_effect(argument, program)),
-        RuntimeExpr::Call { callee, args } => {
-            runtime_expr_contains_effect(callee, program)
-                || args
-                    .iter()
-                    .any(|argument| runtime_expr_contains_effect(argument, program))
-        }
-        RuntimeExpr::Match {
-            scrutinee, cases, ..
-        } => {
-            runtime_expr_contains_effect(scrutinee, program)
-                || cases
-                    .iter()
-                    .any(|case| runtime_expr_contains_effect(&case.body, program))
-        }
-        RuntimeExpr::ComputationalMatch {
-            scrutinee, cases, ..
-        } => {
-            runtime_expr_contains_effect(scrutinee, program)
-                || cases
-                    .iter()
-                    .any(|case| runtime_expr_contains_effect(&case.body, program))
-        }
-        RuntimeExpr::Record { fields } => fields
-            .iter()
-            .any(|(_, value)| runtime_expr_contains_effect(value, program)),
-        RuntimeExpr::Project { record, .. } => runtime_expr_contains_effect(record, program),
-        RuntimeExpr::Closure { body, .. } | RuntimeExpr::LexicalClosure { body, .. } => {
-            runtime_expr_contains_effect(body, program)
-        }
-        RuntimeExpr::DeclarationRef { symbol } => program
-            .declarations
-            .iter()
-            .find(|declaration| declaration.symbol == *symbol)
-            .is_some_and(|declaration| match &declaration.kind {
-                crate::RuntimeDeclarationKind::Transparent { body } => {
-                    runtime_expr_contains_effect(body, program)
-                }
-                _ => false,
-            }),
-        RuntimeExpr::ImportedDeclarationRef { .. }
-        | RuntimeExpr::Value(_)
-        | RuntimeExpr::Var(_)
-        | RuntimeExpr::Trap(_) => false,
-    }
 }
 
 pub fn object_linker_executable_package_hash(package: &ObjectLinkerExecutablePackage) -> u64 {
