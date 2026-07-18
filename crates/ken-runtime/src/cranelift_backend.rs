@@ -2260,6 +2260,25 @@ fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
     ) && produces_deforestable_aggregate_with_ih(expr, &BTreeSet::new())
 }
 
+fn requires_value_aware_heterogeneous_deforestation(
+    expr: &RuntimeExpr,
+    env: &[Lowered],
+) -> bool {
+    if requires_heterogeneous_deforestation(expr) {
+        return true;
+    }
+    let RuntimeExpr::Call { callee, .. } = expr else {
+        return false;
+    };
+    let RuntimeExpr::Var(index) = callee.as_ref() else {
+        return false;
+    };
+    usize::try_from(*index)
+        .ok()
+        .and_then(|index| env.get(index))
+        .is_some_and(|callee| matches!(callee, Lowered::ComputationalRecursorClosure { .. }))
+}
+
 fn shifted_aggregate_ihs(aggregate_ihs: &BTreeSet<usize>, by: usize) -> BTreeSet<usize> {
     aggregate_ihs.iter().map(|index| index + by).collect()
 }
@@ -2538,7 +2557,12 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     } => {
-                        if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
+                        if args.len() == 1
+                            && requires_value_aware_heterogeneous_deforestation(
+                                &args[0],
+                                producer_env,
+                            )
+                        {
                             if let Some((cases, default)) =
                                 ordinary_match_continuation(&params, &body)
                             {
@@ -4014,7 +4038,9 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     } => {
-                        if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
+                        if args.len() == 1
+                            && requires_value_aware_heterogeneous_deforestation(&args[0], env)
+                        {
                             if let Some((cases, default)) =
                                 ordinary_match_continuation(&params, &body)
                             {
