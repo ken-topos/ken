@@ -422,6 +422,29 @@ pub struct RuntimeComputationalMatchCase {
     pub body: RuntimeExpr,
 }
 
+/// Compiler-private structural identity for one erased ordinary eliminator
+/// frame.  The checked join plan binds this fingerprint to a distinct checked
+/// occurrence; native lowering refuses ambiguity rather than treating equal
+/// frame shapes as interchangeable sites.
+#[doc(hidden)]
+pub fn compiler_private_ordinary_match_frame_fingerprint(
+    cases: &[RuntimeMatchCase],
+    default: &RuntimeTrap,
+) -> u64 {
+    crate::fnv1a_64(format!("ordinary\0{cases:?}\0{default:?}").as_bytes())
+}
+
+/// Compiler-private structural identity for one erased computational
+/// eliminator frame.  See
+/// [`compiler_private_ordinary_match_frame_fingerprint`].
+#[doc(hidden)]
+pub fn compiler_private_computational_match_frame_fingerprint(
+    cases: &[RuntimeComputationalMatchCase],
+    default: &RuntimeTrap,
+) -> u64 {
+    crate::fnv1a_64(format!("computational\0{cases:?}\0{default:?}").as_bytes())
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeValue {
     Bool(bool),

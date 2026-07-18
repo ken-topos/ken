@@ -534,6 +534,7 @@ pub(crate) fn emit_process_entrypoint_object_with_cranelift(
         None,
         true,
         None,
+        None,
     )?;
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
@@ -573,6 +574,7 @@ fn emit_process_entrypoint_object_with_symbols(
         None,
         true,
         Some(symbols),
+        None,
     )?;
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
@@ -618,6 +620,7 @@ pub(crate) fn emit_bound_process_program_object_with_cranelift(
         None,
         true,
         Some(symbols),
+        native_join_plan_for_program(program)?,
     )?;
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
@@ -1285,6 +1288,29 @@ fn compile_program_expr(
     )
 }
 
+fn native_join_plan_for_program(
+    program: &RuntimeProgram,
+) -> Result<Option<crate::NativeJoinPlanV1>, CraneliftBackendError> {
+    let candidates = program
+        .erased_core
+        .metadata
+        .checked_core
+        .metadata
+        .values()
+        .filter(|bytes| bytes.starts_with(crate::NATIVE_JOIN_PLAN_V1_HEADER))
+        .collect::<Vec<_>>();
+    match candidates.as_slice() {
+        [] => Ok(None),
+        [bytes] => crate::NativeJoinPlanV1::decode(bytes)
+            .map(Some)
+            .map_err(|reason| unsupported("NativeJoinPlanV1", reason)),
+        _ => Err(unsupported(
+            "NativeJoinPlanV1",
+            "checked package contains multiple native join plans",
+        )),
+    }
+}
+
 fn compile_expr_with_declarations<'a>(
     expr: &RuntimeExpr,
     seed_env: &'a NativeSeedEnvironment,
@@ -1308,6 +1334,7 @@ fn compile_expr_with_declarations_and_process_input<'a>(
         declarations,
         staged_process_input,
         false,
+        None,
         None,
     )
 }
@@ -1363,6 +1390,9 @@ fn run_checked_bounded_nat_fixture(
         next_recursor_frame_provenance: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
+        next_source_join: 0,
+        native_join_plan: None,
+        consumed_join_sites: BTreeSet::new(),
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1551,6 +1581,9 @@ fn run_dynamic_constructor_dispatch_fixture(
         next_recursor_frame_provenance: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
+        next_source_join: 0,
+        native_join_plan: None,
+        consumed_join_sites: BTreeSet::new(),
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1660,6 +1693,7 @@ fn compile_program_expr_object(
         None,
         false,
         None,
+        native_join_plan_for_program(program)?,
     )
 }
 
@@ -1673,6 +1707,7 @@ fn compile_expr_into_module<'a, M: Module>(
     staged_process_input: Option<&RuntimeValue>,
     process_mode: bool,
     process_symbols: Option<&crate::NativeProcessSymbols>,
+    native_join_plan: Option<crate::NativeJoinPlanV1>,
 ) -> Result<CompiledModule<M>, CraneliftBackendError> {
     let mut sig = module.make_signature();
     sig.params
@@ -1717,6 +1752,9 @@ fn compile_expr_into_module<'a, M: Module>(
         next_recursor_frame_provenance: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
+        next_source_join: 0,
+        native_join_plan,
+        consumed_join_sites: BTreeSet::new(),
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: process_mode,
@@ -1840,6 +1878,9 @@ struct Lowering<'a> {
     next_recursor_frame_provenance: u64,
     next_continuation_activation: u64,
     next_continuation_cursor: u64,
+    next_source_join: u64,
+    native_join_plan: Option<crate::NativeJoinPlanV1>,
+    consumed_join_sites: BTreeSet<u64>,
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
     process_object: bool,
@@ -2336,14 +2377,16 @@ enum SourceContinuationTerminal<'a> {
         expected: ContinuationCursorId,
         active: &'a ActiveContinuationFrame<'a>,
     },
-    JumpToJoin(SourceJoinEdge),
+    JumpToJoin(SourceJoinEdge<'a>),
 }
 
-struct SourceJoinEdge {
+struct SourceJoinEdge<'a> {
     join_id: u64,
     predecessor_id: u32,
     target: cranelift_codegen::ir::Block,
     expected_outer: ContinuationCursorId,
+    required_kind: ScalarMergeKind,
+    prefix: Vec<EliminatorFrame<'a>>,
 }
 
 struct ArmedInvocation<'a> {
@@ -4235,6 +4278,75 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn planned_join_site_for_frame(
+        &mut self,
+        frame: EliminatorFrame<'_>,
+    ) -> Result<Option<crate::NativeJoinPlanSiteV1>, CraneliftBackendError> {
+        let fingerprint = match frame {
+            EliminatorFrame::Computational(frame) => {
+                crate::compiler_private_computational_match_frame_fingerprint(
+                    frame.cases,
+                    frame.default,
+                )
+            }
+            EliminatorFrame::Ordinary(frame) => {
+                crate::compiler_private_ordinary_match_frame_fingerprint(
+                    frame.cases,
+                    frame.default,
+                )
+            }
+            EliminatorFrame::PendingLet(_)
+            | EliminatorFrame::InvocationReturn
+            | EliminatorFrame::Active(_) => return Ok(None),
+        };
+        let Some(plan) = &self.native_join_plan else {
+            return Ok(None);
+        };
+        let matches = plan
+            .sites
+            .iter()
+            .filter(|site| site.runtime_frame_fingerprint == fingerprint)
+            .cloned()
+            .collect::<Vec<_>>();
+        match matches.as_slice() {
+            [] => Ok(None),
+            [site] => {
+                self.consumed_join_sites.insert(site.site_id);
+                Ok(Some(site.clone()))
+            }
+            _ => Err(unsupported(
+                "NativeJoinPlanV1",
+                "equal erased frame shapes make a checked cut occurrence ambiguous",
+            )),
+        }
+    }
+
+    fn scalar_kind_from_plan(kind: crate::NativeJoinAnswerKindV1) -> ScalarMergeKind {
+        match kind {
+            crate::NativeJoinAnswerKindV1::Int => ScalarMergeKind::Int,
+            crate::NativeJoinAnswerKindV1::Bool => ScalarMergeKind::Bool,
+            crate::NativeJoinAnswerKindV1::StructuralNat => ScalarMergeKind::StructuralNat,
+            crate::NativeJoinAnswerKindV1::ExitCode => ScalarMergeKind::ExitCode,
+        }
+    }
+
+    fn reconstruct_scalar_join_value(
+        kind: ScalarMergeKind,
+        value: cranelift_codegen::ir::Value,
+    ) -> Lowered {
+        match kind {
+            ScalarMergeKind::Int => Lowered::Int { value, known: None },
+            ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
+            ScalarMergeKind::StructuralNat => {
+                Lowered::StructuralNat(StructuralNatV1 { value })
+            }
+            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
+            ScalarMergeKind::RecursiveBackedge => {
+                unreachable!("a checked join plan never carries RecursiveBackedge")
+            }
+        }
+    }
+
     fn declaration_call_produces_deforestable_aggregate(&self, expr: &RuntimeExpr) -> bool {
         let RuntimeExpr::Call { callee, .. } = expr else {
             return false;
@@ -4282,6 +4394,153 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn source_terminal_active<'b>(
+        continuation: &SourceContinuation<'b>,
+    ) -> Option<ActiveContinuationFrame<'b>> {
+        match continuation {
+            SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
+                active,
+                ..
+            }) => Some(**active),
+            SourceContinuation::Terminal(
+                SourceContinuationTerminal::ReturnValue
+                | SourceContinuationTerminal::JumpToJoin(_),
+            ) => None,
+            SourceContinuation::LetBody { next, .. }
+            | SourceContinuation::IfScrutinee { next, .. }
+            | SourceContinuation::ConstructArgument { next, .. }
+            | SourceContinuation::MatchScrutinee { next, .. }
+            | SourceContinuation::ProjectRecord { next, .. }
+            | SourceContinuation::CallCallee { next, .. }
+            | SourceContinuation::CallArgument { next, .. } => {
+                Self::source_terminal_active(next)
+            }
+        }
+    }
+
+    fn instantiate_source_prefix_to_join<'b>(
+        source: &SourceContinuation<'b>,
+        edge: SourceJoinEdge<'b>,
+    ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        Ok(match source {
+            SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
+                expected,
+                ..
+            }) => {
+                if *expected != edge.expected_outer {
+                    return Err(unsupported(
+                        "NativeJoinPlanV1",
+                        "source prefix terminal does not match the planned outer cursor",
+                    ));
+                }
+                SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge))
+            }
+            SourceContinuation::Terminal(
+                SourceContinuationTerminal::ReturnValue
+                | SourceContinuationTerminal::JumpToJoin(_),
+            ) => {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    "source prefix has no exact outer terminal to replace",
+                ));
+            }
+            SourceContinuation::LetBody { body, env, next } => SourceContinuation::LetBody {
+                body: body.clone(),
+                env: env.clone(),
+                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+            },
+            SourceContinuation::IfScrutinee {
+                then_expr,
+                else_expr,
+                env,
+                next,
+            } => SourceContinuation::IfScrutinee {
+                then_expr: then_expr.clone(),
+                else_expr: else_expr.clone(),
+                env: env.clone(),
+                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+            },
+            SourceContinuation::ConstructArgument {
+                constructor,
+                remaining,
+                lowered,
+                env,
+                next,
+            } => SourceContinuation::ConstructArgument {
+                constructor: constructor.clone(),
+                remaining: remaining.clone(),
+                lowered: lowered.clone(),
+                env: env.clone(),
+                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+            },
+            SourceContinuation::MatchScrutinee {
+                cases,
+                default,
+                env,
+                next,
+            } => SourceContinuation::MatchScrutinee {
+                cases: cases.clone(),
+                default: default.clone(),
+                env: env.clone(),
+                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+            },
+            SourceContinuation::ProjectRecord { field, next } => {
+                SourceContinuation::ProjectRecord {
+                    field: field.clone(),
+                    next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+                }
+            }
+            SourceContinuation::CallCallee { args, env, next } => {
+                SourceContinuation::CallCallee {
+                    args: args.clone(),
+                    env: env.clone(),
+                    next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+                }
+            }
+            SourceContinuation::CallArgument {
+                callee,
+                remaining,
+                lowered,
+                env,
+                next,
+            } => SourceContinuation::CallArgument {
+                callee: callee.clone(),
+                remaining: remaining.clone(),
+                lowered: lowered.clone(),
+                env: env.clone(),
+                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+            },
+        })
+    }
+
+    fn planned_active_scalar_cut<'b>(
+        &mut self,
+        active: ActiveContinuationFrame<'b>,
+    ) -> Result<
+        (
+            Vec<EliminatorFrame<'b>>,
+            &'b [EliminatorFrame<'b>],
+            ScalarMergeKind,
+            u64,
+        ),
+        CraneliftBackendError,
+    > {
+        for (index, frame) in active.pending.iter().copied().enumerate() {
+            if let Some(site) = self.planned_join_site_for_frame(frame)? {
+                return Ok((
+                    active.pending[..=index].to_vec(),
+                    &active.pending[index + 1..],
+                    Self::scalar_kind_from_plan(site.answer_kind),
+                    site.site_id,
+                ));
+            }
+        }
+        Err(unsupported(
+            "NativeJoinPlanV1",
+            "active checked continuation has no planned scalar cut before its outer suffix",
+        ))
+    }
+
     fn lower_source_machine(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -4289,15 +4548,30 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
         active: &ActiveContinuationFrame<'_>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let mut state = SourceMachineState::Eval {
-            expr: expr.clone(),
-            env: env.to_vec(),
-            continuation: SourceContinuation::Terminal(
+        self.lower_source_machine_with_continuation(
+            builder,
+            expr.clone(),
+            env.to_vec(),
+            SourceContinuation::Terminal(
                 SourceContinuationTerminal::ResumeOuter {
                     expected: active.cursor,
                     active,
                 },
             ),
+        )
+    }
+
+    fn lower_source_machine_with_continuation<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        expr: RuntimeExpr,
+        env: Vec<Lowered>,
+        continuation: SourceContinuation<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let mut state = SourceMachineState::Eval {
+            expr,
+            env,
+            continuation,
         };
         loop {
             state = match state {
@@ -4407,11 +4681,35 @@ impl<'a> Lowering<'a> {
                         }
                         return self.resume_active_continuation(builder, value, *active);
                     }
-                    SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(_)) => {
-                        return Err(unsupported(
-                            "ComputationalRecursor",
-                            "source join edge is not yet sealed",
-                        ));
+                    SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)) => {
+                        if edge.prefix.is_empty() {
+                            return Err(unsupported(
+                                "NativeJoinPlanV1",
+                                "scalar join edge has no branch-local eliminator prefix",
+                            ));
+                        }
+                        let mut prefix = edge.prefix;
+                        prefix.push(EliminatorFrame::InvocationReturn);
+                        let value = self.lower_computational_match_value_composed(
+                            builder,
+                            value,
+                            &prefix,
+                        )?;
+                        let (value, actual_kind) =
+                            self.merge_scalar_branch(builder, value, "NativeJoinPlanV1")?;
+                        if actual_kind != ScalarMergeKind::RecursiveBackedge
+                            && actual_kind != edge.required_kind
+                        {
+                            return Err(unsupported(
+                                "NativeJoinPlanV1",
+                                format!(
+                                    "predecessor {} for join {} produced {actual_kind:?}, planned {:?}",
+                                    edge.predecessor_id, edge.join_id, edge.required_kind
+                                ),
+                            ));
+                        }
+                        builder.ins().jump(edge.target, &[value.into()]);
+                        return Ok(Lowered::RecursiveBackedge);
                     }
                     SourceContinuation::LetBody { body, env, next } => {
                         if matches!(value, Lowered::RecursiveBackedge) {
@@ -4472,6 +4770,27 @@ impl<'a> Lowering<'a> {
                         env,
                         next,
                     } => {
+                        if let Lowered::HostResult {
+                            success,
+                            error,
+                            ok,
+                            err_constructor,
+                            ok_constructor,
+                        } = value
+                        {
+                            return self.lower_source_dynamic_host_result_match(
+                                builder,
+                                success,
+                                *error,
+                                *ok,
+                                &err_constructor,
+                                &ok_constructor,
+                                &cases,
+                                default,
+                                &env,
+                                *next,
+                            );
+                        }
                         let Lowered::Constructor { constructor, args } = value else {
                             return Err(unsupported(
                                 "Match",
@@ -4558,6 +4877,100 @@ impl<'a> Lowering<'a> {
                 },
             };
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn lower_source_dynamic_host_result_match<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        success: cranelift_codegen::ir::Value,
+        error: Lowered,
+        ok: Lowered,
+        err_constructor: &str,
+        ok_constructor: &str,
+        cases: &[crate::RuntimeMatchCase],
+        default: RuntimeTrap,
+        env: &[Lowered],
+        suffix_source: SourceContinuation<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let active = Self::source_terminal_active(&suffix_source).ok_or_else(|| {
+            unsupported(
+                "NativeJoinPlanV1",
+                "dynamic HostResult source join has no exact outer continuation",
+            )
+        })?;
+        let (prefix, suffix_pending, required_kind, site_id) =
+            self.planned_active_scalar_cut(active)?;
+        let join_id = self.next_source_join;
+        self.next_source_join = self
+            .next_source_join
+            .checked_add(1)
+            .expect("compiler-private source join identity exhausted");
+
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        let ok_block = builder.create_block();
+        let err_block = builder.create_block();
+        builder.ins().brif(success, ok_block, &[], err_block, &[]);
+
+        for (predecessor_id, block, constructor, payload) in [
+            (0, ok_block, ok_constructor, ok),
+            (1, err_block, err_constructor, error),
+        ] {
+            builder.switch_to_block(block);
+            let edge = SourceJoinEdge {
+                join_id,
+                predecessor_id,
+                target: merge,
+                expected_outer: active.cursor,
+                required_kind,
+                prefix: prefix.clone(),
+            };
+            let continuation =
+                Self::instantiate_source_prefix_to_join(&suffix_source, edge)?;
+            let lowered = if let Some(case) = cases
+                .iter()
+                .find(|case| case.constructor == constructor && case.binders == 1)
+            {
+                let mut arm_env = vec![payload];
+                arm_env.extend_from_slice(env);
+                self.lower_source_machine_with_continuation(
+                    builder,
+                    case.body.clone(),
+                    arm_env,
+                    continuation,
+                )?
+            } else {
+                self.lower_source_machine_with_continuation(
+                    builder,
+                    RuntimeExpr::Trap(default.clone()),
+                    env.to_vec(),
+                    continuation,
+                )?
+            };
+            if !matches!(lowered, Lowered::RecursiveBackedge) {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    format!(
+                        "predecessor {predecessor_id} for checked site {site_id} did not seal its affine join edge"
+                    ),
+                ));
+            }
+        }
+
+        builder.switch_to_block(merge);
+        let merged = Self::reconstruct_scalar_join_value(
+            required_kind,
+            builder.block_params(merge)[0],
+        );
+        let suffix_active = ActiveContinuationFrame {
+            activation: active.activation,
+            cursor: active.cursor,
+            parent: active.parent,
+            pending: suffix_pending,
+            selected_ancestry: active.selected_ancestry,
+        };
+        self.resume_active_continuation(builder, merged, suffix_active)
     }
 
     fn finish_source_constructor(

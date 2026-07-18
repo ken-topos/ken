@@ -79,19 +79,26 @@ pub fn erase_checked_core_package_for_target<'a>(
     target_closure: impl IntoIterator<Item = &'a StableSymbol>,
 ) -> Result<RuntimeProgram, ErasureError> {
     let targets: Vec<StableSymbol> = target_closure.into_iter().cloned().collect();
-    erase_checked_package_with_host_root(package, targets, None)
+    erase_checked_package_with_host_root(package, targets, None, None)
 }
 
 fn erase_checked_package_with_host_root(
     package: &CheckedCorePackage,
     mut targets: Vec<StableSymbol>,
     host_root: Option<(&StableSymbol, &CheckedHostSpineV1)>,
+    mut join_plan: Option<&mut NativeJoinPlanCollector>,
 ) -> Result<RuntimeProgram, ErasureError> {
     validate_checked_core_package(package)?;
     let requested_targets = targets.clone();
     let mut prelowered = BTreeMap::new();
     if let Some((root, spine)) = host_root {
-        let root_kind = lower_checked_host_root(package, &requested_targets, root, spine)?;
+        let root_kind = lower_checked_host_root(
+            package,
+            &requested_targets,
+            root,
+            spine,
+            join_plan.as_deref_mut(),
+        )?;
         let mut executable = BTreeSet::from([root.clone()]);
         let mut queue = runtime_declaration_refs_in_kind(&root_kind)
             .into_iter()
@@ -110,8 +117,13 @@ fn erase_checked_package_with_host_root(
             if !executable.insert(symbol.clone()) {
                 continue;
             }
-            let declaration =
-                match lower_checked_host_declaration(package, &requested_targets, &symbol, spine) {
+            let declaration = match lower_checked_host_declaration(
+                package,
+                &requested_targets,
+                &symbol,
+                spine,
+                join_plan.as_deref_mut(),
+            ) {
                     Ok(declaration) => declaration,
                     Err(error)
                         if matches!(
@@ -202,6 +214,7 @@ fn lower_checked_host_declaration(
     target_closure: &[StableSymbol],
     symbol: &StableSymbol,
     spine: &CheckedHostSpineV1,
+    join_plan: Option<&mut NativeJoinPlanCollector>,
 ) -> Result<RuntimeDeclaration, ErasureError> {
     let semantic = &package.artifact.semantic;
     let reachable_declarations = checked_host_body_view_symbols(semantic, target_closure);
@@ -245,6 +258,7 @@ fn lower_checked_host_declaration(
         parameter_count,
         spine,
         None,
+        join_plan,
     )?;
     Ok(RuntimeDeclaration {
         symbol: symbol.to_string(),
@@ -493,6 +507,91 @@ pub(crate) struct CheckedHostSpineV1 {
     pub operations: BTreeMap<StableSymbol, ken_host::HostOpV1>,
 }
 
+#[derive(Clone)]
+pub(crate) struct CheckedJoinAnswerSymbols {
+    pub int: StableSymbol,
+    pub bool_: StableSymbol,
+    pub structural_nat: StableSymbol,
+    pub exit_code: StableSymbol,
+}
+
+struct NativeJoinPlanCollector {
+    answer_symbols: CheckedJoinAnswerSymbols,
+    next_site_id: u64,
+    sites: Vec<ken_runtime::NativeJoinPlanSiteV1>,
+}
+
+impl NativeJoinPlanCollector {
+    fn new(answer_symbols: CheckedJoinAnswerSymbols) -> Self {
+        Self {
+            answer_symbols,
+            next_site_id: 0,
+            sites: Vec::new(),
+        }
+    }
+
+    fn finish(self) -> ken_runtime::NativeJoinPlanV1 {
+        ken_runtime::NativeJoinPlanV1 {
+            representation_rule_version:
+                ken_runtime::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+            sites: self.sites,
+        }
+    }
+
+    fn record_match(
+        &mut self,
+        owner: &StableSymbol,
+        view: &checked_core::CheckedCoreMatchView,
+        runtime: &RuntimeExpr,
+    ) -> Result<(), ErasureError> {
+        let Some(result_type) = checked_core::checked_constant_motive_result_type(&view.motive)
+            .map_err(|reason| {
+                expression_lowering_error(owner, "native_join_plan_motive", reason)
+            })?
+        else {
+            return Ok(());
+        };
+        let Some(head) = checked_core::checked_type_head_symbol(&result_type).map_err(|reason| {
+            expression_lowering_error(owner, "native_join_plan_result_type", reason)
+        })? else {
+            return Ok(());
+        };
+        let answer_kind = if head == self.answer_symbols.int {
+            ken_runtime::NativeJoinAnswerKindV1::Int
+        } else if head == self.answer_symbols.bool_ {
+            ken_runtime::NativeJoinAnswerKindV1::Bool
+        } else if head == self.answer_symbols.structural_nat {
+            ken_runtime::NativeJoinAnswerKindV1::StructuralNat
+        } else if head == self.answer_symbols.exit_code {
+            ken_runtime::NativeJoinAnswerKindV1::ExitCode
+        } else {
+            return Ok(());
+        };
+        let runtime_frame_fingerprint = match runtime {
+            RuntimeExpr::Match { cases, default, .. } => {
+                ken_runtime::compiler_private_ordinary_match_frame_fingerprint(cases, default)
+            }
+            RuntimeExpr::ComputationalMatch { cases, default, .. } => {
+                ken_runtime::compiler_private_computational_match_frame_fingerprint(cases, default)
+            }
+            _ => unreachable!("checked Match lowers to one Runtime Match form"),
+        };
+        let site_id = self.next_site_id;
+        self.next_site_id = self
+            .next_site_id
+            .checked_add(1)
+            .expect("compiler-private join site identity exhausted");
+        self.sites.push(ken_runtime::NativeJoinPlanSiteV1 {
+            site_id,
+            declaration: owner.to_string(),
+            checked_result_type_fingerprint: ken_runtime::fnv1a_64(&result_type),
+            runtime_frame_fingerprint,
+            answer_kind,
+        });
+        Ok(())
+    }
+}
+
 /// Deforest an identity-checked HostIO tree while erasing the selected target.
 /// The tree does not survive into the artifact: every `Vis op k` becomes an
 /// ordinary response-producing `Effect`, immediately bound by `Let` to the
@@ -504,7 +603,25 @@ pub(crate) fn erase_checked_host_package_for_target<'a>(
     spine: &CheckedHostSpineV1,
 ) -> Result<RuntimeProgram, ErasureError> {
     let targets: Vec<StableSymbol> = target_closure.into_iter().cloned().collect();
-    erase_checked_package_with_host_root(package, targets, Some((root, spine)))
+    erase_checked_package_with_host_root(package, targets, Some((root, spine)), None)
+}
+
+pub(crate) fn erase_checked_host_package_for_target_with_join_plan<'a>(
+    package: &CheckedCorePackage,
+    target_closure: impl IntoIterator<Item = &'a StableSymbol>,
+    root: &StableSymbol,
+    spine: &CheckedHostSpineV1,
+    answer_symbols: CheckedJoinAnswerSymbols,
+) -> Result<(RuntimeProgram, ken_runtime::NativeJoinPlanV1), ErasureError> {
+    let targets: Vec<StableSymbol> = target_closure.into_iter().cloned().collect();
+    let mut collector = NativeJoinPlanCollector::new(answer_symbols);
+    let program = erase_checked_package_with_host_root(
+        package,
+        targets,
+        Some((root, spine)),
+        Some(&mut collector),
+    )?;
+    Ok((program, collector.finish()))
 }
 
 fn lower_checked_host_root(
@@ -512,6 +629,7 @@ fn lower_checked_host_root(
     target_closure: &[StableSymbol],
     root: &StableSymbol,
     spine: &CheckedHostSpineV1,
+    join_plan: Option<&mut NativeJoinPlanCollector>,
 ) -> Result<RuntimeDeclarationKind, ErasureError> {
     let semantic = &package.artifact.semantic;
     // Decode exactly the finite executable declaration closure. Recursive
@@ -559,6 +677,7 @@ fn lower_checked_host_root(
         2,
         spine,
         None,
+        join_plan,
     )?;
     Ok(RuntimeDeclarationKind::Transparent {
         body: RuntimeExpr::Closure {
@@ -578,6 +697,7 @@ fn lower_checked_host_computation(
     context_depth: usize,
     spine: &CheckedHostSpineV1,
     branch_remap: Option<&BranchBinderRemap>,
+    mut join_plan: Option<&mut NativeJoinPlanCollector>,
 ) -> Result<RuntimeExpr, ErasureError> {
     if let CheckedCoreBodyTerm::Match(view) = term {
         reject_level_args(root, &view.level_args)?;
@@ -598,63 +718,61 @@ fn lower_checked_host_computation(
             branch_remap,
         )?;
         let computational = match_uses_computational_recursive_hypothesis(view, root)?;
-        let cases = view
-            .branches
-            .iter()
-            .map(|branch| {
-                let constructor = &branch.constructor;
-                reject_level_args(root, &constructor.level_args)?;
-                require_expression_supported(
+        let mut cases = Vec::with_capacity(view.branches.len());
+        for branch in &view.branches {
+            let constructor = &branch.constructor;
+            reject_level_args(root, &constructor.level_args)?;
+            require_expression_supported(
+                root,
+                &constructor.family_symbol,
+                &constructor.family_lowerability,
+                "data_lowerability_blocked",
+            )?;
+            require_expression_supported(
+                root,
+                &constructor.symbol,
+                &constructor.constructor_lowerability,
+                "constructor_lowerability_blocked",
+            )?;
+            if constructor.family_index_count != 0 || constructor.target_index_count != 0 {
+                return Err(expression_lowering_error(
                     root,
-                    &constructor.family_symbol,
-                    &constructor.family_lowerability,
-                    "data_lowerability_blocked",
-                )?;
-                require_expression_supported(
-                    root,
-                    &constructor.symbol,
-                    &constructor.constructor_lowerability,
-                    "constructor_lowerability_blocked",
-                )?;
-                if constructor.family_index_count != 0 || constructor.target_index_count != 0 {
-                    return Err(expression_lowering_error(
-                        root,
-                        "host_match_identity",
-                        "checked host Match branch belongs to an indexed family",
-                    ));
-                }
-                let erased_count = constructor.recursive_positions.len();
-                let source_binders = constructor.argument_count + erased_count;
-                let method = peel_match_branch_method(
-                    &branch.method,
-                    source_binders,
-                    root,
-                    &constructor.symbol,
-                )?;
-                let remap = branch_remap.cloned().unwrap_or_default().enter_match(
-                    constructor.argument_count,
-                    erased_count,
-                    computational,
-                );
-                let body = lower_checked_host_computation(
-                    method,
-                    declarations,
-                    semantic,
-                    stack,
-                    root,
-                    context_depth + source_binders,
-                    spine,
-                    Some(&remap),
-                )?;
-                Ok((constructor, body))
-            })
-            .collect::<Result<Vec<_>, ErasureError>>()?;
+                    "host_match_identity",
+                    "checked host Match branch belongs to an indexed family",
+                ));
+            }
+            let erased_count = constructor.recursive_positions.len();
+            let source_binders = constructor.argument_count + erased_count;
+            let method = peel_match_branch_method(
+                &branch.method,
+                source_binders,
+                root,
+                &constructor.symbol,
+            )?;
+            let remap = branch_remap.cloned().unwrap_or_default().enter_match(
+                constructor.argument_count,
+                erased_count,
+                computational,
+            );
+            let body = lower_checked_host_computation(
+                method,
+                declarations,
+                semantic,
+                stack,
+                root,
+                context_depth + source_binders,
+                spine,
+                Some(&remap),
+                join_plan.as_deref_mut(),
+            )?;
+            cases.push((constructor, body));
+        }
         let default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
             message: "checked HostIO match had no constructor arm".to_string(),
         };
-        return if computational {
-            Ok(RuntimeExpr::ComputationalMatch {
+        let runtime = if computational {
+            RuntimeExpr::ComputationalMatch {
                 scrutinee: Box::new(scrutinee),
                 cases: cases
                     .into_iter()
@@ -666,9 +784,9 @@ fn lower_checked_host_computation(
                     })
                     .collect(),
                 default,
-            })
+            }
         } else {
-            Ok(RuntimeExpr::Match {
+            RuntimeExpr::Match {
                 scrutinee: Box::new(scrutinee),
                 cases: cases
                     .into_iter()
@@ -679,8 +797,12 @@ fn lower_checked_host_computation(
                     })
                     .collect(),
                 default,
-            })
+            }
         };
+        if let Some(join_plan) = join_plan.as_deref_mut() {
+            join_plan.record_match(root, view, &runtime)?;
+        }
+        return Ok(runtime);
     }
     if let Some((symbol, level_args, arguments)) = direct_application_spine(term) {
         reject_level_args(root, level_args)?;
@@ -723,6 +845,7 @@ fn lower_checked_host_computation(
                     context_depth + parameter_count,
                     spine,
                     inner_remap.as_ref(),
+                    join_plan.as_deref_mut(),
                 );
                 stack.pop();
                 let mut lowered = lowered?;
@@ -771,6 +894,7 @@ fn lower_checked_host_computation(
                     context_depth + 1,
                     spine,
                     branch_remap.map(BranchBinderRemap::enter_binding).as_ref(),
+                    join_plan.as_deref_mut(),
                 )?
             } else {
                 let callee = lower_body_term_inner(

@@ -4202,6 +4202,37 @@ fn inspect_non_dependent_motive(motive: &[u8]) -> Result<MotiveShape, String> {
     Ok(sort)
 }
 
+/// Return the exact checked result type of a constant, non-indexed Match
+/// motive.  Native join planning consumes this checked fact before erasure;
+/// erased Runtime syntax is never used to reconstruct it.
+pub(crate) fn checked_constant_motive_result_type(
+    motive: &[u8],
+) -> Result<Option<Vec<u8>>, String> {
+    let mut cursor = CanonicalCursor::new(motive);
+    if cursor.read_tag()?.as_str() != "ascript" || cursor.read_tag()?.as_str() != "lam" {
+        return Ok(None);
+    }
+    skip_term(&mut cursor)?;
+    let body = capture_canonical_term(&mut cursor)?;
+    if canonical_term_contains_free_var(&body, 0)? {
+        return Ok(None);
+    }
+    if inspect_non_indexed_motive_type_sort(&mut cursor)? != MotiveShape::ConstantType
+        || cursor.remaining() != 0
+    {
+        return Ok(None);
+    }
+    Ok(Some(body))
+}
+
+/// Exact stable head identity of one canonical checked type, when its head is
+/// a constant/inductive former (possibly applied to arguments).
+pub(crate) fn checked_type_head_symbol(
+    checked_type: &[u8],
+) -> Result<Option<StableSymbol>, String> {
+    record_head_symbol_from_type(checked_type)
+}
+
 fn inspect_non_indexed_motive_type_sort(
     cursor: &mut CanonicalCursor<'_>,
 ) -> Result<MotiveShape, String> {
