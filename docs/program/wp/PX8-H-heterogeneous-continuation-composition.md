@@ -33,8 +33,9 @@
 > frame**, not relax the default.
 >
 > **★ The immutable downstream discriminator is `wp/px8f-buffer-io-surface @
-> c8b8cdb7` (on origin).** After PX8-H merges, PX8-F rebases onto it and the
-> **unchanged** real `writeAll` fixture must compile, link, and perform the real
+> c8b8cdb7` (on origin).** After PX8-H and PX8-I merge, PX8-F rebases onto them,
+> and the **unchanged** real `writeAll` fixture must compile, link, and perform
+> the real
 > writes in **both** the interpreter and native lanes. Do NOT edit that fixture,
 > special-case `writeAll`/`after_read`/`ReadProgress`, or weaken the fail-closed
 > default (all forbidden by the ruling). Use `c8b8cdb7` only as a **throwaway
@@ -60,7 +61,7 @@
   the tip.
 - **Depends on:** **PX8-L merged** (finite recursive-declaration lowering — the
   recursor call must already lower for this composition seam to be reachable).
-  **Downstream:** PX8-F resumes only after PX8-H lands.
+  **Downstream:** PX8-I follows PX8-H; PX8-F resumes only after both land.
 - **Ownership note (Architect):** Runtime-owned. This extends **Runtime code
   generation** (the PX7-O/P heterogeneous eliminator-frame machinery), **not**
   kernel conversion. **No kernel change.**
@@ -102,7 +103,9 @@ deliverable.
    any operation identity; add **no** dynamic heap aggregate, **no** ABI/wire
    representation, and **no** kernel change.
 6. **`c8b8cdb7` is the immutable downstream integration discriminator** — a
-   throwaway overlay only; never edited, never committed into PX8-H.
+   throwaway overlay only; never edited, never committed into PX8-H. PX8-H must
+   carry it through the continuation seam to the exact dynamic-`add_int`
+   boundary; PX8-I owns the later real-write gate.
 
 ### Fifteenth-stop scope correction — checked scalar join plan
 
@@ -132,6 +135,24 @@ trusted primitive.  Equal-kind adjacent or nested sites remain distinct;
 reversing predecessor emission cannot change the planned answer; and `Bool`
 versus `ExitCode` must reject even though both use one Cranelift `i64` block
 parameter.
+
+### Seventeenth-stop scope correction — native Int is PX8-I
+
+Architect ruling `evt_1mhavqy6yy128` banks PX8-H once the unchanged PX8-F
+overlay traverses the complete heterogeneous-continuation seam and reaches the
+next independent boundary: dynamic total `add_int`. Native lowering currently
+represents `Int` as one Cranelift `i64` and correctly refuses a dynamic addition
+whose exact mathematical result is not statically known to fit. PX8-H must not
+replace that refusal with wrapping arithmetic, an overflow trap, range-plan
+specialization, or a `writeAll` exception.
+
+PX8-I, a distinct Runtime-owned prerequisite, supplies semantics-preserving
+arbitrary-precision native `Int` before PX8-F's real-write terminal gate. Thus
+PX8-H's overlay proof ends at the exact `add_int file_offset
+(transfer_count_int count)` unsupported boundary, after both source
+computational selections, dynamic HostResult, dynamic Bool, dynamic
+constructor, and BoundedNat elimination have succeeded without an earlier
+Result/default/cursor failure.
 
 ## Landed anchors (verify before editing; do not trust frozen line numbers)
 
@@ -193,11 +214,14 @@ parameter.
 - **H-P5 — Preserved negatives (no regression).** PX7-O negatives (direct and
   call-returned `HostResult` remain on the ordinary dynamic lane) and PX7-P's
   **known-omitted vs unknown-tag** distinction stay green.
-- **H-P6 — Downstream integration discriminator (overlay only).** On a throwaway
-  overlay of the **unchanged** PX8-F `c8b8cdb7` fixture, the real `writeAll` now
-  performs the real writes and matches the interpreter lane (past the
-  `FsWriteAt`). Overlay only — **never committed**; this is PX8-F's evidence,
-  checked here to confirm the seam is truly closed.
+- **H-P6a — Downstream continuation discriminator (overlay only).** On a
+  throwaway overlay of the **unchanged** PX8-F `c8b8cdb7` fixture, lowering
+  traverses both source computational selections, dynamic HostResult, dynamic
+  Bool, dynamic constructor, and BoundedNat elimination, then refuses at the
+  exact dynamic-total-`add_int` boundary. No earlier Result/default/cursor
+  failure and no weakened fail-closed path is permitted. Real `FsWriteAt` plus
+  interpreter/native agreement remains unchanged as PX8-I's downstream gate
+  and PX8-F's terminal gate. Overlay only — **never committed**.
 
 ## Acceptance criteria (testable)
 
@@ -208,7 +232,8 @@ parameter.
   discriminate).
 - H-P5 preserved — PX7-O ordinary-lane + PX7-P known-omitted-vs-unknown-tag
   negatives stay green.
-- H-P6 — the unchanged `c8b8cdb7` overlay performs real writes in both lanes.
+- H-P6a — the unchanged `c8b8cdb7` overlay reaches the exact dynamic
+  `add_int` refusal only after every named continuation stage succeeds.
 - `lower_dynamic_constructor_match` remains fail-closed (grep the emission: no
   missing case returns success; unknown-tag path unchanged).
 - **No-regression = GREEN IN CI** — run the targeted `ken-cli` native-compile
@@ -224,13 +249,17 @@ aggregate; no ABI/wire representation change; no kernel-conversion change; no
 weakening of the fail-closed default; no edit to `c8b8cdb7`/`writeAll`. A kernel
 API-contract violation, if independently shown, is a **distinct Kernel defect** —
 route separately, never buried here. PX8-L's banked lowering is settled — do not
-re-open it.
+re-open it. Add no arithmetic-range plan, primitive-specific lowering, native
+`Int` representation, wrapping arithmetic, or overflow trap; those semantics
+belong to PX8-I.
 
 ## Sequencing
 
-`PX8-L (landed) → PX8-H → PX8-F (rebased terminal gate).` PX8-H bases on landed
-PX8-L, takes its own Runtime QA + Architect §14 + one Decision, and merges on its
-own tip. Only after PX8-H lands does PX8-F rebase onto the combined main and
-require the **unchanged** real `writeAll` fixture to compile, link, and perform
-real writes in **both** interpreter and native lanes as its native evidence.
-`c8b8cdb7` stays the immutable downstream discriminator throughout.
+`PX8-L (landed) → PX8-H → PX8-I → PX8-F (rebased terminal gate).` PX8-H
+bases on landed PX8-L, takes its own Runtime QA + Architect §14 + one Decision,
+and merges on its own tip. PX8-I then supplies semantics-preserving native
+arbitrary-precision `Int`. Only after both land does PX8-F rebase onto the
+combined main and require the **unchanged** real `writeAll` fixture to compile,
+link, and perform real writes in **both** interpreter and native lanes as its
+native evidence. `c8b8cdb7` stays the immutable downstream discriminator
+throughout.
