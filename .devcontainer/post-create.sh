@@ -19,11 +19,12 @@ curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
 # Python tooling
 pip install uv
 
-# Install moot package (pinned). --upgrade so an already-present older mootup
-# is actually replaced: a bare `pip install mootup` is a no-op against a
-# satisfied requirement, which is how the env drifted stale at 0.5.10. Bump this
-# pin when a newer moot ships fixes (0.5.12: codex stranded-paste fix).
-pip install --upgrade mootup==0.5.12
+# Install moot package. --upgrade is load-bearing: a bare `pip install mootup`
+# is a no-op against an already-satisfied requirement (how the env drifted stale
+# at 0.5.10), whereas --upgrade pulls the latest each build — so future moot
+# fixes (e.g. the 0.5.12 codex stranded-paste fix) land on rebuild with no
+# manual version bump.
+pip install --upgrade mootup
 
 # Register MCP servers for Claude Code at user scope so claude finds
 # them regardless of cwd (agents launch in worktrees under .worktrees/,
