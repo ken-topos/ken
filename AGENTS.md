@@ -81,12 +81,13 @@ to write Ken's code.** Per `CLEAN-ROOM.md`:
   consultable reference. There is zero AGPLv3 contact, which is strictly
   cleaner. **No agent should go looking for it.**
 - **The permissive references** (Lean, Agda, cooltt, smalltt, cctt, …) may be
-  **read to understand** by the Architect / Spec enclave to sharpen the spec,
-  but **not copied** into the repo. Implementer agents build from `/spec`,
-  never from `local/refs/`.
-- **Copyleft references** (GPL/AGPL/CeCILL — e.g. smtcoq, spot, jif) are
-  **Spec-enclave-only** for approach and behavior only, under the leakage
-  recheck. Never consulted by implementer agents, never vendored.
+  **read to understand** by the Architect / Spec enclave **and the research
+  agent** to sharpen the spec, but **not copied** into the repo. Implementer
+  agents build from `/spec`, never from `local/refs/`.
+- **Copyleft references** (GPL/AGPL/CeCILL — e.g. smtcoq, spot, jif) are for the
+  **Spec enclave and the research agent only**, for approach and behavior only,
+  under the leakage recheck. Never consulted by implementer agents, never
+  vendored.
 
 When unsure whether you may look at something under `local/refs/`, the answer
 is no — ask the operator or the Spec enclave.
