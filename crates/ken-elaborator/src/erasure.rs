@@ -1658,6 +1658,9 @@ fn lower_body_term_inner(
         .clone();
     if let Some((view, arguments)) = recursive_application_spine(term) {
         let callee = lower_recursive_declaration_call(view, declarations, root_symbol)?;
+        if arguments.is_empty() {
+            return Ok(callee);
+        }
         let args = arguments
             .into_iter()
             .map(|argument| {
