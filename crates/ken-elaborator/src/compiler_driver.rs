@@ -1292,25 +1292,69 @@ pub fn compile_native_program_sources(
         .recursion_metadata
         .values()
         .flat_map(|metadata| metadata.group_members.iter())
+        .cloned()
         .collect::<BTreeSet<_>>();
-    let has_reachable_recursion = closure
+    let reachable_recursive = closure
         .reachable_declarations
         .iter()
-        .any(|symbol| recursive_members.contains(symbol));
-    // Strong normalization remains a finite convenience only for a closure
-    // proved acyclic by the checked declaration graph. A closure containing an
-    // SCT-admitted recursive member keeps its exact declaration nodes and
-    // edges; using conversion as an inliner there would be unbounded.
-    let normalized_host_package = if has_reachable_recursion {
-        None
-    } else {
-        closure.reachable_declarations = BTreeSet::from([plan.main.clone()]);
-        closure.report.reachable_declarations = closure.reachable_declarations.clone();
-        let mut normalized = package.clone();
-        let declaration = env.env.lookup(checked.main).ok_or_else(|| {
-            NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
-                id: checked.main,
-            })
+        .filter(|symbol| recursive_members.contains(*symbol))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let mut executable_declarations = reachable_recursive.clone();
+    executable_declarations.insert(plan.main.clone());
+    closure.reachable_declarations = executable_declarations.clone();
+    closure.report.reachable_declarations = executable_declarations.clone();
+
+    // Normalize only after replacing every selected SCT-admitted recursive
+    // member with an opaque barrier in a private compiler environment. The
+    // acyclic helper graph still deforests, while recursive edges remain exact
+    // declaration references and therefore cannot unfold without bound.
+    let mut normalization_env = env.env.clone();
+    for symbol in &reachable_recursive {
+        let id = symbols
+            .iter()
+            .find_map(|(id, candidate)| (candidate == symbol).then_some(*id))
+            .ok_or_else(|| {
+                NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
+                    id: checked.main,
+                })
+            })?;
+        let declaration = env.env.lookup(id).ok_or_else(|| {
+            NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol { id })
+        })?;
+        let Decl::Transparent {
+            id,
+            level_params,
+            ty,
+            ..
+        } = declaration
+        else {
+            return Err(NativeProgramBuildError::Driver(
+                CompilerDriverError::MissingClosureMetadata {
+                    section: "transparent recursive declaration",
+                    symbol: symbol.clone(),
+                },
+            ));
+        };
+        normalization_env.add_decl(Decl::Opaque {
+            id: *id,
+            name: format!("px8l-recursion-barrier:{symbol}"),
+            level_params: level_params.clone(),
+            ty: ty.clone(),
+        });
+    }
+    let mut normalized = package.clone();
+    for symbol in &executable_declarations {
+        let id = symbols
+            .iter()
+            .find_map(|(id, candidate)| (candidate == symbol).then_some(*id))
+            .ok_or_else(|| {
+                NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
+                    id: checked.main,
+                })
+            })?;
+        let declaration = env.env.lookup(id).ok_or_else(|| {
+            NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol { id })
         })?;
         let Decl::Transparent {
             id,
@@ -1319,31 +1363,33 @@ pub fn compile_native_program_sources(
             body,
         } = declaration
         else {
-            unreachable!("checked main admission requires a transparent declaration")
+            return Err(NativeProgramBuildError::Driver(
+                CompilerDriverError::MissingClosureMetadata {
+                    section: "transparent executable declaration",
+                    symbol: symbol.clone(),
+                },
+            ));
         };
-        let normalized_main = Decl::Transparent {
+        let normalized_declaration = Decl::Transparent {
             id: *id,
             level_params: level_params.clone(),
             ty: ty.clone(),
-            body: ken_kernel::normalize(&env.env, &ken_kernel::Context::new(), body),
+            body: ken_kernel::normalize(&normalization_env, &ken_kernel::Context::new(), body),
         };
-        let bytes = canonical_decl_bytes(&normalized_main, &symbol_table).map_err(|_| {
-            NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
-                id: checked.main,
-            })
+        let bytes = canonical_decl_bytes(&normalized_declaration, &symbol_table).map_err(|_| {
+            NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol { id: *id })
         })?;
         normalized
             .artifact
             .semantic
             .declarations
-            .insert(plan.main.clone(), bytes);
-        Some(
-            emit_checked_core_package(normalized.header.clone(), normalized.artifact.clone())
-                .map_err(CompilerDriverError::from)
-                .map_err(NativeProgramBuildError::Driver)?,
-        )
-    };
-    let executable_view = normalized_host_package.as_ref().unwrap_or(&package);
+            .insert(symbol.clone(), bytes);
+    }
+    let normalized_host_package =
+        emit_checked_core_package(normalized.header.clone(), normalized.artifact.clone())
+            .map_err(CompilerDriverError::from)
+            .map_err(NativeProgramBuildError::Driver)?;
+    let executable_view = &normalized_host_package;
     let mut executable_closure_view = closure.clone();
     executable_closure_view.report.package_core_semantic_hash = executable_view.core_semantic_hash;
     executable_closure_view.report.package_artifact_hash = executable_view.artifact_hash;
