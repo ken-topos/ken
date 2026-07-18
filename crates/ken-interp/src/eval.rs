@@ -3753,9 +3753,13 @@ pub struct FSIds {
     pub private_fs_open_id: GlobalId,
     pub private_fs_handle_metadata_id: GlobalId,
     pub private_buffer_allocate_id: GlobalId,
+    pub private_fs_read_at_id: GlobalId,
+    pub private_fs_write_at_id: GlobalId,
+    pub private_buffer_freeze_id: GlobalId,
     pub private_resource_release_id: GlobalId,
     pub resource_read_id: GlobalId,
     pub resource_metadata_mode_id: GlobalId,
+    pub resource_write_create_id: GlobalId,
     pub resource_host_io_id: GlobalId,
     pub closed_id: GlobalId,
     pub malformed_resource_id: GlobalId,
@@ -3768,6 +3772,13 @@ pub struct FSIds {
     pub invalid_offset_id: GlobalId,
     pub invalid_bounds_id: GlobalId,
     pub no_progress_id: GlobalId,
+    pub private_buffer_span_id: GlobalId,
+    pub private_transfer_count_id: GlobalId,
+    pub read_some_id: GlobalId,
+    pub read_eof_id: GlobalId,
+    pub wrote_id: GlobalId,
+    pub zero_id: GlobalId,
+    pub suc_id: GlobalId,
     pub private_resource_trace_identity_id: GlobalId,
     pub create_new_id: GlobalId,
     pub create_or_truncate_id: GlobalId,
@@ -3811,9 +3822,13 @@ impl FSIds {
             private_fs_open_id: elab.prelude_env.private_fs_open_id,
             private_fs_handle_metadata_id: elab.prelude_env.private_fs_handle_metadata_id,
             private_buffer_allocate_id: elab.prelude_env.private_buffer_allocate_id,
+            private_fs_read_at_id: elab.prelude_env.private_fs_read_at_id,
+            private_fs_write_at_id: elab.prelude_env.private_fs_write_at_id,
+            private_buffer_freeze_id: elab.prelude_env.private_buffer_freeze_id,
             private_resource_release_id: elab.prelude_env.private_resource_release_id,
             resource_read_id: get("ResourceRead")?,
             resource_metadata_mode_id: get("ResourceMetadata")?,
+            resource_write_create_id: get("ResourceWriteCreate")?,
             resource_host_io_id: elab.prelude_env.resource_host_io_id,
             closed_id: elab.prelude_env.closed_id,
             malformed_resource_id: elab.prelude_env.malformed_resource_id,
@@ -3826,6 +3841,14 @@ impl FSIds {
             invalid_offset_id: get("InvalidOffset")?,
             invalid_bounds_id: get("InvalidBounds")?,
             no_progress_id: get("NoProgress")?,
+            private_buffer_span_id: elab.env.inductive(get("BufferSpan")?)?.constructors[0].id,
+            private_transfer_count_id: elab.env.inductive(get("TransferCount")?)?.constructors[0]
+                .id,
+            read_some_id: get("ReadSome")?,
+            read_eof_id: get("ReadEof")?,
+            wrote_id: get("Wrote")?,
+            zero_id: get("Zero")?,
+            suc_id: get("Suc")?,
             private_resource_trace_identity_id: elab.prelude_env.private_resource_trace_identity_id,
             create_new_id: get("CreateNew")?,
             create_or_truncate_id: get("CreateOrTruncate")?,
@@ -4528,6 +4551,21 @@ fn fs_dispatch<H: HostHandler>(
             Some(EvalVal::Ctor { id, .. }) if *id == fs.resource_metadata_mode_id => {
                 ken_host::FsOpenModeV1::Metadata
             }
+            Some(EvalVal::Ctor { id, args, .. }) if *id == fs.resource_write_create_id => {
+                let policy = match args.first() {
+                    Some(EvalVal::Ctor { id, .. }) if *id == fs.create_new_id => {
+                        ken_host::CreatePolicyV1::CreateNew
+                    }
+                    Some(EvalVal::Ctor { id, .. }) if *id == fs.create_or_truncate_id => {
+                        ken_host::CreatePolicyV1::CreateOrTruncate
+                    }
+                    Some(EvalVal::Ctor { id, .. }) if *id == fs.create_or_keep_id => {
+                        ken_host::CreatePolicyV1::CreateOrKeep
+                    }
+                    _ => return Some(Err(())),
+                };
+                ken_host::FsOpenModeV1::WriteCreate(policy)
+            }
             _ => return Some(Err(())),
         };
         (
@@ -4553,6 +4591,56 @@ fn fs_dispatch<H: HostHandler>(
             ken_host::CanonicalRequestV1::BufferAllocate { capacity },
             fs.op_metadata_id,
         )
+    } else if op_id == fs.private_fs_read_at_id {
+        let file_offset = eval_to_bigint(args.get(2)?)
+            .and_then(|value| value.to_u64())
+            .unwrap_or(u64::MAX);
+        let buffer_start = eval_to_bigint(args.get(4)?)
+            .and_then(|value| value.to_u64())
+            .unwrap_or(u64::MAX);
+        let length = eval_to_bigint(args.get(5)?)
+            .and_then(|value| value.to_u64())
+            .unwrap_or(u64::MAX);
+        (
+            ken_host::HostOpV1::FsReadAt,
+            ken_host::CanonicalRequestV1::FsReadAt {
+                file_offset,
+                buffer_start,
+                length,
+            },
+            fs.op_read_file_id,
+        )
+    } else if op_id == fs.private_fs_write_at_id {
+        let file_offset = eval_to_bigint(args.get(2)?)
+            .and_then(|value| value.to_u64())
+            .unwrap_or(u64::MAX);
+        let buffer_start = eval_to_bigint(args.get(4)?)
+            .and_then(|value| value.to_u64())
+            .unwrap_or(u64::MAX);
+        let length = eval_to_bigint(args.get(5)?)
+            .and_then(|value| value.to_u64())
+            .unwrap_or(u64::MAX);
+        (
+            ken_host::HostOpV1::FsWriteAt,
+            ken_host::CanonicalRequestV1::FsWriteAt {
+                file_offset,
+                buffer_start,
+                length,
+            },
+            fs.op_write_file_id,
+        )
+    } else if op_id == fs.private_buffer_freeze_id {
+        let start = eval_to_bigint(args.get(2)?)
+            .and_then(|value| value.to_u64())
+            .unwrap_or(u64::MAX);
+        let length = eval_to_bigint(args.get(3)?)
+            .and_then(|value| value.to_u64())
+            .unwrap_or(u64::MAX);
+        (
+            ken_host::HostOpV1::BufferFreeze,
+            ken_host::CanonicalRequestV1::BufferFreeze { start, length },
+            fs.op_metadata_id,
+        )
     } else if op_id == fs.private_resource_release_id {
         (
             ken_host::HostOpV1::ResourceRelease,
@@ -4568,6 +4656,9 @@ fn fs_dispatch<H: HostHandler>(
         operation,
         ken_host::HostOpV1::FsHandleMetadata
             | ken_host::HostOpV1::BufferAllocate
+            | ken_host::HostOpV1::FsReadAt
+            | ken_host::HostOpV1::FsWriteAt
+            | ken_host::HostOpV1::BufferFreeze
             | ken_host::HostOpV1::ResourceRelease
     ) {
         None
@@ -4595,6 +4686,27 @@ fn fs_dispatch<H: HostHandler>(
     } else {
         None
     };
+    let resource_inputs = match operation {
+        ken_host::HostOpV1::FsReadAt | ken_host::HostOpV1::FsWriteAt => {
+            match (args.get(1), args.get(3)) {
+                (Some(EvalVal::ResourceToken(file)), Some(EvalVal::ResourceToken(buffer))) => {
+                    ken_host::ResourceInputsV1::FileBuffer {
+                        file: *file,
+                        buffer: *buffer,
+                    }
+                }
+                _ => return Some(Err(())),
+            }
+        }
+        ken_host::HostOpV1::BufferFreeze => match args.get(1) {
+            Some(EvalVal::ResourceToken(token)) => ken_host::ResourceInputsV1::Target(*token),
+            _ => return Some(Err(())),
+        },
+        _ => resource.map_or(
+            ken_host::ResourceInputsV1::None,
+            ken_host::ResourceInputsV1::Target,
+        ),
+    };
     let mut backend = InterpreterHostBackend { handler };
     let reply = ken_host::dispatch_host_op_v1(
         &mut backend,
@@ -4602,10 +4714,7 @@ fn fs_dispatch<H: HostHandler>(
         resources,
         operation,
         token,
-        resource.map_or(
-            ken_host::ResourceInputsV1::None,
-            ken_host::ResourceInputsV1::Target,
-        ),
+        resource_inputs,
         &request,
     )
     .map_err(|_| ());
@@ -4623,6 +4732,7 @@ fn fs_dispatch<H: HostHandler>(
         reify_host_reply_v1(
             reply.outcome,
             reply.resource_token,
+            &request,
             operation_id,
             fs,
             ids,
@@ -4632,9 +4742,18 @@ fn fs_dispatch<H: HostHandler>(
     Some(reply)
 }
 
+fn buffer_nat_value(value: u64, fs: &FSIds, store: &mut EvalStore) -> Result<EvalVal, ()> {
+    let mut result = make_ctor(fs.zero_id, vec![], store);
+    for _ in 0..usize::try_from(value).map_err(|_| ())? {
+        result = make_ctor(fs.suc_id, vec![result], store);
+    }
+    Ok(result)
+}
+
 fn reify_host_reply_v1(
     outcome: ken_host::CanonicalOutcomeV1,
     resource_token: Option<ken_host::ResourceTokenV1>,
+    request: &ken_host::CanonicalRequestV1,
     operation_id: GlobalId,
     fs: &FSIds,
     ids: &ConsoleIds,
@@ -4689,6 +4808,45 @@ fn reify_host_reply_v1(
         ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::ResourceSettlement(
             _,
         )) => make_ctor(ids.unit_id, vec![], store),
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::ReadProgress(
+            progress,
+        )) => match progress {
+            ken_host::ReadProgressV1::ReadEof => make_ctor(fs.read_eof_id, vec![], store),
+            ken_host::ReadProgressV1::ReadSome { span, transferred } => {
+                let budget = buffer_nat_value(span.length(), fs, store)?;
+                let span = make_ctor(
+                    fs.private_buffer_span_id,
+                    vec![EvalVal::BigInt(BigInt::from(span.start())), budget],
+                    store,
+                );
+                let count = transferred.get();
+                let predecessor = buffer_nat_value(count.checked_sub(1).ok_or(())?, fs, store)?;
+                let remaining = buffer_nat_value(0, fs, store)?;
+                let count = make_ctor(
+                    fs.private_transfer_count_id,
+                    vec![predecessor, remaining],
+                    store,
+                );
+                make_ctor(fs.read_some_id, vec![span, count], store)
+            }
+        },
+        ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::WriteProgress(
+            ken_host::WriteProgressV1::Wrote(transferred),
+        )) => {
+            let requested = match request {
+                ken_host::CanonicalRequestV1::FsWriteAt { length, .. } => *length,
+                _ => return Err(()),
+            };
+            let count = transferred.get();
+            let predecessor = buffer_nat_value(count.checked_sub(1).ok_or(())?, fs, store)?;
+            let remaining = buffer_nat_value(requested.checked_sub(count).ok_or(())?, fs, store)?;
+            let count = make_ctor(
+                fs.private_transfer_count_id,
+                vec![predecessor, remaining],
+                store,
+            );
+            make_ctor(fs.wrote_id, vec![count], store)
+        }
         ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::File(error)) => {
             let cause = match error.cause {
                 ken_host::FileErrorCauseV1::Io(error) => io_error_identity_value(error, ids, store),
