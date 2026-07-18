@@ -139,7 +139,7 @@ impl ScriptedPosixHost {
     }
 
     /// Completes the independent execution script assertion. No value from
-    /// this script enters `EffectObservationV1`.
+    /// this script enters `EffectObservation`.
     pub fn finish_assertions(&self) -> Result<(), String> {
         if let Some(error) = &self.assertion_error {
             return Err(error.clone());

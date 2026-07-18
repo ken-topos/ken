@@ -3,7 +3,8 @@ use std::collections::BTreeSet;
 use ken_elaborator::compiler_driver::{
     compile_checked_target_denotation, CheckedTargetDenotationError, CompilerSource,
 };
-use ken_elaborator::{emit_checked_target_export, ExportError};
+use ken_elaborator::{emit_checked_target_export, ExportError, ResourceLifetimeBindingPoint};
+use ken_host::{HostOpV1, ResourceBindingRole};
 
 const RESOURCE_PRODUCER: &str = r#"
 fn after_metadata (outcome : Result ResourceError FileMetadata)
@@ -72,12 +73,20 @@ fn real_resource_performs_derive_the_exact_lifecycle_alphabet() {
 }
 
 #[test]
-fn declared_headroom_cannot_manufacture_a_metadata_perform_node() {
-    assert!(matches!(
-        export(DECLARED_HEADROOM_WITHOUT_METADATA),
-        Err(ExportError::TemporalSymbolOutsideAlphabet { symbol })
-            if symbol == "FsHandleMetadata"
-    ));
+fn declared_headroom_cannot_manufacture_a_metadata_perform_or_plan_point() {
+    let export = export(DECLARED_HEADROOM_WITHOUT_METADATA)
+        .expect("exact reachable resource operations project directly");
+    assert!(!export.alphabet.contains("FsHandleMetadata"));
+    let obligation = export
+        .resource_lifetime_obligation
+        .expect("FsOpen produces the file plan");
+    assert_eq!(
+        obligation.plans[0].require_same_at,
+        vec![ResourceLifetimeBindingPoint {
+            operation: HostOpV1::ResourceRelease,
+            role: ResourceBindingRole::Target,
+        }]
+    );
 }
 
 #[test]

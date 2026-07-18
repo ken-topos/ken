@@ -4,10 +4,10 @@
 //! The passing interpreter lane uses a real [`ken_interp::PosixHost`] rooted at
 //! one of two byte-identical temporary roots. The native lane executes the
 //! exact PX5 bound checked-source artifact against the other root through
-//! `run_bound_process_effect_observation_v1`. `CaptureHost` is only an explicit
+//! `run_bound_process_effect_observation`. `CaptureHost` is only an explicit
 //! insufficient negative control, never a passing substrate.
 //!
-//! PX5 owns `EffectObservationV1`, `EffectEventV1`, canonical error identity,
+//! Runtime owns `EffectObservation`, `EffectEvent`, canonical error identity,
 //! and `FsDeltaV1`. This crate intentionally does not define substitutes for
 //! those types. [`canonical::compare_canonical_exact`] consumes their concrete
 //! `ken_host` re-export directly.

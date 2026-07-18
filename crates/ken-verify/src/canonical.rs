@@ -1,10 +1,11 @@
-//! Exact comparator and mutation net over PX5's imported V1 vocabulary.
+//! Exact comparator and mutation net over the imported canonical vocabulary.
 
 use ken_host::{
     CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, CapabilityDeniedV1,
-    CapabilityTraceIdentity, CreatePolicyV1, DirEntryV1, EffectEventV1, EffectObservationV1,
+    CapabilityTraceIdentity, CreatePolicyV1, DirEntryV1, EffectEvent, EffectObservation,
     FileErrorCauseV1, FileErrorIdentityV1, FsCapabilityOperationV1, FsDeltaV1, FsNodeKindV1,
     FsNodeObservationV1, HostOpV1, IoErrorIdentityV1, SemanticErrorV1, TerminalErrorV1,
+    TerminalExitClass,
 };
 
 use crate::{
@@ -15,8 +16,8 @@ use crate::{
 /// identity: no message-string comparison, path normalization, trace sorting,
 /// or comparator-side repair is permitted.
 pub fn compare_canonical_exact(
-    interpreter: &EffectObservationV1,
-    native: &EffectObservationV1,
+    interpreter: &EffectObservation,
+    native: &EffectObservation,
 ) -> Result<(), ObservationMismatch> {
     let mut mismatches = Vec::new();
     push_mismatch(
@@ -48,6 +49,12 @@ pub fn compare_canonical_exact(
         ObservationField::CanonicalImported("ordered_effect_trace"),
         &interpreter.effect_trace,
         &native.effect_trace,
+    );
+    push_mismatch(
+        &mut mismatches,
+        ObservationField::CanonicalImported("terminal_exit"),
+        &interpreter.terminal_exit,
+        &native.terminal_exit,
     );
     push_mismatch(
         &mut mismatches,
@@ -98,6 +105,7 @@ pub enum CanonicalMutation {
     UnknownFamilyIdentity,
     UnknownOperationIdentity,
     UnknownRawOperationId,
+    TerminalExitClass,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,7 +118,7 @@ pub struct CanonicalMutationError {
 /// proxy. Applying a mutation changes only the external observation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CanonicalMutationControl<T> {
-    pub observation: EffectObservationV1,
+    pub observation: EffectObservation,
     pub runner_only: RunnerOnlyProxy<T>,
 }
 
@@ -122,7 +130,7 @@ impl<T> CanonicalMutationControl<T> {
 
 /// Inject one discriminator directly into the imported canonical values.
 pub fn apply_canonical_mutation(
-    observation: &mut EffectObservationV1,
+    observation: &mut EffectObservation,
     mutation: CanonicalMutation,
 ) -> Result<(), CanonicalMutationError> {
     let missing = |reason| CanonicalMutationError { mutation, reason };
@@ -206,11 +214,11 @@ pub fn apply_canonical_mutation(
                 .last()
                 .map(|event| event.sequence + 1)
                 .unwrap_or(0);
-            observation.effect_trace.push(EffectEventV1 {
+            observation.effect_trace.push(EffectEvent {
                 sequence,
                 operation: HostOpV1::FsWriteFile,
                 capability: Some(CapabilityTraceIdentity("program_caps.fs".to_string())),
-                resource: None,
+                resource_bindings: Vec::new(),
                 request: CanonicalRequestV1::FsWriteFile {
                     path: b"trace-without-mutation".to_vec(),
                     create_policy: CreatePolicyV1::CreateOrTruncate,
@@ -279,6 +287,14 @@ pub fn apply_canonical_mutation(
                 raw_operation_id,
             });
         }
+        CanonicalMutation::TerminalExitClass => {
+            observation.terminal_exit = match observation.terminal_exit {
+                TerminalExitClass::NormalReturn => TerminalExitClass::ReturnedError,
+                TerminalExitClass::ReturnedError | TerminalExitClass::ControlledTrap => {
+                    TerminalExitClass::NormalReturn
+                }
+            };
+        }
     }
     Ok(())
 }
@@ -287,7 +303,7 @@ pub fn apply_canonical_mutation(
 /// host action. The runner seam and real-root state are both required.
 pub fn denial_precedes_host_action(
     capture: &LaneActionEvidence,
-    observation: &EffectObservationV1,
+    observation: &EffectObservation,
 ) -> bool {
     capture.fs_actions_after_resolve == Some(0)
         && capture.root_before == capture.root_after
@@ -303,7 +319,7 @@ pub fn denial_precedes_host_action(
             .any(|event| is_fs_operation(event.operation) && is_capability_denial(&event.outcome))
 }
 
-pub fn is_fail_closed_manifest_mismatch(observation: &EffectObservationV1) -> bool {
+pub fn is_fail_closed_manifest_mismatch(observation: &EffectObservation) -> bool {
     observation.effect_trace.is_empty()
         && observation.filesystem_delta.is_empty()
         && matches!(
@@ -336,7 +352,7 @@ fn request_path_mut(request: &mut CanonicalRequestV1) -> Option<&mut Vec<u8>> {
     }
 }
 
-fn request_path_with_marker_mut(events: &mut [EffectEventV1]) -> Option<&mut Vec<u8>> {
+fn request_path_with_marker_mut(events: &mut [EffectEvent]) -> Option<&mut Vec<u8>> {
     events.iter_mut().find_map(|event| {
         let path = request_path_mut(&mut event.request)?;
         path.windows(3)
@@ -345,14 +361,14 @@ fn request_path_with_marker_mut(events: &mut [EffectEventV1]) -> Option<&mut Vec
     })
 }
 
-fn first_error_outcome_mut(events: &mut [EffectEventV1]) -> Option<&mut CanonicalOutcomeV1> {
+fn first_error_outcome_mut(events: &mut [EffectEvent]) -> Option<&mut CanonicalOutcomeV1> {
     events
         .iter_mut()
         .find(|event| matches!(event.outcome, CanonicalOutcomeV1::Error(_)))
         .map(|event| &mut event.outcome)
 }
 
-fn first_capability_event_index(events: &[EffectEventV1]) -> Option<usize> {
+fn first_capability_event_index(events: &[EffectEvent]) -> Option<usize> {
     events.iter().position(|event| event.capability.is_some())
 }
 
@@ -383,7 +399,7 @@ fn is_fs_operation(operation: HostOpV1) -> bool {
     )
 }
 
-fn first_metadata_reply_mut(events: &mut [EffectEventV1]) -> Option<&mut ken_host::FileMetadataV1> {
+fn first_metadata_reply_mut(events: &mut [EffectEvent]) -> Option<&mut ken_host::FileMetadataV1> {
     events
         .iter_mut()
         .find_map(|event| match &mut event.outcome {
@@ -392,7 +408,7 @@ fn first_metadata_reply_mut(events: &mut [EffectEventV1]) -> Option<&mut ken_hos
         })
 }
 
-fn first_directory_entry_mut(events: &mut [EffectEventV1]) -> Option<&mut DirEntryV1> {
+fn first_directory_entry_mut(events: &mut [EffectEvent]) -> Option<&mut DirEntryV1> {
     events
         .iter_mut()
         .find_map(|event| match &mut event.outcome {
@@ -431,19 +447,19 @@ mod tests {
         capability: bool,
         request: CanonicalRequestV1,
         outcome: CanonicalOutcomeV1,
-    ) -> EffectEventV1 {
-        EffectEventV1 {
+    ) -> EffectEvent {
+        EffectEvent {
             sequence,
             operation,
             capability: capability.then(|| CapabilityTraceIdentity("program_caps.fs".to_string())),
-            resource: None,
+            resource_bindings: Vec::new(),
             request,
             outcome,
         }
     }
 
-    fn baseline() -> EffectObservationV1 {
-        EffectObservationV1 {
+    fn baseline() -> EffectObservation {
+        EffectObservation {
             stdout: b"stdout".to_vec(),
             stderr: b"stderr".to_vec(),
             filesystem_delta: vec![FsDeltaV1::Modified {
@@ -506,6 +522,7 @@ mod tests {
                     })),
                 ),
             ],
+            terminal_exit: TerminalExitClass::ControlledTrap,
             exit_status: 1,
         }
     }
@@ -542,6 +559,7 @@ mod tests {
             CanonicalMutation::UnknownFamilyIdentity,
             CanonicalMutation::UnknownOperationIdentity,
             CanonicalMutation::UnknownRawOperationId,
+            CanonicalMutation::TerminalExitClass,
         ] {
             let oracle = control();
             let mut subject = oracle.clone();
