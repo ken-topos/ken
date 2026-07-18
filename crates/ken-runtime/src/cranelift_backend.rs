@@ -4295,9 +4295,10 @@ impl<'a> Lowering<'a> {
                     frame.default,
                 )
             }
-            EliminatorFrame::PendingLet(_)
-            | EliminatorFrame::InvocationReturn
-            | EliminatorFrame::Active(_) => return Ok(None),
+            EliminatorFrame::InvocationReturn => {
+                crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+            }
+            EliminatorFrame::PendingLet(_) | EliminatorFrame::Active(_) => return Ok(None),
         };
         let Some(plan) = &self.native_join_plan else {
             return Ok(None);
@@ -4527,9 +4528,14 @@ impl<'a> Lowering<'a> {
     > {
         for (index, frame) in active.pending.iter().copied().enumerate() {
             if let Some(site) = self.planned_join_site_for_frame(frame)? {
+                let prefix_end = if matches!(frame, EliminatorFrame::InvocationReturn) {
+                    index
+                } else {
+                    index + 1
+                };
                 return Ok((
-                    active.pending[..=index].to_vec(),
-                    &active.pending[index + 1..],
+                    active.pending[..prefix_end].to_vec(),
+                    &active.pending[prefix_end..],
                     Self::scalar_kind_from_plan(site.answer_kind),
                     site.site_id,
                 ));

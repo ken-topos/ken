@@ -3,6 +3,7 @@
 use crate::fnv1a_64;
 
 pub const NATIVE_JOIN_PLAN_V1_HEADER: &[u8] = b"NativeJoinPlanV1\0";
+pub const NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1: u64 = 0x4b4a_5245_5455_524e;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NativeJoinAnswerKindV1 {
@@ -143,4 +144,3 @@ fn take_bytes<'a>(bytes: &mut &'a [u8]) -> Result<&'a [u8], &'static str> {
     *bytes = tail;
     Ok(head)
 }
-

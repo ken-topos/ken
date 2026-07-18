@@ -538,6 +538,26 @@ impl NativeJoinPlanCollector {
         }
     }
 
+    fn record_root_exit_answer(
+        &mut self,
+        root: &StableSymbol,
+        checked_type: &[u8],
+    ) {
+        let site_id = self.next_site_id;
+        self.next_site_id = self
+            .next_site_id
+            .checked_add(1)
+            .expect("compiler-private join site identity exhausted");
+        self.sites.push(ken_runtime::NativeJoinPlanSiteV1 {
+            site_id,
+            declaration: root.to_string(),
+            checked_result_type_fingerprint: ken_runtime::fnv1a_64(checked_type),
+            runtime_frame_fingerprint:
+                ken_runtime::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
+            answer_kind: ken_runtime::NativeJoinAnswerKindV1::ExitCode,
+        });
+    }
+
     fn record_match(
         &mut self,
         owner: &StableSymbol,
@@ -629,7 +649,7 @@ fn lower_checked_host_root(
     target_closure: &[StableSymbol],
     root: &StableSymbol,
     spine: &CheckedHostSpineV1,
-    join_plan: Option<&mut NativeJoinPlanCollector>,
+    mut join_plan: Option<&mut NativeJoinPlanCollector>,
 ) -> Result<RuntimeDeclarationKind, ErasureError> {
     let semantic = &package.artifact.semantic;
     // Decode exactly the finite executable declaration closure. Recursive
@@ -667,6 +687,9 @@ fn lower_checked_host_root(
             "checked host root must accept ProgramCaps",
         ));
     };
+    if let Some(join_plan) = join_plan.as_deref_mut() {
+        join_plan.record_root_exit_answer(root, &declaration.checked_type);
+    }
     let mut stack = vec![root.clone()];
     let lowered = lower_checked_host_computation(
         body,
