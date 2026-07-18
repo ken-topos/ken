@@ -2267,13 +2267,6 @@ fn requires_value_aware_heterogeneous_deforestation(
     if requires_heterogeneous_deforestation(expr) {
         return true;
     }
-    environment_resolves_computational_recursor_call(expr, env)
-}
-
-fn environment_resolves_computational_recursor_call(
-    expr: &RuntimeExpr,
-    env: &[Lowered],
-) -> bool {
     let RuntimeExpr::Call { callee, .. } = expr else {
         return false;
     };
@@ -2842,23 +2835,6 @@ impl<'a> Lowering<'a> {
                 cases: producer_cases,
                 default: producer_default,
             } => {
-                if environment_resolves_computational_recursor_call(scrutinee, producer_env) {
-                    let mut composed = Vec::with_capacity(eliminators.len() + 1);
-                    composed.push(EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
-                        cases: producer_cases,
-                        default: producer_default,
-                        env: producer_env,
-                        retained_scrutinee_index: None,
-                        deferred_constructor_case: None,
-                    }));
-                    composed.extend_from_slice(eliminators);
-                    return self.lower_computational_producer_expr(
-                        builder,
-                        scrutinee,
-                        producer_env,
-                        &composed,
-                    );
-                }
                 let selected = self.lower_expr(builder, scrutinee, producer_env)?;
                 if let Lowered::Bool { value, known } = selected {
                     let true_case = producer_cases.iter().find(|case| {
