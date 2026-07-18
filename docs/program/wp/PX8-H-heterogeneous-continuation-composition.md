@@ -104,6 +104,35 @@ deliverable.
 6. **`c8b8cdb7` is the immutable downstream integration discriminator** — a
    throwaway overlay only; never edited, never committed into PX8-H.
 
+### Fifteenth-stop scope correction — checked scalar join plan
+
+Architect ruling `evt_7sdmvyme8qy50` makes the scalar join contract an
+admission-derived input, never an erased-body inference.  The checked native
+production transaction must derive a canonical compiler-private join plan from
+the exact admitted declaration type and Match motive, bind each answer to the
+exact checked-term occurrence, and embed that hash-free plan through the
+existing checked-package semantic-metadata path before package hashes are
+finalized.  The erased Runtime graph may validate and consume the plan, but may
+not invent it.
+
+Each planned site carries an exact occurrence identity, a checked result-type
+fingerprint, and one logical answer kind: `Int`, `Bool`, `StructuralNat`, or
+`ExitCode`.  `RecursiveBackedge` is compatible bottom-like edge evidence and
+never establishes a kind.  The native source machine resolves the plan before
+emitting any predecessor, binds it to a fresh dynamic cut and exact outer
+cursor, and treats the existing scalar classifiers only as postcondition
+checks.  Missing, malformed, stale, transplanted, wrong-version,
+identity-inconsistent, unresolved-polymorphic, non-scalar, or uncovered plan
+evidence rejects before join-block creation.
+
+This correction authorizes only compiler-private checked-package metadata and
+the native-lowering consumer.  It adds no generic Runtime-expression field,
+public ABI, interpreter behavior, kernel rule, aggregate join carrier, or
+trusted primitive.  Equal-kind adjacent or nested sites remain distinct;
+reversing predecessor emission cannot change the planned answer; and `Bool`
+versus `ExitCode` must reject even though both use one Cranelift `i64` block
+parameter.
+
 ## Landed anchors (verify before editing; do not trust frozen line numbers)
 
 - `crates/ken-runtime/src/cranelift_backend.rs` — `requires_heterogeneous_
