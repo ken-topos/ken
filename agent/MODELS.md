@@ -29,7 +29,7 @@ downstream is already correct.
 
 | Tier | Model (current mapping) | Roles | Why |
 |---|---|---|---|
-| **T1** (enclave) | **Opus-class** (1M, high effort, extended thinking) | Spec-author, Conformance-validator, **Steward**, **Architect** | Highest judgment; the clean-room enclave; design + workflow authority. These calls are worth the most. |
+| **T1** (enclave) | **Opus-class** (1M, high effort, extended thinking) | Spec-author, Conformance-validator, **Steward**, **Architect**; **Research** and **Adversary** aux seats (the Adversary dispatches T2/T3 fan-out for breadth) | Highest judgment; the clean-room enclave; design + workflow authority; hard flaw-reasoning. These calls are worth the most. |
 | **T2** (build & coordination) | **Sonnet-class** | Build-team Leaders, Implementers, QA; Spec-team Leader; Librarian | High-volume code generation, coordination, mechanical gates, verification runs, doc observation. |
 | **T3** | **Haiku-class** | (none currently) | Lightweight tier; held in reserve. |
 

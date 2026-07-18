@@ -21,6 +21,7 @@ again **after every context compaction** — orient yourself:
 | `architect` | `ken-architect` |
 | `librarian` | `ken-librarian` |
 | `research` | `ken-research` |
+| `adversary` | `ken-adversary` |
 | `spec-leader` | `ken-spec-leader` |
 | `spec-author` | `ken-spec-author` |
 | `conformance-validator` | `ken-conformance-validator` |
@@ -60,6 +61,7 @@ narrower scopes on your path (its path + ancestors).
 | `spec-leader` / `spec-author` / `conformance-validator` | `fleet` + `enclave` + `agent/memory/roles/<role>/` |
 | `librarian` | `fleet` + `agent/memory/roles/librarian/` |
 | `research` | `fleet` + `agent/memory/enclave/` + `agent/memory/roles/research/` |
+| `adversary` | `fleet` + `agent/memory/enclave/` + `agent/memory/roles/adversary/` |
 | `<team>-leader` | `fleet` + `agent/memory/build/` + `agent/memory/build/leaders/` + `agent/memory/teams/<team>/` |
 | `<team>-implementer` | `fleet` + `build/` + `build/implementers/` + `teams/<team>/` |
 | `<team>-qa` | `fleet` + `build/` + `build/qa/` + `teams/<team>/` |
@@ -81,13 +83,14 @@ to write Ken's code.** Per `CLEAN-ROOM.md`:
   consultable reference. There is zero AGPLv3 contact, which is strictly
   cleaner. **No agent should go looking for it.**
 - **The permissive references** (Lean, Agda, cooltt, smalltt, cctt, …) may be
-  **read to understand** by the Architect / Spec enclave **and the research
-  agent** to sharpen the spec, but **not copied** into the repo. Implementer
+  **read to understand** by the Architect / Spec enclave, **the research agent,
+  and the adversary agent** (the adversary for known prior-art failure modes) to
+  sharpen the spec / hunt flaws, but **not copied** into the repo. Implementer
   agents build from `/spec`, never from `local/refs/`.
 - **Copyleft references** (GPL/AGPL/CeCILL — e.g. smtcoq, spot, jif) are for the
-  **Spec enclave and the research agent only**, for approach and behavior only,
-  under the leakage recheck. Never consulted by implementer agents, never
-  vendored.
+  **Spec enclave, the research agent, and the adversary agent only**, for
+  approach and behavior only, under the leakage recheck. Never consulted by
+  implementer agents, never vendored.
 
 When unsure whether you may look at something under `local/refs/`, the answer
 is no — ask the operator or the Spec enclave.
