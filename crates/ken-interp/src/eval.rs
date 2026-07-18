@@ -4409,7 +4409,7 @@ fn fs_dispatch<H: HostHandler>(
     fs: &FSIds,
     ids: &ConsoleIds,
     store: &mut EvalStore,
-    recorder: Option<&mut EffectTraceRecorderV1>,
+    recorder: Option<&mut EffectTraceRecorder>,
 ) -> Option<Result<EvalVal, ()>> {
     let bytes_at = |index| match args.get(index) {
         Some(EvalVal::Bytes(bytes)) => Some(bytes.clone()),
@@ -4780,7 +4780,7 @@ fn ambient_dispatch<H: HostHandler>(
     ids: &ConsoleIds,
     clock_ids: Option<&ClockIds>,
     store: &mut EvalStore,
-    recorder: Option<&mut EffectTraceRecorderV1>,
+    recorder: Option<&mut EffectTraceRecorder>,
 ) -> Result<EvalVal, ()> {
     let mut backend = InterpreterHostBackend { handler };
     let reply = ken_host::dispatch_host_op_v1(
@@ -4869,36 +4869,27 @@ pub fn run_io<H: HostHandler>(
 }
 
 #[derive(Default)]
-struct EffectTraceRecorderV1 {
-    events: Vec<ken_host::EffectEventV1>,
-    events_v2: Vec<ken_host::EffectEventV2>,
+struct EffectTraceRecorder {
+    events: Vec<ken_host::EffectEvent>,
 }
 
-impl EffectTraceRecorderV1 {
+impl EffectTraceRecorder {
     fn record(
         &mut self,
         operation: ken_host::HostOpV1,
         request: ken_host::CanonicalRequestV1,
         reply: &ken_host::HostDispatchReplyV1,
     ) {
-        self.events_v2.push(ken_host::effect_event_v2_from_dispatch(
-            self.events_v2.len() as u64,
+        self.events.push(ken_host::effect_event_from_dispatch(
+            self.events.len() as u64,
             operation,
-            request.clone(),
+            request,
             reply,
         ));
-        self.events.push(ken_host::EffectEventV1 {
-            sequence: self.events.len() as u64,
-            operation,
-            capability: reply.capability_identity.clone(),
-            resource: reply.resource_identity,
-            request,
-            outcome: reply.outcome.clone(),
-        });
     }
 }
 
-/// Run the interpreter host driver and return its canonical six-field effect
+/// Run the interpreter host driver and return its canonical effect
 /// observation.
 ///
 /// Every trace event is appended after the canonical dispatcher has produced
@@ -4907,7 +4898,7 @@ impl EffectTraceRecorderV1 {
 /// `HostHandler` surface intentionally exposes no filesystem snapshot, so
 /// `filesystem_delta` is empty here; the differential harness supplies that
 /// field from its independent root snapshot.
-pub fn run_io_effect_observation_v1<H: HostHandler>(
+pub fn run_io_effect_observation<H: HostHandler>(
     tree: EvalVal,
     handler: &mut H,
     ids: &ConsoleIds,
@@ -4918,8 +4909,8 @@ pub fn run_io_effect_observation_v1<H: HostHandler>(
     store: &mut EvalStore,
     success_id: GlobalId,
     failure_id: GlobalId,
-) -> ken_host::EffectObservationV1 {
-    let mut recorder = EffectTraceRecorderV1::default();
+) -> ken_host::EffectObservation {
+    let mut recorder = EffectTraceRecorder::default();
     let result = run_io_with_effect_recorder(
         tree,
         handler,
@@ -4931,15 +4922,15 @@ pub fn run_io_effect_observation_v1<H: HostHandler>(
         store,
         Some(&mut recorder),
     );
-    effect_observation_v1(result, recorder.events, success_id, failure_id)
+    effect_observation(result, recorder.events, success_id, failure_id)
 }
 
-fn effect_observation_v1(
+fn effect_observation(
     result: Result<EvalVal, RunIoError>,
-    effect_trace: Vec<ken_host::EffectEventV1>,
+    effect_trace: Vec<ken_host::EffectEvent>,
     success_id: GlobalId,
     failure_id: GlobalId,
-) -> ken_host::EffectObservationV1 {
+) -> ken_host::EffectObservation {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
     for event in &effect_trace {
@@ -4958,36 +4949,61 @@ fn effect_observation_v1(
             ken_host::ConsoleStreamV1::Stdin => {}
         }
     }
-    let (terminal_error, exit_status) = match result {
+    let (terminal_error, terminal_exit, exit_status) = match result {
         Ok(value) => {
-            let exit_code = match value {
-                EvalVal::Ctor { id, .. } if id == success_id => {
-                    ken_runtime::ProcessExitCode::Success
-                }
-                EvalVal::Ctor { id, args, .. } if id == failure_id => match args.first() {
-                    Some(EvalVal::Int(code)) => ken_runtime::ProcessExitCode::Failure(*code),
-                    _ => ken_runtime::ProcessExitCode::MalformedFailure,
-                },
-                _ => ken_runtime::ProcessExitCode::Malformed,
+            let (exit_code, terminal_exit) = match value {
+                EvalVal::Ctor { id, .. } if id == success_id => (
+                    ken_runtime::ProcessExitCode::Success,
+                    ken_host::TerminalExitClass::NormalReturn,
+                ),
+                EvalVal::Ctor { id, args, .. } if id == failure_id => (
+                    match args.first() {
+                        Some(EvalVal::Int(code)) => ken_runtime::ProcessExitCode::Failure(*code),
+                        _ => ken_runtime::ProcessExitCode::MalformedFailure,
+                    },
+                    if matches!(args.first(), Some(EvalVal::Int(_))) {
+                        ken_host::TerminalExitClass::ReturnedError
+                    } else {
+                        ken_host::TerminalExitClass::ControlledTrap
+                    },
+                ),
+                _ => (
+                    ken_runtime::ProcessExitCode::Malformed,
+                    ken_host::TerminalExitClass::ControlledTrap,
+                ),
             };
             let mapped = ken_runtime::process_exit_status(exit_code);
             (
                 mapped
                     .trap_report
                     .map(|_| ken_host::TerminalErrorV1::MalformedHostAbiField),
+                terminal_exit,
                 mapped.status,
             )
         }
-        Err(RunIoError::UnknownTree) => (Some(ken_host::TerminalErrorV1::UnknownTree), 1),
-        Err(RunIoError::UnknownEffect(_)) => (Some(ken_host::TerminalErrorV1::DriverFailure), 1),
-        Err(RunIoError::NotAnIOTree(_)) => (Some(ken_host::TerminalErrorV1::MalformedTree), 1),
+        Err(RunIoError::UnknownTree) => (
+            Some(ken_host::TerminalErrorV1::UnknownTree),
+            ken_host::TerminalExitClass::ControlledTrap,
+            1,
+        ),
+        Err(RunIoError::UnknownEffect(_)) => (
+            Some(ken_host::TerminalErrorV1::DriverFailure),
+            ken_host::TerminalExitClass::ControlledTrap,
+            1,
+        ),
+        Err(RunIoError::NotAnIOTree(_)) => (
+            Some(ken_host::TerminalErrorV1::MalformedTree),
+            ken_host::TerminalExitClass::ControlledTrap,
+            1,
+        ),
     };
-    ken_host::EffectObservationV1 {
+    ken_host::EffectObservation {
         stdout,
         stderr,
         filesystem_delta: Vec::new(),
         terminal_error,
         effect_trace,
+        terminal_exit,
         exit_status,
     }
 }
@@ -5001,7 +5017,7 @@ fn run_io_with_effect_recorder<H: HostHandler>(
     coproduct_ids: Option<&CoproductIds>,
     globals: &GlobalEnv,
     store: &mut EvalStore,
-    mut recorder: Option<&mut EffectTraceRecorderV1>,
+    mut recorder: Option<&mut EffectTraceRecorder>,
 ) -> Result<EvalVal, RunIoError> {
     let m = ids.params_len;
     // Resource liveness is invocation-scoped. PX7-F can add public resource
@@ -5232,10 +5248,9 @@ fn run_io_with_effect_recorder<H: HostHandler>(
                 ken_host::CanonicalRequestV1::ResourceRelease,
                 &ken_host::HostDispatchReplyV1 {
                     capability_identity: None,
-                    resource_identity: Some(settlement.identity),
                     resource_token: None,
                     resource_bindings: vec![(
-                        ken_host::ResourceBindingRoleV2::Target,
+                        ken_host::ResourceBindingRole::Target,
                         settlement.identity,
                     )],
                     outcome,
@@ -5594,7 +5609,7 @@ mod px5b_effect_observation_tests {
         path: &[u8],
         capability: EvalVal,
         host: &mut CaptureHost,
-        recorder: Option<&mut EffectTraceRecorderV1>,
+        recorder: Option<&mut EffectTraceRecorder>,
     ) -> Option<Result<EvalVal, ()>> {
         let ids = console_ids();
         let fs = fs_ids();
@@ -5617,7 +5632,7 @@ mod px5b_effect_observation_tests {
         let mut host = CaptureHost::new(Vec::new());
         host.insert_file(b"dir/x".to_vec(), b"payload".to_vec());
         let cap = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_PARTIAL));
-        let mut recorder = EffectTraceRecorderV1::default();
+        let mut recorder = EffectTraceRecorder::default();
 
         dispatch_read(b"dir/./x", cap.clone(), &mut host, Some(&mut recorder))
             .expect("read operation")
@@ -5655,7 +5670,7 @@ mod px5b_effect_observation_tests {
     fn malformed_capability_identity_and_error_come_from_reply() {
         let mut host = CaptureHost::new(Vec::new());
         host.insert_file(b"x".to_vec(), b"payload".to_vec());
-        let mut recorder = EffectTraceRecorderV1::default();
+        let mut recorder = EffectTraceRecorder::default();
 
         dispatch_read(b"x", EvalVal::Int(7), &mut host, Some(&mut recorder))
             .expect("read operation")
@@ -5691,7 +5706,7 @@ mod px5b_effect_observation_tests {
         observed.insert_file(b"dir/x".to_vec(), b"payload".to_vec());
         let plain_cap = EvalVal::Cap(plain.mint_fs_cap(capabilities::AUTH_PARTIAL));
         let observed_cap = EvalVal::Cap(observed.mint_fs_cap(capabilities::AUTH_PARTIAL));
-        let mut recorder = EffectTraceRecorderV1::default();
+        let mut recorder = EffectTraceRecorder::default();
 
         let plain_result = dispatch_read(b"dir/./x", plain_cap, &mut plain, None);
         let observed_result =
@@ -5714,7 +5729,7 @@ mod px5b_effect_observation_tests {
         let mut host = CaptureHost::new(Vec::new());
         host.set_fixed_clock(17);
         let mut store = EvalStore::new();
-        let mut recorder = EffectTraceRecorderV1::default();
+        let mut recorder = EffectTraceRecorder::default();
         let mut resources = ken_host::ResourceTableV1::default();
 
         ambient_dispatch(
@@ -5759,25 +5774,14 @@ mod px5b_effect_observation_tests {
             .events
             .iter()
             .all(|event| event.capability.is_none()));
-        assert_eq!(
-            recorder
-                .events_v2
-                .iter()
-                .map(|event| (event.sequence, event.operation))
-                .collect::<Vec<_>>(),
-            vec![
-                (0, ken_host::HostOpV1::ConsoleWrite),
-                (1, ken_host::HostOpV1::ClockWallNow),
-            ]
-        );
         assert!(recorder
-            .events_v2
+            .events
             .iter()
             .all(|event| event.resource_bindings.is_empty()));
     }
 
     #[test]
-    fn producer_returns_the_imported_six_field_observation() {
+    fn producer_returns_the_imported_observation() {
         let ids = console_ids();
         let success_id = GlobalId(500);
         let failure_id = GlobalId(501);
@@ -5792,7 +5796,7 @@ mod px5b_effect_observation_tests {
         };
         let mut host = CaptureHost::new(Vec::new());
         let mut store = EvalStore::new();
-        let observation = run_io_effect_observation_v1(
+        let observation = run_io_effect_observation(
             tree,
             &mut host,
             &ids,
@@ -5807,15 +5811,60 @@ mod px5b_effect_observation_tests {
 
         assert_eq!(
             observation,
-            ken_host::EffectObservationV1 {
+            ken_host::EffectObservation {
                 stdout: Vec::new(),
                 stderr: Vec::new(),
                 filesystem_delta: Vec::new(),
                 terminal_error: None,
                 effect_trace: Vec::new(),
+                terminal_exit: ken_host::TerminalExitClass::NormalReturn,
                 exit_status: 0,
             }
         );
+    }
+
+    #[test]
+    fn route_classifies_all_terminal_arms() {
+        let ids = console_ids();
+        let success_id = GlobalId(500);
+        let failure_id = GlobalId(501);
+        let returned = |value| EvalVal::Ctor {
+            id: ids.ret_id,
+            args: Rc::new(vec![value]),
+            slot: NULL_SLOT,
+        };
+        let success = returned(EvalVal::Ctor {
+            id: success_id,
+            args: Rc::new(Vec::new()),
+            slot: NULL_SLOT,
+        });
+        let failure = returned(EvalVal::Ctor {
+            id: failure_id,
+            args: Rc::new(vec![EvalVal::Int(7)]),
+            slot: NULL_SLOT,
+        });
+
+        for (tree, expected) in [
+            (success, ken_host::TerminalExitClass::NormalReturn),
+            (failure, ken_host::TerminalExitClass::ReturnedError),
+            (EvalVal::Int(9), ken_host::TerminalExitClass::ControlledTrap),
+        ] {
+            let mut host = CaptureHost::new(Vec::new());
+            let mut store = EvalStore::new();
+            let observation = run_io_effect_observation(
+                tree,
+                &mut host,
+                &ids,
+                None,
+                None,
+                None,
+                &GlobalEnv::new(),
+                &mut store,
+                success_id,
+                failure_id,
+            );
+            assert_eq!(observation.terminal_exit, expected);
+        }
     }
 
     #[test]

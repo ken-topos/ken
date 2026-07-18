@@ -31,7 +31,7 @@ mod abi_v1;
 mod account_db_v1;
 pub mod capability;
 mod effect_v1;
-mod effect_wire_v1;
+mod effect_wire;
 #[cfg(target_os = "linux")]
 mod resource_close_v1;
 
@@ -40,7 +40,7 @@ pub use abi_v1::{
 };
 pub use capability::*;
 pub use effect_v1::*;
-pub use effect_wire_v1::*;
+pub use effect_wire::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DependencyIdentity {

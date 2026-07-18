@@ -203,7 +203,7 @@ impl ResourceLifetimeObligationV1 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResourceLifetimeBindingPointV2 {
     pub operation: ken_host::HostOpV1,
-    pub role: ken_host::ResourceBindingRoleV2,
+    pub role: ken_host::ResourceBindingRole,
 }
 
 /// The static correlation descriptor for role-labelled V2 effect events.
@@ -958,38 +958,38 @@ pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
 const FS_HANDLE_REQUIRE_SAME_AT_V2: [ResourceLifetimeBindingPointV2; 4] = [
     ResourceLifetimeBindingPointV2 {
         operation: ken_host::HostOpV1::FsHandleMetadata,
-        role: ken_host::ResourceBindingRoleV2::Target,
+        role: ken_host::ResourceBindingRole::Target,
     },
     ResourceLifetimeBindingPointV2 {
         operation: ken_host::HostOpV1::FsReadAt,
-        role: ken_host::ResourceBindingRoleV2::File,
+        role: ken_host::ResourceBindingRole::File,
     },
     ResourceLifetimeBindingPointV2 {
         operation: ken_host::HostOpV1::FsWriteAt,
-        role: ken_host::ResourceBindingRoleV2::File,
+        role: ken_host::ResourceBindingRole::File,
     },
     ResourceLifetimeBindingPointV2 {
         operation: ken_host::HostOpV1::ResourceRelease,
-        role: ken_host::ResourceBindingRoleV2::Target,
+        role: ken_host::ResourceBindingRole::Target,
     },
 ];
 
 const BUFFER_REQUIRE_SAME_AT_V2: [ResourceLifetimeBindingPointV2; 4] = [
     ResourceLifetimeBindingPointV2 {
         operation: ken_host::HostOpV1::FsReadAt,
-        role: ken_host::ResourceBindingRoleV2::Buffer,
+        role: ken_host::ResourceBindingRole::Buffer,
     },
     ResourceLifetimeBindingPointV2 {
         operation: ken_host::HostOpV1::FsWriteAt,
-        role: ken_host::ResourceBindingRoleV2::Buffer,
+        role: ken_host::ResourceBindingRole::Buffer,
     },
     ResourceLifetimeBindingPointV2 {
         operation: ken_host::HostOpV1::BufferFreeze,
-        role: ken_host::ResourceBindingRoleV2::Target,
+        role: ken_host::ResourceBindingRole::Target,
     },
     ResourceLifetimeBindingPointV2 {
         operation: ken_host::HostOpV1::ResourceRelease,
-        role: ken_host::ResourceBindingRoleV2::Target,
+        role: ken_host::ResourceBindingRole::Target,
     },
 ];
 
@@ -1078,7 +1078,7 @@ fn project_resource_lifetime_obligation_v2(
             resource_kind: ken_host::ResourceKindV1::FsHandle,
             bind_at: ResourceLifetimeBindingPointV2 {
                 operation: ken_host::HostOpV1::FsOpen,
-                role: ken_host::ResourceBindingRoleV2::Target,
+                role: ken_host::ResourceBindingRole::Target,
             },
             require_same_at: reachable(&FS_HANDLE_REQUIRE_SAME_AT_V2),
         });
@@ -1088,7 +1088,7 @@ fn project_resource_lifetime_obligation_v2(
             resource_kind: ken_host::ResourceKindV1::Buffer,
             bind_at: ResourceLifetimeBindingPointV2 {
                 operation: ken_host::HostOpV1::BufferAllocate,
-                role: ken_host::ResourceBindingRoleV2::Target,
+                role: ken_host::ResourceBindingRole::Target,
             },
             require_same_at: reachable(&BUFFER_REQUIRE_SAME_AT_V2),
         });
@@ -1102,7 +1102,7 @@ fn project_resource_lifetime_obligation_v2(
         correlation: ResourceLifetimeCorrelationV2 {
             identity_type: "ResourceTraceIdentityV1",
             event_field: "EffectEventV2.resource_bindings",
-            role_type: "ResourceBindingRoleV2",
+            role_type: "ResourceBindingRole",
             canonical_order: "OperationDefined",
         },
         plans,
@@ -1300,13 +1300,11 @@ const fn canonical_resource_kind_v1(value: ken_host::ResourceKindV1) -> &'static
     }
 }
 
-const fn canonical_resource_binding_role_v2(
-    value: ken_host::ResourceBindingRoleV2,
-) -> &'static str {
+const fn canonical_resource_binding_role_v2(value: ken_host::ResourceBindingRole) -> &'static str {
     match value {
-        ken_host::ResourceBindingRoleV2::File => "File",
-        ken_host::ResourceBindingRoleV2::Buffer => "Buffer",
-        ken_host::ResourceBindingRoleV2::Target => "Target",
+        ken_host::ResourceBindingRole::File => "File",
+        ken_host::ResourceBindingRole::Buffer => "Buffer",
+        ken_host::ResourceBindingRole::Target => "Target",
     }
 }
 
@@ -1477,11 +1475,11 @@ mod resource_lifetime_hash_tests {
             vec![
                 ResourceLifetimeBindingPointV2 {
                     operation: ken_host::HostOpV1::FsReadAt,
-                    role: ken_host::ResourceBindingRoleV2::File,
+                    role: ken_host::ResourceBindingRole::File,
                 },
                 ResourceLifetimeBindingPointV2 {
                     operation: ken_host::HostOpV1::ResourceRelease,
-                    role: ken_host::ResourceBindingRoleV2::Target,
+                    role: ken_host::ResourceBindingRole::Target,
                 },
             ]
         );
@@ -1490,15 +1488,15 @@ mod resource_lifetime_hash_tests {
             vec![
                 ResourceLifetimeBindingPointV2 {
                     operation: ken_host::HostOpV1::FsReadAt,
-                    role: ken_host::ResourceBindingRoleV2::Buffer,
+                    role: ken_host::ResourceBindingRole::Buffer,
                 },
                 ResourceLifetimeBindingPointV2 {
                     operation: ken_host::HostOpV1::BufferFreeze,
-                    role: ken_host::ResourceBindingRoleV2::Target,
+                    role: ken_host::ResourceBindingRole::Target,
                 },
                 ResourceLifetimeBindingPointV2 {
                     operation: ken_host::HostOpV1::ResourceRelease,
-                    role: ken_host::ResourceBindingRoleV2::Target,
+                    role: ken_host::ResourceBindingRole::Target,
                 },
             ]
         );

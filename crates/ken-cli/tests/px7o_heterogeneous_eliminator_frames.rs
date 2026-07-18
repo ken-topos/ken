@@ -87,7 +87,7 @@ fn assert_case(arguments: &[&str], expected_stdout: &[u8], expected_exit: i32) {
         &dir,
     )
     .expect("heterogeneous eliminators reach the linked artifact");
-    let native = ken_runtime::run_bound_process_effect_observation_v1(
+    let native = ken_runtime::run_bound_process_effect_observation(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {
             arguments: arguments.iter().map(std::ffi::OsString::from).collect(),
@@ -105,7 +105,7 @@ fn assert_case(arguments: &[&str], expected_stdout: &[u8], expected_exit: i32) {
             .map(|argument| argument.as_bytes().to_vec()),
     );
     let mut host = ken_interp::CaptureHost::new(Vec::new());
-    let interpreted = ken_cli::run_program_effect_observation_v1(
+    let interpreted = ken_cli::run_program_effect_observation(
         PROGRAM,
         ken_cli::SourceFormat::Ken,
         &argv,

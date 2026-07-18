@@ -1,6 +1,6 @@
 //! Copyable end-to-end example for deterministic Ken application tests.
 
-use ken_cli::{run_program, run_program_effect_observation_v1, ProgramOutcome, SourceFormat};
+use ken_cli::{run_program, run_program_effect_observation, ProgramOutcome, SourceFormat};
 use ken_interp::{
     CaptureHost, ConsoleStream, ConsoleTrace, FsTrace, HostCreatePolicy, VirtualFsNode,
 };
@@ -106,7 +106,7 @@ fn injected_application_run_is_byte_identical_and_drives_capture_host() {
 fn checked_application_exposes_the_real_dispatch_observation() {
     let mut host = CaptureHost::new(b"fixed stdin".to_vec());
     host.insert_directory(b"sandbox".to_vec());
-    let observation = run_program_effect_observation_v1(
+    let observation = run_program_effect_observation(
         APP,
         SourceFormat::Ken,
         &[b"fixed argv".to_vec()],
@@ -153,7 +153,7 @@ fn checked_application_exposes_the_real_dispatch_observation() {
 
     let mut sibling_host = CaptureHost::new(b"fixed stdin".to_vec());
     sibling_host.insert_directory(b"sandbox".to_vec());
-    let sibling = run_program_effect_observation_v1(
+    let sibling = run_program_effect_observation(
         APP,
         SourceFormat::Ken,
         &[b"fixed argv".to_vec()],

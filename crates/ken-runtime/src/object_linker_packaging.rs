@@ -237,10 +237,10 @@ fn filesystem_delta_v1(
 /// Runs the linked checked-source artifact and returns its complete canonical
 /// observation. The trace sink is launcher-owned and outside the capability
 /// root; stdout/stderr and filesystem deltas are observed by this same call.
-pub fn run_bound_process_effect_observation_v1(
+pub fn run_bound_process_effect_observation(
     artifact: &BoundProcessExecutableArtifact,
     options: &NativeEffectRunOptionsV1,
-) -> Result<ken_host::EffectObservationV1, NativeEffectRunErrorV1> {
+) -> Result<ken_host::EffectObservation, NativeEffectRunErrorV1> {
     let cwd = fs::canonicalize(&options.cwd)?;
     let observation_root = cwd
         .parent()
@@ -264,7 +264,7 @@ pub fn run_bound_process_effect_observation_v1(
     let after = snapshot_effect_root_v1(&cwd)?;
     let trace_bytes = fs::read(&trace_path)?;
     let _ = fs::remove_file(&trace_path);
-    let trace = ken_host::decode_linked_effect_trace_v1(&trace_bytes)
+    let trace = ken_host::decode_linked_effect_trace(&trace_bytes)
         .map_err(|_| NativeEffectRunErrorV1::MalformedTrace)?;
     if trace.plan_hash != options.plan_hash
         || trace.target_abi_hash != ken_host::TARGET_ABI_MANIFEST_HASH
@@ -286,12 +286,13 @@ pub fn run_bound_process_effect_observation_v1(
     } else {
         None
     };
-    Ok(ken_host::EffectObservationV1 {
+    Ok(ken_host::EffectObservation {
         stdout: output.stdout,
         stderr: output.stderr,
         filesystem_delta: filesystem_delta_v1(&before, &after),
         terminal_error,
         effect_trace: trace.effect_trace,
+        terminal_exit: trace.terminal_exit,
         exit_status,
     })
 }
@@ -2477,6 +2478,57 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn linked_transport_classifies_all_terminal_arms() {
+        let run = |name: &str, entry: RuntimeExpr| {
+            let output_dir = temp_output_dir(name);
+            let executable = build_process_starter_executable_artifact(&entry, &output_dir)
+                .expect("terminal fixture links");
+            let trace_path = output_dir.join("observation.trace");
+            let output = Command::new(&executable)
+                .env_clear()
+                .env("KEN_HOST_OBSERVATION_PATH", &trace_path)
+                .output()
+                .expect("terminal fixture runs");
+            let trace = ken_host::decode_linked_effect_trace(&fs::read(&trace_path).unwrap())
+                .expect("terminal trace decodes");
+            fs::remove_dir_all(output_dir).expect("terminal fixture is removed");
+            (output, trace)
+        };
+        let success = RuntimeExpr::Construct {
+            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+            args: Vec::new(),
+        };
+        let failure = RuntimeExpr::Construct {
+            constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+        };
+        let trapped = RuntimeExpr::Trap(RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "process trap fixture".to_string(),
+        });
+
+        let (success_output, success_trace) = run("px8x-success", success);
+        assert_eq!(success_output.status.code(), Some(0));
+        assert_eq!(
+            success_trace.terminal_exit,
+            ken_host::TerminalExitClass::NormalReturn
+        );
+        let (failure_output, failure_trace) = run("px8x-returned-error", failure);
+        assert_eq!(failure_output.status.code(), Some(7));
+        assert_eq!(
+            failure_trace.terminal_exit,
+            ken_host::TerminalExitClass::ReturnedError
+        );
+        let (trap_output, trap_trace) = run("px8x-controlled-trap", trapped);
+        assert_eq!(trap_output.status.code(), Some(1));
+        assert_eq!(
+            trap_trace.terminal_exit,
+            ken_host::TerminalExitClass::ControlledTrap
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn linked_process_artifact_drives_real_resource_open_use_release() {
         let result_err = "ctor:prelude::Result::Err".to_string();
         let result_ok = "ctor:prelude::Result::Ok".to_string();
@@ -2607,7 +2659,7 @@ mod tests {
             .output()
             .expect("linked resource process runs");
         assert_eq!(output.status.code(), Some(0));
-        let trace = ken_host::decode_linked_effect_trace_v1(&fs::read(&trace_path).unwrap())
+        let trace = ken_host::decode_linked_effect_trace(&fs::read(&trace_path).unwrap())
             .expect("resource trace decodes");
 
         struct SharedSemanticBackend;
@@ -2715,14 +2767,12 @@ mod tests {
         )
         .unwrap();
         let token = open.resource_token.expect("semantic lane mints a token");
-        let mut semantic_events = vec![ken_host::EffectEventV1 {
-            sequence: 0,
-            operation: ken_host::HostOpV1::FsOpen,
-            capability: open.capability_identity,
-            resource: open.resource_identity,
-            request: open_request,
-            outcome: open.outcome,
-        }];
+        let mut semantic_events = vec![ken_host::effect_event_from_dispatch(
+            0,
+            ken_host::HostOpV1::FsOpen,
+            open_request,
+            &open,
+        )];
         for (operation, request) in [
             (
                 ken_host::HostOpV1::FsHandleMetadata,
@@ -2747,30 +2797,29 @@ mod tests {
                 &request,
             )
             .unwrap();
-            semantic_events.push(ken_host::EffectEventV1 {
-                sequence: semantic_events.len() as u64,
+            semantic_events.push(ken_host::effect_event_from_dispatch(
+                semantic_events.len() as u64,
                 operation,
-                capability: reply.capability_identity,
-                resource: reply.resource_identity,
                 request,
-                outcome: reply.outcome,
-            });
+                &reply,
+            ));
         }
         assert_eq!(
             trace.effect_trace, semantic_events,
             "the shared host semantic dispatcher and linked native ABI must agree"
         );
-        let semantic_trace = ken_host::LinkedEffectTraceV1 {
+        let semantic_trace = ken_host::LinkedEffectTrace {
             plan_hash: trace.plan_hash,
             target_abi_hash: trace.target_abi_hash,
             host_effect_abi_hash: trace.host_effect_abi_hash,
             terminal_value: trace.terminal_value,
             terminal_error: trace.terminal_error.clone(),
             effect_trace: semantic_events,
+            terminal_exit: trace.terminal_exit,
         };
         assert_eq!(
-            ken_host::encode_linked_effect_trace_v1(&trace).unwrap(),
-            ken_host::encode_linked_effect_trace_v1(&semantic_trace).unwrap(),
+            ken_host::encode_linked_effect_trace(&trace).unwrap(),
+            ken_host::encode_linked_effect_trace(&semantic_trace).unwrap(),
             "shared semantic and linked-native wire observations are byte-identical"
         );
         assert_eq!(
@@ -2790,9 +2839,23 @@ mod tests {
             trace
                 .effect_trace
                 .iter()
-                .map(|event| event.resource)
+                .map(|event| event.resource_bindings.clone())
                 .collect::<Vec<_>>(),
-            vec![Some(ken_host::ResourceTraceIdentityV1(1)); 4]
+            vec![
+                vec![(
+                    ken_host::ResourceBindingRole::Target,
+                    ken_host::ResourceTraceIdentityV1(1),
+                )],
+                vec![(
+                    ken_host::ResourceBindingRole::Target,
+                    ken_host::ResourceTraceIdentityV1(1),
+                )],
+                vec![(
+                    ken_host::ResourceBindingRole::Target,
+                    ken_host::ResourceTraceIdentityV1(1),
+                )],
+                Vec::new(),
+            ]
         );
         assert!(matches!(
             trace.effect_trace[3].outcome,

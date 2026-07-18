@@ -13,7 +13,7 @@ use std::io::{self, Write};
 use crate::{
     dispatch_host_op_v1, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1, Cap,
     CapabilityGrantV1, CapabilityTableV1, CapabilityTokenV1, ConsoleStreamV1, CreatePolicyV1,
-    EffectEventV1, FileErrorCauseV1, FsHandle, FsRootSpec, HostEffectBackendV1, HostOpV1,
+    EffectEvent, FileErrorCauseV1, FsHandle, FsRootSpec, HostEffectBackendV1, HostOpV1,
     IoErrorIdentityV1, OpenRequest, PathComponent, RootPath, RootedHandle, SymlinkPolicy,
     AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
 };
@@ -294,8 +294,7 @@ struct ProcessContext {
     capabilities: CapabilityTableV1,
     resources: crate::ResourceTableV1,
     response_arena: Vec<Box<[u8]>>,
-    effect_trace: Vec<EffectEventV1>,
-    effect_trace_v2: Vec<crate::EffectEventV2>,
+    effect_trace: Vec<EffectEvent>,
     observation: Option<std::fs::File>,
     plan_hash: u64,
     capability: CapabilityTokenV1,
@@ -630,7 +629,7 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     let effective_uid = observe_effective_uid_v1();
     let posture = match establish_process_posture_v1(effective_uid, allow_root_execution != 0) {
         Err(PostureErrorV1::RootExecutionDenied) => {
-            if write_startup_terminal_observation_v1(
+            if write_startup_terminal_observation(
                 observation_path,
                 plan_hash,
                 root_denied_exit_status,
@@ -655,7 +654,7 @@ pub unsafe extern "C" fn ken_host_invocation_v1_init(
     ) {
         Ok(context) => context,
         Err(ProcessContextInitError::Home(failure)) => {
-            if write_startup_terminal_observation_v1(
+            if write_startup_terminal_observation(
                 observation_path,
                 plan_hash,
                 root_denied_exit_status,
@@ -762,7 +761,6 @@ fn initialize_process_context_with_lookup(
         resources: crate::ResourceTableV1::default(),
         response_arena: Vec::new(),
         effect_trace: Vec::new(),
-        effect_trace_v2: Vec::new(),
         observation,
         plan_hash,
         capability,
@@ -775,7 +773,7 @@ enum ProcessContextInitError {
     Home(crate::HomeRootResolutionFailureV1),
 }
 
-fn write_startup_terminal_observation_v1(
+fn write_startup_terminal_observation(
     observation_path: &[u8],
     plan_hash: u64,
     exit_status: i64,
@@ -799,13 +797,15 @@ fn write_startup_terminal_observation_v1(
         .truncate(true)
         .write(true)
         .open(path)?;
-    let bytes = crate::encode_linked_effect_trace_v1(&crate::LinkedEffectTraceV1 {
+    let terminal_exit = crate::terminal_exit_class(exit_status, Some(&terminal_error));
+    let bytes = crate::encode_linked_effect_trace(&crate::LinkedEffectTrace {
         plan_hash,
         target_abi_hash: crate::TARGET_ABI_MANIFEST_HASH,
         host_effect_abi_hash: crate::HOST_EFFECT_ABI_V1_HASH,
         terminal_value: exit_status,
         terminal_error: Some(terminal_error),
         effect_trace: Vec::new(),
+        terminal_exit,
     })
     .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
     sink.write_all(&bytes)?;
@@ -833,7 +833,7 @@ pub unsafe extern "C" fn ken_host_invocation_v1_finish(
     let mut context = unsafe { Box::from_raw(context.cast::<ProcessContext>()) };
     context.finalize_resources();
     if let Some(mut sink) = context.observation.take() {
-        if write_observation_v1(&mut sink, &context, terminal_value).is_err() {
+        if write_observation(&mut sink, &context, terminal_value).is_err() {
             return -1;
         }
     }
@@ -877,52 +877,35 @@ impl ProcessContext {
                     }),
                 ),
             };
-            self.effect_trace.push(EffectEventV1 {
-                sequence: self.effect_trace.len() as u64,
-                operation: HostOpV1::ResourceRelease,
-                capability: None,
-                resource: Some(settlement.identity),
-                request: CanonicalRequestV1::ResourceRelease,
-                outcome,
-            });
             let reply = crate::HostDispatchReplyV1 {
                 capability_identity: None,
-                resource_identity: Some(settlement.identity),
                 resource_token: None,
-                resource_bindings: vec![(
-                    crate::ResourceBindingRoleV2::Target,
-                    settlement.identity,
-                )],
-                outcome: self
-                    .effect_trace
-                    .last()
-                    .expect("settlement event just recorded")
-                    .outcome
-                    .clone(),
+                resource_bindings: vec![(crate::ResourceBindingRole::Target, settlement.identity)],
+                outcome,
             };
-            self.effect_trace_v2
-                .push(crate::effect_event_v2_from_dispatch(
-                    self.effect_trace_v2.len() as u64,
-                    HostOpV1::ResourceRelease,
-                    CanonicalRequestV1::ResourceRelease,
-                    &reply,
-                ));
+            self.effect_trace.push(crate::effect_event_from_dispatch(
+                self.effect_trace.len() as u64,
+                HostOpV1::ResourceRelease,
+                CanonicalRequestV1::ResourceRelease,
+                &reply,
+            ));
         }
     }
 }
 
-fn write_observation_v1(
+fn write_observation(
     sink: &mut impl Write,
     context: &ProcessContext,
     terminal_value: i64,
 ) -> io::Result<()> {
-    let bytes = crate::encode_linked_effect_trace_v1(&crate::LinkedEffectTraceV1 {
+    let bytes = crate::encode_linked_effect_trace(&crate::LinkedEffectTrace {
         plan_hash: context.plan_hash,
         target_abi_hash: crate::TARGET_ABI_MANIFEST_HASH,
         host_effect_abi_hash: crate::HOST_EFFECT_ABI_V1_HASH,
         terminal_value,
         terminal_error: None,
         effect_trace: context.effect_trace.clone(),
+        terminal_exit: crate::terminal_exit_class(terminal_value, None),
     })
     .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
     sink.write_all(&bytes)?;
@@ -1418,22 +1401,12 @@ pub unsafe extern "C" fn ken_host_dispatch_v1(
     let Ok(result) = result else {
         return -3;
     };
-    context
-        .effect_trace_v2
-        .push(crate::effect_event_v2_from_dispatch(
-            context.effect_trace_v2.len() as u64,
-            op,
-            request.clone(),
-            &result,
-        ));
-    context.effect_trace.push(EffectEventV1 {
-        sequence: context.effect_trace.len() as u64,
-        operation: op,
-        capability: result.capability_identity.clone(),
-        resource: result.resource_identity,
+    context.effect_trace.push(crate::effect_event_from_dispatch(
+        context.effect_trace.len() as u64,
+        op,
         request,
-        outcome: result.outcome.clone(),
-    });
+        &result,
+    ));
     // SAFETY: generated code supplies an aligned writable HostReplyV1 slot.
     let token = result.resource_token;
     set_reply(
@@ -1519,7 +1492,6 @@ mod tests {
             resources: crate::ResourceTableV1::default(),
             response_arena: Vec::new(),
             effect_trace: Vec::new(),
-            effect_trace_v2: Vec::new(),
             observation: None,
             plan_hash: 7,
             capability: CapabilityTokenV1::from_erased_identity(0),
@@ -1535,14 +1507,17 @@ mod tests {
         });
 
         let mut encoded = Vec::new();
-        write_observation_v1(&mut encoded, &context, -4).unwrap();
-        let trace = crate::decode_linked_effect_trace_v1(&encoded).unwrap();
+        write_observation(&mut encoded, &context, -4).unwrap();
+        let trace = crate::decode_linked_effect_trace(&encoded).unwrap();
         assert_eq!(trace.terminal_value, -4, "controlled trap stays primary");
         assert_eq!(trace.terminal_error, None);
         assert_eq!(close_calls.get(), 1);
         assert_eq!(trace.effect_trace.len(), 1);
         assert_eq!(trace.effect_trace[0].operation, HostOpV1::ResourceRelease);
-        assert_eq!(trace.effect_trace[0].resource, Some(identity));
+        assert_eq!(
+            trace.effect_trace[0].resource_bindings,
+            vec![(crate::ResourceBindingRole::Target, identity)]
+        );
         assert!(matches!(
             trace.effect_trace[0].outcome,
             CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Resource(
@@ -2125,14 +2100,14 @@ mod tests {
 
         let path =
             std::env::temp_dir().join(format!("ken-px14-root-denied-{}", std::process::id()));
-        write_startup_terminal_observation_v1(
+        write_startup_terminal_observation(
             path.as_os_str().as_bytes(),
             17,
             1,
             crate::TerminalErrorV1::RootExecutionDenied,
         )
         .unwrap();
-        let trace = crate::decode_linked_effect_trace_v1(&std::fs::read(&path).unwrap()).unwrap();
+        let trace = crate::decode_linked_effect_trace(&std::fs::read(&path).unwrap()).unwrap();
         let _ = std::fs::remove_file(path);
         assert_eq!(trace.plan_hash, 17);
         assert_eq!(trace.terminal_value, 1);
@@ -2195,15 +2170,14 @@ mod tests {
                 "ken-px16-home-failure-{}-{index}",
                 std::process::id()
             ));
-            write_startup_terminal_observation_v1(
+            write_startup_terminal_observation(
                 path.as_os_str().as_bytes(),
                 31,
                 1,
                 crate::TerminalErrorV1::HomeRootResolutionFailed(failure.clone()),
             )
             .unwrap();
-            let trace =
-                crate::decode_linked_effect_trace_v1(&std::fs::read(&path).unwrap()).unwrap();
+            let trace = crate::decode_linked_effect_trace(&std::fs::read(&path).unwrap()).unwrap();
             std::fs::remove_file(path).unwrap();
             assert_eq!(trace.plan_hash, 31);
             assert_eq!(trace.terminal_value, 1);
@@ -2317,8 +2291,7 @@ mod tests {
         assert_eq!(denied.capability, 0);
         assert_eq!(denied.plan_hash, 0);
         let trace =
-            crate::decode_linked_effect_trace_v1(&std::fs::read(&observation_path).unwrap())
-                .unwrap();
+            crate::decode_linked_effect_trace(&std::fs::read(&observation_path).unwrap()).unwrap();
         let _ = std::fs::remove_file(observation_path);
         assert_eq!(
             trace.terminal_error,
@@ -2531,21 +2504,14 @@ mod tests {
 
         let context = unsafe { &*initialized.context.cast::<ProcessContext>() };
         assert_eq!(context.effect_trace.len(), 4);
-        assert_eq!(context.effect_trace_v2.len(), 4);
-        let identities = context
-            .effect_trace
-            .iter()
-            .filter_map(|event| event.resource)
-            .collect::<Vec<_>>();
-        assert_eq!(identities, vec![crate::ResourceTraceIdentityV1(1); 4]);
-        assert!(context.effect_trace_v2[..3].iter().all(|event| {
+        assert!(context.effect_trace[..3].iter().all(|event| {
             event.resource_bindings
                 == vec![(
-                    crate::ResourceBindingRoleV2::Target,
+                    crate::ResourceBindingRole::Target,
                     crate::ResourceTraceIdentityV1(1),
                 )]
         }));
-        assert!(context.effect_trace_v2[3].resource_bindings.is_empty());
+        assert!(context.effect_trace[3].resource_bindings.is_empty());
         assert!(matches!(
             context.effect_trace[3].outcome,
             CanonicalOutcomeV1::Error(crate::SemanticErrorV1::Resource(
