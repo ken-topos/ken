@@ -2403,11 +2403,49 @@ impl<'a> Lowering<'a> {
                         default,
                         outer_env,
                     } => {
+                        let mut layers = vec![(cases, default, outer_env)];
+                        let mut base = *recursive;
+                        while let Lowered::ComputationalRecursorClosure {
+                            recursive,
+                            cases,
+                            default,
+                            outer_env,
+                        } = base
+                        {
+                            layers.push((cases, default, outer_env));
+                            base = *recursive;
+                        }
+                        let mut composed = layers
+                            .iter()
+                            .map(|(cases, default, outer_env)| {
+                                EliminatorFrame::Computational(ComputationalEliminatorFrame {
+                                    cases,
+                                    default,
+                                    env: outer_env,
+                                    retained_scrutinee_index: None,
+                                    deferred_constructor_case: None,
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        composed.extend_from_slice(eliminators);
+                        if let Lowered::BoundedNat(predecessor) = base {
+                            if !args.is_empty() {
+                                return Err(unsupported(
+                                    "BoundedNat",
+                                    "structural Nat recursive hypothesis takes no arguments",
+                                ));
+                            }
+                            return self.lower_bounded_nat_computational(
+                                builder,
+                                predecessor,
+                                &composed,
+                            );
+                        }
                         let Lowered::Closure {
                             captures,
                             params,
                             body,
-                        } = *recursive
+                        } = base
                         else {
                             return Err(unsupported(
                                 "ComputationalMatch",
@@ -2430,17 +2468,6 @@ impl<'a> Lowering<'a> {
                             .collect::<Result<Vec<_>, _>>()?;
                         call_env.extend(captures);
                         call_env.extend_from_slice(producer_env);
-                        let mut composed = Vec::with_capacity(eliminators.len() + 1);
-                        composed.push(EliminatorFrame::Computational(
-                            ComputationalEliminatorFrame {
-                                cases: &cases,
-                                default: &default,
-                                env: &outer_env,
-                                retained_scrutinee_index: None,
-                                deferred_constructor_case: None,
-                            },
-                        ));
-                        composed.extend_from_slice(eliminators);
                         self.lower_computational_producer_expr(builder, &body, &call_env, &composed)
                     }
                     _ => Err(unsupported(
@@ -3602,21 +3629,58 @@ impl<'a> Lowering<'a> {
                         default,
                         outer_env,
                     } => {
-                        let mut call_env = args
+                        let mut layers = vec![(cases, default, outer_env)];
+                        let mut base = *recursive;
+                        while let Lowered::ComputationalRecursorClosure {
+                            recursive,
+                            cases,
+                            default,
+                            outer_env,
+                        } = base
+                        {
+                            layers.push((cases, default, outer_env));
+                            base = *recursive;
+                        }
+                        let frames = layers
                             .iter()
-                            .map(|arg| self.lower_expr(builder, arg, env))
-                            .collect::<Result<Vec<_>, _>>()?;
+                            .map(|(cases, default, outer_env)| {
+                                EliminatorFrame::Computational(ComputationalEliminatorFrame {
+                                    cases,
+                                    default,
+                                    env: outer_env,
+                                    retained_scrutinee_index: None,
+                                    deferred_constructor_case: None,
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        if let Lowered::BoundedNat(predecessor) = base {
+                            if !args.is_empty() {
+                                return Err(unsupported(
+                                    "BoundedNat",
+                                    "structural Nat recursive hypothesis takes no arguments",
+                                ));
+                            }
+                            return self.lower_bounded_nat_computational(
+                                builder,
+                                predecessor,
+                                &frames,
+                            );
+                        }
                         let Lowered::Closure {
                             captures,
                             params,
                             body,
-                        } = *recursive
+                        } = base
                         else {
                             return Err(unsupported(
                                 "ComputationalMatch",
                                 "recursive constructor field is not a closure",
                             ));
                         };
+                        let mut call_env = args
+                            .iter()
+                            .map(|arg| self.lower_expr(builder, arg, env))
+                            .collect::<Result<Vec<_>, _>>()?;
                         if params.len() != call_env.len() {
                             return Err(unsupported(
                                 "ComputationalMatch",
@@ -3629,13 +3693,11 @@ impl<'a> Lowering<'a> {
                         }
                         call_env.extend(captures);
                         call_env.extend_from_slice(env);
-                        self.lower_computational_match_expr(
+                        self.lower_computational_producer_expr(
                             builder,
                             &body,
-                            &cases,
-                            &default,
                             &call_env,
-                            &outer_env,
+                            &frames,
                         )
                     }
                     _ => Err(unsupported("Call", "callee is not a closure")),
