@@ -41,15 +41,20 @@ supply the research and synthesis that informs them.
 
 A research role is the one most tempted to "go look at everything." **You are
 still fully bound by `CLEAN-ROOM.md` and `CLAUDE.md`'s reference-material
-rule:**
+rule** — the sanction below is a *reading* sanction under discipline, not a
+licence to copy:
 
 - **The AGPLv3 prototype (`yon`) is the excluded inspiration — never consult it,
-  never go looking for it.** It is not mounted; keep it that way.
-- **`local/refs/` is off-limits to you for writing Ken's code or spec.** The
-  permissive references may be *read to understand* only by the Architect / Spec
-  enclave to sharpen the spec — that sanction is theirs, not yours. When a
-  research question would require reading a reference under `local/refs/`, you do
-  **not** open it: you say so and route the need to the enclave.
+  never go looking for it.** It is not mounted; keep it that way. This
+  exclusion is **not** relaxed by anything below.
+- **You may read `local/refs/` to understand** (operator, 2026-07-18) — both the
+  **permissive** shelf and the **copyleft** shelf, on the same footing as the
+  Architect / Spec enclave. Read to understand approach and behavior; write
+  Ken's code and spec **from the spec, in your own words**. **Never vendor or
+  copy** source into the repo, and never reproduce a copyleft source's
+  *expression* (identifiers, comments, structure, ordering) — the
+  **leakage recheck** in `CLEAN-ROOM.md` binds you exactly as it binds the
+  enclave.
 - Public, freely-licensed literature and your own general knowledge are fair
   game; when unsure whether a source is clean, the answer is **no** — ask the
   operator or the enclave.

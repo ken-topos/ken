@@ -47,19 +47,22 @@ never in this repo). They fall in two tiers:
   operator** before consulting it.
 - **Permissive references** (Lean, Agda, smalltt/elaboration-zoo, Z3, cvc5, F\*,
   Interaction Trees, Koka, LIO, sigstore/in-toto, Quint/Apalache, QuickChick,
-  Unison, …) — Apache-2.0 / BSD / MIT-style. The Architect / Spec enclave may
-  **read them to understand** and to resolve `(oracle)`-tagged spec details;
-  Ken's code is then written **from the spec**, in Ken's own words. Do **not**
-  vendor their source into the repo (keeps Ken uniformly MIT). Implementer
-  agents build from `/spec`, never from `local/refs/`. The full curated shelf
-  and its spec-section mapping live in `local/refs/README.md`.
+  Unison, …) — Apache-2.0 / BSD / MIT-style. The Architect / Spec enclave **and
+  the research agent** may **read them to understand** and to resolve
+  `(oracle)`-tagged spec details; Ken's code is then written **from the spec**,
+  in Ken's own words. Do **not** vendor their source into the repo (keeps Ken
+  uniformly MIT). Implementer agents build from `/spec`, never from
+  `local/refs/`. The full curated shelf and its spec-section mapping live in
+  `local/refs/README.md`.
 - **Copyleft references** (GPL / AGPL / CeCILL — e.g. SMTCoq, Spot, Jif) —
-  permitted for the Spec enclave to **read for *approach and behavior* only**,
-  under a stricter discipline: describe the *what* (the algorithm's behavior,
-  the design idea) in Ken's own words, never the *how* (the source's structure,
-  identifiers, comments, ordering). **Never vendored, never read by
-  implementers.** Because a copyleft transcription into the spec would taint the
-  whole MIT channel, these are subject to the **leakage recheck** below.
+  permitted for the Spec enclave **and the research agent** to **read for
+  *approach and behavior* only**, under a stricter discipline: describe the
+  *what* (the algorithm's behavior, the design idea) in Ken's own words, never
+  the *how* (the source's structure, identifiers, comments, ordering). **Never
+  vendored, never read by implementers.** Because a copyleft transcription into
+  the spec would taint the whole MIT channel, these are subject to the **leakage
+  recheck** below — which binds the research agent exactly as it binds the
+  enclave.
 - **★ FIRST-PARTY SIBLINGS — `ward/` and `keep/` — are NOT references at all,
   and are freely readable by every role.** `local/refs/ward` (and its sibling
   `keep`) are **Ken's own projects**: same operator, same author, **MIT**, part of
