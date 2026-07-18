@@ -2557,12 +2557,7 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     } => {
-                        if args.len() == 1
-                            && requires_value_aware_heterogeneous_deforestation(
-                                &args[0],
-                                producer_env,
-                            )
-                        {
+                        if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
                             if let Some((cases, default)) =
                                 ordinary_match_continuation(&params, &body)
                             {
@@ -3784,7 +3779,7 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
             } => {
-                if requires_heterogeneous_deforestation(scrutinee)
+                if requires_value_aware_heterogeneous_deforestation(scrutinee, env)
                     || self.declaration_call_produces_deforestable_aggregate(scrutinee)
                 {
                     return self.lower_computational_producer_expr(
@@ -4038,9 +4033,7 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     } => {
-                        if args.len() == 1
-                            && requires_value_aware_heterogeneous_deforestation(&args[0], env)
-                        {
+                        if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
                             if let Some((cases, default)) =
                                 ordinary_match_continuation(&params, &body)
                             {
