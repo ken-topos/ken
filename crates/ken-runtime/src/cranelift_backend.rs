@@ -2336,6 +2336,7 @@ enum SourceContinuation<'a> {
     },
     ApplyRecursorLayers {
         remaining: Vec<ComputationalRecursorLayer>,
+        outer: ActiveContinuationFrame<'a>,
         next: Box<SourceContinuation<'a>>,
     },
     IfScrutinee {
@@ -4465,9 +4466,14 @@ impl<'a> Lowering<'a> {
                 env: env.clone(),
                 next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
             },
-            SourceContinuation::ApplyRecursorLayers { remaining, next } => {
+            SourceContinuation::ApplyRecursorLayers {
+                remaining,
+                outer,
+                next,
+            } => {
                 SourceContinuation::ApplyRecursorLayers {
                     remaining: remaining.clone(),
+                    outer: *outer,
                     next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
                 }
             }
@@ -4782,8 +4788,13 @@ impl<'a> Lowering<'a> {
                             }
                         }
                     }
-                    SourceContinuation::ApplyRecursorLayers { remaining, next } => {
+                    SourceContinuation::ApplyRecursorLayers {
+                        remaining,
+                        outer,
+                        next,
+                    } => {
                         let mut frames = recursor_eliminator_frames(&remaining);
+                        frames.push(EliminatorFrame::Active(outer));
                         frames.push(EliminatorFrame::InvocationReturn);
                         SourceMachineState::Value {
                             value: self.lower_computational_match_value_composed(
@@ -5272,6 +5283,12 @@ impl<'a> Lowering<'a> {
                         "recursive invocation source context has the wrong outer cursor",
                     ));
                 }
+                let outer = Self::source_terminal_active(&continuation).ok_or_else(|| {
+                    unsupported(
+                        "ComputationalRecursor",
+                        "recursive invocation source context has no live outer frame",
+                    )
+                })?;
                 let armed = ArmedInvocation {
                     suspended: continuation,
                     expected_outer,
@@ -5293,6 +5310,7 @@ impl<'a> Lowering<'a> {
                         ));
                     }
                     let mut frames = recursor_eliminator_frames(&invocation.owned_layers);
+                    frames.push(EliminatorFrame::Active(outer));
                     frames.push(EliminatorFrame::InvocationReturn);
                     let returned = self.lower_bounded_nat_computational(
                         builder,
@@ -5334,6 +5352,7 @@ impl<'a> Lowering<'a> {
                         env: call_env,
                         continuation: SourceContinuation::ApplyRecursorLayers {
                             remaining: invocation.owned_layers,
+                            outer,
                             next: Box::new(armed.suspended),
                         },
                     });
