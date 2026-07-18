@@ -1059,6 +1059,57 @@ Research is not a standing team. When the federation needs external knowledge,
 the operator / Spec / Architect. Treat it as a bounded, on-demand activity, not
 a role.
 
+### 5a. Hard-stop-chain escalation — call in research, hold the Architect
+
+A design ruling that bounces between the Architect and an implementer as a chain
+of **hard-stops** (implementer builds the ruling → hits a new structural wall →
+hard-stops with evidence → Architect rules again) can run deep. One or two
+hard-stops routinely self-resolve; a **third** is the signal that the pair may
+not have a clear path forward, and an independent prior-art perspective is worth
+more than another unaided round (operator, 2026-07-18, after PX8-H ran to seven).
+
+**Trigger — mechanical, not a judgment call.** On the **3rd hard-stop** in a
+single mechanism chain on one WP — and again at every **3rd** after (6th, 9th,
+…) — escalate. **Never earlier than the 3rd** (1–2 stops commonly resolve on
+their own). A chain that is visibly *progressing* (checkpoints advancing, the
+failure moving strictly deeper) **still triggers** — "it's making progress" is
+not a reason to withhold the check, exactly as it is not a reason to skip a
+compaction. Count **consecutive hard-stops on the same design question**, not
+three unrelated stalls.
+
+**On the trigger, in this order:**
+
+1. **Hold the Architect — fully.** Post an in-thread mention: hold the next
+   ruling on `<WP>`; a research prior-art advisory is incoming and will mention
+   you; resume on it. This is **not** timeboxed, and the Architect does **not**
+   keep working in parallel — its tokens are better spent *with* the advisory's
+   context than on another unaided pass (operator, 2026-07-18). `capture-pane`
+   to confirm it is not mid-finalizing a ruling; if it already engaged, the hold
+   still defers the ruling until the advisory lands.
+2. **Kick research — transport/framing ONLY.** Post an in-thread mention to the
+   research agent carrying only: the WP name, the `thread_id`, the hard-stop
+   `evt_…`s, the latest clean checkpoint SHA, and **the one question the chain
+   keeps circling**. Ask it to review the thread + the work done and search
+   prior art — `local/refs/` (it has both-tier read access) **and** the
+   internet. **Nothing more.** Do **not** add your own design opinion: the
+   instant the Steward frames the mechanism, research (or you) becomes the
+   de-facto design authority. Research is advisory; the Architect owns the
+   ruling.
+3. **Research posts its advisory back in the same thread**, mentioning the
+   Architect + you (see the research playbook). That mention is the Architect's
+   **resume signal** — it picks the ruling back up with the advisory in hand.
+4. **Re-trigger only at the 6th / 9th**, never the 4th/5th. At a re-trigger,
+   *refine* research's search focus given the intervening advisory + the new
+   hard-stops (what to look for next), so each pass adds perspective rather than
+   repeating the last.
+
+You never adjudicate the mechanism (the Architect's lane) and research never
+rules (advisory only); your part is the transport + the hold. Record the
+escalation in the decision log. Sibling of the always-compact-at-the-seam
+discipline: a **mechanical count** defeats the "one more round will crack it"
+rationalization that let PX8-H reach seven before an outside perspective was
+brought in.
+
 ## 6. Cadence
 
 Run a periodic synthesis pass (not a busy poll): collect new retros, apply the

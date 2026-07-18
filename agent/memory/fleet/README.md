@@ -35,6 +35,7 @@ some roles need belongs in a narrower scope.
 | [grep-rust-prelude-emission-for-landedness](grep-rust-prelude-emission-for-landedness.md) | A landedness grep must also check the Rust-emitted prelude, not just `.ken` sources |
 | [grep-the-producer-not-the-cited-proxy](grep-the-producer-not-the-cited-proxy.md) | Verify against the real producer, not a cited proxy |
 | [handoff-scope-count-must-match-full-thread](handoff-scope-count-must-match-full-thread.md) | Verify a handoff's scope count against the full thread |
+| [hard-stop-chain-escalate-to-research-advisory](hard-stop-chain-escalate-to-research-advisory.md) | On the 3rd hard-stop of a design chain (then every 3rd), hold the Architect fully and call in research for an in-thread prior-art advisory |
 | [held-branch-scaffolding-is-load-bearing-evidence](held-branch-scaffolding-is-load-bearing-evidence.md) | A held branch's scaffolding is load-bearing evidence |
 | [live-review-candidate-goes-stale-reanchor-sha](live-review-candidate-goes-stale-reanchor-sha.md) | A live review candidate can go stale; re-anchor the SHA |
 | [making-a-concrete-path-generic-enumerate-every-op-against-the-trait](making-a-concrete-path-generic-enumerate-every-op-against-the-trait.md) | Making a concrete path generic: "is the trait public?" is the wrong question — enumerate every op the path calls against what the trait declares; the difference is the blocker |
