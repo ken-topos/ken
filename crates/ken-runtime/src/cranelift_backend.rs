@@ -2348,21 +2348,25 @@ struct ComputationalRecursorLayer {
 
 #[derive(Clone)]
 struct RecursorInvocationSegment {
-    owned_layers: Vec<ComputationalRecursorLayer>,
+    selection: ComputationalRecursorLayer,
+    unwind: RecursorUnwindStack,
     resume_cursor: ContinuationCursorId,
+}
+
+#[derive(Clone)]
+struct RecursorUnwindStack {
+    later_wrappers_in_construction_order: Vec<ComputationalRecursorLayer>,
 }
 
 impl RecursorInvocationSegment {
     fn new(
-        owned_layers: Vec<ComputationalRecursorLayer>,
+        selection: ComputationalRecursorLayer,
+        unwind: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
     ) -> Self {
-        assert!(
-            !owned_layers.is_empty(),
-            "recursor invocation segment owns at least one layer"
-        );
         Self {
-            owned_layers,
+            selection,
+            unwind,
             resume_cursor,
         }
     }
@@ -2384,9 +2388,15 @@ fn decompose_computational_recursor(
     }
 }
 
-fn recursor_eliminator_frames(layers: &[ComputationalRecursorLayer]) -> Vec<EliminatorFrame<'_>> {
-    layers
-        .iter()
+fn recursor_eliminator_frames(segment: &RecursorInvocationSegment) -> Vec<EliminatorFrame<'_>> {
+    std::iter::once(&segment.selection)
+        .chain(
+            segment
+                .unwind
+                .later_wrappers_in_construction_order
+                .iter()
+                .rev(),
+        )
         .map(|layer| {
             EliminatorFrame::Computational(ComputationalEliminatorFrame {
                 cases: &layer.cases,
@@ -2456,8 +2466,12 @@ enum SourceContinuation<'a> {
         env: Vec<Lowered>,
         next: Box<SourceContinuation<'a>>,
     },
-    ApplyRecursorLayers {
-        remaining: Vec<ComputationalRecursorLayer>,
+    ApplyRecursorSelection {
+        layer: ComputationalRecursorLayer,
+        next: Box<SourceContinuation<'a>>,
+    },
+    UnwindRecursorSegment {
+        stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
         next: Box<SourceContinuation<'a>>,
     },
@@ -2546,8 +2560,12 @@ enum SourcePrefixTemplate {
         env: Vec<Lowered>,
         next: Box<SourcePrefixTemplate>,
     },
-    ApplyRecursorLayers {
-        remaining: Vec<ComputationalRecursorLayer>,
+    ApplyRecursorSelection {
+        layer: ComputationalRecursorLayer,
+        next: Box<SourcePrefixTemplate>,
+    },
+    UnwindRecursorSegment {
+        stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
         next: Box<SourcePrefixTemplate>,
     },
@@ -3074,7 +3092,13 @@ impl<'a> Lowering<'a> {
         )>,
     ) -> Result<Lowered, CraneliftBackendError> {
         let (residual, payload) = decompose_computational_recursor(recursive);
-        let mut owned_layers = if let Some((_, invocation)) = payload {
+        let current_layer = ComputationalRecursorLayer {
+            cases,
+            default,
+            outer_env,
+            provenance,
+        };
+        let (selection, unwind) = if let Some((_, invocation)) = payload {
             let splice_caller = splice_caller.ok_or_else(|| {
                 unsupported(
                     "ComputationalRecursor",
@@ -3092,20 +3116,23 @@ impl<'a> Lowering<'a> {
                     "recursive payload resume cursor is not active",
                 ));
             }
-            invocation.owned_layers
+            let mut unwind = invocation.unwind;
+            unwind
+                .later_wrappers_in_construction_order
+                .push(current_layer);
+            (invocation.selection, unwind)
         } else {
-            Vec::new()
+            (
+                current_layer,
+                RecursorUnwindStack {
+                    later_wrappers_in_construction_order: Vec::new(),
+                },
+            )
         };
-        owned_layers.push(ComputationalRecursorLayer {
-            cases,
-            default,
-            outer_env,
-            provenance,
-        });
         Ok(Lowered::ComputationalRecursorClosure {
             residual: Box::new(residual),
             activation,
-            invocation: RecursorInvocationSegment::new(owned_layers, resume_cursor),
+            invocation: RecursorInvocationSegment::new(selection, unwind, resume_cursor),
         })
     }
 
@@ -3288,8 +3315,7 @@ impl<'a> Lowering<'a> {
                                                 "recursive invocation cursor is not active",
                                             )
                                         })?;
-                                    let frames =
-                                        recursor_eliminator_frames(&invocation.owned_layers);
+                                    let frames = recursor_eliminator_frames(&invocation);
                                     let mut composed = Vec::with_capacity(frames.len() + 2);
                                     composed.push(EliminatorFrame::PendingLet(
                                         PendingLetContinuationFrame {
@@ -3410,7 +3436,7 @@ impl<'a> Lowering<'a> {
                                 "recursive producer invocation cursor is not active",
                             )
                         })?;
-                        let mut composed = recursor_eliminator_frames(&invocation.owned_layers);
+                        let mut composed = recursor_eliminator_frames(&invocation);
                         composed.push(EliminatorFrame::InvocationReturn);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
@@ -4957,7 +4983,8 @@ impl<'a> Lowering<'a> {
                 | SourceContinuationTerminal::ResumeOuter { .. },
             ) => None,
             SourceContinuation::LetBody { next, .. }
-            | SourceContinuation::ApplyRecursorLayers { next, .. }
+            | SourceContinuation::ApplyRecursorSelection { next, .. }
+            | SourceContinuation::UnwindRecursorSegment { next, .. }
             | SourceContinuation::IfScrutinee { next, .. }
             | SourceContinuation::ConstructArgument { next, .. }
             | SourceContinuation::MatchScrutinee { next, .. }
@@ -4972,7 +4999,8 @@ impl<'a> Lowering<'a> {
         match continuation {
             terminal @ SourceContinuation::Terminal(_) => terminal,
             SourceContinuation::LetBody { next, .. }
-            | SourceContinuation::ApplyRecursorLayers { next, .. }
+            | SourceContinuation::ApplyRecursorSelection { next, .. }
+            | SourceContinuation::UnwindRecursorSegment { next, .. }
             | SourceContinuation::IfScrutinee { next, .. }
             | SourceContinuation::ConstructArgument { next, .. }
             | SourceContinuation::MatchScrutinee { next, .. }
@@ -4983,31 +5011,41 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn splice_recursor_after_caller_let<'b>(
+    fn replace_source_terminal_with_unwind<'b>(
         continuation: SourceContinuation<'b>,
-        remaining: Vec<ComputationalRecursorLayer>,
+        stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
         Ok(match continuation {
             SourceContinuation::LetBody { body, env, next } => SourceContinuation::LetBody {
                 body,
                 env,
-                next: Box::new(SourceContinuation::ApplyRecursorLayers {
-                    remaining,
+                next: Box::new(Self::replace_source_terminal_with_unwind(
+                    *next,
+                    stack,
                     resume_cursor,
-                    next,
-                }),
+                )?),
             },
-            SourceContinuation::ApplyRecursorLayers {
-                remaining: outer,
+            SourceContinuation::ApplyRecursorSelection { layer, next } => {
+                SourceContinuation::ApplyRecursorSelection {
+                    layer,
+                    next: Box::new(Self::replace_source_terminal_with_unwind(
+                        *next,
+                        stack,
+                        resume_cursor,
+                    )?),
+                }
+            }
+            SourceContinuation::UnwindRecursorSegment {
+                stack: outer_stack,
                 resume_cursor: outer_cursor,
                 next,
-            } => SourceContinuation::ApplyRecursorLayers {
-                remaining: outer,
+            } => SourceContinuation::UnwindRecursorSegment {
+                stack: outer_stack,
                 resume_cursor: outer_cursor,
-                next: Box::new(Self::splice_recursor_after_caller_let(
+                next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
-                    remaining,
+                    stack,
                     resume_cursor,
                 )?),
             },
@@ -5020,9 +5058,9 @@ impl<'a> Lowering<'a> {
                 then_expr,
                 else_expr,
                 env,
-                next: Box::new(Self::splice_recursor_after_caller_let(
+                next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
-                    remaining,
+                    stack,
                     resume_cursor,
                 )?),
             },
@@ -5037,9 +5075,9 @@ impl<'a> Lowering<'a> {
                 remaining: arguments,
                 lowered,
                 env,
-                next: Box::new(Self::splice_recursor_after_caller_let(
+                next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
-                    remaining,
+                    stack,
                     resume_cursor,
                 )?),
             },
@@ -5052,9 +5090,9 @@ impl<'a> Lowering<'a> {
                 cases,
                 default,
                 env,
-                next: Box::new(Self::splice_recursor_after_caller_let(
+                next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
-                    remaining,
+                    stack,
                     resume_cursor,
                 )?),
             },
@@ -5069,18 +5107,18 @@ impl<'a> Lowering<'a> {
                 default,
                 env,
                 provenance,
-                next: Box::new(Self::splice_recursor_after_caller_let(
+                next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
-                    remaining,
+                    stack,
                     resume_cursor,
                 )?),
             },
             SourceContinuation::ProjectRecord { field, next } => {
                 SourceContinuation::ProjectRecord {
                     field,
-                    next: Box::new(Self::splice_recursor_after_caller_let(
+                    next: Box::new(Self::replace_source_terminal_with_unwind(
                         *next,
-                        remaining,
+                        stack,
                         resume_cursor,
                     )?),
                 }
@@ -5088,9 +5126,9 @@ impl<'a> Lowering<'a> {
             SourceContinuation::CallCallee { args, env, next } => SourceContinuation::CallCallee {
                 args,
                 env,
-                next: Box::new(Self::splice_recursor_after_caller_let(
+                next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
-                    remaining,
+                    stack,
                     resume_cursor,
                 )?),
             },
@@ -5105,37 +5143,33 @@ impl<'a> Lowering<'a> {
                 remaining: arguments,
                 lowered,
                 env,
-                next: Box::new(Self::splice_recursor_after_caller_let(
+                next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
-                    remaining,
+                    stack,
                     resume_cursor,
                 )?),
             },
-            terminal @ SourceContinuation::Terminal(_) => SourceContinuation::ApplyRecursorLayers {
-                remaining,
-                resume_cursor,
-                next: Box::new(terminal),
-            },
+            terminal @ SourceContinuation::Terminal(_) => {
+                SourceContinuation::UnwindRecursorSegment {
+                    stack,
+                    resume_cursor,
+                    next: Box::new(terminal),
+                }
+            }
         })
     }
 
     fn install_recursor_invocation<'b>(
         continuation: SourceContinuation<'b>,
-        mut owned_layers: Vec<ComputationalRecursorLayer>,
-        resume_cursor: ContinuationCursorId,
+        invocation: RecursorInvocationSegment,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
-        if owned_layers.is_empty() {
-            return Err(unsupported(
-                "ComputationalRecursor",
-                "recursive invocation segment has no selected head layer",
-            ));
-        }
-        let head = owned_layers.remove(0);
-        let continuation =
-            Self::splice_recursor_after_caller_let(continuation, owned_layers, resume_cursor)?;
-        Ok(SourceContinuation::ApplyRecursorLayers {
-            remaining: vec![head],
-            resume_cursor,
+        let continuation = Self::replace_source_terminal_with_unwind(
+            continuation,
+            invocation.unwind,
+            invocation.resume_cursor,
+        )?;
+        Ok(SourceContinuation::ApplyRecursorSelection {
+            layer: invocation.selection,
             next: Box::new(continuation),
         })
     }
@@ -5176,15 +5210,25 @@ impl<'a> Lowering<'a> {
                     terminal,
                 )
             }
-            SourceContinuation::ApplyRecursorLayers {
-                remaining,
+            SourceContinuation::ApplyRecursorSelection { layer, next } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::ApplyRecursorSelection {
+                        layer,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::UnwindRecursorSegment {
+                stack,
                 resume_cursor,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
                 (
-                    SourcePrefixTemplate::ApplyRecursorLayers {
-                        remaining,
+                    SourcePrefixTemplate::UnwindRecursorSegment {
+                        stack,
                         resume_cursor,
                         next: Box::new(next),
                     },
@@ -5325,12 +5369,18 @@ impl<'a> Lowering<'a> {
                 env: env.clone(),
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
-            SourcePrefixTemplate::ApplyRecursorLayers {
-                remaining,
+            SourcePrefixTemplate::ApplyRecursorSelection { layer, next } => {
+                SourceContinuation::ApplyRecursorSelection {
+                    layer: layer.clone(),
+                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                }
+            }
+            SourcePrefixTemplate::UnwindRecursorSegment {
+                stack,
                 resume_cursor,
                 next,
-            } => SourceContinuation::ApplyRecursorLayers {
-                remaining: remaining.clone(),
+            } => SourceContinuation::UnwindRecursorSegment {
+                stack: stack.clone(),
                 resume_cursor: *resume_cursor,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
@@ -5723,8 +5773,19 @@ impl<'a> Lowering<'a> {
                                 }
                             }
                         }
-                        SourceContinuation::ApplyRecursorLayers {
-                            mut remaining,
+                        SourceContinuation::ApplyRecursorSelection { layer, next } => {
+                            control.continuation =
+                                SourceContinuation::ComputationalMatchScrutinee {
+                                    cases: layer.cases,
+                                    default: layer.default,
+                                    env: layer.outer_env,
+                                    provenance: layer.provenance,
+                                    next,
+                                };
+                            SourceMachineState::Value { value, control }
+                        }
+                        SourceContinuation::UnwindRecursorSegment {
+                            mut stack,
                             resume_cursor,
                             next,
                         } => {
@@ -5739,16 +5800,15 @@ impl<'a> Lowering<'a> {
                                     "source recursor resume cursor is no longer active",
                                 )
                             })?;
-                            if !remaining.is_empty() {
-                                let layer = remaining.remove(0);
+                            if let Some(layer) = stack.later_wrappers_in_construction_order.pop() {
                                 control.continuation =
                                     SourceContinuation::ComputationalMatchScrutinee {
                                         cases: layer.cases,
                                         default: layer.default,
                                         env: layer.outer_env,
                                         provenance: layer.provenance,
-                                        next: Box::new(SourceContinuation::ApplyRecursorLayers {
-                                            remaining,
+                                        next: Box::new(SourceContinuation::UnwindRecursorSegment {
+                                            stack,
                                             resume_cursor,
                                             next,
                                         }),
@@ -6813,11 +6873,8 @@ impl<'a> Lowering<'a> {
                         ));
                     }
                     let mut suspended = armed.suspended;
-                    suspended.continuation = Self::install_recursor_invocation(
-                        suspended.continuation,
-                        invocation.owned_layers,
-                        invocation.resume_cursor,
-                    )?;
+                    suspended.continuation =
+                        Self::install_recursor_invocation(suspended.continuation, invocation)?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                         value: Lowered::BoundedNat(predecessor),
                         control: suspended,
@@ -6848,11 +6905,8 @@ impl<'a> Lowering<'a> {
                     call_env.extend(captures);
                     call_env.extend(env);
                     let mut suspended = armed.suspended;
-                    suspended.continuation = Self::install_recursor_invocation(
-                        suspended.continuation,
-                        invocation.owned_layers,
-                        invocation.resume_cursor,
-                    )?;
+                    suspended.continuation =
+                        Self::install_recursor_invocation(suspended.continuation, invocation)?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                         expr: body,
                         env: call_env,
@@ -7406,7 +7460,7 @@ impl<'a> Lowering<'a> {
                             "recursor closure carries an invocation segment",
                         );
                         let mut frames =
-                            recursor_eliminator_frames(&invocation.owned_layers);
+                            recursor_eliminator_frames(&invocation);
                         frames.push(EliminatorFrame::InvocationReturn);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
