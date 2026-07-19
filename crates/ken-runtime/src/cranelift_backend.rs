@@ -1363,6 +1363,189 @@ enum BoundedNatLoweringMutation {
     RawScalarPredecessor,
 }
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+enum Px8jDirectRecursorConsumer {
+    PendingLetProducer,
+    ProducerCall,
+    OrdinaryCall,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Px8jProducerPath {
+    Composed,
+    DeferredConstructor,
+    SourceMachine,
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Px8jSourceTraceEvent {
+    Mint {
+        path: Px8jProducerPath,
+        origin: RecursorProducerOriginId,
+        cursor: ContinuationCursorId,
+        siblings: usize,
+        parent_scope: Option<RecursorProducerOriginId>,
+    },
+    Install {
+        origin: RecursorProducerOriginId,
+        selection_cursor: ContinuationCursorId,
+        exits: Vec<(RecursorProducerOriginId, Option<RecursorProducerOriginId>)>,
+    },
+    DirectConsume {
+        origin: RecursorProducerOriginId,
+        selection_cursor: ContinuationCursorId,
+        exits: Vec<(RecursorProducerOriginId, Option<RecursorProducerOriginId>)>,
+    },
+    Selection {
+        origin: RecursorProducerOriginId,
+    },
+    Exit {
+        origin: RecursorProducerOriginId,
+        scope_origin: RecursorProducerOriginId,
+        parent_scope: Option<RecursorProducerOriginId>,
+    },
+    ReturnHole {
+        cursor: ContinuationCursorId,
+    },
+    ResumeOuter {
+        cursor: ContinuationCursorId,
+    },
+}
+
+#[cfg(test)]
+thread_local! {
+    static PX8J_SOURCE_TRACE: std::cell::RefCell<Vec<Px8jSourceTraceEvent>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static PX8J_DELETE_OWNED_SELECTED_SCOPE: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+fn px8j_record_source_event(event: Px8jSourceTraceEvent) {
+    PX8J_SOURCE_TRACE.with(|trace| trace.borrow_mut().push(event));
+}
+
+#[cfg(test)]
+fn run_px8j_malformed_recursor_consumer(
+    consumer: Px8jDirectRecursorConsumer,
+) -> Result<Lowered, CraneliftBackendError> {
+    let mut module = new_jit_module()?;
+    let mut signature = module.make_signature();
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function("px8j_malformed_recursor", Linkage::Local, &signature)
+        .map_err(|error| backend_module(error.to_string()))?;
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = Lowering {
+        seed_env: &seed_env,
+        declarations: BTreeMap::new(),
+        declaration_stack: Vec::new(),
+        active_recursive_declarations: Vec::new(),
+        result_table: BTreeMap::new(),
+        next_token: 0,
+        next_recursor_frame_provenance: 0,
+        next_recursor_producer_origin: 0,
+        next_continuation_activation: 0,
+        next_continuation_cursor: 0,
+        next_source_join: 0,
+        next_source_predecessor: 0,
+        live_source_continuations: 0,
+        native_join_plan: None,
+        consumed_join_sites: BTreeSet::new(),
+        active_join_site: None,
+        assumptions: BTreeSet::new(),
+        unsupported: Vec::new(),
+        process_object: false,
+        process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
+        host_dispatch: None,
+        invocation_pointer: None,
+        native_int_arena: None,
+        native_int_binop: None,
+        native_int_compare: None,
+        native_int_intern: None,
+        native_int_narrow: None,
+        native_int_export: None,
+        native_int_tags: BTreeMap::new(),
+        native_int_mutation: NativeIntLoweringMutation::Exact,
+        bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+    };
+    let origin = RecursorProducerOriginId(7);
+    let cursor = ContinuationCursorId(9);
+    let recursor = Lowered::ComputationalRecursorClosure {
+        residual: Box::new(Lowered::Closure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: RuntimeExpr::Construct {
+                constructor: "ctor:fixture::PX8J::Done".to_string(),
+                args: Vec::new(),
+            },
+        }),
+        activation: ContinuationActivationId(8),
+        invocation: RecursorInvocationSegment::new(
+            origin,
+            ComputationalRecursorLayer {
+                cases: Vec::new(),
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::ExplicitTrap,
+                    message: "px8j malformed selection".to_string(),
+                },
+                outer_env: Vec::new(),
+                provenance: RecursorFrameProvenance(6),
+                role: RecursorLayerRole::ExitsScope {
+                    origin,
+                    scope_origin: origin,
+                    parent_scope: None,
+                },
+            },
+            RecursorUnwindStack {
+                later_wrappers_in_construction_order: Vec::new(),
+            },
+            cursor,
+        ),
+    };
+    let active = ActiveContinuationFrame {
+        activation: ContinuationActivationId(8),
+        cursor,
+        parent: None,
+        pending: &[],
+        selected_ancestry: &[],
+        source_lineage: &[],
+        source_selected_cursor: None,
+        selected_scope: None,
+    };
+    let active_frames = [EliminatorFrame::Active(active)];
+    let env = [recursor];
+    let call = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(0)),
+        args: Vec::new(),
+    };
+    let pending_let = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        body: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Var(1)),
+            args: Vec::new(),
+        }),
+    };
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    match consumer {
+        Px8jDirectRecursorConsumer::PendingLetProducer => compiler
+            .lower_computational_producer_expr(&mut builder, &pending_let, &env, &active_frames),
+        Px8jDirectRecursorConsumer::ProducerCall => {
+            compiler.lower_computational_producer_expr(&mut builder, &call, &env, &active_frames)
+        }
+        Px8jDirectRecursorConsumer::OrdinaryCall => compiler.lower_expr(&mut builder, &call, &env),
+    }
+}
+
 /// Exercise the checked-reply mint without involving any resource operation.
 /// The fixture deliberately enters through `mint_validated_progress_nat`, so
 /// tests cannot manufacture the compact carrier through a second constructor.
@@ -2431,6 +2614,24 @@ fn recursor_eliminator_frames(
     segment: &RecursorInvocationSegment,
 ) -> Result<Vec<EliminatorFrame<'_>>, CraneliftBackendError> {
     validate_recursor_invocation_segment(segment)?;
+    #[cfg(test)]
+    px8j_record_source_event(Px8jSourceTraceEvent::DirectConsume {
+        origin: segment.origin,
+        selection_cursor: segment.resume_cursor,
+        exits: segment
+            .unwind
+            .later_wrappers_in_construction_order
+            .iter()
+            .filter_map(|layer| match layer.role {
+                RecursorLayerRole::ExitsScope {
+                    scope_origin,
+                    parent_scope,
+                    ..
+                } => Some((scope_origin, parent_scope)),
+                RecursorLayerRole::SelectsOccurrence { .. } => None,
+            })
+            .collect(),
+    });
     Ok(std::iter::once(&segment.selection)
         .chain(
             segment
@@ -3240,6 +3441,12 @@ impl<'a> Lowering<'a> {
                 .later_wrappers_in_construction_order
                 .push(current_layer);
             if let Some((selected, lineage)) = source_control {
+                if selected.selected_scope.is_none() {
+                    return Err(unsupported(
+                        "ComputationalRecursor",
+                        "source recursor invocation is missing its owned selected scope",
+                    ));
+                }
                 for scope in selected.selected_scope.iter().chain(
                     lineage
                         .iter()
@@ -4223,6 +4430,16 @@ impl<'a> Lowering<'a> {
                 };
 
                 let producer_origin = self.mint_recursor_producer_origin();
+                #[cfg(test)]
+                px8j_record_source_event(Px8jSourceTraceEvent::Mint {
+                    path: Px8jProducerPath::Composed,
+                    origin: producer_origin,
+                    cursor,
+                    siblings: case.recursive_positions.len(),
+                    parent_scope: splice_caller
+                        .and_then(|active| active.selected_scope)
+                        .map(|scope| scope.scope_origin),
+                });
                 let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
                 for position in case.recursive_positions.iter().rev().copied() {
                     induction_hypotheses.push(self.make_computational_recursor(
@@ -4667,6 +4884,17 @@ impl<'a> Lowering<'a> {
                 }
                 let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
                 let producer_origin = self.mint_recursor_producer_origin();
+                #[cfg(test)]
+                px8j_record_source_event(Px8jSourceTraceEvent::Mint {
+                    path: Px8jProducerPath::DeferredConstructor,
+                    origin: producer_origin,
+                    cursor: deferred.selected_active.cursor,
+                    siblings: case.recursive_positions.len(),
+                    parent_scope: deferred
+                        .selected_active
+                        .selected_scope
+                        .map(|scope| scope.scope_origin),
+                });
                 for position in case.recursive_positions.iter().rev().copied() {
                     induction_hypotheses.push(self.make_computational_recursor(
                         constructor_args[position].clone(),
@@ -5325,6 +5553,24 @@ impl<'a> Lowering<'a> {
         continuation: SourceContinuation<'b>,
         invocation: RecursorInvocationSegment,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        #[cfg(test)]
+        px8j_record_source_event(Px8jSourceTraceEvent::Install {
+            origin: invocation.origin,
+            selection_cursor: invocation.resume_cursor,
+            exits: invocation
+                .unwind
+                .later_wrappers_in_construction_order
+                .iter()
+                .filter_map(|layer| match layer.role {
+                    RecursorLayerRole::ExitsScope {
+                        scope_origin,
+                        parent_scope,
+                        ..
+                    } => Some((scope_origin, parent_scope)),
+                    RecursorLayerRole::SelectsOccurrence { .. } => None,
+                })
+                .collect(),
+        });
         let continuation = Self::replace_source_terminal_with_unwind(
             continuation,
             invocation.unwind,
@@ -5881,6 +6127,10 @@ impl<'a> Lowering<'a> {
                                 active,
                             },
                         ) => {
+                            #[cfg(test)]
+                            px8j_record_source_event(Px8jSourceTraceEvent::ReturnHole {
+                                cursor: resume_cursor,
+                            });
                             if active.cursor != expected {
                                 return Err(unsupported(
                                     "ComputationalRecursor",
@@ -5914,6 +6164,10 @@ impl<'a> Lowering<'a> {
                             expected,
                             active,
                         }) => {
+                            #[cfg(test)]
+                            px8j_record_source_event(Px8jSourceTraceEvent::ResumeOuter {
+                                cursor: expected,
+                            });
                             if active.cursor != expected {
                                 return Err(unsupported(
                                     "ComputationalRecursor",
@@ -5983,6 +6237,12 @@ impl<'a> Lowering<'a> {
                             }
                         }
                         SourceContinuation::ApplyRecursorSelection { layer, next } => {
+                            #[cfg(test)]
+                            if let RecursorLayerRole::SelectsOccurrence { origin } = layer.role {
+                                px8j_record_source_event(Px8jSourceTraceEvent::Selection {
+                                    origin,
+                                });
+                            }
                             control.continuation =
                                 SourceContinuation::ComputationalMatchScrutinee {
                                     cases: layer.cases,
@@ -6010,6 +6270,19 @@ impl<'a> Lowering<'a> {
                                 )
                             })?;
                             if let Some(layer) = stack.later_wrappers_in_construction_order.pop() {
+                                #[cfg(test)]
+                                if let RecursorLayerRole::ExitsScope {
+                                    origin,
+                                    scope_origin,
+                                    parent_scope,
+                                } = layer.role
+                                {
+                                    px8j_record_source_event(Px8jSourceTraceEvent::Exit {
+                                        origin,
+                                        scope_origin,
+                                        parent_scope,
+                                    });
+                                }
                                 control.continuation =
                                     SourceContinuation::ComputationalMatchScrutinee {
                                         cases: layer.cases,
@@ -6242,6 +6515,18 @@ impl<'a> Lowering<'a> {
                             let mut induction_hypotheses =
                                 Vec::with_capacity(case.recursive_positions.len());
                             let producer_origin = self.mint_recursor_producer_origin();
+                            #[cfg(test)]
+                            px8j_record_source_event(Px8jSourceTraceEvent::Mint {
+                                path: Px8jProducerPath::SourceMachine,
+                                origin: producer_origin,
+                                cursor,
+                                siblings: case.recursive_positions.len(),
+                                parent_scope: control
+                                    .selected
+                                    .selected_scope
+                                    .as_ref()
+                                    .map(|scope| scope.scope_origin),
+                            });
                             let parent = control.selected.parent;
                             {
                                 let qold = control.selected.as_active(&control.selected_lineage);
@@ -6279,26 +6564,32 @@ impl<'a> Lowering<'a> {
                             case_env.extend(frame_env);
                             let previous_selected = control.selected.clone();
                             let pending = std::mem::take(&mut control.selected.pending);
+                            let selected_scope = OwnedSelectedScope {
+                                scope_origin: producer_origin,
+                                parent_scope: control
+                                    .selected
+                                    .selected_scope
+                                    .as_ref()
+                                    .map(|scope| scope.scope_origin),
+                                frame: ComputationalRecursorFramePayload {
+                                    cases: cases.clone(),
+                                    default: default.clone(),
+                                    outer_env: env.clone(),
+                                    provenance,
+                                },
+                            };
+                            #[cfg(test)]
+                            let selected_scope =
+                                (!PX8J_DELETE_OWNED_SELECTED_SCOPE.get()).then_some(selected_scope);
+                            #[cfg(not(test))]
+                            let selected_scope = Some(selected_scope);
                             control.selected = SourceSelectedContinuation {
                                 activation,
                                 cursor,
                                 parent,
                                 pending,
                                 selected_ancestry: ancestry,
-                                selected_scope: Some(OwnedSelectedScope {
-                                    scope_origin: producer_origin,
-                                    parent_scope: control
-                                        .selected
-                                        .selected_scope
-                                        .as_ref()
-                                        .map(|scope| scope.scope_origin),
-                                    frame: ComputationalRecursorFramePayload {
-                                        cases: cases.clone(),
-                                        default: default.clone(),
-                                        outer_env: env.clone(),
-                                        provenance,
-                                    },
-                                }),
+                                selected_scope,
                             };
                             control.selected_lineage.push(previous_selected);
                             control.continuation = *next;
@@ -12392,6 +12683,71 @@ mod tests {
         }
     }
 
+    fn px8j_deferred_recursive_field_fixture() -> RuntimeExpr {
+        let wrap = "ctor:fixture::PX8JDeferred::Wrap";
+        let done = "ctor:fixture::PX8JDeferred::Done";
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: wrap.to_string(),
+                args: vec![
+                    RuntimeExpr::LexicalClosure {
+                        captures: Vec::new(),
+                        params: vec!["unit".to_string()],
+                        body: Box::new(RuntimeExpr::Construct {
+                            constructor: done.to_string(),
+                            args: Vec::new(),
+                        }),
+                    },
+                    constructor_field_aggregate(),
+                ],
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: wrap.to_string(),
+                    argument_binders: 2,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Match {
+                        scrutinee: Box::new(RuntimeExpr::Var(2)),
+                        cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+                            .into_iter()
+                            .map(|constructor| RuntimeMatchCase {
+                                constructor: constructor.to_string(),
+                                binders: 1,
+                                body: RuntimeExpr::Call {
+                                    callee: Box::new(RuntimeExpr::Var(1)),
+                                    args: vec![RuntimeExpr::Construct {
+                                        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                                        args: Vec::new(),
+                                    }],
+                                },
+                            })
+                            .collect(),
+                        default: RuntimeTrap {
+                            code: RuntimeTrapCode::PatternMatchFailure,
+                            message: "PX8-J deferred selected-field default".to_string(),
+                        },
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: done.to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Result::Ok".to_string(),
+                        args: vec![RuntimeExpr::Construct {
+                            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                            args: Vec::new(),
+                        }],
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "PX8-J deferred outer default".to_string(),
+            },
+        }
+    }
+
     #[test]
     fn dynamic_host_result_producer_missing_case_routes_to_default() {
         assert!(
@@ -13318,17 +13674,27 @@ mod tests {
         .expect("match-selected HostResult remains owned by ordinary dynamic matching");
     }
 
-    fn recursive_computational_result(leaf_body: RuntimeExpr) -> RuntimeExpr {
+    fn recursive_computational_result_depth(depth: usize, leaf_body: RuntimeExpr) -> RuntimeExpr {
         let node = "ctor:fixture::RecursiveTree::Node";
         let leaf = "ctor:fixture::RecursiveTree::Leaf";
-        let recursive_child = RuntimeExpr::LexicalClosure {
-            captures: Vec::new(),
-            params: vec!["unit".to_string()],
-            body: Box::new(RuntimeExpr::Construct {
-                constructor: leaf.to_string(),
-                args: Vec::new(),
-            }),
-        };
+        fn child(depth: usize, node: &str, leaf: &str) -> RuntimeExpr {
+            RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["unit".to_string()],
+                body: Box::new(if depth == 0 {
+                    RuntimeExpr::Construct {
+                        constructor: leaf.to_string(),
+                        args: Vec::new(),
+                    }
+                } else {
+                    RuntimeExpr::Construct {
+                        constructor: node.to_string(),
+                        args: vec![child(depth - 1, node, leaf)],
+                    }
+                }),
+            }
+        }
+        let recursive_child = child(depth, node, leaf);
         RuntimeExpr::ComputationalMatch {
             scrutinee: Box::new(RuntimeExpr::Construct {
                 constructor: node.to_string(),
@@ -13361,6 +13727,161 @@ mod tests {
         }
     }
 
+    fn recursive_computational_result(leaf_body: RuntimeExpr) -> RuntimeExpr {
+        recursive_computational_result_depth(0, leaf_body)
+    }
+
+    fn px8j_recursive_sibling_result(
+        depth: usize,
+        siblings: usize,
+        leaf_body: RuntimeExpr,
+    ) -> RuntimeExpr {
+        assert!(siblings > 0);
+        let node = "ctor:fixture::PX8JSiblingTree::Node";
+        let leaf = "ctor:fixture::PX8JSiblingTree::Leaf";
+        fn child(depth: usize, siblings: usize, node: &str, leaf: &str) -> RuntimeExpr {
+            RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["unit".to_string()],
+                body: Box::new(if depth == 0 {
+                    RuntimeExpr::Construct {
+                        constructor: leaf.to_string(),
+                        args: Vec::new(),
+                    }
+                } else {
+                    RuntimeExpr::Construct {
+                        constructor: node.to_string(),
+                        args: (0..siblings)
+                            .map(|_| child(depth - 1, siblings, node, leaf))
+                            .collect(),
+                    }
+                }),
+            }
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: node.to_string(),
+                args: (0..siblings)
+                    .map(|_| child(depth, siblings, node, leaf))
+                    .collect(),
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: node.to_string(),
+                    argument_binders: siblings,
+                    recursive_positions: (0..siblings).collect(),
+                    body: RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::Var(0)),
+                        args: vec![RuntimeExpr::Construct {
+                            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                            args: Vec::new(),
+                        }],
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: leaf.to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: leaf_body,
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "PX8-J sibling tree default".to_string(),
+            },
+        }
+    }
+
+    fn px8j_layered_recursive_result(transform_layers: usize, input_depth: usize) -> RuntimeExpr {
+        let tree_constructor = |layer: usize, constructor: &str| {
+            format!("ctor:fixture::PX8JTree{layer}::{constructor}")
+        };
+        let unit = || RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        };
+        let aggregate = || RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Result::Ok".to_string(),
+            args: vec![unit()],
+        };
+        fn child(depth: usize, node: &str, leaf: &str) -> RuntimeExpr {
+            RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["unit".to_string()],
+                body: Box::new(if depth == 0 {
+                    RuntimeExpr::Construct {
+                        constructor: leaf.to_string(),
+                        args: Vec::new(),
+                    }
+                } else {
+                    RuntimeExpr::Construct {
+                        constructor: node.to_string(),
+                        args: vec![child(depth - 1, node, leaf)],
+                    }
+                }),
+            }
+        }
+        let input_node = tree_constructor(0, "Node");
+        let input_leaf = tree_constructor(0, "Leaf");
+        let mut producer = RuntimeExpr::Construct {
+            constructor: input_node.clone(),
+            args: vec![child(input_depth, &input_node, &input_leaf)],
+        };
+        for layer in 0..transform_layers {
+            producer = RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(producer),
+                cases: vec![
+                    crate::RuntimeComputationalMatchCase {
+                        constructor: tree_constructor(layer, "Node"),
+                        argument_binders: 1,
+                        recursive_positions: vec![0],
+                        body: RuntimeExpr::Construct {
+                            constructor: tree_constructor(layer + 1, "Node"),
+                            args: vec![RuntimeExpr::Var(0)],
+                        },
+                    },
+                    crate::RuntimeComputationalMatchCase {
+                        constructor: tree_constructor(layer, "Leaf"),
+                        argument_binders: 0,
+                        recursive_positions: Vec::new(),
+                        body: RuntimeExpr::Construct {
+                            constructor: tree_constructor(layer + 1, "Leaf"),
+                            args: Vec::new(),
+                        },
+                    },
+                ],
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: format!("PX8-J transform {layer} default"),
+                },
+            };
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(producer),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: tree_constructor(transform_layers, "Node"),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::Var(0)),
+                        args: vec![unit()],
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: tree_constructor(transform_layers, "Leaf"),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: aggregate(),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "PX8-J terminal transform default".to_string(),
+            },
+        }
+    }
+
     #[test]
     fn recursive_computational_host_result_keeps_established_dynamic_lane() {
         emit_process_entrypoint_object_with_cranelift(
@@ -13385,6 +13906,309 @@ mod tests {
             "ken_px7o_recursive_computational_aggregate",
         )
         .expect("recursive aggregate traverses the active ordinary frame");
+    }
+
+    fn px8j_capture_source_trace(
+        expression: &RuntimeExpr,
+        delete_owned_scope: bool,
+        symbol: &str,
+    ) -> (
+        Result<CraneliftObjectArtifact, CraneliftBackendError>,
+        Vec<Px8jSourceTraceEvent>,
+    ) {
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                PX8J_DELETE_OWNED_SELECTED_SCOPE.set(false);
+                PX8J_SOURCE_TRACE.with(|trace| trace.borrow_mut().clear());
+            }
+        }
+        PX8J_SOURCE_TRACE.with(|trace| trace.borrow_mut().clear());
+        PX8J_DELETE_OWNED_SELECTED_SCOPE.set(delete_owned_scope);
+        let _reset = Reset;
+        let result = emit_process_entrypoint_object_with_cranelift(expression, symbol);
+        let trace = PX8J_SOURCE_TRACE.with(|trace| trace.borrow().clone());
+        (result, trace)
+    }
+
+    fn px8j_aggregate_result() -> RuntimeExpr {
+        RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Result::Ok".to_string(),
+            args: vec![RuntimeExpr::Construct {
+                constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                args: Vec::new(),
+            }],
+        }
+    }
+
+    #[test]
+    fn px8j_all_three_producer_paths_reach_real_consumers() {
+        let aggregate = RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Result::Ok".to_string(),
+            args: vec![RuntimeExpr::Construct {
+                constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                args: Vec::new(),
+            }],
+        };
+        let expression =
+            host_result_closure_match(recursive_computational_result_depth(2, aggregate));
+        let (result, trace) =
+            px8j_capture_source_trace(&expression, false, "ken_px8j_live_source_paths");
+        result.expect("the composed and source-machine producer paths lower");
+        for path in [Px8jProducerPath::Composed, Px8jProducerPath::SourceMachine] {
+            let (origin, cursor) = trace
+                .iter()
+                .find_map(|event| match event {
+                    Px8jSourceTraceEvent::Mint {
+                        path: actual,
+                        origin,
+                        cursor,
+                        siblings,
+                        ..
+                    } if *actual == path && *siblings > 0 => Some((*origin, *cursor)),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{path:?} must mint a recursive IH"));
+            assert!(trace.iter().any(|event| matches!(
+                event,
+                Px8jSourceTraceEvent::Install {
+                    origin: actual_origin,
+                    selection_cursor,
+                    ..
+                } if *actual_origin == origin && *selection_cursor == cursor
+            )));
+            assert!(trace.iter().any(|event| matches!(
+                event,
+                Px8jSourceTraceEvent::Selection { origin: actual } if *actual == origin
+            )));
+        }
+
+        let deferred = host_result_closure_match(px8j_deferred_recursive_field_fixture());
+        let (result, trace) =
+            px8j_capture_source_trace(&deferred, false, "ken_px8j_live_deferred_path");
+        result.expect("the deferred-constructor producer path lowers");
+        let (origin, cursor) = trace
+            .iter()
+            .find_map(|event| match event {
+                Px8jSourceTraceEvent::Mint {
+                    path: Px8jProducerPath::DeferredConstructor,
+                    origin,
+                    cursor,
+                    siblings: 1,
+                    ..
+                } => Some((*origin, *cursor)),
+                _ => None,
+            })
+            .expect("the deferred constructor mints its recursive IH");
+        assert!(trace.iter().any(|event| matches!(
+            event,
+            Px8jSourceTraceEvent::DirectConsume {
+                origin: actual_origin,
+                selection_cursor,
+                ..
+            } if *actual_origin == origin && *selection_cursor == cursor
+        )));
+    }
+
+    #[test]
+    fn px8j_selected_scope_partitions_differ_across_the_real_return_hole() {
+        let before = host_result_closure_match(recursive_computational_result_depth(
+            2,
+            px8j_aggregate_result(),
+        ));
+        let after = host_result_closure_match(px8j_layered_recursive_result(1, 0));
+        let (before_result, before_trace) =
+            px8j_capture_source_trace(&before, false, "ken_px8j_scope_before_hole");
+        let (after_result, after_trace) =
+            px8j_capture_source_trace(&after, false, "ken_px8j_scope_after_hole");
+        before_result.expect("the before-hole selected scope lowers");
+        after_result.expect("the after-hole selected scope lowers");
+
+        let partition = |trace: &[Px8jSourceTraceEvent]| {
+            let hole = trace
+                .iter()
+                .position(|event| matches!(event, Px8jSourceTraceEvent::ReturnHole { .. }))
+                .expect("the real source path reaches its return hole");
+            let selections_before = trace[..hole]
+                .iter()
+                .filter(|event| matches!(event, Px8jSourceTraceEvent::Selection { .. }))
+                .count();
+            let exits_after = trace[hole + 1..]
+                .iter()
+                .filter(|event| matches!(event, Px8jSourceTraceEvent::Exit { .. }))
+                .count();
+            (selections_before, exits_after)
+        };
+        assert_eq!(partition(&before_trace), (3, 0));
+        assert_eq!(partition(&after_trace), (1, 1));
+    }
+
+    #[test]
+    fn px8j_one_two_three_scope_segments_reach_selection_hole_and_unwind() {
+        for depth in 1..=3 {
+            let expression = host_result_closure_match(px8j_layered_recursive_result(depth, 0));
+            let (result, trace) = px8j_capture_source_trace(
+                &expression,
+                false,
+                &format!("ken_px8j_live_scope_depth_{depth}"),
+            );
+            result.unwrap_or_else(|error| panic!("scope depth {depth} must lower: {error:?}"));
+            let (origin, cursor, exits) = trace
+                .iter()
+                .find_map(|event| match event {
+                    Px8jSourceTraceEvent::Install {
+                        origin,
+                        selection_cursor,
+                        exits,
+                    } if exits.len() == depth => Some((*origin, *selection_cursor, exits)),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("scope depth {depth} must install one exact segment"));
+            assert!(exits
+                .iter()
+                .all(|(scope_origin, parent)| *scope_origin == origin && parent.is_none()));
+            let selection = trace
+                .iter()
+                .position(|event| {
+                    matches!(
+                        event,
+                        Px8jSourceTraceEvent::Selection { origin: actual } if *actual == origin
+                    )
+                })
+                .expect("selection is consumed");
+            let hole = trace
+                .iter()
+                .position(|event| {
+                    matches!(
+                        event,
+                        Px8jSourceTraceEvent::ReturnHole { cursor: actual } if *actual == cursor
+                    )
+                })
+                .expect("the complete caller source K reaches its return hole");
+            let first_exit = trace
+                .iter()
+                .position(|event| {
+                    matches!(
+                        event,
+                        Px8jSourceTraceEvent::Exit { origin: actual, .. } if *actual == origin
+                    )
+                })
+                .expect("the installed unwind stack begins consumption");
+            assert!(selection < hole && hole < first_exit);
+        }
+    }
+
+    #[test]
+    fn px8j_siblings_share_an_origin_and_nested_ih_gets_a_child_origin() {
+        let expression =
+            host_result_closure_match(px8j_recursive_sibling_result(1, 2, px8j_aggregate_result()));
+        let (result, trace) =
+            px8j_capture_source_trace(&expression, false, "ken_px8j_live_sibling_origins");
+        result.expect("the sibling and nested recursive IH path lowers");
+        let (sibling_origin, sibling_cursor) = trace
+            .iter()
+            .find_map(|event| match event {
+                Px8jSourceTraceEvent::Mint {
+                    origin,
+                    cursor,
+                    siblings: 2,
+                    ..
+                } if trace.iter().any(|nested| {
+                    matches!(
+                        nested,
+                        Px8jSourceTraceEvent::Mint {
+                            origin: child,
+                            parent_scope: Some(parent),
+                            ..
+                        } if *child != *origin && *parent == *origin
+                    )
+                }) =>
+                {
+                    Some((*origin, *cursor))
+                }
+                _ => None,
+            })
+            .expect("both sibling IHs share one origin that owns the nested child origin");
+        assert!(trace.iter().any(|event| matches!(
+            event,
+            Px8jSourceTraceEvent::Install {
+                origin,
+                selection_cursor,
+                ..
+            } if *origin == sibling_origin && *selection_cursor == sibling_cursor
+        )));
+        assert!(trace.iter().any(|event| matches!(
+            event,
+            Px8jSourceTraceEvent::Mint {
+                origin,
+                parent_scope: Some(parent),
+                ..
+            } if *origin != sibling_origin && *parent == sibling_origin
+        )));
+    }
+
+    #[test]
+    fn px8j_owned_scope_deletion_fails_closed_before_another_frame_is_emitted() {
+        let expression = host_result_closure_match(px8j_layered_recursive_result(1, 1));
+        let (exact_result, exact_trace) =
+            px8j_capture_source_trace(&expression, false, "ken_px8j_scope_exact");
+        exact_result.expect("the exact owned-scope path lowers");
+        let (deleted_result, deleted_trace) =
+            px8j_capture_source_trace(&expression, true, "ken_px8j_scope_deleted");
+        let error = deleted_result.expect_err("deleting the owned scope must fail closed");
+        assert!(matches!(
+            error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "ComputationalRecursor",
+                ref reason,
+            }) if reason == "source recursor invocation is missing its owned selected scope"
+        ));
+        let exact_prefix: Vec<_> = exact_trace
+            .iter()
+            .take_while(|event| {
+                !matches!(
+                    event,
+                    Px8jSourceTraceEvent::Mint {
+                        path: Px8jProducerPath::SourceMachine,
+                        parent_scope: Some(_),
+                        ..
+                    }
+                )
+            })
+            .cloned()
+            .collect();
+        assert_eq!(&deleted_trace[..deleted_trace.len() - 1], exact_prefix);
+        assert!(matches!(
+            (exact_trace.get(exact_prefix.len()), deleted_trace.last()),
+            (
+                Some(Px8jSourceTraceEvent::Mint {
+                    path: exact_path,
+                    origin: exact_origin,
+                    cursor: exact_cursor,
+                    siblings: exact_siblings,
+                    parent_scope: Some(_),
+                }),
+                Some(Px8jSourceTraceEvent::Mint {
+                    path: deleted_path,
+                    origin: deleted_origin,
+                    cursor: deleted_cursor,
+                    siblings: deleted_siblings,
+                    parent_scope: None,
+                }),
+            ) if exact_path == deleted_path
+                && exact_origin == deleted_origin
+                && exact_cursor == deleted_cursor
+                && exact_siblings == deleted_siblings
+        ));
+        let deleted_origin = match deleted_trace.last() {
+            Some(Px8jSourceTraceEvent::Mint { origin, .. }) => *origin,
+            event => panic!("deletion must stop immediately after the nested mint: {event:?}"),
+        };
+        assert!(!deleted_trace.iter().any(|event| matches!(
+            event,
+            Px8jSourceTraceEvent::Install { origin, .. }
+                if *origin == deleted_origin
+        )));
     }
 
     #[test]
@@ -14254,263 +15078,28 @@ mod tests {
         }
     }
 
-    fn px8j_test_recursor_layer(
-        role: RecursorLayerRole,
-        label: &str,
-    ) -> ComputationalRecursorLayer {
-        ComputationalRecursorLayer {
-            cases: Vec::new(),
-            default: RuntimeTrap {
-                code: RuntimeTrapCode::ExplicitTrap,
-                message: format!("px8j {label}"),
-            },
-            outer_env: Vec::new(),
-            provenance: RecursorFrameProvenance(0),
-            role,
-        }
-    }
-
-    fn px8j_test_recursor_segment(
-        origin: RecursorProducerOriginId,
-        selection_role: RecursorLayerRole,
-        unwind_roles: impl IntoIterator<Item = RecursorLayerRole>,
-    ) -> RecursorInvocationSegment {
-        RecursorInvocationSegment::new(
-            origin,
-            px8j_test_recursor_layer(selection_role, "selection"),
-            RecursorUnwindStack {
-                later_wrappers_in_construction_order: unwind_roles
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, role)| px8j_test_recursor_layer(role, &format!("unwind-{index}")))
-                    .collect(),
-            },
-            ContinuationCursorId(0),
-        )
-    }
-
-    fn assert_px8j_malformed_segment(segment: RecursorInvocationSegment, reason: &str) {
-        let error = match recursor_eliminator_frames(&segment) {
-            Ok(_) => panic!("a malformed recursor role/origin must reject in production"),
-            Err(error) => error,
-        };
-        assert!(
-            matches!(
-                error,
-                CraneliftBackendError::Unsupported(UnsupportedLowering {
-                    construct: "ComputationalRecursor",
-                    reason: ref actual,
-                }) if actual == reason
-            ),
-            "{error:?}"
-        );
-    }
-
-    #[test]
-    fn px8j_all_direct_recursor_consumers_reject_selection_exit_role() {
-        let origin = RecursorProducerOriginId(7);
-        assert_px8j_malformed_segment(
-            px8j_test_recursor_segment(
-                origin,
-                RecursorLayerRole::ExitsScope {
-                    origin,
-                    scope_origin: origin,
-                    parent_scope: None,
-                },
-                [],
-            ),
-            "recursor selection role does not select the invocation origin",
-        );
-    }
-
-    #[test]
-    fn px8j_all_direct_recursor_consumers_reject_wrong_selection_origin() {
-        assert_px8j_malformed_segment(
-            px8j_test_recursor_segment(
-                RecursorProducerOriginId(7),
-                RecursorLayerRole::SelectsOccurrence {
-                    origin: RecursorProducerOriginId(8),
-                },
-                [],
-            ),
-            "recursor selection role does not select the invocation origin",
-        );
-    }
-
-    #[test]
-    fn px8j_all_direct_recursor_consumers_reject_unwind_selection_role() {
-        let origin = RecursorProducerOriginId(7);
-        assert_px8j_malformed_segment(
-            px8j_test_recursor_segment(
-                origin,
-                RecursorLayerRole::SelectsOccurrence { origin },
-                [RecursorLayerRole::SelectsOccurrence { origin }],
-            ),
-            "recursor unwind role does not exit the invocation origin",
-        );
-    }
-
-    #[test]
-    fn px8j_parent_linked_one_two_three_scope_exits_are_lifo() {
-        let invocation = RecursorProducerOriginId(9);
-        for depth in 1_usize..=3 {
-            let scopes: Vec<_> = (0..depth)
-                .map(|index| RecursorProducerOriginId(20 + index as u64))
-                .collect();
-            let segment = px8j_test_recursor_segment(
-                invocation,
-                RecursorLayerRole::SelectsOccurrence { origin: invocation },
-                scopes.iter().enumerate().map(|(index, scope_origin)| {
-                    RecursorLayerRole::ExitsScope {
-                        origin: invocation,
-                        scope_origin: *scope_origin,
-                        parent_scope: index.checked_sub(1).map(|parent| scopes[parent]),
-                    }
-                }),
-            );
-            let frames = recursor_eliminator_frames(&segment)
-                .expect("a parent-linked scope chain must be accepted");
-            assert_eq!(frames.len(), depth + 1);
-            let observed: Vec<_> = segment
-                .unwind
-                .later_wrappers_in_construction_order
-                .iter()
-                .rev()
-                .map(|layer| match layer.role {
-                    RecursorLayerRole::ExitsScope { scope_origin, .. } => scope_origin,
-                    RecursorLayerRole::SelectsOccurrence { .. } => unreachable!(),
-                })
-                .collect();
-            assert_eq!(observed, scopes.into_iter().rev().collect::<Vec<_>>());
-        }
-    }
-
-    #[test]
-    fn px8j_equal_shape_sibling_and_nested_origins_remain_distinct() {
-        let sibling_origin = RecursorProducerOriginId(30);
-        let nested_origin = RecursorProducerOriginId(31);
-        let sibling = px8j_test_recursor_segment(
-            sibling_origin,
-            RecursorLayerRole::SelectsOccurrence {
-                origin: sibling_origin,
-            },
-            [],
-        );
-        let nested = px8j_test_recursor_segment(
-            nested_origin,
-            RecursorLayerRole::SelectsOccurrence {
-                origin: nested_origin,
-            },
-            [],
-        );
-        recursor_eliminator_frames(&sibling).expect("sibling origin must validate");
-        recursor_eliminator_frames(&nested).expect("nested origin must validate");
-        assert_ne!(sibling.origin, nested.origin);
-        assert_eq!(sibling.selection.cases, nested.selection.cases);
-        assert_eq!(
-            sibling.selection.outer_env.len(),
-            nested.selection.outer_env.len()
-        );
-    }
-
     #[test]
     fn px8j_all_three_direct_consumers_propagate_the_role_validator() {
-        let source = include_str!("cranelift_backend.rs");
-        let guarded_consumer = ["recursor_eliminator_", "frames(&invocation)?"].concat();
-        assert_eq!(source.matches(&guarded_consumer).count(), 3);
-        assert!(!source.contains("debug_assert!(matches!(\n        segment.selection.role"));
-    }
-
-    #[test]
-    fn px8j_all_three_recursive_ih_minting_paths_allocate_one_origin_before_siblings() {
-        let source = include_str!("cranelift_backend.rs");
-        let mint = [
-            "let producer_origin = self.",
-            "mint_recursor_producer_origin();",
-        ]
-        .concat();
-        assert_eq!(source.matches(&mint).count(), 3);
-    }
-
-    #[test]
-    fn px8j_equal_shape_opposite_holes_retain_distinct_exact_cursors() {
-        let active_one = ActiveContinuationFrame {
-            activation: ContinuationActivationId(0),
-            cursor: ContinuationCursorId(1),
-            parent: None,
-            pending: &[],
-            selected_ancestry: &[],
-            source_lineage: &[],
-            source_selected_cursor: None,
-            selected_scope: None,
-        };
-        let active_two = ActiveContinuationFrame {
-            cursor: ContinuationCursorId(2),
-            ..active_one
-        };
-        for (expected, active) in [
-            (ContinuationCursorId(1), &active_one),
-            (ContinuationCursorId(2), &active_two),
+        for consumer in [
+            Px8jDirectRecursorConsumer::PendingLetProducer,
+            Px8jDirectRecursorConsumer::ProducerCall,
+            Px8jDirectRecursorConsumer::OrdinaryCall,
         ] {
-            let continuation =
-                SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
-                    expected,
-                    active,
-                });
-            let hole = Lowering::replace_source_terminal_with_unwind(
-                continuation,
-                RecursorUnwindStack {
-                    later_wrappers_in_construction_order: Vec::new(),
-                },
-                expected,
-            )
-            .expect("one exact source terminal must admit one producer hole");
-            assert!(matches!(
-                hole,
-                SourceContinuation::Terminal(
-                    SourceContinuationTerminal::ReturnToProducerHole {
-                        expected: observed,
-                        resume_cursor,
-                        ..
-                    }
-                ) if observed == expected && resume_cursor == expected
-            ));
+            let error = match run_px8j_malformed_recursor_consumer(consumer) {
+                Ok(_) => panic!("each live recursor consumer must reject the malformed selection"),
+                Err(error) => error,
+            };
+            assert!(
+                matches!(
+                    error,
+                    CraneliftBackendError::Unsupported(UnsupportedLowering {
+                        construct: "ComputationalRecursor",
+                        ref reason,
+                    }) if reason == "recursor selection role does not select the invocation origin"
+                ),
+                "{consumer:?}: {error:?}"
+            );
         }
-    }
-
-    #[test]
-    fn px8j_owned_selected_scope_is_the_only_active_scope_payload() {
-        let scope_origin = RecursorProducerOriginId(41);
-        let selected = SourceSelectedContinuation {
-            activation: ContinuationActivationId(0),
-            cursor: ContinuationCursorId(1),
-            parent: None,
-            pending: Vec::new(),
-            selected_ancestry: Vec::new(),
-            selected_scope: Some(OwnedSelectedScope {
-                scope_origin,
-                parent_scope: None,
-                frame: ComputationalRecursorFramePayload {
-                    cases: Vec::new(),
-                    default: RuntimeTrap {
-                        code: RuntimeTrapCode::ExplicitTrap,
-                        message: "px8j owned selected scope".to_string(),
-                    },
-                    outer_env: Vec::new(),
-                    provenance: RecursorFrameProvenance(0),
-                },
-            }),
-        };
-        let active = selected.as_active(&[]);
-        assert_eq!(
-            active.selected_scope.map(|scope| scope.scope_origin),
-            Some(scope_origin)
-        );
-        let deleted = SourceSelectedContinuation {
-            selected_scope: None,
-            ..selected
-        };
-        assert!(deleted.as_active(&[]).selected_scope.is_none());
     }
 
     #[test]
