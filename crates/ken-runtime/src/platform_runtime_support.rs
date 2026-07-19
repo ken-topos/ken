@@ -649,7 +649,8 @@ fn collect_runtime_support_for_expr(
 ) -> Result<(), PlatformRuntimeSupportError> {
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
-        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => {
             collect_runtime_support_for_expr(program, body, shapes, visiting)
         }
         RuntimeExpr::Value(value) => collect_runtime_support_for_value(value, shapes),

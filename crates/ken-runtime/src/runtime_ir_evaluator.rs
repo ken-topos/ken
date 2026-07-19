@@ -881,7 +881,8 @@ fn reject_runtime_expr_blockers(
 ) -> Result<(), RuntimeIrEvaluationError> {
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
-        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => {
             reject_runtime_expr_blockers(program, body)
         }
         RuntimeExpr::Value(_) | RuntimeExpr::Var(_) | RuntimeExpr::Trap(_) => Ok(()),
@@ -1001,7 +1002,8 @@ fn reject_runtime_expr_blockers(
 fn runtime_expr_contains_effect(expr: &RuntimeExpr) -> bool {
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
-        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => {
             runtime_expr_contains_effect(body)
         }
         RuntimeExpr::Value(_) | RuntimeExpr::Var(_) | RuntimeExpr::Trap(_) => false,
@@ -1164,9 +1166,8 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
     ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
         match expr {
             RuntimeExpr::CheckedJoinSite { body, .. }
-            | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
-                self.eval_expr(body, env)
-            }
+            | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+            | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => self.eval_expr(body, env),
             RuntimeExpr::Value(value) => Ok(RuntimeIrOutcome::Value(self.eval_value(value)?)),
             RuntimeExpr::Var(index) => env
                 .get(*index as usize)

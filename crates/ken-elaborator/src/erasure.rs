@@ -393,7 +393,8 @@ fn runtime_declaration_refs_in_kind(kind: &RuntimeDeclarationKind) -> Vec<String
 fn collect_runtime_declaration_refs(expr: &RuntimeExpr, output: &mut BTreeSet<String>) {
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
-        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => {
             collect_runtime_declaration_refs(body, output)
         }
         RuntimeExpr::DeclarationRef { symbol } => {
@@ -521,6 +522,24 @@ pub(crate) struct CheckedJoinAnswerSymbols {
     pub exit_code: StableSymbol,
 }
 
+/// Kernel-typed authority for one complete same-SCC recursive application.
+/// Produced before erasure; consumed exactly once when lowering the matching
+/// maximal checked application spine.
+#[derive(Clone)]
+pub(crate) struct CheckedRecursiveInvocationSeed {
+    pub call_template_id: u64,
+    pub owner: StableSymbol,
+    pub occurrence_ordinal: u64,
+    pub callee: StableSymbol,
+    pub level_instantiation: Vec<Vec<u8>>,
+    pub recursion_group: StableSymbol,
+    pub scc_index: u64,
+    pub admission: u8,
+    pub arity: usize,
+    pub local_telescope: Vec<ken_runtime::CheckedAnswerInterfaceV1>,
+    pub result_interface: ken_runtime::CheckedAnswerInterfaceV1,
+}
+
 #[derive(Clone)]
 struct NativeJoinPlanCollector {
     answer_symbols: CheckedJoinAnswerSymbols,
@@ -532,13 +551,28 @@ struct NativeJoinPlanCollector {
 struct NativeLoweringPlanCollector {
     joins: NativeJoinPlanCollector,
     oriented: OrientedSubcontinuationPlanCollector,
+    recursive_invocations: BTreeMap<(StableSymbol, u64), CheckedRecursiveInvocationSeed>,
+    consumed_recursive_invocations: BTreeSet<u64>,
+    next_recursive_ordinal: BTreeMap<StableSymbol, u64>,
+    pending_recursive_calls: Vec<(CheckedRecursiveInvocationSeed, Vec<u64>, Option<u64>)>,
 }
 
 impl NativeLoweringPlanCollector {
-    fn new(answer_symbols: CheckedJoinAnswerSymbols) -> Self {
+    fn new(
+        answer_symbols: CheckedJoinAnswerSymbols,
+        recursive_invocations: Vec<CheckedRecursiveInvocationSeed>,
+    ) -> Self {
+        let recursive_invocations = recursive_invocations
+            .into_iter()
+            .map(|seed| ((seed.owner.clone(), seed.occurrence_ordinal), seed))
+            .collect();
         Self {
             joins: NativeJoinPlanCollector::new(answer_symbols),
             oriented: OrientedSubcontinuationPlanCollector::default(),
+            recursive_invocations,
+            consumed_recursive_invocations: BTreeSet::new(),
+            next_recursive_ordinal: BTreeMap::new(),
+            pending_recursive_calls: Vec::new(),
         }
     }
 
@@ -548,7 +582,69 @@ impl NativeLoweringPlanCollector {
         ken_runtime::NativeJoinPlanV1,
         ken_runtime::OrientedSubcontinuationPlanV1,
     ) {
-        (self.joins.finish(), self.oriented.finish())
+        (
+            self.joins.finish(),
+            self.oriented.finish(
+                self.recursive_invocations,
+                self.consumed_recursive_invocations,
+                self.pending_recursive_calls,
+            ),
+        )
+    }
+
+    fn consume_recursive_invocation(
+        &mut self,
+        owner: &StableSymbol,
+        view: &checked_core::CheckedCoreRecursiveCallView,
+        arity: usize,
+        occurrence_path: &[u64],
+        parent_frame: Option<u64>,
+    ) -> Result<u64, ErasureError> {
+        let ordinal = self
+            .next_recursive_ordinal
+            .entry(owner.clone())
+            .or_default();
+        let key = (owner.clone(), *ordinal);
+        *ordinal = ordinal
+            .checked_add(1)
+            .expect("compiler-private recursive occurrence ordinal exhausted");
+        let seed = self
+            .recursive_invocations
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| {
+                expression_lowering_error(
+                    owner,
+                    "checked_recursive_invocation_missing",
+                    format!(
+                        "complete recursive application occurrence {key:?} has no checked template"
+                    ),
+                )
+            })?;
+        if seed.callee != view.symbol
+            || seed.recursion_group != view.group_symbol
+            || seed.scc_index != view.scc_index as u64
+            || seed.arity != arity
+        {
+            return Err(expression_lowering_error(
+                owner,
+                "checked_recursive_invocation_mismatch",
+                "recursive application template callee/group/SCC/arity binding is stale",
+            ));
+        }
+        if !self
+            .consumed_recursive_invocations
+            .insert(seed.call_template_id)
+        {
+            return Err(expression_lowering_error(
+                owner,
+                "checked_recursive_invocation_duplicate",
+                "recursive application template was consumed more than once",
+            ));
+        }
+        self.pending_recursive_calls
+            .push((seed.clone(), occurrence_path.to_vec(), parent_frame));
+        Ok(seed.call_template_id)
     }
 }
 
@@ -706,7 +802,8 @@ impl OrientedSubcontinuationPlanCollector {
         let output_interface = parent_frame
             .and_then(|parent| self.input_by_frame.get(&parent).cloned())
             .unwrap_or_else(|| canonical_checked_motive_interface(&view.motive));
-        self.input_by_frame.insert(frame_id, input_interface.clone());
+        self.input_by_frame
+            .insert(frame_id, input_interface.clone());
         Ok(Some(PendingOrientedFrame {
             frame_id,
             segment_site_id,
@@ -755,11 +852,94 @@ impl OrientedSubcontinuationPlanCollector {
         Ok(pending.frame_id)
     }
 
-    fn finish(self) -> ken_runtime::OrientedSubcontinuationPlanV1 {
+    fn finish(
+        mut self,
+        recursive_invocations: BTreeMap<(StableSymbol, u64), CheckedRecursiveInvocationSeed>,
+        consumed_recursive_invocations: BTreeSet<u64>,
+        pending_recursive_calls: Vec<(CheckedRecursiveInvocationSeed, Vec<u64>, Option<u64>)>,
+    ) -> ken_runtime::OrientedSubcontinuationPlanV1 {
+        assert_eq!(
+            recursive_invocations.len(),
+            consumed_recursive_invocations.len(),
+            "checked recursive invocation templates close exactly over Runtime markers"
+        );
+        let mut recursive_calls = Vec::with_capacity(pending_recursive_calls.len());
+        for (seed, occurrence_path, parent_frame) in pending_recursive_calls {
+            let mut callee_frames = self
+                .frames
+                .iter()
+                .filter(|frame| frame.declaration == seed.callee.to_string())
+                .map(|frame| frame.frame_id)
+                .collect::<Vec<_>>();
+            callee_frames.sort_by_key(|id| {
+                self.frames
+                    .iter()
+                    .find(|frame| frame.frame_id == *id)
+                    .expect("callee frame exists")
+                    .semantic_position
+            });
+            assert!(
+                !callee_frames.is_empty(),
+                "checked recursive call callee owns an oriented segment template"
+            );
+            let segment_site_id = self
+                .frames
+                .iter()
+                .find(|frame| frame.frame_id == callee_frames[0])
+                .expect("callee root frame exists")
+                .segment_site_id;
+            assert!(callee_frames.iter().all(|id| self
+                .frames
+                .iter()
+                .find(|frame| frame.frame_id == *id)
+                .is_some_and(|frame| frame.segment_site_id == segment_site_id)));
+
+            // The kernel-inferred fully-applied result is the endpoint
+            // authority for the reusable callee template.  Rebind the final
+            // static frame endpoint before sealing occurrence fingerprints.
+            let last_id = *callee_frames.last().expect("callee segment nonempty");
+            let last = self
+                .frames
+                .iter_mut()
+                .find(|frame| frame.frame_id == last_id)
+                .expect("callee final frame exists");
+            last.output_interface = seed.result_interface.clone();
+            last.occurrence_binding_fingerprint =
+                ken_runtime::compiler_private_oriented_occurrence_binding_fingerprint(last);
+
+            let caller_interface = parent_frame
+                .and_then(|id| self.frames.iter().find(|frame| frame.frame_id == id))
+                .map(|frame| frame.input_interface.clone())
+                .unwrap_or_else(|| seed.result_interface.clone());
+            let mut call = ken_runtime::CheckedRecursiveInvocationTemplateV1 {
+                call_template_id: seed.call_template_id,
+                declaration: seed.owner.to_string(),
+                checked_occurrence_path: occurrence_path,
+                callee: seed.callee.to_string(),
+                level_instantiation: seed.level_instantiation,
+                recursion_group: seed.recursion_group.to_string(),
+                scc_index: seed.scc_index,
+                admission: seed.admission,
+                arity: seed.arity as u64,
+                local_telescope: seed.local_telescope,
+                result_interface: seed.result_interface,
+                callee_segment_site_id: segment_site_id,
+                callee_frame_templates: callee_frames,
+                caller_interface,
+                occurrence_binding_fingerprint: 0,
+            };
+            // For the currently supported non-dependent native subset, the
+            // checked call result is exactly the caller continuation input.
+            call.caller_interface = call.result_interface.clone();
+            call.occurrence_binding_fingerprint =
+                ken_runtime::compiler_private_recursive_call_binding_fingerprint(&call);
+            recursive_calls.push(call);
+        }
         ken_runtime::OrientedSubcontinuationPlanV1 {
             representation_rule_version:
                 ken_runtime::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
             frames: self.frames,
+            recursive_calls,
         }
     }
 }
@@ -839,6 +1019,7 @@ pub(crate) fn erase_checked_host_package_for_target_with_join_plan<'a>(
     root: &StableSymbol,
     spine: &CheckedHostSpineV1,
     answer_symbols: CheckedJoinAnswerSymbols,
+    recursive_invocations: Vec<CheckedRecursiveInvocationSeed>,
 ) -> Result<
     (
         RuntimeProgram,
@@ -848,7 +1029,7 @@ pub(crate) fn erase_checked_host_package_for_target_with_join_plan<'a>(
     ErasureError,
 > {
     let targets: Vec<StableSymbol> = target_closure.into_iter().cloned().collect();
-    let mut collector = NativeLoweringPlanCollector::new(answer_symbols);
+    let mut collector = NativeLoweringPlanCollector::new(answer_symbols, recursive_invocations);
     let program = erase_checked_package_with_host_root(
         package,
         targets,
@@ -993,10 +1174,9 @@ fn lower_checked_host_value(
                     Ok(body)
                 }
             }
-            Err(ErasureError::ExpressionLowering {
-                lane,
-                ..
-            }) if lane == "unrecognized_checked_host_computation" => {
+            Err(ErasureError::ExpressionLowering { lane, .. })
+                if lane == "unrecognized_checked_host_computation" =>
+            {
                 lower_body_term_with_plans(
                     term,
                     declarations,
@@ -1047,6 +1227,13 @@ fn lower_body_term_with_plans(
         .expect("expression lowering stack always has an owner")
         .clone();
     if let Some((view, arguments)) = recursive_application_spine(term) {
+        let call_template_id = native_plans.consume_recursive_invocation(
+            &owner,
+            view,
+            arguments.len(),
+            path,
+            parent_oriented_frame,
+        )?;
         let callee = lower_recursive_declaration_call(view, declarations, root)?;
         let mut args = Vec::with_capacity(arguments.len());
         for (index, argument) in arguments.into_iter().enumerate() {
@@ -1065,9 +1252,12 @@ fn lower_body_term_with_plans(
                 parent_oriented_frame,
             )?);
         }
-        return Ok(RuntimeExpr::Call {
-            callee: Box::new(callee),
-            args,
+        return Ok(RuntimeExpr::CheckedRecursiveInvocation {
+            call_template_id,
+            body: Box::new(RuntimeExpr::Call {
+                callee: Box::new(callee),
+                args,
+            }),
         });
     }
     if let Some((symbol, level_args, arguments)) = direct_application_spine(term) {
@@ -1082,7 +1272,7 @@ fn lower_body_term_with_plans(
                 parameter_count += 1;
                 body = inner;
             }
-            if parameter_count == arguments.len() {
+            if parameter_count == arguments.len() && !admitted_recursive_member(semantic, symbol) {
                 if stack.contains(symbol) {
                     return Err(expression_lowering_error(
                         root,
@@ -1414,7 +1604,9 @@ fn lower_body_term_with_plans(
                     default,
                 }
             };
-            let join_site = native_plans.joins.record_match(&owner, path, view, &runtime)?;
+            let join_site = native_plans
+                .joins
+                .record_match(&owner, path, view, &runtime)?;
             let runtime = if let Some(pending) = pending {
                 let frame_id = native_plans.oriented.finish_match(pending, &runtime)?;
                 RuntimeExpr::CheckedSubcontinuationFrame {
@@ -1424,10 +1616,12 @@ fn lower_body_term_with_plans(
             } else {
                 runtime
             };
-            Ok(join_site.map_or(runtime.clone(), |site_id| RuntimeExpr::CheckedJoinSite {
-                site_id,
-                body: Box::new(runtime),
-            }))
+            Ok(
+                join_site.map_or(runtime.clone(), |site_id| RuntimeExpr::CheckedJoinSite {
+                    site_id,
+                    body: Box::new(runtime),
+                }),
+            )
         }
         _ => lower_body_term_inner(
             term,
@@ -1454,6 +1648,10 @@ fn lower_checked_host_computation(
     mut native_plans: Option<&mut NativeLoweringPlanCollector>,
     parent_oriented_frame: Option<u64>,
 ) -> Result<RuntimeExpr, ErasureError> {
+    let owner = stack
+        .last()
+        .expect("expression lowering stack always has an owner")
+        .clone();
     if let CheckedCoreBodyTerm::Match(view) = term {
         reject_level_args(root, &view.level_args)?;
         if !view.indices.is_empty() {
@@ -1463,22 +1661,17 @@ fn lower_checked_host_computation(
                 "checked host Match carries runtime indices",
             ));
         }
-        let scrutinee = lower_body_term_inner(
-            &view.scrutinee,
-            declarations,
-            semantic,
-            stack,
-            root,
-            context_depth,
-            branch_remap,
-        )?;
         let computational = match_uses_computational_recursive_hypothesis(view, root)?;
         let pending_oriented_frame = if computational {
-            native_plans.as_deref_mut().map(|plans| {
-                plans
-                    .oriented
-                    .begin_match(root, path, parent_oriented_frame, view)
-            }).transpose()?.flatten()
+            native_plans
+                .as_deref_mut()
+                .map(|plans| {
+                    plans
+                        .oriented
+                        .begin_match(root, path, parent_oriented_frame, view)
+                })
+                .transpose()?
+                .flatten()
         } else {
             None
         };
@@ -1486,6 +1679,32 @@ fn lower_checked_host_computation(
             .as_ref()
             .map(|pending| pending.frame_id)
             .or(parent_oriented_frame);
+        let scrutinee = if let Some(plans) = native_plans.as_deref_mut() {
+            let mut scrutinee_path = path.to_vec();
+            scrutinee_path.push(0);
+            lower_body_term_with_plans(
+                &view.scrutinee,
+                declarations,
+                semantic,
+                stack,
+                root,
+                context_depth,
+                branch_remap,
+                &scrutinee_path,
+                plans,
+                nested_oriented_parent,
+            )?
+        } else {
+            lower_body_term_inner(
+                &view.scrutinee,
+                declarations,
+                semantic,
+                stack,
+                root,
+                context_depth,
+                branch_remap,
+            )?
+        };
         let mut cases = Vec::with_capacity(view.branches.len());
         for (branch_index, branch) in view.branches.iter().enumerate() {
             let constructor = &branch.constructor;
@@ -1611,7 +1830,10 @@ fn lower_checked_host_computation(
                 parameter_count += 1;
                 declaration_body = body;
             }
-            if parameter_count == arguments.len() && !stack.contains(symbol) {
+            if parameter_count == arguments.len()
+                && !stack.contains(symbol)
+                && !admitted_recursive_member(semantic, symbol)
+            {
                 let values = arguments
                     .iter()
                     .enumerate()
@@ -1665,6 +1887,32 @@ fn lower_checked_host_computation(
                 }
                 return Ok(lowered);
             }
+        }
+        if admitted_recursive_member(semantic, symbol) {
+            return if let Some(plans) = native_plans.as_deref_mut() {
+                lower_body_term_with_plans(
+                    term,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth,
+                    branch_remap,
+                    path,
+                    plans,
+                    parent_oriented_frame,
+                )
+            } else {
+                lower_body_term_inner(
+                    term,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth,
+                    branch_remap,
+                )
+            };
         }
     }
     if let Some((constructor, args)) = constructor_application_spine(term) {
@@ -1816,6 +2064,18 @@ fn lower_checked_host_computation(
         }
     }
     if let Some((view, arguments)) = recursive_application_spine(term) {
+        let call_template_id = native_plans
+            .as_deref_mut()
+            .map(|plans| {
+                plans.consume_recursive_invocation(
+                    &owner,
+                    view,
+                    arguments.len(),
+                    path,
+                    parent_oriented_frame,
+                )
+            })
+            .transpose()?;
         let callee = lower_recursive_declaration_call(view, declarations, root)?;
         let args = arguments
             .into_iter()
@@ -1838,10 +2098,16 @@ fn lower_checked_host_computation(
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
-        return Ok(RuntimeExpr::Call {
+        let call = RuntimeExpr::Call {
             callee: Box::new(callee),
             args,
-        });
+        };
+        return Ok(call_template_id.map_or(call.clone(), |call_template_id| {
+            RuntimeExpr::CheckedRecursiveInvocation {
+                call_template_id,
+                body: Box::new(call),
+            }
+        }));
     }
     Err(expression_lowering_error(
         root,
@@ -2895,6 +3161,13 @@ fn shift_runtime_vars(expr: RuntimeExpr, by: u32, cutoff: u32) -> RuntimeExpr {
                 body: Box::new(shift_runtime_vars(*body, by, cutoff)),
             }
         }
+        RuntimeExpr::CheckedRecursiveInvocation {
+            call_template_id,
+            body,
+        } => RuntimeExpr::CheckedRecursiveInvocation {
+            call_template_id,
+            body: Box::new(shift_runtime_vars(*body, by, cutoff)),
+        },
         RuntimeExpr::Var(index) if index >= cutoff => RuntimeExpr::Var(index + by),
         RuntimeExpr::Var(_)
         | RuntimeExpr::Value(_)
@@ -4663,14 +4936,17 @@ mod px7l_tests {
         let mut frames = plan.frames.iter().collect::<Vec<_>>();
         frames.sort_by_key(|frame| frame.semantic_position);
         assert_eq!(
-            frames.iter().map(|frame| frame.frame_id).collect::<Vec<_>>(),
+            frames
+                .iter()
+                .map(|frame| frame.frame_id)
+                .collect::<Vec<_>>(),
             vec![2, 1, 0],
             "checked postorder is the semantic p2, p1, p0 chain"
         );
         assert!(
-            frames.windows(2).all(|pair| {
-                pair[0].output_interface == pair[1].input_interface
-            }),
+            frames
+                .windows(2)
+                .all(|pair| { pair[0].output_interface == pair[1].input_interface }),
             "every checked answer endpoint closes before Runtime erasure"
         );
         assert!(

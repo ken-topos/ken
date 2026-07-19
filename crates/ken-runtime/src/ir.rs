@@ -348,6 +348,14 @@ pub enum RuntimeExpr {
         frame_id: u64,
         body: Box<RuntimeExpr>,
     },
+    /// Exact checked marker for one complete same-SCC recursive application.
+    /// The marker names a reusable static call template; native lowering mints
+    /// a fresh affine invocation identity when it consumes the marker.
+    #[doc(hidden)]
+    CheckedRecursiveInvocation {
+        call_template_id: u64,
+        body: Box<RuntimeExpr>,
+    },
     Value(RuntimeValue),
     Var(u32),
     Let {

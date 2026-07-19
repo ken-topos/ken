@@ -4,8 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::fnv1a_64;
 
-pub const ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER: &[u8] =
-    b"OrientedSubcontinuationPlanV1\0";
+pub const ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER: &[u8] = b"OrientedSubcontinuationPlanV1\0";
 pub const CHECKED_ANSWER_INTERFACE_V1_HEADER: &[u8] = b"CheckedAnswerInterfaceV1\0";
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -47,10 +46,33 @@ pub struct OrientedSubcontinuationFramePlanV1 {
     pub control_witness: OrientedControlWitnessV1,
 }
 
+/// One reusable checked edge at a complete same-SCC application occurrence.
+/// The template is static; native lowering mints a fresh affine invocation
+/// identity each time it consumes the matching Runtime marker.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedRecursiveInvocationTemplateV1 {
+    pub call_template_id: u64,
+    pub declaration: String,
+    pub checked_occurrence_path: Vec<u64>,
+    pub callee: String,
+    pub level_instantiation: Vec<Vec<u8>>,
+    pub recursion_group: String,
+    pub scc_index: u64,
+    pub admission: u8,
+    pub arity: u64,
+    pub local_telescope: Vec<CheckedAnswerInterfaceV1>,
+    pub result_interface: CheckedAnswerInterfaceV1,
+    pub callee_segment_site_id: u64,
+    pub callee_frame_templates: Vec<u64>,
+    pub caller_interface: CheckedAnswerInterfaceV1,
+    pub occurrence_binding_fingerprint: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrientedSubcontinuationPlanV1 {
     pub representation_rule_version: u32,
     pub frames: Vec<OrientedSubcontinuationFramePlanV1>,
+    pub recursive_calls: Vec<CheckedRecursiveInvocationTemplateV1>,
 }
 
 impl OrientedSubcontinuationPlanV1 {
@@ -81,12 +103,41 @@ impl OrientedSubcontinuationPlanV1 {
                 }
             }
         }
+        put_u64(&mut out, self.recursive_calls.len() as u64);
+        for call in &self.recursive_calls {
+            put_u64(&mut out, call.call_template_id);
+            put_bytes(&mut out, call.declaration.as_bytes());
+            put_u64(&mut out, call.checked_occurrence_path.len() as u64);
+            for value in &call.checked_occurrence_path {
+                put_u64(&mut out, *value);
+            }
+            put_bytes(&mut out, call.callee.as_bytes());
+            put_u64(&mut out, call.level_instantiation.len() as u64);
+            for level in &call.level_instantiation {
+                put_bytes(&mut out, level);
+            }
+            put_bytes(&mut out, call.recursion_group.as_bytes());
+            put_u64(&mut out, call.scc_index);
+            out.push(call.admission);
+            put_u64(&mut out, call.arity);
+            put_u64(&mut out, call.local_telescope.len() as u64);
+            for entry in &call.local_telescope {
+                put_bytes(&mut out, &entry.canonical);
+            }
+            put_bytes(&mut out, &call.result_interface.canonical);
+            put_u64(&mut out, call.callee_segment_site_id);
+            put_u64(&mut out, call.callee_frame_templates.len() as u64);
+            for frame in &call.callee_frame_templates {
+                put_u64(&mut out, *frame);
+            }
+            put_bytes(&mut out, &call.caller_interface.canonical);
+            put_u64(&mut out, call.occurrence_binding_fingerprint);
+        }
         out
     }
 
     pub fn decode(bytes: &[u8]) -> Result<Self, &'static str> {
-        let Some(mut bytes) = bytes.strip_prefix(ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER)
-        else {
+        let Some(mut bytes) = bytes.strip_prefix(ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER) else {
             return Err("missing OrientedSubcontinuationPlanV1 header");
         };
         let representation_rule_version = take_u32(&mut bytes)?;
@@ -108,10 +159,8 @@ impl OrientedSubcontinuationPlanV1 {
                 checked_occurrence_path.push(take_u64(&mut bytes)?);
             }
             let semantic_position = take_u64(&mut bytes)?;
-            let input_interface =
-                CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
-            let output_interface =
-                CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let input_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let output_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
             let runtime_frame_fingerprint = take_u64(&mut bytes)?;
             let occurrence_binding_fingerprint = take_u64(&mut bytes)?;
             let (tag, tail) = bytes
@@ -136,12 +185,79 @@ impl OrientedSubcontinuationPlanV1 {
                 control_witness,
             });
         }
+        let call_count = usize::try_from(take_u64(&mut bytes)?)
+            .map_err(|_| "recursive invocation template count overflows usize")?;
+        let mut recursive_calls = Vec::with_capacity(call_count);
+        for _ in 0..call_count {
+            let call_template_id = take_u64(&mut bytes)?;
+            let declaration = String::from_utf8(take_bytes(&mut bytes)?.to_vec())
+                .map_err(|_| "recursive invocation declaration is not UTF-8")?;
+            let path_len = usize::try_from(take_u64(&mut bytes)?)
+                .map_err(|_| "recursive invocation occurrence path overflows usize")?;
+            let mut checked_occurrence_path = Vec::with_capacity(path_len);
+            for _ in 0..path_len {
+                checked_occurrence_path.push(take_u64(&mut bytes)?);
+            }
+            let callee = String::from_utf8(take_bytes(&mut bytes)?.to_vec())
+                .map_err(|_| "recursive invocation callee is not UTF-8")?;
+            let level_count = usize::try_from(take_u64(&mut bytes)?)
+                .map_err(|_| "recursive invocation level count overflows usize")?;
+            let mut level_instantiation = Vec::with_capacity(level_count);
+            for _ in 0..level_count {
+                level_instantiation.push(take_bytes(&mut bytes)?.to_vec());
+            }
+            let recursion_group = String::from_utf8(take_bytes(&mut bytes)?.to_vec())
+                .map_err(|_| "recursive invocation group is not UTF-8")?;
+            let scc_index = take_u64(&mut bytes)?;
+            let (admission, tail) = bytes
+                .split_first()
+                .ok_or("truncated recursive invocation admission")?;
+            bytes = tail;
+            let admission = *admission;
+            let arity = take_u64(&mut bytes)?;
+            let telescope_len = usize::try_from(take_u64(&mut bytes)?)
+                .map_err(|_| "recursive invocation telescope length overflows usize")?;
+            let mut local_telescope = Vec::with_capacity(telescope_len);
+            for _ in 0..telescope_len {
+                local_telescope.push(CheckedAnswerInterfaceV1::new(
+                    take_bytes(&mut bytes)?.to_vec(),
+                )?);
+            }
+            let result_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let callee_segment_site_id = take_u64(&mut bytes)?;
+            let frame_count = usize::try_from(take_u64(&mut bytes)?)
+                .map_err(|_| "recursive invocation frame count overflows usize")?;
+            let mut callee_frame_templates = Vec::with_capacity(frame_count);
+            for _ in 0..frame_count {
+                callee_frame_templates.push(take_u64(&mut bytes)?);
+            }
+            let caller_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let occurrence_binding_fingerprint = take_u64(&mut bytes)?;
+            recursive_calls.push(CheckedRecursiveInvocationTemplateV1 {
+                call_template_id,
+                declaration,
+                checked_occurrence_path,
+                callee,
+                level_instantiation,
+                recursion_group,
+                scc_index,
+                admission,
+                arity,
+                local_telescope,
+                result_interface,
+                callee_segment_site_id,
+                callee_frame_templates,
+                caller_interface,
+                occurrence_binding_fingerprint,
+            });
+        }
         if !bytes.is_empty() {
             return Err("OrientedSubcontinuationPlanV1 has trailing bytes");
         }
         let plan = Self {
             representation_rule_version,
             frames,
+            recursive_calls,
         };
         plan.validate()?;
         Ok(plan)
@@ -161,6 +277,48 @@ impl OrientedSubcontinuationPlanV1 {
                 != compiler_private_oriented_occurrence_binding_fingerprint(frame)
             {
                 return Err("oriented subcontinuation occurrence binding is inconsistent");
+            }
+        }
+        let mut call_ids = BTreeSet::new();
+        for call in &self.recursive_calls {
+            if !call_ids.insert(call.call_template_id) {
+                return Err("OrientedSubcontinuationPlanV1 repeats a recursive call template");
+            }
+            if call.arity == 0 || call.callee_frame_templates.is_empty() {
+                return Err("recursive call template is partial or has no callee segment");
+            }
+            if call.occurrence_binding_fingerprint
+                != compiler_private_recursive_call_binding_fingerprint(call)
+            {
+                return Err("recursive call template occurrence binding is inconsistent");
+            }
+            for frame_id in &call.callee_frame_templates {
+                let frame = self
+                    .frames
+                    .iter()
+                    .find(|frame| frame.frame_id == *frame_id)
+                    .ok_or("recursive call template names a stale callee frame")?;
+                if frame.segment_site_id != call.callee_segment_site_id
+                    || frame.declaration != call.callee
+                {
+                    return Err("recursive call template callee binding is inconsistent");
+                }
+            }
+            let mut callee_frames = call
+                .callee_frame_templates
+                .iter()
+                .map(|id| {
+                    self.frames
+                        .iter()
+                        .find(|frame| frame.frame_id == *id)
+                        .unwrap()
+                })
+                .collect::<Vec<_>>();
+            callee_frames.sort_by_key(|frame| frame.semantic_position);
+            if callee_frames.last().unwrap().output_interface != call.result_interface
+                || call.result_interface != call.caller_interface
+            {
+                return Err("recursive call template checked endpoints do not compose");
             }
         }
         let by_id = self
@@ -198,7 +356,10 @@ impl OrientedSubcontinuationPlanV1 {
         }
         let mut by_segment = BTreeMap::<u64, Vec<&OrientedSubcontinuationFramePlanV1>>::new();
         for frame in &self.frames {
-            by_segment.entry(frame.segment_site_id).or_default().push(frame);
+            by_segment
+                .entry(frame.segment_site_id)
+                .or_default()
+                .push(frame);
         }
         for (segment, frames) in &mut by_segment {
             if roots_by_segment.get(segment).copied() != Some(1) {
@@ -221,6 +382,46 @@ impl OrientedSubcontinuationPlanV1 {
     pub fn frame(&self, frame_id: u64) -> Option<&OrientedSubcontinuationFramePlanV1> {
         self.frames.iter().find(|frame| frame.frame_id == frame_id)
     }
+
+    pub fn recursive_call(
+        &self,
+        call_template_id: u64,
+    ) -> Option<&CheckedRecursiveInvocationTemplateV1> {
+        self.recursive_calls
+            .iter()
+            .find(|call| call.call_template_id == call_template_id)
+    }
+}
+
+#[doc(hidden)]
+pub fn compiler_private_recursive_call_binding_fingerprint(
+    call: &CheckedRecursiveInvocationTemplateV1,
+) -> u64 {
+    let mut bytes = b"CheckedRecursiveInvocationOccurrenceV1\0".to_vec();
+    put_u64(&mut bytes, call.call_template_id);
+    put_bytes(&mut bytes, call.declaration.as_bytes());
+    put_u64(&mut bytes, call.checked_occurrence_path.len() as u64);
+    for value in &call.checked_occurrence_path {
+        put_u64(&mut bytes, *value);
+    }
+    put_bytes(&mut bytes, call.callee.as_bytes());
+    for level in &call.level_instantiation {
+        put_bytes(&mut bytes, level);
+    }
+    put_bytes(&mut bytes, call.recursion_group.as_bytes());
+    put_u64(&mut bytes, call.scc_index);
+    bytes.push(call.admission);
+    put_u64(&mut bytes, call.arity);
+    for entry in &call.local_telescope {
+        put_bytes(&mut bytes, &entry.canonical);
+    }
+    put_bytes(&mut bytes, &call.result_interface.canonical);
+    put_u64(&mut bytes, call.callee_segment_site_id);
+    for frame in &call.callee_frame_templates {
+        put_u64(&mut bytes, *frame);
+    }
+    put_bytes(&mut bytes, &call.caller_interface.canonical);
+    fnv1a_64(&bytes)
 }
 
 #[doc(hidden)]
@@ -322,8 +523,7 @@ mod tests {
     #[test]
     fn canonical_roundtrip_keeps_full_checked_interfaces() {
         let plan = OrientedSubcontinuationPlanV1 {
-            representation_rule_version:
-                OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+            representation_rule_version: OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
             frames: vec![frame(0, None), frame(1, Some(0))],
         };
         assert_eq!(
@@ -337,8 +537,7 @@ mod tests {
         let mut frame = frame(0, None);
         frame.output_interface.canonical.push(9);
         let plan = OrientedSubcontinuationPlanV1 {
-            representation_rule_version:
-                OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+            representation_rule_version: OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
             frames: vec![frame],
         };
         assert_eq!(
@@ -358,8 +557,7 @@ mod tests {
         inner.occurrence_binding_fingerprint =
             compiler_private_oriented_occurrence_binding_fingerprint(&inner);
         let plan = OrientedSubcontinuationPlanV1 {
-            representation_rule_version:
-                OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+            representation_rule_version: OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
             frames: vec![outer, inner],
         };
         assert_eq!(
@@ -376,8 +574,7 @@ mod tests {
         child.occurrence_binding_fingerprint =
             compiler_private_oriented_occurrence_binding_fingerprint(&child);
         let plan = OrientedSubcontinuationPlanV1 {
-            representation_rule_version:
-                OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+            representation_rule_version: OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
             frames: vec![root, child],
         };
         assert_eq!(

@@ -2352,7 +2352,8 @@ fn lowerability_status_tag(status: &RuntimeLowerabilityStatus) -> String {
 fn runtime_expr_host_ops(expr: &RuntimeExpr, operations: &mut BTreeSet<ken_host::HostOpV1>) {
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
-        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => {
             runtime_expr_host_ops(body, operations)
         }
         RuntimeExpr::Effect {

@@ -10,17 +10,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::Path;
 
-use ken_kernel::{Decl, GlobalId, Term};
+use ken_kernel::{Context, Decl, GlobalEnv, GlobalId, Term};
 
 use crate::checked_core::{
-    canonical_decl_bytes, canonical_symbol_bytes, checked_core_declaration_body_view,
-    emit_checked_core_package, semantic_fingerprint, validate_checked_core_package,
-    AssumptionTrustKind, AssumptionTrustMetadata, CheckedCoreArtifactInputs, CheckedCoreBodyTerm,
-    CheckedCoreBodyViewError, CheckedCoreBodyViewSelection, CheckedCorePackage,
-    CheckedCorePackageError, CheckedCorePackageHeader, CheckedCoreSemanticInputs,
-    ConstructorMetadata, DataMetadata, LowerabilityStatus, PartialityMetadata, PrimitiveMetadata,
-    PrimitiveReductionMetadata, RecursionAdmission, RecursionMetadata, StableSymbol,
-    StableSymbolTable, SymbolNamespace,
+    canonical_decl_bytes, canonical_symbol_bytes, canonical_term_bytes,
+    checked_core_declaration_body_view, emit_checked_core_package, semantic_fingerprint,
+    validate_checked_core_package, AssumptionTrustKind, AssumptionTrustMetadata,
+    CheckedCoreArtifactInputs, CheckedCoreBodyTerm, CheckedCoreBodyViewError,
+    CheckedCoreBodyViewSelection, CheckedCorePackage, CheckedCorePackageError,
+    CheckedCorePackageHeader, CheckedCoreSemanticInputs, ConstructorMetadata, DataMetadata,
+    LowerabilityStatus, PartialityMetadata, PrimitiveMetadata, PrimitiveReductionMetadata,
+    RecursionAdmission, RecursionMetadata, StableSymbol, StableSymbolTable, SymbolNamespace,
 };
 use crate::program_admission::{admit_checked_main, CheckedMainDescriptor, ProgramAdmissionError};
 use crate::{ElabEnv, ElabError};
@@ -1199,6 +1199,263 @@ pub fn compile_ken_package_sources(
     })
 }
 
+fn checked_answer_interface_from_term(
+    label: &[u8],
+    term: &Term,
+    symbols: &StableSymbolTable,
+) -> Result<ken_runtime::CheckedAnswerInterfaceV1, CompilerDriverError> {
+    let bytes = canonical_term_bytes(term, symbols).map_err(|error| match error {
+        crate::checked_core::CanonicalEncodingError::MissingStableSymbol(id) => {
+            CompilerDriverError::MissingStableSymbol { id }
+        }
+    })?;
+    let mut canonical = ken_runtime::CHECKED_ANSWER_INTERFACE_V1_HEADER.to_vec();
+    canonical.extend_from_slice(&(label.len() as u64).to_be_bytes());
+    canonical.extend_from_slice(label);
+    canonical.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
+    canonical.extend_from_slice(&bytes);
+    Ok(ken_runtime::CheckedAnswerInterfaceV1::new(canonical)
+        .expect("checked answer schema carries its canonical header"))
+}
+
+fn term_application_spine_exact(term: &Term) -> (&Term, Vec<&Term>) {
+    let mut arguments = Vec::new();
+    let mut cursor = term;
+    while let Term::App(function, argument) = cursor {
+        arguments.push(argument.as_ref());
+        cursor = function.as_ref();
+    }
+    arguments.reverse();
+    (cursor, arguments)
+}
+
+struct RecursiveInvocationTemplateCollector<'a> {
+    env: &'a GlobalEnv,
+    symbols: &'a BTreeMap<GlobalId, StableSymbol>,
+    symbol_table: &'a StableSymbolTable,
+    recursion: &'a BTreeMap<StableSymbol, RecursionMetadata>,
+    next_template_id: u64,
+    next_ordinal: BTreeMap<StableSymbol, u64>,
+    templates: Vec<crate::erasure::CheckedRecursiveInvocationSeed>,
+}
+
+impl RecursiveInvocationTemplateCollector<'_> {
+    fn visit(
+        &mut self,
+        owner: &StableSymbol,
+        term: &Term,
+        context: &mut Context,
+        is_application_function: bool,
+    ) -> Result<(), CompilerDriverError> {
+        if !is_application_function {
+            let (head, arguments) = term_application_spine_exact(term);
+            if let Term::Const { id, level_args } = head {
+                if let Some(callee) = self.symbols.get(id) {
+                    if let Some((group, metadata)) = self.recursion.iter().find(|(_, metadata)| {
+                        metadata.group_members.contains(owner)
+                            && metadata.group_members.contains(callee)
+                    }) {
+                        let head_type =
+                            ken_kernel::infer(self.env, context, head).map_err(|_| {
+                                CompilerDriverError::MissingClosureMetadata {
+                                    section: "checked recursive invocation head type",
+                                    symbol: owner.clone(),
+                                }
+                            })?;
+                        let mut arity = 0usize;
+                        let mut cursor = ken_kernel::normalize(self.env, context, &head_type);
+                        while let Term::Pi(_, codomain) = cursor {
+                            arity += 1;
+                            cursor = *codomain;
+                        }
+                        if arguments.len() != arity {
+                            return Err(CompilerDriverError::MissingClosureMetadata {
+                                section: "complete checked recursive invocation arity",
+                                symbol: owner.clone(),
+                            });
+                        }
+                        let result = ken_kernel::infer(self.env, context, term).map_err(|_| {
+                            CompilerDriverError::MissingClosureMetadata {
+                                section: "checked recursive invocation result type",
+                                symbol: owner.clone(),
+                            }
+                        })?;
+                        let result = ken_kernel::normalize(self.env, context, &result);
+                        if matches!(result, Term::Pi(_, _)) {
+                            return Err(CompilerDriverError::MissingClosureMetadata {
+                                section: "partial checked recursive invocation result",
+                                symbol: owner.clone(),
+                            });
+                        }
+                        let local_telescope = context
+                            .types
+                            .iter()
+                            .map(|entry| {
+                                checked_answer_interface_from_term(
+                                    b"recursive-local-telescope",
+                                    entry,
+                                    self.symbol_table,
+                                )
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        let result_interface = checked_answer_interface_from_term(
+                            b"recursive-normalized-result",
+                            &result,
+                            self.symbol_table,
+                        )?;
+                        let occurrence_ordinal =
+                            self.next_ordinal.entry(owner.clone()).or_default();
+                        let seed = crate::erasure::CheckedRecursiveInvocationSeed {
+                            call_template_id: self.next_template_id,
+                            owner: owner.clone(),
+                            occurrence_ordinal: *occurrence_ordinal,
+                            callee: callee.clone(),
+                            level_instantiation: level_args
+                                .iter()
+                                .map(|level| format!("{level:?}").into_bytes())
+                                .collect(),
+                            recursion_group: group.clone(),
+                            scc_index: metadata.scc_index as u64,
+                            admission: match metadata.admission {
+                                RecursionAdmission::AcceptedStructural => 1,
+                                RecursionAdmission::AcceptedSizeChange => 2,
+                                RecursionAdmission::NonRecursive | RecursionAdmission::Rejected => {
+                                    return Err(CompilerDriverError::MissingClosureMetadata {
+                                        section: "admitted checked recursive invocation",
+                                        symbol: owner.clone(),
+                                    });
+                                }
+                            },
+                            arity,
+                            local_telescope,
+                            result_interface,
+                        };
+                        self.next_template_id = self
+                            .next_template_id
+                            .checked_add(1)
+                            .expect("compiler-private recursive call template identity exhausted");
+                        *occurrence_ordinal = occurrence_ordinal
+                            .checked_add(1)
+                            .expect("compiler-private recursive occurrence ordinal exhausted");
+                        self.templates.push(seed);
+                    }
+                }
+            }
+        }
+
+        match term {
+            Term::Elim {
+                params,
+                motive,
+                methods,
+                indices,
+                scrut,
+                ..
+            } => {
+                for child in params {
+                    self.visit(owner, child, context, false)?;
+                }
+                self.visit(owner, motive, context, false)?;
+                for child in methods {
+                    self.visit(owner, child, context, false)?;
+                }
+                for child in indices {
+                    self.visit(owner, child, context, false)?;
+                }
+                self.visit(owner, scrut, context, false)?;
+            }
+            Term::Pi(domain, codomain) | Term::Sigma(domain, codomain) => {
+                self.visit(owner, domain, context, false)?;
+                context.push((**domain).clone());
+                self.visit(owner, codomain, context, false)?;
+                context.pop();
+            }
+            Term::Lam(domain, body) => {
+                self.visit(owner, domain, context, false)?;
+                context.push((**domain).clone());
+                self.visit(owner, body, context, false)?;
+                context.pop();
+            }
+            Term::App(function, argument) => {
+                self.visit(owner, function, context, true)?;
+                self.visit(owner, argument, context, false)?;
+            }
+            Term::Pair(left, right)
+            | Term::Ascript(left, right)
+            | Term::Quot(left, right)
+            | Term::Absurd(left, right) => {
+                self.visit(owner, left, context, false)?;
+                self.visit(owner, right, context, false)?;
+            }
+            Term::Proj1(value)
+            | Term::Proj2(value)
+            | Term::Refl(value)
+            | Term::QuotClass(value)
+            | Term::Trunc(value)
+            | Term::TruncProj(value) => self.visit(owner, value, context, false)?,
+            Term::Let { ty, val, body } => {
+                self.visit(owner, ty, context, false)?;
+                self.visit(owner, val, context, false)?;
+                context.push((**ty).clone());
+                self.visit(owner, body, context, false)?;
+                context.pop();
+            }
+            Term::Eq(ty, left, right) | Term::J(ty, left, right) => {
+                self.visit(owner, ty, context, false)?;
+                self.visit(owner, left, context, false)?;
+                self.visit(owner, right, context, false)?;
+            }
+            Term::Cast(a, b, proof, value) => {
+                self.visit(owner, a, context, false)?;
+                self.visit(owner, b, context, false)?;
+                self.visit(owner, proof, context, false)?;
+                self.visit(owner, value, context, false)?;
+            }
+            Term::QuotElim {
+                motive,
+                method,
+                respect,
+                scrut,
+            } => {
+                self.visit(owner, motive, context, false)?;
+                self.visit(owner, method, context, false)?;
+                self.visit(owner, respect, context, false)?;
+                self.visit(owner, scrut, context, false)?;
+            }
+            Term::Type(_)
+            | Term::Omega(_)
+            | Term::Var(_)
+            | Term::Const { .. }
+            | Term::IntLit(_)
+            | Term::IndFormer { .. }
+            | Term::Constructor { .. } => {}
+        }
+        Ok(())
+    }
+}
+
+fn checked_recursive_invocation_templates(
+    env: &GlobalEnv,
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+    symbol_table: &StableSymbolTable,
+    recursion: &BTreeMap<StableSymbol, RecursionMetadata>,
+    bodies: &BTreeMap<StableSymbol, Term>,
+) -> Result<Vec<crate::erasure::CheckedRecursiveInvocationSeed>, CompilerDriverError> {
+    let mut collector = RecursiveInvocationTemplateCollector {
+        env,
+        symbols,
+        symbol_table,
+        recursion,
+        next_template_id: 0,
+        next_ordinal: BTreeMap::new(),
+        templates: Vec::new(),
+    };
+    for (owner, body) in bodies {
+        collector.visit(owner, body, &mut Context::new(), false)?;
+    }
+    Ok(collector.templates)
+}
+
 /// Compile one exact checked Program I `main` through lowering and linked
 /// process-artifact production as a single identity-consistent transaction.
 pub fn compile_native_program_sources(
@@ -1344,6 +1601,7 @@ pub fn compile_native_program_sources(
         });
     }
     let mut normalized = package.clone();
+    let mut normalized_bodies = BTreeMap::new();
     for symbol in &executable_declarations {
         let id = symbols
             .iter()
@@ -1370,11 +1628,14 @@ pub fn compile_native_program_sources(
                 },
             ));
         };
+        let normalized_body =
+            ken_kernel::normalize(&normalization_env, &ken_kernel::Context::new(), body);
+        normalized_bodies.insert(symbol.clone(), normalized_body.clone());
         let normalized_declaration = Decl::Transparent {
             id: *id,
             level_params: level_params.clone(),
             ty: ty.clone(),
-            body: ken_kernel::normalize(&normalization_env, &ken_kernel::Context::new(), body),
+            body: normalized_body,
         };
         let bytes = canonical_decl_bytes(&normalized_declaration, &symbol_table).map_err(|_| {
             NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol { id: *id })
@@ -1389,6 +1650,14 @@ pub fn compile_native_program_sources(
         emit_checked_core_package(normalized.header.clone(), normalized.artifact.clone())
             .map_err(CompilerDriverError::from)
             .map_err(NativeProgramBuildError::Driver)?;
+    let recursive_invocation_templates = checked_recursive_invocation_templates(
+        &normalization_env,
+        &symbols,
+        &symbol_table,
+        &normalized_host_package.artifact.semantic.recursion_metadata,
+        &normalized_bodies,
+    )
+    .map_err(NativeProgramBuildError::Driver)?;
     let join_answer_symbols = crate::erasure::CheckedJoinAnswerSymbols {
         int: symbols
             .get(&env.numeric_env.int_id)
@@ -1423,6 +1692,7 @@ pub fn compile_native_program_sources(
             &plan.main,
             &host_spine,
             join_answer_symbols,
+            recursive_invocation_templates,
         )
         .map_err(NativeProgramBuildError::Erasure)?;
     let join_plan_bytes = join_plan.canonical_bytes();
