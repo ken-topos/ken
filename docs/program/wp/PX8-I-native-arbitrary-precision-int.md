@@ -62,6 +62,33 @@ the Architect, never an implementer choice.
    checked layer already *types* `Int` as arbitrary-precision; PX8-I only lowers
    it natively.)
 
+### Mechanism correction (Architect ruling `evt_4dq6xdw4m87nn`)
+
+The pre-edit grounding proved that the former one-word native carrier could not
+injectively represent both every `i64` and a `Big` identity. PX8-I therefore
+owns the necessary Runtime-private representation change:
+
+- every compiler-private Int edge carries `NativeIntV1 { tag, payload }` as two
+  native words; `Small` stores the exact signed `i64` bits and `Big` stores a
+  nonzero typed slot in the current invocation's `NativeIntArenaV1`;
+- `RuntimeValue::Int` and `RuntimeGroundValue::Int` use one nested
+  `RuntimeIntV1 = Small(i64) | Big { sign, minimal little-endian limbs }`, byte
+  compatible with the production `ken-runtime::Value::BigInt` image and the
+  `ken-foundation` design-validation oracle;
+- exactly one Runtime-owned arena is shared by all generated calls in an
+  invocation and lives through final decoding. Slots never enter Ken values,
+  host requests, traces, wire artifacts, or terminal observations;
+- every Int CFG join, declaration/invocation return, recursive backedge,
+  closure capture, SourceControl edge, and decoder transports both words; and
+- exact arithmetic/comparison and checked narrowing are local functions emitted
+  into the same Cranelift module/object. They receive the hidden arena pointer;
+  they are not `HostOpV1`, `ken_host_dispatch_v1`, a public ABI, or a dynamic Ken
+  bignum service.
+
+Every tag and slot lookup validates fail-closed. The external process
+`ExitCode` ABI remains scalar only after the compiler-private Int has been
+resolved and narrowed while its arena is still alive.
+
 ## Landed anchors (verify before editing; do not trust frozen line numbers)
 
 Re-grep each; the line numbers below are orientation, not contract.
@@ -97,14 +124,12 @@ Re-grep each; the line numbers below are orientation, not contract.
 
 Ruling `evt_1mhavqy6yy128` fixes the **contract** in "Fixed inputs" above —
 representation, op semantics, narrowing, reuse-canonical-model, and the
-authorization boundary. It deliberately **does not** dictate the cranelift
-instruction sequence, the exact carrier handle, or helper-vs-inline lowering:
-those are **implementer execution under Architect §14**. Restate the contract;
-**do not design past it.** Any mechanism question the contract does not settle
-(e.g. whether the widened carrier forces a Runtime-IR representation change,
-how `Big` is threaded through a scalar join) is a **hard-stop to the Architect**
-(`mentions` architect + leader), not an implementer guess — the PX8-H chain's
-discipline: hard-stop with the exact value-kind/site, never widen or weaken.
+authorization boundary. Architect ruling `evt_4dq6xdw4m87nn` additionally fixes
+the two-word carrier, invocation arena, two-word joins/returns, local emitted
+support functions, and pre-dispatch narrowing above. Instruction details remain
+**implementer execution under Architect §14**. Any further mechanism question
+the two rulings do not settle is a **hard-stop to the Architect** (`mentions`
+architect + leader), not an implementer guess.
 
 ## Mandated deliverables (each ends in a concrete implementable choice)
 
@@ -112,8 +137,9 @@ discipline: hard-stop with the exact value-kind/site, never widen or weaken.
    (`RuntimeValue::Int` / `RuntimeGroundValue::Int` and every `Lowered` `Int`
    carrier) to `Small(i64) | Big(<canonical bignum handle>)` **bridging**
    `ken-foundation` `Value::BigInt`. **Choose the exact carrier** — reuse the
-   foundation canonical type / store handle; do **not** introduce a parallel
-   bignum type. State the chosen carrier and where `Big` values are interned.
+   production canonical image; do **not** introduce a parallel bignum type. Use
+   the ruled two-word carrier and invocation arena and state where `Big` values
+   are interned.
 2. **Arithmetic lowering.** For `add_int`/`sub_int`/`mul_int` over **dynamic**
    operands: `Small` fast-path via **overflow-checked** `i64` ops; on overflow,
    **promote before overflow** and compute exactly via the canonical model;
@@ -177,9 +203,9 @@ From the ruling's discriminator set — each must be a distinct, reaching test:
   `ken-runtime`.
 - **No forbidden movement:** no kernel / host-ABI / wire / public-surface /
   trusted-primitive / `writeAll`-intrinsic / range-postulate / Cargo / spec /
-  conformance change. *If* the carrier widening strictly requires a Runtime-IR
-  representation change, that is itself a **hard-stop to the Architect**, not an
-  implementer choice.
+  conformance change. The ruled two-word Runtime-private Int carrier is the one
+  authorized Runtime-IR representation change; no other representation or ABI
+  widening is implied.
 - **Whole-test-tree exhaustive-consumer ledger complete**; every classified
   integration suite gated. **Targeted local builds only** (`scripts/ken-cargo -p
   <crate>`; never `--workspace`); "workspace-green" / no-regression means
