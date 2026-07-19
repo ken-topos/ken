@@ -340,6 +340,14 @@ pub enum RuntimeExpr {
         site_id: u64,
         body: Box<RuntimeExpr>,
     },
+    /// Exact checked pre-erasure frame marker for native oriented
+    /// subcontinuation validation. This is compiler-private metadata, not a
+    /// source-visible operation or a runtime semantic effect.
+    #[doc(hidden)]
+    CheckedSubcontinuationFrame {
+        frame_id: u64,
+        body: Box<RuntimeExpr>,
+    },
     Value(RuntimeValue),
     Var(u32),
     Let {

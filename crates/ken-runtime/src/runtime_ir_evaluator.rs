@@ -880,7 +880,10 @@ fn reject_runtime_expr_blockers(
     expr: &RuntimeExpr,
 ) -> Result<(), RuntimeIrEvaluationError> {
     match expr {
-        RuntimeExpr::CheckedJoinSite { body, .. } => reject_runtime_expr_blockers(program, body),
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+            reject_runtime_expr_blockers(program, body)
+        }
         RuntimeExpr::Value(_) | RuntimeExpr::Var(_) | RuntimeExpr::Trap(_) => Ok(()),
         RuntimeExpr::Let { value, body } => {
             reject_runtime_expr_blockers(program, value)?;
@@ -997,7 +1000,10 @@ fn reject_runtime_expr_blockers(
 
 fn runtime_expr_contains_effect(expr: &RuntimeExpr) -> bool {
     match expr {
-        RuntimeExpr::CheckedJoinSite { body, .. } => runtime_expr_contains_effect(body),
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+            runtime_expr_contains_effect(body)
+        }
         RuntimeExpr::Value(_) | RuntimeExpr::Var(_) | RuntimeExpr::Trap(_) => false,
         RuntimeExpr::Let { value, body } => {
             runtime_expr_contains_effect(value) || runtime_expr_contains_effect(body)
@@ -1157,7 +1163,10 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
         env: &[EvaluatedValue],
     ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
         match expr {
-            RuntimeExpr::CheckedJoinSite { body, .. } => self.eval_expr(body, env),
+            RuntimeExpr::CheckedJoinSite { body, .. }
+            | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+                self.eval_expr(body, env)
+            }
             RuntimeExpr::Value(value) => Ok(RuntimeIrOutcome::Value(self.eval_value(value)?)),
             RuntimeExpr::Var(index) => env
                 .get(*index as usize)

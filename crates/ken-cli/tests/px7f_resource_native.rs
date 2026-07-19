@@ -18,6 +18,22 @@ fn run(name: &str, source: &str) -> ken_runtime::EffectObservation {
     std::fs::write(dir.join("held.bin"), b"held resource").unwrap();
     let output = ken_cli::build_native_program(source, ken_cli::SourceFormat::Ken, name, &dir)
         .expect("PX7-F checked program reaches the native resource lane");
+    let oriented = output
+        .runtime_program
+        .erased_core
+        .metadata
+        .checked_core
+        .metadata
+        .values()
+        .find(|bytes| {
+            bytes.starts_with(ken_runtime::ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER)
+        })
+        .and_then(|bytes| ken_runtime::OrientedSubcontinuationPlanV1::decode(bytes).ok())
+        .expect("resource bracket carries its checked oriented plan");
+    assert!(
+        !oriented.frames.is_empty(),
+        "the reaching resource bracket must retain checked answer interfaces"
+    );
     let observation = ken_runtime::run_bound_process_effect_observation(
         &output.artifact,
         &ken_runtime::NativeEffectRunOptionsV1 {

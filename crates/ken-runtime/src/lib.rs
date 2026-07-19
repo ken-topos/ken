@@ -23,6 +23,8 @@ pub mod native_int;
 mod native_int_clif;
 #[doc(hidden)]
 pub mod native_join_plan;
+#[doc(hidden)]
+pub mod oriented_subcontinuation_plan;
 pub mod native_process_entrypoint;
 pub mod object_linker_packaging;
 pub mod platform_runtime_support;
@@ -51,6 +53,8 @@ pub use native_execution_differential::*;
 pub use native_int::*;
 #[doc(hidden)]
 pub use native_join_plan::*;
+#[doc(hidden)]
+pub use oriented_subcontinuation_plan::*;
 pub use native_process_entrypoint::*;
 pub use object_linker_packaging::*;
 pub use platform_runtime_support::*;

@@ -1416,7 +1416,7 @@ pub fn compile_native_program_sources(
             })?,
         exit_code: plan.exit_code.clone(),
     };
-    let (planned_runtime_program, join_plan) =
+    let (planned_runtime_program, join_plan, oriented_subcontinuation_plan) =
         crate::erasure::erase_checked_host_package_for_target_with_join_plan(
             &normalized_host_package,
             closure.reachable_declarations.iter(),
@@ -1426,6 +1426,7 @@ pub fn compile_native_program_sources(
         )
         .map_err(NativeProgramBuildError::Erasure)?;
     let join_plan_bytes = join_plan.canonical_bytes();
+    let oriented_subcontinuation_plan_bytes = oriented_subcontinuation_plan.canonical_bytes();
     let mut planned = normalized_host_package.clone();
     let join_plan_symbol = StableSymbol::new(
         SymbolNamespace::Metadata,
@@ -1441,6 +1442,22 @@ pub fn compile_native_program_sources(
         .semantic
         .metadata
         .insert(join_plan_symbol.clone(), join_plan_bytes.clone());
+    let oriented_subcontinuation_plan_symbol = StableSymbol::new(
+        SymbolNamespace::Metadata,
+        vec![
+            package_name.to_string(),
+            "OrientedSubcontinuationPlanV1".to_string(),
+        ],
+    );
+    package
+        .artifact
+        .semantic
+        .symbols
+        .insert(oriented_subcontinuation_plan_symbol.clone());
+    package.artifact.semantic.metadata.insert(
+        oriented_subcontinuation_plan_symbol.clone(),
+        oriented_subcontinuation_plan_bytes.clone(),
+    );
     package = emit_checked_core_package(package.header.clone(), package.artifact.clone())
         .map_err(CompilerDriverError::from)
         .map_err(NativeProgramBuildError::Driver)?;
@@ -1454,6 +1471,15 @@ pub fn compile_native_program_sources(
         .semantic
         .metadata
         .insert(join_plan_symbol, join_plan_bytes);
+    planned
+        .artifact
+        .semantic
+        .symbols
+        .insert(oriented_subcontinuation_plan_symbol.clone());
+    planned.artifact.semantic.metadata.insert(
+        oriented_subcontinuation_plan_symbol,
+        oriented_subcontinuation_plan_bytes,
+    );
     let executable_view =
         emit_checked_core_package(planned.header.clone(), planned.artifact.clone())
             .map_err(CompilerDriverError::from)

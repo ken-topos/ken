@@ -86,7 +86,7 @@ fn erase_checked_package_with_host_root(
     package: &CheckedCorePackage,
     mut targets: Vec<StableSymbol>,
     host_root: Option<(&StableSymbol, &CheckedHostSpineV1)>,
-    mut join_plan: Option<&mut NativeJoinPlanCollector>,
+    mut native_plans: Option<&mut NativeLoweringPlanCollector>,
 ) -> Result<RuntimeProgram, ErasureError> {
     validate_checked_core_package(package)?;
     let requested_targets = targets.clone();
@@ -97,7 +97,7 @@ fn erase_checked_package_with_host_root(
             &requested_targets,
             root,
             spine,
-            join_plan.as_deref_mut(),
+            native_plans.as_deref_mut(),
         )?;
         let mut executable = BTreeSet::from([root.clone()]);
         let mut queue = runtime_declaration_refs_in_kind(&root_kind)
@@ -122,7 +122,7 @@ fn erase_checked_package_with_host_root(
                 &requested_targets,
                 &symbol,
                 spine,
-                join_plan.as_deref_mut(),
+                native_plans.as_deref_mut(),
             ) {
                 Ok(declaration) => declaration,
                 Err(error)
@@ -214,7 +214,7 @@ fn lower_checked_host_declaration(
     target_closure: &[StableSymbol],
     symbol: &StableSymbol,
     spine: &CheckedHostSpineV1,
-    join_plan: Option<&mut NativeJoinPlanCollector>,
+    native_plans: Option<&mut NativeLoweringPlanCollector>,
 ) -> Result<RuntimeDeclaration, ErasureError> {
     let semantic = &package.artifact.semantic;
     let reachable_declarations = checked_host_body_view_symbols(semantic, target_closure);
@@ -259,7 +259,8 @@ fn lower_checked_host_declaration(
         spine,
         None,
         &[1],
-        join_plan,
+        native_plans,
+        None,
     )?;
     Ok(RuntimeDeclaration {
         symbol: symbol.to_string(),
@@ -391,7 +392,10 @@ fn runtime_declaration_refs_in_kind(kind: &RuntimeDeclarationKind) -> Vec<String
 
 fn collect_runtime_declaration_refs(expr: &RuntimeExpr, output: &mut BTreeSet<String>) {
     match expr {
-        RuntimeExpr::CheckedJoinSite { body, .. } => collect_runtime_declaration_refs(body, output),
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+            collect_runtime_declaration_refs(body, output)
+        }
         RuntimeExpr::DeclarationRef { symbol } => {
             output.insert(symbol.clone());
         }
@@ -517,10 +521,35 @@ pub(crate) struct CheckedJoinAnswerSymbols {
     pub exit_code: StableSymbol,
 }
 
+#[derive(Clone)]
 struct NativeJoinPlanCollector {
     answer_symbols: CheckedJoinAnswerSymbols,
     next_site_id: u64,
     sites: Vec<ken_runtime::NativeJoinPlanSiteV1>,
+}
+
+#[derive(Clone)]
+struct NativeLoweringPlanCollector {
+    joins: NativeJoinPlanCollector,
+    oriented: OrientedSubcontinuationPlanCollector,
+}
+
+impl NativeLoweringPlanCollector {
+    fn new(answer_symbols: CheckedJoinAnswerSymbols) -> Self {
+        Self {
+            joins: NativeJoinPlanCollector::new(answer_symbols),
+            oriented: OrientedSubcontinuationPlanCollector::default(),
+        }
+    }
+
+    fn finish(
+        self,
+    ) -> (
+        ken_runtime::NativeJoinPlanV1,
+        ken_runtime::OrientedSubcontinuationPlanV1,
+    ) {
+        (self.joins.finish(), self.oriented.finish())
+    }
 }
 
 impl NativeJoinPlanCollector {
@@ -630,6 +659,166 @@ impl NativeJoinPlanCollector {
     }
 }
 
+#[derive(Clone, Default)]
+struct OrientedSubcontinuationPlanCollector {
+    next_frame_id: u64,
+    next_semantic_position: u64,
+    segment_by_frame: BTreeMap<u64, u64>,
+    input_by_frame: BTreeMap<u64, ken_runtime::CheckedAnswerInterfaceV1>,
+    frames: Vec<ken_runtime::OrientedSubcontinuationFramePlanV1>,
+}
+
+struct PendingOrientedFrame {
+    frame_id: u64,
+    segment_site_id: u64,
+    declaration: String,
+    checked_occurrence_path: Vec<u64>,
+    input_interface: ken_runtime::CheckedAnswerInterfaceV1,
+    output_interface: ken_runtime::CheckedAnswerInterfaceV1,
+    control_witness: ken_runtime::OrientedControlWitnessV1,
+}
+
+impl OrientedSubcontinuationPlanCollector {
+    fn begin_match(
+        &mut self,
+        owner: &StableSymbol,
+        path: &[u64],
+        parent_frame: Option<u64>,
+        view: &checked_core::CheckedCoreMatchView,
+    ) -> Result<Option<PendingOrientedFrame>, ErasureError> {
+        if !view.computational_recursive_hypotheses {
+            return Ok(None);
+        }
+        let frame_id = self.next_frame_id;
+        self.next_frame_id = self
+            .next_frame_id
+            .checked_add(1)
+            .expect("compiler-private oriented frame identity exhausted");
+        let segment_site_id = parent_frame
+            .and_then(|parent| self.segment_by_frame.get(&parent).copied())
+            .unwrap_or(frame_id);
+        self.segment_by_frame.insert(frame_id, segment_site_id);
+        let input_interface = canonical_checked_answer_interface(
+            &view.family_symbol,
+            &view.level_args,
+            view.parameters.iter().chain(view.indices.iter()),
+        );
+        let output_interface = parent_frame
+            .and_then(|parent| self.input_by_frame.get(&parent).cloned())
+            .unwrap_or_else(|| canonical_checked_motive_interface(&view.motive));
+        self.input_by_frame.insert(frame_id, input_interface.clone());
+        Ok(Some(PendingOrientedFrame {
+            frame_id,
+            segment_site_id,
+            declaration: owner.to_string(),
+            checked_occurrence_path: path.to_vec(),
+            input_interface,
+            output_interface,
+            control_witness: parent_frame.map_or(
+                ken_runtime::OrientedControlWitnessV1::DistinguishedRoot,
+                ken_runtime::OrientedControlWitnessV1::ParentFrame,
+            ),
+        }))
+    }
+
+    fn finish_match(
+        &mut self,
+        pending: PendingOrientedFrame,
+        runtime: &RuntimeExpr,
+    ) -> Result<u64, ErasureError> {
+        let runtime_frame_fingerprint = match runtime {
+            RuntimeExpr::ComputationalMatch { cases, default, .. } => {
+                ken_runtime::compiler_private_computational_match_frame_fingerprint(cases, default)
+            }
+            _ => unreachable!("oriented frame is emitted only for a computational Match"),
+        };
+        let semantic_position = self.next_semantic_position;
+        self.next_semantic_position = self
+            .next_semantic_position
+            .checked_add(1)
+            .expect("compiler-private semantic frame position exhausted");
+        let mut frame = ken_runtime::OrientedSubcontinuationFramePlanV1 {
+            frame_id: pending.frame_id,
+            segment_site_id: pending.segment_site_id,
+            declaration: pending.declaration,
+            checked_occurrence_path: pending.checked_occurrence_path,
+            semantic_position,
+            input_interface: pending.input_interface,
+            output_interface: pending.output_interface,
+            runtime_frame_fingerprint,
+            occurrence_binding_fingerprint: 0,
+            control_witness: pending.control_witness,
+        };
+        frame.occurrence_binding_fingerprint =
+            ken_runtime::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+        self.frames.push(frame);
+        Ok(pending.frame_id)
+    }
+
+    fn finish(self) -> ken_runtime::OrientedSubcontinuationPlanV1 {
+        ken_runtime::OrientedSubcontinuationPlanV1 {
+            representation_rule_version:
+                ken_runtime::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+            frames: self.frames,
+        }
+    }
+}
+
+fn canonical_checked_answer_interface<'a>(
+    head: &StableSymbol,
+    levels: &[CheckedCoreLevelView],
+    arguments: impl IntoIterator<Item = &'a Vec<u8>>,
+) -> ken_runtime::CheckedAnswerInterfaceV1 {
+    fn put_u64(out: &mut Vec<u8>, value: u64) {
+        out.extend_from_slice(&value.to_be_bytes());
+    }
+    fn put_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
+        put_u64(out, bytes.len() as u64);
+        out.extend_from_slice(bytes);
+    }
+    fn put_level(out: &mut Vec<u8>, level: &CheckedCoreLevelView) {
+        match level {
+            CheckedCoreLevelView::Zero => out.push(0),
+            CheckedCoreLevelView::Suc(inner) => {
+                out.push(1);
+                put_level(out, inner);
+            }
+            CheckedCoreLevelView::Max(left, right) => {
+                out.push(2);
+                put_level(out, left);
+                put_level(out, right);
+            }
+            CheckedCoreLevelView::Var(index) => {
+                out.push(3);
+                put_u64(out, *index);
+            }
+        }
+    }
+
+    let mut canonical = ken_runtime::CHECKED_ANSWER_INTERFACE_V1_HEADER.to_vec();
+    put_bytes(&mut canonical, head.to_string().as_bytes());
+    put_u64(&mut canonical, levels.len() as u64);
+    for level in levels {
+        put_level(&mut canonical, level);
+    }
+    let arguments = arguments.into_iter().collect::<Vec<_>>();
+    put_u64(&mut canonical, arguments.len() as u64);
+    for argument in arguments {
+        put_bytes(&mut canonical, argument);
+    }
+    ken_runtime::CheckedAnswerInterfaceV1::new(canonical)
+        .expect("canonical answer interface carries its fixed header")
+}
+
+fn canonical_checked_motive_interface(motive: &[u8]) -> ken_runtime::CheckedAnswerInterfaceV1 {
+    let mut canonical = ken_runtime::CHECKED_ANSWER_INTERFACE_V1_HEADER.to_vec();
+    canonical.extend_from_slice(b"motive\0");
+    canonical.extend_from_slice(&(motive.len() as u64).to_be_bytes());
+    canonical.extend_from_slice(motive);
+    ken_runtime::CheckedAnswerInterfaceV1::new(canonical)
+        .expect("compiler-private checked motive descriptor has its canonical header")
+}
+
 /// Deforest an identity-checked HostIO tree while erasing the selected target.
 /// The tree does not survive into the artifact: every `Vis op k` becomes an
 /// ordinary response-producing `Effect`, immediately bound by `Let` to the
@@ -650,16 +839,24 @@ pub(crate) fn erase_checked_host_package_for_target_with_join_plan<'a>(
     root: &StableSymbol,
     spine: &CheckedHostSpineV1,
     answer_symbols: CheckedJoinAnswerSymbols,
-) -> Result<(RuntimeProgram, ken_runtime::NativeJoinPlanV1), ErasureError> {
+) -> Result<
+    (
+        RuntimeProgram,
+        ken_runtime::NativeJoinPlanV1,
+        ken_runtime::OrientedSubcontinuationPlanV1,
+    ),
+    ErasureError,
+> {
     let targets: Vec<StableSymbol> = target_closure.into_iter().cloned().collect();
-    let mut collector = NativeJoinPlanCollector::new(answer_symbols);
+    let mut collector = NativeLoweringPlanCollector::new(answer_symbols);
     let program = erase_checked_package_with_host_root(
         package,
         targets,
         Some((root, spine)),
         Some(&mut collector),
     )?;
-    Ok((program, collector.finish()))
+    let (join_plan, oriented_plan) = collector.finish();
+    Ok((program, join_plan, oriented_plan))
 }
 
 fn lower_checked_host_root(
@@ -667,7 +864,7 @@ fn lower_checked_host_root(
     target_closure: &[StableSymbol],
     root: &StableSymbol,
     spine: &CheckedHostSpineV1,
-    mut join_plan: Option<&mut NativeJoinPlanCollector>,
+    mut native_plans: Option<&mut NativeLoweringPlanCollector>,
 ) -> Result<RuntimeDeclarationKind, ErasureError> {
     let semantic = &package.artifact.semantic;
     // Decode exactly the finite executable declaration closure. Recursive
@@ -705,8 +902,10 @@ fn lower_checked_host_root(
             "checked host root must accept ProgramCaps",
         ));
     };
-    if let Some(join_plan) = join_plan.as_deref_mut() {
-        join_plan.record_root_exit_answer(root, &declaration.checked_type);
+    if let Some(native_plans) = native_plans.as_deref_mut() {
+        native_plans
+            .joins
+            .record_root_exit_answer(root, &declaration.checked_type);
     }
     let mut stack = vec![root.clone()];
     let lowered = lower_checked_host_computation(
@@ -719,7 +918,8 @@ fn lower_checked_host_root(
         spine,
         None,
         &[1],
-        join_plan,
+        native_plans,
+        None,
     )?;
     Ok(RuntimeDeclarationKind::Transparent {
         body: RuntimeExpr::Closure {
@@ -728,6 +928,517 @@ fn lower_checked_host_root(
             body: Box::new(lowered),
         },
     })
+}
+
+/// Lower a runtime value that appears inside the checked HostIO producer.
+///
+/// HostIO-valued callback lambdas are part of the same checked continuation
+/// boundary as their caller.  Descend through those lambdas with a transactional
+/// copy of the native plans; a genuinely pure lambda falls back to ordinary
+/// erasure without leaking partially collected metadata.
+#[allow(clippy::too_many_arguments)]
+fn lower_checked_host_value(
+    term: &CheckedCoreBodyTerm,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+    stack: &mut Vec<StableSymbol>,
+    root: &StableSymbol,
+    context_depth: usize,
+    spine: &CheckedHostSpineV1,
+    branch_remap: Option<&BranchBinderRemap>,
+    path: &[u64],
+    native_plans: Option<&mut NativeLoweringPlanCollector>,
+    parent_oriented_frame: Option<u64>,
+) -> Result<RuntimeExpr, ErasureError> {
+    if let Some(native_plans) = native_plans {
+        let mut trial_plans = native_plans.clone();
+        let (candidate, candidate_depth, entered_remap, is_lambda) =
+            if let CheckedCoreBodyTerm::Lambda { body, .. } = term {
+                (
+                    body.as_ref(),
+                    context_depth + 1,
+                    branch_remap.map(BranchBinderRemap::enter_binding),
+                    true,
+                )
+            } else {
+                (term, context_depth, branch_remap.cloned(), false)
+            };
+        match lower_checked_host_computation(
+            candidate,
+            declarations,
+            semantic,
+            stack,
+            root,
+            candidate_depth,
+            spine,
+            entered_remap.as_ref(),
+            path,
+            Some(&mut trial_plans),
+            parent_oriented_frame,
+        ) {
+            Ok(body) => {
+                *native_plans = trial_plans;
+                if is_lambda {
+                    let runtime_depth = branch_remap
+                        .map(|remap| remap.runtime_depth(context_depth))
+                        .unwrap_or(context_depth);
+                    Ok(RuntimeExpr::LexicalClosure {
+                        captures: (0..runtime_depth)
+                            .map(|index| RuntimeExpr::Var(index as u32))
+                            .collect(),
+                        params: vec!["arg0".to_string()],
+                        body: Box::new(body),
+                    })
+                } else {
+                    Ok(body)
+                }
+            }
+            Err(ErasureError::ExpressionLowering {
+                lane,
+                ..
+            }) if lane == "unrecognized_checked_host_computation" => {
+                lower_body_term_with_plans(
+                    term,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth,
+                    branch_remap,
+                    path,
+                    native_plans,
+                    parent_oriented_frame,
+                )
+            }
+            Err(error) => Err(error),
+        }
+    } else {
+        lower_body_term_inner(
+            term,
+            declarations,
+            semantic,
+            stack,
+            root,
+            context_depth,
+            branch_remap,
+        )
+    }
+}
+
+/// Ordinary checked-value erasure with the native answer plan threaded through
+/// every expression form that can contain a computational eliminator.  This is
+/// the pre-erasure closure needed by HostIO-valued callbacks: generic erasure
+/// remains unchanged for non-native packages.
+#[allow(clippy::too_many_arguments)]
+fn lower_body_term_with_plans(
+    term: &CheckedCoreBodyTerm,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+    stack: &mut Vec<StableSymbol>,
+    root: &StableSymbol,
+    context_depth: usize,
+    branch_remap: Option<&BranchBinderRemap>,
+    path: &[u64],
+    native_plans: &mut NativeLoweringPlanCollector,
+    parent_oriented_frame: Option<u64>,
+) -> Result<RuntimeExpr, ErasureError> {
+    let owner = stack
+        .last()
+        .expect("expression lowering stack always has an owner")
+        .clone();
+    if let Some((view, arguments)) = recursive_application_spine(term) {
+        let callee = lower_recursive_declaration_call(view, declarations, root)?;
+        let mut args = Vec::with_capacity(arguments.len());
+        for (index, argument) in arguments.into_iter().enumerate() {
+            let mut child_path = path.to_vec();
+            child_path.extend([10, index as u64]);
+            args.push(lower_body_term_with_plans(
+                argument,
+                declarations,
+                semantic,
+                stack,
+                root,
+                context_depth,
+                branch_remap,
+                &child_path,
+                native_plans,
+                parent_oriented_frame,
+            )?);
+        }
+        return Ok(RuntimeExpr::Call {
+            callee: Box::new(callee),
+            args,
+        });
+    }
+    if let Some((symbol, level_args, arguments)) = direct_application_spine(term) {
+        reject_level_args(root, level_args)?;
+        if let Some(declaration) = declarations.get(symbol) {
+            let mut body = &declaration.body;
+            let mut parameter_count = 0usize;
+            while parameter_count < arguments.len() {
+                let CheckedCoreBodyTerm::Lambda { body: inner, .. } = body else {
+                    break;
+                };
+                parameter_count += 1;
+                body = inner;
+            }
+            if parameter_count == arguments.len() {
+                if stack.contains(symbol) {
+                    return Err(expression_lowering_error(
+                        root,
+                        "direct_call_cycle",
+                        format!("direct declaration call cycle from {owner} reaches {symbol}"),
+                    ));
+                }
+                let mut values = Vec::with_capacity(arguments.len());
+                for (index, argument) in arguments.iter().enumerate() {
+                    let mut child_path = path.to_vec();
+                    child_path.extend([11, index as u64]);
+                    values.push(lower_body_term_with_plans(
+                        argument,
+                        declarations,
+                        semantic,
+                        stack,
+                        root,
+                        context_depth,
+                        branch_remap,
+                        &child_path,
+                        native_plans,
+                        parent_oriented_frame,
+                    )?);
+                }
+                let mut inner_remap = branch_remap.cloned();
+                for _ in 0..parameter_count {
+                    inner_remap = inner_remap.map(|remap| remap.enter_binding());
+                }
+                stack.push(symbol.clone());
+                let mut child_path = path.to_vec();
+                child_path.extend([12, ken_runtime::fnv1a_64(symbol.to_string().as_bytes())]);
+                let lowered = lower_body_term_with_plans(
+                    body,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth + parameter_count,
+                    inner_remap.as_ref(),
+                    &child_path,
+                    native_plans,
+                    parent_oriented_frame,
+                );
+                stack.pop();
+                let mut lowered = lowered?;
+                for (index, value) in values.into_iter().enumerate().rev() {
+                    lowered = RuntimeExpr::Let {
+                        value: Box::new(shift_runtime_vars(value, index as u32, 0)),
+                        body: Box::new(lowered),
+                    };
+                }
+                return Ok(lowered);
+            }
+        }
+    }
+    if let Some((constructor, arguments)) = constructor_application_spine(term) {
+        reject_level_args(root, &constructor.level_args)?;
+        require_expression_supported(
+            root,
+            &constructor.family_symbol,
+            &constructor.family_lowerability,
+            "data_lowerability_blocked",
+        )?;
+        require_expression_supported(
+            root,
+            &constructor.symbol,
+            &constructor.constructor_lowerability,
+            "constructor_lowerability_blocked",
+        )?;
+        if constructor.family_index_count != 0 || constructor.target_index_count != 0 {
+            return Err(expression_lowering_error(
+                root,
+                "dependent_constructor_lowering_unsupported",
+                format!(
+                    "constructor {} belongs to indexed family {}",
+                    constructor.symbol, constructor.family_symbol
+                ),
+            ));
+        }
+        let expected = constructor.family_parameter_count + constructor.argument_count;
+        if arguments.len() != expected {
+            return Err(expression_lowering_error(
+                root,
+                "constructor_arity_mismatch",
+                format!(
+                    "constructor {} expects {} family parameters plus {} runtime arguments, got {}",
+                    constructor.symbol,
+                    constructor.family_parameter_count,
+                    constructor.argument_count,
+                    arguments.len()
+                ),
+            ));
+        }
+        let runtime_arguments = &arguments[constructor.family_parameter_count..];
+        let mut args = Vec::with_capacity(runtime_arguments.len());
+        for (index, argument) in runtime_arguments.iter().enumerate() {
+            let mut child_path = path.to_vec();
+            child_path.extend([13, index as u64]);
+            args.push(lower_body_term_with_plans(
+                argument,
+                declarations,
+                semantic,
+                stack,
+                root,
+                context_depth,
+                branch_remap,
+                &child_path,
+                native_plans,
+                parent_oriented_frame,
+            )?);
+        }
+        return Ok(RuntimeExpr::Construct {
+            constructor: constructor.symbol.to_string(),
+            args,
+        });
+    }
+
+    match term {
+        CheckedCoreBodyTerm::Lambda { body, .. } => {
+            let runtime_depth = branch_remap
+                .map(|remap| remap.runtime_depth(context_depth))
+                .unwrap_or(context_depth);
+            let mut child_path = path.to_vec();
+            child_path.push(14);
+            Ok(RuntimeExpr::LexicalClosure {
+                captures: (0..runtime_depth)
+                    .map(|index| RuntimeExpr::Var(index as u32))
+                    .collect(),
+                params: vec!["arg0".to_string()],
+                body: Box::new(lower_body_term_with_plans(
+                    body,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth + 1,
+                    branch_remap.map(BranchBinderRemap::enter_binding).as_ref(),
+                    &child_path,
+                    native_plans,
+                    parent_oriented_frame,
+                )?),
+            })
+        }
+        CheckedCoreBodyTerm::Application { function, argument } => {
+            let mut function_path = path.to_vec();
+            function_path.push(15);
+            let mut argument_path = path.to_vec();
+            argument_path.push(16);
+            Ok(RuntimeExpr::Call {
+                callee: Box::new(lower_body_term_with_plans(
+                    function,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth,
+                    branch_remap,
+                    &function_path,
+                    native_plans,
+                    parent_oriented_frame,
+                )?),
+                args: vec![lower_body_term_with_plans(
+                    argument,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth,
+                    branch_remap,
+                    &argument_path,
+                    native_plans,
+                    parent_oriented_frame,
+                )?],
+            })
+        }
+        CheckedCoreBodyTerm::Let { value, body, .. } => {
+            let mut value_path = path.to_vec();
+            value_path.push(17);
+            let mut body_path = path.to_vec();
+            body_path.push(18);
+            Ok(RuntimeExpr::Let {
+                value: Box::new(lower_body_term_with_plans(
+                    value,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth,
+                    branch_remap,
+                    &value_path,
+                    native_plans,
+                    parent_oriented_frame,
+                )?),
+                body: Box::new(lower_body_term_with_plans(
+                    body,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth + 1,
+                    branch_remap.map(BranchBinderRemap::enter_binding).as_ref(),
+                    &body_path,
+                    native_plans,
+                    parent_oriented_frame,
+                )?),
+            })
+        }
+        CheckedCoreBodyTerm::Match(view) => {
+            reject_level_args(root, &view.level_args)?;
+            if !view.indices.is_empty() {
+                return Err(expression_lowering_error(
+                    root,
+                    "unsupported_dependent_motive",
+                    format!("match over {} carries runtime indices", view.family_symbol),
+                ));
+            }
+            let computational = match_uses_computational_recursive_hypothesis(view, root)?;
+            let pending = if computational {
+                native_plans
+                    .oriented
+                    .begin_match(&owner, path, parent_oriented_frame, view)?
+            } else {
+                None
+            };
+            let nested_parent = pending
+                .as_ref()
+                .map(|pending| pending.frame_id)
+                .or(parent_oriented_frame);
+            let mut scrutinee_path = path.to_vec();
+            scrutinee_path.push(19);
+            let scrutinee = Box::new(lower_body_term_with_plans(
+                &view.scrutinee,
+                declarations,
+                semantic,
+                stack,
+                root,
+                context_depth,
+                branch_remap,
+                &scrutinee_path,
+                native_plans,
+                nested_parent,
+            )?);
+            let mut cases = Vec::with_capacity(view.branches.len());
+            for (branch_index, branch) in view.branches.iter().enumerate() {
+                let constructor = &branch.constructor;
+                reject_level_args(root, &constructor.level_args)?;
+                require_expression_supported(
+                    root,
+                    &constructor.family_symbol,
+                    &constructor.family_lowerability,
+                    "data_lowerability_blocked",
+                )?;
+                require_expression_supported(
+                    root,
+                    &constructor.symbol,
+                    &constructor.constructor_lowerability,
+                    "constructor_lowerability_blocked",
+                )?;
+                if constructor.family_index_count != 0 || constructor.target_index_count != 0 {
+                    return Err(expression_lowering_error(
+                        root,
+                        "dependent_constructor_lowering_unsupported",
+                        format!(
+                            "match branch constructor {} belongs to indexed family {}",
+                            constructor.symbol, constructor.family_symbol
+                        ),
+                    ));
+                }
+                let erased_count = constructor.recursive_positions.len();
+                let source_binders = constructor.argument_count + erased_count;
+                let method = peel_match_branch_method(
+                    &branch.method,
+                    source_binders,
+                    root,
+                    &constructor.symbol,
+                )?;
+                let remap = branch_remap.cloned().unwrap_or_default().enter_match(
+                    constructor.argument_count,
+                    erased_count,
+                    computational,
+                );
+                let mut branch_path = path.to_vec();
+                branch_path.extend([20, branch_index as u64]);
+                cases.push((
+                    constructor,
+                    lower_body_term_with_plans(
+                        method,
+                        declarations,
+                        semantic,
+                        stack,
+                        root,
+                        context_depth + source_binders,
+                        Some(&remap),
+                        &branch_path,
+                        native_plans,
+                        nested_parent,
+                    )?,
+                ));
+            }
+            let default = RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: format!("no runtime match case selected for {}", view.family_symbol),
+            };
+            let runtime = if computational {
+                RuntimeExpr::ComputationalMatch {
+                    scrutinee,
+                    cases: cases
+                        .into_iter()
+                        .map(|(constructor, body)| RuntimeComputationalMatchCase {
+                            constructor: constructor.symbol.to_string(),
+                            argument_binders: constructor.argument_count,
+                            recursive_positions: constructor.recursive_positions.clone(),
+                            body,
+                        })
+                        .collect(),
+                    default,
+                }
+            } else {
+                RuntimeExpr::Match {
+                    scrutinee,
+                    cases: cases
+                        .into_iter()
+                        .map(|(constructor, body)| RuntimeMatchCase {
+                            constructor: constructor.symbol.to_string(),
+                            binders: constructor.argument_count,
+                            body,
+                        })
+                        .collect(),
+                    default,
+                }
+            };
+            let join_site = native_plans.joins.record_match(&owner, path, view, &runtime)?;
+            let runtime = if let Some(pending) = pending {
+                let frame_id = native_plans.oriented.finish_match(pending, &runtime)?;
+                RuntimeExpr::CheckedSubcontinuationFrame {
+                    frame_id,
+                    body: Box::new(runtime),
+                }
+            } else {
+                runtime
+            };
+            Ok(join_site.map_or(runtime.clone(), |site_id| RuntimeExpr::CheckedJoinSite {
+                site_id,
+                body: Box::new(runtime),
+            }))
+        }
+        _ => lower_body_term_inner(
+            term,
+            declarations,
+            semantic,
+            stack,
+            root,
+            context_depth,
+            branch_remap,
+        ),
+    }
 }
 
 fn lower_checked_host_computation(
@@ -740,7 +1451,8 @@ fn lower_checked_host_computation(
     spine: &CheckedHostSpineV1,
     branch_remap: Option<&BranchBinderRemap>,
     path: &[u64],
-    mut join_plan: Option<&mut NativeJoinPlanCollector>,
+    mut native_plans: Option<&mut NativeLoweringPlanCollector>,
+    parent_oriented_frame: Option<u64>,
 ) -> Result<RuntimeExpr, ErasureError> {
     if let CheckedCoreBodyTerm::Match(view) = term {
         reject_level_args(root, &view.level_args)?;
@@ -761,6 +1473,19 @@ fn lower_checked_host_computation(
             branch_remap,
         )?;
         let computational = match_uses_computational_recursive_hypothesis(view, root)?;
+        let pending_oriented_frame = if computational {
+            native_plans.as_deref_mut().map(|plans| {
+                plans
+                    .oriented
+                    .begin_match(root, path, parent_oriented_frame, view)
+            }).transpose()?.flatten()
+        } else {
+            None
+        };
+        let nested_oriented_parent = pending_oriented_frame
+            .as_ref()
+            .map(|pending| pending.frame_id)
+            .or(parent_oriented_frame);
         let mut cases = Vec::with_capacity(view.branches.len());
         for (branch_index, branch) in view.branches.iter().enumerate() {
             let constructor = &branch.constructor;
@@ -811,7 +1536,8 @@ fn lower_checked_host_computation(
                     p.extend([1, branch_index as u64]);
                     p
                 },
-                join_plan.as_deref_mut(),
+                native_plans.as_deref_mut(),
+                nested_oriented_parent,
             )?;
             cases.push((constructor, body));
         }
@@ -847,17 +1573,31 @@ fn lower_checked_host_computation(
                 default,
             }
         };
-        return if let Some(join_plan) = join_plan.as_deref_mut() {
-            Ok(match join_plan.record_match(root, path, view, &runtime)? {
-                Some(site_id) => RuntimeExpr::CheckedJoinSite {
-                    site_id,
-                    body: Box::new(runtime),
-                },
-                None => runtime,
-            })
+        let join_site = native_plans
+            .as_deref_mut()
+            .map(|plans| plans.joins.record_match(root, path, view, &runtime))
+            .transpose()?
+            .flatten();
+        let runtime = if let Some(pending) = pending_oriented_frame {
+            let frame_id = native_plans
+                .as_deref_mut()
+                .expect("pending oriented frame has its collector")
+                .oriented
+                .finish_match(pending, &runtime)?;
+            RuntimeExpr::CheckedSubcontinuationFrame {
+                frame_id,
+                body: Box::new(runtime),
+            }
         } else {
-            Ok(runtime)
+            runtime
         };
+        return Ok(match join_site {
+            Some(site_id) => RuntimeExpr::CheckedJoinSite {
+                site_id,
+                body: Box::new(runtime),
+            },
+            None => runtime,
+        });
     }
     if let Some((symbol, level_args, arguments)) = direct_application_spine(term) {
         reject_level_args(root, level_args)?;
@@ -874,15 +1614,22 @@ fn lower_checked_host_computation(
             if parameter_count == arguments.len() && !stack.contains(symbol) {
                 let values = arguments
                     .iter()
-                    .map(|argument| {
-                        lower_body_term_inner(
+                    .enumerate()
+                    .map(|(argument_index, argument)| {
+                        let mut argument_path = path.to_vec();
+                        argument_path.extend([4, argument_index as u64]);
+                        lower_checked_host_value(
                             argument,
                             declarations,
                             semantic,
                             stack,
                             root,
                             context_depth,
+                            spine,
                             branch_remap,
+                            &argument_path,
+                            native_plans.as_deref_mut(),
+                            parent_oriented_frame,
                         )
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -905,7 +1652,8 @@ fn lower_checked_host_computation(
                         p.extend([2, ken_runtime::fnv1a_64(symbol.to_string().as_bytes())]);
                         p
                     },
-                    join_plan.as_deref_mut(),
+                    native_plans.as_deref_mut(),
+                    parent_oriented_frame,
                 );
                 stack.pop();
                 let mut lowered = lowered?;
@@ -959,7 +1707,8 @@ fn lower_checked_host_computation(
                         p.push(3);
                         p
                     },
-                    join_plan.as_deref_mut(),
+                    native_plans.as_deref_mut(),
+                    parent_oriented_frame,
                 )?
             } else {
                 let callee = lower_body_term_inner(
@@ -1066,33 +1815,39 @@ fn lower_checked_host_computation(
             });
         }
     }
-    if is_recursive_declaration_application(term) {
-        return lower_body_term_inner(
-            term,
-            declarations,
-            semantic,
-            stack,
-            root,
-            context_depth,
-            branch_remap,
-        );
+    if let Some((view, arguments)) = recursive_application_spine(term) {
+        let callee = lower_recursive_declaration_call(view, declarations, root)?;
+        let args = arguments
+            .into_iter()
+            .enumerate()
+            .map(|(argument_index, argument)| {
+                let mut argument_path = path.to_vec();
+                argument_path.extend([5, argument_index as u64]);
+                lower_checked_host_value(
+                    argument,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth,
+                    spine,
+                    branch_remap,
+                    &argument_path,
+                    native_plans.as_deref_mut(),
+                    parent_oriented_frame,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(RuntimeExpr::Call {
+            callee: Box::new(callee),
+            args,
+        });
     }
     Err(expression_lowering_error(
         root,
         "unrecognized_checked_host_computation",
         "normalized HostIO body is neither identity-checked Ret nor Vis",
     ))
-}
-
-fn is_recursive_declaration_application(term: &CheckedCoreBodyTerm) -> bool {
-    let mut current = term;
-    while let CheckedCoreBodyTerm::Application { function, .. } = current {
-        current = function;
-    }
-    match current {
-        CheckedCoreBodyTerm::RecursiveDeclarationCall(_) => true,
-        _ => false,
-    }
 }
 
 #[derive(Debug)]
@@ -2134,6 +2889,12 @@ fn shift_runtime_vars(expr: RuntimeExpr, by: u32, cutoff: u32) -> RuntimeExpr {
             site_id,
             body: Box::new(shift_runtime_vars(*body, by, cutoff)),
         },
+        RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+            RuntimeExpr::CheckedSubcontinuationFrame {
+                frame_id,
+                body: Box::new(shift_runtime_vars(*body, by, cutoff)),
+            }
+        }
         RuntimeExpr::Var(index) if index >= cutoff => RuntimeExpr::Var(index + by),
         RuntimeExpr::Var(_)
         | RuntimeExpr::Value(_)
@@ -3836,6 +4597,89 @@ fn effects_for_targets(package: &CheckedCorePackage, targets: &[StableSymbol]) -
 #[cfg(test)]
 mod px7l_tests {
     use super::*;
+
+    fn oriented_match_view(name: &str, motive: u8) -> checked_core::CheckedCoreMatchView {
+        checked_core::CheckedCoreMatchView {
+            family_symbol: StableSymbol::declaration("px8ta", &[], name),
+            level_args: Vec::new(),
+            parameters: Vec::new(),
+            motive: vec![motive],
+            indices: Vec::new(),
+            scrutinee: Box::new(CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 }),
+            branches: Vec::new(),
+            computational_recursive_hypotheses: true,
+        }
+    }
+
+    fn oriented_runtime_frame(name: &str) -> RuntimeExpr {
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: Vec::new(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: name.to_string(),
+            },
+        }
+    }
+
+    #[test]
+    fn checked_producer_emits_inner_to_outer_semantic_chain_before_erasure() {
+        let owner = StableSymbol::declaration("px8ta", &[], "main");
+        let mut collector = OrientedSubcontinuationPlanCollector::default();
+        let outer = collector
+            .begin_match(&owner, &[0], None, &oriented_match_view("P0", 0))
+            .unwrap()
+            .unwrap();
+        let middle = collector
+            .begin_match(
+                &owner,
+                &[0, 1],
+                Some(outer.frame_id),
+                &oriented_match_view("P1", 1),
+            )
+            .unwrap()
+            .unwrap();
+        let inner = collector
+            .begin_match(
+                &owner,
+                &[0, 1, 2],
+                Some(middle.frame_id),
+                &oriented_match_view("P2", 2),
+            )
+            .unwrap()
+            .unwrap();
+        collector
+            .finish_match(inner, &oriented_runtime_frame("p2"))
+            .unwrap();
+        collector
+            .finish_match(middle, &oriented_runtime_frame("p1"))
+            .unwrap();
+        collector
+            .finish_match(outer, &oriented_runtime_frame("p0"))
+            .unwrap();
+
+        let plan = collector.finish();
+        plan.validate().unwrap();
+        let mut frames = plan.frames.iter().collect::<Vec<_>>();
+        frames.sort_by_key(|frame| frame.semantic_position);
+        assert_eq!(
+            frames.iter().map(|frame| frame.frame_id).collect::<Vec<_>>(),
+            vec![2, 1, 0],
+            "checked postorder is the semantic p2, p1, p0 chain"
+        );
+        assert!(
+            frames.windows(2).all(|pair| {
+                pair[0].output_interface == pair[1].input_interface
+            }),
+            "every checked answer endpoint closes before Runtime erasure"
+        );
+        assert!(
+            frames
+                .iter()
+                .all(|frame| frame.segment_site_id == frames[0].segment_site_id),
+            "all three frames belong to one prompt region"
+        );
+    }
 
     fn family(name: &str) -> StableSymbol {
         StableSymbol::declaration("px7l", &[], name)
