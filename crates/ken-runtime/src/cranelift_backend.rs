@@ -2868,6 +2868,7 @@ fn validate_recursor_invocation_segment(
         layers: &[ComputationalRecursorLayer],
         phase: &'static str,
         expected_first_parent: Option<RecursorProducerOriginId>,
+        require_linear_parentage: bool,
     | {
         let mut previous_scope = None;
         for layer in layers {
@@ -2895,7 +2896,10 @@ fn validate_recursor_invocation_segment(
                 ));
             }
             let expected_parent = previous_scope.or(expected_first_parent);
-            if previous_scope.is_some() && parent_scope != expected_parent {
+            if require_linear_parentage
+                && previous_scope.is_some()
+                && parent_scope != expected_parent
+            {
                 return Err(unsupported(
                     "ComputationalRecursor",
                     format!("recursor {phase} has a broken selected-scope parent link"),
@@ -2912,6 +2916,7 @@ fn validate_recursor_invocation_segment(
             .scopes_in_construction_order,
         "captured caller suffix",
         None,
+        true,
     )?;
     validate_phase(
         &segment
@@ -2920,6 +2925,7 @@ fn validate_recursor_invocation_segment(
             .wrappers_in_construction_order,
         "post-caller wrapper stack",
         captured_inner,
+        false,
     )?;
     let executable_scope_origins = segment
         .unwind
@@ -2940,9 +2946,7 @@ fn validate_recursor_invocation_segment(
         .collect::<BTreeSet<_>>();
     let mut witnessed_scope_origins = BTreeSet::new();
     for witness in &segment.unwind.consumed_scope_witnesses {
-        if executable_scope_origins.contains(&witness.scope_origin)
-            || !witnessed_scope_origins.insert(witness.scope_origin)
-        {
+        if !witnessed_scope_origins.insert(witness.scope_origin) {
             return Err(unsupported(
                 "ComputationalRecursor",
                 "consumed selected scope is duplicated or cross-listed as executable",
@@ -3075,6 +3079,7 @@ enum SourceContinuation<'a> {
         child_cursor: ContinuationCursorId,
         parent_cursor: ContinuationCursorId,
         origin: RecursorProducerOriginId,
+        occurrence: SelectedCaseOccurrenceId,
         producer_hole: Option<ProducerHoleId>,
         next: Box<SourceContinuation<'a>>,
     },
@@ -3192,6 +3197,7 @@ enum SourcePrefixTemplate {
         child_cursor: ContinuationCursorId,
         parent_cursor: ContinuationCursorId,
         origin: RecursorProducerOriginId,
+        occurrence: SelectedCaseOccurrenceId,
         producer_hole: Option<ProducerHoleId>,
         next: Box<SourcePrefixTemplate>,
     },
@@ -3958,7 +3964,7 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .map(|(_, invocation)| invocation.sibling_position)
             .unwrap_or(sibling_position);
-        let (selection, unwind, wrapper) =
+        let (mut selection, unwind, wrapper) =
             if let Some((_, invocation)) = payload {
                 let splice_caller = splice_caller.ok_or_else(|| {
                     unsupported(
@@ -4009,6 +4015,77 @@ impl<'a> Lowering<'a> {
                 )
             };
         let mut unwind = unwind;
+        if let (None, Some((selected_spine, hole, true)), None) =
+            (inherited_hole, source_hole, wrapper.as_ref())
+        {
+            let marker_positions = selected_spine
+                .iter()
+                .enumerate()
+                .filter_map(|(index, entry)| {
+                    matches!(entry, SourceSelectedSpineEntry::ProducerHole(actual) if *actual == hole)
+                        .then_some(index)
+                })
+                .collect::<Vec<_>>();
+            let [marker_position] = marker_positions.as_slice() else {
+                return Err(unsupported(
+                    "ComputationalRecursor",
+                    "nested source region has a missing or duplicated current producer hole",
+                ));
+            };
+            let mut inside_region = false;
+            let mut region_layers = Vec::new();
+            for entry in &selected_spine[..*marker_position] {
+                match entry {
+                    SourceSelectedSpineEntry::ProducerHole(_) => inside_region = true,
+                    SourceSelectedSpineEntry::Frame(frame) if inside_region => {
+                        if let Some(scope) = &frame.selected_scope {
+                            region_layers.push(ComputationalRecursorLayer {
+                                cases: scope.frame.cases.clone(),
+                                default: scope.frame.default.clone(),
+                                outer_env: scope.frame.outer_env.clone(),
+                                provenance: scope.frame.provenance,
+                                occurrence: scope.occurrence,
+                                role: RecursorLayerRole::ExitsScope {
+                                    origin: segment_origin,
+                                    scope_origin: scope.scope_origin,
+                                    parent_scope: scope.parent_scope,
+                                },
+                            });
+                        }
+                    }
+                    SourceSelectedSpineEntry::Frame(_) => {}
+                }
+            }
+            if let Some(mut region_selection) = region_layers.first().cloned() {
+                region_selection.role = RecursorLayerRole::SelectsOccurrence {
+                    origin: segment_origin,
+                };
+                let selection_scope = selected_spine[..*marker_position]
+                    .iter()
+                    .filter_map(|entry| match entry {
+                        SourceSelectedSpineEntry::Frame(frame) => frame.selected_scope.as_ref(),
+                        SourceSelectedSpineEntry::ProducerHole(_) => None,
+                    })
+                    .find(|scope| scope.occurrence == selection.occurrence)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "ComputationalRecursor",
+                            "nested source region selection has no exact owned scope",
+                        )
+                    })?;
+                selection.role = RecursorLayerRole::ExitsScope {
+                    origin: segment_origin,
+                    scope_origin: selection_scope.scope_origin,
+                    parent_scope: selection_scope.parent_scope,
+                };
+                let mut post = vec![selection];
+                post.extend(region_layers.into_iter().skip(1));
+                selection = region_selection;
+                unwind
+                    .post_caller_wrappers
+                    .wrappers_in_construction_order = post;
+            }
+        }
         if let (None, Some((selected_spine, hole, true))) = (inherited_hole, source_hole) {
             let marker_positions = selected_spine
                 .iter()
@@ -6185,12 +6262,14 @@ impl<'a> Lowering<'a> {
                 child_cursor,
                 parent_cursor,
                 origin,
+                occurrence,
                 producer_hole,
                 next,
             } => SourceContinuation::ReturnFromSelectedCase {
                 child_cursor,
                 parent_cursor,
                 origin,
+                occurrence,
                 producer_hole,
                 next: Box::new(Self::discard_source_prefix(*next)),
             },
@@ -6324,6 +6403,7 @@ impl<'a> Lowering<'a> {
                 child_cursor,
                 parent_cursor,
                 origin,
+                occurrence,
                 producer_hole,
                 next,
             } => SourceContinuation::UnwindRecursorSegment {
@@ -6334,6 +6414,7 @@ impl<'a> Lowering<'a> {
                     child_cursor,
                     parent_cursor,
                     origin,
+                    occurrence,
                     producer_hole,
                     next,
                 }),
@@ -6432,16 +6513,248 @@ impl<'a> Lowering<'a> {
                 })
                 .collect(),
         });
-        let continuation = Self::replace_source_terminal_with_unwind(
+        let mut layers = vec![invocation.selection];
+        layers.extend(
+            invocation
+                .unwind
+                .captured_caller_suffix
+                .scopes_in_construction_order
+                .into_iter()
+                .rev(),
+        );
+        layers.extend(
+            invocation
+                .unwind
+                .post_caller_wrappers
+                .wrappers_in_construction_order
+                .into_iter()
+                .rev(),
+        );
+        Self::install_marker_local_recursor_layers(
             continuation,
-            invocation.unwind,
-            invocation.resume_cursor,
+            layers,
             invocation.producer_hole,
-        )?;
-        Ok(SourceContinuation::ApplyRecursorSelection {
-            layer: invocation.selection,
-            producer_hole: invocation.producer_hole,
-            next: Box::new(continuation),
+        )
+    }
+
+    fn install_marker_local_recursor_layers<'b>(
+        continuation: SourceContinuation<'b>,
+        mut layers: Vec<ComputationalRecursorLayer>,
+        producer_hole: Option<ProducerHoleId>,
+    ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        let wrap_terminal = |terminal, layers: Vec<ComputationalRecursorLayer>| {
+            layers.into_iter().rev().fold(terminal, |next, layer| {
+                SourceContinuation::ApplyRecursorSelection {
+                    layer,
+                    producer_hole,
+                    next: Box::new(next),
+                }
+            })
+        };
+        Ok(match continuation {
+            terminal @ SourceContinuation::Terminal(_) => {
+                if std::env::var_os("KEN_PX8TA_DEBUG").is_some() {
+                    eprintln!(
+                        "PX8TA splice terminal remaining={:?}",
+                        layers
+                            .iter()
+                            .map(|layer| (layer.provenance.0, layer.occurrence.0))
+                            .collect::<Vec<_>>()
+                    );
+                }
+                wrap_terminal(terminal, layers)
+            }
+            SourceContinuation::ReturnFromSelectedCase {
+                child_cursor,
+                parent_cursor,
+                origin,
+                occurrence,
+                producer_hole: return_hole,
+                next,
+            } => {
+                let local = layers
+                    .iter()
+                    .position(|layer| layer.occurrence == occurrence)
+                    .map(|index| layers.remove(index));
+                if std::env::var_os("KEN_PX8TA_DEBUG").is_some() {
+                    eprintln!(
+                        "PX8TA splice return o{} local={:?} remaining={:?}",
+                        occurrence.0,
+                        local.as_ref().map(|layer| layer.provenance.0),
+                        layers
+                            .iter()
+                            .map(|layer| (layer.provenance.0, layer.occurrence.0))
+                            .collect::<Vec<_>>()
+                    );
+                }
+                let next = Self::install_marker_local_recursor_layers(
+                    *next,
+                    layers,
+                    producer_hole,
+                )?;
+                let returned = SourceContinuation::ReturnFromSelectedCase {
+                    child_cursor,
+                    parent_cursor,
+                    origin,
+                    occurrence,
+                    producer_hole: return_hole,
+                    next: Box::new(next),
+                };
+                if let Some(layer) = local {
+                    SourceContinuation::ApplyRecursorSelection {
+                        layer,
+                        producer_hole,
+                        next: Box::new(returned),
+                    }
+                } else {
+                    returned
+                }
+            }
+            SourceContinuation::LetBody { body, env, next } => SourceContinuation::LetBody {
+                body,
+                env,
+                next: Box::new(Self::install_marker_local_recursor_layers(
+                    *next,
+                    layers,
+                    producer_hole,
+                )?),
+            },
+            SourceContinuation::ApplyRecursorSelection {
+                layer,
+                producer_hole: next_hole,
+                next,
+            } => SourceContinuation::ApplyRecursorSelection {
+                layer,
+                producer_hole: next_hole,
+                next: Box::new(Self::install_marker_local_recursor_layers(
+                    *next,
+                    layers,
+                    producer_hole,
+                )?),
+            },
+            SourceContinuation::UnwindRecursorSegment {
+                stack,
+                resume_cursor,
+                producer_hole: next_hole,
+                next,
+            } => SourceContinuation::UnwindRecursorSegment {
+                stack,
+                resume_cursor,
+                producer_hole: next_hole,
+                next: Box::new(Self::install_marker_local_recursor_layers(
+                    *next,
+                    layers,
+                    producer_hole,
+                )?),
+            },
+            SourceContinuation::IfScrutinee {
+                then_expr,
+                else_expr,
+                env,
+                next,
+            } => SourceContinuation::IfScrutinee {
+                then_expr,
+                else_expr,
+                env,
+                next: Box::new(Self::install_marker_local_recursor_layers(
+                    *next,
+                    layers,
+                    producer_hole,
+                )?),
+            },
+            SourceContinuation::ConstructArgument {
+                constructor,
+                remaining,
+                lowered,
+                env,
+                next,
+            } => SourceContinuation::ConstructArgument {
+                constructor,
+                remaining,
+                lowered,
+                env,
+                next: Box::new(Self::install_marker_local_recursor_layers(
+                    *next,
+                    layers,
+                    producer_hole,
+                )?),
+            },
+            SourceContinuation::MatchScrutinee {
+                cases,
+                default,
+                env,
+                next,
+            } => SourceContinuation::MatchScrutinee {
+                cases,
+                default,
+                env,
+                next: Box::new(Self::install_marker_local_recursor_layers(
+                    *next,
+                    layers,
+                    producer_hole,
+                )?),
+            },
+            SourceContinuation::ComputationalMatchScrutinee {
+                cases,
+                default,
+                env,
+                provenance,
+                producer_hole: next_hole,
+                selected_phase,
+                selected_occurrence,
+                next,
+            } => SourceContinuation::ComputationalMatchScrutinee {
+                cases,
+                default,
+                env,
+                provenance,
+                producer_hole: next_hole,
+                selected_phase,
+                selected_occurrence,
+                next: Box::new(Self::install_marker_local_recursor_layers(
+                    *next,
+                    layers,
+                    producer_hole,
+                )?),
+            },
+            SourceContinuation::ProjectRecord { field, next } => {
+                SourceContinuation::ProjectRecord {
+                    field,
+                    next: Box::new(Self::install_marker_local_recursor_layers(
+                        *next,
+                        layers,
+                        producer_hole,
+                    )?),
+                }
+            }
+            SourceContinuation::CallCallee { args, env, next } => {
+                SourceContinuation::CallCallee {
+                    args,
+                    env,
+                    next: Box::new(Self::install_marker_local_recursor_layers(
+                        *next,
+                        layers,
+                        producer_hole,
+                    )?),
+                }
+            }
+            SourceContinuation::CallArgument {
+                callee,
+                remaining,
+                lowered,
+                env,
+                next,
+            } => SourceContinuation::CallArgument {
+                callee,
+                remaining,
+                lowered,
+                env,
+                next: Box::new(Self::install_marker_local_recursor_layers(
+                    *next,
+                    layers,
+                    producer_hole,
+                )?),
+            },
         })
     }
 
@@ -6450,12 +6763,14 @@ impl<'a> Lowering<'a> {
         child_cursor: ContinuationCursorId,
         parent_cursor: ContinuationCursorId,
         origin: RecursorProducerOriginId,
+        occurrence: SelectedCaseOccurrenceId,
         producer_hole: Option<ProducerHoleId>,
     ) -> SourceContinuation<'b> {
         let wrap = |next| SourceContinuation::ReturnFromSelectedCase {
             child_cursor,
             parent_cursor,
             origin,
+            occurrence,
             producer_hole,
             next: Box::new(next),
         };
@@ -6470,6 +6785,7 @@ impl<'a> Lowering<'a> {
                     child_cursor,
                     parent_cursor,
                     origin,
+                    occurrence,
                     producer_hole,
                 )),
             },
@@ -6485,6 +6801,7 @@ impl<'a> Lowering<'a> {
                     child_cursor,
                     parent_cursor,
                     origin,
+                    occurrence,
                     producer_hole,
                 )),
             },
@@ -6502,6 +6819,7 @@ impl<'a> Lowering<'a> {
                     child_cursor,
                     parent_cursor,
                     origin,
+                    occurrence,
                     producer_hole,
                 )),
             },
@@ -6519,6 +6837,7 @@ impl<'a> Lowering<'a> {
                     child_cursor,
                     parent_cursor,
                     origin,
+                    occurrence,
                     producer_hole,
                 )),
             },
@@ -6538,6 +6857,7 @@ impl<'a> Lowering<'a> {
                     child_cursor,
                     parent_cursor,
                     origin,
+                    occurrence,
                     producer_hole,
                 )),
             },
@@ -6555,6 +6875,7 @@ impl<'a> Lowering<'a> {
                     child_cursor,
                     parent_cursor,
                     origin,
+                    occurrence,
                     producer_hole,
                 )),
             },
@@ -6580,6 +6901,7 @@ impl<'a> Lowering<'a> {
                     child_cursor,
                     parent_cursor,
                     origin,
+                    occurrence,
                     producer_hole,
                 )),
             },
@@ -6591,6 +6913,7 @@ impl<'a> Lowering<'a> {
                         child_cursor,
                         parent_cursor,
                         origin,
+                        occurrence,
                         producer_hole,
                     )),
                 }
@@ -6604,6 +6927,7 @@ impl<'a> Lowering<'a> {
                         child_cursor,
                         parent_cursor,
                         origin,
+                        occurrence,
                         producer_hole,
                     )),
                 }
@@ -6624,6 +6948,7 @@ impl<'a> Lowering<'a> {
                     child_cursor,
                     parent_cursor,
                     origin,
+                    occurrence,
                     producer_hole,
                 )),
             },
@@ -6789,6 +7114,7 @@ impl<'a> Lowering<'a> {
                 child_cursor,
                 parent_cursor,
                 origin,
+                occurrence,
                 producer_hole,
                 next,
             } => {
@@ -6798,6 +7124,7 @@ impl<'a> Lowering<'a> {
                         child_cursor,
                         parent_cursor,
                         origin,
+                        occurrence,
                         producer_hole,
                         next: Box::new(next),
                     },
@@ -6946,12 +7273,14 @@ impl<'a> Lowering<'a> {
                 child_cursor,
                 parent_cursor,
                 origin,
+                occurrence,
                 producer_hole,
                 next,
             } => SourceContinuation::ReturnFromSelectedCase {
                 child_cursor: *child_cursor,
                 parent_cursor: *parent_cursor,
                 origin: *origin,
+                occurrence: *occurrence,
                 producer_hole: *producer_hole,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
@@ -7608,6 +7937,16 @@ impl<'a> Lowering<'a> {
                                     let Some(case) =
                                         cases.iter().find(|case| case.constructor == constructor)
                                     else {
+                                        if std::env::var_os("KEN_PX8TA_DEBUG").is_some() {
+                                            eprintln!(
+                                                "PX8TA ordinary default value={} cases={:?}",
+                                                constructor,
+                                                cases
+                                                    .iter()
+                                                    .map(|case| case.constructor.as_str())
+                                                    .collect::<Vec<_>>()
+                                            );
+                                        }
                                         return Ok(Lowered::Trap(default));
                                     };
                                     if case.binders != args.len() {
@@ -7660,6 +7999,14 @@ impl<'a> Lowering<'a> {
                             let Some(case) =
                                 cases.iter().find(|case| case.constructor == constructor)
                             else {
+                                if std::env::var_os("KEN_PX8TA_DEBUG").is_some() {
+                                    eprintln!(
+                                        "PX8TA computational default p={} o={:?} value={}",
+                                        provenance.0,
+                                        selected_occurrence.map(|occurrence| occurrence.0),
+                                        constructor
+                                    );
+                                }
                                 return Ok(Lowered::Trap(default));
                             };
                             if case.argument_binders != args.len() {
@@ -7860,6 +8207,7 @@ impl<'a> Lowering<'a> {
                                 cursor,
                                 parent_cursor,
                                 producer_origin,
+                                occurrence,
                                 owns_producer_hole.then_some(producer_hole),
                             );
                             SourceMachineState::Eval {
@@ -7872,6 +8220,7 @@ impl<'a> Lowering<'a> {
                             child_cursor,
                             parent_cursor,
                             origin,
+                            occurrence: _,
                             producer_hole,
                             next,
                         } => {
