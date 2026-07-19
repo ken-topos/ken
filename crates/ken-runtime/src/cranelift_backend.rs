@@ -1507,6 +1507,7 @@ fn run_px8j_malformed_recursor_consumer(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_recursor_producer_origin: 0,
+        next_selected_case_occurrence: 0,
         next_producer_hole: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
@@ -1544,6 +1545,7 @@ fn run_px8j_malformed_recursor_consumer(
         },
         outer_env: Vec::new(),
         provenance: RecursorFrameProvenance(6),
+        occurrence: SelectedCaseOccurrenceId(5),
         role,
     };
     let selection = layer(match malformation {
@@ -1606,6 +1608,7 @@ fn run_px8j_malformed_recursor_consumer(
                 post_caller_wrappers: PostCallerWrapperStack {
                     wrappers_in_construction_order: Vec::new(),
                 },
+                consumed_scope_witnesses: Vec::new(),
             },
             cursor,
         ),
@@ -1682,6 +1685,7 @@ fn run_checked_bounded_nat_fixture(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_recursor_producer_origin: 0,
+        next_selected_case_occurrence: 0,
         next_producer_hole: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
@@ -1891,6 +1895,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_recursor_producer_origin: 0,
+        next_selected_case_occurrence: 0,
         next_producer_hole: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
@@ -2115,6 +2120,7 @@ fn compile_expr_into_module<'a, M: Module>(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_recursor_producer_origin: 0,
+        next_selected_case_occurrence: 0,
         next_producer_hole: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
@@ -2268,6 +2274,7 @@ struct Lowering<'a> {
     next_token: i64,
     next_recursor_frame_provenance: u64,
     next_recursor_producer_origin: u64,
+    next_selected_case_occurrence: u64,
     next_producer_hole: u64,
     next_continuation_activation: u64,
     next_continuation_cursor: u64,
@@ -2312,6 +2319,9 @@ struct ContinuationCursorId(u64);
 struct RecursorProducerOriginId(u64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct SelectedCaseOccurrenceId(u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct ProducerHoleId(u64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2338,6 +2348,7 @@ struct ComputationalRecursorFramePayload {
 struct OwnedSelectedScope {
     scope_origin: RecursorProducerOriginId,
     parent_scope: Option<RecursorProducerOriginId>,
+    occurrence: SelectedCaseOccurrenceId,
     frame: ComputationalRecursorFramePayload,
 }
 
@@ -2701,6 +2712,7 @@ struct ComputationalRecursorLayer {
     default: RuntimeTrap,
     outer_env: Vec<Lowered>,
     provenance: RecursorFrameProvenance,
+    occurrence: SelectedCaseOccurrenceId,
     role: RecursorLayerRole,
 }
 
@@ -2721,6 +2733,15 @@ struct RecursorInvocationSegment {
 struct RecursorUnwindStack {
     captured_caller_suffix: CapturedCallerSuffix,
     post_caller_wrappers: PostCallerWrapperStack,
+    consumed_scope_witnesses: Vec<ConsumedSelectedScopeWitness>,
+}
+
+#[derive(Clone)]
+struct ConsumedSelectedScopeWitness {
+    scope_origin: RecursorProducerOriginId,
+    parent_scope: Option<RecursorProducerOriginId>,
+    provenance: RecursorFrameProvenance,
+    occurrence: SelectedCaseOccurrenceId,
 }
 
 #[derive(Clone)]
@@ -2900,6 +2921,53 @@ fn validate_recursor_invocation_segment(
         "post-caller wrapper stack",
         captured_inner,
     )?;
+    let executable_scope_origins = segment
+        .unwind
+        .captured_caller_suffix
+        .scopes_in_construction_order
+        .iter()
+        .chain(
+            segment
+                .unwind
+                .post_caller_wrappers
+                .wrappers_in_construction_order
+                .iter(),
+        )
+        .filter_map(|layer| match layer.role {
+            RecursorLayerRole::ExitsScope { scope_origin, .. } => Some(scope_origin),
+            RecursorLayerRole::SelectsOccurrence { .. } => None,
+        })
+        .collect::<BTreeSet<_>>();
+    let mut witnessed_scope_origins = BTreeSet::new();
+    for witness in &segment.unwind.consumed_scope_witnesses {
+        if executable_scope_origins.contains(&witness.scope_origin)
+            || !witnessed_scope_origins.insert(witness.scope_origin)
+        {
+            return Err(unsupported(
+                "ComputationalRecursor",
+                "consumed selected scope is duplicated or cross-listed as executable",
+            ));
+        }
+        let owners = std::iter::once(&segment.selection)
+            .chain(
+                segment
+                    .unwind
+                    .post_caller_wrappers
+                    .wrappers_in_construction_order
+                    .iter(),
+            )
+            .filter(|layer| layer.occurrence == witness.occurrence)
+            .collect::<Vec<_>>();
+        let [owner] = owners.as_slice() else {
+            return Err(unsupported(
+                "ComputationalRecursor",
+                "consumed selected scope lacks one exact executable occurrence owner",
+            ));
+        };
+        let _ = owner;
+        let _ = witness.provenance;
+        let _ = witness.parent_scope;
+    }
     Ok(())
 }
 
@@ -2997,6 +3065,7 @@ enum SourceContinuation<'a> {
         provenance: RecursorFrameProvenance,
         producer_hole: Option<ProducerHoleId>,
         selected_phase: SelectedScopePhase,
+        selected_occurrence: Option<SelectedCaseOccurrenceId>,
         next: Box<SourceContinuation<'a>>,
     },
     /// The owned return edge for one selected computational case. The case
@@ -3116,6 +3185,7 @@ enum SourcePrefixTemplate {
         provenance: RecursorFrameProvenance,
         producer_hole: Option<ProducerHoleId>,
         selected_phase: SelectedScopePhase,
+        selected_occurrence: Option<SelectedCaseOccurrenceId>,
         next: Box<SourcePrefixTemplate>,
     },
     ReturnFromSelectedCase {
@@ -3177,6 +3247,7 @@ struct SourceSelectedSpineFrame {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SelectedScopePhase {
+    InheritedActive,
     CallerSource,
     CapturedCallerSuffix,
     PostCallerWrapper,
@@ -3805,6 +3876,15 @@ impl<'a> Lowering<'a> {
         origin
     }
 
+    fn mint_selected_case_occurrence(&mut self) -> SelectedCaseOccurrenceId {
+        let occurrence = SelectedCaseOccurrenceId(self.next_selected_case_occurrence);
+        self.next_selected_case_occurrence = self
+            .next_selected_case_occurrence
+            .checked_add(1)
+            .expect("compiler-private selected-case occurrence exhausted");
+        occurrence
+    }
+
     fn mint_producer_hole(&mut self) -> ProducerHoleId {
         let hole = ProducerHoleId(self.next_producer_hole);
         self.next_producer_hole = self
@@ -3848,6 +3928,7 @@ impl<'a> Lowering<'a> {
         default: RuntimeTrap,
         outer_env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
+        occurrence: SelectedCaseOccurrenceId,
         origin: RecursorProducerOriginId,
         sibling_position: usize,
         role: RecursorLayerRole,
@@ -3866,6 +3947,7 @@ impl<'a> Lowering<'a> {
             default,
             outer_env,
             provenance,
+            occurrence,
             role,
         };
         let segment_origin = payload
@@ -3921,6 +4003,7 @@ impl<'a> Lowering<'a> {
                         post_caller_wrappers: PostCallerWrapperStack {
                             wrappers_in_construction_order: Vec::new(),
                         },
+                        consumed_scope_witnesses: Vec::new(),
                     },
                     None,
                 )
@@ -3941,6 +4024,7 @@ impl<'a> Lowering<'a> {
                     "source recursor producer-hole marker is missing or duplicated",
                 ));
             };
+            let mut seen_scope_origins = BTreeSet::new();
             for frame in selected_spine[..*marker_position]
                 .iter()
                 .filter_map(|entry| match entry {
@@ -3951,11 +4035,48 @@ impl<'a> Lowering<'a> {
                 let Some(scope) = frame.selected_scope.as_ref() else {
                     continue;
                 };
+                if !seen_scope_origins.insert(scope.scope_origin) {
+                    return Err(unsupported(
+                        "ComputationalRecursor",
+                        "source recursor capture repeats a selected scope identity",
+                    ));
+                }
+                let matching_layers = std::iter::once(&selection)
+                    .chain(
+                        unwind
+                            .post_caller_wrappers
+                            .wrappers_in_construction_order
+                            .iter(),
+                    )
+                    .chain(wrapper.as_ref())
+                    .filter(|layer| layer.occurrence == scope.occurrence)
+                    .collect::<Vec<_>>();
+                match matching_layers.as_slice() {
+                    [] => {}
+                    [_owner] => {
+                        unwind
+                            .consumed_scope_witnesses
+                            .push(ConsumedSelectedScopeWitness {
+                                scope_origin: scope.scope_origin,
+                                parent_scope: scope.parent_scope,
+                                provenance: scope.frame.provenance,
+                                occurrence: scope.occurrence,
+                            });
+                        continue;
+                    }
+                    _ => {
+                        return Err(unsupported(
+                            "ComputationalRecursor",
+                            "selected scope has multiple executable occurrence owners",
+                        ));
+                    }
+                }
                 let layer = ComputationalRecursorLayer {
                     cases: scope.frame.cases.clone(),
                     default: scope.frame.default.clone(),
                     outer_env: scope.frame.outer_env.clone(),
                     provenance: scope.frame.provenance,
+                    occurrence: scope.occurrence,
                     role: RecursorLayerRole::ExitsScope {
                         origin: segment_origin,
                         scope_origin: scope.scope_origin,
@@ -3964,6 +4085,7 @@ impl<'a> Lowering<'a> {
                 };
                 match frame.phase {
                     SelectedScopePhase::CallerSource
+                    | SelectedScopePhase::InheritedActive
                     | SelectedScopePhase::CapturedCallerSuffix => unwind
                         .captured_caller_suffix
                         .scopes_in_construction_order
@@ -4969,11 +5091,13 @@ impl<'a> Lowering<'a> {
                 let activation = self.mint_continuation_activation();
                 let cursor = self.mint_continuation_cursor();
                 let producer_origin = self.mint_recursor_producer_origin();
+                let occurrence = self.mint_selected_case_occurrence();
                 let selected_scope = OwnedSelectedScope {
                     scope_origin: producer_origin,
                     parent_scope: splice_caller
                         .and_then(|active| active.selected_scope)
                         .map(|scope| scope.scope_origin),
+                    occurrence,
                     frame: ComputationalRecursorFramePayload {
                         cases: eliminator.cases.to_vec(),
                         default: eliminator.default.clone(),
@@ -5017,6 +5141,7 @@ impl<'a> Lowering<'a> {
                         eliminator.default.clone(),
                         eliminator.env.to_vec(),
                         eliminator.provenance,
+                        occurrence,
                         producer_origin,
                         position,
                         RecursorLayerRole::SelectsOccurrence {
@@ -5460,6 +5585,7 @@ impl<'a> Lowering<'a> {
                 }
                 let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
                 let producer_origin = self.mint_recursor_producer_origin();
+                let occurrence = self.mint_selected_case_occurrence();
                 #[cfg(test)]
                 px8j_record_source_event(Px8jSourceTraceEvent::Mint {
                     path: Px8jProducerPath::DeferredConstructor,
@@ -5478,6 +5604,7 @@ impl<'a> Lowering<'a> {
                         frame.default.clone(),
                         outer_tail.clone(),
                         frame.provenance,
+                        occurrence,
                         producer_origin,
                         position,
                         RecursorLayerRole::SelectsOccurrence {
@@ -6176,6 +6303,7 @@ impl<'a> Lowering<'a> {
                 provenance,
                 producer_hole,
                 selected_phase,
+                selected_occurrence,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases,
@@ -6184,6 +6312,7 @@ impl<'a> Lowering<'a> {
                 provenance,
                 producer_hole,
                 selected_phase,
+                selected_occurrence,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
                     stack,
@@ -6436,6 +6565,7 @@ impl<'a> Lowering<'a> {
                 provenance,
                 producer_hole: next_hole,
                 selected_phase,
+                selected_occurrence,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases,
@@ -6444,6 +6574,7 @@ impl<'a> Lowering<'a> {
                 provenance,
                 producer_hole: next_hole,
                 selected_phase,
+                selected_occurrence,
                 next: Box::new(Self::install_source_selected_return(
                     *next,
                     child_cursor,
@@ -6636,6 +6767,7 @@ impl<'a> Lowering<'a> {
                 provenance,
                 producer_hole,
                 selected_phase,
+                selected_occurrence,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
@@ -6647,6 +6779,7 @@ impl<'a> Lowering<'a> {
                         provenance,
                         producer_hole,
                         selected_phase,
+                        selected_occurrence,
                         next: Box::new(next),
                     },
                     terminal,
@@ -6797,6 +6930,7 @@ impl<'a> Lowering<'a> {
                 provenance,
                 producer_hole,
                 selected_phase,
+                selected_occurrence,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases: cases.clone(),
@@ -6805,6 +6939,7 @@ impl<'a> Lowering<'a> {
                 provenance: *provenance,
                 producer_hole: *producer_hole,
                 selected_phase: *selected_phase,
+                selected_occurrence: *selected_occurrence,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::ReturnFromSelectedCase {
@@ -6935,7 +7070,7 @@ impl<'a> Lowering<'a> {
                 SourceSelectedSpineFrame {
                     cursor: active.cursor,
                     selected_scope: active.selected_scope.cloned(),
-                    phase: SelectedScopePhase::CallerSource,
+                    phase: SelectedScopePhase::InheritedActive,
                 },
             ));
         }
@@ -7088,6 +7223,7 @@ impl<'a> Lowering<'a> {
                             provenance: self.mint_recursor_frame_provenance(),
                             producer_hole: None,
                             selected_phase: SelectedScopePhase::CallerSource,
+                            selected_occurrence: None,
                             next: Box::new(control.continuation),
                         };
                         SourceMachineState::Eval {
@@ -7272,6 +7408,7 @@ impl<'a> Lowering<'a> {
                                     provenance: layer.provenance,
                                     producer_hole,
                                     selected_phase: SelectedScopePhase::PostCallerWrapper,
+                                    selected_occurrence: Some(layer.occurrence),
                                     next,
                                 };
                             SourceMachineState::Value { value, control }
@@ -7332,6 +7469,7 @@ impl<'a> Lowering<'a> {
                                         provenance: layer.provenance,
                                         producer_hole,
                                         selected_phase,
+                                        selected_occurrence: Some(layer.occurrence),
                                         next: Box::new(SourceContinuation::UnwindRecursorSegment {
                                             stack,
                                             resume_cursor,
@@ -7506,6 +7644,7 @@ impl<'a> Lowering<'a> {
                             provenance,
                             producer_hole,
                             selected_phase,
+                            selected_occurrence,
                             next,
                         } => {
                             let Lowered::Constructor { constructor, args } = value else {
@@ -7561,6 +7700,8 @@ impl<'a> Lowering<'a> {
                             let mut induction_hypotheses =
                                 Vec::with_capacity(case.recursive_positions.len());
                             let producer_origin = self.mint_recursor_producer_origin();
+                            let occurrence = selected_occurrence
+                                .unwrap_or_else(|| self.mint_selected_case_occurrence());
                             let owns_producer_hole = producer_hole.is_none();
                             let producer_hole = if let Some(producer_hole) = producer_hole {
                                 let marker_count = control
@@ -7640,6 +7781,7 @@ impl<'a> Lowering<'a> {
                                         default.clone(),
                                         env.clone(),
                                         provenance,
+                                        occurrence,
                                         producer_origin,
                                         position,
                                         RecursorLayerRole::SelectsOccurrence {
@@ -7682,6 +7824,7 @@ impl<'a> Lowering<'a> {
                                     .selected_scope
                                     .as_ref()
                                     .map(|scope| scope.scope_origin),
+                                occurrence,
                                 frame: ComputationalRecursorFramePayload {
                                     cases: cases.clone(),
                                     default: default.clone(),
@@ -16721,6 +16864,7 @@ mod tests {
             next_token: 0,
             next_recursor_frame_provenance: 0,
             next_recursor_producer_origin: 0,
+            next_selected_case_occurrence: 0,
             next_producer_hole: 0,
             next_continuation_activation: 0,
             next_continuation_cursor: 0,
