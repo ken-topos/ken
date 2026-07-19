@@ -298,7 +298,7 @@ impl NativeSeedEnvironment {
         let mut values = BTreeMap::new();
         values.insert(
             "decl:fixture::Local::y".to_string(),
-            RuntimeGroundValue::Int(2),
+            RuntimeGroundValue::Int((2).into()),
         );
         Self { values }
     }
@@ -1226,6 +1226,7 @@ type CompiledExpr = CompiledModule<JITModule>;
 #[derive(Clone, Copy)]
 enum ResultDecoder {
     Int,
+    ProcessStatus,
     Bool,
     Table,
 }
@@ -1245,7 +1246,9 @@ impl CompiledModule<JITModule> {
         let code = self.module.get_finalized_function(self.func_id);
         // Named native-code-execution boundary. This is tested/validated JIT
         // execution, never a proof and never a host-ABI syscall boundary.
-        let process_root = process_root.unwrap_or(std::ptr::null());
+        let mut native_int_arena = crate::NativeIntArenaV1::default();
+        let process_root = process_root
+            .unwrap_or_else(|| (&mut native_int_arena as *mut crate::NativeIntArenaV1).cast());
         let native =
             unsafe { mem::transmute::<_, extern "C" fn(*const std::ffi::c_void) -> i64>(code) };
         let token = native(process_root);
@@ -1253,7 +1256,12 @@ impl CompiledModule<JITModule> {
             .decoder
             .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
         let ground = match decoder {
-            ResultDecoder::Int => RuntimeGroundValue::Int(token),
+            ResultDecoder::Int => RuntimeGroundValue::Int(
+                native_int_arena
+                    .decode_final_export()
+                    .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?,
+            ),
+            ResultDecoder::ProcessStatus => RuntimeGroundValue::Int(token.into()),
             ResultDecoder::Bool => RuntimeGroundValue::Bool(token != 0),
             ResultDecoder::Table => self
                 .result_table
@@ -1400,6 +1408,14 @@ fn run_checked_bounded_nat_fixture(
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         host_dispatch: None,
         invocation_pointer: None,
+        native_int_arena: None,
+        native_int_binop: None,
+        native_int_compare: None,
+        native_int_intern: None,
+        native_int_narrow: None,
+        native_int_export: None,
+        native_int_tags: BTreeMap::new(),
+        native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: mutation,
     };
     let mut function_context = FunctionBuilderContext::new();
@@ -1441,7 +1457,7 @@ fn run_checked_bounded_nat_fixture(
                     crate::RuntimeMatchCase {
                         constructor: compiler.process_symbols.nat_zero.clone(),
                         binders: 0,
-                        body: RuntimeExpr::Value(RuntimeValue::Int(10)),
+                        body: RuntimeExpr::Value(RuntimeValue::Int((10).into())),
                     },
                     crate::RuntimeMatchCase {
                         constructor: compiler.process_symbols.nat_suc.clone(),
@@ -1452,12 +1468,12 @@ fn run_checked_bounded_nat_fixture(
                                 crate::RuntimeMatchCase {
                                     constructor: compiler.process_symbols.nat_zero.clone(),
                                     binders: 0,
-                                    body: RuntimeExpr::Value(RuntimeValue::Int(21)),
+                                    body: RuntimeExpr::Value(RuntimeValue::Int((21).into())),
                                 },
                                 crate::RuntimeMatchCase {
                                     constructor: compiler.process_symbols.nat_suc.clone(),
                                     binders: 1,
-                                    body: RuntimeExpr::Value(RuntimeValue::Int(22)),
+                                    body: RuntimeExpr::Value(RuntimeValue::Int((22).into())),
                                 },
                             ],
                             default: default.clone(),
@@ -1530,7 +1546,10 @@ fn run_checked_bounded_nat_fixture(
                 compiler.lower_bounded_nat_computational(&mut builder, nat, false, &frames)?
             }
         };
-        let value = compiler.emit_result(&mut builder, lowered)?.0;
+        let value = match lowered {
+            Lowered::Int { value, .. } => value,
+            other => compiler.emit_result(&mut builder, other)?.0,
+        };
         builder.ins().return_(&[value]);
         builder.seal_all_blocks();
         builder.finalize();
@@ -1542,7 +1561,7 @@ fn run_checked_bounded_nat_fixture(
     let compiled = CompiledModule {
         module,
         func_id,
-        decoder: Some(ResultDecoder::Int),
+        decoder: Some(ResultDecoder::ProcessStatus),
         result_table: compiler.result_table,
         trap: None,
         verifier_passed: true,
@@ -1592,6 +1611,14 @@ fn run_dynamic_constructor_dispatch_fixture(
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         host_dispatch: None,
         invocation_pointer: None,
+        native_int_arena: None,
+        native_int_binop: None,
+        native_int_compare: None,
+        native_int_intern: None,
+        native_int_narrow: None,
+        native_int_export: None,
+        native_int_tags: BTreeMap::new(),
+        native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
     let mut function_context = FunctionBuilderContext::new();
@@ -1628,7 +1655,7 @@ fn run_dynamic_constructor_dispatch_fixture(
             |(_, constructor, binders, result)| crate::RuntimeMatchCase {
                 constructor: constructor.to_string(),
                 binders,
-                body: RuntimeExpr::Value(RuntimeValue::Int(result)),
+                body: RuntimeExpr::Value(RuntimeValue::Int((result).into())),
             },
         )
         .collect::<Vec<_>>();
@@ -1650,6 +1677,7 @@ fn run_dynamic_constructor_dispatch_fixture(
                 assert_eq!(trap, default);
                 builder.ins().iconst(types::I64, -4)
             }
+            Lowered::Int { value, .. } => value,
             value => compiler.emit_result(&mut builder, value)?.0,
         };
         builder.ins().return_(&[value]);
@@ -1663,7 +1691,7 @@ fn run_dynamic_constructor_dispatch_fixture(
     let compiled = CompiledModule {
         module,
         func_id,
-        decoder: Some(ResultDecoder::Int),
+        decoder: Some(ResultDecoder::ProcessStatus),
         result_table: compiler.result_table,
         trap: None,
         verifier_passed: true,
@@ -1719,6 +1747,21 @@ fn compile_expr_into_module<'a, M: Module>(
     let func_id = module
         .declare_function(function_name, linkage, &sig)
         .map_err(|err| backend_module(err.to_string()))?;
+    let native_int_wrapping_mutation = {
+        #[cfg(test)]
+        {
+            NATIVE_INT_LOWERING_MUTATION.with(std::cell::Cell::get)
+                == NativeIntLoweringMutation::Wrapping
+        }
+        #[cfg(not(test))]
+        {
+            false
+        }
+    };
+    let native_int = crate::native_int_clif::emit_native_int_local_graph(
+        &mut module,
+        native_int_wrapping_mutation,
+    )?;
     let host_dispatch = if process_mode {
         let mut host_sig = module.make_signature();
         host_sig
@@ -1742,6 +1785,11 @@ fn compile_expr_into_module<'a, M: Module>(
     let mut ctx = module.make_context();
     ctx.func = Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), sig);
     let host_dispatch = host_dispatch.map(|id| module.declare_func_in_func(id, &mut ctx.func));
+    let int_binop = module.declare_func_in_func(native_int.binop, &mut ctx.func);
+    let int_compare = module.declare_func_in_func(native_int.compare, &mut ctx.func);
+    let int_intern = module.declare_func_in_func(native_int.intern, &mut ctx.func);
+    let int_narrow = module.declare_func_in_func(native_int.narrow, &mut ctx.func);
+    let int_export = module.declare_func_in_func(native_int.export, &mut ctx.func);
 
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
@@ -1766,6 +1814,15 @@ fn compile_expr_into_module<'a, M: Module>(
             .unwrap_or_else(crate::NativeProcessSymbols::legacy_prelude),
         host_dispatch,
         invocation_pointer: None,
+        native_int_arena: None,
+        native_int_binop: Some(int_binop),
+        native_int_compare: Some(int_compare),
+        native_int_intern: Some(int_intern),
+        native_int_narrow: Some(int_narrow),
+        native_int_export: Some(int_export),
+        native_int_tags: BTreeMap::new(),
+        #[cfg(test)]
+        native_int_mutation: NATIVE_INT_LOWERING_MUTATION.with(std::cell::Cell::get),
         #[cfg(test)]
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
     };
@@ -1774,9 +1831,10 @@ fn compile_expr_into_module<'a, M: Module>(
         let block = builder.create_block();
         builder.append_block_params_for_function_params(block);
         builder.switch_to_block(block);
+        let invocation = builder.block_params(block)[0];
+        compiler.native_int_arena = Some(invocation);
         let mut initial_env = Vec::new();
         if process_mode {
-            let invocation = builder.block_params(block)[0];
             compiler.invocation_pointer = Some(invocation);
             let pointer_type = builder.func.dfg.value_type(invocation);
             let process_input =
@@ -1787,6 +1845,11 @@ fn compile_expr_into_module<'a, M: Module>(
             let capability = builder
                 .ins()
                 .load(types::I64, MemFlags::trusted(), invocation, 16);
+            let int_arena = builder
+                .ins()
+                .load(pointer_type, MemFlags::trusted(), invocation, 24);
+            Lowering::require_nonzero(&mut builder, int_arena);
+            compiler.native_int_arena = Some(int_arena);
             initial_env.push(Lowered::BorrowedNativeValue {
                 pointer: process_input,
             });
@@ -1893,6 +1956,15 @@ struct Lowering<'a> {
     process_symbols: crate::NativeProcessSymbols,
     host_dispatch: Option<FuncRef>,
     invocation_pointer: Option<cranelift_codegen::ir::Value>,
+    native_int_arena: Option<cranelift_codegen::ir::Value>,
+    native_int_binop: Option<FuncRef>,
+    native_int_compare: Option<FuncRef>,
+    native_int_intern: Option<FuncRef>,
+    native_int_narrow: Option<FuncRef>,
+    native_int_export: Option<FuncRef>,
+    native_int_tags: BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
+    #[cfg(test)]
+    native_int_mutation: NativeIntLoweringMutation,
     #[cfg(test)]
     bounded_nat_mutation: BoundedNatLoweringMutation,
 }
@@ -1905,6 +1977,28 @@ struct ContinuationActivationId(u64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct ContinuationCursorId(u64);
+
+#[derive(Clone, Copy)]
+struct NativeScalarPairV1 {
+    tag: cranelift_codegen::ir::Value,
+    payload: cranelift_codegen::ir::Value,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NativeIntLoweringMutation {
+    Exact,
+    Wrapping,
+    Trap,
+    SuppressTerminalExport,
+    CorruptTerminalExport,
+}
+
+#[cfg(test)]
+thread_local! {
+    pub(crate) static NATIVE_INT_LOWERING_MUTATION: std::cell::Cell<NativeIntLoweringMutation> =
+        const { std::cell::Cell::new(NativeIntLoweringMutation::Exact) };
+}
 
 #[derive(Clone)]
 enum Lowered {
@@ -3441,6 +3535,7 @@ impl<'a> Lowering<'a> {
                     let false_block = builder.create_block();
                     let merge = builder.create_block();
                     builder.append_block_param(merge, types::I64);
+                    builder.append_block_param(merge, types::I64);
                     builder.ins().brif(value, true_block, &[], false_block, &[]);
                     let mut exit_merge = None;
                     for (block, producer_case) in
@@ -3456,14 +3551,21 @@ impl<'a> Lowering<'a> {
                         let (value, is_exit) =
                             self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
                         Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
-                        builder.ins().jump(merge, &[value.into()]);
+                        builder
+                            .ins()
+                            .jump(merge, &[value.tag.into(), value.payload.into()]);
                     }
                     builder.switch_to_block(merge);
-                    let value = builder.block_params(merge)[0];
+                    let pair = NativeScalarPairV1 {
+                        tag: builder.block_params(merge)[0],
+                        payload: builder.block_params(merge)[1],
+                    };
                     return Ok(if exit_merge == Some(true) {
-                        Lowered::ProcessExitStatus { value }
+                        Lowered::ProcessExitStatus {
+                            value: pair.payload,
+                        }
                     } else {
-                        Lowered::Int { value, known: None }
+                        self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair)
                     });
                 }
                 if let Lowered::HostResult {
@@ -3477,6 +3579,7 @@ impl<'a> Lowering<'a> {
                     let ok_block = builder.create_block();
                     let err_block = builder.create_block();
                     let merge = builder.create_block();
+                    builder.append_block_param(merge, types::I64);
                     builder.append_block_param(merge, types::I64);
                     builder.ins().brif(success, ok_block, &[], err_block, &[]);
                     let mut exit_merge = None;
@@ -3502,14 +3605,21 @@ impl<'a> Lowering<'a> {
                         let (value, is_exit) =
                             self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
                         Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
-                        builder.ins().jump(merge, &[value.into()]);
+                        builder
+                            .ins()
+                            .jump(merge, &[value.tag.into(), value.payload.into()]);
                     }
                     builder.switch_to_block(merge);
-                    let value = builder.block_params(merge)[0];
+                    let pair = NativeScalarPairV1 {
+                        tag: builder.block_params(merge)[0],
+                        payload: builder.block_params(merge)[1],
+                    };
                     return Ok(if exit_merge == Some(true) {
-                        Lowered::ProcessExitStatus { value }
+                        Lowered::ProcessExitStatus {
+                            value: pair.payload,
+                        }
                     } else {
-                        Lowered::Int { value, known: None }
+                        self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair)
                     });
                 }
                 if let Lowered::DynamicConstructor(dynamic) = selected {
@@ -3634,6 +3744,7 @@ impl<'a> Lowering<'a> {
                 let else_block = builder.create_block();
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
+                builder.append_block_param(merge, types::I64);
                 builder.ins().brif(value, then_block, &[], else_block, &[]);
                 let mut exit_merge = None;
                 for (block, branch) in [(then_block, then_expr), (else_block, else_expr)] {
@@ -3647,14 +3758,21 @@ impl<'a> Lowering<'a> {
                     let (value, is_exit) =
                         self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
                     Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
-                    builder.ins().jump(merge, &[value.into()]);
+                    builder
+                        .ins()
+                        .jump(merge, &[value.tag.into(), value.payload.into()]);
                 }
                 builder.switch_to_block(merge);
-                let value = builder.block_params(merge)[0];
+                let pair = NativeScalarPairV1 {
+                    tag: builder.block_params(merge)[0],
+                    payload: builder.block_params(merge)[1],
+                };
                 Ok(if exit_merge == Some(true) {
-                    Lowered::ProcessExitStatus { value }
+                    Lowered::ProcessExitStatus {
+                        value: pair.payload,
+                    }
                 } else {
-                    Lowered::Int { value, known: None }
+                    self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair)
                 })
             }
             _ => {
@@ -3948,26 +4066,41 @@ impl<'a> Lowering<'a> {
         let expose_raw_predecessor = false;
         builder.append_block_param(loop_block, types::I64);
         builder.append_block_param(loop_block, types::I64);
+        builder.append_block_param(loop_block, types::I64);
         if break_decrement {
             builder.append_block_param(loop_block, types::I64);
         }
         builder.append_block_param(done_block, types::I64);
+        builder.append_block_param(done_block, types::I64);
         if break_decrement {
             builder.ins().jump(
                 loop_block,
-                &[zero_value.into(), initial.into(), zero_value.into()],
+                &[
+                    zero_value.into(),
+                    initial.tag.into(),
+                    initial.payload.into(),
+                    zero_value.into(),
+                ],
             );
         } else {
-            builder
-                .ins()
-                .jump(loop_block, &[zero_value.into(), initial.into()]);
+            builder.ins().jump(
+                loop_block,
+                &[
+                    zero_value.into(),
+                    initial.tag.into(),
+                    initial.payload.into(),
+                ],
+            );
         }
 
         builder.switch_to_block(loop_block);
         let predecessor_value = builder.block_params(loop_block)[0];
-        let induction_value = builder.block_params(loop_block)[1];
+        let induction = NativeScalarPairV1 {
+            tag: builder.block_params(loop_block)[1],
+            payload: builder.block_params(loop_block)[2],
+        };
         if break_decrement {
-            let fuel = builder.block_params(loop_block)[2];
+            let fuel = builder.block_params(loop_block)[3];
             let compare_block = builder.create_block();
             let exhausted = builder.ins().icmp(
                 cranelift_codegen::ir::condcodes::IntCC::UnsignedGreaterThan,
@@ -3978,7 +4111,7 @@ impl<'a> Lowering<'a> {
             builder.ins().brif(
                 exhausted,
                 done_block,
-                &[nontermination.into()],
+                &[zero_value.into(), nontermination.into()],
                 compare_block,
                 &[],
             );
@@ -3992,7 +4125,7 @@ impl<'a> Lowering<'a> {
         builder.ins().brif(
             complete,
             done_block,
-            &[induction_value.into()],
+            &[induction.tag.into(), induction.payload.into()],
             step_block,
             &[],
         );
@@ -4027,25 +4160,7 @@ impl<'a> Lowering<'a> {
                 Ok(env) => env,
                 Err(trap) => return Ok(Lowered::Trap(trap)),
             };
-        let induction = match result_kind {
-            ScalarMergeKind::Int => Lowered::Int {
-                value: induction_value,
-                known: None,
-            },
-            ScalarMergeKind::Bool => Lowered::Bool {
-                value: induction_value,
-                known: None,
-            },
-            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 {
-                value: induction_value,
-            }),
-            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus {
-                value: induction_value,
-            },
-            ScalarMergeKind::RecursiveBackedge => {
-                unreachable!("the computational Nat base case is not a backedge")
-            }
-        };
+        let induction = self.lowered_from_scalar_pair(result_kind, induction);
         let mut suc_env = Vec::new();
         if computational {
             suc_env.push(induction);
@@ -4065,29 +4180,32 @@ impl<'a> Lowering<'a> {
             ));
         }
         if break_decrement {
-            let fuel = builder.block_params(loop_block)[2];
+            let fuel = builder.block_params(loop_block)[3];
             let next_fuel = builder.ins().iadd_imm(fuel, 1);
             builder.ins().jump(
                 loop_block,
-                &[successor_value.into(), next.into(), next_fuel.into()],
+                &[
+                    successor_value.into(),
+                    next.tag.into(),
+                    next.payload.into(),
+                    next_fuel.into(),
+                ],
             );
         } else {
-            builder
-                .ins()
-                .jump(loop_block, &[successor_value.into(), next.into()]);
+            builder.ins().jump(
+                loop_block,
+                &[successor_value.into(), next.tag.into(), next.payload.into()],
+            );
         }
 
         builder.switch_to_block(done_block);
-        let value = builder.block_params(done_block)[0];
-        Ok(match result_kind {
-            ScalarMergeKind::Int => Lowered::Int { value, known: None },
-            ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
-            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 { value }),
-            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
-            ScalarMergeKind::RecursiveBackedge => {
-                unreachable!("the computational Nat base case is not a backedge")
-            }
-        })
+        Ok(self.lowered_from_scalar_pair(
+            result_kind,
+            NativeScalarPairV1 {
+                tag: builder.block_params(done_block)[0],
+                payload: builder.block_params(done_block)[1],
+            },
+        ))
     }
 
     fn materialize_eliminator_frame_env(
@@ -4247,13 +4365,30 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         lowered: Lowered,
         construct: &'static str,
-    ) -> Result<(cranelift_codegen::ir::Value, bool), CraneliftBackendError> {
+    ) -> Result<(NativeScalarPairV1, bool), CraneliftBackendError> {
+        let zero_tag = builder.ins().iconst(types::I64, 0);
         match lowered {
-            Lowered::Int { value, .. } => Ok((value, false)),
-            Lowered::ProcessExitStatus { value } => Ok((value, true)),
-            lowered if self.process_object => {
-                Ok((self.emit_process_exit_status(builder, lowered), true))
-            }
+            Lowered::Int { value, known } => Ok((
+                NativeScalarPairV1 {
+                    tag: self.native_int_tag(builder, value, known)?,
+                    payload: value,
+                },
+                false,
+            )),
+            Lowered::ProcessExitStatus { value } => Ok((
+                NativeScalarPairV1 {
+                    tag: zero_tag,
+                    payload: value,
+                },
+                true,
+            )),
+            lowered if self.process_object => Ok((
+                NativeScalarPairV1 {
+                    tag: zero_tag,
+                    payload: self.emit_process_exit_status(builder, lowered),
+                },
+                true,
+            )),
             _ => Err(unsupported(
                 construct,
                 "dynamic native arms must produce scalar Int values",
@@ -4266,31 +4401,65 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         lowered: Lowered,
         construct: &'static str,
-    ) -> Result<(cranelift_codegen::ir::Value, ScalarMergeKind), CraneliftBackendError> {
+    ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        let zero_tag = builder.ins().iconst(types::I64, 0);
         match lowered {
             Lowered::RecursiveBackedge => Ok((
-                builder.ins().iconst(types::I64, 0),
+                NativeScalarPairV1 {
+                    tag: zero_tag,
+                    payload: builder.ins().iconst(types::I64, 0),
+                },
                 ScalarMergeKind::RecursiveBackedge,
             )),
-            Lowered::Int { value, .. } => Ok((value, ScalarMergeKind::Int)),
-            Lowered::Bool { value, .. } => Ok((value, ScalarMergeKind::Bool)),
-            Lowered::StructuralNat(nat) => Ok((nat.value, ScalarMergeKind::StructuralNat)),
+            Lowered::Int { value, known } => Ok((
+                NativeScalarPairV1 {
+                    tag: self.native_int_tag(builder, value, known)?,
+                    payload: value,
+                },
+                ScalarMergeKind::Int,
+            )),
+            Lowered::Bool { value, .. } => Ok((
+                NativeScalarPairV1 {
+                    tag: zero_tag,
+                    payload: value,
+                },
+                ScalarMergeKind::Bool,
+            )),
+            Lowered::StructuralNat(nat) => Ok((
+                NativeScalarPairV1 {
+                    tag: zero_tag,
+                    payload: nat.value,
+                },
+                ScalarMergeKind::StructuralNat,
+            )),
             Lowered::Constructor { constructor, args }
                 if args.is_empty()
                     && (constructor == self.process_symbols.bool_true
                         || constructor == self.process_symbols.bool_false) =>
             {
                 Ok((
-                    builder.ins().iconst(
-                        types::I64,
-                        i64::from(constructor == self.process_symbols.bool_true),
-                    ),
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: builder.ins().iconst(
+                            types::I64,
+                            i64::from(constructor == self.process_symbols.bool_true),
+                        ),
+                    },
                     ScalarMergeKind::Bool,
                 ))
             }
-            Lowered::ProcessExitStatus { value } => Ok((value, ScalarMergeKind::ExitCode)),
+            Lowered::ProcessExitStatus { value } => Ok((
+                NativeScalarPairV1 {
+                    tag: zero_tag,
+                    payload: value,
+                },
+                ScalarMergeKind::ExitCode,
+            )),
             lowered if self.process_object => Ok((
-                self.emit_process_exit_status(builder, lowered),
+                NativeScalarPairV1 {
+                    tag: zero_tag,
+                    payload: self.emit_process_exit_status(builder, lowered),
+                },
                 ScalarMergeKind::ExitCode,
             )),
             _ => Err(unsupported(
@@ -4314,6 +4483,35 @@ impl<'a> Lowering<'a> {
             None => {
                 *expected = Some(exit_status);
                 Ok(())
+            }
+        }
+    }
+
+    fn lowered_from_scalar_pair(
+        &mut self,
+        kind: ScalarMergeKind,
+        pair: NativeScalarPairV1,
+    ) -> Lowered {
+        match kind {
+            ScalarMergeKind::Int => {
+                self.native_int_tags.insert(pair.payload, pair.tag);
+                Lowered::Int {
+                    value: pair.payload,
+                    known: None,
+                }
+            }
+            ScalarMergeKind::Bool => Lowered::Bool {
+                value: pair.payload,
+                known: None,
+            },
+            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 {
+                value: pair.payload,
+            }),
+            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus {
+                value: pair.payload,
+            },
+            ScalarMergeKind::RecursiveBackedge => {
+                unreachable!("backedges do not establish a merge result kind")
             }
         }
     }
@@ -4497,21 +4695,6 @@ impl<'a> Lowering<'a> {
             crate::NativeJoinAnswerKindV1::Bool => ScalarMergeKind::Bool,
             crate::NativeJoinAnswerKindV1::StructuralNat => ScalarMergeKind::StructuralNat,
             crate::NativeJoinAnswerKindV1::ExitCode => ScalarMergeKind::ExitCode,
-        }
-    }
-
-    fn reconstruct_scalar_join_value(
-        kind: ScalarMergeKind,
-        value: cranelift_codegen::ir::Value,
-    ) -> Lowered {
-        match kind {
-            ScalarMergeKind::Int => Lowered::Int { value, known: None },
-            ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
-            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 { value }),
-            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
-            ScalarMergeKind::RecursiveBackedge => {
-                unreachable!("a checked join plan never carries RecursiveBackedge")
-            }
         }
     }
 
@@ -4956,7 +5139,9 @@ impl<'a> Lowering<'a> {
                                 ),
                             ));
                         }
-                        builder.ins().jump(edge.target, &[value.into()]);
+                        builder
+                            .ins()
+                            .jump(edge.target, &[value.tag.into(), value.payload.into()]);
                         return Ok(Lowered::RecursiveBackedge);
                     }
                     SourceContinuation::LetBody { body, env, next } => {
@@ -5322,6 +5507,7 @@ impl<'a> Lowering<'a> {
             .expect("compiler-private source join identity exhausted");
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
+        builder.append_block_param(merge, types::I64);
         let true_block = builder.create_block();
         let false_block = builder.create_block();
         builder
@@ -5362,8 +5548,13 @@ impl<'a> Lowering<'a> {
             }
         }
         builder.switch_to_block(merge);
-        let merged =
-            Self::reconstruct_scalar_join_value(required_kind, builder.block_params(merge)[0]);
+        let merged = self.lowered_from_scalar_pair(
+            required_kind,
+            NativeScalarPairV1 {
+                tag: builder.block_params(merge)[0],
+                payload: builder.block_params(merge)[1],
+            },
+        );
         let suffix_active = ActiveContinuationFrame {
             activation: suffix_control.selected.activation,
             cursor: suffix_control.selected.cursor,
@@ -5399,6 +5590,7 @@ impl<'a> Lowering<'a> {
             .expect("compiler-private source join identity exhausted");
 
         let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
         builder.append_block_param(merge, types::I64);
         let ok_block = builder.create_block();
         let err_block = builder.create_block();
@@ -5455,8 +5647,13 @@ impl<'a> Lowering<'a> {
         }
 
         builder.switch_to_block(merge);
-        let merged =
-            Self::reconstruct_scalar_join_value(required_kind, builder.block_params(merge)[0]);
+        let merged = self.lowered_from_scalar_pair(
+            required_kind,
+            NativeScalarPairV1 {
+                tag: builder.block_params(merge)[0],
+                payload: builder.block_params(merge)[1],
+            },
+        );
         let suffix_active = ActiveContinuationFrame {
             activation: suffix_control.selected.activation,
             cursor: suffix_control.selected.cursor,
@@ -5518,6 +5715,7 @@ impl<'a> Lowering<'a> {
             ));
         };
         let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
         builder.append_block_param(merge, types::I64);
         let mut test_block = builder
             .current_block()
@@ -5581,8 +5779,11 @@ impl<'a> Lowering<'a> {
             .iconst(types::I64, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
         builder.ins().return_(&[malformed]);
         builder.switch_to_block(merge);
-        let value = builder.block_params(merge)[0];
-        builder.ins().jump(outer_edge.target, &[value.into()]);
+        let tag = builder.block_params(merge)[0];
+        let payload = builder.block_params(merge)[1];
+        builder
+            .ins()
+            .jump(outer_edge.target, &[tag.into(), payload.into()]);
         Ok(Lowered::RecursiveBackedge)
     }
 
@@ -5689,6 +5890,7 @@ impl<'a> Lowering<'a> {
             .expect("compiler-private source join identity exhausted");
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
+        builder.append_block_param(merge, types::I64);
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor source match block");
@@ -5752,8 +5954,13 @@ impl<'a> Lowering<'a> {
             .iconst(types::I64, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
         builder.ins().return_(&[malformed]);
         builder.switch_to_block(merge);
-        let merged =
-            Self::reconstruct_scalar_join_value(required_kind, builder.block_params(merge)[0]);
+        let merged = self.lowered_from_scalar_pair(
+            required_kind,
+            NativeScalarPairV1 {
+                tag: builder.block_params(merge)[0],
+                payload: builder.block_params(merge)[1],
+            },
+        );
         let suffix_active = ActiveContinuationFrame {
             activation: suffix_control.selected.activation,
             cursor: suffix_control.selected.cursor,
@@ -6017,21 +6224,26 @@ impl<'a> Lowering<'a> {
                 let else_block = builder.create_block();
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
+                builder.append_block_param(merge, types::I64);
                 builder.ins().brif(value, then_block, &[], else_block, &[]);
                 for (block, arm) in [(then_block, then_expr), (else_block, else_expr)] {
                     builder.switch_to_block(block);
                     let lowered = self.lower_expr(builder, arm, env)?;
-                    let Lowered::Int { value, .. } = lowered else {
+                    let Lowered::Int { value, known } = lowered else {
                         return Err(unsupported(
                             "If",
                             "dynamic native If arms must produce scalar Int values",
                         ));
                     };
-                    builder.ins().jump(merge, &[value.into()]);
+                    let tag = self.native_int_tag(builder, value, known)?;
+                    builder.ins().jump(merge, &[tag.into(), value.into()]);
                 }
                 builder.switch_to_block(merge);
+                let tag = builder.block_params(merge)[0];
+                let value = builder.block_params(merge)[1];
+                self.native_int_tags.insert(value, tag);
                 Ok(Lowered::Int {
-                    value: builder.block_params(merge)[0],
+                    value,
                     known: None,
                 })
             }
@@ -6176,6 +6388,7 @@ impl<'a> Lowering<'a> {
                     let false_block = builder.create_block();
                     let merge = builder.create_block();
                     builder.append_block_param(merge, types::I64);
+                    builder.append_block_param(merge, types::I64);
                     builder
                         .ins()
                         .brif(value, true_block, &[], false_block, &[]);
@@ -6192,24 +6405,19 @@ impl<'a> Lowering<'a> {
                             &mut merge_kind,
                             branch_kind,
                         )?;
-                        builder.ins().jump(merge, &[value.into()]);
+                        builder
+                            .ins()
+                            .jump(merge, &[value.tag.into(), value.payload.into()]);
                     }
                     builder.switch_to_block(merge);
-                    let value = builder.block_params(merge)[0];
-                    return Ok(match merge_kind {
-                        Some(ScalarMergeKind::ExitCode) => {
-                            Lowered::ProcessExitStatus { value }
-                        }
-                        Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
-                        Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
-                        Some(ScalarMergeKind::StructuralNat) => {
-                            Lowered::StructuralNat(StructuralNatV1 { value })
-                        }
-                        Some(ScalarMergeKind::RecursiveBackedge) => {
-                            unreachable!("backedges do not establish a merge result kind")
-                        }
-                        None => unreachable!("Bool match emits both closed alternatives"),
-                    });
+                    let pair = NativeScalarPairV1 {
+                        tag: builder.block_params(merge)[0],
+                        payload: builder.block_params(merge)[1],
+                    };
+                    return Ok(self.lowered_from_scalar_pair(
+                        merge_kind.expect("Bool match emits both closed alternatives"),
+                        pair,
+                    ));
                 }
                 let Lowered::Constructor { constructor, args } = lowered_scrutinee else {
                     return Err(unsupported("Match", "scrutinee is not a constructor value"));
@@ -6489,6 +6697,25 @@ impl<'a> Lowering<'a> {
             wire.request_size,
             wire.request_align_shift,
         ));
+        let mut narrow_failure: Option<(
+            cranelift_codegen::ir::Value,
+            cranelift_codegen::ir::Value,
+        )> = None;
+        let mut positioned_bounds: Option<(
+            cranelift_codegen::ir::Value,
+            cranelift_codegen::ir::Value,
+        )> = None;
+        let mut record_narrow_failure =
+            |builder: &mut FunctionBuilder<'_>, invalid, detail: i64| {
+                let detail = builder.ins().iconst(types::I64, detail);
+                narrow_failure = Some(match narrow_failure.take() {
+                    Some((prior_invalid, prior_detail)) => (
+                        builder.ins().bor(prior_invalid, invalid),
+                        builder.ins().select(prior_invalid, prior_detail, detail),
+                    ),
+                    None => (invalid, detail),
+                });
+            };
         match operation {
             ken_host::HostOpV1::ConsoleWrite
             | ken_host::HostOpV1::ConsoleFlush
@@ -6564,18 +6791,17 @@ impl<'a> Lowering<'a> {
                         .ins()
                         .stack_store(bytes_len, request, request_offset(5));
                 } else if operation == ken_host::HostOpV1::FsChangeMode {
-                    let Lowered::Int { value: mode, .. } = lowered.get(1).ok_or_else(|| {
+                    let mode = lowered.get(1).ok_or_else(|| {
                         unsupported("Effect", "FS.ChangeMode is missing its mode")
-                    })?
-                    else {
-                        return Err(unsupported("Effect", "FS.ChangeMode mode is not an Int"));
-                    };
+                    })?;
+                    let (mode, valid_int) = self.narrow_native_int_u64(builder, mode)?;
                     let in_range = builder.ins().icmp_imm(
                         cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
-                        *mode,
+                        mode,
                         0o7777,
                     );
-                    let narrowed = builder.ins().ireduce(types::I16, *mode);
+                    let in_range = builder.ins().band(valid_int, in_range);
+                    let narrowed = builder.ins().ireduce(types::I16, mode);
                     let invalid = builder.ins().iconst(types::I16, 0xffff);
                     let mode = builder.ins().select(in_range, narrowed, invalid);
                     builder.ins().stack_store(mode, request, request_offset(3));
@@ -6618,17 +6844,19 @@ impl<'a> Lowering<'a> {
                         "buffer allocation carried a capability",
                     ));
                 }
-                let Lowered::Int {
-                    value: capacity, ..
-                } = lowered.first().ok_or_else(|| {
+                let capacity = lowered.first().ok_or_else(|| {
                     unsupported("Effect", "BufferAllocate is missing its capacity")
-                })?
-                else {
-                    return Err(unsupported("Effect", "BufferAllocate capacity is not Int"));
-                };
+                })?;
+                let (capacity, valid) = self.narrow_native_int_u64(builder, capacity)?;
+                let invalid = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    valid,
+                    0,
+                );
+                record_narrow_failure(builder, invalid, 7);
                 builder
                     .ins()
-                    .stack_store(*capacity, request, request_offset(0));
+                    .stack_store(capacity, request, request_offset(0));
             }
             ken_host::HostOpV1::BufferFreeze => {
                 if capability.is_some() {
@@ -6643,19 +6871,22 @@ impl<'a> Lowering<'a> {
                         "BufferFreeze buffer is not a resource",
                     ));
                 };
-                let Lowered::Int { value: start, .. } = lowered
+                let start = lowered
                     .get(1)
-                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its start"))?
-                else {
-                    return Err(unsupported("Effect", "BufferFreeze start is not Int"));
-                };
-                let Lowered::Int { value: length, .. } = lowered
+                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its start"))?;
+                let length = lowered
                     .get(2)
-                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its length"))?
-                else {
-                    return Err(unsupported("Effect", "BufferFreeze length is not Int"));
-                };
-                for (index, value) in [*token, *start, *length].into_iter().enumerate() {
+                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its length"))?;
+                let (start, start_valid) = self.narrow_native_int_u64(builder, start)?;
+                let (length, length_valid) = self.narrow_native_int_u64(builder, length)?;
+                let valid = builder.ins().band(start_valid, length_valid);
+                let invalid = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    valid,
+                    0,
+                );
+                record_narrow_failure(builder, invalid, 7);
+                for (index, value) in [*token, start, length].into_iter().enumerate() {
                     builder
                         .ins()
                         .stack_store(value, request, request_offset(index));
@@ -6678,19 +6909,36 @@ impl<'a> Lowering<'a> {
                     Ok(*value)
                 };
                 let integer = |index: usize, name: &str| {
-                    let Some(Lowered::Int { value, .. }) = lowered.get(index) else {
+                    let Some(value @ Lowered::Int { .. }) = lowered.get(index) else {
                         return Err(unsupported(
                             "Effect",
                             format!("positioned {name} operand is not Int"),
                         ));
                     };
-                    Ok(*value)
+                    Ok(value)
                 };
                 let file = resource(0, "file")?;
-                let file_offset = integer(1, "file offset")?;
+                let (file_offset, file_offset_valid) =
+                    self.narrow_native_int_u64(builder, integer(1, "file offset")?)?;
                 let buffer = resource(2, "buffer")?;
-                let buffer_start = integer(3, "buffer start")?;
-                let length = integer(4, "length")?;
+                let (buffer_start, buffer_start_valid) =
+                    self.narrow_native_int_u64(builder, integer(3, "buffer start")?)?;
+                let (length, length_valid) =
+                    self.narrow_native_int_u64(builder, integer(4, "length")?)?;
+                positioned_bounds = Some((buffer_start, length));
+                let file_offset_invalid = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    file_offset_valid,
+                    0,
+                );
+                record_narrow_failure(builder, file_offset_invalid, 6);
+                let bounds_valid = builder.ins().band(buffer_start_valid, length_valid);
+                let bounds_invalid = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    bounds_valid,
+                    0,
+                );
+                record_narrow_failure(builder, bounds_invalid, 7);
                 for (index, value) in [file, buffer, file_offset, buffer_start, length]
                     .into_iter()
                     .enumerate()
@@ -6716,13 +6964,66 @@ impl<'a> Lowering<'a> {
             .ins()
             .iconst(types::I64, i64::from(wire.request_size));
         let reply_pointer = builder.ins().stack_addr(pointer_type, reply, 0);
-        let call = builder.ins().call(
-            self.host_dispatch
-                .expect("process effect lowering owns one host dispatch import"),
-            &[invocation, op, request_pointer, request_size, reply_pointer],
-        );
-        let status = builder.inst_results(call)[0];
-        Self::require_i64(builder, status, 0);
+        if let Some((invalid, detail)) = narrow_failure {
+            let dispatch = builder.create_block();
+            let synthesize = builder.create_block();
+            let decoded = builder.create_block();
+            builder.ins().brif(invalid, synthesize, &[], dispatch, &[]);
+
+            builder.switch_to_block(dispatch);
+            let call = builder.ins().call(
+                self.host_dispatch
+                    .expect("process effect lowering owns one host dispatch import"),
+                &[invocation, op, request_pointer, request_size, reply_pointer],
+            );
+            let status = builder.inst_results(call)[0];
+            Self::require_i64(builder, status, 0);
+            builder.ins().jump(decoded, &[]);
+
+            builder.switch_to_block(synthesize);
+            let zero = builder.ins().iconst(types::I64, 0);
+            for offset in [
+                wire.reply_resource_error_schema_offset,
+                wire.reply_resource_error_kind_offset,
+                wire.reply_resource_error_identity_offset,
+                wire.reply_resource_error_io_offset,
+                wire.reply_resource_error_required_offset,
+                wire.reply_resource_error_held_offset,
+                wire.reply_resource_error_expected_kind_offset,
+                wire.reply_resource_error_actual_kind_offset,
+                wire.reply_bytes_data_offset,
+                wire.reply_bytes_len_offset,
+            ] {
+                builder.ins().stack_store(
+                    zero,
+                    reply,
+                    i32::try_from(offset).expect("reply field offset is u32"),
+                );
+            }
+            let resource_error_tag = builder
+                .ins()
+                .iconst(types::I64, wire.reply_resource_error_tag as i64);
+            builder.ins().stack_store(
+                resource_error_tag,
+                reply,
+                i32::try_from(wire.reply_tag_offset).expect("reply tag offset is u32"),
+            );
+            builder.ins().stack_store(
+                detail,
+                reply,
+                i32::try_from(wire.reply_detail_offset).expect("reply detail offset is u32"),
+            );
+            builder.ins().jump(decoded, &[]);
+            builder.switch_to_block(decoded);
+        } else {
+            let call = builder.ins().call(
+                self.host_dispatch
+                    .expect("process effect lowering owns one host dispatch import"),
+                &[invocation, op, request_pointer, request_size, reply_pointer],
+            );
+            let status = builder.inst_results(call)[0];
+            Self::require_i64(builder, status, 0);
+        }
         let tag = builder.ins().stack_load(
             types::I64,
             reply,
@@ -6836,6 +7137,7 @@ impl<'a> Lowering<'a> {
                 wire.resource_kind_buffer,
             );
             let payload = builder.ins().sshr_imm(detail, 32);
+            let payload_int = self.lower_dynamic_small_int(builder, payload);
             let last = self.process_symbols.io_errors.len().saturating_sub(1);
             let io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
                 discriminator: builder.ins().band_imm(detail, 0xff),
@@ -6848,12 +7150,7 @@ impl<'a> Lowering<'a> {
                         tag: tag as i64,
                         constructor: constructor.clone(),
                         fields: (tag == last)
-                            .then(|| {
-                                vec![Lowered::Int {
-                                    value: payload,
-                                    known: None,
-                                }]
-                            })
+                            .then(|| vec![payload_int.clone()])
                             .unwrap_or_default(),
                     })
                     .collect(),
@@ -6916,6 +7213,11 @@ impl<'a> Lowering<'a> {
                 let surface_tag = builder.ins().select(generic, zero, resource_surface_tag);
                 let surface_io = builder.ins().select(generic, detail, resource_io);
                 let surface_io_payload = builder.ins().sshr_imm(surface_io, 32);
+                let surface_io_payload_int =
+                    self.lower_dynamic_small_int(builder, surface_io_payload);
+                let resource_required_int =
+                    self.lower_unsigned_u64_int(builder, resource_required)?;
+                let resource_held_int = self.lower_unsigned_u64_int(builder, resource_held)?;
                 let surface_io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: builder.ins().band_imm(surface_io, 0xff),
                     alternatives: self
@@ -6927,18 +7229,15 @@ impl<'a> Lowering<'a> {
                             tag: tag as i64,
                             constructor: constructor.clone(),
                             fields: (tag == last)
-                                .then(|| {
-                                    vec![Lowered::Int {
-                                        value: surface_io_payload,
-                                        known: None,
-                                    }]
-                                })
+                                .then(|| vec![surface_io_payload_int.clone()])
                                 .unwrap_or_default(),
                         })
                         .collect(),
                 });
                 let identity_low = builder.ins().band_imm(resource_identity, 0xffff_ffff);
                 let identity_high = builder.ins().ushr_imm(resource_identity, 32);
+                let identity_low_int = self.lower_dynamic_small_int(builder, identity_low);
+                let identity_high_int = self.lower_dynamic_small_int(builder, identity_high);
                 let resource_kind_value = |discriminator| {
                     Lowered::DynamicConstructor(DynamicConstructorV1 {
                         discriminator,
@@ -6977,16 +7276,7 @@ impl<'a> Lowering<'a> {
                         DynamicConstructorAlternativeV1 {
                             tag: 3,
                             constructor: self.process_symbols.resource_right_not_held.clone(),
-                            fields: vec![
-                                Lowered::Int {
-                                    value: resource_required,
-                                    known: None,
-                                },
-                                Lowered::Int {
-                                    value: resource_held,
-                                    known: None,
-                                },
-                            ],
+                            fields: vec![resource_required_int, resource_held_int],
                         },
                         DynamicConstructorAlternativeV1 {
                             tag: 4,
@@ -6998,16 +7288,7 @@ impl<'a> Lowering<'a> {
                                         .process_symbols
                                         .resource_trace_identity
                                         .clone(),
-                                    args: vec![
-                                        Lowered::Int {
-                                            value: identity_low,
-                                            known: None,
-                                        },
-                                        Lowered::Int {
-                                            value: identity_high,
-                                            known: None,
-                                        },
-                                    ],
+                                    args: vec![identity_low_int, identity_high_int],
                                 },
                                 surface_io_error,
                             ],
@@ -7119,37 +7400,20 @@ impl<'a> Lowering<'a> {
                 let read_eof = builder.ins().band(success, is_zero);
                 Self::require_when(builder, read_eof, eof_valid);
                 Self::require_when(builder, read_some, eof_data);
-                let Lowered::Int {
-                    value: request_start,
-                    ..
-                } = &lowered[3]
-                else {
-                    unreachable!("positioned request start was validated")
-                };
-                let Lowered::Int {
-                    value: request_length,
-                    ..
-                } = &lowered[4]
-                else {
-                    unreachable!("positioned request length was validated")
-                };
+                let (request_start, request_length) = positioned_bounds
+                    .expect("positioned request bounds were narrowed before dispatch");
                 let (count, predecessor, remaining) = Self::mint_validated_progress_nat(
                     builder,
                     read_some,
                     detail,
-                    *request_start,
-                    *request_length,
+                    request_start,
+                    request_length,
                     Some(reply_start),
                 );
+                let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
                 let span = Lowered::Constructor {
                     constructor: self.process_symbols.private_buffer_span.clone(),
-                    args: vec![
-                        Lowered::Int {
-                            value: reply_start,
-                            known: None,
-                        },
-                        Lowered::BoundedNat(count),
-                    ],
+                    args: vec![reply_start_int, Lowered::BoundedNat(count)],
                 };
                 let transferred = Lowered::Constructor {
                     constructor: self.process_symbols.private_transfer_count.clone(),
@@ -7174,26 +7438,14 @@ impl<'a> Lowering<'a> {
                     ],
                 })
             } else if operation == ken_host::HostOpV1::FsWriteAt {
-                let Lowered::Int {
-                    value: request_start,
-                    ..
-                } = &lowered[3]
-                else {
-                    unreachable!("positioned request start was validated")
-                };
-                let Lowered::Int {
-                    value: request_length,
-                    ..
-                } = &lowered[4]
-                else {
-                    unreachable!("positioned request length was validated")
-                };
+                let (request_start, request_length) = positioned_bounds
+                    .expect("positioned request bounds were narrowed before dispatch");
                 let (_count, predecessor, remaining) = Self::mint_validated_progress_nat(
                     builder,
                     success,
                     detail,
-                    *request_start,
-                    *request_length,
+                    request_start,
+                    request_length,
                     None,
                 );
                 Lowered::Constructor {
@@ -7207,10 +7459,7 @@ impl<'a> Lowering<'a> {
                     }],
                 }
             } else if operation == ken_host::HostOpV1::FsHandleMetadata {
-                Lowered::Int {
-                    value: detail,
-                    known: None,
-                }
+                self.lower_unsigned_u64_int(builder, detail)?
             } else {
                 Lowered::Constructor {
                     constructor: self.process_symbols.unit.clone(),
@@ -7280,6 +7529,51 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn narrow_native_int_u64(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: &Lowered,
+    ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
+    {
+        let Lowered::Int { value, known } = value else {
+            return Err(unsupported("Effect", "host-width operand is not Int"));
+        };
+        let arena = self
+            .native_int_arena
+            .ok_or_else(|| unsupported("Effect", "host-width Int has no invocation arena"))?;
+        let helper = self.native_int_narrow.ok_or_else(|| {
+            unsupported("Effect", "host-width Int has no checked narrowing helper")
+        })?;
+        let tag = self.native_int_tag(builder, *value, *known)?;
+        let output_slot =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let output = builder.ins().stack_addr(pointer_type, output_slot, 0);
+        let call = builder.ins().call(helper, &[arena, tag, *value, output]);
+        let status = builder.inst_results(call)[0];
+        Self::require_one_of_i64(builder, status, &[0, 1]);
+        let valid =
+            builder
+                .ins()
+                .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, status, 0);
+        let value = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), output, 0);
+        Ok((value, valid))
+    }
+
+    fn lower_dynamic_small_int(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: cranelift_codegen::ir::Value,
+    ) -> Lowered {
+        let tag = builder
+            .ins()
+            .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
+        self.native_int_tags.insert(value, tag);
+        Lowered::Int { value, known: None }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn lower_unary_recursive_nat_fold(
         &mut self,
@@ -7325,13 +7619,19 @@ impl<'a> Lowering<'a> {
         let done_block = builder.create_block();
         builder.append_block_param(loop_block, types::I64);
         builder.append_block_param(loop_block, types::I64);
+        builder.append_block_param(loop_block, types::I64);
         builder.append_block_param(done_block, types::I64);
-        builder
-            .ins()
-            .jump(loop_block, &[zero.into(), initial.into()]);
+        builder.append_block_param(done_block, types::I64);
+        builder.ins().jump(
+            loop_block,
+            &[zero.into(), initial.tag.into(), initial.payload.into()],
+        );
         builder.switch_to_block(loop_block);
         let predecessor_value = builder.block_params(loop_block)[0];
-        let induction_value = builder.block_params(loop_block)[1];
+        let induction = NativeScalarPairV1 {
+            tag: builder.block_params(loop_block)[1],
+            payload: builder.block_params(loop_block)[2],
+        };
         let complete = builder.ins().icmp(
             cranelift_codegen::ir::condcodes::IntCC::Equal,
             predecessor_value,
@@ -7340,7 +7640,7 @@ impl<'a> Lowering<'a> {
         builder.ins().brif(
             complete,
             done_block,
-            &[induction_value.into()],
+            &[induction.tag.into(), induction.payload.into()],
             step_block,
             &[],
         );
@@ -7361,23 +7661,7 @@ impl<'a> Lowering<'a> {
         } else {
             Lowered::BoundedNat(BoundedNatV1::derived_from_validated(successor_value))
         };
-        let induction = match result_kind {
-            ScalarMergeKind::Int => Lowered::Int {
-                value: induction_value,
-                known: None,
-            },
-            ScalarMergeKind::Bool => Lowered::Bool {
-                value: induction_value,
-                known: None,
-            },
-            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 {
-                value: induction_value,
-            }),
-            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus {
-                value: induction_value,
-            },
-            ScalarMergeKind::RecursiveBackedge => unreachable!(),
-        };
+        let induction = self.lowered_from_scalar_pair(result_kind, induction);
         self.active_recursive_declarations
             .push(ActiveRecursiveDeclarationV1 {
                 symbol: symbol.clone(),
@@ -7399,18 +7683,18 @@ impl<'a> Lowering<'a> {
                 "unary Nat recursion changes its native result representation",
             ));
         }
-        builder
-            .ins()
-            .jump(loop_block, &[successor_value.into(), next.into()]);
+        builder.ins().jump(
+            loop_block,
+            &[successor_value.into(), next.tag.into(), next.payload.into()],
+        );
         builder.switch_to_block(done_block);
-        let value = builder.block_params(done_block)[0];
-        Ok(match result_kind {
-            ScalarMergeKind::Int => Lowered::Int { value, known: None },
-            ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
-            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 { value }),
-            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
-            ScalarMergeKind::RecursiveBackedge => unreachable!(),
-        })
+        Ok(self.lowered_from_scalar_pair(
+            result_kind,
+            NativeScalarPairV1 {
+                tag: builder.block_params(done_block)[0],
+                payload: builder.block_params(done_block)[1],
+            },
+        ))
     }
 
     fn declaration_is_recursive(&self, symbol: &RuntimeSymbol) -> bool {
@@ -7495,7 +7779,12 @@ impl<'a> Lowering<'a> {
                 return Ok(induction);
             }
             let mut values = Vec::new();
-            append_recursive_argument_values(&lowered_args, &mut values)?;
+            append_recursive_argument_values(
+                builder,
+                &lowered_args,
+                &mut values,
+                &self.native_int_tags,
+            )?;
             builder.ins().jump(
                 active
                     .header
@@ -7558,10 +7847,16 @@ impl<'a> Lowering<'a> {
         let header = builder.create_block();
         let done = builder.create_block();
         let mut initial_values = Vec::new();
-        append_recursive_argument_values(&lowered_args, &mut initial_values)?;
+        append_recursive_argument_values(
+            builder,
+            &lowered_args,
+            &mut initial_values,
+            &self.native_int_tags,
+        )?;
         for value in &initial_values {
             builder.append_block_param(header, builder.func.dfg.value_type(*value));
         }
+        builder.append_block_param(done, types::I64);
         builder.append_block_param(done, types::I64);
         builder.ins().jump(
             header,
@@ -7574,10 +7869,14 @@ impl<'a> Lowering<'a> {
         builder.switch_to_block(header);
 
         let mut parameters = builder.block_params(header).iter().copied();
-        let loop_args = lowered_args
-            .iter()
-            .map(|template| rebuild_recursive_argument(template, &mut parameters))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut loop_args = Vec::with_capacity(lowered_args.len());
+        for template in &lowered_args {
+            loop_args.push(rebuild_recursive_argument(
+                template,
+                &mut parameters,
+                &mut self.native_int_tags,
+            )?);
+        }
         if parameters.next().is_some() {
             return Err(unsupported(
                 "DeclarationRef",
@@ -7604,46 +7903,18 @@ impl<'a> Lowering<'a> {
         };
         self.active_recursive_declarations.pop();
         let lowered = lowered?;
-        let (value, result_kind) = if eliminators.is_some() {
-            let (value, exit_status) =
-                self.merge_branch_value(builder, lowered, "DeclarationRef")?;
-            (
-                value,
-                if exit_status {
-                    ScalarMergeKind::ExitCode
-                } else {
-                    ScalarMergeKind::Int
-                },
-            )
-        } else {
-            match lowered {
-                Lowered::Int { value, .. } => (value, ScalarMergeKind::Int),
-                Lowered::Bool { value, .. } => (value, ScalarMergeKind::Bool),
-                Lowered::StructuralNat(nat) => (nat.value, ScalarMergeKind::StructuralNat),
-                Lowered::ProcessExitStatus { value } => (value, ScalarMergeKind::ExitCode),
-                other => {
-                    return Err(unsupported(
-                        "DeclarationRef",
-                        format!(
-                            "recursive declaration {symbol} must produce Int, Bool, structural Nat, or entrypoint ExitCode; got {}",
-                            lowered_value_kind(&other)
-                        ),
-                    ));
-                }
-            }
-        };
-        builder.ins().jump(done, &[value.into()]);
+        let (value, result_kind) = self.merge_scalar_branch(builder, lowered, "DeclarationRef")?;
+        builder
+            .ins()
+            .jump(done, &[value.tag.into(), value.payload.into()]);
         builder.switch_to_block(done);
-        let value = builder.block_params(done)[0];
-        Ok(match result_kind {
-            ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
-            ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
-            ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 { value }),
-            ScalarMergeKind::Int => Lowered::Int { value, known: None },
-            ScalarMergeKind::RecursiveBackedge => {
-                unreachable!("a recursive declaration base establishes its result kind")
-            }
-        })
+        Ok(self.lowered_from_scalar_pair(
+            result_kind,
+            NativeScalarPairV1 {
+                tag: builder.block_params(done)[0],
+                payload: builder.block_params(done)[1],
+            },
+        ))
     }
 
     fn lower_declaration_ref(
@@ -8075,6 +8346,7 @@ impl<'a> Lowering<'a> {
         }
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
+        builder.append_block_param(merge, types::I64);
         let mut test_block = builder.current_block().expect("borrowed match block");
         let mut merge_kind = None;
         for case in cases {
@@ -8118,26 +8390,23 @@ impl<'a> Lowering<'a> {
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
             let (value, kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
             Self::record_scalar_merge_kind("Match", &mut merge_kind, kind)?;
-            builder.ins().jump(merge, &[value.into()]);
+            builder
+                .ins()
+                .jump(merge, &[value.tag.into(), value.payload.into()]);
             test_block = next;
         }
         builder.switch_to_block(test_block);
         let failure = builder.ins().iconst(types::I64, -1);
         builder.ins().return_(&[failure]);
         builder.switch_to_block(merge);
-        let value = builder.block_params(merge)[0];
-        Ok(match merge_kind {
-            Some(ScalarMergeKind::ExitCode) => Lowered::ProcessExitStatus { value },
-            Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
-            Some(ScalarMergeKind::StructuralNat) => {
-                Lowered::StructuralNat(StructuralNatV1 { value })
-            }
-            Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
-            Some(ScalarMergeKind::RecursiveBackedge) => {
-                unreachable!("backedges do not establish a merge result kind")
-            }
-            None => unreachable!("borrowed match emits at least one case"),
-        })
+        let pair = NativeScalarPairV1 {
+            tag: builder.block_params(merge)[0],
+            payload: builder.block_params(merge)[1],
+        };
+        Ok(self.lowered_from_scalar_pair(
+            merge_kind.expect("borrowed match emits at least one case"),
+            pair,
+        ))
     }
 
     fn lower_borrowed_option_match(
@@ -8152,6 +8421,7 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
         let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
         builder.append_block_param(merge, types::I64);
         let some_block = builder.create_block();
         let none_block = builder.create_block();
@@ -8178,14 +8448,21 @@ impl<'a> Lowering<'a> {
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
             let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
             Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
-            builder.ins().jump(merge, &[value.into()]);
+            builder
+                .ins()
+                .jump(merge, &[value.tag.into(), value.payload.into()]);
         }
         builder.switch_to_block(merge);
-        let value = builder.block_params(merge)[0];
+        let pair = NativeScalarPairV1 {
+            tag: builder.block_params(merge)[0],
+            payload: builder.block_params(merge)[1],
+        };
         Ok(if exit_merge == Some(true) {
-            Lowered::ProcessExitStatus { value }
+            Lowered::ProcessExitStatus {
+                value: pair.payload,
+            }
         } else {
-            Lowered::Int { value, known: None }
+            self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair)
         })
     }
 
@@ -8202,6 +8479,7 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
         let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
         builder.append_block_param(merge, types::I64);
         let ok_block = builder.create_block();
         let err_block = builder.create_block();
@@ -8225,22 +8503,19 @@ impl<'a> Lowering<'a> {
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
             let (value, branch_kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
             Self::record_scalar_merge_kind("Match", &mut merge_kind, branch_kind)?;
-            builder.ins().jump(merge, &[value.into()]);
+            builder
+                .ins()
+                .jump(merge, &[value.tag.into(), value.payload.into()]);
         }
         builder.switch_to_block(merge);
-        let value = builder.block_params(merge)[0];
-        Ok(match merge_kind {
-            Some(ScalarMergeKind::ExitCode) => Lowered::ProcessExitStatus { value },
-            Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
-            Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
-            Some(ScalarMergeKind::StructuralNat) => {
-                Lowered::StructuralNat(StructuralNatV1 { value })
-            }
-            Some(ScalarMergeKind::RecursiveBackedge) => {
-                unreachable!("backedges do not establish a merge result kind")
-            }
-            None => unreachable!("HostResult emits both closed alternatives"),
-        })
+        let pair = NativeScalarPairV1 {
+            tag: builder.block_params(merge)[0],
+            payload: builder.block_params(merge)[1],
+        };
+        Ok(self.lowered_from_scalar_pair(
+            merge_kind.expect("HostResult emits both closed alternatives"),
+            pair,
+        ))
     }
 
     fn lower_bounded_nat_match(
@@ -8267,6 +8542,7 @@ impl<'a> Lowering<'a> {
         let zero_block = builder.create_block();
         let suc_block = builder.create_block();
         let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
         builder.append_block_param(merge, types::I64);
         let predecessor = nat.predecessor(builder);
         let is_zero =
@@ -8295,21 +8571,19 @@ impl<'a> Lowering<'a> {
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
             let (value, kind) = self.merge_scalar_branch(builder, lowered, "BoundedNat")?;
             Self::record_scalar_merge_kind("BoundedNat", &mut merge_kind, kind)?;
-            builder.ins().jump(merge, &[value.into()]);
+            builder
+                .ins()
+                .jump(merge, &[value.tag.into(), value.payload.into()]);
         }
         builder.switch_to_block(merge);
-        let value = builder.block_params(merge)[0];
-        Ok(
-            match merge_kind.expect("both structural Nat arms were emitted") {
-                ScalarMergeKind::Int => Lowered::Int { value, known: None },
-                ScalarMergeKind::Bool => Lowered::Bool { value, known: None },
-                ScalarMergeKind::StructuralNat => Lowered::StructuralNat(StructuralNatV1 { value }),
-                ScalarMergeKind::ExitCode => Lowered::ProcessExitStatus { value },
-                ScalarMergeKind::RecursiveBackedge => {
-                    unreachable!("backedges do not establish a merge result kind")
-                }
-            },
-        )
+        let pair = NativeScalarPairV1 {
+            tag: builder.block_params(merge)[0],
+            payload: builder.block_params(merge)[1],
+        };
+        Ok(self.lowered_from_scalar_pair(
+            merge_kind.expect("both structural Nat arms were emitted"),
+            pair,
+        ))
     }
 
     fn lower_dynamic_constructor_match(
@@ -8336,6 +8610,7 @@ impl<'a> Lowering<'a> {
         });
         let merge = has_selected_case.then(|| {
             let merge = builder.create_block();
+            builder.append_block_param(merge, types::I64);
             builder.append_block_param(merge, types::I64);
             merge
         });
@@ -8396,7 +8671,7 @@ impl<'a> Lowering<'a> {
             Self::record_scalar_merge_kind("DynamicConstructor", &mut merge_kind, branch_kind)?;
             builder.ins().jump(
                 merge.expect("a selected dynamic constructor case owns the merge"),
-                &[value.into()],
+                &[value.tag.into(), value.payload.into()],
             );
             test_block = next;
         }
@@ -8411,19 +8686,14 @@ impl<'a> Lowering<'a> {
             return Ok(Lowered::Trap(source_default.clone()));
         };
         builder.switch_to_block(merge);
-        let value = builder.block_params(merge)[0];
-        Ok(match merge_kind {
-            Some(ScalarMergeKind::ExitCode) => Lowered::ProcessExitStatus { value },
-            Some(ScalarMergeKind::Bool) => Lowered::Bool { value, known: None },
-            Some(ScalarMergeKind::Int) => Lowered::Int { value, known: None },
-            Some(ScalarMergeKind::StructuralNat) => {
-                Lowered::StructuralNat(StructuralNatV1 { value })
-            }
-            Some(ScalarMergeKind::RecursiveBackedge) => {
-                unreachable!("backedges do not establish a merge result kind")
-            }
-            None => unreachable!("a selected dynamic constructor case emits one arm"),
-        })
+        let pair = NativeScalarPairV1 {
+            tag: builder.block_params(merge)[0],
+            payload: builder.block_params(merge)[1],
+        };
+        Ok(self.lowered_from_scalar_pair(
+            merge_kind.expect("a selected dynamic constructor case emits one arm"),
+            pair,
+        ))
     }
 
     fn lower_value(
@@ -8436,10 +8706,13 @@ impl<'a> Lowering<'a> {
                 value: builder.ins().iconst(types::I64, i64::from(*value)),
                 known: Some(*value),
             }),
-            RuntimeValue::Int(value) => Ok(Lowered::Int {
+            RuntimeValue::Int(crate::RuntimeIntV1::Small(value)) => Ok(Lowered::Int {
                 value: builder.ins().iconst(types::I64, *value),
                 known: Some(*value),
             }),
+            RuntimeValue::Int(value @ crate::RuntimeIntV1::Big { .. }) => {
+                self.lower_big_int_constant(builder, value)
+            }
             RuntimeValue::Bytes(value) => Ok(Lowered::Bytes(value.clone())),
             RuntimeValue::String(value) => Ok(Lowered::String(value.clone())),
             RuntimeValue::Constructor { constructor, args } => Ok(Lowered::Constructor {
@@ -8490,10 +8763,13 @@ impl<'a> Lowering<'a> {
                 value: builder.ins().iconst(types::I64, i64::from(*value)),
                 known: Some(*value),
             }),
-            RuntimeGroundValue::Int(value) => Ok(Lowered::Int {
+            RuntimeGroundValue::Int(crate::RuntimeIntV1::Small(value)) => Ok(Lowered::Int {
                 value: builder.ins().iconst(types::I64, *value),
                 known: Some(*value),
             }),
+            RuntimeGroundValue::Int(value @ crate::RuntimeIntV1::Big { .. }) => {
+                self.lower_big_int_constant(builder, value)
+            }
             RuntimeGroundValue::Bytes(value) => Ok(Lowered::Bytes(value.clone())),
             RuntimeGroundValue::String(value) => Ok(Lowered::String(value.clone())),
             RuntimeGroundValue::Constructor { constructor, args } => Ok(Lowered::Constructor {
@@ -8512,6 +8788,106 @@ impl<'a> Lowering<'a> {
                     .collect::<Result<Vec<_>, CraneliftBackendError>>()?,
             }),
         }
+    }
+
+    fn lower_big_int_constant(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: &crate::RuntimeIntV1,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let crate::RuntimeIntV1::Big { sign, limbs } = value else {
+            unreachable!("Big constant lowering is called only for Big Int values")
+        };
+        let limb_count = limbs.len();
+        let byte_len = u32::try_from(limbs.len().saturating_mul(std::mem::size_of::<u64>()))
+            .map_err(|_| unsupported("RuntimeValue::Int", "Big Int literal is too large"))?;
+        let limbs_slot = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            byte_len,
+            3,
+        ));
+        for (index, limb) in limbs.iter().enumerate() {
+            let limb = builder.ins().iconst(types::I64, *limb as i64);
+            builder.ins().stack_store(
+                limb,
+                limbs_slot,
+                i32::try_from(index * std::mem::size_of::<u64>()).expect("Big limb offset is u32"),
+            );
+        }
+        let output =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
+        let pointer_type = builder.func.dfg.value_type(
+            self.native_int_arena
+                .ok_or_else(|| unsupported("RuntimeValue::Int", "Big Int has no arena"))?,
+        );
+        let arena = self.native_int_arena.expect("Big Int arena was checked");
+        let helper = self.native_int_intern.ok_or_else(|| {
+            unsupported("RuntimeValue::Int", "Big Int has no local intern helper")
+        })?;
+        let sign = builder
+            .ins()
+            .iconst(types::I64, i64::from(matches!(sign, crate::Sign::Negative)));
+        let limbs = builder.ins().stack_addr(pointer_type, limbs_slot, 0);
+        let len = builder.ins().iconst(
+            types::I64,
+            i64::try_from(limb_count).expect("Big limb count fits i64"),
+        );
+        let output_ptr = builder.ins().stack_addr(pointer_type, output, 0);
+        let call = builder
+            .ins()
+            .call(helper, &[arena, sign, limbs, len, output_ptr]);
+        Self::require_i64(builder, builder.inst_results(call)[0], 0);
+        let pair = NativeScalarPairV1 {
+            tag: builder.ins().stack_load(types::I64, output, 0),
+            payload: builder.ins().stack_load(types::I64, output, 8),
+        };
+        Ok(self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair))
+    }
+
+    /// Reify a host-owned unsigned word into the exact native Int carrier.
+    /// The shared local interner chooses Small or canonical Big; callers never
+    /// reinterpret the raw `u64` bits as a signed scalar.
+    fn lower_unsigned_u64_int(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: cranelift_codegen::ir::Value,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let arena = self.native_int_arena.ok_or_else(|| {
+            unsupported("NativeInt", "unsigned Int producer has no invocation arena")
+        })?;
+        let helper = self.native_int_intern.ok_or_else(|| {
+            unsupported(
+                "NativeInt",
+                "unsigned Int producer has no local intern helper",
+            )
+        })?;
+        let limb =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+        builder.ins().stack_store(value, limb, 0);
+        let output =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let limb = builder.ins().stack_addr(pointer_type, limb, 0);
+        let output_pointer = builder.ins().stack_addr(pointer_type, output, 0);
+        let zero = builder.ins().iconst(types::I64, 0);
+        let one = builder.ins().iconst(types::I64, 1);
+        let call = builder
+            .ins()
+            .call(helper, &[arena, zero, limb, one, output_pointer]);
+        Self::require_i64(builder, builder.inst_results(call)[0], 0);
+        let pair = NativeScalarPairV1 {
+            tag: builder.ins().stack_load(types::I64, output, 0),
+            payload: builder.ins().stack_load(types::I64, output, 8),
+        };
+        Self::require_one_of_i64(
+            builder,
+            pair.tag,
+            &[
+                crate::NATIVE_INT_SMALL_TAG_V1 as i64,
+                crate::NATIVE_INT_BIG_TAG_V1 as i64,
+            ],
+        );
+        Ok(self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair))
     }
 
     fn lower_primitive_call(
@@ -8561,27 +8937,15 @@ impl<'a> Lowering<'a> {
         }
 
         match primitive.symbol.as_str() {
-            "add_int" => self.lower_int_binop(
-                builder,
-                "add_int",
-                lowered_args,
-                |builder, lhs, rhs| builder.ins().iadd(lhs, rhs),
-                |lhs, rhs| lhs.checked_add(rhs),
-            ),
-            "sub_int" => self.lower_int_binop(
-                builder,
-                "sub_int",
-                lowered_args,
-                |builder, lhs, rhs| builder.ins().isub(lhs, rhs),
-                |lhs, rhs| lhs.checked_sub(rhs),
-            ),
-            "mul_int" => self.lower_int_binop(
-                builder,
-                "mul_int",
-                lowered_args,
-                |builder, lhs, rhs| builder.ins().imul(lhs, rhs),
-                |lhs, rhs| lhs.checked_mul(rhs),
-            ),
+            "add_int" => self.lower_int_binop(builder, "add_int", lowered_args, |lhs, rhs| {
+                lhs.checked_add(rhs)
+            }),
+            "sub_int" => self.lower_int_binop(builder, "sub_int", lowered_args, |lhs, rhs| {
+                lhs.checked_sub(rhs)
+            }),
+            "mul_int" => self.lower_int_binop(builder, "mul_int", lowered_args, |lhs, rhs| {
+                lhs.checked_mul(rhs)
+            }),
             "eq_int" => self.lower_int_cmp(
                 builder,
                 "eq_int",
@@ -8674,11 +9038,6 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         symbol: &'static str,
         args: Vec<Lowered>,
-        emit: impl FnOnce(
-            &mut FunctionBuilder<'_>,
-            cranelift_codegen::ir::Value,
-            cranelift_codegen::ir::Value,
-        ) -> cranelift_codegen::ir::Value,
         eval: impl FnOnce(i64, i64) -> Option<i64>,
     ) -> Result<Lowered, CraneliftBackendError> {
         let (lhs, rhs) = expect_two_args(symbol, args)?;
@@ -8698,20 +9057,65 @@ impl<'a> Lowering<'a> {
                 format!("{symbol} only supports Int arguments in native lowering"),
             ));
         };
-        let known = lhs_known
-            .and_then(|lhs| rhs_known.and_then(|rhs| eval(lhs, rhs)))
-            .ok_or_else(|| {
-                unsupported(
+        #[cfg(test)]
+        match self.native_int_mutation {
+            NativeIntLoweringMutation::Exact => {}
+            NativeIntLoweringMutation::Wrapping => {}
+            NativeIntLoweringMutation::Trap => {
+                return Err(unsupported(
                     "PrimitiveCall",
-                    format!(
-                        "{symbol} requires statically known non-overflowing Int operands in native lowering"
-                    ),
-                )
-            })?;
-        Ok(Lowered::Int {
-            value: emit(builder, lhs, rhs),
-            known: Some(known),
-        })
+                    "PX8-I mutation traps before exact Int support",
+                ));
+            }
+            NativeIntLoweringMutation::SuppressTerminalExport
+            | NativeIntLoweringMutation::CorruptTerminalExport => {}
+        }
+        let lhs_tag = self.native_int_tag(builder, lhs, lhs_known)?;
+        let rhs_tag = self.native_int_tag(builder, rhs, rhs_known)?;
+        let arena = self.native_int_arena.ok_or_else(|| {
+            unsupported(
+                "PrimitiveCall",
+                "exact Int operation has no invocation arena",
+            )
+        })?;
+        let helper = self.native_int_binop.ok_or_else(|| {
+            unsupported(
+                "PrimitiveCall",
+                "exact Int operation has no local support function",
+            )
+        })?;
+        let output =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let output_pointer = builder.ins().stack_addr(pointer_type, output, 0);
+        let operation = builder.ins().iconst(
+            types::I64,
+            match symbol {
+                "add_int" => 0,
+                "sub_int" => 1,
+                "mul_int" => 2,
+                _ => unreachable!("caller supplies exact Int arithmetic symbol"),
+            },
+        );
+        let call = builder.ins().call(
+            helper,
+            &[arena, operation, lhs_tag, lhs, rhs_tag, rhs, output_pointer],
+        );
+        let status = builder.inst_results(call)[0];
+        Self::require_i64(builder, status, 0);
+        let tag = builder.ins().stack_load(types::I64, output, 0);
+        let value = builder.ins().stack_load(types::I64, output, 8);
+        Self::require_one_of_i64(
+            builder,
+            tag,
+            &[
+                crate::NATIVE_INT_SMALL_TAG_V1 as i64,
+                crate::NATIVE_INT_BIG_TAG_V1 as i64,
+            ],
+        );
+        self.native_int_tags.insert(value, tag);
+        let known = lhs_known.and_then(|lhs| rhs_known.and_then(|rhs| eval(lhs, rhs)));
+        Ok(Lowered::Int { value, known })
     }
 
     fn lower_int_cmp(
@@ -8719,7 +9123,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         symbol: &'static str,
         args: Vec<Lowered>,
-        cc: cranelift_codegen::ir::condcodes::IntCC,
+        _cc: cranelift_codegen::ir::condcodes::IntCC,
         eval: impl FnOnce(i64, i64) -> bool,
     ) -> Result<Lowered, CraneliftBackendError> {
         let (lhs, rhs) = expect_two_args(symbol, args)?;
@@ -8739,12 +9143,57 @@ impl<'a> Lowering<'a> {
                 format!("{symbol} only supports Int arguments in native lowering"),
             ));
         };
-        let cmp = builder.ins().icmp(cc, lhs, rhs);
-        let value = builder.ins().uextend(types::I64, cmp);
+        let lhs_tag = self.native_int_tag(builder, lhs, lhs_known)?;
+        let rhs_tag = self.native_int_tag(builder, rhs, rhs_known)?;
+        let arena = self.native_int_arena.ok_or_else(|| {
+            unsupported(
+                "PrimitiveCall",
+                "exact Int comparison has no invocation arena",
+            )
+        })?;
+        let helper = self.native_int_compare.ok_or_else(|| {
+            unsupported(
+                "PrimitiveCall",
+                "exact Int comparison has no local support function",
+            )
+        })?;
+        let operation = builder.ins().iconst(
+            types::I64,
+            match symbol {
+                "eq_int" => 0,
+                "leq_int" => 1,
+                _ => unreachable!("caller supplies exact Int comparison symbol"),
+            },
+        );
+        let call = builder
+            .ins()
+            .call(helper, &[arena, operation, lhs_tag, lhs, rhs_tag, rhs]);
+        let value = builder.inst_results(call)[0];
+        Self::require_one_of_i64(builder, value, &[0, 1]);
         Ok(Lowered::Bool {
             value,
             known: lhs_known.and_then(|lhs| rhs_known.map(|rhs| eval(lhs, rhs))),
         })
+    }
+
+    fn native_int_tag(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        payload: cranelift_codegen::ir::Value,
+        known: Option<i64>,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        if let Some(tag) = self.native_int_tags.get(&payload).copied() {
+            return Ok(tag);
+        }
+        if known.is_some() {
+            return Ok(builder
+                .ins()
+                .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64));
+        }
+        Err(unsupported(
+            "NativeInt",
+            "dynamic Int value lost its two-word tag transport",
+        ))
     }
 
     fn lower_bool_not(
@@ -8818,10 +9267,7 @@ impl<'a> Lowering<'a> {
             )
         })?;
         if let Lowered::ResponseBytes { len, .. } = arg {
-            return Ok(Lowered::Int {
-                value: len,
-                known: None,
-            });
+            return self.lower_unsigned_u64_int(builder, len);
         }
         if let Lowered::BorrowedNativeValue { pointer } = arg {
             let kind = builder
@@ -8831,10 +9277,7 @@ impl<'a> Lowering<'a> {
             let len = builder
                 .ins()
                 .load(types::I64, MemFlags::trusted(), pointer, 24);
-            return Ok(Lowered::Int {
-                value: len,
-                known: None,
-            });
+            return self.lower_unsigned_u64_int(builder, len);
         }
         let Lowered::Bytes(bytes) = arg else {
             return Err(unsupported(
@@ -8904,9 +9347,14 @@ impl<'a> Lowering<'a> {
             let zero = builder.ins().iconst(types::I64, 0);
             builder.ins().jump(merge, &[no.into(), zero.into()]);
             builder.switch_to_block(merge);
+            let value = builder.block_params(merge)[1];
+            let tag = builder
+                .ins()
+                .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
+            self.native_int_tags.insert(value, tag);
             return Ok(Lowered::BorrowedOption {
                 present: builder.block_params(merge)[0],
-                value: builder.block_params(merge)[1],
+                value,
                 none: none.clone(),
                 some: some.clone(),
             });
@@ -8948,9 +9396,14 @@ impl<'a> Lowering<'a> {
             let zero = builder.ins().iconst(types::I64, 0);
             builder.ins().jump(merge, &[zero.into()]);
             builder.switch_to_block(merge);
+            let value = builder.block_params(merge)[0];
+            let tag = builder
+                .ins()
+                .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
+            self.native_int_tags.insert(value, tag);
             return Ok(Lowered::BorrowedOption {
                 present,
-                value: builder.block_params(merge)[0],
+                value,
                 none: none.clone(),
                 some: some.clone(),
             });
@@ -9166,10 +9619,35 @@ impl<'a> Lowering<'a> {
                 Lowered::ProcessExitStatus { value } => value,
                 value => self.emit_process_exit_status(builder, value),
             };
-            return Ok((value, ResultDecoder::Int));
+            return Ok((value, ResultDecoder::ProcessStatus));
         }
         match value {
-            Lowered::Int { value, .. } => Ok((value, ResultDecoder::Int)),
+            Lowered::Int { value, known } => {
+                let tag = self.native_int_tag(builder, value, known)?;
+                let arena = self.native_int_arena.ok_or_else(|| {
+                    unsupported("NativeResult", "Int result has no invocation arena")
+                })?;
+                let export = self.native_int_export.ok_or_else(|| {
+                    unsupported("NativeResult", "Int result has no export support function")
+                })?;
+                #[cfg(test)]
+                if self.native_int_mutation == NativeIntLoweringMutation::SuppressTerminalExport {
+                    return Ok((value, ResultDecoder::Int));
+                }
+                let call = builder.ins().call(export, &[arena, tag, value]);
+                Self::require_i64(builder, builder.inst_results(call)[0], 0);
+                #[cfg(test)]
+                if self.native_int_mutation == NativeIntLoweringMutation::CorruptTerminalExport {
+                    let invalid = builder.ins().iconst(types::I64, 7);
+                    builder.ins().store(
+                        MemFlags::trusted(),
+                        invalid,
+                        arena,
+                        crate::native_int_clif::ARENA_FINAL_TAG,
+                    );
+                }
+                Ok((value, ResultDecoder::Int))
+            }
             Lowered::Bool { value, .. } => Ok((value, ResultDecoder::Bool)),
             value => {
                 let ground = self.ground_value(value)?;
@@ -9203,10 +9681,10 @@ impl<'a> Lowering<'a> {
         let Ok([payload]) = <Vec<Lowered> as TryInto<[Lowered; 1]>>::try_into(args) else {
             return builder.ins().iconst(types::I64, -3);
         };
-        let Lowered::Int { value, known } = payload else {
+        let Lowered::Int { known, .. } = &payload else {
             return builder.ins().iconst(types::I64, -3);
         };
-        if let Some(code) = known {
+        if let Some(code) = *known {
             let mapping = crate::process_exit_status(crate::ProcessExitCode::Failure(code));
             return builder.ins().iconst(
                 types::I64,
@@ -9217,6 +9695,9 @@ impl<'a> Lowering<'a> {
                 },
             );
         }
+        let Ok((value, valid_int)) = self.narrow_native_int_u64(builder, &payload) else {
+            return builder.ins().iconst(types::I64, -3);
+        };
         let zero = builder.ins().iconst(types::I64, 0);
         let one = builder.ins().iconst(types::I64, 1);
         let max = builder.ins().iconst(types::I64, 255);
@@ -9226,16 +9707,17 @@ impl<'a> Lowering<'a> {
                 .ins()
                 .icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, value, zero);
         let positive = builder.ins().icmp(
-            cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThan,
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedGreaterThan,
             value,
             zero,
         );
         let within_max = builder.ins().icmp(
-            cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual,
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
             value,
             max,
         );
-        let valid = builder.ins().band(positive, within_max);
+        let valid = builder.ins().band(valid_int, positive);
+        let valid = builder.ins().band(valid, within_max);
         let nonzero = builder.ins().select(valid, value, malformed);
         builder.ins().select(is_zero, one, nonzero)
     }
@@ -9247,7 +9729,7 @@ impl<'a> Lowering<'a> {
         match value {
             Lowered::Int {
                 known: Some(value), ..
-            } => Ok(RuntimeGroundValue::Int(value)),
+            } => Ok(RuntimeGroundValue::Int((value).into())),
             Lowered::Int { known: None, .. } => Err(unsupported(
                 "Result",
                 "native aggregate result contains a non-constant Int field",
@@ -9393,13 +9875,30 @@ fn lowered_value_kind(value: &Lowered) -> &'static str {
 }
 
 fn append_recursive_argument_values(
+    builder: &mut FunctionBuilder<'_>,
     values: &[Lowered],
     output: &mut Vec<cranelift_codegen::ir::Value>,
+    native_int_tags: &BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
 ) -> Result<(), CraneliftBackendError> {
     for value in values {
         match value {
-            Lowered::Int { value, .. }
-            | Lowered::Bool { value, .. }
+            Lowered::Int { value, known } => {
+                let tag = match native_int_tags.get(value).copied() {
+                    Some(tag) => tag,
+                    None if known.is_some() => builder
+                        .ins()
+                        .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64),
+                    None => {
+                        return Err(unsupported(
+                            "DeclarationRef",
+                            "recursive Int argument lost its two-word tag transport",
+                        ));
+                    }
+                };
+                output.push(tag);
+                output.push(*value);
+            }
+            Lowered::Bool { value, .. }
             | Lowered::ProcessExitStatus { value }
             | Lowered::CapabilityToken { value }
             | Lowered::ResourceToken { value } => output.push(*value),
@@ -9412,11 +9911,16 @@ fn append_recursive_argument_values(
             Lowered::BorrowedNativeValue { pointer } => output.push(*pointer),
             Lowered::Bytes(_) | Lowered::String(_) => {}
             Lowered::Constructor { args, .. } => {
-                append_recursive_argument_values(args, output)?;
+                append_recursive_argument_values(builder, args, output, native_int_tags)?;
             }
             Lowered::Record { fields } => {
                 for (_, field) in fields {
-                    append_recursive_argument_values(std::slice::from_ref(field), output)?;
+                    append_recursive_argument_values(
+                        builder,
+                        std::slice::from_ref(field),
+                        output,
+                        native_int_tags,
+                    )?;
                 }
             }
             _ => {
@@ -9433,6 +9937,7 @@ fn append_recursive_argument_values(
 fn rebuild_recursive_argument(
     template: &Lowered,
     values: &mut impl Iterator<Item = cranelift_codegen::ir::Value>,
+    native_int_tags: &mut BTreeMap<cranelift_codegen::ir::Value, cranelift_codegen::ir::Value>,
 ) -> Result<Lowered, CraneliftBackendError> {
     let next = |values: &mut dyn Iterator<Item = cranelift_codegen::ir::Value>| {
         values.next().ok_or_else(|| {
@@ -9443,10 +9948,12 @@ fn rebuild_recursive_argument(
         })
     };
     Ok(match template {
-        Lowered::Int { .. } => Lowered::Int {
-            value: next(values)?,
-            known: None,
-        },
+        Lowered::Int { .. } => {
+            let tag = next(values)?;
+            let value = next(values)?;
+            native_int_tags.insert(value, tag);
+            Lowered::Int { value, known: None }
+        }
         Lowered::Bool { .. } => Lowered::Bool {
             value: next(values)?,
             known: None,
@@ -9479,13 +9986,18 @@ fn rebuild_recursive_argument(
             constructor: constructor.clone(),
             args: args
                 .iter()
-                .map(|arg| rebuild_recursive_argument(arg, values))
+                .map(|arg| rebuild_recursive_argument(arg, values, native_int_tags))
                 .collect::<Result<Vec<_>, _>>()?,
         },
         Lowered::Record { fields } => Lowered::Record {
             fields: fields
                 .iter()
-                .map(|(name, value)| Ok((name.clone(), rebuild_recursive_argument(value, values)?)))
+                .map(|(name, value)| {
+                    Ok((
+                        name.clone(),
+                        rebuild_recursive_argument(value, values, native_int_tags)?,
+                    ))
+                })
                 .collect::<Result<Vec<_>, CraneliftBackendError>>()?,
         },
         _ => {
@@ -9538,7 +10050,7 @@ fn backend(failure: BackendFailure) -> CraneliftBackendError {
     CraneliftBackendError::Backend(failure)
 }
 
-fn backend_module(reason: String) -> CraneliftBackendError {
+pub(crate) fn backend_module(reason: String) -> CraneliftBackendError {
     backend(BackendFailure::Module(reason))
 }
 
@@ -9705,6 +10217,49 @@ mod tests {
         );
     }
 
+    #[test]
+    fn px8i_host_narrowing_rejects_negative_and_over_u64_before_dispatch() {
+        let (negative, negative_fixture) =
+            run_px8n_arm_fixture(PX8N_SHORT_WROTE, px8i_negative_narrow_fixture);
+        assert_eq!(negative, 71);
+        assert_eq!(negative_fixture.call_index, 0);
+
+        let (oversize, oversize_fixture) =
+            run_px8n_arm_fixture(PX8N_SHORT_WROTE, px8i_oversize_narrow_fixture);
+        assert_eq!(oversize, 72);
+        assert_eq!(oversize_fixture.call_index, 0);
+    }
+
+    #[test]
+    fn px8i_positioned_start_and_metadata_promote_u64_above_i64_max() {
+        let (read, read_fixture) =
+            run_px8n_arm_fixture(PX8I_BIG_READ_START, px8i_big_read_start_fixture);
+        assert_eq!(read_fixture.malformed_request, 0);
+        assert_eq!(read_fixture.call_index, 3);
+        assert_eq!(
+            read, 13,
+            "ReadAt keeps the narrowed start through validation"
+        );
+
+        let (write, write_fixture) =
+            run_px8n_arm_fixture(PX8I_WRAPPING_WRITE_START, px8i_wrapping_write_start_fixture);
+        assert_eq!(write_fixture.malformed_request, 0);
+        assert_eq!(write_fixture.call_index, 3);
+        assert_eq!(
+            write, -1,
+            "WriteAt validates progress against the narrowed start and rejects wrap"
+        );
+
+        let (metadata, metadata_fixture) =
+            run_px8n_arm_fixture(PX8I_METADATA_BIG, px8i_metadata_big_fixture);
+        assert_eq!(metadata_fixture.malformed_request, 0);
+        assert_eq!(metadata_fixture.call_index, 2);
+        assert_eq!(
+            metadata, 14,
+            "metadata detail is promoted to canonical Big rather than a negative Small"
+        );
+    }
+
     #[repr(C)]
     struct BorrowedFixtureValue {
         kind: u64,
@@ -9718,6 +10273,7 @@ mod tests {
         process_input: *const BorrowedFixtureValue,
         host_context: *mut std::ffi::c_void,
         capability: u64,
+        native_int_arena: *mut crate::NativeIntArenaV1,
     }
 
     #[repr(C)]
@@ -9733,6 +10289,10 @@ mod tests {
     const PX8N_SHORT_READ: u64 = 3;
     const PX8N_READ_EOF: u64 = 4;
     const PX8N_OVER_BOUND_READ: u64 = 5;
+    const PX8I_METADATA_BIG: u64 = 6;
+    const PX8I_BIG_READ_START: u64 = 7;
+    const PX8I_WRAPPING_WRITE_START: u64 = 8;
+    const PX8I_BIG_U64: u64 = i64::MAX as u64 + 97;
 
     extern "C" fn px8n_scripted_host_dispatch(
         invocation: *const std::ffi::c_void,
@@ -9747,8 +10307,14 @@ mod tests {
         // SAFETY: `host_context` points to the live fixture for the duration of
         // the compiled call and is never retained by the dispatcher.
         let fixture = unsafe { &mut *(invocation.host_context.cast::<Px8nHostReplyFixture>()) };
-        let expected = if fixture.call_index < 2 {
+        let expected = if fixture.call_index == 0
+            || (fixture.call_index == 1 && fixture.scenario != PX8I_METADATA_BIG)
+        {
             ken_host::HostOpV1::BufferAllocate
+        } else if fixture.scenario == PX8I_METADATA_BIG {
+            ken_host::HostOpV1::FsHandleMetadata
+        } else if fixture.scenario == PX8I_WRAPPING_WRITE_START {
+            ken_host::HostOpV1::FsWriteAt
         } else if fixture.scenario >= PX8N_SHORT_READ {
             ken_host::HostOpV1::FsReadAt
         } else {
@@ -9774,14 +10340,28 @@ mod tests {
                 fixture.malformed_request = 3;
                 return -1;
             }
+        } else if expected == ken_host::HostOpV1::FsHandleMetadata {
+            if load(wire.request_offsets[0]) != 11 {
+                fixture.malformed_request = 5;
+                return -1;
+            }
         } else if [
             load(wire.request_offsets[0]),
             load(wire.request_offsets[1]),
             load(wire.request_offsets[2]),
             load(wire.request_offsets[3]),
             load(wire.request_offsets[4]),
-        ] != [11, 22, 0, 7, 4]
-        {
+        ] != [
+            11,
+            22,
+            0,
+            match fixture.scenario {
+                PX8I_BIG_READ_START => PX8I_BIG_U64,
+                PX8I_WRAPPING_WRITE_START => u64::MAX - 1,
+                _ => 7,
+            },
+            4,
+        ] {
             fixture.malformed_request = 4;
             return -1;
         }
@@ -9801,9 +10381,12 @@ mod tests {
                 wire.reply_detail_offset,
                 if fixture.call_index == 0 { 11 } else { 22 },
             );
+        } else if expected == ken_host::HostOpV1::FsHandleMetadata {
+            store(wire.reply_tag_offset, wire.reply_metadata_tag);
+            store(wire.reply_detail_offset, PX8I_BIG_U64);
         } else {
             match fixture.scenario {
-                PX8N_SHORT_WROTE => {
+                PX8N_SHORT_WROTE | PX8I_WRAPPING_WRITE_START => {
                     store(wire.reply_tag_offset, wire.reply_write_progress_tag);
                     store(wire.reply_detail_offset, 1);
                 }
@@ -9828,6 +10411,11 @@ mod tests {
                     store(wire.reply_detail_offset, 5);
                     store(wire.reply_bytes_len_offset, 7);
                 }
+                PX8I_BIG_READ_START => {
+                    store(wire.reply_tag_offset, wire.reply_read_progress_tag);
+                    store(wire.reply_detail_offset, 1);
+                    store(wire.reply_bytes_len_offset, PX8I_BIG_U64);
+                }
                 _ => return -1,
             }
         }
@@ -9841,7 +10429,7 @@ mod tests {
         depth: usize,
         exact: RuntimeExpr,
     ) -> RuntimeExpr {
-        let mismatch = RuntimeExpr::Value(RuntimeValue::Int(99));
+        let mismatch = RuntimeExpr::Value(RuntimeValue::Int((99).into()));
         let cases = if depth == 0 {
             vec![
                 crate::RuntimeMatchCase {
@@ -9886,7 +10474,67 @@ mod tests {
         }
     }
 
-    fn px8n_write_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    fn px8i_invalid_allocate(
+        symbols: &crate::NativeProcessSymbols,
+        capacity: RuntimeExpr,
+        code: i64,
+    ) -> RuntimeExpr {
+        RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "FS".to_string(),
+                operation: ken_host::HostOpV1::BufferAllocate,
+                capability: None,
+                args: vec![capacity],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: RuntimeExpr::Match {
+                        scrutinee: Box::new(RuntimeExpr::Var(0)),
+                        cases: vec![crate::RuntimeMatchCase {
+                            constructor: symbols.resource_invalid_bounds.clone(),
+                            binders: 0,
+                            body: px8n_failure(
+                                symbols,
+                                RuntimeExpr::Value(RuntimeValue::Int(code.into())),
+                            ),
+                        }],
+                        default: RuntimeTrap {
+                            code: RuntimeTrapCode::PatternMatchFailure,
+                            message: "PX8-I expected InvalidBounds".to_string(),
+                        },
+                    },
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(99.into()))),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "PX8-I expected Result".to_string(),
+            },
+        }
+    }
+
+    fn px8i_negative_narrow_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        px8i_invalid_allocate(
+            symbols,
+            RuntimeExpr::Value(RuntimeValue::Int((-1).into())),
+            71,
+        )
+    }
+
+    fn px8i_oversize_narrow_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        px8i_invalid_allocate(symbols, big(crate::Sign::NonNegative, &[0, 1]), 72)
+    }
+
+    fn px8n_write_arm_fixture_with_start(
+        symbols: &crate::NativeProcessSymbols,
+        start: RuntimeExpr,
+    ) -> RuntimeExpr {
         let trap = || RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
             message: "PX8-N checked result default".to_string(),
@@ -9895,7 +10543,7 @@ mod tests {
             family: "FS".to_string(),
             operation: ken_host::HostOpV1::BufferAllocate,
             capability: None,
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(8))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
         };
         let write = RuntimeExpr::Effect {
             family: "FS".to_string(),
@@ -9903,10 +10551,10 @@ mod tests {
             capability: None,
             args: vec![
                 RuntimeExpr::Var(1),
-                RuntimeExpr::Value(RuntimeValue::Int(0)),
+                RuntimeExpr::Value(RuntimeValue::Int((0).into())),
                 RuntimeExpr::Var(0),
-                RuntimeExpr::Value(RuntimeValue::Int(7)),
-                RuntimeExpr::Value(RuntimeValue::Int(4)),
+                start,
+                RuntimeExpr::Value(RuntimeValue::Int((4).into())),
             ],
         };
         let transfer_observation = px8n_exact_nat(
@@ -9917,7 +10565,7 @@ mod tests {
                 symbols,
                 RuntimeExpr::Var(1),
                 3,
-                RuntimeExpr::Value(RuntimeValue::Int(3)),
+                RuntimeExpr::Value(RuntimeValue::Int((3).into())),
             ),
         );
         let success = RuntimeExpr::Match {
@@ -9942,7 +10590,7 @@ mod tests {
             cases: vec![crate::RuntimeMatchCase {
                 constructor: symbols.resource_no_progress.clone(),
                 binders: 0,
-                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(70))),
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((70).into()))),
             }],
             default: RuntimeTrap {
                 code: RuntimeTrapCode::PatternMatchFailure,
@@ -9971,7 +10619,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_err.clone(),
                     binders: 1,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(81))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((81).into()))),
                 },
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_ok.clone(),
@@ -9987,7 +10635,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_err.clone(),
                     binders: 1,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(80))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((80).into()))),
                 },
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_ok.clone(),
@@ -9999,7 +10647,22 @@ mod tests {
         }
     }
 
-    fn px8n_read_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    fn px8n_write_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        px8n_write_arm_fixture_with_start(
+            symbols,
+            RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+        )
+    }
+
+    fn px8i_wrapping_write_start_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        px8n_write_arm_fixture_with_start(symbols, big(crate::Sign::NonNegative, &[u64::MAX - 1]))
+    }
+
+    fn px8n_read_arm_fixture_with_start(
+        symbols: &crate::NativeProcessSymbols,
+        start: RuntimeExpr,
+        observe_big_start: bool,
+    ) -> RuntimeExpr {
         let trap = || RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
             message: "PX8-N checked read result default".to_string(),
@@ -10008,7 +10671,7 @@ mod tests {
             family: "FS".to_string(),
             operation: ken_host::HostOpV1::BufferAllocate,
             capability: None,
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(8))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
         };
         let read = RuntimeExpr::Effect {
             family: "FS".to_string(),
@@ -10016,23 +10679,33 @@ mod tests {
             capability: None,
             args: vec![
                 RuntimeExpr::Var(1),
-                RuntimeExpr::Value(RuntimeValue::Int(0)),
+                RuntimeExpr::Value(RuntimeValue::Int((0).into())),
                 RuntimeExpr::Var(0),
-                RuntimeExpr::Value(RuntimeValue::Int(7)),
-                RuntimeExpr::Value(RuntimeValue::Int(4)),
+                start,
+                RuntimeExpr::Value(RuntimeValue::Int((4).into())),
             ],
+        };
+        let exact = if observe_big_start {
+            RuntimeExpr::If {
+                scrutinee: Box::new(total_primitive(
+                    "eq_int",
+                    vec![
+                        RuntimeExpr::Var(1),
+                        big(crate::Sign::NonNegative, &[PX8I_BIG_U64]),
+                    ],
+                )),
+                then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((13).into()))),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((99).into()))),
+            }
+        } else {
+            RuntimeExpr::Value(RuntimeValue::Int((12).into()))
         };
         let read_some = RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Var(0)),
             cases: vec![crate::RuntimeMatchCase {
                 constructor: symbols.private_buffer_span.clone(),
                 binders: 2,
-                body: px8n_exact_nat(
-                    symbols,
-                    RuntimeExpr::Var(1),
-                    1,
-                    RuntimeExpr::Value(RuntimeValue::Int(12)),
-                ),
+                body: px8n_exact_nat(symbols, RuntimeExpr::Var(1), 1, exact),
             }],
             default: trap(),
         };
@@ -10048,7 +10721,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.read_eof.clone(),
                     binders: 0,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(10))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((10).into()))),
                 },
             ],
             default: trap(),
@@ -10059,7 +10732,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_err.clone(),
                     binders: 1,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(82))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((82).into()))),
                 },
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_ok.clone(),
@@ -10075,7 +10748,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_err.clone(),
                     binders: 1,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(81))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((81).into()))),
                 },
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_ok.clone(),
@@ -10091,12 +10764,91 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_err.clone(),
                     binders: 1,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(80))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((80).into()))),
                 },
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_ok.clone(),
                     binders: 1,
                     body: second,
+                },
+            ],
+            default: trap(),
+        }
+    }
+
+    fn px8n_read_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        px8n_read_arm_fixture_with_start(
+            symbols,
+            RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+            false,
+        )
+    }
+
+    fn px8i_big_read_start_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        px8n_read_arm_fixture_with_start(
+            symbols,
+            big(crate::Sign::NonNegative, &[PX8I_BIG_U64]),
+            true,
+        )
+    }
+
+    fn px8i_metadata_big_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        let trap = || RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-I metadata result default".to_string(),
+        };
+        let metadata = RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::FsHandleMetadata,
+            capability: None,
+            args: vec![RuntimeExpr::Var(0)],
+        };
+        let observe = RuntimeExpr::Match {
+            scrutinee: Box::new(metadata),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((98).into()))),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: px8n_failure(
+                        symbols,
+                        RuntimeExpr::If {
+                            scrutinee: Box::new(total_primitive(
+                                "eq_int",
+                                vec![
+                                    RuntimeExpr::Var(0),
+                                    big(crate::Sign::NonNegative, &[PX8I_BIG_U64]),
+                                ],
+                            )),
+                            then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((14).into()))),
+                            else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((99).into()))),
+                        },
+                    ),
+                },
+            ],
+            default: trap(),
+        };
+        RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "FS".to_string(),
+                operation: ken_host::HostOpV1::BufferAllocate,
+                capability: None,
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((97).into()))),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: observe,
                 },
             ],
             default: trap(),
@@ -10138,10 +10890,12 @@ mod tests {
             call_index: 0,
             malformed_request: 0,
         };
+        let mut native_int_arena = crate::NativeIntArenaV1::default();
         let invocation = NativeInvocationFixture {
             process_input: &input,
             host_context: (&mut fixture as *mut Px8nHostReplyFixture).cast(),
             capability: 0,
+            native_int_arena: &mut native_int_arena,
         };
         let (_, result) = compiled
             .run(Some((&invocation as *const NativeInvocationFixture).cast()))
@@ -10178,7 +10932,7 @@ mod tests {
                 args: if mismatched_result_kind {
                     Vec::new()
                 } else {
-                    vec![RuntimeExpr::Value(RuntimeValue::Int(9))]
+                    vec![RuntimeExpr::Value(RuntimeValue::Int((9).into()))]
                 },
             },
         }];
@@ -10188,7 +10942,7 @@ mod tests {
                 binders: ok_binders,
                 body: RuntimeExpr::Construct {
                     constructor: scalar_tree.clone(),
-                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
                 },
             });
         }
@@ -10280,7 +11034,7 @@ mod tests {
             body: RuntimeExpr::Construct {
                 constructor: leaf,
                 args: vec![if payload_is_int {
-                    RuntimeExpr::Value(RuntimeValue::Int(payload))
+                    RuntimeExpr::Value(RuntimeValue::Int((payload).into()))
                 } else {
                     RuntimeExpr::Construct {
                         constructor: "ctor:prelude::Unit::MkUnit".to_string(),
@@ -10292,7 +11046,7 @@ mod tests {
         .collect();
         RuntimeExpr::ComputationalMatch {
             scrutinee: Box::new(RuntimeExpr::Let {
-                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int(41))),
+                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int((41).into()))),
                 body: Box::new(RuntimeExpr::ComputationalMatch {
                     scrutinee: Box::new(RuntimeExpr::Match {
                         scrutinee: Box::new(RuntimeExpr::Effect {
@@ -10393,7 +11147,7 @@ mod tests {
                     body: RuntimeExpr::Construct {
                         constructor: inner_constructor.to_string(),
                         args: vec![if payload_is_int {
-                            RuntimeExpr::Value(RuntimeValue::Int(7))
+                            RuntimeExpr::Value(RuntimeValue::Int((7).into()))
                         } else {
                             RuntimeExpr::Construct {
                                 constructor: "ctor:prelude::Unit::MkUnit".to_string(),
@@ -10439,7 +11193,7 @@ mod tests {
                                 partiality: RuntimePartiality::Total,
                             },
                             args: vec![
-                                RuntimeExpr::Value(RuntimeValue::Int(41)),
+                                RuntimeExpr::Value(RuntimeValue::Int((41).into())),
                                 RuntimeExpr::Var(0),
                             ],
                         }
@@ -10472,7 +11226,7 @@ mod tests {
                 binders: 0,
                 body: RuntimeExpr::Construct {
                     constructor: result.to_string(),
-                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(payload))],
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int((payload).into()))],
                 },
             })
             .collect(),
@@ -10491,7 +11245,7 @@ mod tests {
             scrutinee: Box::new(RuntimeExpr::Construct {
                 constructor: "ctor:fixture::Envelope::Wrap".to_string(),
                 args: vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(41)),
+                    RuntimeExpr::Value(RuntimeValue::Int((41).into())),
                     constructor_field_aggregate(),
                 ],
             }),
@@ -10703,7 +11457,7 @@ mod tests {
                     binders: 0,
                     body: RuntimeExpr::Construct {
                         constructor: leaf.clone(),
-                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
                     },
                 })
                 .collect(),
@@ -10715,7 +11469,7 @@ mod tests {
         let expr = RuntimeExpr::ComputationalMatch {
             scrutinee: Box::new(RuntimeExpr::Construct {
                 constructor: "ctor:fixture::Envelope::Wrap".to_string(),
-                args: vec![RuntimeExpr::Value(RuntimeValue::Int(41)), field],
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((41).into())), field],
             }),
             cases: vec![crate::RuntimeComputationalMatchCase {
                 constructor: "ctor:fixture::Envelope::Wrap".to_string(),
@@ -10803,7 +11557,7 @@ mod tests {
                     binders: 0,
                     body: RuntimeExpr::Construct {
                         constructor: "ctor:prelude::Result::Ok".to_string(),
-                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
                     },
                 })
                 .collect(),
@@ -10816,9 +11570,9 @@ mod tests {
             scrutinee: Box::new(RuntimeExpr::Construct {
                 constructor: "ctor:fixture::Envelope::Wrap".to_string(),
                 args: vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(13)),
+                    RuntimeExpr::Value(RuntimeValue::Int((13).into())),
                     aggregate,
-                    RuntimeExpr::Value(RuntimeValue::Int(41)),
+                    RuntimeExpr::Value(RuntimeValue::Int((41).into())),
                 ],
             }),
             cases: vec![crate::RuntimeComputationalMatchCase {
@@ -10853,7 +11607,7 @@ mod tests {
             .expect("the selected middle field composes without moving its trailing sibling");
         assert_eq!(
             compiled.run(None).expect("middle-field fixture runs").0,
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(34))
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((34).into()))
         );
     }
 
@@ -10953,7 +11707,7 @@ mod tests {
     fn constructor_field_aggregate_unconsumed_sibling_stays_ordinary() {
         let prefix = RuntimeExpr::Construct {
             constructor: "ctor:fixture::Prefix::Keep".to_string(),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(41))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((41).into()))],
         };
         let expr = RuntimeExpr::ComputationalMatch {
             scrutinee: Box::new(RuntimeExpr::Construct {
@@ -11126,7 +11880,7 @@ mod tests {
                 let code = if binders == 1 {
                     RuntimeExpr::Var(0)
                 } else {
-                    RuntimeExpr::Value(RuntimeValue::Int(tag as i64 + 1))
+                    RuntimeExpr::Value(RuntimeValue::Int((tag as i64 + 1).into()))
                 };
                 RuntimeMatchCase {
                     constructor: constructor.clone(),
@@ -11177,7 +11931,7 @@ mod tests {
                     body: if producer {
                         RuntimeExpr::Construct {
                             constructor: tree.to_string(),
-                            args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
+                            args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
                         }
                     } else if ordinary_bool {
                         RuntimeExpr::Value(RuntimeValue::Bool(false))
@@ -11225,7 +11979,7 @@ mod tests {
                     body: RuntimeExpr::Construct {
                         constructor: exit.to_string(),
                         args: (exit == crate::EXIT_FAILURE_CONSTRUCTOR)
-                            .then(|| RuntimeExpr::Value(RuntimeValue::Int(1)))
+                            .then(|| RuntimeExpr::Value(RuntimeValue::Int((1).into())))
                             .into_iter()
                             .collect(),
                     },
@@ -11409,7 +12163,7 @@ mod tests {
                 params: vec!["ignored".to_string()],
                 body: Box::new(console_write_effect()),
             }),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
         };
 
         emit_process_entrypoint_object_with_cranelift(
@@ -11444,7 +12198,7 @@ mod tests {
                     },
                 }),
             }),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
         };
 
         emit_process_entrypoint_object_with_cranelift(
@@ -11563,7 +12317,7 @@ mod tests {
     fn heterogeneous_frame_environment_and_binder_order_are_preserved() {
         let inner_call = RuntimeExpr::Call {
             callee: Box::new(RuntimeExpr::LexicalClosure {
-                captures: vec![RuntimeExpr::Value(RuntimeValue::Int(41))],
+                captures: vec![RuntimeExpr::Value(RuntimeValue::Int((41).into()))],
                 params: vec!["inner".to_string()],
                 body: Box::new(RuntimeExpr::Match {
                     scrutinee: Box::new(RuntimeExpr::Var(0)),
@@ -11589,7 +12343,7 @@ mod tests {
             }),
             args: vec![RuntimeExpr::Construct {
                 constructor: "ctor:fixture::Inner::Hit".to_string(),
-                args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
             }],
         };
         let expr = RuntimeExpr::Call {
@@ -11613,7 +12367,7 @@ mod tests {
                 .run(None)
                 .expect("frame environment fixture runs")
                 .0,
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(34))
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((34).into()))
         );
     }
 
@@ -11635,7 +12389,7 @@ mod tests {
                     binders: 0,
                     body: RuntimeExpr::Construct {
                         constructor: "ctor:fixture::Inner::Scalar".to_string(),
-                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
                     },
                 },
                 RuntimeMatchCase {
@@ -11720,7 +12474,7 @@ mod tests {
         let first_cases = vec![RuntimeMatchCase {
             constructor: "ctor:fixture::Inner::Hit".to_string(),
             binders: 1,
-            body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
         }];
         let first_default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
@@ -11750,7 +12504,7 @@ mod tests {
         let later_cases = vec![RuntimeMatchCase {
             constructor: "ctor:fixture::Outer::Hit".to_string(),
             binders: 1,
-            body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
         }];
         let first_default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
@@ -11831,13 +12585,13 @@ mod tests {
             constructor: "ctor:fixture::Inner::Hit".to_string(),
             argument_binders: 0,
             recursive_positions: Vec::new(),
-            body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
         }];
         let outer_cases = vec![crate::RuntimeComputationalMatchCase {
             constructor: "ctor:fixture::Outer::Hit".to_string(),
             argument_binders: 0,
             recursive_positions: Vec::new(),
-            body: RuntimeExpr::Value(RuntimeValue::Int(2)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((2).into())),
         }];
         let inner_default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
@@ -11882,13 +12636,13 @@ mod tests {
             constructor: "ctor:fixture::Inner::Hit".to_string(),
             argument_binders: 0,
             recursive_positions: Vec::new(),
-            body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
         }];
         let outer_cases = vec![crate::RuntimeComputationalMatchCase {
             constructor: "ctor:fixture::Outer::Hit".to_string(),
             argument_binders: 0,
             recursive_positions: Vec::new(),
-            body: RuntimeExpr::Value(RuntimeValue::Int(2)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((2).into())),
         }];
         let inner_default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
@@ -12028,10 +12782,12 @@ mod tests {
             None,
         )
         .expect("borrowed fixture lowers");
+        let mut native_int_arena = crate::NativeIntArenaV1::default();
         let invocation = NativeInvocationFixture {
             process_input: root,
             host_context: std::ptr::null_mut(),
             capability: 1_u64 << 32,
+            native_int_arena: &mut native_int_arena,
         };
         compiled
             .run(Some((&invocation as *const NativeInvocationFixture).cast()))
@@ -12053,7 +12809,7 @@ mod tests {
             cases: vec![RuntimeMatchCase {
                 constructor: crate::PROCESS_INPUT_CONSTRUCTOR.to_string(),
                 binders: 3,
-                body: RuntimeExpr::Value(RuntimeValue::Int(0)),
+                body: RuntimeExpr::Value(RuntimeValue::Int((0).into())),
             }],
             default: RuntimeTrap {
                 code: RuntimeTrapCode::PatternMatchFailure,
@@ -12129,19 +12885,19 @@ mod tests {
                             },
                             args: vec![
                                 RuntimeExpr::Var(2),
-                                RuntimeExpr::Value(RuntimeValue::Int(99)),
+                                RuntimeExpr::Value(RuntimeValue::Int((99).into())),
                             ],
                         }),
                         cases: vec![
                             RuntimeMatchCase {
                                 constructor: none.to_string(),
                                 binders: 0,
-                                body: RuntimeExpr::Value(RuntimeValue::Int(7)),
+                                body: RuntimeExpr::Value(RuntimeValue::Int((7).into())),
                             },
                             RuntimeMatchCase {
                                 constructor: some.to_string(),
                                 binders: 1,
-                                body: RuntimeExpr::Value(RuntimeValue::Int(9)),
+                                body: RuntimeExpr::Value(RuntimeValue::Int((9).into())),
                             },
                         ],
                         default: RuntimeTrap {
@@ -12267,7 +13023,7 @@ mod tests {
                         }),
                         args: vec![RuntimeExpr::Construct {
                             constructor: "ctor:fixture::Option::Some".to_string(),
-                            args: vec![RuntimeExpr::Value(RuntimeValue::Int(1))],
+                            args: vec![RuntimeExpr::Value(RuntimeValue::Int((1).into()))],
                         }],
                     }),
                 },
@@ -12316,7 +13072,7 @@ mod tests {
     fn checked_join_marker_without_exact_plan_site_rejects_before_emission() {
         let expression = RuntimeExpr::CheckedJoinSite {
             site_id: 41,
-            body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(7))),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((7).into()))),
         };
         let result = compile_expr_into_module(
             new_object_module("px8h-missing-join-site").unwrap(),
@@ -12414,6 +13170,14 @@ mod tests {
             process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
             host_dispatch: None,
             invocation_pointer: None,
+            native_int_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_tags: BTreeMap::new(),
+            native_int_mutation: NativeIntLoweringMutation::Exact,
             bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         };
         let error = lowering
@@ -12476,7 +13240,7 @@ mod tests {
         let cases = vec![RuntimeMatchCase {
             constructor: "ctor:fixture::PX8H::Only".to_string(),
             binders: 0,
-            body: RuntimeExpr::Value(RuntimeValue::Int(7)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((7).into())),
         }];
         let default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
@@ -12526,7 +13290,7 @@ mod tests {
             new_object_module("px8h-orphan-join-site").unwrap(),
             "ken_px8h_orphan_join_site",
             Linkage::Export,
-            &RuntimeExpr::Value(RuntimeValue::Int(7)),
+            &RuntimeExpr::Value(RuntimeValue::Int((7).into())),
             &NativeSeedEnvironment::empty(),
             BTreeMap::new(),
             None,
@@ -12647,8 +13411,8 @@ mod tests {
             value: Box::new(total_primitive(
                 "add_int",
                 vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(2)),
-                    RuntimeExpr::Value(RuntimeValue::Int(3)),
+                    RuntimeExpr::Value(RuntimeValue::Int((2).into())),
+                    RuntimeExpr::Value(RuntimeValue::Int((3).into())),
                 ],
             )),
             body: Box::new(RuntimeExpr::Call {
@@ -12672,7 +13436,9 @@ mod tests {
                                                 "eq_int",
                                                 vec![
                                                     RuntimeExpr::Var(0),
-                                                    RuntimeExpr::Value(RuntimeValue::Int(5)),
+                                                    RuntimeExpr::Value(RuntimeValue::Int(
+                                                        (5).into(),
+                                                    )),
                                                 ],
                                             )),
                                             then_expr: Box::new(RuntimeExpr::Value(
@@ -12692,10 +13458,12 @@ mod tests {
                                                     "mul_int",
                                                     vec![
                                                         RuntimeExpr::Var(0),
-                                                        RuntimeExpr::Value(RuntimeValue::Int(2)),
+                                                        RuntimeExpr::Value(RuntimeValue::Int(
+                                                            (2).into(),
+                                                        )),
                                                     ],
                                                 ),
-                                                RuntimeExpr::Value(RuntimeValue::Int(3)),
+                                                RuntimeExpr::Value(RuntimeValue::Int((3).into())),
                                             ],
                                         ),
                                     ),
@@ -12714,7 +13482,7 @@ mod tests {
         let observation = RuntimeObservation::Returned(RuntimeGroundValue::Record {
             fields: vec![
                 ("ok".to_string(), RuntimeGroundValue::Bool(true)),
-                ("value".to_string(), RuntimeGroundValue::Int(7)),
+                ("value".to_string(), RuntimeGroundValue::Int((7).into())),
             ],
         });
         let program = nc22_program_with_body(body, observation.clone());
@@ -12761,7 +13529,7 @@ mod tests {
                 dependency: dependency.clone(),
                 dependency_semantic_hash: dependency_hash.clone(),
             },
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(9)),
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((9).into())),
         );
         program.declarations[0].symbol = symbol.clone();
         program.erased_core.symbols.insert(imported.clone());
@@ -12780,7 +13548,7 @@ mod tests {
             imported,
             dependency,
             dependency_hash,
-            RuntimeGroundValue::Int(9),
+            RuntimeGroundValue::Int((9).into()),
         );
         let run_report = evaluate_runtime_ir_example(&program, &program.examples[0], &runtime_env)
             .expect("runtime-IR evaluator can use an exact imported seed binding");
@@ -12805,8 +13573,8 @@ mod tests {
     #[test]
     fn nc22_runtime_ir_report_identity_mismatch_rejects_before_native_lowering() {
         let program = nc22_program_with_body(
-            RuntimeExpr::Value(RuntimeValue::Int(1)),
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         );
         let mut run_report = evaluate_runtime_ir_example(
             &program,
@@ -12836,14 +13604,14 @@ mod tests {
     #[test]
     fn nc22_ambiguous_runtime_ir_report_target_rejects_before_native_lowering() {
         let mut program = nc22_program_with_body(
-            RuntimeExpr::Value(RuntimeValue::Int(1)),
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         );
         program.examples.push(program.examples[0].clone());
         let mut run_report = evaluate_runtime_ir_example(
             &nc22_program_with_body(
-                RuntimeExpr::Value(RuntimeValue::Int(1)),
-                RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+                RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+                RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
             ),
             &program.examples[0],
             &RuntimeIrSeedEnvironment::empty(),
@@ -13031,7 +13799,7 @@ mod tests {
             name: "unknown-runtime-value".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::Value(RuntimeValue::Unknown),
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(0)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((0).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13051,10 +13819,10 @@ mod tests {
             name: "let-outside-supported-subset".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::Let {
-                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
                 body: Box::new(RuntimeExpr::Var(0)),
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13073,8 +13841,8 @@ mod tests {
         program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
             body: RuntimeExpr::If {
                 scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-                then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
-                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(0))),
+                then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((0).into()))),
             },
         };
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
@@ -13100,11 +13868,11 @@ mod tests {
                     partiality: RuntimePartiality::Total,
                 },
                 args: vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(2)),
-                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    RuntimeExpr::Value(RuntimeValue::Int((2).into())),
+                    RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 ],
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13126,7 +13894,7 @@ mod tests {
                     symbol: "add_int".to_string(),
                     partiality: RuntimePartiality::Total,
                 },
-                args: vec![RuntimeExpr::Value(RuntimeValue::Int(1))],
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((1).into()))],
             },
         };
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
@@ -13153,10 +13921,10 @@ mod tests {
                 },
                 args: vec![
                     RuntimeExpr::Value(RuntimeValue::Bool(true)),
-                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 ],
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(2)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((2).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13190,7 +13958,7 @@ mod tests {
                         },
                         args: vec![
                             RuntimeExpr::Var(0),
-                            RuntimeExpr::Value(RuntimeValue::Int(1)),
+                            RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                         ],
                     },
                 }],
@@ -13199,7 +13967,7 @@ mod tests {
                     message: "unused default".to_string(),
                 },
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(2)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((2).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13219,7 +13987,7 @@ mod tests {
             name: "top-level-var".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::Var(0),
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(0)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((0).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13239,10 +14007,10 @@ mod tests {
             name: "project-from-int".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::Project {
-                record: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                record: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
                 field: "x".to_string(),
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13264,9 +14032,9 @@ mod tests {
             ir: RuntimeExpr::Closure {
                 captures: Vec::new(),
                 params: Vec::new(),
-                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13558,7 +14326,7 @@ mod tests {
                 },
                 args: vec![
                     RuntimeExpr::Value(RuntimeValue::Bytes(Vec::new())),
-                    RuntimeExpr::Value(RuntimeValue::Int(0)),
+                    RuntimeExpr::Value(RuntimeValue::Int((0).into())),
                 ],
             },
             observation: RuntimeObservation::Returned(RuntimeGroundValue::Constructor {
@@ -13595,8 +14363,8 @@ mod tests {
                     },
                     args: vec![
                         RuntimeExpr::Value(RuntimeValue::Bytes(vec![0, 1, 2])),
-                        RuntimeExpr::Value(RuntimeValue::Int(1)),
-                        RuntimeExpr::Value(RuntimeValue::Int(2)),
+                        RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+                        RuntimeExpr::Value(RuntimeValue::Int((2).into())),
                     ],
                 },
                 observation: RuntimeObservation::Returned(RuntimeGroundValue::Constructor {
@@ -13670,30 +14438,373 @@ mod tests {
     }
 
     #[test]
-    fn overflowing_int_primitive_rejects_before_native_wrapping_semantics() {
+    fn overflowing_int_primitive_promotes_before_native_wrapping_semantics() {
         let example = RuntimeExample {
             name: "overflowing-add-int".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: total_primitive(
                 "add_int",
                 vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(i64::MAX)),
-                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    RuntimeExpr::Value(RuntimeValue::Int((i64::MAX).into())),
+                    RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 ],
             ),
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(i64::MIN)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(
+                crate::RuntimeIntV1::Big {
+                    sign: crate::Sign::NonNegative,
+                    limbs: vec![1_u64 << 63],
+                },
+            )),
         };
 
-        let err = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
-            .expect_err("native lowering must not use wrapping Int semantics");
+        let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+            .expect("native lowering promotes before overflow");
+        assert_eq!(report.observation, example.observation);
+    }
 
+    fn run_exact_int(expr: RuntimeExpr, expected: crate::RuntimeIntV1) {
+        let direct =
+            crate::evaluate_runtime_ir_expr(&expr, &crate::RuntimeIrSeedEnvironment::empty())
+                .expect("backend-neutral Runtime IR evaluates exact Int expression");
+        let example = RuntimeExample {
+            name: "px8i-exact-int".to_string(),
+            checked_core_shape: "PX8-I exact Int discriminator".to_string(),
+            ir: expr,
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(expected)),
+        };
+        let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+            .expect("exact Int expression lowers and executes");
+        assert_eq!(direct, example.observation);
+        assert_eq!(report.observation, example.observation);
+    }
+
+    fn big(sign: crate::Sign, limbs: &[u64]) -> RuntimeExpr {
+        RuntimeExpr::Value(RuntimeValue::Int(crate::RuntimeIntV1::Big {
+            sign,
+            limbs: limbs.to_vec(),
+        }))
+    }
+
+    #[test]
+    fn px8i_big_small_big_mul_and_canonical_narrow_are_exact() {
+        run_exact_int(
+            total_primitive(
+                "add_int",
+                vec![
+                    big(crate::Sign::NonNegative, &[u64::MAX, 1]),
+                    RuntimeExpr::Value(RuntimeValue::Int(1.into())),
+                ],
+            ),
+            crate::RuntimeIntV1::Big {
+                sign: crate::Sign::NonNegative,
+                limbs: vec![0, 2],
+            },
+        );
+        run_exact_int(
+            total_primitive(
+                "mul_int",
+                vec![
+                    big(crate::Sign::NonNegative, &[0, 1]),
+                    big(crate::Sign::NonNegative, &[0, 1]),
+                ],
+            ),
+            crate::RuntimeIntV1::Big {
+                sign: crate::Sign::NonNegative,
+                limbs: vec![0, 0, 1],
+            },
+        );
+        run_exact_int(
+            total_primitive(
+                "sub_int",
+                vec![
+                    big(crate::Sign::NonNegative, &[1_u64 << 63]),
+                    RuntimeExpr::Value(RuntimeValue::Int(1.into())),
+                ],
+            ),
+            crate::RuntimeIntV1::Small(i64::MAX),
+        );
+        run_exact_int(
+            total_primitive(
+                "add_int",
+                vec![
+                    big(crate::Sign::Negative, &[0, 2]),
+                    RuntimeExpr::Value(RuntimeValue::Int(1.into())),
+                ],
+            ),
+            crate::RuntimeIntV1::Big {
+                sign: crate::Sign::Negative,
+                limbs: vec![u64::MAX, 1],
+            },
+        );
+        run_exact_int(
+            total_primitive(
+                "sub_int",
+                vec![
+                    RuntimeExpr::Value(RuntimeValue::Int(1.into())),
+                    big(crate::Sign::NonNegative, &[0, 2]),
+                ],
+            ),
+            crate::RuntimeIntV1::Big {
+                sign: crate::Sign::Negative,
+                limbs: vec![u64::MAX, 1],
+            },
+        );
+    }
+
+    #[test]
+    fn px8i_comparison_observes_high_limbs_and_dynamic_join_preserves_pair() {
+        let lhs = big(crate::Sign::NonNegative, &[7, 1]);
+        let rhs = big(crate::Sign::NonNegative, &[7, 2]);
+        let condition = total_primitive("eq_int", vec![lhs.clone(), rhs]);
+        run_exact_int(
+            RuntimeExpr::If {
+                scrutinee: Box::new(condition),
+                then_expr: Box::new(big(crate::Sign::NonNegative, &[99, 9])),
+                else_expr: Box::new(lhs),
+            },
+            crate::RuntimeIntV1::Big {
+                sign: crate::Sign::NonNegative,
+                limbs: vec![7, 1],
+            },
+        );
+
+        run_exact_int(
+            RuntimeExpr::If {
+                scrutinee: Box::new(total_primitive(
+                    "leq_int",
+                    vec![
+                        RuntimeExpr::Value(RuntimeValue::Int(i64::MAX.into())),
+                        big(crate::Sign::NonNegative, &[0, 1]),
+                    ],
+                )),
+                then_expr: Box::new(big(crate::Sign::NonNegative, &[17, 3])),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((-1).into()))),
+            },
+            crate::RuntimeIntV1::Big {
+                sign: crate::Sign::NonNegative,
+                limbs: vec![17, 3],
+            },
+        );
+        run_exact_int(
+            RuntimeExpr::If {
+                scrutinee: Box::new(total_primitive(
+                    "leq_int",
+                    vec![
+                        big(crate::Sign::Negative, &[0, 1]),
+                        RuntimeExpr::Value(RuntimeValue::Int(i64::MIN.into())),
+                    ],
+                )),
+                then_expr: Box::new(big(crate::Sign::Negative, &[23, 4])),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((-1).into()))),
+            },
+            crate::RuntimeIntV1::Big {
+                sign: crate::Sign::Negative,
+                limbs: vec![23, 4],
+            },
+        );
+    }
+
+    #[test]
+    fn px8i_wrapping_and_trap_mutations_are_causal_at_live_binop_lowering() {
+        let expr = total_primitive(
+            "add_int",
+            vec![
+                RuntimeExpr::Value(RuntimeValue::Int(i64::MAX.into())),
+                RuntimeExpr::Value(RuntimeValue::Int(1.into())),
+            ],
+        );
+        let example = RuntimeExample {
+            name: "px8i-live-mutation".to_string(),
+            checked_core_shape: "PX8-I live exact binop mutation".to_string(),
+            ir: expr,
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(
+                crate::RuntimeIntV1::Big {
+                    sign: crate::Sign::NonNegative,
+                    limbs: vec![1_u64 << 63],
+                },
+            )),
+        };
+
+        NATIVE_INT_LOWERING_MUTATION
+            .with(|mutation| mutation.set(NativeIntLoweringMutation::Wrapping));
+        let wrapping = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+            .expect("wrapping mutation still emits the live native expression");
+        NATIVE_INT_LOWERING_MUTATION
+            .with(|mutation| mutation.set(NativeIntLoweringMutation::Exact));
+        assert_ne!(wrapping.observation, example.observation);
+        assert_eq!(
+            wrapping.observation,
+            RuntimeObservation::Returned(RuntimeGroundValue::Int(i64::MIN.into()))
+        );
+
+        NATIVE_INT_LOWERING_MUTATION.with(|mutation| mutation.set(NativeIntLoweringMutation::Trap));
+        let trapped = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty());
+        NATIVE_INT_LOWERING_MUTATION
+            .with(|mutation| mutation.set(NativeIntLoweringMutation::Exact));
         assert!(matches!(
-            err,
-            CraneliftBackendError::Unsupported(UnsupportedLowering {
+            trapped,
+            Err(CraneliftBackendError::Unsupported(UnsupportedLowering {
                 construct: "PrimitiveCall",
                 ..
-            })
+            }))
         ));
+    }
+
+    #[test]
+    fn px8i_jit_terminal_requires_uncorrupted_local_export_evidence() {
+        let example = RuntimeExample {
+            name: "px8i-terminal-export".to_string(),
+            checked_core_shape: "PX8-I terminal Big export".to_string(),
+            ir: big(crate::Sign::NonNegative, &[5, 1]),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(
+                crate::RuntimeIntV1::Big {
+                    sign: crate::Sign::NonNegative,
+                    limbs: vec![5, 1],
+                },
+            )),
+        };
+        for mutation in [
+            NativeIntLoweringMutation::SuppressTerminalExport,
+            NativeIntLoweringMutation::CorruptTerminalExport,
+        ] {
+            NATIVE_INT_LOWERING_MUTATION.with(|cell| cell.set(mutation));
+            let result =
+                run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty());
+            NATIVE_INT_LOWERING_MUTATION.with(|cell| cell.set(NativeIntLoweringMutation::Exact));
+            assert!(matches!(
+                result,
+                Err(CraneliftBackendError::Backend(
+                    BackendFailure::NativeResultDecode { .. }
+                ))
+            ));
+        }
+    }
+
+    #[test]
+    fn px8i_jit_and_object_construct_identical_local_helper_clif() {
+        let mut jit = new_jit_module().expect("JIT module constructs");
+        let jit_clif = crate::native_int_clif::capture_native_int_local_graph(&mut jit)
+            .expect("JIT local helper graph emits");
+        let mut object =
+            new_object_module("px8i-local-helper-identity").expect("object module constructs");
+        let object_clif = crate::native_int_clif::capture_native_int_local_graph(&mut object)
+            .expect("object local helper graph emits");
+        assert_eq!(jit_clif, object_clif);
+        assert!(!jit_clif.is_empty());
+        assert_eq!(jit_clif.matches("-- helper --").count(), 5);
+    }
+
+    #[test]
+    fn px8i_local_helpers_reject_invalid_zero_stale_and_wrong_arena_slots() {
+        let mut module = new_jit_module().expect("JIT module constructs");
+        let helpers = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
+            .expect("local helper graph emits");
+        let pointer = module.target_config().pointer_type();
+
+        let mut mint_signature = module.make_signature();
+        mint_signature.params.push(AbiParam::new(pointer));
+        mint_signature.returns.push(AbiParam::new(types::I64));
+        let mint_id = module
+            .declare_function("px8i_mint_probe", Linkage::Local, &mint_signature)
+            .expect("mint probe declares");
+        let mut mint_context = module.make_context();
+        mint_context.func =
+            Function::with_name_signature(UserFuncName::user(2, mint_id.as_u32()), mint_signature);
+        let intern = module.declare_func_in_func(helpers.intern, &mut mint_context.func);
+        let mut frontend = FunctionBuilderContext::new();
+        {
+            let mut builder = FunctionBuilder::new(&mut mint_context.func, &mut frontend);
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            let arena = builder.block_params(entry)[0];
+            let limbs = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                16,
+                3,
+            ));
+            let zero = builder.ins().iconst(types::I64, 0);
+            let one = builder.ins().iconst(types::I64, 1);
+            builder.ins().stack_store(zero, limbs, 0);
+            builder.ins().stack_store(one, limbs, 8);
+            let output = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                16,
+                3,
+            ));
+            let limbs = builder.ins().stack_addr(pointer, limbs, 0);
+            let output_pointer = builder.ins().stack_addr(pointer, output, 0);
+            let two = builder.ins().iconst(types::I64, 2);
+            let call = builder
+                .ins()
+                .call(intern, &[arena, zero, limbs, two, output_pointer]);
+            let status = builder.inst_results(call)[0];
+            Lowering::require_i64(&mut builder, status, 0);
+            let slot = builder.ins().stack_load(types::I64, output, 8);
+            builder.ins().return_(&[slot]);
+            builder.seal_all_blocks();
+            builder.finalize();
+        }
+        verify_cranelift_function(&mint_context.func, module.isa()).expect("mint verifies");
+        module
+            .define_function(mint_id, &mut mint_context)
+            .expect("mint defines");
+
+        let mut check_signature = module.make_signature();
+        check_signature.params.push(AbiParam::new(pointer));
+        check_signature.params.push(AbiParam::new(types::I64));
+        check_signature.params.push(AbiParam::new(types::I64));
+        check_signature.returns.push(AbiParam::new(types::I64));
+        let check_id = module
+            .declare_function("px8i_slot_probe", Linkage::Local, &check_signature)
+            .expect("slot probe declares");
+        let mut check_context = module.make_context();
+        check_context.func = Function::with_name_signature(
+            UserFuncName::user(2, check_id.as_u32()),
+            check_signature,
+        );
+        let compare = module.declare_func_in_func(helpers.compare, &mut check_context.func);
+        let mut frontend = FunctionBuilderContext::new();
+        {
+            let mut builder = FunctionBuilder::new(&mut check_context.func, &mut frontend);
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            let params = builder.block_params(entry).to_vec();
+            let eq = builder.ins().iconst(types::I64, 0);
+            let call = builder.ins().call(
+                compare,
+                &[params[0], eq, params[1], params[2], params[1], params[2]],
+            );
+            let status = builder.inst_results(call)[0];
+            builder.ins().return_(&[status]);
+            builder.seal_all_blocks();
+            builder.finalize();
+        }
+        verify_cranelift_function(&check_context.func, module.isa()).expect("check verifies");
+        module
+            .define_function(check_id, &mut check_context)
+            .expect("check defines");
+        module
+            .finalize_definitions()
+            .expect("probe module finalizes");
+
+        let mint = module.get_finalized_function(mint_id);
+        let check = module.get_finalized_function(check_id);
+        let mint = unsafe {
+            mem::transmute::<_, extern "C" fn(*mut crate::NativeIntArenaV1) -> u64>(mint)
+        };
+        let check = unsafe {
+            mem::transmute::<_, extern "C" fn(*mut crate::NativeIntArenaV1, u64, u64) -> i64>(check)
+        };
+        let mut first = crate::NativeIntArenaV1::default();
+        let mut second = crate::NativeIntArenaV1::default();
+        let slot = mint(&mut first);
+        assert_ne!(slot, 0);
+        assert_eq!(check(&mut first, crate::NATIVE_INT_BIG_TAG_V1, slot), 1);
+        assert_eq!(check(&mut first, crate::NATIVE_INT_BIG_TAG_V1, 0), -1);
+        assert_eq!(check(&mut second, crate::NATIVE_INT_BIG_TAG_V1, slot), -1);
+        assert_eq!(check(&mut first, 9, slot), -1);
     }
 
     #[test]

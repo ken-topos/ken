@@ -373,7 +373,9 @@ fn pure_program_report_keeps_starter_subset_ready() {
     ));
     assert!(matches!(
         program.examples[0].observation,
-        RuntimeObservation::Returned(RuntimeGroundValue::Int(5))
+        RuntimeObservation::Returned(RuntimeGroundValue::Int(
+            ken_runtime::RuntimeIntV1::Small(5),
+        ))
     ));
 }
 

@@ -312,7 +312,9 @@ fn runtime_exit_code(value: &RuntimeGroundValue) -> ProcessExitCode {
             if constructor == EXIT_FAILURE_CONSTRUCTOR =>
         {
             match args.as_slice() {
-                [RuntimeGroundValue::Int(code)] => ProcessExitCode::Failure(*code),
+                [RuntimeGroundValue::Int(crate::RuntimeIntV1::Small(code))] => {
+                    ProcessExitCode::Failure(*code)
+                }
                 _ => ProcessExitCode::MalformedFailure,
             }
         }
@@ -339,7 +341,7 @@ mod tests {
     use crate::{RuntimeTrapCode, RuntimeValue};
 
     fn failure(code: i64) -> RuntimeExpr {
-        failure_expr(RuntimeExpr::Value(RuntimeValue::Int(code)))
+        failure_expr(RuntimeExpr::Value(RuntimeValue::Int((code).into())))
     }
 
     fn failure_expr(code: RuntimeExpr) -> RuntimeExpr {
@@ -562,7 +564,7 @@ mod tests {
             working_directory: vec![],
         };
         let mut stderr = Vec::new();
-        let malformed_entrypoint = RuntimeExpr::Value(RuntimeValue::Int(0));
+        let malformed_entrypoint = RuntimeExpr::Value(RuntimeValue::Int((0).into()));
         let malformed =
             run_native_process_entrypoint_with_stderr(&input, &malformed_entrypoint, &mut stderr);
         assert_eq!(malformed.exit_status, 1);

@@ -1594,14 +1594,84 @@ fn runtime_trap_code_tag(code: &crate::RuntimeTrapCode) -> &'static str {
 }
 
 fn starter_c_stub() -> &'static str {
-    r#"#include <stdio.h>
+    r#"#include <inttypes.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+struct KenNativeBigEntryV1 {
+    struct KenNativeBigEntryV1 *next;
+    uint64_t slot, sign, len;
+    uint64_t limbs[];
+};
+struct KenNativeIntArenaV1 {
+    struct KenNativeBigEntryV1 *head;
+    uint64_t next_slot, final_tag, final_payload, final_sign, final_len;
+    const uint64_t *final_limbs;
+    uint64_t final_small;
+};
+
+static void ken_int_arena_destroy(struct KenNativeIntArenaV1 *arena) {
+    struct KenNativeBigEntryV1 *entry = arena->head;
+    while (entry != NULL) {
+        struct KenNativeBigEntryV1 *next = entry->next;
+        free(entry);
+        entry = next;
+    }
+}
+
+static int ken_print_exported_int(const struct KenNativeIntArenaV1 *arena) {
+    if (arena->final_tag == 0) {
+        int64_t value = (int64_t)arena->final_payload;
+        uint64_t magnitude = value < 0 ? (~arena->final_payload) + 1 : arena->final_payload;
+        uint64_t sign = value < 0 ? 1 : 0;
+        if (arena->final_sign != sign || arena->final_len != 1 ||
+            arena->final_limbs != &arena->final_small ||
+            arena->final_small != magnitude) {
+            return 1;
+        }
+        printf("%" PRId64 "\n", value);
+        return 0;
+    }
+    if (arena->final_tag != 1 || arena->final_payload == 0 ||
+        arena->final_sign > 1 || arena->final_len == 0 ||
+        arena->final_limbs == NULL ||
+        arena->final_limbs[arena->final_len - 1] == 0) {
+        return 1;
+    }
+    if (arena->final_len == 1) {
+        uint64_t limb = arena->final_limbs[0];
+        if ((arena->final_sign == 0 && limb <= INT64_MAX) ||
+            (arena->final_sign == 1 && limb <= (UINT64_C(1) << 63))) {
+            return 1;
+        }
+    }
+    if (arena->final_sign == 1) {
+        fputc('-', stdout);
+    }
+    fputs("0x", stdout);
+    printf("%" PRIx64, arena->final_limbs[arena->final_len - 1]);
+    for (uint64_t index = arena->final_len - 1; index > 0; --index) {
+        printf("%016" PRIx64, arena->final_limbs[index - 1]);
+    }
+    fputc('\n', stdout);
+    return 0;
+}
 
 extern long long ken_nc23_entrypoint(const void *input);
 
 int main(void) {
-    long long value = ken_nc23_entrypoint(NULL);
-    printf("%lld\n", value);
-    return 0;
+    struct KenNativeIntArenaV1 arena = { .final_tag = UINT64_MAX };
+    long long value = ken_nc23_entrypoint(&arena);
+    int status;
+    if (arena.final_tag == UINT64_MAX) {
+        printf("%lld\n", value);
+        status = 0;
+    } else {
+        status = ken_print_exported_int(&arena);
+    }
+    ken_int_arena_destroy(&arena);
+    return status;
 }
 "#
 }
@@ -1640,11 +1710,43 @@ struct KenArena {
     size_t capacity;
 };
 
+struct KenNativeBigEntryV1 {
+    struct KenNativeBigEntryV1 *next;
+    uint64_t slot;
+    uint64_t sign;
+    size_t len;
+    uint64_t limbs[];
+};
+
+struct KenNativeIntArenaV1 {
+    struct KenNativeBigEntryV1 *head;
+    uint64_t next_slot;
+    uint64_t final_tag;
+    uint64_t final_payload;
+    uint64_t final_sign;
+    uint64_t final_len;
+    const uint64_t *final_limbs;
+    uint64_t final_small;
+};
+
 struct KenNativeInvocationV1 {
     const struct KenBorrowedValue *process_input;
     void *host_context;
     uint64_t capability;
+    struct KenNativeIntArenaV1 *native_int_arena;
 };
+
+
+
+static void ken_int_arena_destroy(struct KenNativeIntArenaV1 *arena) {
+    struct KenNativeBigEntryV1 *entry = arena->head;
+    while (entry != NULL) {
+        struct KenNativeBigEntryV1 *next = entry->next;
+        free(entry);
+        entry = next;
+    }
+    arena->head = NULL;
+}
 
 struct KenHostInitResultV1 {
     void *context;
@@ -1804,13 +1906,16 @@ int main(int argc, char **argv, char **envp) {
         host_init.plan_hash != KEN_ENTRYPOINT_PLAN_HASH) {
         free(pool); free(cwd); return 1;
     }
+    struct KenNativeIntArenaV1 native_int_arena = {0};
     struct KenNativeInvocationV1 invocation = {
         .process_input = root,
         .host_context = host_init.context,
-        .capability = host_init.capability
+        .capability = host_init.capability,
+        .native_int_arena = &native_int_arena
     };
     long long value = ken_nc23_entrypoint(&invocation);
     long long finish_status = ken_host_invocation_v1_finish(host_init.context, value);
+    ken_int_arena_destroy(&native_int_arena);
     free(cwd);
     free(pool);
     if (finish_status != 0) return 1;
@@ -1951,8 +2056,8 @@ mod tests {
                 partiality: RuntimePartiality::Total,
             },
             args: vec![
-                RuntimeExpr::Value(RuntimeValue::Int(value - 1)),
-                RuntimeExpr::Value(RuntimeValue::Int(1)),
+                RuntimeExpr::Value(RuntimeValue::Int((value - 1).into())),
+                RuntimeExpr::Value(RuntimeValue::Int((1).into())),
             ],
         }
     }
@@ -2053,9 +2158,24 @@ mod tests {
         dir
     }
 
+    #[cfg(target_os = "linux")]
+    fn assert_no_undefined_native_int_service(path: &std::path::Path) {
+        let output = Command::new("nm")
+            .arg("-u")
+            .arg(path)
+            .output()
+            .expect("nm is part of the linked-artifact toolchain");
+        assert!(output.status.success(), "nm -u failed");
+        let undefined = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            !undefined.contains("ken_runtime_native_int_"),
+            "native Int service remained undefined:\n{undefined}"
+        );
+    }
+
     #[test]
     fn packages_and_smokes_scalar_starter_executable() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(42));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((42).into()));
         let program = starter_program(int_body(42), observation);
         let (_report, entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2101,6 +2221,183 @@ mod tests {
         ));
     }
 
+    fn generic_big_int_program() -> RuntimeProgram {
+        let big = |limbs: Vec<u64>| {
+            RuntimeExpr::Value(RuntimeValue::Int(crate::RuntimeIntV1::Big {
+                sign: crate::Sign::NonNegative,
+                limbs,
+            }))
+        };
+        let product = RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "mul_int".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![big(vec![0, 1]), big(vec![0, 1])],
+        };
+        let exact = RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "eq_int".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![product, big(vec![0, 0, 1])],
+        };
+        let body = RuntimeExpr::If {
+            scrutinee: Box::new(exact),
+            then_expr: Box::new(int_body(7)),
+            else_expr: Box::new(int_body(9)),
+        };
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(7.into()));
+        starter_program(body, observation)
+    }
+
+    #[test]
+    fn generic_object_executes_the_same_exact_big_int_helper_graph() {
+        let program = generic_big_int_program();
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let support = platform_support(&program, &entrypoint, &run_report);
+        let output_dir = temp_output_dir("px8i-generic-big-int");
+        let package = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            &output_dir,
+            "PX8-I generic object Big discriminator",
+        )
+        .expect("generic object executes the shared exact-Int graph");
+        assert_eq!(package.smoke.stdout, "7\n");
+        assert!(package.smoke.passed);
+        #[cfg(target_os = "linux")]
+        {
+            assert_no_undefined_native_int_service(
+                &output_dir.join(&package.object_artifact.relative_path),
+            );
+            assert_no_undefined_native_int_service(
+                &output_dir.join(&package.executable_artifact.relative_path),
+            );
+        }
+    }
+
+    #[test]
+    fn generic_object_decodes_terminal_big_before_destroying_its_arena() {
+        let terminal = crate::RuntimeIntV1::Big {
+            sign: crate::Sign::Negative,
+            limbs: vec![7, 1],
+        };
+        let program = starter_program(
+            RuntimeExpr::Value(RuntimeValue::Int(terminal.clone())),
+            RuntimeObservation::Returned(RuntimeGroundValue::Int(terminal)),
+        );
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let support = platform_support(&program, &entrypoint, &run_report);
+        let output_dir = temp_output_dir("px8i-generic-terminal-big-int");
+        let package = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            &output_dir,
+            "PX8-I generic terminal Big discriminator",
+        )
+        .expect("generic object decodes terminal Big while its arena is live");
+        assert_eq!(package.smoke.stdout, "-0x10000000000000007\n");
+        assert!(package.smoke.passed);
+    }
+
+    #[test]
+    fn shared_helper_wrapping_mutation_turns_generic_object_discriminator_red() {
+        let program = generic_big_int_program();
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let support = platform_support(&program, &entrypoint, &run_report);
+        let output_dir = temp_output_dir("px8i-generic-big-int-wrapping-mutation");
+        crate::cranelift_backend::NATIVE_INT_LOWERING_MUTATION.with(|mutation| {
+            mutation.set(crate::cranelift_backend::NativeIntLoweringMutation::Wrapping)
+        });
+        let result = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            &output_dir,
+            "PX8-I shared-helper mutation",
+        );
+        crate::cranelift_backend::NATIVE_INT_LOWERING_MUTATION.with(|mutation| {
+            mutation.set(crate::cranelift_backend::NativeIntLoweringMutation::Exact)
+        });
+        assert!(
+            result.is_err(),
+            "wrapping helper mutation must break Big object evidence"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linked_process_executes_exact_big_int_support_without_host_dispatch() {
+        let output_dir = temp_output_dir("px8i-linked-big-int");
+        let big = |limbs: Vec<u64>| {
+            RuntimeExpr::Value(RuntimeValue::Int(crate::RuntimeIntV1::Big {
+                sign: crate::Sign::NonNegative,
+                limbs,
+            }))
+        };
+        let product = RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "mul_int".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![big(vec![0, 1]), big(vec![0, 1])],
+        };
+        let exact = RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "eq_int".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![product, big(vec![0, 0, 1])],
+        };
+        let entry = RuntimeExpr::Match {
+            scrutinee: Box::new(exact),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: "ctor:prelude::Bool::True".to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Construct {
+                        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                        args: Vec::new(),
+                    },
+                },
+                crate::RuntimeMatchCase {
+                    constructor: "ctor:prelude::Bool::False".to_string(),
+                    binders: 0,
+                    body: RuntimeExpr::Construct {
+                        constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "PX8-I exact comparison must return Bool".to_string(),
+            },
+        };
+        let executable = build_process_starter_executable_artifact(&entry, &output_dir)
+            .expect("PX8-I process starter links its private exact-Int support");
+        assert_no_undefined_native_int_service(
+            &output_dir.join(ObjectLinkerPackagingOptions::starter_host().object_relative_path),
+        );
+        assert_no_undefined_native_int_service(&executable);
+        let status = Command::new(&executable)
+            .status()
+            .expect("PX8-I linked process executes");
+        assert_eq!(status.code(), Some(0));
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn same_process_artifact_observes_fresh_byte_exact_os_input() {
@@ -2125,13 +2422,13 @@ mod tests {
                         obligation: Some("obl:px4.bytes_at.bounds".to_string()),
                     },
                 },
-                args: vec![bytes, RuntimeExpr::Value(RuntimeValue::Int(index))],
+                args: vec![bytes, RuntimeExpr::Value(RuntimeValue::Int((index).into()))],
             }),
             cases: vec![
                 crate::RuntimeMatchCase {
                     constructor: option_none.to_string(),
                     binders: 0,
-                    body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 },
                 crate::RuntimeMatchCase {
                     constructor: option_some.to_string(),
@@ -2195,7 +2492,10 @@ mod tests {
                 symbol: "eq_int".to_string(),
                 partiality: RuntimePartiality::Total,
             },
-            args: vec![value, RuntimeExpr::Value(RuntimeValue::Int(expected))],
+            args: vec![
+                value,
+                RuntimeExpr::Value(RuntimeValue::Int((expected).into())),
+            ],
         };
         let cwd_length = RuntimeExpr::PrimitiveCall {
             primitive: RuntimePrimitive {
@@ -2222,13 +2522,13 @@ mod tests {
                             i64::from(0xfe_u8),
                         )),
                         then_expr: Box::new(environment_byte(1)),
-                        else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                        else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
                     }),
-                    else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                    else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
                 }),
-                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
             }),
-            else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+            else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
         };
         let entry = RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Var(0)),
@@ -2357,7 +2657,7 @@ mod tests {
         assert_eq!(
             run(
                 "px4-failure-zero",
-                failure(RuntimeExpr::Value(RuntimeValue::Int(0))),
+                failure(RuntimeExpr::Value(RuntimeValue::Int((0).into()))),
             )
             .status
             .code(),
@@ -2366,7 +2666,7 @@ mod tests {
         assert_eq!(
             run(
                 "px4-failure-255",
-                failure(RuntimeExpr::Value(RuntimeValue::Int(255))),
+                failure(RuntimeExpr::Value(RuntimeValue::Int((255).into()))),
             )
             .status
             .code(),
@@ -2375,7 +2675,7 @@ mod tests {
 
         let malformed = run(
             "px4-malformed-exitcode",
-            RuntimeExpr::Value(RuntimeValue::Int(0)),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
         );
         assert_eq!(malformed.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&malformed.stderr)
@@ -2424,7 +2724,7 @@ mod tests {
         };
         let failure = RuntimeExpr::Construct {
             constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
         };
         let trapped = RuntimeExpr::Trap(RuntimeTrap {
             code: RuntimeTrapCode::ExplicitTrap,
@@ -2460,9 +2760,9 @@ mod tests {
             constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
             args: Vec::new(),
         };
-        let failure = |code| RuntimeExpr::Construct {
+        let failure = |code: i64| RuntimeExpr::Construct {
             constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(code))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((code).into()))],
         };
         let stale_use = RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Effect {
@@ -2793,7 +3093,7 @@ mod tests {
 
     #[test]
     fn stale_platform_support_hash_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(7));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((7).into()));
         let program = starter_program(int_body(7), observation);
         let (_report, entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2824,7 +3124,7 @@ mod tests {
 
     #[test]
     fn stale_mutated_entrypoint_payload_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(11));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((11).into()));
         let program = starter_program(int_body(11), observation);
         let (_report, mut entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2848,7 +3148,7 @@ mod tests {
 
     #[test]
     fn forged_support_for_non_executable_payload_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(13));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((13).into()));
         let program = starter_program(int_body(13), observation);
         let (_report, mut entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2879,7 +3179,7 @@ mod tests {
 
     #[test]
     fn forged_entrypoint_package_kind_version_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(17));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((17).into()));
         let program = starter_program(int_body(17), observation);
         let (_report, mut entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2908,7 +3208,7 @@ mod tests {
 
     #[test]
     fn forged_entrypoint_package_version_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(18));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((18).into()));
         let program = starter_program(int_body(18), observation);
         let (_report, mut entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2936,7 +3236,7 @@ mod tests {
 
     #[test]
     fn forged_platform_support_kind_version_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(19));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((19).into()));
         let program = starter_program(int_body(19), observation);
         let (_report, entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2966,7 +3266,7 @@ mod tests {
 
     #[test]
     fn forged_platform_support_version_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(20));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((20).into()));
         let program = starter_program(int_body(20), observation);
         let (_report, entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2995,7 +3295,7 @@ mod tests {
 
     #[test]
     fn unsupported_platform_target_rejects_before_object_emission() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(3));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((3).into()));
         let program = starter_program(int_body(3), observation);
         let (_report, entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -3066,13 +3366,13 @@ mod tests {
     #[test]
     fn aggregate_observation_rejects_as_non_scalar_smoke_lane() {
         let observation = RuntimeObservation::Returned(RuntimeGroundValue::Record {
-            fields: vec![("value".to_string(), RuntimeGroundValue::Int(1))],
+            fields: vec![("value".to_string(), RuntimeGroundValue::Int((1).into()))],
         });
         let program = starter_program(
             RuntimeExpr::Record {
                 fields: vec![(
                     "value".to_string(),
-                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 )],
             },
             observation,

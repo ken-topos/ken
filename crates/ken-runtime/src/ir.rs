@@ -453,7 +453,7 @@ pub fn compiler_private_computational_match_frame_fingerprint(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeValue {
     Bool(bool),
-    Int(i64),
+    Int(crate::RuntimeIntV1),
     Bytes(Vec<u8>),
     String(String),
     Constructor {
@@ -480,7 +480,7 @@ pub enum RuntimeObservation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeGroundValue {
     Bool(bool),
-    Int(i64),
+    Int(crate::RuntimeIntV1),
     Bytes(Vec<u8>),
     String(String),
     Constructor {
@@ -526,11 +526,11 @@ pub fn nc5_seed_examples() -> Vec<RuntimeExample> {
                     partiality: RuntimePartiality::Total,
                 },
                 args: vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(2)),
-                    RuntimeExpr::Value(RuntimeValue::Int(3)),
+                    RuntimeExpr::Value(RuntimeValue::Int((2).into())),
+                    RuntimeExpr::Value(RuntimeValue::Int((3).into())),
                 ],
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(5)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((5).into())),
         },
         RuntimeExample {
             name: "adt-constructor-match".to_string(),
@@ -538,7 +538,7 @@ pub fn nc5_seed_examples() -> Vec<RuntimeExample> {
             ir: RuntimeExpr::Match {
                 scrutinee: Box::new(RuntimeExpr::Construct {
                     constructor: "ctor:fixture::Core::Option::Some".to_string(),
-                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(4))],
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int((4).into()))],
                 }),
                 cases: vec![RuntimeMatchCase {
                     constructor: "ctor:fixture::Core::Option::Some".to_string(),
@@ -550,7 +550,7 @@ pub fn nc5_seed_examples() -> Vec<RuntimeExample> {
                     message: "no Option case selected".to_string(),
                 },
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(4)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((4).into())),
         },
         RuntimeExample {
             name: "closure-capture-application".to_string(),
@@ -567,9 +567,9 @@ pub fn nc5_seed_examples() -> Vec<RuntimeExample> {
                         args: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)],
                     }),
                 }),
-                args: vec![RuntimeExpr::Value(RuntimeValue::Int(5))],
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((5).into()))],
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(7)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((7).into())),
         },
         RuntimeExample {
             name: "record-construction-projection".to_string(),
@@ -577,16 +577,19 @@ pub fn nc5_seed_examples() -> Vec<RuntimeExample> {
             ir: RuntimeExpr::Project {
                 record: Box::new(RuntimeExpr::Record {
                     fields: vec![
-                        ("left".to_string(), RuntimeExpr::Value(RuntimeValue::Int(1))),
+                        (
+                            "left".to_string(),
+                            RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+                        ),
                         (
                             "right".to_string(),
-                            RuntimeExpr::Value(RuntimeValue::Int(2)),
+                            RuntimeExpr::Value(RuntimeValue::Int((2).into())),
                         ),
                     ],
                 }),
                 field: "right".to_string(),
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(2)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((2).into())),
         },
         RuntimeExample {
             name: "explicit-partial-primitive-trap".to_string(),
@@ -600,7 +603,7 @@ pub fn nc5_seed_examples() -> Vec<RuntimeExample> {
                 },
                 args: vec![
                     RuntimeExpr::Value(RuntimeValue::Bytes(Vec::new())),
-                    RuntimeExpr::Value(RuntimeValue::Int(0)),
+                    RuntimeExpr::Value(RuntimeValue::Int((0).into())),
                 ],
             },
             observation: RuntimeObservation::Trapped(RuntimeTrap {
@@ -662,7 +665,7 @@ mod tests {
             declarations: vec![RuntimeDeclaration {
                 symbol: "decl:fixture::Main::f".to_string(),
                 kind: RuntimeDeclarationKind::Transparent {
-                    body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 },
                 metadata: RuntimeSymbolMetadata::empty(),
             }],

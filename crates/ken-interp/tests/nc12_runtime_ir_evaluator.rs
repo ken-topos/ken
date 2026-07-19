@@ -135,7 +135,7 @@ fn oracle_observation(
     } = interpreter_add_2_3_fixture();
     let value = eval(&[], &term, &globals, &mut store);
     let observation = match value {
-        EvalVal::Int(value) => RuntimeObservation::Returned(RuntimeGroundValue::Int(value)),
+        EvalVal::Int(value) => RuntimeObservation::Returned(RuntimeGroundValue::Int((value).into())),
         other => panic!("runtime IR oracle fixture must return Int, got {other:?}"),
     };
     RuntimeInterpreterObservation {
@@ -253,7 +253,7 @@ fn caller_supplied_interpreter_agreement_binds_identities_without_live_path_clai
     );
     assert_eq!(
         runtime_ir.observation,
-        RuntimeObservation::Returned(RuntimeGroundValue::Int(5))
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((5).into()))
     );
     assert!(runtime_ir.evidence_source.contains("RuntimeExpr evaluator"));
     assert!(report
@@ -266,7 +266,7 @@ fn caller_supplied_interpreter_agreement_binds_identities_without_live_path_clai
 fn disagreement_report_names_artifact_target_and_both_observations() {
     let mut example = scalar_seed_example();
     example.name = "mismatched-runtime-ir".to_string();
-    example.ir = ken_runtime::RuntimeExpr::Value(RuntimeValue::Int(4));
+    example.ir = ken_runtime::RuntimeExpr::Value(RuntimeValue::Int((4).into()));
     let program = runtime_program(example.clone(), 0x1204);
     let oracle = oracle_observation(&program, &example);
 
@@ -285,8 +285,12 @@ fn disagreement_report_names_artifact_target_and_both_observations() {
         report.verdict,
         RuntimeIrDifferentialVerdict::Mismatch {
             stage: RuntimeIrDifferentialStage::InterpreterRuntimeIrCompare,
-            interpreter: RuntimeObservation::Returned(RuntimeGroundValue::Int(5)),
-            runtime_ir: RuntimeObservation::Returned(RuntimeGroundValue::Int(4)),
+            interpreter: RuntimeObservation::Returned(RuntimeGroundValue::Int(
+                ken_runtime::RuntimeIntV1::Small(5),
+            )),
+            runtime_ir: RuntimeObservation::Returned(RuntimeGroundValue::Int(
+                ken_runtime::RuntimeIntV1::Small(4),
+            )),
         }
     ));
     assert_ne!(
@@ -334,8 +338,8 @@ fn stale_oracle_identity_rejects_before_runtime_ir_evaluation() {
 fn external_runtime_example_rejects_before_evaluation() {
     let stored = scalar_seed_example();
     let mut external = stored.clone();
-    external.ir = ken_runtime::RuntimeExpr::Value(RuntimeValue::Int(99));
-    external.observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(99));
+    external.ir = ken_runtime::RuntimeExpr::Value(RuntimeValue::Int((99).into()));
+    external.observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((99).into()));
     let program = runtime_program(stored, 0x1209);
     let oracle = oracle_observation(&program, &external);
 
@@ -447,7 +451,7 @@ fn package_level_trust_metadata_rejects_before_runtime_ir_success() {
 }
 
 #[test]
-fn add_int_overflow_rejects_without_host_panic_or_wrap() {
+fn add_int_overflow_promotes_without_host_panic_or_wrap() {
     let example = ken_runtime::RuntimeExample {
         name: "add-int-overflow".to_string(),
         checked_core_shape: "overflowing add_int fixture".to_string(),
@@ -457,23 +461,26 @@ fn add_int_overflow_rejects_without_host_panic_or_wrap() {
                 partiality: RuntimePartiality::Total,
             },
             args: vec![
-                ken_runtime::RuntimeExpr::Value(RuntimeValue::Int(i64::MAX)),
-                ken_runtime::RuntimeExpr::Value(RuntimeValue::Int(1)),
+                ken_runtime::RuntimeExpr::Value(RuntimeValue::Int((i64::MAX).into())),
+                ken_runtime::RuntimeExpr::Value(RuntimeValue::Int((1).into())),
             ],
         },
-        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(i64::MIN)),
+        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(
+            ken_runtime::RuntimeIntV1::Big {
+                sign: ken_runtime::Sign::NonNegative,
+                limbs: vec![1_u64 << 63],
+            },
+        )),
     };
     let program = runtime_program(example.clone(), 0x1210);
 
-    let err = evaluate_runtime_ir_example(&program, &example, &RuntimeIrSeedEnvironment::empty())
-        .expect_err("overflowing add_int is outside the current small-int subset");
-
-    assert_eq!(err.construct, "PrimitiveCall");
-    assert_eq!(
-        err.stage,
-        ken_runtime::RuntimeIrEvaluationStage::RuntimeIrEvaluation
-    );
-    assert!(err.reason.contains("add_int overflow"));
+    let report = evaluate_runtime_ir_example(
+        &program,
+        &example,
+        &RuntimeIrSeedEnvironment::empty(),
+    )
+    .expect("overflowing add_int promotes before wrapping");
+    assert_eq!(report.observation.observation, example.observation);
 }
 
 #[test]

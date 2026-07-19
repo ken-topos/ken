@@ -195,7 +195,9 @@ fn interpreter_add_2_3_observation() -> RuntimeObservation {
         primitive_const(lit_3),
     );
     match eval(&[], &term, &globals, &mut store) {
-        EvalVal::Int(value) => RuntimeObservation::Returned(RuntimeGroundValue::Int(value)),
+        EvalVal::Int(value) => {
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((value).into()))
+        }
         other => panic!("interpreter fixture must return Int, got {other:?}"),
     }
 }
@@ -251,7 +253,7 @@ fn primitive_integer_application_lowers_evaluates_and_reports_agreement() {
         .expect("primitive integer runtime IR evaluates");
     assert_eq!(
         observation,
-        RuntimeObservation::Returned(RuntimeGroundValue::Int(5))
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((5).into()))
     );
     let example = RuntimeExample {
         name: "nc16-int-add".to_string(),
@@ -323,7 +325,7 @@ fn primitive_bool_string_and_bytes_values_lower_and_evaluate() {
         .expect("primitive string runtime IR evaluates");
     assert_eq!(
         observation,
-        RuntimeObservation::Returned(RuntimeGroundValue::Int(3))
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((3).into()))
     );
 
     let package_name = "nc16_bytes_pkg";
