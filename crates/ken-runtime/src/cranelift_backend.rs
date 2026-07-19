@@ -1399,6 +1399,8 @@ fn run_checked_bounded_nat_fixture(
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
         next_source_join: 0,
+        next_source_predecessor: 0,
+        live_source_continuations: 0,
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
         active_join_site: None,
@@ -1602,6 +1604,8 @@ fn run_dynamic_constructor_dispatch_fixture(
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
         next_source_join: 0,
+        next_source_predecessor: 0,
+        live_source_continuations: 0,
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
         active_join_site: None,
@@ -1803,6 +1807,8 @@ fn compile_expr_into_module<'a, M: Module>(
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
         next_source_join: 0,
+        next_source_predecessor: 0,
+        live_source_continuations: 0,
         native_join_plan,
         consumed_join_sites: BTreeSet::new(),
         active_join_site: None,
@@ -1947,6 +1953,8 @@ struct Lowering<'a> {
     next_continuation_activation: u64,
     next_continuation_cursor: u64,
     next_source_join: u64,
+    next_source_predecessor: u64,
+    live_source_continuations: usize,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,
     active_join_site: Option<u64>,
@@ -2326,6 +2334,8 @@ struct ActiveContinuationFrame<'a> {
     parent: Option<&'a ActiveContinuationFrame<'a>>,
     pending: &'a [EliminatorFrame<'a>],
     selected_ancestry: &'a [RecursorFrameProvenance],
+    source_lineage: &'a [SourceSelectedContinuation<'a>],
+    source_selected_cursor: Option<ContinuationCursorId>,
 }
 
 #[derive(Clone)]
@@ -2415,6 +2425,18 @@ fn find_continuation_cursor<'a>(
     }
 }
 
+fn active_context_contains_cursor(
+    active: &ActiveContinuationFrame<'_>,
+    cursor: ContinuationCursorId,
+) -> bool {
+    find_continuation_cursor(active, cursor).is_some()
+        || active.source_selected_cursor == Some(cursor)
+        || active.source_lineage.iter().rev().any(|candidate| {
+            let candidate = candidate.as_active(active.source_lineage);
+            find_continuation_cursor(&candidate, cursor).is_some()
+        })
+}
+
 #[derive(Clone, Copy)]
 enum EliminatorFrame<'a> {
     Computational(ComputationalEliminatorFrame<'a>),
@@ -2436,6 +2458,7 @@ enum SourceContinuation<'a> {
     },
     ApplyRecursorLayers {
         remaining: Vec<ComputationalRecursorLayer>,
+        resume_cursor: ContinuationCursorId,
         next: Box<SourceContinuation<'a>>,
     },
     IfScrutinee {
@@ -2488,16 +2511,98 @@ enum SourceContinuationTerminal<'a> {
         expected: ContinuationCursorId,
         active: &'a ActiveContinuationFrame<'a>,
     },
-    JumpToJoin(SourceJoinEdge<'a>),
+    JumpToJoin(SourcePredecessorEdge<'a>),
 }
 
-struct SourceJoinEdge<'a> {
+#[derive(Clone)]
+struct SourceJoinTarget<'a> {
     join_id: u64,
-    predecessor_id: u32,
-    target: cranelift_codegen::ir::Block,
+    block: cranelift_codegen::ir::Block,
     expected_outer: ContinuationCursorId,
     required_kind: ScalarMergeKind,
-    prefix: Vec<EliminatorFrame<'a>>,
+    terminal_active_prefix: Vec<EliminatorFrame<'a>>,
+}
+
+/// An affine capability for one mutually exclusive predecessor of a checked
+/// source join. The target description is shareable; this edge deliberately is
+/// not `Clone`, so a predecessor can either seal its edge or consume it into a
+/// branch fan-out, never replay it.
+struct SourcePredecessorEdge<'a> {
+    target: SourceJoinTarget<'a>,
+    predecessor_identity: u64,
+}
+
+/// A cloneable source-evaluation prefix with its terminal edge removed. A
+/// branch fan-out may materialize this prefix once per mutually exclusive CFG
+/// arm, but the post-cut suffix and executable predecessor edge never live in
+/// the template.
+#[derive(Clone)]
+enum SourcePrefixTemplate {
+    Terminal {
+        expected_outer: ContinuationCursorId,
+    },
+    LetBody {
+        body: RuntimeExpr,
+        env: Vec<Lowered>,
+        next: Box<SourcePrefixTemplate>,
+    },
+    ApplyRecursorLayers {
+        remaining: Vec<ComputationalRecursorLayer>,
+        resume_cursor: ContinuationCursorId,
+        next: Box<SourcePrefixTemplate>,
+    },
+    IfScrutinee {
+        then_expr: RuntimeExpr,
+        else_expr: RuntimeExpr,
+        env: Vec<Lowered>,
+        next: Box<SourcePrefixTemplate>,
+    },
+    ConstructArgument {
+        constructor: RuntimeSymbol,
+        remaining: Vec<RuntimeExpr>,
+        lowered: Vec<Lowered>,
+        env: Vec<Lowered>,
+        next: Box<SourcePrefixTemplate>,
+    },
+    MatchScrutinee {
+        cases: Vec<crate::RuntimeMatchCase>,
+        default: RuntimeTrap,
+        env: Vec<Lowered>,
+        next: Box<SourcePrefixTemplate>,
+    },
+    ComputationalMatchScrutinee {
+        cases: Vec<crate::RuntimeComputationalMatchCase>,
+        default: RuntimeTrap,
+        env: Vec<Lowered>,
+        provenance: RecursorFrameProvenance,
+        next: Box<SourcePrefixTemplate>,
+    },
+    ProjectRecord {
+        field: String,
+        next: Box<SourcePrefixTemplate>,
+    },
+    CallCallee {
+        args: Vec<RuntimeExpr>,
+        env: Vec<Lowered>,
+        next: Box<SourcePrefixTemplate>,
+    },
+    CallArgument {
+        callee: Lowered,
+        remaining: Vec<RuntimeExpr>,
+        lowered: Vec<Lowered>,
+        env: Vec<Lowered>,
+        next: Box<SourcePrefixTemplate>,
+    },
+}
+
+enum SourcePrefixTerminal<'a> {
+    ResumeOuter,
+    Join(SourcePredecessorEdge<'a>),
+}
+
+struct SourceBranchFanout<'a> {
+    source_prefix_template: SourcePrefixTemplate,
+    inherited_edge: SourcePredecessorEdge<'a>,
 }
 
 struct ArmedInvocation<'a> {
@@ -2515,20 +2620,57 @@ struct SourceSelectedContinuation<'a> {
 }
 
 impl<'a> SourceSelectedContinuation<'a> {
-    fn as_active(&self) -> ActiveContinuationFrame<'_> {
+    fn as_active<'b>(
+        &'b self,
+        source_lineage: &'b [SourceSelectedContinuation<'a>],
+    ) -> ActiveContinuationFrame<'b>
+    where
+        'a: 'b,
+    {
         ActiveContinuationFrame {
             activation: self.activation,
             cursor: self.cursor,
             parent: self.parent,
             pending: &self.pending,
             selected_ancestry: &self.selected_ancestry,
+            source_lineage,
+            source_selected_cursor: Some(self.cursor),
         }
     }
+}
+
+fn source_active_cursor<'a: 'b, 'b>(
+    selected: &'b SourceSelectedContinuation<'a>,
+    lineage: &'b [SourceSelectedContinuation<'a>],
+    cursor: ContinuationCursorId,
+) -> Option<ActiveContinuationFrame<'b>> {
+    std::iter::once(selected)
+        .chain(lineage.iter().rev())
+        .find_map(|candidate| {
+            let mut active = candidate.as_active(lineage);
+            active.source_selected_cursor = Some(selected.cursor);
+            if active.cursor == cursor {
+                Some(active)
+            } else {
+                let mut parent = active.parent;
+                while let Some(frame) = parent {
+                    if frame.cursor == cursor {
+                        let mut frame = *frame;
+                        frame.source_lineage = lineage;
+                        frame.source_selected_cursor = Some(selected.cursor);
+                        return Some(frame);
+                    }
+                    parent = frame.parent;
+                }
+                None
+            }
+        })
 }
 
 struct SourceControl<'a> {
     continuation: SourceContinuation<'a>,
     selected: SourceSelectedContinuation<'a>,
+    selected_lineage: Vec<SourceSelectedContinuation<'a>>,
     terminal_outer: ContinuationCursorId,
 }
 
@@ -2542,6 +2684,11 @@ enum SourceMachineState<'a> {
         value: Lowered,
         control: SourceControl<'a>,
     },
+}
+
+enum SourceCallOutcome<'a> {
+    Continue(SourceMachineState<'a>),
+    Complete(Lowered),
 }
 
 #[derive(Clone, Copy)]
@@ -2567,6 +2714,11 @@ enum ScalarMergeKind {
     ExitCode,
     RecursiveBackedge,
 }
+
+/// Proof token for the legacy closed-expression merge sites. It can only be
+/// minted when source evaluation has no live continuation. Checked source joins
+/// use their explicit `SourceJoinTarget.required_kind` instead.
+struct TerminalProcessAnswerBoundary;
 
 struct DeferredConstructorCaseEnvironment<'a> {
     constructor: &'a str,
@@ -2916,6 +3068,10 @@ impl<'a> Lowering<'a> {
         activation: ContinuationActivationId,
         resume_cursor: ContinuationCursorId,
         splice_caller: Option<&ActiveContinuationFrame<'_>>,
+        source_control: Option<(
+            &SourceSelectedContinuation<'_>,
+            &[SourceSelectedContinuation<'_>],
+        )>,
     ) -> Result<Lowered, CraneliftBackendError> {
         let (residual, payload) = decompose_computational_recursor(recursive);
         let mut owned_layers = if let Some((_, invocation)) = payload {
@@ -2925,7 +3081,12 @@ impl<'a> Lowering<'a> {
                     "recursive payload splice has no active continuation",
                 )
             })?;
-            if find_continuation_cursor(splice_caller, invocation.resume_cursor).is_none() {
+            let source_cursor_is_live = source_control.is_some_and(|(selected, lineage)| {
+                source_active_cursor(selected, lineage, invocation.resume_cursor).is_some()
+            });
+            if !active_context_contains_cursor(splice_caller, invocation.resume_cursor)
+                && !source_cursor_is_live
+            {
                 return Err(unsupported(
                     "ComputationalRecursor",
                     "recursive payload resume cursor is not active",
@@ -2964,6 +3125,8 @@ impl<'a> Lowering<'a> {
             parent: Some(&active),
             pending: tail,
             selected_ancestry: active.selected_ancestry,
+            source_lineage: active.source_lineage,
+            source_selected_cursor: active.source_selected_cursor,
         });
         self.lower_computational_match_value_composed(builder, value, &[*head, successor])
     }
@@ -3445,6 +3608,11 @@ impl<'a> Lowering<'a> {
                         parent: splice_caller.and_then(|active| active.parent),
                         pending: &pending,
                         selected_ancestry: &selected_ancestry,
+                        source_lineage: splice_caller
+                            .map(|active| active.source_lineage)
+                            .unwrap_or(&[]),
+                        source_selected_cursor: splice_caller
+                            .and_then(|active| active.source_selected_cursor),
                     };
                     let deferred = DeferredConstructorCaseEnvironment {
                         constructor,
@@ -3873,6 +4041,11 @@ impl<'a> Lowering<'a> {
                     parent: splice_caller.and_then(|active| active.parent),
                     pending: &pending,
                     selected_ancestry: &selected_ancestry,
+                    source_lineage: splice_caller
+                        .map(|active| active.source_lineage)
+                        .unwrap_or(&[]),
+                    source_selected_cursor: splice_caller
+                        .and_then(|active| active.source_selected_cursor),
                 };
 
                 let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
@@ -3886,6 +4059,7 @@ impl<'a> Lowering<'a> {
                         activation,
                         cursor,
                         splice_caller,
+                        None,
                     )?);
                 }
                 let mut case_env = induction_hypotheses;
@@ -4323,6 +4497,7 @@ impl<'a> Lowering<'a> {
                         deferred.selected_active.activation,
                         deferred.selected_active.cursor,
                         deferred.splice_caller,
+                        None,
                     )?);
                 }
                 induction_hypotheses.extend(constructor_args);
@@ -4382,7 +4557,7 @@ impl<'a> Lowering<'a> {
                 },
                 true,
             )),
-            lowered if self.process_object => Ok((
+            lowered if self.terminal_process_answer_boundary().is_some() => Ok((
                 NativeScalarPairV1 {
                     tag: zero_tag,
                     payload: self.emit_process_exit_status(builder, lowered),
@@ -4455,7 +4630,7 @@ impl<'a> Lowering<'a> {
                 },
                 ScalarMergeKind::ExitCode,
             )),
-            lowered if self.process_object => Ok((
+            lowered if self.terminal_process_answer_boundary().is_some() => Ok((
                 NativeScalarPairV1 {
                     tag: zero_tag,
                     payload: self.emit_process_exit_status(builder, lowered),
@@ -4467,6 +4642,55 @@ impl<'a> Lowering<'a> {
                 "dynamic arms must produce scalar Int or Bool values",
             )),
         }
+    }
+
+    fn terminal_process_answer_boundary(&self) -> Option<TerminalProcessAnswerBoundary> {
+        (self.process_object && self.live_source_continuations == 0)
+            .then_some(TerminalProcessAnswerBoundary)
+    }
+
+    /// Scalarize only under the answer kind carried by an already-consumed
+    /// checked join site. In particular, process-object mode is not evidence
+    /// that an arbitrary constructor is terminal: only an `ExitCode` plan may
+    /// invoke the terminal process decoder.
+    fn merge_planned_scalar_branch(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        lowered: Lowered,
+        required_kind: ScalarMergeKind,
+        construct: &'static str,
+    ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        if required_kind == ScalarMergeKind::ExitCode {
+            let zero_tag = builder.ins().iconst(types::I64, 0);
+            return match lowered {
+                Lowered::RecursiveBackedge => Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: builder.ins().iconst(types::I64, 0),
+                    },
+                    ScalarMergeKind::RecursiveBackedge,
+                )),
+                Lowered::ProcessExitStatus { value } => Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: value,
+                    },
+                    ScalarMergeKind::ExitCode,
+                )),
+                lowered if self.process_object => Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: self.emit_process_exit_status(builder, lowered),
+                    },
+                    ScalarMergeKind::ExitCode,
+                )),
+                _ => Err(unsupported(
+                    construct,
+                    "checked ExitCode join is unavailable outside process-object lowering",
+                )),
+            };
+        }
+        self.merge_scalar_branch(builder, lowered, construct)
     }
 
     fn record_merge_kind(
@@ -4721,61 +4945,12 @@ impl<'a> Lowering<'a> {
         produces_recursive_deforestable_aggregate(declaration_body, symbol)
     }
 
-    fn source_continuation_outer(
-        continuation: &SourceContinuation<'_>,
-    ) -> Option<ContinuationCursorId> {
-        match continuation {
-            SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => None,
-            SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
-                expected,
-                ..
-            }) => Some(*expected),
-            SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)) => {
-                Some(edge.expected_outer)
-            }
-            SourceContinuation::LetBody { next, .. }
-            | SourceContinuation::ApplyRecursorLayers { next, .. }
-            | SourceContinuation::IfScrutinee { next, .. }
-            | SourceContinuation::ConstructArgument { next, .. }
-            | SourceContinuation::MatchScrutinee { next, .. }
-            | SourceContinuation::ComputationalMatchScrutinee { next, .. }
-            | SourceContinuation::ProjectRecord { next, .. }
-            | SourceContinuation::CallCallee { next, .. }
-            | SourceContinuation::CallArgument { next, .. } => {
-                Self::source_continuation_outer(next)
-            }
-        }
-    }
-
-    fn source_terminal_active<'b>(
-        continuation: &SourceContinuation<'b>,
-    ) -> Option<ActiveContinuationFrame<'b>> {
-        match continuation {
-            SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
-                active,
-                ..
-            }) => Some(**active),
-            SourceContinuation::Terminal(
-                SourceContinuationTerminal::ReturnValue | SourceContinuationTerminal::JumpToJoin(_),
-            ) => None,
-            SourceContinuation::LetBody { next, .. }
-            | SourceContinuation::ApplyRecursorLayers { next, .. }
-            | SourceContinuation::IfScrutinee { next, .. }
-            | SourceContinuation::ConstructArgument { next, .. }
-            | SourceContinuation::MatchScrutinee { next, .. }
-            | SourceContinuation::ComputationalMatchScrutinee { next, .. }
-            | SourceContinuation::ProjectRecord { next, .. }
-            | SourceContinuation::CallCallee { next, .. }
-            | SourceContinuation::CallArgument { next, .. } => Self::source_terminal_active(next),
-        }
-    }
-
     fn source_terminal_join<'b, 'c>(
         continuation: &'b SourceContinuation<'c>,
-    ) -> Option<&'b SourceJoinEdge<'c>> {
+    ) -> Option<&'b SourceJoinTarget<'c>> {
         match continuation {
             SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)) => {
-                Some(edge)
+                Some(&edge.target)
             }
             SourceContinuation::Terminal(
                 SourceContinuationTerminal::ReturnValue
@@ -4793,16 +4968,351 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn instantiate_source_prefix_to_join<'b>(
-        source: &SourceContinuation<'b>,
-        edge: SourceJoinEdge<'b>,
+    fn discard_source_prefix<'b>(continuation: SourceContinuation<'b>) -> SourceContinuation<'b> {
+        match continuation {
+            terminal @ SourceContinuation::Terminal(_) => terminal,
+            SourceContinuation::LetBody { next, .. }
+            | SourceContinuation::ApplyRecursorLayers { next, .. }
+            | SourceContinuation::IfScrutinee { next, .. }
+            | SourceContinuation::ConstructArgument { next, .. }
+            | SourceContinuation::MatchScrutinee { next, .. }
+            | SourceContinuation::ComputationalMatchScrutinee { next, .. }
+            | SourceContinuation::ProjectRecord { next, .. }
+            | SourceContinuation::CallCallee { next, .. }
+            | SourceContinuation::CallArgument { next, .. } => Self::discard_source_prefix(*next),
+        }
+    }
+
+    fn splice_recursor_after_caller_let<'b>(
+        continuation: SourceContinuation<'b>,
+        remaining: Vec<ComputationalRecursorLayer>,
+        resume_cursor: ContinuationCursorId,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        Ok(match continuation {
+            SourceContinuation::LetBody { body, env, next } => SourceContinuation::LetBody {
+                body,
+                env,
+                next: Box::new(SourceContinuation::ApplyRecursorLayers {
+                    remaining,
+                    resume_cursor,
+                    next,
+                }),
+            },
+            SourceContinuation::ApplyRecursorLayers {
+                remaining: outer,
+                resume_cursor: outer_cursor,
+                next,
+            } => SourceContinuation::ApplyRecursorLayers {
+                remaining: outer,
+                resume_cursor: outer_cursor,
+                next: Box::new(Self::splice_recursor_after_caller_let(
+                    *next,
+                    remaining,
+                    resume_cursor,
+                )?),
+            },
+            SourceContinuation::IfScrutinee {
+                then_expr,
+                else_expr,
+                env,
+                next,
+            } => SourceContinuation::IfScrutinee {
+                then_expr,
+                else_expr,
+                env,
+                next: Box::new(Self::splice_recursor_after_caller_let(
+                    *next,
+                    remaining,
+                    resume_cursor,
+                )?),
+            },
+            SourceContinuation::ConstructArgument {
+                constructor,
+                remaining: arguments,
+                lowered,
+                env,
+                next,
+            } => SourceContinuation::ConstructArgument {
+                constructor,
+                remaining: arguments,
+                lowered,
+                env,
+                next: Box::new(Self::splice_recursor_after_caller_let(
+                    *next,
+                    remaining,
+                    resume_cursor,
+                )?),
+            },
+            SourceContinuation::MatchScrutinee {
+                cases,
+                default,
+                env,
+                next,
+            } => SourceContinuation::MatchScrutinee {
+                cases,
+                default,
+                env,
+                next: Box::new(Self::splice_recursor_after_caller_let(
+                    *next,
+                    remaining,
+                    resume_cursor,
+                )?),
+            },
+            SourceContinuation::ComputationalMatchScrutinee {
+                cases,
+                default,
+                env,
+                provenance,
+                next,
+            } => SourceContinuation::ComputationalMatchScrutinee {
+                cases,
+                default,
+                env,
+                provenance,
+                next: Box::new(Self::splice_recursor_after_caller_let(
+                    *next,
+                    remaining,
+                    resume_cursor,
+                )?),
+            },
+            SourceContinuation::ProjectRecord { field, next } => {
+                SourceContinuation::ProjectRecord {
+                    field,
+                    next: Box::new(Self::splice_recursor_after_caller_let(
+                        *next,
+                        remaining,
+                        resume_cursor,
+                    )?),
+                }
+            }
+            SourceContinuation::CallCallee { args, env, next } => SourceContinuation::CallCallee {
+                args,
+                env,
+                next: Box::new(Self::splice_recursor_after_caller_let(
+                    *next,
+                    remaining,
+                    resume_cursor,
+                )?),
+            },
+            SourceContinuation::CallArgument {
+                callee,
+                remaining: arguments,
+                lowered,
+                env,
+                next,
+            } => SourceContinuation::CallArgument {
+                callee,
+                remaining: arguments,
+                lowered,
+                env,
+                next: Box::new(Self::splice_recursor_after_caller_let(
+                    *next,
+                    remaining,
+                    resume_cursor,
+                )?),
+            },
+            terminal @ SourceContinuation::Terminal(_) => SourceContinuation::ApplyRecursorLayers {
+                remaining,
+                resume_cursor,
+                next: Box::new(terminal),
+            },
+        })
+    }
+
+    fn install_recursor_invocation<'b>(
+        continuation: SourceContinuation<'b>,
+        mut owned_layers: Vec<ComputationalRecursorLayer>,
+        resume_cursor: ContinuationCursorId,
+    ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        if owned_layers.is_empty() {
+            return Err(unsupported(
+                "ComputationalRecursor",
+                "recursive invocation segment has no selected head layer",
+            ));
+        }
+        let head = owned_layers.remove(0);
+        let continuation =
+            Self::splice_recursor_after_caller_let(continuation, owned_layers, resume_cursor)?;
+        Ok(SourceContinuation::ApplyRecursorLayers {
+            remaining: vec![head],
+            resume_cursor,
+            next: Box::new(continuation),
+        })
+    }
+
+    fn split_source_prefix<'b>(
+        source: SourceContinuation<'b>,
+    ) -> Result<(SourcePrefixTemplate, SourcePrefixTerminal<'b>), CraneliftBackendError> {
         Ok(match source {
+            SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    "source prefix has no exact outer terminal to split",
+                ));
+            }
             SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected,
                 ..
-            }) => {
-                if *expected != edge.expected_outer {
+            }) => (
+                SourcePrefixTemplate::Terminal {
+                    expected_outer: expected,
+                },
+                SourcePrefixTerminal::ResumeOuter,
+            ),
+            SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)) => (
+                SourcePrefixTemplate::Terminal {
+                    expected_outer: edge.target.expected_outer,
+                },
+                SourcePrefixTerminal::Join(edge),
+            ),
+            SourceContinuation::LetBody { body, env, next } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::LetBody {
+                        body,
+                        env,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::ApplyRecursorLayers {
+                remaining,
+                resume_cursor,
+                next,
+            } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::ApplyRecursorLayers {
+                        remaining,
+                        resume_cursor,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::IfScrutinee {
+                then_expr,
+                else_expr,
+                env,
+                next,
+            } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::IfScrutinee {
+                        then_expr,
+                        else_expr,
+                        env,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::ConstructArgument {
+                constructor,
+                remaining,
+                lowered,
+                env,
+                next,
+            } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::ConstructArgument {
+                        constructor,
+                        remaining,
+                        lowered,
+                        env,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::MatchScrutinee {
+                cases,
+                default,
+                env,
+                next,
+            } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::MatchScrutinee {
+                        cases,
+                        default,
+                        env,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::ComputationalMatchScrutinee {
+                cases,
+                default,
+                env,
+                provenance,
+                next,
+            } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::ComputationalMatchScrutinee {
+                        cases,
+                        default,
+                        env,
+                        provenance,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::ProjectRecord { field, next } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::ProjectRecord {
+                        field,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::CallCallee { args, env, next } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::CallCallee {
+                        args,
+                        env,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::CallArgument {
+                callee,
+                remaining,
+                lowered,
+                env,
+                next,
+            } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::CallArgument {
+                        callee,
+                        remaining,
+                        lowered,
+                        env,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+        })
+    }
+
+    fn instantiate_source_prefix_template<'b>(
+        template: &SourcePrefixTemplate,
+        edge: SourcePredecessorEdge<'b>,
+    ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        Ok(match template {
+            SourcePrefixTemplate::Terminal { expected_outer } => {
+                if *expected_outer != edge.target.expected_outer {
                     return Err(unsupported(
                         "NativeJoinPlanV1",
                         "source prefix terminal does not match the planned outer cursor",
@@ -4810,37 +5320,21 @@ impl<'a> Lowering<'a> {
                 }
                 SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge))
             }
-            SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => {
-                return Err(unsupported(
-                    "NativeJoinPlanV1",
-                    "source prefix has no exact outer terminal to replace",
-                ));
-            }
-            SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(existing)) => {
-                if existing.join_id != edge.join_id
-                    || existing.target != edge.target
-                    || existing.expected_outer != edge.expected_outer
-                    || existing.required_kind != edge.required_kind
-                {
-                    return Err(unsupported(
-                        "NativeJoinPlanV1",
-                        "nested source edge does not target the exact planned join",
-                    ));
-                }
-                SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge))
-            }
-            SourceContinuation::LetBody { body, env, next } => SourceContinuation::LetBody {
+            SourcePrefixTemplate::LetBody { body, env, next } => SourceContinuation::LetBody {
                 body: body.clone(),
                 env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
-            SourceContinuation::ApplyRecursorLayers { remaining, next } => {
-                SourceContinuation::ApplyRecursorLayers {
-                    remaining: remaining.clone(),
-                    next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
-                }
-            }
-            SourceContinuation::IfScrutinee {
+            SourcePrefixTemplate::ApplyRecursorLayers {
+                remaining,
+                resume_cursor,
+                next,
+            } => SourceContinuation::ApplyRecursorLayers {
+                remaining: remaining.clone(),
+                resume_cursor: *resume_cursor,
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+            },
+            SourcePrefixTemplate::IfScrutinee {
                 then_expr,
                 else_expr,
                 env,
@@ -4849,9 +5343,9 @@ impl<'a> Lowering<'a> {
                 then_expr: then_expr.clone(),
                 else_expr: else_expr.clone(),
                 env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
-            SourceContinuation::ConstructArgument {
+            SourcePrefixTemplate::ConstructArgument {
                 constructor,
                 remaining,
                 lowered,
@@ -4862,9 +5356,9 @@ impl<'a> Lowering<'a> {
                 remaining: remaining.clone(),
                 lowered: lowered.clone(),
                 env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
-            SourceContinuation::MatchScrutinee {
+            SourcePrefixTemplate::MatchScrutinee {
                 cases,
                 default,
                 env,
@@ -4873,9 +5367,9 @@ impl<'a> Lowering<'a> {
                 cases: cases.clone(),
                 default: default.clone(),
                 env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
-            SourceContinuation::ComputationalMatchScrutinee {
+            SourcePrefixTemplate::ComputationalMatchScrutinee {
                 cases,
                 default,
                 env,
@@ -4886,20 +5380,22 @@ impl<'a> Lowering<'a> {
                 default: default.clone(),
                 env: env.clone(),
                 provenance: *provenance,
-                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
-            SourceContinuation::ProjectRecord { field, next } => {
+            SourcePrefixTemplate::ProjectRecord { field, next } => {
                 SourceContinuation::ProjectRecord {
                     field: field.clone(),
-                    next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
                 }
             }
-            SourceContinuation::CallCallee { args, env, next } => SourceContinuation::CallCallee {
-                args: args.clone(),
-                env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
-            },
-            SourceContinuation::CallArgument {
+            SourcePrefixTemplate::CallCallee { args, env, next } => {
+                SourceContinuation::CallCallee {
+                    args: args.clone(),
+                    env: env.clone(),
+                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                }
+            }
+            SourcePrefixTemplate::CallArgument {
                 callee,
                 remaining,
                 lowered,
@@ -4910,9 +5406,34 @@ impl<'a> Lowering<'a> {
                 remaining: remaining.clone(),
                 lowered: lowered.clone(),
                 env: env.clone(),
-                next: Box::new(Self::instantiate_source_prefix_to_join(next, edge)?),
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
         })
+    }
+
+    fn mint_source_predecessor<'b>(
+        &mut self,
+        target: SourceJoinTarget<'b>,
+    ) -> SourcePredecessorEdge<'b> {
+        let predecessor_identity = self.next_source_predecessor;
+        self.next_source_predecessor = self
+            .next_source_predecessor
+            .checked_add(1)
+            .expect("compiler-private source predecessor identity exhausted");
+        SourcePredecessorEdge {
+            target,
+            predecessor_identity,
+        }
+    }
+
+    fn seal_source_trap_branch(builder: &mut FunctionBuilder<'_>, lowered: &Lowered) -> bool {
+        if matches!(lowered, Lowered::Trap(_)) {
+            let failure = builder.ins().iconst(types::I64, -4);
+            builder.ins().return_(&[failure]);
+            true
+        } else {
+            false
+        }
     }
 
     fn planned_active_scalar_cut<'b>(
@@ -4979,12 +5500,32 @@ impl<'a> Lowering<'a> {
                 pending: active.pending.to_vec(),
                 selected_ancestry: active.selected_ancestry.to_vec(),
             },
+            selected_lineage: Vec::new(),
             terminal_outer: active.cursor,
         };
         self.lower_source_machine_with_continuation(builder, expr.clone(), env.to_vec(), control)
     }
 
     fn lower_source_machine_with_continuation<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        expr: RuntimeExpr,
+        env: Vec<Lowered>,
+        control: SourceControl<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        self.live_source_continuations = self
+            .live_source_continuations
+            .checked_add(1)
+            .expect("compiler-private live source-continuation depth exhausted");
+        let result = self.lower_source_machine_with_continuation_inner(builder, expr, env, control);
+        self.live_source_continuations = self
+            .live_source_continuations
+            .checked_sub(1)
+            .expect("source-continuation depth must balance");
+        result
+    }
+
+    fn lower_source_machine_with_continuation_inner<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         expr: RuntimeExpr,
@@ -5102,451 +5643,581 @@ impl<'a> Lowering<'a> {
                         control,
                     },
                 },
-                SourceMachineState::Value { value, mut control } => match control.continuation {
-                    SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => {
-                        return Ok(value);
+                SourceMachineState::Value { value, mut control } => {
+                    if matches!(value, Lowered::Trap(_)) {
+                        control.continuation = Self::discard_source_prefix(control.continuation);
                     }
-                    SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
-                        expected,
-                        active,
-                    }) => {
-                        if active.cursor != expected {
-                            return Err(unsupported(
-                                "ComputationalRecursor",
-                                "source continuation terminal cursor mismatch",
-                            ));
+                    match control.continuation {
+                        SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => {
+                            return Ok(value);
                         }
-                        return self.resume_active_continuation(builder, value, *active);
-                    }
-                    SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)) => {
-                        let value = if edge.prefix.is_empty() {
-                            value
-                        } else {
-                            let mut prefix = edge.prefix;
-                            prefix.push(EliminatorFrame::InvocationReturn);
-                            self.lower_computational_match_value_composed(builder, value, &prefix)?
-                        };
-                        let (value, actual_kind) =
-                            self.merge_scalar_branch(builder, value, "NativeJoinPlanV1")?;
-                        if actual_kind != ScalarMergeKind::RecursiveBackedge
-                            && actual_kind != edge.required_kind
-                        {
-                            return Err(unsupported(
+                        SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
+                            expected,
+                            active,
+                        }) => {
+                            if active.cursor != expected {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "source continuation terminal cursor mismatch",
+                                ));
+                            }
+                            if matches!(value, Lowered::Trap(_)) {
+                                return Ok(value);
+                            }
+                            return self.resume_active_continuation(builder, value, *active);
+                        }
+                        SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(
+                            edge,
+                        )) => {
+                            if matches!(value, Lowered::Trap(_)) {
+                                let failure = builder.ins().iconst(types::I64, -4);
+                                builder.ins().return_(&[failure]);
+                                return Ok(Lowered::RecursiveBackedge);
+                            }
+                            let value = if edge.target.terminal_active_prefix.is_empty() {
+                                value
+                            } else {
+                                let mut prefix = edge.target.terminal_active_prefix;
+                                prefix.push(EliminatorFrame::InvocationReturn);
+                                self.lower_computational_match_value_composed(
+                                    builder, value, &prefix,
+                                )?
+                            };
+                            let (value, actual_kind) = self.merge_planned_scalar_branch(
+                                builder,
+                                value,
+                                edge.target.required_kind,
+                                "NativeJoinPlanV1",
+                            )?;
+                            if actual_kind != ScalarMergeKind::RecursiveBackedge
+                                && actual_kind != edge.target.required_kind
+                            {
+                                return Err(unsupported(
                                 "NativeJoinPlanV1",
                                 format!(
                                     "predecessor {} for join {} produced {actual_kind:?}, planned {:?}",
-                                    edge.predecessor_id, edge.join_id, edge.required_kind
+                                    edge.predecessor_identity,
+                                    edge.target.join_id,
+                                    edge.target.required_kind
                                 ),
                             ));
+                            }
+                            builder
+                                .ins()
+                                .jump(edge.target.block, &[value.tag.into(), value.payload.into()]);
+                            return Ok(Lowered::RecursiveBackedge);
                         }
-                        builder
-                            .ins()
-                            .jump(edge.target, &[value.tag.into(), value.payload.into()]);
-                        return Ok(Lowered::RecursiveBackedge);
-                    }
-                    SourceContinuation::LetBody { body, env, next } => {
-                        control.continuation = *next;
-                        if matches!(value, Lowered::RecursiveBackedge) {
-                            SourceMachineState::Value { value, control }
-                        } else if matches!(value, Lowered::Trap(_)) {
-                            SourceMachineState::Value { value, control }
-                        } else {
-                            let mut body_env = vec![value];
-                            body_env.extend(env);
-                            SourceMachineState::Eval {
-                                expr: body,
-                                env: body_env,
-                                control,
+                        SourceContinuation::LetBody { body, env, next } => {
+                            control.continuation = *next;
+                            if matches!(value, Lowered::RecursiveBackedge) {
+                                SourceMachineState::Value { value, control }
+                            } else if matches!(value, Lowered::Trap(_)) {
+                                SourceMachineState::Value { value, control }
+                            } else {
+                                let mut body_env = vec![value];
+                                body_env.extend(env);
+                                SourceMachineState::Eval {
+                                    expr: body,
+                                    env: body_env,
+                                    control,
+                                }
                             }
                         }
-                    }
-                    SourceContinuation::ApplyRecursorLayers { remaining, next } => {
-                        let mut frames = recursor_eliminator_frames(&remaining);
-                        frames.push(EliminatorFrame::Active(control.selected.as_active()));
-                        frames.push(EliminatorFrame::InvocationReturn);
-                        control.continuation = *next;
-                        SourceMachineState::Value {
-                            value: self.lower_computational_match_value_composed(
-                                builder, value, &frames,
-                            )?,
-                            control,
-                        }
-                    }
-                    SourceContinuation::ConstructArgument {
-                        constructor,
-                        mut remaining,
-                        mut lowered,
-                        env,
-                        next,
-                    } => {
-                        lowered.push(value);
-                        control.continuation = *next;
-                        if remaining.is_empty() {
-                            SourceMachineState::Value {
-                                value: self.finish_source_constructor(
-                                    builder,
-                                    constructor,
-                                    lowered,
-                                )?,
-                                control,
-                            }
-                        } else {
-                            let first = remaining.remove(0);
-                            control.continuation = SourceContinuation::ConstructArgument {
-                                constructor,
-                                remaining,
-                                lowered,
-                                env: env.clone(),
-                                next: Box::new(control.continuation),
-                            };
-                            SourceMachineState::Eval {
-                                expr: first,
-                                env,
-                                control,
+                        SourceContinuation::ApplyRecursorLayers {
+                            mut remaining,
+                            resume_cursor,
+                            next,
+                        } => {
+                            source_active_cursor(
+                                &control.selected,
+                                &control.selected_lineage,
+                                resume_cursor,
+                            )
+                            .ok_or_else(|| {
+                                unsupported(
+                                    "ComputationalRecursor",
+                                    "source recursor resume cursor is no longer active",
+                                )
+                            })?;
+                            if !remaining.is_empty() {
+                                let layer = remaining.remove(0);
+                                control.continuation =
+                                    SourceContinuation::ComputationalMatchScrutinee {
+                                        cases: layer.cases,
+                                        default: layer.default,
+                                        env: layer.outer_env,
+                                        provenance: layer.provenance,
+                                        next: Box::new(SourceContinuation::ApplyRecursorLayers {
+                                            remaining,
+                                            resume_cursor,
+                                            next,
+                                        }),
+                                    };
+                                SourceMachineState::Value { value, control }
+                            } else {
+                                control.continuation = *next;
+                                SourceMachineState::Value { value, control }
                             }
                         }
-                    }
-                    SourceContinuation::MatchScrutinee {
-                        cases,
-                        default,
-                        env,
-                        next,
-                    } => {
-                        control.continuation = *next;
-                        match value {
-                            Lowered::BoundedNat(nat) => SourceMachineState::Value {
-                                value: self.lower_bounded_nat_match(
-                                    builder, nat, false, &cases, &default, &env,
-                                )?,
-                                control,
-                            },
-                            Lowered::StructuralNat(nat) => SourceMachineState::Value {
-                                value: self.lower_bounded_nat_match(
-                                    builder,
-                                    BoundedNatV1::derived_from_validated(nat.value),
-                                    true,
-                                    &cases,
-                                    &default,
-                                    &env,
-                                )?,
-                                control,
-                            },
-                            Lowered::Bool { value, known } => {
-                                let true_case = cases.iter().find(|case| {
-                                    case.binders == 0 && case.constructor.ends_with("::Bool::True")
-                                });
-                                let false_case = cases.iter().find(|case| {
-                                    case.binders == 0 && case.constructor.ends_with("::Bool::False")
-                                });
-                                let (Some(true_case), Some(false_case)) = (true_case, false_case)
-                                else {
-                                    return Err(unsupported(
-                                        "Match",
-                                        "Bool match requires zero-binder True and False cases",
-                                    ));
-                                };
-                                if let Some(selected) = known {
-                                    SourceMachineState::Eval {
-                                        expr: if selected {
-                                            true_case.body.clone()
-                                        } else {
-                                            false_case.body.clone()
-                                        },
-                                        env,
-                                        control,
-                                    }
-                                } else {
-                                    return self.lower_source_dynamic_bool_match(
+                        SourceContinuation::ConstructArgument {
+                            constructor,
+                            mut remaining,
+                            mut lowered,
+                            env,
+                            next,
+                        } => {
+                            lowered.push(value);
+                            control.continuation = *next;
+                            if remaining.is_empty() {
+                                SourceMachineState::Value {
+                                    value: self.finish_source_constructor(
                                         builder,
-                                        value,
-                                        &true_case.body,
-                                        &false_case.body,
+                                        constructor,
+                                        lowered,
+                                    )?,
+                                    control,
+                                }
+                            } else {
+                                let first = remaining.remove(0);
+                                control.continuation = SourceContinuation::ConstructArgument {
+                                    constructor,
+                                    remaining,
+                                    lowered,
+                                    env: env.clone(),
+                                    next: Box::new(control.continuation),
+                                };
+                                SourceMachineState::Eval {
+                                    expr: first,
+                                    env,
+                                    control,
+                                }
+                            }
+                        }
+                        SourceContinuation::MatchScrutinee {
+                            cases,
+                            default,
+                            env,
+                            next,
+                        } => {
+                            control.continuation = *next;
+                            match value {
+                                Lowered::BoundedNat(nat) => {
+                                    return self.lower_source_bounded_nat_match(
+                                        builder, nat, false, &cases, &default, &env, control,
+                                    );
+                                }
+                                Lowered::StructuralNat(nat) => {
+                                    return self.lower_source_bounded_nat_match(
+                                        builder,
+                                        BoundedNatV1::derived_from_validated(nat.value),
+                                        true,
+                                        &cases,
+                                        &default,
                                         &env,
                                         control,
                                     );
                                 }
-                            }
-                            Lowered::HostResult {
-                                success,
-                                error,
-                                ok,
-                                err_constructor,
-                                ok_constructor,
-                            } => {
-                                return self.lower_source_dynamic_host_result_match(
-                                    builder,
+                                Lowered::Bool { value, known } => {
+                                    let true_case = cases.iter().find(|case| {
+                                        case.binders == 0
+                                            && case.constructor.ends_with("::Bool::True")
+                                    });
+                                    let false_case = cases.iter().find(|case| {
+                                        case.binders == 0
+                                            && case.constructor.ends_with("::Bool::False")
+                                    });
+                                    let (Some(true_case), Some(false_case)) =
+                                        (true_case, false_case)
+                                    else {
+                                        return Err(unsupported(
+                                            "Match",
+                                            "Bool match requires zero-binder True and False cases",
+                                        ));
+                                    };
+                                    if let Some(selected) = known {
+                                        SourceMachineState::Eval {
+                                            expr: if selected {
+                                                true_case.body.clone()
+                                            } else {
+                                                false_case.body.clone()
+                                            },
+                                            env,
+                                            control,
+                                        }
+                                    } else {
+                                        return self.lower_source_dynamic_bool_match(
+                                            builder,
+                                            value,
+                                            &true_case.body,
+                                            &false_case.body,
+                                            &env,
+                                            control,
+                                        );
+                                    }
+                                }
+                                Lowered::HostResult {
                                     success,
-                                    *error,
-                                    *ok,
-                                    &err_constructor,
-                                    &ok_constructor,
-                                    &cases,
-                                    default,
-                                    &env,
-                                    control,
-                                );
-                            }
-                            Lowered::DynamicConstructor(dynamic) => {
-                                return self.lower_source_dynamic_constructor_match(
-                                    builder, dynamic, &cases, &default, &env, control,
-                                );
-                            }
-                            Lowered::Constructor { constructor, args } => {
-                                let Some(case) =
-                                    cases.iter().find(|case| case.constructor == constructor)
-                                else {
-                                    return Ok(Lowered::Trap(default));
-                                };
-                                if case.binders != args.len() {
-                                    return Err(unsupported(
-                                        "Match",
-                                        format!(
+                                    error,
+                                    ok,
+                                    err_constructor,
+                                    ok_constructor,
+                                } => {
+                                    return self.lower_source_dynamic_host_result_match(
+                                        builder,
+                                        success,
+                                        *error,
+                                        *ok,
+                                        &err_constructor,
+                                        &ok_constructor,
+                                        &cases,
+                                        default,
+                                        &env,
+                                        control,
+                                    );
+                                }
+                                Lowered::DynamicConstructor(dynamic) => {
+                                    return self.lower_source_dynamic_constructor_match(
+                                        builder, dynamic, &cases, &default, &env, control,
+                                    );
+                                }
+                                Lowered::Constructor { constructor, args } => {
+                                    let Some(case) =
+                                        cases.iter().find(|case| case.constructor == constructor)
+                                    else {
+                                        return Ok(Lowered::Trap(default));
+                                    };
+                                    if case.binders != args.len() {
+                                        return Err(unsupported(
+                                            "Match",
+                                            format!(
                                     "case {} expects {} binders but constructor has {} args",
                                     case.constructor,
                                     case.binders,
                                     args.len()
                                 ),
+                                        ));
+                                    }
+                                    let mut case_env = args;
+                                    case_env.extend(env);
+                                    SourceMachineState::Eval {
+                                        expr: case.body.clone(),
+                                        env: case_env,
+                                        control,
+                                    }
+                                }
+                                _ => {
+                                    return Err(unsupported(
+                                        "Match",
+                                        "scrutinee is not a constructor value",
                                     ));
                                 }
-                                let mut case_env = args;
-                                case_env.extend(env);
-                                SourceMachineState::Eval {
-                                    expr: case.body.clone(),
-                                    env: case_env,
-                                    control,
-                                }
                             }
-                            _ => {
+                        }
+                        SourceContinuation::ComputationalMatchScrutinee {
+                            cases,
+                            default,
+                            env,
+                            provenance,
+                            next,
+                        } => {
+                            let Lowered::Constructor { constructor, args } = value else {
                                 return Err(unsupported(
-                                    "Match",
-                                    "scrutinee is not a constructor value",
+                                    "ComputationalMatch",
+                                    "source scrutinee is not a constructor value",
                                 ));
-                            }
-                        }
-                    }
-                    SourceContinuation::ComputationalMatchScrutinee {
-                        cases,
-                        default,
-                        env,
-                        provenance,
-                        next,
-                    } => {
-                        let Lowered::Constructor { constructor, args } = value else {
-                            return Err(unsupported(
-                                "ComputationalMatch",
-                                "source scrutinee is not a constructor value",
-                            ));
-                        };
-                        let retained = Lowered::Constructor {
-                            constructor: constructor.clone(),
-                            args: args.clone(),
-                        };
-                        let Some(case) = cases.iter().find(|case| case.constructor == constructor)
-                        else {
-                            return Ok(Lowered::Trap(default));
-                        };
-                        if case.argument_binders != args.len() {
-                            return Err(unsupported(
-                                "ComputationalMatch",
-                                format!(
-                                    "case {} expects {} constructor arguments but value has {}",
-                                    case.constructor,
-                                    case.argument_binders,
-                                    args.len()
-                                ),
-                            ));
-                        }
-                        let mut seen = BTreeSet::new();
-                        for position in case.recursive_positions.iter().copied() {
-                            if !seen.insert(position) || position >= args.len() {
+                            };
+                            let retained = Lowered::Constructor {
+                                constructor: constructor.clone(),
+                                args: args.clone(),
+                            };
+                            let Some(case) =
+                                cases.iter().find(|case| case.constructor == constructor)
+                            else {
+                                return Ok(Lowered::Trap(default));
+                            };
+                            if case.argument_binders != args.len() {
                                 return Err(unsupported(
                                     "ComputationalMatch",
                                     format!(
-                                        "case {} has malformed recursive position {position}",
-                                        case.constructor
+                                        "case {} expects {} constructor arguments but value has {}",
+                                        case.constructor,
+                                        case.argument_binders,
+                                        args.len()
                                     ),
                                 ));
                             }
-                        }
-                        let frame = ComputationalEliminatorFrame {
-                            cases: &cases,
-                            default: &default,
-                            env: &env,
-                            retained_scrutinee_index: None,
-                            deferred_constructor_case: None,
-                            provenance,
-                        };
-                        let activation = self.mint_continuation_activation();
-                        let cursor = self.mint_continuation_cursor();
-                        let mut ancestry = control.selected.selected_ancestry.clone();
-                        ancestry.push(provenance);
-                        let mut induction_hypotheses =
-                            Vec::with_capacity(case.recursive_positions.len());
-                        let parent = control.selected.parent;
-                        {
-                            let qold = control.selected.as_active();
-                            for position in case.recursive_positions.iter().rev().copied() {
-                                induction_hypotheses.push(self.make_computational_recursor(
-                                    args[position].clone(),
-                                    cases.clone(),
-                                    default.clone(),
-                                    env.clone(),
-                                    provenance,
-                                    activation,
-                                    cursor,
-                                    Some(&qold),
-                                )?);
+                            let mut seen = BTreeSet::new();
+                            for position in case.recursive_positions.iter().copied() {
+                                if !seen.insert(position) || position >= args.len() {
+                                    return Err(unsupported(
+                                        "ComputationalMatch",
+                                        format!(
+                                            "case {} has malformed recursive position {position}",
+                                            case.constructor
+                                        ),
+                                    ));
+                                }
                             }
-                        }
-                        let frame_env = match self.materialize_eliminator_frame_env(
-                            builder,
-                            EliminatorFrame::Computational(frame),
-                            &retained,
-                        )? {
-                            Ok(frame_env) => frame_env,
-                            Err(trap) => return Ok(Lowered::Trap(trap)),
-                        };
-                        let mut case_env = induction_hypotheses;
-                        case_env.extend(args);
-                        case_env.extend(frame_env);
-                        let pending = std::mem::take(&mut control.selected.pending);
-                        control.selected = SourceSelectedContinuation {
-                            activation,
-                            cursor,
-                            parent,
-                            pending,
-                            selected_ancestry: ancestry,
-                        };
-                        control.continuation = *next;
-                        SourceMachineState::Eval {
-                            expr: case.body.clone(),
-                            env: case_env,
-                            control,
-                        }
-                    }
-                    SourceContinuation::CallCallee {
-                        mut args,
-                        env,
-                        next,
-                    } => {
-                        control.continuation = *next;
-                        if args.is_empty() {
-                            self.source_call_state(builder, value, Vec::new(), env, control)?
-                        } else {
-                            let first = args.remove(0);
-                            control.continuation = SourceContinuation::CallArgument {
-                                callee: value,
-                                remaining: args,
-                                lowered: Vec::new(),
-                                env: env.clone(),
-                                next: Box::new(control.continuation),
+                            let frame = ComputationalEliminatorFrame {
+                                cases: &cases,
+                                default: &default,
+                                env: &env,
+                                retained_scrutinee_index: None,
+                                deferred_constructor_case: None,
+                                provenance,
                             };
+                            let activation = self.mint_continuation_activation();
+                            let cursor = self.mint_continuation_cursor();
+                            let mut ancestry = control.selected.selected_ancestry.clone();
+                            ancestry.push(provenance);
+                            let mut induction_hypotheses =
+                                Vec::with_capacity(case.recursive_positions.len());
+                            let parent = control.selected.parent;
+                            {
+                                let qold = control.selected.as_active(&control.selected_lineage);
+                                for position in case.recursive_positions.iter().rev().copied() {
+                                    induction_hypotheses.push(self.make_computational_recursor(
+                                        args[position].clone(),
+                                        cases.clone(),
+                                        default.clone(),
+                                        env.clone(),
+                                        provenance,
+                                        activation,
+                                        cursor,
+                                        Some(&qold),
+                                        Some((&control.selected, &control.selected_lineage)),
+                                    )?);
+                                }
+                            }
+                            let frame_env = match self.materialize_eliminator_frame_env(
+                                builder,
+                                EliminatorFrame::Computational(frame),
+                                &retained,
+                            )? {
+                                Ok(frame_env) => frame_env,
+                                Err(trap) => return Ok(Lowered::Trap(trap)),
+                            };
+                            let mut case_env = induction_hypotheses;
+                            case_env.extend(args);
+                            case_env.extend(frame_env);
+                            let previous_selected = control.selected.clone();
+                            let pending = std::mem::take(&mut control.selected.pending);
+                            control.selected = SourceSelectedContinuation {
+                                activation,
+                                cursor,
+                                parent,
+                                pending,
+                                selected_ancestry: ancestry,
+                            };
+                            control.selected_lineage.push(previous_selected);
+                            control.continuation = *next;
                             SourceMachineState::Eval {
-                                expr: first,
-                                env,
+                                expr: case.body.clone(),
+                                env: case_env,
                                 control,
                             }
                         }
-                    }
-                    SourceContinuation::CallArgument {
-                        callee,
-                        mut remaining,
-                        mut lowered,
-                        env,
-                        next,
-                    } => {
-                        lowered.push(value);
-                        control.continuation = *next;
-                        if remaining.is_empty() {
-                            self.source_call_state(builder, callee, lowered, env, control)?
-                        } else {
-                            let first = remaining.remove(0);
-                            control.continuation = SourceContinuation::CallArgument {
-                                callee,
-                                remaining,
-                                lowered,
-                                env: env.clone(),
-                                next: Box::new(control.continuation),
-                            };
-                            SourceMachineState::Eval {
-                                expr: first,
-                                env,
-                                control,
+                        SourceContinuation::CallCallee {
+                            mut args,
+                            env,
+                            next,
+                        } => {
+                            control.continuation = *next;
+                            if args.is_empty() {
+                                match self.source_call_state(
+                                    builder,
+                                    value,
+                                    Vec::new(),
+                                    env,
+                                    control,
+                                )? {
+                                    SourceCallOutcome::Continue(state) => state,
+                                    SourceCallOutcome::Complete(value) => return Ok(value),
+                                }
+                            } else {
+                                let first = args.remove(0);
+                                control.continuation = SourceContinuation::CallArgument {
+                                    callee: value,
+                                    remaining: args,
+                                    lowered: Vec::new(),
+                                    env: env.clone(),
+                                    next: Box::new(control.continuation),
+                                };
+                                SourceMachineState::Eval {
+                                    expr: first,
+                                    env,
+                                    control,
+                                }
                             }
                         }
+                        SourceContinuation::CallArgument {
+                            callee,
+                            mut remaining,
+                            mut lowered,
+                            env,
+                            next,
+                        } => {
+                            lowered.push(value);
+                            control.continuation = *next;
+                            if remaining.is_empty() {
+                                match self
+                                    .source_call_state(builder, callee, lowered, env, control)?
+                                {
+                                    SourceCallOutcome::Continue(state) => state,
+                                    SourceCallOutcome::Complete(value) => return Ok(value),
+                                }
+                            } else {
+                                let first = remaining.remove(0);
+                                control.continuation = SourceContinuation::CallArgument {
+                                    callee,
+                                    remaining,
+                                    lowered,
+                                    env: env.clone(),
+                                    next: Box::new(control.continuation),
+                                };
+                                SourceMachineState::Eval {
+                                    expr: first,
+                                    env,
+                                    control,
+                                }
+                            }
+                        }
+                        SourceContinuation::IfScrutinee { .. }
+                        | SourceContinuation::ProjectRecord { .. } => {
+                            return Err(unsupported(
+                                "ComputationalRecursor",
+                                "source continuation frame is not implemented",
+                            ));
+                        }
                     }
-                    SourceContinuation::IfScrutinee { .. }
-                    | SourceContinuation::ProjectRecord { .. } => {
-                        return Err(unsupported(
-                            "ComputationalRecursor",
-                            "source continuation frame is not implemented",
-                        ));
-                    }
-                },
+                }
             };
         }
     }
 
-    fn lower_source_dynamic_bool_match<'b>(
+    #[allow(clippy::too_many_arguments)]
+    fn lower_source_bounded_nat_match<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        condition: cranelift_codegen::ir::Value,
-        true_body: &RuntimeExpr,
-        false_body: &RuntimeExpr,
+        nat: BoundedNatV1,
+        structural: bool,
+        cases: &[crate::RuntimeMatchCase],
+        _default: &RuntimeTrap,
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let active = suffix_control.selected.as_active();
-        let (prefix, suffix_pending, required_kind, site_id) =
-            self.planned_active_scalar_cut(active)?;
-        let suffix_pending = suffix_pending.to_vec();
-        let join_id = self.next_source_join;
-        self.next_source_join = self
-            .next_source_join
-            .checked_add(1)
-            .expect("compiler-private source join identity exhausted");
-        let merge = builder.create_block();
-        builder.append_block_param(merge, types::I64);
-        builder.append_block_param(merge, types::I64);
-        let true_block = builder.create_block();
-        let false_block = builder.create_block();
-        builder
-            .ins()
-            .brif(condition, true_block, &[], false_block, &[]);
-        for (predecessor_id, block, body) in
-            [(0, true_block, true_body), (1, false_block, false_body)]
-        {
+        let zero = cases
+            .iter()
+            .find(|case| case.constructor == self.process_symbols.nat_zero && case.binders == 0);
+        let suc = cases
+            .iter()
+            .find(|case| case.constructor == self.process_symbols.nat_suc && case.binders == 1);
+        let (Some(zero), Some(suc)) = (zero, suc) else {
+            return Err(unsupported(
+                "BoundedNat",
+                "structural Nat source match requires exact Zero and Suc predecessor arms",
+            ));
+        };
+
+        let (source_prefix_template, terminal) =
+            Self::split_source_prefix(suffix_control.continuation)?;
+        let mut local_completion = None;
+        let (source_prefix_template, target) = match terminal {
+            SourcePrefixTerminal::Join(inherited_edge) => {
+                let fanout = SourceBranchFanout {
+                    source_prefix_template,
+                    inherited_edge,
+                };
+                (fanout.source_prefix_template, fanout.inherited_edge.target)
+            }
+            SourcePrefixTerminal::ResumeOuter => {
+                let active = suffix_control
+                    .selected
+                    .as_active(&suffix_control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder.append_block_param(merge, types::I64);
+                local_completion = Some((merge, suffix_pending.to_vec(), required_kind, site_id));
+                (
+                    source_prefix_template,
+                    SourceJoinTarget {
+                        join_id,
+                        block: merge,
+                        expected_outer: suffix_control.terminal_outer,
+                        required_kind,
+                        terminal_active_prefix: prefix,
+                    },
+                )
+            }
+        };
+
+        let zero_block = builder.create_block();
+        let suc_block = builder.create_block();
+        let predecessor = nat.predecessor(builder);
+        let is_zero =
+            builder
+                .ins()
+                .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, nat.value, 0);
+        builder.ins().brif(is_zero, zero_block, &[], suc_block, &[]);
+
+        for (arm_name, block, case, predecessor) in [
+            ("Zero", zero_block, zero, None),
+            ("Suc", suc_block, suc, Some(predecessor)),
+        ] {
             builder.switch_to_block(block);
-            let edge = SourceJoinEdge {
-                join_id,
-                predecessor_id,
-                target: merge,
-                expected_outer: suffix_control.terminal_outer,
-                required_kind,
-                prefix: prefix.clone(),
-            };
+            let mut arm_env = predecessor
+                .map(|predecessor| {
+                    vec![if structural {
+                        Lowered::StructuralNat(StructuralNatV1 {
+                            value: predecessor.value,
+                        })
+                    } else {
+                        Lowered::BoundedNat(predecessor)
+                    }]
+                })
+                .unwrap_or_default();
+            arm_env.extend_from_slice(env);
+            let edge = self.mint_source_predecessor(target.clone());
             let continuation =
-                Self::instantiate_source_prefix_to_join(&suffix_control.continuation, edge)?;
+                Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let branch_control = SourceControl {
                 continuation,
                 selected: suffix_control.selected.clone(),
+                selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
             let lowered = self.lower_source_machine_with_continuation(
                 builder,
-                body.clone(),
-                env.to_vec(),
+                case.body.clone(),
+                arm_env,
                 branch_control,
             )?;
-            if !matches!(lowered, Lowered::RecursiveBackedge) {
+            if Self::seal_source_trap_branch(builder, &lowered) {
+                // A trap terminates this mutually exclusive predecessor.
+            } else if !matches!(lowered, Lowered::RecursiveBackedge) {
+                let detail = match &lowered {
+                    Lowered::Trap(trap) => format!("Trap({}: {:?})", trap.message, trap.code),
+                    other => lowered_value_kind(other).to_string(),
+                };
                 return Err(unsupported(
                     "NativeJoinPlanV1",
                     format!(
-                        "Bool predecessor {predecessor_id} for checked site {site_id} did not seal its affine join edge"
+                        "bounded-Nat {arm_name} arm produced {detail} instead of sealing its distinct affine predecessor edge"
                     ),
                 ));
             }
         }
+
+        let Some((merge, suffix_pending, required_kind, _site_id)) = local_completion else {
+            return Ok(Lowered::RecursiveBackedge);
+        };
         builder.switch_to_block(merge);
         let merged = self.lowered_from_scalar_pair(
             required_kind,
@@ -5561,6 +6232,104 @@ impl<'a> Lowering<'a> {
             parent: suffix_control.selected.parent,
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
+            source_lineage: &suffix_control.selected_lineage,
+            source_selected_cursor: Some(suffix_control.selected.cursor),
+        };
+        self.resume_active_continuation(builder, merged, suffix_active)
+    }
+
+    fn lower_source_dynamic_bool_match<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        condition: cranelift_codegen::ir::Value,
+        true_body: &RuntimeExpr,
+        false_body: &RuntimeExpr,
+        env: &[Lowered],
+        suffix_control: SourceControl<'b>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let (source_prefix_template, terminal) =
+            Self::split_source_prefix(suffix_control.continuation)?;
+        let mut local_completion = None;
+        let target = match terminal {
+            SourcePrefixTerminal::Join(inherited_edge) => inherited_edge.target,
+            SourcePrefixTerminal::ResumeOuter => {
+                let active = suffix_control
+                    .selected
+                    .as_active(&suffix_control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder.append_block_param(merge, types::I64);
+                local_completion = Some((merge, suffix_pending.to_vec(), required_kind, site_id));
+                SourceJoinTarget {
+                    join_id,
+                    block: merge,
+                    expected_outer: suffix_control.terminal_outer,
+                    required_kind,
+                    terminal_active_prefix: prefix,
+                }
+            }
+        };
+        let true_block = builder.create_block();
+        let false_block = builder.create_block();
+        builder
+            .ins()
+            .brif(condition, true_block, &[], false_block, &[]);
+        for (predecessor_id, block, body) in
+            [(0, true_block, true_body), (1, false_block, false_body)]
+        {
+            builder.switch_to_block(block);
+            let edge = self.mint_source_predecessor(target.clone());
+            let continuation =
+                Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
+            let branch_control = SourceControl {
+                continuation,
+                selected: suffix_control.selected.clone(),
+                selected_lineage: suffix_control.selected_lineage.clone(),
+                terminal_outer: suffix_control.terminal_outer,
+            };
+            let lowered = self.lower_source_machine_with_continuation(
+                builder,
+                body.clone(),
+                env.to_vec(),
+                branch_control,
+            )?;
+            if Self::seal_source_trap_branch(builder, &lowered) {
+                // A trap terminates this mutually exclusive predecessor.
+            } else if !matches!(lowered, Lowered::RecursiveBackedge) {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    format!(
+                        "Bool predecessor {predecessor_id} did not seal its distinct affine join edge"
+                    ),
+                ));
+            }
+        }
+        let Some((merge, suffix_pending, required_kind, _site_id)) = local_completion else {
+            return Ok(Lowered::RecursiveBackedge);
+        };
+        builder.switch_to_block(merge);
+        let merged = self.lowered_from_scalar_pair(
+            required_kind,
+            NativeScalarPairV1 {
+                tag: builder.block_params(merge)[0],
+                payload: builder.block_params(merge)[1],
+            },
+        );
+        let suffix_active = ActiveContinuationFrame {
+            activation: suffix_control.selected.activation,
+            cursor: suffix_control.selected.cursor,
+            parent: suffix_control.selected.parent,
+            pending: &suffix_pending,
+            selected_ancestry: &suffix_control.selected.selected_ancestry,
+            source_lineage: &suffix_control.selected_lineage,
+            source_selected_cursor: Some(suffix_control.selected.cursor),
         };
         self.resume_active_continuation(builder, merged, suffix_active)
     }
@@ -5579,19 +6348,35 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let active = suffix_control.selected.as_active();
-        let (prefix, suffix_pending, required_kind, site_id) =
-            self.planned_active_scalar_cut(active)?;
-        let suffix_pending = suffix_pending.to_vec();
-        let join_id = self.next_source_join;
-        self.next_source_join = self
-            .next_source_join
-            .checked_add(1)
-            .expect("compiler-private source join identity exhausted");
-
-        let merge = builder.create_block();
-        builder.append_block_param(merge, types::I64);
-        builder.append_block_param(merge, types::I64);
+        let (source_prefix_template, terminal) =
+            Self::split_source_prefix(suffix_control.continuation)?;
+        let mut local_completion = None;
+        let target = match terminal {
+            SourcePrefixTerminal::Join(inherited_edge) => inherited_edge.target,
+            SourcePrefixTerminal::ResumeOuter => {
+                let active = suffix_control
+                    .selected
+                    .as_active(&suffix_control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder.append_block_param(merge, types::I64);
+                local_completion = Some((merge, suffix_pending.to_vec(), required_kind, site_id));
+                SourceJoinTarget {
+                    join_id,
+                    block: merge,
+                    expected_outer: suffix_control.terminal_outer,
+                    required_kind,
+                    terminal_active_prefix: prefix,
+                }
+            }
+        };
         let ok_block = builder.create_block();
         let err_block = builder.create_block();
         builder.ins().brif(success, ok_block, &[], err_block, &[]);
@@ -5601,19 +6386,13 @@ impl<'a> Lowering<'a> {
             (1, err_block, err_constructor, error),
         ] {
             builder.switch_to_block(block);
-            let edge = SourceJoinEdge {
-                join_id,
-                predecessor_id,
-                target: merge,
-                expected_outer: suffix_control.terminal_outer,
-                required_kind,
-                prefix: prefix.clone(),
-            };
+            let edge = self.mint_source_predecessor(target.clone());
             let continuation =
-                Self::instantiate_source_prefix_to_join(&suffix_control.continuation, edge)?;
+                Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let branch_control = SourceControl {
                 continuation,
                 selected: suffix_control.selected.clone(),
+                selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
             let lowered = if let Some(case) = cases
@@ -5636,16 +6415,21 @@ impl<'a> Lowering<'a> {
                     branch_control,
                 )?
             };
-            if !matches!(lowered, Lowered::RecursiveBackedge) {
+            if Self::seal_source_trap_branch(builder, &lowered) {
+                // A trap terminates this mutually exclusive predecessor.
+            } else if !matches!(lowered, Lowered::RecursiveBackedge) {
                 return Err(unsupported(
                     "NativeJoinPlanV1",
                     format!(
-                        "predecessor {predecessor_id} for checked site {site_id} did not seal its affine join edge"
+                        "HostResult predecessor {predecessor_id} did not seal its distinct affine join edge"
                     ),
                 ));
             }
         }
 
+        let Some((merge, suffix_pending, required_kind, _site_id)) = local_completion else {
+            return Ok(Lowered::RecursiveBackedge);
+        };
         builder.switch_to_block(merge);
         let merged = self.lowered_from_scalar_pair(
             required_kind,
@@ -5660,6 +6444,8 @@ impl<'a> Lowering<'a> {
             parent: suffix_control.selected.parent,
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
+            source_lineage: &suffix_control.selected_lineage,
+            source_selected_cursor: Some(suffix_control.selected.cursor),
         };
         self.resume_active_continuation(builder, merged, suffix_active)
     }
@@ -5679,11 +6465,7 @@ impl<'a> Lowering<'a> {
                 .iter()
                 .map(|alternative| (alternative.tag, alternative.constructor.as_str())),
         )?;
-        if !matches!(
-            &suffix_control.continuation,
-            SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(_))
-        ) && Self::source_terminal_join(&suffix_control.continuation).is_some()
-        {
+        if Self::source_terminal_join(&suffix_control.continuation).is_some() {
             return self.lower_source_nested_dynamic_constructor_match(
                 builder,
                 dynamic,
@@ -5693,98 +6475,14 @@ impl<'a> Lowering<'a> {
                 suffix_control,
             );
         }
-        if !matches!(
-            &suffix_control.continuation,
-            SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(_))
-        ) {
-            return self.lower_source_planned_dynamic_constructor_match(
-                builder,
-                dynamic,
-                cases,
-                default,
-                env,
-                suffix_control,
-            );
-        }
-        let SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(outer_edge)) =
-            suffix_control.continuation
-        else {
-            return Err(unsupported(
-                "NativeJoinPlanV1",
-                "nested dynamic constructor is not inside one exact planned source cut",
-            ));
-        };
-        let merge = builder.create_block();
-        builder.append_block_param(merge, types::I64);
-        builder.append_block_param(merge, types::I64);
-        let mut test_block = builder
-            .current_block()
-            .expect("dynamic constructor source match block");
-        for (predecessor_id, alternative) in dynamic.alternatives.into_iter().enumerate() {
-            let arm = builder.create_block();
-            let next = builder.create_block();
-            if builder.current_block() != Some(test_block) {
-                builder.switch_to_block(test_block);
-            }
-            let selected = builder.ins().icmp_imm(
-                cranelift_codegen::ir::condcodes::IntCC::Equal,
-                dynamic.discriminator,
-                alternative.tag,
-            );
-            builder.ins().brif(selected, arm, &[], next, &[]);
-            builder.switch_to_block(arm);
-            let case = match select_dynamic_constructor_case(cases, &alternative, default)? {
-                Ok(case) => case,
-                Err(_) => {
-                    let failure = builder.ins().iconst(types::I64, -4);
-                    builder.ins().return_(&[failure]);
-                    test_block = next;
-                    continue;
-                }
-            };
-            let edge = SourceJoinEdge {
-                join_id: outer_edge.join_id,
-                predecessor_id: u32::try_from(predecessor_id)
-                    .map_err(|_| unsupported("NativeJoinPlanV1", "too many predecessors"))?,
-                target: merge,
-                expected_outer: outer_edge.expected_outer,
-                required_kind: outer_edge.required_kind,
-                prefix: outer_edge.prefix.clone(),
-            };
-            let arm_env = materialize_dynamic_constructor_env(&alternative, env);
-            let control = SourceControl {
-                continuation: SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(
-                    edge,
-                )),
-                selected: suffix_control.selected.clone(),
-                terminal_outer: suffix_control.terminal_outer,
-            };
-            let lowered = self.lower_source_machine_with_continuation(
-                builder,
-                case.body.clone(),
-                arm_env,
-                control,
-            )?;
-            if !matches!(lowered, Lowered::RecursiveBackedge) {
-                return Err(unsupported(
-                    "NativeJoinPlanV1",
-                    "nested dynamic constructor predecessor did not seal its edge",
-                ));
-            }
-            test_block = next;
-        }
-        builder.switch_to_block(test_block);
-        let malformed = builder
-            .ins()
-            .iconst(types::I64, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
-        builder.ins().return_(&[malformed]);
-        builder.switch_to_block(merge);
-        let tag = builder.block_params(merge)[0];
-        let payload = builder.block_params(merge)[1];
-        builder
-            .ins()
-            .jump(outer_edge.target, &[tag.into(), payload.into()]);
-        Ok(Lowered::RecursiveBackedge)
+        self.lower_source_planned_dynamic_constructor_match(
+            builder,
+            dynamic,
+            cases,
+            default,
+            env,
+            suffix_control,
+        )
     }
 
     fn lower_source_nested_dynamic_constructor_match<'b>(
@@ -5796,21 +6494,23 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let outer = Self::source_terminal_join(&suffix_control.continuation).ok_or_else(|| {
-            unsupported(
+        let (source_prefix_template, terminal) =
+            Self::split_source_prefix(suffix_control.continuation)?;
+        let SourcePrefixTerminal::Join(inherited_edge) = terminal else {
+            return Err(unsupported(
                 "NativeJoinPlanV1",
                 "nested dynamic constructor has no affine terminal edge",
-            )
-        })?;
-        let join_id = outer.join_id;
-        let target = outer.target;
-        let expected_outer = outer.expected_outer;
-        let required_kind = outer.required_kind;
-        let prefix = outer.prefix.clone();
+            ));
+        };
+        let fanout = SourceBranchFanout {
+            source_prefix_template,
+            inherited_edge,
+        };
+        let target = fanout.inherited_edge.target;
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor source match block");
-        for (predecessor_id, alternative) in dynamic.alternatives.into_iter().enumerate() {
+        for alternative in dynamic.alternatives {
             let arm = builder.create_block();
             let next = builder.create_block();
             if builder.current_block() != Some(test_block) {
@@ -5832,20 +6532,13 @@ impl<'a> Lowering<'a> {
                     continue;
                 }
             };
-            let edge = SourceJoinEdge {
-                join_id,
-                predecessor_id: u32::try_from(predecessor_id)
-                    .map_err(|_| unsupported("NativeJoinPlanV1", "too many predecessors"))?,
-                target,
-                expected_outer,
-                required_kind,
-                prefix: prefix.clone(),
-            };
+            let edge = self.mint_source_predecessor(target.clone());
             let continuation =
-                Self::instantiate_source_prefix_to_join(&suffix_control.continuation, edge)?;
+                Self::instantiate_source_prefix_template(&fanout.source_prefix_template, edge)?;
             let control = SourceControl {
                 continuation,
                 selected: suffix_control.selected.clone(),
+                selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
             let lowered = self.lower_source_machine_with_continuation(
@@ -5854,7 +6547,9 @@ impl<'a> Lowering<'a> {
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
             )?;
-            if !matches!(lowered, Lowered::RecursiveBackedge) {
+            if Self::seal_source_trap_branch(builder, &lowered) {
+                // A trap terminates this mutually exclusive predecessor.
+            } else if !matches!(lowered, Lowered::RecursiveBackedge) {
                 return Err(unsupported(
                     "NativeJoinPlanV1",
                     "nested dynamic constructor predecessor did not seal its edge",
@@ -5879,7 +6574,9 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
         suffix_control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let active = suffix_control.selected.as_active();
+        let active = suffix_control
+            .selected
+            .as_active(&suffix_control.selected_lineage);
         let (prefix, suffix_pending, required_kind, site_id) =
             self.planned_active_scalar_cut(active)?;
         let suffix_pending = suffix_pending.to_vec();
@@ -5891,6 +6588,21 @@ impl<'a> Lowering<'a> {
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
         builder.append_block_param(merge, types::I64);
+        let target = SourceJoinTarget {
+            join_id,
+            block: merge,
+            expected_outer: suffix_control.terminal_outer,
+            required_kind,
+            terminal_active_prefix: prefix,
+        };
+        let (source_prefix_template, terminal) =
+            Self::split_source_prefix(suffix_control.continuation)?;
+        if !matches!(terminal, SourcePrefixTerminal::ResumeOuter) {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "planned dynamic-constructor cut unexpectedly inherited an executable edge",
+            ));
+        }
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor source match block");
@@ -5916,20 +6628,13 @@ impl<'a> Lowering<'a> {
                     continue;
                 }
             };
-            let edge = SourceJoinEdge {
-                join_id,
-                predecessor_id: u32::try_from(predecessor_id)
-                    .map_err(|_| unsupported("NativeJoinPlanV1", "too many predecessors"))?,
-                target: merge,
-                expected_outer: suffix_control.terminal_outer,
-                required_kind,
-                prefix: prefix.clone(),
-            };
+            let edge = self.mint_source_predecessor(target.clone());
             let continuation =
-                Self::instantiate_source_prefix_to_join(&suffix_control.continuation, edge)?;
+                Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let control = SourceControl {
                 continuation,
                 selected: suffix_control.selected.clone(),
+                selected_lineage: suffix_control.selected_lineage.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
             let lowered = self.lower_source_machine_with_continuation(
@@ -5938,7 +6643,9 @@ impl<'a> Lowering<'a> {
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
             )?;
-            if !matches!(lowered, Lowered::RecursiveBackedge) {
+            if Self::seal_source_trap_branch(builder, &lowered) {
+                // A trap terminates this mutually exclusive predecessor.
+            } else if !matches!(lowered, Lowered::RecursiveBackedge) {
                 return Err(unsupported(
                     "NativeJoinPlanV1",
                     format!(
@@ -5967,6 +6674,8 @@ impl<'a> Lowering<'a> {
             parent: suffix_control.selected.parent,
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
+            source_lineage: &suffix_control.selected_lineage,
+            source_selected_cursor: Some(suffix_control.selected.cursor),
         };
         self.resume_active_continuation(builder, merged, suffix_active)
     }
@@ -6018,7 +6727,7 @@ impl<'a> Lowering<'a> {
         args: Vec<Lowered>,
         env: Vec<Lowered>,
         control: SourceControl<'b>,
-    ) -> Result<SourceMachineState<'b>, CraneliftBackendError> {
+    ) -> Result<SourceCallOutcome<'b>, CraneliftBackendError> {
         match callee {
             Lowered::Closure {
                 captures,
@@ -6038,11 +6747,11 @@ impl<'a> Lowering<'a> {
                 let mut call_env = args;
                 call_env.extend(captures);
                 call_env.extend(env);
-                Ok(SourceMachineState::Eval {
+                Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                     expr: body,
                     env: call_env,
                     control,
-                })
+                }))
             }
             Lowered::DeclarationClosure {
                 symbol,
@@ -6060,22 +6769,21 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
-                let mut call_env = args;
-                call_env.extend(captures);
-                call_env.extend(env);
-                let _ = symbol;
-                Ok(SourceMachineState::Eval {
-                    expr: body,
-                    env: call_env,
-                    control,
-                })
+                self.lower_source_declaration_call(
+                    builder, symbol, captures, body, args, env, control,
+                )
             }
             recursor @ Lowered::ComputationalRecursorClosure { .. } => {
                 let (base, boundary) = decompose_computational_recursor(recursor);
                 let (_, invocation) =
                     boundary.expect("recursor closure carries an invocation segment");
-                let selected = control.selected.as_active();
-                if find_continuation_cursor(&selected, invocation.resume_cursor).is_none() {
+                if source_active_cursor(
+                    &control.selected,
+                    &control.selected_lineage,
+                    invocation.resume_cursor,
+                )
+                .is_none()
+                {
                     return Err(unsupported(
                         "ComputationalRecursor",
                         "recursive invocation cursor is not live in source control",
@@ -6085,8 +6793,9 @@ impl<'a> Lowering<'a> {
                     suspended: control,
                     expected_selected: invocation.resume_cursor,
                 };
-                if find_continuation_cursor(
-                    &armed.suspended.selected.as_active(),
+                if source_active_cursor(
+                    &armed.suspended.selected,
+                    &armed.suspended.selected_lineage,
                     armed.expected_selected,
                 )
                 .is_none()
@@ -6103,17 +6812,16 @@ impl<'a> Lowering<'a> {
                             "structural Nat recursive hypothesis takes no arguments",
                         ));
                     }
-                    let mut frames = recursor_eliminator_frames(&invocation.owned_layers);
-                    frames.push(EliminatorFrame::Active(
-                        armed.suspended.selected.as_active(),
-                    ));
-                    frames.push(EliminatorFrame::InvocationReturn);
-                    let returned =
-                        self.lower_bounded_nat_computational(builder, predecessor, false, &frames)?;
-                    return Ok(SourceMachineState::Value {
-                        value: returned,
-                        control: armed.suspended,
-                    });
+                    let mut suspended = armed.suspended;
+                    suspended.continuation = Self::install_recursor_invocation(
+                        suspended.continuation,
+                        invocation.owned_layers,
+                        invocation.resume_cursor,
+                    )?;
+                    return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
+                        value: Lowered::BoundedNat(predecessor),
+                        control: suspended,
+                    }));
                 } else {
                     let Lowered::Closure {
                         captures,
@@ -6140,19 +6848,133 @@ impl<'a> Lowering<'a> {
                     call_env.extend(captures);
                     call_env.extend(env);
                     let mut suspended = armed.suspended;
-                    suspended.continuation = SourceContinuation::ApplyRecursorLayers {
-                        remaining: invocation.owned_layers,
-                        next: Box::new(suspended.continuation),
-                    };
-                    return Ok(SourceMachineState::Eval {
+                    suspended.continuation = Self::install_recursor_invocation(
+                        suspended.continuation,
+                        invocation.owned_layers,
+                        invocation.resume_cursor,
+                    )?;
+                    return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                         expr: body,
                         env: call_env,
                         control: suspended,
-                    });
+                    }));
                 }
             }
             _ => Err(unsupported("Call", "callee is not a closure")),
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn lower_source_declaration_call<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        symbol: RuntimeSymbol,
+        captures: Vec<Lowered>,
+        body: RuntimeExpr,
+        args: Vec<Lowered>,
+        env: Vec<Lowered>,
+        control: SourceControl<'b>,
+    ) -> Result<SourceCallOutcome<'b>, CraneliftBackendError> {
+        if !self.declaration_is_recursive(&symbol) {
+            let mut call_env = args;
+            call_env.extend(captures);
+            call_env.extend(env);
+            return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
+                expr: body,
+                env: call_env,
+                control,
+            }));
+        }
+
+        if let Some(active) = self
+            .active_recursive_declarations
+            .iter()
+            .rev()
+            .find(|active| active.symbol == symbol)
+            .cloned()
+        {
+            if !same_recursive_argument_shapes(&active.argument_templates, &args) {
+                return Err(unsupported(
+                    "DeclarationRef",
+                    format!(
+                        "recursive declaration {symbol} changes its native argument representation: {:?} -> {:?}",
+                        active
+                            .argument_templates
+                            .iter()
+                            .map(lowered_value_kind)
+                            .collect::<Vec<_>>(),
+                        args.iter().map(lowered_value_kind).collect::<Vec<_>>()
+                    ),
+                ));
+            }
+            if let Some(induction) = active.induction {
+                return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
+                    value: induction,
+                    control,
+                }));
+            }
+            let mut values = Vec::new();
+            append_recursive_argument_values(builder, &args, &mut values, &self.native_int_tags)?;
+            builder.ins().jump(
+                active
+                    .header
+                    .expect("tail-recursive source declarations own a loop header"),
+                &values.into_iter().map(Into::into).collect::<Vec<_>>(),
+            );
+            let unreachable = builder.create_block();
+            builder.switch_to_block(unreachable);
+            return Ok(SourceCallOutcome::Complete(Lowered::RecursiveBackedge));
+        }
+
+        let header = builder.create_block();
+        let mut initial_values = Vec::new();
+        append_recursive_argument_values(
+            builder,
+            &args,
+            &mut initial_values,
+            &self.native_int_tags,
+        )?;
+        for value in &initial_values {
+            builder.append_block_param(header, builder.func.dfg.value_type(*value));
+        }
+        builder.ins().jump(
+            header,
+            &initial_values
+                .iter()
+                .copied()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+        );
+        builder.switch_to_block(header);
+
+        let mut parameters = builder.block_params(header).iter().copied();
+        let mut loop_args = Vec::with_capacity(args.len());
+        for template in &args {
+            loop_args.push(rebuild_recursive_argument(
+                template,
+                &mut parameters,
+                &mut self.native_int_tags,
+            )?);
+        }
+        if parameters.next().is_some() {
+            return Err(unsupported(
+                "DeclarationRef",
+                "recursive source declaration loop parameter shape is not closed",
+            ));
+        }
+        self.active_recursive_declarations
+            .push(ActiveRecursiveDeclarationV1 {
+                symbol: symbol.clone(),
+                header: Some(header),
+                argument_templates: args,
+                induction: None,
+            });
+        let mut call_env = loop_args.into_iter().rev().collect::<Vec<_>>();
+        call_env.extend(captures);
+        call_env.extend(env);
+        let lowered = self.lower_source_machine_with_continuation(builder, body, call_env, control);
+        self.active_recursive_declarations.pop();
+        Ok(SourceCallOutcome::Complete(lowered?))
     }
 
     fn lower_expr(
@@ -13158,6 +13980,8 @@ mod tests {
             next_continuation_activation: 0,
             next_continuation_cursor: 0,
             next_source_join: 0,
+            next_source_predecessor: 0,
+            live_source_continuations: 0,
             native_join_plan: Some(crate::NativeJoinPlanV1 {
                 representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
                 sites: vec![self_consistent_root_join_site(0)],
