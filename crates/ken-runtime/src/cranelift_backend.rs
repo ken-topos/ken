@@ -2928,6 +2928,15 @@ enum SourceContinuation<'a> {
         provenance: RecursorFrameProvenance,
         next: Box<SourceContinuation<'a>>,
     },
+    /// The owned return edge for one selected computational case. The case
+    /// body runs with `child_cursor` selected; returning through this frame
+    /// restores exactly `parent_cursor` before the caller-owned `next` runs.
+    ReturnFromSelectedCase {
+        child_cursor: ContinuationCursorId,
+        parent_cursor: ContinuationCursorId,
+        origin: RecursorProducerOriginId,
+        next: Box<SourceContinuation<'a>>,
+    },
     ProjectRecord {
         field: String,
         next: Box<SourceContinuation<'a>>,
@@ -3030,6 +3039,12 @@ enum SourcePrefixTemplate {
         default: RuntimeTrap,
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
+        next: Box<SourcePrefixTemplate>,
+    },
+    ReturnFromSelectedCase {
+        child_cursor: ContinuationCursorId,
+        parent_cursor: ContinuationCursorId,
+        origin: RecursorProducerOriginId,
         next: Box<SourcePrefixTemplate>,
     },
     ProjectRecord {
@@ -3511,6 +3526,82 @@ fn select_computational_case<'frames, 'data>(
 }
 
 impl<'a> Lowering<'a> {
+    /// Transfer compiler-private recursor return capabilities that escape a
+    /// selected case to the restored parent cursor. This changes no Ken value:
+    /// it closes only the source-control return edge carried inside `Lowered`.
+    fn rebind_selected_return_cursor(
+        value: &mut Lowered,
+        child_cursor: ContinuationCursorId,
+        parent_cursor: ContinuationCursorId,
+    ) {
+        fn rebind_layer(
+            layer: &mut ComputationalRecursorLayer,
+            child_cursor: ContinuationCursorId,
+            parent_cursor: ContinuationCursorId,
+        ) {
+            for value in &mut layer.outer_env {
+                Lowering::rebind_selected_return_cursor(value, child_cursor, parent_cursor);
+            }
+        }
+
+        match value {
+            Lowered::HostResult { error, ok, .. } => {
+                Self::rebind_selected_return_cursor(error, child_cursor, parent_cursor);
+                Self::rebind_selected_return_cursor(ok, child_cursor, parent_cursor);
+            }
+            Lowered::DynamicConstructor(dynamic) => {
+                for alternative in &mut dynamic.alternatives {
+                    for field in &mut alternative.fields {
+                        Self::rebind_selected_return_cursor(field, child_cursor, parent_cursor);
+                    }
+                }
+            }
+            Lowered::Constructor { args, .. } => {
+                for argument in args {
+                    Self::rebind_selected_return_cursor(argument, child_cursor, parent_cursor);
+                }
+            }
+            Lowered::Record { fields } => {
+                for (_, field) in fields {
+                    Self::rebind_selected_return_cursor(field, child_cursor, parent_cursor);
+                }
+            }
+            Lowered::Closure { captures, .. } | Lowered::DeclarationClosure { captures, .. } => {
+                for capture in captures {
+                    Self::rebind_selected_return_cursor(capture, child_cursor, parent_cursor);
+                }
+            }
+            Lowered::ComputationalRecursorClosure {
+                residual,
+                invocation,
+                ..
+            } => {
+                Self::rebind_selected_return_cursor(residual, child_cursor, parent_cursor);
+                if invocation.resume_cursor == child_cursor {
+                    invocation.resume_cursor = parent_cursor;
+                }
+                rebind_layer(&mut invocation.selection, child_cursor, parent_cursor);
+                for layer in &mut invocation.unwind.later_wrappers_in_construction_order {
+                    rebind_layer(layer, child_cursor, parent_cursor);
+                }
+            }
+            Lowered::Int { .. }
+            | Lowered::Bool { .. }
+            | Lowered::ProcessExitStatus { .. }
+            | Lowered::CapabilityToken { .. }
+            | Lowered::ResourceToken { .. }
+            | Lowered::BoundedNat(_)
+            | Lowered::StructuralNat(_)
+            | Lowered::ResponseBytes { .. }
+            | Lowered::Bytes(_)
+            | Lowered::BorrowedNativeValue { .. }
+            | Lowered::BorrowedOption { .. }
+            | Lowered::String(_)
+            | Lowered::RecursiveBackedge
+            | Lowered::Trap(_) => {}
+        }
+    }
+
     fn mint_recursor_producer_origin(&mut self) -> RecursorProducerOriginId {
         let origin = RecursorProducerOriginId(self.next_recursor_producer_origin);
         self.next_recursor_producer_origin = self
@@ -5694,6 +5785,7 @@ impl<'a> Lowering<'a> {
             | SourceContinuation::ConstructArgument { next, .. }
             | SourceContinuation::MatchScrutinee { next, .. }
             | SourceContinuation::ComputationalMatchScrutinee { next, .. }
+            | SourceContinuation::ReturnFromSelectedCase { next, .. }
             | SourceContinuation::ProjectRecord { next, .. }
             | SourceContinuation::CallCallee { next, .. }
             | SourceContinuation::CallArgument { next, .. } => Self::source_terminal_join(next),
@@ -5713,6 +5805,17 @@ impl<'a> Lowering<'a> {
             | SourceContinuation::ProjectRecord { next, .. }
             | SourceContinuation::CallCallee { next, .. }
             | SourceContinuation::CallArgument { next, .. } => Self::discard_source_prefix(*next),
+            SourceContinuation::ReturnFromSelectedCase {
+                child_cursor,
+                parent_cursor,
+                origin,
+                next,
+            } => SourceContinuation::ReturnFromSelectedCase {
+                child_cursor,
+                parent_cursor,
+                origin,
+                next: Box::new(Self::discard_source_prefix(*next)),
+            },
         }
     }
 
@@ -5816,6 +5919,25 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                )?),
+            },
+            SourceContinuation::ReturnFromSelectedCase {
+                child_cursor,
+                parent_cursor,
+                origin,
+                next,
+            } => SourceContinuation::ReturnFromSelectedCase {
+                child_cursor,
+                parent_cursor,
+                origin,
+                next: Box::new(Self::replace_source_terminal_with_unwind(
+                    *next,
+                    stack,
+                    if resume_cursor == child_cursor {
+                        parent_cursor
+                    } else {
+                        resume_cursor
+                    },
                 )?),
             },
             SourceContinuation::ProjectRecord { field, next } => {
@@ -6043,6 +6165,23 @@ impl<'a> Lowering<'a> {
                     terminal,
                 )
             }
+            SourceContinuation::ReturnFromSelectedCase {
+                child_cursor,
+                parent_cursor,
+                origin,
+                next,
+            } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::ReturnFromSelectedCase {
+                        child_cursor,
+                        parent_cursor,
+                        origin,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
             SourceContinuation::ProjectRecord { field, next } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
                 (
@@ -6166,6 +6305,17 @@ impl<'a> Lowering<'a> {
                 default: default.clone(),
                 env: env.clone(),
                 provenance: *provenance,
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+            },
+            SourcePrefixTemplate::ReturnFromSelectedCase {
+                child_cursor,
+                parent_cursor,
+                origin,
+                next,
+            } => SourceContinuation::ReturnFromSelectedCase {
+                child_cursor: *child_cursor,
+                parent_cursor: *parent_cursor,
+                origin: *origin,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::ProjectRecord { field, next } => {
@@ -6459,6 +6609,12 @@ impl<'a> Lowering<'a> {
                                     "producer-hole terminal cursor mismatch",
                                 ));
                             }
+                            if control.selected.cursor != expected {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "producer-hole reached before the selected case returned",
+                                ));
+                            }
                             if matches!(value, Lowered::Trap(_)) {
                                 return Ok(value);
                             }
@@ -6496,6 +6652,12 @@ impl<'a> Lowering<'a> {
                                     "source continuation terminal cursor mismatch",
                                 ));
                             }
+                            if control.selected.cursor != expected {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "outer resume reached before the selected case returned",
+                                ));
+                            }
                             if matches!(value, Lowered::Trap(_)) {
                                 return Ok(value);
                             }
@@ -6508,6 +6670,12 @@ impl<'a> Lowering<'a> {
                                 let failure = builder.ins().iconst(types::I64, -4);
                                 builder.ins().return_(&[failure]);
                                 return Ok(Lowered::RecursiveBackedge);
+                            }
+                            if control.selected.cursor != edge.target.expected_outer {
+                                return Err(unsupported(
+                                    "NativeJoinPlanV1",
+                                    "root join reached before the selected case returned",
+                                ));
                             }
                             let value = if edge.target.terminal_active_prefix.is_empty() {
                                 value
@@ -6897,7 +7065,7 @@ impl<'a> Lowering<'a> {
                             let mut case_env = induction_hypotheses;
                             case_env.extend(args);
                             case_env.extend(frame_env);
-                            let previous_selected = control.selected.clone();
+                            let parent_cursor = control.selected.cursor;
                             let pending = std::mem::take(&mut control.selected.pending);
                             let selected_scope = OwnedSelectedScope {
                                 scope_origin: producer_origin,
@@ -6918,7 +7086,7 @@ impl<'a> Lowering<'a> {
                                 (!PX8J_DELETE_OWNED_SELECTED_SCOPE.get()).then_some(selected_scope);
                             #[cfg(not(test))]
                             let selected_scope = Some(selected_scope);
-                            control.selected = SourceSelectedContinuation {
+                            let child_selected = SourceSelectedContinuation {
                                 activation,
                                 cursor,
                                 parent,
@@ -6926,13 +7094,88 @@ impl<'a> Lowering<'a> {
                                 selected_ancestry: ancestry,
                                 selected_scope,
                             };
+                            let previous_selected =
+                                std::mem::replace(&mut control.selected, child_selected);
                             control.selected_lineage.push(previous_selected);
-                            control.continuation = *next;
+                            control.continuation = SourceContinuation::ReturnFromSelectedCase {
+                                child_cursor: cursor,
+                                parent_cursor,
+                                origin: producer_origin,
+                                next,
+                            };
                             SourceMachineState::Eval {
                                 expr: case.body.clone(),
                                 env: case_env,
                                 control,
                             }
+                        }
+                        SourceContinuation::ReturnFromSelectedCase {
+                            child_cursor,
+                            parent_cursor,
+                            origin,
+                            next,
+                        } => {
+                            if control.selected.cursor != child_cursor {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return cursor does not match its child",
+                                ));
+                            }
+                            let child_parent_scope = control
+                                .selected
+                                .selected_scope
+                                .as_ref()
+                                .ok_or_else(|| {
+                                    unsupported(
+                                        "ComputationalRecursor",
+                                        "source recursor invocation is missing its owned selected scope",
+                                    )
+                                })?
+                                .parent_scope;
+                            if control
+                                .selected
+                                .selected_scope
+                                .as_ref()
+                                .is_none_or(|scope| scope.scope_origin != origin)
+                            {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return scope origin does not match its child",
+                                ));
+                            }
+                            let mut value = value;
+                            Self::rebind_selected_return_cursor(
+                                &mut value,
+                                child_cursor,
+                                parent_cursor,
+                            );
+                            let child_pending = std::mem::take(&mut control.selected.pending);
+                            let mut parent = control.selected_lineage.pop().ok_or_else(|| {
+                                unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return is missing its parent control",
+                                )
+                            })?;
+                            if parent.cursor != parent_cursor {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return cursor does not match its parent",
+                                ));
+                            }
+                            let parent_scope = parent
+                                .selected_scope
+                                .as_ref()
+                                .map(|scope| scope.scope_origin);
+                            if child_parent_scope != parent_scope {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return has a broken scope-parent link",
+                                ));
+                            }
+                            parent.pending = child_pending;
+                            control.selected = parent;
+                            control.continuation = *next;
+                            SourceMachineState::Value { value, control }
                         }
                         SourceContinuation::CallCallee {
                             mut args,
@@ -14769,65 +15012,10 @@ mod tests {
                 ref reason,
             }) if reason == "source recursor invocation is missing its owned selected scope"
         ));
-        let deleted_terminal = deleted_trace
-            .last()
-            .expect("deletion must leave its terminal mint observation");
-        let exact_terminal_index = exact_trace
-            .iter()
-            .position(|event| match (event, deleted_terminal) {
-                (
-                    Px8jSourceTraceEvent::Mint {
-                        path: exact_path,
-                        origin: exact_origin,
-                        cursor: exact_cursor,
-                        siblings: exact_siblings,
-                        ..
-                    },
-                    Px8jSourceTraceEvent::Mint {
-                        path: deleted_path,
-                        origin: deleted_origin,
-                        cursor: deleted_cursor,
-                        siblings: deleted_siblings,
-                        ..
-                    },
-                ) => {
-                    exact_path == deleted_path
-                        && exact_origin == deleted_origin
-                        && exact_cursor == deleted_cursor
-                        && exact_siblings == deleted_siblings
-                }
-                _ => false,
-            })
-            .expect("the exact run reaches the deleted run's terminal mint");
-        assert_eq!(
-            &deleted_trace[..deleted_trace.len() - 1],
-            &exact_trace[..exact_terminal_index]
-        );
-        assert!(matches!(
-            (exact_trace.get(exact_terminal_index), deleted_trace.last()),
-            (
-                Some(Px8jSourceTraceEvent::Mint {
-                    path: exact_path,
-                    origin: exact_origin,
-                    cursor: exact_cursor,
-                    siblings: exact_siblings,
-                    parent_scope: Some(_),
-                }),
-                Some(Px8jSourceTraceEvent::Mint {
-                    path: deleted_path,
-                    origin: deleted_origin,
-                    cursor: deleted_cursor,
-                    siblings: deleted_siblings,
-                    parent_scope: None,
-                }),
-            ) if exact_path == deleted_path
-                && exact_origin == deleted_origin
-                && exact_cursor == deleted_cursor
-                && exact_siblings == deleted_siblings
-        ));
+        assert_eq!(deleted_trace, exact_trace[..deleted_trace.len()]);
         let deleted_origin = match deleted_trace.last() {
-            Some(Px8jSourceTraceEvent::Mint { origin, .. }) => *origin,
-            event => panic!("deletion must stop immediately after the nested mint: {event:?}"),
+            Some(Px8jSourceTraceEvent::Carrier { origin, .. }) => *origin,
+            event => panic!("deletion must stop before the nested carrier installs: {event:?}"),
         };
         assert!(!deleted_trace.iter().any(|event| matches!(
             event,
