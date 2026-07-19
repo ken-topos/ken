@@ -161,6 +161,15 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) {
   size_t capped = count > 2 ? 2 : count;
   return next_pwrite(fd, buf, capped, offset);
 }
+
+ssize_t pwrite64(int fd, const void *buf, size_t count, off64_t offset) {
+  static ssize_t (*next_pwrite64)(int, const void *, size_t, off64_t) = 0;
+  if (!next_pwrite64) {
+    next_pwrite64 = dlsym(RTLD_NEXT, "pwrite64");
+  }
+  size_t capped = count > 2 ? 2 : count;
+  return next_pwrite64(fd, buf, capped, offset);
+}
 "#,
     )
     .unwrap();
@@ -189,6 +198,8 @@ fn linked_checked_write_all_observes_short_progress_and_matches_interpreter() {
 
 #[cfg(target_os = "linux")]
 fn run_linked_checked_write_all() {
+    use std::os::unix::ffi::OsStrExt as _;
+
     let dir = std::env::temp_dir().join(format!("ken-px8f-write-all-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -241,24 +252,44 @@ fn run_linked_checked_write_all() {
         ));
     }
 
-    let mut interpreter = ken_interp::CaptureHost::new(Vec::new());
-    interpreter.insert_file(b"input.bin".to_vec(), b"abcdef".to_vec());
-    let interpreted = ken_cli::run_program_effect_observation(
+    let mut unsupported_virtual = ken_interp::CaptureHost::new(Vec::new());
+    unsupported_virtual.insert_file(b"input.bin".to_vec(), b"abcdef".to_vec());
+    let virtual_observation = ken_cli::run_program_effect_observation(
         WRITE_ALL,
         ken_cli::SourceFormat::Ken,
         &[],
         &[],
         b".",
+        &mut unsupported_virtual,
+    )
+    .expect("the virtual-root control reaches the resource-open boundary");
+    assert_eq!(virtual_observation.exit_status, 81);
+    let denied_open = virtual_observation
+        .effect_trace
+        .first()
+        .expect("virtual-root control records its denied resource open");
+    assert_eq!(denied_open.operation, ken_runtime::HostOpV1::FsOpen);
+    let ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::File(error)) =
+        &denied_open.outcome
+    else {
+        panic!("virtual-root resource open did not return a file error");
+    };
+    assert_eq!(format!("{:?}", error.cause), "Capability(ScopeEscape)");
+
+    let mut interpreter = ken_interp::PosixHost::new_at(&dir);
+    let interpreted = ken_cli::run_program_effect_observation(
+        WRITE_ALL,
+        ken_cli::SourceFormat::Ken,
+        &[],
+        &[],
+        dir.as_os_str().as_bytes(),
         &mut interpreter,
     )
     .expect("the same checked writeAll runs in the interpreter");
     eprintln!("PX8-F: comparing observations");
     assert_eq!(interpreted.exit_status, observation.exit_status);
     assert_eq!(interpreted.terminal_error, observation.terminal_error);
-    assert_eq!(
-        interpreter.fs_nodes().get(b"output.bin".as_slice()),
-        Some(&ken_interp::VirtualFsNode::File(b"abcdef".to_vec()))
-    );
+    assert_eq!(std::fs::read(dir.join("output.bin")).unwrap(), b"abcdef");
 
     let _ = std::fs::remove_dir_all(dir);
 }

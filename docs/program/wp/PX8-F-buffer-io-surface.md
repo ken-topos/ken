@@ -1,8 +1,16 @@
 # PX8-F — Foundation `System.Buffer`/`System.IO` surface + derived `writeAll` proof
 
-> **▶ UNFROZEN (2026-07-18) — BOTH predecessors have LANDED on `origin/main @
-> ace72db7` (PX8-X train `a97b4304`, PR #764; PX8-N `ace72db7`, PR #763). RESUME:
-> rebase the preserved candidate ONCE onto that combined main** (Architect rulings
+> **▶ RESUME NOW (2026-07-19) — ALL PX8-F PREREQUISITES HAVE LANDED; current
+> `origin/main = a9db5a17`.** Full native effect-lowering chain merged: PX8-N
+> `ace72db7`, PX8-X train `a97b4304`, PX8-L `e74e935f`, PX8-H `aab1f831`, PX8-I
+> `38ed8223`, PX8-J `a9db5a17`. Held candidate = **`c8b8cdb7` on
+> `origin/wp/px8f-buffer-io-surface`** (base `ace72db7`, now far behind main).
+> **⚠ SEMANTIC REBASE, not delta-apply:** rebase `c8b8cdb7`'s ~1200-line PX8-F
+> payload (catalog Buffer/IO + prelude + interp eval + surface/native fixtures)
+> ONTO current `a9db5a17`; NEVER `git diff main c8b8cdb7`-and-apply (that reverts
+> the PX8-L/H/I/J chain). Re-derive every anchor against the rebased tree. The two
+> test-only fixture riders are on `origin/steward/work`. Resume per the sequence
+> below** (Architect rulings
 > `evt_291b8gcwde32v` + `evt_22y0emyj6cwf2` + `evt_5v6jrc6rnva`, 2026-07-17).
 > PX8-F hard-stopped on a real substrate gap:
 > the checked surface needs `BufferSpan` to carry a **constructor-private
@@ -50,6 +58,51 @@
   Foundation reconstructs anchors from the combined main at unfreeze (a held-WP
   unfreeze is a semantic rebase — re-derive every anchor; do not trust the frozen
   line numbers below without re-grepping the rebased tree).
+  **(Live-state note: the hold point advanced to `c8b8cdb7` during the
+  PX8-L/H/I/J native-lowering chain; `60a481b5` above is stale — reconcile the
+  held SHA at unfreeze, Task #11.)**
+- **⚑ UNFREEZE RIDERS (added while held — apply at unfreeze):**
+  - **`PX8-F-fixture-rider-pwrite64.patch`** (this dir) — a **test-only** repair
+    to `crates/ken-cli/tests/px8f_buffer_native.rs`: adds a `pwrite64` LD_PRELOAD
+    wrapper (`dlsym RTLD_NEXT "pwrite64"`, `off64_t`, same `min(count,2)` cap)
+    beside the existing `pwrite`, so the short-write interposer bites the symbol
+    the host `FileExt::write_at` actually calls (`pwrite64@GLIBC_2.2.5`), not the
+    unreached `pwrite`. **Why held here:** PX8-J proved its terminal-answer
+    continuation mechanism against this overlay (real ordered `FsWriteAt`, exact
+    `abcdef`, exit 0, interpreter agreement), but the frozen `writes.len()==3`
+    oracle was mechanically unreachable because the shim missed `pwrite64`. The
+    repair is a **PX8-F fixture fix, not a PX8-J change** — it was kept off the
+    PX8-J production branch and custodied here. **Provenance:** Architect ruling
+    (refined-b, thr_618c 2026-07-19 07:41Z) + Steward ownership ruling
+    `evt_3mv6g5v5ksnyy` + implementer `code_share` `evt_6a1syfq0a2cv3`. Base blob
+    `6378c31d` (hunk `@@ -161`). **At unfreeze:** `git apply` it (or re-derive the
+    hunk against the rebased fixture), then confirm the discriminator is live —
+    removing only the `pwrite64` wrapper must collapse the native trace to one
+    write and fail the three-write assertion. **No** `pwritev` (the vectored API
+    is imported but unreached; interposing it is not minimal evidence).
+  - **`PX8-F-fixture-rider-posix-interp-leg.patch`** (this dir) — a **test-only**
+    repair to the same file: the interpreter differential leg was mechanically
+    unreachable because `InterpreterHostBackend::fs_open_resource` accepts only
+    `FsHandle::Posix` and rejects `CaptureHost`'s virtual root as
+    `Capability(ScopeEscape)` (exit 81, zero writes) **before** any `input.bin`
+    lookup — a host-KIND mismatch, not a relative-path miss. The rider **keeps**
+    the old `CaptureHost` leg as a control (asserting the pre-lookup `FsOpen` +
+    `Capability(ScopeEscape)`/exit 81), then runs the real differential through
+    `PosixHost::new_at(&dir)` with the real execution-start cwd and reads real
+    `dir/output.bin`; the native/interpreter exit + terminal-error comparison is
+    preserved. **Provenance:** Architect ruling (`evt_azmharf1p667`, 08:30Z) +
+    Steward custody (`evt_4smfxym8ef2h3` routing) + implementer `code_share`
+    `evt_298an89139jt9`. Base blob `6378c31d` (hunks `@@ -189`, `@@ -241`).
+  - **⚠ Both riders share base blob `6378c31d` (the `c8b8cdb7` fixture) and touch
+    DISJOINT regions** (pwrite64 C-shim ~L161; interp leg ~L189-283) — they
+    compose (implementer proved `ken-cargo test -p ken-cli --test
+    px8f_buffer_native --no-run` green with both applied over PX8-J `dcfae3e1`).
+    At unfreeze apply **both**, then run BOTH legs green as the Task #11
+    fixture-revalidation pass — not a bare rebase. **✅ APPLY-VERIFIED
+    (2026-07-19): both `git apply --check` clean against `c8b8cdb7`'s fixture,
+    individually AND composed (pwrite64 → posix-interp-leg), exit 0** — no
+    line-offset issue in practice. Re-derive only if the unfreeze rebase moves the
+    surrounding lines.
 - **Route:** **Architect §14** (surface soundness — the `writeAll` proof is
   real-checked, the progress partition matches §1.7.2, no in-language mutation) —
   **+ CV** iff the candidate touches `spec/`/`conformance/` (it will: the buffer
