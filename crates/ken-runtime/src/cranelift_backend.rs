@@ -1600,7 +1600,12 @@ fn run_px8j_malformed_recursor_consumer(
             None,
             selection,
             RecursorUnwindStack {
-                later_wrappers_in_construction_order: unwind,
+                captured_caller_suffix: CapturedCallerSuffix {
+                    scopes_in_construction_order: unwind,
+                },
+                post_caller_wrappers: PostCallerWrapperStack {
+                    wrappers_in_construction_order: Vec::new(),
+                },
             },
             cursor,
         ),
@@ -2714,7 +2719,18 @@ struct RecursorInvocationSegment {
 
 #[derive(Clone)]
 struct RecursorUnwindStack {
-    later_wrappers_in_construction_order: Vec<ComputationalRecursorLayer>,
+    captured_caller_suffix: CapturedCallerSuffix,
+    post_caller_wrappers: PostCallerWrapperStack,
+}
+
+#[derive(Clone)]
+struct CapturedCallerSuffix {
+    scopes_in_construction_order: Vec<ComputationalRecursorLayer>,
+}
+
+#[derive(Clone)]
+struct PostCallerWrapperStack {
+    wrappers_in_construction_order: Vec<ComputationalRecursorLayer>,
 }
 
 impl RecursorInvocationSegment {
@@ -2764,8 +2780,16 @@ fn recursor_eliminator_frames(
         sibling_position: segment.sibling_position,
         exits: segment
             .unwind
-            .later_wrappers_in_construction_order
+            .captured_caller_suffix
+            .scopes_in_construction_order
             .iter()
+            .chain(
+                segment
+                    .unwind
+                    .post_caller_wrappers
+                    .wrappers_in_construction_order
+                    .iter(),
+            )
             .filter_map(|layer| match layer.role {
                 RecursorLayerRole::ExitsScope {
                     scope_origin,
@@ -2780,7 +2804,16 @@ fn recursor_eliminator_frames(
         .chain(
             segment
                 .unwind
-                .later_wrappers_in_construction_order
+                .captured_caller_suffix
+                .scopes_in_construction_order
+                .iter()
+                .rev(),
+        )
+        .chain(
+            segment
+                .unwind
+                .post_caller_wrappers
+                .wrappers_in_construction_order
                 .iter()
                 .rev(),
         )
@@ -2809,45 +2842,64 @@ fn validate_recursor_invocation_segment(
             "recursor selection role does not select the invocation origin",
         ));
     }
-    // Construction order is outer-to-inner, while execution pops the vector
-    // inner-to-outer. An outermost scope may name a parent owned by the caller;
-    // every carried successor must link to the immediately preceding scope.
     let mut scope_origins = BTreeSet::new();
-    let mut previous_scope = None;
-    for layer in &segment.unwind.later_wrappers_in_construction_order {
-        let RecursorLayerRole::ExitsScope {
-            origin,
-            scope_origin,
-            parent_scope,
-        } = layer.role
-        else {
-            return Err(unsupported(
-                "ComputationalRecursor",
-                "recursor unwind role does not exit the invocation origin",
-            ));
-        };
-        if origin != segment.origin {
-            return Err(unsupported(
-                "ComputationalRecursor",
-                "recursor unwind role does not exit the invocation origin",
-            ));
-        }
-        if !scope_origins.insert(scope_origin) {
-            return Err(unsupported(
-                "ComputationalRecursor",
-                "recursor unwind repeats a selected scope identity",
-            ));
-        }
-        if let Some(previous_scope) = previous_scope {
-            if parent_scope != Some(previous_scope) {
+    let mut validate_phase = |
+        layers: &[ComputationalRecursorLayer],
+        phase: &'static str,
+        expected_first_parent: Option<RecursorProducerOriginId>,
+    | {
+        let mut previous_scope = None;
+        for layer in layers {
+            let RecursorLayerRole::ExitsScope {
+                origin,
+                scope_origin,
+                parent_scope,
+            } = layer.role
+            else {
                 return Err(unsupported(
                     "ComputationalRecursor",
-                    "recursor unwind has a broken selected-scope parent link",
+                    format!("recursor {phase} role does not exit the invocation origin"),
+                ));
+            };
+            if origin != segment.origin {
+                return Err(unsupported(
+                    "ComputationalRecursor",
+                    format!("recursor {phase} role does not exit the invocation origin"),
                 ));
             }
+            if !scope_origins.insert(scope_origin) {
+                return Err(unsupported(
+                    "ComputationalRecursor",
+                    "recursor unwind repeats or cross-lists a selected scope identity",
+                ));
+            }
+            let expected_parent = previous_scope.or(expected_first_parent);
+            if previous_scope.is_some() && parent_scope != expected_parent {
+                return Err(unsupported(
+                    "ComputationalRecursor",
+                    format!("recursor {phase} has a broken selected-scope parent link"),
+                ));
+            }
+            previous_scope = Some(scope_origin);
         }
-        previous_scope = Some(scope_origin);
-    }
+        Ok(previous_scope)
+    };
+    let captured_inner = validate_phase(
+        &segment
+            .unwind
+            .captured_caller_suffix
+            .scopes_in_construction_order,
+        "captured caller suffix",
+        None,
+    )?;
+    validate_phase(
+        &segment
+            .unwind
+            .post_caller_wrappers
+            .wrappers_in_construction_order,
+        "post-caller wrapper stack",
+        captured_inner,
+    )?;
     Ok(())
 }
 
@@ -2944,6 +2996,7 @@ enum SourceContinuation<'a> {
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
         producer_hole: Option<ProducerHoleId>,
+        selected_phase: SelectedScopePhase,
         next: Box<SourceContinuation<'a>>,
     },
     /// The owned return edge for one selected computational case. The case
@@ -3062,6 +3115,7 @@ enum SourcePrefixTemplate {
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
         producer_hole: Option<ProducerHoleId>,
+        selected_phase: SelectedScopePhase,
         next: Box<SourcePrefixTemplate>,
     },
     ReturnFromSelectedCase {
@@ -3118,6 +3172,14 @@ struct SourceSelectedContinuation<'a> {
 struct SourceSelectedSpineFrame {
     cursor: ContinuationCursorId,
     selected_scope: Option<OwnedSelectedScope>,
+    phase: SelectedScopePhase,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SelectedScopePhase {
+    CallerSource,
+    CapturedCallerSuffix,
+    PostCallerWrapper,
 }
 
 #[derive(Clone)]
@@ -3622,7 +3684,18 @@ impl<'a> Lowering<'a> {
                     invocation.resume_cursor = parent_cursor;
                 }
                 rebind_layer(&mut invocation.selection, child_cursor, parent_cursor);
-                for layer in &mut invocation.unwind.later_wrappers_in_construction_order {
+                for layer in &mut invocation
+                    .unwind
+                    .captured_caller_suffix
+                    .scopes_in_construction_order
+                {
+                    rebind_layer(layer, child_cursor, parent_cursor);
+                }
+                for layer in &mut invocation
+                    .unwind
+                    .post_caller_wrappers
+                    .wrappers_in_construction_order
+                {
                     rebind_layer(layer, child_cursor, parent_cursor);
                 }
             }
@@ -3687,7 +3760,20 @@ impl<'a> Lowering<'a> {
                 for value in &mut invocation.selection.outer_env {
                     Self::cross_producer_hole(value, producer_hole);
                 }
-                for layer in &mut invocation.unwind.later_wrappers_in_construction_order {
+                for layer in &mut invocation
+                    .unwind
+                    .captured_caller_suffix
+                    .scopes_in_construction_order
+                {
+                    for value in &mut layer.outer_env {
+                        Self::cross_producer_hole(value, producer_hole);
+                    }
+                }
+                for layer in &mut invocation
+                    .unwind
+                    .post_caller_wrappers
+                    .wrappers_in_construction_order
+                {
                     for value in &mut layer.outer_env {
                         Self::cross_producer_hole(value, producer_hole);
                     }
@@ -3829,7 +3915,12 @@ impl<'a> Lowering<'a> {
                 (
                     current_layer,
                     RecursorUnwindStack {
-                        later_wrappers_in_construction_order: Vec::new(),
+                        captured_caller_suffix: CapturedCallerSuffix {
+                            scopes_in_construction_order: Vec::new(),
+                        },
+                        post_caller_wrappers: PostCallerWrapperStack {
+                            wrappers_in_construction_order: Vec::new(),
+                        },
                     },
                     None,
                 )
@@ -3850,60 +3941,60 @@ impl<'a> Lowering<'a> {
                     "source recursor producer-hole marker is missing or duplicated",
                 ));
             };
-            for scope in selected_spine[..*marker_position]
+            for frame in selected_spine[..*marker_position]
                 .iter()
                 .filter_map(|entry| match entry {
-                    SourceSelectedSpineEntry::Frame(frame) => frame.selected_scope.as_ref(),
+                    SourceSelectedSpineEntry::Frame(frame) => Some(frame),
                     SourceSelectedSpineEntry::ProducerHole(_) => None,
                 })
             {
-                if let Some(existing) =
-                    unwind
-                        .later_wrappers_in_construction_order
-                        .iter()
-                        .find(|layer| {
-                            matches!(
-                                layer.role,
-                                RecursorLayerRole::ExitsScope { scope_origin, .. }
-                                    if scope_origin == scope.scope_origin
-                            )
-                        })
-                {
-                    let RecursorLayerRole::ExitsScope { parent_scope, .. } = existing.role else {
-                        unreachable!("selected scope identity belongs only to an exit layer")
-                    };
-                    if parent_scope != scope.parent_scope
-                        || existing.provenance != scope.frame.provenance
-                    {
-                        return Err(unsupported(
-                            "ComputationalRecursor",
-                            "recursor unwind conflicts with an inherited selected scope",
-                        ));
-                    }
+                let Some(scope) = frame.selected_scope.as_ref() else {
                     continue;
+                };
+                let layer = ComputationalRecursorLayer {
+                    cases: scope.frame.cases.clone(),
+                    default: scope.frame.default.clone(),
+                    outer_env: scope.frame.outer_env.clone(),
+                    provenance: scope.frame.provenance,
+                    role: RecursorLayerRole::ExitsScope {
+                        origin: segment_origin,
+                        scope_origin: scope.scope_origin,
+                        parent_scope: scope.parent_scope,
+                    },
+                };
+                match frame.phase {
+                    SelectedScopePhase::CallerSource
+                    | SelectedScopePhase::CapturedCallerSuffix => unwind
+                        .captured_caller_suffix
+                        .scopes_in_construction_order
+                        .push(layer),
+                    SelectedScopePhase::PostCallerWrapper => unwind
+                        .post_caller_wrappers
+                        .wrappers_in_construction_order
+                        .push(layer),
                 }
-                unwind
-                    .later_wrappers_in_construction_order
-                    .push(ComputationalRecursorLayer {
-                        cases: scope.frame.cases.clone(),
-                        default: scope.frame.default.clone(),
-                        outer_env: scope.frame.outer_env.clone(),
-                        provenance: scope.frame.provenance,
-                        role: RecursorLayerRole::ExitsScope {
-                            origin: segment_origin,
-                            scope_origin: scope.scope_origin,
-                            parent_scope: scope.parent_scope,
-                        },
-                    });
             }
         }
         if let Some(mut wrapper) = wrapper {
             let parent_scope = unwind
-                .later_wrappers_in_construction_order
+                .post_caller_wrappers
+                .wrappers_in_construction_order
                 .last()
                 .and_then(|layer| match layer.role {
                     RecursorLayerRole::ExitsScope { scope_origin, .. } => Some(scope_origin),
                     RecursorLayerRole::SelectsOccurrence { .. } => None,
+                })
+                .or_else(|| {
+                    unwind
+                        .captured_caller_suffix
+                        .scopes_in_construction_order
+                        .last()
+                        .and_then(|layer| match layer.role {
+                            RecursorLayerRole::ExitsScope { scope_origin, .. } => {
+                                Some(scope_origin)
+                            }
+                            RecursorLayerRole::SelectsOccurrence { .. } => None,
+                        })
                 });
             if let RecursorLayerRole::ExitsScope {
                 parent_scope: wrapper_parent,
@@ -3913,7 +4004,8 @@ impl<'a> Lowering<'a> {
                 *wrapper_parent = parent_scope;
             }
             unwind
-                .later_wrappers_in_construction_order
+                .post_caller_wrappers
+                .wrappers_in_construction_order
                 .push(wrapper);
         }
         let invocation = RecursorInvocationSegment::new(
@@ -6083,6 +6175,7 @@ impl<'a> Lowering<'a> {
                 env,
                 provenance,
                 producer_hole,
+                selected_phase,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases,
@@ -6090,6 +6183,7 @@ impl<'a> Lowering<'a> {
                 env,
                 provenance,
                 producer_hole,
+                selected_phase,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
                     stack,
@@ -6189,8 +6283,16 @@ impl<'a> Lowering<'a> {
             sibling_position: invocation.sibling_position,
             exits: invocation
                 .unwind
-                .later_wrappers_in_construction_order
+                .captured_caller_suffix
+                .scopes_in_construction_order
                 .iter()
+                .chain(
+                    invocation
+                        .unwind
+                        .post_caller_wrappers
+                        .wrappers_in_construction_order
+                        .iter(),
+                )
                 .filter_map(|layer| match layer.role {
                     RecursorLayerRole::ExitsScope {
                         scope_origin,
@@ -6333,6 +6435,7 @@ impl<'a> Lowering<'a> {
                 env,
                 provenance,
                 producer_hole: next_hole,
+                selected_phase,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases,
@@ -6340,6 +6443,7 @@ impl<'a> Lowering<'a> {
                 env,
                 provenance,
                 producer_hole: next_hole,
+                selected_phase,
                 next: Box::new(Self::install_source_selected_return(
                     *next,
                     child_cursor,
@@ -6531,6 +6635,7 @@ impl<'a> Lowering<'a> {
                 env,
                 provenance,
                 producer_hole,
+                selected_phase,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
@@ -6541,6 +6646,7 @@ impl<'a> Lowering<'a> {
                         env,
                         provenance,
                         producer_hole,
+                        selected_phase,
                         next: Box::new(next),
                     },
                     terminal,
@@ -6690,6 +6796,7 @@ impl<'a> Lowering<'a> {
                 env,
                 provenance,
                 producer_hole,
+                selected_phase,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases: cases.clone(),
@@ -6697,6 +6804,7 @@ impl<'a> Lowering<'a> {
                 env: env.clone(),
                 provenance: *provenance,
                 producer_hole: *producer_hole,
+                selected_phase: *selected_phase,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::ReturnFromSelectedCase {
@@ -6827,6 +6935,7 @@ impl<'a> Lowering<'a> {
                 SourceSelectedSpineFrame {
                     cursor: active.cursor,
                     selected_scope: active.selected_scope.cloned(),
+                    phase: SelectedScopePhase::CallerSource,
                 },
             ));
         }
@@ -6978,6 +7087,7 @@ impl<'a> Lowering<'a> {
                             env: env.clone(),
                             provenance: self.mint_recursor_frame_provenance(),
                             producer_hole: None,
+                            selected_phase: SelectedScopePhase::CallerSource,
                             next: Box::new(control.continuation),
                         };
                         SourceMachineState::Eval {
@@ -7161,6 +7271,7 @@ impl<'a> Lowering<'a> {
                                     env: layer.outer_env,
                                     provenance: layer.provenance,
                                     producer_hole,
+                                    selected_phase: SelectedScopePhase::PostCallerWrapper,
                                     next,
                                 };
                             SourceMachineState::Value { value, control }
@@ -7183,7 +7294,23 @@ impl<'a> Lowering<'a> {
                                     "source recursor resume cursor is no longer active",
                                 )
                             })?;
-                            if let Some(layer) = stack.later_wrappers_in_construction_order.pop() {
+                            let layer = stack
+                                .captured_caller_suffix
+                                .scopes_in_construction_order
+                                .pop()
+                                .map(|layer| {
+                                    (layer, SelectedScopePhase::CapturedCallerSuffix)
+                                })
+                                .or_else(|| {
+                                    stack
+                                        .post_caller_wrappers
+                                        .wrappers_in_construction_order
+                                        .pop()
+                                        .map(|layer| {
+                                            (layer, SelectedScopePhase::PostCallerWrapper)
+                                        })
+                                });
+                            if let Some((layer, selected_phase)) = layer {
                                 #[cfg(test)]
                                 if let RecursorLayerRole::ExitsScope {
                                     origin,
@@ -7204,6 +7331,7 @@ impl<'a> Lowering<'a> {
                                         env: layer.outer_env,
                                         provenance: layer.provenance,
                                         producer_hole,
+                                        selected_phase,
                                         next: Box::new(SourceContinuation::UnwindRecursorSegment {
                                             stack,
                                             resume_cursor,
@@ -7377,6 +7505,7 @@ impl<'a> Lowering<'a> {
                             env,
                             provenance,
                             producer_hole,
+                            selected_phase,
                             next,
                         } => {
                             let Lowered::Constructor { constructor, args } = value else {
@@ -7580,6 +7709,7 @@ impl<'a> Lowering<'a> {
                                 SourceSelectedSpineFrame {
                                     cursor,
                                     selected_scope: control.selected.selected_scope.clone(),
+                                    phase: selected_phase,
                                 },
                             ));
                             control.continuation = Self::install_source_selected_return(
