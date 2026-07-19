@@ -11,26 +11,26 @@ use std::fmt;
 use std::mem;
 
 use cranelift_codegen::ir::{
-    types, AbiParam, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
-    UserFuncName,
+    AbiParam, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind, UserFuncName,
+    types,
 };
 use cranelift_codegen::isa::OwnedTargetIsa;
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_codegen::verify_function;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{default_libcall_names, FuncId, Linkage, Module};
+use cranelift_module::{FuncId, Linkage, Module, default_libcall_names};
 use cranelift_object::{ObjectBuilder, ObjectModule};
 
 use crate::{
-    fnv1a_64, proof_erasure_boundary_facts_from_program, proof_erasure_witness_error,
-    validate_supported_runtime_artifact_certificate, KenCheckedProofErasureBoundaryReport,
-    ProofErasureBoundaryWitnessError, ProofErasureBoundaryWitnessStage, RuntimeArtifactCertificate,
-    RuntimeArtifactIdentity, RuntimeArtifactValidationError, RuntimeArtifactValidationReport,
-    RuntimeDeclaration, RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExample, RuntimeExpr,
-    RuntimeGroundValue, RuntimeIrRunReport, RuntimeIrTargetIdentity, RuntimeLowerabilityStatus,
-    RuntimeObservation, RuntimePartiality, RuntimePrimitive, RuntimeProgram, RuntimeSymbol,
-    RuntimeTrap, RuntimeTrapCode, RuntimeValue,
+    KenCheckedProofErasureBoundaryReport, ProofErasureBoundaryWitnessError,
+    ProofErasureBoundaryWitnessStage, RuntimeArtifactCertificate, RuntimeArtifactIdentity,
+    RuntimeArtifactValidationError, RuntimeArtifactValidationReport, RuntimeDeclaration,
+    RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExample, RuntimeExpr, RuntimeGroundValue,
+    RuntimeIrRunReport, RuntimeIrTargetIdentity, RuntimeLowerabilityStatus, RuntimeObservation,
+    RuntimePartiality, RuntimePrimitive, RuntimeProgram, RuntimeSymbol, RuntimeTrap,
+    RuntimeTrapCode, RuntimeValue, fnv1a_64, proof_erasure_boundary_facts_from_program,
+    proof_erasure_witness_error, validate_supported_runtime_artifact_certificate,
 };
 
 const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [
@@ -519,6 +519,32 @@ pub fn emit_runtime_ir_object_with_cranelift(
 }
 
 #[cfg(test)]
+fn test_distinguished_root_join_plan() -> crate::NativeJoinPlanV1 {
+    let site_id = 0;
+    let declaration = "decl:fixture::NativeProcess::main".to_string();
+    let checked_occurrence_path = vec![0];
+    let checked_result_type_fingerprint = 0x5058_3854_415f_524f;
+    crate::NativeJoinPlanV1 {
+        representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+        sites: vec![crate::NativeJoinPlanSiteV1 {
+            site_id,
+            occurrence_binding_fingerprint:
+                crate::compiler_private_join_occurrence_binding_fingerprint(
+                    site_id,
+                    &declaration,
+                    &checked_occurrence_path,
+                    checked_result_type_fingerprint,
+                ),
+            declaration,
+            checked_occurrence_path,
+            checked_result_type_fingerprint,
+            runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
+            answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
+        }],
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn emit_process_entrypoint_object_with_cranelift(
     entrypoint: &RuntimeExpr,
     entry_symbol: impl Into<String>,
@@ -534,7 +560,7 @@ pub(crate) fn emit_process_entrypoint_object_with_cranelift(
         None,
         true,
         None,
-        None,
+        Some(test_distinguished_root_join_plan()),
     )?;
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
@@ -574,7 +600,7 @@ fn emit_process_entrypoint_object_with_symbols(
         None,
         true,
         Some(symbols),
-        None,
+        Some(test_distinguished_root_join_plan()),
     )?;
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
@@ -1487,6 +1513,7 @@ fn run_px8j_malformed_recursor_consumer(
         next_source_predecessor: 0,
         live_source_continuations: 0,
         native_join_plan: None,
+        terminal_answer_cut: None,
         consumed_join_sites: BTreeSet::new(),
         active_join_site: None,
         assumptions: BTreeSet::new(),
@@ -1504,6 +1531,7 @@ fn run_px8j_malformed_recursor_consumer(
         native_int_tags: BTreeMap::new(),
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        terminal_answer_authority_mutation: TerminalAnswerAuthorityMutation::Exact,
     };
     let origin = RecursorProducerOriginId(7);
     let cursor = ContinuationCursorId(9);
@@ -1652,6 +1680,7 @@ fn run_checked_bounded_nat_fixture(
         next_source_predecessor: 0,
         live_source_continuations: 0,
         native_join_plan: None,
+        terminal_answer_cut: None,
         consumed_join_sites: BTreeSet::new(),
         active_join_site: None,
         assumptions: BTreeSet::new(),
@@ -1669,6 +1698,7 @@ fn run_checked_bounded_nat_fixture(
         native_int_tags: BTreeMap::new(),
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: mutation,
+        terminal_answer_authority_mutation: TerminalAnswerAuthorityMutation::Exact,
     };
     let mut function_context = FunctionBuilderContext::new();
     {
@@ -1800,7 +1830,7 @@ fn run_checked_bounded_nat_fixture(
         };
         let value = match lowered {
             Lowered::Int { value, .. } => value,
-            other => compiler.emit_result(&mut builder, other)?.0,
+            other => compiler.emit_result(&mut builder, other, None)?.0,
         };
         builder.ins().return_(&[value]);
         builder.seal_all_blocks();
@@ -1858,6 +1888,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         next_source_predecessor: 0,
         live_source_continuations: 0,
         native_join_plan: None,
+        terminal_answer_cut: None,
         consumed_join_sites: BTreeSet::new(),
         active_join_site: None,
         assumptions: BTreeSet::new(),
@@ -1875,6 +1906,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         native_int_tags: BTreeMap::new(),
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        terminal_answer_authority_mutation: TerminalAnswerAuthorityMutation::Exact,
     };
     let mut function_context = FunctionBuilderContext::new();
     {
@@ -1933,7 +1965,7 @@ fn run_dynamic_constructor_dispatch_fixture(
                 builder.ins().iconst(types::I64, -4)
             }
             Lowered::Int { value, .. } => value,
-            value => compiler.emit_result(&mut builder, value)?.0,
+            value => compiler.emit_result(&mut builder, value, None)?.0,
         };
         builder.ins().return_(&[value]);
         builder.seal_all_blocks();
@@ -2047,6 +2079,23 @@ fn compile_expr_into_module<'a, M: Module>(
     let int_export = module.declare_func_in_func(native_int.export, &mut ctx.func);
 
     let mut func_ctx = FunctionBuilderContext::new();
+    let terminal_answer_cut = process_mode
+        .then(|| {
+            native_join_plan.as_ref().and_then(|plan| {
+                plan.sites
+                    .iter()
+                    .find(|site| {
+                        site.runtime_frame_fingerprint
+                            == crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+                            && site.checked_occurrence_path == [0]
+                            && site.answer_kind == crate::NativeJoinAnswerKindV1::ExitCode
+                    })
+                    .map(|site| TerminalProcessAnswerCut {
+                        checked_site_id: site.site_id,
+                    })
+            })
+        })
+        .flatten();
     let mut compiler = Lowering {
         seed_env,
         declarations,
@@ -2062,6 +2111,7 @@ fn compile_expr_into_module<'a, M: Module>(
         next_source_predecessor: 0,
         live_source_continuations: 0,
         native_join_plan,
+        terminal_answer_cut,
         consumed_join_sites: BTreeSet::new(),
         active_join_site: None,
         assumptions: BTreeSet::new(),
@@ -2083,6 +2133,9 @@ fn compile_expr_into_module<'a, M: Module>(
         native_int_mutation: NATIVE_INT_LOWERING_MUTATION.with(std::cell::Cell::get),
         #[cfg(test)]
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        #[cfg(test)]
+        terminal_answer_authority_mutation: TERMINAL_ANSWER_AUTHORITY_MUTATION
+            .with(std::cell::Cell::get),
     };
     let (maybe_trap, decoder) = {
         let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
@@ -2117,7 +2170,7 @@ fn compile_expr_into_module<'a, M: Module>(
             initial_env.push(compiler.lower_value(&mut builder, value)?);
         }
         let lowered = compiler.lower_expr(&mut builder, expr, &initial_env)?;
-        compiler.consume_distinguished_root_join_site()?;
+        let terminal_authority = compiler.consume_distinguished_root_join_site()?;
         compiler.require_complete_join_plan_consumption()?;
         let result = match lowered {
             Lowered::Trap(trap) => {
@@ -2128,7 +2181,8 @@ fn compile_expr_into_module<'a, M: Module>(
                 (Some(trap), None)
             }
             value => {
-                let (token, decoder) = compiler.emit_result(&mut builder, value)?;
+                let (token, decoder) =
+                    compiler.emit_result(&mut builder, value, terminal_authority)?;
                 builder.ins().return_(&[token]);
                 (None, Some(decoder))
             }
@@ -2209,6 +2263,7 @@ struct Lowering<'a> {
     next_source_predecessor: u64,
     live_source_continuations: usize,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
+    terminal_answer_cut: Option<TerminalProcessAnswerCut>,
     consumed_join_sites: BTreeSet<u64>,
     active_join_site: Option<u64>,
     assumptions: BTreeSet<String>,
@@ -2228,6 +2283,8 @@ struct Lowering<'a> {
     native_int_mutation: NativeIntLoweringMutation,
     #[cfg(test)]
     bounded_nat_mutation: BoundedNatLoweringMutation,
+    #[cfg(test)]
+    terminal_answer_authority_mutation: TerminalAnswerAuthorityMutation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2913,6 +2970,7 @@ struct SourceJoinTarget<'a> {
     block: cranelift_codegen::ir::Block,
     expected_outer: ContinuationCursorId,
     required_kind: ScalarMergeKind,
+    terminal_answer_site: Option<u64>,
     terminal_active_prefix: Vec<EliminatorFrame<'a>>,
 }
 
@@ -3114,10 +3172,33 @@ enum ScalarMergeKind {
     RecursiveBackedge,
 }
 
-/// Proof token for the legacy closed-expression merge sites. It can only be
-/// minted when source evaluation has no live continuation. Checked source joins
-/// use their explicit `SourceJoinTarget.required_kind` instead.
-struct TerminalProcessAnswerBoundary;
+/// Move-only proof that one native value is at the distinguished checked root
+/// `InvocationReturn` / `ExitCode` cut.  Nested producer holes and intermediate
+/// joins never mint this authority.
+struct TerminalProcessAnswerAuthority {
+    checked_site_id: u64,
+}
+
+/// The unique checked root cut carried while lowering a semantically terminal
+/// source position. It is deliberately not `Clone`; live source continuations
+/// move it out of the lowering context until they have drained.
+struct TerminalProcessAnswerCut {
+    checked_site_id: u64,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TerminalAnswerAuthorityMutation {
+    Exact,
+    ProcessObjectAndZeroDepth,
+}
+
+#[cfg(test)]
+thread_local! {
+    static TERMINAL_ANSWER_AUTHORITY_MUTATION:
+        std::cell::Cell<TerminalAnswerAuthorityMutation> =
+        const { std::cell::Cell::new(TerminalAnswerAuthorityMutation::Exact) };
+}
 
 struct DeferredConstructorCaseEnvironment<'a> {
     constructor: &'a str,
@@ -4218,8 +4299,14 @@ impl<'a> Lowering<'a> {
                             producer_env,
                             eliminators,
                         )?;
-                        let (value, is_exit) =
-                            self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
+                        let authority =
+                            self.terminal_authority_for_drained_eliminators(eliminators)?;
+                        let (value, is_exit) = self.merge_branch_value(
+                            builder,
+                            lowered,
+                            authority,
+                            "ComputationalMatch",
+                        )?;
                         Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
                         builder
                             .ins()
@@ -4272,8 +4359,14 @@ impl<'a> Lowering<'a> {
                         } else {
                             Lowered::Trap(producer_default.clone())
                         };
-                        let (value, is_exit) =
-                            self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
+                        let authority =
+                            self.terminal_authority_for_drained_eliminators(eliminators)?;
+                        let (value, is_exit) = self.merge_branch_value(
+                            builder,
+                            lowered,
+                            authority,
+                            "ComputationalMatch",
+                        )?;
                         Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
                         builder
                             .ins()
@@ -4425,8 +4518,9 @@ impl<'a> Lowering<'a> {
                         producer_env,
                         eliminators,
                     )?;
+                    let authority = self.terminal_authority_for_drained_eliminators(eliminators)?;
                     let (value, is_exit) =
-                        self.merge_branch_value(builder, lowered, "ComputationalMatch")?;
+                        self.merge_branch_value(builder, lowered, authority, "ComputationalMatch")?;
                     Self::record_merge_kind("ComputationalMatch", &mut exit_merge, is_exit)?;
                     builder
                         .ins()
@@ -4757,8 +4851,9 @@ impl<'a> Lowering<'a> {
         } else {
             self.lower_computational_producer_expr(builder, zero_body, &zero_frame_env, remaining)?
         };
+        let authority = self.terminal_authority_for_drained_eliminators(remaining)?;
         let (initial, result_kind) =
-            self.merge_scalar_branch(builder, zero_lowered, "BoundedNat")?;
+            self.merge_scalar_branch(builder, zero_lowered, authority, "BoundedNat")?;
 
         let loop_block = builder.create_block();
         let step_block = builder.create_block();
@@ -4881,7 +4976,9 @@ impl<'a> Lowering<'a> {
         } else {
             self.lower_computational_producer_expr(builder, suc_body, &suc_env, remaining)?
         };
-        let (next, next_kind) = self.merge_scalar_branch(builder, suc_lowered, "BoundedNat")?;
+        let authority = self.terminal_authority_for_drained_eliminators(remaining)?;
+        let (next, next_kind) =
+            self.merge_scalar_branch(builder, suc_lowered, authority, "BoundedNat")?;
         if next_kind != result_kind {
             return Err(unsupported(
                 "BoundedNat",
@@ -5097,9 +5194,11 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         lowered: Lowered,
+        authority: Option<TerminalProcessAnswerAuthority>,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, bool), CraneliftBackendError> {
         let zero_tag = builder.ins().iconst(types::I64, 0);
+        let terminal_authorized = self.consume_terminal_answer_authority(authority);
         match lowered {
             Lowered::Int { value, known } => Ok((
                 NativeScalarPairV1 {
@@ -5115,7 +5214,7 @@ impl<'a> Lowering<'a> {
                 },
                 true,
             )),
-            lowered if self.terminal_process_answer_boundary().is_some() => Ok((
+            lowered if terminal_authorized => Ok((
                 NativeScalarPairV1 {
                     tag: zero_tag,
                     payload: self.emit_process_exit_status(builder, lowered),
@@ -5133,9 +5232,11 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         lowered: Lowered,
+        authority: Option<TerminalProcessAnswerAuthority>,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
         let zero_tag = builder.ins().iconst(types::I64, 0);
+        let terminal_authorized = self.consume_terminal_answer_authority(authority);
         match lowered {
             Lowered::RecursiveBackedge => Ok((
                 NativeScalarPairV1 {
@@ -5188,7 +5289,7 @@ impl<'a> Lowering<'a> {
                 },
                 ScalarMergeKind::ExitCode,
             )),
-            lowered if self.terminal_process_answer_boundary().is_some() => Ok((
+            lowered if terminal_authorized => Ok((
                 NativeScalarPairV1 {
                     tag: zero_tag,
                     payload: self.emit_process_exit_status(builder, lowered),
@@ -5202,11 +5303,6 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn terminal_process_answer_boundary(&self) -> Option<TerminalProcessAnswerBoundary> {
-        (self.process_object && self.live_source_continuations == 0)
-            .then_some(TerminalProcessAnswerBoundary)
-    }
-
     /// Scalarize only under the answer kind carried by an already-consumed
     /// checked join site. In particular, process-object mode is not evidence
     /// that an arbitrary constructor is terminal: only an `ExitCode` plan may
@@ -5216,10 +5312,12 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         lowered: Lowered,
         required_kind: ScalarMergeKind,
+        authority: Option<TerminalProcessAnswerAuthority>,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
         if required_kind == ScalarMergeKind::ExitCode {
             let zero_tag = builder.ins().iconst(types::I64, 0);
+            let terminal_authorized = self.consume_terminal_answer_authority(authority);
             return match lowered {
                 Lowered::RecursiveBackedge => Ok((
                     NativeScalarPairV1 {
@@ -5235,7 +5333,7 @@ impl<'a> Lowering<'a> {
                     },
                     ScalarMergeKind::ExitCode,
                 )),
-                lowered if self.process_object => Ok((
+                lowered if terminal_authorized => Ok((
                     NativeScalarPairV1 {
                         tag: zero_tag,
                         payload: self.emit_process_exit_status(builder, lowered),
@@ -5248,7 +5346,25 @@ impl<'a> Lowering<'a> {
                 )),
             };
         }
-        self.merge_scalar_branch(builder, lowered, construct)
+        let authority = self.mint_active_terminal_answer_authority()?;
+        self.merge_scalar_branch(builder, lowered, authority, construct)
+    }
+
+    fn consume_terminal_answer_authority(
+        &self,
+        authority: Option<TerminalProcessAnswerAuthority>,
+    ) -> bool {
+        if let Some(authority) = authority {
+            debug_assert!(self.is_distinguished_root_site(authority.checked_site_id));
+            return true;
+        }
+        #[cfg(test)]
+        if self.terminal_answer_authority_mutation
+            == TerminalAnswerAuthorityMutation::ProcessObjectAndZeroDepth
+        {
+            return self.process_object && self.live_source_continuations == 0;
+        }
+        false
     }
 
     fn record_merge_kind(
@@ -5430,9 +5546,45 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
-    fn consume_distinguished_root_join_site(&mut self) -> Result<(), CraneliftBackendError> {
+    fn is_distinguished_root_site(&self, site_id: u64) -> bool {
+        self.native_join_plan.as_ref().is_some_and(|plan| {
+            plan.sites.iter().any(|site| {
+                site.site_id == site_id
+                    && site.runtime_frame_fingerprint
+                        == crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+                    && site.checked_occurrence_path == [0]
+                    && site.answer_kind == crate::NativeJoinAnswerKindV1::ExitCode
+            })
+        })
+    }
+
+    fn mint_terminal_answer_authority(
+        &self,
+        checked_site_id: u64,
+    ) -> Result<TerminalProcessAnswerAuthority, CraneliftBackendError> {
+        if !self.process_object || !self.is_distinguished_root_site(checked_site_id) {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "terminal authority requires the exact checked process root ExitCode cut",
+            ));
+        }
+        Ok(TerminalProcessAnswerAuthority { checked_site_id })
+    }
+
+    fn mint_active_terminal_answer_authority(
+        &self,
+    ) -> Result<Option<TerminalProcessAnswerAuthority>, CraneliftBackendError> {
+        self.terminal_answer_cut
+            .as_ref()
+            .map(|cut| self.mint_terminal_answer_authority(cut.checked_site_id))
+            .transpose()
+    }
+
+    fn consume_distinguished_root_join_site(
+        &mut self,
+    ) -> Result<Option<TerminalProcessAnswerAuthority>, CraneliftBackendError> {
         let Some(plan) = &self.native_join_plan else {
-            return Ok(());
+            return Ok(None);
         };
         let roots = plan
             .sites
@@ -5445,7 +5597,7 @@ impl<'a> Lowering<'a> {
             .cloned()
             .collect::<Vec<_>>();
         let site = match roots.as_slice() {
-            [] => return Ok(()),
+            [] => return Ok(None),
             [site] => site,
             _ => {
                 return Err(unsupported(
@@ -5467,8 +5619,14 @@ impl<'a> Lowering<'a> {
                 "distinguished root join occurrence binding is stale or inconsistent",
             ));
         }
-        self.consumed_join_sites.insert(site.site_id);
-        Ok(())
+        if !self.consumed_join_sites.insert(site.site_id) {
+            return Ok(None);
+        }
+        if self.process_object {
+            self.mint_terminal_answer_authority(site.site_id).map(Some)
+        } else {
+            Ok(None)
+        }
     }
 
     fn scalar_kind_from_plan(kind: crate::NativeJoinAnswerKindV1) -> ScalarMergeKind {
@@ -5478,6 +5636,20 @@ impl<'a> Lowering<'a> {
             crate::NativeJoinAnswerKindV1::StructuralNat => ScalarMergeKind::StructuralNat,
             crate::NativeJoinAnswerKindV1::ExitCode => ScalarMergeKind::ExitCode,
         }
+    }
+
+    fn terminal_authority_for_drained_eliminators(
+        &mut self,
+        eliminators: &[EliminatorFrame<'_>],
+    ) -> Result<Option<TerminalProcessAnswerAuthority>, CraneliftBackendError> {
+        if !matches!(eliminators, [EliminatorFrame::InvocationReturn]) {
+            return self.mint_active_terminal_answer_authority();
+        }
+        let Some(site) = self.planned_join_site_for_frame(EliminatorFrame::InvocationReturn)?
+        else {
+            return Ok(None);
+        };
+        self.mint_terminal_answer_authority(site.site_id).map(Some)
     }
 
     fn declaration_call_produces_deforestable_aggregate(&self, expr: &RuntimeExpr) -> bool {
@@ -6128,6 +6300,7 @@ impl<'a> Lowering<'a> {
         env: Vec<Lowered>,
         control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let terminal_answer_cut = self.terminal_answer_cut.take();
         self.live_source_continuations = self
             .live_source_continuations
             .checked_add(1)
@@ -6137,6 +6310,8 @@ impl<'a> Lowering<'a> {
             .live_source_continuations
             .checked_sub(1)
             .expect("source-continuation depth must balance");
+        debug_assert!(self.terminal_answer_cut.is_none());
+        self.terminal_answer_cut = terminal_answer_cut;
         result
     }
 
@@ -6343,24 +6518,30 @@ impl<'a> Lowering<'a> {
                                     builder, value, &prefix,
                                 )?
                             };
+                            let terminal_authority = edge
+                                .target
+                                .terminal_answer_site
+                                .map(|site_id| self.mint_terminal_answer_authority(site_id))
+                                .transpose()?;
                             let (value, actual_kind) = self.merge_planned_scalar_branch(
                                 builder,
                                 value,
                                 edge.target.required_kind,
+                                terminal_authority,
                                 "NativeJoinPlanV1",
                             )?;
                             if actual_kind != ScalarMergeKind::RecursiveBackedge
                                 && actual_kind != edge.target.required_kind
                             {
                                 return Err(unsupported(
-                                "NativeJoinPlanV1",
-                                format!(
-                                    "predecessor {} for join {} produced {actual_kind:?}, planned {:?}",
-                                    edge.predecessor_identity,
-                                    edge.target.join_id,
-                                    edge.target.required_kind
-                                ),
-                            ));
+                                    "NativeJoinPlanV1",
+                                    format!(
+                                        "predecessor {} for join {} produced {actual_kind:?}, planned {:?}",
+                                        edge.predecessor_identity,
+                                        edge.target.join_id,
+                                        edge.target.required_kind
+                                    ),
+                                ));
                             }
                             builder
                                 .ins()
@@ -6579,11 +6760,11 @@ impl<'a> Lowering<'a> {
                                         return Err(unsupported(
                                             "Match",
                                             format!(
-                                    "case {} expects {} binders but constructor has {} args",
-                                    case.constructor,
-                                    case.binders,
-                                    args.len()
-                                ),
+                                                "case {} expects {} binders but constructor has {} args",
+                                                case.constructor,
+                                                case.binders,
+                                                args.len()
+                                            ),
                                         ));
                                     }
                                     let mut case_env = args;
@@ -6888,6 +7069,9 @@ impl<'a> Lowering<'a> {
                         block: merge,
                         expected_outer: suffix_control.terminal_outer,
                         required_kind,
+                        terminal_answer_site: self
+                            .is_distinguished_root_site(site_id)
+                            .then_some(site_id),
                         terminal_active_prefix: prefix,
                     },
                 )
@@ -7009,6 +7193,9 @@ impl<'a> Lowering<'a> {
                     block: merge,
                     expected_outer: suffix_control.terminal_outer,
                     required_kind,
+                    terminal_answer_site: self
+                        .is_distinguished_root_site(site_id)
+                        .then_some(site_id),
                     terminal_active_prefix: prefix,
                 }
             }
@@ -7111,6 +7298,9 @@ impl<'a> Lowering<'a> {
                     block: merge,
                     expected_outer: suffix_control.terminal_outer,
                     required_kind,
+                    terminal_answer_site: self
+                        .is_distinguished_root_site(site_id)
+                        .then_some(site_id),
                     terminal_active_prefix: prefix,
                 }
             }
@@ -7332,6 +7522,7 @@ impl<'a> Lowering<'a> {
             block: merge,
             expected_outer: suffix_control.terminal_outer,
             required_kind,
+            terminal_answer_site: self.is_distinguished_root_site(site_id).then_some(site_id),
             terminal_active_prefix: prefix,
         };
         let (source_prefix_template, terminal) =
@@ -7798,10 +7989,7 @@ impl<'a> Lowering<'a> {
                 let tag = builder.block_params(merge)[0];
                 let value = builder.block_params(merge)[1];
                 self.native_int_tags.insert(value, tag);
-                Ok(Lowered::Int {
-                    value,
-                    known: None,
-                })
+                Ok(Lowered::Int { value, known: None })
             }
             RuntimeExpr::Construct { constructor, args } => {
                 let lowered_args = args
@@ -7936,7 +8124,11 @@ impl<'a> Lowering<'a> {
                     if let Some(selected) = known {
                         return self.lower_expr(
                             builder,
-                            if selected { &true_case.body } else { &false_case.body },
+                            if selected {
+                                &true_case.body
+                            } else {
+                                &false_case.body
+                            },
                             env,
                         );
                     }
@@ -7945,22 +8137,15 @@ impl<'a> Lowering<'a> {
                     let merge = builder.create_block();
                     builder.append_block_param(merge, types::I64);
                     builder.append_block_param(merge, types::I64);
-                    builder
-                        .ins()
-                        .brif(value, true_block, &[], false_block, &[]);
+                    builder.ins().brif(value, true_block, &[], false_block, &[]);
                     let mut merge_kind = None;
-                    for (block, case) in
-                        [(true_block, true_case), (false_block, false_case)]
-                    {
+                    for (block, case) in [(true_block, true_case), (false_block, false_case)] {
                         builder.switch_to_block(block);
                         let lowered = self.lower_expr(builder, &case.body, env)?;
+                        let authority = self.mint_active_terminal_answer_authority()?;
                         let (value, branch_kind) =
-                            self.merge_scalar_branch(builder, lowered, "Match")?;
-                        Self::record_scalar_merge_kind(
-                            "Match",
-                            &mut merge_kind,
-                            branch_kind,
-                        )?;
+                            self.merge_scalar_branch(builder, lowered, authority, "Match")?;
+                        Self::record_scalar_merge_kind("Match", &mut merge_kind, branch_kind)?;
                         builder
                             .ins()
                             .jump(merge, &[value.tag.into(), value.payload.into()]);
@@ -8000,16 +8185,7 @@ impl<'a> Lowering<'a> {
                 scrutinee,
                 cases,
                 default,
-            } => {
-                self.lower_computational_match_expr(
-                    builder,
-                    scrutinee,
-                    cases,
-                    default,
-                    env,
-                    env,
-                )
-            }
+            } => self.lower_computational_match_expr(builder, scrutinee, cases, default, env, env),
             RuntimeExpr::Record { fields } => {
                 let lowered_fields = fields
                     .iter()
@@ -8082,14 +8258,7 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     } => self.lower_recursive_declaration_call(
-                        builder,
-                        &symbol,
-                        &captures,
-                        &params,
-                        &body,
-                        args,
-                        env,
-                        None,
+                        builder, &symbol, &captures, &params, &body, args, env, None,
                     ),
                     Lowered::Closure {
                         captures,
@@ -8136,9 +8305,8 @@ impl<'a> Lowering<'a> {
                     }
                     callee @ Lowered::ComputationalRecursorClosure { .. } => {
                         let (base, boundary) = decompose_computational_recursor(callee);
-                        let (_, invocation) = boundary.expect(
-                            "recursor closure carries an invocation segment",
-                        );
+                        let (_, invocation) =
+                            boundary.expect("recursor closure carries an invocation segment");
                         let mut frames = recursor_eliminator_frames(&invocation)?;
                         frames.push(EliminatorFrame::InvocationReturn);
                         if let Lowered::BoundedNat(predecessor) = base {
@@ -8182,12 +8350,7 @@ impl<'a> Lowering<'a> {
                         }
                         call_env.extend(captures);
                         call_env.extend_from_slice(env);
-                        self.lower_computational_producer_expr(
-                            builder,
-                            &body,
-                            &call_env,
-                            &frames,
-                        )
+                        self.lower_computational_producer_expr(builder, &body, &call_env, &frames)
                     }
                     _ => Err(unsupported("Call", "callee is not a closure")),
                 }
@@ -8198,10 +8361,17 @@ impl<'a> Lowering<'a> {
                 operation,
                 capability,
                 args,
-            } if self.process_object => {
-                self.lower_process_host_effect(builder, family, *operation, capability.as_ref(), args, env)
-            }
-            RuntimeExpr::Effect { family, operation, .. } => Err(unsupported(
+            } if self.process_object => self.lower_process_host_effect(
+                builder,
+                family,
+                *operation,
+                capability.as_ref(),
+                args,
+                env,
+            ),
+            RuntimeExpr::Effect {
+                family, operation, ..
+            } => Err(unsupported(
                 "Effect",
                 format!(
                     "effect {family}.{} is not modeled in the supported native subset",
@@ -9160,8 +9330,12 @@ impl<'a> Lowering<'a> {
         zero_env.extend_from_slice(captures);
         zero_env.extend_from_slice(producer_env);
         let zero_lowered = self.lower_expr(builder, zero_body, &zero_env)?;
-        let (initial, result_kind) =
-            self.merge_scalar_branch(builder, zero_lowered, "DeclarationRef")?;
+        let (initial, result_kind) = self.merge_scalar_branch(
+            builder,
+            zero_lowered,
+            self.mint_active_terminal_answer_authority()?,
+            "DeclarationRef",
+        )?;
         if result_kind == ScalarMergeKind::RecursiveBackedge {
             return Err(unsupported(
                 "DeclarationRef",
@@ -9231,7 +9405,12 @@ impl<'a> Lowering<'a> {
         suc_env.extend_from_slice(producer_env);
         let next = self.lower_expr(builder, suc_body, &suc_env);
         self.active_recursive_declarations.pop();
-        let (next, next_kind) = self.merge_scalar_branch(builder, next?, "DeclarationRef")?;
+        let (next, next_kind) = self.merge_scalar_branch(
+            builder,
+            next?,
+            self.mint_active_terminal_answer_authority()?,
+            "DeclarationRef",
+        )?;
         if next_kind != result_kind {
             return Err(unsupported(
                 "DeclarationRef",
@@ -9458,7 +9637,12 @@ impl<'a> Lowering<'a> {
         };
         self.active_recursive_declarations.pop();
         let lowered = lowered?;
-        let (value, result_kind) = self.merge_scalar_branch(builder, lowered, "DeclarationRef")?;
+        let (value, result_kind) = self.merge_scalar_branch(
+            builder,
+            lowered,
+            self.mint_active_terminal_answer_authority()?,
+            "DeclarationRef",
+        )?;
         builder
             .ins()
             .jump(done, &[value.tag.into(), value.payload.into()]);
@@ -9943,7 +10127,8 @@ impl<'a> Lowering<'a> {
                 .collect::<Vec<_>>();
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
-            let (value, kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
+            let authority = self.mint_active_terminal_answer_authority()?;
+            let (value, kind) = self.merge_scalar_branch(builder, lowered, authority, "Match")?;
             Self::record_scalar_merge_kind("Match", &mut merge_kind, kind)?;
             builder
                 .ins()
@@ -10001,7 +10186,8 @@ impl<'a> Lowering<'a> {
             let mut arm_env = fields;
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
-            let (value, is_exit) = self.merge_branch_value(builder, lowered, "Match")?;
+            let authority = self.mint_active_terminal_answer_authority()?;
+            let (value, is_exit) = self.merge_branch_value(builder, lowered, authority, "Match")?;
             Self::record_merge_kind("Match", &mut exit_merge, is_exit)?;
             builder
                 .ins()
@@ -10056,7 +10242,9 @@ impl<'a> Lowering<'a> {
             let mut arm_env = vec![payload];
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
-            let (value, branch_kind) = self.merge_scalar_branch(builder, lowered, "Match")?;
+            let authority = self.mint_active_terminal_answer_authority()?;
+            let (value, branch_kind) =
+                self.merge_scalar_branch(builder, lowered, authority, "Match")?;
             Self::record_scalar_merge_kind("Match", &mut merge_kind, branch_kind)?;
             builder
                 .ins()
@@ -10124,7 +10312,9 @@ impl<'a> Lowering<'a> {
                 .unwrap_or_default();
             arm_env.extend_from_slice(env);
             let lowered = self.lower_expr(builder, &case.body, &arm_env)?;
-            let (value, kind) = self.merge_scalar_branch(builder, lowered, "BoundedNat")?;
+            let authority = self.mint_active_terminal_answer_authority()?;
+            let (value, kind) =
+                self.merge_scalar_branch(builder, lowered, authority, "BoundedNat")?;
             Self::record_scalar_merge_kind("BoundedNat", &mut merge_kind, kind)?;
             builder
                 .ins()
@@ -10221,8 +10411,9 @@ impl<'a> Lowering<'a> {
                         eliminators,
                     )?,
             };
+            let authority = self.mint_active_terminal_answer_authority()?;
             let (value, branch_kind) =
-                self.merge_scalar_branch(builder, lowered, "DynamicConstructor")?;
+                self.merge_scalar_branch(builder, lowered, authority, "DynamicConstructor")?;
             Self::record_scalar_merge_kind("DynamicConstructor", &mut merge_kind, branch_kind)?;
             builder.ins().jump(
                 merge.expect("a selected dynamic constructor case owns the merge"),
@@ -11168,11 +11359,20 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         value: Lowered,
+        authority: Option<TerminalProcessAnswerAuthority>,
     ) -> Result<(cranelift_codegen::ir::Value, ResultDecoder), CraneliftBackendError> {
         if self.process_object {
             let value = match value {
                 Lowered::ProcessExitStatus { value } => value,
-                value => self.emit_process_exit_status(builder, value),
+                value if self.consume_terminal_answer_authority(authority) => {
+                    self.emit_process_exit_status(builder, value)
+                }
+                _ => {
+                    return Err(unsupported(
+                        "NativeResult",
+                        "process result reached terminal decoding without checked root authority",
+                    ));
+                }
             };
             return Ok((value, ResultDecoder::ProcessStatus));
         }
@@ -11613,11 +11813,11 @@ pub(crate) fn backend_module(reason: String) -> CraneliftBackendError {
 mod tests {
     use super::*;
     use crate::{
-        evaluate_runtime_ir_example, nc5_seed_examples, ErasedExecutableCore,
-        RuntimeArtifactValidationStage, RuntimeArtifactValidationTier, RuntimeAssumptionTrustKind,
-        RuntimeAssumptionTrustMetadata, RuntimeDeclaration, RuntimeEffectsForeignAuditMetadata,
-        RuntimeFieldStatus, RuntimeIrSeedEnvironment, RuntimeMatchCase, RuntimeMetadata,
-        RuntimeSymbolMetadata,
+        ErasedExecutableCore, RuntimeArtifactValidationStage, RuntimeArtifactValidationTier,
+        RuntimeAssumptionTrustKind, RuntimeAssumptionTrustMetadata, RuntimeDeclaration,
+        RuntimeEffectsForeignAuditMetadata, RuntimeFieldStatus, RuntimeIrSeedEnvironment,
+        RuntimeMatchCase, RuntimeMetadata, RuntimeSymbolMetadata, evaluate_runtime_ir_example,
+        nc5_seed_examples,
     };
 
     #[test]
@@ -12431,7 +12631,7 @@ mod tests {
             None,
             true,
             Some(&symbols),
-            None,
+            Some(test_distinguished_root_join_plan()),
         )
         .unwrap();
         let input = BorrowedFixtureValue {
@@ -15138,7 +15338,7 @@ mod tests {
             None,
             true,
             None,
-            None,
+            Some(test_distinguished_root_join_plan()),
         )
         .expect("borrowed fixture lowers");
         let mut native_int_arena = crate::NativeIntArenaV1::default();
@@ -15190,8 +15390,10 @@ mod tests {
             len: 2,
         };
         assert_eq!(run_borrowed_fixture(&expr, &wrong_arity), -1);
-        assert!(crate::object_linker_packaging::process_starter_c_stub()
-            .contains("ken native trap: malformed borrowed process input"));
+        assert!(
+            crate::object_linker_packaging::process_starter_c_stub()
+                .contains("ken native trap: malformed borrowed process input")
+        );
     }
 
     #[test]
@@ -15583,6 +15785,7 @@ mod tests {
                 representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
                 sites: vec![self_consistent_root_join_site(0)],
             }),
+            terminal_answer_cut: None,
             consumed_join_sites: BTreeSet::new(),
             active_join_site: Some(41),
             assumptions: BTreeSet::new(),
@@ -15600,6 +15803,7 @@ mod tests {
             native_int_tags: BTreeMap::new(),
             native_int_mutation: NativeIntLoweringMutation::Exact,
             bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+            terminal_answer_authority_mutation: TerminalAnswerAuthorityMutation::Exact,
         };
         let error = lowering
             .planned_join_site_for_frame(EliminatorFrame::InvocationReturn)
@@ -15821,9 +16025,11 @@ mod tests {
         let reports = run_nc6_seed_examples(&program).expect("seed program runs");
 
         assert_eq!(reports.len(), 5);
-        assert!(reports
-            .iter()
-            .all(|report| report.trust.fidelity == NativeFidelity::F1SeedObservationAgreement));
+        assert!(
+            reports
+                .iter()
+                .all(|report| report.trust.fidelity == NativeFidelity::F1SeedObservationAgreement)
+        );
     }
 
     #[test]
@@ -16114,9 +16320,11 @@ mod tests {
             program.core_semantic_hash
         );
         assert_eq!(validation.artifact.artifact_hash, program.artifact_hash);
-        assert!(validation
-            .evidence_source
-            .contains("recomputed supported-subset facts"));
+        assert!(
+            validation
+                .evidence_source
+                .contains("recomputed supported-subset facts")
+        );
     }
 
     #[test]
@@ -16163,10 +16371,12 @@ mod tests {
     fn nc8_certificate_contradictory_claim_rejects() {
         let mut program =
             seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
-        program.examples = vec![nc5_seed_examples()
-            .into_iter()
-            .find(|example| example.name == "closed-scalar-primitive")
-            .expect("seed exists")];
+        program.examples = vec![
+            nc5_seed_examples()
+                .into_iter()
+                .find(|example| example.name == "closed-scalar-primitive")
+                .expect("seed exists"),
+        ];
         let mut certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
         certificate
             .claim
