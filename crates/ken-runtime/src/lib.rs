@@ -19,6 +19,8 @@ pub mod ir;
 #[cfg(test)]
 mod native_effect_v1;
 pub mod native_execution_differential;
+#[doc(hidden)]
+pub mod native_join_plan;
 pub mod native_process_entrypoint;
 pub mod object_linker_packaging;
 pub mod platform_runtime_support;
@@ -44,6 +46,8 @@ pub use ken_host::{
     SemanticErrorV1, TerminalErrorV1, TerminalExitClass,
 };
 pub use native_execution_differential::*;
+#[doc(hidden)]
+pub use native_join_plan::*;
 pub use native_process_entrypoint::*;
 pub use object_linker_packaging::*;
 pub use platform_runtime_support::*;

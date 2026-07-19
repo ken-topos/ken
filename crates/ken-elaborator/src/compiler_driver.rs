@@ -1389,12 +1389,80 @@ pub fn compile_native_program_sources(
         emit_checked_core_package(normalized.header.clone(), normalized.artifact.clone())
             .map_err(CompilerDriverError::from)
             .map_err(NativeProgramBuildError::Driver)?;
-    let executable_view = &normalized_host_package;
+    let join_answer_symbols = crate::erasure::CheckedJoinAnswerSymbols {
+        int: symbols
+            .get(&env.numeric_env.int_id)
+            .cloned()
+            .ok_or_else(|| {
+                NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
+                    id: env.numeric_env.int_id,
+                })
+            })?,
+        bool_: symbols
+            .get(&env.numeric_env.bool_id)
+            .cloned()
+            .ok_or_else(|| {
+                NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
+                    id: env.numeric_env.bool_id,
+                })
+            })?,
+        structural_nat: symbols
+            .get(&env.prelude_env.nat_id)
+            .cloned()
+            .ok_or_else(|| {
+                NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol {
+                    id: env.prelude_env.nat_id,
+                })
+            })?,
+        exit_code: plan.exit_code.clone(),
+    };
+    let (planned_runtime_program, join_plan) =
+        crate::erasure::erase_checked_host_package_for_target_with_join_plan(
+            &normalized_host_package,
+            closure.reachable_declarations.iter(),
+            &plan.main,
+            &host_spine,
+            join_answer_symbols,
+        )
+        .map_err(NativeProgramBuildError::Erasure)?;
+    let join_plan_bytes = join_plan.canonical_bytes();
+    let mut planned = normalized_host_package.clone();
+    let join_plan_symbol = StableSymbol::new(
+        SymbolNamespace::Metadata,
+        vec![package_name.to_string(), "NativeJoinPlanV1".to_string()],
+    );
+    package
+        .artifact
+        .semantic
+        .symbols
+        .insert(join_plan_symbol.clone());
+    package
+        .artifact
+        .semantic
+        .metadata
+        .insert(join_plan_symbol.clone(), join_plan_bytes.clone());
+    package = emit_checked_core_package(package.header.clone(), package.artifact.clone())
+        .map_err(CompilerDriverError::from)
+        .map_err(NativeProgramBuildError::Driver)?;
+    planned
+        .artifact
+        .semantic
+        .symbols
+        .insert(join_plan_symbol.clone());
+    planned
+        .artifact
+        .semantic
+        .metadata
+        .insert(join_plan_symbol, join_plan_bytes);
+    let executable_view =
+        emit_checked_core_package(planned.header.clone(), planned.artifact.clone())
+            .map_err(CompilerDriverError::from)
+            .map_err(NativeProgramBuildError::Driver)?;
     let mut executable_closure_view = closure.clone();
     executable_closure_view.report.package_core_semantic_hash = executable_view.core_semantic_hash;
     executable_closure_view.report.package_artifact_hash = executable_view.artifact_hash;
     let mut executable_entrypoint =
-        package_executable_entrypoint_mode(executable_view, &executable_closure_view, true)
+        package_executable_entrypoint_mode(&executable_view, &executable_closure_view, true)
             .map_err(NativeProgramBuildError::Driver)?;
     if main_has_host_effect {
         for lanes in executable_entrypoint.unsupported_lanes.values_mut() {
@@ -1422,15 +1490,16 @@ pub fn compile_native_program_sources(
     // signal; an unused sibling must not enter native production.
     let executable_closure = closure.reachable_declarations.clone();
     let mut runtime_program = if main_has_host_effect {
-        let mut program = crate::erasure::erase_checked_host_package_for_target(
-            executable_view,
-            executable_closure.iter(),
-            &plan.main,
-            &host_spine,
-        )
-        .map_err(NativeProgramBuildError::Erasure)?;
+        let mut program = planned_runtime_program;
         program.core_semantic_hash = package.core_semantic_hash;
         program.artifact_hash = package.artifact_hash;
+        program.erased_core.metadata.checked_core.metadata = executable_view
+            .artifact
+            .semantic
+            .metadata
+            .iter()
+            .map(|(symbol, bytes)| (symbol.to_string(), bytes.clone()))
+            .collect();
         program
     } else {
         crate::erasure::erase_checked_core_package_for_target(&package, executable_closure.iter())
