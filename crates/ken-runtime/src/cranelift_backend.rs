@@ -3898,96 +3898,23 @@ impl<'a> Lowering<'a> {
             }
         }
         if let Some(mut wrapper) = wrapper {
-            if let Some((selected_spine, hole, _)) = source_hole {
-                let marker_positions = selected_spine
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, entry)| {
-                        matches!(
-                            entry,
-                            SourceSelectedSpineEntry::ProducerHole(actual) if *actual == hole
-                        )
-                        .then_some(index)
-                    })
-                    .collect::<Vec<_>>();
-                let [marker_position] = marker_positions.as_slice() else {
-                    return Err(unsupported(
-                        "ComputationalRecursor",
-                        "wrapped recursor producer-hole marker is missing or duplicated",
-                    ));
-                };
-                let suffix_origins = selected_spine[..*marker_position]
-                    .iter()
-                    .filter_map(|entry| match entry {
-                        SourceSelectedSpineEntry::Frame(frame) => {
-                            frame.selected_scope.as_ref().map(|scope| scope.scope_origin)
-                        }
-                        SourceSelectedSpineEntry::ProducerHole(_) => None,
-                    })
-                    .collect::<BTreeSet<_>>();
-                let wrapper_boundary = unwind
-                    .later_wrappers_in_construction_order
-                    .iter()
-                    .take_while(|layer| {
-                        matches!(
-                            layer.role,
-                            RecursorLayerRole::ExitsScope { scope_origin, .. }
-                                if suffix_origins.contains(&scope_origin)
-                        )
-                    })
-                    .count();
-                let parent_scope = unwind
-                    .later_wrappers_in_construction_order
-                    .get(wrapper_boundary.wrapping_sub(1))
-                    .and_then(|layer| match layer.role {
-                        RecursorLayerRole::ExitsScope { scope_origin, .. }
-                            if wrapper_boundary > 0 => Some(scope_origin),
-                        _ => None,
-                    });
-                let wrapper_scope = match &mut wrapper.role {
-                    RecursorLayerRole::ExitsScope {
-                        scope_origin,
-                        parent_scope: wrapper_parent,
-                        ..
-                    } => {
-                        *wrapper_parent = parent_scope;
-                        *scope_origin
-                    }
-                    RecursorLayerRole::SelectsOccurrence { .. } => {
-                        unreachable!("a wrapper cannot select the invocation")
-                    }
-                };
-                if let Some(next) = unwind
-                    .later_wrappers_in_construction_order
-                    .get_mut(wrapper_boundary)
-                {
-                    let RecursorLayerRole::ExitsScope { parent_scope, .. } = &mut next.role else {
-                        unreachable!("an unwind wrapper cannot select the invocation")
-                    };
-                    *parent_scope = Some(wrapper_scope);
-                }
-                unwind
-                    .later_wrappers_in_construction_order
-                    .insert(wrapper_boundary, wrapper);
-            } else {
-                let parent_scope = unwind
-                    .later_wrappers_in_construction_order
-                    .last()
-                    .and_then(|layer| match layer.role {
-                        RecursorLayerRole::ExitsScope { scope_origin, .. } => Some(scope_origin),
-                        RecursorLayerRole::SelectsOccurrence { .. } => None,
-                    });
-                if let RecursorLayerRole::ExitsScope {
-                    parent_scope: wrapper_parent,
-                    ..
-                } = &mut wrapper.role
-                {
-                    *wrapper_parent = parent_scope;
-                }
-                unwind
-                    .later_wrappers_in_construction_order
-                    .push(wrapper);
+            let parent_scope = unwind
+                .later_wrappers_in_construction_order
+                .last()
+                .and_then(|layer| match layer.role {
+                    RecursorLayerRole::ExitsScope { scope_origin, .. } => Some(scope_origin),
+                    RecursorLayerRole::SelectsOccurrence { .. } => None,
+                });
+            if let RecursorLayerRole::ExitsScope {
+                parent_scope: wrapper_parent,
+                ..
+            } = &mut wrapper.role
+            {
+                *wrapper_parent = parent_scope;
             }
+            unwind
+                .later_wrappers_in_construction_order
+                .push(wrapper);
         }
         let invocation = RecursorInvocationSegment::new(
             segment_origin,
@@ -6319,11 +6246,17 @@ impl<'a> Lowering<'a> {
                 layer,
                 producer_hole: next_hole,
                 next,
-            } => wrap(SourceContinuation::ApplyRecursorSelection {
+            } => SourceContinuation::ApplyRecursorSelection {
                 layer,
                 producer_hole: next_hole,
-                next,
-            }),
+                next: Box::new(Self::install_source_selected_return(
+                    *next,
+                    child_cursor,
+                    parent_cursor,
+                    origin,
+                    producer_hole,
+                )),
+            },
             SourceContinuation::UnwindRecursorSegment {
                 stack,
                 resume_cursor,
