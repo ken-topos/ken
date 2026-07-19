@@ -68,15 +68,57 @@ pub struct CheckedRecursiveInvocationTemplateV1 {
     pub occurrence_binding_fingerprint: u64,
 }
 
+/// One checked recursive-hypothesis binder introduced by an exact
+/// computational eliminator branch.  This is a reusable static template, not
+/// a dynamic invocation identity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedComputationalIHSlotTemplateV1 {
+    pub slot_template_id: u64,
+    pub declaration: String,
+    pub checked_match_ordinal: u64,
+    pub checked_occurrence_path: Vec<u64>,
+    pub frame_template_id: u64,
+    pub constructor: String,
+    pub recursive_position: u64,
+    pub method_binder_ordinal: u64,
+    pub local_telescope: Vec<CheckedAnswerInterfaceV1>,
+    pub ih_interface: CheckedAnswerInterfaceV1,
+    pub segment_site_id: u64,
+    pub frame_templates: Vec<u64>,
+    pub input_interface: CheckedAnswerInterfaceV1,
+    pub output_interface: CheckedAnswerInterfaceV1,
+    pub occurrence_binding_fingerprint: u64,
+}
+
+/// One exact complete application occurrence of a checked computational IH.
+/// Native lowering mints a fresh affine dynamic identity only while consuming
+/// the matching Runtime marker.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedComputationalIHCallTemplateV1 {
+    pub call_template_id: u64,
+    pub declaration: String,
+    pub checked_occurrence_path: Vec<u64>,
+    pub slot_template_id: u64,
+    pub arity: u64,
+    pub local_telescope: Vec<CheckedAnswerInterfaceV1>,
+    pub result_interface: CheckedAnswerInterfaceV1,
+    pub callee_segment_site_id: u64,
+    pub callee_frame_templates: Vec<u64>,
+    pub caller_interface: CheckedAnswerInterfaceV1,
+    pub occurrence_binding_fingerprint: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrientedSubcontinuationPlanV1 {
     pub representation_rule_version: u32,
     pub frames: Vec<OrientedSubcontinuationFramePlanV1>,
     pub recursive_calls: Vec<CheckedRecursiveInvocationTemplateV1>,
+    pub computational_ih_slots: Vec<CheckedComputationalIHSlotTemplateV1>,
+    pub computational_ih_calls: Vec<CheckedComputationalIHCallTemplateV1>,
 }
 
 impl OrientedSubcontinuationPlanV1 {
-    pub const REPRESENTATION_RULE_VERSION: u32 = 1;
+    pub const REPRESENTATION_RULE_VERSION: u32 = 2;
 
     pub fn canonical_bytes(&self) -> Vec<u8> {
         let mut out = ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER.to_vec();
@@ -119,6 +161,56 @@ impl OrientedSubcontinuationPlanV1 {
             put_bytes(&mut out, call.recursion_group.as_bytes());
             put_u64(&mut out, call.scc_index);
             out.push(call.admission);
+            put_u64(&mut out, call.arity);
+            put_u64(&mut out, call.local_telescope.len() as u64);
+            for entry in &call.local_telescope {
+                put_bytes(&mut out, &entry.canonical);
+            }
+            put_bytes(&mut out, &call.result_interface.canonical);
+            put_u64(&mut out, call.callee_segment_site_id);
+            put_u64(&mut out, call.callee_frame_templates.len() as u64);
+            for frame in &call.callee_frame_templates {
+                put_u64(&mut out, *frame);
+            }
+            put_bytes(&mut out, &call.caller_interface.canonical);
+            put_u64(&mut out, call.occurrence_binding_fingerprint);
+        }
+        put_u64(&mut out, self.computational_ih_slots.len() as u64);
+        for slot in &self.computational_ih_slots {
+            put_u64(&mut out, slot.slot_template_id);
+            put_bytes(&mut out, slot.declaration.as_bytes());
+            put_u64(&mut out, slot.checked_match_ordinal);
+            put_u64(&mut out, slot.checked_occurrence_path.len() as u64);
+            for value in &slot.checked_occurrence_path {
+                put_u64(&mut out, *value);
+            }
+            put_u64(&mut out, slot.frame_template_id);
+            put_bytes(&mut out, slot.constructor.as_bytes());
+            put_u64(&mut out, slot.recursive_position);
+            put_u64(&mut out, slot.method_binder_ordinal);
+            put_u64(&mut out, slot.local_telescope.len() as u64);
+            for entry in &slot.local_telescope {
+                put_bytes(&mut out, &entry.canonical);
+            }
+            put_bytes(&mut out, &slot.ih_interface.canonical);
+            put_u64(&mut out, slot.segment_site_id);
+            put_u64(&mut out, slot.frame_templates.len() as u64);
+            for frame in &slot.frame_templates {
+                put_u64(&mut out, *frame);
+            }
+            put_bytes(&mut out, &slot.input_interface.canonical);
+            put_bytes(&mut out, &slot.output_interface.canonical);
+            put_u64(&mut out, slot.occurrence_binding_fingerprint);
+        }
+        put_u64(&mut out, self.computational_ih_calls.len() as u64);
+        for call in &self.computational_ih_calls {
+            put_u64(&mut out, call.call_template_id);
+            put_bytes(&mut out, call.declaration.as_bytes());
+            put_u64(&mut out, call.checked_occurrence_path.len() as u64);
+            for value in &call.checked_occurrence_path {
+                put_u64(&mut out, *value);
+            }
+            put_u64(&mut out, call.slot_template_id);
             put_u64(&mut out, call.arity);
             put_u64(&mut out, call.local_telescope.len() as u64);
             for entry in &call.local_telescope {
@@ -251,6 +343,109 @@ impl OrientedSubcontinuationPlanV1 {
                 occurrence_binding_fingerprint,
             });
         }
+        let slot_count = usize::try_from(take_u64(&mut bytes)?)
+            .map_err(|_| "computational IH slot count overflows usize")?;
+        let mut computational_ih_slots = Vec::with_capacity(slot_count);
+        for _ in 0..slot_count {
+            let slot_template_id = take_u64(&mut bytes)?;
+            let declaration = String::from_utf8(take_bytes(&mut bytes)?.to_vec())
+                .map_err(|_| "computational IH slot declaration is not UTF-8")?;
+            let checked_match_ordinal = take_u64(&mut bytes)?;
+            let path_len = usize::try_from(take_u64(&mut bytes)?)
+                .map_err(|_| "computational IH slot occurrence path overflows usize")?;
+            let mut checked_occurrence_path = Vec::with_capacity(path_len);
+            for _ in 0..path_len {
+                checked_occurrence_path.push(take_u64(&mut bytes)?);
+            }
+            let frame_template_id = take_u64(&mut bytes)?;
+            let constructor = String::from_utf8(take_bytes(&mut bytes)?.to_vec())
+                .map_err(|_| "computational IH slot constructor is not UTF-8")?;
+            let recursive_position = take_u64(&mut bytes)?;
+            let method_binder_ordinal = take_u64(&mut bytes)?;
+            let telescope_len = usize::try_from(take_u64(&mut bytes)?)
+                .map_err(|_| "computational IH slot telescope length overflows usize")?;
+            let mut local_telescope = Vec::with_capacity(telescope_len);
+            for _ in 0..telescope_len {
+                local_telescope.push(CheckedAnswerInterfaceV1::new(
+                    take_bytes(&mut bytes)?.to_vec(),
+                )?);
+            }
+            let ih_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let segment_site_id = take_u64(&mut bytes)?;
+            let frame_count = usize::try_from(take_u64(&mut bytes)?)
+                .map_err(|_| "computational IH slot frame count overflows usize")?;
+            let mut frame_templates = Vec::with_capacity(frame_count);
+            for _ in 0..frame_count {
+                frame_templates.push(take_u64(&mut bytes)?);
+            }
+            let input_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let output_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let occurrence_binding_fingerprint = take_u64(&mut bytes)?;
+            computational_ih_slots.push(CheckedComputationalIHSlotTemplateV1 {
+                slot_template_id,
+                declaration,
+                checked_match_ordinal,
+                checked_occurrence_path,
+                frame_template_id,
+                constructor,
+                recursive_position,
+                method_binder_ordinal,
+                local_telescope,
+                ih_interface,
+                segment_site_id,
+                frame_templates,
+                input_interface,
+                output_interface,
+                occurrence_binding_fingerprint,
+            });
+        }
+        let ih_call_count = usize::try_from(take_u64(&mut bytes)?)
+            .map_err(|_| "computational IH call count overflows usize")?;
+        let mut computational_ih_calls = Vec::with_capacity(ih_call_count);
+        for _ in 0..ih_call_count {
+            let call_template_id = take_u64(&mut bytes)?;
+            let declaration = String::from_utf8(take_bytes(&mut bytes)?.to_vec())
+                .map_err(|_| "computational IH call declaration is not UTF-8")?;
+            let path_len = usize::try_from(take_u64(&mut bytes)?)
+                .map_err(|_| "computational IH call occurrence path overflows usize")?;
+            let mut checked_occurrence_path = Vec::with_capacity(path_len);
+            for _ in 0..path_len {
+                checked_occurrence_path.push(take_u64(&mut bytes)?);
+            }
+            let slot_template_id = take_u64(&mut bytes)?;
+            let arity = take_u64(&mut bytes)?;
+            let telescope_len = usize::try_from(take_u64(&mut bytes)?)
+                .map_err(|_| "computational IH call telescope length overflows usize")?;
+            let mut local_telescope = Vec::with_capacity(telescope_len);
+            for _ in 0..telescope_len {
+                local_telescope.push(CheckedAnswerInterfaceV1::new(
+                    take_bytes(&mut bytes)?.to_vec(),
+                )?);
+            }
+            let result_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let callee_segment_site_id = take_u64(&mut bytes)?;
+            let frame_count = usize::try_from(take_u64(&mut bytes)?)
+                .map_err(|_| "computational IH call frame count overflows usize")?;
+            let mut callee_frame_templates = Vec::with_capacity(frame_count);
+            for _ in 0..frame_count {
+                callee_frame_templates.push(take_u64(&mut bytes)?);
+            }
+            let caller_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let occurrence_binding_fingerprint = take_u64(&mut bytes)?;
+            computational_ih_calls.push(CheckedComputationalIHCallTemplateV1 {
+                call_template_id,
+                declaration,
+                checked_occurrence_path,
+                slot_template_id,
+                arity,
+                local_telescope,
+                result_interface,
+                callee_segment_site_id,
+                callee_frame_templates,
+                caller_interface,
+                occurrence_binding_fingerprint,
+            });
+        }
         if !bytes.is_empty() {
             return Err("OrientedSubcontinuationPlanV1 has trailing bytes");
         }
@@ -258,6 +453,8 @@ impl OrientedSubcontinuationPlanV1 {
             representation_rule_version,
             frames,
             recursive_calls,
+            computational_ih_slots,
+            computational_ih_calls,
         };
         plan.validate()?;
         Ok(plan)
@@ -319,6 +516,57 @@ impl OrientedSubcontinuationPlanV1 {
                 || call.result_interface != call.caller_interface
             {
                 return Err("recursive call template checked endpoints do not compose");
+            }
+        }
+        let mut slot_ids = BTreeSet::new();
+        for slot in &self.computational_ih_slots {
+            if !slot_ids.insert(slot.slot_template_id) {
+                return Err("OrientedSubcontinuationPlanV1 repeats a computational IH slot");
+            }
+            if slot.frame_templates.is_empty()
+                || !slot.frame_templates.contains(&slot.frame_template_id)
+            {
+                return Err("computational IH slot has no exact frame template");
+            }
+            if slot.occurrence_binding_fingerprint
+                != compiler_private_computational_ih_slot_binding_fingerprint(slot)
+            {
+                return Err("computational IH slot occurrence binding is inconsistent");
+            }
+            for frame_id in &slot.frame_templates {
+                let frame = self.frame(*frame_id).ok_or(
+                    "computational IH slot names a stale frame template",
+                )?;
+                if frame.segment_site_id != slot.segment_site_id {
+                    return Err("computational IH slot crosses a checked segment");
+                }
+            }
+        }
+        let mut ih_call_ids = BTreeSet::new();
+        for call in &self.computational_ih_calls {
+            if !ih_call_ids.insert(call.call_template_id) {
+                return Err("OrientedSubcontinuationPlanV1 repeats a computational IH call");
+            }
+            let slot = self.computational_ih_slot(call.slot_template_id).ok_or(
+                "computational IH call names a stale slot template",
+            )?;
+            if call.callee_frame_templates.is_empty()
+                || call.callee_segment_site_id != slot.segment_site_id
+                || call.callee_frame_templates != slot.frame_templates
+                || call.occurrence_binding_fingerprint
+                    != compiler_private_computational_ih_call_binding_fingerprint(call)
+            {
+                return Err("computational IH call binding is inconsistent");
+            }
+            if call
+                .callee_frame_templates
+                .iter()
+                .any(|frame| self.frame(*frame).is_none())
+            {
+                return Err("computational IH call names a stale callee frame");
+            }
+            if call.result_interface != call.caller_interface {
+                return Err("computational IH call checked endpoints do not compose");
             }
         }
         let by_id = self
@@ -391,6 +639,76 @@ impl OrientedSubcontinuationPlanV1 {
             .iter()
             .find(|call| call.call_template_id == call_template_id)
     }
+
+    pub fn computational_ih_slot(
+        &self,
+        slot_template_id: u64,
+    ) -> Option<&CheckedComputationalIHSlotTemplateV1> {
+        self.computational_ih_slots
+            .iter()
+            .find(|slot| slot.slot_template_id == slot_template_id)
+    }
+
+    pub fn computational_ih_call(
+        &self,
+        call_template_id: u64,
+    ) -> Option<&CheckedComputationalIHCallTemplateV1> {
+        self.computational_ih_calls
+            .iter()
+            .find(|call| call.call_template_id == call_template_id)
+    }
+}
+
+#[doc(hidden)]
+pub fn compiler_private_computational_ih_slot_binding_fingerprint(
+    slot: &CheckedComputationalIHSlotTemplateV1,
+) -> u64 {
+    let mut bytes = b"CheckedComputationalIHSlotOccurrenceV1\0".to_vec();
+    put_u64(&mut bytes, slot.slot_template_id);
+    put_bytes(&mut bytes, slot.declaration.as_bytes());
+    put_u64(&mut bytes, slot.checked_match_ordinal);
+    for value in &slot.checked_occurrence_path {
+        put_u64(&mut bytes, *value);
+    }
+    put_u64(&mut bytes, slot.frame_template_id);
+    put_bytes(&mut bytes, slot.constructor.as_bytes());
+    put_u64(&mut bytes, slot.recursive_position);
+    put_u64(&mut bytes, slot.method_binder_ordinal);
+    for entry in &slot.local_telescope {
+        put_bytes(&mut bytes, &entry.canonical);
+    }
+    put_bytes(&mut bytes, &slot.ih_interface.canonical);
+    put_u64(&mut bytes, slot.segment_site_id);
+    for frame in &slot.frame_templates {
+        put_u64(&mut bytes, *frame);
+    }
+    put_bytes(&mut bytes, &slot.input_interface.canonical);
+    put_bytes(&mut bytes, &slot.output_interface.canonical);
+    fnv1a_64(&bytes)
+}
+
+#[doc(hidden)]
+pub fn compiler_private_computational_ih_call_binding_fingerprint(
+    call: &CheckedComputationalIHCallTemplateV1,
+) -> u64 {
+    let mut bytes = b"CheckedComputationalIHCallOccurrenceV1\0".to_vec();
+    put_u64(&mut bytes, call.call_template_id);
+    put_bytes(&mut bytes, call.declaration.as_bytes());
+    for value in &call.checked_occurrence_path {
+        put_u64(&mut bytes, *value);
+    }
+    put_u64(&mut bytes, call.slot_template_id);
+    put_u64(&mut bytes, call.arity);
+    for entry in &call.local_telescope {
+        put_bytes(&mut bytes, &entry.canonical);
+    }
+    put_bytes(&mut bytes, &call.result_interface.canonical);
+    put_u64(&mut bytes, call.callee_segment_site_id);
+    for frame in &call.callee_frame_templates {
+        put_u64(&mut bytes, *frame);
+    }
+    put_bytes(&mut bytes, &call.caller_interface.canonical);
+    fnv1a_64(&bytes)
 }
 
 #[doc(hidden)]

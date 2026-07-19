@@ -882,7 +882,9 @@ fn reject_runtime_expr_blockers(
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
         | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
-        | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => {
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
             reject_runtime_expr_blockers(program, body)
         }
         RuntimeExpr::Value(_) | RuntimeExpr::Var(_) | RuntimeExpr::Trap(_) => Ok(()),
@@ -1003,7 +1005,9 @@ fn runtime_expr_contains_effect(expr: &RuntimeExpr) -> bool {
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
         | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
-        | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => {
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
             runtime_expr_contains_effect(body)
         }
         RuntimeExpr::Value(_) | RuntimeExpr::Var(_) | RuntimeExpr::Trap(_) => false,
@@ -1167,7 +1171,9 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
         match expr {
             RuntimeExpr::CheckedJoinSite { body, .. }
             | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
-            | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => self.eval_expr(body, env),
+            | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+            | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+            | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => self.eval_expr(body, env),
             RuntimeExpr::Value(value) => Ok(RuntimeIrOutcome::Value(self.eval_value(value)?)),
             RuntimeExpr::Var(index) => env
                 .get(*index as usize)

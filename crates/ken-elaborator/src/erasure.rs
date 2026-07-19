@@ -394,7 +394,9 @@ fn collect_runtime_declaration_refs(expr: &RuntimeExpr, output: &mut BTreeSet<St
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
         | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
-        | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => {
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
             collect_runtime_declaration_refs(body, output)
         }
         RuntimeExpr::DeclarationRef { symbol } => {
@@ -541,6 +543,30 @@ pub(crate) struct CheckedRecursiveInvocationSeed {
 }
 
 #[derive(Clone)]
+pub(crate) struct CheckedComputationalIHSlotSeed {
+    pub slot_template_id: u64,
+    pub owner: StableSymbol,
+    pub match_ordinal: u64,
+    pub branch_ordinal: usize,
+    pub constructor: StableSymbol,
+    pub recursive_position: usize,
+    pub method_binder_ordinal: usize,
+    pub local_telescope: Vec<ken_runtime::CheckedAnswerInterfaceV1>,
+    pub ih_interface: ken_runtime::CheckedAnswerInterfaceV1,
+}
+
+#[derive(Clone)]
+pub(crate) struct CheckedComputationalIHCallSeed {
+    pub call_template_id: u64,
+    pub owner: StableSymbol,
+    pub slot_template_id: u64,
+    pub occurrence_ordinal: u64,
+    pub arity: usize,
+    pub local_telescope: Vec<ken_runtime::CheckedAnswerInterfaceV1>,
+    pub result_interface: ken_runtime::CheckedAnswerInterfaceV1,
+}
+
+#[derive(Clone)]
 struct NativeJoinPlanCollector {
     answer_symbols: CheckedJoinAnswerSymbols,
     next_site_id: u64,
@@ -555,16 +581,47 @@ struct NativeLoweringPlanCollector {
     consumed_recursive_invocations: BTreeSet<u64>,
     next_recursive_ordinal: BTreeMap<StableSymbol, u64>,
     pending_recursive_calls: Vec<(CheckedRecursiveInvocationSeed, Vec<u64>, Option<u64>)>,
+    computational_ih_slots:
+        BTreeMap<(StableSymbol, u64, usize, usize), CheckedComputationalIHSlotSeed>,
+    computational_ih_calls: BTreeMap<(u64, u64), CheckedComputationalIHCallSeed>,
+    next_computational_match_ordinal: BTreeMap<StableSymbol, u64>,
+    next_computational_ih_call_ordinal: BTreeMap<u64, u64>,
+    consumed_computational_ih_slots: BTreeSet<u64>,
+    consumed_computational_ih_calls: BTreeSet<u64>,
+    pending_computational_ih_slots:
+        Vec<(CheckedComputationalIHSlotSeed, Vec<u64>, u64)>,
+    pending_computational_ih_calls:
+        Vec<(CheckedComputationalIHCallSeed, Vec<u64>, Option<u64>)>,
 }
 
 impl NativeLoweringPlanCollector {
     fn new(
         answer_symbols: CheckedJoinAnswerSymbols,
         recursive_invocations: Vec<CheckedRecursiveInvocationSeed>,
+        computational_ih_slots: Vec<CheckedComputationalIHSlotSeed>,
+        computational_ih_calls: Vec<CheckedComputationalIHCallSeed>,
     ) -> Self {
         let recursive_invocations = recursive_invocations
             .into_iter()
             .map(|seed| ((seed.owner.clone(), seed.occurrence_ordinal), seed))
+            .collect();
+        let computational_ih_slots = computational_ih_slots
+            .into_iter()
+            .map(|seed| {
+                (
+                    (
+                        seed.owner.clone(),
+                        seed.match_ordinal,
+                        seed.branch_ordinal,
+                        seed.method_binder_ordinal,
+                    ),
+                    seed,
+                )
+            })
+            .collect();
+        let computational_ih_calls = computational_ih_calls
+            .into_iter()
+            .map(|seed| ((seed.slot_template_id, seed.occurrence_ordinal), seed))
             .collect();
         Self {
             joins: NativeJoinPlanCollector::new(answer_symbols),
@@ -573,6 +630,14 @@ impl NativeLoweringPlanCollector {
             consumed_recursive_invocations: BTreeSet::new(),
             next_recursive_ordinal: BTreeMap::new(),
             pending_recursive_calls: Vec::new(),
+            computational_ih_slots,
+            computational_ih_calls,
+            next_computational_match_ordinal: BTreeMap::new(),
+            next_computational_ih_call_ordinal: BTreeMap::new(),
+            consumed_computational_ih_slots: BTreeSet::new(),
+            consumed_computational_ih_calls: BTreeSet::new(),
+            pending_computational_ih_slots: Vec::new(),
+            pending_computational_ih_calls: Vec::new(),
         }
     }
 
@@ -588,6 +653,12 @@ impl NativeLoweringPlanCollector {
                 self.recursive_invocations,
                 self.consumed_recursive_invocations,
                 self.pending_recursive_calls,
+                self.computational_ih_slots,
+                self.computational_ih_calls,
+                self.consumed_computational_ih_slots,
+                self.consumed_computational_ih_calls,
+                self.pending_computational_ih_slots,
+                self.pending_computational_ih_calls,
             ),
         )
     }
@@ -643,6 +714,125 @@ impl NativeLoweringPlanCollector {
             ));
         }
         self.pending_recursive_calls
+            .push((seed.clone(), occurrence_path.to_vec(), parent_frame));
+        Ok(seed.call_template_id)
+    }
+
+    fn consume_computational_ih_slots(
+        &mut self,
+        owner: &StableSymbol,
+        view: &checked_core::CheckedCoreMatchView,
+        occurrence_path: &[u64],
+        frame_id: u64,
+    ) -> Result<Vec<Vec<u64>>, ErasureError> {
+        let ordinal = self
+            .next_computational_match_ordinal
+            .entry(owner.clone())
+            .or_default();
+        let match_ordinal = *ordinal;
+        *ordinal = ordinal
+            .checked_add(1)
+            .expect("compiler-private computational match ordinal exhausted");
+        let mut result = Vec::with_capacity(view.branches.len());
+        for (branch_ordinal, branch) in view.branches.iter().enumerate() {
+            let mut branch_slots = Vec::with_capacity(branch.constructor.recursive_positions.len());
+            for (method_binder_ordinal, recursive_position) in branch
+                .constructor
+                .recursive_positions
+                .iter()
+                .copied()
+                .enumerate()
+            {
+                let key = (
+                    owner.clone(),
+                    match_ordinal,
+                    branch_ordinal,
+                    method_binder_ordinal,
+                );
+                let seed = self.computational_ih_slots.get(&key).cloned().ok_or_else(|| {
+                    let candidates = self
+                        .computational_ih_slots
+                        .values()
+                        .filter(|seed| seed.owner == *owner)
+                        .map(|seed| (seed.match_ordinal, seed.branch_ordinal, seed.method_binder_ordinal, seed.constructor.to_string(), seed.recursive_position))
+                        .collect::<Vec<_>>();
+                    expression_lowering_error(
+                        owner,
+                        "checked_computational_ih_slot_missing",
+                        format!("computational IH binder {key:?} has no checked slot template; candidates={candidates:?}"),
+                    )
+                })?;
+                if seed.constructor != branch.constructor.symbol
+                    || seed.recursive_position != recursive_position
+                {
+                    return Err(expression_lowering_error(
+                        owner,
+                        "checked_computational_ih_slot_mismatch",
+                        "computational IH slot constructor/recursive-position binding is stale",
+                    ));
+                }
+                if !self
+                    .consumed_computational_ih_slots
+                    .insert(seed.slot_template_id)
+                {
+                    return Err(expression_lowering_error(
+                        owner,
+                        "checked_computational_ih_slot_duplicate",
+                        "computational IH slot template was consumed more than once",
+                    ));
+                }
+                let mut path = occurrence_path.to_vec();
+                path.extend([21, branch_ordinal as u64, method_binder_ordinal as u64]);
+                self.pending_computational_ih_slots
+                    .push((seed.clone(), path, frame_id));
+                branch_slots.push(seed.slot_template_id);
+            }
+            result.push(branch_slots);
+        }
+        Ok(result)
+    }
+
+    fn consume_computational_ih_call(
+        &mut self,
+        owner: &StableSymbol,
+        slot_template_id: u64,
+        arity: usize,
+        occurrence_path: &[u64],
+        parent_frame: Option<u64>,
+    ) -> Result<u64, ErasureError> {
+        let ordinal = self
+            .next_computational_ih_call_ordinal
+            .entry(slot_template_id)
+            .or_default();
+        let key = (slot_template_id, *ordinal);
+        *ordinal = ordinal
+            .checked_add(1)
+            .expect("compiler-private computational IH call ordinal exhausted");
+        let seed = self.computational_ih_calls.get(&key).cloned().ok_or_else(|| {
+            expression_lowering_error(
+                owner,
+                "checked_computational_ih_call_missing",
+                format!("complete computational IH application {key:?} has no checked template"),
+            )
+        })?;
+        if seed.owner != *owner || seed.arity != arity {
+            return Err(expression_lowering_error(
+                owner,
+                "checked_computational_ih_call_mismatch",
+                "computational IH call owner/arity binding is stale",
+            ));
+        }
+        if !self
+            .consumed_computational_ih_calls
+            .insert(seed.call_template_id)
+        {
+            return Err(expression_lowering_error(
+                owner,
+                "checked_computational_ih_call_duplicate",
+                "computational IH call template was consumed more than once",
+            ));
+        }
+        self.pending_computational_ih_calls
             .push((seed.clone(), occurrence_path.to_vec(), parent_frame));
         Ok(seed.call_template_id)
     }
@@ -857,11 +1047,30 @@ impl OrientedSubcontinuationPlanCollector {
         recursive_invocations: BTreeMap<(StableSymbol, u64), CheckedRecursiveInvocationSeed>,
         consumed_recursive_invocations: BTreeSet<u64>,
         pending_recursive_calls: Vec<(CheckedRecursiveInvocationSeed, Vec<u64>, Option<u64>)>,
+        computational_ih_slot_seeds:
+            BTreeMap<(StableSymbol, u64, usize, usize), CheckedComputationalIHSlotSeed>,
+        computational_ih_call_seeds: BTreeMap<(u64, u64), CheckedComputationalIHCallSeed>,
+        consumed_computational_ih_slots: BTreeSet<u64>,
+        consumed_computational_ih_calls: BTreeSet<u64>,
+        pending_computational_ih_slots:
+            Vec<(CheckedComputationalIHSlotSeed, Vec<u64>, u64)>,
+        pending_computational_ih_calls:
+            Vec<(CheckedComputationalIHCallSeed, Vec<u64>, Option<u64>)>,
     ) -> ken_runtime::OrientedSubcontinuationPlanV1 {
         assert_eq!(
             recursive_invocations.len(),
             consumed_recursive_invocations.len(),
             "checked recursive invocation templates close exactly over Runtime markers"
+        );
+        assert_eq!(
+            computational_ih_slot_seeds.len(),
+            consumed_computational_ih_slots.len(),
+            "checked computational IH slot templates close exactly over Runtime case markers"
+        );
+        assert_eq!(
+            computational_ih_call_seeds.len(),
+            consumed_computational_ih_calls.len(),
+            "checked computational IH call templates close exactly over Runtime call markers"
         );
         let mut recursive_calls = Vec::with_capacity(pending_recursive_calls.len());
         for (seed, occurrence_path, parent_frame) in pending_recursive_calls {
@@ -935,11 +1144,70 @@ impl OrientedSubcontinuationPlanCollector {
                 ken_runtime::compiler_private_recursive_call_binding_fingerprint(&call);
             recursive_calls.push(call);
         }
+        let mut computational_ih_slots = Vec::with_capacity(pending_computational_ih_slots.len());
+        for (seed, occurrence_path, frame_id) in pending_computational_ih_slots {
+            let frame = self
+                .frames
+                .iter()
+                .find(|frame| frame.frame_id == frame_id)
+                .expect("computational IH slot frame exists");
+            let mut slot = ken_runtime::CheckedComputationalIHSlotTemplateV1 {
+                slot_template_id: seed.slot_template_id,
+                declaration: seed.owner.to_string(),
+                checked_match_ordinal: seed.match_ordinal,
+                checked_occurrence_path: occurrence_path,
+                frame_template_id: frame_id,
+                constructor: seed.constructor.to_string(),
+                recursive_position: seed.recursive_position as u64,
+                method_binder_ordinal: seed.method_binder_ordinal as u64,
+                local_telescope: seed.local_telescope,
+                ih_interface: seed.ih_interface,
+                segment_site_id: frame.segment_site_id,
+                frame_templates: vec![frame_id],
+                input_interface: frame.input_interface.clone(),
+                output_interface: frame.output_interface.clone(),
+                occurrence_binding_fingerprint: 0,
+            };
+            slot.occurrence_binding_fingerprint =
+                ken_runtime::compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+            computational_ih_slots.push(slot);
+        }
+        let mut computational_ih_calls = Vec::with_capacity(pending_computational_ih_calls.len());
+        for (seed, occurrence_path, _parent_frame) in pending_computational_ih_calls {
+            let slot = computational_ih_slots
+                .iter()
+                .find(|slot| slot.slot_template_id == seed.slot_template_id)
+                .expect("computational IH call slot exists");
+            // The callee sequence is the reusable slot template only.  The
+            // enclosing checked frame is the caller endpoint; including that
+            // parent in the callee sequence would let one IH invocation claim
+            // a continuation owned by a later, distinct marker.
+            let callee_frame_templates = slot.frame_templates.clone();
+            let caller_interface = seed.result_interface.clone();
+            let mut call = ken_runtime::CheckedComputationalIHCallTemplateV1 {
+                call_template_id: seed.call_template_id,
+                declaration: seed.owner.to_string(),
+                checked_occurrence_path: occurrence_path,
+                slot_template_id: seed.slot_template_id,
+                arity: seed.arity as u64,
+                local_telescope: seed.local_telescope,
+                result_interface: seed.result_interface.clone(),
+                callee_segment_site_id: slot.segment_site_id,
+                callee_frame_templates,
+                caller_interface,
+                occurrence_binding_fingerprint: 0,
+            };
+            call.occurrence_binding_fingerprint =
+                ken_runtime::compiler_private_computational_ih_call_binding_fingerprint(&call);
+            computational_ih_calls.push(call);
+        }
         ken_runtime::OrientedSubcontinuationPlanV1 {
             representation_rule_version:
                 ken_runtime::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
             frames: self.frames,
             recursive_calls,
+            computational_ih_slots,
+            computational_ih_calls,
         }
     }
 }
@@ -1020,6 +1288,8 @@ pub(crate) fn erase_checked_host_package_for_target_with_join_plan<'a>(
     spine: &CheckedHostSpineV1,
     answer_symbols: CheckedJoinAnswerSymbols,
     recursive_invocations: Vec<CheckedRecursiveInvocationSeed>,
+    computational_ih_slots: Vec<CheckedComputationalIHSlotSeed>,
+    computational_ih_calls: Vec<CheckedComputationalIHCallSeed>,
 ) -> Result<
     (
         RuntimeProgram,
@@ -1029,7 +1299,12 @@ pub(crate) fn erase_checked_host_package_for_target_with_join_plan<'a>(
     ErasureError,
 > {
     let targets: Vec<StableSymbol> = target_closure.into_iter().cloned().collect();
-    let mut collector = NativeLoweringPlanCollector::new(answer_symbols, recursive_invocations);
+    let mut collector = NativeLoweringPlanCollector::new(
+        answer_symbols,
+        recursive_invocations,
+        computational_ih_slots,
+        computational_ih_calls,
+    );
     let program = erase_checked_package_with_host_root(
         package,
         targets,
@@ -1226,6 +1501,65 @@ fn lower_body_term_with_plans(
         .last()
         .expect("expression lowering stack always has an owner")
         .clone();
+    if let Some((slot_template_id, arguments)) =
+        computational_ih_application_spine(term, branch_remap)
+    {
+        let call_template_id = native_plans.consume_computational_ih_call(
+            &owner,
+            slot_template_id,
+            arguments.len(),
+            path,
+            parent_oriented_frame,
+        )?;
+        let runtime_index = match term_application_head(term) {
+            CheckedCoreBodyTerm::Variable { de_bruijn_index } => branch_remap
+                .and_then(|remap| remap.runtime_index(*de_bruijn_index))
+                .ok_or_else(|| {
+                    expression_lowering_error(
+                        root,
+                        "checked_computational_ih_runtime_binding",
+                        "checked computational IH has no runtime binder",
+                    )
+                })?,
+            _ => unreachable!("computational IH spine has a variable head"),
+        };
+        let callee = RuntimeExpr::Var(u32::try_from(runtime_index).map_err(|_| {
+            expression_lowering_error(
+                root,
+                "variable_index_overflow",
+                "computational IH runtime index does not fit runtime IR",
+            )
+        })?);
+        let mut args = Vec::with_capacity(arguments.len());
+        for (index, argument) in arguments.into_iter().enumerate() {
+            let mut child_path = path.to_vec();
+            child_path.extend([9, index as u64]);
+            args.push(lower_body_term_with_plans(
+                argument,
+                declarations,
+                semantic,
+                stack,
+                root,
+                context_depth,
+                branch_remap,
+                &child_path,
+                native_plans,
+                parent_oriented_frame,
+            )?);
+        }
+        let body = if args.is_empty() {
+            callee
+        } else {
+            RuntimeExpr::Call {
+                callee: Box::new(callee),
+                args,
+            }
+        };
+        return Ok(RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id,
+            body: Box::new(body),
+        });
+    }
     if let Some((view, arguments)) = recursive_application_spine(term) {
         let call_template_id = native_plans.consume_recursive_invocation(
             &owner,
@@ -1501,6 +1835,16 @@ fn lower_body_term_with_plans(
                 .as_ref()
                 .map(|pending| pending.frame_id)
                 .or(parent_oriented_frame);
+            let branch_slot_templates = if let Some(pending) = pending.as_ref() {
+                native_plans.consume_computational_ih_slots(
+                    &owner,
+                    view,
+                    path,
+                    pending.frame_id,
+                )?
+            } else {
+                vec![Vec::new(); view.branches.len()]
+            };
             let mut scrutinee_path = path.to_vec();
             scrutinee_path.push(19);
             let scrutinee = Box::new(lower_body_term_with_plans(
@@ -1549,16 +1893,16 @@ fn lower_body_term_with_plans(
                     root,
                     &constructor.symbol,
                 )?;
+                let slot_templates = branch_slot_templates[branch_index].clone();
                 let remap = branch_remap.cloned().unwrap_or_default().enter_match(
                     constructor.argument_count,
                     erased_count,
                     computational,
+                    slot_templates.clone(),
                 );
                 let mut branch_path = path.to_vec();
                 branch_path.extend([20, branch_index as u64]);
-                cases.push((
-                    constructor,
-                    lower_body_term_with_plans(
+                let body = lower_body_term_with_plans(
                         method,
                         declarations,
                         semantic,
@@ -1569,8 +1913,16 @@ fn lower_body_term_with_plans(
                         &branch_path,
                         native_plans,
                         nested_parent,
-                    )?,
-                ));
+                    )?;
+                let body = if slot_templates.is_empty() {
+                    body
+                } else {
+                    RuntimeExpr::CheckedComputationalIHSlots {
+                        slot_template_ids: slot_templates,
+                        body: Box::new(body),
+                    }
+                };
+                cases.push((constructor, body));
             }
             let default = RuntimeTrap {
                 code: RuntimeTrapCode::PatternMatchFailure,
@@ -1652,6 +2004,74 @@ fn lower_checked_host_computation(
         .last()
         .expect("expression lowering stack always has an owner")
         .clone();
+    if let Some((slot_template_id, arguments)) =
+        computational_ih_application_spine(term, branch_remap)
+    {
+        let plans = native_plans.as_deref_mut().ok_or_else(|| {
+            expression_lowering_error(
+                root,
+                "checked_computational_ih_plan_missing",
+                "computational IH application reached native lowering without checked metadata",
+            )
+        })?;
+        let call_template_id = plans.consume_computational_ih_call(
+            &owner,
+            slot_template_id,
+            arguments.len(),
+            path,
+            parent_oriented_frame,
+        )?;
+        let de_bruijn_index = match term_application_head(term) {
+            CheckedCoreBodyTerm::Variable { de_bruijn_index } => *de_bruijn_index,
+            _ => unreachable!("computational IH spine has a variable head"),
+        };
+        let runtime_index = branch_remap
+            .and_then(|remap| remap.runtime_index(de_bruijn_index))
+            .ok_or_else(|| {
+                expression_lowering_error(
+                    root,
+                    "checked_computational_ih_runtime_binding",
+                    "checked computational IH has no runtime binder",
+                )
+            })?;
+        let mut args = Vec::with_capacity(arguments.len());
+        for (argument_index, argument) in arguments.into_iter().enumerate() {
+            let mut argument_path = path.to_vec();
+            argument_path.extend([3, argument_index as u64]);
+            args.push(lower_checked_host_value(
+                argument,
+                declarations,
+                semantic,
+                stack,
+                root,
+                context_depth,
+                spine,
+                branch_remap,
+                &argument_path,
+                Some(&mut *plans),
+                parent_oriented_frame,
+            )?);
+        }
+        let callee = RuntimeExpr::Var(u32::try_from(runtime_index).map_err(|_| {
+            expression_lowering_error(
+                root,
+                "variable_index_overflow",
+                "computational IH runtime index does not fit runtime IR",
+            )
+        })?);
+        let body = if args.is_empty() {
+            callee
+        } else {
+            RuntimeExpr::Call {
+                callee: Box::new(callee),
+                args,
+            }
+        };
+        return Ok(RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id,
+            body: Box::new(body),
+        });
+    }
     if let CheckedCoreBodyTerm::Match(view) = term {
         reject_level_args(root, &view.level_args)?;
         if !view.indices.is_empty() {
@@ -1668,7 +2088,7 @@ fn lower_checked_host_computation(
                 .map(|plans| {
                     plans
                         .oriented
-                        .begin_match(root, path, parent_oriented_frame, view)
+                        .begin_match(&owner, path, parent_oriented_frame, view)
                 })
                 .transpose()?
                 .flatten()
@@ -1679,6 +2099,13 @@ fn lower_checked_host_computation(
             .as_ref()
             .map(|pending| pending.frame_id)
             .or(parent_oriented_frame);
+        let branch_slot_templates = if let (Some(plans), Some(pending)) =
+            (native_plans.as_deref_mut(), pending_oriented_frame.as_ref())
+        {
+            plans.consume_computational_ih_slots(&owner, view, path, pending.frame_id)?
+        } else {
+            vec![Vec::new(); view.branches.len()]
+        };
         let scrutinee = if let Some(plans) = native_plans.as_deref_mut() {
             let mut scrutinee_path = path.to_vec();
             scrutinee_path.push(0);
@@ -1736,10 +2163,12 @@ fn lower_checked_host_computation(
                 root,
                 &constructor.symbol,
             )?;
+            let slot_templates = branch_slot_templates[branch_index].clone();
             let remap = branch_remap.cloned().unwrap_or_default().enter_match(
                 constructor.argument_count,
                 erased_count,
                 computational,
+                slot_templates.clone(),
             );
             let body = lower_checked_host_computation(
                 method,
@@ -1758,6 +2187,14 @@ fn lower_checked_host_computation(
                 native_plans.as_deref_mut(),
                 nested_oriented_parent,
             )?;
+            let body = if slot_templates.is_empty() {
+                body
+            } else {
+                RuntimeExpr::CheckedComputationalIHSlots {
+                    slot_template_ids: slot_templates,
+                    body: Box::new(body),
+                }
+            };
             cases.push((constructor, body));
         }
         let default = RuntimeTrap {
@@ -1958,6 +2395,79 @@ fn lower_checked_host_computation(
                     native_plans.as_deref_mut(),
                     parent_oriented_frame,
                 )?
+            } else if let Some((slot_template_id, arguments)) =
+                computational_ih_application_spine(continuation, branch_remap)
+            {
+                let plans = native_plans.as_deref_mut().ok_or_else(|| {
+                    expression_lowering_error(
+                        root,
+                        "checked_computational_ih_plan_missing",
+                        "computational IH continuation reached native lowering without checked metadata",
+                    )
+                })?;
+                let mut continuation_path = path.to_vec();
+                continuation_path.push(3);
+                let call_template_id = plans.consume_computational_ih_call(
+                    &owner,
+                    slot_template_id,
+                    arguments.len(),
+                    &continuation_path,
+                    parent_oriented_frame,
+                )?;
+                let de_bruijn_index = match term_application_head(continuation) {
+                    CheckedCoreBodyTerm::Variable { de_bruijn_index } => *de_bruijn_index,
+                    _ => unreachable!("computational IH spine has a variable head"),
+                };
+                let runtime_index = branch_remap
+                    .and_then(|remap| remap.runtime_index(de_bruijn_index))
+                    .ok_or_else(|| {
+                        expression_lowering_error(
+                            root,
+                            "checked_computational_ih_runtime_binding",
+                            "checked computational IH continuation has no runtime binder",
+                        )
+                    })?;
+                let callee = shift_runtime_vars(
+                    RuntimeExpr::Var(u32::try_from(runtime_index).map_err(|_| {
+                        expression_lowering_error(
+                            root,
+                            "variable_index_overflow",
+                            "computational IH runtime index does not fit runtime IR",
+                        )
+                    })?),
+                    1,
+                    0,
+                );
+                let mut args = Vec::with_capacity(arguments.len() + 1);
+                for (argument_index, argument) in arguments.into_iter().enumerate() {
+                    let mut argument_path = continuation_path.clone();
+                    argument_path.extend([3, argument_index as u64]);
+                    args.push(shift_runtime_vars(
+                        lower_checked_host_value(
+                            argument,
+                            declarations,
+                            semantic,
+                            stack,
+                            root,
+                            context_depth,
+                            spine,
+                            branch_remap,
+                            &argument_path,
+                            Some(&mut *plans),
+                            parent_oriented_frame,
+                        )?,
+                        1,
+                        0,
+                    ));
+                }
+                args.push(RuntimeExpr::Var(0));
+                RuntimeExpr::CheckedComputationalIHInvocation {
+                    call_template_id,
+                    body: Box::new(RuntimeExpr::Call {
+                        callee: Box::new(callee),
+                        args,
+                    }),
+                }
             } else {
                 let callee = lower_body_term_inner(
                     continuation,
@@ -2769,6 +3279,7 @@ struct BranchBinderGroup {
     argument_count: usize,
     recursive_count: usize,
     recursive_runtime: bool,
+    recursive_slot_templates: Vec<u64>,
 }
 
 impl BranchBinderRemap {
@@ -2786,6 +3297,7 @@ impl BranchBinderRemap {
         argument_count: usize,
         recursive_count: usize,
         recursive_runtime: bool,
+        recursive_slot_templates: Vec<u64>,
     ) -> Self {
         let mut remap = self.clone();
         for group in &mut remap.groups {
@@ -2803,6 +3315,7 @@ impl BranchBinderRemap {
             argument_count,
             recursive_count,
             recursive_runtime,
+            recursive_slot_templates,
         });
         remap
     }
@@ -2843,6 +3356,20 @@ impl BranchBinderRemap {
             })
             .sum::<usize>();
         Some(de_bruijn_index - erased_below)
+    }
+
+    fn computational_ih_slot(&self, de_bruijn_index: usize) -> Option<u64> {
+        for group in &self.groups {
+            let recursive_end = group.source_start + group.recursive_count;
+            if (group.source_start..recursive_end).contains(&de_bruijn_index) {
+                let source_ordinal = de_bruijn_index - group.source_start;
+                // IH binders are innermost-first in de Bruijn order, while
+                // slot templates are stored in method telescope order.
+                let method_ordinal = group.recursive_count - 1 - source_ordinal;
+                return group.recursive_slot_templates.get(method_ordinal).copied();
+            }
+        }
+        None
     }
 
     fn runtime_depth(&self, source_depth: usize) -> usize {
@@ -3168,6 +3695,20 @@ fn shift_runtime_vars(expr: RuntimeExpr, by: u32, cutoff: u32) -> RuntimeExpr {
             call_template_id,
             body: Box::new(shift_runtime_vars(*body, by, cutoff)),
         },
+        RuntimeExpr::CheckedComputationalIHSlots {
+            slot_template_ids,
+            body,
+        } => RuntimeExpr::CheckedComputationalIHSlots {
+            slot_template_ids,
+            body: Box::new(shift_runtime_vars(*body, by, cutoff)),
+        },
+        RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id,
+            body,
+        } => RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id,
+            body: Box::new(shift_runtime_vars(*body, by, cutoff)),
+        },
         RuntimeExpr::Var(index) if index >= cutoff => RuntimeExpr::Var(index + by),
         RuntimeExpr::Var(_)
         | RuntimeExpr::Value(_)
@@ -3321,6 +3862,13 @@ fn direct_application_spine<'a>(
     Some((symbol, level_args, arguments))
 }
 
+fn term_application_head(mut term: &CheckedCoreBodyTerm) -> &CheckedCoreBodyTerm {
+    while let CheckedCoreBodyTerm::Application { function, .. } = term {
+        term = function;
+    }
+    term
+}
+
 fn recursive_application_spine(
     term: &CheckedCoreBodyTerm,
 ) -> Option<(
@@ -3338,6 +3886,24 @@ fn recursive_application_spine(
     };
     arguments.reverse();
     Some((view, arguments))
+}
+
+fn computational_ih_application_spine<'a>(
+    term: &'a CheckedCoreBodyTerm,
+    branch_remap: Option<&BranchBinderRemap>,
+) -> Option<(u64, Vec<&'a CheckedCoreBodyTerm>)> {
+    let mut arguments = Vec::new();
+    let mut current = term;
+    while let CheckedCoreBodyTerm::Application { function, argument } = current {
+        arguments.push(argument.as_ref());
+        current = function.as_ref();
+    }
+    let CheckedCoreBodyTerm::Variable { de_bruijn_index } = current else {
+        return None;
+    };
+    let slot_template_id = branch_remap?.computational_ih_slot(*de_bruijn_index)?;
+    arguments.reverse();
+    Some((slot_template_id, arguments))
 }
 
 fn lower_recursive_declaration_call(
@@ -4067,6 +4633,7 @@ fn lower_match_view(
             constructor.argument_count,
             erased_count,
             computational,
+            Vec::new(),
         );
         cases.push((
             constructor,
@@ -5159,12 +5726,12 @@ mod px7l_tests {
 
     #[test]
     fn computational_ih_and_capture_order_have_independent_opposites() {
-        let preserved = BranchBinderRemap::default().enter_match(2, 1, true);
+        let preserved = BranchBinderRemap::default().enter_match(2, 1, true, Vec::new());
         assert_eq!(preserved.runtime_index(0), Some(0), "IH is live");
         assert_eq!(preserved.runtime_index(1), Some(2), "continuation order");
         assert_eq!(preserved.runtime_index(2), Some(1), "operation order");
 
-        let erased = BranchBinderRemap::default().enter_match(2, 1, false);
+        let erased = BranchBinderRemap::default().enter_match(2, 1, false, Vec::new());
         assert_eq!(erased.runtime_index(0), None, "erased-IH mutation flips");
         let root = family("main");
         let mut stack = vec![root.clone()];

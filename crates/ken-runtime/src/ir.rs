@@ -356,6 +356,20 @@ pub enum RuntimeExpr {
         call_template_id: u64,
         body: Box<RuntimeExpr>,
     },
+    /// Exact checked slot templates aligned with the recursive positions of
+    /// one computational match case.
+    #[doc(hidden)]
+    CheckedComputationalIHSlots {
+        slot_template_ids: Vec<u64>,
+        body: Box<RuntimeExpr>,
+    },
+    /// Exact checked marker for one complete application of a bound
+    /// computational induction hypothesis.
+    #[doc(hidden)]
+    CheckedComputationalIHInvocation {
+        call_template_id: u64,
+        body: Box<RuntimeExpr>,
+    },
     Value(RuntimeValue),
     Var(u32),
     Let {

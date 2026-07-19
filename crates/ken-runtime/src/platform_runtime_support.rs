@@ -650,7 +650,9 @@ fn collect_runtime_support_for_expr(
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
         | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
-        | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => {
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
             collect_runtime_support_for_expr(program, body, shapes, visiting)
         }
         RuntimeExpr::Value(value) => collect_runtime_support_for_value(value, shapes),

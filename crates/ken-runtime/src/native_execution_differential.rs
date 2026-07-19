@@ -2353,7 +2353,9 @@ fn runtime_expr_host_ops(expr: &RuntimeExpr, operations: &mut BTreeSet<ken_host:
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
         | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
-        | RuntimeExpr::CheckedRecursiveInvocation { body, .. } => {
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
             runtime_expr_host_ops(body, operations)
         }
         RuntimeExpr::Effect {
