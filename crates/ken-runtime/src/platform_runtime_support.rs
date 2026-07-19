@@ -135,7 +135,7 @@ pub enum PlatformRuntimeObservation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PlatformRuntimeValue {
     Bool(bool),
-    Int(i64),
+    Int(crate::RuntimeIntV1),
     Bytes(Vec<u8>),
     String(String),
     Constructor {
@@ -853,7 +853,7 @@ fn platform_value(
         }
         RuntimeGroundValue::Int(value) => {
             shapes.insert(PlatformRuntimeShape::Int);
-            Ok(PlatformRuntimeValue::Int(*value))
+            Ok(PlatformRuntimeValue::Int(value.clone()))
         }
         RuntimeGroundValue::Bytes(value) => {
             shapes.insert(PlatformRuntimeShape::Bytes);
@@ -1249,7 +1249,7 @@ mod tests {
                                         },
                                         args: vec![
                                             RuntimeExpr::Var(0),
-                                            RuntimeExpr::Value(RuntimeValue::Int(1)),
+                                            RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                                         ],
                                     },
                                 ),
@@ -1269,16 +1269,16 @@ mod tests {
                     },
                 }),
             }),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(4))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((4).into()))],
         };
         let observation = RuntimeObservation::Returned(RuntimeGroundValue::Record {
             fields: vec![
-                ("payload".to_string(), RuntimeGroundValue::Int(5)),
+                ("payload".to_string(), RuntimeGroundValue::Int((5).into())),
                 (
                     "wrapped".to_string(),
                     RuntimeGroundValue::Constructor {
                         constructor: some,
-                        args: vec![RuntimeGroundValue::Int(4)],
+                        args: vec![RuntimeGroundValue::Int((4).into())],
                     },
                 ),
             ],
@@ -1590,7 +1590,7 @@ mod tests {
             dependency: "module:dep".to_string(),
             dependency_semantic_hash: "dep-hash".to_string(),
         };
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(9));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((9).into()));
         let program = starter_program(body, observation.clone());
         let (_report, package) = packaged_entrypoint(&program);
 
@@ -1612,7 +1612,7 @@ mod tests {
     #[test]
     fn declaration_ref_scans_referenced_transparent_body() {
         let helper = "decl:fixture::Executable::helper".to_string();
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(9));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((9).into()));
         let mut program = starter_program(
             RuntimeExpr::DeclarationRef {
                 symbol: helper.clone(),

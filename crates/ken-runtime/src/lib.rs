@@ -19,6 +19,7 @@ pub mod ir;
 #[cfg(test)]
 mod native_effect_v1;
 pub mod native_execution_differential;
+pub mod native_int;
 #[doc(hidden)]
 pub mod native_join_plan;
 pub mod native_process_entrypoint;
@@ -46,6 +47,7 @@ pub use ken_host::{
     SemanticErrorV1, TerminalErrorV1, TerminalExitClass,
 };
 pub use native_execution_differential::*;
+pub use native_int::*;
 #[doc(hidden)]
 pub use native_join_plan::*;
 pub use native_process_entrypoint::*;

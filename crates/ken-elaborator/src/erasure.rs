@@ -1974,7 +1974,7 @@ fn lower_body_term_inner(
             Ok(RuntimeExpr::Var(index))
         }
         CheckedCoreBodyTerm::IntegerLiteral { value } => {
-            Ok(RuntimeExpr::Value(RuntimeValue::Int(*value)))
+            Ok(RuntimeExpr::Value(RuntimeValue::Int((*value).into())))
         }
         CheckedCoreBodyTerm::DirectDeclarationCall { symbol, level_args } => {
             reject_level_args(root_symbol, level_args)?;
@@ -2788,7 +2788,10 @@ fn lower_primitive_application(
 
 fn primitive_literal_value(registry_symbol: &str) -> Option<RuntimeValue> {
     if let Some(raw) = registry_symbol.strip_prefix("lit_int_") {
-        return raw.parse::<i64>().ok().map(RuntimeValue::Int);
+        return raw
+            .parse::<i64>()
+            .ok()
+            .map(|value| RuntimeValue::Int(value.into()));
     }
     match registry_symbol {
         "lit_bool_true" => return Some(RuntimeValue::Bool(true)),

@@ -2463,7 +2463,9 @@ fn decode_native_stdout(
                     format!("native stdout is not an Int observation: {err}"),
                 )
             })?;
-            Ok(RuntimeObservation::Returned(RuntimeGroundValue::Int(value)))
+            Ok(RuntimeObservation::Returned(RuntimeGroundValue::Int(
+                (value).into(),
+            )))
         }
         RuntimeObservation::Returned(RuntimeGroundValue::Bool(_)) => match trimmed {
             "0" => Ok(RuntimeObservation::Returned(RuntimeGroundValue::Bool(
@@ -3098,8 +3100,8 @@ mod tests {
                             partiality: RuntimePartiality::Total,
                         },
                         args: vec![
-                            RuntimeExpr::Value(RuntimeValue::Int(value - 1)),
-                            RuntimeExpr::Value(RuntimeValue::Int(1)),
+                            RuntimeExpr::Value(RuntimeValue::Int((value - 1).into())),
+                            RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                         ],
                     },
                 },
@@ -3112,7 +3114,7 @@ mod tests {
                 name: "native-differential-main".to_string(),
                 checked_core_shape: "fixture main".to_string(),
                 ir: RuntimeExpr::DeclarationRef { symbol },
-                observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(value)),
+                observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((value).into())),
             }],
         }
     }
@@ -3180,7 +3182,7 @@ mod tests {
                 family: "Console".to_string(),
                 operation: ken_host::HostOpV1::ConsoleRead,
                 capability: None,
-                args: vec![RuntimeExpr::Value(RuntimeValue::Int(1))],
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((1).into()))],
             },
         };
     }
@@ -3415,7 +3417,9 @@ mod tests {
         assert!(matches!(
             report.native,
             NativeExecutionLaneReport::Available(NativeExecutionObservation {
-                observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(24)),
+                observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(
+                    crate::RuntimeIntV1::Small(24),
+                )),
                 ..
             })
         ));
@@ -4153,7 +4157,7 @@ mod tests {
         let output_dir = temp_output_dir("nc24-runtime-mismatch");
         let mut package = package_for(&program, &run_report, &output_dir);
         run_report.observation.observation =
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(30));
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((30).into()));
         package.runtime_report_hash = object_linker_runtime_ir_run_report_hash(&run_report);
         package.header.package_hash = object_linker_executable_package_hash(&package);
 
@@ -4391,7 +4395,8 @@ mod tests {
             NativeInterpreterLaneInput::Available(interpreter) => interpreter,
             NativeInterpreterLaneInput::Unavailable { .. } => unreachable!(),
         };
-        interpreter.observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(53));
+        interpreter.observation =
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((53).into()));
         let report = run_native_execution_differential(
             &program,
             &package,
@@ -4440,7 +4445,7 @@ mod tests {
         let output_dir = temp_output_dir("nc27-closeout-runtime-ir-mismatch");
         let mut package = package_for(&program, &run_report, &output_dir);
         run_report.observation.observation =
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(55));
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((55).into()));
         package.runtime_report_hash = object_linker_runtime_ir_run_report_hash(&run_report);
         package.header.package_hash = object_linker_executable_package_hash(&package);
 

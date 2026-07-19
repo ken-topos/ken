@@ -298,7 +298,7 @@ impl NativeSeedEnvironment {
         let mut values = BTreeMap::new();
         values.insert(
             "decl:fixture::Local::y".to_string(),
-            RuntimeGroundValue::Int(2),
+            RuntimeGroundValue::Int((2).into()),
         );
         Self { values }
     }
@@ -1253,7 +1253,7 @@ impl CompiledModule<JITModule> {
             .decoder
             .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
         let ground = match decoder {
-            ResultDecoder::Int => RuntimeGroundValue::Int(token),
+            ResultDecoder::Int => RuntimeGroundValue::Int((token).into()),
             ResultDecoder::Bool => RuntimeGroundValue::Bool(token != 0),
             ResultDecoder::Table => self
                 .result_table
@@ -1441,7 +1441,7 @@ fn run_checked_bounded_nat_fixture(
                     crate::RuntimeMatchCase {
                         constructor: compiler.process_symbols.nat_zero.clone(),
                         binders: 0,
-                        body: RuntimeExpr::Value(RuntimeValue::Int(10)),
+                        body: RuntimeExpr::Value(RuntimeValue::Int((10).into())),
                     },
                     crate::RuntimeMatchCase {
                         constructor: compiler.process_symbols.nat_suc.clone(),
@@ -1452,12 +1452,12 @@ fn run_checked_bounded_nat_fixture(
                                 crate::RuntimeMatchCase {
                                     constructor: compiler.process_symbols.nat_zero.clone(),
                                     binders: 0,
-                                    body: RuntimeExpr::Value(RuntimeValue::Int(21)),
+                                    body: RuntimeExpr::Value(RuntimeValue::Int((21).into())),
                                 },
                                 crate::RuntimeMatchCase {
                                     constructor: compiler.process_symbols.nat_suc.clone(),
                                     binders: 1,
-                                    body: RuntimeExpr::Value(RuntimeValue::Int(22)),
+                                    body: RuntimeExpr::Value(RuntimeValue::Int((22).into())),
                                 },
                             ],
                             default: default.clone(),
@@ -1628,7 +1628,7 @@ fn run_dynamic_constructor_dispatch_fixture(
             |(_, constructor, binders, result)| crate::RuntimeMatchCase {
                 constructor: constructor.to_string(),
                 binders,
-                body: RuntimeExpr::Value(RuntimeValue::Int(result)),
+                body: RuntimeExpr::Value(RuntimeValue::Int((result).into())),
             },
         )
         .collect::<Vec<_>>();
@@ -1851,7 +1851,19 @@ fn native_isa() -> Result<OwnedTargetIsa, CraneliftBackendError> {
 
 fn new_jit_module() -> Result<JITModule, CraneliftBackendError> {
     let isa = native_isa()?;
-    let builder = JITBuilder::with_isa(isa, default_libcall_names());
+    let mut builder = JITBuilder::with_isa(isa, default_libcall_names());
+    builder.symbol(
+        "ken_runtime_native_int_binop_v1",
+        crate::native_int_binop_v1 as *const u8,
+    );
+    builder.symbol(
+        "ken_runtime_native_int_compare_v1",
+        crate::native_int_compare_v1 as *const u8,
+    );
+    builder.symbol(
+        "ken_runtime_native_int_narrow_u64_v1",
+        crate::native_int_narrow_u64_v1 as *const u8,
+    );
     Ok(JITModule::new(builder))
 }
 
@@ -8436,10 +8448,14 @@ impl<'a> Lowering<'a> {
                 value: builder.ins().iconst(types::I64, i64::from(*value)),
                 known: Some(*value),
             }),
-            RuntimeValue::Int(value) => Ok(Lowered::Int {
+            RuntimeValue::Int(crate::RuntimeIntV1::Small(value)) => Ok(Lowered::Int {
                 value: builder.ins().iconst(types::I64, *value),
                 known: Some(*value),
             }),
+            RuntimeValue::Int(crate::RuntimeIntV1::Big { .. }) => Err(unsupported(
+                "RuntimeValue::Int",
+                "Big Int literal requires the PX8-I native arena",
+            )),
             RuntimeValue::Bytes(value) => Ok(Lowered::Bytes(value.clone())),
             RuntimeValue::String(value) => Ok(Lowered::String(value.clone())),
             RuntimeValue::Constructor { constructor, args } => Ok(Lowered::Constructor {
@@ -8490,10 +8506,14 @@ impl<'a> Lowering<'a> {
                 value: builder.ins().iconst(types::I64, i64::from(*value)),
                 known: Some(*value),
             }),
-            RuntimeGroundValue::Int(value) => Ok(Lowered::Int {
+            RuntimeGroundValue::Int(crate::RuntimeIntV1::Small(value)) => Ok(Lowered::Int {
                 value: builder.ins().iconst(types::I64, *value),
                 known: Some(*value),
             }),
+            RuntimeGroundValue::Int(crate::RuntimeIntV1::Big { .. }) => Err(unsupported(
+                "RuntimeGroundValue::Int",
+                "Big Int seed requires the PX8-I native arena",
+            )),
             RuntimeGroundValue::Bytes(value) => Ok(Lowered::Bytes(value.clone())),
             RuntimeGroundValue::String(value) => Ok(Lowered::String(value.clone())),
             RuntimeGroundValue::Constructor { constructor, args } => Ok(Lowered::Constructor {
@@ -9247,7 +9267,7 @@ impl<'a> Lowering<'a> {
         match value {
             Lowered::Int {
                 known: Some(value), ..
-            } => Ok(RuntimeGroundValue::Int(value)),
+            } => Ok(RuntimeGroundValue::Int((value).into())),
             Lowered::Int { known: None, .. } => Err(unsupported(
                 "Result",
                 "native aggregate result contains a non-constant Int field",
@@ -9841,7 +9861,7 @@ mod tests {
         depth: usize,
         exact: RuntimeExpr,
     ) -> RuntimeExpr {
-        let mismatch = RuntimeExpr::Value(RuntimeValue::Int(99));
+        let mismatch = RuntimeExpr::Value(RuntimeValue::Int((99).into()));
         let cases = if depth == 0 {
             vec![
                 crate::RuntimeMatchCase {
@@ -9895,7 +9915,7 @@ mod tests {
             family: "FS".to_string(),
             operation: ken_host::HostOpV1::BufferAllocate,
             capability: None,
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(8))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
         };
         let write = RuntimeExpr::Effect {
             family: "FS".to_string(),
@@ -9903,10 +9923,10 @@ mod tests {
             capability: None,
             args: vec![
                 RuntimeExpr::Var(1),
-                RuntimeExpr::Value(RuntimeValue::Int(0)),
+                RuntimeExpr::Value(RuntimeValue::Int((0).into())),
                 RuntimeExpr::Var(0),
-                RuntimeExpr::Value(RuntimeValue::Int(7)),
-                RuntimeExpr::Value(RuntimeValue::Int(4)),
+                RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+                RuntimeExpr::Value(RuntimeValue::Int((4).into())),
             ],
         };
         let transfer_observation = px8n_exact_nat(
@@ -9917,7 +9937,7 @@ mod tests {
                 symbols,
                 RuntimeExpr::Var(1),
                 3,
-                RuntimeExpr::Value(RuntimeValue::Int(3)),
+                RuntimeExpr::Value(RuntimeValue::Int((3).into())),
             ),
         );
         let success = RuntimeExpr::Match {
@@ -9942,7 +9962,7 @@ mod tests {
             cases: vec![crate::RuntimeMatchCase {
                 constructor: symbols.resource_no_progress.clone(),
                 binders: 0,
-                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(70))),
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((70).into()))),
             }],
             default: RuntimeTrap {
                 code: RuntimeTrapCode::PatternMatchFailure,
@@ -9971,7 +9991,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_err.clone(),
                     binders: 1,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(81))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((81).into()))),
                 },
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_ok.clone(),
@@ -9987,7 +10007,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_err.clone(),
                     binders: 1,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(80))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((80).into()))),
                 },
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_ok.clone(),
@@ -10008,7 +10028,7 @@ mod tests {
             family: "FS".to_string(),
             operation: ken_host::HostOpV1::BufferAllocate,
             capability: None,
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(8))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
         };
         let read = RuntimeExpr::Effect {
             family: "FS".to_string(),
@@ -10016,10 +10036,10 @@ mod tests {
             capability: None,
             args: vec![
                 RuntimeExpr::Var(1),
-                RuntimeExpr::Value(RuntimeValue::Int(0)),
+                RuntimeExpr::Value(RuntimeValue::Int((0).into())),
                 RuntimeExpr::Var(0),
-                RuntimeExpr::Value(RuntimeValue::Int(7)),
-                RuntimeExpr::Value(RuntimeValue::Int(4)),
+                RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+                RuntimeExpr::Value(RuntimeValue::Int((4).into())),
             ],
         };
         let read_some = RuntimeExpr::Match {
@@ -10031,7 +10051,7 @@ mod tests {
                     symbols,
                     RuntimeExpr::Var(1),
                     1,
-                    RuntimeExpr::Value(RuntimeValue::Int(12)),
+                    RuntimeExpr::Value(RuntimeValue::Int((12).into())),
                 ),
             }],
             default: trap(),
@@ -10048,7 +10068,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.read_eof.clone(),
                     binders: 0,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(10))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((10).into()))),
                 },
             ],
             default: trap(),
@@ -10059,7 +10079,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_err.clone(),
                     binders: 1,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(82))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((82).into()))),
                 },
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_ok.clone(),
@@ -10075,7 +10095,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_err.clone(),
                     binders: 1,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(81))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((81).into()))),
                 },
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_ok.clone(),
@@ -10091,7 +10111,7 @@ mod tests {
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_err.clone(),
                     binders: 1,
-                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(80))),
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((80).into()))),
                 },
                 crate::RuntimeMatchCase {
                     constructor: symbols.result_ok.clone(),
@@ -10178,7 +10198,7 @@ mod tests {
                 args: if mismatched_result_kind {
                     Vec::new()
                 } else {
-                    vec![RuntimeExpr::Value(RuntimeValue::Int(9))]
+                    vec![RuntimeExpr::Value(RuntimeValue::Int((9).into()))]
                 },
             },
         }];
@@ -10188,7 +10208,7 @@ mod tests {
                 binders: ok_binders,
                 body: RuntimeExpr::Construct {
                     constructor: scalar_tree.clone(),
-                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
                 },
             });
         }
@@ -10280,7 +10300,7 @@ mod tests {
             body: RuntimeExpr::Construct {
                 constructor: leaf,
                 args: vec![if payload_is_int {
-                    RuntimeExpr::Value(RuntimeValue::Int(payload))
+                    RuntimeExpr::Value(RuntimeValue::Int((payload).into()))
                 } else {
                     RuntimeExpr::Construct {
                         constructor: "ctor:prelude::Unit::MkUnit".to_string(),
@@ -10292,7 +10312,7 @@ mod tests {
         .collect();
         RuntimeExpr::ComputationalMatch {
             scrutinee: Box::new(RuntimeExpr::Let {
-                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int(41))),
+                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int((41).into()))),
                 body: Box::new(RuntimeExpr::ComputationalMatch {
                     scrutinee: Box::new(RuntimeExpr::Match {
                         scrutinee: Box::new(RuntimeExpr::Effect {
@@ -10393,7 +10413,7 @@ mod tests {
                     body: RuntimeExpr::Construct {
                         constructor: inner_constructor.to_string(),
                         args: vec![if payload_is_int {
-                            RuntimeExpr::Value(RuntimeValue::Int(7))
+                            RuntimeExpr::Value(RuntimeValue::Int((7).into()))
                         } else {
                             RuntimeExpr::Construct {
                                 constructor: "ctor:prelude::Unit::MkUnit".to_string(),
@@ -10439,7 +10459,7 @@ mod tests {
                                 partiality: RuntimePartiality::Total,
                             },
                             args: vec![
-                                RuntimeExpr::Value(RuntimeValue::Int(41)),
+                                RuntimeExpr::Value(RuntimeValue::Int((41).into())),
                                 RuntimeExpr::Var(0),
                             ],
                         }
@@ -10472,7 +10492,7 @@ mod tests {
                 binders: 0,
                 body: RuntimeExpr::Construct {
                     constructor: result.to_string(),
-                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(payload))],
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int((payload).into()))],
                 },
             })
             .collect(),
@@ -10491,7 +10511,7 @@ mod tests {
             scrutinee: Box::new(RuntimeExpr::Construct {
                 constructor: "ctor:fixture::Envelope::Wrap".to_string(),
                 args: vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(41)),
+                    RuntimeExpr::Value(RuntimeValue::Int((41).into())),
                     constructor_field_aggregate(),
                 ],
             }),
@@ -10703,7 +10723,7 @@ mod tests {
                     binders: 0,
                     body: RuntimeExpr::Construct {
                         constructor: leaf.clone(),
-                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
                     },
                 })
                 .collect(),
@@ -10715,7 +10735,7 @@ mod tests {
         let expr = RuntimeExpr::ComputationalMatch {
             scrutinee: Box::new(RuntimeExpr::Construct {
                 constructor: "ctor:fixture::Envelope::Wrap".to_string(),
-                args: vec![RuntimeExpr::Value(RuntimeValue::Int(41)), field],
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((41).into())), field],
             }),
             cases: vec![crate::RuntimeComputationalMatchCase {
                 constructor: "ctor:fixture::Envelope::Wrap".to_string(),
@@ -10803,7 +10823,7 @@ mod tests {
                     binders: 0,
                     body: RuntimeExpr::Construct {
                         constructor: "ctor:prelude::Result::Ok".to_string(),
-                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
                     },
                 })
                 .collect(),
@@ -10816,9 +10836,9 @@ mod tests {
             scrutinee: Box::new(RuntimeExpr::Construct {
                 constructor: "ctor:fixture::Envelope::Wrap".to_string(),
                 args: vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(13)),
+                    RuntimeExpr::Value(RuntimeValue::Int((13).into())),
                     aggregate,
-                    RuntimeExpr::Value(RuntimeValue::Int(41)),
+                    RuntimeExpr::Value(RuntimeValue::Int((41).into())),
                 ],
             }),
             cases: vec![crate::RuntimeComputationalMatchCase {
@@ -10853,7 +10873,7 @@ mod tests {
             .expect("the selected middle field composes without moving its trailing sibling");
         assert_eq!(
             compiled.run(None).expect("middle-field fixture runs").0,
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(34))
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((34).into()))
         );
     }
 
@@ -10953,7 +10973,7 @@ mod tests {
     fn constructor_field_aggregate_unconsumed_sibling_stays_ordinary() {
         let prefix = RuntimeExpr::Construct {
             constructor: "ctor:fixture::Prefix::Keep".to_string(),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(41))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((41).into()))],
         };
         let expr = RuntimeExpr::ComputationalMatch {
             scrutinee: Box::new(RuntimeExpr::Construct {
@@ -11126,7 +11146,7 @@ mod tests {
                 let code = if binders == 1 {
                     RuntimeExpr::Var(0)
                 } else {
-                    RuntimeExpr::Value(RuntimeValue::Int(tag as i64 + 1))
+                    RuntimeExpr::Value(RuntimeValue::Int((tag as i64 + 1).into()))
                 };
                 RuntimeMatchCase {
                     constructor: constructor.clone(),
@@ -11177,7 +11197,7 @@ mod tests {
                     body: if producer {
                         RuntimeExpr::Construct {
                             constructor: tree.to_string(),
-                            args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
+                            args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
                         }
                     } else if ordinary_bool {
                         RuntimeExpr::Value(RuntimeValue::Bool(false))
@@ -11225,7 +11245,7 @@ mod tests {
                     body: RuntimeExpr::Construct {
                         constructor: exit.to_string(),
                         args: (exit == crate::EXIT_FAILURE_CONSTRUCTOR)
-                            .then(|| RuntimeExpr::Value(RuntimeValue::Int(1)))
+                            .then(|| RuntimeExpr::Value(RuntimeValue::Int((1).into())))
                             .into_iter()
                             .collect(),
                     },
@@ -11409,7 +11429,7 @@ mod tests {
                 params: vec!["ignored".to_string()],
                 body: Box::new(console_write_effect()),
             }),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
         };
 
         emit_process_entrypoint_object_with_cranelift(
@@ -11444,7 +11464,7 @@ mod tests {
                     },
                 }),
             }),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(0))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
         };
 
         emit_process_entrypoint_object_with_cranelift(
@@ -11563,7 +11583,7 @@ mod tests {
     fn heterogeneous_frame_environment_and_binder_order_are_preserved() {
         let inner_call = RuntimeExpr::Call {
             callee: Box::new(RuntimeExpr::LexicalClosure {
-                captures: vec![RuntimeExpr::Value(RuntimeValue::Int(41))],
+                captures: vec![RuntimeExpr::Value(RuntimeValue::Int((41).into()))],
                 params: vec!["inner".to_string()],
                 body: Box::new(RuntimeExpr::Match {
                     scrutinee: Box::new(RuntimeExpr::Var(0)),
@@ -11589,7 +11609,7 @@ mod tests {
             }),
             args: vec![RuntimeExpr::Construct {
                 constructor: "ctor:fixture::Inner::Hit".to_string(),
-                args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
             }],
         };
         let expr = RuntimeExpr::Call {
@@ -11613,7 +11633,7 @@ mod tests {
                 .run(None)
                 .expect("frame environment fixture runs")
                 .0,
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(34))
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((34).into()))
         );
     }
 
@@ -11635,7 +11655,7 @@ mod tests {
                     binders: 0,
                     body: RuntimeExpr::Construct {
                         constructor: "ctor:fixture::Inner::Scalar".to_string(),
-                        args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
                     },
                 },
                 RuntimeMatchCase {
@@ -11720,7 +11740,7 @@ mod tests {
         let first_cases = vec![RuntimeMatchCase {
             constructor: "ctor:fixture::Inner::Hit".to_string(),
             binders: 1,
-            body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
         }];
         let first_default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
@@ -11750,7 +11770,7 @@ mod tests {
         let later_cases = vec![RuntimeMatchCase {
             constructor: "ctor:fixture::Outer::Hit".to_string(),
             binders: 1,
-            body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
         }];
         let first_default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
@@ -11831,13 +11851,13 @@ mod tests {
             constructor: "ctor:fixture::Inner::Hit".to_string(),
             argument_binders: 0,
             recursive_positions: Vec::new(),
-            body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
         }];
         let outer_cases = vec![crate::RuntimeComputationalMatchCase {
             constructor: "ctor:fixture::Outer::Hit".to_string(),
             argument_binders: 0,
             recursive_positions: Vec::new(),
-            body: RuntimeExpr::Value(RuntimeValue::Int(2)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((2).into())),
         }];
         let inner_default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
@@ -11882,13 +11902,13 @@ mod tests {
             constructor: "ctor:fixture::Inner::Hit".to_string(),
             argument_binders: 0,
             recursive_positions: Vec::new(),
-            body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
         }];
         let outer_cases = vec![crate::RuntimeComputationalMatchCase {
             constructor: "ctor:fixture::Outer::Hit".to_string(),
             argument_binders: 0,
             recursive_positions: Vec::new(),
-            body: RuntimeExpr::Value(RuntimeValue::Int(2)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((2).into())),
         }];
         let inner_default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
@@ -12053,7 +12073,7 @@ mod tests {
             cases: vec![RuntimeMatchCase {
                 constructor: crate::PROCESS_INPUT_CONSTRUCTOR.to_string(),
                 binders: 3,
-                body: RuntimeExpr::Value(RuntimeValue::Int(0)),
+                body: RuntimeExpr::Value(RuntimeValue::Int((0).into())),
             }],
             default: RuntimeTrap {
                 code: RuntimeTrapCode::PatternMatchFailure,
@@ -12129,19 +12149,19 @@ mod tests {
                             },
                             args: vec![
                                 RuntimeExpr::Var(2),
-                                RuntimeExpr::Value(RuntimeValue::Int(99)),
+                                RuntimeExpr::Value(RuntimeValue::Int((99).into())),
                             ],
                         }),
                         cases: vec![
                             RuntimeMatchCase {
                                 constructor: none.to_string(),
                                 binders: 0,
-                                body: RuntimeExpr::Value(RuntimeValue::Int(7)),
+                                body: RuntimeExpr::Value(RuntimeValue::Int((7).into())),
                             },
                             RuntimeMatchCase {
                                 constructor: some.to_string(),
                                 binders: 1,
-                                body: RuntimeExpr::Value(RuntimeValue::Int(9)),
+                                body: RuntimeExpr::Value(RuntimeValue::Int((9).into())),
                             },
                         ],
                         default: RuntimeTrap {
@@ -12267,7 +12287,7 @@ mod tests {
                         }),
                         args: vec![RuntimeExpr::Construct {
                             constructor: "ctor:fixture::Option::Some".to_string(),
-                            args: vec![RuntimeExpr::Value(RuntimeValue::Int(1))],
+                            args: vec![RuntimeExpr::Value(RuntimeValue::Int((1).into()))],
                         }],
                     }),
                 },
@@ -12316,7 +12336,7 @@ mod tests {
     fn checked_join_marker_without_exact_plan_site_rejects_before_emission() {
         let expression = RuntimeExpr::CheckedJoinSite {
             site_id: 41,
-            body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(7))),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((7).into()))),
         };
         let result = compile_expr_into_module(
             new_object_module("px8h-missing-join-site").unwrap(),
@@ -12476,7 +12496,7 @@ mod tests {
         let cases = vec![RuntimeMatchCase {
             constructor: "ctor:fixture::PX8H::Only".to_string(),
             binders: 0,
-            body: RuntimeExpr::Value(RuntimeValue::Int(7)),
+            body: RuntimeExpr::Value(RuntimeValue::Int((7).into())),
         }];
         let default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
@@ -12526,7 +12546,7 @@ mod tests {
             new_object_module("px8h-orphan-join-site").unwrap(),
             "ken_px8h_orphan_join_site",
             Linkage::Export,
-            &RuntimeExpr::Value(RuntimeValue::Int(7)),
+            &RuntimeExpr::Value(RuntimeValue::Int((7).into())),
             &NativeSeedEnvironment::empty(),
             BTreeMap::new(),
             None,
@@ -12647,8 +12667,8 @@ mod tests {
             value: Box::new(total_primitive(
                 "add_int",
                 vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(2)),
-                    RuntimeExpr::Value(RuntimeValue::Int(3)),
+                    RuntimeExpr::Value(RuntimeValue::Int((2).into())),
+                    RuntimeExpr::Value(RuntimeValue::Int((3).into())),
                 ],
             )),
             body: Box::new(RuntimeExpr::Call {
@@ -12672,7 +12692,9 @@ mod tests {
                                                 "eq_int",
                                                 vec![
                                                     RuntimeExpr::Var(0),
-                                                    RuntimeExpr::Value(RuntimeValue::Int(5)),
+                                                    RuntimeExpr::Value(RuntimeValue::Int(
+                                                        (5).into(),
+                                                    )),
                                                 ],
                                             )),
                                             then_expr: Box::new(RuntimeExpr::Value(
@@ -12692,10 +12714,12 @@ mod tests {
                                                     "mul_int",
                                                     vec![
                                                         RuntimeExpr::Var(0),
-                                                        RuntimeExpr::Value(RuntimeValue::Int(2)),
+                                                        RuntimeExpr::Value(RuntimeValue::Int(
+                                                            (2).into(),
+                                                        )),
                                                     ],
                                                 ),
-                                                RuntimeExpr::Value(RuntimeValue::Int(3)),
+                                                RuntimeExpr::Value(RuntimeValue::Int((3).into())),
                                             ],
                                         ),
                                     ),
@@ -12714,7 +12738,7 @@ mod tests {
         let observation = RuntimeObservation::Returned(RuntimeGroundValue::Record {
             fields: vec![
                 ("ok".to_string(), RuntimeGroundValue::Bool(true)),
-                ("value".to_string(), RuntimeGroundValue::Int(7)),
+                ("value".to_string(), RuntimeGroundValue::Int((7).into())),
             ],
         });
         let program = nc22_program_with_body(body, observation.clone());
@@ -12761,7 +12785,7 @@ mod tests {
                 dependency: dependency.clone(),
                 dependency_semantic_hash: dependency_hash.clone(),
             },
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(9)),
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((9).into())),
         );
         program.declarations[0].symbol = symbol.clone();
         program.erased_core.symbols.insert(imported.clone());
@@ -12780,7 +12804,7 @@ mod tests {
             imported,
             dependency,
             dependency_hash,
-            RuntimeGroundValue::Int(9),
+            RuntimeGroundValue::Int((9).into()),
         );
         let run_report = evaluate_runtime_ir_example(&program, &program.examples[0], &runtime_env)
             .expect("runtime-IR evaluator can use an exact imported seed binding");
@@ -12805,8 +12829,8 @@ mod tests {
     #[test]
     fn nc22_runtime_ir_report_identity_mismatch_rejects_before_native_lowering() {
         let program = nc22_program_with_body(
-            RuntimeExpr::Value(RuntimeValue::Int(1)),
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         );
         let mut run_report = evaluate_runtime_ir_example(
             &program,
@@ -12836,14 +12860,14 @@ mod tests {
     #[test]
     fn nc22_ambiguous_runtime_ir_report_target_rejects_before_native_lowering() {
         let mut program = nc22_program_with_body(
-            RuntimeExpr::Value(RuntimeValue::Int(1)),
-            RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         );
         program.examples.push(program.examples[0].clone());
         let mut run_report = evaluate_runtime_ir_example(
             &nc22_program_with_body(
-                RuntimeExpr::Value(RuntimeValue::Int(1)),
-                RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+                RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+                RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
             ),
             &program.examples[0],
             &RuntimeIrSeedEnvironment::empty(),
@@ -13031,7 +13055,7 @@ mod tests {
             name: "unknown-runtime-value".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::Value(RuntimeValue::Unknown),
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(0)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((0).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13051,10 +13075,10 @@ mod tests {
             name: "let-outside-supported-subset".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::Let {
-                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
                 body: Box::new(RuntimeExpr::Var(0)),
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13073,8 +13097,8 @@ mod tests {
         program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
             body: RuntimeExpr::If {
                 scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-                then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
-                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(0))),
+                then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((0).into()))),
             },
         };
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
@@ -13100,11 +13124,11 @@ mod tests {
                     partiality: RuntimePartiality::Total,
                 },
                 args: vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(2)),
-                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    RuntimeExpr::Value(RuntimeValue::Int((2).into())),
+                    RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 ],
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13126,7 +13150,7 @@ mod tests {
                     symbol: "add_int".to_string(),
                     partiality: RuntimePartiality::Total,
                 },
-                args: vec![RuntimeExpr::Value(RuntimeValue::Int(1))],
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((1).into()))],
             },
         };
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
@@ -13153,10 +13177,10 @@ mod tests {
                 },
                 args: vec![
                     RuntimeExpr::Value(RuntimeValue::Bool(true)),
-                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 ],
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(2)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((2).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13190,7 +13214,7 @@ mod tests {
                         },
                         args: vec![
                             RuntimeExpr::Var(0),
-                            RuntimeExpr::Value(RuntimeValue::Int(1)),
+                            RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                         ],
                     },
                 }],
@@ -13199,7 +13223,7 @@ mod tests {
                     message: "unused default".to_string(),
                 },
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(2)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((2).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13219,7 +13243,7 @@ mod tests {
             name: "top-level-var".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::Var(0),
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(0)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((0).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13239,10 +13263,10 @@ mod tests {
             name: "project-from-int".to_string(),
             checked_core_shape: "diagnostic label only".to_string(),
             ir: RuntimeExpr::Project {
-                record: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                record: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
                 field: "x".to_string(),
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13264,9 +13288,9 @@ mod tests {
             ir: RuntimeExpr::Closure {
                 captures: Vec::new(),
                 params: Vec::new(),
-                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
             },
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((1).into())),
         }];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
@@ -13558,7 +13582,7 @@ mod tests {
                 },
                 args: vec![
                     RuntimeExpr::Value(RuntimeValue::Bytes(Vec::new())),
-                    RuntimeExpr::Value(RuntimeValue::Int(0)),
+                    RuntimeExpr::Value(RuntimeValue::Int((0).into())),
                 ],
             },
             observation: RuntimeObservation::Returned(RuntimeGroundValue::Constructor {
@@ -13595,8 +13619,8 @@ mod tests {
                     },
                     args: vec![
                         RuntimeExpr::Value(RuntimeValue::Bytes(vec![0, 1, 2])),
-                        RuntimeExpr::Value(RuntimeValue::Int(1)),
-                        RuntimeExpr::Value(RuntimeValue::Int(2)),
+                        RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+                        RuntimeExpr::Value(RuntimeValue::Int((2).into())),
                     ],
                 },
                 observation: RuntimeObservation::Returned(RuntimeGroundValue::Constructor {
@@ -13677,11 +13701,11 @@ mod tests {
             ir: total_primitive(
                 "add_int",
                 vec![
-                    RuntimeExpr::Value(RuntimeValue::Int(i64::MAX)),
-                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    RuntimeExpr::Value(RuntimeValue::Int((i64::MAX).into())),
+                    RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 ],
             ),
-            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(i64::MIN)),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((i64::MIN).into())),
         };
 
         let err = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())

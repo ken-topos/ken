@@ -181,7 +181,7 @@ impl RuntimeIrSeedEnvironment {
         let mut values = BTreeMap::new();
         values.insert(
             "decl:fixture::Local::y".to_string(),
-            RuntimeGroundValue::Int(2),
+            RuntimeGroundValue::Int((2).into()),
         );
         Self {
             values,
@@ -1107,7 +1107,7 @@ enum RuntimeIrOutcome {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum EvaluatedValue {
     Bool(bool),
-    Int(i64),
+    Int(crate::RuntimeIntV1),
     Bytes(Vec<u8>),
     String(String),
     Constructor {
@@ -1380,7 +1380,7 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
     ) -> Result<EvaluatedValue, RuntimeIrEvaluationError> {
         match value {
             RuntimeValue::Bool(value) => Ok(EvaluatedValue::Bool(*value)),
-            RuntimeValue::Int(value) => Ok(EvaluatedValue::Int(*value)),
+            RuntimeValue::Int(value) => Ok(EvaluatedValue::Int(value.clone())),
             RuntimeValue::Bytes(value) => Ok(EvaluatedValue::Bytes(value.clone())),
             RuntimeValue::String(value) => Ok(EvaluatedValue::String(value.clone())),
             RuntimeValue::Constructor { constructor, args } => Ok(EvaluatedValue::Constructor {
@@ -1493,7 +1493,7 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
     ) -> Result<EvaluatedValue, RuntimeIrEvaluationError> {
         match value {
             RuntimeGroundValue::Bool(value) => Ok(EvaluatedValue::Bool(*value)),
-            RuntimeGroundValue::Int(value) => Ok(EvaluatedValue::Int(*value)),
+            RuntimeGroundValue::Int(value) => Ok(EvaluatedValue::Int(value.clone())),
             RuntimeGroundValue::Bytes(value) => Ok(EvaluatedValue::Bytes(value.clone())),
             RuntimeGroundValue::String(value) => Ok(EvaluatedValue::String(value.clone())),
             RuntimeGroundValue::Constructor { constructor, args } => {
@@ -1548,11 +1548,13 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
         }
 
         match primitive.symbol.as_str() {
-            "add_int" => eval_int_binop(&primitive.symbol, args, |lhs, rhs| lhs.checked_add(rhs)),
-            "sub_int" => eval_int_binop(&primitive.symbol, args, |lhs, rhs| lhs.checked_sub(rhs)),
-            "mul_int" => eval_int_binop(&primitive.symbol, args, |lhs, rhs| lhs.checked_mul(rhs)),
+            "add_int" => eval_int_binop(&primitive.symbol, args, crate::RuntimeIntV1::add),
+            "sub_int" => eval_int_binop(&primitive.symbol, args, crate::RuntimeIntV1::sub),
+            "mul_int" => eval_int_binop(&primitive.symbol, args, crate::RuntimeIntV1::mul),
             "eq_int" => eval_int_cmp(&primitive.symbol, args, |lhs, rhs| lhs == rhs),
-            "leq_int" => eval_int_cmp(&primitive.symbol, args, |lhs, rhs| lhs <= rhs),
+            "leq_int" => eval_int_cmp(&primitive.symbol, args, |lhs, rhs| {
+                lhs.exact_cmp(rhs).is_le()
+            }),
             "uint8_to_int" | "int_to_uint8_raw" => {
                 let [value]: [EvaluatedValue; 1] = args.try_into().map_err(|args: Vec<_>| {
                     eval_unsupported(
@@ -1594,25 +1596,21 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
 fn eval_int_binop(
     symbol: &str,
     args: Vec<EvaluatedValue>,
-    op: impl FnOnce(i64, i64) -> Option<i64>,
+    op: impl FnOnce(&crate::RuntimeIntV1, &crate::RuntimeIntV1) -> crate::RuntimeIntV1,
 ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
     let (lhs, rhs) = expect_two_ints(symbol, args)?;
-    let value = op(lhs, rhs).ok_or_else(|| {
-        eval_unsupported(
-            "PrimitiveCall",
-            format!("{symbol} overflow is outside the supported runtime-IR subset"),
-        )
-    })?;
-    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(value)))
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(op(&lhs, &rhs))))
 }
 
 fn eval_int_cmp(
     symbol: &str,
     args: Vec<EvaluatedValue>,
-    op: impl FnOnce(i64, i64) -> bool,
+    op: impl FnOnce(&crate::RuntimeIntV1, &crate::RuntimeIntV1) -> bool,
 ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
     let (lhs, rhs) = expect_two_ints(symbol, args)?;
-    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Bool(op(lhs, rhs))))
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Bool(op(
+        &lhs, &rhs,
+    ))))
 }
 
 fn eval_bool_unop(
@@ -1638,10 +1636,9 @@ fn eval_bytes_length(
     args: Vec<EvaluatedValue>,
 ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
     let bytes = expect_one_bytes(symbol, args)?;
-    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(usize_to_i64(
-        symbol,
-        bytes.len(),
-    )?)))
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(
+        usize_to_i64(symbol, bytes.len())?.into(),
+    )))
 }
 
 fn eval_bytes_at(
@@ -1662,7 +1659,7 @@ fn eval_bytes_at(
     Ok(RuntimeIrOutcome::Value(match value {
         Some(byte) => EvaluatedValue::Constructor {
             constructor: some.clone(),
-            args: vec![EvaluatedValue::Int(i64::from(byte))],
+            args: vec![EvaluatedValue::Int(i64::from(byte).into())],
         },
         None => EvaluatedValue::Constructor {
             constructor: none.clone(),
@@ -1762,10 +1759,9 @@ fn eval_string_byte_length(
     args: Vec<EvaluatedValue>,
 ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
     let value = expect_one_string(symbol, args)?;
-    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(usize_to_i64(
-        symbol,
-        value.len(),
-    )?)))
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(
+        usize_to_i64(symbol, value.len())?.into(),
+    )))
 }
 
 fn eval_string_char_length(
@@ -1773,16 +1769,15 @@ fn eval_string_char_length(
     args: Vec<EvaluatedValue>,
 ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
     let value = expect_one_string(symbol, args)?;
-    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(usize_to_i64(
-        symbol,
-        value.chars().count(),
-    )?)))
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(
+        usize_to_i64(symbol, value.chars().count())?.into(),
+    )))
 }
 
 fn expect_two_ints(
     symbol: &str,
     args: Vec<EvaluatedValue>,
-) -> Result<(i64, i64), RuntimeIrEvaluationError> {
+) -> Result<(crate::RuntimeIntV1, crate::RuntimeIntV1), RuntimeIrEvaluationError> {
     if args.len() != 2 {
         return Err(wrong_arity(symbol, 2, args.len()));
     }
@@ -1868,6 +1863,9 @@ fn expect_bytes_int(
     let (EvaluatedValue::Bytes(bytes), EvaluatedValue::Int(index)) = (bytes, index) else {
         return Err(wrong_type(symbol, "Bytes, Int"));
     };
+    let Some(index) = index.as_small() else {
+        return Err(wrong_type(symbol, "Bytes, host-width Int"));
+    };
     Ok((bytes, index))
 }
 
@@ -1886,6 +1884,9 @@ fn expect_bytes_int_int(
         (bytes, start, len)
     else {
         return Err(wrong_type(symbol, "Bytes, Int, Int"));
+    };
+    let (Some(start), Some(len)) = (start.as_small(), len.as_small()) else {
+        return Err(wrong_type(symbol, "Bytes, host-width Int, host-width Int"));
     };
     Ok((bytes, start, len))
 }

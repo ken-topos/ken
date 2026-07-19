@@ -1951,8 +1951,8 @@ mod tests {
                 partiality: RuntimePartiality::Total,
             },
             args: vec![
-                RuntimeExpr::Value(RuntimeValue::Int(value - 1)),
-                RuntimeExpr::Value(RuntimeValue::Int(1)),
+                RuntimeExpr::Value(RuntimeValue::Int((value - 1).into())),
+                RuntimeExpr::Value(RuntimeValue::Int((1).into())),
             ],
         }
     }
@@ -2055,7 +2055,7 @@ mod tests {
 
     #[test]
     fn packages_and_smokes_scalar_starter_executable() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(42));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((42).into()));
         let program = starter_program(int_body(42), observation);
         let (_report, entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2125,13 +2125,13 @@ mod tests {
                         obligation: Some("obl:px4.bytes_at.bounds".to_string()),
                     },
                 },
-                args: vec![bytes, RuntimeExpr::Value(RuntimeValue::Int(index))],
+                args: vec![bytes, RuntimeExpr::Value(RuntimeValue::Int((index).into()))],
             }),
             cases: vec![
                 crate::RuntimeMatchCase {
                     constructor: option_none.to_string(),
                     binders: 0,
-                    body: RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 },
                 crate::RuntimeMatchCase {
                     constructor: option_some.to_string(),
@@ -2195,7 +2195,10 @@ mod tests {
                 symbol: "eq_int".to_string(),
                 partiality: RuntimePartiality::Total,
             },
-            args: vec![value, RuntimeExpr::Value(RuntimeValue::Int(expected))],
+            args: vec![
+                value,
+                RuntimeExpr::Value(RuntimeValue::Int((expected).into())),
+            ],
         };
         let cwd_length = RuntimeExpr::PrimitiveCall {
             primitive: RuntimePrimitive {
@@ -2222,13 +2225,13 @@ mod tests {
                             i64::from(0xfe_u8),
                         )),
                         then_expr: Box::new(environment_byte(1)),
-                        else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                        else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
                     }),
-                    else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                    else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
                 }),
-                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
             }),
-            else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+            else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
         };
         let entry = RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Var(0)),
@@ -2357,7 +2360,7 @@ mod tests {
         assert_eq!(
             run(
                 "px4-failure-zero",
-                failure(RuntimeExpr::Value(RuntimeValue::Int(0))),
+                failure(RuntimeExpr::Value(RuntimeValue::Int((0).into()))),
             )
             .status
             .code(),
@@ -2366,7 +2369,7 @@ mod tests {
         assert_eq!(
             run(
                 "px4-failure-255",
-                failure(RuntimeExpr::Value(RuntimeValue::Int(255))),
+                failure(RuntimeExpr::Value(RuntimeValue::Int((255).into()))),
             )
             .status
             .code(),
@@ -2375,7 +2378,7 @@ mod tests {
 
         let malformed = run(
             "px4-malformed-exitcode",
-            RuntimeExpr::Value(RuntimeValue::Int(0)),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
         );
         assert_eq!(malformed.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&malformed.stderr)
@@ -2424,7 +2427,7 @@ mod tests {
         };
         let failure = RuntimeExpr::Construct {
             constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
         };
         let trapped = RuntimeExpr::Trap(RuntimeTrap {
             code: RuntimeTrapCode::ExplicitTrap,
@@ -2460,9 +2463,9 @@ mod tests {
             constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
             args: Vec::new(),
         };
-        let failure = |code| RuntimeExpr::Construct {
+        let failure = |code: i64| RuntimeExpr::Construct {
             constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(code))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((code).into()))],
         };
         let stale_use = RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Effect {
@@ -2793,7 +2796,7 @@ mod tests {
 
     #[test]
     fn stale_platform_support_hash_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(7));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((7).into()));
         let program = starter_program(int_body(7), observation);
         let (_report, entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2824,7 +2827,7 @@ mod tests {
 
     #[test]
     fn stale_mutated_entrypoint_payload_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(11));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((11).into()));
         let program = starter_program(int_body(11), observation);
         let (_report, mut entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2848,7 +2851,7 @@ mod tests {
 
     #[test]
     fn forged_support_for_non_executable_payload_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(13));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((13).into()));
         let program = starter_program(int_body(13), observation);
         let (_report, mut entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2879,7 +2882,7 @@ mod tests {
 
     #[test]
     fn forged_entrypoint_package_kind_version_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(17));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((17).into()));
         let program = starter_program(int_body(17), observation);
         let (_report, mut entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2908,7 +2911,7 @@ mod tests {
 
     #[test]
     fn forged_entrypoint_package_version_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(18));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((18).into()));
         let program = starter_program(int_body(18), observation);
         let (_report, mut entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2936,7 +2939,7 @@ mod tests {
 
     #[test]
     fn forged_platform_support_kind_version_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(19));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((19).into()));
         let program = starter_program(int_body(19), observation);
         let (_report, entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2966,7 +2969,7 @@ mod tests {
 
     #[test]
     fn forged_platform_support_version_rejects_before_linking() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(20));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((20).into()));
         let program = starter_program(int_body(20), observation);
         let (_report, entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -2995,7 +2998,7 @@ mod tests {
 
     #[test]
     fn unsupported_platform_target_rejects_before_object_emission() {
-        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(3));
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((3).into()));
         let program = starter_program(int_body(3), observation);
         let (_report, entrypoint) = packaged_entrypoint(&program);
         let run_report = runtime_ir_run_report(&program);
@@ -3066,13 +3069,13 @@ mod tests {
     #[test]
     fn aggregate_observation_rejects_as_non_scalar_smoke_lane() {
         let observation = RuntimeObservation::Returned(RuntimeGroundValue::Record {
-            fields: vec![("value".to_string(), RuntimeGroundValue::Int(1))],
+            fields: vec![("value".to_string(), RuntimeGroundValue::Int((1).into()))],
         });
         let program = starter_program(
             RuntimeExpr::Record {
                 fields: vec![(
                     "value".to_string(),
-                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                    RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                 )],
             },
             observation,
