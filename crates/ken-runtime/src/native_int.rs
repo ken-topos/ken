@@ -146,6 +146,7 @@ pub struct NativeIntV1 {
 pub struct NativeIntArenaV1 {
     entries: Vec<Value>,
     canonical_slots: BTreeMap<Vec<u8>, NativeBigSlotV1>,
+    final_result: Option<NativeIntV1>,
 }
 
 impl NativeIntArenaV1 {
@@ -192,6 +193,10 @@ impl NativeIntArenaV1 {
 
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    pub fn final_result(&self) -> Option<NativeIntV1> {
+        self.final_result
     }
 }
 
@@ -265,6 +270,34 @@ pub unsafe extern "C" fn native_int_compare_v1(
 }
 
 #[doc(hidden)]
+pub unsafe extern "C" fn native_int_intern_v1(
+    arena: *mut NativeIntArenaV1,
+    sign: u64,
+    limbs: *const u64,
+    len: u64,
+    output: *mut NativeIntV1,
+) -> i64 {
+    let (Some(arena), Some(output)) = (arena.as_mut(), output.as_mut()) else {
+        return -1;
+    };
+    let Ok(len) = usize::try_from(len) else {
+        return -1;
+    };
+    if limbs.is_null() || len == 0 {
+        return -1;
+    }
+    let limbs = std::slice::from_raw_parts(limbs, len).to_vec();
+    let sign = match sign {
+        0 => Sign::NonNegative,
+        1 => Sign::Negative,
+        _ => return -1,
+    };
+    let value = RuntimeIntV1::from_canonical_parts(sign, limbs);
+    *output = arena.intern(&value);
+    0
+}
+
+#[doc(hidden)]
 pub unsafe extern "C" fn native_int_narrow_u64_v1(
     arena: *mut NativeIntArenaV1,
     tag: u64,
@@ -281,6 +314,23 @@ pub unsafe extern "C" fn native_int_narrow_u64_v1(
         return 1;
     };
     *output = value;
+    0
+}
+
+#[doc(hidden)]
+pub unsafe extern "C" fn native_int_export_v1(
+    arena: *mut NativeIntArenaV1,
+    tag: u64,
+    payload: u64,
+) -> i64 {
+    let Some(arena) = arena.as_mut() else {
+        return -1;
+    };
+    let value = NativeIntV1 { tag, payload };
+    if arena.resolve(value).is_none() {
+        return -1;
+    }
+    arena.final_result = Some(value);
     0
 }
 

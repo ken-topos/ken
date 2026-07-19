@@ -151,7 +151,7 @@ fn source_derived_closed_function_target_lowers_to_runtime_ir() {
     let observation = evaluate_runtime_ir_expr(
         &RuntimeExpr::Call {
             callee: Box::new(body),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(11))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((11).into()))],
         },
         &RuntimeIrSeedEnvironment::empty(),
     )
@@ -159,7 +159,7 @@ fn source_derived_closed_function_target_lowers_to_runtime_ir() {
 
     assert_eq!(
         observation,
-        RuntimeObservation::Returned(RuntimeGroundValue::Int(11))
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((11).into()))
     );
     assert_eq!(
         program.package_identity,
@@ -179,7 +179,7 @@ fn transparent_declaration_body_lowers_and_evaluates_through_runtime_ir() {
     let observation = evaluate_runtime_ir_expr(
         &RuntimeExpr::Call {
             callee: Box::new(body),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(9))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((9).into()))],
         },
         &RuntimeIrSeedEnvironment::empty(),
     )
@@ -187,7 +187,7 @@ fn transparent_declaration_body_lowers_and_evaluates_through_runtime_ir() {
 
     assert_eq!(
         observation,
-        RuntimeObservation::Returned(RuntimeGroundValue::Int(9))
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((9).into()))
     );
     assert_eq!(
         program.package_identity,
@@ -318,8 +318,8 @@ fn generated_closure_arity_mismatch_stays_runtime_ir_error() {
         &RuntimeExpr::Call {
             callee: Box::new(body),
             args: vec![
-                RuntimeExpr::Value(RuntimeValue::Int(1)),
-                RuntimeExpr::Value(RuntimeValue::Int(2)),
+                RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+                RuntimeExpr::Value(RuntimeValue::Int((2).into())),
             ],
         },
         &RuntimeIrSeedEnvironment::empty(),

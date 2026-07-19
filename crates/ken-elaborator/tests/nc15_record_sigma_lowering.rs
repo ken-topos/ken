@@ -197,7 +197,7 @@ fn record_construction_lowers_runtime_fields_and_preserves_erased_statuses() {
     let observation = evaluate_runtime_ir_expr(
         &RuntimeExpr::Call {
             callee: Box::new(body),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(41))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((41).into()))],
         },
         &RuntimeIrSeedEnvironment::empty(),
     )
@@ -206,7 +206,10 @@ fn record_construction_lowers_runtime_fields_and_preserves_erased_statuses() {
     assert_eq!(
         observation,
         RuntimeObservation::Returned(RuntimeGroundValue::Record {
-            fields: vec![("runtime_payload".to_string(), RuntimeGroundValue::Int(41))]
+            fields: vec![(
+                "runtime_payload".to_string(),
+                RuntimeGroundValue::Int((41).into())
+            )]
         })
     );
     let record_decl = program
@@ -282,7 +285,7 @@ fn runtime_record_projection_from_constructed_sigma_lowers_and_evaluates() {
     let observation = evaluate_runtime_ir_expr(
         &RuntimeExpr::Call {
             callee: Box::new(body),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(7))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
         },
         &RuntimeIrSeedEnvironment::empty(),
     )
@@ -290,7 +293,7 @@ fn runtime_record_projection_from_constructed_sigma_lowers_and_evaluates() {
 
     assert_eq!(
         observation,
-        RuntimeObservation::Returned(RuntimeGroundValue::Int(7))
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((7).into()))
     );
 }
 

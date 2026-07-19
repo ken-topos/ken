@@ -1509,7 +1509,7 @@ mod tests {
             declarations: vec![RuntimeDeclaration {
                 symbol: symbol.clone(),
                 kind: RuntimeDeclarationKind::Transparent {
-                    body: RuntimeExpr::Value(RuntimeValue::Int(42)),
+                    body: RuntimeExpr::Value(RuntimeValue::Int((42).into())),
                 },
                 metadata: RuntimeSymbolMetadata {
                     lowerability: Some(RuntimeLowerabilityStatus::Supported),
@@ -1520,7 +1520,7 @@ mod tests {
                 name: "nc19-main".to_string(),
                 checked_core_shape: "42".to_string(),
                 ir: RuntimeExpr::DeclarationRef { symbol },
-                observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(42)),
+                observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((42).into())),
             }],
         }
     }

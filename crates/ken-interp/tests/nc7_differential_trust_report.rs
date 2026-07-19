@@ -83,7 +83,7 @@ fn oracle_observation(artifact: NativeArtifactIdentity) -> InterpreterOracleObse
     } = interpreter_add_2_3_fixture();
     let value = eval(&[], &term, &globals, &mut store);
     let observation = match value {
-        EvalVal::Int(value) => RuntimeObservation::Returned(RuntimeGroundValue::Int(value)),
+        EvalVal::Int(value) => RuntimeObservation::Returned(RuntimeGroundValue::Int((value).into())),
         other => panic!("NC7 oracle fixture must return Int, got {other:?}"),
     };
     InterpreterOracleObservation {
@@ -178,7 +178,7 @@ fn interpreter_backed_f1_report_uses_real_oracle_not_seed_observation() {
         .contains("ken-interp eval over GlobalEnv"));
     assert_eq!(
         native.observation,
-        RuntimeObservation::Returned(RuntimeGroundValue::Int(5))
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((5).into()))
     );
 }
 
@@ -186,7 +186,7 @@ fn interpreter_backed_f1_report_uses_real_oracle_not_seed_observation() {
 fn mismatch_report_names_compare_stage_after_both_sides_run() {
     let mut example = scalar_seed_example();
     example.name = "mismatched-runtime-ir".to_string();
-    example.ir = RuntimeExpr::Value(RuntimeValue::Int(4));
+    example.ir = RuntimeExpr::Value(RuntimeValue::Int((4).into()));
     let program = runtime_program(example.clone(), 0x7003);
     let artifact = artifact_identity(0x7003);
 
@@ -203,8 +203,12 @@ fn mismatch_report_names_compare_stage_after_both_sides_run() {
         report.verdict,
         NativeDifferentialVerdict::Mismatch {
             stage: NativeDifferentialStage::InterpreterNativeCompare,
-            interpreter: RuntimeObservation::Returned(RuntimeGroundValue::Int(5)),
-            native: RuntimeObservation::Returned(RuntimeGroundValue::Int(4)),
+            interpreter: RuntimeObservation::Returned(RuntimeGroundValue::Int(
+                ken_runtime::RuntimeIntV1::Small(5),
+            )),
+            native: RuntimeObservation::Returned(RuntimeGroundValue::Int(
+                ken_runtime::RuntimeIntV1::Small(4),
+            )),
         }
     ));
 }

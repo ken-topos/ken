@@ -315,7 +315,7 @@ fn native_trust_report_records_nc9_separately_from_nc8_and_f1() {
             core_semantic_hash: program.core_semantic_hash,
             runtime_artifact_hash: program.artifact_hash,
         },
-        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(5)),
+        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((5).into())),
         evidence_source: "test oracle for exact NC9 RuntimeProgram identity".to_string(),
     };
 

@@ -276,10 +276,10 @@ fn recursive_runtime_program() -> (RuntimeProgram, RuntimeExample) {
                 },
                 args: vec![
                     RuntimeExpr::Var(0),
-                    RuntimeExpr::Value(RuntimeValue::Int(0)),
+                    RuntimeExpr::Value(RuntimeValue::Int((0).into())),
                 ],
             }),
-            then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(0))),
+            then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((0).into()))),
             else_expr: Box::new(RuntimeExpr::PrimitiveCall {
                 primitive: RuntimePrimitive {
                     symbol: "add_int".to_string(),
@@ -298,7 +298,7 @@ fn recursive_runtime_program() -> (RuntimeProgram, RuntimeExample) {
                             },
                             args: vec![
                                 RuntimeExpr::Var(0),
-                                RuntimeExpr::Value(RuntimeValue::Int(1)),
+                                RuntimeExpr::Value(RuntimeValue::Int((1).into())),
                             ],
                         }],
                     },
@@ -313,9 +313,9 @@ fn recursive_runtime_program() -> (RuntimeProgram, RuntimeExample) {
             callee: Box::new(RuntimeExpr::DeclarationRef {
                 symbol: symbol.clone(),
             }),
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(4))],
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((4).into()))],
         },
-        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(10)),
+        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((10).into())),
     };
     let program = RuntimeProgram {
         package_identity: "module:nc17_runtime".to_string(),
@@ -389,7 +389,7 @@ fn imported_declaration_ref_requires_exact_dependency_seed_identity() {
         name: "nc17-imported-answer".to_string(),
         checked_core_shape: "dep-pkg.Dep.answer".to_string(),
         ir: body,
-        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(9)),
+        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int((9).into())),
     };
     program.examples.push(example.clone());
     let mut env = RuntimeIrSeedEnvironment::empty();
@@ -397,7 +397,7 @@ fn imported_declaration_ref_requires_exact_dependency_seed_identity() {
         imported.to_string(),
         dependency.to_string(),
         dependency_hash.clone(),
-        RuntimeGroundValue::Int(9),
+        RuntimeGroundValue::Int((9).into()),
     );
     let report = evaluate_runtime_ir_example(&program, &example, &env)
         .expect("exact dependency seed identity evaluates imported ref");
@@ -408,7 +408,7 @@ fn imported_declaration_ref_requires_exact_dependency_seed_identity() {
         imported.to_string(),
         dependency.to_string(),
         "sha256:stale",
-        RuntimeGroundValue::Int(9),
+        RuntimeGroundValue::Int((9).into()),
     );
     let err = evaluate_runtime_ir_example(&program, &example, &stale_env)
         .expect_err("stale dependency seed identity must reject loudly");
@@ -473,7 +473,7 @@ fn dictionary_construction_lowers_only_runtime_fields_to_record_values() {
     assert_eq!(
         observation,
         RuntimeObservation::Returned(RuntimeGroundValue::Record {
-            fields: vec![("value".to_string(), RuntimeGroundValue::Int(7))]
+            fields: vec![("value".to_string(), RuntimeGroundValue::Int((7).into()))]
         })
     );
 
