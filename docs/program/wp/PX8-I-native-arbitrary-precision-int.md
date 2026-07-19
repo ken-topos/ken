@@ -1,6 +1,7 @@
 # PX8-I — native arbitrary-precision Int lowering
 
-> **Runtime-owned prerequisite for PX8-F, opened by Architect ruling
+> **Runtime-owned exact-Int prerequisite in the PX8-F chain, opened by
+> Architect ruling
 > `evt_1mhavqy6yy128` (2026-07-18 20:52 — the 17th PX8-H ruling).** PX8-H banked
 > the heterogeneous-continuation machine and, per that ruling, the Int-arithmetic
 > gap was **split out** of PX8-H into this new WP. PX8-H's H-P6a overlay reaches
@@ -9,8 +10,8 @@
 > operands in native lowering"` (`crates/ken-runtime/src/cranelift_backend.rs`,
 > the `lower_int_binop` static-known guard). PX8-I completes native `Int` at the
 > value-representation + primitive-lowering layer so that boundary computes exact
-> mathematical **Z**, not wrapping `i64`. It is the last Runtime prerequisite
-> before PX8-F.
+> mathematical **Z**, not wrapping `i64`, and clears the overlay's dynamic-Int
+> boundary. PX8-J is the next and last Runtime prerequisite before PX8-F.
 >
 > Chain position:
 > **PX8-L ✅ → PX8-H ✅ → PX8-I (this) → PX8-J → PX8-F.**
@@ -32,9 +33,9 @@
 
 Native lowering computes `Int` add/sub/mul/eq/leq over **dynamic** operands in
 exact mathematical **Z**, by **bridging the already-landed canonical bignum
-store model** (not a second numeric semantics), so that the unchanged PX8-F
-`writeAll` fixture's dynamic `add_int file_offset count` reaches a real
-`FsWriteAt` and the native run **agrees with the interpreter run**.
+store model** (not a second numeric semantics), and clears the unchanged PX8-F
+`writeAll` overlay's dynamic-addition boundary. PX8-J owns that overlay's real
+`FsWriteAt` and interpreter/native differential evidence.
 
 Owner: **Runtime** (L/I/Q `agt_37reqrd72cg00` / `agt_37reqg3nync00` /
 `agt_37reqvb6ce400`). Size **M**, Risk **Medium** (representation change crosses
