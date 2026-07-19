@@ -1372,6 +1372,14 @@ enum Px8jDirectRecursorConsumer {
 }
 
 #[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+enum Px8jRecursorMalformation {
+    SelectionRole,
+    RepeatedScopeIdentity,
+    BrokenScopeParent,
+}
+
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Px8jProducerPath {
     Composed,
@@ -1389,14 +1397,22 @@ enum Px8jSourceTraceEvent {
         siblings: usize,
         parent_scope: Option<RecursorProducerOriginId>,
     },
+    Carrier {
+        path: Px8jProducerPath,
+        origin: RecursorProducerOriginId,
+        cursor: ContinuationCursorId,
+        sibling_position: usize,
+    },
     Install {
         origin: RecursorProducerOriginId,
         selection_cursor: ContinuationCursorId,
+        sibling_position: usize,
         exits: Vec<(RecursorProducerOriginId, Option<RecursorProducerOriginId>)>,
     },
     DirectConsume {
         origin: RecursorProducerOriginId,
         selection_cursor: ContinuationCursorId,
+        sibling_position: usize,
         exits: Vec<(RecursorProducerOriginId, Option<RecursorProducerOriginId>)>,
     },
     Selection {
@@ -1429,8 +1445,22 @@ fn px8j_record_source_event(event: Px8jSourceTraceEvent) {
 }
 
 #[cfg(test)]
+fn px8j_record_recursor_carrier(path: Px8jProducerPath, value: &Lowered) {
+    let Lowered::ComputationalRecursorClosure { invocation, .. } = value else {
+        return;
+    };
+    px8j_record_source_event(Px8jSourceTraceEvent::Carrier {
+        path,
+        origin: invocation.origin,
+        cursor: invocation.resume_cursor,
+        sibling_position: invocation.sibling_position,
+    });
+}
+
+#[cfg(test)]
 fn run_px8j_malformed_recursor_consumer(
     consumer: Px8jDirectRecursorConsumer,
+    malformation: Px8jRecursorMalformation,
 ) -> Result<Lowered, CraneliftBackendError> {
     let mut module = new_jit_module()?;
     let mut signature = module.make_signature();
@@ -1477,6 +1507,54 @@ fn run_px8j_malformed_recursor_consumer(
     };
     let origin = RecursorProducerOriginId(7);
     let cursor = ContinuationCursorId(9);
+    let layer = |role| ComputationalRecursorLayer {
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "px8j malformed recursor role".to_string(),
+        },
+        outer_env: Vec::new(),
+        provenance: RecursorFrameProvenance(6),
+        role,
+    };
+    let selection = layer(match malformation {
+        Px8jRecursorMalformation::SelectionRole => RecursorLayerRole::ExitsScope {
+            origin,
+            scope_origin: origin,
+            parent_scope: None,
+        },
+        Px8jRecursorMalformation::RepeatedScopeIdentity
+        | Px8jRecursorMalformation::BrokenScopeParent => {
+            RecursorLayerRole::SelectsOccurrence { origin }
+        }
+    });
+    let unwind = match malformation {
+        Px8jRecursorMalformation::SelectionRole => Vec::new(),
+        Px8jRecursorMalformation::RepeatedScopeIdentity => vec![
+            layer(RecursorLayerRole::ExitsScope {
+                origin,
+                scope_origin: RecursorProducerOriginId(11),
+                parent_scope: None,
+            }),
+            layer(RecursorLayerRole::ExitsScope {
+                origin,
+                scope_origin: RecursorProducerOriginId(11),
+                parent_scope: Some(RecursorProducerOriginId(11)),
+            }),
+        ],
+        Px8jRecursorMalformation::BrokenScopeParent => vec![
+            layer(RecursorLayerRole::ExitsScope {
+                origin,
+                scope_origin: RecursorProducerOriginId(11),
+                parent_scope: None,
+            }),
+            layer(RecursorLayerRole::ExitsScope {
+                origin,
+                scope_origin: RecursorProducerOriginId(12),
+                parent_scope: Some(RecursorProducerOriginId(99)),
+            }),
+        ],
+    };
     let recursor = Lowered::ComputationalRecursorClosure {
         residual: Box::new(Lowered::Closure {
             captures: Vec::new(),
@@ -1489,22 +1567,10 @@ fn run_px8j_malformed_recursor_consumer(
         activation: ContinuationActivationId(8),
         invocation: RecursorInvocationSegment::new(
             origin,
-            ComputationalRecursorLayer {
-                cases: Vec::new(),
-                default: RuntimeTrap {
-                    code: RuntimeTrapCode::ExplicitTrap,
-                    message: "px8j malformed selection".to_string(),
-                },
-                outer_env: Vec::new(),
-                provenance: RecursorFrameProvenance(6),
-                role: RecursorLayerRole::ExitsScope {
-                    origin,
-                    scope_origin: origin,
-                    parent_scope: None,
-                },
-            },
+            0,
+            selection,
             RecursorUnwindStack {
-                later_wrappers_in_construction_order: Vec::new(),
+                later_wrappers_in_construction_order: unwind,
             },
             cursor,
         ),
@@ -2173,7 +2239,7 @@ struct ContinuationActivationId(u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct ContinuationCursorId(u64);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct RecursorProducerOriginId(u64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2568,6 +2634,10 @@ struct ComputationalRecursorLayer {
 #[derive(Clone)]
 struct RecursorInvocationSegment {
     origin: RecursorProducerOriginId,
+    /// Declaration-order field position inside the one selected constructor
+    /// case. Siblings share `origin`; this position distinguishes their
+    /// immutable carriers through the consumer boundary.
+    sibling_position: usize,
     selection: ComputationalRecursorLayer,
     unwind: RecursorUnwindStack,
     resume_cursor: ContinuationCursorId,
@@ -2581,12 +2651,14 @@ struct RecursorUnwindStack {
 impl RecursorInvocationSegment {
     fn new(
         origin: RecursorProducerOriginId,
+        sibling_position: usize,
         selection: ComputationalRecursorLayer,
         unwind: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
     ) -> Self {
         Self {
             origin,
+            sibling_position,
             selection,
             unwind,
             resume_cursor,
@@ -2618,6 +2690,7 @@ fn recursor_eliminator_frames(
     px8j_record_source_event(Px8jSourceTraceEvent::DirectConsume {
         origin: segment.origin,
         selection_cursor: segment.resume_cursor,
+        sibling_position: segment.sibling_position,
         exits: segment
             .unwind
             .later_wrappers_in_construction_order
@@ -2665,21 +2738,44 @@ fn validate_recursor_invocation_segment(
             "recursor selection role does not select the invocation origin",
         ));
     }
-    if segment
-        .unwind
-        .later_wrappers_in_construction_order
-        .iter()
-        .any(|layer| {
-            !matches!(
-                layer.role,
-                RecursorLayerRole::ExitsScope { origin, .. } if origin == segment.origin
-            )
-        })
-    {
-        return Err(unsupported(
-            "ComputationalRecursor",
-            "recursor unwind role does not exit the invocation origin",
-        ));
+    // Construction order is outer-to-inner, while execution pops the vector
+    // inner-to-outer. An outermost scope may name a parent owned by the caller;
+    // every carried successor must link to the immediately preceding scope.
+    let mut scope_origins = BTreeSet::new();
+    let mut previous_scope = None;
+    for layer in &segment.unwind.later_wrappers_in_construction_order {
+        let RecursorLayerRole::ExitsScope {
+            origin,
+            scope_origin,
+            parent_scope,
+        } = layer.role
+        else {
+            return Err(unsupported(
+                "ComputationalRecursor",
+                "recursor unwind role does not exit the invocation origin",
+            ));
+        };
+        if origin != segment.origin {
+            return Err(unsupported(
+                "ComputationalRecursor",
+                "recursor unwind role does not exit the invocation origin",
+            ));
+        }
+        if !scope_origins.insert(scope_origin) {
+            return Err(unsupported(
+                "ComputationalRecursor",
+                "recursor unwind repeats a selected scope identity",
+            ));
+        }
+        if let Some(previous_scope) = previous_scope {
+            if parent_scope != Some(previous_scope) {
+                return Err(unsupported(
+                    "ComputationalRecursor",
+                    "recursor unwind has a broken selected-scope parent link",
+                ));
+            }
+        }
+        previous_scope = Some(scope_origin);
     }
     Ok(())
 }
@@ -3378,6 +3474,7 @@ impl<'a> Lowering<'a> {
         outer_env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
         origin: RecursorProducerOriginId,
+        sibling_position: usize,
         role: RecursorLayerRole,
         activation: ContinuationActivationId,
         resume_cursor: ContinuationCursorId,
@@ -3399,88 +3496,113 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .map(|(_, invocation)| invocation.origin)
             .unwrap_or(origin);
-        let (selection, unwind) = if let Some((_, invocation)) = payload {
-            let splice_caller = splice_caller.ok_or_else(|| {
-                unsupported(
-                    "ComputationalRecursor",
-                    "recursive payload splice has no active continuation",
-                )
-            })?;
-            let source_cursor_is_live = source_control.is_some_and(|(selected, lineage)| {
-                source_active_cursor(selected, lineage, invocation.resume_cursor).is_some()
-            });
-            if !active_context_contains_cursor(splice_caller, invocation.resume_cursor)
-                && !source_cursor_is_live
-            {
-                return Err(unsupported(
-                    "ComputationalRecursor",
-                    "recursive payload resume cursor is not active",
-                ));
-            }
-            let mut unwind = invocation.unwind;
-            let unwind_role = match role {
-                RecursorLayerRole::SelectsOccurrence { origin: _ } => {
-                    RecursorLayerRole::ExitsScope {
-                        origin: segment_origin,
-                        scope_origin: segment_origin,
-                        parent_scope: None,
-                    }
-                }
-                RecursorLayerRole::ExitsScope {
-                    origin: _,
-                    scope_origin,
-                    parent_scope,
-                } => RecursorLayerRole::ExitsScope {
-                    origin: segment_origin,
-                    scope_origin,
-                    parent_scope,
-                },
-            };
-            current_layer.role = unwind_role;
-            unwind
-                .later_wrappers_in_construction_order
-                .push(current_layer);
-            if let Some((selected, lineage)) = source_control {
-                if selected.selected_scope.is_none() {
+        let segment_sibling_position = payload
+            .as_ref()
+            .map(|(_, invocation)| invocation.sibling_position)
+            .unwrap_or(sibling_position);
+        let (selection, unwind) =
+            if let Some((_, invocation)) = payload {
+                let splice_caller = splice_caller.ok_or_else(|| {
+                    unsupported(
+                        "ComputationalRecursor",
+                        "recursive payload splice has no active continuation",
+                    )
+                })?;
+                let source_cursor_is_live = source_control.is_some_and(|(selected, lineage)| {
+                    source_active_cursor(selected, lineage, invocation.resume_cursor).is_some()
+                });
+                if !active_context_contains_cursor(splice_caller, invocation.resume_cursor)
+                    && !source_cursor_is_live
+                {
                     return Err(unsupported(
                         "ComputationalRecursor",
-                        "source recursor invocation is missing its owned selected scope",
+                        "recursive payload resume cursor is not active",
                     ));
                 }
-                for scope in selected.selected_scope.iter().chain(
-                    lineage
+                let mut unwind = invocation.unwind;
+                let parent_scope = unwind.later_wrappers_in_construction_order.last().and_then(
+                    |layer| match layer.role {
+                        RecursorLayerRole::ExitsScope { scope_origin, .. } => Some(scope_origin),
+                        RecursorLayerRole::SelectsOccurrence { .. } => None,
+                    },
+                );
+                let unwind_role = match role {
+                    RecursorLayerRole::SelectsOccurrence { origin: _ } => {
+                        RecursorLayerRole::ExitsScope {
+                            origin: segment_origin,
+                            scope_origin: origin,
+                            parent_scope,
+                        }
+                    }
+                    RecursorLayerRole::ExitsScope {
+                        origin: _,
+                        scope_origin,
+                        parent_scope,
+                    } => RecursorLayerRole::ExitsScope {
+                        origin: segment_origin,
+                        scope_origin,
+                        parent_scope,
+                    },
+                };
+                current_layer.role = unwind_role;
+                unwind
+                    .later_wrappers_in_construction_order
+                    .push(current_layer);
+                if let Some((selected, lineage)) = source_control {
+                    if selected.selected_scope.is_none() {
+                        return Err(unsupported(
+                            "ComputationalRecursor",
+                            "source recursor invocation is missing its owned selected scope",
+                        ));
+                    }
+                    for scope in lineage
                         .iter()
-                        .filter_map(|selected| selected.selected_scope.as_ref()),
-                ) {
-                    unwind
-                        .later_wrappers_in_construction_order
-                        .push(ComputationalRecursorLayer {
-                            cases: scope.frame.cases.clone(),
-                            default: scope.frame.default.clone(),
-                            outer_env: scope.frame.outer_env.clone(),
-                            provenance: scope.frame.provenance,
-                            role: RecursorLayerRole::ExitsScope {
-                                origin: segment_origin,
-                                scope_origin: scope.scope_origin,
-                                parent_scope: scope.parent_scope,
+                        .filter_map(|selected| selected.selected_scope.as_ref())
+                        .chain(selected.selected_scope.iter())
+                    {
+                        if unwind
+                            .later_wrappers_in_construction_order
+                            .iter()
+                            .any(|layer| {
+                                matches!(
+                                    layer.role,
+                                    RecursorLayerRole::ExitsScope { scope_origin, .. }
+                                        if scope_origin == scope.scope_origin
+                                )
+                            })
+                        {
+                            continue;
+                        }
+                        unwind.later_wrappers_in_construction_order.push(
+                            ComputationalRecursorLayer {
+                                cases: scope.frame.cases.clone(),
+                                default: scope.frame.default.clone(),
+                                outer_env: scope.frame.outer_env.clone(),
+                                provenance: scope.frame.provenance,
+                                role: RecursorLayerRole::ExitsScope {
+                                    origin: segment_origin,
+                                    scope_origin: scope.scope_origin,
+                                    parent_scope: scope.parent_scope,
+                                },
                             },
-                        });
+                        );
+                    }
                 }
-            }
-            (invocation.selection, unwind)
-        } else {
-            (
-                current_layer,
-                RecursorUnwindStack {
-                    later_wrappers_in_construction_order: Vec::new(),
-                },
-            )
-        };
+                (invocation.selection, unwind)
+            } else {
+                (
+                    current_layer,
+                    RecursorUnwindStack {
+                        later_wrappers_in_construction_order: Vec::new(),
+                    },
+                )
+            };
         Ok(Lowered::ComputationalRecursorClosure {
             residual: Box::new(residual),
             activation,
             invocation: RecursorInvocationSegment::new(
                 segment_origin,
+                segment_sibling_position,
                 selection,
                 unwind,
                 resume_cursor,
@@ -4415,6 +4537,20 @@ impl<'a> Lowering<'a> {
                 }
                 let activation = self.mint_continuation_activation();
                 let cursor = self.mint_continuation_cursor();
+                let producer_origin = self.mint_recursor_producer_origin();
+                let selected_scope = OwnedSelectedScope {
+                    scope_origin: producer_origin,
+                    parent_scope: splice_caller
+                        .and_then(|active| active.selected_scope)
+                        .map(|scope| scope.scope_origin),
+                    frame: ComputationalRecursorFramePayload {
+                        cases: eliminator.cases.to_vec(),
+                        default: eliminator.default.clone(),
+                        outer_env: eliminator.env.to_vec(),
+                        provenance: eliminator.provenance,
+                    },
+                };
+                let selected_scope = Some(selected_scope);
                 let active_state = ActiveContinuationFrame {
                     activation,
                     cursor,
@@ -4426,10 +4562,9 @@ impl<'a> Lowering<'a> {
                         .unwrap_or(&[]),
                     source_selected_cursor: splice_caller
                         .and_then(|active| active.source_selected_cursor),
-                    selected_scope: splice_caller.and_then(|active| active.selected_scope),
+                    selected_scope: selected_scope.as_ref(),
                 };
 
-                let producer_origin = self.mint_recursor_producer_origin();
                 #[cfg(test)]
                 px8j_record_source_event(Px8jSourceTraceEvent::Mint {
                     path: Px8jProducerPath::Composed,
@@ -4442,13 +4577,14 @@ impl<'a> Lowering<'a> {
                 });
                 let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
                 for position in case.recursive_positions.iter().rev().copied() {
-                    induction_hypotheses.push(self.make_computational_recursor(
+                    let induction_hypothesis = self.make_computational_recursor(
                         args[position].clone(),
                         eliminator.cases.to_vec(),
                         eliminator.default.clone(),
                         eliminator.env.to_vec(),
                         eliminator.provenance,
                         producer_origin,
+                        position,
                         RecursorLayerRole::SelectsOccurrence {
                             origin: producer_origin,
                         },
@@ -4456,7 +4592,10 @@ impl<'a> Lowering<'a> {
                         cursor,
                         splice_caller,
                         None,
-                    )?);
+                    )?;
+                    #[cfg(test)]
+                    px8j_record_recursor_carrier(Px8jProducerPath::Composed, &induction_hypothesis);
+                    induction_hypotheses.push(induction_hypothesis);
                 }
                 let mut case_env = induction_hypotheses;
                 case_env.extend(args);
@@ -4896,13 +5035,14 @@ impl<'a> Lowering<'a> {
                         .map(|scope| scope.scope_origin),
                 });
                 for position in case.recursive_positions.iter().rev().copied() {
-                    induction_hypotheses.push(self.make_computational_recursor(
+                    let induction_hypothesis = self.make_computational_recursor(
                         constructor_args[position].clone(),
                         frame.cases.to_vec(),
                         frame.default.clone(),
                         outer_tail.clone(),
                         frame.provenance,
                         producer_origin,
+                        position,
                         RecursorLayerRole::SelectsOccurrence {
                             origin: producer_origin,
                         },
@@ -4910,7 +5050,13 @@ impl<'a> Lowering<'a> {
                         deferred.selected_active.cursor,
                         deferred.splice_caller,
                         None,
-                    )?);
+                    )?;
+                    #[cfg(test)]
+                    px8j_record_recursor_carrier(
+                        Px8jProducerPath::DeferredConstructor,
+                        &induction_hypothesis,
+                    );
+                    induction_hypotheses.push(induction_hypothesis);
                 }
                 induction_hypotheses.extend(constructor_args);
                 induction_hypotheses.extend(outer_tail);
@@ -5557,6 +5703,7 @@ impl<'a> Lowering<'a> {
         px8j_record_source_event(Px8jSourceTraceEvent::Install {
             origin: invocation.origin,
             selection_cursor: invocation.resume_cursor,
+            sibling_position: invocation.sibling_position,
             exits: invocation
                 .unwind
                 .later_wrappers_in_construction_order
@@ -6531,13 +6678,14 @@ impl<'a> Lowering<'a> {
                             {
                                 let qold = control.selected.as_active(&control.selected_lineage);
                                 for position in case.recursive_positions.iter().rev().copied() {
-                                    induction_hypotheses.push(self.make_computational_recursor(
+                                    let induction_hypothesis = self.make_computational_recursor(
                                         args[position].clone(),
                                         cases.clone(),
                                         default.clone(),
                                         env.clone(),
                                         provenance,
                                         producer_origin,
+                                        position,
                                         RecursorLayerRole::SelectsOccurrence {
                                             origin: producer_origin,
                                         },
@@ -6548,7 +6696,13 @@ impl<'a> Lowering<'a> {
                                             &control.selected,
                                             control.selected_lineage.as_slice(),
                                         )),
-                                    )?);
+                                    )?;
+                                    #[cfg(test)]
+                                    px8j_record_recursor_carrier(
+                                        Px8jProducerPath::SourceMachine,
+                                        &induction_hypothesis,
+                                    );
+                                    induction_hypotheses.push(induction_hypothesis);
                                 }
                             }
                             let frame_env = match self.materialize_eliminator_frame_env(
@@ -13770,12 +13924,31 @@ mod tests {
                     constructor: node.to_string(),
                     argument_binders: siblings,
                     recursive_positions: (0..siblings).collect(),
-                    body: RuntimeExpr::Call {
-                        callee: Box::new(RuntimeExpr::Var(0)),
-                        args: vec![RuntimeExpr::Construct {
-                            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
-                            args: Vec::new(),
-                        }],
+                    body: if siblings == 1 {
+                        RuntimeExpr::Call {
+                            callee: Box::new(RuntimeExpr::Var(0)),
+                            args: vec![RuntimeExpr::Construct {
+                                constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                                args: Vec::new(),
+                            }],
+                        }
+                    } else {
+                        RuntimeExpr::Let {
+                            value: Box::new(RuntimeExpr::Call {
+                                callee: Box::new(RuntimeExpr::Var(0)),
+                                args: vec![RuntimeExpr::Construct {
+                                    constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                                    args: Vec::new(),
+                                }],
+                            }),
+                            body: Box::new(RuntimeExpr::Call {
+                                callee: Box::new(RuntimeExpr::Var(2)),
+                                args: vec![RuntimeExpr::Construct {
+                                    constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                                    args: Vec::new(),
+                                }],
+                            }),
+                        }
                     },
                 },
                 crate::RuntimeComputationalMatchCase {
@@ -13878,6 +14051,197 @@ mod tests {
             default: RuntimeTrap {
                 code: RuntimeTrapCode::PatternMatchFailure,
                 message: "PX8-J terminal transform default".to_string(),
+            },
+        }
+    }
+
+    fn px8j_scope_chain_observation_result(
+        transform_layers: usize,
+        input_depth: usize,
+    ) -> RuntimeExpr {
+        let tree_constructor = |_layer: usize, constructor: &str| {
+            format!("ctor:fixture::PX8JScopeTree::{constructor}")
+        };
+        fn child(depth: usize, node: &str, leaf: &str) -> RuntimeExpr {
+            RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["unit".to_string()],
+                body: Box::new(if depth == 0 {
+                    RuntimeExpr::Construct {
+                        constructor: leaf.to_string(),
+                        args: Vec::new(),
+                    }
+                } else {
+                    RuntimeExpr::Construct {
+                        constructor: node.to_string(),
+                        args: vec![child(depth - 1, node, leaf)],
+                    }
+                }),
+            }
+        }
+        let input_node = tree_constructor(0, "Node");
+        let input_leaf = tree_constructor(0, "Leaf");
+        let mut producer = RuntimeExpr::Construct {
+            constructor: input_node.clone(),
+            args: vec![child(input_depth, &input_node, &input_leaf)],
+        };
+        for layer in 0..transform_layers {
+            producer = RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(producer),
+                cases: vec![
+                    crate::RuntimeComputationalMatchCase {
+                        constructor: tree_constructor(layer, "Node"),
+                        argument_binders: 1,
+                        recursive_positions: vec![0],
+                        body: RuntimeExpr::Construct {
+                            constructor: tree_constructor(layer + 1, "Node"),
+                            args: vec![RuntimeExpr::Var(0)],
+                        },
+                    },
+                    crate::RuntimeComputationalMatchCase {
+                        constructor: tree_constructor(layer, "Leaf"),
+                        argument_binders: 0,
+                        recursive_positions: Vec::new(),
+                        body: RuntimeExpr::Construct {
+                            constructor: tree_constructor(layer + 1, "Leaf"),
+                            args: Vec::new(),
+                        },
+                    },
+                ],
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: format!("PX8-J transform {layer} default"),
+                },
+            };
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(producer),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: tree_constructor(transform_layers, "Node"),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Let {
+                        value: Box::new(RuntimeExpr::Call {
+                            callee: Box::new(RuntimeExpr::Var(0)),
+                            args: vec![RuntimeExpr::Construct {
+                                constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                                args: Vec::new(),
+                            }],
+                        }),
+                        body: Box::new(RuntimeExpr::Construct {
+                            constructor: tree_constructor(transform_layers, "Node"),
+                            args: vec![child(
+                                0,
+                                &tree_constructor(transform_layers, "Node"),
+                                &tree_constructor(transform_layers, "Leaf"),
+                            )],
+                        }),
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: tree_constructor(transform_layers, "Leaf"),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: tree_constructor(transform_layers, "Leaf"),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "PX8-J terminal transform default".to_string(),
+            },
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum Px8jSelectedScopePlacement {
+        BeforeReturnHole,
+        AfterReturnHole,
+    }
+
+    fn px8j_equal_payload_hole_placement(placement: Px8jSelectedScopePlacement) -> RuntimeExpr {
+        let input_node = "ctor:fixture::PX8JHoleInput::Node";
+        let input_leaf = "ctor:fixture::PX8JHoleInput::Leaf";
+        let output_node = "ctor:fixture::PX8JHoleOutput::Node";
+        let output_leaf = "ctor:fixture::PX8JHoleOutput::Leaf";
+        let unit = || RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        };
+        let recursive_child = || RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["unit".to_string()],
+            body: Box::new(RuntimeExpr::Construct {
+                constructor: input_leaf.to_string(),
+                args: Vec::new(),
+            }),
+        };
+        let scoped_payload = || RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: input_node.to_string(),
+                args: vec![recursive_child()],
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: input_node.to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Construct {
+                        constructor: output_node.to_string(),
+                        args: vec![RuntimeExpr::Var(0)],
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: input_leaf.to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: output_leaf.to_string(),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "PX8-J equal-payload inner default".to_string(),
+            },
+        };
+        let outer_scrutinee = match placement {
+            Px8jSelectedScopePlacement::BeforeReturnHole => RuntimeExpr::Construct {
+                constructor: output_node.to_string(),
+                args: vec![RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["unit".to_string()],
+                    body: Box::new(scoped_payload()),
+                }],
+            },
+            Px8jSelectedScopePlacement::AfterReturnHole => scoped_payload(),
+        };
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(outer_scrutinee),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: output_node.to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::Var(0)),
+                        args: vec![unit()],
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: output_leaf.to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: px8j_aggregate_result(),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "PX8-J equal-payload outer default".to_string(),
             },
         }
     }
@@ -14012,11 +14376,12 @@ mod tests {
 
     #[test]
     fn px8j_selected_scope_partitions_differ_across_the_real_return_hole() {
-        let before = host_result_closure_match(recursive_computational_result_depth(
-            2,
-            px8j_aggregate_result(),
+        let before = host_result_closure_match(px8j_equal_payload_hole_placement(
+            Px8jSelectedScopePlacement::BeforeReturnHole,
         ));
-        let after = host_result_closure_match(px8j_layered_recursive_result(1, 0));
+        let after = host_result_closure_match(px8j_equal_payload_hole_placement(
+            Px8jSelectedScopePlacement::AfterReturnHole,
+        ));
         let (before_result, before_trace) =
             px8j_capture_source_trace(&before, false, "ken_px8j_scope_before_hole");
         let (after_result, after_trace) =
@@ -14039,14 +14404,15 @@ mod tests {
                 .count();
             (selections_before, exits_after)
         };
-        assert_eq!(partition(&before_trace), (3, 0));
+        assert_eq!(partition(&before_trace), (2, 0));
         assert_eq!(partition(&after_trace), (1, 1));
     }
 
     #[test]
     fn px8j_one_two_three_scope_segments_reach_selection_hole_and_unwind() {
         for depth in 1..=3 {
-            let expression = host_result_closure_match(px8j_layered_recursive_result(depth, 0));
+            let expression =
+                host_result_closure_match(px8j_scope_chain_observation_result(depth, 0));
             let (result, trace) = px8j_capture_source_trace(
                 &expression,
                 false,
@@ -14060,13 +14426,24 @@ mod tests {
                         origin,
                         selection_cursor,
                         exits,
+                        ..
                     } if exits.len() == depth => Some((*origin, *selection_cursor, exits)),
                     _ => None,
                 })
-                .unwrap_or_else(|| panic!("scope depth {depth} must install one exact segment"));
-            assert!(exits
+                .unwrap_or_else(|| {
+                    panic!("scope depth {depth} must install one exact segment: {trace:#?}")
+                });
+            let unique_scope_origins: BTreeSet<_> = exits
                 .iter()
-                .all(|(scope_origin, parent)| *scope_origin == origin && parent.is_none()));
+                .map(|(scope_origin, _)| *scope_origin)
+                .collect();
+            assert_eq!(unique_scope_origins.len(), depth);
+            assert_eq!(exits.first().and_then(|(_, parent)| *parent), None);
+            for pair in exits.windows(2) {
+                let (outer_scope, _) = pair[0];
+                let (_, inner_parent) = pair[1];
+                assert_eq!(inner_parent, Some(outer_scope));
+            }
             let selection = trace
                 .iter()
                 .position(|event| {
@@ -14095,6 +14472,22 @@ mod tests {
                 })
                 .expect("the installed unwind stack begins consumption");
             assert!(selection < hole && hole < first_exit);
+            let consumed_exits: Vec<_> = trace[hole + 1..]
+                .iter()
+                .filter_map(|event| match event {
+                    Px8jSourceTraceEvent::Exit {
+                        origin: actual_origin,
+                        scope_origin,
+                        parent_scope,
+                    } if *actual_origin == origin => Some((*scope_origin, *parent_scope)),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                consumed_exits,
+                exits.iter().rev().copied().collect::<Vec<_>>(),
+                "depth {depth}: {trace:#?}"
+            );
         }
     }
 
@@ -14113,38 +14506,51 @@ mod tests {
                     cursor,
                     siblings: 2,
                     ..
-                } if trace.iter().any(|nested| {
-                    matches!(
-                        nested,
-                        Px8jSourceTraceEvent::Mint {
-                            origin: child,
-                            parent_scope: Some(parent),
-                            ..
-                        } if *child != *origin && *parent == *origin
-                    )
-                }) =>
-                {
-                    Some((*origin, *cursor))
+                } => Some((*origin, *cursor)),
+                _ => None,
+            })
+            .expect("the selected case owns the sibling IH origin");
+        let sibling_carriers: BTreeSet<_> = trace
+            .iter()
+            .filter_map(|event| match event {
+                Px8jSourceTraceEvent::Carrier {
+                    origin,
+                    cursor,
+                    sibling_position,
+                    ..
+                } if *origin == sibling_origin && *cursor == sibling_cursor => {
+                    Some(*sibling_position)
                 }
                 _ => None,
             })
-            .expect("both sibling IHs share one origin that owns the nested child origin");
-        assert!(trace.iter().any(|event| matches!(
-            event,
-            Px8jSourceTraceEvent::Install {
-                origin,
-                selection_cursor,
-                ..
-            } if *origin == sibling_origin && *selection_cursor == sibling_cursor
-        )));
-        assert!(trace.iter().any(|event| matches!(
-            event,
-            Px8jSourceTraceEvent::Mint {
-                origin,
-                parent_scope: Some(parent),
-                ..
-            } if *origin != sibling_origin && *parent == sibling_origin
-        )));
+            .collect();
+        assert_eq!(sibling_carriers, BTreeSet::from([0, 1]));
+        let sibling_consumers: BTreeSet<_> = trace
+            .iter()
+            .filter_map(|event| match event {
+                Px8jSourceTraceEvent::Install {
+                    origin,
+                    selection_cursor,
+                    sibling_position,
+                    ..
+                } if *origin == sibling_origin && *selection_cursor == sibling_cursor => {
+                    Some(*sibling_position)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(sibling_consumers, sibling_carriers);
+        assert!(
+            trace.iter().any(|event| matches!(
+                event,
+                Px8jSourceTraceEvent::Mint {
+                    origin,
+                    parent_scope: Some(parent),
+                    ..
+                } if *origin != sibling_origin && *parent == sibling_origin
+            )),
+            "{trace:#?}"
+        );
     }
 
     #[test]
@@ -14163,23 +14569,42 @@ mod tests {
                 ref reason,
             }) if reason == "source recursor invocation is missing its owned selected scope"
         ));
-        let exact_prefix: Vec<_> = exact_trace
+        let deleted_terminal = deleted_trace
+            .last()
+            .expect("deletion must leave its terminal mint observation");
+        let exact_terminal_index = exact_trace
             .iter()
-            .take_while(|event| {
-                !matches!(
-                    event,
+            .position(|event| match (event, deleted_terminal) {
+                (
                     Px8jSourceTraceEvent::Mint {
-                        path: Px8jProducerPath::SourceMachine,
-                        parent_scope: Some(_),
+                        path: exact_path,
+                        origin: exact_origin,
+                        cursor: exact_cursor,
+                        siblings: exact_siblings,
                         ..
-                    }
-                )
+                    },
+                    Px8jSourceTraceEvent::Mint {
+                        path: deleted_path,
+                        origin: deleted_origin,
+                        cursor: deleted_cursor,
+                        siblings: deleted_siblings,
+                        ..
+                    },
+                ) => {
+                    exact_path == deleted_path
+                        && exact_origin == deleted_origin
+                        && exact_cursor == deleted_cursor
+                        && exact_siblings == deleted_siblings
+                }
+                _ => false,
             })
-            .cloned()
-            .collect();
-        assert_eq!(&deleted_trace[..deleted_trace.len() - 1], exact_prefix);
+            .expect("the exact run reaches the deleted run's terminal mint");
+        assert_eq!(
+            &deleted_trace[..deleted_trace.len() - 1],
+            &exact_trace[..exact_terminal_index]
+        );
         assert!(matches!(
-            (exact_trace.get(exact_prefix.len()), deleted_trace.last()),
+            (exact_trace.get(exact_terminal_index), deleted_trace.last()),
             (
                 Some(Px8jSourceTraceEvent::Mint {
                     path: exact_path,
@@ -15085,7 +15510,10 @@ mod tests {
             Px8jDirectRecursorConsumer::ProducerCall,
             Px8jDirectRecursorConsumer::OrdinaryCall,
         ] {
-            let error = match run_px8j_malformed_recursor_consumer(consumer) {
+            let error = match run_px8j_malformed_recursor_consumer(
+                consumer,
+                Px8jRecursorMalformation::SelectionRole,
+            ) {
                 Ok(_) => panic!("each live recursor consumer must reject the malformed selection"),
                 Err(error) => error,
             };
@@ -15098,6 +15526,38 @@ mod tests {
                     }) if reason == "recursor selection role does not select the invocation origin"
                 ),
                 "{consumer:?}: {error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn px8j_release_validator_rejects_repeated_and_broken_scope_lineage() {
+        for (malformation, expected_reason) in [
+            (
+                Px8jRecursorMalformation::RepeatedScopeIdentity,
+                "recursor unwind repeats a selected scope identity",
+            ),
+            (
+                Px8jRecursorMalformation::BrokenScopeParent,
+                "recursor unwind has a broken selected-scope parent link",
+            ),
+        ] {
+            let error = match run_px8j_malformed_recursor_consumer(
+                Px8jDirectRecursorConsumer::OrdinaryCall,
+                malformation,
+            ) {
+                Ok(_) => panic!("the real direct consumer must propagate release validation"),
+                Err(error) => error,
+            };
+            assert!(
+                matches!(
+                    error,
+                    CraneliftBackendError::Unsupported(UnsupportedLowering {
+                        construct: "ComputationalRecursor",
+                        ref reason,
+                    }) if reason == expected_reason
+                ),
+                "{malformation:?}: {error:?}"
             );
         }
     }

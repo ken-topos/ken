@@ -27,10 +27,10 @@ active, or source continuation frame can still consume the current Ken value**.
 Every scalar join scalarizes **only** under the PX8-H **preplanned checked
 answer-kind cut** — never merely because a process object is being emitted.
 Aggregate `Constructor` values remain inside **branch-local prefix P** until
-their eliminators drain; they never cross the scalar join. With that boundary
-enforced, the unchanged PX8-F `c8b8cdb7` overlay clears the `ComputationalMatch`
-stop, reaches a **real `FsWriteAt`**, and the native run **agrees with the
-interpreter** — the overlay AC deferred out of PX8-I lands here.
+their eliminators drain; they never cross the scalar join. PX8-J proves that
+boundary through the real native source-machine producer, typed return hole,
+owned selected scopes, and all direct recursor consumers. The held PX8-F
+overlay is downstream evidence and is not a PX8-J acceptance gate.
 
 Owner: **Runtime** (L/I/Q `agt_37reqrd72cg00` / `agt_37reqg3nync00` /
 `agt_37reqvb6ce400`). Size **S–M**, Risk **Medium** (a join/answer-boundary
@@ -171,19 +171,26 @@ never an implementer guess, never a widened/weakened match.
 
 ## Required proofs / discriminators (each independently reaching)
 
-- **The blocked overlay now clears the stop (the deferred PX8-I AC):** the
-  unchanged PX8-F `c8b8cdb7` overlay passes the `ComputationalMatch` boundary,
-  reaches a **real `FsWriteAt`**, and the native run **agrees with the
-  interpreter** (differential). Run it as a **throwaway overlay** — do **not**
-  edit `c8b8cdb7` or the fixture.
-- **A live computational eliminator is not prematurely scalarized:** the overlay
-  failure (reproduces on the `38ed8223` base) — a `Constructor` presented to a
-  live computational eliminator after a process-object scalar join — now lowers
-  correctly (the aggregate stays in P; no `ExitCode` mint).
-- **Mutation control (predicate is load-bearing):** reverting to the
-  unconditional `process_object` fallback re-introduces `ComputationalMatch:
-  scrutinee is not a constructor value…` — proving the terminal-answer gate is
-  what fixes it.
+- **Opposite-hole discriminator:** one common nested-recursion payload grammar
+  is minted through the real producer twice. Only the typed selected-scope
+  placement relative to the exact return hole differs. The actual installation
+  and consumption traces must therefore partition selection and unwind roles
+  differently without comparing unrelated programs.
+- **Exact owned-scope chain:** real one-, two-, and three-scope producer paths
+  retain distinct scope origins. Every inner scope names the immediately outer
+  scope as its parent, and consumption is exactly once, inner-to-outer, after
+  the return hole. The release validator rejects both repeated identities and a
+  broken parent link through a real direct consumer.
+- **Sibling and nested lineage:** every sibling IH is observed separately at
+  both its real carrier mint and consumer installation. Siblings share the one
+  selected-case origin; a nested IH receives a distinct child origin with the
+  exact parent link.
+- **All direct consumers enforce the barrier:** pending-`Let` producer,
+  producer-call, and ordinary-call consumers each propagate malformed recursor
+  role rejection. This is a live lowering harness, not a source-token oracle.
+- **Owned-scope deletion is load-bearing:** deleting the selected scope stops at
+  the corresponding real producer mint, before another carrier or frame is
+  installed.
 - **No regression on the genuine terminal path:** where the value **is** a real
   terminal process answer (`Success`/`Failure`), the correct `ExitCode` is still
   minted — the boundary tightens the precondition without dropping legitimate
@@ -194,16 +201,22 @@ never an implementer guess, never a widened/weakened match.
   from the computational case).
 - **Fail-close intact:** the `ComputationalMatch` refusal still rejects a genuine
   non-constructor scrutinee (unchanged behavior).
+- **Deferred PX8-F evidence:** the exact linked-artifact observation — three
+  short writes with `3 → 2 → 1` progress, final bytes `abcdef`, exit 0, and the
+  Posix interpreter/native differential — is run only when PX8-F unfreezes.
+  That gate applies to the complete held PX8-F delta plus both custodied fixture
+  riders; it earns no PX8-J-time host-trace credit.
 
 ## Acceptance criteria (testable)
 
-- The unchanged PX8-F `c8b8cdb7` `writeAll` overlay (throwaway; **do not** edit
-  `c8b8cdb7` or the fixture) compiles/links/runs, reaches a **real `FsWriteAt`**,
-  and the native run **agrees with the interpreter** (differential). **This is
-  the overlay AC deferred out of PX8-I; PX8-J owns it.**
-- Every discriminator above is green; the `ComputationalMatch` refusal and all
+- Every PX8-J source-machine discriminator above is green; the
+  `ComputationalMatch` refusal and all
   fail-closes are **unchanged**; **no** `writeAll` special case; **no**
   join-kind-contract weakening.
+- The recursor invocation validator is release code, rejects duplicate scope
+  identities and broken adjacent parent links, and is reached by all three
+  direct consumers. Real 1/2/3-scope and sibling controls prove the positive
+  carrier/install/consume path.
 - **No process-object-mode-only `ExitCode` mint survives:** every
   `ProcessExitStatus`/`ExitCode` mint is either a planned answer-kind cut or
   gated by the terminal-answer predicate (the site ledger proves it).
@@ -217,6 +230,9 @@ never an implementer guess, never a widened/weakened match.
   **green in CI**.
 - **PX8-I landed SHA `38ed8223` is byte-unchanged** — PX8-J is additive; it does
   not amend PX8-I or its exact-Int gates.
+- PX8-J does **not** claim the held PX8-F linked-artifact result. The three-write
+  trace, `abcdef`, exit 0, and Posix interpreter/native agreement remain PX8-F
+  unfreeze criteria over the whole held delta plus both custodied riders.
 
 ## Do-not-reopen guard
 
@@ -245,7 +261,8 @@ never an implementer guess, never a widened/weakened match.
 4. On resolved APPROVE → **publisher non-doc-only** (crates → CI must go green,
    **including full-workspace exhaustiveness**) → verify byte-identical landing +
    **PIN** → chase retros → close the WP.
-5. **Downstream:** PX8-J landed → **unblock PX8-F** (rebase `c8b8cdb7` onto the
-   combined `main`; the unchanged `writeAll` fixture now performs **real writes**
-   in both interpreter and native lanes = PX8-F native evidence). PX8-F is the
-   Linux ABI capstone; PX8-J is its last Runtime prerequisite.
+5. **Downstream:** PX8-J landed → unfreeze PX8-F. PX8-F rebases the complete
+   held delta onto the combined `main`, folds both custodied fixture riders, and
+   only then proves the real three-write `3 → 2 → 1` trace, `abcdef`, exit 0,
+   and Posix interpreter/native agreement. PX8-J supplies the source-machine
+   prerequisite but does not claim that downstream evidence.
