@@ -4,6 +4,9 @@
 
 **Audit baseline:** `origin/main @ a9db5a17` (2026-07-19)
 
+**Amended:** 2026-07-19 on `origin/main @ b4c4c9d1`, correcting the original
+MMIO and atomics boundary after operator clarification
+
 **Prepared for:** the operator and Steward
 
 ## Executive recommendation
@@ -20,15 +23,16 @@ or `epoll` event loop, and the native `writeAll` fixture remains the end of an
 active compiler chain. The current achievement is therefore the **Linux ABI
 foundation and descriptor tranche**, not the whole PX-A through PX-E campaign.
 
-Linux ABI II should have seven substantive tracks:
+Linux ABI II should have eight substantive tracks:
 
 1. finish and reconcile the first tranche;
 2. generalize the target manifest into a family-scoped Linux UAPI contract;
 3. complete the synchronous user-space floor;
 4. deliver the already-committed process, socket, and event-loop work;
 5. make `io_uring` a first-class, single-issuer asynchronous I/O facility;
-6. add Linux observation and control through typed netlink and cgroup APIs; and
-7. add self-confinement, child isolation, and selected typed `ioctl` families.
+6. add Linux observation and control through typed netlink and cgroup APIs;
+7. add self-confinement, child isolation, and selected typed `ioctl` families;
+8. add capability-scoped device access, including typed, bounded MMIO.
 
 The public C ABI and generated headers should proceed as a **linked companion
 program**, not as a Linux ABI II phase. It is target-neutral language interop,
@@ -39,9 +43,19 @@ The following remain outside this proposal:
 
 - a thread-safe Ken runtime, already covered by separate research;
 - affine or unique types, which the operator has ruled out of Ken;
-- Ken-visible raw pointers, pointer arithmetic, atomics, or MMIO;
-- a generic syscall or generic `ioctl` escape hatch; and
-- bare-metal or driver work.
+- Ken-visible raw addresses, arbitrary dereference, or pointer arithmetic;
+- arbitrary atomics over addresses or untyped shared memory;
+- a generic syscall or generic `ioctl` escape hatch;
+- bare-metal execution and in-kernel driver implementation; and
+- ambient physical-memory access such as a general `/dev/mem` capability.
+
+The original version of this report overgeneralized the operator's rejection
+of bare pointers. Safely wrapped MMIO is not equivalent to a raw-pointer API.
+Linux ABI II should permit capability-scoped, runtime-owned mappings with
+typed, bounded register access. Likewise, atomics are not inherently
+incompatible with Ken: runtime-private atomics and facility-specific atomic
+protocols are in scope, while a general Ken atomic-cell API awaits an explicit
+shared-memory and concurrency model.
 
 This is an advisory program shape. Work-package release, ownership, and
 acceptance language remain Steward and Architect decisions.
@@ -55,8 +69,10 @@ The first charter explicitly excluded:
 > affine/unique types · raw pointers/atomics/MMIO
 
 The operator has now narrowed the question. Thread safety has its own report;
-affinity is not a Ken direction; and an ordinary raw-pointer surface would be
-contrary to Ken's model. This report asks:
+affine typing is not a Ken direction; and an ordinary raw-pointer surface would be
+contrary to Ken's model. The operator has further clarified that this does not
+exclude MMIO when the mapping and access protocol are safely wrapped. This
+report asks:
 
 - which remaining facilities belong in a coherent second Linux program;
 - what prerequisites the first program actually supplied;
@@ -250,6 +266,8 @@ family-scoped manifests:
   alignments, and selected calling convention;
 - dependency and backend identity, as today;
 - constants and record/union layouts for each enabled family;
+- facility-required atomic widths, alignment, and ordering capabilities without
+  treating host support as a public Ken atomic API;
 - facility ABI versions and build-time availability;
 - runtime-probe schema and results;
 - kernel-policy dependencies where relevant; and
@@ -283,12 +301,13 @@ Recommended contents:
 - monotonic clocks, sleep/deadlines, and secure kernel entropy;
 - terminal basics and process signal disposition needed at the executable edge;
 - `statx`-shaped metadata with field-availability bits; and
-- memory mapping exposed only as opaque runtime-owned regions and bounded byte
-  views, never Ken pointers.
+- ordinary anonymous and file-backed memory mapping exposed only as opaque
+  runtime-owned regions and bounded byte views, never Ken pointers.
 
-The last item does not authorize MMIO. Anonymous/file-backed user mappings and
-device memory are different authority classes; Linux II includes only the
-former.
+Ordinary mappings and device memory are different authority classes and must
+not share an undifferentiated public API. L2-2 supplies the common mapping,
+lifetime, and bounded-access substrate. L2-8 adds the stronger acquisition,
+register-schema, volatile-access, and ordering rules required for MMIO.
 
 ### L2-3 — processes, sockets, and the readiness event loop
 
@@ -333,7 +352,8 @@ policy logic above the host boundary.
 ### L2-4 — `io_uring`
 
 **Objective:** provide high-throughput asynchronous file and socket I/O without
-adding Ken-visible pointers, atomics, affinity, or runtime threading.
+adding Ken-visible pointers, general shared-memory atomics, affinity, or
+runtime threading.
 
 `io_uring` belongs in Linux ABI II. It is no longer credible to treat it as an
 indefinite performance experiment for a systems-adjacent Linux language. It is,
@@ -356,11 +376,12 @@ The first version should be deliberately constrained:
   semantics.
 
 This design does not require a thread-safe Ken evaluator. The kernel-shared ring
-does require atomic/memory-ordering mechanics, but those stay inside the audited
-runtime module. Enabling `rustix`'s `io_uring` feature widens its compiled feature
-surface and exposes unsafe raw-pointer-bearing setup/register functions; it does
-not by itself create a Ken thread-safety requirement. The dependency delta and
-exercised upstream unsafe surface must therefore be re-audited.
+does require atomic and memory-ordering mechanics, but these are a
+facility-private protocol inside the audited runtime module, not a general Ken
+atomic-memory surface. Enabling `rustix`'s `io_uring` feature widens its compiled
+feature surface and exposes unsafe raw-pointer-bearing setup/register functions;
+it does not by itself create a Ken thread-safety requirement. The dependency
+delta and exercised upstream unsafe surface must therefore be re-audited.
 
 #### Request state machine
 
@@ -530,6 +551,124 @@ do not make all real ioctl families regular
 remain necessary. There should be no standard-library “raw request” escape
 hatch.
 
+### L2-8 — capability-scoped MMIO and device memory
+
+**Objective:** let Ken programs perform efficient device I/O through
+runtime-owned mappings and generated access protocols, without turning machine
+addresses into language values.
+
+MMIO belongs in Linux ABI II. Excluding raw pointers does not require copying
+every device transfer through a syscall or byte buffer. A runtime can retain the
+mapping and perform a checked access directly at the validated offset, so the
+safety boundary need not impose a data-copy penalty.
+
+The first acquisition path should be a controlled UIO or VFIO device
+capability, not ambient `/dev/mem`. Linux UIO deliberately exposes named device
+regions through `mmap` and interrupt observations through the device file; its
+guidance also requires consumers to verify device identity, version, mapping
+presence, and size ([UIO HOWTO][uio]). VFIO provides a stronger device and IOMMU
+ownership boundary for later work ([VFIO][vfio]). A Ken acquisition should bind:
+
+- device and driver identity;
+- region or PCI BAR identity, offset, and length;
+- mapping and cache policy;
+- read, write, and control rights;
+- the register-schema and target-manifest hashes; and
+- a Ward-owned lifetime and generation-checked runtime handle.
+
+Ken code should receive no address and no general dereference operation. A
+generated register-bank schema should instead describe each legal access:
+
+- register offset, width, alignment, and byte order;
+- read-only, write-only, or read/write authority;
+- write-one-to-clear, read-to-clear, doorbell, and other side effects;
+- legal values, masks, and device-state preconditions where known; and
+- ordering or barrier requirements between accesses.
+
+The runtime performs the corresponding volatile load, store, or barrier after
+checking resource kind, generation, bounds, width, alignment, and rights.
+Volatile access is appropriate for externally observable I/O, but is explicitly
+not an inter-thread synchronization primitive ([Rust volatile][rust-volatile]).
+The Linux device-I/O guidance likewise distinguishes access widths, ordering,
+and mapping characteristics; a generic bounded byte slice therefore cannot
+stand in for a register protocol ([Linux device I/O][device-io]).
+
+The public resource model should distinguish at least:
+
+- ordinary anonymous or file-backed regions;
+- MMIO register banks;
+- bulk device-memory windows such as framebuffers;
+- DMA buffers and I/O virtual-address mappings; and
+- coherent queue or ring mappings with a facility-specific protocol.
+
+These may share private mapping machinery, but their public operations and
+evidence are not interchangeable. In particular, DMA is adjacent to MMIO, not
+synonymous with it. It adds device/IOMMU ownership, pinning or registration,
+direction, cache coherence, synchronization, and lifetime obligations. VFIO
+and IOMMUFD make those obligations explicit through device regions and I/O
+address-space mappings ([VFIO][vfio], [IOMMUFD][iommufd]). DMA should therefore
+be a later vertical slice rather than an accidental consequence of exposing an
+MMIO region.
+
+The first MMIO vertical slice should use a controlled device or emulator with:
+
+- a typed register bank generated from a checked-in schema;
+- bounded reads and writes of at least two widths;
+- one side-effectful register rule, such as a doorbell or
+  write-one-to-clear field;
+- interrupt delivery integrated with L2-3's readiness loop;
+- explicit denial tests for wrong device, region, width, offset, and rights;
+  and
+- an interpreter device model that produces the same semantic observations as
+  native execution, while hardware-dependent native runs report explicit
+  `unavailable` when the fixture is absent.
+
+This slice establishes useful MMIO without claiming a generic userspace-driver
+framework. A subsequent device-family package may combine typed MMIO, selected
+typed `ioctl`, interrupts, and DMA when its protocol justifies all four.
+
+### Cross-cutting atomic policy
+
+Atomics are not inherently incompatible with Ken. The relevant distinction is
+between a controlled protocol implementation and a language-wide shared-memory
+primitive.
+
+Linux ABI II should recognize three levels:
+
+1. **Runtime-private atomics:** queue indices, handle tables, allocators, and
+   other implementation state that never becomes a Ken value. These are
+   permitted now and required by facilities such as `io_uring`.
+2. **Facility-specific atomic protocols:** generated operations over a named
+   shared ring, queue, or device contract whose widths, orderings, rights, and
+   lifetime are fixed by that facility. These are permitted when a Linux II
+   work package demonstrates the complete protocol.
+3. **General Ken atomic cells:** a public `AtomicCell<T>`-like API for arbitrary
+   shared program state. This is possible in principle, but is not a Linux ABI
+   II deliverable. It belongs with the separate thread-safe runtime and
+   shared-memory language design.
+
+The third level cannot be introduced responsibly as a thin wrapper around
+compare-and-swap. It must define a Ken memory model; supported widths and
+alignment by target; the meaning of relaxed, acquire, release, and sequentially
+consistent orderings; whether operations are lock-free or emulated; and the
+effect and nondeterminism boundary. The ordering choices are semantically
+distinct even when an API presents the same value operation
+([Rust atomic ordering][rust-ordering]).
+
+It must also avoid false guarantees. A single compare-and-swap attempt can be a
+total effectful operation; an unbounded retry loop is not thereby proved to
+terminate. Atomics alone do not solve ABA, object lifetime, reclamation, or
+progress. Runtime ownership and Ward still govern those concerns, and a future
+public API must not claim lock-freedom merely because the host offers an atomic
+instruction.
+
+Finally, volatile MMIO and shared-memory atomics are different mechanisms.
+Volatile preserves externally observable device accesses; atomic ordering
+coordinates participating memory agents. Atomic read-modify-write on device
+memory should be forbidden unless a device schema and platform contract
+explicitly authorize it. Device barriers and doorbells should appear as typed
+facility operations, not as a generic `Atomic<T>` escape hatch.
+
 ## 5. The public C ABI is a companion program
 
 The public C ABI was in the original report because systems adoption needs
@@ -565,7 +704,7 @@ native linking, stable foreign ABI, and foreign execution unavailable. A public
 export ABI must not silently make foreign-import execution available.
 
 This program can begin after L2-1 stabilizes target/layout generation and can
-then proceed in parallel with L2-5 through L2-7.
+then proceed in parallel with L2-5 through L2-8.
 
 ## 6. Proposed dependency graph
 
@@ -579,6 +718,7 @@ flowchart TD
     L25[L2-5 netlink inotify cgroup]
     L26[L2-6 confinement and child isolation]
     L27[L2-7 typed ioctl families]
+    L28[L2-8 capability-scoped MMIO]
     CABI[Companion public C ABI]
 
     L20 --> L21
@@ -594,6 +734,9 @@ flowchart TD
     L25 --> L26
     L21 --> L27
     L26 --> L27
+    L21 --> L28
+    L22 --> L28
+    L23 --> L28
     L21 --> CABI
 ```
 
@@ -601,6 +744,10 @@ This graph does not require finishing every control family before shipping
 `io_uring`. It does require the synchronous resource/error floor and operation
 manifest first. The event loop precedes `io_uring` because readiness remains the
 portable Linux mechanism for facilities and descriptors a ring does not cover.
+MMIO depends on the mapping/resource substrate and on readiness for interrupt
+integration. A particular device-family vertical slice may additionally depend
+on a selected L2-7 `ioctl` family or later DMA work; that is a device contract,
+not a hard dependency of every MMIO mapping.
 
 ## 7. Catalog shape
 
@@ -614,8 +761,11 @@ mechanism tier. Proposed homes, subject to the catalog taxonomy decision, are:
 - `System/Linux/Filesystem/Inotify`;
 - `System/Linux/Control/CgroupV2`;
 - `System/Linux/Sandbox/Landlock` and `Seccomp`;
-- `System/Linux/Process/Namespace` and child-isolation plans; and
-- `System/Linux/Ioctl/<Family>` for selected generated families.
+- `System/Linux/Process/Namespace` and child-isolation plans;
+- `System/Linux/Ioctl/<Family>` for selected generated families;
+- `System/Linux/Device/MMIO/<Family>` for typed register-bank protocols; and
+- `System/Linux/Device/DMA/<Family>` only for later, explicitly designed
+  device-memory and queue protocols.
 
 Higher-level, target-independent packages should sit above those where their
 semantics genuinely generalize: `Capability/Process`, `Capability/Network`,
@@ -666,6 +816,8 @@ availability they require.
 | Landlock/seccomp | runtime feature query, unsupported-right handling, architecture check, pre-Ken installation, denied operation observation |
 | Namespaces | child-only setup, uid/gid map validation, mount propagation, failure before runtime initialization |
 | Typed `ioctl` | request/layout cross-check, resource-kind rejection, direction/bounds enforcement, unsupported request behavior |
+| MMIO | device/schema identity, bounds/width/alignment/rights denial, volatile ordering, side-effect register behavior, stale-region rejection, interrupt integration |
+| Facility atomics | target width/alignment checks, named ordering protocol, forbidden generic atomic RMW, terminal lifetime evidence, no unsupported progress claim |
 | Public C ABI | header/compiler matrix, symbol/version checks, allocation ownership, trap/result mapping, wrong-target rejection |
 
 Integration tests that require kernel configuration, delegation, or privileges
@@ -685,6 +837,8 @@ following are true:
   cgroup subtree;
 - a launched child is confined by an attested namespace/cgroup/Landlock/seccomp
   plan before Ken execution;
+- a controlled device or emulator is driven through typed MMIO, including an
+  interrupt and a side-effectful register rule, without exposing an address;
 - interpreter and native semantic observations agree for all standard
   operations that claim both lanes;
 - every artifact carries target, family, feature, and evidence identity; and
@@ -712,7 +866,13 @@ layout.
 6. **Raw boundary:** reaffirm that boxed machine integers may represent numeric
    facts or opaque IDs but never acquire dereference, pointer arithmetic, or
    arbitrary syscall/`ioctl` authority.
-7. **Catalog:** ratify a `System/Linux` mechanism tier below portable capability
+7. **MMIO:** include capability-scoped MMIO as an L2-8 track, beginning with a
+   controlled UIO or VFIO device/emulator, typed register schemas, runtime-owned
+   mappings, and no ambient `/dev/mem` capability.
+8. **Atomics:** permit runtime-private atomics and facility-specific atomic
+   protocols now; defer a general Ken atomic-cell API to the shared-memory and
+   concurrency design rather than ruling it out permanently.
+9. **Catalog:** ratify a `System/Linux` mechanism tier below portable capability
    and service packages.
 
 ## 11. Sources
@@ -739,11 +899,16 @@ layout.
 - Linux kernel documentation, [Seccomp BPF filter][seccomp]
 - Linux kernel documentation, [Control Groups v2][cgroup-v2]
 - Linux kernel documentation, [ioctl numbering and encoding][ioctl]
+- Linux kernel documentation, [Userspace I/O HOWTO][uio],
+  [VFIO][vfio], [IOMMUFD][iommufd], and
+  [bus-independent device I/O][device-io]
 - Linux man-pages, [`io_uring_setup(2)`][uring-setup],
   [`io_uring_register(2)`][uring-register], and
   [`io_uring_enter(2)`][uring-enter]
 - Linux man-pages, [`namespaces(7)`][namespaces], [`unshare(2)`][unshare], and
   [`setns(2)`][setns]
+- Rust standard-library documentation, [volatile reads][rust-volatile] and
+  [atomic memory ordering][rust-ordering]
 
 ## Conclusion
 
@@ -759,7 +924,15 @@ memory and terminal-completion lifetime rules gives Ken the capability that a
 serious Linux language needs without importing raw pointers, affine types, or a
 thread-safe evaluator into the language. Netlink, cgroup v2, sandboxing,
 namespaces, and selected typed `ioctl` families then form a coherent Linux
-control plane. The C ABI belongs beside that program, not inside it.
+control plane.
+
+Capability-scoped MMIO completes the system-adjacent picture without reversing
+the raw-pointer ruling. Runtime-owned mappings, typed register schemas, and
+explicit volatile and ordering operations can provide direct device access
+without exposing addresses. Runtime-private and facility-specific atomics are
+similarly legitimate implementation mechanisms; only arbitrary atomics over
+shared Ken memory need to wait for a language-level memory and concurrency
+model. The C ABI belongs beside this program, not inside it.
 
 [charter]: ../docs/program/09-posix-linux-abi-campaign.md
 [host-ops]: ../crates/ken-host/src/effect_v1.rs
@@ -775,6 +948,12 @@ control plane. The C ABI belongs beside that program, not inside it.
 [seccomp]: https://docs.kernel.org/userspace-api/seccomp_filter.html
 [cgroup-v2]: https://docs.kernel.org/admin-guide/cgroup-v2.html
 [ioctl]: https://docs.kernel.org/userspace-api/ioctl/ioctl-number.html
+[uio]: https://docs.kernel.org/driver-api/uio-howto.html
+[vfio]: https://docs.kernel.org/driver-api/vfio.html
+[iommufd]: https://docs.kernel.org/userspace-api/iommufd.html
+[device-io]: https://docs.kernel.org/driver-api/device-io.html
+[rust-volatile]: https://doc.rust-lang.org/stable/std/ptr/fn.read_volatile.html
+[rust-ordering]: https://doc.rust-lang.org/std/sync/atomic/enum.Ordering.html
 [uring-setup]: https://man7.org/linux/man-pages/man2/io_uring_setup.2.html
 [uring-register]: https://man7.org/linux/man-pages/man2/io_uring_register.2.html
 [uring-enter]: https://man7.org/linux/man-pages/man2/io_uring_enter.2.html
