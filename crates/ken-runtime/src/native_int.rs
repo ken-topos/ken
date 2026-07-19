@@ -4,10 +4,10 @@
 //! its two-word native transport: Small values remain unboxed and Big values
 //! name a canonical `Value::BigInt` in one invocation-scoped arena.
 
-use crate::{Canonical, Sign, Value};
+use crate::{Sign, Value};
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 use std::fmt;
+use std::ptr;
 
 pub const NATIVE_INT_SMALL_TAG_V1: u64 = 0;
 pub const NATIVE_INT_BIG_TAG_V1: u64 = 1;
@@ -142,196 +142,103 @@ pub struct NativeIntV1 {
     pub payload: u64,
 }
 
-#[derive(Default)]
+#[repr(C)]
+struct NativeBigEntryV1 {
+    next: *mut NativeBigEntryV1,
+    slot: u64,
+    sign: u64,
+    len: u64,
+    limbs: [u64; 0],
+}
+
+/// C-compatible invocation header shared by every generated execution lane.
+#[repr(C)]
 pub struct NativeIntArenaV1 {
-    entries: Vec<Value>,
-    canonical_slots: BTreeMap<Vec<u8>, NativeBigSlotV1>,
-    final_result: Option<NativeIntV1>,
+    head: *mut NativeBigEntryV1,
+    next_slot: u64,
+    final_tag: u64,
+    final_payload: u64,
+    final_sign: u64,
+    final_len: u64,
+    final_limbs: *const u64,
+    final_small: u64,
+}
+
+impl Default for NativeIntArenaV1 {
+    fn default() -> Self {
+        Self {
+            head: ptr::null_mut(),
+            next_slot: 0,
+            final_tag: u64::MAX,
+            final_payload: 0,
+            final_sign: 0,
+            final_len: 0,
+            final_limbs: ptr::null(),
+            final_small: 0,
+        }
+    }
 }
 
 impl NativeIntArenaV1 {
-    pub fn intern(&mut self, value: &RuntimeIntV1) -> NativeIntV1 {
-        if let RuntimeIntV1::Small(value) = value {
-            return NativeIntV1 {
-                tag: NATIVE_INT_SMALL_TAG_V1,
-                payload: *value as u64,
-            };
-        }
-        let image = value.canonical_big_image();
-        let mut canonical = Vec::new();
-        image.encode_canonical(&mut canonical);
-        let slot = if let Some(slot) = self.canonical_slots.get(&canonical) {
-            *slot
-        } else {
-            self.entries.push(image);
-            let slot = NativeBigSlotV1(self.entries.len() as u64);
-            self.canonical_slots.insert(canonical, slot);
-            slot
-        };
-        NativeIntV1 {
-            tag: NATIVE_INT_BIG_TAG_V1,
-            payload: slot.get(),
-        }
-    }
-
     pub fn resolve(&self, value: NativeIntV1) -> Option<RuntimeIntV1> {
         match value.tag {
             NATIVE_INT_SMALL_TAG_V1 => Some(RuntimeIntV1::Small(value.payload as i64)),
             NATIVE_INT_BIG_TAG_V1 => {
-                let index = usize::try_from(value.payload).ok()?.checked_sub(1)?;
-                match self.entries.get(index)? {
-                    Value::BigInt { sign, limbs } => Some(RuntimeIntV1::Big {
-                        sign: *sign,
-                        limbs: limbs.clone(),
-                    }),
-                    _ => None,
+                if value.payload == 0 {
+                    return None;
                 }
+                let mut entry = self.head;
+                while !entry.is_null() {
+                    // SAFETY: entries are allocated and linked only by the
+                    // generated local helper graph and remain owned by this
+                    // arena until `drop`.
+                    let current = unsafe { &*entry };
+                    if current.slot == value.payload {
+                        let len = usize::try_from(current.len).ok()?;
+                        let limbs =
+                            unsafe { std::slice::from_raw_parts(current.limbs.as_ptr(), len) }
+                                .to_vec();
+                        let sign = match current.sign {
+                            0 => Sign::NonNegative,
+                            1 => Sign::Negative,
+                            _ => return None,
+                        };
+                        return Some(RuntimeIntV1::from_canonical_parts(sign, limbs));
+                    }
+                    entry = current.next;
+                }
+                None
             }
             _ => None,
         }
     }
 
     pub fn len(&self) -> usize {
-        self.entries.len()
+        usize::try_from(self.next_slot).unwrap_or(usize::MAX)
     }
 
     pub fn final_result(&self) -> Option<NativeIntV1> {
-        self.final_result
+        (self.final_tag != u64::MAX).then_some(NativeIntV1 {
+            tag: self.final_tag,
+            payload: self.final_payload,
+        })
     }
 }
 
-/// JIT-side implementation of the compiler-private exact-Int support call.
-/// Linked artifacts provide the same private ABI from their generated runtime
-/// support object; neither form is a Ken host operation.
-#[doc(hidden)]
-pub unsafe extern "C" fn native_int_binop_v1(
-    arena: *mut NativeIntArenaV1,
-    operation: u64,
-    lhs_tag: u64,
-    lhs_payload: u64,
-    rhs_tag: u64,
-    rhs_payload: u64,
-    output: *mut NativeIntV1,
-) -> i64 {
-    let (Some(arena), Some(output)) = (arena.as_mut(), output.as_mut()) else {
-        return -1;
-    };
-    let Some(lhs) = arena.resolve(NativeIntV1 {
-        tag: lhs_tag,
-        payload: lhs_payload,
-    }) else {
-        return -1;
-    };
-    let Some(rhs) = arena.resolve(NativeIntV1 {
-        tag: rhs_tag,
-        payload: rhs_payload,
-    }) else {
-        return -1;
-    };
-    let result = match operation {
-        0 => lhs.add(&rhs),
-        1 => lhs.sub(&rhs),
-        2 => lhs.mul(&rhs),
-        _ => return -1,
-    };
-    *output = arena.intern(&result);
-    0
+unsafe extern "C" {
+    fn free(pointer: *mut std::ffi::c_void);
 }
 
-#[doc(hidden)]
-pub unsafe extern "C" fn native_int_compare_v1(
-    arena: *mut NativeIntArenaV1,
-    operation: u64,
-    lhs_tag: u64,
-    lhs_payload: u64,
-    rhs_tag: u64,
-    rhs_payload: u64,
-) -> i64 {
-    let Some(arena) = arena.as_ref() else {
-        return -1;
-    };
-    let Some(lhs) = arena.resolve(NativeIntV1 {
-        tag: lhs_tag,
-        payload: lhs_payload,
-    }) else {
-        return -1;
-    };
-    let Some(rhs) = arena.resolve(NativeIntV1 {
-        tag: rhs_tag,
-        payload: rhs_payload,
-    }) else {
-        return -1;
-    };
-    match operation {
-        0 => i64::from(lhs == rhs),
-        1 => i64::from(lhs.exact_cmp(&rhs).is_le()),
-        _ => -1,
+impl Drop for NativeIntArenaV1 {
+    fn drop(&mut self) {
+        let mut entry = self.head;
+        while !entry.is_null() {
+            let next = unsafe { (*entry).next };
+            unsafe { free(entry.cast()) };
+            entry = next;
+        }
+        self.head = ptr::null_mut();
     }
-}
-
-#[doc(hidden)]
-pub unsafe extern "C" fn native_int_intern_v1(
-    arena: *mut NativeIntArenaV1,
-    sign: u64,
-    limbs: *const u64,
-    len: u64,
-    output: *mut NativeIntV1,
-) -> i64 {
-    let (Some(arena), Some(output)) = (arena.as_mut(), output.as_mut()) else {
-        return -1;
-    };
-    let Ok(len) = usize::try_from(len) else {
-        return -1;
-    };
-    if limbs.is_null() || len == 0 {
-        return -1;
-    }
-    let limbs = std::slice::from_raw_parts(limbs, len).to_vec();
-    let sign = match sign {
-        0 => Sign::NonNegative,
-        1 => Sign::Negative,
-        _ => return -1,
-    };
-    let value = RuntimeIntV1::from_canonical_parts(sign, limbs);
-    *output = arena.intern(&value);
-    0
-}
-
-#[doc(hidden)]
-pub unsafe extern "C" fn native_int_narrow_u64_v1(
-    arena: *mut NativeIntArenaV1,
-    tag: u64,
-    payload: u64,
-    output: *mut u64,
-) -> i64 {
-    let (Some(arena), Some(output)) = (arena.as_ref(), output.as_mut()) else {
-        return -1;
-    };
-    let Some(value) = arena.resolve(NativeIntV1 { tag, payload }) else {
-        return -1;
-    };
-    let Some(value) = value.checked_to_u64() else {
-        return 1;
-    };
-    *output = value;
-    0
-}
-
-#[doc(hidden)]
-pub unsafe extern "C" fn native_int_export_v1(
-    arena: *mut NativeIntArenaV1,
-    tag: u64,
-    payload: u64,
-) -> i64 {
-    let Some(arena) = arena.as_mut() else {
-        return -1;
-    };
-    let value = NativeIntV1 { tag, payload };
-    if arena.resolve(value).is_none() {
-        return -1;
-    }
-    arena.final_result = Some(value);
-    0
 }
 
 fn exact_binop(
@@ -470,6 +377,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn arena_header_matches_the_generated_local_helper_layout() {
+        assert_eq!(
+            std::mem::size_of::<NativeIntArenaV1>(),
+            crate::native_int_clif::ARENA_BYTES
+        );
+    }
+
+    #[test]
     fn exact_arithmetic_promotes_and_canonicalizes() {
         let promoted = RuntimeIntV1::Small(i64::MAX).add(&RuntimeIntV1::Small(1));
         assert_eq!(
@@ -504,18 +419,5 @@ mod tests {
         let different = RuntimeIntV1::from_canonical_parts(Sign::NonNegative, vec![7, 2]);
         assert_ne!(low_equal, different);
         assert_eq!(low_equal.exact_cmp(&different), Ordering::Less);
-    }
-
-    #[test]
-    fn arena_slots_are_nonzero_content_identities() {
-        let value = RuntimeIntV1::from_canonical_parts(Sign::NonNegative, vec![0, 1]);
-        let mut arena = NativeIntArenaV1::default();
-        let first = arena.intern(&value);
-        let second = arena.intern(&value);
-        assert_eq!(first, second);
-        assert_eq!(first.tag, NATIVE_INT_BIG_TAG_V1);
-        assert_ne!(first.payload, 0);
-        assert_eq!(arena.resolve(first), Some(value));
-        assert_eq!(arena.len(), 1);
     }
 }

@@ -20,6 +20,7 @@ pub mod ir;
 mod native_effect_v1;
 pub mod native_execution_differential;
 pub mod native_int;
+mod native_int_clif;
 #[doc(hidden)]
 pub mod native_join_plan;
 pub mod native_process_entrypoint;

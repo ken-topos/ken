@@ -89,6 +89,23 @@ Every tag and slot lookup validates fail-closed. The external process
 `ExitCode` ABI remains scalar only after the compiler-private Int has been
 resolved and narrowed while its arena is still alive.
 
+### Local-helper boundary correction (Architect ruling `evt_7f86e5mfjdcph`)
+
+The exact integer semantics are one Cranelift-local helper graph emitted by one
+module-construction routine into every JIT and object module. The entry function
+calls only local `FuncId`s for tag/slot resolution, canonical interning,
+add/sub/mul, comparison, checked narrowing, and terminal export. JIT callbacks,
+undefined `ken_runtime_native_int_*` symbols, and header-compiled C arithmetic
+bodies are forbidden.
+
+Only ordinary allocator imports (`malloc` / `free`) may remain. JIT setup and
+both C starters own a zeroed, C-compatible invocation arena header and free its
+raw allocations after terminal decoding; they implement no integer semantics.
+Construction evidence compares the normalized helper CLIF emitted for fresh
+JIT and object modules. Both generic and process linked artifacts must execute
+the same Big path, and a shared-helper mutation must turn JIT and object
+discriminators red.
+
 ## Landed anchors (verify before editing; do not trust frozen line numbers)
 
 Re-grep each; the line numbers below are orientation, not contract.
@@ -144,8 +161,8 @@ architect + leader), not an implementer guess.
    operands: `Small` fast-path via **overflow-checked** `i64` ops; on overflow,
    **promote before overflow** and compute exactly via the canonical model;
    **canonicalize `Big → Small` iff it fits.** Replace the `:1709` static-known
-   refusal for these three ops. **State** helper-call (runtime libcall) vs inline
-   emission and why.
+   refusal for these three ops. Call the ruled Cranelift-local helper graph;
+   imported runtime callbacks and separately authored C bodies are forbidden.
 3. **Comparison lowering.** `eq_int`/`leq_int` **exact** across all four
    `Small`/`Big` operand combinations.
 4. **Host narrowing.** A **single** checked conversion at **every** `Int →
@@ -187,6 +204,13 @@ From the ruling's discriminator set — each must be a distinct, reaching test:
   exact host width) with the op's `InvalidOffset`/`InvalidBounds`, not a wrap.
 - **Differential:** the unchanged PX8-F `c8b8cdb7` overlay's dynamic additions
   **agree with the interpreter**.
+- **Local-helper identity:** normalized CLIF for the complete helper graph is
+  identical for JIT and object construction. Generic and process objects have
+  no undefined `ken_runtime_native_int_*` symbols; only allocator imports (and
+  the already-authorized process host dispatch) remain.
+- **Three-lane reachability:** a generic object and a process object each
+  execute a genuinely Big intermediate beyond `i128`; the same helper mutation
+  makes both the JIT and linked-object discriminators fail.
 
 ## Acceptance criteria (testable)
 

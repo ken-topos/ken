@@ -1595,76 +1595,28 @@ fn runtime_trap_code_tag(code: &crate::RuntimeTrapCode) -> &'static str {
 
 fn starter_c_stub() -> &'static str {
     r#"#include <stdint.h>
-#include <stdio.h>
+    #include <stdio.h>
+    #include <stdlib.h>
 
-struct KenNativeIntArenaV1 { uint64_t final_tag; uint64_t final_payload; };
-struct KenNativeIntV1 { uint64_t tag; uint64_t payload; };
+struct KenNativeBigEntryV1 {
+    struct KenNativeBigEntryV1 *next;
+    uint64_t slot, sign, len;
+    uint64_t limbs[];
+};
+struct KenNativeIntArenaV1 {
+    struct KenNativeBigEntryV1 *head;
+    uint64_t next_slot, final_tag, final_payload, final_sign, final_len;
+    const uint64_t *final_limbs;
+    uint64_t final_small;
+};
 
-__attribute__((visibility("hidden")))
-int64_t ken_runtime_native_int_binop_v1(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t operation,
-    uint64_t lhs_tag,
-    uint64_t lhs_payload,
-    uint64_t rhs_tag,
-    uint64_t rhs_payload,
-    struct KenNativeIntV1 *output
-) {
-    (void)arena;
-    if (lhs_tag != 0 || rhs_tag != 0 || output == NULL) return -1;
-    int64_t lhs = (int64_t)lhs_payload;
-    int64_t rhs = (int64_t)rhs_payload;
-    int64_t result;
-    int overflow = operation == 0 ? __builtin_add_overflow(lhs, rhs, &result)
-        : operation == 1 ? __builtin_sub_overflow(lhs, rhs, &result)
-        : operation == 2 ? __builtin_mul_overflow(lhs, rhs, &result)
-        : 1;
-    if (overflow) return -1;
-    output->tag = 0;
-    output->payload = (uint64_t)result;
-    return 0;
-}
-
-__attribute__((visibility("hidden")))
-int64_t ken_runtime_native_int_compare_v1(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t operation,
-    uint64_t lhs_tag,
-    uint64_t lhs_payload,
-    uint64_t rhs_tag,
-    uint64_t rhs_payload
-) {
-    (void)arena;
-    if (lhs_tag != 0 || rhs_tag != 0) return -1;
-    int64_t lhs = (int64_t)lhs_payload;
-    int64_t rhs = (int64_t)rhs_payload;
-    return operation == 0 ? lhs == rhs : operation == 1 ? lhs <= rhs : -1;
-}
-
-__attribute__((visibility("hidden")))
-int64_t ken_runtime_native_int_narrow_u64_v1(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t tag,
-    uint64_t payload,
-    uint64_t *output
-) {
-    (void)arena;
-    if (tag != 0 || output == NULL) return -1;
-    if ((int64_t)payload < 0) return 1;
-    *output = payload;
-    return 0;
-}
-
-__attribute__((visibility("hidden")))
-int64_t ken_runtime_native_int_export_v1(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t tag,
-    uint64_t payload
-) {
-    if (arena == NULL || tag != 0) return -1;
-    arena->final_tag = tag;
-    arena->final_payload = payload;
-    return 0;
+static void ken_int_arena_destroy(struct KenNativeIntArenaV1 *arena) {
+    struct KenNativeBigEntryV1 *entry = arena->head;
+    while (entry != NULL) {
+        struct KenNativeBigEntryV1 *next = entry->next;
+        free(entry);
+        entry = next;
+    }
 }
 
 extern long long ken_nc23_entrypoint(const void *input);
@@ -1672,6 +1624,7 @@ extern long long ken_nc23_entrypoint(const void *input);
 int main(void) {
     struct KenNativeIntArenaV1 arena = {0};
     long long value = ken_nc23_entrypoint(&arena);
+    ken_int_arena_destroy(&arena);
     printf("%lld\n", value);
     return 0;
 }
@@ -1723,21 +1676,13 @@ struct KenNativeBigEntryV1 {
 struct KenNativeIntArenaV1 {
     struct KenNativeBigEntryV1 *head;
     uint64_t next_slot;
+    uint64_t final_tag;
+    uint64_t final_payload;
+    uint64_t final_sign;
+    uint64_t final_len;
+    const uint64_t *final_limbs;
+    uint64_t final_small;
 };
-
-struct KenNativeIntV1 {
-    uint64_t tag;
-    uint64_t payload;
-};
-
-struct KenNativeIntViewV1 {
-    uint64_t sign;
-    size_t len;
-    const uint64_t *limbs;
-    uint64_t small_limb;
-};
-
-enum { KEN_INT_SMALL = 0, KEN_INT_BIG = 1 };
 
 struct KenNativeInvocationV1 {
     const struct KenBorrowedValue *process_input;
@@ -1746,274 +1691,7 @@ struct KenNativeInvocationV1 {
     struct KenNativeIntArenaV1 *native_int_arena;
 };
 
-static size_t ken_int_minimal_len(const uint64_t *limbs, size_t len) {
-    while (len > 1 && limbs[len - 1] == 0) --len;
-    return len == 0 ? 1 : len;
-}
 
-static struct KenNativeBigEntryV1 *ken_int_slot(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t slot
-) {
-    if (arena == NULL || slot == 0) return NULL;
-    for (struct KenNativeBigEntryV1 *entry = arena->head;
-         entry != NULL;
-         entry = entry->next) {
-        if (entry->slot == slot) return entry;
-    }
-    return NULL;
-}
-
-static int ken_int_view(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t tag,
-    uint64_t payload,
-    struct KenNativeIntViewV1 *view
-) {
-    if (tag == KEN_INT_SMALL) {
-        int64_t value = (int64_t)payload;
-        view->sign = value < 0;
-        view->small_limb = value < 0
-            ? (uint64_t)(-(value + 1)) + 1
-            : (uint64_t)value;
-        view->len = 1;
-        view->limbs = &view->small_limb;
-        return 1;
-    }
-    if (tag != KEN_INT_BIG) return 0;
-    struct KenNativeBigEntryV1 *entry = ken_int_slot(arena, payload);
-    if (entry == NULL || entry->len == 0) return 0;
-    view->sign = entry->sign;
-    view->len = entry->len;
-    view->limbs = entry->limbs;
-    return 1;
-}
-
-static int ken_int_mag_cmp(
-    const uint64_t *lhs,
-    size_t lhs_len,
-    const uint64_t *rhs,
-    size_t rhs_len
-) {
-    lhs_len = ken_int_minimal_len(lhs, lhs_len);
-    rhs_len = ken_int_minimal_len(rhs, rhs_len);
-    if (lhs_len != rhs_len) return lhs_len < rhs_len ? -1 : 1;
-    while (lhs_len != 0) {
-        --lhs_len;
-        if (lhs[lhs_len] != rhs[lhs_len]) {
-            return lhs[lhs_len] < rhs[lhs_len] ? -1 : 1;
-        }
-    }
-    return 0;
-}
-
-static int ken_int_signed_cmp(
-    const struct KenNativeIntViewV1 *lhs,
-    const struct KenNativeIntViewV1 *rhs
-) {
-    if (lhs->sign != rhs->sign) return lhs->sign ? -1 : 1;
-    int magnitude = ken_int_mag_cmp(lhs->limbs, lhs->len, rhs->limbs, rhs->len);
-    return lhs->sign ? -magnitude : magnitude;
-}
-
-static uint64_t ken_int_intern(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t sign,
-    const uint64_t *limbs,
-    size_t len
-) {
-    len = ken_int_minimal_len(limbs, len);
-    if (len == 1 && limbs[0] == 0) sign = 0;
-    for (struct KenNativeBigEntryV1 *entry = arena->head;
-         entry != NULL;
-         entry = entry->next) {
-        if (entry->sign == sign && entry->len == len &&
-            memcmp(entry->limbs, limbs, len * sizeof(uint64_t)) == 0) {
-            return entry->slot;
-        }
-    }
-    if (len > (SIZE_MAX - sizeof(struct KenNativeBigEntryV1)) / sizeof(uint64_t)) {
-        return 0;
-    }
-    struct KenNativeBigEntryV1 *entry = malloc(
-        sizeof(struct KenNativeBigEntryV1) + len * sizeof(uint64_t));
-    if (entry == NULL || arena->next_slot == UINT64_MAX) {
-        free(entry);
-        return 0;
-    }
-    entry->next = arena->head;
-    entry->slot = ++arena->next_slot;
-    entry->sign = sign;
-    entry->len = len;
-    memcpy(entry->limbs, limbs, len * sizeof(uint64_t));
-    arena->head = entry;
-    return entry->slot;
-}
-
-static int ken_int_finish(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t sign,
-    uint64_t *limbs,
-    size_t len,
-    struct KenNativeIntV1 *output
-) {
-    len = ken_int_minimal_len(limbs, len);
-    if (len == 1 && limbs[0] == 0) sign = 0;
-    if (len == 1 && ((!sign && limbs[0] <= INT64_MAX) ||
-                     (sign && limbs[0] <= (UINT64_C(1) << 63)))) {
-        int64_t value = sign
-            ? (limbs[0] == (UINT64_C(1) << 63)
-                ? INT64_MIN
-                : -(int64_t)limbs[0])
-            : (int64_t)limbs[0];
-        output->tag = KEN_INT_SMALL;
-        output->payload = (uint64_t)value;
-        return 1;
-    }
-    uint64_t slot = ken_int_intern(arena, sign, limbs, len);
-    if (slot == 0) return 0;
-    output->tag = KEN_INT_BIG;
-    output->payload = slot;
-    return 1;
-}
-
-__attribute__((visibility("hidden")))
-int64_t ken_runtime_native_int_intern_v1(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t sign,
-    const uint64_t *limbs,
-    uint64_t len,
-    struct KenNativeIntV1 *output
-) {
-    if (arena == NULL || output == NULL || limbs == NULL || len == 0 || sign > 1) {
-        return -1;
-    }
-    return ken_int_finish(arena, sign, (uint64_t *)limbs, (size_t)len, output) ? 0 : -1;
-}
-
-__attribute__((visibility("hidden")))
-int64_t ken_runtime_native_int_binop_v1(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t operation,
-    uint64_t lhs_tag,
-    uint64_t lhs_payload,
-    uint64_t rhs_tag,
-    uint64_t rhs_payload,
-    struct KenNativeIntV1 *output
-) {
-    struct KenNativeIntViewV1 lhs, rhs;
-    if (arena == NULL || output == NULL ||
-        !ken_int_view(arena, lhs_tag, lhs_payload, &lhs) ||
-        !ken_int_view(arena, rhs_tag, rhs_payload, &rhs)) return -1;
-    size_t capacity = operation == 2
-        ? lhs.len + rhs.len
-        : (lhs.len > rhs.len ? lhs.len : rhs.len) + 1;
-    if (capacity == 0 || capacity > SIZE_MAX / sizeof(uint64_t)) return -1;
-    uint64_t *result = calloc(capacity, sizeof(uint64_t));
-    if (result == NULL) return -1;
-    uint64_t sign = 0;
-    size_t len = capacity;
-    if (operation == 2) {
-        sign = lhs.sign ^ rhs.sign;
-        for (size_t i = 0; i < lhs.len; ++i) {
-            __uint128_t carry = 0;
-            for (size_t j = 0; j < rhs.len; ++j) {
-                size_t k = i + j;
-                __uint128_t product = (__uint128_t)lhs.limbs[i] * rhs.limbs[j]
-                    + result[k] + carry;
-                result[k] = (uint64_t)product;
-                carry = product >> 64;
-            }
-            size_t k = i + rhs.len;
-            while (carry != 0 && k < capacity) {
-                __uint128_t sum = (__uint128_t)result[k] + carry;
-                result[k++] = (uint64_t)sum;
-                carry = sum >> 64;
-            }
-            if (carry != 0) { free(result); return -1; }
-        }
-    } else {
-        uint64_t rhs_sign = operation == 1 && !(rhs.len == 1 && rhs.limbs[0] == 0)
-            ? !rhs.sign
-            : rhs.sign;
-        if (lhs.sign == rhs_sign) {
-            sign = lhs.sign;
-            __uint128_t carry = 0;
-            size_t n = lhs.len > rhs.len ? lhs.len : rhs.len;
-            for (size_t i = 0; i < n; ++i) {
-                __uint128_t sum = (i < lhs.len ? lhs.limbs[i] : 0)
-                    + (__uint128_t)(i < rhs.len ? rhs.limbs[i] : 0) + carry;
-                result[i] = (uint64_t)sum;
-                carry = sum >> 64;
-            }
-            result[n] = (uint64_t)carry;
-        } else {
-            int order = ken_int_mag_cmp(lhs.limbs, lhs.len, rhs.limbs, rhs.len);
-            if (order == 0) {
-                result[0] = 0;
-                sign = 0;
-            } else {
-                const struct KenNativeIntViewV1 *large = order > 0 ? &lhs : &rhs;
-                const struct KenNativeIntViewV1 *small = order > 0 ? &rhs : &lhs;
-                sign = order > 0 ? lhs.sign : rhs_sign;
-                uint64_t borrow = 0;
-                for (size_t i = 0; i < large->len; ++i) {
-                    __uint128_t right = (i < small->len ? small->limbs[i] : 0)
-                        + (__uint128_t)borrow;
-                    __uint128_t left = large->limbs[i];
-                    result[i] = (uint64_t)(left - right);
-                    borrow = left < right;
-                }
-                if (borrow != 0) { free(result); return -1; }
-            }
-        }
-    }
-    int ok = ken_int_finish(arena, sign, result, len, output);
-    free(result);
-    return ok ? 0 : -1;
-}
-
-__attribute__((visibility("hidden")))
-int64_t ken_runtime_native_int_compare_v1(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t operation,
-    uint64_t lhs_tag,
-    uint64_t lhs_payload,
-    uint64_t rhs_tag,
-    uint64_t rhs_payload
-) {
-    struct KenNativeIntViewV1 lhs, rhs;
-    if (!ken_int_view(arena, lhs_tag, lhs_payload, &lhs) ||
-        !ken_int_view(arena, rhs_tag, rhs_payload, &rhs)) return -1;
-    int order = ken_int_signed_cmp(&lhs, &rhs);
-    if (operation == 0) return order == 0;
-    if (operation == 1) return order <= 0;
-    return -1;
-}
-
-__attribute__((visibility("hidden")))
-int64_t ken_runtime_native_int_narrow_u64_v1(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t tag,
-    uint64_t payload,
-    uint64_t *output
-) {
-    struct KenNativeIntViewV1 value;
-    if (output == NULL || !ken_int_view(arena, tag, payload, &value)) return -1;
-    if (value.sign || value.len != 1) return 1;
-    *output = value.limbs[0];
-    return 0;
-}
-
-__attribute__((visibility("hidden")))
-int64_t ken_runtime_native_int_export_v1(
-    struct KenNativeIntArenaV1 *arena,
-    uint64_t tag,
-    uint64_t payload
-) {
-    struct KenNativeIntViewV1 value;
-    return ken_int_view(arena, tag, payload, &value) ? 0 : -1;
-}
 
 static void ken_int_arena_destroy(struct KenNativeIntArenaV1 *arena) {
     struct KenNativeBigEntryV1 *entry = arena->head;
@@ -2435,6 +2113,21 @@ mod tests {
         dir
     }
 
+    #[cfg(target_os = "linux")]
+    fn assert_no_undefined_native_int_service(path: &std::path::Path) {
+        let output = Command::new("nm")
+            .arg("-u")
+            .arg(path)
+            .output()
+            .expect("nm is part of the linked-artifact toolchain");
+        assert!(output.status.success(), "nm -u failed");
+        let undefined = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            !undefined.contains("ken_runtime_native_int_"),
+            "native Int service remained undefined:\n{undefined}"
+        );
+    }
+
     #[test]
     fn packages_and_smokes_scalar_starter_executable() {
         let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int((42).into()));
@@ -2481,6 +2174,89 @@ mod tests {
             package.toolchain.whole_compiler_proof,
             ObjectLinkerEvidenceFact::Unavailable { .. }
         ));
+    }
+
+    fn generic_big_int_program() -> RuntimeProgram {
+        let big = |limbs: Vec<u64>| {
+            RuntimeExpr::Value(RuntimeValue::Int(crate::RuntimeIntV1::Big {
+                sign: crate::Sign::NonNegative,
+                limbs,
+            }))
+        };
+        let product = RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "mul_int".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![big(vec![0, 1]), big(vec![0, 1])],
+        };
+        let exact = RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "eq_int".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![product, big(vec![0, 0, 1])],
+        };
+        let body = RuntimeExpr::If {
+            scrutinee: Box::new(exact),
+            then_expr: Box::new(int_body(7)),
+            else_expr: Box::new(int_body(9)),
+        };
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(7.into()));
+        starter_program(body, observation)
+    }
+
+    #[test]
+    fn generic_object_executes_the_same_exact_big_int_helper_graph() {
+        let program = generic_big_int_program();
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let support = platform_support(&program, &entrypoint, &run_report);
+        let output_dir = temp_output_dir("px8i-generic-big-int");
+        let package = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            &output_dir,
+            "PX8-I generic object Big discriminator",
+        )
+        .expect("generic object executes the shared exact-Int graph");
+        assert_eq!(package.smoke.stdout, "7\n");
+        assert!(package.smoke.passed);
+        #[cfg(target_os = "linux")]
+        assert_no_undefined_native_int_service(
+            &output_dir.join(&package.executable_artifact.relative_path),
+        );
+    }
+
+    #[test]
+    fn shared_helper_wrapping_mutation_turns_generic_object_discriminator_red() {
+        let program = generic_big_int_program();
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let support = platform_support(&program, &entrypoint, &run_report);
+        let output_dir = temp_output_dir("px8i-generic-big-int-wrapping-mutation");
+        crate::cranelift_backend::NATIVE_INT_LOWERING_MUTATION.with(|mutation| {
+            mutation.set(crate::cranelift_backend::NativeIntLoweringMutation::Wrapping)
+        });
+        let result = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            &output_dir,
+            "PX8-I shared-helper mutation",
+        );
+        crate::cranelift_backend::NATIVE_INT_LOWERING_MUTATION.with(|mutation| {
+            mutation.set(crate::cranelift_backend::NativeIntLoweringMutation::Exact)
+        });
+        assert!(
+            result.is_err(),
+            "wrapping helper mutation must break Big object evidence"
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -2534,7 +2310,8 @@ mod tests {
         };
         let executable = build_process_starter_executable_artifact(&entry, &output_dir)
             .expect("PX8-I process starter links its private exact-Int support");
-        let status = Command::new(executable)
+        assert_no_undefined_native_int_service(&executable);
+        let status = Command::new(&executable)
             .status()
             .expect("PX8-I linked process executes");
         assert_eq!(status.code(), Some(0));
