@@ -1507,6 +1507,7 @@ fn run_px8j_malformed_recursor_consumer(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_recursor_producer_origin: 0,
+        next_producer_hole: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
         next_source_join: 0,
@@ -1596,6 +1597,7 @@ fn run_px8j_malformed_recursor_consumer(
         invocation: RecursorInvocationSegment::new(
             origin,
             0,
+            None,
             selection,
             RecursorUnwindStack {
                 later_wrappers_in_construction_order: unwind,
@@ -1610,6 +1612,7 @@ fn run_px8j_malformed_recursor_consumer(
         pending: &[],
         selected_ancestry: &[],
         source_lineage: &[],
+        source_selected_spine: &[],
         source_selected_cursor: None,
         selected_scope: None,
     };
@@ -1674,6 +1677,7 @@ fn run_checked_bounded_nat_fixture(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_recursor_producer_origin: 0,
+        next_producer_hole: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
         next_source_join: 0,
@@ -1882,6 +1886,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_recursor_producer_origin: 0,
+        next_producer_hole: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
         next_source_join: 0,
@@ -2105,6 +2110,7 @@ fn compile_expr_into_module<'a, M: Module>(
         next_token: 0,
         next_recursor_frame_provenance: 0,
         next_recursor_producer_origin: 0,
+        next_producer_hole: 0,
         next_continuation_activation: 0,
         next_continuation_cursor: 0,
         next_source_join: 0,
@@ -2257,6 +2263,7 @@ struct Lowering<'a> {
     next_token: i64,
     next_recursor_frame_provenance: u64,
     next_recursor_producer_origin: u64,
+    next_producer_hole: u64,
     next_continuation_activation: u64,
     next_continuation_cursor: u64,
     next_source_join: u64,
@@ -2298,6 +2305,9 @@ struct ContinuationCursorId(u64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct RecursorProducerOriginId(u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct ProducerHoleId(u64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RecursorLayerRole {
@@ -2675,6 +2685,7 @@ struct ActiveContinuationFrame<'a> {
     pending: &'a [EliminatorFrame<'a>],
     selected_ancestry: &'a [RecursorFrameProvenance],
     source_lineage: &'a [SourceSelectedContinuation<'a>],
+    source_selected_spine: &'a [SourceSelectedSpineEntry],
     source_selected_cursor: Option<ContinuationCursorId>,
     selected_scope: Option<&'a OwnedSelectedScope>,
 }
@@ -2695,6 +2706,7 @@ struct RecursorInvocationSegment {
     /// case. Siblings share `origin`; this position distinguishes their
     /// immutable carriers through the consumer boundary.
     sibling_position: usize,
+    producer_hole: Option<ProducerHoleId>,
     selection: ComputationalRecursorLayer,
     unwind: RecursorUnwindStack,
     resume_cursor: ContinuationCursorId,
@@ -2709,6 +2721,7 @@ impl RecursorInvocationSegment {
     fn new(
         origin: RecursorProducerOriginId,
         sibling_position: usize,
+        producer_hole: Option<ProducerHoleId>,
         selection: ComputationalRecursorLayer,
         unwind: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
@@ -2716,6 +2729,7 @@ impl RecursorInvocationSegment {
         Self {
             origin,
             sibling_position,
+            producer_hole,
             selection,
             unwind,
             resume_cursor,
@@ -2869,7 +2883,8 @@ fn active_context_contains_cursor(
     find_continuation_cursor(active, cursor).is_some()
         || active.source_selected_cursor == Some(cursor)
         || active.source_lineage.iter().rev().any(|candidate| {
-            let candidate = candidate.as_active(active.source_lineage);
+            let candidate =
+                candidate.as_active(active.source_lineage, active.source_selected_spine);
             find_continuation_cursor(&candidate, cursor).is_some()
         })
 }
@@ -2895,11 +2910,13 @@ enum SourceContinuation<'a> {
     },
     ApplyRecursorSelection {
         layer: ComputationalRecursorLayer,
+        producer_hole: Option<ProducerHoleId>,
         next: Box<SourceContinuation<'a>>,
     },
     UnwindRecursorSegment {
         stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
+        producer_hole: Option<ProducerHoleId>,
         next: Box<SourceContinuation<'a>>,
     },
     IfScrutinee {
@@ -2926,6 +2943,7 @@ enum SourceContinuation<'a> {
         default: RuntimeTrap,
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
+        producer_hole: Option<ProducerHoleId>,
         next: Box<SourceContinuation<'a>>,
     },
     /// The owned return edge for one selected computational case. The case
@@ -2935,6 +2953,7 @@ enum SourceContinuation<'a> {
         child_cursor: ContinuationCursorId,
         parent_cursor: ContinuationCursorId,
         origin: RecursorProducerOriginId,
+        producer_hole: Option<ProducerHoleId>,
         next: Box<SourceContinuation<'a>>,
     },
     ProjectRecord {
@@ -2963,6 +2982,7 @@ enum SourceContinuationTerminal<'a> {
     ReturnToProducerHole {
         stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
+        producer_hole: Option<ProducerHoleId>,
         expected: ContinuationCursorId,
         active: &'a ActiveContinuationFrame<'a>,
     },
@@ -3008,11 +3028,13 @@ enum SourcePrefixTemplate {
     },
     ApplyRecursorSelection {
         layer: ComputationalRecursorLayer,
+        producer_hole: Option<ProducerHoleId>,
         next: Box<SourcePrefixTemplate>,
     },
     UnwindRecursorSegment {
         stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
+        producer_hole: Option<ProducerHoleId>,
         next: Box<SourcePrefixTemplate>,
     },
     IfScrutinee {
@@ -3039,12 +3061,14 @@ enum SourcePrefixTemplate {
         default: RuntimeTrap,
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
+        producer_hole: Option<ProducerHoleId>,
         next: Box<SourcePrefixTemplate>,
     },
     ReturnFromSelectedCase {
         child_cursor: ContinuationCursorId,
         parent_cursor: ContinuationCursorId,
         origin: RecursorProducerOriginId,
+        producer_hole: Option<ProducerHoleId>,
         next: Box<SourcePrefixTemplate>,
     },
     ProjectRecord {
@@ -3090,10 +3114,23 @@ struct SourceSelectedContinuation<'a> {
     selected_scope: Option<OwnedSelectedScope>,
 }
 
+#[derive(Clone)]
+struct SourceSelectedSpineFrame {
+    cursor: ContinuationCursorId,
+    selected_scope: Option<OwnedSelectedScope>,
+}
+
+#[derive(Clone)]
+enum SourceSelectedSpineEntry {
+    Frame(SourceSelectedSpineFrame),
+    ProducerHole(ProducerHoleId),
+}
+
 impl<'a> SourceSelectedContinuation<'a> {
     fn as_active<'b>(
         &'b self,
         source_lineage: &'b [SourceSelectedContinuation<'a>],
+        source_selected_spine: &'b [SourceSelectedSpineEntry],
     ) -> ActiveContinuationFrame<'b>
     where
         'a: 'b,
@@ -3105,6 +3142,7 @@ impl<'a> SourceSelectedContinuation<'a> {
             pending: &self.pending,
             selected_ancestry: &self.selected_ancestry,
             source_lineage,
+            source_selected_spine,
             source_selected_cursor: Some(self.cursor),
             selected_scope: self.selected_scope.as_ref(),
         }
@@ -3114,12 +3152,13 @@ impl<'a> SourceSelectedContinuation<'a> {
 fn source_active_cursor<'a: 'b, 'b>(
     selected: &'b SourceSelectedContinuation<'a>,
     lineage: &'b [SourceSelectedContinuation<'a>],
+    selected_spine: &'b [SourceSelectedSpineEntry],
     cursor: ContinuationCursorId,
 ) -> Option<ActiveContinuationFrame<'b>> {
     std::iter::once(selected)
         .chain(lineage.iter().rev())
         .find_map(|candidate| {
-            let mut active = candidate.as_active(lineage);
+            let mut active = candidate.as_active(lineage, selected_spine);
             active.source_selected_cursor = Some(selected.cursor);
             if active.cursor == cursor {
                 Some(active)
@@ -3129,6 +3168,7 @@ fn source_active_cursor<'a: 'b, 'b>(
                     if frame.cursor == cursor {
                         let mut frame = *frame;
                         frame.source_lineage = lineage;
+                        frame.source_selected_spine = selected_spine;
                         frame.source_selected_cursor = Some(selected.cursor);
                         return Some(frame);
                     }
@@ -3143,6 +3183,7 @@ struct SourceControl<'a> {
     continuation: SourceContinuation<'a>,
     selected: SourceSelectedContinuation<'a>,
     selected_lineage: Vec<SourceSelectedContinuation<'a>>,
+    selected_spine: Vec<SourceSelectedSpineEntry>,
     terminal_outer: ContinuationCursorId,
 }
 
@@ -3602,6 +3643,73 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    /// Consume one producer-hole splice capability when its selected case
+    /// returns to the control immediately below that marker. Captured unwind
+    /// frames remain on the value; only the now-crossed live marker is
+    /// discharged.
+    fn cross_producer_hole(value: &mut Lowered, producer_hole: ProducerHoleId) {
+        match value {
+            Lowered::HostResult { error, ok, .. } => {
+                Self::cross_producer_hole(error, producer_hole);
+                Self::cross_producer_hole(ok, producer_hole);
+            }
+            Lowered::DynamicConstructor(dynamic) => {
+                for alternative in &mut dynamic.alternatives {
+                    for field in &mut alternative.fields {
+                        Self::cross_producer_hole(field, producer_hole);
+                    }
+                }
+            }
+            Lowered::Constructor { args, .. } => {
+                for argument in args {
+                    Self::cross_producer_hole(argument, producer_hole);
+                }
+            }
+            Lowered::Record { fields } => {
+                for (_, field) in fields {
+                    Self::cross_producer_hole(field, producer_hole);
+                }
+            }
+            Lowered::Closure { captures, .. } | Lowered::DeclarationClosure { captures, .. } => {
+                for capture in captures {
+                    Self::cross_producer_hole(capture, producer_hole);
+                }
+            }
+            Lowered::ComputationalRecursorClosure {
+                residual,
+                invocation,
+                ..
+            } => {
+                Self::cross_producer_hole(residual, producer_hole);
+                if invocation.producer_hole == Some(producer_hole) {
+                    invocation.producer_hole = None;
+                }
+                for value in &mut invocation.selection.outer_env {
+                    Self::cross_producer_hole(value, producer_hole);
+                }
+                for layer in &mut invocation.unwind.later_wrappers_in_construction_order {
+                    for value in &mut layer.outer_env {
+                        Self::cross_producer_hole(value, producer_hole);
+                    }
+                }
+            }
+            Lowered::Int { .. }
+            | Lowered::Bool { .. }
+            | Lowered::ProcessExitStatus { .. }
+            | Lowered::CapabilityToken { .. }
+            | Lowered::ResourceToken { .. }
+            | Lowered::BoundedNat(_)
+            | Lowered::StructuralNat(_)
+            | Lowered::ResponseBytes { .. }
+            | Lowered::Bytes(_)
+            | Lowered::BorrowedNativeValue { .. }
+            | Lowered::BorrowedOption { .. }
+            | Lowered::String(_)
+            | Lowered::RecursiveBackedge
+            | Lowered::Trap(_) => {}
+        }
+    }
+
     fn mint_recursor_producer_origin(&mut self) -> RecursorProducerOriginId {
         let origin = RecursorProducerOriginId(self.next_recursor_producer_origin);
         self.next_recursor_producer_origin = self
@@ -3609,6 +3717,15 @@ impl<'a> Lowering<'a> {
             .checked_add(1)
             .expect("compiler-private recursor producer origin exhausted");
         origin
+    }
+
+    fn mint_producer_hole(&mut self) -> ProducerHoleId {
+        let hole = ProducerHoleId(self.next_producer_hole);
+        self.next_producer_hole = self
+            .next_producer_hole
+            .checked_add(1)
+            .expect("compiler-private producer-hole identity exhausted");
+        hole
     }
 
     fn mint_recursor_frame_provenance(&mut self) -> RecursorFrameProvenance {
@@ -3651,13 +3768,13 @@ impl<'a> Lowering<'a> {
         activation: ContinuationActivationId,
         resume_cursor: ContinuationCursorId,
         splice_caller: Option<&ActiveContinuationFrame<'_>>,
-        source_control: Option<(
-            &SourceSelectedContinuation<'_>,
-            &[SourceSelectedContinuation<'_>],
-        )>,
+        source_hole: Option<(&[SourceSelectedSpineEntry], ProducerHoleId, bool)>,
     ) -> Result<Lowered, CraneliftBackendError> {
         let (residual, payload) = decompose_computational_recursor(recursive);
-        let had_payload = payload.is_some();
+        let inherited_hole = payload
+            .as_ref()
+            .and_then(|(_, invocation)| invocation.producer_hole);
+        let producer_hole = inherited_hole.or_else(|| source_hole.map(|(_, hole, _)| hole));
         let mut current_layer = ComputationalRecursorLayer {
             cases,
             default,
@@ -3673,7 +3790,7 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .map(|(_, invocation)| invocation.sibling_position)
             .unwrap_or(sibling_position);
-        let (selection, unwind) =
+        let (selection, unwind, wrapper) =
             if let Some((_, invocation)) = payload {
                 let splice_caller = splice_caller.ok_or_else(|| {
                     unsupported(
@@ -3681,30 +3798,19 @@ impl<'a> Lowering<'a> {
                         "recursive payload splice has no active continuation",
                     )
                 })?;
-                let source_cursor_is_live = source_control.is_some_and(|(selected, lineage)| {
-                    source_active_cursor(selected, lineage, invocation.resume_cursor).is_some()
-                });
-                if !active_context_contains_cursor(splice_caller, invocation.resume_cursor)
-                    && !source_cursor_is_live
-                {
+                if !active_context_contains_cursor(splice_caller, invocation.resume_cursor) {
                     return Err(unsupported(
                         "ComputationalRecursor",
                         "recursive payload resume cursor is not active",
                     ));
                 }
-                let mut unwind = invocation.unwind;
-                let parent_scope = unwind.later_wrappers_in_construction_order.last().and_then(
-                    |layer| match layer.role {
-                        RecursorLayerRole::ExitsScope { scope_origin, .. } => Some(scope_origin),
-                        RecursorLayerRole::SelectsOccurrence { .. } => None,
-                    },
-                );
+                let unwind = invocation.unwind;
                 let unwind_role = match role {
                     RecursorLayerRole::SelectsOccurrence { origin: _ } => {
                         RecursorLayerRole::ExitsScope {
                             origin: segment_origin,
                             scope_origin: origin,
-                            parent_scope,
+                            parent_scope: None,
                         }
                     }
                     RecursorLayerRole::ExitsScope {
@@ -3718,30 +3824,38 @@ impl<'a> Lowering<'a> {
                     },
                 };
                 current_layer.role = unwind_role;
-                unwind
-                    .later_wrappers_in_construction_order
-                    .push(current_layer);
-                (invocation.selection, unwind)
+                (invocation.selection, unwind, Some(current_layer))
             } else {
                 (
                     current_layer,
                     RecursorUnwindStack {
                         later_wrappers_in_construction_order: Vec::new(),
                     },
+                    None,
                 )
             };
         let mut unwind = unwind;
-        if let Some((selected, lineage)) = source_control {
-            if had_payload && selected.selected_scope.is_none() {
+        if let (None, Some((selected_spine, hole, true))) = (inherited_hole, source_hole) {
+            let marker_positions = selected_spine
+                .iter()
+                .enumerate()
+                .filter_map(|(index, entry)| {
+                    matches!(entry, SourceSelectedSpineEntry::ProducerHole(actual) if *actual == hole)
+                        .then_some(index)
+                })
+                .collect::<Vec<_>>();
+            let [marker_position] = marker_positions.as_slice() else {
                 return Err(unsupported(
                     "ComputationalRecursor",
-                    "source recursor invocation is missing its owned selected scope",
+                    "source recursor producer-hole marker is missing or duplicated",
                 ));
-            }
-            for scope in lineage
+            };
+            for scope in selected_spine[..*marker_position]
                 .iter()
-                .filter_map(|selected| selected.selected_scope.as_ref())
-                .chain(selected.selected_scope.iter())
+                .filter_map(|entry| match entry {
+                    SourceSelectedSpineEntry::Frame(frame) => frame.selected_scope.as_ref(),
+                    SourceSelectedSpineEntry::ProducerHole(_) => None,
+                })
             {
                 if let Some(existing) =
                     unwind
@@ -3783,9 +3897,102 @@ impl<'a> Lowering<'a> {
                     });
             }
         }
+        if let Some(mut wrapper) = wrapper {
+            if let Some((selected_spine, hole, _)) = source_hole {
+                let marker_positions = selected_spine
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, entry)| {
+                        matches!(
+                            entry,
+                            SourceSelectedSpineEntry::ProducerHole(actual) if *actual == hole
+                        )
+                        .then_some(index)
+                    })
+                    .collect::<Vec<_>>();
+                let [marker_position] = marker_positions.as_slice() else {
+                    return Err(unsupported(
+                        "ComputationalRecursor",
+                        "wrapped recursor producer-hole marker is missing or duplicated",
+                    ));
+                };
+                let suffix_origins = selected_spine[..*marker_position]
+                    .iter()
+                    .filter_map(|entry| match entry {
+                        SourceSelectedSpineEntry::Frame(frame) => {
+                            frame.selected_scope.as_ref().map(|scope| scope.scope_origin)
+                        }
+                        SourceSelectedSpineEntry::ProducerHole(_) => None,
+                    })
+                    .collect::<BTreeSet<_>>();
+                let wrapper_boundary = unwind
+                    .later_wrappers_in_construction_order
+                    .iter()
+                    .take_while(|layer| {
+                        matches!(
+                            layer.role,
+                            RecursorLayerRole::ExitsScope { scope_origin, .. }
+                                if suffix_origins.contains(&scope_origin)
+                        )
+                    })
+                    .count();
+                let parent_scope = unwind
+                    .later_wrappers_in_construction_order
+                    .get(wrapper_boundary.wrapping_sub(1))
+                    .and_then(|layer| match layer.role {
+                        RecursorLayerRole::ExitsScope { scope_origin, .. }
+                            if wrapper_boundary > 0 => Some(scope_origin),
+                        _ => None,
+                    });
+                let wrapper_scope = match &mut wrapper.role {
+                    RecursorLayerRole::ExitsScope {
+                        scope_origin,
+                        parent_scope: wrapper_parent,
+                        ..
+                    } => {
+                        *wrapper_parent = parent_scope;
+                        *scope_origin
+                    }
+                    RecursorLayerRole::SelectsOccurrence { .. } => {
+                        unreachable!("a wrapper cannot select the invocation")
+                    }
+                };
+                if let Some(next) = unwind
+                    .later_wrappers_in_construction_order
+                    .get_mut(wrapper_boundary)
+                {
+                    let RecursorLayerRole::ExitsScope { parent_scope, .. } = &mut next.role else {
+                        unreachable!("an unwind wrapper cannot select the invocation")
+                    };
+                    *parent_scope = Some(wrapper_scope);
+                }
+                unwind
+                    .later_wrappers_in_construction_order
+                    .insert(wrapper_boundary, wrapper);
+            } else {
+                let parent_scope = unwind
+                    .later_wrappers_in_construction_order
+                    .last()
+                    .and_then(|layer| match layer.role {
+                        RecursorLayerRole::ExitsScope { scope_origin, .. } => Some(scope_origin),
+                        RecursorLayerRole::SelectsOccurrence { .. } => None,
+                    });
+                if let RecursorLayerRole::ExitsScope {
+                    parent_scope: wrapper_parent,
+                    ..
+                } = &mut wrapper.role
+                {
+                    *wrapper_parent = parent_scope;
+                }
+                unwind
+                    .later_wrappers_in_construction_order
+                    .push(wrapper);
+            }
+        }
         let invocation = RecursorInvocationSegment::new(
             segment_origin,
             segment_sibling_position,
+            producer_hole,
             selection,
             unwind,
             resume_cursor,
@@ -3815,6 +4022,7 @@ impl<'a> Lowering<'a> {
             pending: tail,
             selected_ancestry: active.selected_ancestry,
             source_lineage: active.source_lineage,
+            source_selected_spine: active.source_selected_spine,
             source_selected_cursor: active.source_selected_cursor,
             selected_scope: active.selected_scope,
         });
@@ -4300,6 +4508,9 @@ impl<'a> Lowering<'a> {
                         source_lineage: splice_caller
                             .map(|active| active.source_lineage)
                             .unwrap_or(&[]),
+                        source_selected_spine: splice_caller
+                            .map(|active| active.source_selected_spine)
+                            .unwrap_or(&[]),
                         source_selected_cursor: splice_caller
                             .and_then(|active| active.source_selected_cursor),
                         selected_scope: splice_caller.and_then(|active| active.selected_scope),
@@ -4760,6 +4971,9 @@ impl<'a> Lowering<'a> {
                     selected_ancestry: &selected_ancestry,
                     source_lineage: splice_caller
                         .map(|active| active.source_lineage)
+                        .unwrap_or(&[]),
+                    source_selected_spine: splice_caller
+                        .map(|active| active.source_selected_spine)
                         .unwrap_or(&[]),
                     source_selected_cursor: splice_caller
                         .and_then(|active| active.source_selected_cursor),
@@ -5825,11 +6039,13 @@ impl<'a> Lowering<'a> {
                 child_cursor,
                 parent_cursor,
                 origin,
+                producer_hole,
                 next,
             } => SourceContinuation::ReturnFromSelectedCase {
                 child_cursor,
                 parent_cursor,
                 origin,
+                producer_hole,
                 next: Box::new(Self::discard_source_prefix(*next)),
             },
         }
@@ -5839,6 +6055,7 @@ impl<'a> Lowering<'a> {
         continuation: SourceContinuation<'b>,
         stack: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
+        invocation_hole: Option<ProducerHoleId>,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
         Ok(match continuation {
             SourceContinuation::LetBody { body, env, next } => SourceContinuation::LetBody {
@@ -5848,29 +6065,39 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    invocation_hole,
                 )?),
             },
-            SourceContinuation::ApplyRecursorSelection { layer, next } => {
+            SourceContinuation::ApplyRecursorSelection {
+                layer,
+                producer_hole,
+                next,
+            } => {
                 SourceContinuation::ApplyRecursorSelection {
                     layer,
+                    producer_hole,
                     next: Box::new(Self::replace_source_terminal_with_unwind(
                         *next,
                         stack,
                         resume_cursor,
+                        invocation_hole,
                     )?),
                 }
             }
             SourceContinuation::UnwindRecursorSegment {
                 stack: outer_stack,
                 resume_cursor: outer_cursor,
+                producer_hole: outer_hole,
                 next,
             } => SourceContinuation::UnwindRecursorSegment {
                 stack: outer_stack,
                 resume_cursor: outer_cursor,
+                producer_hole: outer_hole,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
                     stack,
                     resume_cursor,
+                    invocation_hole,
                 )?),
             },
             SourceContinuation::IfScrutinee {
@@ -5886,6 +6113,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    invocation_hole,
                 )?),
             },
             SourceContinuation::ConstructArgument {
@@ -5903,6 +6131,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    invocation_hole,
                 )?),
             },
             SourceContinuation::MatchScrutinee {
@@ -5918,6 +6147,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    invocation_hole,
                 )?),
             },
             SourceContinuation::ComputationalMatchScrutinee {
@@ -5925,30 +6155,36 @@ impl<'a> Lowering<'a> {
                 default,
                 env,
                 provenance,
+                producer_hole,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases,
                 default,
                 env,
                 provenance,
+                producer_hole,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
                     stack,
                     resume_cursor,
+                    invocation_hole,
                 )?),
             },
             SourceContinuation::ReturnFromSelectedCase {
                 child_cursor,
                 parent_cursor,
                 origin,
+                producer_hole,
                 next,
             } => SourceContinuation::UnwindRecursorSegment {
                 stack,
                 resume_cursor,
+                producer_hole: invocation_hole,
                 next: Box::new(SourceContinuation::ReturnFromSelectedCase {
                     child_cursor,
                     parent_cursor,
                     origin,
+                    producer_hole,
                     next,
                 }),
             },
@@ -5959,6 +6195,7 @@ impl<'a> Lowering<'a> {
                         *next,
                         stack,
                         resume_cursor,
+                        invocation_hole,
                     )?),
                 }
             }
@@ -5969,6 +6206,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    invocation_hole,
                 )?),
             },
             SourceContinuation::CallArgument {
@@ -5986,6 +6224,7 @@ impl<'a> Lowering<'a> {
                     *next,
                     stack,
                     resume_cursor,
+                    invocation_hole,
                 )?),
             },
             SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
@@ -5994,6 +6233,7 @@ impl<'a> Lowering<'a> {
             }) => SourceContinuation::Terminal(SourceContinuationTerminal::ReturnToProducerHole {
                 stack,
                 resume_cursor,
+                producer_hole: invocation_hole,
                 expected,
                 active,
             }),
@@ -6001,6 +6241,7 @@ impl<'a> Lowering<'a> {
                 SourceContinuation::UnwindRecursorSegment {
                     stack,
                     resume_cursor,
+                    producer_hole: invocation_hole,
                     next: Box::new(SourceContinuation::Terminal(
                         SourceContinuationTerminal::JumpToJoin(edge),
                     )),
@@ -6037,11 +6278,188 @@ impl<'a> Lowering<'a> {
             continuation,
             invocation.unwind,
             invocation.resume_cursor,
+            invocation.producer_hole,
         )?;
         Ok(SourceContinuation::ApplyRecursorSelection {
             layer: invocation.selection,
+            producer_hole: invocation.producer_hole,
             next: Box::new(continuation),
         })
+    }
+
+    fn install_source_selected_return<'b>(
+        continuation: SourceContinuation<'b>,
+        child_cursor: ContinuationCursorId,
+        parent_cursor: ContinuationCursorId,
+        origin: RecursorProducerOriginId,
+        producer_hole: Option<ProducerHoleId>,
+    ) -> SourceContinuation<'b> {
+        let wrap = |next| SourceContinuation::ReturnFromSelectedCase {
+            child_cursor,
+            parent_cursor,
+            origin,
+            producer_hole,
+            next: Box::new(next),
+        };
+        match continuation {
+            existing @ SourceContinuation::ReturnFromSelectedCase { .. }
+            | existing @ SourceContinuation::Terminal(_) => wrap(existing),
+            SourceContinuation::LetBody { body, env, next } => SourceContinuation::LetBody {
+                body,
+                env,
+                next: Box::new(Self::install_source_selected_return(
+                    *next,
+                    child_cursor,
+                    parent_cursor,
+                    origin,
+                    producer_hole,
+                )),
+            },
+            SourceContinuation::ApplyRecursorSelection {
+                layer,
+                producer_hole: next_hole,
+                next,
+            } => wrap(SourceContinuation::ApplyRecursorSelection {
+                layer,
+                producer_hole: next_hole,
+                next,
+            }),
+            SourceContinuation::UnwindRecursorSegment {
+                stack,
+                resume_cursor,
+                producer_hole: next_hole,
+                next,
+            } => SourceContinuation::UnwindRecursorSegment {
+                stack,
+                resume_cursor,
+                producer_hole: next_hole,
+                next: Box::new(Self::install_source_selected_return(
+                    *next,
+                    child_cursor,
+                    parent_cursor,
+                    origin,
+                    producer_hole,
+                )),
+            },
+            SourceContinuation::IfScrutinee {
+                then_expr,
+                else_expr,
+                env,
+                next,
+            } => SourceContinuation::IfScrutinee {
+                then_expr,
+                else_expr,
+                env,
+                next: Box::new(Self::install_source_selected_return(
+                    *next,
+                    child_cursor,
+                    parent_cursor,
+                    origin,
+                    producer_hole,
+                )),
+            },
+            SourceContinuation::ConstructArgument {
+                constructor,
+                remaining,
+                lowered,
+                env,
+                next,
+            } => SourceContinuation::ConstructArgument {
+                constructor,
+                remaining,
+                lowered,
+                env,
+                next: Box::new(Self::install_source_selected_return(
+                    *next,
+                    child_cursor,
+                    parent_cursor,
+                    origin,
+                    producer_hole,
+                )),
+            },
+            SourceContinuation::MatchScrutinee {
+                cases,
+                default,
+                env,
+                next,
+            } => SourceContinuation::MatchScrutinee {
+                cases,
+                default,
+                env,
+                next: Box::new(Self::install_source_selected_return(
+                    *next,
+                    child_cursor,
+                    parent_cursor,
+                    origin,
+                    producer_hole,
+                )),
+            },
+            SourceContinuation::ComputationalMatchScrutinee {
+                cases,
+                default,
+                env,
+                provenance,
+                producer_hole: next_hole,
+                next,
+            } => SourceContinuation::ComputationalMatchScrutinee {
+                cases,
+                default,
+                env,
+                provenance,
+                producer_hole: next_hole,
+                next: Box::new(Self::install_source_selected_return(
+                    *next,
+                    child_cursor,
+                    parent_cursor,
+                    origin,
+                    producer_hole,
+                )),
+            },
+            SourceContinuation::ProjectRecord { field, next } => {
+                SourceContinuation::ProjectRecord {
+                    field,
+                    next: Box::new(Self::install_source_selected_return(
+                        *next,
+                        child_cursor,
+                        parent_cursor,
+                        origin,
+                        producer_hole,
+                    )),
+                }
+            }
+            SourceContinuation::CallCallee { args, env, next } => {
+                SourceContinuation::CallCallee {
+                    args,
+                    env,
+                    next: Box::new(Self::install_source_selected_return(
+                        *next,
+                        child_cursor,
+                        parent_cursor,
+                        origin,
+                        producer_hole,
+                    )),
+                }
+            }
+            SourceContinuation::CallArgument {
+                callee,
+                remaining,
+                lowered,
+                env,
+                next,
+            } => SourceContinuation::CallArgument {
+                callee,
+                remaining,
+                lowered,
+                env,
+                next: Box::new(Self::install_source_selected_return(
+                    *next,
+                    child_cursor,
+                    parent_cursor,
+                    origin,
+                    producer_hole,
+                )),
+            },
+        }
     }
 
     fn split_source_prefix<'b>(
@@ -6089,11 +6507,16 @@ impl<'a> Lowering<'a> {
                     terminal,
                 )
             }
-            SourceContinuation::ApplyRecursorSelection { layer, next } => {
+            SourceContinuation::ApplyRecursorSelection {
+                layer,
+                producer_hole,
+                next,
+            } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
                 (
                     SourcePrefixTemplate::ApplyRecursorSelection {
                         layer,
+                        producer_hole,
                         next: Box::new(next),
                     },
                     terminal,
@@ -6102,6 +6525,7 @@ impl<'a> Lowering<'a> {
             SourceContinuation::UnwindRecursorSegment {
                 stack,
                 resume_cursor,
+                producer_hole,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
@@ -6109,6 +6533,7 @@ impl<'a> Lowering<'a> {
                     SourcePrefixTemplate::UnwindRecursorSegment {
                         stack,
                         resume_cursor,
+                        producer_hole,
                         next: Box::new(next),
                     },
                     terminal,
@@ -6172,6 +6597,7 @@ impl<'a> Lowering<'a> {
                 default,
                 env,
                 provenance,
+                producer_hole,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
@@ -6181,6 +6607,7 @@ impl<'a> Lowering<'a> {
                         default,
                         env,
                         provenance,
+                        producer_hole,
                         next: Box::new(next),
                     },
                     terminal,
@@ -6190,6 +6617,7 @@ impl<'a> Lowering<'a> {
                 child_cursor,
                 parent_cursor,
                 origin,
+                producer_hole,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
@@ -6198,6 +6626,7 @@ impl<'a> Lowering<'a> {
                         child_cursor,
                         parent_cursor,
                         origin,
+                        producer_hole,
                         next: Box::new(next),
                     },
                     terminal,
@@ -6265,19 +6694,26 @@ impl<'a> Lowering<'a> {
                 env: env.clone(),
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
-            SourcePrefixTemplate::ApplyRecursorSelection { layer, next } => {
+            SourcePrefixTemplate::ApplyRecursorSelection {
+                layer,
+                producer_hole,
+                next,
+            } => {
                 SourceContinuation::ApplyRecursorSelection {
                     layer: layer.clone(),
+                    producer_hole: *producer_hole,
                     next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
                 }
             }
             SourcePrefixTemplate::UnwindRecursorSegment {
                 stack,
                 resume_cursor,
+                producer_hole,
                 next,
             } => SourceContinuation::UnwindRecursorSegment {
                 stack: stack.clone(),
                 resume_cursor: *resume_cursor,
+                producer_hole: *producer_hole,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::IfScrutinee {
@@ -6320,23 +6756,27 @@ impl<'a> Lowering<'a> {
                 default,
                 env,
                 provenance,
+                producer_hole,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases: cases.clone(),
                 default: default.clone(),
                 env: env.clone(),
                 provenance: *provenance,
+                producer_hole: *producer_hole,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::ReturnFromSelectedCase {
                 child_cursor,
                 parent_cursor,
                 origin,
+                producer_hole,
                 next,
             } => SourceContinuation::ReturnFromSelectedCase {
                 child_cursor: *child_cursor,
                 parent_cursor: *parent_cursor,
                 origin: *origin,
+                producer_hole: *producer_hole,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::ProjectRecord { field, next } => {
@@ -6445,6 +6885,18 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
         active: &ActiveContinuationFrame<'_>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let mut selected_spine = active.source_selected_spine.to_vec();
+        if !matches!(
+            selected_spine.last(),
+            Some(SourceSelectedSpineEntry::Frame(frame)) if frame.cursor == active.cursor
+        ) {
+            selected_spine.push(SourceSelectedSpineEntry::Frame(
+                SourceSelectedSpineFrame {
+                    cursor: active.cursor,
+                    selected_scope: active.selected_scope.cloned(),
+                },
+            ));
+        }
         let control = SourceControl {
             continuation: SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected: active.cursor,
@@ -6459,6 +6911,7 @@ impl<'a> Lowering<'a> {
                 selected_scope: active.selected_scope.cloned(),
             },
             selected_lineage: Vec::new(),
+            selected_spine,
             terminal_outer: active.cursor,
         };
         self.lower_source_machine_with_continuation(builder, expr.clone(), env.to_vec(), control)
@@ -6591,6 +7044,7 @@ impl<'a> Lowering<'a> {
                             default,
                             env: env.clone(),
                             provenance: self.mint_recursor_frame_provenance(),
+                            producer_hole: None,
                             next: Box::new(control.continuation),
                         };
                         SourceMachineState::Eval {
@@ -6616,6 +7070,7 @@ impl<'a> Lowering<'a> {
                             SourceContinuationTerminal::ReturnToProducerHole {
                                 stack,
                                 resume_cursor,
+                                producer_hole,
                                 expected,
                                 active,
                             },
@@ -6642,6 +7097,7 @@ impl<'a> Lowering<'a> {
                             source_active_cursor(
                                 &control.selected,
                                 &control.selected_lineage,
+                                &control.selected_spine,
                                 resume_cursor,
                             )
                             .ok_or_else(|| {
@@ -6653,6 +7109,7 @@ impl<'a> Lowering<'a> {
                             control.continuation = SourceContinuation::UnwindRecursorSegment {
                                 stack,
                                 resume_cursor,
+                                producer_hole,
                                 next: Box::new(SourceContinuation::Terminal(
                                     SourceContinuationTerminal::ResumeOuter { expected, active },
                                 )),
@@ -6753,7 +7210,11 @@ impl<'a> Lowering<'a> {
                                 }
                             }
                         }
-                        SourceContinuation::ApplyRecursorSelection { layer, next } => {
+                        SourceContinuation::ApplyRecursorSelection {
+                            layer,
+                            producer_hole,
+                            next,
+                        } => {
                             #[cfg(test)]
                             if let RecursorLayerRole::SelectsOccurrence { origin } = layer.role {
                                 px8j_record_source_event(Px8jSourceTraceEvent::Selection {
@@ -6766,6 +7227,7 @@ impl<'a> Lowering<'a> {
                                     default: layer.default,
                                     env: layer.outer_env,
                                     provenance: layer.provenance,
+                                    producer_hole,
                                     next,
                                 };
                             SourceMachineState::Value { value, control }
@@ -6773,11 +7235,13 @@ impl<'a> Lowering<'a> {
                         SourceContinuation::UnwindRecursorSegment {
                             mut stack,
                             resume_cursor,
+                            producer_hole,
                             next,
                         } => {
                             source_active_cursor(
                                 &control.selected,
                                 &control.selected_lineage,
+                                &control.selected_spine,
                                 resume_cursor,
                             )
                             .ok_or_else(|| {
@@ -6806,9 +7270,11 @@ impl<'a> Lowering<'a> {
                                         default: layer.default,
                                         env: layer.outer_env,
                                         provenance: layer.provenance,
+                                        producer_hole,
                                         next: Box::new(SourceContinuation::UnwindRecursorSegment {
                                             stack,
                                             resume_cursor,
+                                            producer_hole,
                                             next,
                                         }),
                                     };
@@ -6977,6 +7443,7 @@ impl<'a> Lowering<'a> {
                             default,
                             env,
                             provenance,
+                            producer_hole,
                             next,
                         } => {
                             let Lowered::Constructor { constructor, args } = value else {
@@ -7032,6 +7499,60 @@ impl<'a> Lowering<'a> {
                             let mut induction_hypotheses =
                                 Vec::with_capacity(case.recursive_positions.len());
                             let producer_origin = self.mint_recursor_producer_origin();
+                            let owns_producer_hole = producer_hole.is_none();
+                            let producer_hole = if let Some(producer_hole) = producer_hole {
+                                let marker_count = control
+                                    .selected_spine
+                                    .iter()
+                                    .filter(|entry| {
+                                        matches!(
+                                            entry,
+                                            SourceSelectedSpineEntry::ProducerHole(actual)
+                                                if *actual == producer_hole
+                                        )
+                                    })
+                                    .count();
+                                if marker_count != 1 {
+                                    let spine = control
+                                        .selected_spine
+                                        .iter()
+                                        .map(|entry| match entry {
+                                            SourceSelectedSpineEntry::Frame(frame) => {
+                                                format!("F{}", frame.cursor.0)
+                                            }
+                                            SourceSelectedSpineEntry::ProducerHole(hole) => {
+                                                format!("H{}", hole.0)
+                                            }
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join(",");
+                                    return Err(unsupported(
+                                        "ComputationalRecursor",
+                                        format!(
+                                            "installed producer-hole marker H{} is missing or duplicated: {marker_count} exact markers in [{spine}]",
+                                            producer_hole.0
+                                        ),
+                                    ));
+                                }
+                                producer_hole
+                            } else {
+                                let current_is_last = matches!(
+                                    control.selected_spine.last(),
+                                    Some(SourceSelectedSpineEntry::Frame(frame))
+                                        if frame.cursor == control.selected.cursor
+                                );
+                                if !current_is_last {
+                                    return Err(unsupported(
+                                        "ComputationalRecursor",
+                                        "producer-hole marker cannot be minted outside the current selected scope",
+                                    ));
+                                }
+                                let producer_hole = self.mint_producer_hole();
+                                control
+                                    .selected_spine
+                                    .push(SourceSelectedSpineEntry::ProducerHole(producer_hole));
+                                producer_hole
+                            };
                             #[cfg(test)]
                             px8j_record_source_event(Px8jSourceTraceEvent::Mint {
                                 path: Px8jProducerPath::SourceMachine,
@@ -7046,7 +7567,10 @@ impl<'a> Lowering<'a> {
                             });
                             let parent = control.selected.parent;
                             {
-                                let qold = control.selected.as_active(&control.selected_lineage);
+                                let qold = control.selected.as_active(
+                                    &control.selected_lineage,
+                                    &control.selected_spine,
+                                );
                                 for position in case.recursive_positions.iter().rev().copied() {
                                     let induction_hypothesis = self.make_computational_recursor(
                                         args[position].clone(),
@@ -7063,8 +7587,9 @@ impl<'a> Lowering<'a> {
                                         cursor,
                                         Some(&qold),
                                         Some((
-                                            &control.selected,
-                                            control.selected_lineage.as_slice(),
+                                            &control.selected_spine,
+                                            producer_hole,
+                                            owns_producer_hole,
                                         )),
                                     )?;
                                     #[cfg(test)]
@@ -7118,12 +7643,19 @@ impl<'a> Lowering<'a> {
                             let previous_selected =
                                 std::mem::replace(&mut control.selected, child_selected);
                             control.selected_lineage.push(previous_selected);
-                            control.continuation = SourceContinuation::ReturnFromSelectedCase {
-                                child_cursor: cursor,
+                            control.selected_spine.push(SourceSelectedSpineEntry::Frame(
+                                SourceSelectedSpineFrame {
+                                    cursor,
+                                    selected_scope: control.selected.selected_scope.clone(),
+                                },
+                            ));
+                            control.continuation = Self::install_source_selected_return(
+                                *next,
+                                cursor,
                                 parent_cursor,
-                                origin: producer_origin,
-                                next,
-                            };
+                                producer_origin,
+                                owns_producer_hole.then_some(producer_hole),
+                            );
                             SourceMachineState::Eval {
                                 expr: case.body.clone(),
                                 env: case_env,
@@ -7134,6 +7666,7 @@ impl<'a> Lowering<'a> {
                             child_cursor,
                             parent_cursor,
                             origin,
+                            producer_hole,
                             next,
                         } => {
                             if control.selected.cursor != child_cursor {
@@ -7164,12 +7697,62 @@ impl<'a> Lowering<'a> {
                                     "selected-case return scope origin does not match its child",
                                 ));
                             }
+                            let child_spine = control.selected_spine.pop().ok_or_else(|| {
+                                unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return has no child scope in its selected spine",
+                                )
+                            })?;
+                            let SourceSelectedSpineEntry::Frame(child_spine) = child_spine else {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return encountered a producer-hole before its child scope",
+                                ));
+                            };
+                            if child_spine.cursor != child_cursor
+                                || child_spine
+                                    .selected_scope
+                                    .as_ref()
+                                    .is_none_or(|scope| scope.scope_origin != origin)
+                            {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return spine does not match its child scope",
+                                ));
+                            }
+                            if let Some(producer_hole) = producer_hole {
+                                match control.selected_spine.pop() {
+                                    Some(SourceSelectedSpineEntry::ProducerHole(actual))
+                                        if actual == producer_hole => {}
+                                    _ => {
+                                        return Err(unsupported(
+                                            "ComputationalRecursor",
+                                            "selected-case return producer-hole marker is missing or out of order",
+                                        ));
+                                    }
+                                }
+                                if control.selected_spine.iter().any(|entry| {
+                                    matches!(
+                                        entry,
+                                        SourceSelectedSpineEntry::ProducerHole(actual)
+                                            if *actual == producer_hole
+                                    )
+                                }) {
+                                    return Err(unsupported(
+                                        "ComputationalRecursor",
+                                        "selected-case return producer-hole marker is duplicated",
+                                    ));
+                                }
+                            }
                             let mut value = value;
                             Self::rebind_selected_return_cursor(
                                 &mut value,
                                 child_cursor,
                                 parent_cursor,
                             );
+                            if let Some(producer_hole) = producer_hole {
+                                Self::cross_producer_hole(&mut value, producer_hole);
+                            }
                             let child_pending = std::mem::take(&mut control.selected.pending);
                             let mut parent = control.selected_lineage.pop().ok_or_else(|| {
                                 unsupported(
@@ -7191,6 +7774,30 @@ impl<'a> Lowering<'a> {
                                 return Err(unsupported(
                                     "ComputationalRecursor",
                                     "selected-case return has a broken scope-parent link",
+                                ));
+                            }
+                            let parent_spine = control.selected_spine.last().ok_or_else(|| {
+                                unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return has no parent scope in its selected spine",
+                                )
+                            })?;
+                            let SourceSelectedSpineEntry::Frame(parent_spine) = parent_spine else {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return left a producer-hole above its parent scope",
+                                ));
+                            };
+                            if parent_spine.cursor != parent_cursor
+                                || parent_spine
+                                    .selected_scope
+                                    .as_ref()
+                                    .map(|scope| scope.scope_origin)
+                                    != parent_scope
+                            {
+                                return Err(unsupported(
+                                    "ComputationalRecursor",
+                                    "selected-case return spine does not match its parent scope",
                                 ));
                             }
                             parent.pending = child_pending;
@@ -7314,7 +7921,10 @@ impl<'a> Lowering<'a> {
             SourcePrefixTerminal::ResumeOuter => {
                 let active = suffix_control
                     .selected
-                    .as_active(&suffix_control.selected_lineage);
+                    .as_active(
+                        &suffix_control.selected_lineage,
+                        &suffix_control.selected_spine,
+                    );
                 let (prefix, suffix_pending, required_kind, site_id) =
                     self.planned_active_scalar_cut(active)?;
                 let join_id = self.next_source_join;
@@ -7375,6 +7985,7 @@ impl<'a> Lowering<'a> {
                 continuation,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
+                selected_spine: suffix_control.selected_spine.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
             let lowered = self.lower_source_machine_with_continuation(
@@ -7417,6 +8028,7 @@ impl<'a> Lowering<'a> {
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
             source_lineage: &suffix_control.selected_lineage,
+            source_selected_spine: &suffix_control.selected_spine,
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
@@ -7440,7 +8052,10 @@ impl<'a> Lowering<'a> {
             SourcePrefixTerminal::ResumeOuter => {
                 let active = suffix_control
                     .selected
-                    .as_active(&suffix_control.selected_lineage);
+                    .as_active(
+                        &suffix_control.selected_lineage,
+                        &suffix_control.selected_spine,
+                    );
                 let (prefix, suffix_pending, required_kind, site_id) =
                     self.planned_active_scalar_cut(active)?;
                 let join_id = self.next_source_join;
@@ -7480,6 +8095,7 @@ impl<'a> Lowering<'a> {
                 continuation,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
+                selected_spine: suffix_control.selected_spine.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
             let lowered = self.lower_source_machine_with_continuation(
@@ -7517,6 +8133,7 @@ impl<'a> Lowering<'a> {
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
             source_lineage: &suffix_control.selected_lineage,
+            source_selected_spine: &suffix_control.selected_spine,
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
@@ -7545,7 +8162,10 @@ impl<'a> Lowering<'a> {
             SourcePrefixTerminal::ResumeOuter => {
                 let active = suffix_control
                     .selected
-                    .as_active(&suffix_control.selected_lineage);
+                    .as_active(
+                        &suffix_control.selected_lineage,
+                        &suffix_control.selected_spine,
+                    );
                 let (prefix, suffix_pending, required_kind, site_id) =
                     self.planned_active_scalar_cut(active)?;
                 let join_id = self.next_source_join;
@@ -7585,6 +8205,7 @@ impl<'a> Lowering<'a> {
                 continuation,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
+                selected_spine: suffix_control.selected_spine.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
             let lowered = if let Some(case) = cases
@@ -7637,6 +8258,7 @@ impl<'a> Lowering<'a> {
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
             source_lineage: &suffix_control.selected_lineage,
+            source_selected_spine: &suffix_control.selected_spine,
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
@@ -7732,6 +8354,7 @@ impl<'a> Lowering<'a> {
                 continuation,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
+                selected_spine: suffix_control.selected_spine.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
             let lowered = self.lower_source_machine_with_continuation(
@@ -7769,7 +8392,10 @@ impl<'a> Lowering<'a> {
     ) -> Result<Lowered, CraneliftBackendError> {
         let active = suffix_control
             .selected
-            .as_active(&suffix_control.selected_lineage);
+            .as_active(
+                &suffix_control.selected_lineage,
+                &suffix_control.selected_spine,
+            );
         let (prefix, suffix_pending, required_kind, site_id) =
             self.planned_active_scalar_cut(active)?;
         let suffix_pending = suffix_pending.to_vec();
@@ -7829,6 +8455,7 @@ impl<'a> Lowering<'a> {
                 continuation,
                 selected: suffix_control.selected.clone(),
                 selected_lineage: suffix_control.selected_lineage.clone(),
+                selected_spine: suffix_control.selected_spine.clone(),
                 terminal_outer: suffix_control.terminal_outer,
             };
             let lowered = self.lower_source_machine_with_continuation(
@@ -7869,6 +8496,7 @@ impl<'a> Lowering<'a> {
             pending: &suffix_pending,
             selected_ancestry: &suffix_control.selected.selected_ancestry,
             source_lineage: &suffix_control.selected_lineage,
+            source_selected_spine: &suffix_control.selected_spine,
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
@@ -7975,6 +8603,7 @@ impl<'a> Lowering<'a> {
                 if source_active_cursor(
                     &control.selected,
                     &control.selected_lineage,
+                    &control.selected_spine,
                     invocation.resume_cursor,
                 )
                 .is_none()
@@ -7984,6 +8613,49 @@ impl<'a> Lowering<'a> {
                         "recursive invocation cursor is not live in source control",
                     ));
                 }
+                if let Some(producer_hole) = invocation.producer_hole {
+                    let marker_positions = control
+                        .selected_spine
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(position, entry)| {
+                            matches!(
+                                entry,
+                                SourceSelectedSpineEntry::ProducerHole(actual)
+                                    if *actual == producer_hole
+                            )
+                            .then_some(position)
+                        })
+                        .collect::<Vec<_>>();
+                    let [marker_position] = marker_positions.as_slice() else {
+                        return Err(unsupported(
+                            "ComputationalRecursor",
+                            "recursive invocation producer-hole marker is missing or duplicated",
+                        ));
+                    };
+                    let current_position = control
+                        .selected_spine
+                        .iter()
+                        .rposition(|entry| {
+                            matches!(
+                                entry,
+                                SourceSelectedSpineEntry::Frame(frame)
+                                    if frame.cursor == control.selected.cursor
+                            )
+                        })
+                        .ok_or_else(|| {
+                            unsupported(
+                                "ComputationalRecursor",
+                                "recursive invocation current selected scope is absent from its spine",
+                            )
+                        })?;
+                    if *marker_position >= current_position {
+                        return Err(unsupported(
+                            "ComputationalRecursor",
+                            "recursive invocation producer-hole marker is stale or out of order",
+                        ));
+                    }
+                }
                 let armed = ArmedInvocation {
                     suspended: control,
                     expected_selected: invocation.resume_cursor,
@@ -7991,6 +8663,7 @@ impl<'a> Lowering<'a> {
                 if source_active_cursor(
                     &armed.suspended.selected,
                     &armed.suspended.selected_lineage,
+                    &armed.suspended.selected_spine,
                     armed.expected_selected,
                 )
                 .is_none()
@@ -15985,6 +16658,7 @@ mod tests {
             next_token: 0,
             next_recursor_frame_provenance: 0,
             next_recursor_producer_origin: 0,
+            next_producer_hole: 0,
             next_continuation_activation: 0,
             next_continuation_cursor: 0,
             next_source_join: 0,
