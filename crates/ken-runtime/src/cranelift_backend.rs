@@ -2427,20 +2427,11 @@ fn decompose_computational_recursor(
     }
 }
 
-fn recursor_eliminator_frames(segment: &RecursorInvocationSegment) -> Vec<EliminatorFrame<'_>> {
-    debug_assert!(matches!(
-        segment.selection.role,
-        RecursorLayerRole::SelectsOccurrence { origin } if origin == segment.origin
-    ));
-    debug_assert!(segment
-        .unwind
-        .later_wrappers_in_construction_order
-        .iter()
-        .all(|layer| matches!(
-            layer.role,
-            RecursorLayerRole::ExitsScope { origin, .. } if origin == segment.origin
-        )));
-    std::iter::once(&segment.selection)
+fn recursor_eliminator_frames(
+    segment: &RecursorInvocationSegment,
+) -> Result<Vec<EliminatorFrame<'_>>, CraneliftBackendError> {
+    validate_recursor_invocation_segment(segment)?;
+    Ok(std::iter::once(&segment.selection)
         .chain(
             segment
                 .unwind
@@ -2458,7 +2449,38 @@ fn recursor_eliminator_frames(segment: &RecursorInvocationSegment) -> Vec<Elimin
                 provenance: layer.provenance,
             })
         })
-        .collect()
+        .collect())
+}
+
+fn validate_recursor_invocation_segment(
+    segment: &RecursorInvocationSegment,
+) -> Result<(), CraneliftBackendError> {
+    if !matches!(
+        segment.selection.role,
+        RecursorLayerRole::SelectsOccurrence { origin } if origin == segment.origin
+    ) {
+        return Err(unsupported(
+            "ComputationalRecursor",
+            "recursor selection role does not select the invocation origin",
+        ));
+    }
+    if segment
+        .unwind
+        .later_wrappers_in_construction_order
+        .iter()
+        .any(|layer| {
+            !matches!(
+                layer.role,
+                RecursorLayerRole::ExitsScope { origin, .. } if origin == segment.origin
+            )
+        })
+    {
+        return Err(unsupported(
+            "ComputationalRecursor",
+            "recursor unwind role does not exit the invocation origin",
+        ));
+    }
+    Ok(())
 }
 
 fn active_recursor_frame<'a>(
@@ -3439,7 +3461,7 @@ impl<'a> Lowering<'a> {
                                                 "recursive invocation cursor is not active",
                                             )
                                         })?;
-                                    let frames = recursor_eliminator_frames(&invocation);
+                                    let frames = recursor_eliminator_frames(&invocation)?;
                                     let mut composed = Vec::with_capacity(frames.len() + 2);
                                     composed.push(EliminatorFrame::PendingLet(
                                         PendingLetContinuationFrame {
@@ -3560,7 +3582,7 @@ impl<'a> Lowering<'a> {
                                 "recursive producer invocation cursor is not active",
                             )
                         })?;
-                        let mut composed = recursor_eliminator_frames(&invocation);
+                        let mut composed = recursor_eliminator_frames(&invocation)?;
                         composed.push(EliminatorFrame::InvocationReturn);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
@@ -7672,8 +7694,7 @@ impl<'a> Lowering<'a> {
                         let (_, invocation) = boundary.expect(
                             "recursor closure carries an invocation segment",
                         );
-                        let mut frames =
-                            recursor_eliminator_frames(&invocation);
+                        let mut frames = recursor_eliminator_frames(&invocation)?;
                         frames.push(EliminatorFrame::InvocationReturn);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
@@ -14231,6 +14252,265 @@ mod tests {
             runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
             answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
         }
+    }
+
+    fn px8j_test_recursor_layer(
+        role: RecursorLayerRole,
+        label: &str,
+    ) -> ComputationalRecursorLayer {
+        ComputationalRecursorLayer {
+            cases: Vec::new(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: format!("px8j {label}"),
+            },
+            outer_env: Vec::new(),
+            provenance: RecursorFrameProvenance(0),
+            role,
+        }
+    }
+
+    fn px8j_test_recursor_segment(
+        origin: RecursorProducerOriginId,
+        selection_role: RecursorLayerRole,
+        unwind_roles: impl IntoIterator<Item = RecursorLayerRole>,
+    ) -> RecursorInvocationSegment {
+        RecursorInvocationSegment::new(
+            origin,
+            px8j_test_recursor_layer(selection_role, "selection"),
+            RecursorUnwindStack {
+                later_wrappers_in_construction_order: unwind_roles
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, role)| px8j_test_recursor_layer(role, &format!("unwind-{index}")))
+                    .collect(),
+            },
+            ContinuationCursorId(0),
+        )
+    }
+
+    fn assert_px8j_malformed_segment(segment: RecursorInvocationSegment, reason: &str) {
+        let error = match recursor_eliminator_frames(&segment) {
+            Ok(_) => panic!("a malformed recursor role/origin must reject in production"),
+            Err(error) => error,
+        };
+        assert!(
+            matches!(
+                error,
+                CraneliftBackendError::Unsupported(UnsupportedLowering {
+                    construct: "ComputationalRecursor",
+                    reason: ref actual,
+                }) if actual == reason
+            ),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn px8j_all_direct_recursor_consumers_reject_selection_exit_role() {
+        let origin = RecursorProducerOriginId(7);
+        assert_px8j_malformed_segment(
+            px8j_test_recursor_segment(
+                origin,
+                RecursorLayerRole::ExitsScope {
+                    origin,
+                    scope_origin: origin,
+                    parent_scope: None,
+                },
+                [],
+            ),
+            "recursor selection role does not select the invocation origin",
+        );
+    }
+
+    #[test]
+    fn px8j_all_direct_recursor_consumers_reject_wrong_selection_origin() {
+        assert_px8j_malformed_segment(
+            px8j_test_recursor_segment(
+                RecursorProducerOriginId(7),
+                RecursorLayerRole::SelectsOccurrence {
+                    origin: RecursorProducerOriginId(8),
+                },
+                [],
+            ),
+            "recursor selection role does not select the invocation origin",
+        );
+    }
+
+    #[test]
+    fn px8j_all_direct_recursor_consumers_reject_unwind_selection_role() {
+        let origin = RecursorProducerOriginId(7);
+        assert_px8j_malformed_segment(
+            px8j_test_recursor_segment(
+                origin,
+                RecursorLayerRole::SelectsOccurrence { origin },
+                [RecursorLayerRole::SelectsOccurrence { origin }],
+            ),
+            "recursor unwind role does not exit the invocation origin",
+        );
+    }
+
+    #[test]
+    fn px8j_parent_linked_one_two_three_scope_exits_are_lifo() {
+        let invocation = RecursorProducerOriginId(9);
+        for depth in 1_usize..=3 {
+            let scopes: Vec<_> = (0..depth)
+                .map(|index| RecursorProducerOriginId(20 + index as u64))
+                .collect();
+            let segment = px8j_test_recursor_segment(
+                invocation,
+                RecursorLayerRole::SelectsOccurrence { origin: invocation },
+                scopes.iter().enumerate().map(|(index, scope_origin)| {
+                    RecursorLayerRole::ExitsScope {
+                        origin: invocation,
+                        scope_origin: *scope_origin,
+                        parent_scope: index.checked_sub(1).map(|parent| scopes[parent]),
+                    }
+                }),
+            );
+            let frames = recursor_eliminator_frames(&segment)
+                .expect("a parent-linked scope chain must be accepted");
+            assert_eq!(frames.len(), depth + 1);
+            let observed: Vec<_> = segment
+                .unwind
+                .later_wrappers_in_construction_order
+                .iter()
+                .rev()
+                .map(|layer| match layer.role {
+                    RecursorLayerRole::ExitsScope { scope_origin, .. } => scope_origin,
+                    RecursorLayerRole::SelectsOccurrence { .. } => unreachable!(),
+                })
+                .collect();
+            assert_eq!(observed, scopes.into_iter().rev().collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn px8j_equal_shape_sibling_and_nested_origins_remain_distinct() {
+        let sibling_origin = RecursorProducerOriginId(30);
+        let nested_origin = RecursorProducerOriginId(31);
+        let sibling = px8j_test_recursor_segment(
+            sibling_origin,
+            RecursorLayerRole::SelectsOccurrence {
+                origin: sibling_origin,
+            },
+            [],
+        );
+        let nested = px8j_test_recursor_segment(
+            nested_origin,
+            RecursorLayerRole::SelectsOccurrence {
+                origin: nested_origin,
+            },
+            [],
+        );
+        recursor_eliminator_frames(&sibling).expect("sibling origin must validate");
+        recursor_eliminator_frames(&nested).expect("nested origin must validate");
+        assert_ne!(sibling.origin, nested.origin);
+        assert_eq!(sibling.selection.cases, nested.selection.cases);
+        assert_eq!(
+            sibling.selection.outer_env.len(),
+            nested.selection.outer_env.len()
+        );
+    }
+
+    #[test]
+    fn px8j_all_three_direct_consumers_propagate_the_role_validator() {
+        let source = include_str!("cranelift_backend.rs");
+        let guarded_consumer = ["recursor_eliminator_", "frames(&invocation)?"].concat();
+        assert_eq!(source.matches(&guarded_consumer).count(), 3);
+        assert!(!source.contains("debug_assert!(matches!(\n        segment.selection.role"));
+    }
+
+    #[test]
+    fn px8j_all_three_recursive_ih_minting_paths_allocate_one_origin_before_siblings() {
+        let source = include_str!("cranelift_backend.rs");
+        let mint = [
+            "let producer_origin = self.",
+            "mint_recursor_producer_origin();",
+        ]
+        .concat();
+        assert_eq!(source.matches(&mint).count(), 3);
+    }
+
+    #[test]
+    fn px8j_equal_shape_opposite_holes_retain_distinct_exact_cursors() {
+        let active_one = ActiveContinuationFrame {
+            activation: ContinuationActivationId(0),
+            cursor: ContinuationCursorId(1),
+            parent: None,
+            pending: &[],
+            selected_ancestry: &[],
+            source_lineage: &[],
+            source_selected_cursor: None,
+            selected_scope: None,
+        };
+        let active_two = ActiveContinuationFrame {
+            cursor: ContinuationCursorId(2),
+            ..active_one
+        };
+        for (expected, active) in [
+            (ContinuationCursorId(1), &active_one),
+            (ContinuationCursorId(2), &active_two),
+        ] {
+            let continuation =
+                SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
+                    expected,
+                    active,
+                });
+            let hole = Lowering::replace_source_terminal_with_unwind(
+                continuation,
+                RecursorUnwindStack {
+                    later_wrappers_in_construction_order: Vec::new(),
+                },
+                expected,
+            )
+            .expect("one exact source terminal must admit one producer hole");
+            assert!(matches!(
+                hole,
+                SourceContinuation::Terminal(
+                    SourceContinuationTerminal::ReturnToProducerHole {
+                        expected: observed,
+                        resume_cursor,
+                        ..
+                    }
+                ) if observed == expected && resume_cursor == expected
+            ));
+        }
+    }
+
+    #[test]
+    fn px8j_owned_selected_scope_is_the_only_active_scope_payload() {
+        let scope_origin = RecursorProducerOriginId(41);
+        let selected = SourceSelectedContinuation {
+            activation: ContinuationActivationId(0),
+            cursor: ContinuationCursorId(1),
+            parent: None,
+            pending: Vec::new(),
+            selected_ancestry: Vec::new(),
+            selected_scope: Some(OwnedSelectedScope {
+                scope_origin,
+                parent_scope: None,
+                frame: ComputationalRecursorFramePayload {
+                    cases: Vec::new(),
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::ExplicitTrap,
+                        message: "px8j owned selected scope".to_string(),
+                    },
+                    outer_env: Vec::new(),
+                    provenance: RecursorFrameProvenance(0),
+                },
+            }),
+        };
+        let active = selected.as_active(&[]);
+        assert_eq!(
+            active.selected_scope.map(|scope| scope.scope_origin),
+            Some(scope_origin)
+        );
+        let deleted = SourceSelectedContinuation {
+            selected_scope: None,
+            ..selected
+        };
+        assert!(deleted.as_active(&[]).selected_scope.is_none());
     }
 
     #[test]
