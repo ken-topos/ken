@@ -180,48 +180,59 @@ impl Default for NativeIntArenaV1 {
 }
 
 impl NativeIntArenaV1 {
-    pub fn resolve(&self, value: NativeIntV1) -> Option<RuntimeIntV1> {
-        match value.tag {
-            NATIVE_INT_SMALL_TAG_V1 => Some(RuntimeIntV1::Small(value.payload as i64)),
-            NATIVE_INT_BIG_TAG_V1 => {
-                if value.payload == 0 {
-                    return None;
-                }
-                let mut entry = self.head;
-                while !entry.is_null() {
-                    // SAFETY: entries are allocated and linked only by the
-                    // generated local helper graph and remain owned by this
-                    // arena until `drop`.
-                    let current = unsafe { &*entry };
-                    if current.slot == value.payload {
-                        let len = usize::try_from(current.len).ok()?;
-                        let limbs =
-                            unsafe { std::slice::from_raw_parts(current.limbs.as_ptr(), len) }
-                                .to_vec();
-                        let sign = match current.sign {
-                            0 => Sign::NonNegative,
-                            1 => Sign::Negative,
-                            _ => return None,
-                        };
-                        return Some(RuntimeIntV1::from_canonical_parts(sign, limbs));
-                    }
-                    entry = current.next;
-                }
-                None
-            }
-            _ => None,
-        }
-    }
-
     pub fn len(&self) -> usize {
         usize::try_from(self.next_slot).unwrap_or(usize::MAX)
     }
 
-    pub fn final_result(&self) -> Option<NativeIntV1> {
-        (self.final_tag != u64::MAX).then_some(NativeIntV1 {
-            tag: self.final_tag,
-            payload: self.final_payload,
-        })
+    /// Decode only the canonical view written by the emitted local export
+    /// helper. This is a representation decoder, not a second slot resolver
+    /// or integer-normalization implementation.
+    pub fn decode_final_export(&self) -> Option<RuntimeIntV1> {
+        let sign = match self.final_sign {
+            0 => Sign::NonNegative,
+            1 => Sign::Negative,
+            _ => return None,
+        };
+        let len = usize::try_from(self.final_len).ok()?;
+        if len == 0 || self.final_limbs.is_null() {
+            return None;
+        }
+        match self.final_tag {
+            NATIVE_INT_SMALL_TAG_V1 => {
+                if len != 1 || !ptr::eq(self.final_limbs, &self.final_small) {
+                    return None;
+                }
+                let value = self.final_payload as i64;
+                let expected_sign = if value < 0 {
+                    Sign::Negative
+                } else {
+                    Sign::NonNegative
+                };
+                if sign != expected_sign || self.final_small != value.unsigned_abs() {
+                    return None;
+                }
+                Some(RuntimeIntV1::Small(value))
+            }
+            NATIVE_INT_BIG_TAG_V1 => {
+                if self.final_payload == 0 {
+                    return None;
+                }
+                // SAFETY: the local export helper points this view into an
+                // arena allocation that remains live until this decoder
+                // returns and the invocation arena is dropped.
+                let limbs = unsafe { std::slice::from_raw_parts(self.final_limbs, len) };
+                if limbs.last().copied() == Some(0)
+                    || signed_magnitude_to_i64(sign, limbs).is_some()
+                {
+                    return None;
+                }
+                Some(RuntimeIntV1::Big {
+                    sign,
+                    limbs: limbs.to_vec(),
+                })
+            }
+            _ => None,
+        }
     }
 }
 
@@ -382,6 +393,32 @@ mod tests {
             std::mem::size_of::<NativeIntArenaV1>(),
             crate::native_int_clif::ARENA_BYTES
         );
+    }
+
+    #[test]
+    fn terminal_decoder_requires_a_complete_canonical_export_view() {
+        let mut absent = NativeIntArenaV1::default();
+        assert_eq!(absent.decode_final_export(), None);
+
+        absent.final_tag = NATIVE_INT_BIG_TAG_V1;
+        absent.final_payload = 1;
+        absent.final_sign = 0;
+        absent.final_len = 1;
+        assert_eq!(absent.decode_final_export(), None);
+
+        let limbs = [0, 1];
+        absent.final_len = limbs.len() as u64;
+        absent.final_limbs = limbs.as_ptr();
+        assert_eq!(
+            absent.decode_final_export(),
+            Some(RuntimeIntV1::Big {
+                sign: Sign::NonNegative,
+                limbs: limbs.to_vec(),
+            })
+        );
+
+        absent.final_sign = 7;
+        assert_eq!(absent.decode_final_export(), None);
     }
 
     #[test]

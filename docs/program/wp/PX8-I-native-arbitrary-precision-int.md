@@ -12,7 +12,21 @@
 > mathematical **Z**, not wrapping `i64`. It is the last Runtime prerequisite
 > before PX8-F.
 >
-> Chain position: **PX8-L ✅ → PX8-H ✅ → PX8-I (this) → PX8-F.**
+> Chain position:
+> **PX8-L ✅ → PX8-H ✅ → PX8-I (this) → PX8-J → PX8-F.**
+>
+> **⚠ Overlay-AC deferral (Architect §14, `evt_2gs0zfg66x9qk`; reconciled
+> `evt_2v6x1rs70c06g`).** PX8-I does **not** directly unblock PX8-F. Running the
+> unchanged PX8-F `c8b8cdb7` overlay clears PX8-I's dynamic-`add_int` boundary
+> but then stops at a **distinct** continuation defect (`ComputationalMatch:
+> scrutinee is not a constructor value` — process-object scalarization mints
+> `ProcessExitStatus` while a computational eliminator is still live), which the
+> Architect split into the new prerequisite **PX8-J** (terminal-answer
+> boundary). The overlay's
+> **real-`FsWriteAt` + interpreter/native differential** is therefore
+> **PX8-J's** acceptance, **not** PX8-I's. PX8-I's acceptance is its
+> **exact-Int mechanism + direct green gates** (below).
+> PX8-I → PX8-J → PX8-F.
 
 ## Objective
 
@@ -202,8 +216,6 @@ From the ruling's discriminator set — each must be a distinct, reaching test:
   surface).
 - **Checked narrowing rejects** a negative value and a value `> u64::MAX` (or the
   exact host width) with the op's `InvalidOffset`/`InvalidBounds`, not a wrap.
-- **Differential:** the unchanged PX8-F `c8b8cdb7` overlay's dynamic additions
-  **agree with the interpreter**.
 - **Local-helper identity:** normalized CLIF for the complete helper graph is
   identical for JIT and object construction. Generic and process objects have
   no undefined `ken_runtime_native_int_*` symbols; only allocator imports (and
@@ -216,12 +228,16 @@ From the ruling's discriminator set — each must be a distinct, reaching test:
 
 - `add_int`/`sub_int`/`mul_int`/`eq_int`/`leq_int` over dynamic operands lower
   and execute exact-Z; **every discriminator above is green**.
-- The unchanged PX8-F `c8b8cdb7` `writeAll` overlay (run as a **throwaway
-  overlay** — do **not** edit `c8b8cdb7` or the fixture) compiles/links/runs,
-  **both** dynamic additions compute, reaches a **real `FsWriteAt`**, and the
-  native run **agrees with the interpreter** (differential). This is PX8-I's
-  downstream evidence; the H-P6/H-P6a obligation moves off PX8-H onto here + the
-  PX8-F terminal.
+- **Overlay real-write/differential is DEFERRED to PX8-J — NOT a PX8-I AC**
+  (Architect `evt_2gs0zfg66x9qk`; reconciled `evt_2v6x1rs70c06g`). The unchanged
+  PX8-F `c8b8cdb7` `writeAll` overlay (run as a **throwaway overlay** — do
+  **not** edit `c8b8cdb7` or the fixture) must clear PX8-I's dynamic-`add_int`
+  boundary and **both** dynamic additions must compute exact-Z; it then stops at
+  the distinct process-object continuation defect owned by **PX8-J**. Reaching a
+  **real `FsWriteAt`** and the interpreter/native differential are **PX8-J's**
+  acceptance. PX8-I's acceptance stops at: the overlay clears `add_int` and
+  computes both additions correctly (overlay surface 2/2), plus all direct
+  exact-Int gates above.
 - **No second numeric semantics:** the native path shares the `ken-foundation`
   canonical bignum model — `git grep` shows **no parallel bignum type** in
   `ken-runtime`.
@@ -259,6 +275,9 @@ From the ruling's discriminator set — each must be a distinct, reaching test:
 4. On resolved APPROVE → **publisher non-doc-only** (crates → CI must go green,
    **including full-workspace exhaustiveness**) → verify byte-identical landing +
    **PIN** → chase retros → close the WP.
-5. **Downstream:** PX8-I + PX8-H both landed → **unblock PX8-F** (rebase
-   `c8b8cdb7` onto combined `main`; the unchanged `writeAll` fixture performs
-   **real writes** in both interpreter and native lanes = PX8-F native evidence).
+5. **Downstream:** PX8-I landed → **PX8-J** (continuation terminal-answer
+   boundary; `docs/program/wp/PX8-J-terminal-answer-boundary.md`) — PX8-J owns
+   the overlay real-write/differential and, once landed, **unblocks PX8-F**
+   (rebase `c8b8cdb7` onto combined `main`; the unchanged `writeAll` fixture then
+   performs **real writes** in both lanes = PX8-F native evidence). PX8-I does
+   **not** directly unblock PX8-F. Sequence: PX8-I → PX8-J → PX8-F.

@@ -1594,9 +1594,10 @@ fn runtime_trap_code_tag(code: &crate::RuntimeTrapCode) -> &'static str {
 }
 
 fn starter_c_stub() -> &'static str {
-    r#"#include <stdint.h>
-    #include <stdio.h>
-    #include <stdlib.h>
+    r#"#include <inttypes.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 struct KenNativeBigEntryV1 {
     struct KenNativeBigEntryV1 *next;
@@ -1619,14 +1620,58 @@ static void ken_int_arena_destroy(struct KenNativeIntArenaV1 *arena) {
     }
 }
 
+static int ken_print_exported_int(const struct KenNativeIntArenaV1 *arena) {
+    if (arena->final_tag == 0) {
+        int64_t value = (int64_t)arena->final_payload;
+        uint64_t magnitude = value < 0 ? (~arena->final_payload) + 1 : arena->final_payload;
+        uint64_t sign = value < 0 ? 1 : 0;
+        if (arena->final_sign != sign || arena->final_len != 1 ||
+            arena->final_limbs != &arena->final_small ||
+            arena->final_small != magnitude) {
+            return 1;
+        }
+        printf("%" PRId64 "\n", value);
+        return 0;
+    }
+    if (arena->final_tag != 1 || arena->final_payload == 0 ||
+        arena->final_sign > 1 || arena->final_len == 0 ||
+        arena->final_limbs == NULL ||
+        arena->final_limbs[arena->final_len - 1] == 0) {
+        return 1;
+    }
+    if (arena->final_len == 1) {
+        uint64_t limb = arena->final_limbs[0];
+        if ((arena->final_sign == 0 && limb <= INT64_MAX) ||
+            (arena->final_sign == 1 && limb <= (UINT64_C(1) << 63))) {
+            return 1;
+        }
+    }
+    if (arena->final_sign == 1) {
+        fputc('-', stdout);
+    }
+    fputs("0x", stdout);
+    printf("%" PRIx64, arena->final_limbs[arena->final_len - 1]);
+    for (uint64_t index = arena->final_len - 1; index > 0; --index) {
+        printf("%016" PRIx64, arena->final_limbs[index - 1]);
+    }
+    fputc('\n', stdout);
+    return 0;
+}
+
 extern long long ken_nc23_entrypoint(const void *input);
 
 int main(void) {
-    struct KenNativeIntArenaV1 arena = {0};
+    struct KenNativeIntArenaV1 arena = { .final_tag = UINT64_MAX };
     long long value = ken_nc23_entrypoint(&arena);
+    int status;
+    if (arena.final_tag == UINT64_MAX) {
+        printf("%lld\n", value);
+        status = 0;
+    } else {
+        status = ken_print_exported_int(&arena);
+    }
     ken_int_arena_destroy(&arena);
-    printf("%lld\n", value);
-    return 0;
+    return status;
 }
 "#
 }
@@ -2226,9 +2271,42 @@ mod tests {
         assert_eq!(package.smoke.stdout, "7\n");
         assert!(package.smoke.passed);
         #[cfg(target_os = "linux")]
-        assert_no_undefined_native_int_service(
-            &output_dir.join(&package.executable_artifact.relative_path),
+        {
+            assert_no_undefined_native_int_service(
+                &output_dir.join(&package.object_artifact.relative_path),
+            );
+            assert_no_undefined_native_int_service(
+                &output_dir.join(&package.executable_artifact.relative_path),
+            );
+        }
+    }
+
+    #[test]
+    fn generic_object_decodes_terminal_big_before_destroying_its_arena() {
+        let terminal = crate::RuntimeIntV1::Big {
+            sign: crate::Sign::Negative,
+            limbs: vec![7, 1],
+        };
+        let program = starter_program(
+            RuntimeExpr::Value(RuntimeValue::Int(terminal.clone())),
+            RuntimeObservation::Returned(RuntimeGroundValue::Int(terminal)),
         );
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let support = platform_support(&program, &entrypoint, &run_report);
+        let output_dir = temp_output_dir("px8i-generic-terminal-big-int");
+        let package = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            &output_dir,
+            "PX8-I generic terminal Big discriminator",
+        )
+        .expect("generic object decodes terminal Big while its arena is live");
+        assert_eq!(package.smoke.stdout, "-0x10000000000000007\n");
+        assert!(package.smoke.passed);
     }
 
     #[test]
@@ -2310,6 +2388,9 @@ mod tests {
         };
         let executable = build_process_starter_executable_artifact(&entry, &output_dir)
             .expect("PX8-I process starter links its private exact-Int support");
+        assert_no_undefined_native_int_service(
+            &output_dir.join(ObjectLinkerPackagingOptions::starter_host().object_relative_path),
+        );
         assert_no_undefined_native_int_service(&executable);
         let status = Command::new(&executable)
             .status()

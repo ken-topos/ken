@@ -1256,16 +1256,11 @@ impl CompiledModule<JITModule> {
             .decoder
             .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
         let ground = match decoder {
-            ResultDecoder::Int => {
-                let native = native_int_arena
-                    .final_result()
-                    .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
-                RuntimeGroundValue::Int(
-                    native_int_arena
-                        .resolve(native)
-                        .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?,
-                )
-            }
+            ResultDecoder::Int => RuntimeGroundValue::Int(
+                native_int_arena
+                    .decode_final_export()
+                    .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?,
+            ),
             ResultDecoder::ProcessStatus => RuntimeGroundValue::Int(token.into()),
             ResultDecoder::Bool => RuntimeGroundValue::Bool(token != 0),
             ResultDecoder::Table => self
@@ -1995,6 +1990,8 @@ pub(crate) enum NativeIntLoweringMutation {
     Exact,
     Wrapping,
     Trap,
+    SuppressTerminalExport,
+    CorruptTerminalExport,
 }
 
 #[cfg(test)]
@@ -4371,9 +4368,9 @@ impl<'a> Lowering<'a> {
     ) -> Result<(NativeScalarPairV1, bool), CraneliftBackendError> {
         let zero_tag = builder.ins().iconst(types::I64, 0);
         match lowered {
-            Lowered::Int { value, .. } => Ok((
+            Lowered::Int { value, known } => Ok((
                 NativeScalarPairV1 {
-                    tag: self.native_int_tag(builder, value),
+                    tag: self.native_int_tag(builder, value, known)?,
                     payload: value,
                 },
                 false,
@@ -4414,9 +4411,9 @@ impl<'a> Lowering<'a> {
                 },
                 ScalarMergeKind::RecursiveBackedge,
             )),
-            Lowered::Int { value, .. } => Ok((
+            Lowered::Int { value, known } => Ok((
                 NativeScalarPairV1 {
-                    tag: self.native_int_tag(builder, value),
+                    tag: self.native_int_tag(builder, value, known)?,
                     payload: value,
                 },
                 ScalarMergeKind::Int,
@@ -6232,13 +6229,13 @@ impl<'a> Lowering<'a> {
                 for (block, arm) in [(then_block, then_expr), (else_block, else_expr)] {
                     builder.switch_to_block(block);
                     let lowered = self.lower_expr(builder, arm, env)?;
-                    let Lowered::Int { value, .. } = lowered else {
+                    let Lowered::Int { value, known } = lowered else {
                         return Err(unsupported(
                             "If",
                             "dynamic native If arms must produce scalar Int values",
                         ));
                     };
-                    let tag = self.native_int_tag(builder, value);
+                    let tag = self.native_int_tag(builder, value, known)?;
                     builder.ins().jump(merge, &[tag.into(), value.into()]);
                 }
                 builder.switch_to_block(merge);
@@ -6704,6 +6701,10 @@ impl<'a> Lowering<'a> {
             cranelift_codegen::ir::Value,
             cranelift_codegen::ir::Value,
         )> = None;
+        let mut positioned_bounds: Option<(
+            cranelift_codegen::ir::Value,
+            cranelift_codegen::ir::Value,
+        )> = None;
         let mut record_narrow_failure =
             |builder: &mut FunctionBuilder<'_>, invalid, detail: i64| {
                 let detail = builder.ins().iconst(types::I64, detail);
@@ -6924,6 +6925,7 @@ impl<'a> Lowering<'a> {
                     self.narrow_native_int_u64(builder, integer(3, "buffer start")?)?;
                 let (length, length_valid) =
                     self.narrow_native_int_u64(builder, integer(4, "length")?)?;
+                positioned_bounds = Some((buffer_start, length));
                 let file_offset_invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
                     file_offset_valid,
@@ -7135,6 +7137,7 @@ impl<'a> Lowering<'a> {
                 wire.resource_kind_buffer,
             );
             let payload = builder.ins().sshr_imm(detail, 32);
+            let payload_int = self.lower_dynamic_small_int(builder, payload);
             let last = self.process_symbols.io_errors.len().saturating_sub(1);
             let io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
                 discriminator: builder.ins().band_imm(detail, 0xff),
@@ -7147,12 +7150,7 @@ impl<'a> Lowering<'a> {
                         tag: tag as i64,
                         constructor: constructor.clone(),
                         fields: (tag == last)
-                            .then(|| {
-                                vec![Lowered::Int {
-                                    value: payload,
-                                    known: None,
-                                }]
-                            })
+                            .then(|| vec![payload_int.clone()])
                             .unwrap_or_default(),
                     })
                     .collect(),
@@ -7215,6 +7213,11 @@ impl<'a> Lowering<'a> {
                 let surface_tag = builder.ins().select(generic, zero, resource_surface_tag);
                 let surface_io = builder.ins().select(generic, detail, resource_io);
                 let surface_io_payload = builder.ins().sshr_imm(surface_io, 32);
+                let surface_io_payload_int =
+                    self.lower_dynamic_small_int(builder, surface_io_payload);
+                let resource_required_int =
+                    self.lower_unsigned_u64_int(builder, resource_required)?;
+                let resource_held_int = self.lower_unsigned_u64_int(builder, resource_held)?;
                 let surface_io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: builder.ins().band_imm(surface_io, 0xff),
                     alternatives: self
@@ -7226,18 +7229,15 @@ impl<'a> Lowering<'a> {
                             tag: tag as i64,
                             constructor: constructor.clone(),
                             fields: (tag == last)
-                                .then(|| {
-                                    vec![Lowered::Int {
-                                        value: surface_io_payload,
-                                        known: None,
-                                    }]
-                                })
+                                .then(|| vec![surface_io_payload_int.clone()])
                                 .unwrap_or_default(),
                         })
                         .collect(),
                 });
                 let identity_low = builder.ins().band_imm(resource_identity, 0xffff_ffff);
                 let identity_high = builder.ins().ushr_imm(resource_identity, 32);
+                let identity_low_int = self.lower_dynamic_small_int(builder, identity_low);
+                let identity_high_int = self.lower_dynamic_small_int(builder, identity_high);
                 let resource_kind_value = |discriminator| {
                     Lowered::DynamicConstructor(DynamicConstructorV1 {
                         discriminator,
@@ -7276,16 +7276,7 @@ impl<'a> Lowering<'a> {
                         DynamicConstructorAlternativeV1 {
                             tag: 3,
                             constructor: self.process_symbols.resource_right_not_held.clone(),
-                            fields: vec![
-                                Lowered::Int {
-                                    value: resource_required,
-                                    known: None,
-                                },
-                                Lowered::Int {
-                                    value: resource_held,
-                                    known: None,
-                                },
-                            ],
+                            fields: vec![resource_required_int, resource_held_int],
                         },
                         DynamicConstructorAlternativeV1 {
                             tag: 4,
@@ -7297,16 +7288,7 @@ impl<'a> Lowering<'a> {
                                         .process_symbols
                                         .resource_trace_identity
                                         .clone(),
-                                    args: vec![
-                                        Lowered::Int {
-                                            value: identity_low,
-                                            known: None,
-                                        },
-                                        Lowered::Int {
-                                            value: identity_high,
-                                            known: None,
-                                        },
-                                    ],
+                                    args: vec![identity_low_int, identity_high_int],
                                 },
                                 surface_io_error,
                             ],
@@ -7418,37 +7400,20 @@ impl<'a> Lowering<'a> {
                 let read_eof = builder.ins().band(success, is_zero);
                 Self::require_when(builder, read_eof, eof_valid);
                 Self::require_when(builder, read_some, eof_data);
-                let Lowered::Int {
-                    value: request_start,
-                    ..
-                } = &lowered[3]
-                else {
-                    unreachable!("positioned request start was validated")
-                };
-                let Lowered::Int {
-                    value: request_length,
-                    ..
-                } = &lowered[4]
-                else {
-                    unreachable!("positioned request length was validated")
-                };
+                let (request_start, request_length) = positioned_bounds
+                    .expect("positioned request bounds were narrowed before dispatch");
                 let (count, predecessor, remaining) = Self::mint_validated_progress_nat(
                     builder,
                     read_some,
                     detail,
-                    *request_start,
-                    *request_length,
+                    request_start,
+                    request_length,
                     Some(reply_start),
                 );
+                let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
                 let span = Lowered::Constructor {
                     constructor: self.process_symbols.private_buffer_span.clone(),
-                    args: vec![
-                        Lowered::Int {
-                            value: reply_start,
-                            known: None,
-                        },
-                        Lowered::BoundedNat(count),
-                    ],
+                    args: vec![reply_start_int, Lowered::BoundedNat(count)],
                 };
                 let transferred = Lowered::Constructor {
                     constructor: self.process_symbols.private_transfer_count.clone(),
@@ -7473,26 +7438,14 @@ impl<'a> Lowering<'a> {
                     ],
                 })
             } else if operation == ken_host::HostOpV1::FsWriteAt {
-                let Lowered::Int {
-                    value: request_start,
-                    ..
-                } = &lowered[3]
-                else {
-                    unreachable!("positioned request start was validated")
-                };
-                let Lowered::Int {
-                    value: request_length,
-                    ..
-                } = &lowered[4]
-                else {
-                    unreachable!("positioned request length was validated")
-                };
+                let (request_start, request_length) = positioned_bounds
+                    .expect("positioned request bounds were narrowed before dispatch");
                 let (_count, predecessor, remaining) = Self::mint_validated_progress_nat(
                     builder,
                     success,
                     detail,
-                    *request_start,
-                    *request_length,
+                    request_start,
+                    request_length,
                     None,
                 );
                 Lowered::Constructor {
@@ -7506,10 +7459,7 @@ impl<'a> Lowering<'a> {
                     }],
                 }
             } else if operation == ken_host::HostOpV1::FsHandleMetadata {
-                Lowered::Int {
-                    value: detail,
-                    known: None,
-                }
+                self.lower_unsigned_u64_int(builder, detail)?
             } else {
                 Lowered::Constructor {
                     constructor: self.process_symbols.unit.clone(),
@@ -7585,7 +7535,7 @@ impl<'a> Lowering<'a> {
         value: &Lowered,
     ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
     {
-        let Lowered::Int { value, .. } = value else {
+        let Lowered::Int { value, known } = value else {
             return Err(unsupported("Effect", "host-width operand is not Int"));
         };
         let arena = self
@@ -7594,7 +7544,7 @@ impl<'a> Lowering<'a> {
         let helper = self.native_int_narrow.ok_or_else(|| {
             unsupported("Effect", "host-width Int has no checked narrowing helper")
         })?;
-        let tag = self.native_int_tag(builder, *value);
+        let tag = self.native_int_tag(builder, *value, *known)?;
         let output_slot =
             builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
         let pointer_type = builder.func.dfg.value_type(arena);
@@ -7610,6 +7560,18 @@ impl<'a> Lowering<'a> {
             .ins()
             .load(types::I64, MemFlags::trusted(), output, 0);
         Ok((value, valid))
+    }
+
+    fn lower_dynamic_small_int(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: cranelift_codegen::ir::Value,
+    ) -> Lowered {
+        let tag = builder
+            .ins()
+            .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
+        self.native_int_tags.insert(value, tag);
+        Lowered::Int { value, known: None }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -8882,6 +8844,52 @@ impl<'a> Lowering<'a> {
         Ok(self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair))
     }
 
+    /// Reify a host-owned unsigned word into the exact native Int carrier.
+    /// The shared local interner chooses Small or canonical Big; callers never
+    /// reinterpret the raw `u64` bits as a signed scalar.
+    fn lower_unsigned_u64_int(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: cranelift_codegen::ir::Value,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let arena = self.native_int_arena.ok_or_else(|| {
+            unsupported("NativeInt", "unsigned Int producer has no invocation arena")
+        })?;
+        let helper = self.native_int_intern.ok_or_else(|| {
+            unsupported(
+                "NativeInt",
+                "unsigned Int producer has no local intern helper",
+            )
+        })?;
+        let limb =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+        builder.ins().stack_store(value, limb, 0);
+        let output =
+            builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let limb = builder.ins().stack_addr(pointer_type, limb, 0);
+        let output_pointer = builder.ins().stack_addr(pointer_type, output, 0);
+        let zero = builder.ins().iconst(types::I64, 0);
+        let one = builder.ins().iconst(types::I64, 1);
+        let call = builder
+            .ins()
+            .call(helper, &[arena, zero, limb, one, output_pointer]);
+        Self::require_i64(builder, builder.inst_results(call)[0], 0);
+        let pair = NativeScalarPairV1 {
+            tag: builder.ins().stack_load(types::I64, output, 0),
+            payload: builder.ins().stack_load(types::I64, output, 8),
+        };
+        Self::require_one_of_i64(
+            builder,
+            pair.tag,
+            &[
+                crate::NATIVE_INT_SMALL_TAG_V1 as i64,
+                crate::NATIVE_INT_BIG_TAG_V1 as i64,
+            ],
+        );
+        Ok(self.lowered_from_scalar_pair(ScalarMergeKind::Int, pair))
+    }
+
     fn lower_primitive_call(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -9059,9 +9067,11 @@ impl<'a> Lowering<'a> {
                     "PX8-I mutation traps before exact Int support",
                 ));
             }
+            NativeIntLoweringMutation::SuppressTerminalExport
+            | NativeIntLoweringMutation::CorruptTerminalExport => {}
         }
-        let lhs_tag = self.native_int_tag(builder, lhs);
-        let rhs_tag = self.native_int_tag(builder, rhs);
+        let lhs_tag = self.native_int_tag(builder, lhs, lhs_known)?;
+        let rhs_tag = self.native_int_tag(builder, rhs, rhs_known)?;
         let arena = self.native_int_arena.ok_or_else(|| {
             unsupported(
                 "PrimitiveCall",
@@ -9133,8 +9143,8 @@ impl<'a> Lowering<'a> {
                 format!("{symbol} only supports Int arguments in native lowering"),
             ));
         };
-        let lhs_tag = self.native_int_tag(builder, lhs);
-        let rhs_tag = self.native_int_tag(builder, rhs);
+        let lhs_tag = self.native_int_tag(builder, lhs, lhs_known)?;
+        let rhs_tag = self.native_int_tag(builder, rhs, rhs_known)?;
         let arena = self.native_int_arena.ok_or_else(|| {
             unsupported(
                 "PrimitiveCall",
@@ -9170,15 +9180,20 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         payload: cranelift_codegen::ir::Value,
-    ) -> cranelift_codegen::ir::Value {
-        self.native_int_tags
-            .get(&payload)
-            .copied()
-            .unwrap_or_else(|| {
-                builder
-                    .ins()
-                    .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64)
-            })
+        known: Option<i64>,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        if let Some(tag) = self.native_int_tags.get(&payload).copied() {
+            return Ok(tag);
+        }
+        if known.is_some() {
+            return Ok(builder
+                .ins()
+                .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64));
+        }
+        Err(unsupported(
+            "NativeInt",
+            "dynamic Int value lost its two-word tag transport",
+        ))
     }
 
     fn lower_bool_not(
@@ -9252,10 +9267,7 @@ impl<'a> Lowering<'a> {
             )
         })?;
         if let Lowered::ResponseBytes { len, .. } = arg {
-            return Ok(Lowered::Int {
-                value: len,
-                known: None,
-            });
+            return self.lower_unsigned_u64_int(builder, len);
         }
         if let Lowered::BorrowedNativeValue { pointer } = arg {
             let kind = builder
@@ -9265,10 +9277,7 @@ impl<'a> Lowering<'a> {
             let len = builder
                 .ins()
                 .load(types::I64, MemFlags::trusted(), pointer, 24);
-            return Ok(Lowered::Int {
-                value: len,
-                known: None,
-            });
+            return self.lower_unsigned_u64_int(builder, len);
         }
         let Lowered::Bytes(bytes) = arg else {
             return Err(unsupported(
@@ -9338,9 +9347,14 @@ impl<'a> Lowering<'a> {
             let zero = builder.ins().iconst(types::I64, 0);
             builder.ins().jump(merge, &[no.into(), zero.into()]);
             builder.switch_to_block(merge);
+            let value = builder.block_params(merge)[1];
+            let tag = builder
+                .ins()
+                .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
+            self.native_int_tags.insert(value, tag);
             return Ok(Lowered::BorrowedOption {
                 present: builder.block_params(merge)[0],
-                value: builder.block_params(merge)[1],
+                value,
                 none: none.clone(),
                 some: some.clone(),
             });
@@ -9382,9 +9396,14 @@ impl<'a> Lowering<'a> {
             let zero = builder.ins().iconst(types::I64, 0);
             builder.ins().jump(merge, &[zero.into()]);
             builder.switch_to_block(merge);
+            let value = builder.block_params(merge)[0];
+            let tag = builder
+                .ins()
+                .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64);
+            self.native_int_tags.insert(value, tag);
             return Ok(Lowered::BorrowedOption {
                 present,
-                value: builder.block_params(merge)[0],
+                value,
                 none: none.clone(),
                 some: some.clone(),
             });
@@ -9603,16 +9622,30 @@ impl<'a> Lowering<'a> {
             return Ok((value, ResultDecoder::ProcessStatus));
         }
         match value {
-            Lowered::Int { value, .. } => {
-                let tag = self.native_int_tag(builder, value);
+            Lowered::Int { value, known } => {
+                let tag = self.native_int_tag(builder, value, known)?;
                 let arena = self.native_int_arena.ok_or_else(|| {
                     unsupported("NativeResult", "Int result has no invocation arena")
                 })?;
                 let export = self.native_int_export.ok_or_else(|| {
                     unsupported("NativeResult", "Int result has no export support function")
                 })?;
+                #[cfg(test)]
+                if self.native_int_mutation == NativeIntLoweringMutation::SuppressTerminalExport {
+                    return Ok((value, ResultDecoder::Int));
+                }
                 let call = builder.ins().call(export, &[arena, tag, value]);
                 Self::require_i64(builder, builder.inst_results(call)[0], 0);
+                #[cfg(test)]
+                if self.native_int_mutation == NativeIntLoweringMutation::CorruptTerminalExport {
+                    let invalid = builder.ins().iconst(types::I64, 7);
+                    builder.ins().store(
+                        MemFlags::trusted(),
+                        invalid,
+                        arena,
+                        crate::native_int_clif::ARENA_FINAL_TAG,
+                    );
+                }
                 Ok((value, ResultDecoder::Int))
             }
             Lowered::Bool { value, .. } => Ok((value, ResultDecoder::Bool)),
@@ -9849,12 +9882,20 @@ fn append_recursive_argument_values(
 ) -> Result<(), CraneliftBackendError> {
     for value in values {
         match value {
-            Lowered::Int { value, .. } => {
-                output.push(native_int_tags.get(value).copied().unwrap_or_else(|| {
-                    builder
+            Lowered::Int { value, known } => {
+                let tag = match native_int_tags.get(value).copied() {
+                    Some(tag) => tag,
+                    None if known.is_some() => builder
                         .ins()
-                        .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64)
-                }));
+                        .iconst(types::I64, crate::NATIVE_INT_SMALL_TAG_V1 as i64),
+                    None => {
+                        return Err(unsupported(
+                            "DeclarationRef",
+                            "recursive Int argument lost its two-word tag transport",
+                        ));
+                    }
+                };
+                output.push(tag);
                 output.push(*value);
             }
             Lowered::Bool { value, .. }
@@ -10189,6 +10230,36 @@ mod tests {
         assert_eq!(oversize_fixture.call_index, 0);
     }
 
+    #[test]
+    fn px8i_positioned_start_and_metadata_promote_u64_above_i64_max() {
+        let (read, read_fixture) =
+            run_px8n_arm_fixture(PX8I_BIG_READ_START, px8i_big_read_start_fixture);
+        assert_eq!(read_fixture.malformed_request, 0);
+        assert_eq!(read_fixture.call_index, 3);
+        assert_eq!(
+            read, 13,
+            "ReadAt keeps the narrowed start through validation"
+        );
+
+        let (write, write_fixture) =
+            run_px8n_arm_fixture(PX8I_WRAPPING_WRITE_START, px8i_wrapping_write_start_fixture);
+        assert_eq!(write_fixture.malformed_request, 0);
+        assert_eq!(write_fixture.call_index, 3);
+        assert_eq!(
+            write, -1,
+            "WriteAt validates progress against the narrowed start and rejects wrap"
+        );
+
+        let (metadata, metadata_fixture) =
+            run_px8n_arm_fixture(PX8I_METADATA_BIG, px8i_metadata_big_fixture);
+        assert_eq!(metadata_fixture.malformed_request, 0);
+        assert_eq!(metadata_fixture.call_index, 2);
+        assert_eq!(
+            metadata, 14,
+            "metadata detail is promoted to canonical Big rather than a negative Small"
+        );
+    }
+
     #[repr(C)]
     struct BorrowedFixtureValue {
         kind: u64,
@@ -10218,6 +10289,10 @@ mod tests {
     const PX8N_SHORT_READ: u64 = 3;
     const PX8N_READ_EOF: u64 = 4;
     const PX8N_OVER_BOUND_READ: u64 = 5;
+    const PX8I_METADATA_BIG: u64 = 6;
+    const PX8I_BIG_READ_START: u64 = 7;
+    const PX8I_WRAPPING_WRITE_START: u64 = 8;
+    const PX8I_BIG_U64: u64 = i64::MAX as u64 + 97;
 
     extern "C" fn px8n_scripted_host_dispatch(
         invocation: *const std::ffi::c_void,
@@ -10232,8 +10307,14 @@ mod tests {
         // SAFETY: `host_context` points to the live fixture for the duration of
         // the compiled call and is never retained by the dispatcher.
         let fixture = unsafe { &mut *(invocation.host_context.cast::<Px8nHostReplyFixture>()) };
-        let expected = if fixture.call_index < 2 {
+        let expected = if fixture.call_index == 0
+            || (fixture.call_index == 1 && fixture.scenario != PX8I_METADATA_BIG)
+        {
             ken_host::HostOpV1::BufferAllocate
+        } else if fixture.scenario == PX8I_METADATA_BIG {
+            ken_host::HostOpV1::FsHandleMetadata
+        } else if fixture.scenario == PX8I_WRAPPING_WRITE_START {
+            ken_host::HostOpV1::FsWriteAt
         } else if fixture.scenario >= PX8N_SHORT_READ {
             ken_host::HostOpV1::FsReadAt
         } else {
@@ -10259,14 +10340,28 @@ mod tests {
                 fixture.malformed_request = 3;
                 return -1;
             }
+        } else if expected == ken_host::HostOpV1::FsHandleMetadata {
+            if load(wire.request_offsets[0]) != 11 {
+                fixture.malformed_request = 5;
+                return -1;
+            }
         } else if [
             load(wire.request_offsets[0]),
             load(wire.request_offsets[1]),
             load(wire.request_offsets[2]),
             load(wire.request_offsets[3]),
             load(wire.request_offsets[4]),
-        ] != [11, 22, 0, 7, 4]
-        {
+        ] != [
+            11,
+            22,
+            0,
+            match fixture.scenario {
+                PX8I_BIG_READ_START => PX8I_BIG_U64,
+                PX8I_WRAPPING_WRITE_START => u64::MAX - 1,
+                _ => 7,
+            },
+            4,
+        ] {
             fixture.malformed_request = 4;
             return -1;
         }
@@ -10286,9 +10381,12 @@ mod tests {
                 wire.reply_detail_offset,
                 if fixture.call_index == 0 { 11 } else { 22 },
             );
+        } else if expected == ken_host::HostOpV1::FsHandleMetadata {
+            store(wire.reply_tag_offset, wire.reply_metadata_tag);
+            store(wire.reply_detail_offset, PX8I_BIG_U64);
         } else {
             match fixture.scenario {
-                PX8N_SHORT_WROTE => {
+                PX8N_SHORT_WROTE | PX8I_WRAPPING_WRITE_START => {
                     store(wire.reply_tag_offset, wire.reply_write_progress_tag);
                     store(wire.reply_detail_offset, 1);
                 }
@@ -10312,6 +10410,11 @@ mod tests {
                     store(wire.reply_tag_offset, wire.reply_read_progress_tag);
                     store(wire.reply_detail_offset, 5);
                     store(wire.reply_bytes_len_offset, 7);
+                }
+                PX8I_BIG_READ_START => {
+                    store(wire.reply_tag_offset, wire.reply_read_progress_tag);
+                    store(wire.reply_detail_offset, 1);
+                    store(wire.reply_bytes_len_offset, PX8I_BIG_U64);
                 }
                 _ => return -1,
             }
@@ -10428,7 +10531,10 @@ mod tests {
         px8i_invalid_allocate(symbols, big(crate::Sign::NonNegative, &[0, 1]), 72)
     }
 
-    fn px8n_write_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    fn px8n_write_arm_fixture_with_start(
+        symbols: &crate::NativeProcessSymbols,
+        start: RuntimeExpr,
+    ) -> RuntimeExpr {
         let trap = || RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
             message: "PX8-N checked result default".to_string(),
@@ -10447,7 +10553,7 @@ mod tests {
                 RuntimeExpr::Var(1),
                 RuntimeExpr::Value(RuntimeValue::Int((0).into())),
                 RuntimeExpr::Var(0),
-                RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+                start,
                 RuntimeExpr::Value(RuntimeValue::Int((4).into())),
             ],
         };
@@ -10541,7 +10647,22 @@ mod tests {
         }
     }
 
-    fn px8n_read_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    fn px8n_write_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        px8n_write_arm_fixture_with_start(
+            symbols,
+            RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+        )
+    }
+
+    fn px8i_wrapping_write_start_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        px8n_write_arm_fixture_with_start(symbols, big(crate::Sign::NonNegative, &[u64::MAX - 1]))
+    }
+
+    fn px8n_read_arm_fixture_with_start(
+        symbols: &crate::NativeProcessSymbols,
+        start: RuntimeExpr,
+        observe_big_start: bool,
+    ) -> RuntimeExpr {
         let trap = || RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
             message: "PX8-N checked read result default".to_string(),
@@ -10560,21 +10681,31 @@ mod tests {
                 RuntimeExpr::Var(1),
                 RuntimeExpr::Value(RuntimeValue::Int((0).into())),
                 RuntimeExpr::Var(0),
-                RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+                start,
                 RuntimeExpr::Value(RuntimeValue::Int((4).into())),
             ],
+        };
+        let exact = if observe_big_start {
+            RuntimeExpr::If {
+                scrutinee: Box::new(total_primitive(
+                    "eq_int",
+                    vec![
+                        RuntimeExpr::Var(1),
+                        big(crate::Sign::NonNegative, &[PX8I_BIG_U64]),
+                    ],
+                )),
+                then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((13).into()))),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((99).into()))),
+            }
+        } else {
+            RuntimeExpr::Value(RuntimeValue::Int((12).into()))
         };
         let read_some = RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Var(0)),
             cases: vec![crate::RuntimeMatchCase {
                 constructor: symbols.private_buffer_span.clone(),
                 binders: 2,
-                body: px8n_exact_nat(
-                    symbols,
-                    RuntimeExpr::Var(1),
-                    1,
-                    RuntimeExpr::Value(RuntimeValue::Int((12).into())),
-                ),
+                body: px8n_exact_nat(symbols, RuntimeExpr::Var(1), 1, exact),
             }],
             default: trap(),
         };
@@ -10639,6 +10770,85 @@ mod tests {
                     constructor: symbols.result_ok.clone(),
                     binders: 1,
                     body: second,
+                },
+            ],
+            default: trap(),
+        }
+    }
+
+    fn px8n_read_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        px8n_read_arm_fixture_with_start(
+            symbols,
+            RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+            false,
+        )
+    }
+
+    fn px8i_big_read_start_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        px8n_read_arm_fixture_with_start(
+            symbols,
+            big(crate::Sign::NonNegative, &[PX8I_BIG_U64]),
+            true,
+        )
+    }
+
+    fn px8i_metadata_big_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+        let trap = || RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-I metadata result default".to_string(),
+        };
+        let metadata = RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::FsHandleMetadata,
+            capability: None,
+            args: vec![RuntimeExpr::Var(0)],
+        };
+        let observe = RuntimeExpr::Match {
+            scrutinee: Box::new(metadata),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((98).into()))),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: px8n_failure(
+                        symbols,
+                        RuntimeExpr::If {
+                            scrutinee: Box::new(total_primitive(
+                                "eq_int",
+                                vec![
+                                    RuntimeExpr::Var(0),
+                                    big(crate::Sign::NonNegative, &[PX8I_BIG_U64]),
+                                ],
+                            )),
+                            then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((14).into()))),
+                            else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((99).into()))),
+                        },
+                    ),
+                },
+            ],
+            default: trap(),
+        };
+        RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Effect {
+                family: "FS".to_string(),
+                operation: ken_host::HostOpV1::BufferAllocate,
+                capability: None,
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
+            }),
+            cases: vec![
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_err.clone(),
+                    binders: 1,
+                    body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((97).into()))),
+                },
+                crate::RuntimeMatchCase {
+                    constructor: symbols.result_ok.clone(),
+                    binders: 1,
+                    body: observe,
                 },
             ],
             default: trap(),
@@ -14357,6 +14567,41 @@ mod tests {
                 limbs: vec![7, 1],
             },
         );
+
+        run_exact_int(
+            RuntimeExpr::If {
+                scrutinee: Box::new(total_primitive(
+                    "leq_int",
+                    vec![
+                        RuntimeExpr::Value(RuntimeValue::Int(i64::MAX.into())),
+                        big(crate::Sign::NonNegative, &[0, 1]),
+                    ],
+                )),
+                then_expr: Box::new(big(crate::Sign::NonNegative, &[17, 3])),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((-1).into()))),
+            },
+            crate::RuntimeIntV1::Big {
+                sign: crate::Sign::NonNegative,
+                limbs: vec![17, 3],
+            },
+        );
+        run_exact_int(
+            RuntimeExpr::If {
+                scrutinee: Box::new(total_primitive(
+                    "leq_int",
+                    vec![
+                        big(crate::Sign::Negative, &[0, 1]),
+                        RuntimeExpr::Value(RuntimeValue::Int(i64::MIN.into())),
+                    ],
+                )),
+                then_expr: Box::new(big(crate::Sign::Negative, &[23, 4])),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((-1).into()))),
+            },
+            crate::RuntimeIntV1::Big {
+                sign: crate::Sign::Negative,
+                limbs: vec![23, 4],
+            },
+        );
     }
 
     #[test]
@@ -14403,6 +14648,36 @@ mod tests {
                 ..
             }))
         ));
+    }
+
+    #[test]
+    fn px8i_jit_terminal_requires_uncorrupted_local_export_evidence() {
+        let example = RuntimeExample {
+            name: "px8i-terminal-export".to_string(),
+            checked_core_shape: "PX8-I terminal Big export".to_string(),
+            ir: big(crate::Sign::NonNegative, &[5, 1]),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(
+                crate::RuntimeIntV1::Big {
+                    sign: crate::Sign::NonNegative,
+                    limbs: vec![5, 1],
+                },
+            )),
+        };
+        for mutation in [
+            NativeIntLoweringMutation::SuppressTerminalExport,
+            NativeIntLoweringMutation::CorruptTerminalExport,
+        ] {
+            NATIVE_INT_LOWERING_MUTATION.with(|cell| cell.set(mutation));
+            let result =
+                run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty());
+            NATIVE_INT_LOWERING_MUTATION.with(|cell| cell.set(NativeIntLoweringMutation::Exact));
+            assert!(matches!(
+                result,
+                Err(CraneliftBackendError::Backend(
+                    BackendFailure::NativeResultDecode { .. }
+                ))
+            ));
+        }
     }
 
     #[test]
