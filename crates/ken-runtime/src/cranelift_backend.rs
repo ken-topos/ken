@@ -3657,6 +3657,7 @@ impl<'a> Lowering<'a> {
         )>,
     ) -> Result<Lowered, CraneliftBackendError> {
         let (residual, payload) = decompose_computational_recursor(recursive);
+        let had_payload = payload.is_some();
         let mut current_layer = ComputationalRecursorLayer {
             cases,
             default,
@@ -3720,46 +3721,6 @@ impl<'a> Lowering<'a> {
                 unwind
                     .later_wrappers_in_construction_order
                     .push(current_layer);
-                if let Some((selected, lineage)) = source_control {
-                    if selected.selected_scope.is_none() {
-                        return Err(unsupported(
-                            "ComputationalRecursor",
-                            "source recursor invocation is missing its owned selected scope",
-                        ));
-                    }
-                    for scope in lineage
-                        .iter()
-                        .filter_map(|selected| selected.selected_scope.as_ref())
-                        .chain(selected.selected_scope.iter())
-                    {
-                        if unwind
-                            .later_wrappers_in_construction_order
-                            .iter()
-                            .any(|layer| {
-                                matches!(
-                                    layer.role,
-                                    RecursorLayerRole::ExitsScope { scope_origin, .. }
-                                        if scope_origin == scope.scope_origin
-                                )
-                            })
-                        {
-                            continue;
-                        }
-                        unwind.later_wrappers_in_construction_order.push(
-                            ComputationalRecursorLayer {
-                                cases: scope.frame.cases.clone(),
-                                default: scope.frame.default.clone(),
-                                outer_env: scope.frame.outer_env.clone(),
-                                provenance: scope.frame.provenance,
-                                role: RecursorLayerRole::ExitsScope {
-                                    origin: segment_origin,
-                                    scope_origin: scope.scope_origin,
-                                    parent_scope: scope.parent_scope,
-                                },
-                            },
-                        );
-                    }
-                }
                 (invocation.selection, unwind)
             } else {
                 (
@@ -3769,16 +3730,71 @@ impl<'a> Lowering<'a> {
                     },
                 )
             };
+        let mut unwind = unwind;
+        if let Some((selected, lineage)) = source_control {
+            if had_payload && selected.selected_scope.is_none() {
+                return Err(unsupported(
+                    "ComputationalRecursor",
+                    "source recursor invocation is missing its owned selected scope",
+                ));
+            }
+            for scope in lineage
+                .iter()
+                .filter_map(|selected| selected.selected_scope.as_ref())
+                .chain(selected.selected_scope.iter())
+            {
+                if let Some(existing) =
+                    unwind
+                        .later_wrappers_in_construction_order
+                        .iter()
+                        .find(|layer| {
+                            matches!(
+                                layer.role,
+                                RecursorLayerRole::ExitsScope { scope_origin, .. }
+                                    if scope_origin == scope.scope_origin
+                            )
+                        })
+                {
+                    let RecursorLayerRole::ExitsScope { parent_scope, .. } = existing.role else {
+                        unreachable!("selected scope identity belongs only to an exit layer")
+                    };
+                    if parent_scope != scope.parent_scope
+                        || existing.provenance != scope.frame.provenance
+                    {
+                        return Err(unsupported(
+                            "ComputationalRecursor",
+                            "recursor unwind conflicts with an inherited selected scope",
+                        ));
+                    }
+                    continue;
+                }
+                unwind
+                    .later_wrappers_in_construction_order
+                    .push(ComputationalRecursorLayer {
+                        cases: scope.frame.cases.clone(),
+                        default: scope.frame.default.clone(),
+                        outer_env: scope.frame.outer_env.clone(),
+                        provenance: scope.frame.provenance,
+                        role: RecursorLayerRole::ExitsScope {
+                            origin: segment_origin,
+                            scope_origin: scope.scope_origin,
+                            parent_scope: scope.parent_scope,
+                        },
+                    });
+            }
+        }
+        let invocation = RecursorInvocationSegment::new(
+            segment_origin,
+            segment_sibling_position,
+            selection,
+            unwind,
+            resume_cursor,
+        );
+        validate_recursor_invocation_segment(&invocation)?;
         Ok(Lowered::ComputationalRecursorClosure {
             residual: Box::new(residual),
             activation,
-            invocation: RecursorInvocationSegment::new(
-                segment_origin,
-                segment_sibling_position,
-                selection,
-                unwind,
-                resume_cursor,
-            ),
+            invocation,
         })
     }
 
@@ -5926,19 +5942,15 @@ impl<'a> Lowering<'a> {
                 parent_cursor,
                 origin,
                 next,
-            } => SourceContinuation::ReturnFromSelectedCase {
-                child_cursor,
-                parent_cursor,
-                origin,
-                next: Box::new(Self::replace_source_terminal_with_unwind(
-                    *next,
-                    stack,
-                    if resume_cursor == child_cursor {
-                        parent_cursor
-                    } else {
-                        resume_cursor
-                    },
-                )?),
+            } => SourceContinuation::UnwindRecursorSegment {
+                stack,
+                resume_cursor,
+                next: Box::new(SourceContinuation::ReturnFromSelectedCase {
+                    child_cursor,
+                    parent_cursor,
+                    origin,
+                    next,
+                }),
             },
             SourceContinuation::ProjectRecord { field, next } => {
                 SourceContinuation::ProjectRecord {
@@ -5985,6 +5997,15 @@ impl<'a> Lowering<'a> {
                 expected,
                 active,
             }),
+            SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)) => {
+                SourceContinuation::UnwindRecursorSegment {
+                    stack,
+                    resume_cursor,
+                    next: Box::new(SourceContinuation::Terminal(
+                        SourceContinuationTerminal::JumpToJoin(edge),
+                    )),
+                }
+            }
             terminal @ SourceContinuation::Terminal(_) => terminal,
         })
     }
