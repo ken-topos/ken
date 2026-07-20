@@ -586,6 +586,279 @@ pub(crate) fn emit_process_entrypoint_object_with_cranelift(
 }
 
 #[cfg(test)]
+pub(crate) struct Px8trNestedRouteObject {
+    pub artifact: CraneliftObjectArtifact,
+    pub provenance: Vec<Px8trTrapProvenanceEvent>,
+}
+
+#[cfg(test)]
+fn px8tr_test_interface(name: u8) -> crate::CheckedAnswerInterfaceV1 {
+    let mut bytes = crate::CHECKED_ANSWER_INTERFACE_V1_HEADER.to_vec();
+    bytes.push(name);
+    crate::CheckedAnswerInterfaceV1::new(bytes).expect("PX8-TR test interface is canonical")
+}
+
+#[cfg(test)]
+fn px8tr_nested_post_effect_fixture() -> (
+    RuntimeExpr,
+    RuntimeDeclaration,
+    crate::OrientedSubcontinuationPlanV1,
+) {
+    let declaration = "decl:fixture::PX8TR::main".to_string();
+    let ret_constructor = "ctor:fixture::PX8TR::ITree::Ret".to_string();
+    let vis_constructor = "ctor:fixture::PX8TR::ITree::Vis".to_string();
+    let result_err = "ctor:prelude::Result::Err".to_string();
+    let result_ok = "ctor:prelude::Result::Ok".to_string();
+    let unit = || RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+        args: Vec::new(),
+    };
+    let default = RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "PX8-TR checked ITree recursor default".to_string(),
+    };
+    let ret_body = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: result_err.clone(),
+                binders: 1,
+                body: RuntimeExpr::Construct {
+                    constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+                },
+            },
+            crate::RuntimeMatchCase {
+                constructor: result_ok.clone(),
+                binders: 1,
+                body: RuntimeExpr::Construct {
+                    constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                    args: Vec::new(),
+                },
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-TR Result default".to_string(),
+        },
+    };
+    let terminal_body = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Effect {
+            family: "Console".to_string(),
+            operation: ken_host::HostOpV1::ConsoleFlush,
+            capability: None,
+            args: vec![RuntimeExpr::Construct {
+                constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                args: Vec::new(),
+            }],
+        }),
+        body: Box::new(RuntimeExpr::Construct {
+            constructor: result_ok,
+            args: vec![unit()],
+        }),
+    };
+    let recursive_body = RuntimeExpr::Construct {
+        constructor: vis_constructor.clone(),
+        args: vec![
+            unit(),
+            RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["response".to_string()],
+                body: Box::new(terminal_body),
+            },
+        ],
+    };
+    let cases = vec![
+        crate::RuntimeComputationalMatchCase {
+            constructor: ret_constructor,
+            argument_binders: 1,
+            recursive_positions: Vec::new(),
+            body: ret_body,
+        },
+        crate::RuntimeComputationalMatchCase {
+            constructor: vis_constructor.clone(),
+            argument_binders: 2,
+            recursive_positions: vec![1],
+            body: RuntimeExpr::CheckedComputationalIHSlots {
+                slot_template_ids: vec![200],
+                checked_occurrence_paths: vec![vec![20]],
+                body: Box::new(RuntimeExpr::CheckedComputationalIHInvocation {
+                    call_template_id: 100,
+                    checked_occurrence_path: vec![30],
+                    body: Box::new(RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::Var(0)),
+                        args: vec![unit()],
+                    }),
+                }),
+            },
+        },
+    ];
+    let frame_fingerprint =
+        crate::compiler_private_computational_match_frame_fingerprint(&cases, &default);
+    let body = RuntimeExpr::Closure {
+        captures: Vec::new(),
+        params: vec!["process_input".to_string(), "program_caps".to_string()],
+        body: Box::new(RuntimeExpr::CheckedSubcontinuationFrame {
+            frame_id: 7,
+            body: Box::new(RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(RuntimeExpr::Construct {
+                    constructor: vis_constructor.clone(),
+                    args: vec![
+                        unit(),
+                        RuntimeExpr::LexicalClosure {
+                            captures: Vec::new(),
+                            params: vec!["response".to_string()],
+                            body: Box::new(recursive_body),
+                        },
+                    ],
+                }),
+                cases,
+                default,
+            }),
+        }),
+    };
+    let runtime_declaration = RuntimeDeclaration {
+        symbol: declaration.clone(),
+        kind: RuntimeDeclarationKind::Transparent { body },
+        metadata: crate::RuntimeSymbolMetadata::empty(),
+    };
+    let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+        frame_id: 7,
+        segment_site_id: 9,
+        declaration: declaration.clone(),
+        checked_occurrence_path: vec![10],
+        semantic_position: 0,
+        input_interface: px8tr_test_interface(0),
+        output_interface: px8tr_test_interface(1),
+        runtime_frame_fingerprint: frame_fingerprint,
+        occurrence_binding_fingerprint: 0,
+        control_witness: crate::OrientedControlWitnessV1::DistinguishedRoot,
+    };
+    frame.occurrence_binding_fingerprint =
+        crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+    let mut slot = crate::CheckedComputationalIHSlotTemplateV1 {
+        slot_template_id: 200,
+        declaration: declaration.clone(),
+        checked_match_ordinal: 0,
+        checked_occurrence_path: vec![20],
+        frame_template_id: 7,
+        constructor: vis_constructor,
+        recursive_position: 1,
+        method_binder_ordinal: 0,
+        local_telescope: Vec::new(),
+        ih_interface: px8tr_test_interface(0),
+        segment_site_id: 9,
+        frame_templates: vec![7],
+        input_interface: px8tr_test_interface(0),
+        output_interface: px8tr_test_interface(1),
+        runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+            declaration: declaration.clone(),
+            runtime_path: vec![2, 0, 2],
+        }],
+        occurrence_binding_fingerprint: 0,
+    };
+    slot.occurrence_binding_fingerprint =
+        crate::compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+    let mut call = crate::CheckedComputationalIHCallTemplateV1 {
+        call_template_id: 100,
+        declaration: declaration.clone(),
+        checked_occurrence_path: vec![30],
+        slot_template_id: 200,
+        arity: 1,
+        local_telescope: Vec::new(),
+        result_interface: px8tr_test_interface(1),
+        callee_segment_site_id: 9,
+        callee_frame_templates: vec![7],
+        parent_frame_template_id: Some(7),
+        parent_segment_site_id: Some(9),
+        caller_interface: px8tr_test_interface(1),
+        runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+            declaration,
+            runtime_path: vec![2, 0, 2, 0],
+        }],
+        occurrence_binding_fingerprint: 0,
+    };
+    call.occurrence_binding_fingerprint =
+        crate::compiler_private_computational_ih_call_binding_fingerprint(&call);
+    let entrypoint = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: runtime_declaration.symbol.clone(),
+        }),
+        args: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)],
+    };
+    (
+        entrypoint,
+        runtime_declaration,
+        crate::OrientedSubcontinuationPlanV1 {
+            representation_rule_version:
+                crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+            frames: vec![frame],
+            recursive_calls: Vec::new(),
+            computational_ih_slots: vec![slot],
+            computational_ih_calls: vec![call],
+        },
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn emit_px8tr_nested_post_effect_object(
+    entry_symbol: impl Into<String>,
+    disable_repair: bool,
+) -> Result<Px8trNestedRouteObject, CraneliftBackendError> {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            PX8TR_DISABLE_DEFORESTED_ANSWER_ROUTE.set(false);
+            PX8TR_TRAP_PROVENANCE.with(|trace| trace.borrow_mut().clear());
+        }
+    }
+
+    let entry_symbol = entry_symbol.into();
+    let (entrypoint, declaration, plan) = px8tr_nested_post_effect_fixture();
+    let declarations = BTreeMap::from([(declaration.symbol.as_str(), &declaration)]);
+    PX8TR_TRAP_PROVENANCE.with(|trace| trace.borrow_mut().clear());
+    PX8TR_DISABLE_DEFORESTED_ANSWER_ROUTE.set(disable_repair);
+    let _reset = Reset;
+    let compiled = compile_expr_into_module(
+        new_object_module("ken-runtime-px8tr-post-effect")?,
+        &entry_symbol,
+        Linkage::Export,
+        &entrypoint,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        Some(&crate::NativeProcessSymbols::legacy_prelude()),
+        Some(test_only_distinguished_root_join_plan()),
+        Some(plan),
+    )?;
+    let verifier_passed = compiled.verifier_passed;
+    let assumptions = compiled.assumptions.clone();
+    let unsupported = compiled.unsupported.clone();
+    let object_bytes = compiled
+        .module
+        .finish()
+        .emit()
+        .map_err(|err| backend_module(err.to_string()))?;
+    let object_hash = fnv1a_64(&object_bytes);
+    let provenance = PX8TR_TRAP_PROVENANCE.with(|trace| trace.borrow().clone());
+    Ok(Px8trNestedRouteObject {
+        artifact: CraneliftObjectArtifact {
+            example: "px8tr-nested-post-effect".to_string(),
+            entry_symbol,
+            object_bytes,
+            object_hash,
+            platform_target: native_platform_target_name(),
+            backend_name: "Cranelift PX8-TR process object".to_string(),
+            verifier_passed,
+            assumptions,
+            unsupported,
+        },
+        provenance,
+    })
+}
+
+#[cfg(test)]
 fn emit_process_entrypoint_object_with_symbols(
     entrypoint: &RuntimeExpr,
     symbols: &crate::NativeProcessSymbols,
@@ -2027,16 +2300,53 @@ enum Px8jSourceTraceEvent {
 }
 
 #[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Px8trTrapProvenanceEvent {
+    CheckedRecursorDefault {
+        checked_frame_id: u64,
+        actual_constructor: Option<RuntimeSymbol>,
+        trap: RuntimeTrap,
+    },
+    DeforestedAnswerResumed {
+        checked_frame_id: u64,
+        actual_constructor: Option<RuntimeSymbol>,
+        return_constructor: RuntimeSymbol,
+    },
+    FinalProcessObjectTrap {
+        trap: RuntimeTrap,
+    },
+}
+
+#[cfg(test)]
 thread_local! {
     static PX8J_SOURCE_TRACE: std::cell::RefCell<Vec<Px8jSourceTraceEvent>> =
         const { std::cell::RefCell::new(Vec::new()) };
     static PX8J_DELETE_OWNED_SELECTED_SCOPE: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    static PX8TR_TRAP_PROVENANCE: std::cell::RefCell<Vec<Px8trTrapProvenanceEvent>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static PX8TR_DISABLE_DEFORESTED_ANSWER_ROUTE: std::cell::Cell<bool> =
         const { std::cell::Cell::new(false) };
 }
 
 #[cfg(test)]
 fn px8j_record_source_event(event: Px8jSourceTraceEvent) {
     PX8J_SOURCE_TRACE.with(|trace| trace.borrow_mut().push(event));
+}
+
+#[cfg(test)]
+fn px8tr_record_trap_provenance(event: Px8trTrapProvenanceEvent) {
+    PX8TR_TRAP_PROVENANCE.with(|trace| trace.borrow_mut().push(event));
+}
+
+#[cfg(test)]
+fn px8tr_deforested_answer_route_enabled() -> bool {
+    !PX8TR_DISABLE_DEFORESTED_ANSWER_ROUTE.get()
+}
+
+#[cfg(not(test))]
+fn px8tr_deforested_answer_route_enabled() -> bool {
+    true
 }
 
 #[cfg(test)]
@@ -2787,6 +3097,12 @@ fn compile_expr_into_module<'a, M: Module>(
         compiler.require_complete_dynamic_splice_edge_consumption()?;
         let result = match lowered {
             Lowered::Trap(trap) => {
+                #[cfg(test)]
+                if process_mode {
+                    px8tr_record_trap_provenance(
+                        Px8trTrapProvenanceEvent::FinalProcessObjectTrap { trap: trap.clone() },
+                    );
+                }
                 let status = builder
                     .ins()
                     .iconst(types::I64, if process_mode { -4 } else { 0 });
@@ -4339,6 +4655,36 @@ enum EliminatorFrame<'a> {
 /// The source-evaluation continuation above a recursive-IH invocation.  This
 /// is deliberately distinct from `EliminatorFrame`: source evaluation drains
 /// this owned chain before its terminal may resume the outer eliminator cursor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SourceComputationalAnswerRoute {
+    DirectScrutinee,
+    CheckedSelectedRecursor,
+}
+
+impl SourceComputationalAnswerRoute {
+    fn for_recursor_layer(layer: &ComputationalRecursorLayer) -> Self {
+        if layer.checked_frame_id.is_some()
+            && matches!(layer.role, RecursorLayerRole::SelectsOccurrence { .. })
+        {
+            Self::CheckedSelectedRecursor
+        } else {
+            Self::DirectScrutinee
+        }
+    }
+}
+
+fn source_case_has_no_checked_control_markers(expr: &RuntimeExpr) -> bool {
+    let mut frames = BTreeMap::new();
+    if collect_checked_subcontinuation_frames(expr, &mut frames).is_err() || !frames.is_empty() {
+        return false;
+    }
+    let mut markers = CheckedOrientedMarkerSets::default();
+    collect_checked_oriented_markers(expr, &mut markers, "<source-case>", &mut Vec::new()).is_ok()
+        && markers.recursive_calls.is_empty()
+        && markers.computational_ih_slots.is_empty()
+        && markers.computational_ih_calls.is_empty()
+}
+
 enum SourceContinuation<'a> {
     Terminal(SourceContinuationTerminal<'a>),
     CheckedRecursiveInvocationReturn {
@@ -4392,6 +4738,7 @@ enum SourceContinuation<'a> {
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
+        answer_route: SourceComputationalAnswerRoute,
         next: Box<SourceContinuation<'a>>,
     },
     ProjectRecord {
@@ -4510,6 +4857,7 @@ enum SourcePrefixTemplate {
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
+        answer_route: SourceComputationalAnswerRoute,
         next: Box<SourcePrefixTemplate>,
     },
     ProjectRecord {
@@ -8103,6 +8451,7 @@ impl<'a> Lowering<'a> {
                 env,
                 provenance,
                 checked_frame_id,
+                answer_route,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases,
@@ -8110,6 +8459,7 @@ impl<'a> Lowering<'a> {
                 env,
                 provenance,
                 checked_frame_id,
+                answer_route,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
                     stack,
@@ -8415,6 +8765,7 @@ impl<'a> Lowering<'a> {
                 env,
                 provenance,
                 checked_frame_id,
+                answer_route,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
@@ -8425,6 +8776,7 @@ impl<'a> Lowering<'a> {
                         env,
                         provenance,
                         checked_frame_id,
+                        answer_route,
                         next: Box::new(next),
                     },
                     terminal,
@@ -8567,6 +8919,7 @@ impl<'a> Lowering<'a> {
                 env,
                 provenance,
                 checked_frame_id,
+                answer_route,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases: cases.clone(),
@@ -8574,6 +8927,7 @@ impl<'a> Lowering<'a> {
                 env: env.clone(),
                 provenance: *provenance,
                 checked_frame_id: *checked_frame_id,
+                answer_route: *answer_route,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::ProjectRecord { field, next } => {
@@ -8894,6 +9248,7 @@ impl<'a> Lowering<'a> {
                             env: env.clone(),
                             provenance: self.mint_recursor_frame_provenance(),
                             checked_frame_id,
+                            answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                             next: Box::new(control.continuation),
                         };
                         SourceMachineState::Eval {
@@ -9108,6 +9463,8 @@ impl<'a> Lowering<'a> {
                                     parent_scope,
                                 }),
                             }
+                            let answer_route =
+                                SourceComputationalAnswerRoute::for_recursor_layer(&layer);
                             control.continuation =
                                 SourceContinuation::ComputationalMatchScrutinee {
                                     cases: layer.cases,
@@ -9115,6 +9472,7 @@ impl<'a> Lowering<'a> {
                                     env: layer.outer_env,
                                     provenance: layer.provenance,
                                     checked_frame_id: layer.checked_frame_id,
+                                    answer_route,
                                     next,
                                 };
                             SourceMachineState::Value { value, control }
@@ -9149,6 +9507,8 @@ impl<'a> Lowering<'a> {
                                         parent_scope,
                                     });
                                 }
+                                let answer_route =
+                                    SourceComputationalAnswerRoute::for_recursor_layer(&layer);
                                 control.continuation =
                                     SourceContinuation::ComputationalMatchScrutinee {
                                         cases: layer.cases,
@@ -9156,6 +9516,7 @@ impl<'a> Lowering<'a> {
                                         env: layer.outer_env,
                                         provenance: layer.provenance,
                                         checked_frame_id: layer.checked_frame_id,
+                                        answer_route,
                                         next: Box::new(SourceContinuation::UnwindRecursorSegment {
                                             stack,
                                             resume_cursor,
@@ -9328,22 +9689,104 @@ impl<'a> Lowering<'a> {
                             env,
                             provenance,
                             checked_frame_id,
+                            answer_route,
                             next,
                         } => {
-                            let Lowered::Constructor { constructor, args } = value else {
-                                return Err(unsupported(
-                                    "ComputationalMatch",
-                                    "source scrutinee is not a constructor value",
-                                ));
+                            let retained = value.clone();
+                            #[cfg(test)]
+                            let actual_constructor = match &value {
+                                Lowered::Constructor { constructor, .. } => {
+                                    Some(constructor.clone())
+                                }
+                                _ => None,
                             };
-                            let retained = Lowered::Constructor {
-                                constructor: constructor.clone(),
-                                args: args.clone(),
+                            let selected = match &value {
+                                Lowered::Constructor { constructor, .. } => {
+                                    cases.iter().find(|case| case.constructor == *constructor)
+                                }
+                                _ => None,
                             };
-                            let Some(case) =
-                                cases.iter().find(|case| case.constructor == constructor)
-                            else {
+                            let case = if let Some(case) = selected {
+                                case
+                            } else if answer_route
+                                == SourceComputationalAnswerRoute::CheckedSelectedRecursor
+                                && matches!(&value, Lowered::Constructor { .. })
+                                && px8tr_deforested_answer_route_enabled()
+                            {
+                                let mut returns = cases.iter().filter(|case| {
+                                    case.argument_binders == 1
+                                        && case.constructor.ends_with("::ITree::Ret")
+                                });
+                                let return_case = returns.next();
+                                let exact_return = returns.next().is_none();
+                                let mut visible = cases
+                                    .iter()
+                                    .filter(|case| case.constructor.ends_with("::ITree::Vis"));
+                                let exact_visible = visible.next().is_some()
+                                    && visible.next().is_none()
+                                    && cases.len() == 2;
+                                let Some(return_case) = return_case.filter(|return_case| {
+                                    exact_return
+                                        && exact_visible
+                                        && source_case_has_no_checked_control_markers(
+                                            &return_case.body,
+                                        )
+                                }) else {
+                                    #[cfg(test)]
+                                    px8tr_record_trap_provenance(
+                                        Px8trTrapProvenanceEvent::CheckedRecursorDefault {
+                                            checked_frame_id: checked_frame_id.expect(
+                                                "checked answer routes carry exact frame ids",
+                                            ),
+                                            actual_constructor,
+                                            trap: default.clone(),
+                                        },
+                                    );
+                                    return Ok(Lowered::Trap(default));
+                                };
+                                #[cfg(test)]
+                                px8tr_record_trap_provenance(
+                                    Px8trTrapProvenanceEvent::DeforestedAnswerResumed {
+                                        checked_frame_id: checked_frame_id
+                                            .expect("checked answer routes carry exact frame ids"),
+                                        actual_constructor,
+                                        return_constructor: return_case.constructor.clone(),
+                                    },
+                                );
+                                let mut case_env = vec![retained];
+                                case_env.extend(env);
+                                control.continuation = *next;
+                                return self.lower_source_machine_with_continuation(
+                                    builder,
+                                    return_case.body.clone(),
+                                    case_env,
+                                    control,
+                                );
+                            } else {
+                                if !matches!(&value, Lowered::Constructor { .. }) {
+                                    return Err(unsupported(
+                                        "ComputationalMatch",
+                                        "source scrutinee is not a constructor value",
+                                    ));
+                                }
+                                #[cfg(test)]
+                                if answer_route
+                                    == SourceComputationalAnswerRoute::CheckedSelectedRecursor
+                                {
+                                    px8tr_record_trap_provenance(
+                                        Px8trTrapProvenanceEvent::CheckedRecursorDefault {
+                                            checked_frame_id: checked_frame_id.expect(
+                                                "checked answer routes carry exact frame ids",
+                                            ),
+                                            actual_constructor,
+                                            trap: default.clone(),
+                                        },
+                                    );
+                                }
                                 return Ok(Lowered::Trap(default));
+                            };
+                            let Lowered::Constructor { args, .. } = value else {
+                                unreachable!("a selected source case has a constructor value")
                             };
                             if case.argument_binders != args.len() {
                                 return Err(unsupported(
