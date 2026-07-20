@@ -4551,6 +4551,50 @@ fn installed_oriented_eliminator_frames(
         .collect()
 }
 
+/// Validate the control shape available at source-machine installation.
+/// Parent adjacency is established by the return-hole continuation and belongs
+/// only to the flattened-consumer validator below.
+fn validate_recursor_invocation_install_shape(
+    segment: &RecursorInvocationSegment,
+) -> Result<(), CraneliftBackendError> {
+    if !matches!(
+        segment.selection.role,
+        RecursorLayerRole::SelectsOccurrence { origin } if origin == segment.origin
+    ) {
+        return Err(unsupported(
+            "ComputationalRecursor",
+            "recursor selection role does not select the invocation origin",
+        ));
+    }
+    let mut scope_origins = BTreeSet::new();
+    for layer in &segment.unwind.later_wrappers_in_construction_order {
+        let RecursorLayerRole::ExitsScope {
+            origin,
+            scope_origin,
+            ..
+        } = layer.role
+        else {
+            return Err(unsupported(
+                "ComputationalRecursor",
+                "recursor unwind role does not exit the invocation origin",
+            ));
+        };
+        if origin != segment.origin {
+            return Err(unsupported(
+                "ComputationalRecursor",
+                "recursor unwind role does not exit the invocation origin",
+            ));
+        }
+        if !scope_origins.insert(scope_origin) {
+            return Err(unsupported(
+                "ComputationalRecursor",
+                "recursor unwind repeats a selected scope identity",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_recursor_invocation_segment(
     segment: &RecursorInvocationSegment,
 ) -> Result<(), CraneliftBackendError> {
@@ -8524,7 +8568,7 @@ impl<'a> Lowering<'a> {
         checked_ih_invocation: Option<CheckedRecursiveInvocationInstance>,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
         if !recursor_invocation_is_checked(&invocation) {
-            validate_recursor_invocation_segment(&invocation)?;
+            validate_recursor_invocation_install_shape(&invocation)?;
         }
         #[cfg(test)]
         px8j_record_source_event(Px8jSourceTraceEvent::Install {
@@ -20088,8 +20132,16 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Copy)]
+    enum Px8jInstallMalformation {
+        SelectionRole,
+        UnwindRole,
+        UnwindOrigin,
+        RepeatedScopeIdentity,
+    }
+
     fn run_px8j_source_machine_install(
-        malformation: Option<Px8jRecursorMalformation>,
+        malformation: Option<Px8jInstallMalformation>,
     ) -> Result<SourceContinuation<'static>, CraneliftBackendError> {
         let seed_env = NativeSeedEnvironment::empty();
         let mut compiler = root_authority_test_lowering(&seed_env);
@@ -20113,9 +20165,28 @@ mod tests {
             checked_invocation_depth: 0,
             semantic_pending: matches!(role, RecursorLayerRole::SelectsOccurrence { .. }),
         };
+        let selection = match malformation {
+            Some(Px8jInstallMalformation::SelectionRole) => layer(RecursorLayerRole::ExitsScope {
+                origin,
+                scope_origin: RecursorProducerOriginId(18),
+                parent_scope: None,
+            }),
+            _ => layer(RecursorLayerRole::SelectsOccurrence { origin }),
+        };
         let unwind = match malformation {
             None => Vec::new(),
-            Some(Px8jRecursorMalformation::RepeatedScopeIdentity) => vec![
+            Some(Px8jInstallMalformation::SelectionRole) => Vec::new(),
+            Some(Px8jInstallMalformation::UnwindRole) => {
+                vec![layer(RecursorLayerRole::SelectsOccurrence { origin })]
+            }
+            Some(Px8jInstallMalformation::UnwindOrigin) => {
+                vec![layer(RecursorLayerRole::ExitsScope {
+                    origin: RecursorProducerOriginId(99),
+                    scope_origin: RecursorProducerOriginId(19),
+                    parent_scope: None,
+                })]
+            }
+            Some(Px8jInstallMalformation::RepeatedScopeIdentity) => vec![
                 layer(RecursorLayerRole::ExitsScope {
                     origin,
                     scope_origin: RecursorProducerOriginId(19),
@@ -20127,15 +20198,11 @@ mod tests {
                     parent_scope: Some(RecursorProducerOriginId(19)),
                 }),
             ],
-            Some(Px8jRecursorMalformation::SelectionRole)
-            | Some(Px8jRecursorMalformation::BrokenScopeParent) => {
-                panic!("source-install fixture only exercises repeated-scope malformation")
-            }
         };
         let invocation = RecursorInvocationSegment::new(
             origin,
             0,
-            layer(RecursorLayerRole::SelectsOccurrence { origin }),
+            selection,
             RecursorUnwindStack {
                 later_wrappers_in_construction_order: unwind,
             },
@@ -20215,7 +20282,7 @@ mod tests {
     #[test]
     fn px8j_source_machine_install_rejects_repeated_scope_identity() {
         let error = match run_px8j_source_machine_install(Some(
-            Px8jRecursorMalformation::RepeatedScopeIdentity,
+            Px8jInstallMalformation::RepeatedScopeIdentity,
         )) {
             Ok(_) => panic!("the unchecked source-machine install must validate before CFG"),
             Err(error) => error,
@@ -20227,6 +20294,36 @@ mod tests {
                 reason,
             }) if reason == "recursor unwind repeats a selected scope identity"
         ));
+    }
+
+    #[test]
+    fn px8j_source_machine_install_rejects_wrong_control_roles_and_origins() {
+        for (malformation, expected_reason) in [
+            (
+                Px8jInstallMalformation::SelectionRole,
+                "recursor selection role does not select the invocation origin",
+            ),
+            (
+                Px8jInstallMalformation::UnwindRole,
+                "recursor unwind role does not exit the invocation origin",
+            ),
+            (
+                Px8jInstallMalformation::UnwindOrigin,
+                "recursor unwind role does not exit the invocation origin",
+            ),
+        ] {
+            let error = match run_px8j_source_machine_install(Some(malformation)) {
+                Ok(_) => panic!("the unchecked source-machine install must validate before CFG"),
+                Err(error) => error,
+            };
+            assert!(matches!(
+                error,
+                CraneliftBackendError::Unsupported(UnsupportedLowering {
+                    construct: "ComputationalRecursor",
+                    ref reason,
+                }) if reason == expected_reason
+            ));
+        }
     }
 
     #[test]
