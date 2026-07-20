@@ -661,6 +661,44 @@ impl NativeLoweringPlanCollector {
         )
     }
 
+    fn validate_total_computational_ih_seed_consumption(&self) -> Result<(), ErasureError> {
+        if self.computational_ih_slots.len() != self.consumed_computational_ih_slots.len() {
+            let seed = self
+                .computational_ih_slots
+                .values()
+                .find(|seed| {
+                    !self
+                        .consumed_computational_ih_slots
+                        .contains(&seed.slot_template_id)
+                })
+                .or_else(|| self.computational_ih_slots.values().next())
+                .expect("a slot-count mismatch has at least one supplied slot");
+            return Err(expression_lowering_error(
+                &seed.owner,
+                "checked_computational_ih_slot_unconsumed",
+                "not every supplied computational IH slot template was consumed exactly once",
+            ));
+        }
+        if self.computational_ih_calls.len() != self.consumed_computational_ih_calls.len() {
+            let seed = self
+                .computational_ih_calls
+                .values()
+                .find(|seed| {
+                    !self
+                        .consumed_computational_ih_calls
+                        .contains(&seed.call_template_id)
+                })
+                .or_else(|| self.computational_ih_calls.values().next())
+                .expect("a call-count mismatch has at least one supplied call");
+            return Err(expression_lowering_error(
+                &seed.owner,
+                "checked_computational_ih_call_unconsumed",
+                "not every supplied computational IH call template was consumed exactly once",
+            ));
+        }
+        Ok(())
+    }
+
     fn consume_recursive_invocation(
         &mut self,
         owner: &StableSymbol,
@@ -1060,11 +1098,11 @@ impl OrientedSubcontinuationPlanCollector {
         _recursive_invocations: BTreeMap<(StableSymbol, u64), CheckedRecursiveInvocationSeed>,
         consumed_recursive_invocations: BTreeSet<u64>,
         pending_recursive_calls: Vec<(CheckedRecursiveInvocationSeed, Vec<u64>, Option<u64>)>,
-        _computational_ih_slot_seeds: BTreeMap<
+        computational_ih_slot_seeds: BTreeMap<
             (StableSymbol, u64, usize, usize),
             CheckedComputationalIHSlotSeed,
         >,
-        _computational_ih_call_seeds: BTreeMap<(u64, u64), CheckedComputationalIHCallSeed>,
+        computational_ih_call_seeds: BTreeMap<(u64, u64), CheckedComputationalIHCallSeed>,
         consumed_computational_ih_slots: BTreeSet<u64>,
         consumed_computational_ih_calls: BTreeSet<u64>,
         pending_computational_ih_slots: Vec<(CheckedComputationalIHSlotSeed, Vec<u64>, u64)>,
@@ -1085,9 +1123,19 @@ impl OrientedSubcontinuationPlanCollector {
             "emitted computational IH slot templates close exactly over Runtime case markers"
         );
         assert_eq!(
+            computational_ih_slot_seeds.len(),
+            consumed_computational_ih_slots.len(),
+            "every supplied computational IH slot template is consumed exactly once"
+        );
+        assert_eq!(
             pending_computational_ih_calls.len(),
             consumed_computational_ih_calls.len(),
             "emitted computational IH call templates close exactly over Runtime call markers"
+        );
+        assert_eq!(
+            computational_ih_call_seeds.len(),
+            consumed_computational_ih_calls.len(),
+            "every supplied computational IH call template is consumed exactly once"
         );
         let mut recursive_calls = Vec::with_capacity(pending_recursive_calls.len());
         for (seed, occurrence_path, parent_frame) in pending_recursive_calls {
@@ -1347,6 +1395,7 @@ pub(crate) fn erase_checked_host_package_for_target_with_join_plan<'a>(
         Some((root, spine)),
         Some(&mut collector),
     )?;
+    collector.validate_total_computational_ih_seed_consumption()?;
     let (join_plan, mut oriented_plan) = collector.finish();
     let retained_recursive_calls = oriented_plan
         .recursive_calls
@@ -5871,6 +5920,145 @@ fn effects_for_targets(package: &CheckedCorePackage, targets: &[StableSymbol]) -
 #[cfg(test)]
 mod px7l_tests {
     use super::*;
+
+    fn test_answer_interface() -> ken_runtime::CheckedAnswerInterfaceV1 {
+        ken_runtime::CheckedAnswerInterfaceV1::new(
+            ken_runtime::CHECKED_ANSWER_INTERFACE_V1_HEADER.to_vec(),
+        )
+        .expect("the fixed checked-answer header is canonical")
+    }
+
+    fn test_answer_symbols() -> CheckedJoinAnswerSymbols {
+        CheckedJoinAnswerSymbols {
+            int: StableSymbol::declaration("px8ta-total-census", &[], "Int"),
+            bool_: StableSymbol::declaration("px8ta-total-census", &[], "Bool"),
+            structural_nat: StableSymbol::declaration("px8ta-total-census", &[], "Nat"),
+            exit_code: StableSymbol::declaration("px8ta-total-census", &[], "ExitCode"),
+        }
+    }
+
+    #[test]
+    fn finish_rejects_an_unconsumed_computational_ih_slot_seed() {
+        let owner = StableSymbol::declaration("px8ta-total-census", &[], "main");
+        let constructor = StableSymbol::constructor(
+            &StableSymbol::declaration("px8ta-total-census", &[], "Tree"),
+            "Step",
+        );
+        let seed = CheckedComputationalIHSlotSeed {
+            slot_template_id: 7,
+            owner: owner.clone(),
+            match_ordinal: 0,
+            branch_ordinal: 0,
+            constructor,
+            recursive_position: 0,
+            method_binder_ordinal: 0,
+            local_telescope: Vec::new(),
+            ih_interface: test_answer_interface(),
+        };
+        let collector = NativeLoweringPlanCollector::new(
+            test_answer_symbols(),
+            Vec::new(),
+            vec![seed],
+            Vec::new(),
+        );
+        assert_eq!(
+            lane(
+                collector
+                    .validate_total_computational_ih_seed_consumption()
+                    .unwrap_err()
+            ),
+            "checked_computational_ih_slot_unconsumed"
+        );
+    }
+
+    #[test]
+    fn finish_rejects_an_unconsumed_computational_ih_call_seed() {
+        let owner = StableSymbol::declaration("px8ta-total-census", &[], "main");
+        let seed = CheckedComputationalIHCallSeed {
+            call_template_id: 11,
+            owner,
+            slot_template_id: 7,
+            occurrence_ordinal: 0,
+            arity: 0,
+            local_telescope: Vec::new(),
+            result_interface: test_answer_interface(),
+        };
+        let collector = NativeLoweringPlanCollector::new(
+            test_answer_symbols(),
+            Vec::new(),
+            Vec::new(),
+            vec![seed],
+        );
+        assert_eq!(
+            lane(
+                collector
+                    .validate_total_computational_ih_seed_consumption()
+                    .unwrap_err()
+            ),
+            "checked_computational_ih_call_unconsumed"
+        );
+    }
+
+    #[test]
+    fn erased_constructor_parameter_and_live_ih_argument_emit_one_runtime_marker() {
+        let owner = StableSymbol::declaration("px8ta-runtime-call-census", &[], "main");
+        let family = StableSymbol::declaration("px8ta-runtime-call-census", &[], "Box");
+        let term = apply_constructor(
+            constructor_view(&family, "MkBox", 1, 1),
+            vec![
+                CheckedCoreBodyTerm::ErasedConstructorArgument { term: vec![0] },
+                CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 },
+            ],
+        );
+        let seed = CheckedComputationalIHCallSeed {
+            call_template_id: 11,
+            owner: owner.clone(),
+            slot_template_id: 7,
+            occurrence_ordinal: 0,
+            arity: 0,
+            local_telescope: Vec::new(),
+            result_interface: test_answer_interface(),
+        };
+        let mut plans = NativeLoweringPlanCollector::new(
+            test_answer_symbols(),
+            Vec::new(),
+            Vec::new(),
+            vec![seed],
+        );
+        let remap = BranchBinderRemap::default().enter_match(0, 1, true, vec![7]);
+        let mut stack = vec![owner.clone()];
+        let lowered = lower_body_term_with_plans(
+            &term,
+            &BTreeMap::new(),
+            &checked_core::CheckedCoreSemanticInputs::default(),
+            &mut stack,
+            &owner,
+            1,
+            Some(&remap),
+            &[],
+            &mut plans,
+            None,
+        )
+        .expect("the mixed constructor application lowers through the real marker consumer");
+
+        let RuntimeExpr::Construct { args, .. } = lowered else {
+            panic!("the mixed constructor must remain a Runtime constructor")
+        };
+        assert_eq!(args.len(), 1, "the erased family parameter is absent");
+        assert!(matches!(
+            &args[0],
+            RuntimeExpr::CheckedComputationalIHInvocation {
+                call_template_id: 11,
+                body,
+                ..
+            } if matches!(body.as_ref(), RuntimeExpr::Var(0))
+        ));
+        assert_eq!(plans.consumed_computational_ih_calls, BTreeSet::from([11]));
+        assert_eq!(plans.pending_computational_ih_calls.len(), 1);
+        plans
+            .validate_total_computational_ih_seed_consumption()
+            .expect("the one supplied live call seed is consumed exactly once");
+    }
 
     fn oriented_match_view(name: &str, motive: u8) -> checked_core::CheckedCoreMatchView {
         checked_core::CheckedCoreMatchView {

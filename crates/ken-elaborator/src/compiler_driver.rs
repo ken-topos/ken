@@ -1668,7 +1668,12 @@ impl ComputationalIHTemplateCollector<'_> {
         bindings: &mut Vec<Option<ComputationalIHBinding>>,
         is_application_function: bool,
     ) -> Result<(), CompilerDriverError> {
-        if !is_application_function {
+        if !is_application_function
+            && matches!(
+                runtime_term,
+                CheckedCoreBodyTerm::Variable { .. } | CheckedCoreBodyTerm::Application { .. }
+            )
+        {
             let (head, arguments) = term_application_spine_exact(term);
             if let Term::Var(index) = head {
                 let binding = bindings
@@ -4954,6 +4959,73 @@ mod tests {
             leaf_value,
             "the genuine ordinal-zero match executes after the erased type match"
         );
+    }
+
+    #[test]
+    fn erased_constructor_parameter_and_live_ih_argument_emit_one_call_template() {
+        let owner = StableSymbol::declaration("px8ta-runtime-call-census", &[], "main");
+        let family = StableSymbol::declaration("px8ta-runtime-call-census", &[], "Box");
+        let constructor = StableSymbol::constructor(&family, "MkBox");
+        let constructor_view = crate::checked_core::CheckedCoreConstructorView {
+            symbol: constructor,
+            family_symbol: family,
+            level_args: Vec::new(),
+            family_parameter_count: 1,
+            family_index_count: 0,
+            argument_count: 1,
+            target_index_count: 0,
+            recursive_positions: Vec::new(),
+            constructor_lowerability: LowerabilityStatus::Supported,
+            family_lowerability: LowerabilityStatus::Supported,
+        };
+        let constructor_id = GlobalId(91);
+        let raw = Term::app(
+            Term::app(Term::constructor(constructor_id, Vec::new()), Term::var(0)),
+            Term::var(0),
+        );
+        let erased_ih = canonical_term_bytes(&Term::var(0), &StableSymbolTable::new())
+            .expect("a local variable needs no global identity");
+        let runtime = CheckedCoreBodyTerm::Application {
+            function: Box::new(CheckedCoreBodyTerm::Application {
+                function: Box::new(CheckedCoreBodyTerm::ConstructorReference(constructor_view)),
+                argument: Box::new(CheckedCoreBodyTerm::ErasedConstructorArgument {
+                    term: erased_ih,
+                }),
+            }),
+            argument: Box::new(CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 }),
+        };
+        let env = GlobalEnv::new();
+        let mut context = Context::new();
+        context.push(Term::Type(ken_kernel::Level::zero()));
+        let mut bindings = vec![Some(ComputationalIHBinding {
+            slot_template_id: 7,
+        })];
+        let symbol_map = BTreeMap::new();
+        let symbol_table = StableSymbolTable::new();
+        let mut collector = ComputationalIHTemplateCollector {
+            env: &env,
+            symbols: &symbol_map,
+            symbol_table: &symbol_table,
+            next_slot_template_id: 8,
+            next_call_template_id: 0,
+            runtime_match_census: BTreeMap::new(),
+            next_runtime_match_index: BTreeMap::new(),
+            next_call_ordinal: BTreeMap::new(),
+            slots: Vec::new(),
+            calls: Vec::new(),
+        };
+
+        collector
+            .visit(&owner, &raw, &runtime, &mut context, &mut bindings, false)
+            .expect("the paired Runtime constructor path is accepted");
+        assert_eq!(
+            collector.calls.len(),
+            1,
+            "the erased family parameter must not mint an IH call template"
+        );
+        assert_eq!(collector.calls[0].slot_template_id, 7);
+        assert_eq!(collector.calls[0].occurrence_ordinal, 0);
+        assert_eq!(collector.calls[0].arity, 0);
     }
 
     fn main_symbol(package: &str) -> StableSymbol {
