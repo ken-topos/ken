@@ -125,7 +125,10 @@ fn contains_recursive_bind_ir(expr: &ken_runtime::RuntimeExpr) -> bool {
                 || args.iter().any(contains_recursive_bind_ir)
         }
         RuntimeExpr::CheckedJoinSite { body, .. }
-        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
             contains_recursive_bind_ir(body)
         }
         RuntimeExpr::Value(_)

@@ -104,6 +104,8 @@ pub struct CheckedComputationalIHCallTemplateV1 {
     pub result_interface: CheckedAnswerInterfaceV1,
     pub callee_segment_site_id: u64,
     pub callee_frame_templates: Vec<u64>,
+    pub parent_frame_template_id: Option<u64>,
+    pub parent_segment_site_id: Option<u64>,
     pub caller_interface: CheckedAnswerInterfaceV1,
     pub occurrence_binding_fingerprint: u64,
 }
@@ -118,7 +120,7 @@ pub struct OrientedSubcontinuationPlanV1 {
 }
 
 impl OrientedSubcontinuationPlanV1 {
-    pub const REPRESENTATION_RULE_VERSION: u32 = 2;
+    pub const REPRESENTATION_RULE_VERSION: u32 = 3;
 
     pub fn canonical_bytes(&self) -> Vec<u8> {
         let mut out = ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER.to_vec();
@@ -222,6 +224,8 @@ impl OrientedSubcontinuationPlanV1 {
             for frame in &call.callee_frame_templates {
                 put_u64(&mut out, *frame);
             }
+            put_optional_u64(&mut out, call.parent_frame_template_id);
+            put_optional_u64(&mut out, call.parent_segment_site_id);
             put_bytes(&mut out, &call.caller_interface.canonical);
             put_u64(&mut out, call.occurrence_binding_fingerprint);
         }
@@ -430,6 +434,8 @@ impl OrientedSubcontinuationPlanV1 {
             for _ in 0..frame_count {
                 callee_frame_templates.push(take_u64(&mut bytes)?);
             }
+            let parent_frame_template_id = take_optional_u64(&mut bytes)?;
+            let parent_segment_site_id = take_optional_u64(&mut bytes)?;
             let caller_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
             let occurrence_binding_fingerprint = take_u64(&mut bytes)?;
             computational_ih_calls.push(CheckedComputationalIHCallTemplateV1 {
@@ -442,6 +448,8 @@ impl OrientedSubcontinuationPlanV1 {
                 result_interface,
                 callee_segment_site_id,
                 callee_frame_templates,
+                parent_frame_template_id,
+                parent_segment_site_id,
                 caller_interface,
                 occurrence_binding_fingerprint,
             });
@@ -534,9 +542,9 @@ impl OrientedSubcontinuationPlanV1 {
                 return Err("computational IH slot occurrence binding is inconsistent");
             }
             for frame_id in &slot.frame_templates {
-                let frame = self.frame(*frame_id).ok_or(
-                    "computational IH slot names a stale frame template",
-                )?;
+                let frame = self
+                    .frame(*frame_id)
+                    .ok_or("computational IH slot names a stale frame template")?;
                 if frame.segment_site_id != slot.segment_site_id {
                     return Err("computational IH slot crosses a checked segment");
                 }
@@ -547,9 +555,9 @@ impl OrientedSubcontinuationPlanV1 {
             if !ih_call_ids.insert(call.call_template_id) {
                 return Err("OrientedSubcontinuationPlanV1 repeats a computational IH call");
             }
-            let slot = self.computational_ih_slot(call.slot_template_id).ok_or(
-                "computational IH call names a stale slot template",
-            )?;
+            let slot = self
+                .computational_ih_slot(call.slot_template_id)
+                .ok_or("computational IH call names a stale slot template")?;
             if call.callee_frame_templates.is_empty()
                 || call.callee_segment_site_id != slot.segment_site_id
                 || call.callee_frame_templates != slot.frame_templates
@@ -565,8 +573,23 @@ impl OrientedSubcontinuationPlanV1 {
             {
                 return Err("computational IH call names a stale callee frame");
             }
-            if call.result_interface != call.caller_interface {
-                return Err("computational IH call checked endpoints do not compose");
+            match (call.parent_frame_template_id, call.parent_segment_site_id) {
+                (Some(parent_id), Some(parent_segment)) => {
+                    let parent = self
+                        .frame(parent_id)
+                        .ok_or("computational IH call names a stale parent frame")?;
+                    if parent.segment_site_id != parent_segment
+                        || parent_segment != call.callee_segment_site_id
+                        || parent_id != slot.frame_template_id
+                    {
+                        return Err("computational IH call parent edge is inconsistent");
+                    }
+                    if call.result_interface != call.caller_interface {
+                        return Err("computational IH call checked endpoints do not compose");
+                    }
+                }
+                (None, None) => return Err("computational IH call parent edge is missing"),
+                _ => return Err("computational IH call parent edge is incomplete"),
             }
         }
         let by_id = self
@@ -707,6 +730,8 @@ pub fn compiler_private_computational_ih_call_binding_fingerprint(
     for frame in &call.callee_frame_templates {
         put_u64(&mut bytes, *frame);
     }
+    put_optional_u64(&mut bytes, call.parent_frame_template_id);
+    put_optional_u64(&mut bytes, call.parent_segment_site_id);
     put_bytes(&mut bytes, &call.caller_interface.canonical);
     fnv1a_64(&bytes)
 }
@@ -776,6 +801,16 @@ fn put_u64(out: &mut Vec<u8>, value: u64) {
     out.extend_from_slice(&value.to_be_bytes());
 }
 
+fn put_optional_u64(out: &mut Vec<u8>, value: Option<u64>) {
+    match value {
+        None => out.push(0),
+        Some(value) => {
+            out.push(1);
+            put_u64(out, value);
+        }
+    }
+}
+
 fn put_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
     put_u64(out, bytes.len() as u64);
     out.extend_from_slice(bytes);
@@ -787,6 +822,18 @@ fn take_u32(bytes: &mut &[u8]) -> Result<u32, &'static str> {
         .ok_or("truncated oriented subcontinuation u32")?;
     *bytes = tail;
     Ok(u32::from_be_bytes(head.try_into().expect("exact width")))
+}
+
+fn take_optional_u64(bytes: &mut &[u8]) -> Result<Option<u64>, &'static str> {
+    let (tag, tail) = bytes
+        .split_first()
+        .ok_or("truncated oriented subcontinuation optional u64")?;
+    *bytes = tail;
+    match tag {
+        0 => Ok(None),
+        1 => Ok(Some(take_u64(bytes)?)),
+        _ => Err("invalid oriented subcontinuation optional u64 tag"),
+    }
 }
 
 fn take_u64(bytes: &mut &[u8]) -> Result<u64, &'static str> {
@@ -838,11 +885,69 @@ mod tests {
         frame
     }
 
+    fn computational_ih_plan() -> OrientedSubcontinuationPlanV1 {
+        let frames = vec![frame(0, None), frame(1, Some(0))];
+        let mut slots = Vec::new();
+        let mut calls = Vec::new();
+        for frame_id in 0..=1 {
+            let slot_template_id = 20 + frame_id;
+            let mut slot = CheckedComputationalIHSlotTemplateV1 {
+                slot_template_id,
+                declaration: "pkg::main".to_string(),
+                checked_match_ordinal: frame_id,
+                checked_occurrence_path: vec![2, frame_id],
+                frame_template_id: frame_id,
+                constructor: format!("Ctor{frame_id}"),
+                recursive_position: 0,
+                method_binder_ordinal: 0,
+                local_telescope: Vec::new(),
+                ih_interface: interface(&[frame_id as u8]),
+                segment_site_id: 10,
+                frame_templates: vec![frame_id],
+                input_interface: interface(&[frame_id as u8]),
+                output_interface: interface(&[frame_id as u8 + 1]),
+                occurrence_binding_fingerprint: 0,
+            };
+            slot.occurrence_binding_fingerprint =
+                compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+            slots.push(slot);
+
+            let mut call = CheckedComputationalIHCallTemplateV1 {
+                call_template_id: 30 + frame_id,
+                declaration: "pkg::main".to_string(),
+                checked_occurrence_path: vec![3, frame_id],
+                slot_template_id,
+                arity: 1,
+                local_telescope: Vec::new(),
+                result_interface: interface(&[frame_id as u8 + 1]),
+                callee_segment_site_id: 10,
+                callee_frame_templates: vec![frame_id],
+                parent_frame_template_id: Some(frame_id),
+                parent_segment_site_id: Some(10),
+                caller_interface: interface(&[frame_id as u8 + 1]),
+                occurrence_binding_fingerprint: 0,
+            };
+            call.occurrence_binding_fingerprint =
+                compiler_private_computational_ih_call_binding_fingerprint(&call);
+            calls.push(call);
+        }
+        OrientedSubcontinuationPlanV1 {
+            representation_rule_version: OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+            frames,
+            recursive_calls: Vec::new(),
+            computational_ih_slots: slots,
+            computational_ih_calls: calls,
+        }
+    }
+
     #[test]
     fn canonical_roundtrip_keeps_full_checked_interfaces() {
         let plan = OrientedSubcontinuationPlanV1 {
             representation_rule_version: OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
             frames: vec![frame(0, None), frame(1, Some(0))],
+            recursive_calls: Vec::new(),
+            computational_ih_slots: Vec::new(),
+            computational_ih_calls: Vec::new(),
         };
         assert_eq!(
             OrientedSubcontinuationPlanV1::decode(&plan.canonical_bytes()).unwrap(),
@@ -857,6 +962,9 @@ mod tests {
         let plan = OrientedSubcontinuationPlanV1 {
             representation_rule_version: OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
             frames: vec![frame],
+            recursive_calls: Vec::new(),
+            computational_ih_slots: Vec::new(),
+            computational_ih_calls: Vec::new(),
         };
         assert_eq!(
             OrientedSubcontinuationPlanV1::decode(&plan.canonical_bytes()),
@@ -877,6 +985,9 @@ mod tests {
         let plan = OrientedSubcontinuationPlanV1 {
             representation_rule_version: OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
             frames: vec![outer, inner],
+            recursive_calls: Vec::new(),
+            computational_ih_slots: Vec::new(),
+            computational_ih_calls: Vec::new(),
         };
         assert_eq!(
             plan.validate(),
@@ -894,10 +1005,74 @@ mod tests {
         let plan = OrientedSubcontinuationPlanV1 {
             representation_rule_version: OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
             frames: vec![root, child],
+            recursive_calls: Vec::new(),
+            computational_ih_slots: Vec::new(),
+            computational_ih_calls: Vec::new(),
         };
         assert_eq!(
             plan.validate(),
             Err("oriented subcontinuation parent crosses a prompt region")
+        );
+    }
+
+    #[test]
+    fn computational_ih_parent_edges_roundtrip_and_bind_exact_occurrences() {
+        let plan = computational_ih_plan();
+        plan.validate().unwrap();
+        assert_eq!(
+            OrientedSubcontinuationPlanV1::decode(&plan.canonical_bytes()).unwrap(),
+            plan
+        );
+    }
+
+    #[test]
+    fn computational_ih_parent_edge_deletion_corruption_and_swap_reject() {
+        let exact = computational_ih_plan();
+
+        let mut deleted = exact.clone();
+        deleted.computational_ih_calls[0].parent_frame_template_id = None;
+        deleted.computational_ih_calls[0].parent_segment_site_id = None;
+        deleted.computational_ih_calls[0].occurrence_binding_fingerprint =
+            compiler_private_computational_ih_call_binding_fingerprint(
+                &deleted.computational_ih_calls[0],
+            );
+        assert_eq!(
+            deleted.validate(),
+            Err("computational IH call parent edge is missing")
+        );
+
+        let mut incomplete = exact.clone();
+        incomplete.computational_ih_calls[0].parent_segment_site_id = None;
+        incomplete.computational_ih_calls[0].occurrence_binding_fingerprint =
+            compiler_private_computational_ih_call_binding_fingerprint(
+                &incomplete.computational_ih_calls[0],
+            );
+        assert_eq!(
+            incomplete.validate(),
+            Err("computational IH call parent edge is incomplete")
+        );
+
+        let mut transplanted = exact.clone();
+        transplanted.computational_ih_calls[0].parent_segment_site_id = Some(99);
+        transplanted.computational_ih_calls[0].occurrence_binding_fingerprint =
+            compiler_private_computational_ih_call_binding_fingerprint(
+                &transplanted.computational_ih_calls[0],
+            );
+        assert_eq!(
+            transplanted.validate(),
+            Err("computational IH call parent edge is inconsistent")
+        );
+
+        let mut swapped = exact;
+        swapped.computational_ih_calls[0].parent_frame_template_id = Some(1);
+        swapped.computational_ih_calls[1].parent_frame_template_id = Some(0);
+        for call in &mut swapped.computational_ih_calls {
+            call.occurrence_binding_fingerprint =
+                compiler_private_computational_ih_call_binding_fingerprint(call);
+        }
+        assert_eq!(
+            swapped.validate(),
+            Err("computational IH call parent edge is inconsistent")
         );
     }
 }

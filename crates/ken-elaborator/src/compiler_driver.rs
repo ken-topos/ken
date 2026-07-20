@@ -1262,8 +1262,10 @@ impl RecursiveInvocationTemplateCollector<'_> {
                                     symbol: owner.clone(),
                                 }
                             })?;
+                        let normalized_head_type =
+                            ken_kernel::normalize(self.env, context, &head_type);
                         let mut arity = 0usize;
-                        let mut cursor = ken_kernel::normalize(self.env, context, &head_type);
+                        let mut cursor = normalized_head_type.clone();
                         while let Term::Pi(_, codomain) = cursor {
                             arity += 1;
                             cursor = *codomain;
@@ -1274,7 +1276,15 @@ impl RecursiveInvocationTemplateCollector<'_> {
                                 symbol: owner.clone(),
                             });
                         }
-                        let result = ken_kernel::infer(self.env, context, term).map_err(|_| {
+                        let arguments = arguments
+                            .iter()
+                            .map(|argument| (*argument).clone())
+                            .collect::<Vec<_>>();
+                        let result = ken_kernel::subst::instantiate_codomain(
+                            &normalized_head_type,
+                            &arguments,
+                        )
+                        .ok_or_else(|| {
                             CompilerDriverError::MissingClosureMetadata {
                                 section: "checked recursive invocation result type",
                                 symbol: owner.clone(),
@@ -1518,39 +1528,39 @@ impl ComputationalIHTemplateCollector<'_> {
             };
             let binding = if binder_ordinal >= argument_count {
                 let method_binder_ordinal = binder_ordinal - argument_count;
-                let recursive_position = *recursive_positions.get(method_binder_ordinal).ok_or_else(
-                    || CompilerDriverError::MissingClosureMetadata {
+                let recursive_position = *recursive_positions
+                    .get(method_binder_ordinal)
+                    .ok_or_else(|| CompilerDriverError::MissingClosureMetadata {
                         section: "checked computational IH recursive position",
                         symbol: owner.clone(),
-                    },
-                )?;
+                    })?;
                 let slot_template_id = self.next_slot_template_id;
                 self.next_slot_template_id = self
                     .next_slot_template_id
                     .checked_add(1)
                     .expect("compiler-private computational IH slot identity exhausted");
                 let ih_type = ken_kernel::normalize(self.env, context, &expected_domain);
-                let constructor_symbol = self.symbols.get(&constructor.id).cloned().ok_or_else(|| {
-                    CompilerDriverError::MissingStableSymbol { id: constructor.id }
-                })?;
-                self.slots.push(crate::erasure::CheckedComputationalIHSlotSeed {
-                    slot_template_id,
-                    owner: owner.clone(),
-                    match_ordinal,
-                    branch_ordinal,
-                    constructor: constructor_symbol,
-                    recursive_position,
-                    method_binder_ordinal,
-                    local_telescope: self.checked_telescope(
-                        context,
-                        b"computational-ih-local-telescope",
-                    )?,
-                    ih_interface: checked_answer_interface_from_term(
-                        b"computational-ih-type",
-                        &ih_type,
-                        self.symbol_table,
-                    )?,
-                });
+                let constructor_symbol =
+                    self.symbols.get(&constructor.id).cloned().ok_or_else(|| {
+                        CompilerDriverError::MissingStableSymbol { id: constructor.id }
+                    })?;
+                self.slots
+                    .push(crate::erasure::CheckedComputationalIHSlotSeed {
+                        slot_template_id,
+                        owner: owner.clone(),
+                        match_ordinal,
+                        branch_ordinal,
+                        constructor: constructor_symbol,
+                        recursive_position,
+                        method_binder_ordinal,
+                        local_telescope: self
+                            .checked_telescope(context, b"computational-ih-local-telescope")?,
+                        ih_interface: checked_answer_interface_from_term(
+                            b"computational-ih-type",
+                            &ih_type,
+                            self.symbol_table,
+                        )?,
+                    });
                 Some(ComputationalIHBinding { slot_template_id })
             } else {
                 None
@@ -1622,22 +1632,21 @@ impl ComputationalIHTemplateCollector<'_> {
                         .get(&binding.slot_template_id)
                         .copied()
                         .unwrap_or(0);
-                    self.calls.push(crate::erasure::CheckedComputationalIHCallSeed {
-                        call_template_id: self.next_call_template_id,
-                        owner: owner.clone(),
-                        slot_template_id: binding.slot_template_id,
-                        occurrence_ordinal,
-                        arity: arguments.len(),
-                        local_telescope: self.checked_telescope(
-                            context,
-                            b"computational-ih-call-telescope",
-                        )?,
-                        result_interface: checked_answer_interface_from_term(
-                            b"computational-ih-type",
-                            &result,
-                            self.symbol_table,
-                        )?,
-                    });
+                    self.calls
+                        .push(crate::erasure::CheckedComputationalIHCallSeed {
+                            call_template_id: self.next_call_template_id,
+                            owner: owner.clone(),
+                            slot_template_id: binding.slot_template_id,
+                            occurrence_ordinal,
+                            arity: arguments.len(),
+                            local_telescope: self
+                                .checked_telescope(context, b"computational-ih-call-telescope")?,
+                            result_interface: checked_answer_interface_from_term(
+                                b"computational-ih-type",
+                                &result,
+                                self.symbol_table,
+                            )?,
+                        });
                     self.next_call_template_id = self
                         .next_call_template_id
                         .checked_add(1)
@@ -1645,8 +1654,8 @@ impl ComputationalIHTemplateCollector<'_> {
                     self.next_call_ordinal.insert(
                         binding.slot_template_id,
                         occurrence_ordinal
-                        .checked_add(1)
-                        .expect("compiler-private computational IH occurrence exhausted"),
+                            .checked_add(1)
+                            .expect("compiler-private computational IH occurrence exhausted"),
                     );
                 }
             }
@@ -1692,10 +1701,7 @@ impl ComputationalIHTemplateCollector<'_> {
                         .collect::<Vec<_>>()
                     })
                     .collect::<Vec<_>>();
-                if recursive_positions_by_constructor
-                    .iter()
-                    .all(Vec::is_empty)
-                {
+                if recursive_positions_by_constructor.iter().all(Vec::is_empty) {
                     for method in methods {
                         self.visit(owner, method, context, bindings, false)?;
                     }

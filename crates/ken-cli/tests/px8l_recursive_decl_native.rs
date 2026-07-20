@@ -79,7 +79,10 @@ fn declaration_refs(
             }
         }
         RuntimeExpr::CheckedJoinSite { body, .. }
-        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
             declaration_refs(body, output)
         }
         RuntimeExpr::Value(_)

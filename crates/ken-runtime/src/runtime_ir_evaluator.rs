@@ -1173,7 +1173,9 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
             | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
             | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
             | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
-            | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => self.eval_expr(body, env),
+            | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
+                self.eval_expr(body, env)
+            }
             RuntimeExpr::Value(value) => Ok(RuntimeIrOutcome::Value(self.eval_value(value)?)),
             RuntimeExpr::Var(index) => env
                 .get(*index as usize)

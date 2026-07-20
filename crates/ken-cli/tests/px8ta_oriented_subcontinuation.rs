@@ -93,15 +93,18 @@ proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
 fn run_depth(depth: usize) -> (ken_runtime::EffectObservation, usize) {
     let body = match depth {
         1 => "leaf_body",
-        2 => r#"(\resource.
+        2 => {
+            r#"(\resource.
           bind (Coproduct (FSOp AFull) AmbientOp)
             (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
             (Result FileError (ResourceBracketResult Unit Unit))
             (ResourceBodyResult Unit Unit)
             (withResource AFull Unit Unit cap (bytes_encode "held-1.bin")
               ResourceMetadata leaf_body)
-            (\outcome. body_result outcome))"#,
-        3 => r#"(\resource.
+            (\outcome. body_result outcome))"#
+        }
+        3 => {
+            r#"(\resource.
           bind (Coproduct (FSOp AFull) AmbientOp)
             (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
             (Result FileError (ResourceBracketResult Unit Unit))
@@ -116,7 +119,8 @@ fn run_depth(depth: usize) -> (ken_runtime::EffectObservation, usize) {
                   (withResource AFull Unit Unit cap (bytes_encode "held-2.bin")
                     ResourceMetadata leaf_body)
                   (\inner_outcome. body_result inner_outcome)))
-            (\outcome. body_result outcome))"#,
+            (\outcome. body_result outcome))"#
+        }
         _ => panic!("PX8-TA public control supports depths one through three"),
     };
     let source = NESTED_BRACKET_PROGRAM.replace("__ROOT_BODY__", body);
@@ -144,9 +148,7 @@ fn run_depth(depth: usize) -> (ken_runtime::EffectObservation, usize) {
         .checked_core
         .metadata
         .values()
-        .find(|bytes| {
-            bytes.starts_with(ken_runtime::ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER)
-        })
+        .find(|bytes| bytes.starts_with(ken_runtime::ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER))
         .and_then(|bytes| ken_runtime::OrientedSubcontinuationPlanV1::decode(bytes).ok())
         .expect("checked nested bracket transports its oriented answer plan");
     let observation = ken_runtime::run_bound_process_effect_observation(

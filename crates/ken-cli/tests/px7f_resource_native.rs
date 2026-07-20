@@ -25,9 +25,7 @@ fn run(name: &str, source: &str) -> ken_runtime::EffectObservation {
         .checked_core
         .metadata
         .values()
-        .find(|bytes| {
-            bytes.starts_with(ken_runtime::ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER)
-        })
+        .find(|bytes| bytes.starts_with(ken_runtime::ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER))
         .and_then(|bytes| ken_runtime::OrientedSubcontinuationPlanV1::decode(bytes).ok())
         .expect("resource bracket carries its checked oriented plan");
     assert!(

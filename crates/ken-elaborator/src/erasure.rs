@@ -588,10 +588,8 @@ struct NativeLoweringPlanCollector {
     next_computational_ih_call_ordinal: BTreeMap<u64, u64>,
     consumed_computational_ih_slots: BTreeSet<u64>,
     consumed_computational_ih_calls: BTreeSet<u64>,
-    pending_computational_ih_slots:
-        Vec<(CheckedComputationalIHSlotSeed, Vec<u64>, u64)>,
-    pending_computational_ih_calls:
-        Vec<(CheckedComputationalIHCallSeed, Vec<u64>, Option<u64>)>,
+    pending_computational_ih_slots: Vec<(CheckedComputationalIHSlotSeed, Vec<u64>, u64)>,
+    pending_computational_ih_calls: Vec<(CheckedComputationalIHCallSeed, Vec<u64>, Option<u64>)>,
 }
 
 impl NativeLoweringPlanCollector {
@@ -808,13 +806,19 @@ impl NativeLoweringPlanCollector {
         *ordinal = ordinal
             .checked_add(1)
             .expect("compiler-private computational IH call ordinal exhausted");
-        let seed = self.computational_ih_calls.get(&key).cloned().ok_or_else(|| {
-            expression_lowering_error(
-                owner,
-                "checked_computational_ih_call_missing",
-                format!("complete computational IH application {key:?} has no checked template"),
-            )
-        })?;
+        let seed = self
+            .computational_ih_calls
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| {
+                expression_lowering_error(
+                    owner,
+                    "checked_computational_ih_call_missing",
+                    format!(
+                        "complete computational IH application {key:?} has no checked template"
+                    ),
+                )
+            })?;
         if seed.owner != *owner || seed.arity != arity {
             return Err(expression_lowering_error(
                 owner,
@@ -832,8 +836,11 @@ impl NativeLoweringPlanCollector {
                 "computational IH call template was consumed more than once",
             ));
         }
-        self.pending_computational_ih_calls
-            .push((seed.clone(), occurrence_path.to_vec(), parent_frame));
+        self.pending_computational_ih_calls.push((
+            seed.clone(),
+            occurrence_path.to_vec(),
+            parent_frame,
+        ));
         Ok(seed.call_template_id)
     }
 }
@@ -1044,33 +1051,37 @@ impl OrientedSubcontinuationPlanCollector {
 
     fn finish(
         mut self,
-        recursive_invocations: BTreeMap<(StableSymbol, u64), CheckedRecursiveInvocationSeed>,
+        _recursive_invocations: BTreeMap<(StableSymbol, u64), CheckedRecursiveInvocationSeed>,
         consumed_recursive_invocations: BTreeSet<u64>,
         pending_recursive_calls: Vec<(CheckedRecursiveInvocationSeed, Vec<u64>, Option<u64>)>,
-        computational_ih_slot_seeds:
-            BTreeMap<(StableSymbol, u64, usize, usize), CheckedComputationalIHSlotSeed>,
-        computational_ih_call_seeds: BTreeMap<(u64, u64), CheckedComputationalIHCallSeed>,
+        _computational_ih_slot_seeds: BTreeMap<
+            (StableSymbol, u64, usize, usize),
+            CheckedComputationalIHSlotSeed,
+        >,
+        _computational_ih_call_seeds: BTreeMap<(u64, u64), CheckedComputationalIHCallSeed>,
         consumed_computational_ih_slots: BTreeSet<u64>,
         consumed_computational_ih_calls: BTreeSet<u64>,
-        pending_computational_ih_slots:
-            Vec<(CheckedComputationalIHSlotSeed, Vec<u64>, u64)>,
-        pending_computational_ih_calls:
-            Vec<(CheckedComputationalIHCallSeed, Vec<u64>, Option<u64>)>,
+        pending_computational_ih_slots: Vec<(CheckedComputationalIHSlotSeed, Vec<u64>, u64)>,
+        pending_computational_ih_calls: Vec<(
+            CheckedComputationalIHCallSeed,
+            Vec<u64>,
+            Option<u64>,
+        )>,
     ) -> ken_runtime::OrientedSubcontinuationPlanV1 {
         assert_eq!(
-            recursive_invocations.len(),
+            pending_recursive_calls.len(),
             consumed_recursive_invocations.len(),
-            "checked recursive invocation templates close exactly over Runtime markers"
+            "emitted recursive invocation templates close exactly over Runtime markers"
         );
         assert_eq!(
-            computational_ih_slot_seeds.len(),
+            pending_computational_ih_slots.len(),
             consumed_computational_ih_slots.len(),
-            "checked computational IH slot templates close exactly over Runtime case markers"
+            "emitted computational IH slot templates close exactly over Runtime case markers"
         );
         assert_eq!(
-            computational_ih_call_seeds.len(),
+            pending_computational_ih_calls.len(),
             consumed_computational_ih_calls.len(),
-            "checked computational IH call templates close exactly over Runtime call markers"
+            "emitted computational IH call templates close exactly over Runtime call markers"
         );
         let mut recursive_calls = Vec::with_capacity(pending_recursive_calls.len());
         for (seed, occurrence_path, parent_frame) in pending_recursive_calls {
@@ -1087,10 +1098,14 @@ impl OrientedSubcontinuationPlanCollector {
                     .expect("callee frame exists")
                     .semantic_position
             });
-            assert!(
-                !callee_frames.is_empty(),
-                "checked recursive call callee owns an oriented segment template"
-            );
+            if callee_frames.is_empty() {
+                // The checked recursive-call census is intentionally broader
+                // than oriented lowering. Preserve the established bare
+                // recursive IR when the callee owns no oriented frame; only
+                // calls that can instantiate a segment receive a plan row and
+                // Runtime marker.
+                continue;
+            }
             let segment_site_id = self
                 .frames
                 .iter()
@@ -1173,7 +1188,7 @@ impl OrientedSubcontinuationPlanCollector {
             computational_ih_slots.push(slot);
         }
         let mut computational_ih_calls = Vec::with_capacity(pending_computational_ih_calls.len());
-        for (seed, occurrence_path, _parent_frame) in pending_computational_ih_calls {
+        for (seed, occurrence_path, parent_frame) in pending_computational_ih_calls {
             let slot = computational_ih_slots
                 .iter()
                 .find(|slot| slot.slot_template_id == seed.slot_template_id)
@@ -1183,6 +1198,16 @@ impl OrientedSubcontinuationPlanCollector {
             // parent in the callee sequence would let one IH invocation claim
             // a continuation owned by a later, distinct marker.
             let callee_frame_templates = slot.frame_templates.clone();
+            if parent_frame.is_some() && parent_frame != Some(slot.frame_template_id) {
+                panic!("checked computational IH call is not enclosed by its slot frame");
+            }
+            // This is the exact checked frame enclosing the IH call occurrence.
+            // Its own control witness describes that frame's static parent, a
+            // different edge which must not be substituted for this dynamic
+            // call-to-open-scope binding.
+            let parent_frame_template_id = parent_frame;
+            let parent = parent_frame_template_id
+                .and_then(|id| self.frames.iter().find(|frame| frame.frame_id == id));
             let caller_interface = seed.result_interface.clone();
             let mut call = ken_runtime::CheckedComputationalIHCallTemplateV1 {
                 call_template_id: seed.call_template_id,
@@ -1194,6 +1219,8 @@ impl OrientedSubcontinuationPlanCollector {
                 result_interface: seed.result_interface.clone(),
                 callee_segment_site_id: slot.segment_site_id,
                 callee_frame_templates,
+                parent_frame_template_id,
+                parent_segment_site_id: parent.map(|frame| frame.segment_site_id),
                 caller_interface,
                 occurrence_binding_fingerprint: 0,
             };
@@ -1305,14 +1332,129 @@ pub(crate) fn erase_checked_host_package_for_target_with_join_plan<'a>(
         computational_ih_slots,
         computational_ih_calls,
     );
-    let program = erase_checked_package_with_host_root(
+    let mut program = erase_checked_package_with_host_root(
         package,
         targets,
         Some((root, spine)),
         Some(&mut collector),
     )?;
     let (join_plan, oriented_plan) = collector.finish();
+    let retained_recursive_calls = oriented_plan
+        .recursive_calls
+        .iter()
+        .map(|call| call.call_template_id)
+        .collect::<BTreeSet<_>>();
+    for declaration in &mut program.declarations {
+        if let RuntimeDeclarationKind::Transparent { body } = &mut declaration.kind {
+            remove_unplanned_recursive_invocation_markers(body, &retained_recursive_calls);
+        }
+    }
+    for example in &mut program.examples {
+        remove_unplanned_recursive_invocation_markers(&mut example.ir, &retained_recursive_calls);
+    }
     Ok((program, join_plan, oriented_plan))
+}
+
+fn remove_unplanned_recursive_invocation_markers(
+    expression: &mut RuntimeExpr,
+    retained: &BTreeSet<u64>,
+) {
+    loop {
+        let remove = matches!(
+            expression,
+            RuntimeExpr::CheckedRecursiveInvocation {
+                call_template_id,
+                ..
+            } if !retained.contains(call_template_id)
+        );
+        if !remove {
+            break;
+        }
+        let RuntimeExpr::CheckedRecursiveInvocation { body, .. } =
+            std::mem::replace(expression, RuntimeExpr::Value(RuntimeValue::Unknown))
+        else {
+            unreachable!("removal predicate selects one recursive marker")
+        };
+        *expression = *body;
+    }
+
+    match expression {
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. }
+        | RuntimeExpr::Project { record: body, .. }
+        | RuntimeExpr::Closure { body, .. } => {
+            remove_unplanned_recursive_invocation_markers(body, retained)
+        }
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            for capture in captures {
+                remove_unplanned_recursive_invocation_markers(capture, retained);
+            }
+            remove_unplanned_recursive_invocation_markers(body, retained);
+        }
+        RuntimeExpr::Let { value, body } => {
+            remove_unplanned_recursive_invocation_markers(value, retained);
+            remove_unplanned_recursive_invocation_markers(body, retained);
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            remove_unplanned_recursive_invocation_markers(scrutinee, retained);
+            remove_unplanned_recursive_invocation_markers(then_expr, retained);
+            remove_unplanned_recursive_invocation_markers(else_expr, retained);
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for argument in args {
+                remove_unplanned_recursive_invocation_markers(argument, retained);
+            }
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            remove_unplanned_recursive_invocation_markers(scrutinee, retained);
+            for case in cases {
+                remove_unplanned_recursive_invocation_markers(&mut case.body, retained);
+            }
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            remove_unplanned_recursive_invocation_markers(scrutinee, retained);
+            for case in cases {
+                remove_unplanned_recursive_invocation_markers(&mut case.body, retained);
+            }
+        }
+        RuntimeExpr::Record { fields } => {
+            for (_, field) in fields {
+                remove_unplanned_recursive_invocation_markers(field, retained);
+            }
+        }
+        RuntimeExpr::Call { callee, args } => {
+            remove_unplanned_recursive_invocation_markers(callee, retained);
+            for argument in args {
+                remove_unplanned_recursive_invocation_markers(argument, retained);
+            }
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            if let Some(capability) = capability {
+                remove_unplanned_recursive_invocation_markers(&mut capability.value, retained);
+            }
+            for argument in args {
+                remove_unplanned_recursive_invocation_markers(argument, retained);
+            }
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => {}
+    }
 }
 
 fn lower_checked_host_root(
@@ -1836,12 +1978,7 @@ fn lower_body_term_with_plans(
                 .map(|pending| pending.frame_id)
                 .or(parent_oriented_frame);
             let branch_slot_templates = if let Some(pending) = pending.as_ref() {
-                native_plans.consume_computational_ih_slots(
-                    &owner,
-                    view,
-                    path,
-                    pending.frame_id,
-                )?
+                native_plans.consume_computational_ih_slots(&owner, view, path, pending.frame_id)?
             } else {
                 vec![Vec::new(); view.branches.len()]
             };
@@ -1903,17 +2040,17 @@ fn lower_body_term_with_plans(
                 let mut branch_path = path.to_vec();
                 branch_path.extend([20, branch_index as u64]);
                 let body = lower_body_term_with_plans(
-                        method,
-                        declarations,
-                        semantic,
-                        stack,
-                        root,
-                        context_depth + source_binders,
-                        Some(&remap),
-                        &branch_path,
-                        native_plans,
-                        nested_parent,
-                    )?;
+                    method,
+                    declarations,
+                    semantic,
+                    stack,
+                    root,
+                    context_depth + source_binders,
+                    Some(&remap),
+                    &branch_path,
+                    native_plans,
+                    nested_parent,
+                )?;
                 let body = if slot_templates.is_empty() {
                     body
                 } else {
@@ -5498,7 +5635,17 @@ mod px7l_tests {
             .finish_match(outer, &oriented_runtime_frame("p0"))
             .unwrap();
 
-        let plan = collector.finish();
+        let plan = collector.finish(
+            BTreeMap::new(),
+            BTreeSet::new(),
+            Vec::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            Vec::new(),
+            Vec::new(),
+        );
         plan.validate().unwrap();
         let mut frames = plan.frames.iter().collect::<Vec<_>>();
         frames.sort_by_key(|frame| frame.semantic_position);
