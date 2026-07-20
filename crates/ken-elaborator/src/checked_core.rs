@@ -1478,40 +1478,6 @@ pub fn checked_core_declaration_body_view(
     decode_declaration_body_view(semantic, selection, symbol)
 }
 
-/// Decode one canonical checked term through the same runtime-body projection
-/// used for declaration erasure.
-///
-/// This is compiler-private glue for producers that must classify a source
-/// occurrence before erasure without maintaining a second notion of which
-/// children survive at runtime.
-pub(crate) fn checked_core_runtime_term_view(
-    package: &CheckedCorePackage,
-    selection: &CheckedCoreBodyViewSelection,
-    owner: &StableSymbol,
-    canonical_term: &[u8],
-    type_context: &[Vec<u8>],
-) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
-    let semantic = validate_body_view_selection(package, selection)?;
-    if !selection.reachable_declarations.contains(owner) {
-        return Err(
-            CheckedCoreBodyViewError::RequestedBodyOutsideSelectedClosure {
-                target: selection.target_symbol.clone(),
-                symbol: owner.clone(),
-            },
-        );
-    }
-    let mut cursor = CanonicalCursor::new(canonical_term);
-    let term =
-        decode_supported_body_term(&mut cursor, semantic, selection, owner, type_context, None)?;
-    if cursor.remaining() != 0 {
-        return Err(CheckedCoreBodyViewError::TrailingCanonicalBytes {
-            symbol: owner.clone(),
-            remaining: cursor.remaining(),
-        });
-    }
-    Ok(term)
-}
-
 /// Decide whether a checked runtime match actually consumes a computational
 /// induction hypothesis. Both checked-plan production and erasure call this
 /// exact predicate.
@@ -1550,6 +1516,90 @@ pub(crate) fn checked_match_uses_computational_recursive_hypothesis(
         }
     }
     Ok(false)
+}
+
+/// One match occurrence in the exact child domain retained by checked Runtime
+/// erasure. Opaque type/proof metadata is deliberately absent from this census.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CheckedRuntimeMatchOccurrence {
+    pub computational_ordinal: Option<u64>,
+}
+
+pub(crate) fn checked_runtime_match_census(
+    term: &CheckedCoreBodyTerm,
+) -> Result<Vec<CheckedRuntimeMatchOccurrence>, CheckedComputationalIHClassificationError> {
+    fn visit(
+        term: &CheckedCoreBodyTerm,
+        next_computational_ordinal: &mut u64,
+        occurrences: &mut Vec<CheckedRuntimeMatchOccurrence>,
+    ) -> Result<(), CheckedComputationalIHClassificationError> {
+        match term {
+            CheckedCoreBodyTerm::Variable { .. }
+            | CheckedCoreBodyTerm::IntegerLiteral { .. }
+            | CheckedCoreBodyTerm::DirectDeclarationCall { .. }
+            | CheckedCoreBodyTerm::RecursiveDeclarationCall(_)
+            | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
+            | CheckedCoreBodyTerm::PrimitiveLiteral(_)
+            | CheckedCoreBodyTerm::ConstructorReference(_)
+            | CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => {}
+            CheckedCoreBodyTerm::PrimitiveApplication(view) => {
+                for argument in &view.arguments {
+                    visit(argument, next_computational_ordinal, occurrences)?;
+                }
+            }
+            CheckedCoreBodyTerm::Lambda { body, .. } => {
+                visit(body, next_computational_ordinal, occurrences)?;
+            }
+            CheckedCoreBodyTerm::Application { function, argument } => {
+                visit(function, next_computational_ordinal, occurrences)?;
+                visit(argument, next_computational_ordinal, occurrences)?;
+            }
+            CheckedCoreBodyTerm::Let { value, body, .. } => {
+                visit(value, next_computational_ordinal, occurrences)?;
+                visit(body, next_computational_ordinal, occurrences)?;
+            }
+            CheckedCoreBodyTerm::Match(view) => {
+                let computational = checked_match_uses_computational_recursive_hypothesis(view)?;
+                let computational_ordinal = computational.then(|| {
+                    let ordinal = *next_computational_ordinal;
+                    *next_computational_ordinal = next_computational_ordinal
+                        .checked_add(1)
+                        .expect("compiler-private computational match ordinal exhausted");
+                    ordinal
+                });
+                occurrences.push(CheckedRuntimeMatchOccurrence {
+                    computational_ordinal,
+                });
+                visit(&view.scrutinee, next_computational_ordinal, occurrences)?;
+                for branch in &view.branches {
+                    visit(&branch.method, next_computational_ordinal, occurrences)?;
+                }
+            }
+            CheckedCoreBodyTerm::RecordSigmaConstruction(view) => {
+                for field in &view.fields {
+                    if let CheckedCoreRecordSigmaFieldValue::Runtime { value, .. } = field {
+                        visit(value, next_computational_ordinal, occurrences)?;
+                    }
+                }
+            }
+            CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
+                visit(&view.base, next_computational_ordinal, occurrences)?;
+            }
+            CheckedCoreBodyTerm::DictionaryConstruction(view) => {
+                for field in &view.fields {
+                    if let CheckedCoreDictionaryFieldValue::Runtime { value, .. } = field {
+                        visit(value, next_computational_ordinal, occurrences)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    let mut occurrences = Vec::new();
+    let mut next_computational_ordinal = 0;
+    visit(term, &mut next_computational_ordinal, &mut occurrences)?;
+    Ok(occurrences)
 }
 
 fn runtime_body_references_outer_binder_range(
