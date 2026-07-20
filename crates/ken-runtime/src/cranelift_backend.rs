@@ -2095,6 +2095,8 @@ fn run_px8j_malformed_recursor_consumer(
         pending_computational_ih_call: None,
         active_recursive_invocations: Vec::new(),
         next_recursive_invocation_instance: 1,
+        dynamic_splice_edges: BTreeMap::new(),
+        next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -2278,6 +2280,8 @@ fn run_checked_bounded_nat_fixture(
         pending_computational_ih_call: None,
         active_recursive_invocations: Vec::new(),
         next_recursive_invocation_instance: 1,
+        dynamic_splice_edges: BTreeMap::new(),
+        next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -2499,6 +2503,8 @@ fn run_dynamic_constructor_dispatch_fixture(
         pending_computational_ih_call: None,
         active_recursive_invocations: Vec::new(),
         next_recursive_invocation_instance: 1,
+        dynamic_splice_edges: BTreeMap::new(),
+        next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -2721,6 +2727,8 @@ fn compile_expr_into_module<'a, M: Module>(
         pending_computational_ih_call: None,
         active_recursive_invocations: Vec::new(),
         next_recursive_invocation_instance: 1,
+        dynamic_splice_edges: BTreeMap::new(),
+        next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: process_mode,
@@ -2776,6 +2784,7 @@ fn compile_expr_into_module<'a, M: Module>(
         compiler.root_terminal_authority = compiler.take_distinguished_root_answer_authority()?;
         let lowered = compiler.lower_expr(&mut builder, expr, &initial_env)?;
         compiler.require_complete_join_plan_consumption()?;
+        compiler.require_complete_dynamic_splice_edge_consumption()?;
         let result = match lowered {
             Lowered::Trap(trap) => {
                 let status = builder
@@ -2879,6 +2888,8 @@ struct Lowering<'a> {
     pending_computational_ih_call: Option<u64>,
     active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
     next_recursive_invocation_instance: u64,
+    dynamic_splice_edges: BTreeMap<DynamicSpliceEdgeId, DynamicSpliceEdge>,
+    next_dynamic_splice_edge: u64,
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
     process_object: bool,
@@ -2912,6 +2923,23 @@ struct CheckedRecursiveInvocationInstance {
     source: InvocationTemplateRef,
     invocation_instance_id: u64,
     semantic_depth: usize,
+    dynamic_splice_edge: Option<DynamicSpliceEdgeId>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct DynamicSpliceEdgeId(u64);
+
+/// The unique compiler-owned authority to splice one completed dynamic child
+/// invocation into one exact open parent occurrence. Lowered values retain
+/// only the inert `DynamicSpliceEdgeId`; this non-`Clone` ledger entry is
+/// removed and consumed before any CFG is emitted.
+struct DynamicSpliceEdge {
+    edge_id: DynamicSpliceEdgeId,
+    child_invocation_instance_id: u64,
+    parent_invocation_instance_id: u64,
+    checked_call_template_id: u64,
+    parent_frame_template_id: u64,
+    segment_site_id: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3337,6 +3365,10 @@ struct RecursorInvocationSegment {
     resume_cursor: ContinuationCursorId,
     checked_invocation: Option<CheckedRecursiveInvocationInstance>,
     computational_ih_slot_template_id: Option<u64>,
+    /// Inert handles into `Lowering::dynamic_splice_edges`. Cloning a lowered
+    /// recursor can copy a handle, but only one clone can consume the unique
+    /// compiler-owned edge; every replay rejects before CFG.
+    dynamic_splice_edges: Vec<DynamicSpliceEdgeId>,
     /// Immutable mint-time witness for every already-open control extent.
     /// Qualification may attach a fresh invocation identity later, but it may
     /// not delete, duplicate, reorder, or transplant an exit obligation.
@@ -3530,6 +3562,7 @@ impl RecursorInvocationSegment {
             resume_cursor,
             checked_invocation,
             computational_ih_slot_template_id,
+            dynamic_splice_edges: Vec::new(),
             open_control_obligations,
         }
     }
@@ -3669,6 +3702,7 @@ fn compose_oriented_subcontinuation(
     invocation: Option<CheckedRecursiveInvocationInstance>,
     activation: ContinuationActivationId,
     mut segment: RecursorInvocationSegment,
+    dynamic_splice_edges: Vec<DynamicSpliceEdge>,
 ) -> Result<InstalledOrientedSubcontinuationSegment, CraneliftBackendError> {
     segment.validate_open_control_obligations()?;
     let invocation = invocation.or(segment.checked_invocation);
@@ -3802,37 +3836,240 @@ fn compose_oriented_subcontinuation(
                     .clone(),
             );
         }
-        let mut by_id = BTreeMap::new();
+        let mut by_id = BTreeMap::<u64, Vec<u64>>::new();
+        let mut layers_by_key = BTreeMap::new();
         for layer in semantic_layers {
             let frame_id = layer.checked_frame_id.expect("all frames are checked");
             let invocation_id = layer
                 .checked_invocation_id
                 .expect("all checked frames have an invocation instance");
-            if by_id.insert((invocation_id, frame_id), layer).is_some() {
+            if layers_by_key
+                .insert((invocation_id, frame_id), layer)
+                .is_some()
+            {
                 return Err(unsupported(
                     "OrientedSubcontinuationPlanV1",
                     "oriented segment repeats a checked dynamic frame key",
                 ));
             }
+            by_id.entry(invocation_id).or_default().push(frame_id);
         }
-        let mut ordered = by_id
-            .into_iter()
-            .map(|((invocation_id, frame_id), layer)| {
-                let entry = plan.frame(frame_id).ok_or_else(|| {
+        for frame_ids in by_id.values_mut() {
+            frame_ids.sort_by_key(|frame_id| {
+                plan.frame(*frame_id)
+                    .expect("checked frame exists after plan validation")
+                    .semantic_position
+            });
+            for pair in frame_ids.windows(2) {
+                let left = plan.frame(pair[0]).expect("validated frame");
+                let right = plan.frame(pair[1]).expect("validated frame");
+                if left.segment_site_id != right.segment_site_id {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "invocation-local oriented segment crosses checked prompt regions",
+                    ));
+                }
+                if left.output_interface != right.input_interface {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "invocation-local oriented segment endpoints do not compose",
+                    ));
+                }
+            }
+        }
+
+        let mut edges_by_child = BTreeMap::new();
+        let mut child_by_parent_frame = BTreeMap::new();
+        for edge in dynamic_splice_edges {
+            if edge.child_invocation_instance_id == edge.parent_invocation_instance_id {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic splice edge forms a self-parent cycle",
+                ));
+            }
+            let child_frames = by_id
+                .get(&edge.child_invocation_instance_id)
+                .ok_or_else(|| {
                     unsupported(
                         "OrientedSubcontinuationPlanV1",
-                        "oriented segment frame has no checked plan entry",
+                        "dynamic splice edge names a stale child invocation",
                     )
                 })?;
-                Ok((invocation_id, entry, layer))
+            let parent_frames = by_id.get(&edge.parent_invocation_instance_id);
+            if parent_frames.is_some_and(|frames| !frames.contains(&edge.parent_frame_template_id))
+            {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic splice edge names the wrong static parent frame",
+                ));
+            }
+            let call = plan
+                .computational_ih_call(edge.checked_call_template_id)
+                .ok_or_else(|| {
+                    unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "dynamic splice edge names a stale checked call template",
+                    )
+                })?;
+            if call.parent_frame_template_id != Some(edge.parent_frame_template_id)
+                || call.parent_segment_site_id != Some(edge.segment_site_id)
+                || call.callee_segment_site_id != edge.segment_site_id
+                || call.callee_frame_templates != *child_frames
+            {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic splice edge disagrees with its checked static parent",
+                ));
+            }
+            if call.result_interface != call.caller_interface {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic splice call result does not match its checked caller interface",
+                ));
+            }
+            if edges_by_child
+                .insert(edge.child_invocation_instance_id, edge)
+                .is_some()
+            {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic child invocation carries duplicate affine splice edges",
+                ));
+            }
+        }
+        let mut external_children = BTreeMap::new();
+        for edge in edges_by_child.values() {
+            if by_id.contains_key(&edge.parent_invocation_instance_id) {
+                let key = (
+                    edge.parent_invocation_instance_id,
+                    edge.parent_frame_template_id,
+                );
+                if child_by_parent_frame
+                    .insert(key, edge.child_invocation_instance_id)
+                    .is_some()
+                {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "sibling dynamic invocations contend for one affine parent edge",
+                    ));
+                }
+            } else {
+                if edge.parent_invocation_instance_id != 0 {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "dynamic splice edge names a stale parent invocation",
+                    ));
+                }
+                if external_children
+                    .insert(
+                        edge.parent_frame_template_id,
+                        edge.child_invocation_instance_id,
+                    )
+                    .is_some()
+                {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "sibling dynamic invocations compete for one external parent edge",
+                    ));
+                }
+            }
+        }
+        let roots = if !external_children.is_empty() {
+            if edges_by_child.len() != by_id.len() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic splice edge deletion leaves an unparented invocation-local segment",
+                ));
+            }
+            let mut roots = external_children.into_iter().collect::<Vec<_>>();
+            roots.sort_by_key(|(parent_frame, _)| {
+                plan.frame(*parent_frame)
+                    .expect("validated external parent frame")
+                    .semantic_position
+            });
+            roots.into_iter().map(|(_, child)| child).collect()
+        } else {
+            by_id
+                .keys()
+                .filter(|instance| !edges_by_child.contains_key(instance))
+                .copied()
+                .collect::<Vec<_>>()
+        };
+        if roots.is_empty() || (edges_by_child.len() < by_id.len() && roots.len() != 1) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "dynamic splice edges do not form one exact invocation-local tree",
+            ));
+        }
+        fn append_invocation_local_segment(
+            invocation_id: u64,
+            by_id: &BTreeMap<u64, Vec<u64>>,
+            child_by_parent_frame: &BTreeMap<(u64, u64), u64>,
+            visiting: &mut BTreeSet<u64>,
+            completed: &mut BTreeSet<u64>,
+            order: &mut Vec<(u64, u64)>,
+        ) -> Result<(), CraneliftBackendError> {
+            if completed.contains(&invocation_id) {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic splice edge is shared across sibling invocation paths",
+                ));
+            }
+            if !visiting.insert(invocation_id) {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic splice edges form a parent cycle",
+                ));
+            }
+            for frame_id in by_id
+                .get(&invocation_id)
+                .expect("validated invocation-local segment exists")
+            {
+                if let Some(child) = child_by_parent_frame.get(&(invocation_id, *frame_id)) {
+                    append_invocation_local_segment(
+                        *child,
+                        by_id,
+                        child_by_parent_frame,
+                        visiting,
+                        completed,
+                        order,
+                    )?;
+                }
+                order.push((invocation_id, *frame_id));
+            }
+            visiting.remove(&invocation_id);
+            completed.insert(invocation_id);
+            Ok(())
+        }
+        let mut order = Vec::new();
+        let mut visiting = BTreeSet::new();
+        let mut completed = BTreeSet::new();
+        for root in roots {
+            append_invocation_local_segment(
+                root,
+                &by_id,
+                &child_by_parent_frame,
+                &mut visiting,
+                &mut completed,
+                &mut order,
+            )?;
+        }
+        if completed.len() != by_id.len() {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "dynamic splice tree leaves an invocation-local segment unreachable",
+            ));
+        }
+        let mut ordered = order
+            .into_iter()
+            .map(|key| {
+                let layer = layers_by_key
+                    .remove(&key)
+                    .expect("validated dynamic frame key exists");
+                let frame = plan.frame(key.1).expect("validated checked frame exists");
+                (key.0, frame, layer)
             })
-            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
-        ordered.sort_by_key(|(_, entry, layer)| {
-            (
-                std::cmp::Reverse(layer.checked_invocation_depth),
-                entry.semantic_position,
-            )
-        });
+            .collect::<Vec<_>>();
         let site = ordered
             .first()
             .expect("checked oriented segment is nonempty")
@@ -3840,67 +4077,12 @@ fn compose_oriented_subcontinuation(
             .segment_site_id;
         if ordered
             .iter()
-            .any(|(_, entry, _)| entry.segment_site_id != site)
+            .any(|(_, frame, _)| frame.segment_site_id != site)
         {
             return Err(unsupported(
                 "OrientedSubcontinuationPlanV1",
-                "oriented splice crosses checked prompt regions",
+                "oriented dynamic splice crosses checked prompt regions",
             ));
-        }
-        for pair in ordered.windows(2) {
-            if pair[0].1.output_interface != pair[1].1.input_interface {
-                return Err(unsupported(
-                    "OrientedSubcontinuationPlanV1",
-                    format!(
-                        "oriented splice answer endpoints do not compose: left=(instance={}, frame={}, depth={}, out={}) right=(instance={}, frame={}, depth={}, in={}) order={:?}",
-                        pair[0].0,
-                        pair[0].1.frame_id,
-                        pair[0].2.checked_invocation_depth,
-                        crate::fnv1a_64(&pair[0].1.output_interface.canonical),
-                        pair[1].0,
-                        pair[1].1.frame_id,
-                        pair[1].2.checked_invocation_depth,
-                        crate::fnv1a_64(&pair[1].1.input_interface.canonical),
-                        ordered
-                            .iter()
-                            .map(|(instance, frame, layer)| (*instance, frame.frame_id, layer.checked_invocation_depth))
-                            .collect::<Vec<_>>(),
-                    ),
-                ));
-            }
-        }
-        for (index, (_, _, layer)) in ordered.iter().enumerate() {
-            let Some(InvocationTemplateRef::ComputationalIHCall(call_id)) =
-                layer.checked_invocation_source
-            else {
-                continue;
-            };
-            let call = plan.computational_ih_call(call_id).ok_or_else(|| {
-                unsupported(
-                    "OrientedSubcontinuationPlanV1",
-                    "semantic IH layer has no checked call parent edge",
-                )
-            })?;
-            match call.parent_frame_template_id {
-                Some(parent) => {
-                    if ordered[index].1.frame_id != parent {
-                        return Err(unsupported(
-                            "OrientedSubcontinuationPlanV1",
-                            format!(
-                                "semantic IH layer does not select its checked open parent frame: call={call_id} frame={} parent={parent}",
-                                ordered[index].1.frame_id,
-                            ),
-                        ));
-                    }
-                }
-                None if index + 1 == ordered.len() => {}
-                None => {
-                    return Err(unsupported(
-                        "OrientedSubcontinuationPlanV1",
-                        "root IH call leaves residual semantic work without a checked edge",
-                    ))
-                }
-            }
         }
         let input = ordered.first().unwrap().1.input_interface.clone();
         let output = ordered.last().unwrap().1.output_interface.clone();
@@ -3908,7 +4090,7 @@ fn compose_oriented_subcontinuation(
             Some(site),
             Some(input),
             Some(output),
-            ordered.into_iter().map(|(_, _, layer)| layer).collect(),
+            ordered.drain(..).map(|(_, _, layer)| layer).collect(),
         )
     } else {
         (None, None, None, semantic_layers)
@@ -4842,6 +5024,7 @@ impl<'a> Lowering<'a> {
             source: InvocationTemplateRef::SameSccCall(call_template_id),
             invocation_instance_id: self.next_recursive_invocation_instance,
             semantic_depth: self.active_recursive_invocations.len() + 1,
+            dynamic_splice_edge: None,
         };
         self.next_recursive_invocation_instance = self
             .next_recursive_invocation_instance
@@ -4903,7 +5086,7 @@ impl<'a> Lowering<'a> {
 
     fn mint_checked_computational_ih_instance(
         &mut self,
-        value: &Lowered,
+        value: &mut Lowered,
     ) -> Result<Option<CheckedRecursiveInvocationInstance>, CraneliftBackendError> {
         let Some(call_template_id) = self.pending_computational_ih_call.take() else {
             return Ok(None);
@@ -4934,23 +5117,174 @@ impl<'a> Lowering<'a> {
                 "computational IH invocation marker names a different slot",
             ));
         }
+        let parent_frame_template_id = call.parent_frame_template_id.ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH invocation has no checked static parent",
+            )
+        })?;
+        let segment_site_id = call.parent_segment_site_id.ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH invocation has no checked parent segment",
+            )
+        })?;
+        let mut parents = std::iter::once(&invocation.selection)
+            .chain(
+                invocation
+                    .unwind
+                    .later_wrappers_in_construction_order
+                    .iter(),
+            )
+            .filter(|layer| {
+                layer.semantic_pending && layer.checked_frame_id == Some(parent_frame_template_id)
+            });
+        let selected = parents.next().ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH closure has no exact checked open parent occurrence",
+            )
+        })?;
+        if parents.next().is_some() {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH closure has multiple candidate dynamic parent occurrences",
+            ));
+        }
+        let parent_invocation_instance_id = match selected.checked_invocation_id {
+            Some(instance_id) => instance_id,
+            None if selected.checked_invocation_source.is_none() => 0,
+            None => {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    format!(
+                        "computational IH closure-selected occurrence has no dynamic parent identity: frame={:?} source={:?} depth={} handles={:?}",
+                        selected.checked_frame_id,
+                        selected.checked_invocation_source,
+                        selected.checked_invocation_depth,
+                        invocation.dynamic_splice_edges,
+                    ),
+                ))
+            }
+        };
+        let selected_site = plan
+            .frame(parent_frame_template_id)
+            .map(|frame| frame.segment_site_id)
+            .ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "computational IH closure-selected occurrence names a stale parent frame",
+                )
+            })?;
+        if selected_site != segment_site_id {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH closure-selected occurrence crosses its checked segment",
+            ));
+        }
+        let edge_id = DynamicSpliceEdgeId(self.next_dynamic_splice_edge);
+        self.next_dynamic_splice_edge = self
+            .next_dynamic_splice_edge
+            .checked_add(1)
+            .expect("compiler-private dynamic splice edge identity exhausted");
         let instance = CheckedRecursiveInvocationInstance {
             source: InvocationTemplateRef::ComputationalIHCall(call_template_id),
             invocation_instance_id: self.next_recursive_invocation_instance,
             semantic_depth: self.active_recursive_invocations.len() + 1,
+            dynamic_splice_edge: Some(edge_id),
         };
         self.next_recursive_invocation_instance = self
             .next_recursive_invocation_instance
             .checked_add(1)
             .expect("compiler-private invocation identity exhausted");
+        if self
+            .dynamic_splice_edges
+            .insert(
+                edge_id,
+                DynamicSpliceEdge {
+                    edge_id,
+                    child_invocation_instance_id: instance.invocation_instance_id,
+                    parent_invocation_instance_id,
+                    checked_call_template_id: call_template_id,
+                    parent_frame_template_id,
+                    segment_site_id,
+                },
+            )
+            .is_some()
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "dynamic splice edge identity was minted twice",
+            ));
+        }
+        invocation.dynamic_splice_edges.push(edge_id);
         Ok(Some(instance))
+    }
+
+    fn validate_source_dynamic_splice_parent(
+        &self,
+        instance: CheckedRecursiveInvocationInstance,
+        open: &OwnedSelectedScope,
+    ) -> Result<(), CraneliftBackendError> {
+        let edge_id = instance.dynamic_splice_edge.ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "source IH invocation has no affine dynamic splice edge",
+            )
+        })?;
+        let edge = self.dynamic_splice_edges.get(&edge_id).ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "source IH invocation names a deleted or already-consumed dynamic splice edge",
+            )
+        })?;
+        if edge.child_invocation_instance_id != instance.invocation_instance_id
+            || edge.parent_invocation_instance_id != open.frame.checked_invocation_id.unwrap_or(0)
+            || Some(edge.parent_frame_template_id) != open.frame.checked_frame_id
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "source open occurrence disagrees with the closure-selected dynamic parent",
+            ));
+        }
+        Ok(())
+    }
+
+    fn take_dynamic_splice_edges(
+        &mut self,
+        segment: &RecursorInvocationSegment,
+    ) -> Result<Vec<DynamicSpliceEdge>, CraneliftBackendError> {
+        let mut seen = BTreeSet::new();
+        let mut edges = Vec::with_capacity(segment.dynamic_splice_edges.len());
+        for edge_id in &segment.dynamic_splice_edges {
+            if !seen.insert(*edge_id) {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic splice edge handle is duplicated in one invocation carrier",
+                ));
+            }
+            let edge = self.dynamic_splice_edges.remove(edge_id).ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic splice edge was deleted, replayed, or consumed by a sibling",
+                )
+            })?;
+            if edge.edge_id != *edge_id {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic splice edge ledger identity is stale",
+                ));
+            }
+            edges.push(edge);
+        }
+        Ok(edges)
     }
 
     fn finish_checked_computational_ih_marker(
         &mut self,
         mut value: Lowered,
     ) -> Result<Lowered, CraneliftBackendError> {
-        let Some(instance) = self.mint_checked_computational_ih_instance(&value)? else {
+        let Some(instance) = self.mint_checked_computational_ih_instance(&mut value)? else {
             return Ok(value);
         };
         let Lowered::ComputationalRecursorClosure { invocation, .. } = &mut value else {
@@ -5173,6 +5507,7 @@ impl<'a> Lowering<'a> {
         };
         let invocation_id = inferred_frame_id
             .and_then(|_| active_instance.map(|instance| instance.invocation_instance_id));
+        let invocation_source = active_instance.map(|instance| instance.source);
         let invocation_depth = active_instance.map_or(0, |instance| instance.semantic_depth);
         let mut current_layer = ComputationalRecursorLayer {
             cases,
@@ -5182,7 +5517,7 @@ impl<'a> Lowering<'a> {
             role,
             checked_frame_id: inferred_frame_id,
             checked_invocation_id: invocation_id,
-            checked_invocation_source: active_instance.map(|instance| instance.source),
+            checked_invocation_source: invocation_source,
             checked_invocation_depth: invocation_depth,
             semantic_pending: true,
         };
@@ -5198,6 +5533,10 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .and_then(|(_, invocation)| invocation.checked_invocation)
             .or(active_instance);
+        let segment_dynamic_splice_edges = payload
+            .as_ref()
+            .map(|(_, invocation)| invocation.dynamic_splice_edges.clone())
+            .unwrap_or_default();
         let (selection, unwind) =
             if let Some((_, invocation)) = payload {
                 let splice_caller = splice_caller.ok_or_else(|| {
@@ -5301,18 +5640,20 @@ impl<'a> Lowering<'a> {
                     },
                 )
             };
+        let mut invocation = RecursorInvocationSegment::new(
+            segment_origin,
+            segment_sibling_position,
+            selection,
+            unwind,
+            resume_cursor,
+            segment_checked_invocation,
+            computational_ih_slot_template_id,
+        );
+        invocation.dynamic_splice_edges = segment_dynamic_splice_edges;
         Ok(Lowered::ComputationalRecursorClosure {
             residual: Box::new(residual),
             activation,
-            invocation: RecursorInvocationSegment::new(
-                segment_origin,
-                segment_sibling_position,
-                selection,
-                unwind,
-                resume_cursor,
-                segment_checked_invocation,
-                computational_ih_slot_template_id,
-            ),
+            invocation,
         })
     }
 
@@ -5564,11 +5905,14 @@ impl<'a> Lowering<'a> {
                                     if !recursor_invocation_is_checked(&invocation) {
                                         validate_recursor_invocation_segment(&invocation)?;
                                     }
+                                    let dynamic_splice_edges =
+                                        self.take_dynamic_splice_edges(&invocation)?;
                                     let installed = compose_oriented_subcontinuation(
                                         self.oriented_subcontinuation_plan.as_ref(),
                                         self.active_recursive_invocations.last().copied(),
                                         activation,
                                         invocation,
+                                        dynamic_splice_edges,
                                     )?;
                                     let frames = installed_oriented_eliminator_frames(&installed);
                                     let mut composed = Vec::with_capacity(frames.len() + 2);
@@ -5677,9 +6021,9 @@ impl<'a> Lowering<'a> {
                             eliminators,
                         )
                     }
-                    callee @ Lowered::ComputationalRecursorClosure { .. } => {
+                    mut callee @ Lowered::ComputationalRecursorClosure { .. } => {
                         let checked_ih_invocation =
-                            self.mint_checked_computational_ih_instance(&callee)?;
+                            self.mint_checked_computational_ih_instance(&mut callee)?;
                         let (base, boundary) = decompose_computational_recursor(callee);
                         let (activation, invocation) =
                             boundary.expect("recursor closure carries an invocation segment");
@@ -5699,12 +6043,14 @@ impl<'a> Lowering<'a> {
                         if !recursor_invocation_is_checked(&invocation) {
                             validate_recursor_invocation_segment(&invocation)?;
                         }
+                        let dynamic_splice_edges = self.take_dynamic_splice_edges(&invocation)?;
                         let installed = compose_oriented_subcontinuation(
                             self.oriented_subcontinuation_plan.as_ref(),
                             checked_ih_invocation
                                 .or_else(|| self.active_recursive_invocations.last().copied()),
                             activation,
                             invocation,
+                            dynamic_splice_edges,
                         )?;
                         let mut composed = installed_oriented_eliminator_frames(&installed);
                         composed.push(EliminatorFrame::InvocationReturn);
@@ -7390,6 +7736,21 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
+    fn require_complete_dynamic_splice_edge_consumption(
+        &self,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.dynamic_splice_edges.is_empty() {
+            return Ok(());
+        }
+        Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            format!(
+                "checked lowering left affine dynamic splice edges unconsumed: {:?}",
+                self.dynamic_splice_edges.keys().collect::<Vec<_>>(),
+            ),
+        ))
+    }
+
     fn take_distinguished_root_answer_authority(
         &mut self,
     ) -> Result<Option<RootTerminalAnswerAuthority>, CraneliftBackendError> {
@@ -7761,11 +8122,13 @@ impl<'a> Lowering<'a> {
                 .collect(),
         });
         let sibling_position = invocation.sibling_position;
+        let dynamic_splice_edges = self.take_dynamic_splice_edges(&invocation)?;
         let installed = compose_oriented_subcontinuation(
             self.oriented_subcontinuation_plan.as_ref(),
             checked_ih_invocation.or_else(|| self.active_recursive_invocations.last().copied()),
             activation,
             invocation,
+            dynamic_splice_edges,
         )?;
         debug_assert_eq!(installed.activation, activation);
         debug_assert!(installed
@@ -9879,9 +10242,9 @@ impl<'a> Lowering<'a> {
                     builder, symbol, captures, body, args, env, control,
                 )
             }
-            recursor @ Lowered::ComputationalRecursorClosure { .. } => {
+            mut recursor @ Lowered::ComputationalRecursorClosure { .. } => {
                 let checked_ih_invocation =
-                    self.mint_checked_computational_ih_instance(&recursor)?;
+                    self.mint_checked_computational_ih_instance(&mut recursor)?;
                 if let Some(CheckedRecursiveInvocationInstance {
                     source: InvocationTemplateRef::ComputationalIHCall(call_template_id),
                     ..
@@ -9907,6 +10270,10 @@ impl<'a> Lowering<'a> {
                             "checked IH invocation has no selected/open parent occurrence",
                         )
                     })?;
+                    self.validate_source_dynamic_splice_parent(
+                        checked_ih_invocation.expect("matched checked IH invocation"),
+                        open,
+                    )?;
                     if call.parent_frame_template_id != open.frame.checked_frame_id
                         || call.parent_segment_site_id
                             != open.frame.checked_frame_id.and_then(|frame_id| {
@@ -10584,9 +10951,9 @@ impl<'a> Lowering<'a> {
                         call_env.extend_from_slice(env);
                         self.lower_expr(builder, &body, &call_env)
                     }
-                    callee @ Lowered::ComputationalRecursorClosure { .. } => {
+                    mut callee @ Lowered::ComputationalRecursorClosure { .. } => {
                         let checked_ih_invocation =
-                            self.mint_checked_computational_ih_instance(&callee)?;
+                            self.mint_checked_computational_ih_instance(&mut callee)?;
                         let (base, boundary) = decompose_computational_recursor(callee);
                         let (activation, invocation) = boundary.expect(
                             "recursor closure carries an invocation segment",
@@ -10594,12 +10961,15 @@ impl<'a> Lowering<'a> {
                         if !recursor_invocation_is_checked(&invocation) {
                             validate_recursor_invocation_segment(&invocation)?;
                         }
+                        let dynamic_splice_edges =
+                            self.take_dynamic_splice_edges(&invocation)?;
                         let installed = compose_oriented_subcontinuation(
                             self.oriented_subcontinuation_plan.as_ref(),
                             checked_ih_invocation
                                 .or_else(|| self.active_recursive_invocations.last().copied()),
                             activation,
                             invocation,
+                            dynamic_splice_edges,
                         )?;
                         let mut frames = installed_oriented_eliminator_frames(&installed);
                         frames.push(EliminatorFrame::InvocationReturn);
@@ -14238,8 +14608,8 @@ mod tests {
             0,
             oriented_test_instance_layer(
                 2,
-                2,
-                3,
+                0,
+                0,
                 true,
                 RecursorLayerRole::SelectsOccurrence { origin },
             ),
@@ -14269,8 +14639,8 @@ mod tests {
                     ),
                     oriented_test_instance_layer(
                         0,
-                        4,
-                        1,
+                        0,
+                        0,
                         true,
                         RecursorLayerRole::ExitsScope {
                             origin,
@@ -14280,8 +14650,8 @@ mod tests {
                     ),
                     oriented_test_instance_layer(
                         1,
-                        3,
-                        2,
+                        0,
+                        0,
                         true,
                         RecursorLayerRole::ExitsScope {
                             origin,
@@ -14297,6 +14667,12 @@ mod tests {
         );
         for layer in &mut invocation.unwind.later_wrappers_in_construction_order[..2] {
             layer.checked_invocation_source = Some(InvocationTemplateRef::SameSccCall(999));
+        }
+        invocation.selection.checked_invocation_source = None;
+        for layer in &mut invocation.unwind.later_wrappers_in_construction_order {
+            if layer.semantic_pending {
+                layer.checked_invocation_source = None;
+            }
         }
         invocation
     }
@@ -14340,6 +14716,7 @@ mod tests {
             None,
             ContinuationActivationId(8),
             oriented_test_invocation(),
+            Vec::new(),
         )
         .unwrap();
         assert_eq!(
@@ -14373,6 +14750,7 @@ mod tests {
             None,
             ContinuationActivationId(8),
             oriented_test_invocation(),
+            Vec::new(),
         ) {
             Ok(_) => panic!("endpoint corruption must reject before installation"),
             Err(error) => error,
@@ -14399,6 +14777,7 @@ mod tests {
             None,
             ContinuationActivationId(8),
             oriented_five_control_invocation(),
+            Vec::new(),
         )
         .unwrap();
         assert_eq!(
@@ -14412,7 +14791,7 @@ mod tests {
                     )
                 })
                 .collect::<Vec<_>>(),
-            vec![(2, 2), (3, 1), (4, 0)],
+            vec![(0, 2), (0, 1), (0, 0)],
         );
         assert_eq!(installed.control_ledger.len(), 5);
         assert_eq!(
@@ -14436,6 +14815,7 @@ mod tests {
             None,
             ContinuationActivationId(8),
             replayed,
+            Vec::new(),
         ) {
             Ok(_) => panic!("an inherited open scope cannot replay its semantic transformer"),
             Err(error) => error,
@@ -14443,7 +14823,7 @@ mod tests {
         assert!(matches!(
             replayed,
             CraneliftBackendError::Unsupported(UnsupportedLowering { reason, .. })
-                if reason.contains("endpoints do not compose")
+                if reason.contains("exact invocation-local tree")
         ));
 
         let mut omitted = oriented_five_control_invocation();
@@ -14453,6 +14833,7 @@ mod tests {
             None,
             ContinuationActivationId(8),
             omitted,
+            Vec::new(),
         ) {
             Ok(_) => panic!("a pending selection cannot be omitted from semantic work"),
             Err(error) => error,
@@ -14477,6 +14858,7 @@ mod tests {
             None,
             ContinuationActivationId(8),
             deleted,
+            Vec::new(),
         ) {
             Ok(_) => panic!("deleting only an inherited exit obligation must reject"),
             Err(error) => error,
@@ -14498,6 +14880,7 @@ mod tests {
             None,
             ContinuationActivationId(8),
             duplicated,
+            Vec::new(),
         ) {
             Ok(_) => panic!("duplicating an inherited exit obligation must reject"),
             Err(error) => error,
@@ -14506,6 +14889,479 @@ mod tests {
             duplicated,
             CraneliftBackendError::Unsupported(UnsupportedLowering { reason, .. })
                 if reason == "open control obligation set changed after affine mint"
+        ));
+    }
+
+    fn oriented_dynamic_sibling_fixture() -> (
+        crate::OrientedSubcontinuationPlanV1,
+        RecursorInvocationSegment,
+        Vec<DynamicSpliceEdge>,
+    ) {
+        let plan = oriented_test_ih_plan();
+        let origin = RecursorProducerOriginId(60);
+        let mut segment = RecursorInvocationSegment::new(
+            origin,
+            0,
+            oriented_test_instance_layer(
+                2,
+                11,
+                1,
+                true,
+                RecursorLayerRole::SelectsOccurrence { origin },
+            ),
+            RecursorUnwindStack {
+                later_wrappers_in_construction_order: vec![oriented_test_instance_layer(
+                    0,
+                    12,
+                    1,
+                    true,
+                    RecursorLayerRole::ExitsScope {
+                        origin,
+                        scope_origin: RecursorProducerOriginId(61),
+                        parent_scope: None,
+                    },
+                )],
+            },
+            ContinuationCursorId(13),
+            None,
+            None,
+        );
+        segment.dynamic_splice_edges = vec![DynamicSpliceEdgeId(71), DynamicSpliceEdgeId(72)];
+        let edges = vec![
+            DynamicSpliceEdge {
+                edge_id: DynamicSpliceEdgeId(71),
+                child_invocation_instance_id: 11,
+                parent_invocation_instance_id: 0,
+                checked_call_template_id: 102,
+                parent_frame_template_id: 2,
+                segment_site_id: 9,
+            },
+            DynamicSpliceEdge {
+                edge_id: DynamicSpliceEdgeId(72),
+                child_invocation_instance_id: 12,
+                parent_invocation_instance_id: 0,
+                checked_call_template_id: 100,
+                parent_frame_template_id: 0,
+                segment_site_id: 9,
+            },
+        ];
+        (plan, segment, edges)
+    }
+
+    #[test]
+    fn oriented_same_depth_siblings_require_exact_dynamic_edges() {
+        let (plan, segment, edges) = oriented_dynamic_sibling_fixture();
+
+        let mut old_flat = std::iter::once(&segment.selection)
+            .chain(segment.unwind.later_wrappers_in_construction_order.iter())
+            .filter(|layer| layer.semantic_pending)
+            .collect::<Vec<_>>();
+        old_flat.sort_by_key(|layer| {
+            (
+                std::cmp::Reverse(layer.checked_invocation_depth),
+                plan.frame(layer.checked_frame_id.unwrap())
+                    .unwrap()
+                    .semantic_position,
+            )
+        });
+        let [left, right] = old_flat.as_slice() else {
+            panic!("the discriminator must carry exactly two same-depth siblings")
+        };
+        assert_eq!(left.checked_invocation_depth, 1);
+        assert_eq!(right.checked_invocation_depth, 1);
+        let left = plan.frame(left.checked_frame_id.unwrap()).unwrap();
+        let right = plan.frame(right.checked_frame_id.unwrap()).unwrap();
+        assert_ne!(
+            left.output_interface, right.input_interface,
+            "the retired flat ordering must invent the non-composable sibling adjacency"
+        );
+
+        let installed = compose_oriented_subcontinuation(
+            Some(&plan),
+            None,
+            ContinuationActivationId(14),
+            segment,
+            edges,
+        )
+        .expect("exact child-to-parent edges keep same-depth siblings separate");
+        assert_eq!(
+            installed
+                .semantic_frames
+                .iter()
+                .map(|frame| (
+                    frame.checked_invocation_id.unwrap(),
+                    frame.checked_frame_id.unwrap(),
+                ))
+                .collect::<Vec<_>>(),
+            vec![(11, 2), (12, 0)],
+        );
+    }
+
+    #[test]
+    fn oriented_dynamic_edge_mutations_reject_through_named_lanes() {
+        let reject =
+            |segment: RecursorInvocationSegment, edges: Vec<DynamicSpliceEdge>, expected: &str| {
+                let plan = oriented_test_ih_plan();
+                let error = match compose_oriented_subcontinuation(
+                    Some(&plan),
+                    None,
+                    ContinuationActivationId(14),
+                    segment,
+                    edges,
+                ) {
+                    Ok(_) => panic!("a malformed dynamic splice graph must reject before CFG"),
+                    Err(error) => error,
+                };
+                assert!(
+                    matches!(
+                        error,
+                        CraneliftBackendError::Unsupported(UnsupportedLowering {
+                            construct: "OrientedSubcontinuationPlanV1",
+                            ref reason,
+                        }) if reason.contains(expected)
+                    ),
+                    "expected {expected:?}, got {error:?}"
+                );
+            };
+
+        let (_, segment, mut edges) = oriented_dynamic_sibling_fixture();
+        edges.pop();
+        reject(segment, edges, "deletion leaves an unparented");
+
+        let (_, segment, mut edges) = oriented_dynamic_sibling_fixture();
+        edges.push(DynamicSpliceEdge {
+            edge_id: DynamicSpliceEdgeId(73),
+            child_invocation_instance_id: 11,
+            parent_invocation_instance_id: 0,
+            checked_call_template_id: 102,
+            parent_frame_template_id: 2,
+            segment_site_id: 9,
+        });
+        reject(segment, edges, "duplicate affine splice edges");
+
+        let (_, segment, mut edges) = oriented_dynamic_sibling_fixture();
+        edges[0].parent_invocation_instance_id = 99;
+        reject(segment, edges, "stale parent invocation");
+
+        let (_, segment, mut edges) = oriented_dynamic_sibling_fixture();
+        edges[0].parent_frame_template_id = 1;
+        reject(segment, edges, "disagrees with its checked static parent");
+    }
+
+    #[test]
+    fn oriented_dynamic_edge_ledger_is_affine_and_sibling_isolated() {
+        let seed_env = NativeSeedEnvironment::empty();
+        let mut lowering = root_authority_test_lowering(&seed_env);
+        let (_, mut segment, mut edges) = oriented_dynamic_sibling_fixture();
+        let edge = edges.remove(0);
+        segment.dynamic_splice_edges = vec![edge.edge_id];
+        lowering.dynamic_splice_edges.insert(edge.edge_id, edge);
+
+        let consumed = lowering
+            .take_dynamic_splice_edges(&segment)
+            .expect("the owning invocation consumes its edge exactly once");
+        assert_eq!(consumed.len(), 1);
+        let stolen = match lowering.take_dynamic_splice_edges(&segment) {
+            Ok(_) => panic!("a sibling cannot steal an already-consumed edge"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            stolen,
+            CraneliftBackendError::Unsupported(UnsupportedLowering { reason, .. })
+                if reason.contains("consumed by a sibling")
+        ));
+
+        let (_, mut duplicated, mut edges) = oriented_dynamic_sibling_fixture();
+        let edge = edges.remove(0);
+        duplicated.dynamic_splice_edges = vec![edge.edge_id, edge.edge_id];
+        lowering.dynamic_splice_edges.insert(edge.edge_id, edge);
+        let duplicate = match lowering.take_dynamic_splice_edges(&duplicated) {
+            Ok(_) => panic!("one carrier cannot duplicate an affine edge handle"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            duplicate,
+            CraneliftBackendError::Unsupported(UnsupportedLowering { reason, .. })
+                if reason.contains("handle is duplicated")
+        ));
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum Px8dsEdgeMutation {
+        Delete,
+        Duplicate,
+        StaleParent,
+        CrossSibling,
+        WrongStaticParent,
+    }
+
+    fn run_px8ds_edge_consumer(
+        consumer: Px8jDirectRecursorConsumer,
+        mutation: Px8dsEdgeMutation,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let seed_env = NativeSeedEnvironment::empty();
+        let mut compiler = root_authority_test_lowering(&seed_env);
+        compiler.native_join_plan = None;
+        compiler.root_terminal_authority = None;
+        compiler.process_object = false;
+        let (plan, mut segment, mut edges) = oriented_dynamic_sibling_fixture();
+        compiler.oriented_subcontinuation_plan = Some(plan);
+
+        match mutation {
+            Px8dsEdgeMutation::Delete => {
+                edges.remove(0);
+            }
+            Px8dsEdgeMutation::Duplicate => {
+                segment
+                    .dynamic_splice_edges
+                    .push(segment.dynamic_splice_edges[0]);
+            }
+            Px8dsEdgeMutation::StaleParent => {
+                edges[0].parent_invocation_instance_id = 99;
+            }
+            Px8dsEdgeMutation::CrossSibling => {
+                let stolen = RecursorInvocationSegment {
+                    dynamic_splice_edges: vec![segment.dynamic_splice_edges[0]],
+                    ..segment.clone()
+                };
+                for edge in edges.drain(..) {
+                    compiler.dynamic_splice_edges.insert(edge.edge_id, edge);
+                }
+                compiler.take_dynamic_splice_edges(&stolen)?;
+            }
+            Px8dsEdgeMutation::WrongStaticParent => {
+                edges[0].parent_frame_template_id = 1;
+            }
+        }
+        for edge in edges {
+            compiler.dynamic_splice_edges.insert(edge.edge_id, edge);
+        }
+
+        let cursor = segment.resume_cursor;
+        let activation = ContinuationActivationId(90);
+        let recursor = Lowered::ComputationalRecursorClosure {
+            residual: Box::new(Lowered::Closure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::PX8DS::Done".to_string(),
+                    args: Vec::new(),
+                },
+            }),
+            activation,
+            invocation: segment,
+        };
+        let active = ActiveContinuationFrame {
+            activation,
+            cursor,
+            parent: None,
+            pending: &[],
+            selected_ancestry: &[],
+            source_lineage: &[],
+            source_selected_cursor: None,
+            selected_scope: None,
+        };
+        let active_frames = [EliminatorFrame::Active(active)];
+        let env = [recursor];
+        let call = RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Var(0)),
+            args: Vec::new(),
+        };
+        let pending_let = RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            body: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(1)),
+                args: Vec::new(),
+            }),
+        };
+
+        let mut module = new_jit_module()?;
+        let mut signature = module.make_signature();
+        signature.returns.push(AbiParam::new(types::I64));
+        let func_id = module
+            .declare_function("px8ds_edge_consumer", Linkage::Local, &signature)
+            .map_err(|error| backend_module(error.to_string()))?;
+        let mut context = module.make_context();
+        context.func =
+            Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+        let mut function_context = FunctionBuilderContext::new();
+        let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+        let entry = builder.create_block();
+        builder.switch_to_block(entry);
+        match consumer {
+            Px8jDirectRecursorConsumer::PendingLetProducer => compiler
+                .lower_computational_producer_expr(
+                    &mut builder,
+                    &pending_let,
+                    &env,
+                    &active_frames,
+                ),
+            Px8jDirectRecursorConsumer::ProducerCall => compiler.lower_computational_producer_expr(
+                &mut builder,
+                &call,
+                &env,
+                &active_frames,
+            ),
+            Px8jDirectRecursorConsumer::OrdinaryCall => {
+                compiler.lower_expr(&mut builder, &call, &env)
+            }
+        }
+    }
+
+    #[test]
+    fn oriented_edge_mutations_reject_in_all_three_direct_consumers() {
+        for consumer in [
+            Px8jDirectRecursorConsumer::PendingLetProducer,
+            Px8jDirectRecursorConsumer::ProducerCall,
+            Px8jDirectRecursorConsumer::OrdinaryCall,
+        ] {
+            for (mutation, expected) in [
+                (Px8dsEdgeMutation::Delete, "deleted, replayed"),
+                (Px8dsEdgeMutation::Duplicate, "handle is duplicated"),
+                (Px8dsEdgeMutation::StaleParent, "stale parent invocation"),
+                (Px8dsEdgeMutation::CrossSibling, "consumed by a sibling"),
+                (
+                    Px8dsEdgeMutation::WrongStaticParent,
+                    "disagrees with its checked static parent",
+                ),
+            ] {
+                let error = match run_px8ds_edge_consumer(consumer, mutation) {
+                    Ok(_) => panic!("{consumer:?}/{mutation:?} must reject before CFG"),
+                    Err(error) => error,
+                };
+                assert!(
+                    matches!(
+                        error,
+                        CraneliftBackendError::Unsupported(UnsupportedLowering {
+                            construct: "OrientedSubcontinuationPlanV1",
+                            ref reason,
+                        }) if reason.contains(expected)
+                    ),
+                    "{consumer:?}/{mutation:?}: expected {expected:?}, got {error:?}"
+                );
+            }
+        }
+    }
+
+    fn run_px8ds_source_consumer(mutation: Px8dsEdgeMutation) -> Result<(), CraneliftBackendError> {
+        let seed_env = NativeSeedEnvironment::empty();
+        let mut compiler = root_authority_test_lowering(&seed_env);
+        compiler.native_join_plan = None;
+        compiler.root_terminal_authority = None;
+        compiler.process_object = false;
+        let (plan, mut segment, mut edges) = oriented_dynamic_sibling_fixture();
+        compiler.oriented_subcontinuation_plan = Some(plan);
+
+        match mutation {
+            Px8dsEdgeMutation::Delete => {
+                edges.remove(0);
+            }
+            Px8dsEdgeMutation::Duplicate => {
+                segment
+                    .dynamic_splice_edges
+                    .push(segment.dynamic_splice_edges[0]);
+            }
+            Px8dsEdgeMutation::StaleParent => {
+                edges[0].parent_invocation_instance_id = 99;
+            }
+            Px8dsEdgeMutation::CrossSibling => {
+                let stolen = RecursorInvocationSegment {
+                    dynamic_splice_edges: vec![segment.dynamic_splice_edges[0]],
+                    ..segment.clone()
+                };
+                for edge in edges.drain(..) {
+                    compiler.dynamic_splice_edges.insert(edge.edge_id, edge);
+                }
+                compiler.take_dynamic_splice_edges(&stolen)?;
+            }
+            Px8dsEdgeMutation::WrongStaticParent => {
+                edges[0].parent_frame_template_id = 1;
+            }
+        }
+        for edge in edges {
+            compiler.dynamic_splice_edges.insert(edge.edge_id, edge);
+        }
+        compiler
+            .install_recursor_invocation(
+                SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue),
+                ContinuationActivationId(90),
+                segment,
+                None,
+            )
+            .map(|_| ())
+    }
+
+    #[test]
+    fn oriented_edge_mutations_reject_in_the_source_machine_consumer() {
+        for (mutation, expected) in [
+            (Px8dsEdgeMutation::Delete, "deleted, replayed"),
+            (Px8dsEdgeMutation::Duplicate, "handle is duplicated"),
+            (Px8dsEdgeMutation::StaleParent, "stale parent invocation"),
+            (Px8dsEdgeMutation::CrossSibling, "consumed by a sibling"),
+            (
+                Px8dsEdgeMutation::WrongStaticParent,
+                "disagrees with its checked static parent",
+            ),
+        ] {
+            let error = match run_px8ds_source_consumer(mutation) {
+                Ok(()) => panic!("source {mutation:?} must reject before CFG"),
+                Err(error) => error,
+            };
+            assert!(
+                matches!(
+                    error,
+                    CraneliftBackendError::Unsupported(UnsupportedLowering {
+                        construct: "OrientedSubcontinuationPlanV1",
+                        ref reason,
+                    }) if reason.contains(expected)
+                ),
+                "source {mutation:?}: expected {expected:?}, got {error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn oriented_source_open_occurrence_cross_checks_the_closure_selected_parent() {
+        let seed_env = NativeSeedEnvironment::empty();
+        let mut compiler = root_authority_test_lowering(&seed_env);
+        let (_, _, mut edges) = oriented_dynamic_sibling_fixture();
+        let edge = edges.remove(0);
+        let edge_id = edge.edge_id;
+        compiler.dynamic_splice_edges.insert(edge_id, edge);
+        let instance = CheckedRecursiveInvocationInstance {
+            source: InvocationTemplateRef::ComputationalIHCall(102),
+            invocation_instance_id: 11,
+            semantic_depth: 1,
+            dynamic_splice_edge: Some(edge_id),
+        };
+        let mut open = OwnedSelectedScope {
+            scope_origin: RecursorProducerOriginId(70),
+            parent_scope: None,
+            frame: ComputationalRecursorFramePayload {
+                cases: Vec::new(),
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::ExplicitTrap,
+                    message: "PX8-DS source parent".to_string(),
+                },
+                outer_env: Vec::new(),
+                provenance: RecursorFrameProvenance(71),
+                checked_frame_id: Some(2),
+                checked_invocation_id: Some(0),
+                checked_invocation_source: None,
+                checked_invocation_depth: 0,
+            },
+        };
+        compiler
+            .validate_source_dynamic_splice_parent(instance, &open)
+            .expect("the source open occurrence agrees with closure selection");
+        open.frame.checked_frame_id = Some(0);
+        let mismatch = compiler
+            .validate_source_dynamic_splice_parent(instance, &open)
+            .expect_err("source and closure parent identities must agree before CFG");
+        assert!(matches!(
+            mismatch,
+            CraneliftBackendError::Unsupported(UnsupportedLowering { reason, .. })
+                if reason.contains("source open occurrence disagrees")
         ));
     }
 
@@ -18444,6 +19300,8 @@ mod tests {
             pending_computational_ih_call: None,
             active_recursive_invocations: Vec::new(),
             next_recursive_invocation_instance: 1,
+            dynamic_splice_edges: BTreeMap::new(),
+            next_dynamic_splice_edge: 1,
             assumptions: BTreeSet::new(),
             unsupported: Vec::new(),
             process_object: true,
@@ -18806,6 +19664,8 @@ mod tests {
             pending_computational_ih_call: None,
             active_recursive_invocations: Vec::new(),
             next_recursive_invocation_instance: 1,
+            dynamic_splice_edges: BTreeMap::new(),
+            next_dynamic_splice_edge: 1,
             assumptions: BTreeSet::new(),
             unsupported: Vec::new(),
             process_object: false,
