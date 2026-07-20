@@ -766,7 +766,13 @@ impl NativeLoweringPlanCollector {
                     return Err(expression_lowering_error(
                         owner,
                         "checked_computational_ih_slot_mismatch",
-                        "computational IH slot constructor/recursive-position binding is stale",
+                        format!(
+                            "computational IH slot constructor/recursive-position binding is stale: checked {} position {}, erased {} position {}",
+                            seed.constructor,
+                            seed.recursive_position,
+                            branch.constructor.symbol,
+                            recursive_position,
+                        ),
                     ));
                 }
                 if !self

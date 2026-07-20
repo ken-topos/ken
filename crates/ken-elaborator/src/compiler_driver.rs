@@ -1483,6 +1483,117 @@ struct ComputationalIHTemplateCollector<'a> {
     calls: Vec<crate::erasure::CheckedComputationalIHCallSeed>,
 }
 
+fn term_references_outer_binder_range(
+    term: &Term,
+    start: usize,
+    end: usize,
+    local_depth: usize,
+) -> bool {
+    match term {
+        Term::Var(index) => {
+            *index >= local_depth && {
+                let outer = *index - local_depth;
+                outer >= start && outer < end
+            }
+        }
+        Term::Elim {
+            params,
+            motive,
+            methods,
+            indices,
+            scrut,
+            ..
+        } => params
+            .iter()
+            .chain(std::iter::once(motive.as_ref()))
+            .chain(methods)
+            .chain(indices)
+            .chain(std::iter::once(scrut.as_ref()))
+            .any(|child| term_references_outer_binder_range(child, start, end, local_depth)),
+        Term::Pi(domain, codomain)
+        | Term::Lam(domain, codomain)
+        | Term::Sigma(domain, codomain) => {
+            term_references_outer_binder_range(domain, start, end, local_depth)
+                || term_references_outer_binder_range(codomain, start, end, local_depth + 1)
+        }
+        Term::App(function, argument)
+        | Term::Pair(function, argument)
+        | Term::Ascript(function, argument)
+        | Term::Quot(function, argument)
+        | Term::Absurd(function, argument) => {
+            term_references_outer_binder_range(function, start, end, local_depth)
+                || term_references_outer_binder_range(argument, start, end, local_depth)
+        }
+        Term::Proj1(value)
+        | Term::Proj2(value)
+        | Term::Refl(value)
+        | Term::QuotClass(value)
+        | Term::Trunc(value)
+        | Term::TruncProj(value) => {
+            term_references_outer_binder_range(value, start, end, local_depth)
+        }
+        Term::Let { ty, val, body } => {
+            term_references_outer_binder_range(ty, start, end, local_depth)
+                || term_references_outer_binder_range(val, start, end, local_depth)
+                || term_references_outer_binder_range(body, start, end, local_depth + 1)
+        }
+        Term::Eq(ty, left, right) | Term::J(ty, left, right) => {
+            term_references_outer_binder_range(ty, start, end, local_depth)
+                || term_references_outer_binder_range(left, start, end, local_depth)
+                || term_references_outer_binder_range(right, start, end, local_depth)
+        }
+        Term::Cast(ty, target, equality, value) => {
+            term_references_outer_binder_range(ty, start, end, local_depth)
+                || term_references_outer_binder_range(target, start, end, local_depth)
+                || term_references_outer_binder_range(equality, start, end, local_depth)
+                || term_references_outer_binder_range(value, start, end, local_depth)
+        }
+        Term::QuotElim {
+            motive,
+            method,
+            respect,
+            scrut,
+        } => [
+            motive.as_ref(),
+            method.as_ref(),
+            respect.as_ref(),
+            scrut.as_ref(),
+        ]
+        .into_iter()
+        .any(|child| term_references_outer_binder_range(child, start, end, local_depth)),
+        Term::Type(_)
+        | Term::Omega(_)
+        | Term::Const { .. }
+        | Term::IntLit(_)
+        | Term::IndFormer { .. }
+        | Term::Constructor { .. } => false,
+    }
+}
+
+fn method_uses_computational_ih(
+    owner: &StableSymbol,
+    method: &Term,
+    argument_count: usize,
+    recursive_count: usize,
+) -> Result<bool, CompilerDriverError> {
+    let mut body = method;
+    for _ in 0..argument_count + recursive_count {
+        let Term::Lam(_, next) = body else {
+            return Err(CompilerDriverError::MissingClosureMetadata {
+                section: "checked computational IH method telescope",
+                symbol: owner.clone(),
+            });
+        };
+        body = next;
+    }
+    Ok(term_references_outer_binder_range(
+        body,
+        0,
+        recursive_count,
+        0,
+    ))
+}
+
 impl ComputationalIHTemplateCollector<'_> {
     fn checked_telescope(
         &self,
@@ -1702,6 +1813,29 @@ impl ComputationalIHTemplateCollector<'_> {
                     })
                     .collect::<Vec<_>>();
                 if recursive_positions_by_constructor.iter().all(Vec::is_empty) {
+                    for method in methods {
+                        self.visit(owner, method, context, bindings, false)?;
+                    }
+                    for child in indices {
+                        self.visit(owner, child, context, bindings, false)?;
+                    }
+                    self.visit(owner, scrut, context, bindings, false)?;
+                    return Ok(());
+                }
+                let mut computational = false;
+                for ((method, constructor), recursive_positions) in methods
+                    .iter()
+                    .zip(&inductive.constructors)
+                    .zip(&recursive_positions_by_constructor)
+                {
+                    computational |= method_uses_computational_ih(
+                        owner,
+                        method,
+                        constructor.args.len(),
+                        recursive_positions.len(),
+                    )?;
+                }
+                if !computational {
                     for method in methods {
                         self.visit(owner, method, context, bindings, false)?;
                     }
