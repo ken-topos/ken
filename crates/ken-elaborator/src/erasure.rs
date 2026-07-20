@@ -5210,25 +5210,16 @@ fn match_uses_computational_recursive_hypothesis(
     view: &checked_core::CheckedCoreMatchView,
     root_symbol: &StableSymbol,
 ) -> Result<bool, ErasureError> {
-    if !view.computational_recursive_hypotheses {
-        return Ok(false);
-    }
-    for branch in &view.branches {
-        let recursive_count = branch.constructor.recursive_positions.len();
-        if recursive_count == 0 {
-            continue;
-        }
-        let body = peel_match_branch_method(
-            &branch.method,
-            branch.constructor.argument_count + recursive_count,
+    checked_core::checked_match_uses_computational_recursive_hypothesis(view).map_err(|error| {
+        expression_lowering_error(
             root_symbol,
-            &branch.constructor.symbol,
-        )?;
-        if references_outer_binder_range(body, 0, recursive_count, 0) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+            "match_branch_arity_mismatch",
+            format!(
+                "branch for constructor {} is missing binder {} of {}",
+                error.constructor, error.position, error.binders
+            ),
+        )
+    })
 }
 
 fn require_expression_supported(
@@ -5308,66 +5299,6 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
             view.fields.iter().any(|field| match field {
                 checked_core::CheckedCoreDictionaryFieldValue::Runtime { value, .. } => {
                     has_free_variable_at_or_above(value, bound)
-                }
-                checked_core::CheckedCoreDictionaryFieldValue::Erased { .. } => false,
-            })
-        }
-    }
-}
-
-fn references_outer_binder_range(
-    term: &CheckedCoreBodyTerm,
-    start: usize,
-    end: usize,
-    local_depth: usize,
-) -> bool {
-    match term {
-        CheckedCoreBodyTerm::Variable { de_bruijn_index } => {
-            (local_depth + start..local_depth + end).contains(de_bruijn_index)
-        }
-        CheckedCoreBodyTerm::IntegerLiteral { .. }
-        | CheckedCoreBodyTerm::DirectDeclarationCall { .. }
-        | CheckedCoreBodyTerm::RecursiveDeclarationCall(_)
-        | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
-        | CheckedCoreBodyTerm::PrimitiveLiteral(_)
-        | CheckedCoreBodyTerm::ConstructorReference(_)
-        | CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => false,
-        CheckedCoreBodyTerm::PrimitiveApplication(view) => view
-            .arguments
-            .iter()
-            .any(|term| references_outer_binder_range(term, start, end, local_depth)),
-        CheckedCoreBodyTerm::Lambda { body, .. } => {
-            references_outer_binder_range(body, start, end, local_depth + 1)
-        }
-        CheckedCoreBodyTerm::Application { function, argument } => {
-            references_outer_binder_range(function, start, end, local_depth)
-                || references_outer_binder_range(argument, start, end, local_depth)
-        }
-        CheckedCoreBodyTerm::Let { value, body, .. } => {
-            references_outer_binder_range(value, start, end, local_depth)
-                || references_outer_binder_range(body, start, end, local_depth + 1)
-        }
-        CheckedCoreBodyTerm::Match(view) => {
-            references_outer_binder_range(&view.scrutinee, start, end, local_depth)
-                || view.branches.iter().any(|branch| {
-                    references_outer_binder_range(&branch.method, start, end, local_depth)
-                })
-        }
-        CheckedCoreBodyTerm::RecordSigmaConstruction(view) => {
-            view.fields.iter().any(|field| match field {
-                checked_core::CheckedCoreRecordSigmaFieldValue::Runtime { value, .. } => {
-                    references_outer_binder_range(value, start, end, local_depth)
-                }
-                checked_core::CheckedCoreRecordSigmaFieldValue::Erased { .. } => false,
-            })
-        }
-        CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
-            references_outer_binder_range(&view.base, start, end, local_depth)
-        }
-        CheckedCoreBodyTerm::DictionaryConstruction(view) => {
-            view.fields.iter().any(|field| match field {
-                checked_core::CheckedCoreDictionaryFieldValue::Runtime { value, .. } => {
-                    references_outer_binder_range(value, start, end, local_depth)
                 }
                 checked_core::CheckedCoreDictionaryFieldValue::Erased { .. } => false,
             })

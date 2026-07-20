@@ -1478,6 +1478,144 @@ pub fn checked_core_declaration_body_view(
     decode_declaration_body_view(semantic, selection, symbol)
 }
 
+/// Decode one canonical checked term through the same runtime-body projection
+/// used for declaration erasure.
+///
+/// This is compiler-private glue for producers that must classify a source
+/// occurrence before erasure without maintaining a second notion of which
+/// children survive at runtime.
+pub(crate) fn checked_core_runtime_term_view(
+    package: &CheckedCorePackage,
+    selection: &CheckedCoreBodyViewSelection,
+    owner: &StableSymbol,
+    canonical_term: &[u8],
+    type_context: &[Vec<u8>],
+) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
+    let semantic = validate_body_view_selection(package, selection)?;
+    if !selection.reachable_declarations.contains(owner) {
+        return Err(
+            CheckedCoreBodyViewError::RequestedBodyOutsideSelectedClosure {
+                target: selection.target_symbol.clone(),
+                symbol: owner.clone(),
+            },
+        );
+    }
+    let mut cursor = CanonicalCursor::new(canonical_term);
+    let term =
+        decode_supported_body_term(&mut cursor, semantic, selection, owner, type_context, None)?;
+    if cursor.remaining() != 0 {
+        return Err(CheckedCoreBodyViewError::TrailingCanonicalBytes {
+            symbol: owner.clone(),
+            remaining: cursor.remaining(),
+        });
+    }
+    Ok(term)
+}
+
+/// Decide whether a checked runtime match actually consumes a computational
+/// induction hypothesis. Both checked-plan production and erasure call this
+/// exact predicate.
+#[derive(Debug)]
+pub(crate) struct CheckedComputationalIHClassificationError {
+    pub constructor: StableSymbol,
+    pub position: usize,
+    pub binders: usize,
+}
+
+pub(crate) fn checked_match_uses_computational_recursive_hypothesis(
+    view: &CheckedCoreMatchView,
+) -> Result<bool, CheckedComputationalIHClassificationError> {
+    if !view.computational_recursive_hypotheses {
+        return Ok(false);
+    }
+    for branch in &view.branches {
+        let recursive_count = branch.constructor.recursive_positions.len();
+        if recursive_count == 0 {
+            continue;
+        }
+        let binders = branch.constructor.argument_count + recursive_count;
+        let mut body = &branch.method;
+        for position in 0..binders {
+            let CheckedCoreBodyTerm::Lambda { body: next, .. } = body else {
+                return Err(CheckedComputationalIHClassificationError {
+                    constructor: branch.constructor.symbol.clone(),
+                    position,
+                    binders,
+                });
+            };
+            body = next.as_ref();
+        }
+        if runtime_body_references_outer_binder_range(body, 0, recursive_count, 0) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn runtime_body_references_outer_binder_range(
+    term: &CheckedCoreBodyTerm,
+    start: usize,
+    end: usize,
+    local_depth: usize,
+) -> bool {
+    match term {
+        CheckedCoreBodyTerm::Variable { de_bruijn_index } => {
+            (local_depth + start..local_depth + end).contains(de_bruijn_index)
+        }
+        CheckedCoreBodyTerm::IntegerLiteral { .. }
+        | CheckedCoreBodyTerm::DirectDeclarationCall { .. }
+        | CheckedCoreBodyTerm::RecursiveDeclarationCall(_)
+        | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
+        | CheckedCoreBodyTerm::PrimitiveLiteral(_)
+        | CheckedCoreBodyTerm::ConstructorReference(_)
+        | CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => false,
+        CheckedCoreBodyTerm::PrimitiveApplication(view) => view.arguments.iter().any(|child| {
+            runtime_body_references_outer_binder_range(child, start, end, local_depth)
+        }),
+        CheckedCoreBodyTerm::Lambda { body, .. } => {
+            runtime_body_references_outer_binder_range(body, start, end, local_depth + 1)
+        }
+        CheckedCoreBodyTerm::Application { function, argument } => {
+            runtime_body_references_outer_binder_range(function, start, end, local_depth)
+                || runtime_body_references_outer_binder_range(argument, start, end, local_depth)
+        }
+        CheckedCoreBodyTerm::Let { value, body, .. } => {
+            runtime_body_references_outer_binder_range(value, start, end, local_depth)
+                || runtime_body_references_outer_binder_range(body, start, end, local_depth + 1)
+        }
+        CheckedCoreBodyTerm::Match(view) => {
+            runtime_body_references_outer_binder_range(&view.scrutinee, start, end, local_depth)
+                || view.branches.iter().any(|branch| {
+                    runtime_body_references_outer_binder_range(
+                        &branch.method,
+                        start,
+                        end,
+                        local_depth,
+                    )
+                })
+        }
+        CheckedCoreBodyTerm::RecordSigmaConstruction(view) => {
+            view.fields.iter().any(|field| match field {
+                CheckedCoreRecordSigmaFieldValue::Runtime { value, .. } => {
+                    runtime_body_references_outer_binder_range(value, start, end, local_depth)
+                }
+                CheckedCoreRecordSigmaFieldValue::Erased { .. } => false,
+            })
+        }
+        CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
+            runtime_body_references_outer_binder_range(&view.base, start, end, local_depth)
+        }
+        CheckedCoreBodyTerm::DictionaryConstruction(view) => {
+            view.fields.iter().any(|field| match field {
+                CheckedCoreDictionaryFieldValue::Runtime { value, .. } => {
+                    runtime_body_references_outer_binder_range(value, start, end, local_depth)
+                }
+                CheckedCoreDictionaryFieldValue::Erased { .. } => false,
+            })
+        }
+    }
+}
+
 fn validate_body_view_selection<'a>(
     package: &'a CheckedCorePackage,
     selection: &CheckedCoreBodyViewSelection,
