@@ -610,8 +610,8 @@ pub fn package_starter_executable_artifact_with_options(
 /// The produced artifact receives fresh OS argv, environment, and cwd on every
 /// invocation. It is a validated runtime artifact, never a proof surface.
 #[cfg(test)]
-fn build_process_starter_executable_artifact(
-    entrypoint: &RuntimeExpr,
+fn link_process_starter_object_artifact(
+    object: crate::CraneliftObjectArtifact,
     output_dir: impl AsRef<Path>,
 ) -> Result<PathBuf, ObjectLinkerPackagingError> {
     let options = ObjectLinkerPackagingOptions::starter_host();
@@ -623,15 +623,6 @@ fn build_process_starter_executable_artifact(
             format!("could not create process starter output directory: {err}"),
         )
     })?;
-    let object =
-        crate::emit_process_entrypoint_object_with_cranelift(entrypoint, STARTER_ENTRY_SYMBOL)
-            .map_err(|err| {
-                packaging_error(
-                    ObjectLinkerPackagingStage::ObjectEmission,
-                    "process_cranelift_object",
-                    err.to_string(),
-                )
-            })?;
     let object_path = output_dir.join(&options.object_relative_path);
     fs::write(&object_path, object.object_bytes).map_err(|err| {
         packaging_error(
@@ -657,6 +648,49 @@ fn build_process_starter_executable_artifact(
         Some(&ken_host_staticlib()?),
     )?;
     Ok(executable_path)
+}
+
+#[cfg(test)]
+fn build_process_starter_executable_artifact(
+    entrypoint: &RuntimeExpr,
+    output_dir: impl AsRef<Path>,
+) -> Result<PathBuf, ObjectLinkerPackagingError> {
+    let object =
+        crate::emit_process_entrypoint_object_with_cranelift(entrypoint, STARTER_ENTRY_SYMBOL)
+            .map_err(|err| {
+                packaging_error(
+                    ObjectLinkerPackagingStage::ObjectEmission,
+                    "process_cranelift_object",
+                    err.to_string(),
+                )
+            })?;
+    link_process_starter_object_artifact(object, output_dir)
+}
+
+#[cfg(test)]
+fn build_px8tr_nested_post_effect_artifact(
+    output_dir: impl AsRef<Path>,
+    disable_repair: bool,
+) -> Result<
+    (
+        PathBuf,
+        Vec<crate::cranelift_backend::Px8trTrapProvenanceEvent>,
+    ),
+    ObjectLinkerPackagingError,
+> {
+    let route = crate::cranelift_backend::emit_px8tr_nested_post_effect_object(
+        STARTER_ENTRY_SYMBOL,
+        disable_repair,
+    )
+    .map_err(|err| {
+        packaging_error(
+            ObjectLinkerPackagingStage::ObjectEmission,
+            "px8tr_nested_post_effect_object",
+            err.to_string(),
+        )
+    })?;
+    let executable = link_process_starter_object_artifact(route.artifact, output_dir)?;
+    Ok((executable, route.provenance))
 }
 
 /// Build a process artifact only from an identity-bound `RuntimeProgram` and
@@ -2698,6 +2732,60 @@ mod tests {
         );
         assert_eq!(trapped.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&trapped.stderr).contains("explicit entry trap"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn nested_post_effect_checked_recursor_reaches_success_and_retains_exact_trap_provenance() {
+        let run = |name: &str, disable_repair: bool| {
+            let output_dir = temp_output_dir(name);
+            let (executable, provenance) =
+                build_px8tr_nested_post_effect_artifact(&output_dir, disable_repair)
+                    .expect("PX8-TR checked post-effect fixture emits and links");
+            let output = Command::new(&executable)
+                .env_clear()
+                .output()
+                .expect("PX8-TR checked post-effect fixture runs");
+            fs::remove_dir_all(output_dir).expect("PX8-TR fixture is removed");
+            (output, provenance)
+        };
+
+        let (success, success_provenance) = run("px8tr-post-effect-success", false);
+        assert_eq!(success.status.code(), Some(0));
+        assert!(success_provenance.iter().any(|event| matches!(
+            event,
+            crate::cranelift_backend::Px8trTrapProvenanceEvent::DeforestedAnswerResumed {
+                checked_frame_id: 7,
+                actual_constructor: Some(constructor),
+                return_constructor,
+            } if constructor == "ctor:prelude::Result::Ok"
+                && return_constructor == "ctor:fixture::PX8TR::ITree::Ret"
+        )));
+        assert!(!success_provenance.iter().any(|event| matches!(
+            event,
+            crate::cranelift_backend::Px8trTrapProvenanceEvent::FinalProcessObjectTrap { .. }
+        )));
+
+        let (trapped, trapped_provenance) = run("px8tr-post-effect-route-disabled", true);
+        assert_eq!(trapped.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&trapped.stderr).contains("explicit entry trap"));
+        let expected = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-TR checked ITree recursor default".to_string(),
+        };
+        assert!(trapped_provenance.iter().any(|event| matches!(
+            event,
+            crate::cranelift_backend::Px8trTrapProvenanceEvent::CheckedRecursorDefault {
+                checked_frame_id: 7,
+                actual_constructor: Some(constructor),
+                trap,
+            } if constructor == "ctor:prelude::Result::Ok" && trap == &expected
+        )));
+        assert!(trapped_provenance.iter().any(|event| matches!(
+            event,
+            crate::cranelift_backend::Px8trTrapProvenanceEvent::FinalProcessObjectTrap { trap }
+                if trap == &expected
+        )));
     }
 
     #[cfg(target_os = "linux")]
