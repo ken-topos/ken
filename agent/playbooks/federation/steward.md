@@ -1265,22 +1265,37 @@ The patterns above are *what* to catch; this is *how*. State the mechanism,
 because a compacted (or a lower-tier successor) Steward will otherwise
 improvise it wrong.
 
-**Arm the watchdog as a private `CronCreate`, never the convo `schedule_call`,
-and never a hand-rolled bash `while`-loop / `Monitor`-tool poll.**
-`CronCreate(cron="7,22,37,52 * * * *", prompt="[Steward watchdog tick] …",
-recurring=true)` enqueues a tick into your *own* session and posts nothing; on
-each fire you run a private `get_recent_context` read (+ the pane sweep below) and
-message the space **only** when there is a real stall to nudge — **post nothing on
-a clear tick.** The convo `schedule_call` broadcasts its read into the space as a
-System event everyone sees (noise + orphan risk) — never use it for the watchdog.
-A bash `while true; do sleep …; git … done` loop or the `Monitor` tool is a
-**codex-era improvisation** from before this seat had `CronCreate` — it only
-watches git refs, so it is **blind to the pane-level stalls below** and leaks a
-CPU-spinning orphan; `CronCreate` is the sanctioned mechanism, so do **not**
-resurrect a script (operator, 2026-07-11). Cadence is tunable — **~15 min**
-(operator preference, 2026-07-11); avoid the `:00`/`:30` marks. `durable:false`
-dies on session exit, so re-arm at session start, and `CronDelete` any stale job
-(`CronList` shows yours). (COORDINATION §13.)
+**Arm the watchdog with the convo-channel `schedule_create` self-wake, never the
+convo `schedule_call`, and never a hand-rolled bash `while`-loop / `Monitor`-tool
+poll** (operator, 2026-07-20 — supersedes the earlier `CronCreate` guidance;
+`schedule_create` is now the one provider-agnostic mechanism the whole fleet
+shares, so your skill and the leaders' match).
+`schedule_create(interval_seconds=900, label="steward-watchdog",
+prompt="[Steward watchdog tick] …")` delivers a tick privately into your *own*
+session and **posts nothing to the space**; on each fire you run a private
+`get_recent_context` read (+ the pane sweep below) and message the space **only**
+when there is a real stall to nudge — **post nothing on a clear tick.**
+`interval_seconds` is the recurring "set_interval" (**~15 min = 900s**, operator
+preference); it returns a `schedule_id` and `schedule_delete(schedule_id)` disarms
+it. The convo `schedule_call` broadcasts its read into the space as a System event
+everyone sees (noise + orphan risk) — never use it for the watchdog. A bash `while
+true; do sleep …; git … done` loop, the `Monitor` tool, or the old
+`local/steward-watchdog-wake.sh` tick script are all **superseded** — they only
+watch git refs (blind to the pane-level stalls below) or leak a CPU-spinning
+orphan; `schedule_create` is the sanctioned mechanism, so do **not** resurrect a
+script.
+**⚠ THE RECONNECT REGRESSION — the one way this backstop silently dies.**
+`schedule_create` schedules live only for the convo-channel MCP process's lifetime
+and **do NOT survive an MCP reconnect** (a package upgrade, a network blip, or a
+self-compaction that re-instantiates the client — and posting can stay up while
+they're gone, so you get no signal). So **re-arm on session start, after every
+compaction, AND after any convo-MCP reconnect**, and **`schedule_list` at the top
+of every tick** — an empty list while work is open means your backstop fell over;
+re-arm immediately. `schedule_delete` any stale job when the fleet quiesces. (On
+this Claude-Code seat the host-level `CronCreate` remains available and *does*
+survive an MCP reconnect — a valid durable fallback if the reconnect-fragility
+ever bites — but default to `schedule_create` for fleet uniformity.) (COORDINATION
+§13.)
 
 **★ EVERY tick proactively sweeps the active seats' panes for idle — not only
 reactively after a convo signal (operator-grounded, 2026-07-11: an implementer

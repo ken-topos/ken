@@ -569,39 +569,55 @@ Rules for every layer:
   stops at the operator (human): if the Steward goes quiet, the absence of its
   updates is the operator's signal. Watchdogs are the only schedulers (§1);
   everyone else is event-driven.
-- **Arm your watchdog with a *private* `CronCreate` timer — NOT the convo
-  `schedule_call`** (operator 2026-06-29, validated). A scheduler (team leader,
-  Steward) sets up its recurring pass at **session start, while its
-  ring/pipeline has open work**, with the Claude Code harness tool
-  **`CronCreate`** — e.g.
-  `CronCreate(cron="7,17,27,37,47,57 * * * *", prompt="Watchdog tick: pull
-  get_recent_context, scan the enumerated stall patterns, mention only a blocked
-  agent; if clear, do nothing", recurring=true)`. `CronCreate` **enqueues a
-  prompt into your own session** — it posts **nothing** to the convo space — and
-  fires only while you're idle. On each fire you run your *own* direct
-  `get_recent_context` / `get_space_status` read (private, not posted) and do the
-  stall-pattern assessment + recovery above, **messaging the space only when
-  there is an actual stall to nudge.**
+- **Arm your watchdog with the convo-channel `schedule_create` self-wake — NOT
+  the convo `schedule_call`, and NOT a hand-rolled wake script** (operator
+  2026-07-20; supersedes the earlier `CronCreate`-only guidance). `schedule_create`
+  is the **one sanctioned, provider-agnostic** watchdog mechanism — it works
+  identically on Claude-Code **and** terra/Codex seats, so the whole fleet
+  converges on a single command. A scheduler (team leader, Steward) sets up its
+  recurring pass at **session start, while its ring/pipeline has open work** — e.g.
+  `schedule_create(interval_seconds=900, label="steward-watchdog",
+  prompt="[watchdog tick] read get_recent_context, sweep the active panes, scan
+  the enumerated stall patterns, mention only a blocked agent; if clear, do
+  nothing")` (`interval_seconds` is the recurring "set_interval"; `cron="…"` for a
+  5-field expression, `delay_seconds` for a one-shot). It **posts nothing to the
+  space** — it delivers the prompt privately into your *own* session (a Claude-Code
+  channel push when possible, else a guarded tmux `send-keys` that **skips a tick
+  rather than overtyping a human's not-yet-submitted input**). On each fire you run
+  your *own* direct `get_recent_context` / `get_space_status` read (private, not
+  posted) and do the stall-pattern assessment + recovery above, **messaging the
+  space only when there is an actual stall to nudge.** It returns a `schedule_id`;
+  **`schedule_delete(schedule_id)` disarms it** ("clear_interval") and
+  `schedule_list` shows the schedules you own. A leader may arm a **teammate's**
+  pane by passing an explicit `target`.
   **Do NOT use the convo `schedule_call`** for a watchdog: it executes the read
   *on the backend* and posts the result back into the space as a **System event
   visible to every participant** — pure broadcast noise (and the
   `get_recent_context` variant reads its own prior fires and recursively nests
   them — an exponential self-feeding loop the Architect + runtime-leader caught).
-  A watchdog is a *private* wake, not a public post; `CronCreate` is private,
-  `schedule_call` is not. **A scheduler that never arms its watchdog catches
-  nothing** — the operator caught exactly this (a QA-approved WP left unmerged
-  because the leader wasn't watching).
-- **`CronCreate` is session-local, which is a feature — it cannot orphan across a
-  restart.** A `durable: false` (default) cron **dies when your session exits**,
-  so you simply **re-arm it at session start** while you have open work, and
-  **`CronDelete` it when your ring/WP closes** (`CronList` shows the jobs you own;
-  reconcile after every compaction). This is strictly safer than the convo timer,
-  which is cancellable **only by its creating session** and, if you compacted
-  without recording its `timer_id`, became an un-killable orphan firing stale
-  context until the operator killed it at the source (a K3 runtime watchdog and a
-  spec-leader timer both orphaned this way before we switched). Recurring crons
-  also auto-expire after 7 days. **If you still hold a convo `schedule_call`
-  timer from the old guidance, `cancel_call` it and re-arm with `CronCreate`.**
+  A watchdog is a *private* wake, not a public post; `schedule_create` is private,
+  `schedule_call` is not. Likewise **do NOT** hand-roll a bash `while`-loop, the
+  `Monitor` tool (git-refs only — blind to the pane-level stalls), or the interim
+  `local/steward-watchdog-wake.sh` external tick script — that script was the
+  terra-seat stopgap **before** `schedule_create` existed and is now superseded.
+  **A scheduler that never arms its watchdog catches nothing** — the operator
+  caught exactly this (a QA-approved WP left unmerged because the leader wasn't
+  watching).
+- **`schedule_create` schedules are process-local, which is mostly a feature —
+  they cannot orphan across a restart — but they carry ONE regression you must
+  defend against: they live only for the convo-channel MCP server process's
+  lifetime and do NOT survive an MCP reconnect** (a package upgrade, a network
+  blip, or a compaction that re-instantiates the client all drop them silently —
+  and posting/notification can stay up while they're gone). So **re-arm on session
+  start, after every compaction, AND after any convo-MCP reconnect**, and
+  **reconcile with `schedule_list` at the top of each tick** — if the list is
+  empty while your ring/WP is open, your backstop silently fell over; re-arm it.
+  **`schedule_delete` it when your ring/WP closes.** (On a Claude-Code seat the
+  host-level `CronCreate`/`CronDelete` remains available and *does* survive an MCP
+  reconnect; it is a valid durable fallback for that seat, but default to
+  `schedule_create` for fleet uniformity.) **If you still hold a convo
+  `schedule_call` timer from the old guidance, `cancel_call` it and re-arm with
+  `schedule_create`.**
 
 ## 14. Agents never touch GitHub; the publisher path is the gateway
 

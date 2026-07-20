@@ -107,22 +107,27 @@ seat working straight through instead of stalling every sub-step onto your (or
 the Steward's) watchdog. Mirror of the build-implementer "keep this turn active"
 discipline.
 
-**Your watchdog is driven by the external watchdog-wake SCRIPT, not
-`CronCreate` (operator, 2026-07-11).** A terra/Codex leader seat doesn't
-self-arm an in-session timer — `CronCreate` is a Claude-Code-only tool your seat
-doesn't have. Instead a managed wake script written for your seat (the reference
-implementation is `local/steward-watchdog-wake.sh` — a pid-tracked
-`start`/`stop`/`status`/`restart` loop that `send-keys` a watchdog-tick prompt
-to a `TARGET` pane every `INTERVAL_SECONDS`) ticks **your own** pane on a
-cadence. On each wake you run the tick and **nothing posts to the space**. Do
-**not** reach for `CronCreate` (unavailable on your seat), the convo
-`schedule_call` (it broadcasts its read into the space as a System event
-everyone sees — noise + orphan risk), or a hand-rolled bash `while`-loop / the
-`Monitor` tool (git-refs only — they miss the pane-level stalls below). *(A
-uniform convo-MCP watchdog command with `CronCreate`-parity is in progress so
-every seat — terra or Claude-Code — converges on one mechanism; until it lands,
-the wake script is the leader watchdog, and the tick discipline below is
-identical regardless of what fires it.)*
+**Your watchdog is the convo-channel `schedule_create` self-wake (operator,
+2026-07-20 — this replaces the old external wake SCRIPT).** `schedule_create` is
+the uniform convo-MCP watchdog command with `CronCreate`-parity that was in
+progress — it has **landed**, and it works on your terra/Codex seat, so you no
+longer need `local/steward-watchdog-wake.sh` or any managed tick script. Arm it at
+session start while your ring has open work:
+`schedule_create(interval_seconds=900, label="<team>-leader-watchdog",
+prompt="[watchdog tick] …")` ticks **your own** pane on a cadence and **posts
+nothing to the space** (it delivers via a guarded tmux `send-keys` on a terra
+seat, skipping a tick rather than overtyping partial input). `interval_seconds` is
+the recurring "set_interval"; it returns a `schedule_id`, and
+`schedule_delete(schedule_id)` disarms it when your retros are in. Do **not** reach
+for the convo `schedule_call` (it broadcasts its read into the space as a System
+event everyone sees — noise + orphan risk), a hand-rolled bash `while`-loop, or the
+`Monitor` tool (git-refs only — they miss the pane-level stalls below).
+**⚠ Re-arm on reconnect:** `schedule_create` schedules do **not** survive a
+convo-MCP reconnect (a restart re-instantiates the client and silently drops
+them). Re-arm on session start, after any compaction, and after any reconnect;
+`schedule_list` at the top of each tick — an empty list while work is open means
+your watchdog fell over, so re-arm it. The tick discipline below is identical
+regardless of what fires it.
 
 Workers are event-driven and never poll; the wake keeps **you** the only poller
 on the team. On each fire, run your *own* `get_recent_context`/`get_space_status`
