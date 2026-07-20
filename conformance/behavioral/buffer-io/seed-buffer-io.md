@@ -410,8 +410,10 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/positive-short-is-success-zero-write-is-error
 
-- status: **RED-UNTIL-PX8-R + PX8-F surface**
+- status: **GREEN — PX8-R producer + PX8-F checked surface/Verify companion**
 - spec: `38 §1.7.2`; PX8-T D2/D3/AC3
+- evidence: `effect_v1::tests::bounded_positioned_io_reaches_progress_mismatch_and_ordered_bindings`
+  plus `px8f_write_partition::checked_write_all_reaches_full_short_zero_progress_flip_and_error_prefixes`
 - given: positive effective requests of length `8`
 - expect:
   - read `0` -> `ReadEof`;
@@ -429,8 +431,12 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/positioned-transfer-bounds
 
-- status: **RED-UNTIL-PX8-R + PX8-F surface**
+- status: **RED-UNTIL-PX8-F-CAP — checked capacity observation absent**
 - spec: `38 §1.7.1/§1.7.2`; PX8-T D3/AC3
+- deferred: the closed-endpoint `ReadEof`-without-host-visit discharge requires
+  buffer-capacity observation absent from the current surface; current `readAt`
+  fail-closes as `InvalidBounds`, a completeness gap rather than a soundness
+  hole. Tracked by **PX8-F-CAP**.
 - given: a capacity-`8` buffer, a positive length-`4` request, and explicit
   file offsets
 - expect: start `6` is capped to the available tail and a positive transfer is
@@ -447,8 +453,17 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 
 ### buffer-io/transfer-failures-remain-errors
 
-- status: **RED-UNTIL-PX8-R + PX8-F surface**
+- status: **RED-UNTIL-REMAINING-PR-C-ARMS — partial reaching evidence only**
 - spec: `38 §1.7.2`; PX8-T D2/AC3
+- GREEN arms: `Closed`, `ResourceKindMismatch`, `RightNotHeld`, and
+  `BufferLimit` independently reach in
+  `effect_v1::tests::bounded_positioned_io_reaches_progress_mismatch_and_ordered_bindings`;
+  `Interrupted` independently reaches after a successful prefix in
+  `px8f_write_partition::checked_write_all_reaches_full_short_zero_progress_flip_and_error_prefixes`.
+- non-GREEN arms: `MalformedResource`, invalid offset/window/bounds
+  (`InvalidBounds`), allocation failure distinct from `BufferLimit`, unsupported
+  nonblocking posture, and host-I/O failure distinct from the reaching
+  `Interrupted` identity have no independently-reaching evidence on this SHA.
 - given: independently reach `Closed`, `MalformedResource`,
   `ResourceKindMismatch`, `RightNotHeld`, invalid offset/window/bounds,
   buffer-limit/allocation failure, unsupported nonblocking posture, host I/O
@@ -480,8 +495,9 @@ or a result that claims success with a nonempty remainder does not conform.
 
 ### buffer-io/write-all-full-writes
 
-- status: **RED-UNTIL-PX8-R + PX8-F derived Ken `writeAll`**
+- status: **GREEN — PX8-F derived Ken `writeAll` + Verify companion**
 - spec: `38 §1.7.3`; PX8-T D4/AC4
+- evidence: `px8f_write_partition::checked_write_all_reaches_full_short_zero_progress_flip_and_error_prefixes`
 - given: span bytes `ABCDEFGH`, initial file offset `10`, and a real scripted
   transfer backend whose successive positive writes are `[8]`
 - expect: `writeAll` returns success, the sink contains exactly `ABCDEFGH`, and
@@ -495,8 +511,9 @@ or a result that claims success with a nonempty remainder does not conform.
 
 ### buffer-io/write-all-short-writes-complete
 
-- status: **RED-UNTIL-PX8-R + PX8-F derived Ken `writeAll`**
+- status: **GREEN — PX8-F derived Ken `writeAll` + Verify companion**
 - spec: `38 §1.7.3`; PX8-T D4/AC4
+- evidence: `px8f_write_partition::checked_write_all_reaches_full_short_zero_progress_flip_and_error_prefixes`
 - given: the same span and offset as WA-A, with real successive write results
   `[Wrote 3, Wrote 2, Wrote 3]`
 - expect: `writeAll` returns success and the sink contains exactly `ABCDEFGH`;
@@ -510,8 +527,9 @@ or a result that claims success with a nonempty remainder does not conform.
 
 ### buffer-io/write-all-zero-write-is-no-progress
 
-- status: **RED-UNTIL-PX8-R + PX8-F derived Ken `writeAll`**
+- status: **GREEN — PX8-F derived Ken `writeAll` + Verify companion**
 - spec: `38 §1.7.2/§1.7.3`; PX8-T D2/D4/AC3/AC4
+- evidence: `px8f_write_partition::checked_write_all_reaches_full_short_zero_progress_flip_and_error_prefixes`
 - given: the same span and offset, with real successive write results
   `[Wrote 3, syscall-zero]`
 - expect: `writeAll` returns `Err NoProgress`; the sink contains exactly `ABC`;
@@ -524,8 +542,9 @@ or a result that claims success with a nonempty remainder does not conform.
 
 ### buffer-io/write-all-transfer-error-preserves-prefix
 
-- status: **RED-UNTIL-PX8-R + PX8-F derived Ken `writeAll`**
+- status: **GREEN — PX8-F derived Ken `writeAll` + Verify companion**
 - spec: `38 §1.7.3`; PX8-T D4/AC4
+- evidence: `px8f_write_partition::checked_write_all_reaches_full_short_zero_progress_flip_and_error_prefixes`
 - given: the same span and offset, with real successive results
   `[Wrote 2, Err E]`
 - expect: `writeAll` returns the same first error `E` unchanged; the sink
