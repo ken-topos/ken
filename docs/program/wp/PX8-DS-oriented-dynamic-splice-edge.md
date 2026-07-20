@@ -24,6 +24,13 @@
 > - Architect **mechanism ruling** `evt_7rdeq8hmetpsv` (thread
 >   `thr_2gj12skfxqn5e`, 2026-07-20 06:09Z) — the defect's exact landed causal
 >   path + the corrected mechanism boundary, reproduced verbatim in §2/§3.
+> - Architect **superseding endpoint correction** `evt_4apv0j2enhvzy`
+>   (2026-07-20) — a frame's terminal output is a checked answer-transformer
+>   boundary, while a computational-IH call's result/caller interface is an
+>   independently inferred application-result descriptor. Their byte equality
+>   is a false cross-domain invariant, including at a real dynamic edge. The
+>   lawful checks are internal frame-segment adjacency and the call's own
+>   result-to-caller equality.
 > - Steward **scope disposition** `evt_3c4amv9sf1peg` (2026-07-20 06:10Z) —
 >   this WP's framing, ownership, gate, and PX8-F re-freeze.
 > - The accepted **PX8-TA** checked interfaces (merged `e45ca05e`, PR #784) are
@@ -38,8 +45,8 @@ compose by their **exact dynamic parent occurrence**, not by a global static
 sort: keep each dynamic invocation's semantic frames as one invocation-local
 oriented segment and join segments with one exact affine child→parent dynamic
 splice edge minted at checked IH-marker consumption — deleting the flat
-cross-instance `(depth, semantic_position)` ordering rule — **without weakening
-any endpoint or fail-closed check.**
+cross-instance `(depth, semantic_position)` ordering rule — **without
+weakening any lawful same-domain endpoint or fail-closed check.**
 
 ## 2. The defect (Architect `evt_7rdeq8hmetpsv`, fixed input — do not re-open)
 
@@ -72,7 +79,7 @@ causal path (Architect-verified):
    layer into one map and globally sorts distinct dynamic instances by
    `(Reverse(depth), static semantic_position)`.** It consequently **invents
    adjacency** between `(330, frame 7)` and `(331, frame 5)`; their checked
-   endpoints correctly reject.
+   frame-transformer endpoints correctly reject.
 4. The checked IH-call template's `parent_frame_template_id` is only a
    **reusable static edge**. Current validation proves the selected static
    template but **cannot identify which dynamic parent occurrence owns this
@@ -85,7 +92,10 @@ causal path (Architect-verified):
    currently **validates that occurrence and then drops its dynamic parent
    identity.**
 
-## 3. The corrected mechanism boundary (Architect `evt_7rdeq8hmetpsv`, fixed input)
+## 3. The corrected mechanism boundary
+
+Architect `evt_7rdeq8hmetpsv`, as superseded for endpoint meaning by
+`evt_4apv0j2enhvzy`, is fixed input.
 
 Implement exactly this; do not substitute a different cut.
 
@@ -98,12 +108,16 @@ Implement exactly this; do not substitute a different cut.
 2. **Invocation-local oriented segments.** Keep each dynamic invocation's
    semantic frames in the **checked static order** as one invocation-local
    oriented segment. **Validate that segment internally against its checked
-   frame endpoints** (the existing endpoint check — unchanged, not weakened).
+   frame-transformer endpoints** (the existing within-segment adjacency check
+   — unchanged, not weakened).
 3. **Splice on completion, once.** Complete a child segment, then consume its
    exact dynamic edge **once** to splice it into the **named parent** at the
-   checked IH call's result/caller interface. **Nested and sibling instances
-   remain separate until their own completion; no child may steal another
-   sibling's edge or token.**
+   checked IH call occurrence. Retain the call's own
+   `result_interface == caller_interface` check. The edge names the parent
+   occurrence; it does **not** assert that the child's terminal frame output
+   equals the independently inferred IH-call result descriptor. **Nested and
+   sibling instances remain separate until their own completion; no child may
+   steal another sibling's edge or token.**
 4. **`ExitsScope` stays affine control-only.** Retain inherited `ExitsScope`
    rows as affine control obligations. They **do not** become executable
    semantic frames and **do not** select semantic order.
@@ -127,7 +141,9 @@ purely in Runtime consumption). Work within the landed PX8-TA Runtime fence:
   representation / `compose_oriented_subcontinuation`; the dynamic splice edge +
   invocation-local segment structure live here.
 - `crates/ken-runtime/src/cranelift_backend.rs` — object-emission consumer;
-  splice at the IH-call result/caller interface; mutation rejection pre-CFG.
+  splice at the exact edge-qualified IH-call occurrence; retain the call's
+  result-to-caller equality without comparing that descriptor to a frame
+  terminal; mutation rejection pre-CFG.
 - `crates/ken-runtime/src/ir.rs` — marker/edge carrier if the edge needs a
   representation slot (add only what §3.1's qualification requires; no public IR
   change).
@@ -152,9 +168,9 @@ the Architect (mechanism) and the Steward (scope)** — do not widen silently.
    qualification tuple; how it is minted at IH-marker consumption and how it is
    affine-consumed exactly once. *End: the concrete struct + mint/consume sites.*
 2. **Invocation-local segment** — how each invocation's frames are grouped in
-   checked static order and validated internally against checked endpoints
-   (reusing, not rewriting, the endpoint check). *End: the concrete grouping +
-   validation call.*
+   checked static order and validated internally against checked
+   frame-transformer endpoints (reusing, not rewriting, the within-segment
+   adjacency check). *End: the concrete grouping + validation call.*
 3. **Compose rewrite** — `compose_oriented_subcontinuation` no longer flattens +
    globally sorts; it splices completed child segments into named parents along
    the dynamic edge. *End: the deleted sort + the new splice.*
@@ -192,8 +208,11 @@ the Architect (mechanism) and the Steward (scope)** — do not widen silently.
    `ResourceRead` → nested `ResourceWriteCreate` → `withBuffer`/`writeAll`
    program lowers, links, and executes to the correct result (no
    `oriented splice answer endpoints do not compose`).
-3. **Endpoint check NOT weakened.** A genuinely non-composable checked program
-   (mismatched checked endpoints within a segment) still rejects before CFG.
+3. **Lawful endpoint checks NOT weakened.** A genuinely non-composable checked
+   program (mismatched frame-transformer endpoints within an invocation-local
+   segment) still rejects before CFG, and a checked IH call whose own result and
+   caller descriptors differ still rejects. No test may reintroduce or require
+   the withdrawn cross-domain terminal-frame-output = IH-call-result oracle.
 4. **Five mutation rejections, all four+ consumers.** Deletion, duplication,
    stale-parent, cross-sibling, and wrong-static-parent edge mutations each
    reject **before CFG** in the object-emission backend, the source machine, and
@@ -212,9 +231,13 @@ the Architect (mechanism) and the Steward (scope)** — do not widen silently.
 
 ## 8. Scope fence & do-not-reopen guards
 
-- **DO NOT weaken the endpoint check or any fail-closed validation.** The defect
-  is a false rejection *because dynamic identity was dropped* — the fix restores
-  identity, it never relaxes the check. (Architect, explicit.)
+- **DO NOT weaken lawful same-domain endpoint checks or any fail-closed
+  validation.** Preserve invocation-local frame-transformer adjacency and each
+  checked call's result-to-caller equality. Do **not** compare a terminal frame
+  output to a computational-IH result descriptor or reintroduce the withdrawn
+  cross-domain mutation oracle. The defect is a false rejection *because
+  dynamic identity was dropped* — the fix restores identity; it does not relax
+  either lawful check. (Architect, explicit.)
 - **DO NOT re-open the accepted PX8-TA mechanism** — checked descriptors,
   endpoint interfaces, semantic/control separation, occurrence census, and
   root-terminal authority are fixed inputs.
