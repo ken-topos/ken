@@ -8523,6 +8523,9 @@ impl<'a> Lowering<'a> {
         invocation: RecursorInvocationSegment,
         checked_ih_invocation: Option<CheckedRecursiveInvocationInstance>,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        if !recursor_invocation_is_checked(&invocation) {
+            validate_recursor_invocation_segment(&invocation)?;
+        }
         #[cfg(test)]
         px8j_record_source_event(Px8jSourceTraceEvent::Install {
             origin: invocation.origin,
@@ -20085,6 +20088,71 @@ mod tests {
         }
     }
 
+    fn run_px8j_source_machine_install(
+        malformation: Option<Px8jRecursorMalformation>,
+    ) -> Result<SourceContinuation<'static>, CraneliftBackendError> {
+        let seed_env = NativeSeedEnvironment::empty();
+        let mut compiler = root_authority_test_lowering(&seed_env);
+        compiler.native_join_plan = None;
+        compiler.root_terminal_authority = None;
+        compiler.process_object = false;
+
+        let origin = RecursorProducerOriginId(17);
+        let layer = |role| ComputationalRecursorLayer {
+            cases: Vec::new(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "PX8-J-ERR source install".to_string(),
+            },
+            outer_env: Vec::new(),
+            provenance: RecursorFrameProvenance(18),
+            role,
+            checked_frame_id: None,
+            checked_invocation_id: None,
+            checked_invocation_source: None,
+            checked_invocation_depth: 0,
+            semantic_pending: matches!(role, RecursorLayerRole::SelectsOccurrence { .. }),
+        };
+        let unwind = match malformation {
+            None => Vec::new(),
+            Some(Px8jRecursorMalformation::RepeatedScopeIdentity) => vec![
+                layer(RecursorLayerRole::ExitsScope {
+                    origin,
+                    scope_origin: RecursorProducerOriginId(19),
+                    parent_scope: None,
+                }),
+                layer(RecursorLayerRole::ExitsScope {
+                    origin,
+                    scope_origin: RecursorProducerOriginId(19),
+                    parent_scope: Some(RecursorProducerOriginId(19)),
+                }),
+            ],
+            Some(Px8jRecursorMalformation::SelectionRole)
+            | Some(Px8jRecursorMalformation::BrokenScopeParent) => {
+                panic!("source-install fixture only exercises repeated-scope malformation")
+            }
+        };
+        let invocation = RecursorInvocationSegment::new(
+            origin,
+            0,
+            layer(RecursorLayerRole::SelectsOccurrence { origin }),
+            RecursorUnwindStack {
+                later_wrappers_in_construction_order: unwind,
+            },
+            ContinuationCursorId(20),
+            None,
+            None,
+        );
+        assert!(!recursor_invocation_is_checked(&invocation));
+
+        compiler.install_recursor_invocation(
+            SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue),
+            ContinuationActivationId(21),
+            invocation,
+            None,
+        )
+    }
+
     #[test]
     fn px8j_all_three_direct_consumers_propagate_the_role_validator() {
         for consumer in [
@@ -20142,6 +20210,33 @@ mod tests {
                 "{malformation:?}: {error:?}"
             );
         }
+    }
+
+    #[test]
+    fn px8j_source_machine_install_rejects_repeated_scope_identity() {
+        let error = match run_px8j_source_machine_install(Some(
+            Px8jRecursorMalformation::RepeatedScopeIdentity,
+        )) {
+            Ok(_) => panic!("the unchecked source-machine install must validate before CFG"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "ComputationalRecursor",
+                reason,
+            }) if reason == "recursor unwind repeats a selected scope identity"
+        ));
+    }
+
+    #[test]
+    fn px8j_source_machine_install_accepts_valid_unchecked_segment() {
+        let installed = run_px8j_source_machine_install(None)
+            .expect("a valid unchecked source-machine invocation still installs");
+        assert!(matches!(
+            installed,
+            SourceContinuation::ApplyRecursorSelection { .. }
+        ));
     }
 
     #[test]
