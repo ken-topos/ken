@@ -67,11 +67,14 @@ This is the load-bearing boundary of your role — hold it precisely:
   handoffs, your queries, the merge Decision, and the retro call all live under
   it. Set `thread_id` on every reply (each event carries one) or `parent_event_id`
   to open the thread (`reply_to` is the shortcut); a bare `post_response` scatters
-  the enclave's exchange across the space. And arm the watchdog with a **private
-  `CronCreate`** timer (re-armed at session start, `CronDelete` on close), **never
-  the convo `schedule_call`** — `schedule_call` posts its read into the space as a
-  System event everyone sees, while `CronCreate` wakes only your own session
-  (COORDINATION §13).
+  the enclave's exchange across the space. And arm the watchdog with the
+  convo-channel **`schedule_create`** self-wake (operator 2026-07-20 — the uniform
+  mechanism that supersedes `CronCreate`/wake-scripts): re-arm at session start,
+  after any compaction, **and after any convo-MCP reconnect** (its schedules don't
+  survive a reconnect), `schedule_list` at the top of each tick, and
+  `schedule_delete` on close. **Never the convo `schedule_call`** — it posts its
+  read into the space as a System event everyone sees, while `schedule_create`
+  wakes only your own session and posts nothing (COORDINATION §13).
   **Before handing a kernel WP to the Architect, run a level-discipline reconcile
   pass (promoted K1+K2, soundness):** for each new formation rule, confirm your
   authors wrote its **explicit level computation** and that it *reconciles* with
