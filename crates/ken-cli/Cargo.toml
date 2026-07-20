@@ -20,3 +20,6 @@ ken-kernel = { path = "../ken-kernel" }
 ken-elaborator = { path = "../ken-elaborator" }
 ken-interp = { path = "../ken-interp" }
 ken-runtime = { path = "../ken-runtime" }
+
+[dev-dependencies]
+ken-runtime = { path = "../ken-runtime", features = ["px8-ds-test-support"] }
