@@ -354,6 +354,7 @@ pub enum RuntimeExpr {
     #[doc(hidden)]
     CheckedRecursiveInvocation {
         call_template_id: u64,
+        checked_occurrence_path: Vec<u64>,
         body: Box<RuntimeExpr>,
     },
     /// Exact checked slot templates aligned with the recursive positions of
@@ -361,6 +362,7 @@ pub enum RuntimeExpr {
     #[doc(hidden)]
     CheckedComputationalIHSlots {
         slot_template_ids: Vec<u64>,
+        checked_occurrence_paths: Vec<Vec<u64>>,
         body: Box<RuntimeExpr>,
     },
     /// Exact checked marker for one complete application of a bound
@@ -368,6 +370,7 @@ pub enum RuntimeExpr {
     #[doc(hidden)]
     CheckedComputationalIHInvocation {
         call_template_id: u64,
+        checked_occurrence_path: Vec<u64>,
         body: Box<RuntimeExpr>,
     },
     Value(RuntimeValue),

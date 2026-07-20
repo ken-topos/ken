@@ -722,7 +722,7 @@ impl NativeLoweringPlanCollector {
         view: &checked_core::CheckedCoreMatchView,
         occurrence_path: &[u64],
         frame_id: u64,
-    ) -> Result<Vec<Vec<u64>>, ErasureError> {
+    ) -> Result<Vec<Vec<(u64, Vec<u64>)>>, ErasureError> {
         let ordinal = self
             .next_computational_match_ordinal
             .entry(owner.clone())
@@ -782,8 +782,8 @@ impl NativeLoweringPlanCollector {
                 let mut path = occurrence_path.to_vec();
                 path.extend([21, branch_ordinal as u64, method_binder_ordinal as u64]);
                 self.pending_computational_ih_slots
-                    .push((seed.clone(), path, frame_id));
-                branch_slots.push(seed.slot_template_id);
+                    .push((seed.clone(), path.clone(), frame_id));
+                branch_slots.push((seed.slot_template_id, path));
             }
             result.push(branch_slots);
         }
@@ -1150,6 +1150,7 @@ impl OrientedSubcontinuationPlanCollector {
                 callee_segment_site_id: segment_site_id,
                 callee_frame_templates: callee_frames,
                 caller_interface,
+                runtime_marker_locations: Vec::new(),
                 occurrence_binding_fingerprint: 0,
             };
             // For the currently supported non-dependent native subset, the
@@ -1181,6 +1182,7 @@ impl OrientedSubcontinuationPlanCollector {
                 frame_templates: vec![frame_id],
                 input_interface: frame.input_interface.clone(),
                 output_interface: frame.output_interface.clone(),
+                runtime_marker_locations: Vec::new(),
                 occurrence_binding_fingerprint: 0,
             };
             slot.occurrence_binding_fingerprint =
@@ -1222,6 +1224,7 @@ impl OrientedSubcontinuationPlanCollector {
                 parent_frame_template_id,
                 parent_segment_site_id: parent.map(|frame| frame.segment_site_id),
                 caller_interface,
+                runtime_marker_locations: Vec::new(),
                 occurrence_binding_fingerprint: 0,
             };
             call.occurrence_binding_fingerprint =
@@ -1338,7 +1341,7 @@ pub(crate) fn erase_checked_host_package_for_target_with_join_plan<'a>(
         Some((root, spine)),
         Some(&mut collector),
     )?;
-    let (join_plan, oriented_plan) = collector.finish();
+    let (join_plan, mut oriented_plan) = collector.finish();
     let retained_recursive_calls = oriented_plan
         .recursive_calls
         .iter()
@@ -1352,6 +1355,7 @@ pub(crate) fn erase_checked_host_package_for_target_with_join_plan<'a>(
     for example in &mut program.examples {
         remove_unplanned_recursive_invocation_markers(&mut example.ir, &retained_recursive_calls);
     }
+    bind_oriented_runtime_marker_locations(root, &program, &mut oriented_plan)?;
     Ok((program, join_plan, oriented_plan))
 }
 
@@ -1455,6 +1459,333 @@ fn remove_unplanned_recursive_invocation_markers(
         | RuntimeExpr::ImportedDeclarationRef { .. }
         | RuntimeExpr::Trap(_) => {}
     }
+}
+
+#[derive(Default)]
+struct OrientedRuntimeMarkerLocations {
+    recursive_calls: BTreeMap<(u64, Vec<u64>), Vec<CheckedRuntimeMarkerLocationV1>>,
+    computational_ih_slots: BTreeMap<(u64, Vec<u64>), Vec<CheckedRuntimeMarkerLocationV1>>,
+    computational_ih_calls: BTreeMap<(u64, Vec<u64>), Vec<CheckedRuntimeMarkerLocationV1>>,
+}
+
+fn bind_oriented_runtime_marker_locations(
+    root: &StableSymbol,
+    program: &RuntimeProgram,
+    plan: &mut OrientedSubcontinuationPlanV1,
+) -> Result<(), ErasureError> {
+    let mut locations = OrientedRuntimeMarkerLocations::default();
+    for declaration in &program.declarations {
+        let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+            continue;
+        };
+        collect_oriented_runtime_marker_locations(
+            body,
+            &declaration.symbol,
+            &mut Vec::new(),
+            &mut locations,
+        )?;
+    }
+
+    for call in &mut plan.recursive_calls {
+        call.runtime_marker_locations = locations
+            .recursive_calls
+            .remove(&(call.call_template_id, call.checked_occurrence_path.clone()))
+            .ok_or_else(|| {
+                expression_lowering_error(
+                    root,
+                    "checked_oriented_marker_location",
+                    format!(
+                        "recursive-call template {} has no exact Runtime occurrence",
+                        call.call_template_id
+                    ),
+                )
+            })?;
+        call.runtime_marker_locations.sort();
+        call.occurrence_binding_fingerprint =
+            compiler_private_recursive_call_binding_fingerprint(call);
+    }
+    for slot in &mut plan.computational_ih_slots {
+        slot.runtime_marker_locations = locations
+            .computational_ih_slots
+            .remove(&(slot.slot_template_id, slot.checked_occurrence_path.clone()))
+            .ok_or_else(|| {
+                expression_lowering_error(
+                    root,
+                    "checked_oriented_marker_location",
+                    format!(
+                        "computational-IH slot template {} has no exact Runtime occurrence",
+                        slot.slot_template_id
+                    ),
+                )
+            })?;
+        slot.runtime_marker_locations.sort();
+        slot.occurrence_binding_fingerprint =
+            compiler_private_computational_ih_slot_binding_fingerprint(slot);
+    }
+    for call in &mut plan.computational_ih_calls {
+        call.runtime_marker_locations = locations
+            .computational_ih_calls
+            .remove(&(call.call_template_id, call.checked_occurrence_path.clone()))
+            .ok_or_else(|| {
+                expression_lowering_error(
+                    root,
+                    "checked_oriented_marker_location",
+                    format!(
+                        "computational-IH call template {} has no exact Runtime occurrence",
+                        call.call_template_id
+                    ),
+                )
+            })?;
+        call.runtime_marker_locations.sort();
+        call.occurrence_binding_fingerprint =
+            compiler_private_computational_ih_call_binding_fingerprint(call);
+    }
+    if !locations.recursive_calls.is_empty()
+        || !locations.computational_ih_slots.is_empty()
+        || !locations.computational_ih_calls.is_empty()
+    {
+        return Err(expression_lowering_error(
+            root,
+            "checked_oriented_marker_location",
+            "Runtime IR contains an oriented marker with no exact checked template",
+        ));
+    }
+    plan.validate().map_err(|reason| {
+        expression_lowering_error(root, "checked_oriented_marker_location", reason)
+    })
+}
+
+fn collect_oriented_runtime_marker_locations(
+    expression: &RuntimeExpr,
+    declaration: &str,
+    runtime_path: &mut Vec<u64>,
+    locations: &mut OrientedRuntimeMarkerLocations,
+) -> Result<(), ErasureError> {
+    let location = || CheckedRuntimeMarkerLocationV1 {
+        declaration: declaration.to_string(),
+        runtime_path: runtime_path.clone(),
+    };
+    match expression {
+        RuntimeExpr::CheckedRecursiveInvocation {
+            call_template_id,
+            checked_occurrence_path,
+            body,
+        } => {
+            locations
+                .recursive_calls
+                .entry((*call_template_id, checked_occurrence_path.clone()))
+                .or_default()
+                .push(location());
+            collect_oriented_runtime_marker_child(body, declaration, runtime_path, locations, 0)
+        }
+        RuntimeExpr::CheckedComputationalIHSlots {
+            slot_template_ids,
+            checked_occurrence_paths,
+            body,
+        } => {
+            assert_eq!(
+                slot_template_ids.len(),
+                checked_occurrence_paths.len(),
+                "erasure emits one checked occurrence path per computational IH slot marker"
+            );
+            for (slot_template_id, checked_occurrence_path) in
+                slot_template_ids.iter().zip(checked_occurrence_paths)
+            {
+                locations
+                    .computational_ih_slots
+                    .entry((*slot_template_id, checked_occurrence_path.clone()))
+                    .or_default()
+                    .push(location());
+            }
+            collect_oriented_runtime_marker_child(body, declaration, runtime_path, locations, 0)
+        }
+        RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id,
+            checked_occurrence_path,
+            body,
+        } => {
+            locations
+                .computational_ih_calls
+                .entry((*call_template_id, checked_occurrence_path.clone()))
+                .or_default()
+                .push(location());
+            collect_oriented_runtime_marker_child(body, declaration, runtime_path, locations, 0)
+        }
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. } => {
+            collect_oriented_runtime_marker_child(body, declaration, runtime_path, locations, 0)
+        }
+        RuntimeExpr::Project { record, .. } => {
+            collect_oriented_runtime_marker_child(record, declaration, runtime_path, locations, 1)
+        }
+        RuntimeExpr::Closure { body, .. } => {
+            collect_oriented_runtime_marker_child(body, declaration, runtime_path, locations, 2)
+        }
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            for (index, capture) in captures.iter().enumerate() {
+                collect_oriented_runtime_marker_child(
+                    capture,
+                    declaration,
+                    runtime_path,
+                    locations,
+                    10 + index as u64,
+                )?;
+            }
+            collect_oriented_runtime_marker_child(body, declaration, runtime_path, locations, 3)
+        }
+        RuntimeExpr::Let { value, body } => {
+            collect_oriented_runtime_marker_child(value, declaration, runtime_path, locations, 0)?;
+            collect_oriented_runtime_marker_child(body, declaration, runtime_path, locations, 1)
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            collect_oriented_runtime_marker_child(
+                scrutinee,
+                declaration,
+                runtime_path,
+                locations,
+                0,
+            )?;
+            collect_oriented_runtime_marker_child(
+                then_expr,
+                declaration,
+                runtime_path,
+                locations,
+                1,
+            )?;
+            collect_oriented_runtime_marker_child(
+                else_expr,
+                declaration,
+                runtime_path,
+                locations,
+                2,
+            )
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for (index, argument) in args.iter().enumerate() {
+                collect_oriented_runtime_marker_child(
+                    argument,
+                    declaration,
+                    runtime_path,
+                    locations,
+                    index as u64,
+                )?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            collect_oriented_runtime_marker_child(
+                scrutinee,
+                declaration,
+                runtime_path,
+                locations,
+                0,
+            )?;
+            for (index, case) in cases.iter().enumerate() {
+                collect_oriented_runtime_marker_child(
+                    &case.body,
+                    declaration,
+                    runtime_path,
+                    locations,
+                    1 + index as u64,
+                )?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            collect_oriented_runtime_marker_child(
+                scrutinee,
+                declaration,
+                runtime_path,
+                locations,
+                0,
+            )?;
+            for (index, case) in cases.iter().enumerate() {
+                collect_oriented_runtime_marker_child(
+                    &case.body,
+                    declaration,
+                    runtime_path,
+                    locations,
+                    1 + index as u64,
+                )?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Record { fields } => {
+            for (index, (_, value)) in fields.iter().enumerate() {
+                collect_oriented_runtime_marker_child(
+                    value,
+                    declaration,
+                    runtime_path,
+                    locations,
+                    index as u64,
+                )?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Call { callee, args } => {
+            collect_oriented_runtime_marker_child(callee, declaration, runtime_path, locations, 0)?;
+            for (index, argument) in args.iter().enumerate() {
+                collect_oriented_runtime_marker_child(
+                    argument,
+                    declaration,
+                    runtime_path,
+                    locations,
+                    1 + index as u64,
+                )?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            if let Some(capability) = capability {
+                collect_oriented_runtime_marker_child(
+                    &capability.value,
+                    declaration,
+                    runtime_path,
+                    locations,
+                    0,
+                )?;
+            }
+            for (index, argument) in args.iter().enumerate() {
+                collect_oriented_runtime_marker_child(
+                    argument,
+                    declaration,
+                    runtime_path,
+                    locations,
+                    1 + index as u64,
+                )?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => Ok(()),
+    }
+}
+
+fn collect_oriented_runtime_marker_child(
+    expression: &RuntimeExpr,
+    declaration: &str,
+    runtime_path: &mut Vec<u64>,
+    locations: &mut OrientedRuntimeMarkerLocations,
+    edge: u64,
+) -> Result<(), ErasureError> {
+    runtime_path.push(edge);
+    let result =
+        collect_oriented_runtime_marker_locations(expression, declaration, runtime_path, locations);
+    runtime_path.pop();
+    result
 }
 
 fn lower_checked_host_root(
@@ -1699,6 +2030,7 @@ fn lower_body_term_with_plans(
         };
         return Ok(RuntimeExpr::CheckedComputationalIHInvocation {
             call_template_id,
+            checked_occurrence_path: path.to_vec(),
             body: Box::new(body),
         });
     }
@@ -1730,6 +2062,7 @@ fn lower_body_term_with_plans(
         }
         return Ok(RuntimeExpr::CheckedRecursiveInvocation {
             call_template_id,
+            checked_occurrence_path: path.to_vec(),
             body: Box::new(RuntimeExpr::Call {
                 callee: Box::new(callee),
                 args,
@@ -2030,7 +2363,15 @@ fn lower_body_term_with_plans(
                     root,
                     &constructor.symbol,
                 )?;
-                let slot_templates = branch_slot_templates[branch_index].clone();
+                let slot_markers = branch_slot_templates[branch_index].clone();
+                let slot_templates = slot_markers
+                    .iter()
+                    .map(|(slot_template_id, _)| *slot_template_id)
+                    .collect::<Vec<_>>();
+                let checked_occurrence_paths = slot_markers
+                    .into_iter()
+                    .map(|(_, path)| path)
+                    .collect::<Vec<_>>();
                 let remap = branch_remap.cloned().unwrap_or_default().enter_match(
                     constructor.argument_count,
                     erased_count,
@@ -2056,6 +2397,7 @@ fn lower_body_term_with_plans(
                 } else {
                     RuntimeExpr::CheckedComputationalIHSlots {
                         slot_template_ids: slot_templates,
+                        checked_occurrence_paths,
                         body: Box::new(body),
                     }
                 };
@@ -2206,6 +2548,7 @@ fn lower_checked_host_computation(
         };
         return Ok(RuntimeExpr::CheckedComputationalIHInvocation {
             call_template_id,
+            checked_occurrence_path: path.to_vec(),
             body: Box::new(body),
         });
     }
@@ -2300,7 +2643,15 @@ fn lower_checked_host_computation(
                 root,
                 &constructor.symbol,
             )?;
-            let slot_templates = branch_slot_templates[branch_index].clone();
+            let slot_markers = branch_slot_templates[branch_index].clone();
+            let slot_templates = slot_markers
+                .iter()
+                .map(|(slot_template_id, _)| *slot_template_id)
+                .collect::<Vec<_>>();
+            let checked_occurrence_paths = slot_markers
+                .into_iter()
+                .map(|(_, path)| path)
+                .collect::<Vec<_>>();
             let remap = branch_remap.cloned().unwrap_or_default().enter_match(
                 constructor.argument_count,
                 erased_count,
@@ -2329,6 +2680,7 @@ fn lower_checked_host_computation(
             } else {
                 RuntimeExpr::CheckedComputationalIHSlots {
                     slot_template_ids: slot_templates,
+                    checked_occurrence_paths,
                     body: Box::new(body),
                 }
             };
@@ -2600,6 +2952,7 @@ fn lower_checked_host_computation(
                 args.push(RuntimeExpr::Var(0));
                 RuntimeExpr::CheckedComputationalIHInvocation {
                     call_template_id,
+                    checked_occurrence_path: continuation_path,
                     body: Box::new(RuntimeExpr::Call {
                         callee: Box::new(callee),
                         args,
@@ -2752,6 +3105,7 @@ fn lower_checked_host_computation(
         return Ok(call_template_id.map_or(call.clone(), |call_template_id| {
             RuntimeExpr::CheckedRecursiveInvocation {
                 call_template_id,
+                checked_occurrence_path: path.to_vec(),
                 body: Box::new(call),
             }
         }));
@@ -3827,23 +4181,29 @@ fn shift_runtime_vars(expr: RuntimeExpr, by: u32, cutoff: u32) -> RuntimeExpr {
         }
         RuntimeExpr::CheckedRecursiveInvocation {
             call_template_id,
+            checked_occurrence_path,
             body,
         } => RuntimeExpr::CheckedRecursiveInvocation {
             call_template_id,
+            checked_occurrence_path,
             body: Box::new(shift_runtime_vars(*body, by, cutoff)),
         },
         RuntimeExpr::CheckedComputationalIHSlots {
             slot_template_ids,
+            checked_occurrence_paths,
             body,
         } => RuntimeExpr::CheckedComputationalIHSlots {
             slot_template_ids,
+            checked_occurrence_paths,
             body: Box::new(shift_runtime_vars(*body, by, cutoff)),
         },
         RuntimeExpr::CheckedComputationalIHInvocation {
             call_template_id,
+            checked_occurrence_path,
             body,
         } => RuntimeExpr::CheckedComputationalIHInvocation {
             call_template_id,
+            checked_occurrence_path,
             body: Box::new(shift_runtime_vars(*body, by, cutoff)),
         },
         RuntimeExpr::Var(index) if index >= cutoff => RuntimeExpr::Var(index + by),

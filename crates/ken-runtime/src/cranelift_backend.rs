@@ -519,6 +519,32 @@ pub fn emit_runtime_ir_object_with_cranelift(
 }
 
 #[cfg(test)]
+fn test_only_distinguished_root_join_plan() -> crate::NativeJoinPlanV1 {
+    let site_id = 0;
+    let declaration = "decl:fixture::CheckedRoot::main".to_string();
+    let checked_occurrence_path = vec![0];
+    let checked_result_type_fingerprint = 0x5058_3854_4152_4f4f;
+    crate::NativeJoinPlanV1 {
+        representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+        sites: vec![crate::NativeJoinPlanSiteV1 {
+            site_id,
+            occurrence_binding_fingerprint:
+                crate::compiler_private_join_occurrence_binding_fingerprint(
+                    site_id,
+                    &declaration,
+                    &checked_occurrence_path,
+                    checked_result_type_fingerprint,
+                ),
+            declaration,
+            checked_occurrence_path,
+            checked_result_type_fingerprint,
+            runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
+            answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
+        }],
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn emit_process_entrypoint_object_with_cranelift(
     entrypoint: &RuntimeExpr,
     entry_symbol: impl Into<String>,
@@ -534,7 +560,7 @@ pub(crate) fn emit_process_entrypoint_object_with_cranelift(
         None,
         true,
         None,
-        None,
+        Some(test_only_distinguished_root_join_plan()),
         None,
     )?;
     let verifier_passed = compiled.verifier_passed;
@@ -575,7 +601,7 @@ fn emit_process_entrypoint_object_with_symbols(
         None,
         true,
         Some(symbols),
-        None,
+        Some(test_only_distinguished_root_join_plan()),
         None,
     )?;
     let verifier_passed = compiled.verifier_passed;
@@ -1450,96 +1476,192 @@ fn collect_checked_subcontinuation_frames(
 
 #[derive(Default)]
 struct CheckedOrientedMarkerSets {
-    recursive_calls: BTreeSet<u64>,
-    computational_ih_slots: BTreeSet<u64>,
-    computational_ih_calls: BTreeSet<u64>,
+    recursive_calls: BTreeMap<(u64, Vec<u64>), BTreeSet<Vec<u64>>>,
+    computational_ih_slots: BTreeMap<(u64, Vec<u64>), BTreeSet<Vec<u64>>>,
+    computational_ih_calls: BTreeMap<(u64, Vec<u64>), BTreeSet<Vec<u64>>>,
+}
+
+impl CheckedOrientedMarkerSets {
+    fn extend_from(&mut self, other: &Self) {
+        for (key, paths) in &other.recursive_calls {
+            self.recursive_calls
+                .entry(key.clone())
+                .or_default()
+                .extend(paths.iter().cloned());
+        }
+        for (key, paths) in &other.computational_ih_slots {
+            self.computational_ih_slots
+                .entry(key.clone())
+                .or_default()
+                .extend(paths.iter().cloned());
+        }
+        for (key, paths) in &other.computational_ih_calls {
+            self.computational_ih_calls
+                .entry(key.clone())
+                .or_default()
+                .extend(paths.iter().cloned());
+        }
+    }
 }
 
 fn collect_checked_oriented_markers(
     expr: &RuntimeExpr,
     markers: &mut CheckedOrientedMarkerSets,
+    root: &str,
+    runtime_path: &mut Vec<u64>,
 ) -> Result<(), CraneliftBackendError> {
     match expr {
         RuntimeExpr::CheckedRecursiveInvocation {
             call_template_id,
+            checked_occurrence_path,
             body,
         } => {
-            markers.recursive_calls.insert(*call_template_id);
-            collect_checked_oriented_markers(body, markers)
+            if !markers
+                .recursive_calls
+                .entry((*call_template_id, checked_occurrence_path.clone()))
+                .or_default()
+                .insert(runtime_path.clone())
+            {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    format!(
+                        "Runtime IR root {root} repeats checked recursive-call marker {call_template_id} at the same structural path {runtime_path:?}"
+                    ),
+                ));
+            }
+            collect_checked_oriented_child(body, markers, root, runtime_path, 0)
         }
         RuntimeExpr::CheckedComputationalIHSlots {
             slot_template_ids,
+            checked_occurrence_paths,
             body,
         } => {
-            for slot_template_id in slot_template_ids {
-                markers.computational_ih_slots.insert(*slot_template_id);
+            if slot_template_ids.len() != checked_occurrence_paths.len() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "computational IH slot marker identity/location arity differs",
+                ));
             }
-            collect_checked_oriented_markers(body, markers)
+            for (slot_template_id, checked_occurrence_path) in
+                slot_template_ids.iter().zip(checked_occurrence_paths)
+            {
+                if !markers
+                    .computational_ih_slots
+                    .entry((*slot_template_id, checked_occurrence_path.clone()))
+                    .or_default()
+                    .insert(runtime_path.clone())
+                {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        format!(
+                            "Runtime IR root {root} repeats checked computational-IH slot marker {slot_template_id} at the same structural path {runtime_path:?}"
+                        ),
+                    ));
+                }
+            }
+            collect_checked_oriented_child(body, markers, root, runtime_path, 0)
         }
         RuntimeExpr::CheckedComputationalIHInvocation {
             call_template_id,
+            checked_occurrence_path,
             body,
         } => {
-            markers.computational_ih_calls.insert(*call_template_id);
-            collect_checked_oriented_markers(body, markers)
+            if !markers
+                .computational_ih_calls
+                .entry((*call_template_id, checked_occurrence_path.clone()))
+                .or_default()
+                .insert(runtime_path.clone())
+            {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    format!(
+                        "Runtime IR root {root} repeats checked computational-IH call marker {call_template_id} at the same structural path {runtime_path:?}"
+                    ),
+                ));
+            }
+            collect_checked_oriented_child(body, markers, root, runtime_path, 0)
         }
         RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
-        | RuntimeExpr::CheckedJoinSite { body, .. }
-        | RuntimeExpr::Project { record: body, .. }
-        | RuntimeExpr::Closure { body, .. } => collect_checked_oriented_markers(body, markers),
+        | RuntimeExpr::CheckedJoinSite { body, .. } => {
+            collect_checked_oriented_child(body, markers, root, runtime_path, 0)
+        }
+        RuntimeExpr::Project { record, .. } => {
+            collect_checked_oriented_child(record, markers, root, runtime_path, 1)
+        }
+        RuntimeExpr::Closure { body, .. } => {
+            collect_checked_oriented_child(body, markers, root, runtime_path, 2)
+        }
         RuntimeExpr::LexicalClosure { captures, body, .. } => {
-            for capture in captures {
-                collect_checked_oriented_markers(capture, markers)?;
+            for (index, capture) in captures.iter().enumerate() {
+                collect_checked_oriented_child(
+                    capture,
+                    markers,
+                    root,
+                    runtime_path,
+                    10 + index as u64,
+                )?;
             }
-            collect_checked_oriented_markers(body, markers)
+            collect_checked_oriented_child(body, markers, root, runtime_path, 3)
         }
         RuntimeExpr::Let { value, body } => {
-            collect_checked_oriented_markers(value, markers)?;
-            collect_checked_oriented_markers(body, markers)
+            collect_checked_oriented_child(value, markers, root, runtime_path, 0)?;
+            collect_checked_oriented_child(body, markers, root, runtime_path, 1)
         }
         RuntimeExpr::If {
             scrutinee,
             then_expr,
             else_expr,
         } => {
-            collect_checked_oriented_markers(scrutinee, markers)?;
-            collect_checked_oriented_markers(then_expr, markers)?;
-            collect_checked_oriented_markers(else_expr, markers)
+            collect_checked_oriented_child(scrutinee, markers, root, runtime_path, 0)?;
+            collect_checked_oriented_child(then_expr, markers, root, runtime_path, 1)?;
+            collect_checked_oriented_child(else_expr, markers, root, runtime_path, 2)
         }
         RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
-            for arg in args {
-                collect_checked_oriented_markers(arg, markers)?;
+            for (index, arg) in args.iter().enumerate() {
+                collect_checked_oriented_child(arg, markers, root, runtime_path, index as u64)?;
             }
             Ok(())
         }
         RuntimeExpr::Match {
             scrutinee, cases, ..
         } => {
-            collect_checked_oriented_markers(scrutinee, markers)?;
-            for case in cases {
-                collect_checked_oriented_markers(&case.body, markers)?;
+            collect_checked_oriented_child(scrutinee, markers, root, runtime_path, 0)?;
+            for (index, case) in cases.iter().enumerate() {
+                collect_checked_oriented_child(
+                    &case.body,
+                    markers,
+                    root,
+                    runtime_path,
+                    1 + index as u64,
+                )?;
             }
             Ok(())
         }
         RuntimeExpr::ComputationalMatch {
             scrutinee, cases, ..
         } => {
-            collect_checked_oriented_markers(scrutinee, markers)?;
-            for case in cases {
-                collect_checked_oriented_markers(&case.body, markers)?;
+            collect_checked_oriented_child(scrutinee, markers, root, runtime_path, 0)?;
+            for (index, case) in cases.iter().enumerate() {
+                collect_checked_oriented_child(
+                    &case.body,
+                    markers,
+                    root,
+                    runtime_path,
+                    1 + index as u64,
+                )?;
             }
             Ok(())
         }
         RuntimeExpr::Record { fields } => {
-            for (_, value) in fields {
-                collect_checked_oriented_markers(value, markers)?;
+            for (index, (_, value)) in fields.iter().enumerate() {
+                collect_checked_oriented_child(value, markers, root, runtime_path, index as u64)?;
             }
             Ok(())
         }
         RuntimeExpr::Call { callee, args } => {
-            collect_checked_oriented_markers(callee, markers)?;
-            for arg in args {
-                collect_checked_oriented_markers(arg, markers)?;
+            collect_checked_oriented_child(callee, markers, root, runtime_path, 0)?;
+            for (index, arg) in args.iter().enumerate() {
+                collect_checked_oriented_child(arg, markers, root, runtime_path, 1 + index as u64)?;
             }
             Ok(())
         }
@@ -1547,10 +1669,10 @@ fn collect_checked_oriented_markers(
             capability, args, ..
         } => {
             if let Some(capability) = capability {
-                collect_checked_oriented_markers(&capability.value, markers)?;
+                collect_checked_oriented_child(&capability.value, markers, root, runtime_path, 0)?;
             }
-            for arg in args {
-                collect_checked_oriented_markers(arg, markers)?;
+            for (index, arg) in args.iter().enumerate() {
+                collect_checked_oriented_child(arg, markers, root, runtime_path, 1 + index as u64)?;
             }
             Ok(())
         }
@@ -1562,19 +1684,121 @@ fn collect_checked_oriented_markers(
     }
 }
 
+fn collect_checked_oriented_child(
+    expr: &RuntimeExpr,
+    markers: &mut CheckedOrientedMarkerSets,
+    root: &str,
+    runtime_path: &mut Vec<u64>,
+    edge: u64,
+) -> Result<(), CraneliftBackendError> {
+    runtime_path.push(edge);
+    let result = collect_checked_oriented_markers(expr, markers, root, runtime_path);
+    runtime_path.pop();
+    result
+}
+
+fn planned_marker_locations_for_declaration(
+    plan: &crate::OrientedSubcontinuationPlanV1,
+    declaration: &str,
+) -> CheckedOrientedMarkerSets {
+    let mut expected = CheckedOrientedMarkerSets::default();
+    for call in &plan.recursive_calls {
+        if call.declaration == declaration {
+            expected.recursive_calls.insert(
+                (call.call_template_id, call.checked_occurrence_path.clone()),
+                call.runtime_marker_locations
+                    .iter()
+                    .map(|location| location.runtime_path.clone())
+                    .collect(),
+            );
+        }
+    }
+    for slot in &plan.computational_ih_slots {
+        if slot.declaration == declaration {
+            expected.computational_ih_slots.insert(
+                (slot.slot_template_id, slot.checked_occurrence_path.clone()),
+                slot.runtime_marker_locations
+                    .iter()
+                    .map(|location| location.runtime_path.clone())
+                    .collect(),
+            );
+        }
+    }
+    for call in &plan.computational_ih_calls {
+        if call.declaration == declaration {
+            expected.computational_ih_calls.insert(
+                (call.call_template_id, call.checked_occurrence_path.clone()),
+                call.runtime_marker_locations
+                    .iter()
+                    .map(|location| location.runtime_path.clone())
+                    .collect(),
+            );
+        }
+    }
+    expected
+}
+
+fn require_exact_marker_locations(
+    declaration: &str,
+    actual: &CheckedOrientedMarkerSets,
+    expected: &CheckedOrientedMarkerSets,
+) -> Result<(), CraneliftBackendError> {
+    if actual.recursive_calls != expected.recursive_calls {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            format!(
+                "checked recursive-call Runtime occurrences differ in declaration {declaration}"
+            ),
+        ));
+    }
+    if actual.computational_ih_slots != expected.computational_ih_slots {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            format!(
+                "checked computational-IH slot Runtime occurrences differ in declaration {declaration}"
+            ),
+        ));
+    }
+    if actual.computational_ih_calls != expected.computational_ih_calls {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            format!(
+                "checked computational-IH call Runtime occurrences differ in declaration {declaration}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_oriented_subcontinuation_transport(
     expr: &RuntimeExpr,
     declarations: &BTreeMap<&str, &RuntimeDeclaration>,
     plan: Option<&crate::OrientedSubcontinuationPlanV1>,
 ) -> Result<(), CraneliftBackendError> {
     let mut markers = BTreeMap::new();
+    let mut entry_nonframe_markers = CheckedOrientedMarkerSets::default();
     let mut nonframe_markers = CheckedOrientedMarkerSets::default();
+    let mut declaration_nonframe_markers = Vec::new();
     collect_checked_subcontinuation_frames(expr, &mut markers)?;
-    collect_checked_oriented_markers(expr, &mut nonframe_markers)?;
-    for declaration in declarations.values() {
+    collect_checked_oriented_markers(
+        expr,
+        &mut entry_nonframe_markers,
+        "<entry>",
+        &mut Vec::new(),
+    )?;
+    nonframe_markers.extend_from(&entry_nonframe_markers);
+    for (symbol, declaration) in declarations.iter() {
         if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
             collect_checked_subcontinuation_frames(body, &mut markers)?;
-            collect_checked_oriented_markers(body, &mut nonframe_markers)?;
+            let mut declaration_markers = CheckedOrientedMarkerSets::default();
+            collect_checked_oriented_markers(
+                body,
+                &mut declaration_markers,
+                symbol,
+                &mut Vec::new(),
+            )?;
+            nonframe_markers.extend_from(&declaration_markers);
+            declaration_nonframe_markers.push((*symbol, declaration_markers));
         }
     }
     let markers_are_empty = markers.is_empty()
@@ -1608,6 +1832,19 @@ fn validate_oriented_subcontinuation_transport(
     let plan = plan.expect("nonempty marker set has a plan");
     plan.validate()
         .map_err(|reason| unsupported("OrientedSubcontinuationPlanV1", reason))?;
+    if !entry_nonframe_markers.recursive_calls.is_empty()
+        || !entry_nonframe_markers.computational_ih_slots.is_empty()
+        || !entry_nonframe_markers.computational_ih_calls.is_empty()
+    {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            "checked recursive/IH marker escaped its declaration into the entry expression",
+        ));
+    }
+    for (declaration, markers) in &declaration_nonframe_markers {
+        let expected = planned_marker_locations_for_declaration(plan, declaration);
+        require_exact_marker_locations(declaration, markers, &expected)?;
+    }
     if markers.len() != plan.frames.len() {
         return Err(unsupported(
             "OrientedSubcontinuationPlanV1",
@@ -1637,21 +1874,36 @@ fn validate_oriented_subcontinuation_transport(
     let plan_recursive_calls = plan
         .recursive_calls
         .iter()
-        .map(|call| call.call_template_id)
+        .map(|call| (call.call_template_id, call.checked_occurrence_path.clone()))
         .collect::<BTreeSet<_>>();
     let plan_ih_slots = plan
         .computational_ih_slots
         .iter()
-        .map(|slot| slot.slot_template_id)
+        .map(|slot| (slot.slot_template_id, slot.checked_occurrence_path.clone()))
         .collect::<BTreeSet<_>>();
     let plan_ih_calls = plan
         .computational_ih_calls
         .iter()
-        .map(|call| call.call_template_id)
+        .map(|call| (call.call_template_id, call.checked_occurrence_path.clone()))
         .collect::<BTreeSet<_>>();
-    if nonframe_markers.recursive_calls != plan_recursive_calls
-        || nonframe_markers.computational_ih_slots != plan_ih_slots
-        || nonframe_markers.computational_ih_calls != plan_ih_calls
+    let runtime_recursive_calls = nonframe_markers
+        .recursive_calls
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let runtime_ih_slots = nonframe_markers
+        .computational_ih_slots
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let runtime_ih_calls = nonframe_markers
+        .computational_ih_calls
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if runtime_recursive_calls != plan_recursive_calls
+        || runtime_ih_slots != plan_ih_slots
+        || runtime_ih_calls != plan_ih_calls
     {
         return Err(unsupported(
             "OrientedSubcontinuationPlanV1",
@@ -1833,6 +2085,7 @@ fn run_px8j_malformed_recursor_consumer(
         active_oriented_semantic_regions: 0,
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
+        root_terminal_authority: None,
         active_join_site: None,
         oriented_subcontinuation_plan: None,
         consumed_subcontinuation_frames: BTreeSet::new(),
@@ -2015,6 +2268,7 @@ fn run_checked_bounded_nat_fixture(
         active_oriented_semantic_regions: 0,
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
+        root_terminal_authority: None,
         active_join_site: None,
         oriented_subcontinuation_plan: None,
         consumed_subcontinuation_frames: BTreeSet::new(),
@@ -2235,6 +2489,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         active_oriented_semantic_regions: 0,
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
+        root_terminal_authority: None,
         active_join_site: None,
         oriented_subcontinuation_plan: None,
         consumed_subcontinuation_frames: BTreeSet::new(),
@@ -2456,6 +2711,7 @@ fn compile_expr_into_module<'a, M: Module>(
         active_oriented_semantic_regions: 0,
         native_join_plan,
         consumed_join_sites: BTreeSet::new(),
+        root_terminal_authority: None,
         active_join_site: None,
         oriented_subcontinuation_plan,
         consumed_subcontinuation_frames: BTreeSet::new(),
@@ -2517,8 +2773,8 @@ fn compile_expr_into_module<'a, M: Module>(
         if let Some(value) = staged_process_input {
             initial_env.push(compiler.lower_value(&mut builder, value)?);
         }
+        compiler.root_terminal_authority = compiler.take_distinguished_root_answer_authority()?;
         let lowered = compiler.lower_expr(&mut builder, expr, &initial_env)?;
-        compiler.consume_distinguished_root_join_site()?;
         compiler.require_complete_join_plan_consumption()?;
         let result = match lowered {
             Lowered::Trap(trap) => {
@@ -2613,6 +2869,7 @@ struct Lowering<'a> {
     active_oriented_semantic_regions: usize,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,
+    root_terminal_authority: Option<RootTerminalAnswerAuthority>,
     active_join_site: Option<u64>,
     oriented_subcontinuation_plan: Option<crate::OrientedSubcontinuationPlanV1>,
     consumed_subcontinuation_frames: BTreeSet<(u64, u64)>,
@@ -3911,10 +4168,12 @@ enum SourceContinuationTerminal<'a> {
         resume_cursor: ContinuationCursorId,
         expected: ContinuationCursorId,
         active: &'a ActiveContinuationFrame<'a>,
+        root_authority: Option<RootTerminalAnswerAuthority>,
     },
     ResumeOuter {
         expected: ContinuationCursorId,
         active: &'a ActiveContinuationFrame<'a>,
+        root_authority: Option<RootTerminalAnswerAuthority>,
     },
     JumpToJoin(SourcePredecessorEdge<'a>),
 }
@@ -4018,7 +4277,9 @@ enum SourcePrefixTemplate {
 }
 
 enum SourcePrefixTerminal<'a> {
-    ResumeOuter,
+    ResumeOuter {
+        root_authority: Option<RootTerminalAnswerAuthority>,
+    },
     Join(SourcePredecessorEdge<'a>),
 }
 
@@ -4154,6 +4415,13 @@ enum ScalarMergeKind {
 /// Move-only proof that the native lowering machine has reached the checked
 /// invocation root with no semantic or control continuation left to consume
 /// the value.
+struct RootTerminalAnswerAuthority {
+    site_id: u64,
+    checked_result_type_fingerprint: u64,
+    occurrence_binding_fingerprint: u64,
+    outer_cursor: Option<ContinuationCursorId>,
+}
+
 struct TerminalAnswerAuthority;
 
 struct DeferredConstructorCaseEnvironment<'a> {
@@ -5236,6 +5504,7 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::CheckedRecursiveInvocation {
                 call_template_id,
                 body,
+                ..
             } => {
                 let instance = self.enter_checked_recursive_invocation(*call_template_id, body)?;
                 let result = self.lower_computational_producer_expr(
@@ -5253,6 +5522,7 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::CheckedComputationalIHInvocation {
                 call_template_id,
                 body,
+                ..
             } => {
                 self.enter_checked_computational_ih_invocation(*call_template_id)?;
                 let value = self.lower_computational_producer_expr(
@@ -6674,8 +6944,8 @@ impl<'a> Lowering<'a> {
         lowered: Lowered,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, bool), CraneliftBackendError> {
-        let terminal_authority = self.mint_terminal_answer_authority();
-        let lowered = if terminal_authority.is_some() {
+        let checked_root_exit_representation = self.has_checked_root_exit_representation();
+        let lowered = if checked_root_exit_representation {
             Self::unwrap_terminal_ret(lowered)
         } else {
             lowered
@@ -6696,7 +6966,7 @@ impl<'a> Lowering<'a> {
                 },
                 true,
             )),
-            lowered if terminal_authority.is_some() => Ok((
+            lowered if checked_root_exit_representation => Ok((
                 NativeScalarPairV1 {
                     tag: zero_tag,
                     payload: self.emit_process_exit_status(builder, lowered),
@@ -6716,8 +6986,8 @@ impl<'a> Lowering<'a> {
         lowered: Lowered,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
-        let terminal_authority = self.mint_terminal_answer_authority();
-        let lowered = if terminal_authority.is_some() {
+        let checked_root_exit_representation = self.has_checked_root_exit_representation();
+        let lowered = if checked_root_exit_representation {
             Self::unwrap_terminal_ret(lowered)
         } else {
             lowered
@@ -6775,7 +7045,7 @@ impl<'a> Lowering<'a> {
                 },
                 ScalarMergeKind::ExitCode,
             )),
-            lowered if terminal_authority.is_some() => Ok((
+            lowered if checked_root_exit_representation => Ok((
                 NativeScalarPairV1 {
                     tag: zero_tag,
                     payload: self.emit_process_exit_status(builder, lowered),
@@ -6789,18 +7059,97 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn mint_terminal_answer_authority(&self) -> Option<TerminalAnswerAuthority> {
+    fn restore_root_terminal_authority(
+        &mut self,
+        authority: Option<RootTerminalAnswerAuthority>,
+        expected_outer: ContinuationCursorId,
+    ) -> Result<(), CraneliftBackendError> {
+        let Some(mut authority) = authority else {
+            return Ok(());
+        };
+        if authority.outer_cursor != Some(expected_outer) {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "checked root answer authority returned through the wrong outer cursor",
+            ));
+        }
+        // The exact source-machine delimiter consumes this cursor binding.
+        // A later source-machine episode may bind the same affine root token
+        // to its own exact outer cursor; retaining the old cursor would turn a
+        // lawful sequential episode into an apparent transplant.
+        authority.outer_cursor = None;
+        if self.root_terminal_authority.replace(authority).is_some() {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "checked root answer authority was duplicated across source control",
+            ));
+        }
+        Ok(())
+    }
+
+    /// The checked root cut determines the temporary scalar representation
+    /// used at internal CFG joins. This is validation metadata only: it cannot
+    /// mint or consume terminal authority, which remains affine in
+    /// `RootTerminalAnswerAuthority` until `emit_result`.
+    fn has_checked_root_exit_representation(&self) -> bool {
+        self.process_object
+            && self.native_join_plan.as_ref().is_some_and(|plan| {
+                plan.sites.iter().any(|site| {
+                    site.runtime_frame_fingerprint == crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+                        && site.checked_occurrence_path == [0]
+                        && site.answer_kind == crate::NativeJoinAnswerKindV1::ExitCode
+                        && self.consumed_join_sites.contains(&site.site_id)
+                })
+            })
+    }
+
+    fn mint_terminal_answer_authority(
+        &mut self,
+    ) -> Result<TerminalAnswerAuthority, CraneliftBackendError> {
         debug_assert_eq!(
             self.live_source_continuations == 0,
             self.source_control_root.is_none(),
             "source-control ownership and diagnostic depth must agree"
         );
-        (self.process_object
-            && self.source_control_root.is_none()
-            && self.active_oriented_semantic_regions == 0
-            && self.active_subcontinuation_frame.is_none()
-            && self.active_join_site.is_none())
-        .then_some(TerminalAnswerAuthority)
+        let authority = self.root_terminal_authority.take().ok_or_else(|| {
+            unsupported(
+                "NativeJoinPlanV1",
+                "terminal answer has no affine checked-root authority",
+            )
+        })?;
+        let site = self
+            .native_join_plan
+            .as_ref()
+            .and_then(|plan| {
+                plan.sites
+                    .iter()
+                    .find(|site| site.site_id == authority.site_id)
+            })
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeJoinPlanV1",
+                    "terminal answer authority names a missing checked-root site",
+                )
+            })?;
+        if !self.process_object
+            || site.runtime_frame_fingerprint != crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+            || site.checked_occurrence_path != [0]
+            || site.answer_kind != crate::NativeJoinAnswerKindV1::ExitCode
+            || site.checked_result_type_fingerprint != authority.checked_result_type_fingerprint
+            || site.occurrence_binding_fingerprint != authority.occurrence_binding_fingerprint
+            || !self.consumed_join_sites.contains(&authority.site_id)
+            || authority.outer_cursor.is_some()
+            || self.source_control_root.is_some()
+            || self.active_oriented_semantic_regions != 0
+            || self.active_subcontinuation_frame.is_some()
+            || self.active_join_site.is_some()
+        {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "terminal answer authority does not match the exhausted checked root",
+            ));
+        }
+        Ok(TerminalAnswerAuthority)
     }
 
     fn unwrap_terminal_ret(mut lowered: Lowered) -> Lowered {
@@ -7041,9 +7390,18 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
-    fn consume_distinguished_root_join_site(&mut self) -> Result<(), CraneliftBackendError> {
+    fn take_distinguished_root_answer_authority(
+        &mut self,
+    ) -> Result<Option<RootTerminalAnswerAuthority>, CraneliftBackendError> {
         let Some(plan) = &self.native_join_plan else {
-            return Ok(());
+            return if self.process_object {
+                Err(unsupported(
+                    "NativeJoinPlanV1",
+                    "process-object lowering has no checked distinguished-root answer authority",
+                ))
+            } else {
+                Ok(None)
+            };
         };
         let roots = plan
             .sites
@@ -7056,7 +7414,13 @@ impl<'a> Lowering<'a> {
             .cloned()
             .collect::<Vec<_>>();
         let site = match roots.as_slice() {
-            [] => return Ok(()),
+            [] if !self.process_object => return Ok(None),
+            [] => {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    "process-object lowering has no checked distinguished-root answer authority",
+                ));
+            }
             [site] => site,
             _ => {
                 return Err(unsupported(
@@ -7078,8 +7442,18 @@ impl<'a> Lowering<'a> {
                 "distinguished root join occurrence binding is stale or inconsistent",
             ));
         }
-        self.consumed_join_sites.insert(site.site_id);
-        Ok(())
+        if !self.consumed_join_sites.insert(site.site_id) {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "checked distinguished-root answer authority was consumed more than once",
+            ));
+        }
+        Ok(Some(RootTerminalAnswerAuthority {
+            site_id: site.site_id,
+            checked_result_type_fingerprint: site.checked_result_type_fingerprint,
+            occurrence_binding_fingerprint: site.occurrence_binding_fingerprint,
+            outer_cursor: None,
+        }))
     }
 
     fn scalar_kind_from_plan(kind: crate::NativeJoinAnswerKindV1) -> ScalarMergeKind {
@@ -7348,11 +7722,13 @@ impl<'a> Lowering<'a> {
             SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected,
                 active,
+                root_authority,
             }) => SourceContinuation::Terminal(SourceContinuationTerminal::ReturnToProducerHole {
                 stack,
                 resume_cursor,
                 expected,
                 active,
+                root_authority,
             }),
             terminal @ SourceContinuation::Terminal(_) => terminal,
         })
@@ -7485,21 +7861,23 @@ impl<'a> Lowering<'a> {
             }
             SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected,
+                root_authority,
                 ..
             }) => (
                 SourcePrefixTemplate::Terminal {
                     expected_outer: expected,
                 },
-                SourcePrefixTerminal::ResumeOuter,
+                SourcePrefixTerminal::ResumeOuter { root_authority },
             ),
             SourceContinuation::Terminal(SourceContinuationTerminal::ReturnToProducerHole {
                 expected,
+                root_authority,
                 ..
             }) => (
                 SourcePrefixTemplate::Terminal {
                     expected_outer: expected,
                 },
-                SourcePrefixTerminal::ResumeOuter,
+                SourcePrefixTerminal::ResumeOuter { root_authority },
             ),
             SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)) => (
                 SourcePrefixTemplate::Terminal {
@@ -7869,10 +8247,24 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
         active: &ActiveContinuationFrame<'_>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let mut root_authority = self.root_terminal_authority.take();
+        if let Some(authority) = &mut root_authority {
+            match authority.outer_cursor {
+                None => authority.outer_cursor = Some(active.cursor),
+                Some(cursor) if cursor == active.cursor => {}
+                Some(_) => {
+                    return Err(unsupported(
+                        "NativeJoinPlanV1",
+                        "checked root answer authority was transplanted to another outer cursor",
+                    ));
+                }
+            }
+        }
         let control = SourceControl {
             continuation: SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected: active.cursor,
                 active,
+                root_authority,
             }),
             selected: SourceSelectedContinuation {
                 activation: active.activation,
@@ -7935,6 +8327,7 @@ impl<'a> Lowering<'a> {
                     RuntimeExpr::CheckedRecursiveInvocation {
                         call_template_id,
                         body,
+                        ..
                     } => {
                         let instance =
                             self.enter_checked_recursive_invocation(call_template_id, &body)?;
@@ -7959,6 +8352,7 @@ impl<'a> Lowering<'a> {
                     RuntimeExpr::CheckedComputationalIHInvocation {
                         call_template_id,
                         body,
+                        ..
                     } => {
                         self.enter_checked_computational_ih_invocation(call_template_id)?;
                         control.continuation =
@@ -8092,6 +8486,7 @@ impl<'a> Lowering<'a> {
                                 resume_cursor,
                                 expected,
                                 active,
+                                root_authority,
                             },
                         ) => {
                             #[cfg(test)]
@@ -8122,7 +8517,11 @@ impl<'a> Lowering<'a> {
                                 stack,
                                 resume_cursor,
                                 next: Box::new(SourceContinuation::Terminal(
-                                    SourceContinuationTerminal::ResumeOuter { expected, active },
+                                    SourceContinuationTerminal::ResumeOuter {
+                                        expected,
+                                        active,
+                                        root_authority,
+                                    },
                                 )),
                             };
                             SourceMachineState::Value { value, control }
@@ -8130,6 +8529,7 @@ impl<'a> Lowering<'a> {
                         SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                             expected,
                             active,
+                            root_authority,
                         }) => {
                             #[cfg(test)]
                             px8j_record_source_event(Px8jSourceTraceEvent::ResumeOuter {
@@ -8141,6 +8541,7 @@ impl<'a> Lowering<'a> {
                                     "source continuation terminal cursor mismatch",
                                 ));
                             }
+                            self.restore_root_terminal_authority(root_authority, expected)?;
                             if matches!(value, Lowered::Trap(_)) {
                                 return Ok(value);
                             }
@@ -8800,7 +9201,7 @@ impl<'a> Lowering<'a> {
                 };
                 (fanout.source_prefix_template, fanout.inherited_edge.target)
             }
-            SourcePrefixTerminal::ResumeOuter => {
+            SourcePrefixTerminal::ResumeOuter { root_authority } => {
                 let active = suffix_control
                     .selected
                     .as_active(&suffix_control.selected_lineage);
@@ -8814,7 +9215,13 @@ impl<'a> Lowering<'a> {
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
-                local_completion = Some((merge, suffix_pending.to_vec(), required_kind, site_id));
+                local_completion = Some((
+                    merge,
+                    suffix_pending.to_vec(),
+                    required_kind,
+                    site_id,
+                    root_authority,
+                ));
                 (
                     source_prefix_template,
                     SourceJoinTarget {
@@ -8885,7 +9292,9 @@ impl<'a> Lowering<'a> {
             }
         }
 
-        let Some((merge, suffix_pending, required_kind, _site_id)) = local_completion else {
+        let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
+            local_completion
+        else {
             return Ok(Lowered::RecursiveBackedge);
         };
         builder.switch_to_block(merge);
@@ -8906,6 +9315,7 @@ impl<'a> Lowering<'a> {
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
         self.resume_active_continuation(builder, merged, suffix_active)
     }
 
@@ -8923,7 +9333,7 @@ impl<'a> Lowering<'a> {
         let mut local_completion = None;
         let target = match terminal {
             SourcePrefixTerminal::Join(inherited_edge) => inherited_edge.target,
-            SourcePrefixTerminal::ResumeOuter => {
+            SourcePrefixTerminal::ResumeOuter { root_authority } => {
                 let active = suffix_control
                     .selected
                     .as_active(&suffix_control.selected_lineage);
@@ -8937,7 +9347,13 @@ impl<'a> Lowering<'a> {
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
-                local_completion = Some((merge, suffix_pending.to_vec(), required_kind, site_id));
+                local_completion = Some((
+                    merge,
+                    suffix_pending.to_vec(),
+                    required_kind,
+                    site_id,
+                    root_authority,
+                ));
                 SourceJoinTarget {
                     join_id,
                     block: merge,
@@ -8982,7 +9398,9 @@ impl<'a> Lowering<'a> {
                 ));
             }
         }
-        let Some((merge, suffix_pending, required_kind, _site_id)) = local_completion else {
+        let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
+            local_completion
+        else {
             return Ok(Lowered::RecursiveBackedge);
         };
         builder.switch_to_block(merge);
@@ -9003,6 +9421,7 @@ impl<'a> Lowering<'a> {
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
         self.resume_active_continuation(builder, merged, suffix_active)
     }
 
@@ -9025,7 +9444,7 @@ impl<'a> Lowering<'a> {
         let mut local_completion = None;
         let target = match terminal {
             SourcePrefixTerminal::Join(inherited_edge) => inherited_edge.target,
-            SourcePrefixTerminal::ResumeOuter => {
+            SourcePrefixTerminal::ResumeOuter { root_authority } => {
                 let active = suffix_control
                     .selected
                     .as_active(&suffix_control.selected_lineage);
@@ -9039,7 +9458,13 @@ impl<'a> Lowering<'a> {
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
-                local_completion = Some((merge, suffix_pending.to_vec(), required_kind, site_id));
+                local_completion = Some((
+                    merge,
+                    suffix_pending.to_vec(),
+                    required_kind,
+                    site_id,
+                    root_authority,
+                ));
                 SourceJoinTarget {
                     join_id,
                     block: merge,
@@ -9099,7 +9524,9 @@ impl<'a> Lowering<'a> {
             }
         }
 
-        let Some((merge, suffix_pending, required_kind, _site_id)) = local_completion else {
+        let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
+            local_completion
+        else {
             return Ok(Lowered::RecursiveBackedge);
         };
         builder.switch_to_block(merge);
@@ -9120,6 +9547,7 @@ impl<'a> Lowering<'a> {
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
         self.resume_active_continuation(builder, merged, suffix_active)
     }
 
@@ -9270,12 +9698,15 @@ impl<'a> Lowering<'a> {
         };
         let (source_prefix_template, terminal) =
             Self::split_source_prefix(suffix_control.continuation)?;
-        if !matches!(terminal, SourcePrefixTerminal::ResumeOuter) {
-            return Err(unsupported(
-                "NativeJoinPlanV1",
-                "planned dynamic-constructor cut unexpectedly inherited an executable edge",
-            ));
-        }
+        let root_authority = match terminal {
+            SourcePrefixTerminal::ResumeOuter { root_authority } => root_authority,
+            SourcePrefixTerminal::Join(_) => {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    "planned dynamic-constructor cut unexpectedly inherited an executable edge",
+                ));
+            }
+        };
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor source match block");
@@ -9351,6 +9782,7 @@ impl<'a> Lowering<'a> {
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
         self.resume_active_continuation(builder, merged, suffix_active)
     }
 
@@ -9733,6 +10165,7 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::CheckedRecursiveInvocation {
                 call_template_id,
                 body,
+                ..
             } => {
                 let instance =
                     self.enter_checked_recursive_invocation(*call_template_id, body)?;
@@ -9746,6 +10179,7 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::CheckedComputationalIHInvocation {
                 call_template_id,
                 body,
+                ..
             } => {
                 self.enter_checked_computational_ih_invocation(*call_template_id)?;
                 let value = self.lower_expr(builder, body, env)?;
@@ -13205,6 +13639,8 @@ impl<'a> Lowering<'a> {
         value: Lowered,
     ) -> Result<(cranelift_codegen::ir::Value, ResultDecoder), CraneliftBackendError> {
         if self.process_object {
+            let _authority = self.mint_terminal_answer_authority()?;
+            let value = Self::unwrap_terminal_ret(value);
             let value = match value {
                 Lowered::ProcessExitStatus { value } => value,
                 value => self.emit_process_exit_status(builder, value),
@@ -13742,6 +14178,10 @@ mod tests {
                 frame_templates: vec![frame_id],
                 input_interface: oriented_test_interface(frame_id as u8),
                 output_interface: oriented_test_interface(frame_id as u8 + 1),
+                runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+                    declaration: "decl:fixture::oriented".to_string(),
+                    runtime_path: vec![0, frame_id],
+                }],
                 occurrence_binding_fingerprint: 0,
             };
             slot.occurrence_binding_fingerprint =
@@ -13761,6 +14201,10 @@ mod tests {
                 parent_frame_template_id: Some(frame_id),
                 parent_segment_site_id: Some(9),
                 caller_interface: oriented_test_interface(frame_id as u8 + 1),
+                runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+                    declaration: "decl:fixture::oriented".to_string(),
+                    runtime_path: vec![1, frame_id],
+                }],
                 occurrence_binding_fingerprint: 0,
             };
             call.occurrence_binding_fingerprint =
@@ -14876,7 +15320,7 @@ mod tests {
             None,
             true,
             Some(&symbols),
-            None,
+            Some(test_only_distinguished_root_join_plan()),
             None,
         )
         .unwrap();
@@ -17600,7 +18044,7 @@ mod tests {
             None,
             true,
             None,
-            None,
+            Some(test_only_distinguished_root_join_plan()),
             None,
         )
         .expect("borrowed fixture lowers");
@@ -17875,7 +18319,7 @@ mod tests {
             None,
             true,
             None,
-            None,
+            Some(test_only_distinguished_root_join_plan()),
             None,
         );
         let error = match result {
@@ -17968,6 +18412,307 @@ mod tests {
         }
     }
 
+    fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowering<'a> {
+        Lowering {
+            seed_env,
+            declarations: BTreeMap::new(),
+            declaration_stack: Vec::new(),
+            active_recursive_declarations: Vec::new(),
+            result_table: BTreeMap::new(),
+            next_token: 0,
+            next_recursor_frame_provenance: 0,
+            next_recursor_producer_origin: 0,
+            next_continuation_activation: 0,
+            next_continuation_cursor: 0,
+            next_source_join: 0,
+            next_source_predecessor: 0,
+            live_source_continuations: 0,
+            source_control_root: None,
+            active_oriented_semantic_regions: 0,
+            native_join_plan: Some(crate::NativeJoinPlanV1 {
+                representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+                sites: vec![self_consistent_root_join_site(0)],
+            }),
+            consumed_join_sites: BTreeSet::new(),
+            root_terminal_authority: None,
+            active_join_site: None,
+            oriented_subcontinuation_plan: None,
+            consumed_subcontinuation_frames: BTreeSet::new(),
+            active_subcontinuation_frame: None,
+            consumed_recursive_call_templates: BTreeSet::new(),
+            pending_recursive_call: None,
+            pending_computational_ih_call: None,
+            active_recursive_invocations: Vec::new(),
+            next_recursive_invocation_instance: 1,
+            assumptions: BTreeSet::new(),
+            unsupported: Vec::new(),
+            process_object: true,
+            process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
+            host_dispatch: None,
+            invocation_pointer: None,
+            native_int_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_tags: BTreeMap::new(),
+            native_int_mutation: NativeIntLoweringMutation::Exact,
+            bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        }
+    }
+
+    #[test]
+    fn distinguished_root_authority_is_checked_affine_and_cursor_bound() {
+        let seed_env = NativeSeedEnvironment::empty();
+        let mut lowering = root_authority_test_lowering(&seed_env);
+        let authority = lowering
+            .take_distinguished_root_answer_authority()
+            .expect("the exact checked root site validates")
+            .expect("process lowering carries root authority");
+        lowering.root_terminal_authority = Some(authority);
+        lowering
+            .mint_terminal_answer_authority()
+            .expect("the first exhausted-root mint consumes the authority");
+        let repeated = match lowering.mint_terminal_answer_authority() {
+            Ok(_) => panic!("the affine root authority cannot mint twice"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            repeated,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "NativeJoinPlanV1",
+                reason,
+            }) if reason == "terminal answer has no affine checked-root authority"
+        ));
+
+        let mut lowering = root_authority_test_lowering(&seed_env);
+        let mut authority = lowering
+            .take_distinguished_root_answer_authority()
+            .unwrap()
+            .unwrap();
+        authority.outer_cursor = Some(ContinuationCursorId(7));
+        let transplanted = lowering
+            .restore_root_terminal_authority(Some(authority), ContinuationCursorId(8))
+            .expect_err("a root token cannot cross the wrong source cursor");
+        assert!(matches!(
+            transplanted,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "NativeJoinPlanV1",
+                reason,
+            }) if reason == "checked root answer authority returned through the wrong outer cursor"
+        ));
+    }
+
+    #[test]
+    fn process_lowering_without_checked_root_authority_rejects_before_cfg() {
+        let result = compile_expr_into_module(
+            new_object_module("px8ta-missing-root-authority").unwrap(),
+            "ken_px8ta_missing_root_authority",
+            Linkage::Export,
+            &RuntimeExpr::Construct {
+                constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                args: Vec::new(),
+            },
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            true,
+            None,
+            None,
+            None,
+        );
+        let error = match result {
+            Ok(_) => panic!("process lowering must not invent root authority from process mode"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "NativeJoinPlanV1",
+                reason,
+            }) if reason == "process-object lowering has no checked distinguished-root answer authority"
+        ));
+    }
+
+    fn occurrence_exact_marker_fixture(
+        duplicate_call: bool,
+        duplicate_slot: bool,
+    ) -> (
+        RuntimeExpr,
+        RuntimeDeclaration,
+        crate::OrientedSubcontinuationPlanV1,
+    ) {
+        let declaration = "decl:fixture::PX8TA::markers".to_string();
+        let slot_marker = RuntimeExpr::CheckedComputationalIHSlots {
+            slot_template_ids: vec![200],
+            checked_occurrence_paths: vec![vec![20]],
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
+        };
+        let call_marker = RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id: 100,
+            checked_occurrence_path: vec![30],
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((2).into()))),
+        };
+        let slot_value = if duplicate_slot {
+            RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Pair".to_string(),
+                args: vec![slot_marker.clone(), slot_marker],
+            }
+        } else {
+            slot_marker
+        };
+        let call_body = if duplicate_call {
+            RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Pair".to_string(),
+                args: vec![call_marker.clone(), call_marker],
+            }
+        } else {
+            call_marker
+        };
+        let cases = vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::Only".to_string(),
+            argument_binders: 0,
+            recursive_positions: Vec::new(),
+            body: RuntimeExpr::Let {
+                value: Box::new(slot_value),
+                body: Box::new(call_body),
+            },
+        }];
+        let default = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-TA marker fixture default".to_string(),
+        };
+        let runtime_frame_fingerprint =
+            crate::compiler_private_computational_match_frame_fingerprint(&cases, &default);
+        let body = RuntimeExpr::CheckedSubcontinuationFrame {
+            frame_id: 0,
+            body: Box::new(RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::Only".to_string(),
+                    args: Vec::new(),
+                }),
+                cases,
+                default,
+            }),
+        };
+        let runtime_declaration = RuntimeDeclaration {
+            symbol: declaration.clone(),
+            kind: RuntimeDeclarationKind::Transparent { body },
+            metadata: RuntimeSymbolMetadata::empty(),
+        };
+        let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+            frame_id: 0,
+            segment_site_id: 9,
+            declaration: declaration.clone(),
+            checked_occurrence_path: vec![10],
+            semantic_position: 0,
+            input_interface: oriented_test_interface(0),
+            output_interface: oriented_test_interface(1),
+            runtime_frame_fingerprint,
+            occurrence_binding_fingerprint: 0,
+            control_witness: crate::OrientedControlWitnessV1::DistinguishedRoot,
+        };
+        frame.occurrence_binding_fingerprint =
+            crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+        let mut slot = crate::CheckedComputationalIHSlotTemplateV1 {
+            slot_template_id: 200,
+            declaration: declaration.clone(),
+            checked_match_ordinal: 0,
+            checked_occurrence_path: vec![20],
+            frame_template_id: 0,
+            constructor: "ctor:fixture::Only".to_string(),
+            recursive_position: 0,
+            method_binder_ordinal: 0,
+            local_telescope: Vec::new(),
+            ih_interface: oriented_test_interface(0),
+            segment_site_id: 9,
+            frame_templates: vec![0],
+            input_interface: oriented_test_interface(0),
+            output_interface: oriented_test_interface(1),
+            runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+                declaration: declaration.clone(),
+                runtime_path: vec![0, 1, 0],
+            }],
+            occurrence_binding_fingerprint: 0,
+        };
+        slot.occurrence_binding_fingerprint =
+            crate::compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+        let mut call = crate::CheckedComputationalIHCallTemplateV1 {
+            call_template_id: 100,
+            declaration: declaration.clone(),
+            checked_occurrence_path: vec![30],
+            slot_template_id: 200,
+            arity: 1,
+            local_telescope: Vec::new(),
+            result_interface: oriented_test_interface(1),
+            callee_segment_site_id: 9,
+            callee_frame_templates: vec![0],
+            parent_frame_template_id: Some(0),
+            parent_segment_site_id: Some(9),
+            caller_interface: oriented_test_interface(1),
+            runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+                declaration,
+                runtime_path: vec![0, 1, 1],
+            }],
+            occurrence_binding_fingerprint: 0,
+        };
+        call.occurrence_binding_fingerprint =
+            crate::compiler_private_computational_ih_call_binding_fingerprint(&call);
+        (
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            runtime_declaration,
+            crate::OrientedSubcontinuationPlanV1 {
+                representation_rule_version:
+                    crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+                frames: vec![frame],
+                recursive_calls: Vec::new(),
+                computational_ih_slots: vec![slot],
+                computational_ih_calls: vec![call],
+            },
+        )
+    }
+
+    #[test]
+    fn checked_marker_census_rejects_duplicate_call_and_slot_occurrences_before_cfg() {
+        let (entry, declaration, plan) = occurrence_exact_marker_fixture(false, false);
+        let declarations = BTreeMap::from([(declaration.symbol.as_str(), &declaration)]);
+        validate_oriented_subcontinuation_transport(&entry, &declarations, Some(&plan))
+            .expect("the exact checked Runtime marker occurrence ledger closes");
+
+        for (duplicate_call, duplicate_slot, expected) in [
+            (
+                true,
+                false,
+                "computational-IH call Runtime occurrences differ",
+            ),
+            (
+                false,
+                true,
+                "computational-IH slot Runtime occurrences differ",
+            ),
+        ] {
+            let (entry, declaration, plan) =
+                occurrence_exact_marker_fixture(duplicate_call, duplicate_slot);
+            let declarations = BTreeMap::from([(declaration.symbol.as_str(), &declaration)]);
+            let error =
+                validate_oriented_subcontinuation_transport(&entry, &declarations, Some(&plan))
+                    .expect_err(
+                        "an extra static marker occurrence must reject before CFG emission",
+                    );
+            assert!(
+                matches!(
+                    error,
+                    CraneliftBackendError::Unsupported(UnsupportedLowering {
+                        construct: "OrientedSubcontinuationPlanV1",
+                        ref reason,
+                    }) if reason.contains(expected)
+                ),
+                "{error:?}"
+            );
+        }
+    }
+
     #[test]
     fn px8j_all_three_direct_consumers_propagate_the_role_validator() {
         for consumer in [
@@ -18051,6 +18796,7 @@ mod tests {
                 sites: vec![self_consistent_root_join_site(0)],
             }),
             consumed_join_sites: BTreeSet::new(),
+            root_terminal_authority: None,
             active_join_site: Some(41),
             oriented_subcontinuation_plan: None,
             consumed_subcontinuation_frames: BTreeSet::new(),

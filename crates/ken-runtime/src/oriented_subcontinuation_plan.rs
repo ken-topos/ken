@@ -32,6 +32,12 @@ pub enum OrientedControlWitnessV1 {
     ParentFrame(u64),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CheckedRuntimeMarkerLocationV1 {
+    pub declaration: String,
+    pub runtime_path: Vec<u64>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrientedSubcontinuationFramePlanV1 {
     pub frame_id: u64,
@@ -65,6 +71,7 @@ pub struct CheckedRecursiveInvocationTemplateV1 {
     pub callee_segment_site_id: u64,
     pub callee_frame_templates: Vec<u64>,
     pub caller_interface: CheckedAnswerInterfaceV1,
+    pub runtime_marker_locations: Vec<CheckedRuntimeMarkerLocationV1>,
     pub occurrence_binding_fingerprint: u64,
 }
 
@@ -87,6 +94,7 @@ pub struct CheckedComputationalIHSlotTemplateV1 {
     pub frame_templates: Vec<u64>,
     pub input_interface: CheckedAnswerInterfaceV1,
     pub output_interface: CheckedAnswerInterfaceV1,
+    pub runtime_marker_locations: Vec<CheckedRuntimeMarkerLocationV1>,
     pub occurrence_binding_fingerprint: u64,
 }
 
@@ -107,6 +115,7 @@ pub struct CheckedComputationalIHCallTemplateV1 {
     pub parent_frame_template_id: Option<u64>,
     pub parent_segment_site_id: Option<u64>,
     pub caller_interface: CheckedAnswerInterfaceV1,
+    pub runtime_marker_locations: Vec<CheckedRuntimeMarkerLocationV1>,
     pub occurrence_binding_fingerprint: u64,
 }
 
@@ -119,8 +128,27 @@ pub struct OrientedSubcontinuationPlanV1 {
     pub computational_ih_calls: Vec<CheckedComputationalIHCallTemplateV1>,
 }
 
+fn validate_marker_locations(
+    declaration: &str,
+    locations: &[CheckedRuntimeMarkerLocationV1],
+) -> Result<(), &'static str> {
+    if locations.is_empty() {
+        return Err("checked Runtime marker template has no structural occurrence");
+    }
+    let mut seen = BTreeSet::new();
+    for location in locations {
+        if location.declaration != declaration {
+            return Err("checked Runtime marker occurrence crosses declarations");
+        }
+        if !seen.insert(location) {
+            return Err("checked Runtime marker repeats one structural occurrence");
+        }
+    }
+    Ok(())
+}
+
 impl OrientedSubcontinuationPlanV1 {
-    pub const REPRESENTATION_RULE_VERSION: u32 = 3;
+    pub const REPRESENTATION_RULE_VERSION: u32 = 4;
 
     pub fn canonical_bytes(&self) -> Vec<u8> {
         let mut out = ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER.to_vec();
@@ -175,6 +203,7 @@ impl OrientedSubcontinuationPlanV1 {
                 put_u64(&mut out, *frame);
             }
             put_bytes(&mut out, &call.caller_interface.canonical);
+            put_marker_locations(&mut out, &call.runtime_marker_locations);
             put_u64(&mut out, call.occurrence_binding_fingerprint);
         }
         put_u64(&mut out, self.computational_ih_slots.len() as u64);
@@ -202,6 +231,7 @@ impl OrientedSubcontinuationPlanV1 {
             }
             put_bytes(&mut out, &slot.input_interface.canonical);
             put_bytes(&mut out, &slot.output_interface.canonical);
+            put_marker_locations(&mut out, &slot.runtime_marker_locations);
             put_u64(&mut out, slot.occurrence_binding_fingerprint);
         }
         put_u64(&mut out, self.computational_ih_calls.len() as u64);
@@ -227,6 +257,7 @@ impl OrientedSubcontinuationPlanV1 {
             put_optional_u64(&mut out, call.parent_frame_template_id);
             put_optional_u64(&mut out, call.parent_segment_site_id);
             put_bytes(&mut out, &call.caller_interface.canonical);
+            put_marker_locations(&mut out, &call.runtime_marker_locations);
             put_u64(&mut out, call.occurrence_binding_fingerprint);
         }
         out
@@ -328,6 +359,7 @@ impl OrientedSubcontinuationPlanV1 {
                 callee_frame_templates.push(take_u64(&mut bytes)?);
             }
             let caller_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let runtime_marker_locations = take_marker_locations(&mut bytes)?;
             let occurrence_binding_fingerprint = take_u64(&mut bytes)?;
             recursive_calls.push(CheckedRecursiveInvocationTemplateV1 {
                 call_template_id,
@@ -344,6 +376,7 @@ impl OrientedSubcontinuationPlanV1 {
                 callee_segment_site_id,
                 callee_frame_templates,
                 caller_interface,
+                runtime_marker_locations,
                 occurrence_binding_fingerprint,
             });
         }
@@ -384,6 +417,7 @@ impl OrientedSubcontinuationPlanV1 {
             }
             let input_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
             let output_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let runtime_marker_locations = take_marker_locations(&mut bytes)?;
             let occurrence_binding_fingerprint = take_u64(&mut bytes)?;
             computational_ih_slots.push(CheckedComputationalIHSlotTemplateV1 {
                 slot_template_id,
@@ -400,6 +434,7 @@ impl OrientedSubcontinuationPlanV1 {
                 frame_templates,
                 input_interface,
                 output_interface,
+                runtime_marker_locations,
                 occurrence_binding_fingerprint,
             });
         }
@@ -437,6 +472,7 @@ impl OrientedSubcontinuationPlanV1 {
             let parent_frame_template_id = take_optional_u64(&mut bytes)?;
             let parent_segment_site_id = take_optional_u64(&mut bytes)?;
             let caller_interface = CheckedAnswerInterfaceV1::new(take_bytes(&mut bytes)?.to_vec())?;
+            let runtime_marker_locations = take_marker_locations(&mut bytes)?;
             let occurrence_binding_fingerprint = take_u64(&mut bytes)?;
             computational_ih_calls.push(CheckedComputationalIHCallTemplateV1 {
                 call_template_id,
@@ -451,6 +487,7 @@ impl OrientedSubcontinuationPlanV1 {
                 parent_frame_template_id,
                 parent_segment_site_id,
                 caller_interface,
+                runtime_marker_locations,
                 occurrence_binding_fingerprint,
             });
         }
@@ -492,6 +529,7 @@ impl OrientedSubcontinuationPlanV1 {
             if call.arity == 0 || call.callee_frame_templates.is_empty() {
                 return Err("recursive call template is partial or has no callee segment");
             }
+            validate_marker_locations(&call.declaration, &call.runtime_marker_locations)?;
             if call.occurrence_binding_fingerprint
                 != compiler_private_recursive_call_binding_fingerprint(call)
             {
@@ -536,6 +574,7 @@ impl OrientedSubcontinuationPlanV1 {
             {
                 return Err("computational IH slot has no exact frame template");
             }
+            validate_marker_locations(&slot.declaration, &slot.runtime_marker_locations)?;
             if slot.occurrence_binding_fingerprint
                 != compiler_private_computational_ih_slot_binding_fingerprint(slot)
             {
@@ -558,6 +597,7 @@ impl OrientedSubcontinuationPlanV1 {
             let slot = self
                 .computational_ih_slot(call.slot_template_id)
                 .ok_or("computational IH call names a stale slot template")?;
+            validate_marker_locations(&call.declaration, &call.runtime_marker_locations)?;
             if call.callee_frame_templates.is_empty()
                 || call.callee_segment_site_id != slot.segment_site_id
                 || call.callee_frame_templates != slot.frame_templates
@@ -707,6 +747,7 @@ pub fn compiler_private_computational_ih_slot_binding_fingerprint(
     }
     put_bytes(&mut bytes, &slot.input_interface.canonical);
     put_bytes(&mut bytes, &slot.output_interface.canonical);
+    put_marker_locations(&mut bytes, &slot.runtime_marker_locations);
     fnv1a_64(&bytes)
 }
 
@@ -733,6 +774,7 @@ pub fn compiler_private_computational_ih_call_binding_fingerprint(
     put_optional_u64(&mut bytes, call.parent_frame_template_id);
     put_optional_u64(&mut bytes, call.parent_segment_site_id);
     put_bytes(&mut bytes, &call.caller_interface.canonical);
+    put_marker_locations(&mut bytes, &call.runtime_marker_locations);
     fnv1a_64(&bytes)
 }
 
@@ -764,6 +806,7 @@ pub fn compiler_private_recursive_call_binding_fingerprint(
         put_u64(&mut bytes, *frame);
     }
     put_bytes(&mut bytes, &call.caller_interface.canonical);
+    put_marker_locations(&mut bytes, &call.runtime_marker_locations);
     fnv1a_64(&bytes)
 }
 
@@ -814,6 +857,40 @@ fn put_optional_u64(out: &mut Vec<u8>, value: Option<u64>) {
 fn put_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
     put_u64(out, bytes.len() as u64);
     out.extend_from_slice(bytes);
+}
+
+fn put_marker_locations(out: &mut Vec<u8>, locations: &[CheckedRuntimeMarkerLocationV1]) {
+    put_u64(out, locations.len() as u64);
+    for location in locations {
+        put_bytes(out, location.declaration.as_bytes());
+        put_u64(out, location.runtime_path.len() as u64);
+        for edge in &location.runtime_path {
+            put_u64(out, *edge);
+        }
+    }
+}
+
+fn take_marker_locations(
+    bytes: &mut &[u8],
+) -> Result<Vec<CheckedRuntimeMarkerLocationV1>, &'static str> {
+    let count = usize::try_from(take_u64(bytes)?)
+        .map_err(|_| "checked Runtime marker location count overflows usize")?;
+    let mut locations = Vec::with_capacity(count);
+    for _ in 0..count {
+        let declaration = String::from_utf8(take_bytes(bytes)?.to_vec())
+            .map_err(|_| "checked Runtime marker declaration is not UTF-8")?;
+        let path_len = usize::try_from(take_u64(bytes)?)
+            .map_err(|_| "checked Runtime marker path length overflows usize")?;
+        let mut runtime_path = Vec::with_capacity(path_len);
+        for _ in 0..path_len {
+            runtime_path.push(take_u64(bytes)?);
+        }
+        locations.push(CheckedRuntimeMarkerLocationV1 {
+            declaration,
+            runtime_path,
+        });
+    }
+    Ok(locations)
 }
 
 fn take_u32(bytes: &mut &[u8]) -> Result<u32, &'static str> {
@@ -906,6 +983,10 @@ mod tests {
                 frame_templates: vec![frame_id],
                 input_interface: interface(&[frame_id as u8]),
                 output_interface: interface(&[frame_id as u8 + 1]),
+                runtime_marker_locations: vec![CheckedRuntimeMarkerLocationV1 {
+                    declaration: "pkg::main".to_string(),
+                    runtime_path: vec![0, frame_id],
+                }],
                 occurrence_binding_fingerprint: 0,
             };
             slot.occurrence_binding_fingerprint =
@@ -925,6 +1006,10 @@ mod tests {
                 parent_frame_template_id: Some(frame_id),
                 parent_segment_site_id: Some(10),
                 caller_interface: interface(&[frame_id as u8 + 1]),
+                runtime_marker_locations: vec![CheckedRuntimeMarkerLocationV1 {
+                    declaration: "pkg::main".to_string(),
+                    runtime_path: vec![1, frame_id],
+                }],
                 occurrence_binding_fingerprint: 0,
             };
             call.occurrence_binding_fingerprint =
