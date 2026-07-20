@@ -1,14 +1,15 @@
 # PX8-F — Foundation `System.Buffer`/`System.IO` surface + derived `writeAll` proof
 
-> **▶ RESUME NOW (2026-07-19) — ALL PX8-F PREREQUISITES HAVE LANDED; current
-> `origin/main = a9db5a17`.** Full native effect-lowering chain merged: PX8-N
+> **▶ RESUME NOW (2026-07-20) — ALL PX8-F PREREQUISITES HAVE LANDED; current
+> `origin/main = 8d761bc5`.** Full native effect-lowering chain merged: PX8-N
 > `ace72db7`, PX8-X train `a97b4304`, PX8-L `e74e935f`, PX8-H `aab1f831`, PX8-I
-> `38ed8223`, PX8-J `a9db5a17`. Held candidate = **`c8b8cdb7` on
-> `origin/wp/px8f-buffer-io-surface`** (base `ace72db7`, now far behind main).
-> **⚠ SEMANTIC REBASE, not delta-apply:** rebase `c8b8cdb7`'s ~1200-line PX8-F
-> payload (catalog Buffer/IO + prelude + interp eval + surface/native fixtures)
-> ONTO current `a9db5a17`; NEVER `git diff main c8b8cdb7`-and-apply (that reverts
-> the PX8-L/H/I/J chain). Re-derive every anchor against the rebased tree. The two
+> `38ed8223`, PX8-J `a9db5a17`, PX8-TA `e45ca05e`, PX8-DS `765c73ac`, and
+> PX8-TR `8d761bc5`. Frozen candidate = **`376773b6` on the local
+> `wp/px8f-buffer-io-surface` branch** (base `765c73ac`).
+> **⚠ SEMANTIC REBASE, not delta-apply:** replay `376773b6`'s three PX8-F
+> commits (catalog Buffer/IO + prelude + interp eval + surface/native fixtures)
+> ONTO current `8d761bc5`; NEVER raw-diff-and-apply (that can revert the
+> native-lowering chain). Re-derive every anchor against the rebased tree. The two
 > test-only fixture riders are on `origin/steward/work`. Resume per the sequence
 > below** (Architect rulings
 > `evt_291b8gcwde32v` + `evt_22y0emyj6cwf2` + `evt_5v6jrc6rnva`, 2026-07-17).
