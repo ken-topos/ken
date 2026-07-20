@@ -711,7 +711,13 @@ fn validate_runtime_expr(
     fact_subject: &str,
 ) -> Result<(), RuntimeArtifactValidationError> {
     match expr {
-        RuntimeExpr::CheckedJoinSite { body, .. } => validate_runtime_expr(body, fact_subject),
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
+            validate_runtime_expr(body, fact_subject)
+        }
         RuntimeExpr::Value(value) => validate_runtime_value(value, fact_subject),
         RuntimeExpr::Var(_) => Err(unsupported_runtime_expr_error("Var", fact_subject)),
         RuntimeExpr::Let { .. } => Err(unsupported_runtime_expr_error("Let", fact_subject)),

@@ -340,6 +340,39 @@ pub enum RuntimeExpr {
         site_id: u64,
         body: Box<RuntimeExpr>,
     },
+    /// Exact checked pre-erasure frame marker for native oriented
+    /// subcontinuation validation. This is compiler-private metadata, not a
+    /// source-visible operation or a runtime semantic effect.
+    #[doc(hidden)]
+    CheckedSubcontinuationFrame {
+        frame_id: u64,
+        body: Box<RuntimeExpr>,
+    },
+    /// Exact checked marker for one complete same-SCC recursive application.
+    /// The marker names a reusable static call template; native lowering mints
+    /// a fresh affine invocation identity when it consumes the marker.
+    #[doc(hidden)]
+    CheckedRecursiveInvocation {
+        call_template_id: u64,
+        checked_occurrence_path: Vec<u64>,
+        body: Box<RuntimeExpr>,
+    },
+    /// Exact checked slot templates aligned with the recursive positions of
+    /// one computational match case.
+    #[doc(hidden)]
+    CheckedComputationalIHSlots {
+        slot_template_ids: Vec<u64>,
+        checked_occurrence_paths: Vec<Vec<u64>>,
+        body: Box<RuntimeExpr>,
+    },
+    /// Exact checked marker for one complete application of a bound
+    /// computational induction hypothesis.
+    #[doc(hidden)]
+    CheckedComputationalIHInvocation {
+        call_template_id: u64,
+        checked_occurrence_path: Vec<u64>,
+        body: Box<RuntimeExpr>,
+    },
     Value(RuntimeValue),
     Var(u32),
     Let {

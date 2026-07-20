@@ -10,17 +10,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::Path;
 
-use ken_kernel::{Decl, GlobalId, Term};
+use ken_kernel::{Context, Decl, GlobalEnv, GlobalId, Term};
 
 use crate::checked_core::{
-    canonical_decl_bytes, canonical_symbol_bytes, checked_core_declaration_body_view,
-    emit_checked_core_package, semantic_fingerprint, validate_checked_core_package,
-    AssumptionTrustKind, AssumptionTrustMetadata, CheckedCoreArtifactInputs, CheckedCoreBodyTerm,
-    CheckedCoreBodyViewError, CheckedCoreBodyViewSelection, CheckedCorePackage,
-    CheckedCorePackageError, CheckedCorePackageHeader, CheckedCoreSemanticInputs,
-    ConstructorMetadata, DataMetadata, LowerabilityStatus, PartialityMetadata, PrimitiveMetadata,
-    PrimitiveReductionMetadata, RecursionAdmission, RecursionMetadata, StableSymbol,
-    StableSymbolTable, SymbolNamespace,
+    canonical_decl_bytes, canonical_symbol_bytes, canonical_term_bytes,
+    checked_core_declaration_body_view, emit_checked_core_package, semantic_fingerprint,
+    validate_checked_core_package, AssumptionTrustKind, AssumptionTrustMetadata,
+    CheckedCoreArtifactInputs, CheckedCoreBodyTerm, CheckedCoreBodyViewError,
+    CheckedCoreBodyViewSelection, CheckedCorePackage, CheckedCorePackageError,
+    CheckedCorePackageHeader, CheckedCoreSemanticInputs, ConstructorMetadata, DataMetadata,
+    LowerabilityStatus, PartialityMetadata, PrimitiveMetadata, PrimitiveReductionMetadata,
+    RecursionAdmission, RecursionMetadata, StableSymbol, StableSymbolTable, SymbolNamespace,
 };
 use crate::program_admission::{admit_checked_main, CheckedMainDescriptor, ProgramAdmissionError};
 use crate::{ElabEnv, ElabError};
@@ -1199,6 +1199,843 @@ pub fn compile_ken_package_sources(
     })
 }
 
+fn checked_answer_interface_from_term(
+    label: &[u8],
+    term: &Term,
+    symbols: &StableSymbolTable,
+) -> Result<ken_runtime::CheckedAnswerInterfaceV1, CompilerDriverError> {
+    let bytes = canonical_term_bytes(term, symbols).map_err(|error| match error {
+        crate::checked_core::CanonicalEncodingError::MissingStableSymbol(id) => {
+            CompilerDriverError::MissingStableSymbol { id }
+        }
+    })?;
+    let mut canonical = ken_runtime::CHECKED_ANSWER_INTERFACE_V1_HEADER.to_vec();
+    canonical.extend_from_slice(&(label.len() as u64).to_be_bytes());
+    canonical.extend_from_slice(label);
+    canonical.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
+    canonical.extend_from_slice(&bytes);
+    Ok(ken_runtime::CheckedAnswerInterfaceV1::new(canonical)
+        .expect("checked answer schema carries its canonical header"))
+}
+
+fn term_application_spine_exact(term: &Term) -> (&Term, Vec<&Term>) {
+    let mut arguments = Vec::new();
+    let mut cursor = term;
+    while let Term::App(function, argument) = cursor {
+        arguments.push(argument.as_ref());
+        cursor = function.as_ref();
+    }
+    arguments.reverse();
+    (cursor, arguments)
+}
+
+struct RecursiveInvocationTemplateCollector<'a> {
+    env: &'a GlobalEnv,
+    symbols: &'a BTreeMap<GlobalId, StableSymbol>,
+    symbol_table: &'a StableSymbolTable,
+    recursion: &'a BTreeMap<StableSymbol, RecursionMetadata>,
+    next_template_id: u64,
+    next_ordinal: BTreeMap<StableSymbol, u64>,
+    templates: Vec<crate::erasure::CheckedRecursiveInvocationSeed>,
+}
+
+impl RecursiveInvocationTemplateCollector<'_> {
+    fn visit(
+        &mut self,
+        owner: &StableSymbol,
+        term: &Term,
+        context: &mut Context,
+        is_application_function: bool,
+    ) -> Result<(), CompilerDriverError> {
+        if !is_application_function {
+            let (head, arguments) = term_application_spine_exact(term);
+            if let Term::Const { id, level_args } = head {
+                if let Some(callee) = self.symbols.get(id) {
+                    if let Some((group, metadata)) = self.recursion.iter().find(|(_, metadata)| {
+                        metadata.group_members.contains(owner)
+                            && metadata.group_members.contains(callee)
+                    }) {
+                        let head_type =
+                            ken_kernel::infer(self.env, context, head).map_err(|_| {
+                                CompilerDriverError::MissingClosureMetadata {
+                                    section: "checked recursive invocation head type",
+                                    symbol: owner.clone(),
+                                }
+                            })?;
+                        let normalized_head_type =
+                            ken_kernel::normalize(self.env, context, &head_type);
+                        let mut arity = 0usize;
+                        let mut cursor = normalized_head_type.clone();
+                        while let Term::Pi(_, codomain) = cursor {
+                            arity += 1;
+                            cursor = *codomain;
+                        }
+                        if arguments.len() != arity {
+                            return Err(CompilerDriverError::MissingClosureMetadata {
+                                section: "complete checked recursive invocation arity",
+                                symbol: owner.clone(),
+                            });
+                        }
+                        let arguments = arguments
+                            .iter()
+                            .map(|argument| (*argument).clone())
+                            .collect::<Vec<_>>();
+                        let result = ken_kernel::subst::instantiate_codomain(
+                            &normalized_head_type,
+                            &arguments,
+                        )
+                        .ok_or_else(|| {
+                            CompilerDriverError::MissingClosureMetadata {
+                                section: "checked recursive invocation result type",
+                                symbol: owner.clone(),
+                            }
+                        })?;
+                        let result = ken_kernel::normalize(self.env, context, &result);
+                        if matches!(result, Term::Pi(_, _)) {
+                            return Err(CompilerDriverError::MissingClosureMetadata {
+                                section: "partial checked recursive invocation result",
+                                symbol: owner.clone(),
+                            });
+                        }
+                        let local_telescope = context
+                            .types
+                            .iter()
+                            .map(|entry| {
+                                checked_answer_interface_from_term(
+                                    b"recursive-local-telescope",
+                                    entry,
+                                    self.symbol_table,
+                                )
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        let result_interface = checked_answer_interface_from_term(
+                            b"recursive-normalized-result",
+                            &result,
+                            self.symbol_table,
+                        )?;
+                        let occurrence_ordinal =
+                            self.next_ordinal.entry(owner.clone()).or_default();
+                        let seed = crate::erasure::CheckedRecursiveInvocationSeed {
+                            call_template_id: self.next_template_id,
+                            owner: owner.clone(),
+                            occurrence_ordinal: *occurrence_ordinal,
+                            callee: callee.clone(),
+                            level_instantiation: level_args
+                                .iter()
+                                .map(|level| format!("{level:?}").into_bytes())
+                                .collect(),
+                            recursion_group: group.clone(),
+                            scc_index: metadata.scc_index as u64,
+                            admission: match metadata.admission {
+                                RecursionAdmission::AcceptedStructural => 1,
+                                RecursionAdmission::AcceptedSizeChange => 2,
+                                RecursionAdmission::NonRecursive | RecursionAdmission::Rejected => {
+                                    return Err(CompilerDriverError::MissingClosureMetadata {
+                                        section: "admitted checked recursive invocation",
+                                        symbol: owner.clone(),
+                                    });
+                                }
+                            },
+                            arity,
+                            local_telescope,
+                            result_interface,
+                        };
+                        self.next_template_id = self
+                            .next_template_id
+                            .checked_add(1)
+                            .expect("compiler-private recursive call template identity exhausted");
+                        *occurrence_ordinal = occurrence_ordinal
+                            .checked_add(1)
+                            .expect("compiler-private recursive occurrence ordinal exhausted");
+                        self.templates.push(seed);
+                    }
+                }
+            }
+        }
+
+        match term {
+            Term::Elim {
+                params,
+                motive,
+                methods,
+                indices,
+                scrut,
+                ..
+            } => {
+                for child in params {
+                    self.visit(owner, child, context, false)?;
+                }
+                self.visit(owner, motive, context, false)?;
+                for child in methods {
+                    self.visit(owner, child, context, false)?;
+                }
+                for child in indices {
+                    self.visit(owner, child, context, false)?;
+                }
+                self.visit(owner, scrut, context, false)?;
+            }
+            Term::Pi(domain, codomain) | Term::Sigma(domain, codomain) => {
+                self.visit(owner, domain, context, false)?;
+                context.push((**domain).clone());
+                self.visit(owner, codomain, context, false)?;
+                context.pop();
+            }
+            Term::Lam(domain, body) => {
+                self.visit(owner, domain, context, false)?;
+                context.push((**domain).clone());
+                self.visit(owner, body, context, false)?;
+                context.pop();
+            }
+            Term::App(function, argument) => {
+                self.visit(owner, function, context, true)?;
+                self.visit(owner, argument, context, false)?;
+            }
+            Term::Pair(left, right)
+            | Term::Ascript(left, right)
+            | Term::Quot(left, right)
+            | Term::Absurd(left, right) => {
+                self.visit(owner, left, context, false)?;
+                self.visit(owner, right, context, false)?;
+            }
+            Term::Proj1(value)
+            | Term::Proj2(value)
+            | Term::Refl(value)
+            | Term::QuotClass(value)
+            | Term::Trunc(value)
+            | Term::TruncProj(value) => self.visit(owner, value, context, false)?,
+            Term::Let { ty, val, body } => {
+                self.visit(owner, ty, context, false)?;
+                self.visit(owner, val, context, false)?;
+                context.push((**ty).clone());
+                self.visit(owner, body, context, false)?;
+                context.pop();
+            }
+            Term::Eq(ty, left, right) | Term::J(ty, left, right) => {
+                self.visit(owner, ty, context, false)?;
+                self.visit(owner, left, context, false)?;
+                self.visit(owner, right, context, false)?;
+            }
+            Term::Cast(a, b, proof, value) => {
+                self.visit(owner, a, context, false)?;
+                self.visit(owner, b, context, false)?;
+                self.visit(owner, proof, context, false)?;
+                self.visit(owner, value, context, false)?;
+            }
+            Term::QuotElim {
+                motive,
+                method,
+                respect,
+                scrut,
+            } => {
+                self.visit(owner, motive, context, false)?;
+                self.visit(owner, method, context, false)?;
+                self.visit(owner, respect, context, false)?;
+                self.visit(owner, scrut, context, false)?;
+            }
+            Term::Type(_)
+            | Term::Omega(_)
+            | Term::Var(_)
+            | Term::Const { .. }
+            | Term::IntLit(_)
+            | Term::IndFormer { .. }
+            | Term::Constructor { .. } => {}
+        }
+        Ok(())
+    }
+}
+
+fn checked_recursive_invocation_templates(
+    env: &GlobalEnv,
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+    symbol_table: &StableSymbolTable,
+    recursion: &BTreeMap<StableSymbol, RecursionMetadata>,
+    bodies: &BTreeMap<StableSymbol, Term>,
+) -> Result<Vec<crate::erasure::CheckedRecursiveInvocationSeed>, CompilerDriverError> {
+    let mut collector = RecursiveInvocationTemplateCollector {
+        env,
+        symbols,
+        symbol_table,
+        recursion,
+        next_template_id: 0,
+        next_ordinal: BTreeMap::new(),
+        templates: Vec::new(),
+    };
+    for (owner, body) in bodies {
+        collector.visit(owner, body, &mut Context::new(), false)?;
+    }
+    Ok(collector.templates)
+}
+
+#[derive(Clone, Copy)]
+struct ComputationalIHBinding {
+    slot_template_id: u64,
+}
+
+struct PreparedComputationalIHMethod<'a> {
+    term: &'a Term,
+    runtime_term: &'a CheckedCoreBodyTerm,
+    context: Context,
+    bindings: Vec<Option<ComputationalIHBinding>>,
+}
+
+struct ComputationalIHTemplateCollector<'a> {
+    env: &'a GlobalEnv,
+    symbols: &'a BTreeMap<GlobalId, StableSymbol>,
+    symbol_table: &'a StableSymbolTable,
+    next_slot_template_id: u64,
+    next_call_template_id: u64,
+    runtime_match_census:
+        BTreeMap<StableSymbol, Vec<crate::checked_core::CheckedRuntimeMatchOccurrence>>,
+    next_runtime_match_index: BTreeMap<StableSymbol, usize>,
+    next_call_ordinal: BTreeMap<u64, u64>,
+    slots: Vec<crate::erasure::CheckedComputationalIHSlotSeed>,
+    calls: Vec<crate::erasure::CheckedComputationalIHCallSeed>,
+}
+
+fn raw_pair_fields(term: &Term, field_count: usize) -> Option<(Vec<&Term>, &Term)> {
+    let mut fields = Vec::with_capacity(field_count);
+    let mut cursor = term;
+    for _ in 0..field_count {
+        let Term::Pair(field, tail) = cursor else {
+            return None;
+        };
+        fields.push(field.as_ref());
+        cursor = tail.as_ref();
+    }
+    Some((fields, cursor))
+}
+
+fn raw_projection_base(term: &Term, skipped_fields: usize) -> Option<&Term> {
+    let Term::Proj1(value) = term else {
+        return None;
+    };
+    let mut cursor = value.as_ref();
+    for _ in 0..skipped_fields {
+        let Term::Proj2(value) = cursor else {
+            return None;
+        };
+        cursor = value.as_ref();
+    }
+    Some(cursor)
+}
+
+impl ComputationalIHTemplateCollector<'_> {
+    fn runtime_shape_mismatch(owner: &StableSymbol, section: &'static str) -> CompilerDriverError {
+        CompilerDriverError::MissingClosureMetadata {
+            section,
+            symbol: owner.clone(),
+        }
+    }
+
+    fn checked_telescope(
+        &self,
+        context: &Context,
+        label: &[u8],
+    ) -> Result<Vec<ken_runtime::CheckedAnswerInterfaceV1>, CompilerDriverError> {
+        context
+            .types
+            .iter()
+            .map(|entry| checked_answer_interface_from_term(label, entry, self.symbol_table))
+            .collect()
+    }
+
+    fn consume_runtime_match_occurrence(
+        &mut self,
+        owner: &StableSymbol,
+    ) -> Result<Option<u64>, CompilerDriverError> {
+        let index = self
+            .next_runtime_match_index
+            .entry(owner.clone())
+            .or_default();
+        let occurrence = self
+            .runtime_match_census
+            .get(owner)
+            .and_then(|occurrences| occurrences.get(*index))
+            .ok_or_else(|| {
+                Self::runtime_shape_mismatch(
+                    owner,
+                    "checked computational IH runtime match census exhausted",
+                )
+            })?;
+        *index = index
+            .checked_add(1)
+            .expect("compiler-private Runtime match census exhausted");
+        Ok(occurrence.computational_ordinal)
+    }
+
+    fn prepare_method<'a>(
+        &mut self,
+        owner: &StableSymbol,
+        match_ordinal: u64,
+        branch_ordinal: usize,
+        constructor: &ken_kernel::ConstructorDecl,
+        recursive_positions: &[usize],
+        method: &'a Term,
+        checked_method: &'a CheckedCoreBodyTerm,
+        method_type: &Term,
+        context: &Context,
+        bindings: &[Option<ComputationalIHBinding>],
+    ) -> Result<PreparedComputationalIHMethod<'a>, CompilerDriverError> {
+        let argument_count = constructor.args.len();
+        let total_binders = argument_count + recursive_positions.len();
+        let mut method = method;
+        let mut checked_method = checked_method;
+        let mut method_type = method_type.clone();
+        let mut context = context.clone();
+        let mut bindings = bindings.to_vec();
+        for binder_ordinal in 0..total_binders {
+            let Term::Lam(_domain, body) = method else {
+                return Err(CompilerDriverError::MissingClosureMetadata {
+                    section: "checked computational IH method telescope",
+                    symbol: owner.clone(),
+                });
+            };
+            let CheckedCoreBodyTerm::Lambda {
+                body: checked_body, ..
+            } = checked_method
+            else {
+                return Err(Self::runtime_shape_mismatch(
+                    owner,
+                    "checked computational IH runtime method telescope",
+                ));
+            };
+            let normalized_type = ken_kernel::normalize(self.env, &context, &method_type);
+            let Term::Pi(expected_domain, codomain) = normalized_type else {
+                return Err(CompilerDriverError::MissingClosureMetadata {
+                    section: "checked computational IH method type telescope",
+                    symbol: owner.clone(),
+                });
+            };
+            let binding = if binder_ordinal >= argument_count {
+                let method_binder_ordinal = binder_ordinal - argument_count;
+                let recursive_position = *recursive_positions
+                    .get(method_binder_ordinal)
+                    .ok_or_else(|| CompilerDriverError::MissingClosureMetadata {
+                        section: "checked computational IH recursive position",
+                        symbol: owner.clone(),
+                    })?;
+                let slot_template_id = self.next_slot_template_id;
+                self.next_slot_template_id = self
+                    .next_slot_template_id
+                    .checked_add(1)
+                    .expect("compiler-private computational IH slot identity exhausted");
+                let ih_type = ken_kernel::normalize(self.env, &context, &expected_domain);
+                let constructor_symbol =
+                    self.symbols.get(&constructor.id).cloned().ok_or_else(|| {
+                        CompilerDriverError::MissingStableSymbol { id: constructor.id }
+                    })?;
+                self.slots
+                    .push(crate::erasure::CheckedComputationalIHSlotSeed {
+                        slot_template_id,
+                        owner: owner.clone(),
+                        match_ordinal,
+                        branch_ordinal,
+                        constructor: constructor_symbol,
+                        recursive_position,
+                        method_binder_ordinal,
+                        local_telescope: self
+                            .checked_telescope(&context, b"computational-ih-local-telescope")?,
+                        ih_interface: checked_answer_interface_from_term(
+                            b"computational-ih-type",
+                            &ih_type,
+                            self.symbol_table,
+                        )?,
+                    });
+                Some(ComputationalIHBinding { slot_template_id })
+            } else {
+                None
+            };
+            context.push((*expected_domain).clone());
+            bindings.push(binding);
+            method = body;
+            checked_method = checked_body;
+            method_type = *codomain;
+        }
+        Ok(PreparedComputationalIHMethod {
+            term: method,
+            runtime_term: checked_method,
+            context,
+            bindings,
+        })
+    }
+
+    fn visit(
+        &mut self,
+        owner: &StableSymbol,
+        term: &Term,
+        runtime_term: &CheckedCoreBodyTerm,
+        context: &mut Context,
+        bindings: &mut Vec<Option<ComputationalIHBinding>>,
+        is_application_function: bool,
+    ) -> Result<(), CompilerDriverError> {
+        if !is_application_function
+            && matches!(
+                runtime_term,
+                CheckedCoreBodyTerm::Variable { .. } | CheckedCoreBodyTerm::Application { .. }
+            )
+        {
+            let (head, arguments) = term_application_spine_exact(term);
+            if let Term::Var(index) = head {
+                let binding = bindings
+                    .len()
+                    .checked_sub(index + 1)
+                    .and_then(|position| bindings.get(position))
+                    .and_then(|binding| *binding);
+                if let Some(binding) = binding {
+                    let head_type = ken_kernel::infer(self.env, context, head).map_err(|_| {
+                        CompilerDriverError::MissingClosureMetadata {
+                            section: "checked computational IH head type",
+                            symbol: owner.clone(),
+                        }
+                    })?;
+                    let mut arity = 0usize;
+                    let mut cursor = ken_kernel::normalize(self.env, context, &head_type);
+                    while let Term::Pi(_, codomain) = cursor {
+                        arity += 1;
+                        cursor = *codomain;
+                    }
+                    let nullary_force = arguments.is_empty();
+                    if !nullary_force && arguments.len() != arity {
+                        return Err(CompilerDriverError::MissingClosureMetadata {
+                            section: "complete checked computational IH application arity",
+                            symbol: owner.clone(),
+                        });
+                    }
+                    let result = ken_kernel::infer(self.env, context, term).map_err(|_| {
+                        CompilerDriverError::MissingClosureMetadata {
+                            section: "checked computational IH application result",
+                            symbol: owner.clone(),
+                        }
+                    })?;
+                    let result = ken_kernel::normalize(self.env, context, &result);
+                    if !nullary_force && matches!(result, Term::Pi(_, _)) {
+                        return Err(CompilerDriverError::MissingClosureMetadata {
+                            section: "partial checked computational IH application result",
+                            symbol: owner.clone(),
+                        });
+                    }
+                    let occurrence_ordinal = self
+                        .next_call_ordinal
+                        .get(&binding.slot_template_id)
+                        .copied()
+                        .unwrap_or(0);
+                    self.calls
+                        .push(crate::erasure::CheckedComputationalIHCallSeed {
+                            call_template_id: self.next_call_template_id,
+                            owner: owner.clone(),
+                            slot_template_id: binding.slot_template_id,
+                            occurrence_ordinal,
+                            arity: arguments.len(),
+                            local_telescope: self
+                                .checked_telescope(context, b"computational-ih-call-telescope")?,
+                            result_interface: checked_answer_interface_from_term(
+                                b"computational-ih-type",
+                                &result,
+                                self.symbol_table,
+                            )?,
+                        });
+                    self.next_call_template_id = self
+                        .next_call_template_id
+                        .checked_add(1)
+                        .expect("compiler-private computational IH call identity exhausted");
+                    self.next_call_ordinal.insert(
+                        binding.slot_template_id,
+                        occurrence_ordinal
+                            .checked_add(1)
+                            .expect("compiler-private computational IH occurrence exhausted"),
+                    );
+                }
+            }
+        }
+
+        match (term, runtime_term) {
+            (
+                Term::Elim {
+                    fam,
+                    level_args,
+                    params,
+                    motive,
+                    methods,
+                    indices: _,
+                    scrut,
+                },
+                CheckedCoreBodyTerm::Match(view),
+            ) => {
+                let Some(ken_kernel::Decl::Inductive(inductive)) = self.env.lookup(*fam) else {
+                    return Err(CompilerDriverError::MissingClosureMetadata {
+                        section: "checked computational IH inductive declaration",
+                        symbol: owner.clone(),
+                    });
+                };
+                if methods.len() != inductive.constructors.len() {
+                    return Err(CompilerDriverError::MissingClosureMetadata {
+                        section: "checked computational IH method count",
+                        symbol: owner.clone(),
+                    });
+                }
+                if methods.len() != view.branches.len() {
+                    return Err(Self::runtime_shape_mismatch(
+                        owner,
+                        "checked computational IH runtime branch count",
+                    ));
+                }
+                let recursive_positions_by_constructor = inductive
+                    .constructors
+                    .iter()
+                    .map(|constructor| {
+                        ken_kernel::inductive::recursive_args(
+                            constructor,
+                            inductive.id,
+                            inductive.params.len(),
+                        )
+                        .into_iter()
+                        .map(|(position, _, _)| position)
+                        .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                let runtime_match_ordinal = self.consume_runtime_match_occurrence(owner)?;
+                if recursive_positions_by_constructor.iter().all(Vec::is_empty) {
+                    if runtime_match_ordinal.is_some() {
+                        return Err(Self::runtime_shape_mismatch(
+                            owner,
+                            "checked computational IH nonrecursive match census",
+                        ));
+                    }
+                    self.visit(owner, scrut, &view.scrutinee, context, bindings, false)?;
+                    for (method, branch) in methods.iter().zip(&view.branches) {
+                        self.visit(owner, method, &branch.method, context, bindings, false)?;
+                    }
+                    return Ok(());
+                }
+                let Some(match_ordinal) = runtime_match_ordinal else {
+                    self.visit(owner, scrut, &view.scrutinee, context, bindings, false)?;
+                    for (method, branch) in methods.iter().zip(&view.branches) {
+                        self.visit(owner, method, &branch.method, context, bindings, false)?;
+                    }
+                    return Ok(());
+                };
+                let mut prepared_methods = Vec::with_capacity(methods.len());
+                for (branch_ordinal, (((method, branch), constructor), recursive_positions)) in
+                    methods
+                        .iter()
+                        .zip(&view.branches)
+                        .zip(&inductive.constructors)
+                        .zip(&recursive_positions_by_constructor)
+                        .enumerate()
+                {
+                    let method_type = ken_kernel::inductive::method_type(
+                        inductive,
+                        branch_ordinal,
+                        motive,
+                        params,
+                        level_args,
+                    );
+                    prepared_methods.push(self.prepare_method(
+                        owner,
+                        match_ordinal,
+                        branch_ordinal,
+                        constructor,
+                        recursive_positions,
+                        method,
+                        &branch.method,
+                        &method_type,
+                        context,
+                        bindings,
+                    )?);
+                }
+                self.visit(owner, scrut, &view.scrutinee, context, bindings, false)?;
+                for mut prepared in prepared_methods {
+                    self.visit(
+                        owner,
+                        prepared.term,
+                        prepared.runtime_term,
+                        &mut prepared.context,
+                        &mut prepared.bindings,
+                        false,
+                    )?;
+                }
+            }
+            (
+                Term::Lam(domain, body),
+                CheckedCoreBodyTerm::Lambda {
+                    body: checked_body, ..
+                },
+            ) => {
+                context.push((**domain).clone());
+                bindings.push(None);
+                self.visit(owner, body, checked_body, context, bindings, false)?;
+                bindings.pop();
+                context.pop();
+            }
+            (
+                Term::App(function, argument),
+                CheckedCoreBodyTerm::Application {
+                    function: checked_function,
+                    argument: checked_argument,
+                },
+            ) => {
+                self.visit(owner, function, checked_function, context, bindings, true)?;
+                self.visit(owner, argument, checked_argument, context, bindings, false)?;
+            }
+            (_, CheckedCoreBodyTerm::PrimitiveApplication(view)) => {
+                let (_, arguments) = term_application_spine_exact(term);
+                if arguments.len() != view.arguments.len() {
+                    return Err(Self::runtime_shape_mismatch(
+                        owner,
+                        "checked computational IH primitive application spine",
+                    ));
+                }
+                for (argument, checked_argument) in arguments.iter().zip(&view.arguments) {
+                    self.visit(owner, argument, checked_argument, context, bindings, false)?;
+                }
+            }
+            (
+                Term::Let { ty, val, body },
+                CheckedCoreBodyTerm::Let {
+                    value,
+                    body: checked_body,
+                    ..
+                },
+            ) => {
+                self.visit(owner, val, value, context, bindings, false)?;
+                context.push((**ty).clone());
+                bindings.push(None);
+                self.visit(owner, body, checked_body, context, bindings, false)?;
+                bindings.pop();
+                context.pop();
+            }
+            (Term::Pair(_, _), CheckedCoreBodyTerm::RecordSigmaConstruction(view)) => {
+                let Some((fields, _terminator)) = raw_pair_fields(term, view.fields.len()) else {
+                    return Err(Self::runtime_shape_mismatch(
+                        owner,
+                        "checked computational IH record field spine",
+                    ));
+                };
+                for (field, checked_field) in fields.iter().zip(&view.fields) {
+                    if let crate::checked_core::CheckedCoreRecordSigmaFieldValue::Runtime {
+                        value,
+                        ..
+                    } = checked_field
+                    {
+                        self.visit(owner, field, value, context, bindings, false)?;
+                    }
+                }
+            }
+            (Term::Pair(_, _), CheckedCoreBodyTerm::DictionaryConstruction(view)) => {
+                let Some((fields, _terminator)) = raw_pair_fields(term, view.fields.len()) else {
+                    return Err(Self::runtime_shape_mismatch(
+                        owner,
+                        "checked computational IH dictionary field spine",
+                    ));
+                };
+                for (field, checked_field) in fields.iter().zip(&view.fields) {
+                    if let crate::checked_core::CheckedCoreDictionaryFieldValue::Runtime {
+                        value,
+                        ..
+                    } = checked_field
+                    {
+                        self.visit(owner, field, value, context, bindings, false)?;
+                    }
+                }
+            }
+            (Term::Proj1(_), CheckedCoreBodyTerm::RecordSigmaProjection(view)) => {
+                let Some(base) = raw_projection_base(term, view.skipped_fields.len()) else {
+                    return Err(Self::runtime_shape_mismatch(
+                        owner,
+                        "checked computational IH record projection spine",
+                    ));
+                };
+                self.visit(owner, base, &view.base, context, bindings, false)?;
+            }
+            (
+                _,
+                CheckedCoreBodyTerm::Variable { .. }
+                | CheckedCoreBodyTerm::IntegerLiteral { .. }
+                | CheckedCoreBodyTerm::DirectDeclarationCall { .. }
+                | CheckedCoreBodyTerm::RecursiveDeclarationCall(_)
+                | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
+                | CheckedCoreBodyTerm::PrimitiveLiteral(_)
+                | CheckedCoreBodyTerm::ConstructorReference(_)
+                | CheckedCoreBodyTerm::ErasedConstructorArgument { .. },
+            ) => {}
+            _ => {
+                return Err(Self::runtime_shape_mismatch(
+                    owner,
+                    "checked computational IH runtime occurrence traversal",
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+fn checked_computational_ih_templates(
+    env: &GlobalEnv,
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+    symbol_table: &StableSymbolTable,
+    checked_package: &CheckedCorePackage,
+    body_view_selection: &CheckedCoreBodyViewSelection,
+    bodies: &BTreeMap<StableSymbol, Term>,
+) -> Result<
+    (
+        Vec<crate::erasure::CheckedComputationalIHSlotSeed>,
+        Vec<crate::erasure::CheckedComputationalIHCallSeed>,
+    ),
+    CompilerDriverError,
+> {
+    let mut collector = ComputationalIHTemplateCollector {
+        env,
+        symbols,
+        symbol_table,
+        next_slot_template_id: 0,
+        next_call_template_id: 0,
+        runtime_match_census: BTreeMap::new(),
+        next_runtime_match_index: BTreeMap::new(),
+        next_call_ordinal: BTreeMap::new(),
+        slots: Vec::new(),
+        calls: Vec::new(),
+    };
+    for (owner, body) in bodies {
+        let runtime_body =
+            checked_core_declaration_body_view(checked_package, body_view_selection, owner)
+                .map_err(|_| CompilerDriverError::MissingClosureMetadata {
+                    section: "checked computational IH authoritative runtime body",
+                    symbol: owner.clone(),
+                })?;
+        let census = crate::checked_core::checked_runtime_match_census(&runtime_body.body)
+            .map_err(|_| CompilerDriverError::MissingClosureMetadata {
+                section: "checked computational IH authoritative runtime match census",
+                symbol: owner.clone(),
+            })?;
+        collector.runtime_match_census.insert(owner.clone(), census);
+        collector.visit(
+            owner,
+            body,
+            &runtime_body.body,
+            &mut Context::new(),
+            &mut Vec::new(),
+            false,
+        )?;
+        let consumed = collector
+            .next_runtime_match_index
+            .get(owner)
+            .copied()
+            .unwrap_or(0);
+        let expected = collector
+            .runtime_match_census
+            .get(owner)
+            .map(Vec::len)
+            .unwrap_or(0);
+        if consumed != expected {
+            return Err(CompilerDriverError::MissingClosureMetadata {
+                section: "checked computational IH runtime match census incomplete",
+                symbol: owner.clone(),
+            });
+        }
+    }
+    Ok((collector.slots, collector.calls))
+}
+
 /// Compile one exact checked Program I `main` through lowering and linked
 /// process-artifact production as a single identity-consistent transaction.
 pub fn compile_native_program_sources(
@@ -1344,6 +2181,7 @@ pub fn compile_native_program_sources(
         });
     }
     let mut normalized = package.clone();
+    let mut normalized_bodies = BTreeMap::new();
     for symbol in &executable_declarations {
         let id = symbols
             .iter()
@@ -1370,11 +2208,14 @@ pub fn compile_native_program_sources(
                 },
             ));
         };
+        let normalized_body =
+            ken_kernel::normalize(&normalization_env, &ken_kernel::Context::new(), body);
+        normalized_bodies.insert(symbol.clone(), normalized_body.clone());
         let normalized_declaration = Decl::Transparent {
             id: *id,
             level_params: level_params.clone(),
             ty: ty.clone(),
-            body: ken_kernel::normalize(&normalization_env, &ken_kernel::Context::new(), body),
+            body: normalized_body,
         };
         let bytes = canonical_decl_bytes(&normalized_declaration, &symbol_table).map_err(|_| {
             NativeProgramBuildError::Driver(CompilerDriverError::MissingStableSymbol { id: *id })
@@ -1389,6 +2230,26 @@ pub fn compile_native_program_sources(
         emit_checked_core_package(normalized.header.clone(), normalized.artifact.clone())
             .map_err(CompilerDriverError::from)
             .map_err(NativeProgramBuildError::Driver)?;
+    let recursive_invocation_templates = checked_recursive_invocation_templates(
+        &normalization_env,
+        &symbols,
+        &symbol_table,
+        &normalized_host_package.artifact.semantic.recursion_metadata,
+        &normalized_bodies,
+    )
+    .map_err(NativeProgramBuildError::Driver)?;
+    let normalized_body_view_selection =
+        body_view_selection_for_closure(&normalized_host_package, &closure);
+    let (computational_ih_slot_templates, computational_ih_call_templates) =
+        checked_computational_ih_templates(
+            &normalization_env,
+            &symbols,
+            &symbol_table,
+            &normalized_host_package,
+            &normalized_body_view_selection,
+            &normalized_bodies,
+        )
+        .map_err(NativeProgramBuildError::Driver)?;
     let join_answer_symbols = crate::erasure::CheckedJoinAnswerSymbols {
         int: symbols
             .get(&env.numeric_env.int_id)
@@ -1416,16 +2277,20 @@ pub fn compile_native_program_sources(
             })?,
         exit_code: plan.exit_code.clone(),
     };
-    let (planned_runtime_program, join_plan) =
+    let (planned_runtime_program, join_plan, oriented_subcontinuation_plan) =
         crate::erasure::erase_checked_host_package_for_target_with_join_plan(
             &normalized_host_package,
             closure.reachable_declarations.iter(),
             &plan.main,
             &host_spine,
             join_answer_symbols,
+            recursive_invocation_templates,
+            computational_ih_slot_templates,
+            computational_ih_call_templates,
         )
         .map_err(NativeProgramBuildError::Erasure)?;
     let join_plan_bytes = join_plan.canonical_bytes();
+    let oriented_subcontinuation_plan_bytes = oriented_subcontinuation_plan.canonical_bytes();
     let mut planned = normalized_host_package.clone();
     let join_plan_symbol = StableSymbol::new(
         SymbolNamespace::Metadata,
@@ -1441,6 +2306,22 @@ pub fn compile_native_program_sources(
         .semantic
         .metadata
         .insert(join_plan_symbol.clone(), join_plan_bytes.clone());
+    let oriented_subcontinuation_plan_symbol = StableSymbol::new(
+        SymbolNamespace::Metadata,
+        vec![
+            package_name.to_string(),
+            "OrientedSubcontinuationPlanV1".to_string(),
+        ],
+    );
+    package
+        .artifact
+        .semantic
+        .symbols
+        .insert(oriented_subcontinuation_plan_symbol.clone());
+    package.artifact.semantic.metadata.insert(
+        oriented_subcontinuation_plan_symbol.clone(),
+        oriented_subcontinuation_plan_bytes.clone(),
+    );
     package = emit_checked_core_package(package.header.clone(), package.artifact.clone())
         .map_err(CompilerDriverError::from)
         .map_err(NativeProgramBuildError::Driver)?;
@@ -1454,6 +2335,15 @@ pub fn compile_native_program_sources(
         .semantic
         .metadata
         .insert(join_plan_symbol, join_plan_bytes);
+    planned
+        .artifact
+        .semantic
+        .symbols
+        .insert(oriented_subcontinuation_plan_symbol.clone());
+    planned.artifact.semantic.metadata.insert(
+        oriented_subcontinuation_plan_symbol,
+        oriented_subcontinuation_plan_bytes,
+    );
     let executable_view =
         emit_checked_core_package(planned.header.clone(), planned.artifact.clone())
             .map_err(CompilerDriverError::from)
@@ -3822,6 +4712,321 @@ mod tests {
         ClassInstanceMetadata, ObligationMetadata, ObligationStatus,
     };
     use crate::erasure::erase_checked_core_package_for_target;
+
+    fn px8ta_match_fixture(body: CheckedCoreBodyTerm) -> crate::checked_core::CheckedCoreMatchView {
+        use crate::checked_core::{
+            CheckedCoreConstructorView, CheckedCoreMatchBranchView, CheckedCoreMatchView,
+        };
+        let family = StableSymbol::declaration("px8ta-runtime-census", &[], "Tree");
+        let constructor = StableSymbol::constructor(&family, "Step");
+        let constructor_view = CheckedCoreConstructorView {
+            symbol: constructor,
+            family_symbol: family.clone(),
+            level_args: Vec::new(),
+            family_parameter_count: 0,
+            family_index_count: 0,
+            argument_count: 1,
+            target_index_count: 0,
+            recursive_positions: vec![0],
+            constructor_lowerability: LowerabilityStatus::Supported,
+            family_lowerability: LowerabilityStatus::Supported,
+        };
+        CheckedCoreMatchView {
+            family_symbol: family,
+            level_args: Vec::new(),
+            parameters: Vec::new(),
+            motive: Vec::new(),
+            indices: Vec::new(),
+            scrutinee: Box::new(CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 }),
+            branches: vec![CheckedCoreMatchBranchView {
+                constructor: constructor_view,
+                method: CheckedCoreBodyTerm::Lambda {
+                    parameter_type: Vec::new(),
+                    body: Box::new(CheckedCoreBodyTerm::Lambda {
+                        parameter_type: Vec::new(),
+                        body: Box::new(body),
+                    }),
+                },
+            }],
+            computational_recursive_hypotheses: true,
+        }
+    }
+
+    #[test]
+    fn erased_type_only_ih_reference_does_not_claim_the_following_runtime_ordinal() {
+        let erased_ih_reference = canonical_term_bytes(&Term::var(0), &StableSymbolTable::new())
+            .expect("a variable has no global symbol dependency");
+        let erased_only = px8ta_match_fixture(CheckedCoreBodyTerm::Lambda {
+            parameter_type: erased_ih_reference,
+            body: Box::new(CheckedCoreBodyTerm::IntegerLiteral { value: 0 }),
+        });
+        let genuine = px8ta_match_fixture(CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 });
+        let runtime_body = CheckedCoreBodyTerm::Let {
+            value_type: Vec::new(),
+            value: Box::new(CheckedCoreBodyTerm::Match(erased_only)),
+            body: Box::new(CheckedCoreBodyTerm::Match(genuine)),
+        };
+        let census = crate::checked_core::checked_runtime_match_census(&runtime_body)
+            .expect("both checked matches are well formed");
+        assert_eq!(
+            census
+                .iter()
+                .map(|occurrence| occurrence.computational_ordinal)
+                .collect::<Vec<_>>(),
+            vec![None, Some(0)],
+            "the following genuine computational match claims ordinal zero"
+        );
+    }
+
+    #[test]
+    fn erased_whole_match_does_not_precede_the_runtime_match_census() {
+        use ken_kernel::{declare_inductive, CtorSpec, InductiveSpec, Level};
+
+        let mut env = GlobalEnv::new();
+        let family_id = declare_inductive(&mut env, |family_id| InductiveSpec {
+            level_params: Vec::new(),
+            params: Vec::new(),
+            indices: Vec::new(),
+            level: Level::zero(),
+            constructors: vec![
+                CtorSpec {
+                    args: Vec::new(),
+                    target_indices: Vec::new(),
+                },
+                CtorSpec {
+                    args: vec![Term::indformer(family_id, Vec::new())],
+                    target_indices: Vec::new(),
+                },
+            ],
+        })
+        .expect("the discriminator family is strictly positive");
+        let inductive = env
+            .inductive(family_id)
+            .expect("the discriminator family was registered");
+        let leaf_id = inductive.constructors[0].id;
+        let step_id = inductive.constructors[1].id;
+        let family = StableSymbol::declaration("px8ta-runtime-census", &[], "Tree");
+        let leaf = StableSymbol::constructor(&family, "Leaf");
+        let step = StableSymbol::constructor(&family, "Step");
+        let owner = StableSymbol::declaration("px8ta-runtime-census", &[], "main");
+        let symbol_map = BTreeMap::from([
+            (family_id, family.clone()),
+            (leaf_id, leaf.clone()),
+            (step_id, step.clone()),
+        ]);
+        let mut symbol_table = StableSymbolTable::new();
+        for (id, symbol) in &symbol_map {
+            symbol_table.insert_global(*id, symbol.clone());
+        }
+        let tree_type = Term::indformer(family_id, Vec::new());
+        let leaf_value = Term::constructor(leaf_id, Vec::new());
+        let step_leaf = Term::app(Term::constructor(step_id, Vec::new()), leaf_value.clone());
+        let erased_whole_match = Term::Elim {
+            fam: family_id,
+            level_args: Vec::new(),
+            params: Vec::new(),
+            motive: Box::new(Term::lam(tree_type.clone(), Term::Type(Level::zero()))),
+            methods: vec![
+                tree_type.clone(),
+                Term::lam(
+                    tree_type.clone(),
+                    Term::lam(Term::Type(Level::zero()), Term::var(0)),
+                ),
+            ],
+            indices: Vec::new(),
+            scrut: Box::new(leaf_value.clone()),
+        };
+        let genuine_match = Term::Elim {
+            fam: family_id,
+            level_args: Vec::new(),
+            params: Vec::new(),
+            motive: Box::new(Term::lam(tree_type.clone(), tree_type.clone())),
+            methods: vec![
+                leaf_value.clone(),
+                Term::lam(
+                    tree_type.clone(),
+                    Term::lam(tree_type.clone(), Term::var(0)),
+                ),
+            ],
+            indices: Vec::new(),
+            scrut: Box::new(step_leaf),
+        };
+        let raw_body = Term::Let {
+            ty: Box::new(erased_whole_match.clone()),
+            val: Box::new(genuine_match),
+            body: Box::new(Term::var(0)),
+        };
+
+        let constructor_view = |symbol, argument_count, recursive_positions| {
+            crate::checked_core::CheckedCoreConstructorView {
+                symbol,
+                family_symbol: family.clone(),
+                level_args: Vec::new(),
+                family_parameter_count: 0,
+                family_index_count: 0,
+                argument_count,
+                target_index_count: 0,
+                recursive_positions,
+                constructor_lowerability: LowerabilityStatus::Supported,
+                family_lowerability: LowerabilityStatus::Supported,
+            }
+        };
+        let leaf_view = constructor_view(leaf, 0, Vec::new());
+        let step_view = constructor_view(step, 1, vec![0]);
+        let tree_type_bytes = canonical_term_bytes(&tree_type, &symbol_table)
+            .expect("the discriminator family has an exact stable identity");
+        let genuine_runtime_match = crate::checked_core::CheckedCoreMatchView {
+            family_symbol: family,
+            level_args: Vec::new(),
+            parameters: Vec::new(),
+            motive: Vec::new(),
+            indices: Vec::new(),
+            scrutinee: Box::new(CheckedCoreBodyTerm::Application {
+                function: Box::new(CheckedCoreBodyTerm::ConstructorReference(step_view.clone())),
+                argument: Box::new(CheckedCoreBodyTerm::ConstructorReference(leaf_view.clone())),
+            }),
+            branches: vec![
+                crate::checked_core::CheckedCoreMatchBranchView {
+                    constructor: leaf_view.clone(),
+                    method: CheckedCoreBodyTerm::ConstructorReference(leaf_view),
+                },
+                crate::checked_core::CheckedCoreMatchBranchView {
+                    constructor: step_view,
+                    method: CheckedCoreBodyTerm::Lambda {
+                        parameter_type: tree_type_bytes.clone(),
+                        body: Box::new(CheckedCoreBodyTerm::Lambda {
+                            parameter_type: tree_type_bytes,
+                            body: Box::new(CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 }),
+                        }),
+                    },
+                },
+            ],
+            computational_recursive_hypotheses: true,
+        };
+        let runtime_body = CheckedCoreBodyTerm::Let {
+            value_type: canonical_term_bytes(&erased_whole_match, &symbol_table)
+                .expect("the erased whole eliminator has canonical checked bytes"),
+            value: Box::new(CheckedCoreBodyTerm::Match(genuine_runtime_match)),
+            body: Box::new(CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 }),
+        };
+        let census = crate::checked_core::checked_runtime_match_census(&runtime_body)
+            .expect("the genuine Runtime match is well formed");
+        assert_eq!(
+            census,
+            vec![crate::checked_core::CheckedRuntimeMatchOccurrence {
+                computational_ordinal: Some(0),
+            }],
+            "the whole eliminator hidden in Let.value_type emits no occurrence"
+        );
+
+        let mut collector = ComputationalIHTemplateCollector {
+            env: &env,
+            symbols: &symbol_map,
+            symbol_table: &symbol_table,
+            next_slot_template_id: 0,
+            next_call_template_id: 0,
+            runtime_match_census: BTreeMap::from([(owner.clone(), census)]),
+            next_runtime_match_index: BTreeMap::new(),
+            next_call_ordinal: BTreeMap::new(),
+            slots: Vec::new(),
+            calls: Vec::new(),
+        };
+        collector
+            .visit(
+                &owner,
+                &raw_body,
+                &runtime_body,
+                &mut Context::new(),
+                &mut Vec::new(),
+                false,
+            )
+            .expect("the exact checked Runtime occurrence path reaches plan production");
+        assert_eq!(
+            collector.slots.len(),
+            1,
+            "only the Runtime match emits a slot"
+        );
+        assert_eq!(collector.slots[0].match_ordinal, 0);
+        assert_eq!(collector.slots[0].branch_ordinal, 1);
+        assert_eq!(collector.slots[0].recursive_position, 0);
+        assert_eq!(collector.calls.len(), 1, "the selected IH is consumed once");
+        assert_eq!(
+            collector.calls[0].slot_template_id,
+            collector.slots[0].slot_template_id
+        );
+        assert_eq!(
+            ken_kernel::normalize(&env, &Context::new(), &raw_body),
+            leaf_value,
+            "the genuine ordinal-zero match executes after the erased type match"
+        );
+    }
+
+    #[test]
+    fn erased_constructor_parameter_and_live_ih_argument_emit_one_call_template() {
+        let owner = StableSymbol::declaration("px8ta-runtime-call-census", &[], "main");
+        let family = StableSymbol::declaration("px8ta-runtime-call-census", &[], "Box");
+        let constructor = StableSymbol::constructor(&family, "MkBox");
+        let constructor_view = crate::checked_core::CheckedCoreConstructorView {
+            symbol: constructor,
+            family_symbol: family,
+            level_args: Vec::new(),
+            family_parameter_count: 1,
+            family_index_count: 0,
+            argument_count: 1,
+            target_index_count: 0,
+            recursive_positions: Vec::new(),
+            constructor_lowerability: LowerabilityStatus::Supported,
+            family_lowerability: LowerabilityStatus::Supported,
+        };
+        let constructor_id = GlobalId(91);
+        let raw = Term::app(
+            Term::app(Term::constructor(constructor_id, Vec::new()), Term::var(0)),
+            Term::var(0),
+        );
+        let erased_ih = canonical_term_bytes(&Term::var(0), &StableSymbolTable::new())
+            .expect("a local variable needs no global identity");
+        let runtime = CheckedCoreBodyTerm::Application {
+            function: Box::new(CheckedCoreBodyTerm::Application {
+                function: Box::new(CheckedCoreBodyTerm::ConstructorReference(constructor_view)),
+                argument: Box::new(CheckedCoreBodyTerm::ErasedConstructorArgument {
+                    term: erased_ih,
+                }),
+            }),
+            argument: Box::new(CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 }),
+        };
+        let env = GlobalEnv::new();
+        let mut context = Context::new();
+        context.push(Term::Type(ken_kernel::Level::zero()));
+        let mut bindings = vec![Some(ComputationalIHBinding {
+            slot_template_id: 7,
+        })];
+        let symbol_map = BTreeMap::new();
+        let symbol_table = StableSymbolTable::new();
+        let mut collector = ComputationalIHTemplateCollector {
+            env: &env,
+            symbols: &symbol_map,
+            symbol_table: &symbol_table,
+            next_slot_template_id: 8,
+            next_call_template_id: 0,
+            runtime_match_census: BTreeMap::new(),
+            next_runtime_match_index: BTreeMap::new(),
+            next_call_ordinal: BTreeMap::new(),
+            slots: Vec::new(),
+            calls: Vec::new(),
+        };
+
+        collector
+            .visit(&owner, &raw, &runtime, &mut context, &mut bindings, false)
+            .expect("the paired Runtime constructor path is accepted");
+        assert_eq!(
+            collector.calls.len(),
+            1,
+            "the erased family parameter must not mint an IH call template"
+        );
+        assert_eq!(collector.calls[0].slot_template_id, 7);
+        assert_eq!(collector.calls[0].occurrence_ordinal, 0);
+        assert_eq!(collector.calls[0].arity, 0);
+    }
 
     fn main_symbol(package: &str) -> StableSymbol {
         StableSymbol::declaration(package, &[], "main")

@@ -519,6 +519,32 @@ pub fn emit_runtime_ir_object_with_cranelift(
 }
 
 #[cfg(test)]
+fn test_only_distinguished_root_join_plan() -> crate::NativeJoinPlanV1 {
+    let site_id = 0;
+    let declaration = "decl:fixture::CheckedRoot::main".to_string();
+    let checked_occurrence_path = vec![0];
+    let checked_result_type_fingerprint = 0x5058_3854_4152_4f4f;
+    crate::NativeJoinPlanV1 {
+        representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+        sites: vec![crate::NativeJoinPlanSiteV1 {
+            site_id,
+            occurrence_binding_fingerprint:
+                crate::compiler_private_join_occurrence_binding_fingerprint(
+                    site_id,
+                    &declaration,
+                    &checked_occurrence_path,
+                    checked_result_type_fingerprint,
+                ),
+            declaration,
+            checked_occurrence_path,
+            checked_result_type_fingerprint,
+            runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
+            answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
+        }],
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn emit_process_entrypoint_object_with_cranelift(
     entrypoint: &RuntimeExpr,
     entry_symbol: impl Into<String>,
@@ -534,6 +560,7 @@ pub(crate) fn emit_process_entrypoint_object_with_cranelift(
         None,
         true,
         None,
+        Some(test_only_distinguished_root_join_plan()),
         None,
     )?;
     let verifier_passed = compiled.verifier_passed;
@@ -574,6 +601,7 @@ fn emit_process_entrypoint_object_with_symbols(
         None,
         true,
         Some(symbols),
+        Some(test_only_distinguished_root_join_plan()),
         None,
     )?;
     let verifier_passed = compiled.verifier_passed;
@@ -621,6 +649,7 @@ pub(crate) fn emit_bound_process_program_object_with_cranelift(
         true,
         Some(symbols),
         native_join_plan_for_program(program)?,
+        oriented_subcontinuation_plan_for_program(program)?,
     )?;
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
@@ -1319,6 +1348,571 @@ fn native_join_plan_for_program(
     }
 }
 
+fn oriented_subcontinuation_plan_for_program(
+    program: &RuntimeProgram,
+) -> Result<Option<crate::OrientedSubcontinuationPlanV1>, CraneliftBackendError> {
+    let candidates = program
+        .erased_core
+        .metadata
+        .checked_core
+        .metadata
+        .values()
+        .filter(|bytes| bytes.starts_with(crate::ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER))
+        .collect::<Vec<_>>();
+    match candidates.as_slice() {
+        [] => Ok(None),
+        [bytes] => crate::OrientedSubcontinuationPlanV1::decode(bytes)
+            .map(Some)
+            .map_err(|reason| unsupported("OrientedSubcontinuationPlanV1", reason)),
+        _ => Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            "checked package contains multiple oriented subcontinuation plans",
+        )),
+    }
+}
+
+fn collect_checked_subcontinuation_frames(
+    expr: &RuntimeExpr,
+    frames: &mut BTreeMap<u64, u64>,
+) -> Result<(), CraneliftBackendError> {
+    match expr {
+        RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+            let RuntimeExpr::ComputationalMatch { cases, default, .. } = body.as_ref() else {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "checked subcontinuation marker does not wrap a computational frame",
+                ));
+            };
+            let fingerprint =
+                crate::compiler_private_computational_match_frame_fingerprint(cases, default);
+            if frames.insert(*frame_id, fingerprint).is_some() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "Runtime IR repeats a checked subcontinuation frame marker",
+                ));
+            }
+            collect_checked_subcontinuation_frames(body, frames)
+        }
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. }
+        | RuntimeExpr::Project { record: body, .. }
+        | RuntimeExpr::Closure { body, .. } => collect_checked_subcontinuation_frames(body, frames),
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            for capture in captures {
+                collect_checked_subcontinuation_frames(capture, frames)?;
+            }
+            collect_checked_subcontinuation_frames(body, frames)
+        }
+        RuntimeExpr::Let { value, body } => {
+            collect_checked_subcontinuation_frames(value, frames)?;
+            collect_checked_subcontinuation_frames(body, frames)
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            collect_checked_subcontinuation_frames(scrutinee, frames)?;
+            collect_checked_subcontinuation_frames(then_expr, frames)?;
+            collect_checked_subcontinuation_frames(else_expr, frames)
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for arg in args {
+                collect_checked_subcontinuation_frames(arg, frames)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            collect_checked_subcontinuation_frames(scrutinee, frames)?;
+            for case in cases {
+                collect_checked_subcontinuation_frames(&case.body, frames)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            collect_checked_subcontinuation_frames(scrutinee, frames)?;
+            for case in cases {
+                collect_checked_subcontinuation_frames(&case.body, frames)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Record { fields } => {
+            for (_, value) in fields {
+                collect_checked_subcontinuation_frames(value, frames)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Call { callee, args } => {
+            collect_checked_subcontinuation_frames(callee, frames)?;
+            for arg in args {
+                collect_checked_subcontinuation_frames(arg, frames)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            if let Some(capability) = capability {
+                collect_checked_subcontinuation_frames(&capability.value, frames)?;
+            }
+            for arg in args {
+                collect_checked_subcontinuation_frames(arg, frames)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => Ok(()),
+    }
+}
+
+#[derive(Default)]
+struct CheckedOrientedMarkerSets {
+    recursive_calls: BTreeMap<(u64, Vec<u64>), BTreeSet<Vec<u64>>>,
+    computational_ih_slots: BTreeMap<(u64, Vec<u64>), BTreeSet<Vec<u64>>>,
+    computational_ih_calls: BTreeMap<(u64, Vec<u64>), BTreeSet<Vec<u64>>>,
+}
+
+impl CheckedOrientedMarkerSets {
+    fn extend_from(&mut self, other: &Self) {
+        for (key, paths) in &other.recursive_calls {
+            self.recursive_calls
+                .entry(key.clone())
+                .or_default()
+                .extend(paths.iter().cloned());
+        }
+        for (key, paths) in &other.computational_ih_slots {
+            self.computational_ih_slots
+                .entry(key.clone())
+                .or_default()
+                .extend(paths.iter().cloned());
+        }
+        for (key, paths) in &other.computational_ih_calls {
+            self.computational_ih_calls
+                .entry(key.clone())
+                .or_default()
+                .extend(paths.iter().cloned());
+        }
+    }
+}
+
+fn collect_checked_oriented_markers(
+    expr: &RuntimeExpr,
+    markers: &mut CheckedOrientedMarkerSets,
+    root: &str,
+    runtime_path: &mut Vec<u64>,
+) -> Result<(), CraneliftBackendError> {
+    match expr {
+        RuntimeExpr::CheckedRecursiveInvocation {
+            call_template_id,
+            checked_occurrence_path,
+            body,
+        } => {
+            if !markers
+                .recursive_calls
+                .entry((*call_template_id, checked_occurrence_path.clone()))
+                .or_default()
+                .insert(runtime_path.clone())
+            {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    format!(
+                        "Runtime IR root {root} repeats checked recursive-call marker {call_template_id} at the same structural path {runtime_path:?}"
+                    ),
+                ));
+            }
+            collect_checked_oriented_child(body, markers, root, runtime_path, 0)
+        }
+        RuntimeExpr::CheckedComputationalIHSlots {
+            slot_template_ids,
+            checked_occurrence_paths,
+            body,
+        } => {
+            if slot_template_ids.len() != checked_occurrence_paths.len() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "computational IH slot marker identity/location arity differs",
+                ));
+            }
+            for (slot_template_id, checked_occurrence_path) in
+                slot_template_ids.iter().zip(checked_occurrence_paths)
+            {
+                if !markers
+                    .computational_ih_slots
+                    .entry((*slot_template_id, checked_occurrence_path.clone()))
+                    .or_default()
+                    .insert(runtime_path.clone())
+                {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        format!(
+                            "Runtime IR root {root} repeats checked computational-IH slot marker {slot_template_id} at the same structural path {runtime_path:?}"
+                        ),
+                    ));
+                }
+            }
+            collect_checked_oriented_child(body, markers, root, runtime_path, 0)
+        }
+        RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id,
+            checked_occurrence_path,
+            body,
+        } => {
+            if !markers
+                .computational_ih_calls
+                .entry((*call_template_id, checked_occurrence_path.clone()))
+                .or_default()
+                .insert(runtime_path.clone())
+            {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    format!(
+                        "Runtime IR root {root} repeats checked computational-IH call marker {call_template_id} at the same structural path {runtime_path:?}"
+                    ),
+                ));
+            }
+            collect_checked_oriented_child(body, markers, root, runtime_path, 0)
+        }
+        RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedJoinSite { body, .. } => {
+            collect_checked_oriented_child(body, markers, root, runtime_path, 0)
+        }
+        RuntimeExpr::Project { record, .. } => {
+            collect_checked_oriented_child(record, markers, root, runtime_path, 1)
+        }
+        RuntimeExpr::Closure { body, .. } => {
+            collect_checked_oriented_child(body, markers, root, runtime_path, 2)
+        }
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            for (index, capture) in captures.iter().enumerate() {
+                collect_checked_oriented_child(
+                    capture,
+                    markers,
+                    root,
+                    runtime_path,
+                    10 + index as u64,
+                )?;
+            }
+            collect_checked_oriented_child(body, markers, root, runtime_path, 3)
+        }
+        RuntimeExpr::Let { value, body } => {
+            collect_checked_oriented_child(value, markers, root, runtime_path, 0)?;
+            collect_checked_oriented_child(body, markers, root, runtime_path, 1)
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            collect_checked_oriented_child(scrutinee, markers, root, runtime_path, 0)?;
+            collect_checked_oriented_child(then_expr, markers, root, runtime_path, 1)?;
+            collect_checked_oriented_child(else_expr, markers, root, runtime_path, 2)
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for (index, arg) in args.iter().enumerate() {
+                collect_checked_oriented_child(arg, markers, root, runtime_path, index as u64)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            collect_checked_oriented_child(scrutinee, markers, root, runtime_path, 0)?;
+            for (index, case) in cases.iter().enumerate() {
+                collect_checked_oriented_child(
+                    &case.body,
+                    markers,
+                    root,
+                    runtime_path,
+                    1 + index as u64,
+                )?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            collect_checked_oriented_child(scrutinee, markers, root, runtime_path, 0)?;
+            for (index, case) in cases.iter().enumerate() {
+                collect_checked_oriented_child(
+                    &case.body,
+                    markers,
+                    root,
+                    runtime_path,
+                    1 + index as u64,
+                )?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Record { fields } => {
+            for (index, (_, value)) in fields.iter().enumerate() {
+                collect_checked_oriented_child(value, markers, root, runtime_path, index as u64)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Call { callee, args } => {
+            collect_checked_oriented_child(callee, markers, root, runtime_path, 0)?;
+            for (index, arg) in args.iter().enumerate() {
+                collect_checked_oriented_child(arg, markers, root, runtime_path, 1 + index as u64)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            if let Some(capability) = capability {
+                collect_checked_oriented_child(&capability.value, markers, root, runtime_path, 0)?;
+            }
+            for (index, arg) in args.iter().enumerate() {
+                collect_checked_oriented_child(arg, markers, root, runtime_path, 1 + index as u64)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => Ok(()),
+    }
+}
+
+fn collect_checked_oriented_child(
+    expr: &RuntimeExpr,
+    markers: &mut CheckedOrientedMarkerSets,
+    root: &str,
+    runtime_path: &mut Vec<u64>,
+    edge: u64,
+) -> Result<(), CraneliftBackendError> {
+    runtime_path.push(edge);
+    let result = collect_checked_oriented_markers(expr, markers, root, runtime_path);
+    runtime_path.pop();
+    result
+}
+
+fn planned_marker_locations_for_declaration(
+    plan: &crate::OrientedSubcontinuationPlanV1,
+    declaration: &str,
+) -> CheckedOrientedMarkerSets {
+    let mut expected = CheckedOrientedMarkerSets::default();
+    for call in &plan.recursive_calls {
+        if call.declaration == declaration {
+            expected.recursive_calls.insert(
+                (call.call_template_id, call.checked_occurrence_path.clone()),
+                call.runtime_marker_locations
+                    .iter()
+                    .map(|location| location.runtime_path.clone())
+                    .collect(),
+            );
+        }
+    }
+    for slot in &plan.computational_ih_slots {
+        if slot.declaration == declaration {
+            expected.computational_ih_slots.insert(
+                (slot.slot_template_id, slot.checked_occurrence_path.clone()),
+                slot.runtime_marker_locations
+                    .iter()
+                    .map(|location| location.runtime_path.clone())
+                    .collect(),
+            );
+        }
+    }
+    for call in &plan.computational_ih_calls {
+        if call.declaration == declaration {
+            expected.computational_ih_calls.insert(
+                (call.call_template_id, call.checked_occurrence_path.clone()),
+                call.runtime_marker_locations
+                    .iter()
+                    .map(|location| location.runtime_path.clone())
+                    .collect(),
+            );
+        }
+    }
+    expected
+}
+
+fn require_exact_marker_locations(
+    declaration: &str,
+    actual: &CheckedOrientedMarkerSets,
+    expected: &CheckedOrientedMarkerSets,
+) -> Result<(), CraneliftBackendError> {
+    if actual.recursive_calls != expected.recursive_calls {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            format!(
+                "checked recursive-call Runtime occurrences differ in declaration {declaration}"
+            ),
+        ));
+    }
+    if actual.computational_ih_slots != expected.computational_ih_slots {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            format!(
+                "checked computational-IH slot Runtime occurrences differ in declaration {declaration}"
+            ),
+        ));
+    }
+    if actual.computational_ih_calls != expected.computational_ih_calls {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            format!(
+                "checked computational-IH call Runtime occurrences differ in declaration {declaration}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_oriented_subcontinuation_transport(
+    expr: &RuntimeExpr,
+    declarations: &BTreeMap<&str, &RuntimeDeclaration>,
+    plan: Option<&crate::OrientedSubcontinuationPlanV1>,
+) -> Result<(), CraneliftBackendError> {
+    let mut markers = BTreeMap::new();
+    let mut entry_nonframe_markers = CheckedOrientedMarkerSets::default();
+    let mut nonframe_markers = CheckedOrientedMarkerSets::default();
+    let mut declaration_nonframe_markers = Vec::new();
+    collect_checked_subcontinuation_frames(expr, &mut markers)?;
+    collect_checked_oriented_markers(
+        expr,
+        &mut entry_nonframe_markers,
+        "<entry>",
+        &mut Vec::new(),
+    )?;
+    nonframe_markers.extend_from(&entry_nonframe_markers);
+    for (symbol, declaration) in declarations.iter() {
+        if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
+            collect_checked_subcontinuation_frames(body, &mut markers)?;
+            let mut declaration_markers = CheckedOrientedMarkerSets::default();
+            collect_checked_oriented_markers(
+                body,
+                &mut declaration_markers,
+                symbol,
+                &mut Vec::new(),
+            )?;
+            nonframe_markers.extend_from(&declaration_markers);
+            declaration_nonframe_markers.push((*symbol, declaration_markers));
+        }
+    }
+    let markers_are_empty = markers.is_empty()
+        && nonframe_markers.recursive_calls.is_empty()
+        && nonframe_markers.computational_ih_slots.is_empty()
+        && nonframe_markers.computational_ih_calls.is_empty();
+    match (markers_are_empty, plan) {
+        (true, None) => return Ok(()),
+        (false, None) => {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked subcontinuation markers have no checked plan metadata",
+            ));
+        }
+        (true, Some(plan))
+            if plan.frames.is_empty()
+                && plan.recursive_calls.is_empty()
+                && plan.computational_ih_slots.is_empty()
+                && plan.computational_ih_calls.is_empty() =>
+        {
+            return Ok(())
+        }
+        (true, Some(_)) => {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked plan has no Runtime frame markers",
+            ));
+        }
+        (false, Some(_)) => {}
+    }
+    let plan = plan.expect("nonempty marker set has a plan");
+    plan.validate()
+        .map_err(|reason| unsupported("OrientedSubcontinuationPlanV1", reason))?;
+    if !entry_nonframe_markers.recursive_calls.is_empty()
+        || !entry_nonframe_markers.computational_ih_slots.is_empty()
+        || !entry_nonframe_markers.computational_ih_calls.is_empty()
+    {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            "checked recursive/IH marker escaped its declaration into the entry expression",
+        ));
+    }
+    for (declaration, markers) in &declaration_nonframe_markers {
+        let expected = planned_marker_locations_for_declaration(plan, declaration);
+        require_exact_marker_locations(declaration, markers, &expected)?;
+    }
+    if markers.len() != plan.frames.len() {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            "checked plan and Runtime marker sets differ",
+        ));
+    }
+    for frame in &plan.frames {
+        let Some(fingerprint) = markers.remove(&frame.frame_id) else {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked plan frame marker is missing or transplanted",
+            ));
+        };
+        if fingerprint != frame.runtime_frame_fingerprint {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked plan frame fingerprint is stale",
+            ));
+        }
+    }
+    if !markers.is_empty() {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            "Runtime frame marker has no checked plan entry",
+        ));
+    }
+    let plan_recursive_calls = plan
+        .recursive_calls
+        .iter()
+        .map(|call| (call.call_template_id, call.checked_occurrence_path.clone()))
+        .collect::<BTreeSet<_>>();
+    let plan_ih_slots = plan
+        .computational_ih_slots
+        .iter()
+        .map(|slot| (slot.slot_template_id, slot.checked_occurrence_path.clone()))
+        .collect::<BTreeSet<_>>();
+    let plan_ih_calls = plan
+        .computational_ih_calls
+        .iter()
+        .map(|call| (call.call_template_id, call.checked_occurrence_path.clone()))
+        .collect::<BTreeSet<_>>();
+    let runtime_recursive_calls = nonframe_markers
+        .recursive_calls
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let runtime_ih_slots = nonframe_markers
+        .computational_ih_slots
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let runtime_ih_calls = nonframe_markers
+        .computational_ih_calls
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if runtime_recursive_calls != plan_recursive_calls
+        || runtime_ih_slots != plan_ih_slots
+        || runtime_ih_calls != plan_ih_calls
+    {
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            "checked plan and Runtime recursive/IH marker sets differ",
+        ));
+    }
+    Ok(())
+}
+
 fn compile_expr_with_declarations<'a>(
     expr: &RuntimeExpr,
     seed_env: &'a NativeSeedEnvironment,
@@ -1342,6 +1936,7 @@ fn compile_expr_with_declarations_and_process_input<'a>(
         declarations,
         staged_process_input,
         false,
+        None,
         None,
         None,
     )
@@ -1486,9 +2081,20 @@ fn run_px8j_malformed_recursor_consumer(
         next_source_join: 0,
         next_source_predecessor: 0,
         live_source_continuations: 0,
+        source_control_root: None,
+        active_oriented_semantic_regions: 0,
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
+        root_terminal_authority: None,
         active_join_site: None,
+        oriented_subcontinuation_plan: None,
+        consumed_subcontinuation_frames: BTreeSet::new(),
+        active_subcontinuation_frame: None,
+        consumed_recursive_call_templates: BTreeSet::new(),
+        pending_recursive_call: None,
+        pending_computational_ih_call: None,
+        active_recursive_invocations: Vec::new(),
+        next_recursive_invocation_instance: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1516,6 +2122,11 @@ fn run_px8j_malformed_recursor_consumer(
         outer_env: Vec::new(),
         provenance: RecursorFrameProvenance(6),
         role,
+        checked_frame_id: None,
+        checked_invocation_id: None,
+        checked_invocation_source: None,
+        checked_invocation_depth: 0,
+        semantic_pending: matches!(role, RecursorLayerRole::SelectsOccurrence { .. }),
     };
     let selection = layer(match malformation {
         Px8jRecursorMalformation::SelectionRole => RecursorLayerRole::ExitsScope {
@@ -1573,6 +2184,8 @@ fn run_px8j_malformed_recursor_consumer(
                 later_wrappers_in_construction_order: unwind,
             },
             cursor,
+            None,
+            None,
         ),
     };
     let active = ActiveContinuationFrame {
@@ -1651,9 +2264,20 @@ fn run_checked_bounded_nat_fixture(
         next_source_join: 0,
         next_source_predecessor: 0,
         live_source_continuations: 0,
+        source_control_root: None,
+        active_oriented_semantic_regions: 0,
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
+        root_terminal_authority: None,
         active_join_site: None,
+        oriented_subcontinuation_plan: None,
+        consumed_subcontinuation_frames: BTreeSet::new(),
+        active_subcontinuation_frame: None,
+        consumed_recursive_call_templates: BTreeSet::new(),
+        pending_recursive_call: None,
+        pending_computational_ih_call: None,
+        active_recursive_invocations: Vec::new(),
+        next_recursive_invocation_instance: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1793,6 +2417,10 @@ fn run_checked_bounded_nat_fixture(
                         retained_scrutinee_index: None,
                         deferred_constructor_case: None,
                         provenance: compiler.mint_recursor_frame_provenance(),
+                        checked_frame_id: None,
+                        checked_invocation_id: None,
+                        checked_invocation_source: None,
+                        checked_invocation_depth: 0,
                     },
                 )];
                 compiler.lower_bounded_nat_computational(&mut builder, nat, false, &frames)?
@@ -1857,9 +2485,20 @@ fn run_dynamic_constructor_dispatch_fixture(
         next_source_join: 0,
         next_source_predecessor: 0,
         live_source_continuations: 0,
+        source_control_root: None,
+        active_oriented_semantic_regions: 0,
         native_join_plan: None,
         consumed_join_sites: BTreeSet::new(),
+        root_terminal_authority: None,
         active_join_site: None,
+        oriented_subcontinuation_plan: None,
+        consumed_subcontinuation_frames: BTreeSet::new(),
+        active_subcontinuation_frame: None,
+        consumed_recursive_call_templates: BTreeSet::new(),
+        pending_recursive_call: None,
+        pending_computational_ih_call: None,
+        active_recursive_invocations: Vec::new(),
+        next_recursive_invocation_instance: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: false,
@@ -1979,6 +2618,7 @@ fn compile_program_expr_object(
         false,
         None,
         native_join_plan_for_program(program)?,
+        oriented_subcontinuation_plan_for_program(program)?,
     )
 }
 
@@ -1993,7 +2633,13 @@ fn compile_expr_into_module<'a, M: Module>(
     process_mode: bool,
     process_symbols: Option<&crate::NativeProcessSymbols>,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
+    oriented_subcontinuation_plan: Option<crate::OrientedSubcontinuationPlanV1>,
 ) -> Result<CompiledModule<M>, CraneliftBackendError> {
+    validate_oriented_subcontinuation_transport(
+        expr,
+        &declarations,
+        oriented_subcontinuation_plan.as_ref(),
+    )?;
     let mut sig = module.make_signature();
     sig.params
         .push(AbiParam::new(module.target_config().pointer_type()));
@@ -2061,9 +2707,20 @@ fn compile_expr_into_module<'a, M: Module>(
         next_source_join: 0,
         next_source_predecessor: 0,
         live_source_continuations: 0,
+        source_control_root: None,
+        active_oriented_semantic_regions: 0,
         native_join_plan,
         consumed_join_sites: BTreeSet::new(),
+        root_terminal_authority: None,
         active_join_site: None,
+        oriented_subcontinuation_plan,
+        consumed_subcontinuation_frames: BTreeSet::new(),
+        active_subcontinuation_frame: None,
+        consumed_recursive_call_templates: BTreeSet::new(),
+        pending_recursive_call: None,
+        pending_computational_ih_call: None,
+        active_recursive_invocations: Vec::new(),
+        next_recursive_invocation_instance: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         process_object: process_mode,
@@ -2116,8 +2773,8 @@ fn compile_expr_into_module<'a, M: Module>(
         if let Some(value) = staged_process_input {
             initial_env.push(compiler.lower_value(&mut builder, value)?);
         }
+        compiler.root_terminal_authority = compiler.take_distinguished_root_answer_authority()?;
         let lowered = compiler.lower_expr(&mut builder, expr, &initial_env)?;
-        compiler.consume_distinguished_root_join_site()?;
         compiler.require_complete_join_plan_consumption()?;
         let result = match lowered {
             Lowered::Trap(trap) => {
@@ -2208,9 +2865,20 @@ struct Lowering<'a> {
     next_source_join: u64,
     next_source_predecessor: u64,
     live_source_continuations: usize,
+    source_control_root: Option<ContinuationCursorId>,
+    active_oriented_semantic_regions: usize,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,
+    root_terminal_authority: Option<RootTerminalAnswerAuthority>,
     active_join_site: Option<u64>,
+    oriented_subcontinuation_plan: Option<crate::OrientedSubcontinuationPlanV1>,
+    consumed_subcontinuation_frames: BTreeSet<(u64, u64)>,
+    active_subcontinuation_frame: Option<u64>,
+    consumed_recursive_call_templates: BTreeSet<u64>,
+    pending_recursive_call: Option<CheckedRecursiveInvocationInstance>,
+    pending_computational_ih_call: Option<u64>,
+    active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
+    next_recursive_invocation_instance: u64,
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
     process_object: bool,
@@ -2232,6 +2900,19 @@ struct Lowering<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct RecursorFrameProvenance(u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InvocationTemplateRef {
+    SameSccCall(u64),
+    ComputationalIHCall(u64),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CheckedRecursiveInvocationInstance {
+    source: InvocationTemplateRef,
+    invocation_instance_id: u64,
+    semantic_depth: usize,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct ContinuationActivationId(u64);
@@ -2260,6 +2941,10 @@ struct ComputationalRecursorFramePayload {
     default: RuntimeTrap,
     outer_env: Vec<Lowered>,
     provenance: RecursorFrameProvenance,
+    checked_frame_id: Option<u64>,
+    checked_invocation_id: Option<u64>,
+    checked_invocation_source: Option<InvocationTemplateRef>,
+    checked_invocation_depth: usize,
 }
 
 #[derive(Clone)]
@@ -2592,6 +3277,10 @@ struct ComputationalEliminatorFrame<'a> {
     retained_scrutinee_index: Option<usize>,
     deferred_constructor_case: Option<&'a DeferredConstructorCaseEnvironment<'a>>,
     provenance: RecursorFrameProvenance,
+    checked_frame_id: Option<u64>,
+    checked_invocation_id: Option<u64>,
+    checked_invocation_source: Option<InvocationTemplateRef>,
+    checked_invocation_depth: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -2629,6 +3318,11 @@ struct ComputationalRecursorLayer {
     outer_env: Vec<Lowered>,
     provenance: RecursorFrameProvenance,
     role: RecursorLayerRole,
+    checked_frame_id: Option<u64>,
+    checked_invocation_id: Option<u64>,
+    checked_invocation_source: Option<InvocationTemplateRef>,
+    checked_invocation_depth: usize,
+    semantic_pending: bool,
 }
 
 #[derive(Clone)]
@@ -2641,11 +3335,180 @@ struct RecursorInvocationSegment {
     selection: ComputationalRecursorLayer,
     unwind: RecursorUnwindStack,
     resume_cursor: ContinuationCursorId,
+    checked_invocation: Option<CheckedRecursiveInvocationInstance>,
+    computational_ih_slot_template_id: Option<u64>,
+    /// Immutable mint-time witness for every already-open control extent.
+    /// Qualification may attach a fresh invocation identity later, but it may
+    /// not delete, duplicate, reorder, or transplant an exit obligation.
+    open_control_obligations: Vec<OpenControlObligation>,
 }
 
 #[derive(Clone)]
 struct RecursorUnwindStack {
     later_wrappers_in_construction_order: Vec<ComputationalRecursorLayer>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct OpenControlObligation {
+    scope_origin: RecursorProducerOriginId,
+    parent_scope: Option<RecursorProducerOriginId>,
+    checked_frame_id: Option<u64>,
+    semantic_pending: bool,
+}
+
+fn open_control_obligations(unwind: &RecursorUnwindStack) -> Vec<OpenControlObligation> {
+    unwind
+        .later_wrappers_in_construction_order
+        .iter()
+        .filter_map(|layer| match layer.role {
+            RecursorLayerRole::ExitsScope {
+                scope_origin,
+                parent_scope,
+                ..
+            } => Some(OpenControlObligation {
+                scope_origin,
+                parent_scope,
+                checked_frame_id: layer.checked_frame_id,
+                semantic_pending: layer.semantic_pending,
+            }),
+            RecursorLayerRole::SelectsOccurrence { .. } => None,
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AffineSpliceState {
+    Open,
+    Consumed,
+}
+
+/// Move-only compiler capability for one oriented segment splice.  It is
+/// deliberately not `Clone`; validation consumes the sole open state before
+/// any CFG or consumer lowering begins.
+struct AffineSpliceCapability {
+    state: AffineSpliceState,
+}
+
+impl AffineSpliceCapability {
+    fn consume(&mut self) -> Result<(), CraneliftBackendError> {
+        if std::mem::replace(&mut self.state, AffineSpliceState::Consumed)
+            == AffineSpliceState::Consumed
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuation",
+                "affine splice capability was consumed more than once",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct OrientedControlLedgerEntry {
+    frame_id: Option<u64>,
+    invocation_id: Option<u64>,
+    role: RecursorLayerRole,
+    checked_witness: Option<crate::OrientedControlWitnessV1>,
+}
+
+fn oriented_layer_is_pending_semantic(layer: &ComputationalRecursorLayer) -> bool {
+    layer.semantic_pending
+}
+
+fn validate_oriented_control_projection(
+    producer_origin: RecursorProducerOriginId,
+    layers: &[ComputationalRecursorLayer],
+) -> Result<(), CraneliftBackendError> {
+    let mut invocation_sources = BTreeMap::new();
+    let mut open_scopes = BTreeMap::new();
+    for layer in layers {
+        let role_origin = match layer.role {
+            RecursorLayerRole::SelectsOccurrence { origin }
+            | RecursorLayerRole::ExitsScope { origin, .. } => origin,
+        };
+        if role_origin != producer_origin {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "control occurrence was transplanted across producer regions",
+            ));
+        }
+        match (layer.checked_invocation_id, layer.checked_invocation_source) {
+            (Some(instance), Some(source)) => {
+                if invocation_sources
+                    .insert(instance, source)
+                    .is_some_and(|old| old != source)
+                {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "one invocation instance is shared by distinct checked templates",
+                    ));
+                }
+            }
+            (None, Some(_)) => {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "checked invocation source has no affine instance identity",
+                ));
+            }
+            _ => {}
+        }
+        match (layer.role, layer.semantic_pending) {
+            (RecursorLayerRole::SelectsOccurrence { .. }, false) => {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "pending selection was misclassified as control-only",
+                ));
+            }
+            _ => {}
+        }
+        if let RecursorLayerRole::ExitsScope {
+            scope_origin,
+            parent_scope,
+            ..
+        } = layer.role
+        {
+            if layer.checked_invocation_id.is_some() {
+                if open_scopes.insert(scope_origin, parent_scope).is_some() {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "open control obligation is duplicated",
+                    ));
+                }
+            }
+        }
+    }
+    for parent in open_scopes.values().flatten() {
+        if !open_scopes.contains_key(parent) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "open control obligation has a stale or cross-region parent",
+            ));
+        }
+    }
+    Ok(())
+}
+
+struct OwnedOrientedSubcontinuationSegment {
+    producer_origin: RecursorProducerOriginId,
+    sibling_position: usize,
+    activation: ContinuationActivationId,
+    segment_site_id: Option<u64>,
+    input_interface: Option<crate::CheckedAnswerInterfaceV1>,
+    output_interface: Option<crate::CheckedAnswerInterfaceV1>,
+    semantic_frames: Vec<ComputationalRecursorLayer>,
+    control_ledger: Vec<OrientedControlLedgerEntry>,
+    resume_cursor: ContinuationCursorId,
+    capability: AffineSpliceCapability,
+}
+
+struct InstalledOrientedSubcontinuationSegment {
+    checked: bool,
+    producer_origin: RecursorProducerOriginId,
+    sibling_position: usize,
+    activation: ContinuationActivationId,
+    semantic_frames: Vec<ComputationalRecursorLayer>,
+    control_ledger: Vec<OrientedControlLedgerEntry>,
+    resume_cursor: ContinuationCursorId,
 }
 
 impl RecursorInvocationSegment {
@@ -2655,14 +3518,30 @@ impl RecursorInvocationSegment {
         selection: ComputationalRecursorLayer,
         unwind: RecursorUnwindStack,
         resume_cursor: ContinuationCursorId,
+        checked_invocation: Option<CheckedRecursiveInvocationInstance>,
+        computational_ih_slot_template_id: Option<u64>,
     ) -> Self {
+        let open_control_obligations = open_control_obligations(&unwind);
         Self {
             origin,
             sibling_position,
             selection,
             unwind,
             resume_cursor,
+            checked_invocation,
+            computational_ih_slot_template_id,
+            open_control_obligations,
         }
+    }
+
+    fn validate_open_control_obligations(&self) -> Result<(), CraneliftBackendError> {
+        if open_control_obligations(&self.unwind) != self.open_control_obligations {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "open control obligation set changed after affine mint",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -2682,19 +3561,157 @@ fn decompose_computational_recursor(
     }
 }
 
-fn recursor_eliminator_frames(
-    segment: &RecursorInvocationSegment,
-) -> Result<Vec<EliminatorFrame<'_>>, CraneliftBackendError> {
-    validate_recursor_invocation_segment(segment)?;
+fn checked_invocation_frame_templates(
+    plan: &crate::OrientedSubcontinuationPlanV1,
+    source: InvocationTemplateRef,
+) -> Result<&[u64], CraneliftBackendError> {
+    match source {
+        InvocationTemplateRef::SameSccCall(call_template_id) => plan
+            .recursive_call(call_template_id)
+            .map(|call| call.callee_frame_templates.as_slice())
+            .ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic invocation has no checked same-SCC call template",
+                )
+            }),
+        InvocationTemplateRef::ComputationalIHCall(call_template_id) => plan
+            .computational_ih_call(call_template_id)
+            .map(|call| call.callee_frame_templates.as_slice())
+            .ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "dynamic invocation has no checked computational IH call template",
+                )
+            }),
+    }
+}
+
+fn instantiate_checked_invocation_segment(
+    plan: &crate::OrientedSubcontinuationPlanV1,
+    invocation: CheckedRecursiveInvocationInstance,
+    segment: &mut RecursorInvocationSegment,
+) -> Result<(), CraneliftBackendError> {
+    let frame_templates = checked_invocation_frame_templates(plan, invocation.source)?;
+    let expected = frame_templates.iter().copied().collect::<BTreeSet<_>>();
+    let mut instantiated = BTreeSet::new();
+    let mut visit = |layer: &mut ComputationalRecursorLayer| {
+        let Some(frame_id) = layer.checked_frame_id else {
+            return Ok(());
+        };
+        let frame = plan.frame(frame_id).ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "dynamic recursive layer has no checked frame entry",
+            )
+        })?;
+        if frame.runtime_frame_fingerprint
+            != crate::compiler_private_computational_match_frame_fingerprint(
+                &layer.cases,
+                &layer.default,
+            )
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "dynamic recursive layer does not match its checked frame template",
+            ));
+        }
+        if !expected.contains(&frame_id) {
+            return Ok(());
+        }
+        match layer.checked_invocation_id {
+            None => {
+                layer.checked_invocation_id = Some(invocation.invocation_instance_id);
+                layer.checked_invocation_source = Some(invocation.source);
+                layer.checked_invocation_depth = invocation.semantic_depth;
+            }
+            Some(existing) if existing == invocation.invocation_instance_id => {
+                if layer.checked_invocation_source != Some(invocation.source) {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "dynamic invocation source changed after qualification",
+                    ));
+                }
+            }
+            Some(_) => return Ok(()),
+        }
+        if !instantiated.insert(frame_id) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "one invocation instantiates a checked frame template more than once",
+            ));
+        }
+        Ok(())
+    };
+    visit(&mut segment.selection)?;
+    for layer in &mut segment.unwind.later_wrappers_in_construction_order {
+        visit(layer)?;
+    }
+    if instantiated != expected {
+        let actual = std::iter::once(&segment.selection)
+            .chain(segment.unwind.later_wrappers_in_construction_order.iter())
+            .map(|layer| (layer.checked_frame_id, layer.checked_invocation_id))
+            .collect::<Vec<_>>();
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            format!(
+                "computational invocation {:?} does not carry its exact checked frame sequence: expected={expected:?} instantiated={instantiated:?} actual={actual:?}",
+                invocation.source,
+            ),
+        ));
+    }
+    segment.checked_invocation = None;
+    Ok(())
+}
+
+fn compose_oriented_subcontinuation(
+    plan: Option<&crate::OrientedSubcontinuationPlanV1>,
+    invocation: Option<CheckedRecursiveInvocationInstance>,
+    activation: ContinuationActivationId,
+    mut segment: RecursorInvocationSegment,
+) -> Result<InstalledOrientedSubcontinuationSegment, CraneliftBackendError> {
+    segment.validate_open_control_obligations()?;
+    let invocation = invocation.or(segment.checked_invocation);
+    if let Some(invocation) = invocation {
+        let plan = plan.ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "dynamic invocation has no checked oriented plan",
+            )
+        })?;
+        instantiate_checked_invocation_segment(plan, invocation, &mut segment)?;
+    }
+    let producer_origin = segment.origin;
+    let sibling_position = segment.sibling_position;
+    let resume_cursor = segment.resume_cursor;
+    let mut control_layers =
+        Vec::with_capacity(1 + segment.unwind.later_wrappers_in_construction_order.len());
+    control_layers.push(segment.selection);
+    control_layers.extend(
+        segment
+            .unwind
+            .later_wrappers_in_construction_order
+            .into_iter()
+            .rev(),
+    );
+    let mut control_ledger = control_layers
+        .iter()
+        .map(|layer| OrientedControlLedgerEntry {
+            frame_id: layer.checked_frame_id,
+            invocation_id: layer.checked_invocation_id,
+            role: layer.role,
+            checked_witness: None,
+        })
+        .collect::<Vec<_>>();
+    validate_oriented_control_projection(producer_origin, &control_layers)?;
     #[cfg(test)]
     px8j_record_source_event(Px8jSourceTraceEvent::DirectConsume {
         origin: segment.origin,
         selection_cursor: segment.resume_cursor,
         sibling_position: segment.sibling_position,
-        exits: segment
-            .unwind
-            .later_wrappers_in_construction_order
+        exits: control_layers
             .iter()
+            .rev()
             .filter_map(|layer| match layer.role {
                 RecursorLayerRole::ExitsScope {
                     scope_origin,
@@ -2705,14 +3722,249 @@ fn recursor_eliminator_frames(
             })
             .collect(),
     });
-    Ok(std::iter::once(&segment.selection)
-        .chain(
-            segment
-                .unwind
-                .later_wrappers_in_construction_order
-                .iter()
-                .rev(),
+
+    // A selected frame is pending semantic work. A freshly instantiated IH
+    // layer remains semantic even when its control projection is already in
+    // ExitsScope phase. Inherited exit rows carry no fresh invocation source:
+    // their transformer was consumed at selection and they remain only as
+    // affine open-extent obligations in the control ledger.
+    let semantic_layers = control_layers
+        .iter()
+        .filter(|layer| oriented_layer_is_pending_semantic(layer))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let planned = semantic_layers
+        .iter()
+        .map(|layer| (layer.checked_invocation_id, layer.checked_frame_id))
+        .collect::<Vec<_>>();
+    let has_planned = planned.iter().any(|(_, frame)| frame.is_some());
+    if has_planned
+        && planned
+            .iter()
+            .any(|(invocation, frame)| invocation.is_none() || frame.is_none())
+    {
+        let detail = semantic_layers
+            .iter()
+            .map(|layer| {
+                (
+                    layer.checked_frame_id,
+                    layer.checked_invocation_id,
+                    layer.checked_invocation_depth,
+                    layer.provenance.0,
+                    layer
+                        .cases
+                        .iter()
+                        .map(|case| case.constructor.as_str())
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>();
+        return Err(unsupported(
+            "OrientedSubcontinuationPlanV1",
+            format!(
+                "oriented segment mixes checked and inferred computational frames: {detail:?}; recursive templates: {:?}",
+                plan.map(|plan| (
+                    plan.recursive_calls
+                        .iter()
+                        .map(|call| (call.call_template_id, call.declaration.as_str(), call.callee.as_str()))
+                        .collect::<Vec<_>>(),
+                    plan.computational_ih_calls
+                        .iter()
+                        .map(|call| (call.call_template_id, call.declaration.as_str(), call.slot_template_id))
+                        .collect::<Vec<_>>()
+                ))
+            ),
+        ));
+    }
+
+    let (segment_site_id, input_interface, output_interface, semantic_frames) = if has_planned {
+        let plan = plan.ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "oriented segment has no checked plan metadata",
+            )
+        })?;
+        plan.validate()
+            .map_err(|reason| unsupported("OrientedSubcontinuationPlanV1", reason))?;
+        for entry in &mut control_ledger {
+            if entry.invocation_id.is_none() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "checked control occurrence has no affine invocation identity",
+                ));
+            }
+            let frame_id = entry.frame_id.expect("all control entries are checked");
+            entry.checked_witness = Some(
+                plan.frame(frame_id)
+                    .expect("checked control entry has a validated plan row")
+                    .control_witness
+                    .clone(),
+            );
+        }
+        let mut by_id = BTreeMap::new();
+        for layer in semantic_layers {
+            let frame_id = layer.checked_frame_id.expect("all frames are checked");
+            let invocation_id = layer
+                .checked_invocation_id
+                .expect("all checked frames have an invocation instance");
+            if by_id.insert((invocation_id, frame_id), layer).is_some() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "oriented segment repeats a checked dynamic frame key",
+                ));
+            }
+        }
+        let mut ordered = by_id
+            .into_iter()
+            .map(|((invocation_id, frame_id), layer)| {
+                let entry = plan.frame(frame_id).ok_or_else(|| {
+                    unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "oriented segment frame has no checked plan entry",
+                    )
+                })?;
+                Ok((invocation_id, entry, layer))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+        ordered.sort_by_key(|(_, entry, layer)| {
+            (
+                std::cmp::Reverse(layer.checked_invocation_depth),
+                entry.semantic_position,
+            )
+        });
+        let site = ordered
+            .first()
+            .expect("checked oriented segment is nonempty")
+            .1
+            .segment_site_id;
+        if ordered
+            .iter()
+            .any(|(_, entry, _)| entry.segment_site_id != site)
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "oriented splice crosses checked prompt regions",
+            ));
+        }
+        for pair in ordered.windows(2) {
+            if pair[0].1.output_interface != pair[1].1.input_interface {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    format!(
+                        "oriented splice answer endpoints do not compose: left=(instance={}, frame={}, depth={}, out={}) right=(instance={}, frame={}, depth={}, in={}) order={:?}",
+                        pair[0].0,
+                        pair[0].1.frame_id,
+                        pair[0].2.checked_invocation_depth,
+                        crate::fnv1a_64(&pair[0].1.output_interface.canonical),
+                        pair[1].0,
+                        pair[1].1.frame_id,
+                        pair[1].2.checked_invocation_depth,
+                        crate::fnv1a_64(&pair[1].1.input_interface.canonical),
+                        ordered
+                            .iter()
+                            .map(|(instance, frame, layer)| (*instance, frame.frame_id, layer.checked_invocation_depth))
+                            .collect::<Vec<_>>(),
+                    ),
+                ));
+            }
+        }
+        for (index, (_, _, layer)) in ordered.iter().enumerate() {
+            let Some(InvocationTemplateRef::ComputationalIHCall(call_id)) =
+                layer.checked_invocation_source
+            else {
+                continue;
+            };
+            let call = plan.computational_ih_call(call_id).ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "semantic IH layer has no checked call parent edge",
+                )
+            })?;
+            match call.parent_frame_template_id {
+                Some(parent) => {
+                    if ordered[index].1.frame_id != parent {
+                        return Err(unsupported(
+                            "OrientedSubcontinuationPlanV1",
+                            format!(
+                                "semantic IH layer does not select its checked open parent frame: call={call_id} frame={} parent={parent}",
+                                ordered[index].1.frame_id,
+                            ),
+                        ));
+                    }
+                }
+                None if index + 1 == ordered.len() => {}
+                None => {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "root IH call leaves residual semantic work without a checked edge",
+                    ))
+                }
+            }
+        }
+        let input = ordered.first().unwrap().1.input_interface.clone();
+        let output = ordered.last().unwrap().1.output_interface.clone();
+        (
+            Some(site),
+            Some(input),
+            Some(output),
+            ordered.into_iter().map(|(_, _, layer)| layer).collect(),
         )
+    } else {
+        (None, None, None, semantic_layers)
+    };
+
+    let mut owned = OwnedOrientedSubcontinuationSegment {
+        producer_origin,
+        sibling_position,
+        activation,
+        segment_site_id,
+        input_interface,
+        output_interface,
+        semantic_frames,
+        control_ledger,
+        resume_cursor,
+        capability: AffineSpliceCapability {
+            state: AffineSpliceState::Open,
+        },
+    };
+    owned.capability.consume()?;
+    debug_assert_eq!(owned.capability.state, AffineSpliceState::Consumed);
+    debug_assert!(owned.control_ledger.len() >= owned.semantic_frames.len());
+    debug_assert_eq!(
+        owned.segment_site_id.is_some(),
+        owned.input_interface.is_some()
+    );
+    debug_assert_eq!(
+        owned.segment_site_id.is_some(),
+        owned.output_interface.is_some()
+    );
+    Ok(InstalledOrientedSubcontinuationSegment {
+        checked: owned.segment_site_id.is_some(),
+        producer_origin: owned.producer_origin,
+        sibling_position: owned.sibling_position,
+        activation: owned.activation,
+        semantic_frames: owned.semantic_frames,
+        control_ledger: owned.control_ledger,
+        resume_cursor: owned.resume_cursor,
+    })
+}
+
+fn recursor_invocation_is_checked(segment: &RecursorInvocationSegment) -> bool {
+    segment.selection.checked_frame_id.is_some()
+        || segment
+            .unwind
+            .later_wrappers_in_construction_order
+            .iter()
+            .any(|layer| layer.checked_frame_id.is_some())
+}
+
+fn installed_oriented_eliminator_frames(
+    segment: &InstalledOrientedSubcontinuationSegment,
+) -> Vec<EliminatorFrame<'_>> {
+    segment
+        .semantic_frames
+        .iter()
         .map(|layer| {
             EliminatorFrame::Computational(ComputationalEliminatorFrame {
                 cases: &layer.cases,
@@ -2721,9 +3973,13 @@ fn recursor_eliminator_frames(
                 retained_scrutinee_index: None,
                 deferred_constructor_case: None,
                 provenance: layer.provenance,
+                checked_frame_id: layer.checked_frame_id,
+                checked_invocation_id: layer.checked_invocation_id,
+                checked_invocation_source: layer.checked_invocation_source,
+                checked_invocation_depth: layer.checked_invocation_depth,
             })
         })
-        .collect())
+        .collect()
 }
 
 fn validate_recursor_invocation_segment(
@@ -2831,6 +4087,18 @@ enum EliminatorFrame<'a> {
 /// this owned chain before its terminal may resume the outer eliminator cursor.
 enum SourceContinuation<'a> {
     Terminal(SourceContinuationTerminal<'a>),
+    CheckedRecursiveInvocationReturn {
+        instance: CheckedRecursiveInvocationInstance,
+        next: Box<SourceContinuation<'a>>,
+    },
+    CheckedComputationalIHInvocationReturn {
+        call_template_id: u64,
+        next: Box<SourceContinuation<'a>>,
+    },
+    ReturnFromSelectedCase {
+        delimiter: SelectedCaseReturnDelimiter,
+        next: Box<SourceContinuation<'a>>,
+    },
     LetBody {
         body: RuntimeExpr,
         env: Vec<Lowered>,
@@ -2869,6 +4137,7 @@ enum SourceContinuation<'a> {
         default: RuntimeTrap,
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
+        checked_frame_id: Option<u64>,
         next: Box<SourceContinuation<'a>>,
     },
     ProjectRecord {
@@ -2899,10 +4168,12 @@ enum SourceContinuationTerminal<'a> {
         resume_cursor: ContinuationCursorId,
         expected: ContinuationCursorId,
         active: &'a ActiveContinuationFrame<'a>,
+        root_authority: Option<RootTerminalAnswerAuthority>,
     },
     ResumeOuter {
         expected: ContinuationCursorId,
         active: &'a ActiveContinuationFrame<'a>,
+        root_authority: Option<RootTerminalAnswerAuthority>,
     },
     JumpToJoin(SourcePredecessorEdge<'a>),
 }
@@ -2934,6 +4205,18 @@ enum SourcePrefixTemplate {
     Terminal {
         expected_outer: ContinuationCursorId,
     },
+    CheckedRecursiveInvocationReturn {
+        instance: CheckedRecursiveInvocationInstance,
+        next: Box<SourcePrefixTemplate>,
+    },
+    CheckedComputationalIHInvocationReturn {
+        call_template_id: u64,
+        next: Box<SourcePrefixTemplate>,
+    },
+    ReturnFromSelectedCase {
+        delimiter: SelectedCaseReturnDelimiter,
+        next: Box<SourcePrefixTemplate>,
+    },
     LetBody {
         body: RuntimeExpr,
         env: Vec<Lowered>,
@@ -2972,6 +4255,7 @@ enum SourcePrefixTemplate {
         default: RuntimeTrap,
         env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
+        checked_frame_id: Option<u64>,
         next: Box<SourcePrefixTemplate>,
     },
     ProjectRecord {
@@ -2993,7 +4277,9 @@ enum SourcePrefixTemplate {
 }
 
 enum SourcePrefixTerminal<'a> {
-    ResumeOuter,
+    ResumeOuter {
+        root_authority: Option<RootTerminalAnswerAuthority>,
+    },
     Join(SourcePredecessorEdge<'a>),
 }
 
@@ -3073,6 +4359,15 @@ struct SourceControl<'a> {
     terminal_outer: ContinuationCursorId,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SelectedCaseReturnDelimiter {
+    activation: ContinuationActivationId,
+    cursor: ContinuationCursorId,
+    scope_origin: RecursorProducerOriginId,
+    frame_id: Option<u64>,
+    invocation_id: Option<u64>,
+}
+
 enum SourceMachineState<'a> {
     Eval {
         expr: RuntimeExpr,
@@ -3117,7 +4412,17 @@ enum ScalarMergeKind {
 /// Proof token for the legacy closed-expression merge sites. It can only be
 /// minted when source evaluation has no live continuation. Checked source joins
 /// use their explicit `SourceJoinTarget.required_kind` instead.
-struct TerminalProcessAnswerBoundary;
+/// Move-only proof that the native lowering machine has reached the checked
+/// invocation root with no semantic or control continuation left to consume
+/// the value.
+struct RootTerminalAnswerAuthority {
+    site_id: u64,
+    checked_result_type_fingerprint: u64,
+    occurrence_binding_fingerprint: u64,
+    outer_cursor: Option<ContinuationCursorId>,
+}
+
+struct TerminalAnswerAuthority;
 
 struct DeferredConstructorCaseEnvironment<'a> {
     constructor: &'a str,
@@ -3323,7 +4628,13 @@ fn produces_recursive_deforestable_aggregate(expr: &RuntimeExpr, symbol: &str) -
 
 fn collect_runtime_declaration_refs(expr: &RuntimeExpr, output: &mut BTreeSet<RuntimeSymbol>) {
     match expr {
-        RuntimeExpr::CheckedJoinSite { body, .. } => collect_runtime_declaration_refs(body, output),
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
+            collect_runtime_declaration_refs(body, output)
+        }
         RuntimeExpr::DeclarationRef { symbol } => {
             output.insert(symbol.clone());
         }
@@ -3466,13 +4777,368 @@ impl<'a> Lowering<'a> {
         cursor
     }
 
-    fn make_computational_recursor(
+    fn enter_checked_subcontinuation_frame(
+        &mut self,
+        frame_id: u64,
+    ) -> Result<(), CraneliftBackendError> {
+        if self
+            .active_subcontinuation_frame
+            .replace(frame_id)
+            .is_some()
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "nested checked subcontinuation occurrence marker",
+            ));
+        }
+        Ok(())
+    }
+
+    fn enter_checked_recursive_invocation(
+        &mut self,
+        call_template_id: u64,
+        body: &RuntimeExpr,
+    ) -> Result<CheckedRecursiveInvocationInstance, CraneliftBackendError> {
+        if self.pending_recursive_call.is_some() {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "nested unchecked recursive invocation marker",
+            ));
+        }
+        let call = self
+            .oriented_subcontinuation_plan
+            .as_ref()
+            .and_then(|plan| plan.recursive_call(call_template_id))
+            .ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "recursive invocation marker has no checked call template",
+                )
+            })?;
+        let RuntimeExpr::Call { callee, args } = body else {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "recursive invocation marker does not wrap one complete call",
+            ));
+        };
+        if !matches!(callee.as_ref(), RuntimeExpr::DeclarationRef { symbol } if symbol == &call.callee)
+            || args.len() as u64 != call.arity
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "recursive invocation marker callee or arity is stale",
+            ));
+        }
+        if !self
+            .consumed_recursive_call_templates
+            .insert(call_template_id)
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "recursive invocation occurrence marker was consumed twice",
+            ));
+        }
+        let instance = CheckedRecursiveInvocationInstance {
+            source: InvocationTemplateRef::SameSccCall(call_template_id),
+            invocation_instance_id: self.next_recursive_invocation_instance,
+            semantic_depth: self.active_recursive_invocations.len() + 1,
+        };
+        self.next_recursive_invocation_instance = self
+            .next_recursive_invocation_instance
+            .checked_add(1)
+            .expect("compiler-private recursive invocation identity exhausted");
+        self.pending_recursive_call = Some(instance);
+        self.active_recursive_invocations.push(instance);
+        Ok(instance)
+    }
+
+    fn leave_checked_recursive_invocation(
+        &mut self,
+        instance: CheckedRecursiveInvocationInstance,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.pending_recursive_call == Some(instance) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "recursive invocation marker was not consumed by its call",
+            ));
+        }
+        if self.active_recursive_invocations.pop() != Some(instance) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "recursive invocation instance stack is not affine",
+            ));
+        }
+        Ok(())
+    }
+
+    fn enter_checked_computational_ih_invocation(
+        &mut self,
+        call_template_id: u64,
+    ) -> Result<(), CraneliftBackendError> {
+        if self
+            .pending_computational_ih_call
+            .replace(call_template_id)
+            .is_some()
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "nested computational IH invocation marker",
+            ));
+        }
+        let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH invocation marker has no checked plan",
+            )
+        })?;
+        plan.computational_ih_call(call_template_id)
+            .ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "computational IH invocation marker has no checked call template",
+                )
+            })?;
+        Ok(())
+    }
+
+    fn mint_checked_computational_ih_instance(
+        &mut self,
+        value: &Lowered,
+    ) -> Result<Option<CheckedRecursiveInvocationInstance>, CraneliftBackendError> {
+        let Some(call_template_id) = self.pending_computational_ih_call.take() else {
+            return Ok(None);
+        };
+        let Lowered::ComputationalRecursorClosure { invocation, .. } = value else {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH marker was applied to an ordinary value",
+            ));
+        };
+        let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH invocation has no checked plan",
+            )
+        })?;
+        let call = plan
+            .computational_ih_call(call_template_id)
+            .ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "computational IH invocation has no checked call template",
+                )
+            })?;
+        if invocation.computational_ih_slot_template_id != Some(call.slot_template_id) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH invocation marker names a different slot",
+            ));
+        }
+        let instance = CheckedRecursiveInvocationInstance {
+            source: InvocationTemplateRef::ComputationalIHCall(call_template_id),
+            invocation_instance_id: self.next_recursive_invocation_instance,
+            semantic_depth: self.active_recursive_invocations.len() + 1,
+        };
+        self.next_recursive_invocation_instance = self
+            .next_recursive_invocation_instance
+            .checked_add(1)
+            .expect("compiler-private invocation identity exhausted");
+        Ok(Some(instance))
+    }
+
+    fn finish_checked_computational_ih_marker(
+        &mut self,
+        mut value: Lowered,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let Some(instance) = self.mint_checked_computational_ih_instance(&value)? else {
+            return Ok(value);
+        };
+        let Lowered::ComputationalRecursorClosure { invocation, .. } = &mut value else {
+            unreachable!("IH instance mint validates one recursor closure")
+        };
+        let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH invocation has no checked plan",
+            )
+        })?;
+        // Qualify the exact reusable template sequence at marker consumption.
+        // Existing child-qualified layers remain untouched when later parent
+        // wrappers are added to the same flattened carrier.
+        instantiate_checked_invocation_segment(plan, instance, invocation)?;
+        Ok(value)
+    }
+
+    fn consume_checked_recursive_invocation_call(
+        &mut self,
+        symbol: &RuntimeSymbol,
+    ) -> Result<Option<CheckedRecursiveInvocationInstance>, CraneliftBackendError> {
+        let Some(instance) = self.pending_recursive_call.take() else {
+            return Ok(None);
+        };
+        let InvocationTemplateRef::SameSccCall(call_template_id) = instance.source else {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "same-SCC call consumer received a computational IH invocation",
+            ));
+        };
+        let call = self
+            .oriented_subcontinuation_plan
+            .as_ref()
+            .and_then(|plan| plan.recursive_call(call_template_id))
+            .ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "active recursive invocation has no checked template",
+                )
+            })?;
+        if &call.callee != symbol {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "recursive invocation marker was transplanted to another callee",
+            ));
+        }
+        Ok(Some(instance))
+    }
+
+    fn consume_checked_subcontinuation_frame(
+        &mut self,
+        cases: &[crate::RuntimeComputationalMatchCase],
+        default: &RuntimeTrap,
+    ) -> Result<Option<u64>, CraneliftBackendError> {
+        let Some(frame_id) = self.active_subcontinuation_frame.take() else {
+            return Ok(None);
+        };
+        let frame = self
+            .oriented_subcontinuation_plan
+            .as_ref()
+            .and_then(|plan| plan.frame(frame_id))
+            .ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "checked Runtime marker has no transported frame entry",
+                )
+            })?;
+        if frame.runtime_frame_fingerprint
+            != crate::compiler_private_computational_match_frame_fingerprint(cases, default)
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked Runtime marker no longer denotes its planned frame",
+            ));
+        }
+        let invocation_id = self
+            .active_recursive_invocations
+            .last()
+            .map_or(0, |instance| instance.invocation_instance_id);
+        if !self
+            .consumed_subcontinuation_frames
+            .insert((invocation_id, frame_id))
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked Runtime frame marker was consumed more than once",
+            ));
+        }
+        Ok(Some(frame_id))
+    }
+
+    fn computational_ih_slots_for_case(
         &self,
+        case: &crate::RuntimeComputationalMatchCase,
+        checked_frame_id: Option<u64>,
+    ) -> Result<Vec<Option<u64>>, CraneliftBackendError> {
+        let RuntimeExpr::CheckedComputationalIHSlots {
+            slot_template_ids, ..
+        } = &case.body
+        else {
+            if checked_frame_id.is_some() && !case.recursive_positions.is_empty() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "checked computational case is missing its IH slot marker",
+                ));
+            }
+            return Ok(vec![None; case.recursive_positions.len()]);
+        };
+        let frame_id = checked_frame_id.ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH slot marker is detached from its checked frame",
+            )
+        })?;
+        if slot_template_ids.len() != case.recursive_positions.len() {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH slot marker is not bijective with recursive positions",
+            ));
+        }
+        let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH slot marker has no checked plan",
+            )
+        })?;
+        let mut seen = BTreeSet::new();
+        slot_template_ids
+            .iter()
+            .copied()
+            .zip(case.recursive_positions.iter().copied())
+            .map(|(slot_template_id, recursive_position)| {
+                if !seen.insert(slot_template_id) {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "computational IH case repeats a checked slot template",
+                    ));
+                }
+                let slot = plan
+                    .computational_ih_slot(slot_template_id)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "OrientedSubcontinuationPlanV1",
+                            "computational IH case names a stale slot template",
+                        )
+                    })?;
+                if slot.frame_template_id != frame_id
+                    || slot.constructor != case.constructor
+                    || slot.recursive_position != recursive_position as u64
+                {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "computational IH slot constructor/position/frame binding is stale",
+                    ));
+                }
+                Ok(Some(slot_template_id))
+            })
+            .collect()
+    }
+
+    fn enter_oriented_semantic_region(&mut self, checked: bool) {
+        if checked {
+            self.active_oriented_semantic_regions = self
+                .active_oriented_semantic_regions
+                .checked_add(1)
+                .expect("compiler-private oriented segment depth exhausted");
+        }
+    }
+
+    fn leave_oriented_semantic_region(&mut self, checked: bool) {
+        if checked {
+            self.active_oriented_semantic_regions = self
+                .active_oriented_semantic_regions
+                .checked_sub(1)
+                .expect("oriented semantic region must be entered exactly once");
+        }
+    }
+
+    fn make_computational_recursor(
+        &mut self,
         recursive: Lowered,
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
         outer_env: Vec<Lowered>,
         provenance: RecursorFrameProvenance,
+        checked_frame_id: Option<u64>,
+        computational_ih_slot_template_id: Option<u64>,
         origin: RecursorProducerOriginId,
         sibling_position: usize,
         role: RecursorLayerRole,
@@ -3485,12 +5151,40 @@ impl<'a> Lowering<'a> {
         )>,
     ) -> Result<Lowered, CraneliftBackendError> {
         let (residual, payload) = decompose_computational_recursor(recursive);
+        let active_instance = self.active_recursive_invocations.last().copied();
+        let inferred_frame_id = if checked_frame_id.is_none() {
+            active_instance.and_then(|instance| {
+                let fingerprint =
+                    crate::compiler_private_computational_match_frame_fingerprint(&cases, &default);
+                self.oriented_subcontinuation_plan
+                    .as_ref()
+                    .and_then(|plan| checked_invocation_frame_templates(plan, instance.source).ok())
+                    .and_then(|frame_templates| {
+                        frame_templates.iter().copied().find(|frame_id| {
+                            self.oriented_subcontinuation_plan
+                                .as_ref()
+                                .and_then(|plan| plan.frame(*frame_id))
+                                .is_some_and(|frame| frame.runtime_frame_fingerprint == fingerprint)
+                        })
+                    })
+            })
+        } else {
+            checked_frame_id
+        };
+        let invocation_id = inferred_frame_id
+            .and_then(|_| active_instance.map(|instance| instance.invocation_instance_id));
+        let invocation_depth = active_instance.map_or(0, |instance| instance.semantic_depth);
         let mut current_layer = ComputationalRecursorLayer {
             cases,
             default,
             outer_env,
             provenance,
             role,
+            checked_frame_id: inferred_frame_id,
+            checked_invocation_id: invocation_id,
+            checked_invocation_source: active_instance.map(|instance| instance.source),
+            checked_invocation_depth: invocation_depth,
+            semantic_pending: true,
         };
         let segment_origin = payload
             .as_ref()
@@ -3500,6 +5194,10 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .map(|(_, invocation)| invocation.sibling_position)
             .unwrap_or(sibling_position);
+        let segment_checked_invocation = payload
+            .as_ref()
+            .and_then(|(_, invocation)| invocation.checked_invocation)
+            .or(active_instance);
         let (selection, unwind) =
             if let Some((_, invocation)) = payload {
                 let splice_caller = splice_caller.ok_or_else(|| {
@@ -3513,6 +5211,7 @@ impl<'a> Lowering<'a> {
                 });
                 if !active_context_contains_cursor(splice_caller, invocation.resume_cursor)
                     && !source_cursor_is_live
+                    && !recursor_invocation_is_checked(&invocation)
                 {
                     return Err(unsupported(
                         "ComputationalRecursor",
@@ -3579,6 +5278,11 @@ impl<'a> Lowering<'a> {
                                 default: scope.frame.default.clone(),
                                 outer_env: scope.frame.outer_env.clone(),
                                 provenance: scope.frame.provenance,
+                                checked_frame_id: scope.frame.checked_frame_id,
+                                checked_invocation_id: scope.frame.checked_invocation_id,
+                                checked_invocation_source: scope.frame.checked_invocation_source,
+                                checked_invocation_depth: scope.frame.checked_invocation_depth,
+                                semantic_pending: false,
                                 role: RecursorLayerRole::ExitsScope {
                                     origin: segment_origin,
                                     scope_origin: scope.scope_origin,
@@ -3606,6 +5310,8 @@ impl<'a> Lowering<'a> {
                 selection,
                 unwind,
                 resume_cursor,
+                segment_checked_invocation,
+                computational_ih_slot_template_id,
             ),
         })
     }
@@ -3695,6 +5401,16 @@ impl<'a> Lowering<'a> {
         producer_env: &[Lowered],
         eliminator_env: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
+        let checked_frame_id = self.consume_checked_subcontinuation_frame(cases, default)?;
+        let checked_invocation_id = checked_frame_id.map(|_| {
+            self.active_recursive_invocations
+                .last()
+                .map_or(0, |instance| instance.invocation_instance_id)
+        });
+        let checked_invocation_depth = self
+            .active_recursive_invocations
+            .last()
+            .map_or(0, |instance| instance.semantic_depth);
         let provenance = self.mint_recursor_frame_provenance();
         self.lower_computational_producer_expr(
             builder,
@@ -3708,6 +5424,13 @@ impl<'a> Lowering<'a> {
                     retained_scrutinee_index: None,
                     deferred_constructor_case: None,
                     provenance,
+                    checked_frame_id,
+                    checked_invocation_id,
+                    checked_invocation_source: self
+                        .active_recursive_invocations
+                        .last()
+                        .map(|instance| instance.source),
+                    checked_invocation_depth,
                 },
             )],
         )
@@ -3762,6 +5485,54 @@ impl<'a> Lowering<'a> {
             }
         }
         match scrutinee {
+            RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+                self.enter_checked_subcontinuation_frame(*frame_id)?;
+                let result = self.lower_computational_producer_expr(
+                    builder,
+                    body,
+                    producer_env,
+                    eliminators,
+                );
+                if self.active_subcontinuation_frame.take().is_some() {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "checked subcontinuation marker was not consumed by its frame",
+                    ));
+                }
+                result
+            }
+            RuntimeExpr::CheckedRecursiveInvocation {
+                call_template_id,
+                body,
+                ..
+            } => {
+                let instance = self.enter_checked_recursive_invocation(*call_template_id, body)?;
+                let result = self.lower_computational_producer_expr(
+                    builder,
+                    body,
+                    producer_env,
+                    eliminators,
+                );
+                self.leave_checked_recursive_invocation(instance)?;
+                result
+            }
+            RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
+                self.lower_computational_producer_expr(builder, body, producer_env, eliminators)
+            }
+            RuntimeExpr::CheckedComputationalIHInvocation {
+                call_template_id,
+                body,
+                ..
+            } => {
+                self.enter_checked_computational_ih_invocation(*call_template_id)?;
+                let value = self.lower_computational_producer_expr(
+                    builder,
+                    body,
+                    producer_env,
+                    eliminators,
+                )?;
+                self.finish_checked_computational_ih_marker(value)
+            }
             RuntimeExpr::Let { value, body } => {
                 if reaches_environment_computational_recursor(body, producer_env, 1) {
                     if let RuntimeExpr::Call { callee, args } = body.as_ref() {
@@ -3772,7 +5543,7 @@ impl<'a> Lowering<'a> {
                                 {
                                     let (residual, boundary) =
                                         decompose_computational_recursor(callee.clone());
-                                    let (_, invocation) = boundary.expect(
+                                    let (activation, invocation) = boundary.expect(
                                         "recursor closure carries a continuation delimiter",
                                     );
                                     let resume_cursor = invocation.resume_cursor;
@@ -3790,7 +5561,16 @@ impl<'a> Lowering<'a> {
                                                 "recursive invocation cursor is not active",
                                             )
                                         })?;
-                                    let frames = recursor_eliminator_frames(&invocation)?;
+                                    if !recursor_invocation_is_checked(&invocation) {
+                                        validate_recursor_invocation_segment(&invocation)?;
+                                    }
+                                    let installed = compose_oriented_subcontinuation(
+                                        self.oriented_subcontinuation_plan.as_ref(),
+                                        self.active_recursive_invocations.last().copied(),
+                                        activation,
+                                        invocation,
+                                    )?;
+                                    let frames = installed_oriented_eliminator_frames(&installed);
                                     let mut composed = Vec::with_capacity(frames.len() + 2);
                                     composed.push(EliminatorFrame::PendingLet(
                                         PendingLetContinuationFrame {
@@ -3801,12 +5581,15 @@ impl<'a> Lowering<'a> {
                                     ));
                                     composed.extend(frames);
                                     composed.push(EliminatorFrame::InvocationReturn);
+                                    self.enter_oriented_semantic_region(installed.checked);
                                     let returned = self.lower_computational_producer_expr(
                                         builder,
                                         value,
                                         producer_env,
                                         &composed,
-                                    )?;
+                                    );
+                                    self.leave_oriented_semantic_region(installed.checked);
+                                    let returned = returned?;
                                     return self.lower_computational_match_value_composed(
                                         builder,
                                         returned,
@@ -3895,8 +5678,10 @@ impl<'a> Lowering<'a> {
                         )
                     }
                     callee @ Lowered::ComputationalRecursorClosure { .. } => {
+                        let checked_ih_invocation =
+                            self.mint_checked_computational_ih_instance(&callee)?;
                         let (base, boundary) = decompose_computational_recursor(callee);
-                        let (_, invocation) =
+                        let (activation, invocation) =
                             boundary.expect("recursor closure carries an invocation segment");
                         let current = active_recursor_frame(eliminators).ok_or_else(|| {
                             unsupported(
@@ -3911,7 +5696,17 @@ impl<'a> Lowering<'a> {
                                 "recursive producer invocation cursor is not active",
                             )
                         })?;
-                        let mut composed = recursor_eliminator_frames(&invocation)?;
+                        if !recursor_invocation_is_checked(&invocation) {
+                            validate_recursor_invocation_segment(&invocation)?;
+                        }
+                        let installed = compose_oriented_subcontinuation(
+                            self.oriented_subcontinuation_plan.as_ref(),
+                            checked_ih_invocation
+                                .or_else(|| self.active_recursive_invocations.last().copied()),
+                            activation,
+                            invocation,
+                        )?;
+                        let mut composed = installed_oriented_eliminator_frames(&installed);
                         composed.push(EliminatorFrame::InvocationReturn);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
@@ -3920,12 +5715,15 @@ impl<'a> Lowering<'a> {
                                     "structural Nat recursive hypothesis takes no arguments",
                                 ));
                             }
+                            self.enter_oriented_semantic_region(installed.checked);
                             let returned = self.lower_bounded_nat_computational(
                                 builder,
                                 predecessor,
                                 false,
                                 &composed,
-                            )?;
+                            );
+                            self.leave_oriented_semantic_region(installed.checked);
+                            let returned = returned?;
                             return self.lower_computational_match_value_composed(
                                 builder,
                                 returned,
@@ -3959,9 +5757,12 @@ impl<'a> Lowering<'a> {
                             .collect::<Result<Vec<_>, _>>()?;
                         call_env.extend(captures);
                         call_env.extend_from_slice(producer_env);
+                        self.enter_oriented_semantic_region(installed.checked);
                         let returned = self.lower_computational_producer_expr(
                             builder, &body, &call_env, &composed,
-                        )?;
+                        );
+                        self.leave_oriented_semantic_region(installed.checked);
+                        let returned = returned?;
                         self.lower_computational_match_value_composed(
                             builder,
                             returned,
@@ -4136,6 +5937,10 @@ impl<'a> Lowering<'a> {
                                 retained_scrutinee_index: None,
                                 deferred_constructor_case: Some(&deferred),
                                 provenance: self.mint_recursor_frame_provenance(),
+                                checked_frame_id: None,
+                                checked_invocation_id: None,
+                                checked_invocation_source: None,
+                                checked_invocation_depth: 0,
                             })
                         }
                         ImmediateBinderEliminator::Ordinary { cases, default } => {
@@ -4372,6 +6177,17 @@ impl<'a> Lowering<'a> {
                 // no intermediate aggregate is materialized or exit-lowered.
                 let mut composed = Vec::with_capacity(eliminators.len() + 1);
                 let provenance = self.mint_recursor_frame_provenance();
+                let checked_frame_id =
+                    self.consume_checked_subcontinuation_frame(inner_cases, inner_default)?;
+                let checked_invocation_id = checked_frame_id.map(|_| {
+                    self.active_recursive_invocations
+                        .last()
+                        .map_or(0, |instance| instance.invocation_instance_id)
+                });
+                let checked_invocation_depth = self
+                    .active_recursive_invocations
+                    .last()
+                    .map_or(0, |instance| instance.semantic_depth);
                 composed.push(EliminatorFrame::Computational(
                     ComputationalEliminatorFrame {
                         cases: inner_cases,
@@ -4380,6 +6196,13 @@ impl<'a> Lowering<'a> {
                         retained_scrutinee_index: None,
                         deferred_constructor_case: None,
                         provenance,
+                        checked_frame_id,
+                        checked_invocation_id,
+                        checked_invocation_source: self
+                            .active_recursive_invocations
+                            .last()
+                            .map(|instance| instance.source),
+                        checked_invocation_depth,
                     },
                 ));
                 composed.extend_from_slice(eliminators);
@@ -4548,6 +6371,10 @@ impl<'a> Lowering<'a> {
                         default: eliminator.default.clone(),
                         outer_env: eliminator.env.to_vec(),
                         provenance: eliminator.provenance,
+                        checked_frame_id: eliminator.checked_frame_id,
+                        checked_invocation_id: eliminator.checked_invocation_id,
+                        checked_invocation_source: eliminator.checked_invocation_source,
+                        checked_invocation_depth: eliminator.checked_invocation_depth,
                     },
                 };
                 let selected_scope = Some(selected_scope);
@@ -4576,13 +6403,22 @@ impl<'a> Lowering<'a> {
                         .map(|scope| scope.scope_origin),
                 });
                 let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
+                let ih_slots =
+                    self.computational_ih_slots_for_case(case, eliminator.checked_frame_id)?;
                 for position in case.recursive_positions.iter().rev().copied() {
+                    let slot_template_id = case
+                        .recursive_positions
+                        .iter()
+                        .position(|candidate| *candidate == position)
+                        .and_then(|index| ih_slots[index]);
                     let induction_hypothesis = self.make_computational_recursor(
                         args[position].clone(),
                         eliminator.cases.to_vec(),
                         eliminator.default.clone(),
                         eliminator.env.to_vec(),
                         eliminator.provenance,
+                        eliminator.checked_frame_id,
+                        slot_template_id,
                         producer_origin,
                         position,
                         RecursorLayerRole::SelectsOccurrence {
@@ -5022,6 +6858,8 @@ impl<'a> Lowering<'a> {
                     }
                 }
                 let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
+                let ih_slots =
+                    self.computational_ih_slots_for_case(case, frame.checked_frame_id)?;
                 let producer_origin = self.mint_recursor_producer_origin();
                 #[cfg(test)]
                 px8j_record_source_event(Px8jSourceTraceEvent::Mint {
@@ -5035,12 +6873,19 @@ impl<'a> Lowering<'a> {
                         .map(|scope| scope.scope_origin),
                 });
                 for position in case.recursive_positions.iter().rev().copied() {
+                    let slot_template_id = case
+                        .recursive_positions
+                        .iter()
+                        .position(|candidate| *candidate == position)
+                        .and_then(|index| ih_slots[index]);
                     let induction_hypothesis = self.make_computational_recursor(
                         constructor_args[position].clone(),
                         frame.cases.to_vec(),
                         frame.default.clone(),
                         outer_tail.clone(),
                         frame.provenance,
+                        frame.checked_frame_id,
+                        slot_template_id,
                         producer_origin,
                         position,
                         RecursorLayerRole::SelectsOccurrence {
@@ -5099,6 +6944,12 @@ impl<'a> Lowering<'a> {
         lowered: Lowered,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, bool), CraneliftBackendError> {
+        let checked_root_exit_representation = self.has_checked_root_exit_representation();
+        let lowered = if checked_root_exit_representation {
+            Self::unwrap_terminal_ret(lowered)
+        } else {
+            lowered
+        };
         let zero_tag = builder.ins().iconst(types::I64, 0);
         match lowered {
             Lowered::Int { value, known } => Ok((
@@ -5115,7 +6966,7 @@ impl<'a> Lowering<'a> {
                 },
                 true,
             )),
-            lowered if self.terminal_process_answer_boundary().is_some() => Ok((
+            lowered if checked_root_exit_representation => Ok((
                 NativeScalarPairV1 {
                     tag: zero_tag,
                     payload: self.emit_process_exit_status(builder, lowered),
@@ -5135,6 +6986,12 @@ impl<'a> Lowering<'a> {
         lowered: Lowered,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        let checked_root_exit_representation = self.has_checked_root_exit_representation();
+        let lowered = if checked_root_exit_representation {
+            Self::unwrap_terminal_ret(lowered)
+        } else {
+            lowered
+        };
         let zero_tag = builder.ins().iconst(types::I64, 0);
         match lowered {
             Lowered::RecursiveBackedge => Ok((
@@ -5188,7 +7045,7 @@ impl<'a> Lowering<'a> {
                 },
                 ScalarMergeKind::ExitCode,
             )),
-            lowered if self.terminal_process_answer_boundary().is_some() => Ok((
+            lowered if checked_root_exit_representation => Ok((
                 NativeScalarPairV1 {
                     tag: zero_tag,
                     payload: self.emit_process_exit_status(builder, lowered),
@@ -5202,9 +7059,111 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn terminal_process_answer_boundary(&self) -> Option<TerminalProcessAnswerBoundary> {
-        (self.process_object && self.live_source_continuations == 0)
-            .then_some(TerminalProcessAnswerBoundary)
+    fn restore_root_terminal_authority(
+        &mut self,
+        authority: Option<RootTerminalAnswerAuthority>,
+        expected_outer: ContinuationCursorId,
+    ) -> Result<(), CraneliftBackendError> {
+        let Some(mut authority) = authority else {
+            return Ok(());
+        };
+        if authority.outer_cursor != Some(expected_outer) {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "checked root answer authority returned through the wrong outer cursor",
+            ));
+        }
+        // The exact source-machine delimiter consumes this cursor binding.
+        // A later source-machine episode may bind the same affine root token
+        // to its own exact outer cursor; retaining the old cursor would turn a
+        // lawful sequential episode into an apparent transplant.
+        authority.outer_cursor = None;
+        if self.root_terminal_authority.replace(authority).is_some() {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "checked root answer authority was duplicated across source control",
+            ));
+        }
+        Ok(())
+    }
+
+    /// The checked root cut determines the temporary scalar representation
+    /// used at internal CFG joins. This is validation metadata only: it cannot
+    /// mint or consume terminal authority, which remains affine in
+    /// `RootTerminalAnswerAuthority` until `emit_result`.
+    fn has_checked_root_exit_representation(&self) -> bool {
+        self.process_object
+            && self.native_join_plan.as_ref().is_some_and(|plan| {
+                plan.sites.iter().any(|site| {
+                    site.runtime_frame_fingerprint == crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+                        && site.checked_occurrence_path == [0]
+                        && site.answer_kind == crate::NativeJoinAnswerKindV1::ExitCode
+                        && self.consumed_join_sites.contains(&site.site_id)
+                })
+            })
+    }
+
+    fn mint_terminal_answer_authority(
+        &mut self,
+    ) -> Result<TerminalAnswerAuthority, CraneliftBackendError> {
+        debug_assert_eq!(
+            self.live_source_continuations == 0,
+            self.source_control_root.is_none(),
+            "source-control ownership and diagnostic depth must agree"
+        );
+        let authority = self.root_terminal_authority.take().ok_or_else(|| {
+            unsupported(
+                "NativeJoinPlanV1",
+                "terminal answer has no affine checked-root authority",
+            )
+        })?;
+        let site = self
+            .native_join_plan
+            .as_ref()
+            .and_then(|plan| {
+                plan.sites
+                    .iter()
+                    .find(|site| site.site_id == authority.site_id)
+            })
+            .ok_or_else(|| {
+                unsupported(
+                    "NativeJoinPlanV1",
+                    "terminal answer authority names a missing checked-root site",
+                )
+            })?;
+        if !self.process_object
+            || site.runtime_frame_fingerprint != crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1
+            || site.checked_occurrence_path != [0]
+            || site.answer_kind != crate::NativeJoinAnswerKindV1::ExitCode
+            || site.checked_result_type_fingerprint != authority.checked_result_type_fingerprint
+            || site.occurrence_binding_fingerprint != authority.occurrence_binding_fingerprint
+            || !self.consumed_join_sites.contains(&authority.site_id)
+            || authority.outer_cursor.is_some()
+            || self.source_control_root.is_some()
+            || self.active_oriented_semantic_regions != 0
+            || self.active_subcontinuation_frame.is_some()
+            || self.active_join_site.is_some()
+        {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "terminal answer authority does not match the exhausted checked root",
+            ));
+        }
+        Ok(TerminalAnswerAuthority)
+    }
+
+    fn unwrap_terminal_ret(mut lowered: Lowered) -> Lowered {
+        loop {
+            match lowered {
+                Lowered::Constructor {
+                    constructor,
+                    mut args,
+                } if constructor.ends_with("::ITree::Ret") && args.len() == 1 => {
+                    lowered = args.remove(0);
+                }
+                lowered => return lowered,
+            }
+        }
     }
 
     /// Scalarize only under the answer kind carried by an already-consumed
@@ -5219,6 +7178,7 @@ impl<'a> Lowering<'a> {
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
         if required_kind == ScalarMergeKind::ExitCode {
+            let lowered = Self::unwrap_terminal_ret(lowered);
             let zero_tag = builder.ins().iconst(types::I64, 0);
             return match lowered {
                 Lowered::RecursiveBackedge => Ok((
@@ -5430,9 +7390,18 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
-    fn consume_distinguished_root_join_site(&mut self) -> Result<(), CraneliftBackendError> {
+    fn take_distinguished_root_answer_authority(
+        &mut self,
+    ) -> Result<Option<RootTerminalAnswerAuthority>, CraneliftBackendError> {
         let Some(plan) = &self.native_join_plan else {
-            return Ok(());
+            return if self.process_object {
+                Err(unsupported(
+                    "NativeJoinPlanV1",
+                    "process-object lowering has no checked distinguished-root answer authority",
+                ))
+            } else {
+                Ok(None)
+            };
         };
         let roots = plan
             .sites
@@ -5445,7 +7414,13 @@ impl<'a> Lowering<'a> {
             .cloned()
             .collect::<Vec<_>>();
         let site = match roots.as_slice() {
-            [] => return Ok(()),
+            [] if !self.process_object => return Ok(None),
+            [] => {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    "process-object lowering has no checked distinguished-root answer authority",
+                ));
+            }
             [site] => site,
             _ => {
                 return Err(unsupported(
@@ -5467,8 +7442,18 @@ impl<'a> Lowering<'a> {
                 "distinguished root join occurrence binding is stale or inconsistent",
             ));
         }
-        self.consumed_join_sites.insert(site.site_id);
-        Ok(())
+        if !self.consumed_join_sites.insert(site.site_id) {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "checked distinguished-root answer authority was consumed more than once",
+            ));
+        }
+        Ok(Some(RootTerminalAnswerAuthority {
+            site_id: site.site_id,
+            checked_result_type_fingerprint: site.checked_result_type_fingerprint,
+            occurrence_binding_fingerprint: site.occurrence_binding_fingerprint,
+            outer_cursor: None,
+        }))
     }
 
     fn scalar_kind_from_plan(kind: crate::NativeJoinAnswerKindV1) -> ScalarMergeKind {
@@ -5516,6 +7501,9 @@ impl<'a> Lowering<'a> {
                 | SourceContinuationTerminal::ResumeOuter { .. },
             ) => None,
             SourceContinuation::LetBody { next, .. }
+            | SourceContinuation::CheckedRecursiveInvocationReturn { next, .. }
+            | SourceContinuation::CheckedComputationalIHInvocationReturn { next, .. }
+            | SourceContinuation::ReturnFromSelectedCase { next, .. }
             | SourceContinuation::ApplyRecursorSelection { next, .. }
             | SourceContinuation::UnwindRecursorSegment { next, .. }
             | SourceContinuation::IfScrutinee { next, .. }
@@ -5531,6 +7519,22 @@ impl<'a> Lowering<'a> {
     fn discard_source_prefix<'b>(continuation: SourceContinuation<'b>) -> SourceContinuation<'b> {
         match continuation {
             terminal @ SourceContinuation::Terminal(_) => terminal,
+            SourceContinuation::CheckedRecursiveInvocationReturn { instance, next } => {
+                SourceContinuation::CheckedRecursiveInvocationReturn {
+                    instance,
+                    next: Box::new(Self::discard_source_prefix(*next)),
+                }
+            }
+            SourceContinuation::CheckedComputationalIHInvocationReturn {
+                call_template_id,
+                next,
+            } => SourceContinuation::CheckedComputationalIHInvocationReturn {
+                call_template_id,
+                next: Box::new(Self::discard_source_prefix(*next)),
+            },
+            SourceContinuation::ReturnFromSelectedCase { next, .. } => {
+                Self::discard_source_prefix(*next)
+            }
             SourceContinuation::LetBody { next, .. }
             | SourceContinuation::ApplyRecursorSelection { next, .. }
             | SourceContinuation::UnwindRecursorSegment { next, .. }
@@ -5550,6 +7554,37 @@ impl<'a> Lowering<'a> {
         resume_cursor: ContinuationCursorId,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
         Ok(match continuation {
+            SourceContinuation::CheckedRecursiveInvocationReturn { instance, next } => {
+                SourceContinuation::CheckedRecursiveInvocationReturn {
+                    instance,
+                    next: Box::new(Self::replace_source_terminal_with_unwind(
+                        *next,
+                        stack,
+                        resume_cursor,
+                    )?),
+                }
+            }
+            SourceContinuation::CheckedComputationalIHInvocationReturn {
+                call_template_id,
+                next,
+            } => SourceContinuation::CheckedComputationalIHInvocationReturn {
+                call_template_id,
+                next: Box::new(Self::replace_source_terminal_with_unwind(
+                    *next,
+                    stack,
+                    resume_cursor,
+                )?),
+            },
+            SourceContinuation::ReturnFromSelectedCase { delimiter, next } => {
+                SourceContinuation::ReturnFromSelectedCase {
+                    delimiter,
+                    next: Box::new(Self::replace_source_terminal_with_unwind(
+                        *next,
+                        stack,
+                        resume_cursor,
+                    )?),
+                }
+            }
             SourceContinuation::LetBody { body, env, next } => SourceContinuation::LetBody {
                 body,
                 env,
@@ -5634,12 +7669,14 @@ impl<'a> Lowering<'a> {
                 default,
                 env,
                 provenance,
+                checked_frame_id,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases,
                 default,
                 env,
                 provenance,
+                checked_frame_id,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
                     stack,
@@ -5685,19 +7722,24 @@ impl<'a> Lowering<'a> {
             SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected,
                 active,
+                root_authority,
             }) => SourceContinuation::Terminal(SourceContinuationTerminal::ReturnToProducerHole {
                 stack,
                 resume_cursor,
                 expected,
                 active,
+                root_authority,
             }),
             terminal @ SourceContinuation::Terminal(_) => terminal,
         })
     }
 
     fn install_recursor_invocation<'b>(
+        &mut self,
         continuation: SourceContinuation<'b>,
+        activation: ContinuationActivationId,
         invocation: RecursorInvocationSegment,
+        checked_ih_invocation: Option<CheckedRecursiveInvocationInstance>,
     ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
         #[cfg(test)]
         px8j_record_source_event(Px8jSourceTraceEvent::Install {
@@ -5718,21 +7760,99 @@ impl<'a> Lowering<'a> {
                 })
                 .collect(),
         });
-        let continuation = Self::replace_source_terminal_with_unwind(
-            continuation,
-            invocation.unwind,
-            invocation.resume_cursor,
+        let sibling_position = invocation.sibling_position;
+        let installed = compose_oriented_subcontinuation(
+            self.oriented_subcontinuation_plan.as_ref(),
+            checked_ih_invocation.or_else(|| self.active_recursive_invocations.last().copied()),
+            activation,
+            invocation,
         )?;
-        Ok(SourceContinuation::ApplyRecursorSelection {
-            layer: invocation.selection,
-            next: Box::new(continuation),
-        })
+        debug_assert_eq!(installed.activation, activation);
+        debug_assert!(installed
+            .control_ledger
+            .iter()
+            .all(|entry| match entry.role {
+                RecursorLayerRole::SelectsOccurrence { origin }
+                | RecursorLayerRole::ExitsScope { origin, .. } => {
+                    origin == installed.producer_origin
+                }
+            }));
+        debug_assert_eq!(installed.sibling_position, sibling_position);
+        debug_assert!(installed.control_ledger.len() >= installed.semantic_frames.len());
+        debug_assert!(installed.control_ledger.iter().all(|entry| {
+            entry.frame_id.is_some() == entry.checked_witness.is_some()
+                && (entry.frame_id.is_none()
+                    || matches!(
+                        entry.role,
+                        RecursorLayerRole::SelectsOccurrence { .. }
+                            | RecursorLayerRole::ExitsScope { .. }
+                    ))
+        }));
+        if !installed.checked {
+            let mut frames = installed.semantic_frames.into_iter();
+            let selection = frames
+                .next()
+                .expect("validated recursor invocation has a selection frame");
+            let stack = RecursorUnwindStack {
+                later_wrappers_in_construction_order: frames.rev().collect(),
+            };
+            let continuation = Self::replace_source_terminal_with_unwind(
+                continuation,
+                stack,
+                installed.resume_cursor,
+            )?;
+            return Ok(SourceContinuation::ApplyRecursorSelection {
+                layer: selection,
+                next: Box::new(continuation),
+            });
+        }
+        let mut continuation = continuation;
+        for layer in installed.semantic_frames.into_iter().rev() {
+            continuation = SourceContinuation::ApplyRecursorSelection {
+                layer,
+                next: Box::new(continuation),
+            };
+        }
+        Ok(continuation)
     }
 
     fn split_source_prefix<'b>(
         source: SourceContinuation<'b>,
     ) -> Result<(SourcePrefixTemplate, SourcePrefixTerminal<'b>), CraneliftBackendError> {
         Ok(match source {
+            SourceContinuation::CheckedRecursiveInvocationReturn { instance, next } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::CheckedRecursiveInvocationReturn {
+                        instance,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::CheckedComputationalIHInvocationReturn {
+                call_template_id,
+                next,
+            } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
+                        call_template_id,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
+            SourceContinuation::ReturnFromSelectedCase { delimiter, next } => {
+                let (next, terminal) = Self::split_source_prefix(*next)?;
+                (
+                    SourcePrefixTemplate::ReturnFromSelectedCase {
+                        delimiter,
+                        next: Box::new(next),
+                    },
+                    terminal,
+                )
+            }
             SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => {
                 return Err(unsupported(
                     "NativeJoinPlanV1",
@@ -5741,21 +7861,23 @@ impl<'a> Lowering<'a> {
             }
             SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected,
+                root_authority,
                 ..
             }) => (
                 SourcePrefixTemplate::Terminal {
                     expected_outer: expected,
                 },
-                SourcePrefixTerminal::ResumeOuter,
+                SourcePrefixTerminal::ResumeOuter { root_authority },
             ),
             SourceContinuation::Terminal(SourceContinuationTerminal::ReturnToProducerHole {
                 expected,
+                root_authority,
                 ..
             }) => (
                 SourcePrefixTemplate::Terminal {
                     expected_outer: expected,
                 },
-                SourcePrefixTerminal::ResumeOuter,
+                SourcePrefixTerminal::ResumeOuter { root_authority },
             ),
             SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge)) => (
                 SourcePrefixTemplate::Terminal {
@@ -5857,6 +7979,7 @@ impl<'a> Lowering<'a> {
                 default,
                 env,
                 provenance,
+                checked_frame_id,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
@@ -5866,6 +7989,7 @@ impl<'a> Lowering<'a> {
                         default,
                         env,
                         provenance,
+                        checked_frame_id,
                         next: Box::new(next),
                     },
                     terminal,
@@ -5928,6 +8052,25 @@ impl<'a> Lowering<'a> {
                 }
                 SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(edge))
             }
+            SourcePrefixTemplate::CheckedRecursiveInvocationReturn { instance, next } => {
+                SourceContinuation::CheckedRecursiveInvocationReturn {
+                    instance: *instance,
+                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                }
+            }
+            SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
+                call_template_id,
+                next,
+            } => SourceContinuation::CheckedComputationalIHInvocationReturn {
+                call_template_id: *call_template_id,
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+            },
+            SourcePrefixTemplate::ReturnFromSelectedCase { delimiter, next } => {
+                SourceContinuation::ReturnFromSelectedCase {
+                    delimiter: *delimiter,
+                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+                }
+            }
             SourcePrefixTemplate::LetBody { body, env, next } => SourceContinuation::LetBody {
                 body: body.clone(),
                 env: env.clone(),
@@ -5988,12 +8131,14 @@ impl<'a> Lowering<'a> {
                 default,
                 env,
                 provenance,
+                checked_frame_id,
                 next,
             } => SourceContinuation::ComputationalMatchScrutinee {
                 cases: cases.clone(),
                 default: default.clone(),
                 env: env.clone(),
                 provenance: *provenance,
+                checked_frame_id: *checked_frame_id,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::ProjectRecord { field, next } => {
@@ -6102,10 +8247,24 @@ impl<'a> Lowering<'a> {
         env: &[Lowered],
         active: &ActiveContinuationFrame<'_>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let mut root_authority = self.root_terminal_authority.take();
+        if let Some(authority) = &mut root_authority {
+            match authority.outer_cursor {
+                None => authority.outer_cursor = Some(active.cursor),
+                Some(cursor) if cursor == active.cursor => {}
+                Some(_) => {
+                    return Err(unsupported(
+                        "NativeJoinPlanV1",
+                        "checked root answer authority was transplanted to another outer cursor",
+                    ));
+                }
+            }
+        }
         let control = SourceControl {
             continuation: SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                 expected: active.cursor,
                 active,
+                root_authority,
             }),
             selected: SourceSelectedContinuation {
                 activation: active.activation,
@@ -6128,6 +8287,7 @@ impl<'a> Lowering<'a> {
         env: Vec<Lowered>,
         control: SourceControl<'b>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let previous_source_root = self.source_control_root.replace(control.terminal_outer);
         self.live_source_continuations = self
             .live_source_continuations
             .checked_add(1)
@@ -6137,6 +8297,7 @@ impl<'a> Lowering<'a> {
             .live_source_continuations
             .checked_sub(1)
             .expect("source-continuation depth must balance");
+        self.source_control_root = previous_source_root;
         result
     }
 
@@ -6155,6 +8316,56 @@ impl<'a> Lowering<'a> {
                     env,
                     mut control,
                 } => match expr {
+                    RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+                        self.enter_checked_subcontinuation_frame(frame_id)?;
+                        SourceMachineState::Eval {
+                            expr: *body,
+                            env,
+                            control,
+                        }
+                    }
+                    RuntimeExpr::CheckedRecursiveInvocation {
+                        call_template_id,
+                        body,
+                        ..
+                    } => {
+                        let instance =
+                            self.enter_checked_recursive_invocation(call_template_id, &body)?;
+                        control.continuation =
+                            SourceContinuation::CheckedRecursiveInvocationReturn {
+                                instance,
+                                next: Box::new(control.continuation),
+                            };
+                        SourceMachineState::Eval {
+                            expr: *body,
+                            env,
+                            control,
+                        }
+                    }
+                    RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
+                        SourceMachineState::Eval {
+                            expr: *body,
+                            env,
+                            control,
+                        }
+                    }
+                    RuntimeExpr::CheckedComputationalIHInvocation {
+                        call_template_id,
+                        body,
+                        ..
+                    } => {
+                        self.enter_checked_computational_ih_invocation(call_template_id)?;
+                        control.continuation =
+                            SourceContinuation::CheckedComputationalIHInvocationReturn {
+                                call_template_id,
+                                next: Box::new(control.continuation),
+                            };
+                        SourceMachineState::Eval {
+                            expr: *body,
+                            env,
+                            control,
+                        }
+                    }
                     RuntimeExpr::Value(value) => SourceMachineState::Value {
                         value: self.lower_value(builder, &value)?,
                         control,
@@ -6240,11 +8451,14 @@ impl<'a> Lowering<'a> {
                         cases,
                         default,
                     } => {
+                        let checked_frame_id =
+                            self.consume_checked_subcontinuation_frame(&cases, &default)?;
                         control.continuation = SourceContinuation::ComputationalMatchScrutinee {
                             cases,
                             default,
                             env: env.clone(),
                             provenance: self.mint_recursor_frame_provenance(),
+                            checked_frame_id,
                             next: Box::new(control.continuation),
                         };
                         SourceMachineState::Eval {
@@ -6272,6 +8486,7 @@ impl<'a> Lowering<'a> {
                                 resume_cursor,
                                 expected,
                                 active,
+                                root_authority,
                             },
                         ) => {
                             #[cfg(test)]
@@ -6302,7 +8517,11 @@ impl<'a> Lowering<'a> {
                                 stack,
                                 resume_cursor,
                                 next: Box::new(SourceContinuation::Terminal(
-                                    SourceContinuationTerminal::ResumeOuter { expected, active },
+                                    SourceContinuationTerminal::ResumeOuter {
+                                        expected,
+                                        active,
+                                        root_authority,
+                                    },
                                 )),
                             };
                             SourceMachineState::Value { value, control }
@@ -6310,6 +8529,7 @@ impl<'a> Lowering<'a> {
                         SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                             expected,
                             active,
+                            root_authority,
                         }) => {
                             #[cfg(test)]
                             px8j_record_source_event(Px8jSourceTraceEvent::ResumeOuter {
@@ -6321,6 +8541,7 @@ impl<'a> Lowering<'a> {
                                     "source continuation terminal cursor mismatch",
                                 ));
                             }
+                            self.restore_root_terminal_authority(root_authority, expected)?;
                             if matches!(value, Lowered::Trap(_)) {
                                 return Ok(value);
                             }
@@ -6383,12 +8604,74 @@ impl<'a> Lowering<'a> {
                                 }
                             }
                         }
+                        SourceContinuation::CheckedRecursiveInvocationReturn { instance, next } => {
+                            self.leave_checked_recursive_invocation(instance)?;
+                            control.continuation = *next;
+                            SourceMachineState::Value { value, control }
+                        }
+                        SourceContinuation::CheckedComputationalIHInvocationReturn {
+                            call_template_id,
+                            next,
+                        } => {
+                            if self
+                                .pending_computational_ih_call
+                                .is_some_and(|pending| pending != call_template_id)
+                            {
+                                return Err(unsupported(
+                                    "OrientedSubcontinuationPlanV1",
+                                    "computational IH invocation return crossed another marker",
+                                ));
+                            }
+                            let value = self.finish_checked_computational_ih_marker(value)?;
+                            control.continuation = *next;
+                            SourceMachineState::Value { value, control }
+                        }
+                        SourceContinuation::ReturnFromSelectedCase { delimiter, next } => {
+                            let scope =
+                                control.selected.selected_scope.as_ref().ok_or_else(|| {
+                                    unsupported(
+                                        "OrientedSubcontinuationPlanV1",
+                                        "selected-case return has no open control obligation",
+                                    )
+                                })?;
+                            if control.selected.activation != delimiter.activation
+                                || control.selected.cursor != delimiter.cursor
+                                || scope.scope_origin != delimiter.scope_origin
+                                || scope.frame.checked_frame_id != delimiter.frame_id
+                                || scope.frame.checked_invocation_id != delimiter.invocation_id
+                            {
+                                return Err(unsupported(
+                                    "OrientedSubcontinuationPlanV1",
+                                    "selected-case return delimiter does not match its open occurrence",
+                                ));
+                            }
+                            let previous = control.selected_lineage.pop().ok_or_else(|| {
+                                unsupported(
+                                    "OrientedSubcontinuationPlanV1",
+                                    "selected-case return has no exact parent control state",
+                                )
+                            })?;
+                            control.selected = previous;
+                            control.continuation = *next;
+                            SourceMachineState::Value { value, control }
+                        }
                         SourceContinuation::ApplyRecursorSelection { layer, next } => {
                             #[cfg(test)]
-                            if let RecursorLayerRole::SelectsOccurrence { origin } = layer.role {
-                                px8j_record_source_event(Px8jSourceTraceEvent::Selection {
+                            match layer.role {
+                                RecursorLayerRole::SelectsOccurrence { origin } => {
+                                    px8j_record_source_event(Px8jSourceTraceEvent::Selection {
+                                        origin,
+                                    });
+                                }
+                                RecursorLayerRole::ExitsScope {
                                     origin,
-                                });
+                                    scope_origin,
+                                    parent_scope,
+                                } => px8j_record_source_event(Px8jSourceTraceEvent::Exit {
+                                    origin,
+                                    scope_origin,
+                                    parent_scope,
+                                }),
                             }
                             control.continuation =
                                 SourceContinuation::ComputationalMatchScrutinee {
@@ -6396,6 +8679,7 @@ impl<'a> Lowering<'a> {
                                     default: layer.default,
                                     env: layer.outer_env,
                                     provenance: layer.provenance,
+                                    checked_frame_id: layer.checked_frame_id,
                                     next,
                                 };
                             SourceMachineState::Value { value, control }
@@ -6436,6 +8720,7 @@ impl<'a> Lowering<'a> {
                                         default: layer.default,
                                         env: layer.outer_env,
                                         provenance: layer.provenance,
+                                        checked_frame_id: layer.checked_frame_id,
                                         next: Box::new(SourceContinuation::UnwindRecursorSegment {
                                             stack,
                                             resume_cursor,
@@ -6607,6 +8892,7 @@ impl<'a> Lowering<'a> {
                             default,
                             env,
                             provenance,
+                            checked_frame_id,
                             next,
                         } => {
                             let Lowered::Constructor { constructor, args } = value else {
@@ -6654,6 +8940,20 @@ impl<'a> Lowering<'a> {
                                 retained_scrutinee_index: None,
                                 deferred_constructor_case: None,
                                 provenance,
+                                checked_frame_id,
+                                checked_invocation_id: checked_frame_id.map(|_| {
+                                    self.active_recursive_invocations
+                                        .last()
+                                        .map_or(0, |instance| instance.invocation_instance_id)
+                                }),
+                                checked_invocation_source: self
+                                    .active_recursive_invocations
+                                    .last()
+                                    .map(|instance| instance.source),
+                                checked_invocation_depth: self
+                                    .active_recursive_invocations
+                                    .last()
+                                    .map_or(0, |instance| instance.semantic_depth),
                             };
                             let activation = self.mint_continuation_activation();
                             let cursor = self.mint_continuation_cursor();
@@ -6661,6 +8961,8 @@ impl<'a> Lowering<'a> {
                             ancestry.push(provenance);
                             let mut induction_hypotheses =
                                 Vec::with_capacity(case.recursive_positions.len());
+                            let ih_slots =
+                                self.computational_ih_slots_for_case(case, frame.checked_frame_id)?;
                             let producer_origin = self.mint_recursor_producer_origin();
                             #[cfg(test)]
                             px8j_record_source_event(Px8jSourceTraceEvent::Mint {
@@ -6678,12 +8980,19 @@ impl<'a> Lowering<'a> {
                             {
                                 let qold = control.selected.as_active(&control.selected_lineage);
                                 for position in case.recursive_positions.iter().rev().copied() {
+                                    let slot_template_id = case
+                                        .recursive_positions
+                                        .iter()
+                                        .position(|candidate| *candidate == position)
+                                        .and_then(|index| ih_slots[index]);
                                     let induction_hypothesis = self.make_computational_recursor(
                                         args[position].clone(),
                                         cases.clone(),
                                         default.clone(),
                                         env.clone(),
                                         provenance,
+                                        frame.checked_frame_id,
+                                        slot_template_id,
                                         producer_origin,
                                         position,
                                         RecursorLayerRole::SelectsOccurrence {
@@ -6730,6 +9039,10 @@ impl<'a> Lowering<'a> {
                                     default: default.clone(),
                                     outer_env: env.clone(),
                                     provenance,
+                                    checked_frame_id: frame.checked_frame_id,
+                                    checked_invocation_id: frame.checked_invocation_id,
+                                    checked_invocation_source: frame.checked_invocation_source,
+                                    checked_invocation_depth: frame.checked_invocation_depth,
                                 },
                             };
                             #[cfg(test)]
@@ -6737,6 +9050,29 @@ impl<'a> Lowering<'a> {
                                 (!PX8J_DELETE_OWNED_SELECTED_SCOPE.get()).then_some(selected_scope);
                             #[cfg(not(test))]
                             let selected_scope = Some(selected_scope);
+                            control.continuation = if frame.checked_frame_id.is_some() {
+                                let selected_scope_ref =
+                                    selected_scope.as_ref().ok_or_else(|| {
+                                        unsupported(
+                                            "OrientedSubcontinuationPlanV1",
+                                            "checked selection has no owned open-control obligation",
+                                        )
+                                    })?;
+                                SourceContinuation::ReturnFromSelectedCase {
+                                    delimiter: SelectedCaseReturnDelimiter {
+                                        activation,
+                                        cursor,
+                                        scope_origin: selected_scope_ref.scope_origin,
+                                        frame_id: selected_scope_ref.frame.checked_frame_id,
+                                        invocation_id: selected_scope_ref
+                                            .frame
+                                            .checked_invocation_id,
+                                    },
+                                    next,
+                                }
+                            } else {
+                                *next
+                            };
                             control.selected = SourceSelectedContinuation {
                                 activation,
                                 cursor,
@@ -6746,7 +9082,6 @@ impl<'a> Lowering<'a> {
                                 selected_scope,
                             };
                             control.selected_lineage.push(previous_selected);
-                            control.continuation = *next;
                             SourceMachineState::Eval {
                                 expr: case.body.clone(),
                                 env: case_env,
@@ -6866,7 +9201,7 @@ impl<'a> Lowering<'a> {
                 };
                 (fanout.source_prefix_template, fanout.inherited_edge.target)
             }
-            SourcePrefixTerminal::ResumeOuter => {
+            SourcePrefixTerminal::ResumeOuter { root_authority } => {
                 let active = suffix_control
                     .selected
                     .as_active(&suffix_control.selected_lineage);
@@ -6880,7 +9215,13 @@ impl<'a> Lowering<'a> {
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
-                local_completion = Some((merge, suffix_pending.to_vec(), required_kind, site_id));
+                local_completion = Some((
+                    merge,
+                    suffix_pending.to_vec(),
+                    required_kind,
+                    site_id,
+                    root_authority,
+                ));
                 (
                     source_prefix_template,
                     SourceJoinTarget {
@@ -6951,7 +9292,9 @@ impl<'a> Lowering<'a> {
             }
         }
 
-        let Some((merge, suffix_pending, required_kind, _site_id)) = local_completion else {
+        let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
+            local_completion
+        else {
             return Ok(Lowered::RecursiveBackedge);
         };
         builder.switch_to_block(merge);
@@ -6972,6 +9315,7 @@ impl<'a> Lowering<'a> {
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
         self.resume_active_continuation(builder, merged, suffix_active)
     }
 
@@ -6989,7 +9333,7 @@ impl<'a> Lowering<'a> {
         let mut local_completion = None;
         let target = match terminal {
             SourcePrefixTerminal::Join(inherited_edge) => inherited_edge.target,
-            SourcePrefixTerminal::ResumeOuter => {
+            SourcePrefixTerminal::ResumeOuter { root_authority } => {
                 let active = suffix_control
                     .selected
                     .as_active(&suffix_control.selected_lineage);
@@ -7003,7 +9347,13 @@ impl<'a> Lowering<'a> {
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
-                local_completion = Some((merge, suffix_pending.to_vec(), required_kind, site_id));
+                local_completion = Some((
+                    merge,
+                    suffix_pending.to_vec(),
+                    required_kind,
+                    site_id,
+                    root_authority,
+                ));
                 SourceJoinTarget {
                     join_id,
                     block: merge,
@@ -7048,7 +9398,9 @@ impl<'a> Lowering<'a> {
                 ));
             }
         }
-        let Some((merge, suffix_pending, required_kind, _site_id)) = local_completion else {
+        let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
+            local_completion
+        else {
             return Ok(Lowered::RecursiveBackedge);
         };
         builder.switch_to_block(merge);
@@ -7069,6 +9421,7 @@ impl<'a> Lowering<'a> {
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
         self.resume_active_continuation(builder, merged, suffix_active)
     }
 
@@ -7091,7 +9444,7 @@ impl<'a> Lowering<'a> {
         let mut local_completion = None;
         let target = match terminal {
             SourcePrefixTerminal::Join(inherited_edge) => inherited_edge.target,
-            SourcePrefixTerminal::ResumeOuter => {
+            SourcePrefixTerminal::ResumeOuter { root_authority } => {
                 let active = suffix_control
                     .selected
                     .as_active(&suffix_control.selected_lineage);
@@ -7105,7 +9458,13 @@ impl<'a> Lowering<'a> {
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
-                local_completion = Some((merge, suffix_pending.to_vec(), required_kind, site_id));
+                local_completion = Some((
+                    merge,
+                    suffix_pending.to_vec(),
+                    required_kind,
+                    site_id,
+                    root_authority,
+                ));
                 SourceJoinTarget {
                     join_id,
                     block: merge,
@@ -7165,7 +9524,9 @@ impl<'a> Lowering<'a> {
             }
         }
 
-        let Some((merge, suffix_pending, required_kind, _site_id)) = local_completion else {
+        let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
+            local_completion
+        else {
             return Ok(Lowered::RecursiveBackedge);
         };
         builder.switch_to_block(merge);
@@ -7186,6 +9547,7 @@ impl<'a> Lowering<'a> {
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
         self.resume_active_continuation(builder, merged, suffix_active)
     }
 
@@ -7336,12 +9698,15 @@ impl<'a> Lowering<'a> {
         };
         let (source_prefix_template, terminal) =
             Self::split_source_prefix(suffix_control.continuation)?;
-        if !matches!(terminal, SourcePrefixTerminal::ResumeOuter) {
-            return Err(unsupported(
-                "NativeJoinPlanV1",
-                "planned dynamic-constructor cut unexpectedly inherited an executable edge",
-            ));
-        }
+        let root_authority = match terminal {
+            SourcePrefixTerminal::ResumeOuter { root_authority } => root_authority,
+            SourcePrefixTerminal::Join(_) => {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    "planned dynamic-constructor cut unexpectedly inherited an executable edge",
+                ));
+            }
+        };
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor source match block");
@@ -7417,6 +9782,7 @@ impl<'a> Lowering<'a> {
             source_selected_cursor: Some(suffix_control.selected.cursor),
             selected_scope: suffix_control.selected.selected_scope.as_ref(),
         };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
         self.resume_active_continuation(builder, merged, suffix_active)
     }
 
@@ -7514,8 +9880,47 @@ impl<'a> Lowering<'a> {
                 )
             }
             recursor @ Lowered::ComputationalRecursorClosure { .. } => {
+                let checked_ih_invocation =
+                    self.mint_checked_computational_ih_instance(&recursor)?;
+                if let Some(CheckedRecursiveInvocationInstance {
+                    source: InvocationTemplateRef::ComputationalIHCall(call_template_id),
+                    ..
+                }) = checked_ih_invocation
+                {
+                    let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
+                        unsupported(
+                            "OrientedSubcontinuationPlanV1",
+                            "checked IH invocation has no oriented plan",
+                        )
+                    })?;
+                    let call = plan
+                        .computational_ih_call(call_template_id)
+                        .ok_or_else(|| {
+                            unsupported(
+                                "OrientedSubcontinuationPlanV1",
+                                "checked IH invocation has no exact call template",
+                            )
+                        })?;
+                    let open = control.selected.selected_scope.as_ref().ok_or_else(|| {
+                        unsupported(
+                            "OrientedSubcontinuationPlanV1",
+                            "checked IH invocation has no selected/open parent occurrence",
+                        )
+                    })?;
+                    if call.parent_frame_template_id != open.frame.checked_frame_id
+                        || call.parent_segment_site_id
+                            != open.frame.checked_frame_id.and_then(|frame_id| {
+                                plan.frame(frame_id).map(|frame| frame.segment_site_id)
+                            })
+                    {
+                        return Err(unsupported(
+                            "OrientedSubcontinuationPlanV1",
+                            "checked IH invocation parent edge does not match the active open occurrence",
+                        ));
+                    }
+                }
                 let (base, boundary) = decompose_computational_recursor(recursor);
-                let (_, invocation) =
+                let (activation, invocation) =
                     boundary.expect("recursor closure carries an invocation segment");
                 if source_active_cursor(
                     &control.selected,
@@ -7523,6 +9928,7 @@ impl<'a> Lowering<'a> {
                     invocation.resume_cursor,
                 )
                 .is_none()
+                    && !recursor_invocation_is_checked(&invocation)
                 {
                     return Err(unsupported(
                         "ComputationalRecursor",
@@ -7539,6 +9945,7 @@ impl<'a> Lowering<'a> {
                     armed.expected_selected,
                 )
                 .is_none()
+                    && !recursor_invocation_is_checked(&invocation)
                 {
                     return Err(unsupported(
                         "ComputationalRecursor",
@@ -7553,8 +9960,12 @@ impl<'a> Lowering<'a> {
                         ));
                     }
                     let mut suspended = armed.suspended;
-                    suspended.continuation =
-                        Self::install_recursor_invocation(suspended.continuation, invocation)?;
+                    suspended.continuation = self.install_recursor_invocation(
+                        suspended.continuation,
+                        activation,
+                        invocation,
+                        checked_ih_invocation,
+                    )?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                         value: Lowered::BoundedNat(predecessor),
                         control: suspended,
@@ -7585,8 +9996,12 @@ impl<'a> Lowering<'a> {
                     call_env.extend(captures);
                     call_env.extend(env);
                     let mut suspended = armed.suspended;
-                    suspended.continuation =
-                        Self::install_recursor_invocation(suspended.continuation, invocation)?;
+                    suspended.continuation = self.install_recursor_invocation(
+                        suspended.continuation,
+                        activation,
+                        invocation,
+                        checked_ih_invocation,
+                    )?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                         expr: body,
                         env: call_env,
@@ -7609,6 +10024,7 @@ impl<'a> Lowering<'a> {
         env: Vec<Lowered>,
         control: SourceControl<'b>,
     ) -> Result<SourceCallOutcome<'b>, CraneliftBackendError> {
+        let _checked_invocation = self.consume_checked_recursive_invocation_call(&symbol)?;
         if !self.declaration_is_recursive(&symbol) {
             let mut call_env = args;
             call_env.extend(captures);
@@ -7734,6 +10150,40 @@ impl<'a> Lowering<'a> {
                     ));
                 }
                 result
+            }
+            RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+                self.enter_checked_subcontinuation_frame(*frame_id)?;
+                let result = self.lower_expr(builder, body, env);
+                if self.active_subcontinuation_frame.take().is_some() {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        "checked subcontinuation marker was not consumed by its frame",
+                    ));
+                }
+                result
+            }
+            RuntimeExpr::CheckedRecursiveInvocation {
+                call_template_id,
+                body,
+                ..
+            } => {
+                let instance =
+                    self.enter_checked_recursive_invocation(*call_template_id, body)?;
+                let result = self.lower_expr(builder, body, env);
+                self.leave_checked_recursive_invocation(instance)?;
+                result
+            }
+            RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
+                self.lower_expr(builder, body, env)
+            }
+            RuntimeExpr::CheckedComputationalIHInvocation {
+                call_template_id,
+                body,
+                ..
+            } => {
+                self.enter_checked_computational_ih_invocation(*call_template_id)?;
+                let value = self.lower_expr(builder, body, env)?;
+                self.finish_checked_computational_ih_marker(value)
             }
             RuntimeExpr::Var(index) => env
                 .get(*index as usize)
@@ -8135,11 +10585,23 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, &body, &call_env)
                     }
                     callee @ Lowered::ComputationalRecursorClosure { .. } => {
+                        let checked_ih_invocation =
+                            self.mint_checked_computational_ih_instance(&callee)?;
                         let (base, boundary) = decompose_computational_recursor(callee);
-                        let (_, invocation) = boundary.expect(
+                        let (activation, invocation) = boundary.expect(
                             "recursor closure carries an invocation segment",
                         );
-                        let mut frames = recursor_eliminator_frames(&invocation)?;
+                        if !recursor_invocation_is_checked(&invocation) {
+                            validate_recursor_invocation_segment(&invocation)?;
+                        }
+                        let installed = compose_oriented_subcontinuation(
+                            self.oriented_subcontinuation_plan.as_ref(),
+                            checked_ih_invocation
+                                .or_else(|| self.active_recursive_invocations.last().copied()),
+                            activation,
+                            invocation,
+                        )?;
+                        let mut frames = installed_oriented_eliminator_frames(&installed);
                         frames.push(EliminatorFrame::InvocationReturn);
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
@@ -8148,12 +10610,15 @@ impl<'a> Lowering<'a> {
                                     "structural Nat recursive hypothesis takes no arguments",
                                 ));
                             }
-                            return self.lower_bounded_nat_computational(
+                            self.enter_oriented_semantic_region(installed.checked);
+                            let result = self.lower_bounded_nat_computational(
                                 builder,
                                 predecessor,
                                 false,
                                 &frames,
                             );
+                            self.leave_oriented_semantic_region(installed.checked);
+                            return result;
                         }
                         let Lowered::Closure {
                             captures,
@@ -8182,12 +10647,15 @@ impl<'a> Lowering<'a> {
                         }
                         call_env.extend(captures);
                         call_env.extend_from_slice(env);
-                        self.lower_computational_producer_expr(
+                        self.enter_oriented_semantic_region(installed.checked);
+                        let result = self.lower_computational_producer_expr(
                             builder,
                             &body,
                             &call_env,
                             &frames,
-                        )
+                        );
+                        self.leave_oriented_semantic_region(installed.checked);
+                        result
                     }
                     _ => Err(unsupported("Call", "callee is not a closure")),
                 }
@@ -9291,6 +11759,7 @@ impl<'a> Lowering<'a> {
         producer_env: &[Lowered],
         eliminators: Option<&[EliminatorFrame<'_>]>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        let _checked_invocation = self.consume_checked_recursive_invocation_call(symbol)?;
         let lowered_args = args
             .iter()
             .map(|arg| self.lower_expr(builder, arg, producer_env))
@@ -11170,6 +13639,8 @@ impl<'a> Lowering<'a> {
         value: Lowered,
     ) -> Result<(cranelift_codegen::ir::Value, ResultDecoder), CraneliftBackendError> {
         if self.process_object {
+            let _authority = self.mint_terminal_answer_authority()?;
+            let value = Self::unwrap_terminal_ret(value);
             let value = match value {
                 Lowered::ProcessExitStatus { value } => value,
                 value => self.emit_process_exit_status(builder, value),
@@ -11619,6 +14090,424 @@ mod tests {
         RuntimeFieldStatus, RuntimeIrSeedEnvironment, RuntimeMatchCase, RuntimeMetadata,
         RuntimeSymbolMetadata,
     };
+
+    fn oriented_test_interface(name: u8) -> crate::CheckedAnswerInterfaceV1 {
+        let mut bytes = crate::CHECKED_ANSWER_INTERFACE_V1_HEADER.to_vec();
+        bytes.push(name);
+        crate::CheckedAnswerInterfaceV1::new(bytes).unwrap()
+    }
+
+    fn oriented_test_frame(
+        frame_id: u64,
+        semantic_position: u64,
+        input: u8,
+        output: u8,
+        parent: Option<u64>,
+    ) -> crate::OrientedSubcontinuationFramePlanV1 {
+        let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+            frame_id,
+            segment_site_id: 9,
+            declaration: "decl:fixture::oriented".to_string(),
+            checked_occurrence_path: vec![frame_id],
+            semantic_position,
+            input_interface: oriented_test_interface(input),
+            output_interface: oriented_test_interface(output),
+            runtime_frame_fingerprint: frame_id + 100,
+            occurrence_binding_fingerprint: 0,
+            control_witness: parent.map_or(
+                crate::OrientedControlWitnessV1::DistinguishedRoot,
+                crate::OrientedControlWitnessV1::ParentFrame,
+            ),
+        };
+        frame.occurrence_binding_fingerprint =
+            crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+        frame
+    }
+
+    fn oriented_test_layer(frame_id: u64, role: RecursorLayerRole) -> ComputationalRecursorLayer {
+        ComputationalRecursorLayer {
+            cases: Vec::new(),
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: format!("oriented frame {frame_id}"),
+            },
+            outer_env: Vec::new(),
+            provenance: RecursorFrameProvenance(frame_id),
+            role,
+            checked_frame_id: Some(frame_id),
+            checked_invocation_id: Some(0),
+            checked_invocation_source: None,
+            checked_invocation_depth: 0,
+            semantic_pending: true,
+        }
+    }
+
+    fn oriented_test_plan() -> crate::OrientedSubcontinuationPlanV1 {
+        crate::OrientedSubcontinuationPlanV1 {
+            representation_rule_version:
+                crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+            // Checked postorder is p2, p1, p0 even though control returns
+            // through o0, o4, o3 below.
+            frames: vec![
+                oriented_test_frame(0, 2, 2, 3, None),
+                oriented_test_frame(1, 1, 1, 2, Some(0)),
+                oriented_test_frame(2, 0, 0, 1, Some(1)),
+            ],
+            recursive_calls: Vec::new(),
+            computational_ih_slots: Vec::new(),
+            computational_ih_calls: Vec::new(),
+        }
+    }
+
+    fn oriented_test_ih_plan() -> crate::OrientedSubcontinuationPlanV1 {
+        let mut plan = oriented_test_plan();
+        for frame_id in 0..=2 {
+            let slot_template_id = 200 + frame_id;
+            let mut slot = crate::CheckedComputationalIHSlotTemplateV1 {
+                slot_template_id,
+                declaration: "decl:fixture::oriented".to_string(),
+                checked_match_ordinal: frame_id,
+                checked_occurrence_path: vec![20, frame_id],
+                frame_template_id: frame_id,
+                constructor: format!("Ctor{frame_id}"),
+                recursive_position: 0,
+                method_binder_ordinal: 0,
+                local_telescope: Vec::new(),
+                ih_interface: oriented_test_interface(frame_id as u8),
+                segment_site_id: 9,
+                frame_templates: vec![frame_id],
+                input_interface: oriented_test_interface(frame_id as u8),
+                output_interface: oriented_test_interface(frame_id as u8 + 1),
+                runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+                    declaration: "decl:fixture::oriented".to_string(),
+                    runtime_path: vec![0, frame_id],
+                }],
+                occurrence_binding_fingerprint: 0,
+            };
+            slot.occurrence_binding_fingerprint =
+                crate::compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+            plan.computational_ih_slots.push(slot);
+
+            let mut call = crate::CheckedComputationalIHCallTemplateV1 {
+                call_template_id: 100 + frame_id,
+                declaration: "decl:fixture::oriented".to_string(),
+                checked_occurrence_path: vec![30, frame_id],
+                slot_template_id,
+                arity: 1,
+                local_telescope: Vec::new(),
+                result_interface: oriented_test_interface(frame_id as u8 + 1),
+                callee_segment_site_id: 9,
+                callee_frame_templates: vec![frame_id],
+                parent_frame_template_id: Some(frame_id),
+                parent_segment_site_id: Some(9),
+                caller_interface: oriented_test_interface(frame_id as u8 + 1),
+                runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+                    declaration: "decl:fixture::oriented".to_string(),
+                    runtime_path: vec![1, frame_id],
+                }],
+                occurrence_binding_fingerprint: 0,
+            };
+            call.occurrence_binding_fingerprint =
+                crate::compiler_private_computational_ih_call_binding_fingerprint(&call);
+            plan.computational_ih_calls.push(call);
+        }
+        plan.validate().unwrap();
+        plan
+    }
+
+    fn oriented_test_instance_layer(
+        frame_id: u64,
+        invocation_id: u64,
+        semantic_depth: usize,
+        semantic_pending: bool,
+        role: RecursorLayerRole,
+    ) -> ComputationalRecursorLayer {
+        let mut layer = oriented_test_layer(frame_id, role);
+        layer.checked_invocation_id = Some(invocation_id);
+        layer.checked_invocation_source =
+            Some(InvocationTemplateRef::ComputationalIHCall(100 + frame_id));
+        layer.checked_invocation_depth = semantic_depth;
+        layer.semantic_pending = semantic_pending;
+        layer
+    }
+
+    fn oriented_five_control_invocation() -> RecursorInvocationSegment {
+        let origin = RecursorProducerOriginId(40);
+        let mut invocation = RecursorInvocationSegment::new(
+            origin,
+            0,
+            oriented_test_instance_layer(
+                2,
+                2,
+                3,
+                true,
+                RecursorLayerRole::SelectsOccurrence { origin },
+            ),
+            RecursorUnwindStack {
+                later_wrappers_in_construction_order: vec![
+                    oriented_test_instance_layer(
+                        2,
+                        1,
+                        0,
+                        false,
+                        RecursorLayerRole::ExitsScope {
+                            origin,
+                            scope_origin: RecursorProducerOriginId(41),
+                            parent_scope: None,
+                        },
+                    ),
+                    oriented_test_instance_layer(
+                        0,
+                        1,
+                        0,
+                        false,
+                        RecursorLayerRole::ExitsScope {
+                            origin,
+                            scope_origin: RecursorProducerOriginId(42),
+                            parent_scope: Some(RecursorProducerOriginId(41)),
+                        },
+                    ),
+                    oriented_test_instance_layer(
+                        0,
+                        4,
+                        1,
+                        true,
+                        RecursorLayerRole::ExitsScope {
+                            origin,
+                            scope_origin: RecursorProducerOriginId(43),
+                            parent_scope: Some(RecursorProducerOriginId(42)),
+                        },
+                    ),
+                    oriented_test_instance_layer(
+                        1,
+                        3,
+                        2,
+                        true,
+                        RecursorLayerRole::ExitsScope {
+                            origin,
+                            scope_origin: RecursorProducerOriginId(44),
+                            parent_scope: Some(RecursorProducerOriginId(43)),
+                        },
+                    ),
+                ],
+            },
+            ContinuationCursorId(7),
+            None,
+            None,
+        );
+        for layer in &mut invocation.unwind.later_wrappers_in_construction_order[..2] {
+            layer.checked_invocation_source = Some(InvocationTemplateRef::SameSccCall(999));
+        }
+        invocation
+    }
+
+    fn oriented_test_invocation() -> RecursorInvocationSegment {
+        let origin = RecursorProducerOriginId(40);
+        RecursorInvocationSegment::new(
+            origin,
+            0,
+            oriented_test_layer(0, RecursorLayerRole::SelectsOccurrence { origin }),
+            RecursorUnwindStack {
+                later_wrappers_in_construction_order: vec![
+                    oriented_test_layer(
+                        1,
+                        RecursorLayerRole::ExitsScope {
+                            origin,
+                            scope_origin: RecursorProducerOriginId(41),
+                            parent_scope: None,
+                        },
+                    ),
+                    oriented_test_layer(
+                        2,
+                        RecursorLayerRole::ExitsScope {
+                            origin,
+                            scope_origin: RecursorProducerOriginId(42),
+                            parent_scope: Some(RecursorProducerOriginId(41)),
+                        },
+                    ),
+                ],
+            },
+            ContinuationCursorId(7),
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn oriented_segment_keeps_semantic_and_control_axes_independent() {
+        let installed = compose_oriented_subcontinuation(
+            Some(&oriented_test_plan()),
+            None,
+            ContinuationActivationId(8),
+            oriented_test_invocation(),
+        )
+        .unwrap();
+        assert_eq!(
+            installed
+                .semantic_frames
+                .iter()
+                .map(|frame| frame.checked_frame_id.unwrap())
+                .collect::<Vec<_>>(),
+            vec![2, 1, 0],
+            "checked composition order is p2, p1, p0"
+        );
+        assert_eq!(
+            installed
+                .control_ledger
+                .iter()
+                .map(|entry| entry.frame_id.unwrap())
+                .collect::<Vec<_>>(),
+            vec![0, 2, 1],
+            "delimiter order remains independently o0, o4, o3"
+        );
+    }
+
+    #[test]
+    fn oriented_endpoint_corruption_and_affine_reuse_fail_closed() {
+        let mut plan = oriented_test_plan();
+        plan.frames[2].output_interface = oriented_test_interface(9);
+        plan.frames[2].occurrence_binding_fingerprint =
+            crate::compiler_private_oriented_occurrence_binding_fingerprint(&plan.frames[2]);
+        let error = match compose_oriented_subcontinuation(
+            Some(&plan),
+            None,
+            ContinuationActivationId(8),
+            oriented_test_invocation(),
+        ) {
+            Ok(_) => panic!("endpoint corruption must reject before installation"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "OrientedSubcontinuationPlanV1",
+                reason,
+            }) if reason.contains("endpoints do not compose")
+        ));
+
+        let mut capability = AffineSpliceCapability {
+            state: AffineSpliceState::Open,
+        };
+        capability.consume().unwrap();
+        assert!(capability.consume().is_err());
+    }
+
+    #[test]
+    fn oriented_fresh_ih_semantics_retain_all_inherited_control_obligations() {
+        let installed = compose_oriented_subcontinuation(
+            Some(&oriented_test_ih_plan()),
+            None,
+            ContinuationActivationId(8),
+            oriented_five_control_invocation(),
+        )
+        .unwrap();
+        assert_eq!(
+            installed
+                .semantic_frames
+                .iter()
+                .map(|frame| {
+                    (
+                        frame.checked_invocation_id.unwrap(),
+                        frame.checked_frame_id.unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            vec![(2, 2), (3, 1), (4, 0)],
+        );
+        assert_eq!(installed.control_ledger.len(), 5);
+        assert_eq!(
+            installed
+                .control_ledger
+                .iter()
+                .filter(|entry| matches!(entry.role, RecursorLayerRole::ExitsScope { .. }))
+                .count(),
+            4,
+        );
+    }
+
+    #[test]
+    fn oriented_phase_misclassification_recovers_endpoint_and_missing_semantic_rejections() {
+        let plan = oriented_test_ih_plan();
+        let mut replayed = oriented_five_control_invocation();
+        replayed.unwind.later_wrappers_in_construction_order[0].semantic_pending = true;
+        replayed.open_control_obligations = open_control_obligations(&replayed.unwind);
+        let replayed = match compose_oriented_subcontinuation(
+            Some(&plan),
+            None,
+            ContinuationActivationId(8),
+            replayed,
+        ) {
+            Ok(_) => panic!("an inherited open scope cannot replay its semantic transformer"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            replayed,
+            CraneliftBackendError::Unsupported(UnsupportedLowering { reason, .. })
+                if reason.contains("endpoints do not compose")
+        ));
+
+        let mut omitted = oriented_five_control_invocation();
+        omitted.selection.semantic_pending = false;
+        let omitted = match compose_oriented_subcontinuation(
+            Some(&plan),
+            None,
+            ContinuationActivationId(8),
+            omitted,
+        ) {
+            Ok(_) => panic!("a pending selection cannot be omitted from semantic work"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            omitted,
+            CraneliftBackendError::Unsupported(UnsupportedLowering { reason, .. })
+                if reason == "pending selection was misclassified as control-only"
+        ));
+    }
+
+    #[test]
+    fn oriented_open_control_obligations_are_affine_and_mint_exact() {
+        let plan = oriented_test_ih_plan();
+        let mut deleted = oriented_five_control_invocation();
+        deleted
+            .unwind
+            .later_wrappers_in_construction_order
+            .remove(0);
+        let deleted = match compose_oriented_subcontinuation(
+            Some(&plan),
+            None,
+            ContinuationActivationId(8),
+            deleted,
+        ) {
+            Ok(_) => panic!("deleting only an inherited exit obligation must reject"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            deleted,
+            CraneliftBackendError::Unsupported(UnsupportedLowering { reason, .. })
+                if reason == "open control obligation set changed after affine mint"
+        ));
+
+        let mut duplicated = oriented_five_control_invocation();
+        let duplicate = duplicated.unwind.later_wrappers_in_construction_order[0].clone();
+        duplicated
+            .unwind
+            .later_wrappers_in_construction_order
+            .push(duplicate);
+        let duplicated = match compose_oriented_subcontinuation(
+            Some(&plan),
+            None,
+            ContinuationActivationId(8),
+            duplicated,
+        ) {
+            Ok(_) => panic!("duplicating an inherited exit obligation must reject"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            duplicated,
+            CraneliftBackendError::Unsupported(UnsupportedLowering { reason, .. })
+                if reason == "open control obligation set changed after affine mint"
+        ));
+    }
 
     #[test]
     fn px8n_bounded_nat_observes_exact_zero_successor_and_recursive_order() {
@@ -12431,6 +15320,7 @@ mod tests {
             None,
             true,
             Some(&symbols),
+            Some(test_only_distinguished_root_join_plan()),
             None,
         )
         .unwrap();
@@ -14968,6 +17858,10 @@ mod tests {
                 retained_scrutinee_index: None,
                 deferred_constructor_case: None,
                 provenance: RecursorFrameProvenance(1),
+                checked_frame_id: None,
+                checked_invocation_id: None,
+                checked_invocation_source: None,
+                checked_invocation_depth: 0,
             },
             ComputationalEliminatorFrame {
                 cases: &outer_cases,
@@ -14976,6 +17870,10 @@ mod tests {
                 retained_scrutinee_index: None,
                 deferred_constructor_case: None,
                 provenance: RecursorFrameProvenance(0),
+                checked_frame_id: None,
+                checked_invocation_id: None,
+                checked_invocation_source: None,
+                checked_invocation_depth: 0,
             },
         ];
 
@@ -15019,6 +17917,10 @@ mod tests {
                 retained_scrutinee_index: None,
                 deferred_constructor_case: None,
                 provenance: RecursorFrameProvenance(1),
+                checked_frame_id: None,
+                checked_invocation_id: None,
+                checked_invocation_source: None,
+                checked_invocation_depth: 0,
             },
             ComputationalEliminatorFrame {
                 cases: &outer_cases,
@@ -15027,6 +17929,10 @@ mod tests {
                 retained_scrutinee_index: None,
                 deferred_constructor_case: None,
                 provenance: RecursorFrameProvenance(0),
+                checked_frame_id: None,
+                checked_invocation_id: None,
+                checked_invocation_source: None,
+                checked_invocation_depth: 0,
             },
         ];
 
@@ -15138,6 +18044,7 @@ mod tests {
             None,
             true,
             None,
+            Some(test_only_distinguished_root_join_plan()),
             None,
         )
         .expect("borrowed fixture lowers");
@@ -15412,6 +18319,7 @@ mod tests {
             None,
             true,
             None,
+            Some(test_only_distinguished_root_join_plan()),
             None,
         );
         let error = match result {
@@ -15442,6 +18350,7 @@ mod tests {
             BTreeMap::new(),
             None,
             false,
+            None,
             None,
             None,
         );
@@ -15500,6 +18409,307 @@ mod tests {
             checked_result_type_fingerprint,
             runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
             answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
+        }
+    }
+
+    fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowering<'a> {
+        Lowering {
+            seed_env,
+            declarations: BTreeMap::new(),
+            declaration_stack: Vec::new(),
+            active_recursive_declarations: Vec::new(),
+            result_table: BTreeMap::new(),
+            next_token: 0,
+            next_recursor_frame_provenance: 0,
+            next_recursor_producer_origin: 0,
+            next_continuation_activation: 0,
+            next_continuation_cursor: 0,
+            next_source_join: 0,
+            next_source_predecessor: 0,
+            live_source_continuations: 0,
+            source_control_root: None,
+            active_oriented_semantic_regions: 0,
+            native_join_plan: Some(crate::NativeJoinPlanV1 {
+                representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+                sites: vec![self_consistent_root_join_site(0)],
+            }),
+            consumed_join_sites: BTreeSet::new(),
+            root_terminal_authority: None,
+            active_join_site: None,
+            oriented_subcontinuation_plan: None,
+            consumed_subcontinuation_frames: BTreeSet::new(),
+            active_subcontinuation_frame: None,
+            consumed_recursive_call_templates: BTreeSet::new(),
+            pending_recursive_call: None,
+            pending_computational_ih_call: None,
+            active_recursive_invocations: Vec::new(),
+            next_recursive_invocation_instance: 1,
+            assumptions: BTreeSet::new(),
+            unsupported: Vec::new(),
+            process_object: true,
+            process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
+            host_dispatch: None,
+            invocation_pointer: None,
+            native_int_arena: None,
+            native_int_binop: None,
+            native_int_compare: None,
+            native_int_intern: None,
+            native_int_narrow: None,
+            native_int_export: None,
+            native_int_tags: BTreeMap::new(),
+            native_int_mutation: NativeIntLoweringMutation::Exact,
+            bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
+        }
+    }
+
+    #[test]
+    fn distinguished_root_authority_is_checked_affine_and_cursor_bound() {
+        let seed_env = NativeSeedEnvironment::empty();
+        let mut lowering = root_authority_test_lowering(&seed_env);
+        let authority = lowering
+            .take_distinguished_root_answer_authority()
+            .expect("the exact checked root site validates")
+            .expect("process lowering carries root authority");
+        lowering.root_terminal_authority = Some(authority);
+        lowering
+            .mint_terminal_answer_authority()
+            .expect("the first exhausted-root mint consumes the authority");
+        let repeated = match lowering.mint_terminal_answer_authority() {
+            Ok(_) => panic!("the affine root authority cannot mint twice"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            repeated,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "NativeJoinPlanV1",
+                reason,
+            }) if reason == "terminal answer has no affine checked-root authority"
+        ));
+
+        let mut lowering = root_authority_test_lowering(&seed_env);
+        let mut authority = lowering
+            .take_distinguished_root_answer_authority()
+            .unwrap()
+            .unwrap();
+        authority.outer_cursor = Some(ContinuationCursorId(7));
+        let transplanted = lowering
+            .restore_root_terminal_authority(Some(authority), ContinuationCursorId(8))
+            .expect_err("a root token cannot cross the wrong source cursor");
+        assert!(matches!(
+            transplanted,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "NativeJoinPlanV1",
+                reason,
+            }) if reason == "checked root answer authority returned through the wrong outer cursor"
+        ));
+    }
+
+    #[test]
+    fn process_lowering_without_checked_root_authority_rejects_before_cfg() {
+        let result = compile_expr_into_module(
+            new_object_module("px8ta-missing-root-authority").unwrap(),
+            "ken_px8ta_missing_root_authority",
+            Linkage::Export,
+            &RuntimeExpr::Construct {
+                constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                args: Vec::new(),
+            },
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::new(),
+            None,
+            true,
+            None,
+            None,
+            None,
+        );
+        let error = match result {
+            Ok(_) => panic!("process lowering must not invent root authority from process mode"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "NativeJoinPlanV1",
+                reason,
+            }) if reason == "process-object lowering has no checked distinguished-root answer authority"
+        ));
+    }
+
+    fn occurrence_exact_marker_fixture(
+        duplicate_call: bool,
+        duplicate_slot: bool,
+    ) -> (
+        RuntimeExpr,
+        RuntimeDeclaration,
+        crate::OrientedSubcontinuationPlanV1,
+    ) {
+        let declaration = "decl:fixture::PX8TA::markers".to_string();
+        let slot_marker = RuntimeExpr::CheckedComputationalIHSlots {
+            slot_template_ids: vec![200],
+            checked_occurrence_paths: vec![vec![20]],
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
+        };
+        let call_marker = RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id: 100,
+            checked_occurrence_path: vec![30],
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((2).into()))),
+        };
+        let slot_value = if duplicate_slot {
+            RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Pair".to_string(),
+                args: vec![slot_marker.clone(), slot_marker],
+            }
+        } else {
+            slot_marker
+        };
+        let call_body = if duplicate_call {
+            RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Pair".to_string(),
+                args: vec![call_marker.clone(), call_marker],
+            }
+        } else {
+            call_marker
+        };
+        let cases = vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::Only".to_string(),
+            argument_binders: 0,
+            recursive_positions: Vec::new(),
+            body: RuntimeExpr::Let {
+                value: Box::new(slot_value),
+                body: Box::new(call_body),
+            },
+        }];
+        let default = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-TA marker fixture default".to_string(),
+        };
+        let runtime_frame_fingerprint =
+            crate::compiler_private_computational_match_frame_fingerprint(&cases, &default);
+        let body = RuntimeExpr::CheckedSubcontinuationFrame {
+            frame_id: 0,
+            body: Box::new(RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::Only".to_string(),
+                    args: Vec::new(),
+                }),
+                cases,
+                default,
+            }),
+        };
+        let runtime_declaration = RuntimeDeclaration {
+            symbol: declaration.clone(),
+            kind: RuntimeDeclarationKind::Transparent { body },
+            metadata: RuntimeSymbolMetadata::empty(),
+        };
+        let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+            frame_id: 0,
+            segment_site_id: 9,
+            declaration: declaration.clone(),
+            checked_occurrence_path: vec![10],
+            semantic_position: 0,
+            input_interface: oriented_test_interface(0),
+            output_interface: oriented_test_interface(1),
+            runtime_frame_fingerprint,
+            occurrence_binding_fingerprint: 0,
+            control_witness: crate::OrientedControlWitnessV1::DistinguishedRoot,
+        };
+        frame.occurrence_binding_fingerprint =
+            crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+        let mut slot = crate::CheckedComputationalIHSlotTemplateV1 {
+            slot_template_id: 200,
+            declaration: declaration.clone(),
+            checked_match_ordinal: 0,
+            checked_occurrence_path: vec![20],
+            frame_template_id: 0,
+            constructor: "ctor:fixture::Only".to_string(),
+            recursive_position: 0,
+            method_binder_ordinal: 0,
+            local_telescope: Vec::new(),
+            ih_interface: oriented_test_interface(0),
+            segment_site_id: 9,
+            frame_templates: vec![0],
+            input_interface: oriented_test_interface(0),
+            output_interface: oriented_test_interface(1),
+            runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+                declaration: declaration.clone(),
+                runtime_path: vec![0, 1, 0],
+            }],
+            occurrence_binding_fingerprint: 0,
+        };
+        slot.occurrence_binding_fingerprint =
+            crate::compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+        let mut call = crate::CheckedComputationalIHCallTemplateV1 {
+            call_template_id: 100,
+            declaration: declaration.clone(),
+            checked_occurrence_path: vec![30],
+            slot_template_id: 200,
+            arity: 1,
+            local_telescope: Vec::new(),
+            result_interface: oriented_test_interface(1),
+            callee_segment_site_id: 9,
+            callee_frame_templates: vec![0],
+            parent_frame_template_id: Some(0),
+            parent_segment_site_id: Some(9),
+            caller_interface: oriented_test_interface(1),
+            runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+                declaration,
+                runtime_path: vec![0, 1, 1],
+            }],
+            occurrence_binding_fingerprint: 0,
+        };
+        call.occurrence_binding_fingerprint =
+            crate::compiler_private_computational_ih_call_binding_fingerprint(&call);
+        (
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            runtime_declaration,
+            crate::OrientedSubcontinuationPlanV1 {
+                representation_rule_version:
+                    crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+                frames: vec![frame],
+                recursive_calls: Vec::new(),
+                computational_ih_slots: vec![slot],
+                computational_ih_calls: vec![call],
+            },
+        )
+    }
+
+    #[test]
+    fn checked_marker_census_rejects_duplicate_call_and_slot_occurrences_before_cfg() {
+        let (entry, declaration, plan) = occurrence_exact_marker_fixture(false, false);
+        let declarations = BTreeMap::from([(declaration.symbol.as_str(), &declaration)]);
+        validate_oriented_subcontinuation_transport(&entry, &declarations, Some(&plan))
+            .expect("the exact checked Runtime marker occurrence ledger closes");
+
+        for (duplicate_call, duplicate_slot, expected) in [
+            (
+                true,
+                false,
+                "computational-IH call Runtime occurrences differ",
+            ),
+            (
+                false,
+                true,
+                "computational-IH slot Runtime occurrences differ",
+            ),
+        ] {
+            let (entry, declaration, plan) =
+                occurrence_exact_marker_fixture(duplicate_call, duplicate_slot);
+            let declarations = BTreeMap::from([(declaration.symbol.as_str(), &declaration)]);
+            let error =
+                validate_oriented_subcontinuation_transport(&entry, &declarations, Some(&plan))
+                    .expect_err(
+                        "an extra static marker occurrence must reject before CFG emission",
+                    );
+            assert!(
+                matches!(
+                    error,
+                    CraneliftBackendError::Unsupported(UnsupportedLowering {
+                        construct: "OrientedSubcontinuationPlanV1",
+                        ref reason,
+                    }) if reason.contains(expected)
+                ),
+                "{error:?}"
+            );
         }
     }
 
@@ -15579,12 +18789,23 @@ mod tests {
             next_source_join: 0,
             next_source_predecessor: 0,
             live_source_continuations: 0,
+            source_control_root: None,
+            active_oriented_semantic_regions: 0,
             native_join_plan: Some(crate::NativeJoinPlanV1 {
                 representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
                 sites: vec![self_consistent_root_join_site(0)],
             }),
             consumed_join_sites: BTreeSet::new(),
+            root_terminal_authority: None,
             active_join_site: Some(41),
+            oriented_subcontinuation_plan: None,
+            consumed_subcontinuation_frames: BTreeSet::new(),
+            active_subcontinuation_frame: None,
+            consumed_recursive_call_templates: BTreeSet::new(),
+            pending_recursive_call: None,
+            pending_computational_ih_call: None,
+            active_recursive_invocations: Vec::new(),
+            next_recursive_invocation_instance: 1,
             assumptions: BTreeSet::new(),
             unsupported: Vec::new(),
             process_object: false,
@@ -15639,6 +18860,7 @@ mod tests {
                 representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
                 sites: vec![self_consistent_root_join_site(0)],
             }),
+            None,
         );
         let error = match result {
             Ok(_) => panic!("the root must not discharge a missing marked scalar-cut site"),
@@ -15691,6 +18913,7 @@ mod tests {
                 representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
                 sites: vec![self_consistent_join_site(51, fingerprint)],
             }),
+            None,
         );
         let error = match result {
             Ok(_) => panic!("an unmarked equal-shape frame must not consume a plan row"),
@@ -15724,6 +18947,7 @@ mod tests {
                     self_consistent_join_site(52, 23),
                 ],
             }),
+            None,
         );
         let error = match result {
             Ok(_) => panic!("a self-consistent orphan plan row must reject"),

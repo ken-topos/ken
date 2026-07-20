@@ -1478,6 +1478,194 @@ pub fn checked_core_declaration_body_view(
     decode_declaration_body_view(semantic, selection, symbol)
 }
 
+/// Decide whether a checked runtime match actually consumes a computational
+/// induction hypothesis. Both checked-plan production and erasure call this
+/// exact predicate.
+#[derive(Debug)]
+pub(crate) struct CheckedComputationalIHClassificationError {
+    pub constructor: StableSymbol,
+    pub position: usize,
+    pub binders: usize,
+}
+
+pub(crate) fn checked_match_uses_computational_recursive_hypothesis(
+    view: &CheckedCoreMatchView,
+) -> Result<bool, CheckedComputationalIHClassificationError> {
+    if !view.computational_recursive_hypotheses {
+        return Ok(false);
+    }
+    for branch in &view.branches {
+        let recursive_count = branch.constructor.recursive_positions.len();
+        if recursive_count == 0 {
+            continue;
+        }
+        let binders = branch.constructor.argument_count + recursive_count;
+        let mut body = &branch.method;
+        for position in 0..binders {
+            let CheckedCoreBodyTerm::Lambda { body: next, .. } = body else {
+                return Err(CheckedComputationalIHClassificationError {
+                    constructor: branch.constructor.symbol.clone(),
+                    position,
+                    binders,
+                });
+            };
+            body = next.as_ref();
+        }
+        if runtime_body_references_outer_binder_range(body, 0, recursive_count, 0) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// One match occurrence in the exact child domain retained by checked Runtime
+/// erasure. Opaque type/proof metadata is deliberately absent from this census.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CheckedRuntimeMatchOccurrence {
+    pub computational_ordinal: Option<u64>,
+}
+
+pub(crate) fn checked_runtime_match_census(
+    term: &CheckedCoreBodyTerm,
+) -> Result<Vec<CheckedRuntimeMatchOccurrence>, CheckedComputationalIHClassificationError> {
+    fn visit(
+        term: &CheckedCoreBodyTerm,
+        next_computational_ordinal: &mut u64,
+        occurrences: &mut Vec<CheckedRuntimeMatchOccurrence>,
+    ) -> Result<(), CheckedComputationalIHClassificationError> {
+        match term {
+            CheckedCoreBodyTerm::Variable { .. }
+            | CheckedCoreBodyTerm::IntegerLiteral { .. }
+            | CheckedCoreBodyTerm::DirectDeclarationCall { .. }
+            | CheckedCoreBodyTerm::RecursiveDeclarationCall(_)
+            | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
+            | CheckedCoreBodyTerm::PrimitiveLiteral(_)
+            | CheckedCoreBodyTerm::ConstructorReference(_)
+            | CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => {}
+            CheckedCoreBodyTerm::PrimitiveApplication(view) => {
+                for argument in &view.arguments {
+                    visit(argument, next_computational_ordinal, occurrences)?;
+                }
+            }
+            CheckedCoreBodyTerm::Lambda { body, .. } => {
+                visit(body, next_computational_ordinal, occurrences)?;
+            }
+            CheckedCoreBodyTerm::Application { function, argument } => {
+                visit(function, next_computational_ordinal, occurrences)?;
+                visit(argument, next_computational_ordinal, occurrences)?;
+            }
+            CheckedCoreBodyTerm::Let { value, body, .. } => {
+                visit(value, next_computational_ordinal, occurrences)?;
+                visit(body, next_computational_ordinal, occurrences)?;
+            }
+            CheckedCoreBodyTerm::Match(view) => {
+                let computational = checked_match_uses_computational_recursive_hypothesis(view)?;
+                let computational_ordinal = computational.then(|| {
+                    let ordinal = *next_computational_ordinal;
+                    *next_computational_ordinal = next_computational_ordinal
+                        .checked_add(1)
+                        .expect("compiler-private computational match ordinal exhausted");
+                    ordinal
+                });
+                occurrences.push(CheckedRuntimeMatchOccurrence {
+                    computational_ordinal,
+                });
+                visit(&view.scrutinee, next_computational_ordinal, occurrences)?;
+                for branch in &view.branches {
+                    visit(&branch.method, next_computational_ordinal, occurrences)?;
+                }
+            }
+            CheckedCoreBodyTerm::RecordSigmaConstruction(view) => {
+                for field in &view.fields {
+                    if let CheckedCoreRecordSigmaFieldValue::Runtime { value, .. } = field {
+                        visit(value, next_computational_ordinal, occurrences)?;
+                    }
+                }
+            }
+            CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
+                visit(&view.base, next_computational_ordinal, occurrences)?;
+            }
+            CheckedCoreBodyTerm::DictionaryConstruction(view) => {
+                for field in &view.fields {
+                    if let CheckedCoreDictionaryFieldValue::Runtime { value, .. } = field {
+                        visit(value, next_computational_ordinal, occurrences)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    let mut occurrences = Vec::new();
+    let mut next_computational_ordinal = 0;
+    visit(term, &mut next_computational_ordinal, &mut occurrences)?;
+    Ok(occurrences)
+}
+
+fn runtime_body_references_outer_binder_range(
+    term: &CheckedCoreBodyTerm,
+    start: usize,
+    end: usize,
+    local_depth: usize,
+) -> bool {
+    match term {
+        CheckedCoreBodyTerm::Variable { de_bruijn_index } => {
+            (local_depth + start..local_depth + end).contains(de_bruijn_index)
+        }
+        CheckedCoreBodyTerm::IntegerLiteral { .. }
+        | CheckedCoreBodyTerm::DirectDeclarationCall { .. }
+        | CheckedCoreBodyTerm::RecursiveDeclarationCall(_)
+        | CheckedCoreBodyTerm::ImportedDeclarationCall(_)
+        | CheckedCoreBodyTerm::PrimitiveLiteral(_)
+        | CheckedCoreBodyTerm::ConstructorReference(_)
+        | CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => false,
+        CheckedCoreBodyTerm::PrimitiveApplication(view) => view.arguments.iter().any(|child| {
+            runtime_body_references_outer_binder_range(child, start, end, local_depth)
+        }),
+        CheckedCoreBodyTerm::Lambda { body, .. } => {
+            runtime_body_references_outer_binder_range(body, start, end, local_depth + 1)
+        }
+        CheckedCoreBodyTerm::Application { function, argument } => {
+            runtime_body_references_outer_binder_range(function, start, end, local_depth)
+                || runtime_body_references_outer_binder_range(argument, start, end, local_depth)
+        }
+        CheckedCoreBodyTerm::Let { value, body, .. } => {
+            runtime_body_references_outer_binder_range(value, start, end, local_depth)
+                || runtime_body_references_outer_binder_range(body, start, end, local_depth + 1)
+        }
+        CheckedCoreBodyTerm::Match(view) => {
+            runtime_body_references_outer_binder_range(&view.scrutinee, start, end, local_depth)
+                || view.branches.iter().any(|branch| {
+                    runtime_body_references_outer_binder_range(
+                        &branch.method,
+                        start,
+                        end,
+                        local_depth,
+                    )
+                })
+        }
+        CheckedCoreBodyTerm::RecordSigmaConstruction(view) => {
+            view.fields.iter().any(|field| match field {
+                CheckedCoreRecordSigmaFieldValue::Runtime { value, .. } => {
+                    runtime_body_references_outer_binder_range(value, start, end, local_depth)
+                }
+                CheckedCoreRecordSigmaFieldValue::Erased { .. } => false,
+            })
+        }
+        CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
+            runtime_body_references_outer_binder_range(&view.base, start, end, local_depth)
+        }
+        CheckedCoreBodyTerm::DictionaryConstruction(view) => {
+            view.fields.iter().any(|field| match field {
+                CheckedCoreDictionaryFieldValue::Runtime { value, .. } => {
+                    runtime_body_references_outer_binder_range(value, start, end, local_depth)
+                }
+                CheckedCoreDictionaryFieldValue::Erased { .. } => false,
+            })
+        }
+    }
+}
+
 fn validate_body_view_selection<'a>(
     package: &'a CheckedCorePackage,
     selection: &CheckedCoreBodyViewSelection,

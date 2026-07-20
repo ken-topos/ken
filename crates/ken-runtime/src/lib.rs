@@ -25,6 +25,8 @@ mod native_int_clif;
 pub mod native_join_plan;
 pub mod native_process_entrypoint;
 pub mod object_linker_packaging;
+#[doc(hidden)]
+pub mod oriented_subcontinuation_plan;
 pub mod platform_runtime_support;
 pub mod runtime_ir_evaluator;
 pub mod store;
@@ -53,6 +55,8 @@ pub use native_int::*;
 pub use native_join_plan::*;
 pub use native_process_entrypoint::*;
 pub use object_linker_packaging::*;
+#[doc(hidden)]
+pub use oriented_subcontinuation_plan::*;
 pub use platform_runtime_support::*;
 pub use runtime_ir_evaluator::*;
 pub use store::{InternResult, Space, Store, StoreStats};
