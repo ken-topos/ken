@@ -3697,6 +3697,43 @@ fn instantiate_checked_invocation_segment(
     Ok(())
 }
 
+#[cfg(any(test, feature = "px8-ds-test-support"))]
+thread_local! {
+    static PX8DS_RETIRED_FLAT_ORDER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Test-only causal switch for the retired cross-instance flat ordering.
+///
+/// This is feature-gated so ordinary Runtime and CLI artifacts cannot select
+/// the invalid ordering. PX8-DS integration tests use it to drive the exact
+/// checked source through the former production consumer.
+#[cfg(feature = "px8-ds-test-support")]
+#[doc(hidden)]
+pub fn with_px8ds_retired_flat_order<R>(run: impl FnOnce() -> R) -> R {
+    struct Restore(bool);
+
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            PX8DS_RETIRED_FLAT_ORDER.with(|enabled| enabled.set(self.0));
+        }
+    }
+
+    let previous = PX8DS_RETIRED_FLAT_ORDER.with(|enabled| enabled.replace(true));
+    let _restore = Restore(previous);
+    run()
+}
+
+fn px8ds_retired_flat_order_enabled() -> bool {
+    #[cfg(any(test, feature = "px8-ds-test-support"))]
+    {
+        return PX8DS_RETIRED_FLAT_ORDER.with(std::cell::Cell::get);
+    }
+    #[cfg(not(any(test, feature = "px8-ds-test-support")))]
+    {
+        false
+    }
+}
+
 fn compose_oriented_subcontinuation(
     plan: Option<&crate::OrientedSubcontinuationPlanV1>,
     invocation: Option<CheckedRecursiveInvocationInstance>,
@@ -3873,6 +3910,41 @@ fn compose_oriented_subcontinuation(
                     return Err(unsupported(
                         "OrientedSubcontinuationPlanV1",
                         "invocation-local oriented segment endpoints do not compose",
+                    ));
+                }
+            }
+        }
+
+        if px8ds_retired_flat_order_enabled() {
+            let mut retired = layers_by_key
+                .iter()
+                .map(|((invocation_id, frame_id), layer)| {
+                    (
+                        *invocation_id,
+                        plan.frame(*frame_id).expect("validated checked frame"),
+                        layer,
+                    )
+                })
+                .collect::<Vec<_>>();
+            retired.sort_by_key(|(_, frame, layer)| {
+                (
+                    std::cmp::Reverse(layer.checked_invocation_depth),
+                    frame.semantic_position,
+                )
+            });
+            for pair in retired.windows(2) {
+                if pair[0].1.output_interface != pair[1].1.input_interface {
+                    return Err(unsupported(
+                        "OrientedSubcontinuationPlanV1",
+                        format!(
+                            "retired flat oriented splice answer endpoints do not compose: left=(instance={}, frame={}, depth={}) right=(instance={}, frame={}, depth={})",
+                            pair[0].0,
+                            pair[0].1.frame_id,
+                            pair[0].2.checked_invocation_depth,
+                            pair[1].0,
+                            pair[1].1.frame_id,
+                            pair[1].2.checked_invocation_depth,
+                        ),
                     ));
                 }
             }

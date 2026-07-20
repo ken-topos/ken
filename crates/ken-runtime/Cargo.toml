@@ -9,6 +9,9 @@ rust-version.workspace = true
 
 description = "Runtime crate — production content-addressed value store (K3)"
 
+[features]
+px8-ds-test-support = []
+
 [dependencies]
 ken-host = { path = "../ken-host" }
 cranelift-codegen = "0.113.1"
