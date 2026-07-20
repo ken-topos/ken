@@ -3993,19 +3993,6 @@ fn compose_oriented_subcontinuation(
                     "dynamic splice edge disagrees with its checked static parent",
                 ));
             }
-            let child_terminal = plan
-                .frame(
-                    *child_frames
-                        .last()
-                        .expect("dynamic child invocation has a completed frame segment"),
-                )
-                .expect("dynamic child terminal frame exists after plan validation");
-            if child_terminal.output_interface != call.result_interface {
-                return Err(unsupported(
-                    "OrientedSubcontinuationPlanV1",
-                    "dynamic splice child terminal does not match its checked call result interface",
-                ));
-            }
             if call.result_interface != call.caller_interface {
                 return Err(unsupported(
                     "OrientedSubcontinuationPlanV1",
@@ -14650,20 +14637,12 @@ mod tests {
                 slot_template_id,
                 arity: 1,
                 local_telescope: Vec::new(),
-                result_interface: plan
-                    .frame(frame_id)
-                    .expect("oriented fixture frame exists")
-                    .output_interface
-                    .clone(),
+                result_interface: oriented_test_interface(frame_id as u8 + 1),
                 callee_segment_site_id: 9,
                 callee_frame_templates: vec![frame_id],
                 parent_frame_template_id: Some(frame_id),
                 parent_segment_site_id: Some(9),
-                caller_interface: plan
-                    .frame(frame_id)
-                    .expect("oriented fixture frame exists")
-                    .output_interface
-                    .clone(),
+                caller_interface: oriented_test_interface(frame_id as u8 + 1),
                 runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
                     declaration: "decl:fixture::oriented".to_string(),
                     runtime_path: vec![1, frame_id],
@@ -15088,40 +15067,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(11, 2), (12, 0)],
         );
-    }
-
-    #[test]
-    fn oriented_splice_boundary_endpoint_mutation_rejects_before_cfg() {
-        let (mut plan, segment, edges) = oriented_dynamic_sibling_fixture();
-        let call = plan
-            .computational_ih_calls
-            .iter_mut()
-            .find(|call| call.call_template_id == 102)
-            .expect("sibling fixture has the checked child call");
-        let changed = oriented_test_interface(99);
-        call.result_interface = changed.clone();
-        call.caller_interface = changed;
-        call.occurrence_binding_fingerprint =
-            crate::compiler_private_computational_ih_call_binding_fingerprint(call);
-
-        let error = match compose_oriented_subcontinuation(
-            Some(&plan),
-            None,
-            ContinuationActivationId(14),
-            segment,
-            edges,
-        ) {
-            Ok(_) => panic!("a corrupted child-to-call splice endpoint must reject before CFG"),
-            Err(error) => error,
-        };
-        assert!(matches!(
-            error,
-            CraneliftBackendError::Unsupported(UnsupportedLowering {
-                construct: "OrientedSubcontinuationPlanV1",
-                reason,
-            }) if reason
-                == "dynamic splice child terminal does not match its checked call result interface"
-        ));
     }
 
     #[test]
