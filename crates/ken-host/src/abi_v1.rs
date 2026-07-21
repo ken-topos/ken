@@ -1535,6 +1535,11 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    // Linux-only deliberately, not an accidental gap: this test drives real
+    // POSIX path/root machinery (`RootPath`/`open_root`/`open_resource_at_v1`)
+    // that only exists on this target, matching the file's standing
+    // convention (every other resource-opening test here is gated the same
+    // way).
     fn resource_settlement_is_recorded_before_observation_is_written() {
         // Real behavioral proof, through the actual unsafe entrypoint, that
         // `ken_host_invocation_v1_finish` records resource settlement into
@@ -1570,8 +1575,8 @@ mod tests {
             response_arena: Vec::new(),
             effect_trace: Vec::new(),
             observation: Some(observation_file),
-            plan_hash: 11,
-            capability: CapabilityTokenV1::from_erased_identity(0),
+            plan_hash: 11, // arbitrary, unasserted
+            capability: CapabilityTokenV1::from_erased_identity(0), // arbitrary, unasserted
         });
         let (_, identity) = context
             .resources
@@ -1586,10 +1591,13 @@ mod tests {
 
         let encoded = std::fs::read(&observation_path).unwrap();
         let trace = crate::decode_linked_effect_trace(&encoded).unwrap();
+        // Fixture-derived, not a frozen census: exactly one resource
+        // (`owner`) was inserted above, so exactly one settlement event is
+        // the only possible count here.
         assert_eq!(
             trace.effect_trace.len(),
             1,
-            "the resource settled during finish must be the one event the observation encodes"
+            "exactly the one resource inserted above must be the settled event"
         );
         assert_eq!(trace.effect_trace[0].operation, HostOpV1::ResourceRelease);
         assert_eq!(
