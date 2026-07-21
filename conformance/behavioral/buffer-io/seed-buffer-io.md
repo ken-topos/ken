@@ -452,7 +452,11 @@ Runtime identities such as `file_r` and `buffer_r` do not.
 - spec: `38 §1.7.1/§1.7.2`; PX8-I; RT-PARITY AC3–AC5
 - evidence, at two levels — the dispatch boundary and the executable
   cross-executor differential. Each case is its own test, so each reaches
-  independently and demonstrates its own pre-fix verdict flip:
+  independently. **Reaching independently is not the same as flipping**, and
+  they are not co-extensive here: the per-case flip table below is
+  authoritative about which cases actually discriminate the defect, and three
+  dispatch-boundary single-fault pins plus the two non-narrowing differential
+  cases deliberately do not flip:
   - dispatch boundary (interpreter, exact variant per consumer):
     `eval::px5b_effect_observation_tests::rt_parity_*` —
     `buffer_allocate_rejects_malformed_capacity_exactly`,
@@ -507,33 +511,58 @@ Runtime identities such as `file_r` and `buffer_r` do not.
     single-fault cases. They are exact-variant regression pins, not
     discriminating nets, and are never cited as flip evidence; the
     overlapping-fault cases carry the proof for those consumers.
-  - in the differential, **every** executable case flips, because the
+  - in the differential, all six **narrowing** cases flip, because the
     dispatch-skip axis separates the implementations even where the variant
     axis cannot: pre-fix the interpreter still entered dispatch and recorded a
     canonical event native never had. The allocation and both
     overlapping-fault cases flip on the variant axis; the three single-fault
-    cases flip on the dispatch-skip axis. The `BufferFreeze` unreachability
-    test deliberately does not flip — it pins a structural premise about source
-    scope, not interpreter behavior.
+    cases flip on the dispatch-skip axis. The two **non-narrowing** cases
+    deliberately do not flip and are never cited as flip evidence — the
+    derived-span `BufferFreeze` case asserts parity on an operation that
+    legitimately dispatches, and the transform-closure case is a source-scope
+    inventory check that runs no fixture.
 - `BufferAllocate` verdict: **defect, fails closed, same early-narrow remedy.**
   Its substituted `0` does not silently succeed because `ResourceTableV1`
   rejects zero capacity as `BufferLimit`. It still exposes the wrong public
   variant versus native. An overlapping resource discriminator is
   structurally impossible because allocation has no resource input.
-- `BufferFreeze` reachability: the differential covers this consumer **not at
-  all, by structural necessity rather than omission.** `freeze`/`spanBytes`
-  derive both host-width arguments from a `BufferSpan`, and the prelude removes
-  `PrivateBufferSpan` from public scope, so every span reaching `freeze` is
-  host-minted by a successful `readAt` and is already in range. Checked source
-  therefore cannot present this consumer a malformed argument at all, with or
-  without a coincident resource fault. The narrowing remains correct
-  defense-in-depth and is covered at the dispatch boundary above.
-  `rt_parity_native.rs::buffer_freeze_narrowing_is_unreachable_from_checked_source`
-  pins the premise as a discriminating pair — the public window constructor
-  must elaborate while the private span constructor must not — so this report
-  cannot go stale silently. The same reasoning makes `FsWriteAt`'s
-  `buffer_start`/`length` narrowings source-unreachable; only its `file_offset`
-  is source-controllable.
+- `BufferFreeze` reachability: the differential covers this consumer with an
+  executable cross-executor case
+  (`rt_parity_native.rs::buffer_freeze_on_derived_span_dispatches_alike`), but
+  has **no narrowing case**, because no malformed span is constructible. The
+  justification is a **closure property over the public span surface, not
+  constructor privacy** — privacy alone does not establish it, and an earlier
+  revision of this entry wrongly argued that it did (Architect, terminal block
+  on `2b55706a`).
+
+  The complete source-reachable inventory is: host-minted spans from a
+  successful `readAt`, and one public transform,
+  `write_all_advance_span : BufferSpan -> TransferCount -> BufferSpan`
+  (`prelude.rs:2076`), which is **not** in the private-name closure at
+  `prelude.rs:2111+`. `private_write_all_fuel` also builds a span but is
+  sealed, as is `PrivateBufferSpan`. `TransferCount` has no public producer:
+  every public declaration mentioning it consumes one, and
+  `PrivateTransferCount` is sealed.
+
+  The transform preserves non-negativity, which is what makes a malformed
+  host-width argument unconstructible. Its budget field is
+  `transfer_count_remaining count : Nat`, and `Nat = Zero | Suc Nat` has no
+  negative inhabitant; its start field is
+  `add_int (buffer_span_start span) (transfer_count_int count)`, where
+  `transfer_count_int` is the image of a `Nat` and a host-minted start is a
+  `u64`. So `start' >= start >= 0`, and by induction every source-reachable
+  span has a non-negative start and a `Nat` budget. Negativity — the only route
+  to the guards with a small value — is structurally excluded; the sole
+  remainder is magnitude above `u64::MAX`, which needs ~2^64/capacity
+  applications of the transform and is not executable.
+
+  `buffer_freeze_malformed_span_is_unconstructible_under_transform_closure`
+  pins the **inventory**, since that is the part that can silently go stale: the
+  transform must stay source-nameable (if it is sealed, the closure argument
+  must be re-derived) while both private constructors must stay unnameable. The
+  narrowing guards remain correct defense-in-depth, covered at the dispatch
+  boundary above. The same closure makes `FsWriteAt`'s `buffer_start`/`length`
+  narrowings source-unreachable; only its `file_offset` is source-controllable.
 - overlap-fault shape in the differential: the coincident fault is a **rights**
   fault, not a liveness one. Constructing a closed-but-still-referenced
   resource requires escaping it from its bracket, and escaping a second
