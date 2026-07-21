@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::{ElabEnv, ElabError};
-use ken_kernel::{whnf, Context, Decl, Term};
+use ken_kernel::{whnf, Context, Decl, GlobalId, Term};
 
 const BUFFER_KEN_MD: &str =
     include_str!("../../../catalog/packages/Capability/System/Buffer.ken.md");
@@ -28,12 +28,19 @@ fn public_buffer_span_producers(env: &ElabEnv) -> BTreeSet<String> {
     env.globals
         .iter()
         .filter_map(|(name, id)| {
-            let decl = env.env.lookup(*id)?;
-            let ty = match decl {
-                Decl::Transparent { ty, .. }
-                | Decl::Opaque { ty, .. }
-                | Decl::Primitive { ty, .. } => ty,
-                Decl::Inductive(inductive) => &inductive.former_type,
+            let ty = match env.env.lookup(*id) {
+                Some(decl) => match decl {
+                    Decl::Transparent { ty, .. }
+                    | Decl::Opaque { ty, .. }
+                    | Decl::Primitive { ty, .. } => ty,
+                    Decl::Inductive(inductive) => &inductive.former_type,
+                },
+                None => match env.env.constructor(*id) {
+                    Some((inductive, index)) => &inductive.constructors[index].type_,
+                    None => {
+                        panic!("public global `{name}` is neither a declaration nor a constructor")
+                    }
+                },
             };
             matches!(
                 result_head(&env.env, ty),
@@ -203,6 +210,46 @@ const escaped_function_alias : BufferSpanFunctionAlias = λspan.span
             "escaped_result_alias".to_string(),
         ])
     );
+}
+
+#[test]
+fn buffer_span_producer_closure_resolves_public_constructors() {
+    let mut env = ElabEnv::empty().expect("SPAN-SEAL prelude");
+    let private_buffer_span = {
+        let buffer_span = env
+            .env
+            .inductive(env.globals["BufferSpan"])
+            .expect("BufferSpan inductive");
+        assert_eq!(buffer_span.constructors.len(), 1);
+        buffer_span.constructors[0].id
+    };
+    assert_eq!(
+        private_buffer_span, env.prelude_env.private_buffer_span_id,
+        "discriminator must re-expose the actual sealed constructor"
+    );
+    assert!(env.env.lookup(private_buffer_span).is_none());
+    assert!(env.env.constructor(private_buffer_span).is_some());
+    assert!(!env.globals.values().any(|id| *id == private_buffer_span));
+    env.globals.insert(
+        "escaped_private_buffer_span_constructor".to_string(),
+        private_buffer_span,
+    );
+
+    assert_eq!(
+        public_buffer_span_producers(&env),
+        BTreeSet::from(["escaped_private_buffer_span_constructor".to_string()])
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "public global `escaped_unknown_id` is neither a declaration nor a constructor"
+)]
+fn buffer_span_producer_closure_rejects_unknown_public_ids() {
+    let mut env = ElabEnv::empty().expect("SPAN-SEAL prelude");
+    env.globals
+        .insert("escaped_unknown_id".to_string(), GlobalId(u32::MAX));
+    let _ = public_buffer_span_producers(&env);
 }
 
 #[test]
