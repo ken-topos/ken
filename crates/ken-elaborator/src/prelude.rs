@@ -2018,6 +2018,12 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
            : HostIO a (Result ResourceError Bytes) visits [FS] = spanBytes a buffer span",
     )
     .map_err(|e| ElabError::Internal(format!("prelude freeze failed: {e}")))?;
+    // One private transition serves both the real loop and its public
+    // observer-only proposition. It is removed from the source name map below.
+    elab.elaborate_decl(
+        "fn write_all_advance_span (span : BufferSpan) (count : TransferCount) : BufferSpan = PrivateBufferSpan (add_int (buffer_span_start span) (transfer_count_int count)) (transfer_count_remaining count)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude write_all_advance_span failed: {e}")))?;
     elab.elaborate_decl(
         "proc private_write_all_fuel (a : Auth) (file : Resource FsHandle) \
            (file_offset : Int) (buffer : Resource Buffer) (span : BufferSpan) \
@@ -2041,9 +2047,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
                      (Result ResourceError Unit) (Ok ResourceError Unit MkUnit); \
                    Suc remaining |-> private_write_all_fuel a file \
                      (add_int file_offset (transfer_count_int count)) buffer \
-                     (PrivateBufferSpan \
-                       (add_int (buffer_span_start span) (transfer_count_int count)) \
-                       (Suc remaining)) rest \
+                     (write_all_advance_span span count) rest \
                  } \
                } \
              }) \
@@ -2073,11 +2077,11 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     )
     .map_err(|e| ElabError::Internal(format!("prelude writeAll termination proof failed: {e}")))?;
     elab.elaborate_decl(
-        "fn write_all_advance_span (span : BufferSpan) (count : TransferCount) : BufferSpan = PrivateBufferSpan (add_int (buffer_span_start span) (transfer_count_int count)) (transfer_count_remaining count)",
+        "fn write_all_exact_prefix_prop (span : BufferSpan) (count : TransferCount) : Prop = Equal Nat (buffer_span_budget (write_all_advance_span span count)) (transfer_count_remaining count)",
     )
-    .map_err(|e| ElabError::Internal(format!("prelude write_all_advance_span failed: {e}")))?;
+    .map_err(|e| ElabError::Internal(format!("prelude write_all_exact_prefix_prop failed: {e}")))?;
     elab.elaborate_decl(
-        "proof exact_prefix for write_all_advance_span (span : BufferSpan) (count : TransferCount) : Equal Nat (buffer_span_budget (write_all_advance_span span count)) (transfer_count_remaining count) = Refl",
+        "proof exact_prefix for write_all_exact_prefix_prop (span : BufferSpan) (count : TransferCount) : write_all_exact_prefix_prop span count = Refl",
     )
     .map_err(|e| ElabError::Internal(format!("prelude writeAll exact-prefix proof failed: {e}")))?;
     elab.elaborate_decl(
@@ -2117,6 +2121,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "PrivateBufferFreeze",
         "PrivateBufferSpan",
         "PrivateTransferCount",
+        "write_all_advance_span",
         "PrivateResourceRelease",
         "PrivateResourceTraceIdentity",
         "private_resource_acquire",
