@@ -1,3 +1,398 @@
+# Steward decision log
+
+---
+
+# ▶ ACTIVE WINDOW — 2026-07-21 (operator away ~03:30 → ~11:30 UTC)
+
+Mandate (operator, 2026-07-21): *"Keep going, route around problems if you
+can't decide from PRINCIPLES.md. Keep a decision log. If you encounter another
+refusal, route to the opus agent (regardless of subject area) or to a gpt-5.6
+agent (if opus refuses)."*
+
+**Standing inputs for this window (do NOT reopen):**
+- **Fleet is SINGLE-THREADED** (operator, 2026-07-20) — one WP at a time; idle
+  rings are correct, not stalls. Rationale: enclave context coherence.
+- **Runtime seating:** `runtime-implementer` is **T1** (reseated on Anthropic
+  Opus 2026-07-21 to route around a provider content refusal);
+  `runtime-leader` is T2. Inverted vs the `MODELS.md` table **by design** —
+  implementation is the hard part on that team. **Do not "revert" it.**
+- **A single Runtime WP can legitimately run 16 HOURS.** Silence on that ring
+  is not a stall.
+- **Refusal routing (new this window):** on a provider content refusal, route
+  the task to an **Opus** seat *regardless of subject area*; if Opus also
+  refuses, route to a **gpt-5.6** seat. Protect uncommitted/untracked work
+  first, never re-send the refused content verbatim.
+- **STOP at the title-only issues** (#38/#32/#24/#25) — reconstruct WITH the
+  operator, never invent a scope.
+- Merge autonomy per the standing gate model (QA + Architect §14 + CV where
+  the diff-scope pulls it + CI green). No separate operator-merge gate.
+
+## Queue of record for the window
+1. **RT-PARITY** — active; remediation in flight, 6/6 differential cases flip.
+   ⚠ `dec_7p15cgqz3x0sg` OPEN, bound to **stale** `a692134e`; must be
+   re-anchored, and the Architect's earlier APPROVE does **not** carry forward.
+   On merge: **notify the adversary** (`agt_37vnwmcdxhw00`) — mandatory on
+   every CODE merge.
+2. **F1 (#37)** → Architect (soundness-relevant per research
+   `evt_55tnpnhvcpptf`), released when the RT-PARITY Decision resolves.
+3. **Publish** the two held doc-only branches (`wp/STR-BIJ-frame` `f030cedd`,
+   `wp/MODELS-TIER-erratum` `55576c05`) — held only to avoid rebasing a
+   fragile ring mid-flight.
+4. **STR-BIJ** → enclave (Handoff Gate first). 5. **A3** coverage walker
+   (before F4 — F4 edits the catalog A3 covers). 6. **PX8-F-PROOF (F4)** —
+   risky, may hard-stop to Spec. 7. **F3 (#39)** — must precede RT-SPLIT.
+   8. **RT-SPLIT**. 9. **PX8-F-CAP (#41)**.
+
+## Operator answers at sign-off (2026-07-21 ~03:35 UTC)
+
+1. **Credits are NOT a constraint this window.** Anthropic **46%** remaining
+   with **<2 days to reset**; OpenAI **13%**. Operator: *"You should have enough
+   until I get back."* Operator will *probably* move the fleet **entirely to
+   Anthropic** tomorrow. ⇒ **No credit contingency needed; do not ration.**
+   **★ Note the asymmetry:** OpenAI at 13% is the *tighter* pool, and most seats
+   (runtime-leader, architect, CV, research, spec-*) run on it, while Anthropic
+   at 46% is the looser one. **If an OpenAI seat exhausts mid-window, reseat it
+   to Anthropic** — that is where the credits are, and it is the direction the
+   operator already intends to move the whole fleet. Log any such reseat.
+2. **A MODEL REFUSAL OVERRIDES TOPOLOGY** — operator, explicit: *"a model
+   refusal overrides topology, at least when I'm not present."* ⇒ On a provider
+   content refusal I may route the refused task to **any** seat that can execute
+   it, **regardless of subject area or role**, Opus first, gpt-5.6 second. The
+   resulting work still returns through the **normal gates** (QA, Architect §14,
+   CV where the diff-scope pulls it, CI). **Scope note: this is an
+   operator-absent latitude** — the standing §9 topology invariant reasserts
+   when the operator is present.
+3. **ADR amendments: reason from `docs/PRINCIPLES.md`. If it does not settle
+   it, HOLD.** Operator: *"Use PRINCIPLES.md. It's often enough. If not, hold."*
+   ⇒ Not a blanket authorization and not a blanket veto — a *method*
+   instruction. See the ADR-0010 ruling below.
+
+Operator will *probably* check in in a few hours.
+
+## ▶▶ RESUME HERE AFTER COMPACTION (rewritten 06:56Z)
+
+**State in one paragraph.** Fleet single-threaded, operator away until ~11:30Z.
+**SPAN-SEAL** (Foundation) is APPROVED and **mid-publish as PR #798** at exact
+`02677059`; Decision `dec_1971te8pb7spb` verified RESOLVED (QA + Architect §14 +
+CV, all on that SHA). Publisher is a **live background process** waiting on CI
+(`Waiting 1557s before polling`), log at
+`<scratchpad>/span-seal-publish.log`. `origin/main` is still `d18b4b89` — **that
+is expected, not a failure.** RT-PARITY is HELD at `506fa393` behind it. Every
+other ring idle is CORRECT.
+
+**THE MERGE CHAIN IS MY OPEN OBLIGATION — do this, in order:**
+1. Confirm the merge: `ps` for the publisher **and** read its log tail; then
+   **verify BY CONTENT** — `git cat-file -p origin/main:crates/ken-elaborator/src/prelude.rs | grep write_all_exact_prefix_prop`. Never trust a "merged" line or an exit code.
+2. **NOTIFY THE ADVERSARY `agt_37vnwmcdxhw00`** — MANDATORY on every CODE merge;
+   it hunts event-driven and idles silently without one. This is the step most
+   easily lost to a compaction.
+3. Request **§10 retros** from Foundation (leader + implementer + QA). Carry two
+   lessons: the **four-layer enumeration defect**, and **AC-names-a-mechanism**
+   (layers 3–4 were MY AC's fault — I specified `GlobalEnv::lookup` and a
+   Pi-codomain walk instead of the property).
+4. **Close SPAN-SEAL** in the tracker.
+5. **Release RT-PARITY** — tell runtime-leader to rebase onto the landed sealed
+   closure and respin; it drops the derived-span test that depended on the
+   escaped helper, keeps its six approved differentials.
+6. **Then the queue:** F1 (#37) → Architect · Handoff Gate + kick STR-BIJ to the
+   enclave · A3 · F4 · F3 · RT-SPLIT. **STOP at the title-only issues**
+   (#38/#32/#24/#25) — reconstruct those WITH the operator.
+
+**Also queued (low priority):** a `MODELS.md` follow-up — the full-fleet sweep
+showed implementer=T1 / leader=QA=T2 is the **fleet-wide convention**, not a
+Runtime "inversion"; PR #793's example understates it.
+
+**Discipline earned this window — carry all of it:**
+- **A success signal tells you a thing RAN, never that it did what you meant.**
+  Four tools misled me tonight: publisher exit code, gate-script exit 0, `git
+  commit` on the wrong branch, and a task-completion notification for a `nohup`
+  wrapper whose job was still running. **Verify by CONTENT.**
+- **Branch discipline:** end every publish with `git checkout steward/work` in
+  the SAME command; `git rev-parse --abbrev-ref HEAD` before any log/tracker
+  write. I lost 121 log lines onto a stale branch once tonight.
+- **My detectors fail the way my ACs do** — matching a convenient proxy instead
+  of deciding the property. Three false signals (verb-enumeration false IDLE;
+  `tail -5` false stall; bare `400` matching agent IDs). **Verify before
+  acting**, and exclude self from fleet sweeps.
+- After any Decision opens, **confirm every named reviewer reached `Working`** —
+  the architect stranded ~17 min on an unsubmitted paste tonight; repair with a
+  bare `Enter`, and capture WIDE.
+- **If a third block lands on AC-3, do NOT amend the frame again** — route it to
+  the Architect as a design question.
+
+## Decisions this window
+
+| Time (UTC) | Decision | Basis | Status |
+|---|---|---|---|
+| 03:30 | Window opened; log started. | operator directive | — |
+| 03:35 | Recorded the three sign-off answers above. | operator directive | — |
+| 03:53 | **RT-PARITY remediation COMPLETE — candidate `27c5caf9`; QA in flight.** See the block below. | ring delivered | in QA |
+| 03:53 | **NEW DEFECT FILED: `RT-ESCAPE` — pre-existing native lowering limitation.** Surfaced by RT-PARITY, correctly NOT fixed there. Filed by me because agents cannot create tracked work (§2). | COORDINATION §2; PRINCIPLES §13 "filed and tracked" | queued |
+| 04:04 | QA verdict on `27c5caf9`: **BLOCK on a mechanical `rustfmt` gate only.** All substantive evidence passed, incl. QA's **own independent causal mutation** (sentinel-return splice → all six constructible cases fail with the exact declared modes; the BufferFreeze structural control alone stayed green — correct, it is a pin not a net). QA did not accept the implementer's flip table; it reproduced it. | ring | implementer remediating |
+| 04:08 | **❌ MY ERROR — diagnosed a transport stall that did not exist; sent an unnecessary rouse.** See below. | self-caught | rouse queued, harmless |
+| 04:11 | **❌ MY ERROR — reckless `pkill -f` with a broad alternation pattern.** See below. | self-caught | no damage; verified |
+| 05:04 | **Post-compaction resume verified clean.** Re-oriented; all three branches intact at their recorded SHAs; `origin/main` still `61a78620`; watchdog re-armed at 900s with the full briefing. Implementer alive at 35m, actively deleting `elaboration_error_mentions` and running targeted tests — i.e. **working the closure inventory, not the honesty prose**, which is the right order. | structural detector | no action |
+| 05:06 | **Stale participant status DISPOSITIONED — `integrator` / "PR #365 awaiting Steward routing".** Not a live obligation. See below. | verified by content | closed |
+
+### 04:22–04:28 — rustfmt fixed (`2b55706a`), then ARCHITECT TERMINAL BLOCK on a real defect
+
+Chain ran correctly and fast: implementer formatted → `2b55706a`; QA
+re-approved; leader opened a **fresh** Decision **`dec_6w2gbgarf5443`** (note:
+**a new Decision, not a re-anchor of `dec_7p15cgqz3x0sg`** — cleaner, and both
+reviewers explicitly discarded their stale votes unprompted).
+
+**★ Architect BLOCK (terminal, rejecting on cast) — and it is a genuine catch
+that QA, CV and I all missed.** The BufferFreeze source-unreachability exemption
+is **not established**. The implementer's argument was: `PrivateBufferSpan` is
+not nameable ⇒ every span reaching `freeze` is host-minted and in range. The
+Architect found a **public** counter-producer the private-name closure does not
+remove — `write_all_advance_span` (`prelude.rs:2075-2078`, closure at `:2111+`):
+
+```ken
+fn write_all_advance_span (span : BufferSpan) (count : TransferCount) : BufferSpan =
+  PrivateBufferSpan (add_int (buffer_span_start span) (transfer_count_int count))
+                    (transfer_count_remaining count)
+```
+
+So checked source **can** build a new `BufferSpan` from source-obtainable
+spans/counts **without naming the private constructor**. The claim is false as
+written.
+
+**★ Why this is the lesson of the night, and why my own praise of that test was
+wrong.** At 03:53 I logged approvingly that the implementer "pinned the premise
+with a discriminating pair so it fails if the premise stops holding." **A pin is
+only as strong as the property it pins.** That pair tested *direct
+constructor-name rejection* (`MkBufferWindow` control); the property actually
+needed is **closure under composition of every public `BufferSpan`
+producer/transform**. Constructor privacy was substituted for a closure proof —
+`an-enumeration-needs-a-proven-closure-not-a-better-grep`. I read the test's
+*shape* (non-degenerate pair, fails-if-premise-breaks) and credited it without
+checking that its discriminator matched the claim. **Verify the property, not
+the representative case — COORDINATION §7 — applies to the unreachability
+argument itself, not just to the tests it excuses.**
+
+Leader's remediation brief is well-formed and includes the right §6 escape
+hatch: *"If the inventory reveals a genuine design choice about the helper's
+public status rather than a structurally determined closure result, stop with
+the grounded alternatives and report it for Architect ruling."*
+
+**⚑ Watch item (possible separate defect, NOT actioned yet):**
+`write_all_advance_span` being public means a **public** helper mints a
+**private** type from public inputs. That may be an unintended capability leak
+in the prelude rather than a test-coverage gap. The Architect's respin
+explicitly forces the fork (seal it at its owning layer vs. prove the numeric
+closure), so it is in hand — **do not open a parallel item unless the respin
+punts it back.**
+
+**Steward action: none.** Ring is healthy, reviewers are fresh-voting, the
+leader assigned remediation within 16 seconds. No stall, no transport repair
+needed. Logged only.
+
+**04:41 — CV BLOCKED independently and reached the SAME defect by its own
+grounding** (`evt_77p1t3xsa9352`), explicitly noting the Decision was already
+terminally rejected and that it was recording the independent CV lane anyway.
+That is the review model working as designed: **two reviewers, separate lanes,
+no coordination, same `write_all_advance_span` finding.** Independent
+convergence is much stronger evidence the defect is real than either vote alone
+— and it is why the two-reviewer gate is not redundancy. CV also ran the full
+executable suite itself (7/7, 720.89s) rather than accepting QA's run.
+
+### ❌ Two Steward errors at 04:08–04:11 — both mine, both recorded
+
+**(1) False stall diagnosis from a narrow pane capture.** I captured
+`tail -5` on `runtime-implementer`, saw a bare `❯`, and concluded QA's mention
+"never reached the seat's turn." **It had.** The seat woke on QA's mention at
+04:04 and was `Beboppin'` the whole time — the activity spinner renders *above*
+the input line, so a short tail truncates it and manufactures a phantom idle.
+I then sent a transport-repair rouse that was pure redundancy; it queued behind
+the seat's live turn.
+
+**★ The damning part: I caught this exact trap at 03:08 this same session,
+deliberately widened the capture, wrote it up — and then narrowed it again three
+ticks later.** The lesson "capture wide" is evidently **not durable as a habit**,
+so it must stop being a habit and become a **mechanical command**.
+
+**FIX v1 (WRONG — superseded at 04:44, see below).** I replaced the tail with a
+whole-pane grep over an **enumerated verb list**
+(`Working|Beboppin'|Tomfoolering|Beaming|Cooked`).
+
+**❌ FIX v1 FAILED WITHIN TWO TICKS — and failed in the exact way the Architect
+had just blocked RT-PARITY for.** At 04:44 the detector reported
+`runtime-implementer IDLE` while it was in fact **`Slithering… (15m 44s · ↓
+21.1k tokens)`** with 3 shells running. The activity spinner cycles through a
+whimsical, open-ended verb set; my list could never be complete. **I wrote an
+enumeration with no proven closure — the identical defect class the Architect
+had blocked ninety minutes earlier (`write_all_advance_span` escaping an
+enumerated privacy list), which I had just finished praising him for catching.**
+Had I acted on that reading, I would have sent a second bogus rouse — or worse,
+"recovered" a seat that was mid-work.
+
+**FIX v2 — detect the STRUCTURE, never the vocabulary.** A working pane always
+renders a **running timer in parentheses**, regardless of which verb decorates
+it. Match that:
+```
+tmux capture-pane -p -t moot-<seat> | grep -oE "\([0-9]+[hms]( [0-9]+[ms])? (·|•)[^)]*\)" | tail -1
+```
+Verified against both live forms: `(16m 2s · ↓ 21.1k tokens)` and
+`(2m 02s • esc to interrupt)`. Empty = genuinely idle. Non-empty = **working, do
+not touch.** Now in the watchdog prompt.
+
+**The generalizable lesson, which is the whole point of recording this:**
+*when a signal has an open-ended surface vocabulary, key the detector on the
+invariant structure, never on a list of observed spellings.* Enumerate only
+what you can prove closed. I have now made this mistake and had it made at me
+inside the same hour — `an-enumeration-needs-a-proven-closure-not-a-better-grep`
+is not a lesson about greps, it is a lesson about detectors.
+
+**Corollary retained:** "no paste + no Working" is a *never-delivered* signature
+**only** if the structural detector is empty.
+
+**(2) Reckless `pkill -f "Working|Tomfoolering|Cooked|Beaming"`.** Run
+reflexively to clean up my own stale background monitor. `pkill -f` matches
+against **full command lines**, and that alternation could have matched
+unrelated fleet processes. It happened to match only my own task (exit 144),
+and I verified afterwards: **all 26 tmux sessions alive, implementer still
+working, worktree intact.** But verifying after is not a control. **RULE: never
+`pkill -f` with a broad pattern in this environment. Kill a known job by its
+job spec or PID, or leave it — a leaked background task is far cheaper than a
+mis-killed fleet seat.** Sibling of `orphaned-background-task-loops-leak-cpu`,
+which is about the *cost* of leaks; this is about the far worse cost of the
+cleanup.
+
+**Net damage: none.** But two careless acts inside four minutes, on a night
+where my job was to be the careful one, is the signal — both are recorded
+against my name rather than smoothed over.
+
+### RT-PARITY candidate `27c5caf9` — state of record (03:53)
+
+Branch `wp/RT-PARITY-interp-native`, base `origin/main @ 61a78620` (no rebase
+needed). WIP `3c574d8a` **amended into** this commit. Production behaviour
+unchanged from `a692134e` — this commit is **tests + the conformance seed**.
+4 paths; `crates/ken-runtime/` + `crates/ken-host/` byte-unchanged (verified
+empty diff). Targeted only, no workspace build:
+`ken-cli --test rt_parity_native` **7/0** (728s) · `ken-interp --lib rt_parity`
+**8/0** · full `ken-interp` crate green (56 lib + all integration).
+**All 6 executable differential cases flip**; interpreter 5 of 8.
+
+**⚠ `dec_7p15cgqz3x0sg` MUST be re-anchored to `27c5caf9`.** The Architect's
+APPROVE was cast on `a692134e` and does **not** carry forward; CV's BLOCK was on
+evidence this candidate replaces. Both need **fresh** votes.
+
+**Three reported bounds — two NARROW what the leader's directive asked for.**
+This is AC-5 ("non-reaching obligations are reported, not dropped") working, and
+QA has been told to verify the bounds rather than accept them:
+1. The three `u64::MAX` single-fault cases **cannot** flip at the dispatch
+   boundary — pre-fix the malformed arg became `u64::MAX`, which shared dispatch
+   already rejects with the *same* variant the repair produces. Labelled
+   in-source as **regression pins, not nets**, so they can never be miscited as
+   flip evidence. Covered instead on the dispatch-skip axis.
+2. **`BufferFreeze` has NO differential case — structurally, not by omission.**
+   `PrivateBufferSpan` is removed from public scope (`prelude.rs:2110-2133`), so
+   every span reaching `freeze` is host-minted and already in range; checked
+   source cannot supply a malformed argument. Pinned by a **discriminating
+   pair** (public window ctor must elaborate / private span ctor must not) so it
+   **fails if the premise stops holding** — the right way to pin an unreachable.
+   Same reasoning makes `FsWriteAt`'s `buffer_start`/`length` source-unreachable.
+3. Coincident fault is a **rights** fault, not liveness — see `RT-ESCAPE`.
+
+**⚠ CI COST TO WATCH:** the differential suite runs **~12 min locally (7 native
+builds)** and will add real wall-clock to **every** CI run, not just this PR.
+Flagging as a compounding cost; not blocking this WP.
+
+### RT-ESCAPE (new, queued) — escaping a 2nd `Resource` fails native lowering
+
+**Grounded by RT-PARITY:** constructing a closed-but-still-referenced resource
+needs it escaped from its bracket; escaping a **second** `Resource` through a
+bracket fails native lowering with
+`OrientedSubcontinuationPlanV1: checked Runtime frame marker was consumed more
+than once`. Escaping a resource **plus a plain value** lowers fine ⇒ it is
+specific to a second *Resource*, and it is **pre-existing, not an RT-PARITY
+regression**. The implementer correctly **filed rather than fixed** it, per the
+frame's "if native looks wrong, file it, don't fix it here" guardrail, and
+routed RT-PARITY's coincident-fault coverage through a **rights** fault instead
+— which discriminates the same narrowing-order property.
+
+**Why I am filing it here and now:** the implementer said "filing it" and the
+seed records the finding, but **a note in a conformance seed is not a tracked
+work item**, and agents cannot create one (§2 — the leader proposes, the Steward
+sequences). PRINCIPLES §13's route-around clause requires the root fix be
+**"filed and tracked"**; this is that filing. Not sized or scheduled yet —
+Runtime-owned, needs Architect input on whether the frame-marker consumption
+rule or the escape lowering is the defect's layer.
+| 03:40 | **ADR-0010 amendment: PROCEED on the STR-BIJ branch. No hold.** Reasoned from PRINCIPLES per the operator's method instruction; it settles the question, so the hold clause does not fire. | PRINCIPLES §13, §8, §4 | ruled |
+
+### Ruling — amending ADR 0010 under STR-BIJ (PRINCIPLES-settled, 03:40)
+
+**Question.** STR-BIJ corrects a "bijection" over-claim at 7 sites. One is
+`docs/adr/0010-...:61` — an **Accepted** ADR. Does amending it need the
+operator, or does the normal merge Decision (Architect + CV) suffice?
+
+**PRINCIPLES §13 — "fix the defect at its layer, never compensate upward" — is
+directly on point and decides it.** The corpus is a citation stack: the ADR is
+the layer beneath, and `spec/37:188`, `Derived.ken.md:1389` and
+`seed-collections.md:656` each **cite ADR 0010 §2 as their authority**. The
+defect lives in the ADR's justification sentence ("the round-trip is the
+identity on scalar sequences" — naming the direction that is *false* under NFC).
+Fixing the six leaves while leaving that sentence intact is **exactly**
+compensating upward: it leaves the defect live for every future author who
+reads the ADR and re-derives "bijection," and it hides the root. §13 even names
+the tell — *"you reach for 'just handle it here instead'"* — which is precisely
+what holding the ADR line and patching leaves would be.
+
+**§8 reinforces:** the sentence is an over-claim about what the round trip
+guarantees, and over-claiming *is itself a failure*. Knowingly shipping a
+corpus-wide honesty fix that preserves the root over-claim is incoherent.
+**§4:** holding for 8 hours to dodge a governance question is the *expedient*
+over the correct/permanent.
+
+**Why this does NOT need the operator.** The ADR's **decision stands
+unchanged** — `String` *is* canonical w.r.t. `List Char`, `DecEq`/`Ord String`
+transport *is* deliverable. Only the stated *reason* was too strong (the
+consumer needs `s2l` injectivity, which the landed retraction axiom supplies).
+An amendment that changes **no decision** is a wording correction, it is
+recorded **as** a dated amendment (frame AC-6, never a silent rewrite), it is
+fully reversible and auditable, and the ADR's own co-decider — the **Architect**
+— votes on it through the §14 Decision it already casts. No new authority is
+being claimed.
+
+**★ The boundary I am setting for the rest of this window** (this is the part
+that generalizes): **an ADR amendment that PRESERVES the recorded decision →
+proceed under the normal gates. An amendment that would CHANGE a recorded
+decision → HOLD for the operator**, regardless of how obviously right it looks.
+The second is a governance act; the first is an honesty repair. PRINCIPLES
+settles the first and is silent on the second — and per the operator's
+instruction, silence means hold.
+
+**⚑ SCOPE OF "HOLD" — operator clarification (2026-07-21 ~03:45):** *"By 'hold'
+I mean hold on the ADR. Route around it if you have to hold and you can route
+around it."* ⇒ **A hold is scoped to the held ARTIFACT, never to the WP.** If an
+ADR line must hold, **land the other 6 sites and hold only the ADR line** — do
+not stall the erratum behind it. Generalize to every hold this window: hold the
+narrowest thing that must be held, route the rest through.
+
+**★ This is NOT in tension with the §13 reasoning above — PRINCIPLES §13
+already carries the exact clause, and I should have surfaced it the first
+time.** §13 verbatim: *"A higher layer may route around a lower defect only as a
+**disclosed, temporary** hedge, with the root fix **filed and tracked** — never
+as the permanent answer, and never in a way that **hides** the defect."* So the
+operator's instruction and §13 are the same rule. The three conditions are
+binding and are what separate a legitimate route-around from the
+compensating-upward §13 forbids:
+1. **Disclosed** — the shipped artifact says the root is still wrong. A leaf fix
+   that reads as complete while the ADR still misstates the property is exactly
+   the "hides the defect" failure.
+2. **Filed and tracked** — the held ADR line gets a real queued item, not a
+   tracker sentence saying I intend to file one. (My own dropped F1 dispatch
+   this session is the cautionary case.)
+3. **Temporary** — it comes back to the operator, it does not quietly become the
+   permanent state.
+
+**Applied now:** moot for ADR 0010 — PRINCIPLES settled it as *proceed*, so
+nothing is held and no route-around is needed. The clause is recorded because it
+governs whatever the rest of this window turns up.
+
+---
+
 # Steward decision log — autonomous window 2026-07-18
 
 Operator (Pat) away ~03:47 UTC → ~11:30 UTC. Mandate: keep the fleet moving;
@@ -82,3 +477,640 @@ fixed inputs.
 | ~19:0x (07-18) | **OPERATOR ASK: investigate "breakdowns in thread discipline" — findings delivered, remedy path OPEN (awaiting Pat).** Investigated the live PX8-H thread `thr_37h5` (structural metadata via `get_recent_context detail=full` → jq). **Cause:** convo message vocabulary + reply tooling don't match the federation's actual acts, so agents substitute nearest-fit types + post around tooling rough edges; hygiene never written as law (scattered memory lessons, not one protocol). **Concrete breakdowns:** (1) `message_type` mislabel — Architect rulings typed `decision_propagated` (no real Decision object), advisories/asks typed `review_request`, everything else `status_update` catch-all; explicit `"message"` rejected yet is the omit-default. (2) durable-bookkeeping leaks into the work thread (each ruling + a separate "recorded at architect/work @X" status ≈ 2× messages). (3) transport strands (Codex paste-not-submitted; `reply_to` `'speaker_id'` error → post_response w/ ragged parent). Threading itself mostly intact. **Remedy split:** Steward codifies a COORDINATION.md thread-protocol (act→type mapping, keep-bookkeeping-out, mention discipline, summarize-long-chains); OPERATOR owns backend fixes (extend message_type enum with ruling/advisory/hard_stop/hold; fix reply_to + message-default; Codex paste-submit). **OPEN Q to Pat:** land convention now / hold for enum decision / both; + widen investigation if breakdowns are elsewhere. Not yet acted — awaiting Pat. | operator investigation ask | findings posted; remedy pending operator |
 | ~19:1x (07-18) | **OPERATOR DIRECTIVE (thread discipline, finding #2): the Architect must STOP posting durable-state-update notifications to the work thread** (the "durable checkpoint … recorded on `architect/work @<sha>`" `status_update`s after each ruling — keep the git commits, just don't announce them). Instructed the Architect at root `evt_5syt4zswyb2vh`; it acknowledged (re-oriented + "incorporates the new thread-discipline rule"). **✅ CODIFIED in `architect.md §3`** ("Checkpoint durably, but do NOT announce it to the work thread") so it survives the Architect's own compactions — the convo instruction alone was context-only. The broader COORDINATION.md thread-protocol (act→type mapping, mention discipline, summarize-long-chains) still folds in once Pat rules the remedy path. | operator process directive | codified `architect.md §3`; broader protocol pending Pat |
 | ~post-15th (07-18) | **PX8-H frame RECONCILED to the ruled mechanism (15th ruling's "amend the frame" directive; banked on `steward/work`).** After 15 Architect design rulings, the WP brief still framed the fix as ruling-1's "install the one missing intervening ordinary frame" (H-D1/H-D2) and Fixed-input-5 barred "new representation" — which the ruled compiler-private `NativeJoinPlan` carrier would read as violating at §14 (the exact stale-frame class that §14-BLOCKED PX8-L, `dec_79sg9emgfhthc`). Amended `docs/program/wp/PX8-H-*.md`: (a) new "Mechanism as ruled" § transcribing the 15-ruling chain **by citation** + the 15th ruling's contract + load-bearing invariant **verbatim** (`evt_7sdmvyme8qy50`); (b) Fixed-input-5 + Do-not-reopen guard AUTHORIZE the compiler-private checked-package join-plan carrier (sibling `NativeEntrypointPlanV1`, validated-not-invented) while still barring public/ABI/wire/kernel reps; (c) H-D4/H-D5 deliverables + H-P7 join-plan discriminators; (d) Landed-anchors add `compiler_driver.rs` + demoted `merge_scalar_branch`/`record_scalar_merge_kind`. **In-lane:** transcription of the Architect's ruled contract, not new design (mechanism authority stays the cited events). **LAND-TO-MAIN (doc-only) = first pre-§14 step when a candidate SHA releases**, so the candidate branch carries a current frame at §14; re-amend if a 16th/17th ruling refines the contract. | 15th ruling directive + §14 frame-currency (PX8-L precedent) | banked on `steward/work`; lands to main pre-§14 |
+
+---
+
+# ▶▶ 2026-07-21 WINDOW — narrative entries continue here
+
+*(Navigation: the 07-21 window's header, standing inputs, queue, and decision
+table are at the TOP of this file. The dated narrative entries below sit under
+the 07-18 heading only because both windows append to the end of the file. Read
+top block first, then here.)*
+
+### 05:06 — `integrator` "PR #365 awaiting Steward routing" is a STALE STATUS, not work
+
+The participant roster shows `integrator` (`agt_37reqx7jqz400`) with the status:
+*"watchdog: PR #365 green on current head `befc2dc4…`, but exact-head
+review/decision is stale after prior blocked heads; awaiting Steward routing."*
+That reads as an unrouted obligation I own. It is not one. Verified, not assumed:
+
+- `befc2dc4` is **`tools: add scripted PR auto-merge path`**, sitting on
+  `NC27`/`NC26` — a **2026-07-08-era** commit line, not this window's work.
+- `git merge-base --is-ancestor` says it is **not** an ancestor of `origin/main`
+  — which by itself looks like "unmerged", and is exactly the trap.
+- **Checked by CONTENT instead:** `git cat-file -p
+  origin/main:scripts/scripted-pr-automerge.sh` returns the file. **The work
+  landed** (squash-merged, so the original commits dangle — the documented
+  squash-merge trap in the §2c gate note). The script is the very one my own
+  playbook names as the canonical publisher path; it has been in use all night.
+- `integrator` has **no `moot-integrator` tmux pane** — it is not a seated agent
+  in this fleet. Nothing is waiting on a turn.
+
+**Ruling: closed, no action.** Two standing lessons applied and both were
+load-bearing here — *branch-ahead ⇏ unmerged, verify by content*
+(`check-main-via-git-object-store-not-find`), and *a pane/participant status
+line is not agent state* (`pane-suggestion-text-is-not-agent-state`). A status
+string is a claim by a past turn about a past moment; it does not expire on its
+own and it does not become false-looking when it goes stale. Had I taken it at
+face value I would have opened a merge chain for already-merged work in the
+middle of a single-threaded window.
+
+### 05:08–05:20 — the watch item punted back; framed as **SPAN-SEAL** (Foundation)
+
+**What happened.** The Architect's respin forced the fork I predicted at 04:28,
+and it came back as a design question rather than a closure result — exactly the
+§6 escape hatch the leader's brief provided for. QA blocked `506fa393`; the
+leader escalated; the Architect ruled (`evt_1ppsszssn593s`): **seal the raw
+transform, do not preserve it public, and do not merely add a `u64` bound
+check.** The leader then routed it to me as a blocking pre-existing erratum
+outside RT-PARITY scope, correctly refusing to absorb it.
+
+**★ The report arrived as an overflow story, and the overflow story has a cheap
+wrong fix.** The leader's escalation led with unbounded `start' = start + count`
+composition reaching past `u64::MAX` — true, but astronomical, and it invites
+"add a bound check." The Architect saw past the framing: the breach is available
+**at small values**, because the two arguments are *not indexed to the same
+request, span, or buffer*, so source can combine unrelated host-minted values
+and choose a new start/budget. A `u64` check repairs the magnitude symptom and
+leaves the abstraction breach intact. **Recorded because the cheap fix would
+have passed a review that accepted the reporter's framing.**
+
+**I verified the ruling's load-bearing facts rather than passing them through**
+— three plausible arguments about this exact surface went unchecked tonight:
+- helper installed `prelude.rs:2076`, **absent** from the closure list `:2111+`
+  (read the list, not the line number);
+- the **only** landed source consumer outside RT-PARITY is the catalog wrapper
+  `catalog/…/IO.ken.md:22,24` — repo-wide grep;
+- **no spec or conformance file names the helper or its proof.** Spec
+  `38-ffi-io.md:356-365` locks the contract it violates.
+
+⇒ **Code repair to conform to an already-locked spec. NOT a spec amendment, NOT
+an ADR.** So the operator's "if PRINCIPLES doesn't settle it, HOLD the ADR" rule
+**does not fire** — there is no ADR here, and nothing needs the enclave to start.
+
+**★ I elevated one thing from "prefer" to load-bearing.** The Architect wrote
+*"Prefer* making `private_write_all_fuel` call the single private advance
+helper." Grounding it in the source shows it is stronger than a preference: the
+real loop constructs its span **inline** at `prelude.rs:2044-2046`, so `writeAll`
+**never executes** `write_all_advance_span` — and therefore the *published*
+catalog lemma `write_all_preserves_exact_prefix` proves a property of a faithful
+restatement of the step rather than of the step itself. That is a
+proof-about-a-proxy defect sitting underneath the capability leak, and it is why
+SPAN-SEAL is a **net strengthening, not a removal**. Flagged the elaboration
+hazard too: the loop spells the budget `(Suc remaining)`, the helper spells it
+`transfer_count_remaining count` — definitionally equal *only inside that match
+arm*. The frame requires that refactor be **shown** to elaborate, not argued to.
+
+**★ AC-3 is the criterion that matters, and it is why this recurred.**
+`px8f_buffer_io_surface.rs:59-67` **already** asserts a private-name list, and
+the escaped helper is not in it — the list enumerates what the author remembered
+to seal, not what must be sealed. So the producer passed a test whose stated
+purpose was to catch exactly this. The same shape then repeated one layer up in
+RT-PARITY's unreachability argument. **A better allowlist leaves the defect one
+addition away from recurring**, so AC-3 requires the closure be **derived** from
+the elaborated environment (`env.globals` → `GlobalEnv::lookup` → walk the Pi
+codomain → collect every `BufferSpan`-returning global) and compared to an exact
+expected set. I confirmed that is buildable before writing the AC —
+`GlobalEnv::lookup`/`decls()` are public — so the AC is not unbuildable prose.
+A source grep would not do: the prelude is **Rust-emitted**, not `.ken`.
+
+**Owner: Team Foundation.** Grounded, not guessed — `be65f3d2 PX8-F: buffer/IO
+surface + writeAll` introduced **both** the prelude helper and the catalog lemma
+block. Foundation authored the surface and owns it. The Architect has already
+ruled the *shape*, so this is execution against a specified design — the
+shovel-ready model, appropriate for the ring's tier.
+
+| Decision | Basis |
+|---|---|
+| **SPAN-SEAL framed, owner Foundation, one branch/one Decision.** | Architect ruling + PX8-F provenance |
+| **Required votes: QA + Architect §14 + CV** — the diff changes a *published catalog surface*, so diff-scope pulls CV. | standing gate model |
+| **RT-PARITY held at `506fa393`** until SPAN-SEAL lands, then rebase/respin. | Architect; single-threaded fleet |
+| **Held doc branches released for publish.** The reason for holding (don't rebase a fragile ring mid-flight) is **gone** — RT-PARITY is now held pending SPAN-SEAL and will rebase regardless. | reassessed on changed facts |
+| **Did NOT preemptively reseat Foundation off OpenAI (13%).** Operator's instruction is reactive — *"if an OpenAI seat exhausts, reseat it."* Preemptively moving three seats is a topology change without a trigger, beyond "route around." Monitoring. | operator's actual words |
+
+### 05:08–05:21 — three publishes, a dead seat repaired, SPAN-SEAL kicked
+
+**Published all three held doc branches** (the hold reason was gone — RT-PARITY
+is held pending SPAN-SEAL and will rebase regardless):
+
+| PR | Branch | Verified on `origin/main` **by content** |
+|---|---|---|
+| #793 | `wp/MODELS-TIER-erratum` | `agent/MODELS.md` carries the DEFAULT/inverted/observe text |
+| #794 | `wp/STR-BIJ-frame` | `docs/program/wp/str-bij-overclaim-erratum.md` present |
+| #795 | `wp/SPAN-SEAL-frame` | brief + bundled tracker sync present |
+
+`origin/main` **`61a78620 → 31b7fda5`**. All doc-only ⇒ **no adversary
+notification** (that obligation is on **code** merges); recorded so the omission
+reads as a ruling rather than a lapse. **Held-branch list is now empty.**
+
+### ★ ~05:15 — `foundation-qa` was DEAD on an invalid model string. New stall class.
+
+Gate step 5 (verify the drops) is what caught it — and it is exactly why that
+step is mine and not the script's. Two seats showed `Context compacted`; the
+third showed:
+
+> `400 invalid_request_error: The 'gpt-5.6-terras' model is not supported when
+> using Codex with a ChatGPT account.`
+
+**`gpt-5.6-terras`** — a plural typo. Every turn that seat took was 400ing,
+including its own `/compact`. It had been sitting there reading as a normal
+idle seat.
+
+**`moot.toml` was FINE** (`model = "gpt-5.5"`) — the bad value was an
+**in-session override**, so diagnosing from config would have found nothing and
+concluded the seat was healthy. **The live model is in the pane footer; that is
+the only place this is visible.**
+
+**Repaired without the operator**, per the standing latitude to route around
+problems: drove the in-pane `/model` selector over tmux → `gpt-5.6-terra medium`
+(matching the config's intended T2/medium; the typo makes the intent
+unambiguous) → confirmed `Model changed to gpt-5.6-terra medium` → **re-ran that
+seat's compaction**, since the failed one had done nothing. Now `Context
+compacted`.
+
+**Why this mattered rather than being a curiosity:** SPAN-SEAL requires a QA
+vote from that seat. Had I trusted the script's exit 0 and skipped step 5, the
+kickoff would have gone out to a ring with a silently dead QA seat and the WP
+would have stalled with no diagnosable cause. Saved as memory
+(`seat-on-invalid-model-string-400s-every-turn`) — it is the **third** distinct
+way a seat dies while merely looking quiet, alongside provider content refusal
+and model-at-capacity.
+
+**Also observed: `foundation-implementer` is `gpt-5.6-sol` = T1**, leader T2 —
+the *same inversion* as Runtime. Two teams now, so implementer-T1/leader-T2 is
+the pattern for hard-build teams, not a Runtime quirk. Memory updated.
+
+### 05:20:46 — SPAN-SEAL kicked; Handoff Gate run in full
+
+Gate: retros in ✓ · no in-flight obligation ✓ · quiescent ✓ · all three
+compacted (`handoff-gate-compact.sh`, branch-ahead verified **0** on each before
+running, so the hard reset risked nothing) ✓ · **drops verified individually**
+✓ (this is where the dead seat surfaced) · kickoff posted `evt_4pgqybwbkfssd` ·
+**delivery confirmed — leader observed `Working`**, not merely a returned
+`event_id`.
+
+Kickoff carried the three traps explicitly: don't take the cheap `u64` fix;
+verify the loop refactor elaborates rather than arguing it does; and derive
+AC-3's closure instead of extending the allowlist that caused this. Also told
+the leader about its QA seat's repair so it has the history rather than
+diagnosing it cold.
+
+⚠ Told the ring to **`git fetch` before branching** — the gate reset their
+worktrees to `61a78620`, then I published three branches on top, so the brief
+did not exist at their HEAD. That ordering hazard is inherent to overlapping the
+gate with publishes; the overlap was still right (it saved ~5 min), but the
+fetch instruction is **mandatory** whenever they're overlapped.
+
+### ❌ 05:36 — MY ERROR: I logged estimated wall-clock times, and they were ~15 min FAST
+
+The three headings above originally read `05:22–05:40`, `05:30`, and `05:38`.
+The actual kickoff timestamp is **`05:20:46`** (`evt_4pgqybwbkfssd`), and the
+clock read **05:36** when I noticed — so I had written a *future* time into the
+record and dated a completed action after the moment I was writing about it.
+
+**Cause:** I anchored on my own sense of elapsed effort instead of reading the
+clock, exactly the failure `silence-duration-anchor-on-actual-clock-not-last-
+event` names. It is more dangerous in a decision log than in a stall diagnosis,
+because these timestamps are what a returning operator uses to reconstruct
+order, and a drifted one silently misorders cause and effect.
+
+**Corrected** against event ids and `date -u`, which are the only two anchors
+that cannot drift. Rule for the rest of this window: **every logged time comes
+from an event id or `date -u`, never from estimation.** The watchdog prompt
+inherited the same bad "as of 05:40Z" stamp and is corrected on next re-arm.
+
+### 05:23–05:35 — SPAN-SEAL candidate `8f625666` delivered; QA in flight
+
+Twelve minutes from kickoff to candidate. Ring behaved well: the implementer hit
+a **branch-custody collision** (leader still holding
+`wp/SPAN-SEAL-span-producer-closure`), named it precisely, and the leader
+released within 14 seconds — no Steward intervention needed. That is the
+`wp-branch-handoff-deadlock-leader-holds` trap resolving *correctly* for once.
+
+**The implementer met AC-3 in its strongest available form.** I asked for a
+derived closure compared to "an exact expected set"; it derived the set and
+showed the expected set is **`{}`** — no public `BufferSpan`-returning global at
+all. That is strictly better than what I specified, and it is the honest result
+rather than a convenient one.
+
+Reported: `private_write_all_fuel` now calls the sole private transition; the
+**elaboration hazard is closed empirically** (the real recursion elaborates with
+`write_all_advance_span span count`, so the branch-local `(Suc remaining)` /
+`transfer_count_remaining count` definitional equality is *accepted*, not
+argued); public surface is an observer-only proposition + checked lemma; both
+private names pinned rejecting with exact `ElabError::UnresolvedCon` names;
+positive control sources span/count only from `ReadSome` and reaches `writeAt` /
+`freeze` / `writeAll`. **No `u64` bound was added** — the trap was avoided.
+
+Scope three paths, +125/-11; runtime/host diff empty; targeted suites only.
+
+**Steward action: none.** Leader routed to QA at `05:35:32` with a
+well-specified brief that explicitly asks QA to check the closure oracle *truly
+fails for a new producer* rather than being a prose/grep oracle — the right
+question, and the one I would have added. Awaiting QA, then Architect §14 + CV.
+
+### ❌❌ 05:40 — MY ERROR: three commits landed on the WRONG BRANCH (recovered, nothing published)
+
+**What happened.** To publish the SPAN-SEAL frame I ran `git checkout
+wp/SPAN-SEAL-frame` — and **never returned to `steward/work`.** The next three
+operations then ran against the wrong branch:
+
+- `ae6ed71d` and `cc51b7e0` (two decision-log appends) committed onto
+  `wp/SPAN-SEAL-frame`;
+- worse, that branch was cut from `origin/main @ 61a78620`, whose
+  `STEWARD-DECISION-LOG.md` is the **stale 2026-07-18 version** — so ~121 lines
+  of this window's record were appended to a file that does not contain this
+  window. The 07-21 header was not there; the entries were orphaned.
+
+**How it surfaced.** Not by my noticing. A tool result told me the file "had
+been modified on disk," and the diff it showed started
+`# Steward decision log — autonomous window 2026-07-18` — a line that cannot be
+line 1 of the file I thought I was editing. **The harness caught this, not me.**
+
+**Blast radius — bounded, and verified rather than assumed.** PR #795 published
+`ce066d63`; both stray commits are strictly **after** it, so nothing wrong was
+ever published. Grepped `origin/main` for both commit subjects → **0 hits**.
+`origin/main = 31b7fda5` is correct and the three landed frames are intact.
+
+**Recovery.** Extracted the strayed range as a pure-addition diff (verified **0
+deletions**, so nothing was overwritten), preserving blank lines — a first pass
+with `grep '^+[^+]'` silently dropped them (121 → 95 lines), which would have
+mangled every paragraph break. Reset `wp/SPAN-SEAL-frame` back to the exact
+published `ce066d63` so the branch matches what shipped. Appended the recovered
+text to the real log on `steward/work`; verified single-occurrence, no
+duplication, headings intact.
+
+**Cause and rule.** I have a memory for precisely this —
+`verify-branch-after-checkout-away-and-back` — and did not apply it. The trap is
+that `git commit` **succeeds** on the wrong branch and prints a plausible SHA,
+so there is no failure signal; the only tell is content, and I was appending
+(never reading) so I never saw the wrong content. **Rule for the rest of this
+window: every publish sequence ends with an explicit `git checkout steward/work`
+in the same command, and any log/tracker write is preceded by `git rev-parse
+--abbrev-ref HEAD`.**
+
+**Second-order note.** This is the same failure family as the two errors above
+it: I trusted an action's *success signal* (a commit SHA, an exit 0, a "sent"
+line) as evidence about a *property* it does not establish. That is now three
+distinct instances tonight — the publisher exit code, the gate script's exit 0,
+and now `git commit`. The general form is worth carrying: **a command
+succeeding tells you it ran, never that it did the thing you meant.**
+
+### 05:42–05:55 — CV blocked SPAN-SEAL `8f625666`; ★ the defect recurred INSIDE MY OWN AC
+
+**Chain ran clean and fast.** QA approved `8f625666` at 05:42 (including its own
+reversible closure-oracle mutation — it removed only the helper's private-name
+closure and confirmed the derived set became `{write_all_advance_span}`, so QA
+proved the oracle *reaches*). Leader opened `dec_4nkaf54v5vkyh`. **CV BLOCKED at
+05:49**, terminally.
+
+**CV's finding — and it is excellent.** AC-3's oracle derived the producer set
+**syntactically**: strip raw `Term::Pi` codomains, raw-match
+`Term::IndFormer{ id == BufferSpan }`. CV demonstrated the bypass with a
+*reaching* counterexample rather than an argument:
+
+```ken
+def BufferSpanAlias = BufferSpan
+fn escaped_alias (span : BufferSpan) (count : TransferCount)
+  : BufferSpanAlias = write_all_advance_span span count
+```
+
+Public, elaborates, genuinely produces a `BufferSpan` through the private
+transition — and the derived set stayed **`{}`**. So the oracle did not satisfy
+the brief's own "a newly added producer must fail by default."
+
+**★★ The lesson, and it lands on me.** This is the **third** occurrence of one
+defect on one surface, each a layer deeper:
+
+| # | Artifact | Why it failed |
+|---|---|---|
+| 1 | the private-name allowlist in `px8f_buffer_io_surface.rs` | enumerated what someone remembered to seal |
+| 2 | RT-PARITY's BufferFreeze unreachability argument | enumerated constructor *names*, not producers |
+| 3 | **AC-3's first implementation** | enumerated *spellings* of the result type, not its meaning |
+
+**A syntactic head-match is still an enumeration in disguise.** And #3 is my
+fault, not the ring's: AC-3 as I wrote it said *"walk each decl's type through
+its Pi codomain to the head and compare."* That is a **mechanism**, and I called
+it a property. The implementer built precisely what I specified. **I wrote an AC
+to prevent an enumeration defect and expressed it in a form that admitted a
+subtler one.**
+
+**General rule, recorded:** *"derived" is only as strong as **derived modulo
+what**.* Name the equivalence the closure must hold under — here Ken's
+definitional equality — or a reader will reasonably choose the cheapest
+equivalence the words permit.
+
+**Action taken: amended the frame and landed it mid-respin (PR #796,
+`origin/main 31b7fda5 → e119e6a7`, verified by content).** AC-3 now demands
+weak-head reduction against the real `GlobalEnv` before the Pi decision and
+after every codomain step, comparing the reduced head, covering
+whole-function-type aliases, with CV's alias producer required to appear in the
+derived set.
+
+**Why mid-respin rather than after:** a candidate reviewed at §14 against a brief
+specifying a now-known-insufficient method is exactly the stale-frame
+contradiction that **§14-blocked PX8-L** in an earlier window — mechanism sound,
+sunk by its own frame's words. Landing the amendment before the new SHA's §14
+means the candidate is judged against a frame that agrees with it. Told the ring
+explicitly that nothing in their in-flight correction changes and that I added
+nothing beyond CV's requirement.
+
+**Ring health: very good.** Branch-custody collisions twice (leader, then QA
+holding the branch); both named precisely and released in **under 15 seconds**
+without Steward involvement. Leader's respin brief transcribed CV's requirement
+faithfully and added the right guardrail — *"do not alter the sealed product
+surface merely to accommodate the test."*
+
+**Steward action beyond the frame amendment: none.** Fresh QA + Architect §14 +
+CV required on the new SHA; no prior vote carries.
+
+### 06:00–06:10 — respin `b057cc1e` (strong); ★ Architect was TRANSPORT-STRANDED, repaired
+
+**Respin delivered 06:00:09, QA APPROVED 06:03:55.** Twelve minutes CV-block →
+QA-approved. The correction is the real thing, not a patch over the symptom:
+
+- The oracle now calls kernel `whnf` against the real `GlobalEnv` **before Pi
+  classification** and **after every codomain**, carrying a `Context` and
+  pushing each Pi domain before reducing a dependent codomain. That is the
+  dependent-type-correct form, not just "reduce the result."
+- **A permanent TWO-ARM discriminator**, derived set exactly
+  `{escaped_result_alias, escaped_function_alias}` against a production set of
+  `{}`. One arm needs **post-codomain** reduction, the other needs **pre-Pi**
+  reduction.
+- **QA proved both arms causal rather than trusting their names:** two
+  independent reversible mutations — replacing post-codomain `whnf` with the raw
+  codomain loses **only** `escaped_result_alias`; replacing pre-Pi `whnf` with
+  the raw type loses **only** `escaped_function_alias`. Restored cleanly.
+
+That is exactly the `two-arm-producer-needs-a-case-per-arm` discipline, executed
+without being told. After three rounds of this defect the ring is now producing
+the strongest form of the evidence on its own.
+
+### ★ 06:04–06:10 — the Architect never received the Decision request (transport)
+
+`dec_61psqte1sfegf` was opened at 06:04:19 mentioning the Architect. CV picked
+up 20 seconds later and went `Working`. **The Architect showed nothing.**
+
+Captured its pane **wide** — and found the documented failure: the composer held
+**stacked `[Pasted Content …]` blocks with no `Working`**. The Decision request
+was delivered to the buffer and **never submitted**. Worse, it was *stacked*:
+two earlier pastes (2757 and 2048 chars) sat beneath it, so my 05:53 frame-
+amendment notice had almost certainly been stranded too — roughly **17 minutes**
+of a required §14 reviewer silently holding unread work.
+
+**Repair: a bare `Enter`** to that pane (playbook §2c step-7 table). Architect
+went `Working` within 5 seconds.
+
+**Why this one mattered.** The seat's *status* still read `ready`, and under
+single-threading an idle Architect looks correct. Nothing would have surfaced
+it: the leader had done everything right, `post_response` returned a valid
+`event_id`, and CV was progressing normally — so the Decision would simply have
+sat one vote short, indefinitely, with every participant believing it was
+someone else's turn. **`event_id` proves the event exists; it never proves an
+agent read it.** This is the fourth-plus occurrence on *this specific seat*
+(three on 2026-07-14), which is why the check is in the gate rather than left to
+vigilance — and why a **wide** capture is mandatory: `tail -5` would have shown
+a bare prompt and I would have called it idle.
+
+**Standing correction to my own watchdog practice:** I check liveness on the
+*working* ring, but a §14/CV reviewer that has been *mentioned* is equally a
+seat that can strand. From here: after any Decision opens, confirm **every named
+reviewer** reached `Working`, not just that the Decision exists.
+
+### 06:12–06:22 — Architect BLOCK #4 on the same shape; AC-3 restated as a property (PR #797)
+
+**CV APPROVED `b057cc1e` at 06:10:57** (independently re-proving both alias arms
+causal). **Architect BLOCKED at 06:12:40**, terminal, on a genuinely new hole:
+
+> `public_buffer_span_producers` begins each arm with `env.env.lookup(*id)?`.
+> `GlobalEnv::lookup` resolves only top-level declarations (`env.rs:342`).
+> Constructor IDs live in `ctor_index` behind `GlobalEnv::constructor`
+> (`env.rs:404`) — so **every public constructor took the `?` path and vanished
+> from the derived set unexamined.**
+
+**★★★ This is the FOURTH occurrence of one defect shape on one surface**, and
+the fourth is mine in a way the others were not:
+
+| # | Artifact | Enumerated… | Whose |
+|---|---|---|---|
+| 1 | private-name allowlist | what someone remembered to seal | pre-existing (PX8-F) |
+| 2 | BufferFreeze unreachability | constructor *names* | Runtime ring |
+| 3 | AC-3 first oracle | *spellings* of the result type | **my AC (mechanism-as-property)** |
+| 4 | AC-3 second oracle | one *category* of global | **my AC (named an API)** |
+
+**The drafting diagnosis, stated plainly.** My AC-3 said *"look up each
+`GlobalId` via `GlobalEnv::lookup`."* **I named an API and called it a
+property.** The implementer used exactly that API and inherited its blind spot
+— while being entirely correct against my words. And I had grepped the kernel
+accessors while drafting: **`constructor` at `env.rs:404` was in my own search
+output**, and I still wrote only `lookup`. The information needed to avoid
+breach 4 was in my context at the moment I created it.
+
+**General lesson (the real deliverable of this WP, beyond the code):** *an
+acceptance criterion that specifies a **mechanism** transfers that mechanism's
+blind spots into the deliverable, invisibly — because the result passes review
+against its own text.* State the **property**, name the **axes** closure must
+hold along, require a **loud failure on the unhandled case**, and let the
+implementer choose the mechanism. Every layer here except the first was
+introduced by a spec that described *how* instead of *what*.
+
+**Action: second frame amendment, landed (PR #797, `origin/main e119e6a7 →
+d18b4b89`, verified by content).** AC-3 is now a property closed along three
+axes: (1) modulo definitional equality; (2) over **every category** of public
+global; (3) **★ loud failure on any id resolving to neither known category.**
+
+**Axis 3 is my addition on top of the ruling, and it is what terminates the
+chase.** Axes 1 and 2 were each found by a reviewer after the fact; enumerating
+categories keeps losing to the next unenumerated one. Loud-fail-on-unknown
+converts *"a category nobody thought of passes silently"* into *"a category
+nobody thought of breaks the build"* — closed independently of the author's
+imagination. The Architect required it as an implementation detail; I promoted
+it to the AC's load-bearing clause and said so in-thread rather than smuggling
+it in.
+
+**Frame amended BEFORE the next §14** again — the leader independently asked for
+exactly this (`evt_z7tep5a39785`) while I was already drafting it, which is a
+good sign the stale-frame discipline has propagated to the ring.
+
+**Chain watch:** two terminal blocks on SPAN-SEAL (CV, then Architect). Not yet
+a §5a research-advisory trigger (that counts *Architect* hard-stops, currently
+1). But if a third block lands on this same AC, the correct move is **not**
+another amendment — it is to question whether a test-derived closure is the
+right instrument at all, and route that to the Architect as a design question.
+Recording the trigger now so a post-compaction me does not simply amend again.
+
+### 06:21–06:24 — candidate `02677059` (three axes, each with a reaching discriminator)
+
+Implementer delivered 06:21:26, ~7 minutes after the block. All three axes
+covered, and — the part that matters — **each axis has a permanent
+discriminator justified by what the OLD oracle would have done**:
+
+| Axis | Fixture | Why it reaches |
+|---|---|---|
+| defeq | alias fixture, exact `{escaped_function_alias, escaped_result_alias}` | one arm needs pre-Pi `whnf`, the other post-codomain |
+| categories | re-exposes the **actual sealed `PrivateBufferSpan` ctor id** under synthetic public name; asserts `lookup(id).is_none()` **and** `constructor(id).is_some()` | *"the old declaration-only oracle would derive `{}` and fail this test"* |
+| unknown | inserts `escaped_unknown_id -> GlobalId(u32::MAX)`, `#[should_panic]` pinned to exact panic text | *"the old silent `lookup(*id)?` path would not panic, so this test would fail"* |
+
+That last column is the discipline I have been asking for all night, produced
+unprompted: a discriminator is only evidence if it **fails on the thing it
+claims to exclude**, and each one here is justified against the specific prior
+mechanism. `px8f_buffer_io_surface` 7/7. Scope still three paths, +212/-11;
+runtime/host empty. QA in flight; Architect + CV to follow.
+
+### ❌ 06:23 — MY ERROR (caught before acting): a `400` health-check false positive
+
+My watchdog liveness sweep flagged `conformance-validator` with `400` — the
+invalid-model stall class I had logged an hour earlier. **It was a false
+positive.** `400` matched as a bare substring inside **agent IDs**
+(`agt_37rekz81pp400`, `agt_37reqfp1tm400`) printed in the pane's participant
+list. CV was entirely healthy: it had re-oriented on the amended frame,
+correctly marked **its own prior APPROVE stale**, and set status to await the
+fresh candidate — exemplary behavior.
+
+**Caught it the right way:** I captured the pane and read it *before* concluding
+anything, then grepped for where `400` actually matched, then checked for the
+real signature (`invalid_request_error` / `is not supported when using`) → **0
+hits**. No action taken, nothing posted, no seat disturbed.
+
+**But the detector was bad and is now fixed.** `400` is a terrible pattern —
+it matches agent IDs, SHAs, token counts, durations. Replaced with the anchored
+signature `invalid_request_error|is not supported when using|"status":400`.
+
+**This is the THIRD detector-quality failure of the window** (verb-enumeration
+false IDLE; narrow `tail -5` false stall; now a loose substring false error) —
+and they rhyme with the four-layer AC defect I spent the last hour on. **My
+monitoring patterns fail the same way my acceptance criteria do: they match a
+convenient proxy instead of deciding the actual property.** The corrective is
+identical in both places — anchor on a signature that cannot occur by
+coincidence, and prefer a structural match over a substring.
+
+The one thing that went right: **verify-before-acting held.** A false positive
+that is checked costs a pane capture; one that is acted on costs a needless
+rouse and, if I had "repaired" a healthy seat's model, real damage.
+
+### 06:26–06:35 — SPAN-SEAL APPROVED (all three lanes) and PUBLISHING as PR #798
+
+**Decision `dec_1971te8pb7spb` verified RESOLVED by reading the Decision object,
+not the merge request.** `status: resolved`; resolution APPROVED at exact
+`02677059` on base `d18b4b89`; resolved_by CV `agt_37reqfr97xm00` at 06:30:55;
+QA + Architect §14 + CV all recorded against that SHA. Also verified `d18b4b89`
+is an ancestor of the candidate, and that my local branch ref sits exactly on
+`02677059` (the stale-local-branch force-push hazard).
+
+**★ DELIBERATE PLAYBOOK DEVIATION — published WITHOUT the §2a tracker bundle.**
+§2a normally has me add a tracker-sync commit to the candidate before
+publishing. **After four terminal blocks tonight, every one turning on
+exact-SHA fidelity, adding even a doc-only commit would merge a SHA that none
+of the three reviewers voted on.** Published `02677059` byte-for-byte; tracker
+syncs in a separate doc-only publish after. Same precedent as PX8-N earlier in
+this window. Stated the deviation in-thread so it reads as a decision, not an
+oversight.
+
+### ★ 06:34 — a task notification said "completed exit 0" while the publisher was still running
+
+The background-task notification for the publish reported **`status:
+completed`, exit code 0** — and the publisher was very much alive: the log read
+`Waiting 1557s before polling PR #798 checks`, and `ps` confirmed one live
+process. The notification was for the `nohup … &` **wrapper**, not the job.
+
+**A textbook instance of tonight's recurring rule**, and the fourth distinct
+tool to produce it: publisher exit code, gate script exit 0, `git commit` on the
+wrong branch, and now a task-completion notification. **A success signal tells
+you a thing ran; it never tells you the thing you cared about is done.** Had I
+taken it at face value I would have gone looking for a merge that had not
+happened, found `origin/main` unchanged, and plausibly concluded the *publish*
+failed — inventing a problem out of a misread signal.
+
+**Verification that actually settles it:** the publisher's own log tail plus
+`ps`, then — at the end — `origin/main` **by content**. Recorded in the watchdog.
+
+### 06:40 — full-fleet anchored health sweep (25 seats): CLEAN
+
+Ran the anchored dead/stranded signatures across every `moot-*` session while
+CI runs. **No dead seat, no stranded mention, nothing needing repair.** Worth
+doing: tonight already produced one dead seat (`foundation-qa`, invalid model)
+and one stranded reviewer (`architect`, ~17 min), neither of which announced
+itself.
+
+**The one flag was my OWN pane** — `❌DEAD ⚠STRANDED` on `moot-steward`. A
+self-match: my pane contains the literal signature strings because I have been
+writing them into the watchdog prompt and this log. Harmless, but a clean
+reminder that **a detector run over its own output matches its own
+description.** Exclude self from future sweeps.
+
+### ★ 06:40 — the sweep CORRECTED a memory I had written twice tonight
+
+I recorded Runtime's seating as an "inversion" and Foundation as a "second
+instance." **Both framings were wrong.** The sweep shows the pattern is the
+**fleet-wide convention**, uniform across all six build teams:
+
+- `<team>-implementer` → `gpt-5.6-sol` = **T1**
+- `<team>-leader` → `gpt-5.6-terra` = T2
+- `<team>-qa` → `gpt-5.6-terra` = T2
+- enclave (`architect`, `conformance-validator`, `spec-author`, `research`) →
+  **sol = T1**; `spec-leader`, `librarian` → terra = T2
+
+So the real rule is **implementers and the enclave get T1; leaders and QA get
+T2** — and `agent/MODELS.md`'s Roles column simply does not describe the landed
+fleet for build teams. Anthropic seats: `runtime-implementer` and `adversary`
+(Opus 4.8) only; **every other seat is on the OpenAI pool**, which is the
+tighter one at 13% — a real concentration risk worth flagging to the operator.
+
+**Why I got it wrong twice:** I generalized from single observations (Runtime,
+then Foundation) instead of enumerating the population, when enumerating it cost
+one command. That is *the same defect I have spent this entire window
+correcting in other people's work* — reasoning from a representative case rather
+than deciding the property over the whole set. It is a good deal easier to see
+in an acceptance criterion than in my own belief.
+
+Memory `tier-table-is-a-default-runtime-seats-t1-implementer` corrected. The
+landed `MODELS.md` erratum (PR #793) is still accurate as far as it goes — "the
+table is a default, observe the seat" — but its Runtime example understates the
+scope. **Not amending it now**: fleet is single-threaded, SPAN-SEAL is mid-CI,
+and this is a documentation-precision issue with no operational consequence
+while the observe-don't-infer rule stands. Queued behind the current chain.
+
+### 07:04–07:08 — SPAN-SEAL MERGED `cd4184b8`; full merge chain executed
+
+**PR #798 CI green, merged. Verified BY CONTENT, not by the "merged" line:**
+helper in the private-name closure (1); public proposition present (3); catalog
+names the proposition (2) and the raw helper is **gone** (0); three-axis oracle
+discriminators present (6); `crates/ken-runtime/` + `crates/ken-host/` **zero-line
+diff**. `origin/main d18b4b89 → cd4184b8`.
+
+**Chain executed in order, none skipped:**
+1. ✅ verified by content
+2. ✅ **adversary notified** (`evt_1nzfry4kw5pt8`) — pointed first at the closure
+   oracle, *because that claim has already been wrong three times tonight*, and
+   told it plainly that RT-PARITY's respin will depend on it. Confirmed engaged.
+3. ✅ §10 retros requested from Foundation (`evt_1qs6q1n501v8w`) — carrying both
+   the four-layer lesson and **my own AC-names-a-mechanism error**, plus four
+   ring practices worth spreading.
+4. ⏳ **SPAN-SEAL is `merged`, NOT `closed`** — closes when retros are in.
+5. ✅ **RT-PARITY released** (`evt_2qwd9x2s8z8p5`), runtime-leader confirmed
+   `Working`.
+
+**★ In the RT-PARITY release I explicitly forbade an overclaim.** Its old basis
+("`PrivateBufferSpan` is not nameable ⇒ every span is host-minted") was false;
+the new basis is the landed derived closure. But that is a **test-derived
+property, not a proof**, and it has been wrong three times — so I told the ring
+to write *"structurally unconstructible on the landed closure, asserted by
+`<test>` along three axes"* and **not** *"impossible"*, and to make the
+dependency visible so that if the adversary breaks the closure, the broken
+dependency is obvious. Sending a ring a stronger claim than the evidence
+supports is how the original defect got in.
+
+### ❌ 07:07 — MY ERROR (caught before acting): narrow liveness pattern, 4th false signal
+
+Checking the three mentions reached their seats, I grepped `Working \(` — the
+**Codex** pane form — and `adversary` came back empty. It was fine: Anthropic
+panes show spinner verbs, and it read `Honking… (1m 20s · ↓ 3.7k tokens)`,
+actively diffing the merge.
+
+**The annoyance is that my own watchdog already carries the correct structural
+pattern** (`\([0-9]+[hms]…\)`, provider-agnostic) and I typed a narrower one-off
+instead of using it. **A rule I wrote down but did not reach for is not yet a
+habit.** Fourth false signal of the window; caught, again, only because I
+captured the pane before concluding. Verify-before-acting is now the single
+highest-yield discipline of this session — it has converted every one of my
+detector failures into a non-event.

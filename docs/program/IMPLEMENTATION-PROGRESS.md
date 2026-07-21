@@ -14,6 +14,55 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ## ⚡ LIVE STATE (2026-07-21 07:07Z) — **SPAN-SEAL MERGED `cd4184b8`; RT-PARITY released**
+>
+> **SPAN-SEAL — MERGED (PR #798), verified BY CONTENT on `origin/main @
+> cd4184b8`:** helper present in the private-name closure; catalog names only
+> the observer-only proposition; all three oracle discriminators landed;
+> `crates/ken-runtime/` + `crates/ken-host/` zero-line diff. **Status:
+> `merged`, NOT yet `closed` — §10 retros requested from Foundation and the WP
+> closes when they are in.**
+>
+> **Adversary notified** (`evt_1nzfry4kw5pt8`, mandatory on every code merge) and
+> confirmed actively diffing the merge. Pointed at the closure oracle first,
+> since that claim has already been wrong three times.
+>
+> **RT-PARITY RELEASED** (`evt_2qwd9x2s8z8p5`) — runtime-leader confirmed
+> `Working`. Rebases `506fa393` onto `cd4184b8`, drops the derived-span test,
+> retains its six approved differentials, and re-grounds BufferFreeze
+> unreachability on the **landed sealed closure** rather than constructor
+> privacy. Fresh Decision required; no prior vote carries.
+>
+> **Cost of SPAN-SEAL: four terminal blocks, all on AC-3, all one defect shape**
+> — allowlist → constructor *names* → result-type *spellings* → one *category*
+> of global. **Layers 3 and 4 were caused by my own AC naming a mechanism
+> instead of stating the property.** Terminated by the loud-fail-on-unknown axis.
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 ~06:35Z) — **SPAN-SEAL approved & publishing; RT-PARITY unblocks next**
+>
+> **SPAN-SEAL** — Decision `dec_1971te8pb7spb` **RESOLVED APPROVED** at exact
+> `02677059` (QA + Architect §14 + CV, all on that SHA). Publishing non-doc-only
+> now. Took **four terminal blocks** to get there, every one on AC-3's producer
+> closure and every one the same defect shape: an enumeration standing in for a
+> closure. Layers, in order — the private-name allowlist; constructor *names*;
+> result-type *spellings* (syntactic head-match); one *category* of global
+> (`lookup` misses constructors). Closed by three axes + **loud failure on any
+> unknown category**, which is what makes it closed independently of the
+> author's imagination.
+>
+> **Steward lesson carried into the retro:** layers 3 and 4 were introduced by my
+> own AC naming a **mechanism** instead of stating the **property** — the
+> implementation was correct against my words each time. See
+> `ac-naming-a-mechanism-transfers-its-blind-spots`.
+>
+> **ON MERGE:** verify by content → **notify adversary `agt_37vnwmcdxhw00`** →
+> §10 retros → close → **release RT-PARITY** (held at `506fa393`) to rebase and
+> respin against the landed sealed closure.
+>
+> ### ↓ prior live state, kept for history ↓
+>
 > ## ⚡ LIVE STATE (2026-07-21 ~05:20Z) — `origin/main = 61a78620` — **RT-PARITY BLOCKED behind a new prerequisite: SPAN-SEAL (Foundation)**
 >
 > ### ★★ SPAN-SEAL — NEW, and it is now the ACTIVE WP (single-threaded fleet)
