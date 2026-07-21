@@ -284,7 +284,31 @@ looks pathological rather than inherent. Bring that one test into sibling
 range and the binary lands near 90s and fits trivially — restoring 7 tests
 of coverage for one test's worth of investigation.
 
-### 1e. ⚠ Free win not yet taken: the dedicated jobs over-compile
+### 1e. ✅ TAKEN and CONFIRMED: the dedicated jobs no longer over-compile
+
+**Landed in PR #810 (`fd065d07`). Confirmed by isolation**, not by the job
+total: `px8f_write_partition` is the same binary in both runs below, and
+scoping is the only variable between them.
+
+| run | Test step | Build step |
+|---|---:|---:|
+| 29850405231 (`--workspace`) | 241s | 67s |
+| 29850680007 (`-p ken-verify --test …`) | **129s** | 65s |
+
+**−112s per job per run**, against the ~124s estimated below — the estimate
+held. `px8f_buffer_native` scoped measures 149s Test / 224s job.
+
+> ⚠ **Do not read `native-buffer`'s 224s as confirming the C6 projection.**
+> §1c projected ~240s for that job, and 224s looks like a hit — but the
+> projection was of an **unscoped** job, and scoping (−112s) rode in the
+> **same PR**. Unscoped it would have been ~336s: the projection was ~40%
+> high and only looked right because a second change was bundled with it.
+> **C6's −22.7% on `px8f_write_partition` remains the only clean C6
+> measurement on cranelift-heavy code — one data point, not a scaling law.**
+
+The original argument, kept for the reasoning:
+
+### ⚠ (as written before the change landed)
 
 `native-slow`'s Test step measured 390s while nextest itself ran for only
 266s. **The other ~124s is compiling all 200 test binaries in order to run
@@ -292,7 +316,7 @@ one**, because the job says `cargo nextest run --workspace`.
 
 Scoping it — `-p ken-cli --test rt_parity_native`, and likewise
 `-p ken-verify --test px8f_write_partition` — compiles only what that job
-runs. **This is being paid on every run today** by the merged `native-slow`
+runs. **This was being paid on every run** by the merged `native-slow`
 job. It does not change the critical path (that is still a shard), but it is
 ~2 minutes of wasted compute per run and it widens the headroom that decides
 which binaries can come back.

@@ -11,7 +11,7 @@
 
 - Fleet is **SINGLE-THREADED**. Nothing is owed to any ring; every idle ring
   is **correct**, not a stall.
-- `origin/main = 62643287`. Nothing is blocked.
+- `origin/main = fd065d07`. Nothing is blocked.
 - **Do not kick a WP while the operator has an open question below.**
 
 ## Operator rulings — 2026-07-21 ~12:45Z. SETTLED, do not reopen.
@@ -121,7 +121,9 @@ it manually, bypassing the gate.
   - `px8f_write_partition` ✅ restored, own `native-slow` job. **C6 gave it
     −22.7%** (309s→239s) vs 8.4% suite-wide — C6's benefit is concentrated
     in cranelift-heavy code, exactly as predicted.
-  - `px8f_buffer_native` ✅ restored, own `native-buffer` job.
+  - `px8f_buffer_native` ✅ restored, own `native-buffer` job. **Measured on
+    run 29850680007: Test step 149s, job 224s** — well under the 482s
+    critical shard, so it costs zero wall clock, as predicted.
   - `rt_parity_native` — **a ONE-TEST problem.** Parallelizes fine (7 tests,
     266.7s wall / 470.6s CPU), but
     `fs_write_at_malformed_offset_narrows_to_invalid_offset` takes **221.4s**
@@ -130,11 +132,26 @@ it manually, bypassing the gate.
     is noise.
 
   ✅ **Dedicated jobs are now scoped** (`-p <crate> --test <name>`), not
-  `--workspace` — that was compiling all 200 test binaries to run one,
-  ~124s of waste per job per run. The `Build` step stays `--workspace`: it
-  is only ~65s and it is what proves the workspace compiles under `--locked`.
+  `--workspace` — that was compiling all 200 test binaries to run one. Now
+  **confirmed by isolation**: `px8f_write_partition`'s Test step went
+  **241s → 129s (−112s)** across runs 29850405231 → 29850680007 with
+  scoping as the only variable, against a ~124s estimate. The `Build` step
+  stays `--workspace`: it is only ~65s and it is what proves the workspace
+  compiles under `--locked`.
 
   **Only `rt_parity_native` is still skipped, and the target is ONE test.**
+
+  > ⚠ **The `native-buffer` number was right for the wrong reason — do not
+  > cite it as evidence C6 generalizes.** I projected ~240s for that job and
+  > measured 224s. But that projection was of an *unscoped* job, and the
+  > scoping change (−112s) landed in the **same PR**. Unscoped, the job
+  > would have been ~336s — the projection was ~40% high and was rescued by
+  > an unrelated bundled change. **Two changes in one PR made a wrong
+  > prediction look confirmed.** C6's −22.7% on `px8f_write_partition`
+  > remains the only clean measurement of C6 on cranelift-heavy code; it is
+  > a single data point, not an established scaling law. Sibling of
+  > `green-vs-green does not confirm a fix` — a number matching its forecast
+  > is not evidence the reasoning behind the forecast was sound.
 
   > ★ **I had the CI diagnosis backwards, and the operator caught it.** I
   > claimed a cold dependency build dominated the wall clock. Measured:
