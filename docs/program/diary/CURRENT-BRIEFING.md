@@ -67,6 +67,51 @@ obscured. PX9 gates most of Track T.
 **Not started.** Next step when the operator says go: decompose the tracks
 into `docs/program/issues/` entries.
 
+## ▶ Q-RESIDUE IS ACTIVE AND NEARLY DONE — resume here (2026-07-21 ~21:30Z)
+
+**Branch: `wp/Q-RESIDUE-test-rework @ 5ee76bb5`** (in runtime-implementer's
+worktree; implementer is back on its home branch, branch is FREE).
+Two commits: `bb41c514` rework + `5ee76bb5` comment-tightening fixup.
+Nine files, **all inside `mod tests` — no production code changed.**
+
+**STATE: awaiting the formal QA + leader votes.** Both stated hold
+conditions are already SATISFIED (the item-3–5 fixup landed; the item-1
+mutation receipt was posted at `evt_e408ddafxka0`). Substantive review is
+DONE and favourable. **Next action: collect the votes, then publish via
+`scripts/scripted-pr-automerge.sh` — PR body is already written at
+`scratchpad/pr-qres-merge.md`** (regenerate if the scratchpad is gone).
+
+**Then:** close `docs/program/issues/Q-RESIDUE.md` (`active` → `closed`)
+once merged **and all three §10 retros are in** — the implementer's is
+already posted (`evt_6zydx4gnservd`). **Notify the adversary — mandatory on
+every code merge.**
+
+> ### ★★ THE RESULT WORTH KEEPING FROM THIS WP
+>
+> **AC-2's mutation proof caught a bad test before it shipped, on its first
+> application.** A first draft of the settlement-ordering test
+> *"only hand-sequenced the two helper functions instead of invoking the
+> real `unsafe extern "C"` entrypoint, so it wouldn't have caught a real
+> regression."* It would have sat **green through an actual defect** — a
+> test exercising a **proxy** instead of the **mechanism**, exactly the
+> class this WP existed to remove.
+>
+> The final discriminator is confirmed **three times independently**:
+> implementer's authoring run, QA's independent re-execution on the branch,
+> and the captured panic (`abi_v1.rs:1590`, `left: 0, right: 1`).
+>
+> **Require the mutation proof on every future test-rework WP.** It is the
+> only step that distinguishes a grounded assertion from a green one.
+
+> ### ⚠ I MIS-READ THIS WP'S DIFF AND TOLD THE FLEET
+>
+> I flagged `abi_v1.rs` (+71) as a **production-surface ABI change** in a
+> test-rework WP. It is **entirely inside `mod tests`.** I inferred it from
+> the file path and line count without opening the diff — same shape as the
+> §1 CI misdiagnosis. I corrected it in the flag itself and told the ring to
+> **vote on the branch, not on my summary.** They did, and grounded their
+> review against real code (`abi_v1.rs:824-841` + the C call site).
+
 ## ✅ TRACK Q — DONE (2026-07-21). Only Q-RESIDUE remains, and it is an S.
 
 **Q1 landed. Q2 complete: 428 triaged, 100% classified, six rings in
@@ -130,7 +175,7 @@ parallel.** Result: `docs/program/qa-triage/FINDINGS.md`.
 
 ## My queue, in order
 
-0. **Q-RESIDUE** (`issues/Q-RESIDUE.md`) — ready, not kicked, awaiting operator go.
+0. **Q-RESIDUE** — ACTIVE, awaiting votes then publish. See the block above.
 1. **BUDGET-EFF** — Handoff Gate the Spec enclave (spec-leader, spec-author,
    conformance-validator). **Spec erratum FIRST**: `38` self-contradicts
    (`:404-405`/`:443-444` say *effective*, `:419-420`/`:438-440` say
