@@ -108,7 +108,19 @@ NUMBER_WORDS = (
 )
 STATEFUL_NAME = re.compile(rf"_(?:{NUMBER_WORDS})_|_\d+_(?!bit|byte)", re.I)
 
-TEST_ATTR = re.compile(r"#\[(?:tokio::)?test\b")
+# ANCHORED TO LINE START on purpose. An unanchored `#\[test\]` also matches the
+# attribute *mentioned in prose* -- `//! Each case is its own `#[test]` ...` --
+# and that is not a harmless extra row: the phantom's body runs to the NEXT real
+# #[test], so it swallows every helper in between and attributes their patterns
+# to whatever fn happens to come first. `rt_parity_native.rs:3` did exactly
+# this, inventing a test named `output_dir` (a tmp-dir helper) carrying 430
+# lines of unrelated matches. Found by Team Foundation during Q2b triage, not by
+# the self-test below -- which passed throughout, because it only ever checked
+# files that HAVE the patterns, never a file that would fabricate one.
+#
+# `^\s*` still admits an indented attribute inside `#[cfg(test)] mod tests`,
+# which is where ken-runtime and ken-host keep all of their tests.
+TEST_ATTR = re.compile(r"^[ \t]*#\[(?:tokio::)?test\b", re.M)
 FN_NAME = re.compile(r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)")
 
 
@@ -184,6 +196,18 @@ SELF_TEST = [
      "advisory §10 cites this file; scan must at least parse it"),
 ]
 
+# Names that must NEVER appear as tests. A positives-only self-test cannot see
+# a fabricated row -- every assertion still passes while the scan invents work
+# out of prose. These are the negative arm.
+NEVER_A_TEST = [
+    ("output_dir", "tmp-dir helper in rt_parity_native.rs; would be fabricated "
+                   "by an unanchored #[test] match against the file's doc "
+                   "comment"),
+    ("in_large_stack_thread", "thread helper in the same file, next in line if "
+                              "the anchor regresses"),
+    ("differential", "harness fn in the same file"),
+]
+
 
 def self_test(rows):
     by_file = defaultdict(set)
@@ -201,6 +225,14 @@ def self_test(rows):
             ok = False
         else:
             print(f"  ok   {stem}: {sorted(found)}")
+
+    names = {r["test"] for r in rows}
+    for name, why in NEVER_A_TEST:
+        if name in names:
+            print(f"  FAIL {name}: reported as a test, but it is not one ({why})")
+            ok = False
+        else:
+            print(f"  ok   {name}: correctly absent")
     return ok
 
 
