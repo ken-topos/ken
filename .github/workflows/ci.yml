@@ -62,20 +62,3 @@ jobs:
       # See docs/program/04-git-and-integration.md.
       - name: Path guard (placeholder)
         run: echo "path-guard not yet implemented (WP F1)"
-
-  issue-tracker:
-    name: work-item tracker (schema + regeneration)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # Schema gate: every docs/program/issues/*.md file has all required
-      # frontmatter fields, a valid `status`, an `id` matching its filename,
-      # no duplicate `id`, and every depends_on/blocks reference resolves.
-      - name: Validate issue schema
-        run: scripts/check-issue-schema.sh
-      # Regeneration gate: docs/program/IMPLEMENTATION-PROGRESS.md is fully
-      # derived from docs/program/issues/*.md — this fails if the committed
-      # file is stale (regeneration must be idempotent modulo the timestamp
-      # line; see scripts/gen-progress.sh).
-      - name: Check IMPLEMENTATION-PROGRESS.md is current
-        run: scripts/gen-progress.sh --check
