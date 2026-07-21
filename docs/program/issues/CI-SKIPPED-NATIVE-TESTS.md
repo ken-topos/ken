@@ -23,10 +23,30 @@ origin: docs/program/11-test-suite-and-ci-remediation.md §3 (Track C, C2)
 costs no wall clock: the worst shard is ~471s and that job is ~374s, so it
 finishes first and never sets the pace.
 
-**`px8f_buffer_native` (~310s, also a single test) fits the same headroom
-and is the obvious next one to restore.** `rt_parity_native` does not — at
-14m41s it would roughly double the gate on its own, so it needs to get
-faster before it comes back, not merely be re-enabled.
+**`px8f_buffer_native` (~310s, ~240s post-C6, a single test) fits the same
+headroom and is the obvious next one to restore.**
+
+**`rt_parity_native` was measured directly** (experiment PR #808, closed —
+see `docs/program/11-test-suite-and-ci-remediation.md` §1d). It parallelizes
+fine under nextest: 7 tests, 266.7s wall against 470.6s of CPU. It does not
+fit because of **one outlier test**:
+
+| Test | Duration |
+|---|---:|
+| `fs_write_at_malformed_offset_narrows_to_invalid_offset` | **221.4s** |
+| `fs_write_at_malformed_offset_without_write_right_...` | 42.2s |
+| three `fs_read_at_*` | ~53s each |
+| `buffer_allocate_malformed_capacity_...` | 45.3s |
+| `buffer_freeze_malformed_span_...` | 1.2s |
+
+**So this is a one-test problem, not a binary-wide one.** The 221s test is
+5x its near-identical sibling and 4x the read-side equivalents, which looks
+pathological rather than inherent. Bring it into sibling range and the
+binary lands near 90s and fits with room to spare — 7 tests of coverage
+restored for one test's worth of investigation.
+
+**Do not simply re-enable it.** At ~470s job total against a ~471s critical
+shard it fits by about a second, which is noise, not headroom.
 
 ## Why they were skipped
 

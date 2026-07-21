@@ -115,6 +115,24 @@ it manually, bypassing the gate.
   Details and full scorecard in §1a/§1b. **Track Q (the QA-advisory sweep)
   is untouched and still the actual point of the program.**
 
+  **Skipped-test restoration — measured, not guessed** (§1c/§1d,
+  `CI-SKIPPED-NATIVE-TESTS`). Any job finishing under the ~471s critical
+  shard costs **zero** wall clock, and that headroom is the budget:
+  - `px8f_write_partition` ✅ restored, own `native-slow` job. **C6 gave it
+    −22.7%** (309s→239s) vs 8.4% suite-wide — C6's benefit is concentrated
+    in cranelift-heavy code, exactly as predicted.
+  - `px8f_buffer_native` — ~240s post-C6, fits identically. **Next.**
+  - `rt_parity_native` — **a ONE-TEST problem.** Parallelizes fine (7 tests,
+    266.7s wall / 470.6s CPU), but
+    `fs_write_at_malformed_offset_narrows_to_invalid_offset` takes **221.4s**
+    vs **42.2s** for its near-identical sibling. Fix that one and the binary
+    lands ~90s. **Do not just re-enable it** — today it fits by ~1s, which
+    is noise.
+
+  ⚠ **Free win not taken:** the dedicated jobs run `--workspace`, so they
+  compile all 200 test binaries to run one — ~124s wasted per run, paid
+  today by `native-slow`. Scope with `-p <crate> --test <name>` (§1e).
+
   > ★ **I had the CI diagnosis backwards, and the operator caught it.** I
   > claimed a cold dependency build dominated the wall clock. Measured:
   > **build 47s, test execution 44m14s — 95% of the run.** The error was

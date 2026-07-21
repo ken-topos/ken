@@ -247,6 +247,60 @@ shard's critical path and pushes the whole gate out.
 > every test-running job must appear in the aggregator's `needs` *and* be
 > checked in its script; a job missing there reports green however it failed.
 
+### 1d. Experiment: does `rt_parity_native` parallelize? (PR #808, closed)
+
+**It parallelizes fine. One test is the floor.** nextest ran all 7 in
+**266.7s** against **470.6s** of CPU:
+
+| Test | Duration |
+|---|---:|
+| `buffer_freeze_malformed_span_...` | 1.2s |
+| `fs_write_at_malformed_offset_without_write_right_...` | 42.2s |
+| `buffer_allocate_malformed_capacity_...` | 45.3s |
+| `fs_read_at_malformed_offset_...` | 53.0s |
+| `fs_read_at_malformed_window_...` | 53.7s |
+| `fs_read_at_malformed_offset_without_read_right_...` | 53.9s |
+| **`fs_write_at_malformed_offset_narrows_to_invalid_offset`** | **221.4s** |
+
+> ★ **Both pre-registered predictions were wrong** (~170-250s "parallelizes"
+> / ~680s "serial"). The binary framing was the error: I assumed uniform
+> tests that either parallelize or don't. Six parallelize well; **one
+> outlier sets the wall clock**, and no scheduler can subdivide a single
+> test. Pre-registering the readings was still right — it is what made the
+> miss obvious instead of something to narrate around.
+
+**Not restored.** Job total ~470s against a ~471s critical shard fits by
+about a second — noise, not headroom, and it would make `rt_parity`
+co-critical with zero margin.
+
+**The target is narrow and specific.** Compare two tests with near-identical
+names and nominally the same shape of work:
+
+- `fs_write_at_malformed_offset_without_write_right_...` — **42s**
+- `fs_write_at_malformed_offset_narrows_to_invalid_offset` — **221s**
+
+**5x**, where the three read-side counterparts are all ~53s. That asymmetry
+looks pathological rather than inherent. Bring that one test into sibling
+range and the binary lands near 90s and fits trivially — restoring 7 tests
+of coverage for one test's worth of investigation.
+
+### 1e. ⚠ Free win not yet taken: the dedicated jobs over-compile
+
+`native-slow`'s Test step measured 390s while nextest itself ran for only
+266s. **The other ~124s is compiling all 200 test binaries in order to run
+one**, because the job says `cargo nextest run --workspace`.
+
+Scoping it — `-p ken-cli --test rt_parity_native`, and likewise
+`-p ken-verify --test px8f_write_partition` — compiles only what that job
+runs. **This is being paid on every run today** by the merged `native-slow`
+job. It does not change the critical path (that is still a shard), but it is
+~2 minutes of wasted compute per run and it widens the headroom that decides
+which binaries can come back.
+
+⚠ Check before assuming it is free: the shard lane must keep `--workspace`,
+and a scoped job no longer proves the rest of the workspace still compiles —
+which is fine only because the shards already do.
+
 ### ⛔ Stop here
 
 The per-test distribution is flat (§1a), so there is no fat left to cut. The
