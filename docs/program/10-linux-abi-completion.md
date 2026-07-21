@@ -253,4 +253,64 @@ in:
 - everything in L2-4 … L2-8 — `io_uring`, netlink, cgroups, confinement,
   typed `ioctl`, MMIO.
 
+## 9. Decomposition status — verified 2026-07-21
+
+Operator asked whether WPs exist (framed or not) for the work in this gap.
+Checked file-by-file against `docs/program/issues/` and `docs/program/wp/`,
+not from memory:
+
+| Track | Items | Issues existing |
+|---|---|---|
+| R — reconcile | R1, R2, R3 | **0 of 3** |
+| A — availability | A1, A2, A3 | **0 of 3** |
+| M — manifest | M1, M2 | **0 of 2** |
+| S — synchronous floor | PX9, S1–S6 | **0 of 7** |
+| T — committed exit | PX10, PX11, PX12 | **0 of 3** |
+
+**0 of 18.** The only node of §5's graph with live work is **PX8**, its
+root, in flight as `BUDGET-EFF` / `SEAL-2` / `RT-ESCAPE` / `RT-SPLIT`
+(+ merged `SPAN-SEAL`, `RT-PARITY`). Everything downstream of `PX8 --> R3`
+and `PX8 --> PX9` is unframed. This document is the whole record of it.
+
+### 9.1 ⚠ Gap in this document — the runtime revocation membrane
+
+**The charter names a surviving capability gap that §4 above omits
+entirely.** `09` §5 lists the **runtime revocation membrane** as one of two
+gaps that survive the ADR-0017 regrounding, to be *"folded into PX7 (it is
+the same handle-lifetime machinery) or split out if PX7 grows."*
+
+**PX7 landed; the membrane did not.** Verified:
+
+- `RevocationHandle { revoked: bool }`
+  (`crates/ken-elaborator/src/capabilities.rs:256`) is still the static
+  contract, and **its own doc comment says so**: *"The runtime membrane
+  (forwarder / validity-cell flip) is DEFERRED to `40-runtime`/`OQ-Space`."*
+- **Zero** revocation code in `ken-host`, `ken-runtime`, `ken-interp`, or
+  `catalog/`.
+- PX7's generation-checked handle table (`ken-host/src/effect_v1.rs:448`) is
+  a **different property** — it closes use-after-close and double-close, not
+  delegation revocation with transitive child invalidation.
+
+It belongs in the gap because **L2 assumes it**: §8.1 cross-cutting gate 9
+requires every operation family to *"test stale, wrong-kind, double-release,
+and **revocation** behavior."* Three of the four are landed; revocation is
+not expressible to test.
+
+**Not slotted as a numbered WP — flagged for the operator.** The charter's
+own disposition (fold vs. split) was never exercised, and Track T is a
+resource explosion that would inherit the hole.
+
+### 9.2 ⚠ ID collisions — resolve before framing
+
+- **`A3`** — this document's A3 (directory-mutation availability promotion)
+  collides with the **existing** `docs/program/issues/A3.md`
+  (*catalog-coverage walker*, blocks `F4`). Two live meanings, one ID.
+- **`R1`/`R2`/`R3`** — Track R's IDs collide with the adversary's finding
+  labels `R1`–`R4` already in circulation (`Q-CLAIM-CLOSURE`, and
+  `BUDGET-EFF`'s origin line cites *"adversary R1"*).
+
+Renaming Track R/A here is cheaper than renaming a landed issue. Doing it
+after framing means re-touching every citation — the exact drift class R3
+exists to convert into a build break.
+
 [charter]: 09-posix-linux-abi-campaign.md
