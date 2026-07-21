@@ -472,7 +472,28 @@ sweep triages, then reworks only what fails classification.
 |---|---|---|
 | **Q1** | ✅ **DONE — and mostly already was.** See the correction below. | S |
 | **Q2** | ✅ **DONE 2026-07-21.** 428 triaged, 100% classified, six rings in parallel. 91.6% durable-invariant. Result: [`qa-triage/FINDINGS.md`](qa-triage/FINDINGS.md). | M |
-| **Q-RESIDUE** | ✅ **Q3–Q7 FOLDED INTO ONE ITEM** (operator, 2026-07-21) against the post-triage residue: **10 tests**, not the ~110 the scan hit counts implied. Q4 and Q7 produced **zero** defects. Inventory, acceptance criteria and the cross-team routing note: [`issues/Q-RESIDUE.md`](issues/Q-RESIDUE.md). | S |
+| **Q-RESIDUE** | ✅ **DONE 2026-07-21 — merged `origin/main @ 64337192` (PR #818).** Q3–Q7 folded into one item (operator) against the post-triage residue: **10 tests**, not the ~110 the scan hit counts implied. Q4 and Q7 produced **zero** defects. Inventory, acceptance criteria and the cross-team routing note: [`issues/Q-RESIDUE.md`](issues/Q-RESIDUE.md). | S |
+
+> ## ✅ TRACK Q IS COMPLETE (2026-07-21).
+>
+> Q1, Q2 and Q-RESIDUE all merged. **The track's most durable output is not
+> the ten reworked tests — it is the evidence that the suite was already
+> largely sound (91.6%) and that AC-2's mutation proof works.**
+>
+> ★ **AC-2 paid for itself on its first application.** Mutation-proofing
+> caught a *first draft* of the settlement-ordering rework that only
+> hand-sequenced two helper functions instead of invoking the real
+> `unsafe extern "C"` entrypoint — a test exercising a **proxy** rather than
+> the **mechanism**, which would have sat green through a real regression.
+> That is exactly the defect class Q-RESIDUE existed to remove, caught
+> *before* it shipped, by the gate rather than by review. **Carry this into
+> every future test-rework item: a green rewrite proves nothing on its own.**
+>
+> ⚠ **One caution on the receipts.** The highest-risk rework has *three*
+> independent mutation runs agreeing on the same panic. That is three
+> confirmations of **one** discriminator, not three discriminators — if the
+> chosen seam is the wrong one, all three agree and are all wrong together.
+> Flagged to the adversary at merge (`evt_4g7qasxqdy5s8`).
 
 > ## ✅ Q2 IS DONE. Q3–Q7 ARE ~10 TESTS, AND TWO TRACKS ARE EMPTY.
 >
