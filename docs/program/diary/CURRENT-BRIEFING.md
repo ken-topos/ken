@@ -194,10 +194,42 @@ parallel.** Result: `docs/program/qa-triage/FINDINGS.md`.
 > fixed word read all six busy leaders as dead and nearly caused six
 > duplicate re-rouses.
 
+## ▶ THE DOC PROGRAM IS RUNNING — a SECOND, CONCURRENT track (2026-07-21 ~22:5xZ)
+
+`origin/main @ 7610d2a1`. **`DOC-W0` is `active`** and released to a new
+**doc team** (`evt_1m7j5qvvm2p2m`). This is the fleet's **one standing
+exception to single-threading** (operator): the doc track runs **concurrently**
+with build work, because doc WPs touch `library/` and `agent/`, not `crates/`.
+**The exception is contention-free-ness, not priority** — a doc WP that would
+touch a path a build WP holds defers.
+
+| seat | tier | agent id |
+|---|---|---|
+| `doc-leader` | T2 Sonnet 5 | `agt_37w6sznc4nw00` |
+| `doc-author` | T2 Sonnet 5 | `agt_37w6t02849400` |
+| `librarian` | **T1 `gpt-5.6-sol`** | (existing) — the team's **QA** |
+
+**★ Judgment is concentrated on the REVIEWING end, not the authoring end** —
+inverted from every other team, deliberately. Documentation fails by being
+*confidently wrong*, not badly written; a page whose citation does not carry
+its claim reads perfectly. That is a grounding problem, which is where T1 pays.
+
+Frame: `docs/program/12-documentation-program.md` (§0 team, §1 four **settled**
+decisions — do not reopen). Overlays: `agent/teams/doc/{leader,implementer}.md`.
+There is **no `doc-qa` seat** and no `agent/teams/doc/qa.md`.
+
+**Seat provisioning, if it ever needs repeating:** `moot init` is NOT usable —
+its only incremental option is `--force`, which rotates keys for **all**
+already-adopted agents and would kill every live seat. Use the API directly:
+`POST /api/agents` → `POST /api/registration-tickets/{id}/exchange` for the
+plaintext key → write into `.moot/actors.json` (gitignored). PAT is at
+`.mootup/credentials`. OAS: `local/refs/convo/docs/api/openapi.yaml`
+(operator-sanctioned read; clean-room bars `local/refs/` for *writing Ken's
+code*, which this is not).
+
 ## My queue, in order
 
-0. **Q-RESIDUE** — ACTIVE, awaiting votes then publish. See the block above.
-1. **BUDGET-EFF** — Handoff Gate the Spec enclave (spec-leader, spec-author,
+0. **BUDGET-EFF** — Handoff Gate the Spec enclave (spec-leader, spec-author,
    conformance-validator). **Spec erratum FIRST**: `38` self-contradicts
    (`:404-405`/`:443-444` say *effective*, `:419-420`/`:438-440` say
    *requested*), so a code-first fix re-derives the defect from a broken
@@ -216,12 +248,30 @@ parallel.** Result: `docs/program/qa-triage/FINDINGS.md`.
 
 ## In flight
 
-**Nothing in flight.** Branch aligned on `origin/main`, clean, no orphaned
-polls.
+**`DOC-W0` — doc team, active.** Nothing else. Branch aligned on
+`origin/main`, clean, no orphaned polls. Build fleet idle and home-clean,
+which is **correct**, not a stall.
 
-Recently landed and verified by content: **#810** (restore
-`px8f_buffer_native`, scope the dedicated jobs), **#811** (SHA-pin
-`install-action`), **#812** (Q1 + RT-PARITY closure).
+**Also queued, not started: `Q-CLAIM-CLOSURE`** (`issues/Q-CLAIM-CLOSURE.md`,
+`ready`, owner runtime) — the adversary's post-merge findings on Q-RESIDUE.
+Advisory, **no live defects**. Its generator is worth reading before framing
+any future rework WP: *the ACs took the TEST as the unit when the load-bearing
+unit was the CLAIM*, so a rework could strengthen one claim, mutation-prove it,
+and silently drop its siblings while fully satisfying the criteria. R1 (ABI
+fact inventory has no independent anchor — both sides of the check come from
+one generator) is the one to sequence first.
+
+**Unframed, needs an operator scoping call:** `ken-host` has **never compiled
+on any non-linux target** (`abi_v1.rs:747`, `?` on an `Option` in a
+`Result`-returning fn; pre-existing since PX5 `049628f8`, adversary confirmed
+by extracting and compiling it). 28 `cfg(not(target_os = "linux"))` sites
+implement a **fail-closed posture that has never been built**. Honesty/dead-code
+tier, not a runtime bug — but decide: fix, or declare the lane unsupported and
+delete the dead posture.
+
+Recently landed and verified by content: **#818** (Q-RESIDUE), **#819**
+(Track Q closeout), **#820** (doc program frame), **#821** (doc team),
+**#822** (librarian T1 + DOC-W0 release).
 
 ## ⚠ FLEET IS MID-RESEAT — leader / implementer / QA seats → Sonnet 5
 
@@ -352,6 +402,54 @@ Next step for either program when the operator says go: decompose its tracks
 into `docs/program/issues/` entries.
 
 ## Tooling traps — distrust a clean negative
+
+> ### ⛔⛔ `git maintenance` CAN STARVE THE WHOLE BOX — config now guards it
+>
+> **2026-07-21: `git pack-objects` consumed all 8 cores; load hit 14.** Root
+> cause is structural and will recur if the config is ever reset:
+>
+> ```
+> maintenance.lock  -> .git/worktrees/<name>/maintenance.lock   PER-WORKTREE
+> gc.pid            -> .git/gc.pid                              shared
+> objects/          -> .git/objects                             shared
+> ```
+>
+> **`git maintenance` locks PER-WORKTREE but repacks the SHARED object
+> store.** A run in one worktree is invisible to a run in another, so the
+> concurrency ceiling is **the worktree count — 30**, each defaulting to all 8
+> cores. The legacy `git gc --auto` path did *not* have this hole (`gc.pid` is
+> common, so the second bails). `git maintenance` lost that protection.
+>
+> **Guard now set repo-locally** (covers all worktrees via the shared store):
+> `maintenance.auto=false`, `gc.auto=0`, `pack.threads=2`,
+> `pack.windowMemory=256m`. **`maintenance.auto=false` is the load-bearing
+> one** — capping threads alone still allows 30 × 2 contending.
+>
+> **Consequence you are now carrying:** loose objects accumulate forever.
+> A deliberate `git gc` is needed during a genuinely quiet window (fleet idle,
+> no WP in flight). **Never run it while a team is working.**
+>
+> ⚠ **Trigger to avoid:** a `git add -A` run from `/workspaces/ken` (the MAIN
+> worktree) sweeps untracked `.cache/`, `.targets/`, `.tmp-*` into the object
+> store, blowing past the loose-object threshold and firing maintenance from
+> every worktree at once. **A `cd` chained before a broad `git add` silently
+> changes which repo it applies to.** Those blobs are still present as
+> unreachable objects pending a prune.
+
+> ### ⛔ A PANE SNAPSHOT IS NOT AGENT STATE — three variants seen in ONE day
+>
+> | symptom | actual state | repair |
+> |---|---|---|
+> | stacked `[Pasted Content …]`, no `Working` | alive, **never submitted** | bare `Enter` |
+> | pane **entirely blank** (even `-S -200`) | alive, blocked on a **consent modal** rendered at the buffer's START | capture from `-S -` and `grep -v '^\s*$'`, then `Enter` |
+> | empty prompt, looks idle | **actively working** — narrow `tail` caught a gap between renders | capture WIDE before repairing |
+>
+> The third one bit me *while running the check designed to catch the first*.
+> Had I trusted it I would have stacked a duplicate kickoff on a working seat.
+> **Always `capture-pane -S -` piped through `grep -v '^[[:space:]]*$'` before
+> concluding anything about a seat.** A new seat's first launch is exactly when
+> nobody is watching — the consent modal for `--dangerously-load-development-channels`
+> blocks silently and indefinitely.
 
 - ⛔⛔ **AFTER EVERY MERGE, RE-BASE `steward/work` ONTO `main` BEFORE THE
   NEXT COMMIT.** Cost three publish cycles on 2026-07-21 — the same trap
