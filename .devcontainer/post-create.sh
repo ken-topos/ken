@@ -134,4 +134,16 @@ else
 fi
 echo "[post-create] context-awareness hooks installed."
 
+# Git hooks (work-item tracker gates). Versioned in .githooks/ rather than
+# .git/hooks so they are reviewable and travel with the repo. Worktrees share
+# the common .git dir, so this one setting covers every agent worktree.
+# NOTE: a hook is fast feedback, NOT enforcement — it is bypassable with
+# --no-verify and absent wherever core.hooksPath is unset. The enforcing
+# check is the CI job tracked as CI-TRACKER-GATE.
+if [ -d /workspaces/ken/.githooks ]; then
+  git -C /workspaces/ken config core.hooksPath .githooks
+  chmod +x /workspaces/ken/.githooks/* 2>/dev/null || true
+  echo "[post-create] git hooks installed (core.hooksPath=.githooks)."
+fi
+
 echo "Container ready."

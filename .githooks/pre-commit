@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# Ken pre-commit hook — work-item tracker gates.
+#
+# Two checks, deliberately asymmetric:
+#
+#   1. Issue schema      — HARD FAIL. A malformed issue file is a human
+#                          decision (which owner? which status?); the hook
+#                          cannot guess, so it refuses the commit.
+#   2. Dashboard staleness — AUTO-FIX. docs/program/IMPLEMENTATION-PROGRESS.md
+#                          is fully derived from docs/program/issues/*.md, so
+#                          a stale copy is not a judgement call. Regenerate
+#                          and stage it rather than rejecting the commit.
+#
+# Install: git config core.hooksPath .githooks   (done by
+# .devcontainer/post-create.sh; safe to re-run).
+#
+# ⚠ A HOOK IS NOT A GATE. It is bypassable with --no-verify and absent from
+# any clone that has not set core.hooksPath. It exists for fast feedback.
+# The enforcing check is the CI job tracked as CI-TRACKER-GATE — until that
+# lands, tracker correctness is a convention, not a property.
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+schema_script="scripts/check-issue-schema.sh"
+gen_script="scripts/gen-progress.sh"
+dashboard="docs/program/IMPLEMENTATION-PROGRESS.md"
+
+# Nothing to do if the tooling is absent (e.g. a checkout predating it).
+[ -x "$schema_script" ] && [ -x "$gen_script" ] || exit 0
+
+# Fast path: only engage when something the tracker derives from is staged.
+staged="$(git diff --cached --name-only --diff-filter=ACMR || true)"
+case "$staged" in
+  *docs/program/issues/*) ;;
+  *scripts/gen-progress.sh*) ;;
+  *"$dashboard"*) ;;
+  *) exit 0 ;;
+esac
+
+# 1. Schema — hard fail, no auto-fix.
+if ! "$schema_script"; then
+  echo >&2
+  echo "pre-commit: issue schema check FAILED — commit refused." >&2
+  echo "Fix the file(s) above, or bypass with --no-verify if you know why." >&2
+  exit 1
+fi
+
+# 2. Dashboard — regenerate only when genuinely stale, so the timestamp line
+#    does not dirty the file on every commit (--check ignores it by design).
+if ! "$gen_script" --check >/dev/null 2>&1; then
+  "$gen_script" >/dev/null
+  git add -- "$dashboard"
+  echo "pre-commit: $dashboard was stale — regenerated and staged."
+fi
+
+exit 0
