@@ -14,6 +14,335 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ## ⚡ LIVE STATE (2026-07-21 10:50Z) — **RT-PARITY ✅ CLOSED; BUDGET-EFF is next (ahead of SEAL-2)**
+>
+> **RT-PARITY ✅ CLOSED** — merged `e892777c` (PR #800), verified by content,
+> adversary notified, **all three §10 retros in**. Cost **5 Decisions**; code
+> accepted from `7f772f8c` onward, every later block honesty/attribution wording,
+> **root cause my stale grounding instruction**.
+>
+> **⚠ POSTING OUTAGE — `runtime-implementer` could not post its retro.** Its
+> `post_response`/`share`/`reply_to` tools were **gone while convo-channel
+> stayed up**. It wrote the retro to disk, told me plainly it could not post and
+> **refused to let me close the WP believing a §10 record existed when it did
+> not**, and asked me to paste it. I posted it **verbatim on its behalf**
+> (`evt_4v6wny5st877e`), attributed. **Its systemic flag, now in my watchdog: a
+> seat can be alive, receiving mentions, and unable to answer — an absent post
+> is NOT evidence of a stalled or ignoring agent.** That is the second distinct
+> way I mis-inferred this seat's state today.
+>
+> **★ NEXT: BUDGET-EFF** (`docs/program/wp/BUDGET-EFF-remaining-bounded-by-
+> effective-request.md`) — adversary R1, a **CONFIRMED violation of LOCKED spec
+> `38`**, confirmed by **execution** (`adversary/R1-effective-request-repro @
+> 06bb9538`, fails at `e892777c`). Outranks SEAL-2: SEAL-2 closes a gate with no
+> live defect; this is a live contradiction of locked normative text.
+> **PLUMBING GAP, not a formula fix** — `effective` is discarded at validation
+> and reaches neither reifier; two closures with different blast radii,
+> **Architect call routed WITH the enclave ruling**. **SPEC ERRATUM FIRST** —
+> `38` contradicts itself, so code-first guarantees re-derivation.
+>
+> **Then:** SEAL-2 · F1 (#37) · STR-BIJ · A3 · F4 · F3 · RT-SPLIT.
+> **`RT-ESCAPE`** filed/unsized, carries adversary R2.
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 10:16Z) — **RT-PARITY MERGED `e892777c`; awaiting §10 retros**
+>
+> **RT-PARITY MERGED — `origin/main @ e892777c`** (PR #800, CI green).
+> **VERIFIED BY CONTENT**, not the publisher's "merged" line:
+> - diff `7e87d173 → e892777c` is **exactly the four declared paths**,
+>   +1528/-90 — byte-identical to the approved `9f32967d`;
+> - `crates/ken-runtime/` + `crates/ken-host/` → **zero lines**;
+> - renamed test `..._unconstructible_at_the_landed_surface` present with all
+>   four references (3 in `rt_parity_native.rs`, 1 seed citation);
+> - old identifier `..._on_landed_producer_closure` → **absent from the entire
+>   repo**.
+>
+> **Adversary notified** (`evt_6vtg9hjtyzrmt`, mandatory) and confirmed engaged.
+> Pointed at the **interpreter/native equivalence claim first** — six
+> differentials against a +713-line `eval.rs` change is a universal claim
+> backed by six cases — then the short-read budget reification, then the
+> empirical BufferFreeze basis.
+>
+> **§10 retros requested** (`evt_46tzj1m2bttsy`); leader + QA confirmed
+> `Working`. **Status: `merged`, NOT `closed`** until retros are in.
+>
+> **RT-PARITY final cost: 5 Decisions.** Code accepted from `7f772f8c` onward;
+> every later block was honesty/attribution wording, **root cause my stale
+> grounding instruction**. Chain: closure-inference (2 sites) → coupled 3rd site
+> → identifier + seed citation, ended by the forced whole-artifact sweep.
+>
+> **NEXT: close on retros → doc-only tracker sync → SEAL-2** (frame re-anchored
+> on `e892777c`, publish doc-only, Handoff Gate Foundation, kick).
+> **`RT-ESCAPE` filed, unsized.**
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 09:15Z) — **RT-PARITY APPROVED & PUBLISHING — PR #800 @ `9f32967d`**
+>
+> **Decision `dec_3xyep8021ke88` verified BY OBJECT, not by the merge request:**
+> `status: resolved`, APPROVED at exact `9f32967d`, base `7e87d173`, resolved by
+> Architect 09:10:38; QA + CV + Architect §14 all on that SHA. I independently
+> confirmed `7e87d173` is an ancestor, the diff is exactly the four declared
+> paths (+1528/-90), and `crates/ken-runtime/` + `crates/ken-host/` appear
+> nowhere in it.
+>
+> **PR #800, non-doc-only.** Publisher waits ~2144s for CI, then polls checks.
+> **Published BYTE-IDENTICAL — §2a tracker bundle deliberately OMITTED**, as
+> with SPAN-SEAL: five Decisions on this WP, every block on exact-SHA fidelity,
+> so a doc-only commit on top would mean merging a SHA no reviewer voted on.
+> Tracker syncs in a separate doc-only publish after. **`gh` is not authed in my
+> shell — only the publisher mints credentials — so the PR head is grounded on
+> the local ref (`9f32967d`) plus a fresh branch push, not a `gh` query.**
+>
+> **ON MERGE:** verify by content on `origin/main` → **notify adversary
+> `agt_37vnwmcdxhw00`** → request §10 retros → close → then SEAL-2.
+>
+> **RT-PARITY cost: 5 Decisions.** Code accepted from `7f772f8c` onward; every
+> later block was honesty/attribution wording, and **the root cause was my stale
+> grounding instruction.** Sequence: closure-inference (2 sites) → coupled 3rd
+> site → identifier + seed citation, killed by the forced whole-artifact sweep.
+>
+> **`RT-ESCAPE` remains filed and unsized** — correctly not fixed here.
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 09:04Z) — **RT-PARITY `9f32967d` in QA; the forced sweep found a 4th site pre-review**
+>
+> **Candidate `9f32967d4ddb15713ecf9d2fda3f4be070f6ae8d`** (base `7e87d173`),
+> QA in progress. Prior candidate `b9c8497a` superseded by the rename.
+>
+> **★ THE FORCED WHOLE-ARTIFACT SWEEP WORKED — 4th site caught BEFORE review,
+> not in a 4th block.** The implementer ran its fallacy-shape sweep
+> **independently of QA's and then compared** (226 raw hits, every one read);
+> both converged on one required change. It then found what neither inventory
+> named: the test **identifier** `..._unconstructible_on_landed_producer_closure`
+> asserted the very basis its own doc comment rejects, **and the seed cited it**.
+> Renamed → `..._at_the_landed_surface`; all four references updated in one
+> commit; whole-repo grep for the old name outside the WP paths returned none.
+> Non-comment `.rs` diff = **exactly one line** (the signature). CLI 7/7 (715s),
+> rustfmt clean.
+>
+> **The ruling worth carrying (leader's call, no escalation needed): a test
+> IDENTIFIER is a claim artifact.** The implementer's sharpening is better than
+> mine and is now the memory's core: *a wrong identifier gets copied into
+> artifacts that never see the comment correcting it, so it outlives the fix.*
+> Prose is corrected where it sits; **a name travels**. Risk scales with how
+> widely a name is cited, not how wrong it is.
+>
+> **Caution I attached:** 226 hand-read hits is a strong pass but still a
+> **grep-seeded** enumeration. Honest framing is "I swept these terms across
+> these paths and read every hit" — **not** "no such claim remains."
+>
+> Code/differentials accepted by QA + Architect + CV since `7f772f8c`; every
+> block since has been wording. Architect composer clean this tick.
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 08:35Z) — **RT-PARITY prose-block loop, round 3; I intervened to force a whole-artifact sweep**
+>
+> **CV BLOCKED `5f21732b`** (`dec_5kg639esx9j39`, `evt_55wkqeeack7aj`). The two
+> named sites were correctly repaired — but a **third coupled site**,
+> `crates/ken-cli/tests/rt_parity_native.rs:553-555`, still grounds `FsWriteAt`
+> `buffer_start`/`length` unreachability on **`BufferSpan` constructor
+> privacy** — the precise fallacy the corrected block 60 lines below now names.
+> The seed and the CLI harness had come to **disagree on the evidence basis**.
+> Excellent whole-artifact catch.
+>
+> **★ I INTERVENED (`evt_496zv997a3m0f`) rather than let round 4 happen.** Each
+> round has repaired exactly the sites named in the block — **that is
+> enumeration again**, the identical defect that cost SPAN-SEAL four rounds:
+> fixing found instances instead of closing over the population. I directed the
+> ring to grep every artifact for the fallacy's **SHAPE** (*any* unreachability /
+> unconstructibility / host-minted claim resting on a private NAME or on the
+> oracle's empty result), **report a full inventory in the handoff** — every site
+> found, changed or judged-already-correct — and state the standard swept
+> against, so a reviewer can check the **sweep** and not just the diff.
+>
+> **Root cause remains mine.** Every blocked site is downstream of my 07:06
+> grounding sentence; the ring is sweeping my error out of its artifacts, which
+> is why I would rather spend one extra sweep than let it take a fourth block.
+>
+> **Code, differentials, and scope have been accepted by QA + Architect + CV
+> since `7f772f8c`.** Every block since is honesty/attribution wording only.
+>
+> **⚠ ARCHITECT COMPOSER STRANDED A SECOND TIME** (3 stacked pastes). Bare
+> `Enter` → `Working (5s)`. **Now a standing per-tick check in the watchdog** —
+> it has stranded three times today.
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 08:20Z) — **RT-PARITY blocked on MY stale instruction; prose-only respin @ `5f21732b`**
+>
+> **Architect AND CV both BLOCKED `7f772f8c` independently and identically**
+> (`evt_35aeswtwjg9t2`, `evt_74y14b5z4tkje`) — `dec_2ar8wgk2dx16x` terminally
+> rejected. Substance accepted on both sides: four-path scope (+1511/-90),
+> runtime/host byte-unchanged, interpreter repair + six differentials + internal
+> BufferFreeze pins all sound, `ken-interp` 8/8, `px8p` 3/3.
+>
+> **The blocker is a known-false implication in two prose sites**
+> (`rt_parity_native.rs:636-638`, `seed-buffer-io.md:544-546`): inferring from
+> `px8f` deriving `{}` that *"every span reaching `freeze` is host-minted."* Per
+> the accepted S1 correction that oracle is head-only, over ids already in
+> `env.globals`, in the loaded environment only — so `{}` cannot entail it.
+> Architect's phrasing is the keeper: calling it *"test-derived, not a proof"*
+> **"merely labels an insufficient test."**
+>
+> **★★ THAT WORDING IS MINE.** My 07:06 release brief instructed Runtime to
+> ground the claim on the landed closure. Correct when issued. The adversary
+> invalidated it at 07:26; I broadcast the correction at 07:31 — **and patched
+> Runtime's brief for `TransferCount` only, leaving the `BufferSpan` grounding
+> instruction standing and defective for 35 minutes.** I had the correction and
+> the dependent live brief in the same thread, 30 minutes apart.
+> **Correcting a claim does NOT propagate into instructions already in flight —
+> reissue or withdraw each explicitly.** Owned to the ring at
+> `evt_51e5vey2re5y8`; memory
+> `correcting-a-claim-requires-sweeping-instructions-built-on-it`.
+> **Third block in this chain caused by my words** (AC-3 v1, AC-3 v2, this).
+>
+> **Respin in flight:** leader relayed prose-only in <1min with the four required
+> points; implementer committed **`5f21732b`**, every changed `.rs` line a
+> comment, all 7 tests intact, now validating. Fresh SHA → fresh Decision →
+> fresh Architect + CV votes.
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 08:03Z) — **RT-PARITY QA APPROVED; `dec_2ar8wgk2dx16x` open; both reviewers engaged**
+>
+> **QA APPROVED exact `7f772f8c`** on `origin/main @ 7e87d173` (`evt_5jb08x69dmdar`):
+> four-path scope, runtime/host byte-unchanged, `px8f` 7/7 including all three
+> closure axes, `ken-interp --lib rt_parity` 8/8, `px8p` 3/3, `ken-cli --test
+> rt_parity_native` 7/7 in 690s. Confirms the BufferFreeze exemption now rests
+> **only** on the test-derived landed closure, and that **`TransferCount` is
+> marked verified-but-ungated, SEAL-2-owned, and non-load-bearing while the
+> BufferSpan closure is empty** — the disclosure I required, landed.
+>
+> **FRESH Decision `dec_2ar8wgk2dx16x`** opened 08:00Z on exact `7f772f8c`.
+> `dec_6w2gbgarf5443` / `dec_7p15cgqz3x0sg` are DEAD; no prior vote carries.
+>
+> **⚠ TRANSPORT FAILURE CAUGHT AND REPAIRED — the Architect, again.** Its pane
+> held **two stacked `[Pasted Content]` blocks with no `Working`**: the Decision
+> request reached the composer and was **never submitted**. A bare `Enter` to
+> `moot-architect` submitted it; `Working (5s)` confirmed. CV was already
+> engaged. **This is the gate step-7 failure mode and it has now hit the
+> Architect four-plus times — the check is not optional vigilance, it is part of
+> routing any review request.** Note the empty liveness grep on the *Runtime*
+> ring at the same moment was genuine idle (they had just posted), corroborated
+> by events rather than inferred from the pane.
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 07:50Z) — **RT-PARITY respin COMPLETE @ `7f772f8c`; awaiting QA**
+>
+> **RT-PARITY candidate `7f772f8c984ab81d9de58c27432c03df482310b9`** on
+> `wp/RT-PARITY-interp-native`, rebased onto `7e87d173`. runtime-leader is
+> driving handoff → QA. **Fresh Decision required; `dec_6w2gbgarf5443` and
+> `dec_7p15cgqz3x0sg` are DEAD; Architect AND CV both vote again.**
+>
+> What the respin did: removed the derived-span differential + its now-orphaned
+> helper (it drove freeze through the sealed `write_all_advance_span`);
+> **restated BufferFreeze unreachability on the landed `px8f_buffer_io_surface`
+> closure** rather than constructor-name privacy; **bounded the claim
+> deliberately** — "structurally unconstructible on the landed closure, as
+> asserted by px8f along those three axes," never "impossible" — and recorded
+> that **if the closure weakens, BufferFreeze owes two differential cases**;
+> added the SEAL-2 verified-but-ungated `TransferCount` disclosure.
+>
+> **Implementer discipline worth noting:** `origin/main` advanced to `7e87d173`
+> (my own doc-only tracker sync) *while it was validating*. It treated "rebased
+> onto current main" as a **perishable claim**, re-checked ancestry, rebased
+> again, and verified its four paths byte-identical across the second rebase —
+> so the validation still applies to the final SHA without a 12-minute re-run.
+>
+> **⛔ MY OWN TOOLING BUG, fixed:** I wrote `-S 200` (positive) into the
+> watchdog's liveness grep. tmux reads that as *start at line 200 going down*,
+> which falls past a short scrollback and returns ~1 line **without erroring** —
+> so the 07:40 tick reported the entire Runtime ring as having no spinner. A
+> false-dead on the active WP. **`-S` must be NEGATIVE (`-S -200`).** Caught by
+> self-testing the pattern (`printf` a known spinner string through the same
+> grep → matched), which localised the fault to the capture, not the seats.
+> **An unexpectedly empty sweep indicts the instrument before the fleet.**
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 07:32Z) — **Adversary: seal HOLDS; SEAL-2 drafted; RT-PARITY respinning**
+>
+> **★ ADVERSARY HUNT ON SPAN-SEAL `cd4184b8` — SEAL HOLDS** (`evt_74mjc4txd9y1e`).
+> It attacked the property rather than the oracle's proxy: deep wrapped-inclusive
+> sweep returns `MISSED BY LANDED ORACLE: []`, every forgery route rejects
+> (`UnresolvedCon`), and the transparency exploit I asked about is answered NO
+> (`KernelRejected { TypeMismatch }` — a `Prop`'s transparency exposes the helper
+> only inside a *type*; there is no projection from a type into a term).
+> **RT-PARITY is NOT undermined.** Three findings, **none merge-blocking**.
+>
+> **★ CORRECTION TO WHAT I BROADCAST AT CLOSURE.** I called the loud-fail axis
+> *"closed independently of the author's imagination."* **Overclaimed.** The
+> panic fires only for an id already **in `env.globals`** that classifies as
+> neither declaration nor constructor. It closed the **classification**; it never
+> closed the **enumeration**. A `Result E BufferSpan` producer (carrier not at
+> head) and a class field (never enters `globals`) both pass silently.
+> **A loud-fail guard is only as closed as the domain it iterates.** Corrected to
+> the fleet at `evt_6f8q947c24esp`; memory `loud-fail-guard-only-closes-the-
+> enumerated-namespace`.
+>
+> **SEAL-2 DRAFTED** — `docs/program/wp/SEAL-2-carrier-producer-enumeration-
+> closure.md`, Foundation, M. Parameterize the oracle **by carrier** (BufferSpan
+> **and** TransferCount) and close it over the **producer enumeration**: every
+> namespace, every result position, every source root. **AC-2 requires the
+> enumeration be DERIVED FROM THE ELABORATOR'S OWN STRUCTURE** so a new namespace
+> is a build break — a hand list is the thing that has now failed five times.
+> **Deliberately NOT framed to a branch yet:** RT-PARITY is in flight and touches
+> adjacent prose; publishing a frame now risks the stale-frame §14 hazard that
+> blocked PX8-L. Frame + kick after RT-PARITY closes.
+>
+> **S2 → RT-PARITY, wording only** (`evt_7wmc8m3rggn4j`). Its `TransferCount`
+> premise is **true** (adversary verified empirically, not by grep) but
+> **ungated**. It must state the dependency as verified-but-ungated and name
+> SEAL-2 as the gate. **Not** blocked — the premise holds, so a third block would
+> be disproportionate; and it must **not** build the gate (Foundation's oracle).
+>
+> **S3 → PX8-F-PROOF (F4) scope:** `write_all_exact_prefix_prop` is defined only
+> in Rust-emitted prelude, so a catalog reader cannot resolve what
+> `write_all_preserves_exact_prefix` claims — while its prose got *stronger*.
+> That erratum must not land with the statement unresolvable to its reader.
+>
+> **SEAL-2 starting evidence COMMITTED** — `adversary/SEAL2-repros @ 70a603da`,
+> one file, 6 tests, local-only but visible from every seat's worktree (shared
+> `.git`), so no push is needed. **My "expected-fail today" labelling was wrong:
+> all six PASS.** The real split is **4 property** (must keep holding) vs **2
+> gap** (pass *because the oracle is blind*). That produced **AC-8: SEAL-2 must
+> INVERT the two gap tests** — if they still pass unchanged, the enumeration was
+> not closed. A completion check the ring cannot satisfy with a self-agreeing
+> test. **⛔ The frame forbids adopting the adversary's `mentions()` walker as
+> the closure** — it does not unfold `Const`s in non-head positions
+> (`Option BufferSpanAlias` slips past) and would be instance #6.
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 07:14Z) — **SPAN-SEAL CLOSED; RT-PARITY respinning**
+>
+> **SPAN-SEAL — ✅ CLOSED.** Merged `cd4184b8` (PR #798), verified by content,
+> adversary notified, and **all three §10 retros in** (leader `evt` 07:06:33,
+> QA 07:06:39, implementer 07:06:40). Foundation ring is idle-by-design.
+>
+> **The retros converged independently on the same lesson**, which is why it is
+> worth trusting: an AC that names a mechanism transfers that mechanism's blind
+> spots into the deliverable, and **loud failure on the unhandled case** — not a
+> longer category list — is what closes a claim independently of the author's
+> imagination. All three rings' retros also carried the practice of stating
+> *what the prior oracle would have done* under each discriminator; that is the
+> line between a test and evidence, and it should spread to the other rings.
+>
+> **RT-PARITY — ACTIVE, respinning.** runtime-implementer (T1/Opus) engaged and
+> working: removing the derived-span test, rewriting the closure citation onto
+> the landed sealed closure, updating the seed's superseded BufferFreeze
+> argument. **Fresh Decision + fresh Architect + CV votes required — no prior
+> vote carries** (this has bitten RT-PARITY twice, the fleet four times).
+> On merge: verify by content → **notify adversary `agt_37vnwmcdxhw00`** → §10
+> retros → close.
+>
+> ### ↓ prior live state, kept for history ↓
+>
 > ## ⚡ LIVE STATE (2026-07-21 07:07Z) — **SPAN-SEAL MERGED `cd4184b8`; RT-PARITY released**
 >
 > **SPAN-SEAL — MERGED (PR #798), verified BY CONTENT on `origin/main @
