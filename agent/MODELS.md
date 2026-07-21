@@ -33,6 +33,33 @@ downstream is already correct.
 | **T2** (build & coordination) | **Sonnet-class** | Build-team Leaders, Implementers, QA; Spec-team Leader; Librarian | High-volume code generation, coordination, mechanical gates, verification runs, doc observation. |
 | **T3** | **Haiku-class** | (none currently) | Lightweight tier; held in reserve. |
 
+> ### ★ The Roles column is a DEFAULT, not the landed seating (operator, 2026-07-21)
+>
+> **Seating is chosen per team, on task difficulty — not derived from the role.**
+> The table above is the starting assumption; individual teams deviate from it
+> deliberately, and those deviations are sanctioned, not drift.
+>
+> **Runtime is the standing exception, and it is INVERTED vs the table:**
+> **`runtime-implementer` is T1**, **`runtime-leader` is T2**. The *implementation*
+> is the hard part on that team, not the coordination. Operator: *"Runtime has
+> been sol [high], also a T1 seat, and we've had single WP sessions that took 16
+> hours to complete. Runtime is dealing with genuinely hard coding tasks. Opus is
+> warranted."*
+>
+> **⇒ NEVER infer a seat's tier from its role.** A seat's tier is an
+> **observation**: `tmux capture-pane` the seat, read the model line, and map it
+> through the mass ordering above (Sol/Terra/Luna = T1/T2/T3). Before proposing
+> any seating change — **especially a cost-saving downgrade** — confirm what the
+> seat is actually running. *This paragraph exists because the Steward read the
+> Roles column, inferred `runtime-implementer` was T2, and reported a "tier drift
+> to revert" for a seat that was already T1; acting on it would have downgraded a
+> correctly-seated T1 role in the middle of 16-hour work.*
+>
+> **Corollary for watchdogs:** a Runtime WP legitimately running for **hours** is
+> not a stall. Tuning stall thresholds to tens of minutes on that ring produces
+> false positives, and a watchdog that cries stall trains its readers to ignore
+> it (COORDINATION §13; `reason-in-agent-team-hours-not-human-days`).
+
 The operator is the human product owner; Steward is the primary proxy into the
 federation.
 
@@ -66,6 +93,11 @@ allows. This is the **ideal steady state for the catalog cadence** (T1 enclave
 pins each abstraction boundary → a wide T2 fleet fans out): the topology now
 matches the workflow. Phase 3 also folds in the Opus re-review of the Phase-2
 GPT-only work.
+
+**The "everything else on GPT" split is itself a default, subject to the
+per-team difficulty rule above.** A build seat whose work is genuinely T1-hard
+may be seated on the Anthropic pool despite being a build role — done for
+`runtime-implementer` on 2026-07-21. Read the seat, not the phase model.
 
 **The three phases:** (1) **now** — whole fleet on Anthropic (shared pool);
 reserve it for T1 enclave elaboration/framing, defer T2 builds. (2) **credits
