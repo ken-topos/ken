@@ -5,7 +5,7 @@ status: draft
 owner: TBD
 size: M
 gate: none
-depends_on: []
+depends_on: [SPEC-38-ERRATUM]
 blocks: [SEAL-2]
 github: null
 origin: evt_1s9rt48z7bpsn
@@ -23,8 +23,8 @@ validation and reaches neither reifier, so two closures see different blast
 radii. Prioritized ahead of `SEAL-2` — SEAL-2 closes a gate with no live
 defect, this is a live contradiction of locked normative text.
 
-**Blocked on a spec erratum landing first** (not itself tracked as an issue
-here): `spec/30-surface/38-ffi-io.md` currently contradicts itself, so a
+**Blocked on `SPEC-38-ERRATUM`, which is ACTIVE with the Spec enclave
+(released 2026-07-21):** `spec/30-surface/38-ffi-io.md` currently contradicts itself, so a
 code-first fix would re-derive from broken citation text. The Architect call
 on the erratum routes together with this WP. Owning team not yet assigned
 (tracker: `*TBD — not yet assigned*`) — do not guess.
