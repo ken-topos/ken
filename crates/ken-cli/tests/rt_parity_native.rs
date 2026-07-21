@@ -41,12 +41,12 @@
 //! | `fs_write_at_malformed_offset` | FAILS | dispatch skip |
 //! | `buffer_freeze_malformed_span_is_unconstructible...` | passes | none -- source-scope pin, not interpreter behaviour |
 //!
-//! `BufferFreeze` has no *narrowing* case here by structural necessity, not by
-//! omission: no malformed span is constructible from checked source on the
-//! landed sealed-producer closure. See
+//! `BufferFreeze` has no *narrowing* case here because no malformed span is
+//! constructible from checked source at the landed surface -- an empirical
+//! finding, not a derived closure result, and not an omission. See
 //! `buffer_freeze_malformed_span_is_unconstructible_on_landed_producer_closure`
-//! for what that rests on and what it does not claim. Its narrowing guards stay
-//! covered at the dispatch boundary in `ken-interp`.
+//! for exactly what that rests on and what it does not claim. Its narrowing
+//! guards stay covered at the dispatch boundary in `ken-interp`.
 
 #![cfg(target_os = "linux")]
 
@@ -610,66 +610,66 @@ fn elaborates(span_expression: &str, result_type: &str) -> Result<(), ken_cli::R
     .map(|_| ())
 }
 
-/// `BufferFreeze` has no executable *narrowing* case, because no malformed
-/// span is constructible from checked source.
+/// `BufferFreeze` has no executable *narrowing* case, because no malformed span
+/// is constructible from checked source **at the landed surface**.
 ///
-/// The basis is the **landed sealed-producer closure**, not constructor-name
-/// privacy. Privacy of a name does not by itself establish that no public
-/// producer exists -- an earlier revision of this test argued exactly that
-/// fallacy and was blocked for it (Architect, on `2b55706a`), because
-/// `write_all_advance_span` was then a public `BufferSpan` transform.
+/// That is an **empirical finding about the code as it stands**, not a derived
+/// closure result. The distinction is load-bearing, and it is spelled out
+/// because two earlier revisions of this comment claimed more than the evidence
+/// supports: the first inferred it from constructor-name privacy, and the
+/// second inferred it from an empty oracle result. Both were blocked.
 ///
-/// That helper has since been sealed, and the property is now asserted
-/// directly rather than argued: `ken-elaborator`'s
-/// `px8f_buffer_io_surface` **derives** the set of public globals whose result
-/// type is `BufferSpan` and asserts it is empty, along three axes --
+/// **What is established.** Source-level span forgery is rejected today:
+/// `PrivateBufferSpan` and the now-sealed `write_all_advance_span` are both
+/// unnameable from checked source, pinned below. An independent adversary sweep
+/// (SPAN-SEAL) separately found the seal holds, including a wrapped-inclusive
+/// search and direct forgery attempts.
 ///
-/// 1. modulo definitional equality, so a transparent alias cannot smuggle one
-///    past a syntactic head-match
-///    (`buffer_span_producer_closure_reduces_transparent_type_aliases`);
-/// 2. over declarations **and** constructors, so a public constructor is not
-///    silently dropped
-///    (`buffer_span_producer_closure_resolves_public_constructors`); and
-/// 3. with a loud failure for any public id in neither category
-///    (`buffer_span_producer_closure_rejects_unknown_public_ids`).
+/// **What the landed oracle does and does not give.** `px8f_buffer_io_surface`
+/// asserts that the set of public globals whose result type is `BufferSpan` is
+/// empty, along three axes: modulo definitional equality
+/// (`buffer_span_producer_closure_reduces_transparent_type_aliases`); over
+/// declarations **and** constructors
+/// (`buffer_span_producer_closure_resolves_public_constructors`); and with a
+/// loud failure for any public id in neither category
+/// (`buffer_span_producer_closure_rejects_unknown_public_ids`).
 ///
-/// With that closure empty, every `BufferSpan` reaching `freeze` is host-minted
-/// by a successful `readAt`, so its start and budget are already host-width
-/// valid and the narrowing guards cannot be reached from source.
+/// That evidence is **bounded and known enumeration-incomplete**. The walk is
+/// head-only; it considers only ids already present in `env.globals`; and it
+/// loads only the prelude plus the `Buffer` and `IO` catalog packages. It
+/// therefore does not see wrapped result positions, class fields -- which are
+/// source-reachable producers outside `env.globals` -- or producers in other
+/// catalog packages, and its loud-failure arm totalizes classification only
+/// *within* that partial enumeration.
 ///
-/// **This is a test-derived property, not a proof, and it is stated that way on
-/// purpose.** The closure computation was wrong more than once before it
-/// landed -- a syntactic head-match missed transparent aliases, and a lookup
-/// silently dropped every constructor -- so the honest claim is "structurally
-/// unconstructible on the landed closure, as asserted by
-/// `px8f_buffer_io_surface` along those three axes", never "impossible". If
-/// that closure is broken or weakened, this exemption goes with it and
-/// `BufferFreeze` owes a single-fault and an overlap differential case.
+/// **So an empty result from that oracle does not entail that every span
+/// reaching `freeze` is host-minted, and nothing here makes that inference.**
+/// Labelling the oracle "test-derived rather than proof" would not repair the
+/// implication; it would only describe an insufficient test. The oracle is
+/// corroborating evidence over the fragment it covers, and no more.
 ///
-/// What *this* test adds is the source-level pin at the differential layer:
-/// the private names must stay unnameable from checked source. The narrowing
-/// guards themselves remain covered at the dispatch boundary by
+/// **`SEAL-2` owns the durable producer-enumeration gate.** It is deliberately
+/// not built here.
+///
+/// **If this empirical seal breaks, or its future gate fails, `BufferFreeze`
+/// owes executable single-fault and overlap differential coverage.** The
+/// narrowing guards remain correct defense-in-depth and stay covered at the
+/// dispatch boundary by
 /// `eval::px5b_effect_observation_tests::rt_parity_buffer_freeze_*` and
 /// `rt_parity_malformed_freeze_bounds_precede_closed_resource`.
 ///
 /// **On the `TransferCount` pin below -- verified but ungated.** `TransferCount`
-/// has no public producer empirically at `cd4184b8`: every public declaration
-/// mentioning it consumes one, and `PrivateTransferCount` is sealed. That is a
-/// grep-verified fact with **no oracle behind it** -- the landed closure covers
-/// `BufferSpan` only, so nothing would catch a future public `TransferCount`
-/// producer. The missing gate is tracked as `SEAL-2` and is deliberately not
-/// built here.
-///
-/// It is called out rather than quietly relied on, but note it is **not
-/// load-bearing for this claim**: with the `BufferSpan` producer closure empty,
-/// every span is host-minted regardless of what counts are constructible, since
-/// no public route turns a count into a span. The pin is defense in depth, and
-/// it is what would fail first if a new span transform were ever introduced
-/// that consumed a count.
+/// has no public producer empirically at the landed surface: every public
+/// declaration mentioning it consumes one, and `PrivateTransferCount` is
+/// sealed. That is a grep-verified fact with **no oracle behind it** -- the
+/// landed oracle covers `BufferSpan` only, so nothing would catch a future
+/// public `TransferCount` producer. That gap is also `SEAL-2`'s, and the pin is
+/// retained here as defense in depth rather than as a load-bearing premise.
 #[test]
 fn buffer_freeze_malformed_span_is_unconstructible_on_landed_producer_closure() {
-    // Both private span producers are unnameable from checked source, so the
-    // only route to a span is the host-minted one the closure leaves standing.
+    // Both private span producers are unnameable from checked source. This pins
+    // the empirical seal at the differential layer; it does not enumerate the
+    // producer surface, which is SEAL-2's job.
     for forged in [
         "PrivateBufferSpan (sub_int 0 1) Zero",
         "PrivateBufferSpan (0 : Int) Zero",
@@ -693,8 +693,7 @@ fn buffer_freeze_malformed_span_is_unconstructible_on_landed_producer_closure() 
         "write_all_advance_span must stay sealed: it was the public transform \
          that defeated the earlier privacy argument; got {error:?}"
     );
-    // Defense in depth, not load-bearing: the span closure already settles the
-    // claim. Verified but ungated -- see SEAL-2 in the doc comment.
+    // Defense in depth, verified but ungated -- see SEAL-2 in the doc comment.
     let error = elaborates("PrivateTransferCount Zero Zero", "TransferCount")
         .err()
         .expect("a source-forged TransferCount must not elaborate");
