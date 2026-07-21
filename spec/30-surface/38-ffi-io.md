@@ -403,10 +403,14 @@ data WriteProgress
 
 `TransferCount` is constructor-private, strictly positive, and bounded by the
 effective request: the post-validation length after any in-range tail cap. For
-a count `n`, `0 < n ≤ effective request`, and its remaining request budget is
-`effective request - n`; the raw caller-requested length is not a progress bound
-after capping. It has an `Int` projection. `ReadSome`'s `BufferSpan` and count
-are minted together, and the span length equals the count by construction.
+`readAt`, this is the post-cap window length; for `writeAt`, it is the remaining
+input-span length. For a count `n`, `0 < n ≤ effective request`, and its
+remaining request budget is `effective request - n`; the raw caller-requested
+length is not a progress bound after capping. Thus a tail-capped `readAt` with
+raw request 8, effective request 4, and count and span length 4 has remaining
+request budget 0 and total request budget `count + remaining = 4`. It has an
+`Int` projection. `ReadSome`'s `BufferSpan` and count are minted together, and
+the span length equals the count by construction.
 `Complete` and `Partial` are derived comparisons between the count and effective
 request; they are not runtime constructors or statuses. The checked view of a
 count carries its positivity and upper-bound witnesses; user code cannot detach
