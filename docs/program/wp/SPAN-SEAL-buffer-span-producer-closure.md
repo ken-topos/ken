@@ -122,14 +122,37 @@ a spec amendment and **not** an ADR. No enclave ruling gates the start.
   checked bodies (`transparent_body(...).is_some()`), the catalog `System.IO`
   fences still elaborate, and the exact-prefix law now concerns the advance step
   `private_write_all_fuel` actually executes.
-- **AC-3 — ★ the closure is DERIVED, not enumerated.** This is the criterion
-  that matters most; read the rationale below before implementing it.
+- **AC-3 — ★ the closure is DERIVED, and derived MODULO DEFINITIONAL EQUALITY.**
+  This is the criterion that matters most; read the rationale below before
+  implementing it.
   Extend `crates/ken-elaborator/tests/px8f_buffer_io_surface.rs` to **walk
-  `env.globals`, look up each `GlobalId` via `GlobalEnv::lookup`, walk each
-  decl's type through its Pi codomain to the head, and collect every global
-  whose result type is `BufferSpan`.** Assert that derived set equals an exact
-  expected set. A newly added `BufferSpan` producer must **fail this test by
-  default.**
+  `env.globals`, look up each `GlobalId` via `GlobalEnv::lookup`, and collect
+  every global whose result type is `BufferSpan`.** Assert that derived set
+  equals an exact expected set (which should be **`{}`**). A newly added
+  `BufferSpan` producer must **fail this test by default.**
+
+  > **⚠ AMENDED 2026-07-21 after CV blocked `8f625666` — the first
+  > implementation of this AC satisfied its letter and still admitted a
+  > bypass.** A **syntactic** walk (strip raw `Term::Pi` codomains, raw-match
+  > `Term::IndFormer{ id == BufferSpan }`) is **not sufficient**. CV
+  > demonstrated the hole with a reversible mutation that stayed green:
+  >
+  > ```ken
+  > def BufferSpanAlias = BufferSpan
+  > fn escaped_alias (span : BufferSpan) (count : TransferCount)
+  >   : BufferSpanAlias = write_all_advance_span span count
+  > ```
+  >
+  > That declaration is public, elaborates, and really does produce a
+  > `BufferSpan` through the private transition — yet the derived set stayed
+  > `{}`. **Required:** weak-head-reduce the declaration type against the real
+  > `GlobalEnv` **before deciding whether it is a `Pi`**, and again **after each
+  > codomain step**, then compare the *reduced* head to `BufferSpan`. This
+  > closes whole-function-type aliases as well as result aliases. The alias
+  > producer above (or an equivalent reversible discriminator) **must appear in
+  > the derived set.**
+  >
+  > **Do not weaken the sealed product surface to accommodate the test.**
 - **AC-4 — positive control still reaches.** A checked program still obtains a
   span/count only from `ReadSome` and drives the public consumers (`writeAt`,
   `freeze`, `writeAll`) successfully. AC-1 must not pass by breaking the
@@ -161,6 +184,20 @@ a spec amendment and **not** an ADR. No enclave ruling gates the start.
 > recurring.** Derive the set from the elaborated environment so the closure is
 > a property, not a memory. Do not substitute a source grep: the prelude is
 > Rust-emitted, so grepping `.ken` sources misses it entirely.
+>
+> **★★ And the defect has now recurred once MORE, one level down — including in
+> this AC as I first wrote it.** The first respin derived the set *syntactically*
+> and CV blocked it, because a syntactic head-match is **still an enumeration in
+> disguise**: it enumerates *spellings* of the result type rather than deciding
+> the type's *meaning*, so any transparent alias walks straight past it. My
+> original AC-3 said "walk the Pi codomain to the head and compare" — I specified
+> a **mechanism** and called it a property, and the implementer built exactly
+> what I wrote. **That under-specification is mine, not the ring's.**
+>
+> The general rule, now three layers deep on this one surface: **"derived" is
+> only as strong as *derived modulo what*.** State the equivalence the closure
+> must hold under — here, Ken's definitional equality — or a reader will pick
+> the cheapest one that satisfies the words.
 
 ## 7. Guardrails
 
