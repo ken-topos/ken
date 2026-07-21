@@ -11,7 +11,7 @@
 
 - Fleet is **SINGLE-THREADED**. Nothing is owed to any ring; every idle ring
   is **correct**, not a stall.
-- `origin/main = fd065d07`. Nothing is blocked.
+- `origin/main = cd3606a1`. Nothing is blocked.
 - **Do not kick a WP while the operator has an open question below.**
 
 ## Operator rulings — 2026-07-21 ~12:45Z. SETTLED, do not reopen.
@@ -67,8 +67,45 @@ obscured. PX9 gates most of Track T.
 **Not started.** Next step when the operator says go: decompose the tracks
 into `docs/program/issues/` entries.
 
+## ⏸ TRACK Q — ACTIVE. Q1 done; Q2 blocked on the operator (2026-07-21)
+
+The operator authorized **Q1 and Q2** (program 11 Track Q). Q1 is **landed**
+(`cd3606a1`). **Q2 is blocked on two operator answers — do not start either
+without them, and do not infer past them:**
+
+1. **Go for Q2a?** Proposed split, awaiting approval:
+   - **Q2a — mechanical scan.** Advisory §5's risk patterns are *syntactic
+     smells* (bare count literals, source-text greps, `#[ignore]`, `Err(_)`,
+     wall-clock asserts): scriptable across all 1909 tests, **no domain
+     knowledge and no ownership question**. Output is a candidate queue.
+   - **Q2b — domain triage of only Q2a's candidates.** The hard half ("is
+     this literal a contract value or today's repo state?") genuinely needs
+     the owning team, but runs on a small fraction.
+2. **`ken-cli` and `ken-foundation` ownership** — genuinely undocumented.
+   `CODEOWNERS` declares itself inert and maps no crate; `agent/teams/` holds
+   only `foundation/`, which never names a crate. **`ken-foundation` is the
+   trap: its NAME says Foundation, its CONTENTS are the K3 value model, and
+   the sole WP citing it says Runtime.** Do not infer an owner into the
+   tracker.
+
+> ### ★ Why Q2 is NOT routed per-crate
+>
+> The test distribution is brutally concentrated — `ken-elaborator` alone is
+> **1052 of 1909 (55%)**, while `ken-verify` has 24. Routing by crate hands
+> one team the majority and is a queue behind Language, not a fan-out.
+> **This is the C9 lesson again: partition by the work unit, not by the
+> container.** (C9 sharded by test rather than by crate for exactly this
+> reason.)
+
+**Q1's finding, so it is not re-derived:** the advisory splits into a
+**review** checklist (§9) and an **authoring** workflow (§6). §9 had been in
+`qa.md` since 2026-07-18; `implementer.md` referenced the advisory **not at
+all**. The gap was *routing* — guidance reached reviewers, never authors.
+Fixed by a **pointer** in `implementer.md` step 4, never a copy.
+
 ## My queue, in order
 
+0. **Track Q above** — Q2 the moment the operator answers.
 1. **BUDGET-EFF** — Handoff Gate the Spec enclave (spec-leader, spec-author,
    conformance-validator). **Spec erratum FIRST**: `38` self-contradicts
    (`:404-405`/`:443-444` say *effective*, `:419-420`/`:438-440` say
@@ -88,19 +125,38 @@ into `docs/program/issues/` entries.
 
 ## In flight
 
-**PR #804** @ `e4cb6628` — CI dependency caching + the work-item tracker
-gate, plus both planning documents and this briefing. In its poll wait.
-Verify by content (`git cat-file -p origin/main:.github/workflows/ci.yml |
-grep rust-cache`), never by the publisher's exit code.
+**Nothing in flight.** Branch aligned on `origin/main`, clean, no orphaned
+polls.
 
-> ⚠ **#804's own run will NOT be faster.** `Swatinem/rust-cache` populates on
-> first use, so this run pays the same cold build and then saves artifacts.
-> **The benefit appears on the NEXT run.** A ~40-minute #804 is the expected
-> result, not a failed change — do not report C1 as ineffective on this
-> evidence.
+Recently landed and verified by content: **#810** (restore
+`px8f_buffer_native`, scope the dedicated jobs), **#811** (SHA-pin
+`install-action`), **#812** (Q1 + RT-PARITY closure).
 
-PR #803 (pre-commit hook) already landed at `bc10baff` — the operator merged
-it manually, bypassing the gate.
+## ⚠ FLEET IS MID-RESEAT — leader / implementer / QA seats → Sonnet 5
+
+The operator is reseating the build-team seats (**not** spec-leader). Seats
+were cycling as of ~19:00Z.
+
+> ### ★ NEW TRAP — a reseated agent re-posts an ALREADY-CLOSED retro
+>
+> `kernel-leader` came up on a fresh seat and posted a §10 retro for
+> **KTR-1, which closed 2026-07-14 with retros already in** (`65d68cfc`,
+> PR #675). Not an error on its part — it reported what its context showed.
+> But **counting such a re-post inflates the promotion ladder.**
+>
+> **Verify every post-reseat retro against the RECORDED state, never the
+> report:** `docs/program/issues/<ID>.md` frontmatter (`status: closed`), or
+> the diary for WPs predating the issue system. Expect more of these as the
+> remaining seats come up.
+>
+> Contrast RT-PARITY, where the leader's near-identical announcement *was*
+> actionable: its retros were genuinely in and only the frontmatter lagged at
+> `merged`. **The two look the same from the outside — only the recorded
+> state tells them apart.**
+
+**Do not kick any WP until the reseat is complete and the operator releases
+one.** Delivering into a seat that is about to restart is the transport
+failure the Handoff Gate exists to prevent.
 
 ## Programs written, NOT started
 
