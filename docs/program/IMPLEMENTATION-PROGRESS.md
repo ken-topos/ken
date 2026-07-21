@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-21 19:51:05Z — from 21 issue file(s) in `docs/program/issues/`.
+2026-07-21 20:24:18Z — from 21 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -52,7 +52,7 @@ the committed file matches the generator's output.
 | `MODELS-TIER` | agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception | ready | steward | S | none | — |
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | ready | steward | S | none | — |
 | `PX8-F-CAP-41` | PX8-F-CAP (#41) — backlog, deferred to spec-first | draft | TBD | TBD | none | 41 |
-| `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | ready | runtime | S | none | — |
+| `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | active | runtime | S | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | draft | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
 | `RT-SPLIT` | decompose cranelift_backend.rs | draft | runtime | L | none | — |
@@ -69,7 +69,6 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `F1-37` — F1 (#37) — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `PUB-VERIFY` — scripted-pr-automerge.sh exits 0 on a failed push
-- `Q-RESIDUE` — the Track Q rework residue — 10 tests, folded from Q3-Q7
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
 
 ## Blockers

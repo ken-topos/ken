@@ -1,7 +1,7 @@
 ---
 id: Q-RESIDUE
 title: "the Track Q rework residue — 10 tests, folded from Q3-Q7"
-status: ready
+status: active
 owner: runtime
 size: S
 gate: none
@@ -82,6 +82,17 @@ mutation proving the scan bites.
 `owner: runtime` reflects the majority (7 of 10), **not** clean ownership.
 The three `cat5_parsing_package.rs` rows are **Language's** area, and
 `ken-cli`/`ken-foundation` ownership is genuinely undocumented (`CODEOWNERS`
-is inert and maps no crate). The Runtime leader should route the `cat5` rows
-to Language rather than absorb them. **This is a cross-cutting edit by
-design — path-guard treats that as normal, not a violation.**
+is inert and maps no crate).
+
+**Resolved (Steward, at kickoff): ONE branch, ONE PR, Runtime owns all ten.**
+An earlier draft of this note said to hand the `cat5` rows to Language. That
+would put two teams on one WP with two branches, against the one-WP /
+one-branch / one-PR model, and the fleet is single-threaded — the operator
+relaxed that for Q2 only because triage was procedural and read-only. **This
+is neither.**
+
+So: Runtime holds the branch and **consults `@language-leader` in-thread on
+the three `cat5` rows** — what the surface is *supposed* to promise — then
+writes the change itself. A three-row question is far cheaper than a second
+branch. **This is a cross-cutting edit by design — path-guard treats that as
+normal, not a violation.**
