@@ -1,6 +1,6 @@
 # 12 — The documentation program (`library/`)
 
-**Status:** Framed 2026-07-21. Wave 0 held at `ready` pending seat wiring.
+**Status:** Framed 2026-07-21. **Wave 0 active** — released to the doc team.
 **Owner:** the **doc team** (§0); Steward (frame, sequencing, gates).
 **Source proposal:** `research/librarian-documentation-program-proposal.md`
 (Research, 2026-07-18).
@@ -20,11 +20,19 @@ Steward, states what binds the Librarian, and releases Wave 0.
 Documentation is produced by a **three-seat team on the standard build
 archetype**, not by a solo Librarian:
 
-| seat | skill | role |
-|---|---|---|
-| `doc-leader` | `ken-build-leader` + `agent/teams/doc/leader.md` | scoping, sequencing, kickoffs, merge Decisions |
-| `doc-author` | `ken-build-implementer` + `agent/teams/doc/implementer.md` | authoring |
-| `librarian` | `ken-librarian` | editor, fact-checker, reviewer — **the team's QA** — plus a standing as-built mandate |
+| seat | tier | skill | role |
+|---|---|---|---|
+| `doc-leader` | T2 | `ken-build-leader` + `agent/teams/doc/leader.md` | scoping, sequencing, kickoffs, merge Decisions |
+| `doc-author` | T2 | `ken-build-implementer` + `agent/teams/doc/implementer.md` | authoring |
+| `librarian` | **T1** | `ken-librarian` | editor, fact-checker, reviewer — **the team's QA** — plus a standing as-built mandate |
+
+**★ The judgment is concentrated on the reviewing end, not the authoring
+end** (operator, 2026-07-21). Every other unit in the fleet puts its most
+capable seat on production; this one puts it on review. That is deliberate:
+the failure mode for documentation is not *badly written* but *confidently
+wrong* — a page whose cited evidence does not carry its claim reads perfectly
+and is worth less than nothing, because it still looks authoritative. Catching
+that is a grounding problem, which is where T1 pays. Prose quality is not.
 
 **Why the archetype rather than a bespoke unit.** The doc team inherits
 `COORDINATION.md` wholesale — WP lifecycle, the handoff gate, review and merge

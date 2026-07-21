@@ -1,7 +1,7 @@
 ---
 id: DOC-W0
 title: "documentation Wave 0 — library/ charter and currency substrate"
-status: ready
+status: active
 owner: doc
 size: M
 gate: none
@@ -19,9 +19,12 @@ content at volume.
 > the Librarian as a solo seat. The operator then established a three-seat doc
 > unit — **`doc-leader`** (scoping, workflow), **`doc-author`** (authoring),
 > and the **Librarian** as its QA (editor, fact-checker, reviewer, plus a
-> standing as-built mandate). Held at `ready` until both new seats are wired
-> and confirmed. The deliverables and acceptance criteria below are unchanged;
-> only the ownership is.
+> standing as-built mandate). Both new seats are wired and confirmed
+> (`doc-leader` `agt_37w6sznc4nw00`, `doc-author` `agt_37w6t02849400`, both
+> T2 Sonnet 5); the Librarian is **T1** (`gpt-5.6-sol`). The deliverables and
+> acceptance criteria below are unchanged; only the ownership is.
+>
+> **Released 2026-07-21.**
 
 **Read the design canonically, do not work from this summary:**
 `research/librarian-documentation-program-proposal.md` (the shape) and
