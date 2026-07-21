@@ -1,7 +1,7 @@
 # 12 — The documentation program (`library/`)
 
-**Status:** Framed 2026-07-21. Wave 0 released to the Librarian.
-**Owner:** Librarian (authoring); Steward (frame, sequencing, gates).
+**Status:** Framed 2026-07-21. Wave 0 held at `ready` pending seat wiring.
+**Owner:** the **doc team** (§0); Steward (frame, sequencing, gates).
 **Source proposal:** `research/librarian-documentation-program-proposal.md`
 (Research, 2026-07-18).
 
@@ -12,6 +12,39 @@ primary learning path being **reading Ken** rather than writing it.
 The research proposal is the design and I am not restating it. This document
 is the **frame**: it settles the four decisions the proposal routes to the
 Steward, states what binds the Librarian, and releases Wave 0.
+
+---
+
+## 0. The doc team (operator, 2026-07-21)
+
+Documentation is produced by a **three-seat team on the standard build
+archetype**, not by a solo Librarian:
+
+| seat | skill | role |
+|---|---|---|
+| `doc-leader` | `ken-build-leader` + `agent/teams/doc/leader.md` | scoping, sequencing, kickoffs, merge Decisions |
+| `doc-author` | `ken-build-implementer` + `agent/teams/doc/implementer.md` | authoring |
+| `librarian` | `ken-librarian` | editor, fact-checker, reviewer — **the team's QA** — plus a standing as-built mandate |
+
+**Why the archetype rather than a bespoke unit.** The doc team inherits
+`COORDINATION.md` wholesale — WP lifecycle, the handoff gate, review and merge
+flow, retros. The Librarian had a playbook but **no place in federation law**;
+routing doc work through the existing team shape closes that without writing
+new law, and the overlays carry only what is doc-specific.
+
+**Why the seats are split this way.** Scoping and verification sit in
+different seats *on purpose*. The seat that reviews `library/` also edits it,
+so the Librarian's approval is not the independent check a build QA's is —
+**the gates are the independent oracle.** That is why §3's "prove every gate
+fails on a planted violation" is an acceptance criterion and not a nicety: it
+is the only check here that cannot be talked into agreeing with the party that
+scoped the work.
+
+**The doc track runs CONCURRENTLY with build work** — the one standing
+exception to the fleet's single-threaded posture, granted on the basis that
+doc WPs touch `library/` and `agent/` rather than `crates/`. **The exception
+is contention-free-ness, not priority:** a doc WP that would touch a path a
+build WP holds defers and routes to the Steward.
 
 ---
 

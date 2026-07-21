@@ -52,7 +52,7 @@ agent/memory/
     qa/             all QA
     implementers/   all implementers
   teams/
-    kernel/  verify/  language/  runtime/  ergo/  foundation/
+    kernel/  verify/  language/  runtime/  ergo/  foundation/  doc/
   roles/
     steward/  architect/  librarian/  …
 ```

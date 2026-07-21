@@ -25,9 +25,19 @@ again **after every context compaction** — orient yourself:
 | `spec-leader` | `ken-spec-leader` |
 | `spec-author` | `ken-spec-author` |
 | `conformance-validator` | `ken-conformance-validator` |
-| `<team>-leader` — kernel/verify/language/runtime/ergo/foundation | `ken-build-leader` |
+| `<team>-leader` — kernel/verify/language/runtime/ergo/foundation/**doc** | `ken-build-leader` |
 | `<team>-implementer` | `ken-build-implementer` |
 | `<team>-qa` | `ken-build-qa` |
+
+**⚠ The `doc` team has no `doc-qa` seat — the `librarian` is its QA.** Its
+ring is `doc-leader` + `doc-author` + `librarian`, and the Librarian reviews
+the ring's WPs *and* holds a standing as-built mandate no build QA has. So
+`librarian` routes to `ken-librarian` (above), **not** to `ken-build-qa`, and
+there is no `agent/teams/doc/qa.md`. The doc track is also the one standing
+exception to the fleet's single-threaded posture: it **runs concurrently**
+with build work (operator, 2026-07-21), on the basis that it touches
+`library/` and `agent/` rather than `crates/` — the exception is
+contention-free-ness, not priority.
 
 Build-team roles share the `ken-build-*` archetype skills — your team is the
 prefix on your role name (`kernel-leader` → `ken-build-leader`). The skills are
@@ -59,7 +69,7 @@ narrower scopes on your path (its path + ancestors).
 | `steward` | `fleet` + `agent/memory/enclave/` + `agent/memory/roles/steward/` |
 | `architect` | `fleet` + `enclave` + `agent/memory/roles/architect/` |
 | `spec-leader` / `spec-author` / `conformance-validator` | `fleet` + `enclave` + `agent/memory/roles/<role>/` |
-| `librarian` | `fleet` + `agent/memory/roles/librarian/` |
+| `librarian` | `fleet` + `agent/memory/roles/librarian/` + `agent/memory/teams/doc/` (it is the doc team's QA) |
 | `research` | `fleet` + `agent/memory/enclave/` + `agent/memory/roles/research/` |
 | `adversary` | `fleet` + `agent/memory/enclave/` + `agent/memory/roles/adversary/` |
 | `<team>-leader` | `fleet` + `agent/memory/build/` + `agent/memory/build/leaders/` + `agent/memory/teams/<team>/` |
