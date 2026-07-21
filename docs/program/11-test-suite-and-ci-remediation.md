@@ -1,7 +1,8 @@
 # Test-suite conformance and CI throughput
 
 **Status:** planning document. Nothing framed or kicked.
-**Grounding:** `origin/main @ 62643287`, measured directly.
+**Grounding:** `origin/main @ bc10baff`. CI timings measured from
+`actions/runs/{29828797671,29829654027}` job logs, 2026-07-21.
 **Derives from:** `research/qa-conformance-to-rust-test-guidelines.md`
 (QA advisory) and the observed CI wall-clock regression.
 
@@ -9,48 +10,163 @@ Preparatory to `10-linux-abi-completion.md`. Both programs add many
 operations and many tests; doing this first means that work extends a
 disciplined suite and a fast gate rather than compounding a slow one.
 
-## 1. ★ The CI problem is almost certainly not the tests
+## 1. ★ Measured: it is the tests, and it is nine of them
 
-The workflow has four jobs. **Three are placeholders** (`conformance`,
-`clean-room`, `path-guard` all `echo`). All real work is one job:
+> **This section previously asserted the opposite** — that a cold dependency
+> build dominated the wall clock and the tests were unlikely to be expensive.
+> **That was an inference from the absence of caching, not a measurement, and
+> it was wrong.** The operator measured the build step; it is 47s. The
+> correction is recorded rather than silently overwritten, because the error
+> is instructive: *"there is no cache"* explains why a build **could** be
+> slow, and I promoted that to a claim about where the time **went** without
+> ever opening a run log. The timings below come from
+> `actions/runs/<id>/jobs` and the job log, which were available the whole
+> time.
 
-```yaml
-build-test:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - run: cargo build --workspace --locked
-    - run: cargo test --workspace --locked
-```
+Per-step timing, runs `29828797671` and `29829654027`:
 
-**There is no caching of any kind** — no `Swatinem/rust-cache`, no
-`actions/cache`, no target-directory or registry reuse. Every run compiles
-the entire dependency graph from scratch, including `cranelift-codegen`,
-`cranelift-frontend`, `cranelift-jit`, and `cranelift-module` (0.113.1) in
-`ken-runtime`. That is a large, slow-to-compile tree.
+| Step | Duration | Share |
+|---|---:|---:|
+| `cargo build --workspace --locked` | 44–47s | 1.6% |
+| `cargo test` — compile + link test targets | 85s | 3.0% |
+| `cargo test` — **test execution** | **44m14s** | **95.4%** |
 
-So the 36–48 minute wall clock is **dominated by a cold build**, not by test
-execution. The tests are the visible thing, but they are unlikely to be the
-expensive thing.
+Compilation in total is ~2m10s of a 47-minute run. **Execution is 95% of it.**
 
-### ⚠ Parallelizing first would make it worse
+### The distribution is extremely concentrated
 
-The intuitive fix — a per-crate matrix — is actively harmful **before**
-caching exists. Each matrix job checks out cleanly and compiles the shared
-dependency graph *again*. Splitting into N jobs multiplies the dominant cost
-by N. It would reduce wall-clock somewhat through concurrency while
-substantially increasing total compute, and it would make every job's cold
-build the new floor.
+`cargo test` runs each test binary **to completion before starting the next**
+— 200 binaries strictly in series, verified from the log's `Running`
+timestamps. Deriving each binary's duration from the gap to its successor:
 
-**Cache first. Measure second. Parallelize only if the numbers still ask for
-it.**
+| Rank | Binary | Duration | Tests | Share of execution |
+|---:|---|---:|---:|---:|
+| 1 | `ken-cli/tests/rt_parity_native.rs` | **14m41s** | 7 | 33.2% |
+| 2 | `ken-cli/tests/px8f_buffer_native.rs` | **5m10s** | **1** | 11.7% |
+| 3 | `ken-verify/tests/px8f_write_partition.rs` | **5m09s** | **1** | 11.6% |
+| 4 | `ken-elaborator/tests/b2_acceptance.rs` | 1m26s | — | 3.3% |
+| … | | | | |
+| — | **bottom 150 binaries combined** | **48s** | — | 1.8% |
 
-### ⚠ We cannot currently identify slow tests
+- **Three binaries — nine tests — are 56.5% of the entire CI run.**
+- Top 10 binaries: 75.9% of execution. Top 25: 93.4%.
+- The other 150 binaries are collectively under a minute. **They are free.**
 
-`cargo test` reports no per-test timing. Nothing in the pipeline records
-duration. "Identify and rework long-running individual tests" is therefore
-**not actionable today** — the data does not exist. Instrumentation precedes
-surgery, or we will optimize by guess.
+### The cost driver is native lowering per test
+
+All three dominant binaries compile and link a real native artifact **per
+test case**: `rt_parity_native` calls `ken_cli::build_native_program` in its
+`differential()` helper once per case (7 cases ≈ 126s each), and both
+`px8f_*` binaries do a full lower-plus-`cc`-link inside a **single** test.
+
+Two consequences that shape the fix:
+
+- **These are not accidentally slow tests; they are doing real codegen.** The
+  target is the *cost per lowering* and the *serialization*, not the coverage.
+- **A 1-test binary cannot be parallelized internally.** `px8f_buffer_native`
+  and `px8f_write_partition` are ~310s each in a single `#[test]`, so they
+  become the critical path the moment cross-binary parallelism exists.
+
+### ⚠ What C1 (caching) actually bought — and why it is being removed
+
+**Nothing measurable, and it could not have.** The build step is 47s, so
+even a perfect cache saves under a minute of a 47-minute run.
+
+> **Operator ruling, 2026-07-21: remove `Swatinem/rust-cache` as part of C6.**
+> No measurable benefit, and it is an **extra third-party dependency with
+> access to the build — a supply-chain attack surface** taken on for nothing.
+> A dependency has to earn its place; this one does not. Tracked as **C8**.
+
+I had argued C1 was worth keeping because it would absorb C6's one-time
+dependency rebuild. That argument is weak: it defends a dependency on the
+strength of a *hypothesis* (C6) that has not been tested, and it weighs only
+time, never the trust surface. **A cache that saves under a minute is not
+worth an action that runs inside our build.**
+
+> ★ **A second reason not to judge C1 yet: GitHub scopes caches by ref.**
+> After #804, `repos/{owner}/{repo}/actions/caches` held exactly one entry,
+> keyed to `refs/pull/804/merge` (144 MB). **A cache written by a PR run is
+> visible only to that PR** — `main` cannot read it and neither can any
+> other PR. Only a run on the **default branch** writes a cache that later
+> PRs can restore.
+>
+> So the observed sequence — PR run 39s (wrote a PR-scoped cache), then the
+> post-merge `main` run 47s (restored nothing, 4s cache step) — is **exactly
+> what a correctly-configured cache looks like on its first two runs**, not
+> a broken one. The first genuinely warm restore is the first PR opened
+> *after* a `main` run has finished saving.
+>
+> This generalizes past caching: **any "did it help?" comparison across a
+> PR/main boundary is confounded by cache scoping.** Compare PR-to-PR.
+
+### ⚠ Why a per-crate matrix is still not the first move
+
+Not for the reason previously given. Compilation is cheap, so a matrix would
+not multiply a dominant cost. It fails for a simpler reason: **the work is
+concentrated in one crate.** `ken-cli` holds ranks 1 and 2; splitting by
+crate leaves a ~20-minute `ken-cli` job as the new floor. Matrix-by-crate
+cannot beat the slowest crate, and the slowest crate is where the problem is.
+
+## 1a. ★★ Second measurement: the runner is saturated
+
+Run `29838398785` (nextest, three binaries skipped) settles what is left to
+win. **This supersedes the expectations in §3.**
+
+| | |
+|---|---|
+| Tests run | 1891 (+3 `#[ignore]`d) |
+| Wall clock, execution | **984s** |
+| **Sum of per-test CPU time** | **3893s — 64.9 CPU-minutes** |
+| **Effective parallelism** | **3.96x** on a 4-vCPU runner |
+| Longest single test | **106s** |
+
+**3.96 out of a theoretical 4.00. nextest is saturating the machine, so no
+further scheduling change can help anything.**
+
+### What C2 actually bought: ~11%
+
+The same test set took 18m26s under `cargo test` and 16m24s under nextest.
+**The 44m -> 17.6m improvement is almost entirely the skip, not the runner
+swap.**
+
+> ★ **The framing error.** §1 called it "a serial 200-binary walk," which
+> reads as *fully* serial. It was not: `cargo test` already runs tests
+> **in parallel within each binary** (libtest defaults to one thread per
+> CPU). Only the 200 binaries were serial. So the available win was never
+> 4x — it was just the inter-binary waste, and ~11% is about right for that.
+> **A measurement described in words acquires whatever the words imply.**
+> C2 remains worth keeping: it partitions (C9) and it reports per-test
+> timing. But it is not a throughput win.
+
+### The distribution is flat, which retires C4
+
+At *binary* granularity three files were 56.5% of the run. At **test**
+granularity there is no such concentration:
+
+| Slice | Share of CPU |
+|---|---:|
+| top 1 (106s) | 2.7% |
+| top 4 | 9.4% |
+| top 20 | 32.2% |
+| top 50 | 56.9% |
+
+Reworking individual tests would mean fixing **dozens** for a few percent
+each. **C4 is downgraded to "not worth doing"** on this evidence — the
+concentration that justified it exists only at binary granularity, and the
+binary-level fix was the skip, which is done.
+
+### Therefore exactly two levers remain
+
+The suite is **65 CPU-minutes of genuine work**. On 4 cores the floor is
+16.4 minutes, and we are at 16.4.
+
+1. **More cores — C9 sharding.** `nextest --partition count:N/M` splits by
+   test across N jobs, each with its own 4-vCPU runner. 4 shards = 16
+   effective cores.
+2. **Less work — C6.** Attacks the 65 CPU-minutes rather than dividing it.
+
+They multiply. They are also the *only* two: everything else is noise
+against a saturated CPU.
 
 ## 2. The suite, measured
 
@@ -86,14 +202,85 @@ resolved.
 
 | ID | Objective | Size |
 |---|---|---|
-| **C1** | Add dependency/target caching (`Swatinem/rust-cache` or equivalent) to the real job. Single highest-value change; near-zero risk. Record before/after wall clock. | S |
-| **C2** | Adopt `cargo-nextest` for the test step. Faster execution, better parallelism, and — the point — **per-test timing output**. This is the instrumentation that makes C4 possible. Verify it runs the same test set as `cargo test` before switching the gate. | S |
-| **C3** | Split `build` from `test` and stop double-compiling: `cargo build --workspace` then `cargo test --workspace` partially rebuilds. Evaluate whether the separate build step earns its time once caching exists. | S |
-| **C4** | **Using C2's timings**, identify the slowest tests and rework them. Only now is this grounded. Expect a small number of dominant offenders rather than uniform slowness. | M |
-| **C5** | Reconsider a per-crate matrix **only if** C1–C4 leave the gate unacceptably slow. Explicitly gated on evidence. | M |
+| **C1** | ✅ **Landed (PR #804).** Dependency/target caching. Worth ~5s; keep it for the `opt-level` rebuild it makes affordable, but it is **not** a throughput item. | S |
+| **C2** | **Adopt `cargo-nextest`.** The reason is no longer instrumentation (§1 already has per-binary timing) — it is that nextest schedules **every test across every binary against one global thread pool**, replacing today's strictly-serial 200-binary walk. This is the largest single win available and it is a config change. | S |
+| **C6** | **`[profile.dev.package."*"] opt-level = 2`.** Cranelift at `opt-level = 0` is pathologically slow *at runtime*, and §1's cost driver is cranelift codegen executed 9 times. A 3-line `Cargo.toml` change; costs a one-time dependency rebuild that C1's cache absorbs. **Hypothesis, not a measurement** — see §3a. | S |
+| **C7** | **Split the two 1-test binaries.** `px8f_buffer_native` and `px8f_write_partition` are ~310s in a single `#[test]` each, so no scheduler can subdivide them; after C2 they *are* the critical path. Split each into independent cases, preserving what each asserts. | S |
+| **C9** | **Shard with `nextest --partition count:N/4`** across a 4-job matrix — 16 effective cores against a saturated 4. Splits by *test*, so it does not floor at the slowest crate the way a per-crate matrix would. ⚠ Keep a job literally named `build + test`: it is a **required status check**, and a matrix publishes `test shard N/4` instead. | S |
+| **C4** | ~~Rework the remaining slow tests.~~ **Retired** — §1a shows the per-*test* distribution is flat (top 20 = 32% of CPU). The concentration existed only at binary granularity, and the skip already addressed that. | — |
+| **C3** | Evaluate dropping the separate `build` step — it is 47s of duplicated work. Cosmetic at this scale. | S |
+| **C8** | **Remove `Swatinem/rust-cache`** (operator ruling, §1). Do it **with** C6, so one run measures both the optimization and the cache removal against the same baseline. | S |
+| **C5** | Per-crate matrix. **Discouraged** — §1 shows the load is concentrated in `ken-cli`, so a matrix floors at the slowest crate. Revisit only if C2+C6+C7 disappoint. | M |
 
-**Strict order: C1 → C2 → C4.** C1 removes the dominant cost, C2 makes the
-remainder visible, C4 acts on what C2 shows. C3 and C5 are contingent.
+**Order: C2 → C6 → C7, then re-measure.** These are three independent
+multipliers on the same 44 minutes, and all three are small:
+
+- **C2** attacks the *serialization* (200 binaries in series → one pool).
+- **C6** attacks the *per-lowering cost* (cranelift compiled unoptimized).
+- **C7** attacks the *residual critical path* C2 exposes.
+
+**Re-measure between each.** Landing all three and reporting one number
+would leave us unable to say which worked — and C6 in particular is a
+hypothesis that deserves its own before/after.
+
+### 3a. ⚠ C6 is a hypothesis; here is how it fails
+
+The claim is that cranelift built at `opt-level = 0` executes its codegen
+slowly enough to explain ~126s per native lowering. That is a *well-known*
+pattern for compiler-shaped dependencies, and it is consistent with §1's
+evidence — but nothing here measures it. It fails if the time is actually in
+the `cc` link, in I/O, or in Ken's own elaboration rather than in cranelift.
+
+**Do not merge C6 on plausibility.** The test is one CI run with the three
+lines added and nothing else changed, compared against §1's per-binary table.
+CI is the correct place to run it — it is the offloaded compute, and a
+local dependency rebuild at `opt-level = 2` is exactly the kind of full-graph
+build that OOMs the box (CLAUDE.md / COORDINATION §12).
+
+### 3b. ★ C6 and C8 interact — measure the BUILD step, not just the tests
+
+C6 raises optimization on **every dependency**, cranelift included. That
+cuts codegen time at *run* time, which is the point — but it can only
+*increase* dependency **compile** time. C8 removes the cache in the same
+change, so **every run pays that increase in full**.
+
+Today the build is 47s, so there is nothing to protect. If C6 pushes it to
+several minutes, C8's removal stops being free and the two items are in
+genuine tension.
+
+**So the C6 run must report the Build step's duration, not only the test
+numbers.** Three outcomes, decided in advance so the result is not
+rationalized after the fact:
+
+| Build after C6 | Reading |
+|---|---|
+| still under ~1 min | C6 and C8 are both clean wins. Land both. |
+| 1–3 min | Acceptable; C8 still right — a minute is not worth a third-party action inside the build. |
+| much larger | Real tension. **Return it to the operator** with the number; do not silently reinstate the cache to protect C6. |
+
+If the third case arrives, note that `actions/cache` is **first-party
+GitHub**, so the supply-chain objection that retires `Swatinem/rust-cache`
+does not automatically apply to it. That is an option to *offer*, not a
+decision to take.
+
+### 3c. ⚠ C2 introduced a dependency of exactly the same class
+
+The operator's objection to `Swatinem/rust-cache` is about third-party code
+running inside our build. **C2 added `taiki-e/install-action@nextest`,
+unpinned, which is the same class of exposure** — and `cargo-nextest` itself
+is a new build-time dependency.
+
+The difference is that nextest **earns it**: it is the mechanism that
+replaces the serial 200-binary walk, which is the actual problem. `rust-cache`
+bought under a minute. That is the test a dependency has to pass.
+
+Two cheap hardenings worth taking regardless, neither blocking:
+
+- **Pin the action to a commit SHA**, not a floating tag. An unpinned tag is
+  mutable by whoever controls the repository.
+- Consider installing nextest from a **pinned, checksum-verified release
+  archive** instead of via a third-party action, removing the action from
+  the trust base while keeping the tool.
 
 ### Track Q — test-suite conformance to the guidelines
 
@@ -124,11 +311,12 @@ suite" when in fact nextest revealed it.
 
 ```mermaid
 flowchart TD
-    C1[C1 caching]
-    C2[C2 nextest + timings]
-    C3[C3 build/test split]
-    C4[C4 rework slow tests]
-    C5[C5 matrix - contingent]
+    C1[C1 caching - landed]
+    C2[C2 nextest global pool]
+    C6[C6 opt-level 2 for deps]
+    C7[C7 split the 1-test binaries]
+    C4[C4 rework remaining slow tests]
+    C5[C5 matrix - discouraged]
     Q1[Q1 QA playbook]
     Q2[Q2 triage classify]
     Q3[Q3 derived counts]
@@ -137,9 +325,10 @@ flowchart TD
     Q6[Q6 ignored tests]
     Q7[Q7 timing and fixtures]
 
-    C1 --> C2
+    C1 --> C6
+    C2 --> C7
     C2 --> C4
-    C1 --> C3
+    C6 --> C4
     C4 --> C5
     C2 --> Q7
     Q1 --> Q2
@@ -149,26 +338,32 @@ flowchart TD
     Q2 --> Q6
 ```
 
-- **C1 is the cheapest large win in either program.** It is a workflow edit
-  and it plausibly removes most of the wall clock. Do it first regardless of
-  everything else.
+- **C2, C6, and C7 are the program.** Three small changes against a 44-minute
+  execution phase, each attacking a different multiplier. Everything else in
+  Track C is cleanup by comparison.
+- **The tail is not worth touching.** 150 of 200 binaries total 48 seconds.
+  Any effort spent there is effort not spent on nine tests that own 56.5% of
+  the run — that is the token-efficiency call, and it is not close.
 - **Q2 is mechanical and parallelizable.** Classification per crate is
   exactly the shape to delegate cheaply — it reads and lists, it does not
   design. The rework WPs that follow are where judgment is spent.
 - **Q1 before the rework** is the token argument: the suite grew by 110 tests
   in three days. Guidance that lands after the sweep pays to fix the same
   class twice.
-- **C4 must not start before C2.** Reworking tests for speed without timing
-  data is optimizing by guess, and guesses here cost a T1 seat.
+- **C7 and Q7 are the same edit seen from two sides.** C7 splits the 1-test
+  native binaries for parallelism; Q7 gives temp dirs per-test ownership so
+  that parallelism is safe. Doing either alone invites a flake that reads as
+  "nextest broke the suite." Sequence them together.
 
-## 5. Blocked on the operator
+## 5. Publishing note
 
-**C1, C2, C3, and C5 all edit `.github/workflows/ci.yml`, which the scripted
-publisher cannot push** — its GitHub App token lacks `workflows` permission
-(issue `CI-TRACKER-GATE`). **The entire CI track is blocked on that
-permission**, or on the operator applying those changes by hand.
+The `workflows` permission blocker (`CI-TRACKER-GATE`) is **resolved** — the
+operator granted it 2026-07-21 and C1 published through the normal path.
 
-This is now blocking real throughput work, not just a bookkeeping gate.
+Of the remaining items, only **C2** and **C3** touch
+`.github/workflows/ci.yml`. **C6 and C7 do not** — C6 is a root `Cargo.toml`
+edit and C7 is a test-file split, so both publish through the ordinary path
+with no special permission.
 
 ## 6. Out of scope
 
