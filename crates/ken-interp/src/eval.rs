@@ -6056,80 +6056,144 @@ mod px5b_effect_observation_tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
-    #[test]
-    fn rt_parity_host_width_consumers_return_exact_narrowing_errors() {
+    fn with_host_width_fixture(
+        label: &str,
+        test: impl FnOnce(
+            &ConsoleIds,
+            &FSIds,
+            &mut EvalStore,
+            &mut PosixHost,
+            &mut ken_host::ResourceTableV1,
+            EvalVal,
+            EvalVal,
+        ),
+    ) {
         let ids = console_ids();
         let fs = fs_ids();
         let mut store = EvalStore::new();
-        let root = rt_parity_root("host-width");
+        let root = rt_parity_root(label);
         std::fs::write(root.join("source"), b"abcd").unwrap();
         std::fs::write(root.join("target"), Vec::new()).unwrap();
         let mut host = PosixHost::new_at(&root);
         let read_cap = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_PARTIAL));
         let full_cap = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_FULL));
         let mut resources = ken_host::ResourceTableV1::default();
+        test(
+            &ids,
+            &fs,
+            &mut store,
+            &mut host,
+            &mut resources,
+            read_cap,
+            full_cap,
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
+    // RT-PARITY pre-fix flip status, measured against `origin/main` production
+    // with these tests spliced in. Which cases discriminate the defect is not
+    // uniform, and the difference is intrinsic rather than a test weakness:
+    //
+    // * FLIPS (fails pre-fix): the short-read budget case; the `BufferAllocate`
+    //   single fault, whose pre-fix sentinel `0` is a *lawful* capacity and so
+    //   surfaced `BufferLimit`; and all three overlapping-fault cases, where
+    //   `Closed`/`RightNotHeld` won the race into dispatch.
+    // * DOES NOT FLIP (passes pre-fix and post-fix): the `FsReadAt`,
+    //   `FsWriteAt` and `BufferFreeze` *single-fault* cases. Their pre-fix
+    //   sentinel is `u64::MAX`, and shared dispatch rejects `u64::MAX` with the
+    //   very same `InvalidOffset`/`InvalidBounds` the repair now produces. No
+    //   single-fault input can separate the two implementations for these
+    //   consumers, so these three are exact-variant *regression pins*, not
+    //   discriminating nets -- the overlapping-fault cases are what carry the
+    //   proof for them. Recorded so they are never cited as flip evidence.
+    #[test]
+    fn rt_parity_buffer_allocate_rejects_malformed_capacity_exactly() {
+        with_host_width_fixture("allocate", |ids, fs, mut store, host, mut resources, _, _| {
         let malformed_allocate =
-            allocate_buffer(-1, &mut host, &mut resources, &fs, &ids, &mut store);
+            allocate_buffer(-1, &mut *host, &mut resources, &fs, &ids, &mut store);
         expect_resource_error(&malformed_allocate, fs.invalid_bounds_id, &ids);
+        });
+    }
 
+    #[test]
+    fn rt_parity_fs_read_at_rejects_malformed_offset_exactly() {
+        with_host_width_fixture("read", |ids, fs, mut store, host, mut resources, read_cap, _| {
         let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
         let read_file = open_file(
             b"source",
-            read_mode.clone(),
-            read_cap.clone(),
-            &mut host,
+            read_mode,
+            read_cap,
+            &mut *host,
             &mut resources,
             &fs,
             &ids,
             &mut store,
         );
+        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
+        let result = run_fs(
+            fs.private_fs_read_at_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(read_file),
+                EvalVal::Int(-1),
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(0),
+                EvalVal::Int(1),
+            ],
+            &mut *host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        expect_resource_error(&result, fs.invalid_offset_id, &ids);
+        });
+    }
+
+    #[test]
+    fn rt_parity_fs_write_at_rejects_malformed_offset_exactly() {
+        with_host_width_fixture("write", |ids, fs, mut store, host, mut resources, _, full_cap| {
         let create_keep = make_ctor(fs.create_or_keep_id, vec![], &mut store);
         let write_mode = make_ctor(fs.resource_write_create_id, vec![create_keep], &mut store);
         let write_file = open_file(
             b"target",
             write_mode,
             full_cap,
-            &mut host,
+            &mut *host,
             &mut resources,
             &fs,
             &ids,
             &mut store,
         );
-        let buffer_result = allocate_buffer(8, &mut host, &mut resources, &fs, &ids, &mut store);
+        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
         let buffer = expect_resource_token(&buffer_result, &ids);
-
-        let positioned_args = |file| {
-            vec![
+        let result = run_fs(
+            fs.private_fs_write_at_id,
+            &[
                 EvalVal::Unknown,
-                EvalVal::ResourceToken(file),
+                EvalVal::ResourceToken(write_file),
                 EvalVal::Int(-1),
                 EvalVal::ResourceToken(buffer),
                 EvalVal::Int(0),
                 EvalVal::Int(1),
-            ]
-        };
-        let read_single = run_fs(
-            fs.private_fs_read_at_id,
-            &positioned_args(read_file),
-            &mut host,
+            ],
+            &mut *host,
             &mut resources,
             &fs,
             &ids,
             &mut store,
         );
-        expect_resource_error(&read_single, fs.invalid_offset_id, &ids);
-        let write_single = run_fs(
-            fs.private_fs_write_at_id,
-            &positioned_args(write_file),
-            &mut host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
-        );
-        expect_resource_error(&write_single, fs.invalid_offset_id, &ids);
-        let freeze_single = run_fs(
+        expect_resource_error(&result, fs.invalid_offset_id, &ids);
+        });
+    }
+
+    #[test]
+    fn rt_parity_buffer_freeze_rejects_malformed_bounds_exactly() {
+        with_host_width_fixture("freeze", |ids, fs, mut store, host, mut resources, _, _| {
+        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
+        let result = run_fs(
             fs.private_buffer_freeze_id,
             &[
                 EvalVal::Unknown,
@@ -6137,48 +6201,95 @@ mod px5b_effect_observation_tests {
                 EvalVal::Int(-1),
                 EvalVal::Int(1),
             ],
-            &mut host,
+            &mut *host,
             &mut resources,
             &fs,
             &ids,
             &mut store,
         );
-        expect_resource_error(&freeze_single, fs.invalid_bounds_id, &ids);
+        expect_resource_error(&result, fs.invalid_bounds_id, &ids);
+        });
+    }
 
-        release_resource(read_file, &mut host, &mut resources, &fs, &ids, &mut store);
+    #[test]
+    fn rt_parity_malformed_read_offset_precedes_closed_resource() {
+        with_host_width_fixture("read-closed", |ids, fs, mut store, host, mut resources, read_cap, _| {
+        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
+        let read_file = open_file(
+            b"source",
+            read_mode,
+            read_cap,
+            &mut *host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
+        release_resource(read_file, &mut *host, &mut resources, &fs, &ids, &mut store);
         let read_closed_overlap = run_fs(
             fs.private_fs_read_at_id,
-            &positioned_args(read_file),
-            &mut host,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(read_file),
+                EvalVal::Int(-1),
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(0),
+                EvalVal::Int(1),
+            ],
+            &mut *host,
             &mut resources,
             &fs,
             &ids,
             &mut store,
         );
         expect_resource_error(&read_closed_overlap, fs.invalid_offset_id, &ids);
+        });
+    }
 
+    #[test]
+    fn rt_parity_malformed_write_offset_precedes_missing_right() {
+        with_host_width_fixture("write-right", |ids, fs, mut store, host, mut resources, read_cap, _| {
+        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
         let read_only_file = open_file(
             b"source",
             read_mode,
             read_cap,
-            &mut host,
+            &mut *host,
             &mut resources,
             &fs,
             &ids,
             &mut store,
         );
+        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
         let write_right_overlap = run_fs(
             fs.private_fs_write_at_id,
-            &positioned_args(read_only_file),
-            &mut host,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(read_only_file),
+                EvalVal::Int(-1),
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(0),
+                EvalVal::Int(1),
+            ],
+            &mut *host,
             &mut resources,
             &fs,
             &ids,
             &mut store,
         );
         expect_resource_error(&write_right_overlap, fs.invalid_offset_id, &ids);
+        });
+    }
 
-        release_resource(buffer, &mut host, &mut resources, &fs, &ids, &mut store);
+    #[test]
+    fn rt_parity_malformed_freeze_bounds_precede_closed_resource() {
+        with_host_width_fixture("freeze-closed", |ids, fs, mut store, host, mut resources, _, _| {
+        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
+        release_resource(buffer, &mut *host, &mut resources, &fs, &ids, &mut store);
         let freeze_closed_overlap = run_fs(
             fs.private_buffer_freeze_id,
             &[
@@ -6187,14 +6298,14 @@ mod px5b_effect_observation_tests {
                 EvalVal::Int(-1),
                 EvalVal::Int(1),
             ],
-            &mut host,
+            &mut *host,
             &mut resources,
             &fs,
             &ids,
             &mut store,
         );
         expect_resource_error(&freeze_closed_overlap, fs.invalid_bounds_id, &ids);
-        std::fs::remove_dir_all(root).unwrap();
+        });
     }
 
     #[test]
