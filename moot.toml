@@ -1,19 +1,22 @@
-# ken federation — moot launch profile (hybrid routing).
+# ken federation — moot launch profile (Anthropic direct + one claudex route).
 #
-# Enclave (Opus) runs DIRECT on the Anthropic subscription (OAuth) — no `env`.
-# Build tiers route through the local LLM proxy (127.0.0.1:8090) via each role's
-# `env` below: ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN = `${secret:llm-proxy-secret}`
-# (resolved by moot from /home/node/.secrets at launch). It MUST be AUTH_TOKEN, a
-# Bearer — not ANTHROPIC_API_KEY: the proxy reads `Authorization: Bearer`, and
-# AUTH_TOKEN also overrides the shared claude.ai OAuth login (from the enclave's
-# /login) that would otherwise be sent and rejected as a subscription token. The
-# proxy dispatches by model prefix: accounts/fireworks/* -> Fireworks (GLM),
-# deepseek-* -> DeepSeek.
+# Default: EVERY role runs DIRECT on the Anthropic subscription (OAuth via the
+# steward's cold-start /login) — enclave on claude-opus-4-8[1m], all build /
+# coordination roles on claude-sonnet-5. No `env`, no proxy.
+#
+# ONE EXCEPTION — foundation-implementer routes through the local **claudex**
+# proxy (127.0.0.1:13456) to the operator's ChatGPT/Codex subscription, landing
+# on GPT-5.6-luna (T2). See its `env` block below. This lets us spend OpenAI
+# subscription tokens on one build seat without changing the harness (it's still
+# Claude Code — `model` stays claude-sonnet-5 as the harness selector; the env
+# redirects the actual upstream model to the gpt-5.6 family via claudex).
 # (Per-role `env` requires mootup >= 0.5.4.)
 #
-# Model slugs: deepseek-v4-pro and accounts/fireworks/models/glm-5p2 confirmed by
-# the operator (2026-06-28). The Opus enclave slug is still to confirm at first
-# `moot up` — it runs direct on the Anthropic subscription, not via the proxy.
+# PRECONDITION: the claudex proxy must be running on :13456 before launch —
+#   nohup claudex-config proxy start --port 13456 > /tmp/claudex-proxy.log 2>&1 &
+# (config at ~/.config/claudex/config.toml, profile codex-sub; OAuth via
+# `claudex-config auth login chatgpt --profile codex-sub`). Verified 2026-07-10:
+# sonnet slot -> gpt-5.6-luna, haiku slot -> gpt-5.6-terra, both 200 end-to-end.
 
 [convo]
 api_url = "https://mootup.io"
@@ -34,16 +37,16 @@ launch_stagger_seconds = 30
 
 [agents.spec-author]
 display_name = "spec-author"
-model = "gpt-5.5"
+model = "gpt-5.6-sol"
 harness = "codex"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 startup_prompt = "You are Ken's spec author (clean-room enclave). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/spec/spec-author.md and CLEAN-ROOM.md, set your status, and await the spec leader's kickoff. Do not poll."
 
 [agents.conformance-validator]
 display_name = "conformance-validator"
-model = "gpt-5.5"
+model = "gpt-5.6-sol"
 harness = "codex"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 startup_prompt = "You are Ken's conformance validator (clean-room enclave). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/spec/conformance-validator.md and CLEAN-ROOM.md, set status, await kickoff. Do not poll."
 
 [agents.steward]
@@ -54,154 +57,154 @@ startup_prompt = "You are Ken's Steward (operator proxy, workflow authority). Re
 
 [agents.architect]
 display_name = "architect"
-model = "gpt-5.5"
+model = "gpt-5.6-sol"
 harness = "codex"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 startup_prompt = "You are Ken's Architect (component design + security review). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/federation/architect.md, set status, and stand ready for design queries and merge reviews. Do not poll."
 
 [agents.spec-leader]
 display_name = "spec-leader"
-model = "gpt-5.4"
+model = "gpt-5.6-terra"
 harness = "codex"
 model_reasoning_effort = "medium"
 startup_prompt = "You lead Ken's spec enclave. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/spec/leader.md, set status, and await the Steward's kickoff. Do not poll."
 
 [agents.librarian]
 display_name = "librarian"
-model = "gpt-5.4"
+model = "gpt-5.6-sol"
 harness = "codex"
 model_reasoning_effort = "medium"
-startup_prompt = "You are Ken's Librarian (knowledge curation). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/federation/librarian.md, set status, and stand ready. Do not poll."
+startup_prompt = "You are Ken's Librarian: editor, fact-checker and reviewer of library/ (Ken product documentation), and the DOC TEAM's QA seat. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/federation/librarian.md, then docs/program/12-documentation-program.md (the program frame) and agent/teams/doc/{leader,implementer}.md (what your ring is held to). Your ring is doc-leader and doc-author. You also hold a standing as-built mandate. Set status, and stand ready. Do not poll."
+
+[agents.doc-leader]
+display_name = "Doc leader"
+model = "claude-sonnet-5"
+effort = "medium"
+startup_prompt = "You lead Ken's doc team, which produces library/ (Ken's product documentation). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/doc/leader.md, then docs/program/12-documentation-program.md (the program frame and its settled decisions). Your ring is doc-author (authoring) and the librarian (your QA seat — editor, fact-checker, reviewer). Set status, await the Steward's kickoff. Do not poll."
+
+[agents.doc-author]
+display_name = "Doc author"
+model = "claude-sonnet-5"
+effort = "medium"
+startup_prompt = "You author library/, Ken's product documentation. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/doc/implementer.md, then docs/program/12-documentation-program.md (the program frame and its settled decisions). Your reviewer is the librarian. Set status, await your leader's kickoff. Do not poll."
 
 [agents.research]
 display_name = "research"
 model = "gpt-5.6-sol"
 harness = "codex"
 model_reasoning_effort = "high"
-startup_prompt = "You are Ken's Research aux (in-space investigation + synthesis). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/federation/research.md and CLEAN-ROOM.md, set your status, and await a research request. Do not poll."
+startup_prompt = "You are Ken's Research agent (ad hoc external-knowledge dispatch; research is not a standing team — see the Steward playbook §5). Read agent/COORDINATION.md (federation law) and MODELS.md first. Set your status and await the Steward's research dispatch, then gather sources and synthesize a cited report back to the Steward. Do not poll."
+
+[agents.adversary]
+display_name = "adversary"
+model = "claude-opus-4-8[1m]"
+effort = "high"
+startup_prompt = "You are Ken's Adversary (a standing red-team; the negative-space twin of the Librarian). Read agent/COORDINATION.md (federation law) and MODELS.md first, then your playbook agent/playbooks/federation/adversary.md and your memory scopes (fleet + enclave + roles/adversary). Set your status and, event-driven on Steward/publisher merge notifications, hunt recent changes + their blast radius for flaws, gaps, leaky abstractions, and undesirable behavior. Ground every finding (repro + file:line + the violated invariant) and route it to a side thread to the Steward. You are advisory and non-blocking — never gate a merge, fix, rule, or merge. Do not poll."
 
 [agents.kernel-leader]
 display_name = "Kernel leader"
-model = "gpt-5.4"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You lead Ken's Kernel team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/kernel/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.kernel-implementer]
 display_name = "Kernel implementer"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "high"
+model = "claude-sonnet-5"
+effort = "high"
 startup_prompt = "You are the Kernel team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/kernel/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.kernel-qa]
 display_name = "Kernel QA"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You are the Kernel team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/kernel/qa.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.verify-leader]
 display_name = "Verify leader"
-model = "gpt-5.4"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You lead Ken's Verify team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/verify/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.verify-implementer]
 display_name = "Verify implementer"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "high"
+model = "claude-sonnet-5"
+effort = "high"
 startup_prompt = "You are the Verify team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/verify/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.verify-qa]
 display_name = "Verify QA"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You are the Verify team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/verify/qa.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.language-leader]
 display_name = "Language leader"
-model = "gpt-5.4"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You lead Ken's Language team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/language/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.language-implementer]
 display_name = "Language implementer"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "high"
+model = "claude-sonnet-5"
+effort = "high"
 startup_prompt = "You are the Language team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/language/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.language-qa]
 display_name = "Language QA"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You are the Language team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/language/qa.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.runtime-leader]
 display_name = "Runtime leader"
-model = "gpt-5.4"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You lead Ken's Runtime team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/runtime/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.runtime-implementer]
 display_name = "Runtime implementer"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "high"
+model = "claude-sonnet-5"
+effort = "high"
 startup_prompt = "You are the Runtime team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/runtime/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.runtime-qa]
 display_name = "Runtime QA"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You are the Runtime team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/runtime/qa.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.ergo-leader]
 display_name = "Ergo leader"
-model = "gpt-5.4"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You lead Ken's Ergo team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/ergo/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.ergo-implementer]
 display_name = "Ergo implementer"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "high"
+model = "claude-sonnet-5"
+effort = "high"
 startup_prompt = "You are the Ergo team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/ergo/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.ergo-qa]
 display_name = "Ergo QA"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You are the Ergo team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/ergo/qa.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.foundation-leader]
 display_name = "Foundation leader"
-model = "gpt-5.4"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You lead Ken's Foundation team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/foundation/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.foundation-implementer]
 display_name = "Foundation implementer"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "high"
+model = "claude-sonnet-5"
+effort = "high"
 startup_prompt = "You are the Foundation team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/foundation/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.foundation-qa]
 display_name = "Foundation QA"
-model = "gpt-5.5"
-harness = "codex"
-model_reasoning_effort = "medium"
+model = "claude-sonnet-5"
+effort = "medium"
 startup_prompt = "You are the Foundation team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/foundation/qa.md if present, set status, await your leader's kickoff. Do not poll."
