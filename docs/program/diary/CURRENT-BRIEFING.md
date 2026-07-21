@@ -14,33 +14,49 @@
 - `origin/main = 62643287`. Nothing is blocked.
 - **Do not kick a WP while the operator has an open question below.**
 
-## Awaiting the operator — asked, unanswered. Do NOT re-ask.
+## Operator rulings — 2026-07-21 ~12:45Z. SETTLED, do not reopen.
 
-**Linux ABI II** (`research/linux-abi-ii-work-program-proposal.md`) — briefed
-12:15Z. Four decisions are genuinely theirs:
+**On Linux ABI II** (`research/linux-abi-ii-work-program-proposal.md`):
 
-| # | Decision | My recommendation |
-|---|---|---|
-| 1 | Ratify "foundation and descriptor tranche" as the first campaign's honest status | **Yes, now** — costs nothing, unblocks planning from truth |
-| 2 | `io_uring` v1 in scope | **Yes in principle**, gate framing on an Architect ruling on the atomics-privacy claim |
-| 4 | Public C ABI as a companion program | **Yes — and don't start it**; it competes with the real committed debt |
-| 7 | MMIO as L2-8 | **Confirm, last** |
+- **No "ratification."** The charter is a **planning document, not a
+  commitment**. Nobody outside the project is watching, and nothing depends
+  on our timelines or stated intentions. **I had imported a governance ritual
+  that does not apply — do not re-raise status-correction as a decision.**
+- **Where there is a gap between what was anticipated and what was done, fill
+  the gap first.** Hence `docs/program/10-linux-abi-completion.md`.
+- **L2-1: no cross-compilation.** A very late feature, deferred behind a long
+  line of other work. Manifest v2 = family-scoped and generated, **not**
+  cross-target.
+- **L2-0: all desirable, nothing deferred.** All nine
+  `RepresentedUnavailable` operations get promoted.
+- **Timing, timelines, and budget are the OPERATOR'S domain.** They monitor
+  and adjust. **Do not reason about schedule or cost.**
+- ★ **My lane is token efficiency in terms of delivered work.** That is the
+  axis to optimize and the one to report on.
 
-★ **The finding that matters:** charter `09-posix-linux-abi-campaign.md` says
-"COMMIT THROUGH PX-E", but PX10/PX11/PX12 (process, socket, `epoll`) are
-**absent** from the closed 22-operation `HostOpV1` catalog — verified against
-`main`, not taken from the report. What landed is a foundation + descriptor
-tranche, not the committed campaign. **L2-0 (track zero) is already my
-queue**: BUDGET-EFF / SEAL-2 / RT-ESCAPE / RT-SPLIT *are* the PX8 chain it
-names.
-
-Also open, lower stakes:
+**Still genuinely open (lower stakes, no re-ask):**
 
 - **CI-TRACKER-GATE** — the publisher app lacks `workflows` permission, so
   the tracker's CI gate cannot be pushed. Until it lands, tracker
   correctness is a convention, not a property.
 - **Provider concentration** — only `runtime-implementer` and `adversary` are
   on the Anthropic pool.
+
+## The completion program — written, NOT started
+
+`docs/program/10-linux-abi-completion.md` (commit `f2b98c37`, unpublished).
+Five tracks — **R** reconcile, **A** availability promotion, **M** manifest
+(native-target only), **S** synchronous floor, **T** the committed exit
+(PX10/PX11/PX12).
+
+Verified against `main`, not taken from the advisory: 22 ops, 13
+`NativeTested` / 9 `RepresentedUnavailable`, no process/socket/poll family in
+any state, PX7 landed — and **PX9 (cross-domain `System.Error`) is chartered
+but undelivered**, which the advisory's "good filesystem floor" phrasing
+obscured. PX9 gates most of Track T.
+
+**Not started.** Next step when the operator says go: decompose the tracks
+into `docs/program/issues/` entries.
 
 ## My queue, in order
 
