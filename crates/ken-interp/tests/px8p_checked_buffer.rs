@@ -214,9 +214,23 @@ fn positive_capacity_settles_normally_and_body_error_still_settles() {
 }
 
 #[test]
-fn nonpositive_and_over_policy_capacity_are_exact_buffer_limit() {
+fn malformed_and_policy_invalid_capacities_have_exact_distinct_errors() {
     let env = env();
-    for capacity in [-1, 0, 1_048_577] {
+
+    let mut malformed_store = EvalStore::new();
+    let unit = type_value(&env, &mut malformed_store, "Unit");
+    let tree = with_buffer(
+        &env,
+        &mut malformed_store,
+        unit.clone(),
+        unit,
+        -1,
+        "px8p_ok_body",
+    );
+    let result = drive(&env, &mut malformed_store, tree);
+    assert_outer_error(&env, &result, "InvalidBounds");
+
+    for capacity in [0, 1_048_577] {
         let mut store = EvalStore::new();
         let unit = type_value(&env, &mut store, "Unit");
         let tree = with_buffer(

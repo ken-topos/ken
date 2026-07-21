@@ -427,6 +427,173 @@ Runtime identities such as `file_r` and `buffer_r` do not.
   load-bearing zero-write failure. A generic status/count record can represent
   forbidden combinations and fails this shape.
 
+### buffer-io/short-read-preserves-request-budget
+
+- status: **GREEN — RT-PARITY interpreter repair; native was canonical**
+- spec: `38 §1.7.2`; RT-PARITY AC2
+- evidence:
+  `eval::px5b_effect_observation_tests::`
+  `rt_parity_short_read_reifies_remaining_and_request_budget`
+- given: a real file containing one byte, a capacity-`8` live buffer, and an
+  `FsReadAt` request of length `4`
+- expect: `ReadSome` carries transferred `1`, remaining `3`, and total request
+  budget `1 + 3 = 4`; its returned `BufferSpan` has length `1`
+- pre-fix failure: interpreter reification hardcoded remaining to `0`, so it
+  produced budget `1` while native produced the required budget `4`
+- why: the existing PR-A full-read arm has remaining `0` legitimately and is
+  green before and after the repair. This positive short read is the
+  discriminator that makes a constant-zero remaining field fail.
+
+## PR-PARITY. Host-width narrowing precedes resource dispatch
+
+### buffer-io/interpreter-native-host-width-error-parity
+
+- status: **GREEN — RT-PARITY interpreter repair; native was canonical**
+- spec: `38 §1.7.1/§1.7.2`; PX8-I; RT-PARITY AC3–AC5
+- evidence, at two levels — the dispatch boundary and the executable
+  cross-executor differential. Each case is its own test, so each reaches
+  independently. **Reaching independently is not the same as flipping**, and
+  they are not co-extensive here: the per-case flip table below is
+  authoritative about which cases actually discriminate the defect, and three
+  dispatch-boundary single-fault pins plus the one non-narrowing differential
+  case deliberately do not flip:
+  - dispatch boundary (interpreter, exact variant per consumer):
+    `eval::px5b_effect_observation_tests::rt_parity_*` —
+    `buffer_allocate_rejects_malformed_capacity_exactly`,
+    `fs_read_at_rejects_malformed_offset_exactly`,
+    `fs_write_at_rejects_malformed_offset_exactly`,
+    `buffer_freeze_rejects_malformed_bounds_exactly`,
+    `malformed_read_offset_precedes_closed_resource`,
+    `malformed_write_offset_precedes_missing_right`,
+    `malformed_freeze_bounds_precede_closed_resource`
+  - executable differential (`ken-cli`, linked native artifact against the
+    reference interpreter on the same root):
+    `rt_parity_native.rs`
+- given and expect, at the dispatch boundary:
+
+  | Consumer | Single out-of-range input | Overlapping resource fault | Exact result |
+  |---|---|---|---|
+  | `BufferAllocate` | capacity `-1` | unreachable: the operation consumes no resource | `InvalidBounds` |
+  | `FsReadAt` | file offset `-1` with live resources | the same offset with a closed file | `InvalidOffset` |
+  | `FsWriteAt` | file offset `-1` with a writable file | the same offset with a read-only file | `InvalidOffset` |
+  | `BufferFreeze` | start `-1` with a live buffer | the same start with a closed buffer | `InvalidBounds` |
+
+- given and expect, in the executable differential: the linked native artifact
+  and the reference interpreter must observe the *same exact* variant. Each
+  fixture matches the one expected `ResourceError` constructor and exits `0`,
+  taking a distinct non-zero exit on any other constructor, so the assertion is
+  on exact public identity rather than on failure. A second, independent axis
+  asserts that neither executor records a canonical effect event for the
+  narrowed operation: after the repair the interpreter no longer enters shared
+  dispatch, matching native, whereas before it recorded an event native never
+  had.
+
+  | Consumer | Single out-of-range input | Overlapping resource fault | Exact result |
+  |---|---|---|---|
+  | `BufferAllocate` | capacity `-1` | unreachable: the operation consumes no resource | `InvalidBounds` |
+  | `FsReadAt` | file offset `-1` with the read right held | the same offset without the read right | `InvalidOffset` |
+  | `FsReadAt` | window start `-1` with live resources | — (covered by the offset pair) | `InvalidBounds` |
+  | `FsWriteAt` | file offset `-1` with the write right held | the same offset without the write right | `InvalidOffset` |
+  | `BufferFreeze` | not constructible at the landed surface — see below | not constructible at the landed surface | — |
+
+- pre-fix failure, measured per case against `origin/main` production with
+  these tests retained. **Which cases discriminate is not uniform, and the
+  difference is intrinsic.** A malformed argument became `u64::MAX` for every
+  consumer except allocation, and shared dispatch rejects `u64::MAX` with the
+  *same* `InvalidOffset`/`InvalidBounds` the repair produces — so at the
+  dispatch boundary no single-fault input can separate the implementations for
+  those consumers:
+  - flips at the dispatch boundary: the short-read budget case; the
+    `BufferAllocate` single fault (its sentinel `0` is a *lawful* capacity, so
+    it surfaced `BufferLimit`); and all three overlapping-fault cases, where
+    `Closed`/`RightNotHeld` won the race into dispatch.
+  - does **not** flip there: the `FsReadAt`, `FsWriteAt` and `BufferFreeze`
+    single-fault cases. They are exact-variant regression pins, not
+    discriminating nets, and are never cited as flip evidence; the
+    overlapping-fault cases carry the proof for those consumers.
+  - in the differential, all six **narrowing** cases flip, because the
+    dispatch-skip axis separates the implementations even where the variant
+    axis cannot: pre-fix the interpreter still entered dispatch and recorded a
+    canonical event native never had. The allocation and both
+    overlapping-fault cases flip on the variant axis; the three single-fault
+    cases flip on the dispatch-skip axis. The one **non-narrowing** case
+    deliberately does not flip and is never cited as flip evidence: the
+    producer-closure case is a source-scope pin that runs no fixture.
+- `BufferAllocate` verdict: **defect, fails closed, same early-narrow remedy.**
+  Its substituted `0` does not silently succeed because `ResourceTableV1`
+  rejects zero capacity as `BufferLimit`. It still exposes the wrong public
+  variant versus native. An overlapping resource discriminator is
+  structurally impossible because allocation has no resource input.
+- `BufferFreeze` reachability: the differential has **no narrowing case** for
+  this consumer, because no malformed span is constructible from checked source
+  **at the landed surface**. That is an **empirical finding about the code as it
+  stands**, not a derived closure result. The distinction is load-bearing, and
+  it is spelled out because two earlier revisions of this entry claimed more
+  than the evidence supports — the first inferred it from constructor-name
+  privacy, the second from an empty oracle result. Both were blocked.
+
+  **What is established.** Source-level span forgery is rejected today:
+  `PrivateBufferSpan` and the now-sealed `write_all_advance_span` are both
+  unnameable from checked source. An independent adversary sweep (SPAN-SEAL)
+  separately found the seal holds, including a wrapped-inclusive search and
+  direct forgery attempts.
+
+  **What the landed oracle does and does not give.** `px8f_buffer_io_surface`
+  asserts that the set of public globals whose result type is `BufferSpan` is
+  empty, along three axes: modulo definitional equality
+  (`buffer_span_producer_closure_reduces_transparent_type_aliases`); over
+  declarations **and** constructors
+  (`buffer_span_producer_closure_resolves_public_constructors`); and with a loud
+  failure for any public id in neither category
+  (`buffer_span_producer_closure_rejects_unknown_public_ids`). That evidence is
+  **bounded and known enumeration-incomplete**: the walk is head-only, it
+  considers only ids already in `env.globals`, and it loads only the prelude
+  plus the `Buffer` and `IO` catalog packages. It does not see wrapped result
+  positions, class fields — which are source-reachable producers outside
+  `env.globals` — or producers in other catalog packages, and its loud-failure
+  arm totalizes classification only *within* that partial enumeration.
+
+  **So an empty result from that oracle does not entail that every span reaching
+  `freeze` is host-minted, and this entry does not make that inference.**
+  Calling the oracle "test-derived rather than proof" would not repair the
+  implication; it would only describe an insufficient test. It is corroborating
+  evidence over the fragment it covers, and no more.
+
+  **`SEAL-2` owns the durable producer-enumeration gate**, and is deliberately
+  not built here. **If this empirical seal breaks, or its future gate fails,
+  `BufferFreeze` owes executable single-fault and overlap differential
+  coverage.** The narrowing guards remain correct defense-in-depth, covered at
+  the dispatch boundary above.
+
+  `rt_parity_native.rs::buffer_freeze_malformed_span_is_unconstructible_at_the_landed_surface`
+  pins the empirical seal at the differential layer: `PrivateBufferSpan`,
+  `PrivateTransferCount`, and the sealed `write_all_advance_span` must all stay
+  unnameable from checked source. It pins that seal; it does not enumerate the
+  producer surface.
+
+  One premise in that pin is **verified but ungated**. `TransferCount` has no
+  public producer empirically at the landed surface — every public declaration
+  mentioning it consumes one, and `PrivateTransferCount` is sealed — but that is
+  a grep-verified fact with no oracle behind it: the landed oracle covers
+  `BufferSpan` only, so nothing would catch a future public `TransferCount`
+  producer. That gap is also `SEAL-2`'s, and the pin is retained as defense in
+  depth rather than as a load-bearing premise.
+
+  The same empirical seal is what makes `FsWriteAt`'s `buffer_start`/`length`
+  narrowings source-unreachable; only its `file_offset` is source-controllable.
+- overlap-fault shape in the differential: the coincident fault is a **rights**
+  fault, not a liveness one. Constructing a closed-but-still-referenced
+  resource requires escaping it from its bracket, and escaping a second
+  `Resource` through a bracket currently fails native lowering
+  (`OrientedSubcontinuationPlanV1: checked Runtime frame marker was consumed
+  more than once`). That is a pre-existing native lowering limitation, outside
+  RT-PARITY's scope and reported rather than worked around; the liveness shape
+  is covered at the dispatch boundary, and the rights fault discriminates the
+  same narrowing-order property.
+- why: exact public error identity is part of interpreter/native parity. A
+  sentinel that happens to fail later is not equivalent to rejecting the
+  malformed integer at the consuming operation's narrowing boundary.
+
 ## PR-B. Positioned bounds and tail capping
 
 ### buffer-io/positioned-transfer-bounds
