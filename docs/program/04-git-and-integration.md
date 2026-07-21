@@ -218,7 +218,8 @@ it is not a separate reviewer. **Teams do not merge.**
 ## 5. mootup mapping
 
 - **One space per team** (`ken-kernel`, `ken-verify`, `ken-language`,
-  `ken-runtime`, `ken-ergo`, `ken-foundation` — build teams — plus `ken-spec`,
+  `ken-runtime`, `ken-ergo`, `ken-foundation` — build teams — plus `ken-doc`
+  (doc-leader + doc-author + the Librarian as its QA) and `ken-spec`,
   the clean-room enclave). The team leader is the accountable participant;
   members set presence with `update_status`. (Research is not a standing team —
   the Steward dispatches it ad hoc; see

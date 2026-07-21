@@ -1,8 +1,8 @@
 ---
 id: DOC-W0
 title: "documentation Wave 0 — library/ charter and currency substrate"
-status: active
-owner: librarian
+status: ready
+owner: doc
 size: M
 gate: none
 depends_on: []
@@ -14,6 +14,14 @@ origin: docs/program/12-documentation-program.md (Steward frame, 2026-07-21) fro
 Land `library/` as Ken's product-documentation portal, with the **substrate
 that makes every later page's currency checkable** — before Wave 1 produces
 content at volume.
+
+> **Re-framed 2026-07-21 for the doc team.** This item was first released to
+> the Librarian as a solo seat. The operator then established a three-seat doc
+> unit — **`doc-leader`** (scoping, workflow), **`doc-author`** (authoring),
+> and the **Librarian** as its QA (editor, fact-checker, reviewer, plus a
+> standing as-built mandate). Held at `ready` until both new seats are wired
+> and confirmed. The deliverables and acceptance criteria below are unchanged;
+> only the ownership is.
 
 **Read the design canonically, do not work from this summary:**
 `research/librarian-documentation-program-proposal.md` (the shape) and
