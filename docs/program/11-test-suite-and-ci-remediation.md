@@ -107,6 +107,67 @@ concentrated in one crate.** `ken-cli` holds ranks 1 and 2; splitting by
 crate leaves a ~20-minute `ken-cli` job as the new floor. Matrix-by-crate
 cannot beat the slowest crate, and the slowest crate is where the problem is.
 
+## 1a. ★★ Second measurement: the runner is saturated
+
+Run `29838398785` (nextest, three binaries skipped) settles what is left to
+win. **This supersedes the expectations in §3.**
+
+| | |
+|---|---|
+| Tests run | 1891 (+3 `#[ignore]`d) |
+| Wall clock, execution | **984s** |
+| **Sum of per-test CPU time** | **3893s — 64.9 CPU-minutes** |
+| **Effective parallelism** | **3.96x** on a 4-vCPU runner |
+| Longest single test | **106s** |
+
+**3.96 out of a theoretical 4.00. nextest is saturating the machine, so no
+further scheduling change can help anything.**
+
+### What C2 actually bought: ~11%
+
+The same test set took 18m26s under `cargo test` and 16m24s under nextest.
+**The 44m -> 17.6m improvement is almost entirely the skip, not the runner
+swap.**
+
+> ★ **The framing error.** §1 called it "a serial 200-binary walk," which
+> reads as *fully* serial. It was not: `cargo test` already runs tests
+> **in parallel within each binary** (libtest defaults to one thread per
+> CPU). Only the 200 binaries were serial. So the available win was never
+> 4x — it was just the inter-binary waste, and ~11% is about right for that.
+> **A measurement described in words acquires whatever the words imply.**
+> C2 remains worth keeping: it partitions (C9) and it reports per-test
+> timing. But it is not a throughput win.
+
+### The distribution is flat, which retires C4
+
+At *binary* granularity three files were 56.5% of the run. At **test**
+granularity there is no such concentration:
+
+| Slice | Share of CPU |
+|---|---:|
+| top 1 (106s) | 2.7% |
+| top 4 | 9.4% |
+| top 20 | 32.2% |
+| top 50 | 56.9% |
+
+Reworking individual tests would mean fixing **dozens** for a few percent
+each. **C4 is downgraded to "not worth doing"** on this evidence — the
+concentration that justified it exists only at binary granularity, and the
+binary-level fix was the skip, which is done.
+
+### Therefore exactly two levers remain
+
+The suite is **65 CPU-minutes of genuine work**. On 4 cores the floor is
+16.4 minutes, and we are at 16.4.
+
+1. **More cores — C9 sharding.** `nextest --partition count:N/M` splits by
+   test across N jobs, each with its own 4-vCPU runner. 4 shards = 16
+   effective cores.
+2. **Less work — C6.** Attacks the 65 CPU-minutes rather than dividing it.
+
+They multiply. They are also the *only* two: everything else is noise
+against a saturated CPU.
+
 ## 2. The suite, measured
 
 At `62643287`, against the advisory's 2026-07-18 baseline:
@@ -145,7 +206,8 @@ resolved.
 | **C2** | **Adopt `cargo-nextest`.** The reason is no longer instrumentation (§1 already has per-binary timing) — it is that nextest schedules **every test across every binary against one global thread pool**, replacing today's strictly-serial 200-binary walk. This is the largest single win available and it is a config change. | S |
 | **C6** | **`[profile.dev.package."*"] opt-level = 2`.** Cranelift at `opt-level = 0` is pathologically slow *at runtime*, and §1's cost driver is cranelift codegen executed 9 times. A 3-line `Cargo.toml` change; costs a one-time dependency rebuild that C1's cache absorbs. **Hypothesis, not a measurement** — see §3a. | S |
 | **C7** | **Split the two 1-test binaries.** `px8f_buffer_native` and `px8f_write_partition` are ~310s in a single `#[test]` each, so no scheduler can subdivide them; after C2 they *are* the critical path. Split each into independent cases, preserving what each asserts. | S |
-| **C4** | Rework the remaining slow tests using §1's table. Note this is now a **short** list: below rank 10 the entire tail is ~24% of execution and falling fast. | M |
+| **C9** | **Shard with `nextest --partition count:N/4`** across a 4-job matrix — 16 effective cores against a saturated 4. Splits by *test*, so it does not floor at the slowest crate the way a per-crate matrix would. ⚠ Keep a job literally named `build + test`: it is a **required status check**, and a matrix publishes `test shard N/4` instead. | S |
+| **C4** | ~~Rework the remaining slow tests.~~ **Retired** — §1a shows the per-*test* distribution is flat (top 20 = 32% of CPU). The concentration existed only at binary granularity, and the skip already addressed that. | — |
 | **C3** | Evaluate dropping the separate `build` step — it is 47s of duplicated work. Cosmetic at this scale. | S |
 | **C8** | **Remove `Swatinem/rust-cache`** (operator ruling, §1). Do it **with** C6, so one run measures both the optimization and the cache removal against the same baseline. | S |
 | **C5** | Per-crate matrix. **Discouraged** — §1 shows the load is concentrated in `ken-cli`, so a matrix floors at the slowest crate. Revisit only if C2+C6+C7 disappoint. | M |

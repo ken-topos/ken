@@ -19,25 +19,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-test:
-    name: build + test
+  # The suite is CPU-bound, not scheduling-bound. Measured on run
+  # 29838398785: 1891 tests, 3893 CPU-seconds of real work, executed in 984s
+  # wall on a 4-vCPU runner — an effective parallelism of 3.96x out of a
+  # theoretical 4.00. nextest was already saturating the machine, so no
+  # further scheduling change can help. The only two levers left are LESS
+  # WORK (see `opt-level` in the root Cargo.toml) and MORE CORES — which is
+  # what this matrix buys: 4 shards x 4 vCPU = 16 effective cores.
+  #
+  # Sharding is by TEST, not by crate. A per-crate matrix would floor at the
+  # slowest crate (`ken-cli` holds the heaviest binaries);
+  # `--partition count:N/4` ignores crate boundaries and balances by count.
+  #
+  # This trades ~4x total compute for ~4x wall clock. Actions minutes are
+  # free on public repos, so the trade is worth it — but it IS a real
+  # increase in compute, not a free win.
+  # See docs/program/11-test-suite-and-ci-remediation.md §1/§3.
+  test-shard:
+    name: test shard ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
+    strategy:
+      # Do not cancel siblings on first failure — a full picture of which
+      # shards failed is worth more than the saved minutes, and shards are
+      # independent.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
-      # Dependency/target cache. Before this, every run cold-compiled the whole
-      # graph — including cranelift-codegen/frontend/jit/module — which
-      # dominated a 36-48 minute wall clock. Keyed on Cargo.lock + rustc
-      # version, so a dependency change invalidates it and correctness of the
-      # `--locked` gate is unaffected: this changes only what is recompiled,
-      # never what is compiled or tested.
-      # NOTE: do NOT split this job into a per-crate matrix without measuring
-      # first — each matrix job would pay this same dependency build again,
-      # multiplying the dominant cost rather than dividing it. See
-      # docs/program/11-test-suite-and-ci-remediation.md §1.
-      - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ken-ci
+      # NO dependency cache, deliberately. `Swatinem/rust-cache` was removed
+      # (item C8): it never measurably helped — the build step is well under
+      # a minute either way — and it is third-party code with access to the
+      # build, i.e. supply-chain surface taken on for nothing. A dependency
+      # has to earn its place. If a future change makes the build genuinely
+      # expensive, prefer first-party `actions/cache` and re-argue the case
+      # on measured numbers.
       - name: Build
         run: cargo build --workspace --locked
       # Prebuilt binary, not `cargo install cargo-nextest` — the latter
@@ -45,11 +61,12 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
       # nextest schedules every test across every binary against one global
-      # thread pool, replacing `cargo test`'s serial per-binary walk (200
-      # binaries, one at a time — the dominant cost once C1's cache made the
-      # build itself cheap). See docs/program/11-test-suite-and-ci-remediation.md
-      # §3 (C2). It also gives per-test timing, which is the instrumentation
-      # C4 needs.
+      # thread pool. NOTE: `cargo test` was ALREADY parallel *within* each
+      # binary (libtest defaults to one thread per CPU); only the 200 binaries
+      # themselves ran serially. So nextest recovered just the inter-binary
+      # waste — measured at ~11% (18m26s -> 16m24s on the same test set), not
+      # the large win it was first written up as. It is kept because it
+      # partitions (below) and because it reports per-test timing.
       #
       # SKIPPED HERE, FOR RUN TIME — NOT BECAUSE THEY ARE BROKEN OR FLAKY:
       # three binaries (nine tests) measured at 56.5% of a 47-minute CI run
@@ -64,6 +81,7 @@ jobs:
       - name: Test
         run: >-
           cargo nextest run --workspace --locked
+          --partition count:${{ matrix.shard }}/4
           -E 'not (binary(rt_parity_native) or binary(px8f_buffer_native) or binary(px8f_write_partition))'
       # No `cargo test --workspace --doc --locked` step: nextest does not run
       # doctests, but this workspace has none to lose. Every ``` fence inside
@@ -72,6 +90,35 @@ jobs:
       # today (checked via `grep -rn '```' crates/ --include=*.rs` — every
       # opening fence is `text`). If a real ```rust doctest is ever added,
       # add a `cargo test --workspace --doc --locked` step back here.
+
+  # ⛔ DO NOT RENAME OR DELETE THIS JOB. `build + test` is a REQUIRED status
+  # check in branch protection (docs/ops/github-setup.md §"Required status
+  # checks"). The sharded matrix above publishes checks named `test shard
+  # N/4`, which branch protection does not know about — so if this
+  # name-preserving aggregator were removed, the required check would never
+  # report and EVERY pull request would become unmergeable until an admin
+  # edited branch protection. This job exists so the workflow can be resharded
+  # freely without touching repository settings: change the matrix, leave this
+  # alone.
+  #
+  # It is intentionally a pure gate — no checkout, no build, a few seconds.
+  build-test:
+    name: build + test
+    runs-on: ubuntu-latest
+    needs: test-shard
+    # `always()` so this reports a definite conclusion even when a shard fails
+    # or is skipped. Without it, a failed shard leaves this job *skipped*, and
+    # a skipped required check blocks the PR with no useful signal.
+    if: always()
+    steps:
+      - name: All test shards passed
+        run: |
+          result='${{ needs.test-shard.result }}'
+          echo "test-shard matrix result: $result"
+          if [ "$result" != "success" ]; then
+            echo "::error::One or more test shards did not pass ($result)." >&2
+            exit 1
+          fi
 
   conformance:
     name: conformance suite

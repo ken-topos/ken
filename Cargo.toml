@@ -33,6 +33,27 @@ split-debuginfo = "unpacked"   # faster linking on Linux/macOS
 [profile.dev.package."*"]
 # Dependencies: no debuginfo at all — they're the bulk of compiled code.
 debug = false
+# Optimize DEPENDENCIES (not our own crates) even in dev/test. This is item
+# C6 of docs/program/11-test-suite-and-ci-remediation.md.
+#
+# Why: the test suite is CPU-bound, not scheduling-bound — 3893 CPU-seconds
+# of real work across 1891 tests (run 29838398785), much of it inside
+# cranelift, which the native-lowering tests invoke per case. Cranelift
+# compiled at opt-level 0 executes its own codegen very slowly, so we were
+# paying an unoptimized compiler to compile, thousands of times.
+#
+# This does NOT optimize ken's own crates: `package."*"` matches
+# dependencies only, so our code keeps opt-level 0 and stays debuggable, and
+# backtraces through ken frames are unaffected. Semantics are unchanged
+# either way — this alters only how the dependency code is compiled, never
+# what is compiled or tested.
+#
+# Cost: dependencies compile more slowly, once per runner (there is
+# deliberately no cache — see .github/workflows/ci.yml, item C8). Watch the
+# Build step: it was ~40s before this. If it grows past a few minutes, the
+# trade stops being obviously good and should go back to the operator with
+# the number rather than being papered over by reinstating a cache.
+opt-level = 2
 
 [profile.dev.build-override]
 debug = false                  # build scripts / proc-macros
