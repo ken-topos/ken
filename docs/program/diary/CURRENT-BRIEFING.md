@@ -24,9 +24,19 @@
   that does not apply — do not re-raise status-correction as a decision.**
 - **Where there is a gap between what was anticipated and what was done, fill
   the gap first.** Hence `docs/program/10-linux-abi-completion.md`.
-- **L2-1: no cross-compilation.** A very late feature, deferred behind a long
-  line of other work. Manifest v2 = family-scoped and generated, **not**
-  cross-target.
+- **L2-1: no cross-compilation. CROSS-PLATFORM IS INDEFINITELY DEFERRED**
+  (restated by the operator 2026-07-21 after I re-raised it). A very late
+  feature, behind a long line of other work. Manifest v2 = family-scoped and
+  generated, **not** cross-target.
+
+  ⛔ **This ruling ALREADY ANSWERS any non-linux finding — do not route one
+  back as a scoping question.** I did exactly that with "`ken-host` has never
+  compiled on any non-linux target" (28 `cfg(not(target_os = "linux"))`
+  fail-closed sites, never built, `abi_v1.rs:747`). **Under this ruling that
+  finding is inert**: the lane is deferred, nothing builds it, and the defect
+  cannot bite. It is dead code for a deferred target, not an open decision.
+  Record such findings as *observations against a deferred lane* and stop —
+  a settled ruling is a fixed input, never a question to re-ask.
 - **L2-0: all desirable, nothing deferred.** All nine
   `RepresentedUnavailable` operations get promoted.
 - **Timing, timelines, and budget are the OPERATOR'S domain.** They monitor
@@ -261,13 +271,13 @@ and silently drop its siblings while fully satisfying the criteria. R1 (ABI
 fact inventory has no independent anchor — both sides of the check come from
 one generator) is the one to sequence first.
 
-**Unframed, needs an operator scoping call:** `ken-host` has **never compiled
-on any non-linux target** (`abi_v1.rs:747`, `?` on an `Option` in a
-`Result`-returning fn; pre-existing since PX5 `049628f8`, adversary confirmed
-by extracting and compiling it). 28 `cfg(not(target_os = "linux"))` sites
-implement a **fail-closed posture that has never been built**. Honesty/dead-code
-tier, not a runtime bug — but decide: fix, or declare the lane unsupported and
-delete the dead posture.
+**CLOSED — not a scoping question.** `ken-host` has never compiled on any
+non-linux target (`abi_v1.rs:747`, `?` on an `Option` in a `Result`-returning
+fn; pre-existing since PX5 `049628f8`, adversary confirmed by extracting and
+compiling it). 28 `cfg(not(target_os = "linux"))` fail-closed sites, never
+built. **Cross-platform is indefinitely deferred (operator) — so this is dead
+code for a deferred lane and cannot bite.** Recorded as an observation; no
+action, no decision pending. See the L2-1 ruling above.
 
 Recently landed and verified by content: **#818** (Q-RESIDUE), **#819**
 (Track Q closeout), **#820** (doc program frame), **#821** (doc team),
