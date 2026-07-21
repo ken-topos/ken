@@ -4424,6 +4424,71 @@ fn host_kind_v1(kind: HostFileKind) -> ken_host::FsNodeKindV1 {
     }
 }
 
+fn narrow_host_u64(
+    value: &EvalVal,
+    error: ken_host::ResourceErrorV1,
+) -> Result<u64, ken_host::ResourceErrorV1> {
+    eval_to_bigint(value)
+        .and_then(|value| value.to_u64())
+        .ok_or(error)
+}
+
+fn resource_error_value_v1(
+    error: ken_host::ResourceErrorV1,
+    fs: &FSIds,
+    ids: &ConsoleIds,
+    store: &mut EvalStore,
+) -> EvalVal {
+    match error {
+        ken_host::ResourceErrorV1::Closed => make_ctor(fs.closed_id, vec![], store),
+        ken_host::ResourceErrorV1::MalformedResource => {
+            make_ctor(fs.malformed_resource_id, vec![], store)
+        }
+        ken_host::ResourceErrorV1::RightNotHeld { required, held } => make_ctor(
+            fs.right_not_held_id,
+            vec![
+                EvalVal::Int(i64::from(required)),
+                EvalVal::Int(i64::from(held)),
+            ],
+            store,
+        ),
+        ken_host::ResourceErrorV1::ReleaseFailed {
+            resource_kind,
+            identity,
+            io,
+            ..
+        } => {
+            let kind = match resource_kind {
+                ken_host::ResourceKindV1::FsHandle => make_ctor(fs.fs_handle_id, vec![], store),
+                ken_host::ResourceKindV1::Buffer => make_ctor(fs.buffer_id, vec![], store),
+            };
+            let trace = make_ctor(
+                fs.private_resource_trace_identity_id,
+                vec![
+                    EvalVal::Int(i64::from(identity.0 as u32)),
+                    EvalVal::Int(i64::from((identity.0 >> 32) as u32)),
+                ],
+                store,
+            );
+            let io = io_error_identity_value(io, ids, store);
+            make_ctor(fs.release_failed_id, vec![kind, trace, io], store)
+        }
+        ken_host::ResourceErrorV1::ResourceKindMismatch { expected, actual } => {
+            let kind = |kind, store: &mut EvalStore| match kind {
+                ken_host::ResourceKindV1::FsHandle => make_ctor(fs.fs_handle_id, vec![], store),
+                ken_host::ResourceKindV1::Buffer => make_ctor(fs.buffer_id, vec![], store),
+            };
+            let expected = kind(expected, store);
+            let actual = kind(actual, store);
+            make_ctor(fs.resource_kind_mismatch_id, vec![expected, actual], store)
+        }
+        ken_host::ResourceErrorV1::BufferLimit => make_ctor(fs.buffer_limit_id, vec![], store),
+        ken_host::ResourceErrorV1::InvalidOffset => make_ctor(fs.invalid_offset_id, vec![], store),
+        ken_host::ResourceErrorV1::InvalidBounds => make_ctor(fs.invalid_bounds_id, vec![], store),
+        ken_host::ResourceErrorV1::NoProgress => make_ctor(fs.no_progress_id, vec![], store),
+    }
+}
+
 fn fs_dispatch<H: HostHandler>(
     op_id: GlobalId,
     args: &[EvalVal],
@@ -4583,24 +4648,43 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_metadata_id,
         )
     } else if op_id == fs.private_buffer_allocate_id {
-        let capacity = eval_to_bigint(args.get(1)?)
-            .and_then(|capacity| capacity.to_u64())
-            .unwrap_or(0);
+        let capacity = match narrow_host_u64(args.get(1)?, ken_host::ResourceErrorV1::InvalidBounds)
+        {
+            Ok(capacity) => capacity,
+            Err(error) => {
+                let error = resource_error_value_v1(error, fs, ids, store);
+                return Some(Ok(make_result(false, error, ids, store)));
+            }
+        };
         (
             ken_host::HostOpV1::BufferAllocate,
             ken_host::CanonicalRequestV1::BufferAllocate { capacity },
             fs.op_metadata_id,
         )
     } else if op_id == fs.private_fs_read_at_id {
-        let file_offset = eval_to_bigint(args.get(2)?)
-            .and_then(|value| value.to_u64())
-            .unwrap_or(u64::MAX);
-        let buffer_start = eval_to_bigint(args.get(4)?)
-            .and_then(|value| value.to_u64())
-            .unwrap_or(u64::MAX);
-        let length = eval_to_bigint(args.get(5)?)
-            .and_then(|value| value.to_u64())
-            .unwrap_or(u64::MAX);
+        let file_offset =
+            match narrow_host_u64(args.get(2)?, ken_host::ResourceErrorV1::InvalidOffset) {
+                Ok(file_offset) => file_offset,
+                Err(error) => {
+                    let error = resource_error_value_v1(error, fs, ids, store);
+                    return Some(Ok(make_result(false, error, ids, store)));
+                }
+            };
+        let buffer_start =
+            match narrow_host_u64(args.get(4)?, ken_host::ResourceErrorV1::InvalidBounds) {
+                Ok(buffer_start) => buffer_start,
+                Err(error) => {
+                    let error = resource_error_value_v1(error, fs, ids, store);
+                    return Some(Ok(make_result(false, error, ids, store)));
+                }
+            };
+        let length = match narrow_host_u64(args.get(5)?, ken_host::ResourceErrorV1::InvalidBounds) {
+            Ok(length) => length,
+            Err(error) => {
+                let error = resource_error_value_v1(error, fs, ids, store);
+                return Some(Ok(make_result(false, error, ids, store)));
+            }
+        };
         (
             ken_host::HostOpV1::FsReadAt,
             ken_host::CanonicalRequestV1::FsReadAt {
@@ -4611,15 +4695,29 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_read_file_id,
         )
     } else if op_id == fs.private_fs_write_at_id {
-        let file_offset = eval_to_bigint(args.get(2)?)
-            .and_then(|value| value.to_u64())
-            .unwrap_or(u64::MAX);
-        let buffer_start = eval_to_bigint(args.get(4)?)
-            .and_then(|value| value.to_u64())
-            .unwrap_or(u64::MAX);
-        let length = eval_to_bigint(args.get(5)?)
-            .and_then(|value| value.to_u64())
-            .unwrap_or(u64::MAX);
+        let file_offset =
+            match narrow_host_u64(args.get(2)?, ken_host::ResourceErrorV1::InvalidOffset) {
+                Ok(file_offset) => file_offset,
+                Err(error) => {
+                    let error = resource_error_value_v1(error, fs, ids, store);
+                    return Some(Ok(make_result(false, error, ids, store)));
+                }
+            };
+        let buffer_start =
+            match narrow_host_u64(args.get(4)?, ken_host::ResourceErrorV1::InvalidBounds) {
+                Ok(buffer_start) => buffer_start,
+                Err(error) => {
+                    let error = resource_error_value_v1(error, fs, ids, store);
+                    return Some(Ok(make_result(false, error, ids, store)));
+                }
+            };
+        let length = match narrow_host_u64(args.get(5)?, ken_host::ResourceErrorV1::InvalidBounds) {
+            Ok(length) => length,
+            Err(error) => {
+                let error = resource_error_value_v1(error, fs, ids, store);
+                return Some(Ok(make_result(false, error, ids, store)));
+            }
+        };
         (
             ken_host::HostOpV1::FsWriteAt,
             ken_host::CanonicalRequestV1::FsWriteAt {
@@ -4630,12 +4728,20 @@ fn fs_dispatch<H: HostHandler>(
             fs.op_write_file_id,
         )
     } else if op_id == fs.private_buffer_freeze_id {
-        let start = eval_to_bigint(args.get(2)?)
-            .and_then(|value| value.to_u64())
-            .unwrap_or(u64::MAX);
-        let length = eval_to_bigint(args.get(3)?)
-            .and_then(|value| value.to_u64())
-            .unwrap_or(u64::MAX);
+        let start = match narrow_host_u64(args.get(2)?, ken_host::ResourceErrorV1::InvalidBounds) {
+            Ok(start) => start,
+            Err(error) => {
+                let error = resource_error_value_v1(error, fs, ids, store);
+                return Some(Ok(make_result(false, error, ids, store)));
+            }
+        };
+        let length = match narrow_host_u64(args.get(3)?, ken_host::ResourceErrorV1::InvalidBounds) {
+            Ok(length) => length,
+            Err(error) => {
+                let error = resource_error_value_v1(error, fs, ids, store);
+                return Some(Ok(make_result(false, error, ids, store)));
+            }
+        };
         (
             ken_host::HostOpV1::BufferFreeze,
             ken_host::CanonicalRequestV1::BufferFreeze { start, length },
@@ -4813,6 +4919,10 @@ fn reify_host_reply_v1(
         )) => match progress {
             ken_host::ReadProgressV1::ReadEof => make_ctor(fs.read_eof_id, vec![], store),
             ken_host::ReadProgressV1::ReadSome { span, transferred } => {
+                let requested = match request {
+                    ken_host::CanonicalRequestV1::FsReadAt { length, .. } => *length,
+                    _ => return Err(()),
+                };
                 let budget = buffer_nat_value(span.length(), fs, store)?;
                 let span = make_ctor(
                     fs.private_buffer_span_id,
@@ -4821,7 +4931,8 @@ fn reify_host_reply_v1(
                 );
                 let count = transferred.get();
                 let predecessor = buffer_nat_value(count.checked_sub(1).ok_or(())?, fs, store)?;
-                let remaining = buffer_nat_value(0, fs, store)?;
+                let remaining =
+                    buffer_nat_value(requested.checked_sub(count).ok_or(())?, fs, store)?;
                 let count = make_ctor(
                     fs.private_transfer_count_id,
                     vec![predecessor, remaining],
@@ -4863,66 +4974,7 @@ fn reify_host_reply_v1(
             return Ok(make_result(false, error, ids, store));
         }
         ken_host::CanonicalOutcomeV1::Error(ken_host::SemanticErrorV1::Resource(error)) => {
-            let error = match error {
-                ken_host::ResourceErrorV1::Closed => make_ctor(fs.closed_id, vec![], store),
-                ken_host::ResourceErrorV1::MalformedResource => {
-                    make_ctor(fs.malformed_resource_id, vec![], store)
-                }
-                ken_host::ResourceErrorV1::RightNotHeld { required, held } => make_ctor(
-                    fs.right_not_held_id,
-                    vec![
-                        EvalVal::Int(i64::from(required)),
-                        EvalVal::Int(i64::from(held)),
-                    ],
-                    store,
-                ),
-                ken_host::ResourceErrorV1::ReleaseFailed {
-                    resource_kind,
-                    identity,
-                    io,
-                    ..
-                } => {
-                    let kind = match resource_kind {
-                        ken_host::ResourceKindV1::FsHandle => {
-                            make_ctor(fs.fs_handle_id, vec![], store)
-                        }
-                        ken_host::ResourceKindV1::Buffer => make_ctor(fs.buffer_id, vec![], store),
-                    };
-                    let trace = make_ctor(
-                        fs.private_resource_trace_identity_id,
-                        vec![
-                            EvalVal::Int(i64::from(identity.0 as u32)),
-                            EvalVal::Int(i64::from((identity.0 >> 32) as u32)),
-                        ],
-                        store,
-                    );
-                    let io = io_error_identity_value(io, ids, store);
-                    make_ctor(fs.release_failed_id, vec![kind, trace, io], store)
-                }
-                ken_host::ResourceErrorV1::ResourceKindMismatch { expected, actual } => {
-                    let kind = |kind, store: &mut EvalStore| match kind {
-                        ken_host::ResourceKindV1::FsHandle => {
-                            make_ctor(fs.fs_handle_id, vec![], store)
-                        }
-                        ken_host::ResourceKindV1::Buffer => make_ctor(fs.buffer_id, vec![], store),
-                    };
-                    let expected = kind(expected, store);
-                    let actual = kind(actual, store);
-                    make_ctor(fs.resource_kind_mismatch_id, vec![expected, actual], store)
-                }
-                ken_host::ResourceErrorV1::BufferLimit => {
-                    make_ctor(fs.buffer_limit_id, vec![], store)
-                }
-                ken_host::ResourceErrorV1::InvalidOffset => {
-                    make_ctor(fs.invalid_offset_id, vec![], store)
-                }
-                ken_host::ResourceErrorV1::InvalidBounds => {
-                    make_ctor(fs.invalid_bounds_id, vec![], store)
-                }
-                ken_host::ResourceErrorV1::NoProgress => {
-                    make_ctor(fs.no_progress_id, vec![], store)
-                }
-            };
+            let error = resource_error_value_v1(error, fs, ids, store);
             return Ok(make_result(false, error, ids, store));
         }
         _ => return Err(()),
@@ -5794,6 +5846,355 @@ mod px5b_effect_observation_tests {
             &mut store,
             recorder,
         )
+    }
+
+    fn run_fs<H: HostHandler>(
+        op_id: GlobalId,
+        args: &[EvalVal],
+        host: &mut H,
+        resources: &mut ken_host::ResourceTableV1,
+        fs: &FSIds,
+        ids: &ConsoleIds,
+        store: &mut EvalStore,
+    ) -> EvalVal {
+        fs_dispatch(op_id, args, host, resources, fs, ids, store, None)
+            .expect("recognized FS operation")
+            .expect("FS reply reifies")
+    }
+
+    fn result_payload<'a>(value: &'a EvalVal, ctor: GlobalId) -> &'a EvalVal {
+        let EvalVal::Ctor { id, args, .. } = value else {
+            panic!("expected Result constructor, got {value:?}")
+        };
+        assert_eq!(*id, ctor, "unexpected Result value: {value:?}");
+        args.get(2).expect("Result payload")
+    }
+
+    fn expect_resource_error(value: &EvalVal, expected: GlobalId, ids: &ConsoleIds) {
+        let payload = result_payload(value, ids.err_id);
+        let EvalVal::Ctor { id, .. } = payload else {
+            panic!("expected ResourceError constructor, got {payload:?}")
+        };
+        assert_eq!(*id, expected);
+    }
+
+    fn expect_resource_token(value: &EvalVal, ids: &ConsoleIds) -> ken_host::ResourceTokenV1 {
+        let payload = result_payload(value, ids.ok_id);
+        let EvalVal::ResourceToken(token) = payload else {
+            panic!("expected resource token, got {payload:?}")
+        };
+        *token
+    }
+
+    fn nat_value(value: &EvalVal, fs: &FSIds) -> u64 {
+        match value {
+            EvalVal::Ctor { id, args, .. } if *id == fs.zero_id => 0,
+            EvalVal::Ctor { id, args, .. } if *id == fs.suc_id => {
+                1 + nat_value(args.first().expect("Suc predecessor"), fs)
+            }
+            _ => panic!("expected structural Nat, got {value:?}"),
+        }
+    }
+
+    fn allocate_buffer<H: HostHandler>(
+        capacity: i64,
+        host: &mut H,
+        resources: &mut ken_host::ResourceTableV1,
+        fs: &FSIds,
+        ids: &ConsoleIds,
+        store: &mut EvalStore,
+    ) -> EvalVal {
+        run_fs(
+            fs.private_buffer_allocate_id,
+            &[EvalVal::Unknown, EvalVal::Int(capacity)],
+            host,
+            resources,
+            fs,
+            ids,
+            store,
+        )
+    }
+
+    fn open_file<H: HostHandler>(
+        path: &[u8],
+        mode: EvalVal,
+        capability: EvalVal,
+        host: &mut H,
+        resources: &mut ken_host::ResourceTableV1,
+        fs: &FSIds,
+        ids: &ConsoleIds,
+        store: &mut EvalStore,
+    ) -> ken_host::ResourceTokenV1 {
+        let result = run_fs(
+            fs.private_fs_open_id,
+            &[
+                EvalVal::Unknown,
+                capability,
+                EvalVal::Bytes(path.to_vec()),
+                mode,
+            ],
+            host,
+            resources,
+            fs,
+            ids,
+            store,
+        );
+        expect_resource_token(&result, ids)
+    }
+
+    fn release_resource<H: HostHandler>(
+        token: ken_host::ResourceTokenV1,
+        host: &mut H,
+        resources: &mut ken_host::ResourceTableV1,
+        fs: &FSIds,
+        ids: &ConsoleIds,
+        store: &mut EvalStore,
+    ) {
+        let result = run_fs(
+            fs.private_resource_release_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(token),
+            ],
+            host,
+            resources,
+            fs,
+            ids,
+            store,
+        );
+        let _ = result_payload(&result, ids.ok_id);
+    }
+
+    fn rt_parity_root(label: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "ken-rt-parity-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn rt_parity_short_read_reifies_remaining_and_request_budget() {
+        let ids = console_ids();
+        let fs = fs_ids();
+        let mut store = EvalStore::new();
+        let root = rt_parity_root("short-read");
+        std::fs::write(root.join("short"), b"x").unwrap();
+        let mut host = PosixHost::new_at(&root);
+        let capability = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_PARTIAL));
+        let mut resources = ken_host::ResourceTableV1::default();
+        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
+        let file = open_file(
+            b"short",
+            read_mode,
+            capability,
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let buffer_result = allocate_buffer(8, &mut host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
+
+        let result = run_fs(
+            fs.private_fs_read_at_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(file),
+                EvalVal::Int(0),
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(0),
+                EvalVal::Int(4),
+            ],
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let payload = result_payload(&result, ids.ok_id);
+        let EvalVal::Ctor {
+            id: read_some_id,
+            args: read_args,
+            ..
+        } = payload
+        else {
+            panic!("expected ReadSome, got {payload:?}")
+        };
+        assert_eq!(*read_some_id, fs.read_some_id);
+        let EvalVal::Ctor {
+            id: span_id,
+            args: span_args,
+            ..
+        } = read_args.first().expect("ReadSome span")
+        else {
+            panic!("expected BufferSpan")
+        };
+        assert_eq!(*span_id, fs.private_buffer_span_id);
+        assert_eq!(nat_value(&span_args[1], &fs), 1);
+        let EvalVal::Ctor {
+            id: transfer_count_id,
+            args: count_args,
+            ..
+        } = read_args.get(1).expect("ReadSome count")
+        else {
+            panic!("expected TransferCount")
+        };
+        assert_eq!(*transfer_count_id, fs.private_transfer_count_id);
+        let transferred = 1 + nat_value(&count_args[0], &fs);
+        let remaining = nat_value(&count_args[1], &fs);
+        assert_eq!(transferred, 1);
+        assert_eq!(remaining, 3);
+        assert_eq!(transferred + remaining, 4);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rt_parity_host_width_consumers_return_exact_narrowing_errors() {
+        let ids = console_ids();
+        let fs = fs_ids();
+        let mut store = EvalStore::new();
+        let root = rt_parity_root("host-width");
+        std::fs::write(root.join("source"), b"abcd").unwrap();
+        std::fs::write(root.join("target"), Vec::new()).unwrap();
+        let mut host = PosixHost::new_at(&root);
+        let read_cap = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_PARTIAL));
+        let full_cap = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_FULL));
+        let mut resources = ken_host::ResourceTableV1::default();
+
+        let malformed_allocate =
+            allocate_buffer(-1, &mut host, &mut resources, &fs, &ids, &mut store);
+        expect_resource_error(&malformed_allocate, fs.invalid_bounds_id, &ids);
+
+        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
+        let read_file = open_file(
+            b"source",
+            read_mode.clone(),
+            read_cap.clone(),
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let create_keep = make_ctor(fs.create_or_keep_id, vec![], &mut store);
+        let write_mode = make_ctor(fs.resource_write_create_id, vec![create_keep], &mut store);
+        let write_file = open_file(
+            b"target",
+            write_mode,
+            full_cap,
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let buffer_result = allocate_buffer(8, &mut host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
+
+        let positioned_args = |file| {
+            vec![
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(file),
+                EvalVal::Int(-1),
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(0),
+                EvalVal::Int(1),
+            ]
+        };
+        let read_single = run_fs(
+            fs.private_fs_read_at_id,
+            &positioned_args(read_file),
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        expect_resource_error(&read_single, fs.invalid_offset_id, &ids);
+        let write_single = run_fs(
+            fs.private_fs_write_at_id,
+            &positioned_args(write_file),
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        expect_resource_error(&write_single, fs.invalid_offset_id, &ids);
+        let freeze_single = run_fs(
+            fs.private_buffer_freeze_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(-1),
+                EvalVal::Int(1),
+            ],
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        expect_resource_error(&freeze_single, fs.invalid_bounds_id, &ids);
+
+        release_resource(read_file, &mut host, &mut resources, &fs, &ids, &mut store);
+        let read_closed_overlap = run_fs(
+            fs.private_fs_read_at_id,
+            &positioned_args(read_file),
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        expect_resource_error(&read_closed_overlap, fs.invalid_offset_id, &ids);
+
+        let read_only_file = open_file(
+            b"source",
+            read_mode,
+            read_cap,
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let write_right_overlap = run_fs(
+            fs.private_fs_write_at_id,
+            &positioned_args(read_only_file),
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        expect_resource_error(&write_right_overlap, fs.invalid_offset_id, &ids);
+
+        release_resource(buffer, &mut host, &mut resources, &fs, &ids, &mut store);
+        let freeze_closed_overlap = run_fs(
+            fs.private_buffer_freeze_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(-1),
+                EvalVal::Int(1),
+            ],
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        expect_resource_error(&freeze_closed_overlap, fs.invalid_bounds_id, &ids);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

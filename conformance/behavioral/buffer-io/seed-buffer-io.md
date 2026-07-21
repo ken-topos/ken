@@ -427,6 +427,53 @@ Runtime identities such as `file_r` and `buffer_r` do not.
   load-bearing zero-write failure. A generic status/count record can represent
   forbidden combinations and fails this shape.
 
+### buffer-io/short-read-preserves-request-budget
+
+- status: **GREEN — RT-PARITY interpreter repair; native was canonical**
+- spec: `38 §1.7.2`; RT-PARITY AC2
+- evidence:
+  `eval::px5b_effect_observation_tests::`
+  `rt_parity_short_read_reifies_remaining_and_request_budget`
+- given: a real file containing one byte, a capacity-`8` live buffer, and an
+  `FsReadAt` request of length `4`
+- expect: `ReadSome` carries transferred `1`, remaining `3`, and total request
+  budget `1 + 3 = 4`; its returned `BufferSpan` has length `1`
+- pre-fix failure: interpreter reification hardcoded remaining to `0`, so it
+  produced budget `1` while native produced the required budget `4`
+- why: the existing PR-A full-read arm has remaining `0` legitimately and is
+  green before and after the repair. This positive short read is the
+  discriminator that makes a constant-zero remaining field fail.
+
+## PR-PARITY. Host-width narrowing precedes resource dispatch
+
+### buffer-io/interpreter-native-host-width-error-parity
+
+- status: **GREEN — RT-PARITY interpreter repair; native was canonical**
+- spec: `38 §1.7.1/§1.7.2`; PX8-I; RT-PARITY AC3–AC5
+- evidence:
+  `eval::px5b_effect_observation_tests::`
+  `rt_parity_host_width_consumers_return_exact_narrowing_errors`
+- given and expect:
+
+  | Consumer | Single out-of-range input | Overlapping resource fault | Exact result |
+  |---|---|---|---|
+  | `BufferAllocate` | capacity `-1` | unreachable: the operation consumes no resource | `InvalidBounds` |
+  | `FsReadAt` | file offset `-1` with live resources | the same offset with a closed file | `InvalidOffset` |
+  | `FsWriteAt` | file offset `-1` with a writable file | the same offset with a read-only file | `InvalidOffset` |
+  | `BufferFreeze` | start `-1` with a live buffer | the same start with a closed buffer | `InvalidBounds` |
+
+- pre-fix failure: allocation substituted lawful-width `0` and shared dispatch
+  returned `BufferLimit`; the positioned/freeze overlap arms entered dispatch,
+  allowing `Closed` or `RightNotHeld` to win before the narrowing error.
+- `BufferAllocate` verdict: **defect, fails closed, same early-narrow remedy.**
+  Its substituted `0` does not silently succeed because `ResourceTableV1`
+  rejects zero capacity as `BufferLimit`. It still exposes the wrong public
+  variant versus native. An overlapping resource discriminator is
+  structurally impossible because allocation has no resource input.
+- why: exact public error identity is part of interpreter/native parity. A
+  sentinel that happens to fail later is not equivalent to rejecting the
+  malformed integer at the consuming operation's narrowing boundary.
+
 ## PR-B. Positioned bounds and tail capping
 
 ### buffer-io/positioned-transfer-bounds
