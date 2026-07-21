@@ -1,0 +1,60 @@
+# library/manifest.toml — the inventory of every library/ document.
+#
+# Every document under library/ MUST have exactly one [[document]] entry
+# here (Wave 0 gate 1, docs/program/12-documentation-program.md §2: "a page
+# whose authority class you cannot name is not ready to land"). A gate
+# fails the build if a library/*.md file has no entry, or an entry's path
+# does not exist.
+#
+# Field meaning (research/librarian-documentation-program-proposal.md,
+# "Suggested manifest record"):
+#   path          repo-relative path to the document
+#   kind          the document's shape: portal, explanatory, tutorial,
+#                 how-to, status, reference
+#   audience      who the document is for
+#   authority     exactly one of: derived-reference, explanatory, tutorial,
+#                 how-to, status, normative-pointer (D1 — the closed set)
+#   availability  exactly one of: current, partial, planned, unavailable
+#   sources       "path" or "path#anchor" this document is grounded in;
+#                 an anchor must name a real heading in the target file
+#                 (gate 3) — this is the drift gate D1 requires
+#   validation    which gates apply to this document
+#   owner         the team responsible
+
+[[document]]
+path = "library/README.md"
+kind = "portal"
+audience = ["human-reader"]
+authority = "explanatory"
+availability = "current"
+sources = []
+validation = ["manifest-coverage", "links", "availability-label"]
+owner = "doc"
+
+[[document]]
+path = "library/introduction.md"
+kind = "explanatory"
+audience = ["human-reader"]
+authority = "explanatory"
+availability = "current"
+sources = [
+  "docs/PRINCIPLES.md#1-ken-is-a-software-engineering-language-not-a-programming-language",
+  "docs/PRINCIPLES.md#5-keep-the-tcb-small-permanent-and-auditable--the-de-bruijn-criterion",
+  "docs/PRINCIPLES.md#8-be-honest-about-the-boundary--over-claiming-is-itself-a-failure",
+  "spec/00-overview.md#1-the-verification-thesis",
+  "spec/00-overview.md#5-scope-of-this-specification",
+  "spec/60-security/64-trust-model.md#1-the-trusted-computing-base-tcb-precisely",
+  "spec/20-verification/21-spec-syntax.md#5-the-verification-status-model",
+]
+validation = ["manifest-coverage", "links", "source-anchors", "availability-label"]
+owner = "doc"
+
+[[document]]
+path = "library/STATUS.md"
+kind = "status"
+audience = ["human-reader", "agent-reader"]
+authority = "status"
+availability = "current"
+sources = []
+validation = ["manifest-coverage", "availability-label"]
+owner = "doc"
