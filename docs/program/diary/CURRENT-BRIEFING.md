@@ -106,8 +106,14 @@ it manually, bypassing the gate.
 
 - `docs/program/10-linux-abi-completion.md` — the work Linux ABI II presumes.
   Tracks R/A/M/S/T; **PX9 gates most of Track T**.
-- `docs/program/11-test-suite-and-ci-remediation.md` — QA-advisory sweep +
-  CI throughput. **§1 was corrected 2026-07-21 and the order changed.**
+- `docs/program/11-test-suite-and-ci-remediation.md` — **Track C is DONE.
+  CI went 47 min -> ~8 min, landed `8b09fb95`.** Skip the three slow native
+  binaries + nextest + shard x4 + `opt-level = 2` on deps + rust-cache
+  removed. **Do not shard further** — per-shard parallelism already fell
+  3.96x -> 2.5x, so 8 shards would buy ~90s for double the compute. The next
+  real reduction must come from `CI-SKIPPED-NATIVE-TESTS` getting faster.
+  Details and full scorecard in §1a/§1b. **Track Q (the QA-advisory sweep)
+  is untouched and still the actual point of the program.**
 
   > ★ **I had the CI diagnosis backwards, and the operator caught it.** I
   > claimed a cold dependency build dominated the wall clock. Measured:
