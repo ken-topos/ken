@@ -121,7 +121,7 @@ it manually, bypassing the gate.
   - `px8f_write_partition` ✅ restored, own `native-slow` job. **C6 gave it
     −22.7%** (309s→239s) vs 8.4% suite-wide — C6's benefit is concentrated
     in cranelift-heavy code, exactly as predicted.
-  - `px8f_buffer_native` — ~240s post-C6, fits identically. **Next.**
+  - `px8f_buffer_native` ✅ restored, own `native-buffer` job.
   - `rt_parity_native` — **a ONE-TEST problem.** Parallelizes fine (7 tests,
     266.7s wall / 470.6s CPU), but
     `fs_write_at_malformed_offset_narrows_to_invalid_offset` takes **221.4s**
@@ -129,9 +129,12 @@ it manually, bypassing the gate.
     lands ~90s. **Do not just re-enable it** — today it fits by ~1s, which
     is noise.
 
-  ⚠ **Free win not taken:** the dedicated jobs run `--workspace`, so they
-  compile all 200 test binaries to run one — ~124s wasted per run, paid
-  today by `native-slow`. Scope with `-p <crate> --test <name>` (§1e).
+  ✅ **Dedicated jobs are now scoped** (`-p <crate> --test <name>`), not
+  `--workspace` — that was compiling all 200 test binaries to run one,
+  ~124s of waste per job per run. The `Build` step stays `--workspace`: it
+  is only ~65s and it is what proves the workspace compiles under `--locked`.
+
+  **Only `rt_parity_native` is still skipped, and the target is ONE test.**
 
   > ★ **I had the CI diagnosis backwards, and the operator caught it.** I
   > claimed a cold dependency build dominated the wall clock. Measured:
