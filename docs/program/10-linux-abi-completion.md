@@ -83,11 +83,11 @@ misleading.
 
 | ID | Objective | Owner | Size |
 |---|---|---|---|
-| **R1** | Correct stale capability prose: `Capability/Filesystem/Errors.ken.md` still says filesystem authority is coarse and not path-confined, though scoped roots, rights, symlink policy, and no-follow resolution have landed. | Foundation | S |
-| **R2** | Rename `Capability/Filesystem/Path/Posix.ken.md` — the portability name the Linux-direct ruling rejected. Sweep every citation, not just the file. | Foundation | S |
-| **R3** | Generated inventory of operation identity, availability, rights, request/reply schema, and differential fixture per operation. Derived from the catalog's own structure so a new operation is a build break. Tests assert **named** memberships and properties, never total counts. | Runtime | M |
+| **ABI-R1** | Correct stale capability prose: `Capability/Filesystem/Errors.ken.md` still says filesystem authority is coarse and not path-confined, though scoped roots, rights, symlink policy, and no-follow resolution have landed. | Foundation | S |
+| **ABI-R2** | Rename `Capability/Filesystem/Path/Posix.ken.md` — the portability name the Linux-direct ruling rejected. Sweep every citation, not just the file. | Foundation | S |
+| **ABI-R3** | Generated inventory of operation identity, availability, rights, request/reply schema, and differential fixture per operation. Derived from the catalog's own structure so a new operation is a build break. Tests assert **named** memberships and properties, never total counts. | Runtime | M |
 
-**R3 is the load-bearing one.** It is the same mechanism SEAL-2 builds for
+**ABI-R3 is the load-bearing one.** It is the same mechanism SEAL-2 builds for
 carrier producers, applied to the operation catalog: an enumeration derived
 from structure rather than restated by hand. Every later track adds
 operations, and each one is a chance for a hand-maintained list to drift.
@@ -96,22 +96,22 @@ operations, and each one is a chance for a hand-maintained list to drift.
 
 | ID | Objective | Owner | Size |
 |---|---|---|---|
-| **A1** | Promote `ConsoleRead` and `ClockWallNow` to `NativeTested` with differential evidence. | Runtime | M |
-| **A2** | Promote `FsAppendFile`, `FsMetadata`, `FsRename`. | Runtime | M |
-| **A3** | Promote `FsReadDirectory`, `FsCreateDirectory`, `FsRemoveFile`, `FsRemoveDirectory`. | Runtime | M |
+| **ABI-A1** | Promote `ConsoleRead` and `ClockWallNow` to `NativeTested` with differential evidence. | Runtime | M |
+| **ABI-A2** | Promote `FsAppendFile`, `FsMetadata`, `FsRename`. | Runtime | M |
+| **ABI-A3** | Promote `FsReadDirectory`, `FsCreateDirectory`, `FsRemoveFile`, `FsRemoveDirectory`. | Runtime | M |
 
-Split by evidence shape rather than by count: A1 is
-console/clock (nondeterministic observation, needs normalized comparison), A2
-is metadata/rename (path-policy interaction), A3 is directory mutation
-(ordering and partial-failure semantics). **A3 depends on R3** so the
+Split by evidence shape rather than by count: ABI-A1 is
+console/clock (nondeterministic observation, needs normalized comparison), ABI-A2
+is metadata/rename (path-policy interaction), ABI-A3 is directory mutation
+(ordering and partial-failure semantics). **ABI-A3 depends on ABI-R3** so the
 promotions land against a derived inventory rather than a hand-edited one.
 
 ### Track M — manifest v2, native-target only
 
 | ID | Objective | Owner | Size |
 |---|---|---|---|
-| **M1** | Family-scoped, versioned manifest generated from family schemas rather than one growing handwritten list: target identity (arch, pointer width, endianness, C scalar widths/alignments), constants and record layouts per enabled family, facility ABI versions, canonical hashes per family projection. | Runtime + Foundation | L |
-| **M2** | Runtime facility/operation **probes**, distinct from build-time facts. A minimum kernel version is release metadata, not an availability contract — backports and configuration mean support is per-operation. Unavailability is a stable named result, never a silent fallback. | Runtime | M |
+| **ABI-M1** | Family-scoped, versioned manifest generated from family schemas rather than one growing handwritten list: target identity (arch, pointer width, endianness, C scalar widths/alignments), constants and record layouts per enabled family, facility ABI versions, canonical hashes per family projection. | Runtime + Foundation | L |
+| **ABI-M2** | Runtime facility/operation **probes**, distinct from build-time facts. A minimum kernel version is release metadata, not an availability contract — backports and configuration mean support is per-operation. Unavailability is a stable named result, never a silent fallback. | Runtime | M |
 
 **Explicitly out:** cross-target generation, signed or content-addressed
 manifests, CI native-builder matrices. Deferred per §3.
@@ -121,12 +121,12 @@ manifests, CI native-builder matrices. Deferred per §3.
 | ID | Objective | Owner | Size |
 |---|---|---|---|
 | **PX9** | **Cross-domain `System.Error`** — the charter's own undelivered WP. Semantic identity, raw errno where present, operation, resource, and safe context; retry/interruption/transience classification that does **not** promise retry is always safe. Must reach beyond filesystem: process, socket, and later completion contexts. | Foundation | L |
-| **S1** | Descriptor completion: seek, truncate, sync/data-sync, flags, duplication under explicit inheritance policy, descriptor metadata. | Runtime | M |
-| **S2** | Directory streaming (supersedes A3's whole-directory read where streaming is the honest shape). | Runtime | M |
-| **S3** | Monotonic clocks, sleep/deadlines, secure kernel entropy. | Runtime | M |
-| **S4** | `statx`-shaped metadata with field-availability bits. | Runtime | M |
-| **S5** | Terminal basics and process signal disposition needed at the executable edge. | Runtime | M |
-| **S6** | Ordinary anonymous and file-backed mappings as **opaque runtime-owned regions and bounded byte views** — never Ken pointers. Supplies the mapping/lifetime/bounded-access substrate that L2-8 MMIO later builds on. | Runtime + Foundation | L |
+| **ABI-S1** | Descriptor completion: seek, truncate, sync/data-sync, flags, duplication under explicit inheritance policy, descriptor metadata. | Runtime | M |
+| **ABI-S2** | Directory streaming (supersedes ABI-A3's whole-directory read where streaming is the honest shape). | Runtime | M |
+| **ABI-S3** | Monotonic clocks, sleep/deadlines, secure kernel entropy. | Runtime | M |
+| **ABI-S4** | `statx`-shaped metadata with field-availability bits. | Runtime | M |
+| **ABI-S5** | Terminal basics and process signal disposition needed at the executable edge. | Runtime | M |
+| **ABI-S6** | Ordinary anonymous and file-backed mappings as **opaque runtime-owned regions and bounded byte views** — never Ken pointers. Supplies the mapping/lifetime/bounded-access substrate that L2-8 MMIO later builds on. | Runtime + Foundation | L |
 
 **PX9 gates most of Track T.** Sockets and processes need error context that
 the filesystem floor cannot express, and retrofitting it afterwards means
@@ -144,49 +144,49 @@ re-touching every operation added in between.
 
 ```mermaid
 flowchart TD
-    R1[R1 stale capability prose]
-    R2[R2 Posix naming sweep]
-    R3[R3 derived operation inventory]
-    A1[A1 console and clock]
-    A2[A2 metadata and rename]
-    A3[A3 directory mutation]
-    M1[M1 family-scoped manifest]
-    M2[M2 runtime probes]
+    ABI_R1[ABI-R1 stale capability prose]
+    ABI_R2[ABI-R2 Posix naming sweep]
+    ABI_R3[ABI-R3 derived operation inventory]
+    ABI_A1[ABI-A1 console and clock]
+    ABI_A2[ABI-A2 metadata and rename]
+    ABI_A3[ABI-A3 directory mutation]
+    ABI_M1[ABI-M1 family-scoped manifest]
+    ABI_M2[ABI-M2 runtime probes]
     PX8[PX8 partial IO - IN FLIGHT]
     PX9[PX9 cross-domain System.Error]
-    S1[S1 descriptor completion]
-    S2[S2 directory streaming]
-    S3[S3 clocks sleep entropy]
-    S4[S4 statx metadata]
-    S5[S5 terminal and signals]
-    S6[S6 opaque mappings]
+    ABI_S1[ABI-S1 descriptor completion]
+    ABI_S2[ABI-S2 directory streaming]
+    ABI_S3[ABI-S3 clocks sleep entropy]
+    ABI_S4[ABI-S4 statx metadata]
+    ABI_S5[ABI-S5 terminal and signals]
+    ABI_S6[ABI-S6 opaque mappings]
     PX10[PX10 processes]
     PX11[PX11 sockets and resolver]
     PX12[PX12 nonblocking and event loop]
 
-    PX8 --> R3
-    R3 --> A1
-    R3 --> A2
-    R3 --> A3
-    R3 --> M1
-    M1 --> M2
+    PX8 --> ABI_R3
+    ABI_R3 --> ABI_A1
+    ABI_R3 --> ABI_A2
+    ABI_R3 --> ABI_A3
+    ABI_R3 --> ABI_M1
+    ABI_M1 --> ABI_M2
     PX8 --> PX9
-    PX9 --> S1
-    A3 --> S2
-    PX9 --> S5
-    M1 --> S4
-    S1 --> S6
+    PX9 --> ABI_S1
+    ABI_A3 --> ABI_S2
+    PX9 --> ABI_S5
+    ABI_M1 --> ABI_S4
+    ABI_S1 --> ABI_S6
     PX9 --> PX10
-    M1 --> PX10
-    S5 --> PX10
+    ABI_M1 --> PX10
+    ABI_S5 --> PX10
     PX9 --> PX11
-    M1 --> PX11
+    ABI_M1 --> PX11
     PX10 --> PX12
     PX11 --> PX12
-    S3 --> PX12
+    ABI_S3 --> PX12
 ```
 
-R1 and R2 are documentation-only and depend on nothing.
+ABI-R1 and ABI-R2 are documentation-only and depend on nothing.
 
 ## 6. Exit
 
@@ -218,18 +218,20 @@ Linux ABI II (L2-4 … L2-8) starts from there.
 The operator owns schedule and budget. What this document owes is **delivered
 work per token**, and the graph above is shaped for it:
 
-- **R3 before A1–A3 and M1.** Every one of those adds operations. Landing the
+- **ABI-R3 before ABI-A1–ABI-A3 and ABI-M1.** Every one of those adds
+  operations. Landing the
   derived inventory first means each later WP extends a generated structure
   instead of re-litigating a hand-maintained list — and it converts the
   drift class into a build break. Doing it after would mean re-touching every
   operation added in between.
 - **PX9 before PX10/PX11.** Same argument, stronger: error context retrofitted
   after sockets and processes exist means re-opening both.
-- **A1/A2/A3 split by evidence shape, not by count.** Operations sharing an
+- **ABI-A1/ABI-A2/ABI-A3 split by evidence shape, not by count.** Operations
+  sharing an
   evidence shape share elaboration; a ring that has just reasoned about
   normalized nondeterministic observation should spend that context on all of
   it, not half.
-- **R1 and R2 are unblocked doc-only work.** They are the right filler for a
+- **ABI-R1 and ABI-R2 are unblocked doc-only work.** They are the right filler for a
   window where the enclave or a build ring is otherwise blocked, and they cost
   a T2 seat rather than a T1 one.
 - **Frames must state the mechanism, not name one.** The last two weeks cost
@@ -261,15 +263,15 @@ not from memory:
 
 | Track | Items | Issues existing |
 |---|---|---|
-| R — reconcile | R1, R2, R3 | **0 of 3** |
-| A — availability | A1, A2, A3 | **0 of 3** |
-| M — manifest | M1, M2 | **0 of 2** |
-| S — synchronous floor | PX9, S1–S6 | **0 of 7** |
+| R — reconcile | ABI-R1, ABI-R2, ABI-R3 | **0 of 3** |
+| A — availability | ABI-A1, ABI-A2, ABI-A3 | **0 of 3** |
+| M — manifest | ABI-M1, ABI-M2 | **0 of 2** |
+| S — synchronous floor | PX9, ABI-S1–ABI-S6 | **0 of 7** |
 | T — committed exit | PX10, PX11, PX12 | **0 of 3** |
 
 **0 of 18.** The only node of §5's graph with live work is **PX8**, its
 root, in flight as `BUDGET-EFF` / `SEAL-2` / `RT-ESCAPE` / `RT-SPLIT`
-(+ merged `SPAN-SEAL`, `RT-PARITY`). Everything downstream of `PX8 --> R3`
+(+ merged `SPAN-SEAL`, `RT-PARITY`). Everything downstream of `PX8 --> ABI-R3`
 and `PX8 --> PX9` is unframed. This document is the whole record of it.
 
 ### 9.1 ⚠ Gap in this document — the runtime revocation membrane
@@ -300,17 +302,31 @@ not expressible to test.
 own disposition (fold vs. split) was never exercised, and Track T is a
 resource explosion that would inherit the hole.
 
-### 9.2 ⚠ ID collisions — resolve before framing
+### 9.2 ID collisions — RESOLVED by rename (operator, 2026-07-21)
 
-- **`A3`** — this document's A3 (directory-mutation availability promotion)
-  collides with the **existing** `docs/program/issues/A3.md`
-  (*catalog-coverage walker*, blocks `F4`). Two live meanings, one ID.
-- **`R1`/`R2`/`R3`** — Track R's IDs collide with the adversary's finding
-  labels `R1`–`R4` already in circulation (`Q-CLAIM-CLOSURE`, and
-  `BUDGET-EFF`'s origin line cites *"adversary R1"*).
+Tracks R/A/M/S were bare letter-number IDs that collided with live work:
 
-Renaming Track R/A here is cheaper than renaming a landed issue. Doing it
-after framing means re-touching every citation — the exact drift class R3
-exists to convert into a build break.
+- **`A3`** collided with `docs/program/issues/A3.md` (*catalog-coverage
+  walker*, blocks `F4`) — two meanings, one ID.
+- **`R1`–`R3`** collided with the adversary's finding labels `R1`–`R4`
+  already in circulation (`Q-CLAIM-CLOSURE`; `BUDGET-EFF`'s origin line
+  cites *"adversary R1"*).
+- **`S1`–`S6`**, **`M1`–`M2`**, **`A1`–`A2`** were unclaimed but equally
+  unqualified, and every later citation would inherit the ambiguity.
+
+**All four tracks now carry the `ABI-` prefix** — `ABI-R1`…`ABI-S6`. The
+prefix is free repo-wide (checked) and states what the work is. **`L`** was
+rejected: `L1`–`L7` are existing work packages in `docs/program/wp/`, and
+`L2-*` is the advisory's own track namespace.
+
+**`PX9`–`PX12` keep their charter IDs unchanged.** They are not new IDs —
+they are the first campaign's own undelivered work packages, and renaming
+them would break the charter's citations for no gain. Subsume, don't
+proliferate.
+
+Renaming now was the cheap moment: nothing here is framed, so no branch,
+brief, or issue file cites the old form. After framing it would have meant
+re-touching every citation — the exact drift class `ABI-R3` exists to
+convert into a build break.
 
 [charter]: 09-posix-linux-abi-campaign.md
