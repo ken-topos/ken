@@ -85,7 +85,13 @@ defect from the same sentence. So:
 
 ## ★★ THIS IS A PLUMBING GAP, NOT A WRONG SUBTRACTION — size it accordingly
 
-**Confirmed by EXECUTION**, not inference: `adversary/R1-effective-request-repro
+⛔ **CORRECTED — this section previously read "Confirmed by EXECUTION, not
+inference." That was FALSE** (Steward, 2026-07-21). The R1 oracle never reads
+a reifier field, so its failure is not evidence of anything; see AC-3. **The
+defect rests on SOURCE INSPECTION** of the two reifiers, which is strong but is
+not execution. Producing a real executable demonstration is part of this WP.
+
+Reference: `adversary/R1-effective-request-repro
 @ 06bb9538` (local, unpushed; lives in the `effect_v1` dispatch test module
 because it needs module-private `PositionedBackend`). Fails at `e892777c`:
 
@@ -132,10 +138,40 @@ the Architect with the enclave ruling**, before sizing the implementation half.
 implementation.** A differential between interp and native is **not** acceptable
 evidence for this AC; it is the instrument that missed the defect. Assert the
 absolute property (`request_budget == effective`) on each side independently.
-**AC-3** — the adversary's R1 oracle at
-`adversary/R1-effective-request-repro @ 06bb9538` (expected-fail at
-`e892777c`) **passes, unchanged**. It is the completion check; do not edit it to
-fit the fix.
+**AC-3 — ⛔ REWRITTEN 2026-07-21. The previous wording was VOID and the
+error was the Steward's.** It said the R1 oracle at
+`adversary/R1-effective-request-repro @ 06bb9538` must *"pass, unchanged"*.
+**That is impossible, and not because of anything an implementer could do.**
+The oracle's conclusion is:
+
+```rust
+let derived_remaining = RAW_LENGTH - count;   // 8 - 4 = 4
+let spec_remaining    = effective - count;    // 4 - 4 = 0
+assert_eq!(derived_remaining, spec_remaining) // 4 == 0 — always fails
+```
+
+**Both sides are computed from the test's own constants. It never observes a
+reifier field** — not `remaining`, not `transfer_count_request_budget`. It
+fails identically against a perfect implementation, so its observed failure at
+`e892777c` confirmed nothing. It is a *proxy* (arithmetic over its own
+literals) standing in for the *mechanism*, which is precisely the defect class
+`Q-RESIDUE` existed to remove. Its commit message compounds this: the
+"absolute oracle" and "not green-for-the-wrong-reason" claims describe the
+three **premise** assertions, which do pass and do exercise the tail cap — the
+**conclusion** reaches nothing. The failure message quotes "the reified count
+reports N bytes remaining" where every number is the test's own literal.
+
+**AC-3, corrected:** the R1 oracle is **rewritten to read the reifier's actual
+output** and assert it equals `effective - count`, on **both** interp and
+native. It then passes. **"Unchanged" is withdrawn** — it pinned a broken
+instrument as the definition of done.
+
+> ⚠ **The general lesson, worth more than this WP.** An adversary's repro is
+> built to *demonstrate a defect* (expected-fail); a completion oracle is built
+> to *define correctness*. **They are different artifacts and one does not
+> become the other by being pinned.** Before pinning any oracle as an AC,
+> verify it observes the mechanism — a red result is not evidence that it
+> can ever go green for the right reason.
 **AC-4** — `38` is self-consistent at `:404-405`, `:419-420`, `:438-440`,
 `:443-444`; no site still says `≤ requested` if the ruling is `effective`.
 **AC-5** — the catalog lemma/contract are re-grounded on the settled bound.

@@ -15,8 +15,14 @@ Adversary-confirmed (finding R1) violation of **locked**
 `spec/30-surface/38-ffi-io.md`: `TransferCount.remaining` must be bounded by
 the *effective* request, but the host clamps instead of rejecting, and
 validates against the wrong bound. Fail-closed — not memory-unsafe, not a
-forgery, not a parity bug: wrong value, right memory. Confirmed by execution
-(`adversary/R1-effective-request-repro @ 06bb9538`, fails at `e892777c`).
+forgery, not a parity bug: wrong value, right memory. Identified by **source inspection** of the two reifiers — ⛔ **NOT** confirmed
+by execution; the earlier claim to that effect was false
+(`adversary/R1-effective-request-repro @ 06bb9538` fails at `e892777c`, but its
+conclusion never reads a reifier field).
+⚠ **That oracle's final assertion is itself broken** — it compares constants
+and never reads a reifier field, so it fails regardless of implementation.
+**AC-3 is rewritten**: the oracle must be re-derived to observe the mechanism,
+NOT passed unchanged. See the brief's AC-3.
 
 This is a **plumbing gap, not a formula fix**: `effective` is discarded at
 validation and reaches neither reifier, so two closures see different blast
