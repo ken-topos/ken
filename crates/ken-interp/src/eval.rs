@@ -6108,204 +6108,229 @@ mod px5b_effect_observation_tests {
     //   proof for them. Recorded so they are never cited as flip evidence.
     #[test]
     fn rt_parity_buffer_allocate_rejects_malformed_capacity_exactly() {
-        with_host_width_fixture("allocate", |ids, fs, mut store, host, mut resources, _, _| {
-        let malformed_allocate =
-            allocate_buffer(-1, &mut *host, &mut resources, &fs, &ids, &mut store);
-        expect_resource_error(&malformed_allocate, fs.invalid_bounds_id, &ids);
-        });
+        with_host_width_fixture(
+            "allocate",
+            |ids, fs, mut store, host, mut resources, _, _| {
+                let malformed_allocate =
+                    allocate_buffer(-1, &mut *host, &mut resources, &fs, &ids, &mut store);
+                expect_resource_error(&malformed_allocate, fs.invalid_bounds_id, &ids);
+            },
+        );
     }
 
     #[test]
     fn rt_parity_fs_read_at_rejects_malformed_offset_exactly() {
-        with_host_width_fixture("read", |ids, fs, mut store, host, mut resources, read_cap, _| {
-        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
-        let read_file = open_file(
-            b"source",
-            read_mode,
-            read_cap,
-            &mut *host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
+        with_host_width_fixture(
+            "read",
+            |ids, fs, mut store, host, mut resources, read_cap, _| {
+                let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
+                let read_file = open_file(
+                    b"source",
+                    read_mode,
+                    read_cap,
+                    &mut *host,
+                    &mut resources,
+                    &fs,
+                    &ids,
+                    &mut store,
+                );
+                let buffer_result =
+                    allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+                let buffer = expect_resource_token(&buffer_result, &ids);
+                let result = run_fs(
+                    fs.private_fs_read_at_id,
+                    &[
+                        EvalVal::Unknown,
+                        EvalVal::ResourceToken(read_file),
+                        EvalVal::Int(-1),
+                        EvalVal::ResourceToken(buffer),
+                        EvalVal::Int(0),
+                        EvalVal::Int(1),
+                    ],
+                    &mut *host,
+                    &mut resources,
+                    &fs,
+                    &ids,
+                    &mut store,
+                );
+                expect_resource_error(&result, fs.invalid_offset_id, &ids);
+            },
         );
-        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
-        let buffer = expect_resource_token(&buffer_result, &ids);
-        let result = run_fs(
-            fs.private_fs_read_at_id,
-            &[
-                EvalVal::Unknown,
-                EvalVal::ResourceToken(read_file),
-                EvalVal::Int(-1),
-                EvalVal::ResourceToken(buffer),
-                EvalVal::Int(0),
-                EvalVal::Int(1),
-            ],
-            &mut *host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
-        );
-        expect_resource_error(&result, fs.invalid_offset_id, &ids);
-        });
     }
 
     #[test]
     fn rt_parity_fs_write_at_rejects_malformed_offset_exactly() {
-        with_host_width_fixture("write", |ids, fs, mut store, host, mut resources, _, full_cap| {
-        let create_keep = make_ctor(fs.create_or_keep_id, vec![], &mut store);
-        let write_mode = make_ctor(fs.resource_write_create_id, vec![create_keep], &mut store);
-        let write_file = open_file(
-            b"target",
-            write_mode,
-            full_cap,
-            &mut *host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
+        with_host_width_fixture(
+            "write",
+            |ids, fs, mut store, host, mut resources, _, full_cap| {
+                let create_keep = make_ctor(fs.create_or_keep_id, vec![], &mut store);
+                let write_mode =
+                    make_ctor(fs.resource_write_create_id, vec![create_keep], &mut store);
+                let write_file = open_file(
+                    b"target",
+                    write_mode,
+                    full_cap,
+                    &mut *host,
+                    &mut resources,
+                    &fs,
+                    &ids,
+                    &mut store,
+                );
+                let buffer_result =
+                    allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+                let buffer = expect_resource_token(&buffer_result, &ids);
+                let result = run_fs(
+                    fs.private_fs_write_at_id,
+                    &[
+                        EvalVal::Unknown,
+                        EvalVal::ResourceToken(write_file),
+                        EvalVal::Int(-1),
+                        EvalVal::ResourceToken(buffer),
+                        EvalVal::Int(0),
+                        EvalVal::Int(1),
+                    ],
+                    &mut *host,
+                    &mut resources,
+                    &fs,
+                    &ids,
+                    &mut store,
+                );
+                expect_resource_error(&result, fs.invalid_offset_id, &ids);
+            },
         );
-        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
-        let buffer = expect_resource_token(&buffer_result, &ids);
-        let result = run_fs(
-            fs.private_fs_write_at_id,
-            &[
-                EvalVal::Unknown,
-                EvalVal::ResourceToken(write_file),
-                EvalVal::Int(-1),
-                EvalVal::ResourceToken(buffer),
-                EvalVal::Int(0),
-                EvalVal::Int(1),
-            ],
-            &mut *host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
-        );
-        expect_resource_error(&result, fs.invalid_offset_id, &ids);
-        });
     }
 
     #[test]
     fn rt_parity_buffer_freeze_rejects_malformed_bounds_exactly() {
         with_host_width_fixture("freeze", |ids, fs, mut store, host, mut resources, _, _| {
-        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
-        let buffer = expect_resource_token(&buffer_result, &ids);
-        let result = run_fs(
-            fs.private_buffer_freeze_id,
-            &[
-                EvalVal::Unknown,
-                EvalVal::ResourceToken(buffer),
-                EvalVal::Int(-1),
-                EvalVal::Int(1),
-            ],
-            &mut *host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
-        );
-        expect_resource_error(&result, fs.invalid_bounds_id, &ids);
+            let buffer_result =
+                allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+            let buffer = expect_resource_token(&buffer_result, &ids);
+            let result = run_fs(
+                fs.private_buffer_freeze_id,
+                &[
+                    EvalVal::Unknown,
+                    EvalVal::ResourceToken(buffer),
+                    EvalVal::Int(-1),
+                    EvalVal::Int(1),
+                ],
+                &mut *host,
+                &mut resources,
+                &fs,
+                &ids,
+                &mut store,
+            );
+            expect_resource_error(&result, fs.invalid_bounds_id, &ids);
         });
     }
 
     #[test]
     fn rt_parity_malformed_read_offset_precedes_closed_resource() {
-        with_host_width_fixture("read-closed", |ids, fs, mut store, host, mut resources, read_cap, _| {
-        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
-        let read_file = open_file(
-            b"source",
-            read_mode,
-            read_cap,
-            &mut *host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
+        with_host_width_fixture(
+            "read-closed",
+            |ids, fs, mut store, host, mut resources, read_cap, _| {
+                let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
+                let read_file = open_file(
+                    b"source",
+                    read_mode,
+                    read_cap,
+                    &mut *host,
+                    &mut resources,
+                    &fs,
+                    &ids,
+                    &mut store,
+                );
+                let buffer_result =
+                    allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+                let buffer = expect_resource_token(&buffer_result, &ids);
+                release_resource(read_file, &mut *host, &mut resources, &fs, &ids, &mut store);
+                let read_closed_overlap = run_fs(
+                    fs.private_fs_read_at_id,
+                    &[
+                        EvalVal::Unknown,
+                        EvalVal::ResourceToken(read_file),
+                        EvalVal::Int(-1),
+                        EvalVal::ResourceToken(buffer),
+                        EvalVal::Int(0),
+                        EvalVal::Int(1),
+                    ],
+                    &mut *host,
+                    &mut resources,
+                    &fs,
+                    &ids,
+                    &mut store,
+                );
+                expect_resource_error(&read_closed_overlap, fs.invalid_offset_id, &ids);
+            },
         );
-        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
-        let buffer = expect_resource_token(&buffer_result, &ids);
-        release_resource(read_file, &mut *host, &mut resources, &fs, &ids, &mut store);
-        let read_closed_overlap = run_fs(
-            fs.private_fs_read_at_id,
-            &[
-                EvalVal::Unknown,
-                EvalVal::ResourceToken(read_file),
-                EvalVal::Int(-1),
-                EvalVal::ResourceToken(buffer),
-                EvalVal::Int(0),
-                EvalVal::Int(1),
-            ],
-            &mut *host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
-        );
-        expect_resource_error(&read_closed_overlap, fs.invalid_offset_id, &ids);
-        });
     }
 
     #[test]
     fn rt_parity_malformed_write_offset_precedes_missing_right() {
-        with_host_width_fixture("write-right", |ids, fs, mut store, host, mut resources, read_cap, _| {
-        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
-        let read_only_file = open_file(
-            b"source",
-            read_mode,
-            read_cap,
-            &mut *host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
+        with_host_width_fixture(
+            "write-right",
+            |ids, fs, mut store, host, mut resources, read_cap, _| {
+                let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
+                let read_only_file = open_file(
+                    b"source",
+                    read_mode,
+                    read_cap,
+                    &mut *host,
+                    &mut resources,
+                    &fs,
+                    &ids,
+                    &mut store,
+                );
+                let buffer_result =
+                    allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+                let buffer = expect_resource_token(&buffer_result, &ids);
+                let write_right_overlap = run_fs(
+                    fs.private_fs_write_at_id,
+                    &[
+                        EvalVal::Unknown,
+                        EvalVal::ResourceToken(read_only_file),
+                        EvalVal::Int(-1),
+                        EvalVal::ResourceToken(buffer),
+                        EvalVal::Int(0),
+                        EvalVal::Int(1),
+                    ],
+                    &mut *host,
+                    &mut resources,
+                    &fs,
+                    &ids,
+                    &mut store,
+                );
+                expect_resource_error(&write_right_overlap, fs.invalid_offset_id, &ids);
+            },
         );
-        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
-        let buffer = expect_resource_token(&buffer_result, &ids);
-        let write_right_overlap = run_fs(
-            fs.private_fs_write_at_id,
-            &[
-                EvalVal::Unknown,
-                EvalVal::ResourceToken(read_only_file),
-                EvalVal::Int(-1),
-                EvalVal::ResourceToken(buffer),
-                EvalVal::Int(0),
-                EvalVal::Int(1),
-            ],
-            &mut *host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
-        );
-        expect_resource_error(&write_right_overlap, fs.invalid_offset_id, &ids);
-        });
     }
 
     #[test]
     fn rt_parity_malformed_freeze_bounds_precede_closed_resource() {
-        with_host_width_fixture("freeze-closed", |ids, fs, mut store, host, mut resources, _, _| {
-        let buffer_result = allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
-        let buffer = expect_resource_token(&buffer_result, &ids);
-        release_resource(buffer, &mut *host, &mut resources, &fs, &ids, &mut store);
-        let freeze_closed_overlap = run_fs(
-            fs.private_buffer_freeze_id,
-            &[
-                EvalVal::Unknown,
-                EvalVal::ResourceToken(buffer),
-                EvalVal::Int(-1),
-                EvalVal::Int(1),
-            ],
-            &mut *host,
-            &mut resources,
-            &fs,
-            &ids,
-            &mut store,
+        with_host_width_fixture(
+            "freeze-closed",
+            |ids, fs, mut store, host, mut resources, _, _| {
+                let buffer_result =
+                    allocate_buffer(8, &mut *host, &mut resources, &fs, &ids, &mut store);
+                let buffer = expect_resource_token(&buffer_result, &ids);
+                release_resource(buffer, &mut *host, &mut resources, &fs, &ids, &mut store);
+                let freeze_closed_overlap = run_fs(
+                    fs.private_buffer_freeze_id,
+                    &[
+                        EvalVal::Unknown,
+                        EvalVal::ResourceToken(buffer),
+                        EvalVal::Int(-1),
+                        EvalVal::Int(1),
+                    ],
+                    &mut *host,
+                    &mut resources,
+                    &fs,
+                    &ids,
+                    &mut store,
+                );
+                expect_resource_error(&freeze_closed_overlap, fs.invalid_bounds_id, &ids);
+            },
         );
-        expect_resource_error(&freeze_closed_overlap, fs.invalid_bounds_id, &ids);
-        });
     }
 
     #[test]
