@@ -75,16 +75,29 @@ of one function:
   - a definition's **surface effect row** — `ElabEnv.effect_rows:
     HashMap<String, effects::RowType>` is populated for already-elaborated
     definitions;
-  - the **class/instance/law registry** — `ElabEnv.class_env: ClassEnv`
-    exposes `classes: HashMap<String, ClassInfo>` and
-    `instances: HashMap<(String, String), InstanceInfo>` directly. This
-    earlier draft said laws had no producer at all; that was wrong —
+  - the **class/instance registry** — `ElabEnv.class_env: ClassEnv`
+    exposes `classes: HashMap<String, ClassInfo>` (each with
+    `field_names: Vec<String>` and `field_types: Vec<Term>`, a real
+    Σ-telescope) and `instances: HashMap<(String, String), InstanceInfo>`
+    directly. **Narrower than this note's prior draft claimed:** `ClassEnv`
+    is a class/instance registry, not a distinct law/proof inventory —
+    it holds no separate list of `law`/`proof` declarations. An Ω-sorted
+    (property) field is a `ClassInfo` field like any other; "which fields
+    are laws" is derivable from `field_types`' sorts, not read off a
+    dedicated law registry, because there isn't one. The prior draft's
+    "law registry" claim promoted the API beyond what it exposes;
     corrected here rather than left standing.
 - **Inspectable via derived traversal, not a one-call fact:**
   - a **human-readable signature** — the `ty: Term` above is a raw kernel
-    core term, not surface syntax; rendering it needs the formatter
-    (`ken_elaborator::layout::format_ken` or an equivalent core-term
-    printer), and that path has not been exercised for this purpose;
+    core term. **Correction:** `ken_elaborator::layout::format_ken` does
+    **not** render one — its signature is `format_ken(source: &str) ->
+    Result<String, ElabError>`; it parses and formats Ken *surface source
+    text*, not a kernel `Term`. A grep across `ken-kernel` and
+    `ken-elaborator` for a `Term`-to-surface printer (a `Display` impl or
+    an equivalent pretty-printer) found none. Rendering a readable
+    signature from `ty: Term` needs a core-term printer that does not
+    exist yet in either crate — Wave 5 has to build one, not reuse
+    `format_ken`;
   - **dependencies** between declarations — walkable from a `Term`'s free
     variables by the same traversal `trusted_base_delta` already performs,
     but no ready-made "package dependency list" call exists yet.
@@ -101,10 +114,12 @@ of one function:
     did not do. Recorded as **unconfirmed**, not as a negative.
 
 Wave 5 should budget accordingly: "write an exporter over already-
-inspectable facts" for declarations/trusted-base/effects/laws, "add a
-core-term-to-signature and dependency traversal" for the second tier, and
-"first confirm whether a producer exists at all" for capabilities and
-platform availability before assuming a new surface is needed there too.
+inspectable facts" for declarations/trusted-base/effects/class-instances
+(deriving law-field facts from `ClassInfo.field_types`' sorts, not from a
+dedicated law registry), "build a core-term-to-signature printer plus a
+dependency traversal" for the second tier, and "first confirm whether a
+producer exists at all" for capabilities and platform availability before
+assuming a new surface is needed there too.
 Any fact that turns out to have no producer gets **authored and labelled
 as authored**, never generated-looking prose
 (`docs/program/12-documentation-program.md` D4 note).

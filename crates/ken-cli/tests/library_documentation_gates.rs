@@ -8,6 +8,9 @@
 //!     audience, authority, availability, sources, validation, owner —
 //!     all non-empty) and no `path` repeats (AC1: a page whose fields
 //!     can silently go missing is not "declaring what it is").
+//! 1c. `validation` is a closed, known vocabulary that names exactly the
+//!     checks this file actually runs against that record — not free
+//!     prose (AC1: "how its currency is checked" must be mechanical).
 //! 2. internal links resolve to a real file **and a real anchor**
 //!    (same-file or cross-file), and external links are syntactically
 //!    well-formed;
@@ -298,6 +301,72 @@ fn gate_manifest_records_declare_the_complete_required_shape_and_unique_paths() 
     assert!(
         bad.is_empty(),
         "manifest record(s) with a missing required field or a duplicate path:\n{}",
+        bad.join("\n")
+    );
+}
+
+// `validation` names which checks apply to a record — it must be a closed,
+// known vocabulary tied 1:1 to the gates this file actually runs, not free
+// prose (librarian QA, thr_74hvpkqnxjp9q, second pass, finding 2): a
+// `["banana"]` list passed every other gate. Every current gate below runs
+// unconditionally over every entry except `generated-current`
+// (`status_md_generation_is_idempotent`), which only applies to the one
+// generated (`kind = "status"`) document — so the applicable set is exact,
+// not merely a subset check.
+const KNOWN_VALIDATION_TOKENS: &[&str] = &[
+    "manifest-coverage",
+    "manifest-completeness",
+    "links",
+    "source-anchors",
+    "availability-label",
+    "authority-class",
+    "generated-current",
+];
+
+fn applicable_validation_tokens(entry: &DocEntry) -> BTreeSet<&'static str> {
+    let mut set: BTreeSet<&'static str> = [
+        "manifest-coverage",
+        "manifest-completeness",
+        "links",
+        "source-anchors",
+        "availability-label",
+        "authority-class",
+    ]
+    .into_iter()
+    .collect();
+    if entry.kind == "status" {
+        set.insert("generated-current");
+    }
+    set
+}
+
+#[test]
+fn gate_validation_tokens_are_closed_and_match_applicable_checks() {
+    let entries = load_manifest();
+    let mut bad = Vec::new();
+
+    for entry in &entries {
+        for tok in &entry.validation {
+            if !KNOWN_VALIDATION_TOKENS.contains(&tok.as_str()) {
+                bad.push(format!(
+                    "{}: unknown validation token {tok:?} (known: {KNOWN_VALIDATION_TOKENS:?})",
+                    entry.path
+                ));
+            }
+        }
+        let declared: BTreeSet<&str> = entry.validation.iter().map(String::as_str).collect();
+        let required = applicable_validation_tokens(entry);
+        if declared != required {
+            bad.push(format!(
+                "{}: validation {declared:?} does not exactly match the applicable checks {required:?}",
+                entry.path
+            ));
+        }
+    }
+
+    assert!(
+        bad.is_empty(),
+        "document(s) with an unknown or incomplete validation list:\n{}",
         bad.join("\n")
     );
 }

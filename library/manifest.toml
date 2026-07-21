@@ -18,8 +18,19 @@
 #   sources       "path" or "path#anchor" this document is grounded in;
 #                 an anchor must name a real heading in the target file
 #                 (gate 3) — this is the drift gate D1 requires
-#   validation    which gates apply to this document
+#   validation    the CLOSED set of gate names that apply to this record:
+#                 manifest-coverage, manifest-completeness, links,
+#                 source-anchors, availability-label, authority-class
+#                 (all documents), plus generated-current (status docs
+#                 only) — see KNOWN_VALIDATION_TOKENS in
+#                 crates/ken-cli/tests/library_documentation_gates.rs,
+#                 the single source of truth for this vocabulary
 #   owner         the team responsible
+#
+# library/REVISION holds the explicit, hand-set validated repository
+# revision library/STATUS.md is generated against (scripts/gen-doc-
+# status.sh) — never derived from live `git rev-parse HEAD`, which is
+# self-referential for the commit that updates STATUS.md itself.
 
 [[document]]
 path = "library/README.md"
@@ -30,7 +41,14 @@ availability = "current"
 sources = [
   "docs/program/12-documentation-program.md#1-the-four-decisions--settled",
 ]
-validation = ["manifest-coverage", "links", "source-anchors", "availability-label"]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+]
 owner = "doc"
 
 [[document]]
@@ -48,7 +66,14 @@ sources = [
   "spec/60-security/64-trust-model.md#1-the-trusted-computing-base-tcb-precisely",
   "spec/20-verification/21-spec-syntax.md#5-the-verification-status-model",
 ]
-validation = ["manifest-coverage", "links", "source-anchors", "availability-label"]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+]
 owner = "doc"
 
 [[document]]
@@ -58,5 +83,13 @@ audience = ["human-reader", "agent-reader"]
 authority = "status"
 availability = "current"
 sources = ["library/manifest.toml"]
-validation = ["manifest-coverage", "availability-label"]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "generated-current",
+]
 owner = "doc"
