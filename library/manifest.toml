@@ -27,8 +27,10 @@ kind = "portal"
 audience = ["human-reader"]
 authority = "explanatory"
 availability = "current"
-sources = []
-validation = ["manifest-coverage", "links", "availability-label"]
+sources = [
+  "docs/program/12-documentation-program.md#1-the-four-decisions--settled",
+]
+validation = ["manifest-coverage", "links", "source-anchors", "availability-label"]
 owner = "doc"
 
 [[document]]
@@ -55,6 +57,6 @@ kind = "status"
 audience = ["human-reader", "agent-reader"]
 authority = "status"
 availability = "current"
-sources = []
+sources = ["library/manifest.toml"]
 validation = ["manifest-coverage", "availability-label"]
 owner = "doc"

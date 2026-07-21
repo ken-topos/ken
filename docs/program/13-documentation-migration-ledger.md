@@ -40,27 +40,71 @@ fence elaboration, which is the proposal's documentation-gates item 4).
 Wave 3 must add that gate **before** moving any `catalog/guide/` content,
 per the frame's non-negotiable ordering constraint.
 
-## D4 note — what Wave 0 learned about generation capability
+## D4 note — what Wave 0 learned about generation capability, fact-by-fact
 
 The checked-fence extractor (`ken_elaborator::literate::extract_ken_md`)
 classifies exactly four fence roles (source, ignore, reject, example) by an
 **exact** info-string match and hard-errors on an unrecognized `ken`-tagged
-opener — a typo'd role cannot silently downgrade to unchecked prose. This
-is good news for D4 in one respect and a real gap in another:
+opener — a typo'd role cannot silently downgrade to unchecked prose.
 
-- **What it can express today:** whether a fenced block elaborates, and
-  whether a declared-reject block fails to elaborate for the stated
-  reason. That is sufficient to keep a checked example or counter-example
-  honest.
-- **What it cannot express today:** none of the structural facts D4 asks
-  for — signatures, dependency lists, laws, effect rows, capabilities,
-  platform availability, or `trusted_base_delta` — are exposed as
-  machine-readable output anywhere in the checked path. `elaborate_ken_md_file`
-  returns `Vec<GlobalId>`, not a structural record. Generating `library/catalog/`
-  content (Wave 5) needs a new extraction surface over the elaborator's
-  environment; it does not exist yet. Record this now so Wave 5 is framed
-  against reality rather than against the commitment.
+**Correction to this note's first draft** (librarian QA, `thr_74hvpkqnxjp9q`,
+finding 4): a `` ```ken reject `` fence only proves its body **fails to
+elaborate at all**. `elaborate_ken_md_file` accepts any elaboration error
+as satisfying the fence — it carries no mechanism to check *which* error,
+or that it matches the reason the surrounding prose claims. A rejection
+example is honest evidence the body is rejected, never evidence it is
+rejected for the stated reason. The draft's "for the stated reason" was an
+overclaim; struck.
 
-Until that surface exists, any structural catalog fact Wave 5 needs gets
-**authored and labelled as authored**, never generated-looking prose
+**What D4's structural facts need, checked directly against the API**
+(`ElabEnv`/`GlobalEnv`, `crates/ken-elaborator/src/lib.rs:104-124`,
+`crates/ken-kernel/src/env.rs`) rather than assumed from the return type
+of one function:
+
+- **Directly inspectable today, no new extraction surface needed:**
+  - which declarations a checked fence introduced —
+    `elaborate_ken_md_file` returns `Vec<GlobalId>`, and
+    `ElabEnv.globals: HashMap<String, GlobalId>` names them;
+  - each declaration's kernel type (`Decl::Transparent`/`Opaque`/
+    `Primitive`'s `ty: Term`, or the inductive's telescope) via
+    `GlobalEnv::lookup(id) -> Option<&Decl>`, and the whole declaration set
+    via `GlobalEnv::decls()`;
+  - the trusted-base delta a declaration pulls in, via
+    `ken_elaborator::foreign::trusted_base_delta(&env, id)` and
+    `GlobalEnv::trusted_base()`;
+  - a definition's **surface effect row** — `ElabEnv.effect_rows:
+    HashMap<String, effects::RowType>` is populated for already-elaborated
+    definitions;
+  - the **class/instance/law registry** — `ElabEnv.class_env: ClassEnv`
+    exposes `classes: HashMap<String, ClassInfo>` and
+    `instances: HashMap<(String, String), InstanceInfo>` directly. This
+    earlier draft said laws had no producer at all; that was wrong —
+    corrected here rather than left standing.
+- **Inspectable via derived traversal, not a one-call fact:**
+  - a **human-readable signature** — the `ty: Term` above is a raw kernel
+    core term, not surface syntax; rendering it needs the formatter
+    (`ken_elaborator::layout::format_ken` or an equivalent core-term
+    printer), and that path has not been exercised for this purpose;
+  - **dependencies** between declarations — walkable from a `Term`'s free
+    variables by the same traversal `trusted_base_delta` already performs,
+    but no ready-made "package dependency list" call exists yet.
+- **Not found in the elaborator crate; needs verification against
+  `ken-runtime`/`ken-host` before Wave 5 can rely on either answer:**
+  - per-declaration **capability/authority requirements** —
+    `ken_elaborator::capabilities` implements attenuation/revocation
+    *checking* machinery (`Cap`, `Authority`, `AttenuationObligation`), not
+    an enumerable "which capabilities does this declaration need" record;
+  - **platform/execution-backend availability** — this looked like a
+    `ken-host`/`ken-runtime` concern (cf. the `TARGET_ABI` fact inventory
+    Q-RESIDUE's R1 discusses) in a pass over the elaborator crate alone; a
+    genuine "no producer" claim here needs that pass too, which this wave
+    did not do. Recorded as **unconfirmed**, not as a negative.
+
+Wave 5 should budget accordingly: "write an exporter over already-
+inspectable facts" for declarations/trusted-base/effects/laws, "add a
+core-term-to-signature and dependency traversal" for the second tier, and
+"first confirm whether a producer exists at all" for capabilities and
+platform availability before assuming a new surface is needed there too.
+Any fact that turns out to have no producer gets **authored and labelled
+as authored**, never generated-looking prose
 (`docs/program/12-documentation-program.md` D4 note).

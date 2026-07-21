@@ -22,9 +22,10 @@ declared in [`manifest.toml`](manifest.toml).
 | **Load agent context** — select product knowledge for a coding agent | [`agent/playbooks/tools/write-ken.md`](../agent/playbooks/tools/write-ken.md), for now | planned — Wave 2 |
 
 A route with no library page yet is **planned**, not silently missing — see
-[`STATUS.md`](STATUS.md) for the wave it lands in. This table itself will
-gain real links as each wave lands; it does not point at pages that do not
-exist.
+[the Waves table](../docs/program/12-documentation-program.md#4-waves) for
+the wave it lands in (`STATUS.md` lists what is landed, not what is
+planned). This table itself will gain real links as each wave lands; it
+does not point at pages that do not exist.
 
 ## What's here today (Wave 0)
 

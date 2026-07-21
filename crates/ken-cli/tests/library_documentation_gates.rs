@@ -1,10 +1,16 @@
 //! Wave 0 documentation gates (`docs/program/issues/DOC-W0.md` deliverable
-//! 5, proposal "Documentation gates" 1/2/3/6):
+//! 5, proposal "Documentation gates" 1/2/3/6), plus what librarian QA
+//! (`thr_74hvpkqnxjp9q`) found the first cut left open:
 //!
 //! 1. the manifest covers every `library/` document and every manifest
 //!    path exists;
-//! 2. internal links resolve to a real file and external links are
-//!    syntactically well-formed;
+//! 1b. every manifest record declares the complete required shape (kind,
+//!     audience, authority, availability, sources, validation, owner —
+//!     all non-empty) and no `path` repeats (AC1: a page whose fields
+//!     can silently go missing is not "declaring what it is").
+//! 2. internal links resolve to a real file **and a real anchor**
+//!    (same-file or cross-file), and external links are syntactically
+//!    well-formed;
 //! 3. every manifest `sources` entry's path exists, and its `#anchor` (if
 //!    any) names a real heading in that file — the drift gate D1 requires;
 //! 6. every registered document labels an `availability` of exactly
@@ -42,9 +48,12 @@ fn repo_root() -> PathBuf {
 struct DocEntry {
     path: String,
     kind: String,
+    audience: Vec<String>,
     authority: String,
     availability: String,
     sources: Vec<String>,
+    validation: Vec<String>,
+    owner: String,
 }
 
 fn extract_quoted_strings(s: &str) -> Vec<String> {
@@ -105,6 +114,7 @@ fn parse_manifest(src: &str) -> Vec<DocEntry> {
         match key {
             "path" => entry.path = extract_quoted_strings(value).pop().unwrap_or_default(),
             "kind" => entry.kind = extract_quoted_strings(value).pop().unwrap_or_default(),
+            "audience" => entry.audience = extract_quoted_strings(value),
             "authority" => {
                 entry.authority = extract_quoted_strings(value).pop().unwrap_or_default()
             }
@@ -112,6 +122,8 @@ fn parse_manifest(src: &str) -> Vec<DocEntry> {
                 entry.availability = extract_quoted_strings(value).pop().unwrap_or_default()
             }
             "sources" => entry.sources = extract_quoted_strings(value),
+            "validation" => entry.validation = extract_quoted_strings(value),
+            "owner" => entry.owner = extract_quoted_strings(value).pop().unwrap_or_default(),
             _ => {}
         }
     }
@@ -230,6 +242,66 @@ fn gate1_manifest_covers_every_document_and_every_path_exists() {
     );
 }
 
+// AC1 ("a new page cannot land without declaring what it is, what grounds
+// it, and how its currency is checked"): every field the manifest record
+// promises must actually be present, and the manifest's own "exactly one
+// [[document]] entry" contract must hold. Librarian QA (thr_74hvpkqnxjp9q,
+// finding 2): a field silently missing must fail this gate even when
+// every other gate stays green — `sources = []` in particular means "what
+// grounds it" is not mechanically declared, so `sources` is required
+// non-empty, not merely present.
+#[test]
+fn gate_manifest_records_declare_the_complete_required_shape_and_unique_paths() {
+    let entries = load_manifest();
+    let mut bad = Vec::new();
+    let mut seen_paths: HashSet<String> = HashSet::new();
+
+    for entry in &entries {
+        let label = if entry.path.is_empty() {
+            "<no path>".to_string()
+        } else {
+            entry.path.clone()
+        };
+        if entry.path.is_empty() {
+            bad.push(format!("{label}: missing `path`"));
+        }
+        if entry.kind.is_empty() {
+            bad.push(format!("{label}: missing `kind`"));
+        }
+        if entry.audience.is_empty() {
+            bad.push(format!("{label}: missing `audience`"));
+        }
+        if entry.authority.is_empty() {
+            bad.push(format!("{label}: missing `authority`"));
+        }
+        if entry.availability.is_empty() {
+            bad.push(format!("{label}: missing `availability`"));
+        }
+        if entry.sources.is_empty() {
+            bad.push(format!(
+                "{label}: missing `sources` — what grounds this page is not declared"
+            ));
+        }
+        if entry.validation.is_empty() {
+            bad.push(format!("{label}: missing `validation`"));
+        }
+        if entry.owner.is_empty() {
+            bad.push(format!("{label}: missing `owner`"));
+        }
+        if !entry.path.is_empty() && !seen_paths.insert(entry.path.clone()) {
+            bad.push(format!(
+                "{label}: duplicate [[document]] entry — the manifest promises exactly one"
+            ));
+        }
+    }
+
+    assert!(
+        bad.is_empty(),
+        "manifest record(s) with a missing required field or a duplicate path:\n{}",
+        bad.join("\n")
+    );
+}
+
 // --- gate 2: links valid ---------------------------------------------------
 
 fn markdown_links(contents: &str) -> Vec<String> {
@@ -270,6 +342,10 @@ fn is_well_formed_external_url(url: &str) -> bool {
 
 #[test]
 fn gate2_links_are_valid() {
+    // Librarian QA (thr_74hvpkqnxjp9q, finding 3): a link's `#anchor` must
+    // resolve too, same-file or cross-file — not just the file it points
+    // at. `introduction.md#no-such-heading` is broken exactly like
+    // `nonexistent.md` is; both mean the reader lands nowhere real.
     let root = repo_root();
     let mut broken = Vec::new();
 
@@ -277,6 +353,7 @@ fn gate2_links_are_valid() {
         let abs_path = root.join(&rel_path);
         let contents = std::fs::read_to_string(&abs_path).expect("read library markdown file");
         let file_dir = abs_path.parent().expect("file has a parent dir");
+        let own_anchors = heading_anchors(&contents);
 
         for link in markdown_links(&contents) {
             if link.starts_with("http://") || link.starts_with("https://") {
@@ -285,21 +362,39 @@ fn gate2_links_are_valid() {
                 }
                 continue;
             }
-            if link.starts_with('#') {
-                // Same-file anchor: covered by the heading-anchor machinery
-                // gate 3 exercises; not re-checked here.
-                continue;
-            }
-            let (target_path, _anchor) = split_source(&link);
+
+            let (target_path, anchor) = split_source(&link);
+
             if target_path.is_empty() {
+                // Same-file anchor-only link, e.g. `#no-such-heading`.
+                if let Some(anchor) = anchor {
+                    if !own_anchors.contains(anchor) {
+                        broken.push(format!(
+                            "{rel_path}: same-file anchor '#{anchor}' not found (have: {own_anchors:?})"
+                        ));
+                    }
+                }
                 continue;
             }
+
             let resolved = file_dir.join(target_path);
             if !resolved.exists() {
                 broken.push(format!(
                     "{rel_path}: link target does not exist: {link:?} (resolved {})",
                     resolved.display()
                 ));
+                continue;
+            }
+            if let Some(anchor) = anchor {
+                let target_contents =
+                    std::fs::read_to_string(&resolved).expect("read link target file");
+                let target_anchors = heading_anchors(&target_contents);
+                if !target_anchors.contains(anchor) {
+                    broken.push(format!(
+                        "{rel_path}: link anchor '#{anchor}' not found in {target_path} \
+                         (have: {target_anchors:?})"
+                    ));
+                }
             }
         }
     }
