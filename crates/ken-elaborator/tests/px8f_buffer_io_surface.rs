@@ -3,11 +3,46 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::{ElabEnv, ElabError};
-use ken_kernel::{Decl, Term};
+use ken_kernel::{whnf, Context, Decl, Term};
 
 const BUFFER_KEN_MD: &str =
     include_str!("../../../catalog/packages/Capability/System/Buffer.ken.md");
 const IO_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/System/IO.ken.md");
+
+fn result_head(env: &ken_kernel::GlobalEnv, ty: &Term) -> Term {
+    let mut context = Context::new();
+    let mut head = whnf(env, &context, ty);
+    loop {
+        match head {
+            Term::Pi(domain, codomain) => {
+                context.push(*domain);
+                head = whnf(env, &context, &codomain);
+            }
+            result => return result,
+        }
+    }
+}
+
+fn public_buffer_span_producers(env: &ElabEnv) -> BTreeSet<String> {
+    let buffer_span = env.globals["BufferSpan"];
+    env.globals
+        .iter()
+        .filter_map(|(name, id)| {
+            let decl = env.env.lookup(*id)?;
+            let ty = match decl {
+                Decl::Transparent { ty, .. }
+                | Decl::Opaque { ty, .. }
+                | Decl::Primitive { ty, .. } => ty,
+                Decl::Inductive(inductive) => &inductive.former_type,
+            };
+            matches!(
+                result_head(&env.env, ty),
+                Term::IndFormer { id, .. } if id == buffer_span
+            )
+            .then(|| name.clone())
+        })
+        .collect()
+}
 
 #[test]
 fn checked_surface_is_public_but_proof_carrying_constructors_stay_private() {
@@ -142,27 +177,32 @@ fn buffer_span_producer_closure_is_derived_from_public_globals() {
         .expect("System.Buffer checked fences");
     env.elaborate_ken_md_file(IO_KEN_MD)
         .expect("System.IO checked fences");
-    let buffer_span = env.globals["BufferSpan"];
+    assert_eq!(public_buffer_span_producers(&env), BTreeSet::new());
+}
 
-    let producers = env
-        .globals
-        .iter()
-        .filter_map(|(name, id)| {
-            let decl = env.env.lookup(*id)?;
-            let mut ty = match decl {
-                Decl::Transparent { ty, .. }
-                | Decl::Opaque { ty, .. }
-                | Decl::Primitive { ty, .. } => ty,
-                Decl::Inductive(inductive) => &inductive.former_type,
-            };
-            while let Term::Pi(_, codomain) = ty {
-                ty = codomain;
-            }
-            matches!(ty, Term::IndFormer { id, .. } if *id == buffer_span).then_some(name.as_str())
-        })
-        .collect::<BTreeSet<_>>();
+#[test]
+fn buffer_span_producer_closure_reduces_transparent_type_aliases() {
+    let mut env = ElabEnv::empty().expect("SPAN-SEAL prelude");
+    env.elaborate_file(
+        r#"
+def BufferSpanAlias = BufferSpan
 
-    assert_eq!(producers, BTreeSet::new());
+fn escaped_result_alias (span : BufferSpan) : BufferSpanAlias = span
+
+def BufferSpanFunctionAlias = BufferSpan → BufferSpan
+
+const escaped_function_alias : BufferSpanFunctionAlias = λspan.span
+"#,
+    )
+    .expect("transparent result and whole-function aliases elaborate");
+
+    assert_eq!(
+        public_buffer_span_producers(&env),
+        BTreeSet::from([
+            "escaped_function_alias".to_string(),
+            "escaped_result_alias".to_string(),
+        ])
+    );
 }
 
 #[test]
