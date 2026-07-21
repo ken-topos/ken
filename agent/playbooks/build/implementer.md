@@ -57,6 +57,41 @@ publishes and merges.
    just typical magnitudes** — at-limit, limit±1, empty, and oversized inputs
    (K3: a `>4 MiB` value underflowed the arena, untested because the max test
    value was 8 KiB; the Architect caught it). Keep the change small.
+
+   **★ Declare a promise class for every conformance-derived test you write —
+   if you cannot classify it, it is not ready.** QA applies this as a review
+   gate and will Block on it, so classifying at *authoring* time is strictly
+   cheaper than discovering it at review:
+   - **Durable invariant** — survives every intended extension that preserves
+     the contract. Prefer relations, set equality, disjointness/exhaustiveness,
+     exhaustive matches over literals.
+   - **Normative compatibility vector** — pins exact bytes/values *because those
+     values are the contract* (ABI op identities, field order, canonical
+     hashes, grammar arity). Changing one takes a contract decision.
+   - **Transition sentinel** — *intentionally* goes red when a planned extension
+     lands, to force review. Legal **only if labelled honestly**: named for the
+     boundary rather than the current count, and naming the event that retires
+     it.
+
+   **The discriminating question, asked before you commit the assertion:**
+   *which intended extensions keep this test green, and which turn it red?* If
+   both answers are "any change at all," you have written a snapshot, not an
+   invariant — label it a sentinel or re-assert relationally. **Never freeze a
+   derived count**: a count computable from an authoritative set belongs to
+   that set, so assert against the set. (This is not hypothetical — a
+   `ken-verify` test asserting "exactly nine native and thirteen unavailable"
+   went CI-red when a later WP legitimately promoted four ops. The red was
+   maintenance noise, not a regression.)
+
+   **Authoritative reference — read it once, before writing your first
+   conformance test:** `research/qa-conformance-to-rust-test-guidelines.md`
+   §6 holds the ten-step authoring workflow (restate the proposition → find
+   the production seam → choose an independent oracle → design the
+   discriminator *before* the positive case → assert at the narrowest stable
+   boundary → classify every literal → enumerate consumer closure → prove the
+   test can fail for the intended reason → validate maintenance behavior → run
+   the right gates). §7 holds the Rust patterns. Do not restate it here or in
+   your WP notes — cite it, so there is one copy that cannot go stale.
 5. **Commit to `wp/<ID>` before you hand off** — never hand off uncommitted work
    (the next agent and the publisher path only see committed state). Cite the WP ID,
    acceptance criteria met, and your spec sources in the commit/handoff.
