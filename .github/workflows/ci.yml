@@ -73,15 +73,23 @@ jobs:
       # case and would dominate whichever shard drew it. Measured at 56.5% of
       # a 47-minute run (docs/program/11-test-suite-and-ci-remediation.md §1):
       #   - crates/ken-cli/tests/rt_parity_native.rs        (14m41s, 7 tests)  SKIPPED
-      #   - crates/ken-cli/tests/px8f_buffer_native.rs      ( 5m10s, 1 test)   SKIPPED
+      #   - crates/ken-cli/tests/px8f_buffer_native.rs      ( 5m10s, 1 test)   RESTORED
       #   - crates/ken-verify/tests/px8f_write_partition.rs ( 5m09s, 1 test)   RESTORED
       #
-      # `px8f_write_partition` is no longer skipped — it runs in the
-      # `native-slow` job below, in parallel, where it costs no wall clock.
-      # It stays in this exclusion so it is not ALSO drawn into a shard: the
-      # exclusion here and the inclusion there must stay complementary, or
-      # the test is either duplicated or dropped.
-      # Remaining lost coverage: docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md.
+      # Two of the three now run in their own dedicated jobs below, in
+      # parallel, where they cost no wall clock. They stay in THIS exclusion
+      # so they are not ALSO drawn into a shard: the exclusion here and the
+      # inclusions there must stay complementary, or a test is silently
+      # duplicated or silently dropped — and a dropped test still shows a
+      # green gate.
+      #
+      # `rt_parity_native` remains skipped, and it is a ONE-TEST problem, not
+      # a binary-wide one: measured 7 tests / 266.7s wall / 470.6s CPU, where
+      # `fs_write_at_malformed_offset_narrows_to_invalid_offset` alone takes
+      # 221.4s against 42.2s for its near-identical sibling. Fix that one test
+      # and the binary lands ~90s and fits. See
+      # docs/program/11-test-suite-and-ci-remediation.md §1d and
+      # docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md.
       - name: Test
         run: >-
           cargo nextest run --workspace --locked
@@ -95,25 +103,28 @@ jobs:
       # opening fence is `text`). If a real ```rust doctest is ever added,
       # add a `cargo test --workspace --doc --locked` step back here.
 
-  # One slow native binary, restored to the gate in its own job.
+  # ── Slow native binaries, each restored to the gate in its own job ───────
   #
-  # WHY A SEPARATE JOB rather than letting it back into the shards: it is a
-  # SINGLE #[test] taking ~5 minutes, so no scheduler can subdivide it. In a
-  # shard it would simply become that shard's critical path and push the
-  # whole gate out by ~2 minutes. Alone and in parallel it costs NOTHING:
-  # the worst shard is ~471s (65s build + 406s tests) and this job is ~374s
-  # (65s build + ~309s test), so it finishes first and never sets the pace.
+  # WHY A JOB EACH rather than letting them back into the shards: each is a
+  # SINGLE #[test] running ~4 minutes, so no scheduler can subdivide one. In
+  # a shard it would simply become that shard's critical path and push the
+  # whole gate out. Alone and in parallel each costs NOTHING: the worst shard
+  # is ~471s and each of these is ~250-300s, so they finish first and never
+  # set the pace. That headroom is the budget for restoring coverage.
   #
-  # That headroom is the budget for restoring the others. `px8f_buffer_native`
-  # (~310s, also a single test) fits the same way and is the obvious next one.
-  # `rt_parity_native` (14m41s, 7 tests) does NOT — it would roughly double
-  # the gate on its own, and it needs to get faster before it comes back.
+  # ⚠ SCOPED ON PURPOSE — `-p <crate> --test <name>`, NOT `--workspace`.
+  # With `--workspace`, nextest compiles all 200 test binaries in order to
+  # run one: measured 390s of Test step against 266s of actual test
+  # execution, i.e. ~124s of pure waste per job per run. Scoping compiles
+  # only the target being run.
+  # The `Build` step deliberately stays `--workspace`: it is only ~65s, and
+  # it is what proves the whole workspace still compiles under `--locked`.
   #
-  # ⚠ ITS FILTER MUST STAY COMPLEMENTARY TO THE SHARD EXCLUSION ABOVE.
-  # The binary is named in both places: excluded there, included here. Change
+  # ⚠ THESE FILTERS MUST STAY COMPLEMENTARY TO THE SHARD EXCLUSION ABOVE.
+  # Each binary is named in two places: excluded there, included here. Change
   # one without the other and the test is silently duplicated or silently
   # dropped — and a dropped test still shows a green gate.
-  native-slow:
+  native-write-partition:
     name: native-slow (px8f_write_partition)
     runs-on: ubuntu-latest
     steps:
@@ -124,9 +135,21 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
       - name: Test
-        run: >-
-          cargo nextest run --workspace --locked
-          -E 'binary(px8f_write_partition)'
+        run: cargo nextest run --locked -p ken-verify --test px8f_write_partition
+
+  # ~310s measured pre-C6, ~240s projected post-C6 (C6 gave its sibling
+  # px8f_write_partition -22.7%: 309s -> 239s). Fits the same headroom.
+  native-buffer:
+    name: native-slow (px8f_buffer_native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+      - name: Test
+        run: cargo nextest run --locked -p ken-cli --test px8f_buffer_native
 
   # ⛔ DO NOT RENAME OR DELETE THIS JOB. `build + test` is a REQUIRED status
   # check in branch protection (docs/ops/github-setup.md §"Required status
@@ -147,7 +170,7 @@ jobs:
   build-test:
     name: build + test
     runs-on: ubuntu-latest
-    needs: [test-shard, native-slow]
+    needs: [test-shard, native-write-partition, native-buffer]
     # `always()` so this reports a definite conclusion even when a job fails
     # or is skipped. Without it, a failed dependency leaves this job *skipped*,
     # and a skipped required check blocks the PR with no useful signal.
@@ -156,18 +179,21 @@ jobs:
       - name: All test jobs passed
         run: |
           shards='${{ needs.test-shard.result }}'
-          native='${{ needs.native-slow.result }}'
-          echo "test-shard matrix: $shards"
-          echo "native-slow:       $native"
+          write='${{ needs.native-write-partition.result }}'
+          buffer='${{ needs.native-buffer.result }}'
+          echo "test-shard matrix:      $shards"
+          echo "native-write-partition: $write"
+          echo "native-buffer:          $buffer"
           failed=0
-          if [ "$shards" != "success" ]; then
-            echo "::error::One or more test shards did not pass ($shards)." >&2
-            failed=1
-          fi
-          if [ "$native" != "success" ]; then
-            echo "::error::native-slow did not pass ($native)." >&2
-            failed=1
-          fi
+          for pair in "test shards:$shards" \
+                      "native-write-partition:$write" \
+                      "native-buffer:$buffer"; do
+            name="${pair%:*}"; result="${pair##*:}"
+            if [ "$result" != "success" ]; then
+              echo "::error::$name did not pass ($result)." >&2
+              failed=1
+            fi
+          done
           exit "$failed"
 
   conformance:

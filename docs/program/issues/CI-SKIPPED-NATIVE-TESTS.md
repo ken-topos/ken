@@ -1,6 +1,6 @@
 ---
 id: CI-SKIPPED-NATIVE-TESTS
-title: "Restore the two native test binaries still skipped from the CI gate"
+title: "Restore rt_parity_native — one test at 221s is the blocker"
 status: ready
 owner: steward
 size: S
@@ -16,15 +16,15 @@ origin: docs/program/11-test-suite-and-ci-remediation.md §3 (Track C, C2)
 | Binary | Tests | Measured | State |
 |---|---:|---:|---|
 | `ken-cli/tests/rt_parity_native.rs` | 7 | 14m41s | **skipped** |
-| `ken-cli/tests/px8f_buffer_native.rs` | 1 | 5m10s | **skipped** |
+| `ken-cli/tests/px8f_buffer_native.rs` | 1 | 5m10s | ✅ restored, `native-buffer` job |
 | `ken-verify/tests/px8f_write_partition.rs` | 1 | 5m09s | ✅ restored, `native-slow` job |
 
 `px8f_write_partition` runs in its own parallel `native-slow` job, where it
 costs no wall clock: the worst shard is ~471s and that job is ~374s, so it
 finishes first and never sets the pace.
 
-**`px8f_buffer_native` (~310s, ~240s post-C6, a single test) fits the same
-headroom and is the obvious next one to restore.**
+**`px8f_buffer_native` is now restored too** (own `native-buffer` job).
+**Only `rt_parity_native` remains skipped.**
 
 **`rt_parity_native` was measured directly** (experiment PR #808, closed —
 see `docs/program/11-test-suite-and-ci-remediation.md` §1d). It parallelizes

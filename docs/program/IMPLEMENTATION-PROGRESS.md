@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-21 16:50:32Z — from 20 issue file(s) in `docs/program/issues/`.
+2026-07-21 16:54:19Z — from 20 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -40,7 +40,7 @@ the committed file matches the generator's output.
 |---|---|---|---|---|---|---|
 | `A3` | catalog-coverage walker | draft | TBD | TBD | none | — |
 | `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | draft | TBD | M | none | — |
-| `CI-SKIPPED-NATIVE-TESTS` | Restore the two native test binaries still skipped from the CI gate | ready | steward | S | none | — |
+| `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | ready | steward | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `F1-37` | F1 (#37) — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | 37 |
 | `F3-39` | F3 (#39) — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | 39 |
@@ -64,7 +64,7 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `CI-SKIPPED-NATIVE-TESTS` — Restore the two native test binaries still skipped from the CI gate
+- `CI-SKIPPED-NATIVE-TESTS` — Restore rt_parity_native — one test at 221s is the blocker
 - `F1-37` — F1 (#37) — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `PUB-VERIFY` — scripted-pr-automerge.sh exits 0 on a failed push
