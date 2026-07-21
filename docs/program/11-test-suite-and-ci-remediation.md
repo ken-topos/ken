@@ -216,6 +216,37 @@ Two smaller residuals, neither obviously worth taking:
 Billed runner-time went ~1024s -> ~1660s, about **1.6x** — not the 4x
 warned about, because C6's savings partly offset four repeated builds.
 
+### 1c. Restoring the skipped binaries — the headroom argument
+
+The critical shard is ~471s (65s build + 406s tests). Any job that finishes
+under that adds **zero wall clock**, because it runs in parallel and never
+sets the pace. That is the budget for buying coverage back.
+
+| Binary | Tests | Measured | Fits? |
+|---|---:|---:|---|
+| `px8f_write_partition` | 1 | 309s | ✅ **restored** — ~374s with build |
+| `px8f_buffer_native` | 1 | 310s | ✅ fits identically — restore next |
+| `rt_parity_native` | 7 | 881s | ❌ ~2x the critical path |
+
+Each goes in **its own job**, not back into a shard. A single 5-minute
+`#[test]` cannot be subdivided, so inside a shard it just becomes that
+shard's critical path and pushes the whole gate out.
+
+> ★ **These are the tests C6 should help most.** C6 gave 8.4% suite-wide,
+> but that average is dominated by ~1880 tests that barely touch cranelift.
+> These three do a full native codegen-and-link per case. **The 309s figure
+> is a PRE-C6 measurement** — if C6's effect is concentrated where the
+> cranelift work is, this job should come in well under it. That comparison
+> is the cleanest read we will get on what C6 actually bought, and it is
+> free: the number falls out of the next run.
+
+> ⚠ **The filter is stated in two places and they must stay complementary.**
+> The binary is *excluded* from the shard lane and *included* in its own job.
+> Change one without the other and the test is silently duplicated, or
+> silently dropped — **and a dropped test still shows a green gate.** Likewise
+> every test-running job must appear in the aggregator's `needs` *and* be
+> checked in its script; a job missing there reports green however it failed.
+
 ### ⛔ Stop here
 
 The per-test distribution is flat (§1a), so there is no fat left to cut. The

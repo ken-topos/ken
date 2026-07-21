@@ -1,6 +1,6 @@
 ---
 id: CI-SKIPPED-NATIVE-TESTS
-title: "Restore three native-parity test binaries skipped from the CI gate (C2)"
+title: "Restore the two native test binaries still skipped from the CI gate"
 status: ready
 owner: steward
 size: S
@@ -11,12 +11,22 @@ github: null
 origin: docs/program/11-test-suite-and-ci-remediation.md §3 (Track C, C2)
 ---
 
-`.github/workflows/ci.yml`'s `build + test` job now runs `cargo nextest run`
-with an `-E` filter that excludes three test binaries from every CI run:
+**Updated 2026-07-21: one of the three is back. Two remain skipped.**
 
-- `crates/ken-cli/tests/rt_parity_native.rs` (7 tests)
-- `crates/ken-cli/tests/px8f_buffer_native.rs` (1 test)
-- `crates/ken-verify/tests/px8f_write_partition.rs` (1 test)
+| Binary | Tests | Measured | State |
+|---|---:|---:|---|
+| `ken-cli/tests/rt_parity_native.rs` | 7 | 14m41s | **skipped** |
+| `ken-cli/tests/px8f_buffer_native.rs` | 1 | 5m10s | **skipped** |
+| `ken-verify/tests/px8f_write_partition.rs` | 1 | 5m09s | ✅ restored, `native-slow` job |
+
+`px8f_write_partition` runs in its own parallel `native-slow` job, where it
+costs no wall clock: the worst shard is ~471s and that job is ~374s, so it
+finishes first and never sets the pace.
+
+**`px8f_buffer_native` (~310s, also a single test) fits the same headroom
+and is the obvious next one to restore.** `rt_parity_native` does not — at
+14m41s it would roughly double the gate on its own, so it needs to get
+faster before it comes back, not merely be re-enabled.
 
 ## Why they were skipped
 
