@@ -223,22 +223,31 @@ fn structural_ord_instances_and_all_laws_are_checked_zero_delta() {
 
 #[test]
 fn list_instance_routes_the_canonical_compare_into_raw_list_compare() {
-    let lawful = LAWFUL_CLASSES_KEN_MD
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    let collections = COLLECTIONS_KEN_MD
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    assert!(
-        lawful.contains("list_compare a (compare a d) xs ys"),
-        "Ord (List a) must route the canonical derived compare at the instance layer"
+    // Rework (Q-RESIDUE, 2026-07-21): a source-text scan over the literate
+    // `.ken.md` can be satisfied by a spelling that never actually executes,
+    // and can't be fooled by dead comments either way -- neither proves
+    // ROUTING. Instead evaluate `list_ord_leq` (the List Ord instance's own
+    // `leq`, built from `list_compare a (compare a d)`) on two singleton
+    // lists that differ only in their element: canonical Bool order is
+    // False < True (see `raw_lt` above), so only the forward direction can
+    // hold. An implementation that ignored the canonical element comparator
+    // (e.g. compared only list length/shape) would wrongly agree on BOTH
+    // directions, since both lists have the same length -- this pair is a
+    // real, non-degenerate discriminator for "the canonical compare is what
+    // actually drives list ordering", proven by kernel reduction rather than
+    // by grepping either package's source text.
+    let mut env = mk_env();
+    let list_leq = "list_ord_leq Bool Ord_instance_Bool";
+    assert_bool_reduces(
+        &mut env,
+        "list_leq_false_true",
+        &format!("{list_leq} (Cons Bool False (Nil Bool)) (Cons Bool True (Nil Bool))"),
+        "True",
     );
-    assert!(
-        collections.contains(
-            "fn list_compare (a : Type) (cmp : a → a → OrdResult) (xs : List a) (ys : List a) : OrdResult"
-        ),
-        "Collections list_compare must remain raw-comparator parameterized"
+    assert_bool_reduces(
+        &mut env,
+        "list_leq_true_false",
+        &format!("{list_leq} (Cons Bool True (Nil Bool)) (Cons Bool False (Nil Bool))"),
+        "False",
     );
 }

@@ -1533,6 +1533,85 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    // Linux-only deliberately, not an accidental gap: this test drives real
+    // POSIX path/root machinery (`RootPath`/`open_root`/`open_resource_at_v1`)
+    // that only exists on this target, matching the file's standing
+    // convention (every other resource-opening test here is gated the same
+    // way).
+    fn resource_settlement_is_recorded_before_observation_is_written() {
+        // Real behavioral proof, through the actual unsafe entrypoint, that
+        // `ken_host_invocation_v1_finish` records resource settlement into
+        // the effect trace BEFORE it writes the observation -- if the order
+        // were reversed, the release event below could not appear in the
+        // decoded trace, so this discriminates the ordering by construction
+        // rather than comparing source-text byte offsets of the two call
+        // sites (Q-RESIDUE, 2026-07-21).
+        let root = std::env::temp_dir().join(format!(
+            "ken-q-residue-settlement-order-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("held.bin"), b"resource").unwrap();
+        let root_path = crate::RootPath::new(&root).unwrap();
+        let parent = crate::open_root(&root_path).unwrap();
+        let leaf = crate::PathComponent::new(b"held.bin").unwrap();
+        let owner = crate::open_resource_at_v1(&parent, &leaf, crate::OpenRequest::Read).unwrap();
+
+        let observation_path = root.join("observation.bin");
+        let observation_file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&observation_path)
+            .unwrap();
+
+        let mut context = Box::new(ProcessContext {
+            _posture: ProcessPostureV1(()),
+            host: ProcessHost,
+            capabilities: CapabilityTableV1::default(),
+            resources: crate::ResourceTableV1::default(),
+            response_arena: Vec::new(),
+            effect_trace: Vec::new(),
+            observation: Some(observation_file),
+            plan_hash: 11, // arbitrary, unasserted
+            capability: CapabilityTokenV1::from_erased_identity(0), // arbitrary, unasserted
+        });
+        let (_, identity) = context
+            .resources
+            .insert_fs_handle(owner, crate::RightSet::METADATA);
+
+        let raw = Box::into_raw(context) as *mut c_void;
+        // SAFETY: `raw` is a uniquely-owned, freshly-boxed, properly aligned
+        // `ProcessContext` handed to `finish` exactly once, mirroring the
+        // starter's real usage.
+        let status = unsafe { ken_host_invocation_v1_finish(raw, 0) };
+        assert_eq!(status, 0, "finish must succeed");
+
+        let encoded = std::fs::read(&observation_path).unwrap();
+        let trace = crate::decode_linked_effect_trace(&encoded).unwrap();
+        // Fixture-derived, not a frozen census: exactly one resource
+        // (`owner`) was inserted above, so exactly one settlement event is
+        // the only possible count here.
+        assert_eq!(
+            trace.effect_trace.len(),
+            1,
+            "exactly the one resource inserted above must be the settled event"
+        );
+        assert_eq!(trace.effect_trace[0].operation, HostOpV1::ResourceRelease);
+        assert_eq!(
+            trace.effect_trace[0].resource_bindings,
+            vec![(crate::ResourceBindingRole::Target, identity)]
+        );
+        assert!(matches!(
+            trace.effect_trace[0].outcome,
+            CanonicalOutcomeV1::Success(CanonicalReplyV1::ResourceSettlement(_))
+        ));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn generated_effect_layout_matches_every_live_wire_record() {
         macro_rules! size_align {

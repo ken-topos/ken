@@ -169,6 +169,16 @@ fn neutralize_fixture_proofs(env: &ElabEnv, store: &mut EvalStore, names: &[&str
     }
 }
 
+/// The Pi-telescope depth of a constructor type (its declared field arity).
+/// Constructor types are literal Pi chains, so a plain recursive count is
+/// safe -- no whnf/substitution is needed.
+fn pi_arity(term: &ken_kernel::Term) -> usize {
+    match term {
+        ken_kernel::Term::Pi(_, codomain) => 1 + pi_arity(codomain),
+        _ => 0,
+    }
+}
+
 #[test]
 fn cat5_d1_source_span_package_elaborates_zero_delta() {
     let mut env = dependency_env();
@@ -289,159 +299,240 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
 
 #[test]
 fn cat5_d2_parser_result_surface_is_total_and_located() {
-    let compact = PARSING_KEN_MD
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    assert!(
-        compact.contains("data ParseError = MkParseError SourceId Span")
-            && compact.contains("fn error_source (err : ParseError) : SourceId =")
-            && compact.contains("fn error_span (err : ParseError) : Span ="),
-        "ParseError must carry source identity and a span with accessors"
+    // Rework (Q-RESIDUE, 2026-07-21): the surface contract is "the declared
+    // shape typechecks and evaluates as claimed", not "the source text is
+    // spelled this way" -- checked against the elaborated env, mirroring
+    // `constrained_instance_elaboration.rs`'s structural style. The
+    // `!contains("= Axiom")` check is dropped: `cat5_d1_source_span_package_
+    // elaborates_zero_delta` above already proves zero new trusted-base delta
+    // across the whole package, a strictly stronger semantic proof that no
+    // Axiom was introduced.
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+
+    // ParseError carries a SourceId and Span, both recoverable by accessor.
+    env.elaborate_file(
+        r#"
+        const parse_error_probe : ParseError = MkParseError (MkSourceId (Suc Zero)) (MkSpan Zero (Suc Zero))
+        const parse_error_probe_source : SourceId = error_source parse_error_probe
+        const parse_error_probe_span : Span = error_span parse_error_probe
+        "#,
+    )
+    .expect("ParseError must carry source identity and a span with accessors");
+    let probe_source = eval_def(&env, &mut store, "parse_error_probe_source");
+    assert_eq!(
+        ctor_args(&env, &probe_source, "MkSourceId").len(),
+        1,
+        "SourceId must be recoverable from a ParseError by error_source"
     );
-    assert!(
-        compact.contains("data ParseResult a =")
-            && compact.contains("Parsed a Span Nat")
-            && compact.contains("Failed ParseError"),
-        "ParseResult must be the total Parsed/Failed result surface"
+    let probe_span = eval_def(&env, &mut store, "parse_error_probe_span");
+    assert_eq!(
+        span_bounds(&env, &probe_span),
+        (0, 1),
+        "Span must be recoverable from a ParseError by error_span"
     );
-    assert!(
-        compact.contains("const Parser (a : Type) : Type =")
-            && compact.contains("(s : Source) → (start : Nat) → LessEqNat start (source_length s)")
-            && compact.contains("→ ParseResult a"),
-        "Parser must be total over well-formed source/start inputs"
+
+    // ParseResult is the total Parsed/Failed surface: constructed and
+    // evaluated, not read off the data declaration's spelling.
+    env.elaborate_file(
+        r#"
+        const parsed_probe : ParseResult Bool = Parsed Bool True (MkSpan Zero (Suc Zero)) (Suc Zero)
+        const failed_probe : ParseResult Bool = Failed Bool parse_error_probe
+        "#,
+    )
+    .expect("ParseResult must expose both the Parsed and Failed outcomes");
+    let parsed_probe = eval_def(&env, &mut store, "parsed_probe");
+    assert_eq!(
+        ctor_args(&env, &parsed_probe, "Parsed").len(),
+        4,
+        "Parsed must carry type/value/span/next args"
     );
-    assert!(
-        compact.contains("fn ParsedValid")
-            && compact.contains("Equal Nat (span_start consumed) start")
-            && compact.contains("Equal Nat (span_end consumed) next")
-            && compact.contains("fn FailedValid")
-            && compact.contains("Equal SourceId (error_source err) (source_id s)")
-            && compact.contains("ValidSpan s (error_span err)")
-            && compact.contains("fn ParserLaws"),
-        "D2 laws must state success validity, failure validity, totality, and source locality"
+    let failed_probe = eval_def(&env, &mut store, "failed_probe");
+    assert_eq!(
+        ctor_args(&env, &failed_probe, "Failed").len(),
+        2,
+        "Failed must carry type/ParseError args"
     );
+
+    // Parser is total over a well-formed (source, start) pair: this only
+    // typechecks if Parser really unfolds to the pinned three-argument Pi
+    // chain (Source, Nat, LessEqNat-proof) -> ParseResult a. ParsedValid/
+    // FailedValid/ParserLaws content is exercised as real proof obligations
+    // by the sibling law tests below (`cat5_d2_success_parser_carries_valid_
+    // consumed_span_from_start` et al.), not duplicated here.
+    env.elaborate_file(
+        r#"
+        fn total_parser_shape_probe (s : Source) (start : Nat) (h : LessEqNat start (source_length s)) : ParseResult Bool =
+          (parser_pure Bool True) s start h
+        "#,
+    )
+    .expect("Parser must be total over (Source, in-bounds start)");
+    for law_prop in ["ParsedValid", "FailedValid", "ParserLaws"] {
+        let id = env.globals[law_prop];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{law_prop} must be a checked declaration"
+        );
+    }
+
+    // D2 must specialize the shared Decoder and retire CAT-5's bespoke fuel
+    // recursion -- real name-resolution facts against the elaborated env.
+    for retired in ["parse_bool_expr_at_fuel", "skip_spaces_fuel"] {
+        assert!(
+            !env.globals.contains_key(retired),
+            "{retired} must not survive as a package export"
+        );
+    }
     assert!(
-        compact.contains("fn parser_from_decoder")
-            && compact.contains("decoder_recursive ByteCursor UInt8 Span")
-            && compact.contains("decoder_many ByteCursor UInt8 Span UInt8")
-            && !PARSING_KEN_MD.contains("parse_bool_expr_at_fuel")
-            && !PARSING_KEN_MD.contains("skip_spaces_fuel"),
-        "D2 must specialize the shared Decoder and retire CAT-5's bespoke fuel recursion"
-    );
-    assert!(
-        !PARSING_KEN_MD.contains("= Axiom"),
-        "CAT-5 D2 package must not use Axiom"
+        env.globals.contains_key("parser_from_decoder"),
+        "D2 must specialize the shared Decoder via parser_from_decoder"
     );
 }
 
 #[test]
 fn cat5_d3_bool_expression_surface_is_package_owned() {
-    let compact = PARSING_KEN_MD
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    // Rework (Q-RESIDUE, 2026-07-21): elaborate-then-assert-structurally, per
+    // language-leader's guidance. The parser/printer/formatter roundtrip
+    // BEHAVIOR (including the canonical ASCII token bytes) is proven by the
+    // sibling test `cat5_d3_bool_parser_printer_formatter_roundtrip_on_
+    // source_bytes` below -- exact-byte assertions there would fail if a
+    // non-canonical token encoding were used, which is a strictly stronger
+    // net than grepping the decoder's Rust-side token literals. This test
+    // pins only the package-owned data/type shape. The `!contains("= Axiom")`
+    // check is dropped for the same reason as in D2.
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+
+    // BoolExpr is the package-owned four-constructor surface.
+    env.elaborate_file("const bool_expr_probe : BoolExpr = BAnd BTrue (BNot BFalse)")
+        .expect("BoolExpr's four constructors must compose as declared");
+    let probe = eval_def(&env, &mut store, "bool_expr_probe");
+    let and_args = ctor_args(&env, &probe, "BAnd");
+    assert_eq!(and_args.len(), 2, "BAnd must carry two BoolExpr args");
     assert!(
-        compact.contains("data BoolExpr =")
-            && compact.contains("BTrue")
-            && compact.contains("BFalse")
-            && compact.contains("BNot BoolExpr")
-            && compact.contains("BAnd BoolExpr BoolExpr"),
-        "D3 must expose the package-owned BoolExpr data surface"
+        matches!(&and_args[0], EvalVal::Ctor { id, args, .. } if *id == env.globals["BTrue"] && args.is_empty())
+    );
+    let not_args = ctor_args(&env, &and_args[1], "BNot");
+    assert_eq!(not_args.len(), 1, "BNot must carry one BoolExpr arg");
+    assert!(
+        matches!(&not_args[0], EvalVal::Ctor { id, args, .. } if *id == env.globals["BFalse"] && args.is_empty())
+    );
+
+    // Syntax a is package-owned located syntax (a Located root + a List of
+    // Located children), not a compiler AST.
+    env.elaborate_file(
+        r#"
+        const syntax_probe : Syntax BoolExpr =
+          MkSyntax
+            BoolExpr
+            (MkLocated BoolExpr (MkSourceId Zero) (MkSpan Zero (Suc Zero)) BTrue)
+            (Nil (Located BoolExpr))
+        "#,
+    )
+    .expect("Syntax must be constructible from a Located root and a List of Located children");
+    let syntax_probe = eval_def(&env, &mut store, "syntax_probe");
+    let (root, children) = syntax_root_and_children(&env, &syntax_probe);
+    let root_args = ctor_args(&env, root, "MkLocated");
+    assert_eq!(
+        root_args.len(),
+        4,
+        "MkLocated must carry type/source/span/value args"
     );
     assert!(
-        compact.contains("data Syntax a = MkSyntax (Located a) (List (Located a))")
-            && compact.contains("fn erase_spans (x : Syntax BoolExpr) : BoolExpr =")
-            && compact.contains("fn ValidSyntax"),
-        "D3 Syntax must be package-owned located syntax, not compiler AST"
+        matches!(&root_args[3], EvalVal::Ctor { id, args, .. } if *id == env.globals["BTrue"] && args.is_empty())
     );
     assert!(
-        compact.contains("const parse_bool_expr : Parser (Syntax BoolExpr) =")
-            && compact.contains("fn print_bool_expr (e : BoolExpr) : Bytes =")
-            && compact.contains("fn format_bool_expr (s : Source) : Result ParseError Bytes ="),
-        "D3 must export parser, printer, and formatter with the pinned types"
+        matches!(children, EvalVal::Ctor { id, args, .. } if *id == env.globals["Nil"] && args.len() == 1)
     );
-    assert!(
-        compact.contains("fn byte_cursor_peek")
-            && compact.contains("nth UInt8 (byte_cursor_position cur)")
-            && compact.contains("bytes_to_list (source_bytes (byte_cursor_source cur))")
-            && compact.contains("const bool_expression_decoder : Decoder ByteCursor Span")
-            && compact.contains("bytes_encode \"true\"")
-            && compact.contains("bytes_encode \"false\"")
-            && compact.contains("bytes_encode \"(not \"")
-            && compact.contains("bytes_encode \"(and \""),
-        "D3 must operate through ByteCursor/Decoder over Source bytes and canonical ASCII tokens"
-    );
-    assert!(
-        !PARSING_KEN_MD.contains("compiler")
-            && !PARSING_KEN_MD.contains("AST")
-            && !PARSING_KEN_MD.contains("= Axiom"),
-        "D3 package surface must not route through compiler ASTs or package axioms"
-    );
+    for name in ["erase_spans", "ValidSyntax"] {
+        assert!(
+            env.globals.contains_key(name),
+            "D3 Syntax must expose {name}"
+        );
+    }
+
+    // parser/printer/formatter exist with exactly the pinned types; the
+    // roundtrip behavior is proven by the sibling test below, not restated
+    // here.
+    env.elaborate_file(
+        r#"
+        const parse_bool_expr_shape_probe : Parser (Syntax BoolExpr) = parse_bool_expr
+        fn print_bool_expr_shape_probe (e : BoolExpr) : Bytes = print_bool_expr e
+        fn format_bool_expr_shape_probe (s : Source) : Result ParseError Bytes = format_bool_expr s
+        "#,
+    )
+    .expect("parser/printer/formatter must carry exactly the pinned D3 types");
 }
 
 #[test]
 fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
-    let compact = PARSING_KEN_MD
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    assert!(
-        compact.contains("fn IsUtf8 (bs : Bytes) : Prop =")
-            && compact.contains("match bytes_decode bs")
-            && compact.contains("Ok text ↦ Equal Bytes (bytes_encode text) bs")
-            && !PARSING_KEN_MD.contains("Equal Bytes bs bs"),
-        "IsUtf8 must be round-trip evidence over the source bytes, not reflexive equality"
+    // Rework (Q-RESIDUE, 2026-07-21): elaborate-then-assert-structurally.
+    // IsUtf8's round-trip-not-reflexive claim and source_length's byte-view
+    // computation are proven behaviorally by
+    // `cat5_d1_reflexive_utf8_proof_rejected` and
+    // `cat5_d1_concrete_nonempty_source_constructs_and_projects` below, so
+    // this test only pins their declared shape. The `!contains("= Axiom")`
+    // check is dropped for the same reason as in D2/D3.
+    let mut env = mk_env();
+
+    assert!(matches!(
+        env.env.lookup(env.globals["IsUtf8"]),
+        Some(Decl::Transparent { .. })
+    ));
+    env.elaborate_file("fn source_bytes_type_probe (s : Source) : Bytes = source_bytes s")
+        .expect("source_bytes must return Bytes, not a String-based view");
+
+    // Source carries exactly id/bytes/UTF-8-evidence: its class field list is
+    // read straight from the class registry, not grepped from a field-name
+    // substring. A 4th field (a cached length carrier) would show up here.
+    assert_eq!(
+        env.class_env.classes["Source"].field_names,
+        vec!["source_id_field", "source_bytes_field", "source_utf8_field"],
+        "Source must carry exactly id/bytes/utf8-proof, no cached length field"
     );
     assert!(
-        compact.contains(
-            "fn source_length (s : Source) : Nat = bytes_nat_length s.source_bytes_field"
-        ),
-        "source_length must compute from the structural byte view"
+        !env.globals.contains_key("MkSource"),
+        "the old unconstrained MkSource constructor must not be an exported global"
     );
-    assert!(
-        compact.contains("class Source {")
-            && compact.contains("source_bytes_field : Bytes")
-            && compact.contains("source_utf8_field : IsUtf8 source_bytes_field")
-            && !compact.contains("source_length_field")
-            && !compact.contains("source_length_valid_field")
-            && !compact.contains("source_length_unit_field"),
-        "Source must carry bytes and UTF-8 evidence without a cached length carrier"
+
+    env.elaborate_file("const span_probe : Span = MkSpan Zero Zero")
+        .expect("Span must be constructible from two Nat endpoints");
+
+    // SourceId lives in Capability.Diagnostics.Core (already elaborated by
+    // `dependency_env()` before Parsing.ken.md), not redefined here: it
+    // wraps exactly one Nat.
+    let source_id_inductive = env
+        .env
+        .inductive(env.globals["SourceId"])
+        .expect("SourceId inductive");
+    assert_eq!(source_id_inductive.constructors.len(), 1);
+    assert_eq!(
+        pi_arity(&source_id_inductive.constructors[0].type_),
+        1,
+        "SourceId must wrap exactly one Nat"
     );
-    assert!(
-        !PARSING_KEN_MD.contains("data Source = MkSource"),
-        "Source must not expose the old unconstrained MkSource constructor"
-    );
-    assert!(
-        !PARSING_KEN_MD.contains("source_bytes_field : String")
-            && !PARSING_KEN_MD.contains("String Nat"),
-        "Source must not use normalized String as the offset basis"
-    );
-    assert!(
-        compact.contains("data Span = MkSpan Nat Nat"),
-        "Span must carry only byte endpoints"
-    );
-    assert!(
-        DIAGNOSTIC_KEN_MD.contains("data SourceId = MkSourceId Nat")
-            && !PARSING_KEN_MD.contains("data SourceId ="),
-        "SourceId must move to Capability.Diagnostics.Core while Span remains CAT-5-local"
-    );
-    assert!(
-        compact.contains("fn span_to_byte_range")
-            && compact.contains("fn span_origin")
-            && compact.contains("lemma span_to_byte_range_faithful")
-            && compact.contains("lemma span_origin_source_faithful"),
-        "CAT-5 must own its faithful injection into the neutral diagnostic origin"
-    );
-    assert!(
-        compact.contains("data Located a = MkLocated SourceId Span a")
-            && compact.contains("fn ValidLocated"),
-        "source identity must be supplied by Located/validity, not by bare Span"
-    );
-    assert!(
-        !PARSING_KEN_MD.contains("= Axiom"),
-        "CAT-5 D1 package must not use Axiom"
-    );
+
+    for name in [
+        "span_to_byte_range",
+        "span_origin",
+        "span_to_byte_range_faithful",
+        "span_origin_source_faithful",
+        "ValidLocated",
+    ] {
+        assert!(
+            env.globals.contains_key(name),
+            "{name} must be exported by the Parsing package"
+        );
+    }
+    env.elaborate_file(
+        "const located_probe : Located BoolExpr = MkLocated BoolExpr (MkSourceId Zero) (MkSpan Zero Zero) BTrue",
+    )
+    .expect("Located must carry SourceId, Span, and a value");
+
+    // The trailing extraction-level forbidden-token scan is genuinely
+    // extraction-level (guarding the literate emission, not a typed
+    // declaration) -- left as-is per language-leader's review; there is no
+    // elaborated-term equivalent to check it against.
     let extracted = ken_elaborator::literate::extract_ken_md(PARSING_KEN_MD)
         .expect("Capability.Parsing must extract");
     for forbidden in [
