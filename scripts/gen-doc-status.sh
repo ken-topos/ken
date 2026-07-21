@@ -55,8 +55,23 @@ if [ ! -f "$REVISION_FILE" ]; then
 fi
 
 REVISION="$(tr -d '[:space:]' < "$REVISION_FILE")"
-if ! printf '%s' "$REVISION" | grep -qE '^[0-9a-f]{7,40}$'; then
-  echo "gen-doc-status: library/REVISION does not look like a git commit id: '${REVISION}'" >&2
+
+# Librarian QA (thr_74hvpkqnxjp9q, third pass): a shape check alone lets
+# `library/REVISION` hold forty zeroes — a value that LOOKS like a commit
+# id but isn't one. Require a full 40-hex id, that it resolves to a real
+# commit object, and that it is an ancestor of the current tree (so it
+# genuinely describes an earlier, checkable state of this repository, not
+# an arbitrary hex string or a commit from an unrelated future/fork).
+if ! printf '%s' "$REVISION" | grep -qE '^[0-9a-f]{40}$'; then
+  echo "gen-doc-status: library/REVISION must be a full 40-hex commit id, got: '${REVISION}'" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null; then
+  echo "gen-doc-status: library/REVISION '${REVISION}' does not resolve to a real commit object" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" HEAD 2>/dev/null; then
+  echo "gen-doc-status: library/REVISION '${REVISION}' is not an ancestor of the current tree (HEAD)" >&2
   exit 1
 fi
 

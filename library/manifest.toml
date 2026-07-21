@@ -82,7 +82,7 @@ kind = "status"
 audience = ["human-reader", "agent-reader"]
 authority = "status"
 availability = "current"
-sources = ["library/manifest.toml"]
+sources = ["library/manifest.toml", "library/REVISION"]
 validation = [
   "manifest-coverage",
   "manifest-completeness",
