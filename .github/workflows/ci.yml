@@ -128,6 +128,39 @@ jobs:
           cargo nextest run --workspace --locked
           -E 'binary(px8f_write_partition)'
 
+  # ⚗ EXPERIMENT — not merged to main. Measuring whether rt_parity_native's
+  # 7 tests parallelize under nextest.
+  #
+  # Under `cargo test` this binary took 881s, which is almost exactly
+  # 7 x 126s — i.e. its tests ran SERIALLY despite four threads being
+  # available. But they look independent: each calls `differential()`, which
+  # does its own `build_native_program`, with no shared state.
+  #
+  # The hypothesis is that the serialization is IN-PROCESS (a lock somewhere
+  # in the native build path, or a shared target directory). nextest runs
+  # each test in its own PROCESS, which would sidestep that for free.
+  #
+  # Predictions, to be judged against the 407s critical shard:
+  #   ~170-250s -> in-process serialization confirmed; restore it, no code
+  #                change needed, and it costs zero wall clock.
+  #   ~680s     -> genuinely serial work (or the lock is cross-process);
+  #                it does not fit, and the tests need real rework first.
+  # 881s pre-C6; C6 measured -22.7% on comparable native code, hence ~680s.
+  native-parity:
+    name: native-parity (rt_parity_native) [EXPERIMENT]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+      # Per-test timing is the whole point — do not quiet this output.
+      - name: Test
+        run: >-
+          cargo nextest run --workspace --locked
+          -E 'binary(rt_parity_native)'
+
   # ⛔ DO NOT RENAME OR DELETE THIS JOB. `build + test` is a REQUIRED status
   # check in branch protection (docs/ops/github-setup.md §"Required status
   # checks"). The sharded matrix above publishes checks named `test shard
@@ -147,7 +180,7 @@ jobs:
   build-test:
     name: build + test
     runs-on: ubuntu-latest
-    needs: [test-shard, native-slow]
+    needs: [test-shard, native-slow, native-parity]
     # `always()` so this reports a definite conclusion even when a job fails
     # or is skipped. Without it, a failed dependency leaves this job *skipped*,
     # and a skipped required check blocks the PR with no useful signal.
@@ -157,8 +190,10 @@ jobs:
         run: |
           shards='${{ needs.test-shard.result }}'
           native='${{ needs.native-slow.result }}'
+          parity='${{ needs.native-parity.result }}'
           echo "test-shard matrix: $shards"
           echo "native-slow:       $native"
+          echo "native-parity:     $parity"
           failed=0
           if [ "$shards" != "success" ]; then
             echo "::error::One or more test shards did not pass ($shards)." >&2
@@ -166,6 +201,10 @@ jobs:
           fi
           if [ "$native" != "success" ]; then
             echo "::error::native-slow did not pass ($native)." >&2
+            failed=1
+          fi
+          if [ "$parity" != "success" ]; then
+            echo "::error::native-parity did not pass ($parity)." >&2
             failed=1
           fi
           exit "$failed"
