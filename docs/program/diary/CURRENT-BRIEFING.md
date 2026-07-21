@@ -67,24 +67,39 @@ obscured. PX9 gates most of Track T.
 **Not started.** Next step when the operator says go: decompose the tracks
 into `docs/program/issues/` entries.
 
-## ▶ Q-RESIDUE IS ACTIVE AND NEARLY DONE — resume here (2026-07-21 ~21:30Z)
+## ✅ TRACK Q IS COMPLETE — nothing outstanding (2026-07-21 ~21:55Z)
 
-**Branch: `wp/Q-RESIDUE-test-rework @ 5ee76bb5`** (in runtime-implementer's
-worktree; implementer is back on its home branch, branch is FREE).
-Two commits: `bb41c514` rework + `5ee76bb5` comment-tightening fixup.
-Nine files, **all inside `mod tests` — no production code changed.**
+**Q-RESIDUE merged: `origin/main @ 64337192` (PR #818)**, from
+`wp/Q-RESIDUE-test-rework @ 3f752451`. Verified on main **by content** (the
+crate diff against the approved SHA is empty), not by the publisher's exit
+code. Issue closed, all three retros in, adversary notified
+(`evt_4g7qasxqdy5s8`). Q1 and Q2 merged earlier the same day.
 
-**STATE: awaiting the formal QA + leader votes.** Both stated hold
-conditions are already SATISFIED (the item-3–5 fixup landed; the item-1
-mutation receipt was posted at `evt_e408ddafxka0`). Substantive review is
-DONE and favourable. **Next action: collect the votes, then publish via
-`scripts/scripted-pr-automerge.sh` — PR body is already written at
-`scratchpad/pr-qres-merge.md`** (regenerate if the scratchpad is gone).
+**The fleet is idle and home-clean, and that is CORRECT** — the queue below
+is unstarted pending the operator's direction. Do not kick any of it
+without their go.
 
-**Then:** close `docs/program/issues/Q-RESIDUE.md` (`active` → `closed`)
-once merged **and all three §10 retros are in** — the implementer's is
-already posted (`evt_6zydx4gnservd`). **Notify the adversary — mandatory on
-every code merge.**
+> ### ⚠ THE STALL THAT LOOKED LIKE QUIESCENCE — expect this again
+>
+> Track Q sat still for ~20 minutes not because it was done but because
+> **the architect's composer had two Q-RESIDUE vote requests stacked as
+> `[Pasted Content …]` and never submitted.** No `Working`, no turn, no
+> vote, and nothing in the system surfaces it. A bare `Enter` released it.
+>
+> **"The fleet is quiescent" is an observation with at least two causes.**
+> Single-threading makes idle rings normal, which is exactly what
+> camouflages a wedged pane. On any quiet tick, `capture-pane -S -200` the
+> architect specifically and look for stacked pastes — the composer strands
+> there repeatedly. See `sweep-wedged-panes-misses-stacked-paste-form`.
+
+> ### ⚠ AND A GREP THAT NEARLY MIS-REPORTED THE MERGE
+>
+> Verifying the merge, `grep -c 'examples.len() == 5'` on main returned
+> **1** — reading as "the frozen count survived." It had not: the match was
+> inside a **comment documenting its removal**; the live assertion is
+> `!examples.is_empty()`. **Grepping a name instead of the mechanism** —
+> the precise failure class this WP existed to remove, committed while
+> verifying the fix for it. Read the context, never the count.
 
 > ### ★★ THE RESULT WORTH KEEPING FROM THIS WP
 >
@@ -102,6 +117,12 @@ every code merge.**
 >
 > **Require the mutation proof on every future test-rework WP.** It is the
 > only step that distinguishes a grounded assertion from a green one.
+>
+> ⚠ **But do not over-read the three runs.** They are three confirmations
+> of **one** discriminator, not three discriminators — all three flipped
+> the same seam. A wrong seam produces exactly this agreement. Same shape
+> as `differential-oracle-is-blind-to-a-shared-premise`. Raised with the
+> adversary at merge; unresolved by design, it is theirs to attack.
 
 > ### ⚠ I MIS-READ THIS WP'S DIFF AND TOLD THE FLEET
 >

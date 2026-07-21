@@ -1,15 +1,43 @@
 ---
 id: Q-RESIDUE
 title: "the Track Q rework residue — 10 tests, folded from Q3-Q7"
-status: active
+status: closed
 owner: runtime
 size: S
 gate: none
 depends_on: []
 blocks: []
-github: null
+github: 818
 origin: docs/program/qa-triage/FINDINGS.md (Q2 triage, 2026-07-21; operator folded Q3-Q7 into one item)
 ---
+
+> ## ✅ CLOSED 2026-07-21 — merged `origin/main @ 64337192` (PR #818)
+>
+> All ten reworked or honestly labelled; all four acceptance criteria met;
+> CI green; all three retros in (implementer `evt_6zydx4gnservd`, QA
+> `evt_1e1zth8b2s8v8`, leader `evt_63fybzefcx627`). Adversary notified at
+> merge (`evt_4g7qasxqdy5s8`).
+>
+> **★ AC-2 is the finding worth carrying forward.** The mutation proof caught
+> a bad test *before it shipped*: a first draft of the settlement-ordering
+> rework hand-sequenced two helper functions instead of invoking the real
+> `unsafe extern "C"` entrypoint, so it would have stayed green through a
+> real regression — a test exercising a **proxy** instead of the
+> **mechanism**, precisely the class this item existed to remove. The gate
+> caught it, not review. **A green rewrite proves nothing on its own.**
+>
+> ⚠ **And a caution on how it was confirmed.** The highest-risk rework has
+> three independent mutation runs agreeing on the same panic
+> (`abi_v1.rs:1590`, `left: 0, right: 1`). That is three confirmations of
+> **one** discriminator, not three discriminators — a shared wrong seam
+> would produce exactly this agreement. Raised with the adversary at merge.
+>
+> **Retro carry (leader):** re-verify a branch's base is current *in the same
+> breath as opening the merge Decision*, not at WP kickoff. The first
+> Decision (`dec_vq805w1kj21y`) was correctly BLOCKed on stale identity and
+> superseded by `dec_33rx1th38csyd`; the rebase was clean and
+> content-identical. The miss was **timing, not knowledge** — everyone
+> already knew the rule.
 
 Q3–Q7 of `docs/program/11-test-suite-and-ci-remediation.md` are **folded
 into this single item** (operator, 2026-07-21). Q2 triaged all 428 flagged
