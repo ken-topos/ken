@@ -44,7 +44,7 @@
 //! `BufferFreeze` has no *narrowing* case here because no malformed span is
 //! constructible from checked source at the landed surface -- an empirical
 //! finding, not a derived closure result, and not an omission. See
-//! `buffer_freeze_malformed_span_is_unconstructible_on_landed_producer_closure`
+//! `buffer_freeze_malformed_span_is_unconstructible_at_the_landed_surface`
 //! for exactly what that rests on and what it does not claim. Its narrowing
 //! guards stay covered at the dispatch boundary in `ken-interp`.
 
@@ -561,7 +561,7 @@ fn fs_read_at_malformed_offset_without_read_right_narrows_to_invalid_offset() {
 // enumeration-incomplete, `SEAL-2` owns the durable producer-enumeration gate,
 // and if the seal or its future gate fails these narrowings owe executable
 // coverage too. See
-// `buffer_freeze_malformed_span_is_unconstructible_on_landed_producer_closure`
+// `buffer_freeze_malformed_span_is_unconstructible_at_the_landed_surface`
 // for the full statement of what that evidence does and does not support.
 //
 // Their coverage is the interpreter-level dispatch test, not this differential.
@@ -677,7 +677,7 @@ fn elaborates(span_expression: &str, result_type: &str) -> Result<(), ken_cli::R
 /// public `TransferCount` producer. That gap is also `SEAL-2`'s, and the pin is
 /// retained here as defense in depth rather than as a load-bearing premise.
 #[test]
-fn buffer_freeze_malformed_span_is_unconstructible_on_landed_producer_closure() {
+fn buffer_freeze_malformed_span_is_unconstructible_at_the_landed_surface() {
     // Both private span producers are unnameable from checked source. This pins
     // the empirical seal at the differential layer; it does not enumerate the
     // producer surface, which is SEAL-2's job.

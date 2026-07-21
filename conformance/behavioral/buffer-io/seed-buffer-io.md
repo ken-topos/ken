@@ -565,7 +565,7 @@ Runtime identities such as `file_r` and `buffer_r` do not.
   coverage.** The narrowing guards remain correct defense-in-depth, covered at
   the dispatch boundary above.
 
-  `rt_parity_native.rs::buffer_freeze_malformed_span_is_unconstructible_on_landed_producer_closure`
+  `rt_parity_native.rs::buffer_freeze_malformed_span_is_unconstructible_at_the_landed_surface`
   pins the empirical seal at the differential layer: `PrivateBufferSpan`,
   `PrivateTransferCount`, and the sealed `write_all_advance_span` must all stay
   unnameable from checked source. It pins that seal; it does not enumerate the
