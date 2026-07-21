@@ -2,6 +2,80 @@
 
 ---
 
+## ☕ OPERATOR BRIEFING — staged 09:30Z, for your ~11:30Z return
+
+**Read this first; everything below is the working record.**
+
+### Shipped while you were out (both CLOSED — merged, verified by content, retros in)
+- **SPAN-SEAL** — merged `cd4184b8`, **closed**, retros in. Seals the
+  `BufferSpan` producer surface: public `write_all_advance_span` let checked
+  source forge a span from unrelated span/count values, violating locked
+  `spec/30-surface/38-ffi-io.md:356-365`. Cost **4 Decisions**.
+- **RT-PARITY** — merged `e892777c` (PR #800), **closed**, retros in.
+  Interpreter ↔ native checked buffer-IO narrowing parity + six executable
+  differentials. Cost **5 Decisions**.
+- **Adversary, two hunts, both high-value.** On SPAN-SEAL: **the seal HOLDS** —
+  it attacked the property rather than the oracle; every forgery route rejects.
+  On RT-PARITY: **one CONFIRMED violation of a LOCKED spec line** (below).
+
+### ★ The one finding you'd want to hear about first
+
+**`TransferCount.remaining` is computed from the RAW request length, not the
+CAPPED EFFECTIVE one — on both interpreter and native.** A capacity-4 buffer
+ends up completely full while the reified count tells checked source 4 bytes of
+budget remain. Fail-closed (nothing over-reads), but **the value checked source
+reasons with is wrong against locked `38 §:404-405`**. Confirmed by *execution*:
+`adversary/R1-effective-request-repro @ 06bb9538` fails at `e892777c`.
+
+**Why RT-PARITY's own tests could never have caught it:** interp and native
+*agree*. Six differentials over a shared wrong basis all pass green. **A
+differential is a relative oracle — it establishes agreement, never
+correctness.** Filed as **BUDGET-EFF**, now **ahead of SEAL-2**. Two things
+that change its shape: it is a **plumbing gap** (the effective value is
+discarded at validation and reaches neither reifier — two closures with very
+different blast radii, an Architect call), and the **spec erratum must come
+first** because `38` contradicts itself and code-first guarantees re-derivation.
+
+### The one thing I'd want you to know
+**Seven of those nine Decisions were spent on defects I introduced**, all one
+shape: I handed over a **mechanism or a grounding** and it silently inherited
+whatever that thing could not do. AC-3 named a Pi-codomain walk (missed
+aliases), then named `GlobalEnv::lookup` (missed constructors), then the
+RT-PARITY brief grounded a claim on a closure the adversary had **already
+invalidated 5 minutes before I corrected the lesson but not the instruction**.
+The rings' execution was consistently strong; the rework was mine. Four new
+memories written. If you read one, make it
+`correcting-a-claim-requires-sweeping-instructions-built-on-it`.
+
+### Needs you (nothing is blocked on it right now)
+1. **Provider exposure.** Only `runtime-implementer` and `adversary` are on
+   Anthropic; **every other seat is on the tighter OpenAI pool.** You mentioned
+   possibly moving the fleet to Anthropic — this is the argument for it.
+2. **`MODELS.md` is wrong about the fleet.** A full sweep shows
+   implementer + enclave = **T1**, leader + QA = **T2**, uniformly across all
+   six build teams. The table reads as if build roles are uniformly T2. Not
+   Runtime-specific, as I previously (wrongly) told you.
+3. **Title-only issues #38/#32/#24/#25** — untouched per your instruction,
+   awaiting reconstruction *with* you.
+4. **`RT-ESCAPE`** — filed, unsized. Escaping a 2nd `Resource` through a bracket
+   fails native lowering. Pre-existing; surfaced by RT-PARITY, correctly not
+   fixed there. Now also carries the adversary's untested **R2**.
+5. **Convo posting outage is recurring and it cost us twice tonight.**
+   `runtime-implementer` lost `post_response`/`share`/`reply_to` **while
+   convo-channel stayed up** — alive, receiving mentions, unable to answer. It
+   wrote its retro to disk and I posted it verbatim on its behalf. Worth knowing
+   because **an absent post is not evidence of a stalled agent**, and I mis-read
+   that seat's state twice today before working this out.
+
+### Queued and ready, in order
+**SEAL-2** (drafted, Foundation — closes the producer *enumeration*: every
+namespace, every result position, every source root, derived from the
+elaborator's own structure so a new namespace is a build break) · F1 (#37) →
+Architect · STR-BIJ → enclave · A3 · F4 (now also carries adversary S3) · F3 ·
+RT-SPLIT.
+
+---
+
 # ▶ ACTIVE WINDOW — 2026-07-21 (operator away ~03:30 → ~11:30 UTC)
 
 Mandate (operator, 2026-07-21): *"Keep going, route around problems if you
@@ -69,56 +143,189 @@ agent (if opus refuses)."*
 
 Operator will *probably* check in in a few hours.
 
-## ▶▶ RESUME HERE AFTER COMPACTION (rewritten 06:56Z)
+## ▶▶ RESUME HERE AFTER COMPACTION (updated 10:28Z — RT-PARITY MERGED; BUDGET-EFF is next)
 
-**State in one paragraph.** Fleet single-threaded, operator away until ~11:30Z.
-**SPAN-SEAL** (Foundation) is APPROVED and **mid-publish as PR #798** at exact
-`02677059`; Decision `dec_1971te8pb7spb` verified RESOLVED (QA + Architect §14 +
-CV, all on that SHA). Publisher is a **live background process** waiting on CI
-(`Waiting 1557s before polling`), log at
-`<scratchpad>/span-seal-publish.log`. `origin/main` is still `d18b4b89` — **that
-is expected, not a failure.** RT-PARITY is HELD at `506fa393` behind it. Every
-other ring idle is CORRECT.
+> ### ⏱ STATE: `origin/main = e892777c`. RT-PARITY **MERGED** (PR #800),
+> verified by content. Adversary notified. **Retros: QA ✅ + leader ✅ in;
+> implementer's still pending — the WP CLOSES when it lands.**
+>
+> ### ★★ QUEUE REORDERED — `BUDGET-EFF` NOW OUTRANKS SEAL-2
+>
+> The adversary's RT-PARITY hunt (`evt_1s9rt48z7bpsn`) found **R1: a CONFIRMED
+> violation of a LOCKED spec line.** `TransferCount.remaining` derives from the
+> **raw** request length, not the **capped effective** one, on BOTH interp and
+> native. Buffer full at capacity 4 while the reified count says 4 bytes of
+> budget remain. Fail-closed (not memory-unsafe, not a forgery) but **the value
+> checked source reasons with is wrong against locked `38 §:404-405`/`:443-444`**.
+> Full draft: `docs/program/wp/BUDGET-EFF-remaining-bounded-by-effective-request.md`.
+>
+> **Why it outranks SEAL-2:** SEAL-2 closes a gate with **no live defect**;
+> BUDGET-EFF is a **live contradiction of locked normative text**.
+>
+> **★ Why RT-PARITY could not have caught it — carry this:** interp and native
+> **agree**. Six differentials over a shared wrong basis all pass green. **A
+> differential is a RELATIVE oracle — it establishes agreement, never
+> correctness.** Where the spec is the authority, the oracle must assert against
+> the **normative text**. Memory: `differential-oracle-is-blind-to-a-shared-premise`.
+>
+> **★★ IT IS A PLUMBING GAP, NOT A FORMULA FIX — do not size it as a two-line
+> swap.** `TransferCountV1::new(read, effective)` **validates against
+> `effective` then DISCARDS it**; the reply carries `span.length == count` and
+> the request holds the raw length, so **neither reifier can compute the bound
+> from what it is given.** Two closures with different blast radii — (a) reply
+> carries the effective request (**wire/ABI**, ends host+runtime being
+> byte-unchanged), or (b) host caps the request record before reification (no
+> wire change). **ARCHITECT CALL, routed WITH the enclave ruling** — they
+> interact. Confirmed by EXECUTION: oracle at
+> `adversary/R1-effective-request-repro @ 06bb9538` (local, unpushed), fails at
+> `e892777c` with all three premise assertions passing. It is **AC-3, pinned
+> unchanged** — the ring makes it pass, never edits it to fit.
+>
+> **⛔ SEQUENCING IS FORCED: the SPEC ERRATUM COMES FIRST.** `38` contradicts
+> itself — `:404-405`/`:443-444` say *effective*, `:419-420`/`:438-440` say
+> *requested*. **An implementer reading only the table writes exactly what is
+> landed**, so fixing code first guarantees re-derivation. Spec enclave rules
+> which is normative → then the implementation, with a **spec-absolute** oracle.
+>
+> ### NEXT ACTIONS, in order
+> 1. **Collect the implementer's §10 retro → CLOSE RT-PARITY** in the tracker.
+> 2. **Doc-only publish** to sync tracker + log + both WP drafts to `main`.
+> 3. **BUDGET-EFF:** route the spec question to the **Spec enclave** (idle;
+>    Handoff Gate them first), then frame the implementation half.
+> 4. **THEN SEAL-2** — draft complete at
+>    `docs/program/wp/SEAL-2-carrier-producer-enumeration-closure.md`, evidence
+>    `adversary/SEAL2-repros@70a603da`. Re-anchor on current `origin/main`.
+> 5. Then: F1 (#37) → Architect · STR-BIJ → enclave · A3 · F4 (carries adversary
+>    S3) · F3 · RT-SPLIT. **STOP at #38/#32/#24/#25.**
+>
+> **`RT-ESCAPE`** — filed, unsized; **adversary's R2 attached to it** (untested:
+> `freeze` takes buffer + span independently and `PrivateBufferSpan` carries no
+> buffer identity, so a span minted against buffer A is well-typed against B —
+> a *call-site indexing* question, orthogonal to the constructibility exemption).
+>
+> **Operator briefing is staged at the top of this file** for the ~11:30Z return
+> — **update it with BUDGET-EFF before they arrive.**
 
-**THE MERGE CHAIN IS MY OPEN OBLIGATION — do this, in order:**
-1. Confirm the merge: `ps` for the publisher **and** read its log tail; then
-   **verify BY CONTENT** — `git cat-file -p origin/main:crates/ken-elaborator/src/prelude.rs | grep write_all_exact_prefix_prop`. Never trust a "merged" line or an exit code.
-2. **NOTIFY THE ADVERSARY `agt_37vnwmcdxhw00`** — MANDATORY on every CODE merge;
-   it hunts event-driven and idles silently without one. This is the step most
-   easily lost to a compaction.
-3. Request **§10 retros** from Foundation (leader + implementer + QA). Carry two
-   lessons: the **four-layer enumeration defect**, and **AC-names-a-mechanism**
-   (layers 3–4 were MY AC's fault — I specified `GlobalEnv::lookup` and a
-   Pi-codomain walk instead of the property).
-4. **Close SPAN-SEAL** in the tracker.
-5. **Release RT-PARITY** — tell runtime-leader to rebase onto the landed sealed
-   closure and respin; it drops the derived-span test that depended on the
-   escaped helper, keeps its six approved differentials.
-6. **Then the queue:** F1 (#37) → Architect · Handoff Gate + kick STR-BIJ to the
+## ▶▶ (superseded) RESUME BLOCK — 09:32Z, RT-PARITY PUBLISHING
+
+> ### ⏱ IMMEDIATE — THE MERGE IS IN FLIGHT
+>
+> **PR #800, `wp/RT-PARITY-interp-native @ 9f32967d4ddb15713ecf9d2fda3f4be070f6ae8d`**,
+> non-doc-only. Publisher launched 09:14Z as bg **pid 2369541**; log at
+> `scratchpad/rt-parity-publish.log`. It sleeps **2144s (until ~09:50Z)**, then
+> polls checks, then merges. Decision `dec_3xyep8021ke88` verified
+> resolved/APPROVED at that exact SHA (QA + Architect §14 + CV). Published
+> **byte-identical** — §2a tracker bundle deliberately omitted.
+>
+> **`gh` is NOT authed in my shell** (only the publisher mints credentials), so
+> PR state cannot be queried directly — judge from the log + `origin/main`.
+>
+> **ON MERGE, in order — the watchdog carries the full version:**
+> 1. **Verify BY CONTENT** on `origin/main`, never the "merged" line: the four
+>    paths (`crates/ken-interp/src/eval.rs`,
+>    `crates/ken-cli/tests/rt_parity_native.rs`,
+>    `crates/ken-interp/tests/px8p_checked_buffer.rs`,
+>    `conformance/behavioral/buffer-io/seed-buffer-io.md`);
+>    `crates/ken-runtime/` + `crates/ken-host/` **zero-line diff**; renamed test
+>    `..._unconstructible_at_the_landed_surface` present and the old
+>    `..._on_landed_producer_closure` absent everywhere.
+> 2. **NOTIFY ADVERSARY `agt_37vnwmcdxhw00`** — mandatory on every code merge.
+> 3. Request §10 retros (carry the three items from `evt_3p9a0977psc4y`).
+> 4. Close the WP. 5. Sync tracker via separate doc-only publish.
+> 6. **THEN SEAL-2** — draft at
+>    `docs/program/wp/SEAL-2-carrier-producer-enumeration-closure.md`, evidence
+>    `adversary/SEAL2-repros@70a603da` (visible from every worktree, no push
+>    needed). Frame to `wp/SEAL-2-frame` **re-anchored on the NEW `origin/main`**,
+>    publish doc-only, Handoff Gate Foundation, kick.
+>
+> **An operator briefing is staged at the top of this file** for the ~11:30Z
+> return. Keep it current.
+
+**Resumed cleanly at 07:12Z.** The planned compaction cost nothing: branch was
+`steward/work`, tree clean, and the durable record on `origin/main` +
+`steward/work` carried everything. **Obligation 1 is now DISCHARGED.**
+
+**State.** Fleet single-threaded; operator away until ~11:30Z. `origin/main =
+7e87d173`. **SPAN-SEAL ✅ CLOSED** — merged `cd4184b8` (PR #798), verified by
+content, adversary notified, **all three §10 retros in** (leader 07:06:33, QA
+07:06:39, implementer 07:06:40). Foundation ring idle-by-design.
+**RT-PARITY ACTIVE** — runtime-implementer confirmed working (`Befuddling…`,
+mid-rewrite of the closure citation onto the landed sealed closure). Every other
+ring idle is CORRECT.
+
+**★ Liveness-check correction, 07:12Z — worth more than the outcome.** My first
+capture of `runtime-implementer` used `tail -6` and showed an **empty prompt, no
+paste, no spinner** — the "never delivered" row of my own gate table. I was one
+step from re-delivering a kickoff into a seat that was six minutes deep in the
+work. A `-S -60` capture showed `Befuddling… (5m 52s)` rendering **above** the
+input line. **The Anthropic spinner is not in the last six lines. Capture WIDE
+(`-S -60`), always** — this is the same trap already recorded for the
+`Compacting…` bar, and it generalises: my liveness detectors keep matching a
+convenient proxy (the bottom of the pane) instead of deciding the property (is
+this seat working). Narrow capture is not a cheaper check; it is a wrong one.
+
+**★ ADVERSARY VERDICT ON SPAN-SEAL (07:26Z, `evt_74mjc4txd9y1e`): SEAL HOLDS.**
+Deep wrapped-inclusive sweep `MISSED BY LANDED ORACLE: []`; every forgery route
+`UnresolvedCon`; the transparency exploit answered NO. **RT-PARITY not
+undermined.** Three findings, none merge-blocking. **Rulings I made (07:30Z):**
+S2 → RT-PARITY as a **wording** requirement only, not a block (premise is TRUE,
+just ungated; a third block would be disproportionate, and the gate is
+Foundation's not Runtime's). S1+S2 → **SEAL-2**, drafted, deliberately NOT framed
+to a branch until RT-PARITY closes (stale-frame §14 hazard). S3 → **PX8-F-PROOF
+(F4)** scope. Adversary asked to preserve repros on `adversary/SEAL2-repros`.
+
+**★★ I OVERCLAIMED, AND CORRECTED IT AT THE SAME VOLUME (`evt_6f8q947c24esp`).**
+When I closed SPAN-SEAL I told the fleet the loud-fail axis was *"closed
+independently of the author's imagination."* **It is not.** The panic fires only
+for an id **already in `env.globals`** that classifies as neither declaration nor
+constructor. It closed the **classification**; the **enumeration** stayed
+partial — a `Result E BufferSpan` producer and a class field both pass silently.
+**A loud-fail guard is only as closed as the domain it iterates.** Three drafts
+of AC-3, three mechanisms named, and the adversary found instances #4 and #5.
+The corrected lesson is *stronger* than the one I posted, which is why saying so
+publicly cost nothing and buys the next reader the real rule. **When a lesson I
+broadcast turns out to be partly wrong, the correction goes to the same audience
+at the same prominence — a quiet fix leaves the overclaim standing in everyone
+else's notes.**
+
+**MY OPEN OBLIGATIONS, in order:**
+1. ~~Collect Foundation's §10 retros → CLOSE SPAN-SEAL~~ ✅ **DONE 07:15Z.**
+2. **RT-PARITY respin:** needs a **FRESH Decision** with **FRESH** Architect +
+   CV votes — no prior vote carries (this has bitten this WP twice, the fleet
+   four times). On merge: verify by content → **NOTIFY ADVERSARY
+   `agt_37vnwmcdxhw00`** → §10 retros → close.
+3. **Then the queue:** F1 (#37) → Architect · Handoff Gate + kick STR-BIJ to the
    enclave · A3 · F4 · F3 · RT-SPLIT. **STOP at the title-only issues**
-   (#38/#32/#24/#25) — reconstruct those WITH the operator.
+   (#38/#32/#24/#25) — reconstruct WITH the operator.
+4. **Low priority:** `MODELS.md` follow-up — the full-fleet sweep showed
+   implementer=T1 / leader=QA=T2 is the **fleet-wide convention**, not a Runtime
+   "inversion"; PR #793's example understates it. Also flag to the operator that
+   **only `runtime-implementer` and `adversary` are on Anthropic** — every other
+   seat is on the tighter OpenAI pool (13%).
+5. **Unsized, filed:** `RT-ESCAPE`.
 
-**Also queued (low priority):** a `MODELS.md` follow-up — the full-fleet sweep
-showed implementer=T1 / leader=QA=T2 is the **fleet-wide convention**, not a
-Runtime "inversion"; PR #793's example understates it.
-
-**Discipline earned this window — carry all of it:**
+**Discipline earned this window — all of it still binding:**
 - **A success signal tells you a thing RAN, never that it did what you meant.**
-  Four tools misled me tonight: publisher exit code, gate-script exit 0, `git
-  commit` on the wrong branch, and a task-completion notification for a `nohup`
-  wrapper whose job was still running. **Verify by CONTENT.**
+  Five tools misled me: publisher exit code, gate-script exit 0, `git commit` on
+  the wrong branch, a task-notification for a `nohup` wrapper, and the
+  publisher's own "merged" line. **Verify by CONTENT, always.**
 - **Branch discipline:** end every publish with `git checkout steward/work` in
-  the SAME command; `git rev-parse --abbrev-ref HEAD` before any log/tracker
-  write. I lost 121 log lines onto a stale branch once tonight.
+  the SAME command; `git rev-parse --abbrev-ref HEAD` before any log write.
 - **My detectors fail the way my ACs do** — matching a convenient proxy instead
-  of deciding the property. Three false signals (verb-enumeration false IDLE;
-  `tail -5` false stall; bare `400` matching agent IDs). **Verify before
-  acting**, and exclude self from fleet sweeps.
-- After any Decision opens, **confirm every named reviewer reached `Working`** —
-  the architect stranded ~17 min on an unsubmitted paste tonight; repair with a
-  bare `Enter`, and capture WIDE.
-- **If a third block lands on AC-3, do NOT amend the frame again** — route it to
-  the Architect as a design question.
+  of deciding the property. **Four** false signals; every one neutralised by
+  capturing the pane *before* concluding. **Verify-before-acting is the single
+  highest-yield discipline of this session.** Use the watchdog's structural,
+  provider-agnostic patterns — do not retype a narrower one-off.
+- **An AC that names a MECHANISM transfers its blind spots into the deliverable,
+  invisibly.** State the property, the closure axes, and require a **loud
+  failure on the unhandled case**. This cost SPAN-SEAL two of its four blocks.
+- After any Decision opens, **confirm every named reviewer reached a working
+  state** — the architect stranded ~17 min on an unsubmitted paste; repair with
+  a bare `Enter`; capture WIDE.
+- **Do not send a ring a claim stronger than its evidence.** RT-PARITY's new
+  basis is a *test-derived* closure, not a proof — it has been wrong three
+  times. "Unconstructible on the landed closure, asserted by `<test>`" is
+  honest; "impossible" is not.
 
 ## Decisions this window
 
