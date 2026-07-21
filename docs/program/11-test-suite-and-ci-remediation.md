@@ -67,13 +67,21 @@ Two consequences that shape the fix:
   and `px8f_write_partition` are ~310s each in a single `#[test]`, so they
   become the critical path the moment cross-binary parallelism exists.
 
-### ⚠ What C1 (caching) actually bought
+### ⚠ What C1 (caching) actually bought — and why it is being removed
 
 **Nothing measurable, and it could not have.** The build step is 47s, so
-even a perfect cache saves under a minute of a 47-minute run. C1 was still
-correct to land — near-zero risk, and it absorbs the one-time dependency
-rebuild §3's `opt-level` item needs — but **it must never be reported as a
-throughput improvement.**
+even a perfect cache saves under a minute of a 47-minute run.
+
+> **Operator ruling, 2026-07-21: remove `Swatinem/rust-cache` as part of C6.**
+> No measurable benefit, and it is an **extra third-party dependency with
+> access to the build — a supply-chain attack surface** taken on for nothing.
+> A dependency has to earn its place; this one does not. Tracked as **C8**.
+
+I had argued C1 was worth keeping because it would absorb C6's one-time
+dependency rebuild. That argument is weak: it defends a dependency on the
+strength of a *hypothesis* (C6) that has not been tested, and it weighs only
+time, never the trust surface. **A cache that saves under a minute is not
+worth an action that runs inside our build.**
 
 > ★ **A second reason not to judge C1 yet: GitHub scopes caches by ref.**
 > After #804, `repos/{owner}/{repo}/actions/caches` held exactly one entry,
@@ -139,6 +147,7 @@ resolved.
 | **C7** | **Split the two 1-test binaries.** `px8f_buffer_native` and `px8f_write_partition` are ~310s in a single `#[test]` each, so no scheduler can subdivide them; after C2 they *are* the critical path. Split each into independent cases, preserving what each asserts. | S |
 | **C4** | Rework the remaining slow tests using §1's table. Note this is now a **short** list: below rank 10 the entire tail is ~24% of execution and falling fast. | M |
 | **C3** | Evaluate dropping the separate `build` step — it is 47s of duplicated work. Cosmetic at this scale. | S |
+| **C8** | **Remove `Swatinem/rust-cache`** (operator ruling, §1). Do it **with** C6, so one run measures both the optimization and the cache removal against the same baseline. | S |
 | **C5** | Per-crate matrix. **Discouraged** — §1 shows the load is concentrated in `ken-cli`, so a matrix floors at the slowest crate. Revisit only if C2+C6+C7 disappoint. | M |
 
 **Order: C2 → C6 → C7, then re-measure.** These are three independent
@@ -165,6 +174,51 @@ lines added and nothing else changed, compared against §1's per-binary table.
 CI is the correct place to run it — it is the offloaded compute, and a
 local dependency rebuild at `opt-level = 2` is exactly the kind of full-graph
 build that OOMs the box (CLAUDE.md / COORDINATION §12).
+
+### 3b. ★ C6 and C8 interact — measure the BUILD step, not just the tests
+
+C6 raises optimization on **every dependency**, cranelift included. That
+cuts codegen time at *run* time, which is the point — but it can only
+*increase* dependency **compile** time. C8 removes the cache in the same
+change, so **every run pays that increase in full**.
+
+Today the build is 47s, so there is nothing to protect. If C6 pushes it to
+several minutes, C8's removal stops being free and the two items are in
+genuine tension.
+
+**So the C6 run must report the Build step's duration, not only the test
+numbers.** Three outcomes, decided in advance so the result is not
+rationalized after the fact:
+
+| Build after C6 | Reading |
+|---|---|
+| still under ~1 min | C6 and C8 are both clean wins. Land both. |
+| 1–3 min | Acceptable; C8 still right — a minute is not worth a third-party action inside the build. |
+| much larger | Real tension. **Return it to the operator** with the number; do not silently reinstate the cache to protect C6. |
+
+If the third case arrives, note that `actions/cache` is **first-party
+GitHub**, so the supply-chain objection that retires `Swatinem/rust-cache`
+does not automatically apply to it. That is an option to *offer*, not a
+decision to take.
+
+### 3c. ⚠ C2 introduced a dependency of exactly the same class
+
+The operator's objection to `Swatinem/rust-cache` is about third-party code
+running inside our build. **C2 added `taiki-e/install-action@nextest`,
+unpinned, which is the same class of exposure** — and `cargo-nextest` itself
+is a new build-time dependency.
+
+The difference is that nextest **earns it**: it is the mechanism that
+replaces the serial 200-binary walk, which is the actual problem. `rust-cache`
+bought under a minute. That is the test a dependency has to pass.
+
+Two cheap hardenings worth taking regardless, neither blocking:
+
+- **Pin the action to a commit SHA**, not a floating tag. An unpinned tag is
+  mutable by whoever controls the repository.
+- Consider installing nextest from a **pinned, checksum-verified release
+  archive** instead of via a third-party action, removing the action from
+  the trust base while keeping the tool.
 
 ### Track Q — test-suite conformance to the guidelines
 

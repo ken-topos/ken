@@ -124,6 +124,23 @@ it manually, bypassing the gate.
   binaries total **48 seconds**. All three fat binaries do a real native
   codegen-and-link per test case.
 
+  > **Operator ruling 2026-07-21: remove `Swatinem/rust-cache` as part of
+  > C6** (tracked as C8). No measurable benefit, and it is a third-party
+  > dependency with access to the build — a supply-chain surface taken on
+  > for nothing. **A dependency must earn its place.** My counter-argument
+  > (it absorbs C6's rebuild) was weak: it defended a dependency on an
+  > untested hypothesis and priced only time, never trust.
+  >
+  > ⚠ **C6 and C8 are in latent tension** — C6 can only *increase*
+  > dependency compile time, and C8 makes every run pay it. **The C6 run
+  > must report the Build step**, not just test numbers. Thresholds are
+  > pre-committed in §3b; if the build blows up, **return it to the operator
+  > with the number** rather than quietly reinstating the cache.
+  >
+  > ⚠ **C2 added `taiki-e/install-action@nextest`, unpinned — same class of
+  > exposure.** It is defensible because nextest earns it (it fixes the
+  > actual problem) where the cache did not, but **pin it to a commit SHA**.
+
   **Next steps are C2 → C6 → C7, re-measuring between each:** nextest (one
   global pool replaces the serial walk), `[profile.dev.package."*"]
   opt-level = 2` (cranelift runs its codegen unoptimized — **hypothesis,
