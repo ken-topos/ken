@@ -125,11 +125,37 @@ a spec amendment and **not** an ADR. No enclave ruling gates the start.
 - **AC-3 — ★ the closure is DERIVED, and derived MODULO DEFINITIONAL EQUALITY.**
   This is the criterion that matters most; read the rationale below before
   implementing it.
-  Extend `crates/ken-elaborator/tests/px8f_buffer_io_surface.rs` to **walk
-  `env.globals`, look up each `GlobalId` via `GlobalEnv::lookup`, and collect
-  every global whose result type is `BufferSpan`.** Assert that derived set
-  equals an exact expected set (which should be **`{}`**). A newly added
-  `BufferSpan` producer must **fail this test by default.**
+  **State of the AC after two blocks — read this as a PROPERTY, and do not
+  read any API name below as the specification.**
+
+  In `crates/ken-elaborator/tests/px8f_buffer_io_surface.rs`, derive the set of
+  **every public global whose result type is `BufferSpan`** and assert it
+  equals an exact expected set (production: **`{}`**). The derivation must be
+  closed along **three independent axes**, each of which has already been
+  breached once:
+
+  1. **Modulo definitional equality** — weak-head-reduce against the real
+     `GlobalEnv` *before* the Pi decision and *after* every codomain step,
+     carrying a `Context` and pushing each Pi domain, then compare the
+     **reduced** head. (Breach 1: a syntactic head-match let a transparent
+     alias through.)
+  2. **Over every category of public global** — top-level declarations *and*
+     **constructors**, which live in a separate index and are **not**
+     reachable through the declaration accessor. (Breach 2: `lookup(*id)?`
+     silently dropped every constructor.)
+  3. **★ Closed by construction against categories that do not exist yet** —
+     if an `env.globals` id resolves to **neither** known category, the test
+     must **FAIL LOUDLY**, never `?`-filter it away.
+
+  **Axis 3 is the one that ends this.** Axes 1 and 2 were each found by a
+  reviewer *after* the fact, and enumerating categories will keep losing to the
+  next unenumerated one. A loud failure on the unknown case converts "a
+  category I did not think of passes silently" into "a category I did not think
+  of breaks the build" — which is the only version of this AC that is closed
+  independently of the author's imagination.
+
+  A newly added `BufferSpan` producer must **fail this test by default**, in
+  any category.
 
   > **⚠ AMENDED 2026-07-21 after CV blocked `8f625666` — the first
   > implementation of this AC satisfied its letter and still admitted a
@@ -198,6 +224,29 @@ a spec amendment and **not** an ADR. No enclave ruling gates the start.
 > only as strong as *derived modulo what*.** State the equivalence the closure
 > must hold under — here, Ken's definitional equality — or a reader will pick
 > the cheapest one that satisfies the words.
+>
+> **★★★ FOURTH occurrence, and the diagnosis of my own drafting.** The Architect
+> then blocked the *reduction-correct* oracle because it began each arm with
+> `env.env.lookup(*id)?` — and `GlobalEnv::lookup` resolves only top-level
+> declarations (`env.rs:342`). Constructors live in `ctor_index` behind
+> `GlobalEnv::constructor` (`env.rs:404`), so **every public constructor took
+> the `?` path and vanished from the derived set unexamined.**
+>
+> **This one is squarely mine, twice over.** My AC-3 originally said *"look up
+> each `GlobalId` via `GlobalEnv::lookup`"* — I **named an API and called it a
+> property**, so the implementer used exactly that API and inherited its blind
+> spot. Worse, I had grepped the accessors while drafting and `constructor` at
+> `env.rs:404` was **in my own search output**; I wrote only `lookup` into the
+> AC anyway.
+>
+> **So the meta-lesson is about how an AC is written, not about this surface:**
+> an acceptance criterion that names a **mechanism** transfers that mechanism's
+> blind spots into the deliverable, and it does so invisibly — the
+> implementation is *correct against the words*. State the **property**, name
+> the **axes it must be closed along**, and require a **loud failure on the
+> unhandled case**; let the implementer choose the mechanism. Every layer of
+> this defect except the first was introduced by a specification that described
+> *how* instead of *what*.
 
 ## 7. Guardrails
 
