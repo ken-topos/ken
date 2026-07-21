@@ -14,6 +14,287 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ## ⚡ LIVE STATE (2026-07-21 ~05:20Z) — `origin/main = 61a78620` — **RT-PARITY BLOCKED behind a new prerequisite: SPAN-SEAL (Foundation)**
+>
+> ### ★★ SPAN-SEAL — NEW, and it is now the ACTIVE WP (single-threaded fleet)
+>
+> **Frame:** `docs/program/wp/SPAN-SEAL-buffer-span-producer-closure.md` on
+> `wp/SPAN-SEAL-frame`. **Owner: Team Foundation** (grounded: `be65f3d2 PX8-F`
+> introduced *both* the prelude helper and the catalog lemma block).
+> **Votes required: QA + Architect §14 + CV** (published catalog surface).
+>
+> **Defect:** public `write_all_advance_span` (`prelude.rs:2076`) is **absent**
+> from the private-name closure (`:2111+`), so checked source can forge a
+> `BufferSpan` without naming `PrivateBufferSpan` — violating locked
+> `spec/30-surface/38-ffi-io.md:356-365` (*"User code can neither forge the
+> budget nor choose a different one"*). **Not** primarily an overflow bug: the
+> args are not indexed to the same request/span/buffer, so the breach is
+> available at small values. **A `u64` bound check is the wrong fix.**
+>
+> **Second defect underneath:** `writeAll` never executes that helper — the real
+> loop inlines the construction at `prelude.rs:2044-2046` — so the published
+> catalog lemma `write_all_preserves_exact_prefix` proves a property of a
+> *restatement* of the step, not the step. Sealing + routing the recursion
+> through one private helper makes SPAN-SEAL a **net strengthening**.
+>
+> **Not a spec amendment, not an ADR** — code repair to conform to already-locked
+> spec. Nothing waits on the enclave.
+>
+> **RT-PARITY is HELD at `506fa393`** pending this; then rebase, drop the
+> derived-span test, retain its six approved differentials.
+>
+> ### ↓ prior live state, kept for history ↓
+>
+> ## ⚡ LIVE STATE (2026-07-21 ~01:30Z) — **post-compact re-orient done; STR-BIJ framed; F1 ESCALATED to soundness and HELD**
+>
+> **Re-oriented after compaction** (orientation + COORDINATION.md + tracker +
+> memory scopes). Watchdog **re-armed** (`set_interval` 900s) — schedules do not
+> survive an MCP reconnect/compaction, so this is mandatory, not optional.
+>
+> ### ★★ F1 (#37) — RE-CLASSIFIED AS SOUNDNESS-RELEVANT. Advisory `evt_55tnpnhvcpptf`.
+>
+> Research returned the verdict: **`nullary_force` is reachable, INCLUDING the
+> native path.** The Architect's disposition `evt_2gd715pskkab2` set the
+> conditional explicitly — reaches native ⇒ soundness WP, not defense-in-depth.
+> **The trigger is met.** Chain (grounded @ `61a78620`): kernel admits W-style
+> Pi-typed IH binders → the production ITree `bind` passes one **bare** as a
+> `Vis` constructor arg → the native driver does *not* screen it out → the
+> collector sets `nullary_force = arguments.is_empty()` and **bypasses the arity
+> and Pi-result checks** → erasure emits a zero-arity
+> `CheckedComputationalIHInvocation` → Cranelift lowers it as a complete
+> invocation. Existing **passing** native witness
+> `px7l_checked_host_recursive_bind.rs:142-188` — a green test on this path shows
+> the producer is live and accepted; it is **not** reassurance.
+> **Bounded, per research's own discipline:** kernel acceptance + native
+> reachability are established; a divergent/wrong-result program is **NOT**
+> constructed, and the coupled F3 consequence is **NOT** independently
+> established. Repair choice is **Architect's** — research correctly declined it.
+>
+> **⏸ HELD, with a concrete release condition — routes to the Architect the
+> moment `dec_7p15cgqz3x0sg` (RT-PARITY) resolves.** Reason: the Architect holds
+> an in-flight §14 obligation on a candidate that is mid-remediation and will
+> need a **fresh vote on a re-anchored SHA**; starting a deep soundness analysis
+> now puts it mid-F1 when that vote lands. Fleet is single-threaded (operator).
+> F1 blocks nothing. **This hold is written down precisely because the last
+> F1 routing was booked as intent and never sent** — a queued item is only
+> queued if it survives me. Ack posted `evt_1tjcvrqqdtjf4`.
+>
+> ### ⚠ NEW FAILURE MODE — PROVIDER CONTENT REFUSAL stalled the implementer seat (~01:22Z)
+>
+> `runtime-implementer` (gpt-5.6-sol) went `Working` on the CV remediation, then
+> **dropped back to an idle prompt posting nothing**. Pane tail:
+> *"ⓘ This content can't be shown — We take extra caution with **cybersecurity
+> requests**."* **Provider-side safety-classifier false positive — not an agent
+> error, not a rate limit, not a stall of the kind the watchdog enumerates.**
+> It tripped while authoring the native differential harness CV mandated:
+> `rt_parity_run_raw_native_freeze`, `ken_runtime::NativeEffectRunOptionsV1`,
+> running a native artifact and asserting `exit_status`/`terminal_error` over
+> buffer-freeze + fs read/write. Running a compiled artifact and inspecting its
+> exit status and fs effects is *abstractly* the shape that classifier watches;
+> the classifier cannot see that this is differential testing of Ken's own host
+> ops. **⇒ re-sending the same content re-trips it; "continue" is NOT recovery.**
+>
+> **★ THE REAL HAZARD WAS THE UNCOMMITTED WORK.** The seat sat on
+> `wp/RT-PARITY-interp-native @ a692134e` with **`eval.rs` MODIFIED BUT
+> UNCOMMITTED** — 1344 changed lines vs `origin/main`.
+> **`scripts/handoff-gate-compact.sh` does `git reset --hard` and auto-preserves
+> only *committed* branch-ahead work — uncommitted edits are destroyed.** A
+> routine compaction/gate pass on that seat would have silently vaporized the
+> whole remediation. Flagged to runtime-leader (`evt_4wtjr82xrafat`), which
+> immediately ordered a labelled WIP commit (`evt_qxwsvbrxrjd1`) and is now
+> evaluating harness placement. **Generalize: before ANY gate/compaction pass on
+> a seat, check `git status` for uncommitted work — branch-ahead is preserved,
+> working-tree is not.**
+>
+> Also surfaced (flagged, NOT ruled — it is the leader's/Architect's lane): the
+> seat was reaching for `ken_runtime` from inside `ken-interp`'s test module.
+> `ken-cli`'s `px7l_checked_host_recursive_bind.rs` already builds a native
+> program, runs the linked artifact and compares against the interpreter — a
+> landed, accepted pattern that likely satisfies AC-3 more directly *and* reads
+> less like the refused shape.
+>
+> ### 🚨 SECOND REFUSAL (~01:50Z) — RT-PARITY BLOCKED ON AN INFRASTRUCTURE CONSTRAINT, ESCALATED TO OPERATOR
+>
+> After runtime-leader's placement ruling (`evt_61g9afgybam5h` — move the net to
+> the `ken-cli` native harness; **structurally determined**, correctly resolved
+> in-ring per §6), the implementer created
+> `crates/ken-cli/tests/rt_parity_native.rs` — and **refused again on the same
+> classifier**. Seat silent since 01:35 (`evt_1m8wphhc65cng`); its turn is dead
+> and **it cannot report its own refusal, because the refusal IS the end of the
+> turn.** Watchdog read this as handed-off-but-silent; correct.
+>
+> **Two refusals — the second after a genuine relocation to a different crate, a
+> different harness, and a reframed instruction — establish this is the TASK
+> DOMAIN, not phrasing.** The classifier reacts to "build a native artifact,
+> execute it, assert on exit status + filesystem effects," which is an accurate
+> description of the CV-required evidence. **⇒ any framing faithful enough to
+> produce the right test keeps tripping it. Rewording is a wall; stop.**
+> Escalation posted `evt_2q0y3qts75e1m`; leader stopped re-drives.
+>
+> **⛔ UNTRACKED-FILE HAZARD (worse than uncommitted).** `rt_parity_native.rs`
+> was `??` untracked — invisible to branch-ahead preservation AND destroyed by
+> `reset --hard`/`clean`. WIP `10a61dae` did NOT contain it. **Second time in
+> one hour this ring was one routine command from losing its own work.**
+> **✅ RESOLVED 01:55Z** — leader folded it in; WIP is now
+> **`3c574d8a`** ("preserve CLI differential remediation"), superseding
+> `10a61dae`. Implementer worktree clean and back on `runtime-implementer/work`.
+> **Cite `3c574d8a`, not `10a61dae`** — the earlier SHA is stale and does not
+> carry `rt_parity_native.rs`.
+>
+> **⛔ EXPLICITLY NOT ON THE TABLE: weakening the evidence.** Retreating to
+> source-traced/structural-only assertions because a classifier objected would
+> re-open exactly the gap CV blocked on, with **the classifier as the unexamined
+> author of that decision**. If the evidence bar moves it is CV's call, made
+> openly. Recorded so a later reader cannot mistake a tooling workaround for a
+> conformance ruling.
+>
+> **Options put to operator:** (A) reseat `runtime-implementer` on a
+> Claude-backed model — the classifier is OpenAI-side, so this dissolves the
+> block; costs Anthropic credits, and the fleet is on GPT/Codex precisely as a
+> *credit-window failover* (`MODELS.md`), so it is a deliberate spend the
+> operator owns. (B) borrow a differently-backed seat for this one test file,
+> hand back. (C) OpenAI Trusted Access — org-level, slow. (D) park RT-PARITY and
+> advance the queue meanwhile (within my standing "sequence freely" authority;
+> keeps the fleet single-threaded, just on a different item).
+>
+> ### ✅ RESOLVED ~02:10Z — OPERATOR RESEATED `runtime-implementer`; RT-PARITY RESUMED
+>
+> Operator reseated the implementer on an **Anthropic-backed** model (option A).
+> Verified live: **Opus 4.8 (1M), ctx 9%**, self-orienting (reading
+> `agent/memory/build/implementers/`, reflog, WP branch). The OpenAI classifier
+> path is gone for this seat. Resume order posted `evt_28exyvm0yh15f`; leader
+> picked it up and is re-delivering.
+>
+> **★ A reseat is a NEW SESSION, not a resumed one.** The seat holds **none** of
+> the assignment, the placement ruling, CV's block, or the refusal history — so
+> the re-delivery must be **self-contained**, not a pointer to `evt_` ids from
+> turns it was never in. (A pointer to a dead turn is invisible to a seat that
+> never held it — the shape that silently strands an assignment.) Told the
+> leader explicitly. Also told it **not** to run a Handoff Gate pass: the seat is
+> already cleaner than a compaction would leave it, and the gate hard-resets
+> worktrees — not a habit to exercise on a ring that was one command from losing
+> its work twice tonight.
+>
+> **❌ RETRACTED — my "tier drift" flag was WRONG (operator correction).**
+> I claimed the reseat over-tiered the seat from T2 to T1. **It did not. There
+> was no tier change at all.** The seat was running `gpt-5.6-sol high`, and
+> `MODELS.md`'s own mass-ordering note is explicit: **Sol = T1**, Terra = T2,
+> Luna = T3. Runtime's implementer was **already T1**; the reseat was a
+> **lateral provider move at the same tier**. **My method failure:** I matched
+> the *role* against the tier table (implementer → T2) and reported the
+> inference, instead of reading what the seat was actually running — which was
+> printed in a pane I had already captured. Citing the table instead of grepping
+> the emission, against my own name.
+>
+> **★ AND THE TIER TABLE IS THE REAL DEFECT — `MODELS.md` maps roles→tiers
+> UNIFORMLY, but seating is deliberately per-team by task difficulty.**
+> Operator, 2026-07-21: *"Runtime has been sol [high], also a T1 seat, and we've
+> had single WP sessions that took 16 hours to complete. Runtime is dealing with
+> genuinely hard coding tasks. Opus is warranted."* Note Runtime is also
+> **inverted** vs the table — implementer T1 (sol), leader T2 (terra) — because
+> the *implementation* is the hard part there, not the coordination.
+> ⇒ The table's flat "Implementers = T2" row is **false of the landed fleet**
+> and will keep generating exactly the wrong inference I just made. **ACTION
+> (Steward's lane — I own the playbook corpus): amend `MODELS.md` so the tier
+> table states role→tier as a DEFAULT with sanctioned per-team deviation on
+> task difficulty, and name Runtime's actual seating.** Queued as a doc erratum.
+>
+> ### 📦 TWO BRANCHES HELD, READY TO PUBLISH — deliberately NOT pushed while RT-PARITY is live
+>
+> | Branch | Head | Scope |
+> |---|---|---|
+> | `wp/STR-BIJ-frame` | `f030cedd` | the A1+A2 erratum frame (doc-only) |
+> | `wp/MODELS-TIER-erratum` | `55576c05` | `agent/MODELS.md` — Roles column is a DEFAULT (doc-only, 32 insertions, 0 deletions) |
+>
+> **Why held, not published:** publishing advances `origin/main`, which forces a
+> rebase on `wp/RT-PARITY-interp-native` mid-flight. RT-PARITY has already
+> survived two provider refusals and a reseat; **adding a moving base to a ring
+> that fragile buys nothing.** Neither erratum is urgent and both are committed
+> and safe on their branches. **Publish both once RT-PARITY lands** (the tracker
+> sync rides whichever goes first, per playbook §2a).
+>
+> `MODELS-TIER` content: Roles column is a **default**, seating is per-team on
+> task difficulty; **Runtime is INVERTED** (implementer T1, leader T2) because
+> implementation is the hard part there; never infer a seat's tier from its role
+> — **observe it**; and the watchdog corollary that an hours-long Runtime WP is
+> not a stall. Swept the whole doc per `correcting-scope-must-sweep-whole-doc` —
+> the Phase-3 "everything else on GPT" paragraph contradicted the landed seating
+> too and got a matching note.
+>
+> ### ✅ RT-PARITY REMEDIATION COMPLETE @ 03:38Z — candidate `27c5caf9`, QA in flight
+>
+> Full state of record + the three reported bounds are in
+> **`docs/program/STEWARD-DECISION-LOG.md`** (active window 2026-07-21). Summary:
+> base `61a78620` (no rebase); WIP `3c574d8a` amended in; **tests + seed only**,
+> production unchanged from `a692134e`; 4 paths; runtime/host byte-unchanged.
+> `ken-cli --test rt_parity_native` **7/0** (728s), `ken-interp` full crate green.
+> **All 6 executable differential cases flip.**
+>
+> **⚠ `dec_7p15cgqz3x0sg` MUST re-anchor to `27c5caf9` — the Architect's APPROVE
+> was on the stale `a692134e` and does NOT carry forward; CV's BLOCK was on
+> replaced evidence. BOTH need fresh votes.**
+>
+> **On merge:** publisher NON-doc-only → verify landing **by content** on
+> `origin/main` → **notify the adversary `agt_37vnwmcdxhw00` (MANDATORY on every
+> CODE merge)** → §10 retros → close. THEN release F1 to the Architect and
+> publish the two held doc branches.
+>
+> ### 🆕 RT-ESCAPE (filed, queued, unsized) — pre-existing native lowering defect
+>
+> Escaping a **second** `Resource` through a bracket fails native lowering:
+> `OrientedSubcontinuationPlanV1: checked Runtime frame marker was consumed more
+> than once`. Resource + plain value lowers fine. **Pre-existing, NOT an
+> RT-PARITY regression.** Surfaced by RT-PARITY, correctly filed-not-fixed per
+> the frame guardrail; RT-PARITY routed its coincident-fault coverage through a
+> **rights** fault instead. **I filed it because a seed note is not a tracked
+> item and agents cannot create one (§2).** Runtime-owned; needs Architect input
+> on which layer owns the defect before sizing.
+>
+> ### STR-BIJ — framed, committed, NOT kicked (single-threaded; enclave is next in queue)
+>
+> Frame at `docs/program/wp/str-bij-overclaim-erratum.md`, branch
+> `wp/STR-BIJ-frame` @ `e135fa32`. **The inventory is 7 sites, not the 2
+> reported**, and the two I found change the WP:
+> - `conformance/surface/collections/seed-collections.md:656` carries the same
+>   bijection claim ⇒ the erratum touches `conformance/` and **correctly pulls a
+>   CV vote**. The reported-pair fix would have left a normative over-claim
+>   inside the conformance seed.
+> - **`docs/adr/0010-...:61` is the ROOT** — sites 1/3/6 all cite *ADR 0010 §2*
+>   as authority; the ADR never says "bijection" but says the round trip "is the
+>   identity on scalar sequences," naming the **false** direction. Fixing the
+>   leaves without the root lets the claim re-grow from the citation.
+> **Not soundness** (adversary's own refutation): the consumer needs only `s2l`
+> **injectivity**, landed as `string_to_list_char_injective` via the retraction
+> axiom. Canonicity + `DecEq`/`Ord String` deliverability **stand**. Frame §9
+> forbids the tempting "make the word true" repair — postulating
+> `s2l (l2s cs) ≡ cs` is **false** (repro `[U+0065,U+0301]` vs `[U+00E9]`) and
+> would inhabit `Bottom`.
+> Frame §5 carries a **negative inventory** (3 correct, unrelated uses of
+> "bijection" — path⇔import, seed-modules, the store round trip) to stop a
+> grep-and-replace. Frame §8 **defers the file rename on the record**: renaming
+> `StringBijection.ken.md` renames the module (`07-catalog-style-guide.md §13`
+> path⇔import identity) and 3 `ken-elaborator` suites hard-code both the path
+> and the dotted name — a crates-touching change, not a wording fix.
+> **Self-caught:** one anchor in my own frame was off by a line (`37:89` → `:90`)
+> and the Haiku wrap subagent reported "compliant" while an 89-col line stood —
+> my independent check caught both. A delegated verification is a claim.
+>
+> ### Queue (single-threaded, operator-directed)
+> 1. **RT-PARITY** — ACTIVE, remediation in flight. ⚠ `dec_7p15cgqz3x0sg` is
+>    OPEN and bound to the **STALE** sha `a692134e`; it MUST be re-anchored to
+>    the remediated candidate before any vote resolves. On merge: **notify the
+>    adversary** (`agt_37vnwmcdxhw00`) — mandatory on every CODE merge.
+> 2. **F1 (#37)** — promoted ahead of the cleanup items by its soundness
+>    re-classification; routes to Architect on RT-PARITY resolve.
+> 3. **STR-BIJ** — framed; publish frame + kick enclave (Handoff Gate first).
+> 4. **A3** catalog-coverage walker — before F4 (F4 edits the catalog A3 covers).
+> 5. **PX8-F-PROOF (F4)** · 6. **F3 (#39)** — must precede RT-SPLIT
+>    (`process_symbols` lives inside `cranelift_backend.rs`) · 7. **RT-SPLIT** ·
+>    8. **PX8-F-CAP (#41)**.
+> **STOP THERE** — #38/#32/#24/#25 are title-only; reconstruct WITH the operator.
+
+**↓ superseded — prior live state, kept for history ↓**
+
 > ## ⚡ LIVE STATE (2026-07-21 ~00:05Z) — `origin/main = c4f55c191838e8c405b3f81aaee82ec5d384cfe6` — **STEWARD RE-INSTANTIATED after fleet restart + compaction. Re-oriented (orientation + law + playbook + memory scopes). ADVERSARY DOCKET ROUTED to Architect. Watchdog RE-ARMED. Still PAUSED on the post-PX8 series steer.**
 >
 > **Fleet restart ~23:51–23:54Z — all seats reconnected and re-orienting; NOT a stall.** Verified live at ~00:00Z: architect / spec-author / conformance-validator all `Working` on their memory-scope reads (architect on `gpt-5.6-sol high` = T1, correct tier); adversary idle at ctx 9%. `scripts/sweep-wedged-panes.sh` → **clear, no stranded pastes**. Zero unread operator mentions — Pat did NOT answer the FYI `evt_7zw56v38kswer`; the steer came in-session instead (below).
@@ -55,7 +336,45 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > ★ **VISIBILITY POLICY — the metric became a HARD BUDGET: ≤24 newly-widened declarations over the whole series, ≤12 in one slice; exceed either ⇒ STOP and return the proposed seams to Architect, do NOT spend through the cap.** No private decl may gain bare `pub`; new seams use narrowest `pub(super)`/`pub(in crate::cranelift_backend)`; **new `pub(crate)` PROHIBITED** unless an already-landed consumer outside `cranelift_backend` needs it; `lib.rs` glob unchanged; every slice reports a before/after exported-name dump + an exact ledger (item, old vis, new vis, cross-module consumer). **Hierarchy is load-bearing** — `core` is a *descendant* of the module owning `Lowering` state, so `Lowering` fields + the 79 support methods should consume **ZERO** new visibility. Expected widest seam: `compiled.rs` private container fields (a real shared boundary; may eat most of one slice's allowance).
 > **Slice order — surface → planning → compiled → `lowering::core`+tests → lowering support/state → artifact → `artifact::api`+facade.** ★ **Deliberate exception to leaf-first: the control SCC LEADS (slice 4) rather than trails.** In slice 4 create the final `lowering/mod.rs` scaffold with a private import of still-residual parent items and have `core.rs` import only from its parent; slice 5 moves the residual state/support in and **`core.rs` is never touched again**. Moving support first would force temporary widening of every field/method just so the residual parent could reach into its child.
 >
-> **QUEUED (Steward's own authoring; none is a stall):** **(0) FIRST — fold the RT-SPLIT Phase-0 ruling (`evt_1q0cdpv9qrjxe`) into the canonical brief on `main`** (transcribe the 8 modules + 8 test modules, the assignment rule incl. the ambiguous dispositions, the DAG, the visibility policy + 24/12 budget, and the slice order with the SCC-leads exception). Publisher doc-only. **Gate: no RT-SPLIT kickoff until this is on `main` AND the Runtime ring is free.** **(a)** PX8-F-PROOF frame (F4 — vacuous `writeAll` theorem; Foundation + Spec enclave, ONE branch/ONE Decision, pulls CV; **rename-only "structural bookkeeping" downgrade explicitly REJECTED by the Architect**; hard-stop to Spec if the real-loop theorem is inexpressible in the landed checked vocabulary). **(b)** A1+A2 spec/catalog wording erratum (enclave, small, deliberately NOT folded into PX8-F-PROOF). **(c)** A3 catalog-coverage-walker WP (class-level tooling). **(d)** Remaining backlog: PX8-F-CAP #41 · MAIN-SYNC #38 · hardening F1 #37 / F3 #39 · docs #32 · test review #24 · PX9 errno brief #25.
+> **✅ (0) DONE — RT-SPLIT Phase-0 ruling FOLDED into the canonical brief** and merged doc-only PR #792, `origin/main` `c5021f39`→**`61a78620`**, **verified BY CONTENT** (brief now **449 lines**; §10 carries the full ruling — 8 production + 8 test modules, 6,500-line ceiling, assignment rule incl. all ambiguous dispositions, the DAG, the visibility policy + 24/12 budget, the SCC-leads slice order). **Also swept the doc for currency** ([[correcting-scope-must-sweep-whole-doc]]): §3 now points at §10 as governing, and **§6's cluster list is explicitly marked ⛔ SUPERSEDED — DO NOT BUILD FROM THIS LIST**, because the ruling *discarded* exactly that "control/source/host/value" grouping as cycle-manufacturing. A stale starting-signal list left unmarked is precisely what a reader would have built from. **RT-SPLIT kickoff precondition (i) SATISFIED; only (ii) a free Runtime ring remains.** `steward/work` reset to `61a78620`, clean.
+>
+> **⚖ RT-PARITY SCOPE RULING (Steward, `evt_3fzenh0qqncrf` → fork `evt_3qaneqek2sy11`) — APPROVED + frame AMENDED.** runtime-leader hit a grounded conflict: the `BufferAllocate(-1)` repair necessarily changes `px8p_checked_buffer.rs::nonpositive_and_over_policy_capacity_are_exact_buffer_limit`, which groups `[-1, 0, 1_048_577]` as identically exact `BufferLimit`. It **stopped and escalated instead of editing the assertion to buy green** — the §6 guardrail working as designed. **★ The finding IS the predicted hazard caught in the wild, and it answers AC-4:** that test is the `unwrap_or(0)` conflation **frozen into an assertion** — malformed `-1` and *lawful* `0` asserted to behave identically ⇒ **`BufferAllocate` is a CONFIRMED defect, not accepted latitude** (must be stated in the PR body, not left implicit). **My framing error, now fixed: fixed input #3 scoped by FILE when it should have scoped by CONSUMER CLOSURE** — an `eval.rs` behavior change necessarily reaches its in-crate test consumers, which must land in the SAME PR or `main` is briefly self-contradictory (same family as [[declref-lowering-change-needs-elaborator-integration-tests]]). **Fixed input #3 AMENDED to "`eval.rs`, the conformance seed, and the in-crate test consumers of the changed behavior."** Ruling **explicitly overrides the literal §6 guardrail** ("do not weaken/delete an existing test") — that targets *softening to accommodate a fix*; splitting `-1` out makes the test **strictly more discriminating**, nothing dropped ([[amending-a-frame-mid-flight-must-sweep-its-guardrails-section]]: a stale guardrail would otherwise forbid the correct build in my own voice). **Two conditions imposed: (1) CITE the native producer of `InvalidBounds` for a `BufferAllocate` capacity-narrowing failure — "native-canonical" was asserted, not grounded; if native has NO BufferAllocate narrowing path the canonical answer is unestablished and it routes to the Architect as a design question, not a parity repair. (2) RENAME the test** — post-split, `nonpositive_and_over_policy_capacity_are_exact_buffer_limit` is *false of its own body* (`-1` is nonpositive and no longer `BufferLimit`); a name asserting what its body denies is the same honesty family as F4's lemma names and A2's "bijection" title. Exact-variant assertions throughout, no `is_err`. Still ONE branch / ONE Decision.
+>
+> **⟶ RT-PARITY CANDIDATE RELEASED `a692134e0a4c7aff19af68187d3297abf51dee18`** (`evt_269etp4wqqw28`; commits `d4732c03` interp+conformance, `a692134e` amended capacity test; rebased on `origin/main @ 61a78620`). **In Runtime QA now.** Scope clean — exactly 3 paths (`ken-interp/src/eval.rs`, `ken-interp/tests/px8p_checked_buffer.rs`, `conformance/behavioral/buffer-io/seed-buffer-io.md`); `crates/ken-runtime/` + `crates/ken-host/` **byte-unchanged** (cited `git diff --exit-code` → 0).
+> **Both Steward conditions SATISFIED, properly:** **(1) native producer GROUNDED as a full chain, not asserted** — `cranelift_backend.rs:11794-11810` (BufferAllocate capacity → `narrow_native_int_u64`, narrowing detail `7`) → `:11921-11969` (synthesized resource-error reply **before** host dispatch) → `:12166` (detail → surface tag `8`) → `:12268-12271` (tag `8` → `resource_invalid_bounds`), corroborated by landed `px8i_host_narrowing_rejects_negative_and_over_u64_before_dispatch` (`:16082-16091`, fixture `:16338-16367`, asserts `call_index == 0`). So `InvalidBounds` IS native-canonical — the claim held under probing. **(2) test split + renamed**, now a 3-way distinction (`-1`→exact `InvalidBounds`; `0` and `1_048_577`→exact `BufferLimit`), exact constructors throughout, never `is_err`.
+> **FLIP EVIDENCE supplied (both nets red→green):** pre-repair `rt_parity` exited 101 — short-read remaining `0` vs expected `3`; host-width net observed `BufferLimit` vs expected `InvalidBounds`; post-repair exit 0, 2 passed. Full `-p ken-interp` green; `px8p_checked_buffer` 3/3; rustfmt + diff-check clean.
+> **AC-5 honest non-reaching report delivered:** `BufferAllocate`'s overlapping-fault arm is **structurally unreachable — allocation consumes no resource** — reported rather than silently dropped, exactly as required. The other 3 consumers each carry both a single-fault and an overlapping case with the pre-fix variant named (`FsReadAt`/`FsWriteAt` `InvalidOffset` not `Closed`/`RightNotHeld`; `BufferFreeze` `InvalidBounds` not `Closed`).
+> **★ MY OWN FRAMING CLAIM WAS TOO STRONG — record it.** Frame §3 and my kickoff both warned that `BufferAllocate`'s `unwrap_or(0)` meant a malformed capacity "may **succeed**" because `0` is lawful. **It cannot** — the implementer grounded that the resource table rejects capacity zero, so `-1` became `0` and was then rejected as `BufferLimit`. The defect is real but is **wrong-variant / observably-wrong, fail-closed** — NOT silent acceptance. My "may succeed" was the unverified worst case stated as though established. The *hazard class* distinction (lawful-value sentinel ≠ almost-certainly-invalid sentinel) was right and did the work; the *consequence* I attached to it was not grounded. Do not repeat the stronger claim; [[verify-the-report-is-real-before-explaining-it]] applies to my own predictions too.
+>
+> **⟶ RT-PARITY GATE ROUND 1 → CV BLOCK (evidence lane only); REMEDIATION IN FLIGHT.** Decision **`dec_7p15cgqz3x0sg`** OPEN (`proposed`, opened 00:48:05 by runtime-leader, bound to exact `a692134e`; Architect + CV required; QA had approved after independent exact-SHA verification). **CV blocked the CONFORMANCE-EVIDENCE lane only — production repair + design direction remain approved.** Two corrections (leader relayed `evt_kk5vc8qfqkvn`): **(1)** AC-3 demands executable exact interp **and native/differential** variant coverage for all four consumers, but `eval.rs:6060` invokes `fs_dispatch` **directly** ⇒ interpreter-only; add executable native/differential coverage for FsReadAt/FsWriteAt/BufferFreeze overlaps (+ BufferAllocate, whose overlap stays honestly structurally unreachable). **(2)** Every constructible overlap net must be **independently reaching with its own pre→post flip** — the current composite test **aborts at BufferAllocate pre-fix, leaving the read/closed, write/right and freeze/closed arms UNEXECUTED**; split/isolate them, and **"do not substitute source tracing for a flip."** That is exactly the frame's AC-3/AC-5 discipline enforced by the right lane — the gate working, not a defect in it. **NOTE: the Decision is bound to `a692134e` and MUST be re-anchored to the new remediated SHA** ([[live-review-candidate-goes-stale-reanchor-sha]]) — do not let a resolve land against the stale candidate.
+>
+> **↻ BRANCH-CUSTODY FRICTION RECURRED (promotion-ladder candidate, NOT acted on yet).** Implementer's remediation pickup was mechanically blocked — `wp/RT-PARITY-interp-native` still checked out in `/workspaces/ken/.worktrees/runtime-qa`; QA released it **within ~1 min, unprompted** (`evt_4gyk76vak89y6`). Self-resolved, zero Steward action. But this is the **same shape already banked from the CAT-1/CAT-4 era** ("the WP branch held checked out in the reviewer's worktree blocks the implementer at every handoff; recurred 5+ times across Language and Runtime"), now with a fresh Runtime occurrence under a *different* holder (QA, not the leader). **Promotion assessment: node-internal (a review practice — `git switch --detach` or a scratch review worktree so the reviewer never holds the WP branch), NOT topology-touching** ⇒ it promotes on validation alone, no operator consent needed (§10d). Validation count is now well past the ≥3-runs / ≥2-teams bar. **Fold into the build archetype playbooks (`ken-build-qa` + `ken-build-leader`) at the RT-PARITY retro harvest** — do not fold mid-WP.
+>
+> ## ⚡ OPERATOR DIRECTIVES (2026-07-21, in-session) — SUPERSEDE MY PRIOR PARALLEL-FILL PROPOSAL
+>
+> 1. **⛔ KEEP THE FLEET SINGLE-THREADED — ONE WP AT A TIME ACROSS THE WHOLE FLEET.** This is an explicit **rejection of my "fill the idle rings in parallel" proposal**; operator rationale: *"This makes better use of the context in the enclave."* Do **not** run Foundation ∥ enclave ∥ Runtime. **This also overrides [[dont-gate-pipeline-fill-on-credit-cost]]** ("idle capacity is the waste; parallelize aggressively") **for the current window** — that lesson is about not gating on *credit cost*; this directive is about *enclave context coherence*. Newer + explicit ⇒ single-threaded wins until the operator says otherwise.
+> 2. **Frame and run everything up to the title-only work, in whatever order I judge best.** Standing authority to sequence.
+> 3. **Title-only items keep their titles; do NOT reconstruct them alone** — the operator knows #32/#24/#25 and will reconstruct with me when we reach them. **#38 MAIN-SYNC: the operator does not recognize it either** ⇒ treat as unknown provenance, do not invent a scope.
+> 4. **Address the adversary findings** (F4/F5/F6 + A1/A2/A3 — all already disposed and queued below).
+> 5. **Context:** Linux-ABI **phase 1 just completed**; this whole queue is the **cleanup before phase 2**. That is the deadline shape — cleanup should close before phase 2 opens.
+>
+> **★★ MY DROPPED HANDOFF — OPERATOR-CAUGHT, NOW FIXED.** Operator: *"I don't see any request to research in its tmux pane."* **Correct — F1 (#37) was NEVER dispatched.** The tracker recorded *"route to research `agt_37v77c59fd000`"* — an **intent**, which I then re-read on later passes as an **accomplished action** and reported upward as "routed to research, awaiting the advisory." Research sat idle at *"awaiting Steward research dispatch"* the whole time. **Dispatched now: `evt_7s07y8gkgf2s6`** (honest about reconstructing from a one-line tracker entry; pointed it at `evt_2gd715pskkab2` + the adversary's original F1 + the landed code as the real authorities, told it those win over my summary). **★ Structural lesson — my watchdog CANNOT catch this class:** an idle seat holding **no** assignment reads as *correct*, so a never-sent dispatch is invisible to every stall pattern I run. The only defense is that **a booked routing is not a routing until the mention exists** — [[playbooks-state-mechanism-not-intent]] applied to my own tracker. **Candidate steward-scope memory: "a tracker line that says *route X to Y* is a TODO, not a receipt — record the `evt_` id or it did not happen."**
+>
+> **★ HARD SEQUENCING CONSTRAINT (grounded this session): F3 (#39) MUST LAND BEFORE RT-SPLIT.** F3's target `process_symbols` lives **inside `crates/ken-runtime/src/cranelift_backend.rs`** — the exact file RT-SPLIT decomposes into 8 modules over 7 slices. Landing F3 after (or during) the split forces a small hardening fix to be rebased across a 7-slice restructuring; landing it before means the split moves already-settled code. (`process_symbols` also appears in `object_linker_packaging.rs` and `ken-elaborator/src/compiler_driver.rs`, both **outside** RT-SPLIT scope — confirm which site F3 actually targets when framing it.)
+>
+> ## 📋 SINGLE-THREADED EXECUTION ORDER (Steward-chosen; rationale per step)
+>
+> 1. **RT-PARITY** — ACTIVE, finish it (CV remediation in flight). Then retro + the branch-custody playbook fold.
+> 2. **A1+A2** wording erratum (enclave, S). Cheapest real item; clears the honesty docket and is same-family warm-up for F4.
+> 3. **A3** catalog-coverage walker (tooling, S/M). **Deliberately BEFORE F4:** F4 edits `catalog/packages/Capability/System/IO.ken.md`, and A3 lands the walker that would actually *cover* such an edit. Net first, then the change it should catch.
+> 4. **PX8-F-PROOF (F4)** — Foundation + enclave, L, the risky one (rename-only downgrade REJECTED; may hard-stop to Spec if the real-loop theorem is inexpressible). Cheap wins land first so a hard-stop here doesn't strand them.
+> 5. **F3 (#39)** — Runtime hardening, S. **Must precede RT-SPLIT** (constraint above).
+> 6. **RT-SPLIT** — Runtime, L, 7 slices. **Last Runtime item and ideally the last cleanup item: its entire payoff is making phase-2 Linux-ABI work reviewable**, so it should land *before* phase 2 opens, on a settled file.
+> 7. **PX8-F-CAP (#41)** — spec-first (checked Ken cannot observe `Resource Buffer` capacity); fail-closed completeness gap, no urgency. Candidate to fold into phase-2 prep rather than run standalone.
+> 8. **F1 (#37)** — gated on the research advisory now in flight.
+> **STOP THERE.** #38/#32/#24/#25 are title-only — **prep only, reconstruct WITH the operator.**
+>
+> **QUEUED (superseded by the ordered list above; retained for detail):** **(a)** PX8-F-PROOF frame (F4 — vacuous `writeAll` theorem; Foundation + Spec enclave, ONE branch/ONE Decision, pulls CV; **rename-only "structural bookkeeping" downgrade explicitly REJECTED by the Architect**; hard-stop to Spec if the real-loop theorem is inexpressible in the landed checked vocabulary). **(b)** A1+A2 spec/catalog wording erratum (enclave, small, deliberately NOT folded into PX8-F-PROOF). **(c)** A3 catalog-coverage-walker WP (class-level tooling). **(d)** Remaining backlog: PX8-F-CAP #41 · MAIN-SYNC #38 · hardening F1 #37 / F3 #39 · docs #32 · test review #24 · PX9 errno brief #25.
 >
 > **⛔ BEFORE ANY KICKOFF: Handoff-Gate-compact the receiving ring** (compact-verified THEN mention, ONE act) — Foundation + the enclave for PX8-F-PROOF/A1+A2. Verify 0-ahead-of-`origin/main` per member first, then `handoff-gate-compact.sh`, then **confirm each drop yourself** (the script sends, it does not confirm), then mention the **leader only**.
 >
