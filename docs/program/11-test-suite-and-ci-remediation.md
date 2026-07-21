@@ -454,8 +454,8 @@ sweep triages, then reworks only what fails classification.
 
 | ID | Objective | Size |
 |---|---|---|
-| **Q1** | Encode the advisory as a QA playbook the fleet actually loads: the three promise classes (durable invariant / normative compatibility vector / transition sentinel), and the ten-step conformance-to-test workflow. **A test that cannot be classified is not ready.** Without this, the sweep's lessons decay. | M |
-| **Q2** | Triage pass: classify every test into a promise class, producing a queue of unclassifiable or misclassified ones. Mechanical and parallelizable per crate. **Output is a list, not edits.** | M |
+| **Q1** | ✅ **DONE — and mostly already was.** See the correction below. | S |
+| **Q2** | Triage pass: classify every test into a promise class, producing a queue of unclassifiable or misclassified ones. Mechanical and parallelizable per crate. **Output is a list, not edits.** ⚠ Does **not** start from zero — advisory §10 already names six concrete sites (see below); Q2 extends that partial triage to the full suite and **re-verifies each of the six, several of which may have since landed.** | M |
 | **Q3** | Rework the derived-count and stateful-name findings — counts derivable from an authoritative set in another crate, and names freezing a transient census. This is the class that caused the original incident. | M |
 | **Q4** | Rework broad outcome assertions: a negative conformance case asserting only "some error" must assert the exact variant and the fields identifying the rule. Includes the `Err(_)` alternative that subsumes its own named alternative. | M |
 | **Q5** | Rework source-text tests toward mechanism checks — compiler visibility, type-level construction failure, AST/token inspection, or a lint. Where raw source inspection is the only available net, scan the mechanism rather than a bare name, state the limitation, and add a mutation proving the scan bites. | M |
@@ -465,6 +465,37 @@ sweep triages, then reworks only what fails classification.
 **Q1 before Q2–Q7.** The playbook is what makes the rework durable; doing
 the edits first and writing the guidance later means the next 110 tests
 repeat the pattern.
+
+> ### ⚠ Q1 was written stale — I described work that was already done
+>
+> | | |
+> |---|---|
+> | advisory written (`35d24ebb`) | 2026-07-18 03:40 |
+> | QA playbook encoded it (`2ae8cb25`) | 2026-07-18 03:45 — **five minutes later** |
+> | Q1 authored, as if neither existed | **2026-07-21** |
+>
+> `agent/playbooks/build/qa.md` §"Test design" already carried all three
+> promise classes, the "cannot classify → Block" rule, and ten hard review
+> gates. **I wrote the Q1 row from a plausible story — "an advisory exists,
+> so it must need encoding" — without opening the artifact.** Same shape as
+> the §1 CI misdiagnosis: an explanation for why something *could* need
+> doing is not evidence that it does.
+>
+> **The real gap was routing, and it was invisible until the artifact was
+> read.** The advisory splits into a **review** checklist (§9) and an
+> **authoring** workflow (§6). The playbook had encoded §9 into the QA
+> role — but QA *reviews* tests and implementers *write* them, and
+> `implementer.md` carried **no reference to the advisory at all**. So the
+> guidance reached reviewers and never reached authors, which is the wrong
+> end: a class declared at authoring time is free, and one discovered at
+> review costs a round trip.
+>
+> **What actually shipped for Q1:** the promise-class obligation, the
+> discriminating question ("which extensions keep this green, which turn it
+> red?"), the never-freeze-a-derived-count rule, and a **pointer** to §6/§7
+> added to `agent/playbooks/build/implementer.md` step 4. Deliberately a
+> pointer and not a copy — a second copy of the advisory is precisely the
+> preserved-but-stale defect this program keeps hitting.
 
 **★ Q7 has a dependency people will miss:** adopting nextest (C2) increases
 test parallelism, which can turn a latent shared-fixture assumption into a

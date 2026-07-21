@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-21 16:54:19Z — from 20 issue file(s) in `docs/program/issues/`.
+2026-07-21 19:02:17Z — from 20 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -53,7 +53,7 @@ the committed file matches the generator's output.
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | ready | steward | S | none | — |
 | `PX8-F-CAP-41` | PX8-F-CAP (#41) — backlog, deferred to spec-first | draft | TBD | TBD | none | 41 |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | draft | runtime | TBD | none | — |
-| `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | merged | runtime | M | none | — |
+| `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
 | `RT-SPLIT` | decompose cranelift_backend.rs | draft | runtime | L | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | draft | foundation | M | none | — |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
