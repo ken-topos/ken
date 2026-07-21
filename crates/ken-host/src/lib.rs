@@ -974,7 +974,12 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn generated_manifest_is_closed_and_probe_comparison_discriminates() {
-        assert_eq!(TARGET_ABI.fact_count, 23);
+        // Rework (Q-RESIDUE, 2026-07-21): `fact_count == 23` duplicated the
+        // relational self-consistency check below as a copy of its size --
+        // a legitimate future fact addition would go red for no semantic
+        // reason. The relational check alone is the durable invariant (a
+        // manifest whose declared count diverges from its real fact list is
+        // tampered/malformed); it does not need a frozen literal beside it.
         assert_eq!(TARGET_ABI.fact_count, TARGET_ABI.facts.len());
         assert_eq!(TARGET_ABI.dependencies.len(), 4);
         assert_eq!(

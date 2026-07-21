@@ -21902,7 +21902,21 @@ mod tests {
             .expect("object local helper graph emits");
         assert_eq!(jit_clif, object_clif);
         assert!(!jit_clif.is_empty());
-        assert_eq!(jit_clif.matches("-- helper --").count(), 5);
+        // Rework (Q-RESIDUE, 2026-07-21): the bare `5` was unverified
+        // provenance. Grounded against `emit_native_int_local_graph`, which
+        // calls exactly six `define_*` helpers (resolve, intern, compare,
+        // narrow, export, binop); `capture_native_int_local_graph` joins
+        // their captured CLIF bodies with "-- helper --", so N helpers yield
+        // N-1 separators. This is a fixed property of the compiler's own
+        // small, deliberately-enumerated local-helper set, not an external or
+        // growable corpus -- pinning it here catches a helper silently
+        // failing to emit a body.
+        const LOCAL_HELPER_COUNT: usize = 6;
+        assert_eq!(
+            jit_clif.matches("-- helper --").count(),
+            LOCAL_HELPER_COUNT - 1,
+            "expected all {LOCAL_HELPER_COUNT} native-Int local helpers (resolve, intern, compare, narrow, export, binop) to emit a captured CLIF body"
+        );
     }
 
     #[test]

@@ -6574,28 +6574,61 @@ mod px5b_effect_observation_tests {
     }
 
     #[test]
-    fn resource_table_lifetime_is_owned_by_one_interpreter_invocation() {
-        let source = include_str!("eval.rs");
-        let runner = source
-            .split("fn run_io_with_effect_recorder")
-            .nth(1)
-            .expect("real interpreter producer exists");
-        assert!(runner.contains("let mut resources = ken_host::ResourceTableV1::default();"));
+    fn resource_inserted_by_one_dispatch_call_stays_visible_across_later_dispatch_calls() {
+        // Real behavioral proof that `fs_dispatch` is threaded ONE shared
+        // `ResourceTableV1` across separate dispatch invocations rather than
+        // minting a fresh `ResourceTableV1::default()` per call (which would
+        // silently drop every resource an earlier call in the same
+        // interpreter invocation had inserted). Three sequential calls all
+        // share the same `&mut resources` binding; if `fs_dispatch`
+        // internally shadowed its `resources` parameter with its own table,
+        // call 2 could not find the token call 1 minted (a different,
+        // "unknown resource" error), and call 3 would not see the specific
+        // "already released" rejection this pins.
+        let ids = console_ids();
+        let fs = fs_ids();
+        let mut store = EvalStore::new();
+        let root = rt_parity_root("shared-table");
+        std::fs::write(root.join("source"), b"abcd").unwrap();
+        let mut host = PosixHost::new_at(&root);
+        let capability = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_PARTIAL));
+        let mut resources = ken_host::ResourceTableV1::default();
+        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
 
-        let fs_dispatch_source = source
-            .split("fn fs_dispatch")
-            .nth(1)
-            .and_then(|tail| tail.split("fn reify_host_reply_v1").next())
-            .expect("FS dispatch helper exists");
-        let ambient_dispatch_source = source
-            .split("fn ambient_dispatch")
-            .nth(1)
-            .and_then(|tail| tail.split("/// Host-effect driver").next())
-            .expect("ambient dispatch helper exists");
-        for helper in [fs_dispatch_source, ambient_dispatch_source] {
-            assert!(helper.contains("resources: &mut ken_host::ResourceTableV1"));
-            assert!(!helper.contains("ResourceTableV1::default()"));
-        }
+        // Call 1: insert a resource into `resources`.
+        let file = open_file(
+            b"source",
+            read_mode,
+            capability,
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+
+        // Call 2: a SEPARATE dispatch call releasing the token call 1 minted.
+        release_resource(file, &mut host, &mut resources, &fs, &ids, &mut store);
+
+        // Call 3: reusing the now-retired token only pins the exact
+        // already-closed identity (not just any error) if calls 1-3 all
+        // consulted the same table.
+        let reused = run_fs(
+            fs.private_resource_release_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(file),
+            ],
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        expect_resource_error(&reused, fs.closed_id, &ids);
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
 

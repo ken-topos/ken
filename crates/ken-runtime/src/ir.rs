@@ -653,8 +653,18 @@ mod tests {
 
     #[test]
     fn seed_examples_are_observation_limited() {
+        // The exhaustive match below (no `_` arm) is what actually pins
+        // "observation-limited": adding a third `RuntimeObservation` variant
+        // is a compile error here, not a silent gap. The seed corpus itself
+        // is a growable illustrative set, so this only asserts it is
+        // non-vacuous (the loop below must actually exercise something), not
+        // any particular size (Q-RESIDUE: `examples.len() == 5` froze a
+        // growable corpus at today's size for no semantic reason).
         let examples = nc5_seed_examples();
-        assert_eq!(examples.len(), 5);
+        assert!(
+            !examples.is_empty(),
+            "the seed corpus must not be vacuously empty"
+        );
         for example in examples {
             match example.observation {
                 RuntimeObservation::Returned(_) | RuntimeObservation::Trapped(_) => {}

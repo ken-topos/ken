@@ -6987,9 +6987,17 @@ mod tests {
 
     #[test]
     fn emitter_adds_v0_schema_hashes_and_validates_representative_fixtures() {
+        // Rework (Q-RESIDUE, 2026-07-21): `representative_checked_core_
+        // fixtures` is a growable representative corpus (today one entry);
+        // pinning its length froze that growth for no semantic reason. This
+        // only asserts the corpus is non-vacuous, so the loop below actually
+        // validates something, and validates every entry it contains.
         let fixtures = representative_checked_core_fixtures().unwrap();
 
-        assert_eq!(fixtures.len(), 1);
+        assert!(
+            !fixtures.is_empty(),
+            "the representative corpus must not be vacuously empty"
+        );
         for fixture in fixtures {
             assert_eq!(
                 fixture.package.header.version,
