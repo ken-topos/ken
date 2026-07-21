@@ -106,8 +106,14 @@ it manually, bypassing the gate.
 
 - `docs/program/10-linux-abi-completion.md` — the work Linux ABI II presumes.
   Tracks R/A/M/S/T; **PX9 gates most of Track T**.
-- `docs/program/11-test-suite-and-ci-remediation.md` — QA-advisory sweep +
-  CI throughput. **§1 was corrected 2026-07-21 and the order changed.**
+- `docs/program/11-test-suite-and-ci-remediation.md` — **Track C is DONE.
+  CI went 47 min -> ~8 min, landed `8b09fb95`.** Skip the three slow native
+  binaries + nextest + shard x4 + `opt-level = 2` on deps + rust-cache
+  removed. **Do not shard further** — per-shard parallelism already fell
+  3.96x -> 2.5x, so 8 shards would buy ~90s for double the compute. The next
+  real reduction must come from `CI-SKIPPED-NATIVE-TESTS` getting faster.
+  Details and full scorecard in §1a/§1b. **Track Q (the QA-advisory sweep)
+  is untouched and still the actual point of the program.**
 
   > ★ **I had the CI diagnosis backwards, and the operator caught it.** I
   > claimed a cold dependency build dominated the wall clock. Measured:
@@ -162,10 +168,37 @@ into `docs/program/issues/` entries.
 
 ## Tooling traps — distrust a clean negative
 
+- ⛔⛔ **AFTER EVERY MERGE, RE-BASE `steward/work` ONTO `main` BEFORE THE
+  NEXT COMMIT.** Cost three publish cycles on 2026-07-21 — the same trap
+  each time. `main` merges are **squash** merges, so `steward/work` never
+  contains the resulting commit: its merge base stays at the *previous*
+  main, and GitHub's three-way merge then conflicts on any file both sides
+  touched, even when the content is compatible.
+
+  > ★ **`git diff origin/main..HEAD` will NOT warn you.** A two-dot diff
+  > shows the **net difference**; a merge asks a **different question** —
+  > what happens when both sides' changes are replayed from a shared base.
+  > A clean two-dot diff next to a conflicting merge is not a contradiction.
+  > **The check that actually predicts a conflict is**
+  > `git merge-base --is-ancestor origin/main HEAD` — if that fails, rebase
+  > *before* committing anything further.
+
+  Recipe (content-preserving, verified three times):
+  `git tag -f preserved/<sha> HEAD` → `git reset --hard origin/main` →
+  `git checkout <old-sha> -- <changed files>` → regenerate the dashboard →
+  commit. Then confirm with `git diff <old-sha> HEAD`: the **only** expected
+  delta is `IMPLEMENTATION-PROGRESS.md`'s timestamp line.
+  ⚠ Do **not** verify with a bare `git diff` after `git checkout -- <path>`
+  — that stages the files, so unstaged `git diff` reads empty and looks like
+  a mismatch. Compare **commit to commit**.
+
 - ⛔ **`scripts/scripted-pr-automerge.sh` exits 0 on failure** (4 times on
   2026-07-21). Its **first attempt after any merge always fails** with
   `stale info`, because the merge deletes the origin head branch and stales
   the local ref. **Always `git fetch origin --prune` before publishing.**
+  ⚠ Its `--description-file` must exist **before** the call — a heredoc
+  inside the same `&&` chain does not reliably land, and the script reports
+  `description file not found` and exits.
   Redirect its output to a file — a `| tail` pipe block-buffers it to 0
   bytes. Afterwards it sleeps ~40 min polling a PR that may already have
   merged; verify `origin/main` by content and kill the orphan. Tracked as

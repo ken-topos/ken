@@ -168,6 +168,61 @@ The suite is **65 CPU-minutes of genuine work**. On 4 cores the floor is
 They multiply. They are also the *only* two: everything else is noise
 against a saturated CPU.
 
+## 1b. ★★ Outcome: 47 min -> ~8 min. Landed at `8b09fb95`.
+
+Run `29841111547` (C9 shard x4 + C6 `opt-level` + C8 cache removal):
+
+| Shard | Tests | CPU-s | Wall-s | Parallelism |
+|---:|---:|---:|---:|---:|
+| 1 | 543 | 976 | 375 | 2.60x |
+| 2 | 498 | 1079 | **406** | 2.66x |
+| 3 | 448 | 791 | 313 | 2.53x |
+| 4 | 402 | 719 | 309 | 2.33x |
+
+Critical path ~8 min (65s build + 406s worst shard + setup), from 47.
+
+### Scorecard, per item
+
+- **C8 was free.** Build went 40s -> 65s and *all* of that is C6. The cache
+  was never warm once in its entire life, so removing it cost nothing. The
+  supply-chain objection carried no throughput price at all.
+- **C6 is real but small: 3893 -> 3566 CPU-s, −8.4%**, for +25s of build.
+  Net positive. But this was written up as *the* per-test cost driver, and
+  8% is not that. **Cranelift codegen was not dominating.** §3a's insistence
+  on measuring rather than merging on plausibility is the reason this is a
+  known 8% instead of an assumed 50%.
+- **C9 gave 2.3x wall clock from 4x the cores**, not 4x — see below.
+
+### ★ The finding: sharding degrades its own parallelism
+
+Per-shard parallelism fell from **3.96x to ~2.5x**. With ~470 tests per
+shard instead of 1891, there is less work to overlap: each shard's tail
+cannot fill 4 cores, and the 106s longest test is now **26% of shard 2's
+entire runtime**.
+
+**This caps sharding as a strategy.** Doubling to 8 shards halves
+tests-per-shard again and pushes efficiency below 2x — an estimated ~90s
+gain for double the compute. **Do not shard further.**
+
+Two smaller residuals, neither obviously worth taking:
+
+- **36% shard imbalance** (1079 vs 719 CPU-s). `--partition count` is
+  round-robin by test *index*, not duration, so heavy tests cluster by luck.
+  Perfect balance saves ~55s off the critical shard.
+- **The 106s floor.** No scheduling change crosses it.
+
+### Compute cost, honestly accounted
+
+Billed runner-time went ~1024s -> ~1660s, about **1.6x** — not the 4x
+warned about, because C6's savings partly offset four repeated builds.
+
+### ⛔ Stop here
+
+The per-test distribution is flat (§1a), so there is no fat left to cut. The
+remaining levers are each worth 1-2 minutes for real complexity. **The next
+genuine reduction has to come from the three skipped binaries
+(`CI-SKIPPED-NATIVE-TESTS`) getting faster, not from scheduling.**
+
 ## 2. The suite, measured
 
 At `62643287`, against the advisory's 2026-07-18 baseline:
