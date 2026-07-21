@@ -4,8 +4,9 @@
 (large diff, low semantic content) · **Gate:** none — maintainability work,
 feeds no G-gate · **Deps:** none (PX8 series complete and landed)
 
-**Status:** frame authored; **Phase 0 (Architect decomposition ruling) is
-BLOCKING** and not yet cast.
+**Status:** frame authored; **Phase 0 ruling DELIVERED and transcribed below
+(§10) — it is the binding decomposition.** Execution waits only on the Runtime
+ring becoming free (it is sequential and currently on RT-PARITY).
 
 ## 1. Objective
 
@@ -44,6 +45,9 @@ path. If a slice somehow does, that slice pulls a Spec vote (§14 diff-scope);
 that would itself be a signal the slice is out of scope.
 
 ## 3. Phase 0 — the Architect's ruling (blocking, and the real design work)
+
+> **✅ DELIVERED — see §10 for the binding ruling.** This section states what
+> was *asked for*; §10 is what was *ruled*. Where they differ, §10 governs.
 
 **Runtime does not choose the seams.** The Architect rules, and the ruling
 must pin four things:
@@ -142,6 +146,13 @@ recovered from comments.
 decomposition.** The Architect owns the actual cut and should feel free to
 discard this grouping entirely:
 
+> **⛔ SUPERSEDED — and the ruling did discard it. DO NOT BUILD FROM THIS
+> LIST.** §10.0 found that the `Lowering` impl's call graph contains a
+> 29-method strongly connected component, and that splitting it along exactly
+> the "control / source / host / value" lines suggested below **would
+> manufacture a module cycle and is forbidden.** The list is retained only as
+> a record of the pre-ruling signal. **The binding decomposition is §10.**
+
 - **Errors / reports** — `CraneliftBackendError`, `ValidatedNativeRunError`,
   `UnsupportedLowering`, `BackendFailure`, `CraneliftRunReport`,
   `NativeDifferentialReport`, `NativeTrustReport`, `NativeToolchainReport`,
@@ -239,3 +250,200 @@ move" claim auditable rather than asserted.
   that only makes sense alongside the next one is mis-cut.
 - Rebase each slice onto current `origin/main` before its merge Decision;
   "rebased onto current main" is a perishable claim (§14(5)).
+
+## 10. Phase 0 ruling — DELIVERED (Architect, `evt_1q0cdpv9qrjxe`)
+
+Grounded at `origin/main @ 244cfe9c`; the §6 perishable inputs were
+re-confirmed still true (22,081 lines, `lib.rs` glob export unchanged).
+
+**This section is the binding decomposition.** It is transcribed here because
+an in-thread ruling is not a durable deliverable — build from this file, never
+from the convo thread.
+
+### 10.0 Why the topical cut is forbidden
+
+The cut is driven by the **call graph**, not by the apparent topic list. The
+`Lowering` impl has **108 methods**. Its direct self/associated-call graph has
+one **29-method strongly connected component occupying 5,864 method-body
+lines**. The other **79 methods occupy 3,506 lines**; there are **145 calls
+from the SCC into those helpers and zero calls from those helpers back into
+the SCC**.
+
+⇒ Splitting that SCC into "control", "source", "host", and "value" production
+modules — i.e. the cluster grouping this frame listed in §6 as a *starting
+signal only* — **would manufacture a module cycle and a broad visibility seam.
+It is forbidden.**
+
+### 10.1 Pinned production modules
+
+**No physical Rust module file may exceed 6,500 lines after `rustfmt`.** Do
+not satisfy the ceiling with a giant inline module; the ceiling applies to
+each `.rs` module body too.
+
+1. `cranelift_backend/mod.rs` — facade only: module declarations and explicit
+   re-exports preserving the exact old `ken_runtime::<name>` surface.
+2. `cranelift_backend/surface.rs` — reports, evidence, errors, outward data
+   types, `NativeSeedEnvironment`, and their `Display`/`Error`/`From` impls.
+3. `cranelift_backend/planning.rs` — native-join/oriented-plan extraction,
+   checked-marker census, pre-emission transport validation; no CLIF emission.
+4. `cranelift_backend/compiled.rs` — `CompiledModule`, `CompiledExpr`,
+   `ResultDecoder`, result-table ownership, JIT result decoding/execution.
+5. `cranelift_backend/lowering/mod.rs` — `Lowering` state, lowered-value and
+   continuation/control data model, pure free helpers, and the 79 acyclic
+   support methods outside the SCC.
+6. `cranelift_backend/lowering/core.rs` — the **indivisible 29-method lowering
+   SCC** plus `compile_expr_into_module`; the recursive lowering engine.
+7. `cranelift_backend/artifact/mod.rs` — ISA/module setup and private
+   JIT/object compilation and materialization machinery.
+8. `cranelift_backend/artifact/api.rs` — the existing public and crate-facing
+   run, validation, comparison, and object-emission entrypoints and their
+   orchestration.
+
+**Required test modules:** `planning/tests.rs` · `artifact/tests.rs` ·
+`artifact/api/tests.rs` · `lowering/core/tests/mod.rs` (shared test-only
+fixtures) · `lowering/core/tests/control.rs` ·
+`lowering/core/tests/constructors.rs` · `lowering/core/tests/effects.rs` ·
+`lowering/core/tests/values.rs`. The 6,500-line ceiling applies to these too.
+**No residual omnibus `mod tests` remains in the facade.**
+
+### 10.2 Assignment rule
+
+- **`surface.rs`** — the current report/evidence/error declarations from the
+  top of the file, `NativeSeedEnvironment`, the report/error impls, and
+  `unsupported`/`backend`/`backend_module`.
+- **`planning.rs`** — `native_join_plan_for_program`,
+  `oriented_subcontinuation_plan_for_program`,
+  `collect_checked_subcontinuation_frames`, the checked-marker collectors and
+  exact-location checks, and `validate_oriented_subcontinuation_transport`.
+- **`compiled.rs`** — exactly the compiled container, decoder, JIT `run`, and
+  their directly-owned decoding state. **It does not own compilation policy.**
+- **`artifact/mod.rs`** — `compile_expr`, `compile_program_expr`,
+  `compile_expr_with_declarations{,_and_process_input}`, object/JIT module
+  creation, verifier invocation, target naming, private object/JIT
+  materializers.
+- **`artifact/api.rs`** — all outward runners, preflight and
+  differential/report orchestration, existing object-emission entrypoints.
+- **`lowering/core.rs`** — `compile_expr_into_module` and exactly this SCC:
+  `lower_recursor_residual_call`, `lower_computational_match_expr`,
+  `lower_computational_producer_expr`, `resume_active_continuation`,
+  `lower_computational_match_value_composed`, `lower_bounded_nat_computational`,
+  `materialize_eliminator_frame_env`, `lower_source_machine`,
+  `lower_source_machine_with_continuation`,
+  `lower_source_machine_with_continuation_inner`,
+  `lower_source_bounded_nat_match`, `lower_source_dynamic_bool_match`,
+  `lower_source_dynamic_host_result_match`,
+  `lower_source_dynamic_constructor_match`,
+  `lower_source_nested_dynamic_constructor_match`,
+  `lower_source_planned_dynamic_constructor_match`, `source_call_state`,
+  `lower_source_declaration_call`, `lower_expr`, `lower_process_host_effect`,
+  `lower_unary_recursive_nat_fold`, `lower_recursive_declaration_call`,
+  `lower_declaration_ref`, `lower_borrowed_match`,
+  `lower_borrowed_option_match`, `lower_dynamic_host_result_match`,
+  `lower_bounded_nat_match`, `lower_dynamic_constructor_match`,
+  `lower_primitive_call`.
+- **`lowering/mod.rs`** — every other `Lowering` method; the private
+  lowered-value, recursive-declaration, continuation, source-machine,
+  oriented-control, bounded-Nat, dynamic-constructor and scalar-pair types
+  plus their free helpers; the recursive-argument helpers after the impl.
+
+**Ambiguous dispositions (ruled):**
+
+- `with_px8ds_retired_flat_order` and the PX8 test/mutation ledgers stay with
+  lowering; the facade explicitly re-exports their pre-existing visibility.
+- `Px8trTrapProvenanceEvent`, `NativeIntLoweringMutation`, and
+  `NATIVE_INT_LOWERING_MUTATION` remain **test-only lowering** ownership — not
+  artifact, not surface.
+- `ResultDecoder` belongs to `compiled`, **not** value lowering.
+- `reject_program_blockers` belongs to `artifact/api`, **not** planning.
+- Dynamic-constructor validation/selection and source-continuation free
+  helpers belong to **lowering support**; their callers in the SCC do not make
+  them part of the SCC.
+- Test helpers go in the lowest `tests/mod.rs` ancestor shared by their actual
+  users. **They never justify widening a production item.**
+
+**Test assignment is by subject:** `oriented_*`, `px8j_*`, root-authority,
+join-site, source-install and recursor tests → `control`; constructor-field,
+dynamic-constructor, nested-computational and heterogeneous-eliminator tests →
+`constructors`; host-reply, bounded-Nat, IO, borrowed-ingress and native-int
+tests → `effects`; scalar/bytes/string/closure/primitive lowering tests →
+`values`; certificate, preflight, differential and outward-runner tests →
+`artifact/api/tests.rs`; exact JIT/object/ISA tests → `artifact/tests.rs`. **A
+test spanning two topics is assigned by the private item whose behavior it
+directly discriminates.**
+
+### 10.3 Dependency DAG
+
+Arrows mean "caller depends on callee":
+
+```
+facade          -> artifact::api, surface, existing lowering test hooks
+artifact::api   -> artifact, planning, surface
+artifact        -> lowering::core, compiled, planning, surface
+lowering::core  -> lowering support, compiled, planning, surface
+lowering support-> surface
+planning        -> surface
+compiled        -> surface
+```
+
+**There are no reverse edges.** In particular: `artifact` never imports
+`artifact::api`; lowering support never calls `lowering::core`; and no
+implementation module imports through the facade. Module declarations and
+facade re-exports are **namespace wiring, not permission to introduce a
+semantic back-edge**.
+
+### 10.4 Visibility policy
+
+- The facade uses **explicit re-export lists only**. No internal
+  `pub use child::*`; the existing `lib.rs` glob remains unchanged.
+- Existing bare-`pub` declarations stay bare `pub`; existing `pub(crate)`
+  declarations retain that visibility. Explicit facade re-exports may expose
+  **only** already-exported names.
+- **No private declaration may gain bare `pub`.**
+- A new production seam uses the narrowest `pub(super)` or
+  `pub(in crate::cranelift_backend)`. **New `pub(crate)` is prohibited**
+  unless an already-landed consumer outside `cranelift_backend` requires it.
+- **Hierarchy is load-bearing:** `lowering::core` is a child of the module
+  owning `Lowering` state/support, and `artifact::api` is a child of
+  `artifact`. **Descendants consume ancestor-private items without widening
+  them.**
+- Tests move below their subject. **A production visibility change made only
+  for a test is a seam failure.**
+- **★ BUDGET — at most 24 newly visibility-widened declarations over the whole
+  series, and at most 12 in one slice.** Existing visibility and explicit
+  re-exporting of an already-exported name do not count. **Count fields
+  individually.** If either budget would be exceeded, **stop and return the
+  proposed extra seams to the Architect — do not spend through the cap.**
+- Every slice reports a **before/after exported-name dump** and an **exact
+  visibility ledger**: item, old visibility, new visibility, cross-module
+  consumer.
+
+**Expected widest single seam:** `compiled.rs` — its private container fields
+are shared by artifact construction and lowering completion. That is a real
+shared boundary and may consume most of one slice's allowance. The `Lowering`
+fields and the 79 support methods should consume **zero** new visibility,
+because `core` is their descendant.
+
+### 10.5 Slice order
+
+1. `surface`
+2. `planning`
+3. `compiled`
+4. `lowering::core` plus its subject tests
+5. `lowering` support/state plus its remaining subject tests
+6. `artifact` plus artifact tests
+7. `artifact::api`, API tests, and the final explicit facade
+
+Slices 1–3 are true leaves. **The control SCC then LEADS rather than trails
+the lowerer extraction — the one deliberate exception to leaf-first.** In
+slice 4, create the final `lowering/mod.rs` scaffold with a private import of
+the still-residual parent items, and make `core.rs` import only from its
+parent. In slice 5, move those residual state/support items into
+`lowering/mod.rs`; **`core.rs` is not touched again.** Moving support first
+would force temporary widening of every field/method merely so the residual
+parent could reach into its child.
+
+Each slice is independently green and mergeable, starts fresh from the newly
+landed `origin/main`, moves one production module plus its tests, and does not
+re-touch a previously moved module. **If move-purity, the visibility budget,
+or the DAG cannot be demonstrated for a slice, that slice stops for seam
+revision — it does not improvise a topical split.**
