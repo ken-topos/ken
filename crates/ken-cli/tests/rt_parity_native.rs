@@ -550,10 +550,21 @@ fn fs_read_at_malformed_offset_without_read_right_narrows_to_invalid_offset() {
 
 // -- FsWriteAt -----------------------------------------------------------
 //
-// Only `file_offset` is source-controllable: `writeAt` takes a `BufferSpan`,
-// whose constructor is prelude-private, so the `buffer_start`/`length`
-// narrowings cannot be reached from checked source. Their coverage is the
-// interpreter-level dispatch test, not this differential.
+// Only `file_offset` is source-controllable. `writeAt` takes a `BufferSpan`,
+// and no malformed span is constructible from checked source **at the landed
+// surface**, so the `buffer_start`/`length` narrowings are not reachable here.
+//
+// That rests on the same empirical seal as the `BufferFreeze` case below --
+// **not** on the privacy of `BufferSpan`'s constructor, which does not by
+// itself establish that no public producer exists. The same qualifications
+// carry over: the landed oracle's evidence is bounded and known
+// enumeration-incomplete, `SEAL-2` owns the durable producer-enumeration gate,
+// and if the seal or its future gate fails these narrowings owe executable
+// coverage too. See
+// `buffer_freeze_malformed_span_is_unconstructible_on_landed_producer_closure`
+// for the full statement of what that evidence does and does not support.
+//
+// Their coverage is the interpreter-level dispatch test, not this differential.
 
 #[test]
 fn fs_write_at_malformed_offset_narrows_to_invalid_offset() {
