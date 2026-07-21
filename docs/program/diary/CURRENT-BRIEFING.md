@@ -11,7 +11,7 @@
 
 - Fleet is **SINGLE-THREADED**. Nothing is owed to any ring; every idle ring
   is **correct**, not a stall.
-- `origin/main = cd3606a1`. Nothing is blocked.
+- `origin/main = 4a06cf90`. Nothing is blocked.
 - **Do not kick a WP while the operator has an open question below.**
 
 ## Operator rulings — 2026-07-21 ~12:45Z. SETTLED, do not reopen.
@@ -67,45 +67,70 @@ obscured. PX9 gates most of Track T.
 **Not started.** Next step when the operator says go: decompose the tracks
 into `docs/program/issues/` entries.
 
-## ⏸ TRACK Q — ACTIVE. Q1 done; Q2 blocked on the operator (2026-07-21)
+## ✅ TRACK Q — DONE (2026-07-21). Only Q-RESIDUE remains, and it is an S.
 
-The operator authorized **Q1 and Q2** (program 11 Track Q). Q1 is **landed**
-(`cd3606a1`). **Q2 is blocked on two operator answers — do not start either
-without them, and do not infer past them:**
+**Q1 landed. Q2 complete: 428 triaged, 100% classified, six rings in
+parallel.** Result: `docs/program/qa-triage/FINDINGS.md`.
 
-1. **Go for Q2a?** Proposed split, awaiting approval:
-   - **Q2a — mechanical scan.** Advisory §5's risk patterns are *syntactic
-     smells* (bare count literals, source-text greps, `#[ignore]`, `Err(_)`,
-     wall-clock asserts): scriptable across all 1909 tests, **no domain
-     knowledge and no ownership question**. Output is a candidate queue.
-   - **Q2b — domain triage of only Q2a's candidates.** The hard half ("is
-     this literal a contract value or today's repo state?") genuinely needs
-     the owning team, but runs on a small fraction.
-2. **`ken-cli` and `ken-foundation` ownership** — genuinely undocumented.
-   `CODEOWNERS` declares itself inert and maps no crate; `agent/teams/` holds
-   only `foundation/`, which never names a crate. **`ken-foundation` is the
-   trap: its NAME says Foundation, its CONTENTS are the K3 value model, and
-   the sole WP citing it says Runtime.** Do not infer an owner into the
-   tracker.
+| class | count | share |
+|---|---:|---:|
+| durable-invariant | 392 | **91.6%** |
+| compat-vector | 19 | 4.4% |
+| transition-sentinel | 7 | 1.6% |
+| UNCLASSIFIABLE | 10 | 2.3% |
 
-> ### ★ Why Q2 is NOT routed per-crate
+**Q3–Q7 folded by the operator into ONE S** — `docs/program/issues/Q-RESIDUE.md`
+(status `ready`, owner `runtime`). **Not kicked; awaiting operator go.**
+
+> ### ★★ Q4 AND Q7 WERE EMPTY — THE LESSON, NOT JUST THE RESULT
 >
-> The test distribution is brutally concentrated — `ken-elaborator` alone is
-> **1052 of 1909 (55%)**, while `ken-verify` has 24. Routing by crate hands
-> one team the majority and is a queue behind Language, not a fan-out.
-> **This is the C9 lesson again: partition by the work unit, not by the
-> container.** (C9 sharded by test rather than by crate for exactly this
-> reason.)
+> 147 tests flagged for asserting an outcome without naming the variant:
+> **every one sound.** All 27 wall-clock flags: **sound.** Both tracks had
+> been sized from **scan hit counts**, and hit counts carried almost no
+> signal about defects. Authorizing Q3–Q7 off the totals would have reworked
+> ~300 correct tests.
+>
+> **⛔ Do not re-derive Q-RESIDUE's scope from `scripts/qa-risk-scan.py`.**
+> It emits a **review queue, not a defect list**. The inventory in the issue
+> is the whole of the work.
 
-**Q1's finding, so it is not re-derived:** the advisory splits into a
-**review** checklist (§9) and an **authoring** workflow (§6). §9 had been in
-`qa.md` since 2026-07-18; `implementer.md` referenced the advisory **not at
-all**. The gap was *routing* — guidance reached reviewers, never authors.
-Fixed by a **pointer** in `implementer.md` step 4, never a copy.
+> ### ★★ THREE DEFECTS IN MY OWN INSTRUMENTS — ALL FOUND BY OTHERS
+>
+> 1. **The scanner fabricated a test.** An unanchored `#[test]` matched the
+>    attribute *in prose* (`rt_parity_native.rs:3` is a doc comment). The
+>    phantom swallowed 480 lines of helpers. **Foundation found it by
+>    reading source.** `--self-test` passed throughout — it only checked
+>    files that HAVE the patterns, never one that would INVENT a row. It now
+>    has a negative arm (`NEVER_A_TEST`).
+> 2. **"Two counts agreed" was an echo, not corroboration.** I cited the
+>    scanner reproducing the documented 1909 as proof it wasn't dropping
+>    tests. Both used the same naive match, so both counted prose mentions.
+>    True total **1905**. A differential oracle is blind to a shared premise.
+> 3. **The aggregator read the wrong file** — Ergo parsed 23 vs a reported
+>    71 (glob matched QA's partial share, not the leader's assembly). Caught
+>    only because the leader's own count disagreed.
+>
+> **Every one was caught by an INDEPENDENT source, none by my own checks —
+> which were built on the same premises as the things they checked.**
+
+> ### ★ TRANSPORT: a mention proves the EVENT exists, never that it was READ
+>
+> **Five of six Q2 kickoffs silently failed to deliver.** Repair: `tmux
+> send-keys` a pointer to the `evt_…` (point at it, never restate it).
+>
+> **It reproduces INSIDE a ring.** Kernel stalled at 50/72 — its leader
+> delegated, the implementer never got it, and the leader went idle
+> believing it had handed off. **Silence and done look identical from here.**
+>
+> **⛔ Do NOT detect "working" by grepping a spinner word** — the verb is
+> randomized ("Gitifying…", "Calculating…", "Crunched for…"). Key on the
+> duration/token signature: `\([0-9]+m? ?[0-9]*s · [^)]*\)`. Grepping a
+> fixed word read all six busy leaders as dead and nearly caused six
+> duplicate re-rouses.
 
 ## My queue, in order
 
-0. **Track Q above** — Q2 the moment the operator answers.
+0. **Q-RESIDUE** (`issues/Q-RESIDUE.md`) — ready, not kicked, awaiting operator go.
 1. **BUDGET-EFF** — Handoff Gate the Spec enclave (spec-leader, spec-author,
    conformance-validator). **Spec erratum FIRST**: `38` self-contradicts
    (`:404-405`/`:443-444` say *effective*, `:419-420`/`:438-440` say

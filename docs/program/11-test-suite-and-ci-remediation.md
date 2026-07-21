@@ -471,12 +471,8 @@ sweep triages, then reworks only what fails classification.
 | ID | Objective | Size |
 |---|---|---|
 | **Q1** | ✅ **DONE — and mostly already was.** See the correction below. | S |
-| **Q2** | Triage pass: classify every test into a promise class, producing a queue of unclassifiable or misclassified ones. Mechanical and parallelizable per crate. **Output is a list, not edits.** ⚠ Does **not** start from zero — advisory §10 already names six concrete sites (see below); Q2 extends that partial triage to the full suite and **re-verifies each of the six, several of which may have since landed.** | M |
-| **Q3** | Rework the derived-count and stateful-name findings — counts derivable from an authoritative set in another crate, and names freezing a transient census. This is the class that caused the original incident. | M |
-| **Q4** | Rework broad outcome assertions: a negative conformance case asserting only "some error" must assert the exact variant and the fields identifying the rule. Includes the `Err(_)` alternative that subsumes its own named alternative. | M |
-| **Q5** | Rework source-text tests toward mechanism checks — compiler visibility, type-level construction failure, AST/token inspection, or a lint. Where raw source inspection is the only available net, scan the mechanism rather than a bare name, state the limitation, and add a mutation proving the scan bites. | M |
-| **Q6** | Resolve the remaining `#[ignore]` and any placeholder: either omit and track as conformance debt, or keep a marker with a concrete reification trigger that QA blocks on. **An ignored test is never coverage.** | S |
-| **Q7** | Move wall-clock assertions into a performance lane with wide good/bad separation; ensure timing is never the sole correctness oracle. Give temp dirs unique per-test ownership so parallel runs cannot couple — **this interacts with C2**, since nextest raises parallelism and will expose shared-fixture coupling. | S |
+| **Q2** | ✅ **DONE 2026-07-21.** 428 triaged, 100% classified, six rings in parallel. 91.6% durable-invariant. Result: [`qa-triage/FINDINGS.md`](qa-triage/FINDINGS.md). | M |
+| **Q-RESIDUE** | ✅ **Q3–Q7 FOLDED INTO ONE ITEM** (operator, 2026-07-21) against the post-triage residue: **10 tests**, not the ~110 the scan hit counts implied. Q4 and Q7 produced **zero** defects. Inventory, acceptance criteria and the cross-team routing note: [`issues/Q-RESIDUE.md`](issues/Q-RESIDUE.md). | S |
 
 > ## ✅ Q2 IS DONE. Q3–Q7 ARE ~10 TESTS, AND TWO TRACKS ARE EMPTY.
 >
@@ -498,11 +494,13 @@ sweep triages, then reworks only what fails classification.
 > almost no signal about defects.** Authorizing Q3–Q7 off the scan totals
 > would have committed the fleet to reworking ~300 correct tests. This is
 > the advisory's own framing vindicated: **review queues, not defect
-> counts.** Re-scope Q3–Q7 against the residue, or fold them into one S.
+> counts.** ✅ **The operator folded Q3–Q7 into one S against the
+> residue: `issues/Q-RESIDUE.md`.**
 
-**Q1 before Q2–Q7.** The playbook is what makes the rework durable; doing
-the edits first and writing the guidance later means the next 110 tests
-repeat the pattern.
+**Q1 before Q2–Q7 — both now done.** The playbook is what makes the rework
+durable; doing the edits first and writing the guidance later means the next
+110 tests repeat the pattern. Kept because the ordering rule still binds
+Q-RESIDUE: the playbook is landed, so the rework has guidance to conform to.
 
 > ### ⚠ Q1 was written stale — I described work that was already done
 >
@@ -535,10 +533,17 @@ repeat the pattern.
 > pointer and not a copy — a second copy of the advisory is precisely the
 > preserved-but-stale defect this program keeps hitting.
 
-**★ Q7 has a dependency people will miss:** adopting nextest (C2) increases
-test parallelism, which can turn a latent shared-fixture assumption into a
-flake. Sequence C2 and Q7 together, or expect to debug "nextest broke the
-suite" when in fact nextest revealed it.
+> **★ The Q7/nextest interaction — RESOLVED EMPIRICALLY, kept as a record.**
+> The concern was that adopting nextest (C2) raises parallelism and can turn
+> a latent shared-fixture assumption into a flake, so that "nextest broke the
+> suite" would be misdiagnosed when nextest had merely *revealed* it.
+>
+> **C2 has now landed and the suite is green across four shards plus two
+> dedicated native jobs, and Q2 triaged all 27 wall-clock/environment flags
+> as sound.** The predicted coupling did not materialise. The reasoning was
+> right and the risk was real; it simply did not obtain here. Recorded rather
+> than deleted, because the *next* parallelism increase reopens exactly this
+> question.
 
 ## 4. Sequencing and token efficiency
 
