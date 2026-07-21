@@ -59,7 +59,24 @@ jobs:
       # Prebuilt binary, not `cargo install cargo-nextest` — the latter
       # would compile nextest itself on every run and add minutes back.
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@nextest
+        # SHA-PINNED, not tag-tracked. `@nextest` / `@v2` are FLOATING tags the
+        # maintainer can repoint at any commit, so a compromised or moved tag
+        # would execute new code in our build with no diff and no review. A SHA
+        # cannot be moved; upgrading is an explicit, reviewable commit.
+        #
+        # Pinned to the RELEASE commit (v2.84.0) with the tool passed
+        # explicitly, NOT to the `@nextest` alias commit (37ba6721). The alias
+        # is auto-generated at publish time and sits off the release lineage
+        # with a one-word message, so it is immutable but not reviewable — you
+        # cannot map it back to a version without digging. This form is both.
+        #
+        # To upgrade: pick the new release SHA from
+        # https://github.com/taiki-e/install-action/releases and update the
+        # comment to match. Keep the version comment in sync with the SHA — a
+        # stale version comment is a false provenance claim.
+        uses: taiki-e/install-action@a6b2e2dcd845ddd7f509ce4f3ed3d922b80cc5d9 # v2.84.0
+        with:
+          tool: nextest
       # nextest schedules every test across every binary against one global
       # thread pool. NOTE: `cargo test` was ALREADY parallel *within* each
       # binary (libtest defaults to one thread per CPU); only the 200 binaries
@@ -133,7 +150,24 @@ jobs:
       - name: Build
         run: cargo build --workspace --locked
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@nextest
+        # SHA-PINNED, not tag-tracked. `@nextest` / `@v2` are FLOATING tags the
+        # maintainer can repoint at any commit, so a compromised or moved tag
+        # would execute new code in our build with no diff and no review. A SHA
+        # cannot be moved; upgrading is an explicit, reviewable commit.
+        #
+        # Pinned to the RELEASE commit (v2.84.0) with the tool passed
+        # explicitly, NOT to the `@nextest` alias commit (37ba6721). The alias
+        # is auto-generated at publish time and sits off the release lineage
+        # with a one-word message, so it is immutable but not reviewable — you
+        # cannot map it back to a version without digging. This form is both.
+        #
+        # To upgrade: pick the new release SHA from
+        # https://github.com/taiki-e/install-action/releases and update the
+        # comment to match. Keep the version comment in sync with the SHA — a
+        # stale version comment is a false provenance claim.
+        uses: taiki-e/install-action@a6b2e2dcd845ddd7f509ce4f3ed3d922b80cc5d9 # v2.84.0
+        with:
+          tool: nextest
       - name: Test
         run: cargo nextest run --locked -p ken-verify --test px8f_write_partition
 
@@ -147,7 +181,24 @@ jobs:
       - name: Build
         run: cargo build --workspace --locked
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@nextest
+        # SHA-PINNED, not tag-tracked. `@nextest` / `@v2` are FLOATING tags the
+        # maintainer can repoint at any commit, so a compromised or moved tag
+        # would execute new code in our build with no diff and no review. A SHA
+        # cannot be moved; upgrading is an explicit, reviewable commit.
+        #
+        # Pinned to the RELEASE commit (v2.84.0) with the tool passed
+        # explicitly, NOT to the `@nextest` alias commit (37ba6721). The alias
+        # is auto-generated at publish time and sits off the release lineage
+        # with a one-word message, so it is immutable but not reviewable — you
+        # cannot map it back to a version without digging. This form is both.
+        #
+        # To upgrade: pick the new release SHA from
+        # https://github.com/taiki-e/install-action/releases and update the
+        # comment to match. Keep the version comment in sync with the SHA — a
+        # stale version comment is a false provenance claim.
+        uses: taiki-e/install-action@a6b2e2dcd845ddd7f509ce4f3ed3d922b80cc5d9 # v2.84.0
+        with:
+          tool: nextest
       - name: Test
         run: cargo nextest run --locked -p ken-cli --test px8f_buffer_native
 
