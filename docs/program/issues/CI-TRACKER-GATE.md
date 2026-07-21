@@ -1,19 +1,23 @@
 ---
 id: CI-TRACKER-GATE
 title: "Wire the issue-tracker schema + regeneration gate into CI"
-status: ready
+status: closed
 owner: operator
 size: S
 gate: none
 depends_on: []
 blocks: []
-github: null
+github: 804
 origin: publisher push rejection, 2026-07-21 (steward)
 ---
 
-**Needs the operator — the Steward cannot land this.** The scripted
-publisher's GitHub App token has no `workflows` permission, so any change
-under `.github/workflows/` is remote-rejected:
+> **CLOSED — see the resolution at the bottom.** The problem statement below
+> is kept as written for the record; it describes the state *before* the
+> permission was granted and is no longer true.
+
+**Needed the operator — the Steward could not land this.** The scripted
+publisher's GitHub App token had no `workflows` permission, so any change
+under `.github/workflows/` was remote-rejected:
 
 ```
 ! [remote rejected] steward/work -> steward/work (refusing to allow a
@@ -47,5 +51,17 @@ rather than a convention.
 Option 1 is the durable one — otherwise every CI change is a manual step
 outside the merge path, and the gap will be rediscovered.
 
-Until this lands the gates are **advisory**: run both scripts by hand before
-publishing tracker changes.
+## Closed 2026-07-21 — option 1
+
+The operator granted the app `workflows: write`. Verified two ways before
+closing: the installation's permission set was read directly (a
+`mint-gh-token.sh` variant extracting `['permissions']` instead of
+`['token']`), and a workflow-bearing push was then accepted.
+
+The gate landed in **PR #804 @ `c10ffae8`**, verified **by content** on
+`origin/main` rather than by the publisher's exit code — it exits 0 on
+failure (`PUB-VERIFY`).
+
+**This also unblocks every future CI change through the scripted path**,
+which matters immediately: `11-test-suite-and-ci-remediation.md` C2 edits
+`.github/workflows/ci.yml`.

@@ -36,11 +36,20 @@
 
 **Still genuinely open (lower stakes, no re-ask):**
 
-- **CI-TRACKER-GATE** — the publisher app lacks `workflows` permission, so
-  the tracker's CI gate cannot be pushed. Until it lands, tracker
-  correctness is a convention, not a property.
 - **Provider concentration** — only `runtime-implementer` and `adversary` are
   on the Anthropic pool.
+
+**CI-TRACKER-GATE is RESOLVED.** The operator granted the app `workflows:
+write`; verified present in the installation's permission set, and a
+workflow-bearing push was accepted. Close the issue once PR #804 lands.
+
+> ★ **Diagnosing a `workflows`-permission rejection.** A freshly minted token
+> is NOT enough — but neither is assuming staleness. `mint-gh-token.sh` with
+> its final extraction changed from `['token']` to `['permissions']` prints
+> the installation's **actual** grants. That converts "the push failed, why?"
+> into a direct answer. Note the publisher only mints a new token when `gh`
+> is not already authenticated, so a cached ~1h token keeps its old scopes;
+> force a fresh mint before concluding anything.
 
 ## The completion program — written, NOT started
 
@@ -79,8 +88,60 @@ into `docs/program/issues/` entries.
 
 ## In flight
 
-- **PR #803** — the pre-commit hook. In its ~40-minute CI wait. Verify with
-  `git cat-file -p origin/main:.githooks/pre-commit`, not by exit code.
+**PR #804** @ `e4cb6628` — CI dependency caching + the work-item tracker
+gate, plus both planning documents and this briefing. In its poll wait.
+Verify by content (`git cat-file -p origin/main:.github/workflows/ci.yml |
+grep rust-cache`), never by the publisher's exit code.
+
+> ⚠ **#804's own run will NOT be faster.** `Swatinem/rust-cache` populates on
+> first use, so this run pays the same cold build and then saves artifacts.
+> **The benefit appears on the NEXT run.** A ~40-minute #804 is the expected
+> result, not a failed change — do not report C1 as ineffective on this
+> evidence.
+
+PR #803 (pre-commit hook) already landed at `bc10baff` — the operator merged
+it manually, bypassing the gate.
+
+## Programs written, NOT started
+
+- `docs/program/10-linux-abi-completion.md` — the work Linux ABI II presumes.
+  Tracks R/A/M/S/T; **PX9 gates most of Track T**.
+- `docs/program/11-test-suite-and-ci-remediation.md` — QA-advisory sweep +
+  CI throughput. **§1 was corrected 2026-07-21 and the order changed.**
+
+  > ★ **I had the CI diagnosis backwards, and the operator caught it.** I
+  > claimed a cold dependency build dominated the wall clock. Measured:
+  > **build 47s, test execution 44m14s — 95% of the run.** The error was
+  > reasoning from *"there is no cache"* (true) to *"the build is the cost"*
+  > (never checked) without opening a single run log. The logs were
+  > available the entire time. **An explanation for why something COULD be
+  > slow is not evidence that it IS.**
+
+  Measured distribution: `cargo test` walks its **200 test binaries strictly
+  in series**, and **three of them — nine tests — are 56.5% of the whole
+  run** (`rt_parity_native` 14m41s, `px8f_buffer_native` 5m10s in a *single*
+  test, `px8f_write_partition` 5m09s in a *single* test). The bottom 150
+  binaries total **48 seconds**. All three fat binaries do a real native
+  codegen-and-link per test case.
+
+  **Next steps are C2 → C6 → C7, re-measuring between each:** nextest (one
+  global pool replaces the serial walk), `[profile.dev.package."*"]
+  opt-level = 2` (cranelift runs its codegen unoptimized — **hypothesis,
+  test it in CI, do not merge on plausibility**), and splitting the two
+  1-test binaries (unsubdividable, so they become the critical path the
+  moment C2 lands). C1 landed and bought ~5s — **do not report it as a
+  throughput win**.
+
+  ⚠ C7 and Q7 are one edit from two sides — splitting the native binaries
+  for parallelism, and giving temp dirs per-test ownership so that
+  parallelism is safe. Do them together or expect a flake that reads as
+  "nextest broke the suite."
+
+  **`scripts/ci-test-timings.sh <run-id>`** regenerates the per-binary table
+  from any run's log. Granularity is the binary; per-`#[test]` needs C2.
+
+Next step for either program when the operator says go: decompose its tracks
+into `docs/program/issues/` entries.
 
 ## Tooling traps — distrust a clean negative
 
