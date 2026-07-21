@@ -7,7 +7,7 @@ Track Q, item Q2, of
 
 ## What this is
 
-`scripts/qa-risk-scan.py` (Q2a) scanned all 1909 tests for the risk patterns
+`scripts/qa-risk-scan.py` (Q2a) scanned all 1905 tests for the risk patterns
 in [`research/qa-conformance-to-rust-test-guidelines.md`](../../../research/qa-conformance-to-rust-test-guidelines.md)
 §5 and flagged **428**. Your queue is a balanced slice of those.
 

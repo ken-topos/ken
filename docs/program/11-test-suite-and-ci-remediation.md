@@ -346,7 +346,23 @@ At `62643287`, against the advisory's 2026-07-18 baseline:
 | `ken-host` | 46 | 45 |
 | `ken-verify` | 24 | 23 |
 | `ken-foundation` | 22 | 22 |
-| **Total** | **1909** | 1799 |
+| **Total** | **1905** ⚠ | 1799 |
+
+> ⚠ **This total read 1909 until 2026-07-21, and the correction is instructive.**
+> `grep -c '#\[test\]'` counts the attribute **mentioned in prose** — e.g.
+> `rt_parity_native.rs:3`, a doc comment reading ``//! Each case is its own
+> `#[test]` ...``. Four such mentions across two files inflated the count.
+> The real figure is **1905**.
+>
+> ★ **I had cited the agreement between two counts as validation, and that
+> was worthless.** `scripts/qa-risk-scan.py` independently "reproduced 1909",
+> which I reported as a cross-check confirming the scanner was not dropping
+> tests. **Both methods used the same naive `#[test]` match, so both made the
+> same mistake and agreed.** A differential oracle is blind to a premise its
+> two sides share — agreement between two instances of one method is not
+> corroboration, it is an echo. The scanner's real defect (a phantom test
+> named `output_dir` carrying 430 lines of unrelated matches) was found by
+> **Team Foundation reading the source**, not by any count.
 
 **+110 tests in three days.** The suite is growing fast, which is why the
 discipline matters now rather than later — every week of delay is more tests
@@ -448,7 +464,7 @@ Two cheap hardenings worth taking regardless, neither blocking:
 
 ### Track Q — test-suite conformance to the guidelines
 
-1909 tests cannot be hand-reviewed, and most are fine. The advisory is
+1905 tests cannot be hand-reviewed, and most are fine. The advisory is
 explicit that its scans are **review queues, not defect counts**. So the
 sweep triages, then reworks only what fails classification.
 
@@ -461,6 +477,28 @@ sweep triages, then reworks only what fails classification.
 | **Q5** | Rework source-text tests toward mechanism checks — compiler visibility, type-level construction failure, AST/token inspection, or a lint. Where raw source inspection is the only available net, scan the mechanism rather than a bare name, state the limitation, and add a mutation proving the scan bites. | M |
 | **Q6** | Resolve the remaining `#[ignore]` and any placeholder: either omit and track as conformance debt, or keep a marker with a concrete reification trigger that QA blocks on. **An ignored test is never coverage.** | S |
 | **Q7** | Move wall-clock assertions into a performance lane with wide good/bad separation; ensure timing is never the sole correctness oracle. Give temp dirs unique per-test ownership so parallel runs cannot couple — **this interacts with C2**, since nextest raises parallelism and will expose shared-fixture coupling. | S |
+
+> ## ✅ Q2 IS DONE. Q3–Q7 ARE ~10 TESTS, AND TWO TRACKS ARE EMPTY.
+>
+> **428 tests triaged, 100% classified, six rings in parallel (2026-07-21).**
+> Full result: [`qa-triage/FINDINGS.md`](qa-triage/FINDINGS.md).
+>
+> | class | count | share |
+> |---|---:|---:|
+> | durable-invariant | 392 | **91.6%** |
+> | compat-vector | 19 | 4.4% |
+> | transition-sentinel | 7 | 1.6% |
+> | UNCLASSIFIABLE | 10 | 2.3% |
+>
+> **Q4 (broad outcome assertions) and Q7 (timing/fixtures) are EMPTY.** All
+> 147 R2 hits and all 27 R5 hits classified as sound durable invariants.
+> Q3 ≈ 3 tests, Q5 ≈ 6, Q6 = 1 unlabelled sentinel.
+>
+> ★ **Those two tracks were sized from HIT COUNTS, and hit counts carried
+> almost no signal about defects.** Authorizing Q3–Q7 off the scan totals
+> would have committed the fleet to reworking ~300 correct tests. This is
+> the advisory's own framing vindicated: **review queues, not defect
+> counts.** Re-scope Q3–Q7 against the residue, or fold them into one S.
 
 **Q1 before Q2–Q7.** The playbook is what makes the rework durable; doing
 the edits first and writing the guidance later means the next 110 tests
