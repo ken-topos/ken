@@ -9,11 +9,15 @@ pass and on every WP state change**. The plan lives in `05`; this file
 tracks *progress against it*. Run until complete, blocked, or instructed
 (§2b).
 
-**This file holds CURRENT STATE ONLY.** The full chronicle — every prior
-"live state" snapshot, the detailed evidence trail for every merged WP, and
-the day-by-day session logs back to project start — lives in
-[`progress-archive/`](progress-archive/README.md). If you need *why* a past
-call was made, or the mechanism detail behind a closed WP, start there.
+**This file holds CURRENT STATE ONLY, and it is GENERATED** — edit
+`docs/program/issues/*.md` and re-run `scripts/gen-progress.sh`; hand edits
+here are overwritten. The full chronicle — every prior "live state"
+snapshot, the detailed evidence trail for every merged WP, and the
+day-by-day session logs back to project start — lives in
+[`diary/`](diary/INDEX.md). If you need *why* a past call was made, or the
+mechanism detail behind a closed WP, start there;
+[`diary/CURRENT-BRIEFING.md`](diary/CURRENT-BRIEFING.md) carries the live
+operator briefing and the Steward's resume state.
 
 **Status legend:** `draft` (not framed / deps unmet) · `ready` (deps met,
 unassigned) · `active` (a team is building) · `in-review` (PR open / QA / CI)
@@ -28,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-21 11:58:27Z — from 17 issue file(s) in `docs/program/issues/`.
+2026-07-21 12:04:21Z — from 17 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -43,7 +47,7 @@ the committed file matches the generator's output.
 | `GH-25` | TBD — title-only backlog item, not yet reconstructed | draft | TBD | TBD | none | 25 |
 | `GH-32` | TBD — title-only backlog item, not yet reconstructed | draft | TBD | TBD | none | 32 |
 | `GH-38` | TBD — title-only backlog item, not yet reconstructed | draft | TBD | TBD | none | 38 |
-| `MODELS-TIER` | agent/MODELS.md — Roles-to-tier column is a DEFAULT, not uniform | ready | steward | S | none | — |
+| `MODELS-TIER` | agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception | ready | steward | S | none | — |
 | `PX8-F-CAP-41` | PX8-F-CAP (#41) — backlog, deferred to spec-first | draft | TBD | TBD | none | 41 |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | draft | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | merged | runtime | M | none | — |
@@ -58,7 +62,7 @@ Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
 - `F1-37` — F1 (#37) — bignum Int soundness review for K3 trusted-base promotion
-- `MODELS-TIER` — agent/MODELS.md — Roles-to-tier column is a DEFAULT, not uniform
+- `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
 
 ## Blockers
@@ -81,10 +85,11 @@ for every item, gated or not):
 ## Archive & diary
 
 - The complete build chronicle — every prior live-state snapshot, the full
-  evidence trail behind every merged WP back to project start — is in
-  [`progress-archive/`](progress-archive/README.md).
-- Day-to-day session narrative lives in
-  [`diary/`](diary/INDEX.md) (see `diary/CURRENT-BRIEFING.md` for the latest).
+  evidence trail behind every merged WP back to project start — and the
+  day-to-day session narrative both live in [`diary/`](diary/INDEX.md), one
+  file per day under `diary/YYYY/Mon/DD.md`. See
+  [`diary/CURRENT-BRIEFING.md`](diary/CURRENT-BRIEFING.md) for the live
+  operator briefing and Steward resume state.
 - Per-item briefs, where they exist, live under
   [`wp/`](wp/) and are linked from the corresponding
   `docs/program/issues/<ID>.md` file.

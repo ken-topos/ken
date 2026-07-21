@@ -115,11 +115,15 @@ pass and on every WP state change**. The plan lives in `05`; this file
 tracks *progress against it*. Run until complete, blocked, or instructed
 (§2b).
 
-**This file holds CURRENT STATE ONLY.** The full chronicle — every prior
-"live state" snapshot, the detailed evidence trail for every merged WP, and
-the day-by-day session logs back to project start — lives in
-[`progress-archive/`](progress-archive/README.md). If you need *why* a past
-call was made, or the mechanism detail behind a closed WP, start there.
+**This file holds CURRENT STATE ONLY, and it is GENERATED** — edit
+`docs/program/issues/*.md` and re-run `scripts/gen-progress.sh`; hand edits
+here are overwritten. The full chronicle — every prior "live state"
+snapshot, the detailed evidence trail for every merged WP, and the
+day-by-day session logs back to project start — lives in
+[`diary/`](diary/INDEX.md). If you need *why* a past call was made, or the
+mechanism detail behind a closed WP, start there;
+[`diary/CURRENT-BRIEFING.md`](diary/CURRENT-BRIEFING.md) carries the live
+operator briefing and the Steward's resume state.
 
 **Status legend:** `draft` (not framed / deps unmet) · `ready` (deps met,
 unassigned) · `active` (a team is building) · `in-review` (PR open / QA / CI)
@@ -217,10 +221,11 @@ cat <<'FOOTER'
 ## Archive & diary
 
 - The complete build chronicle — every prior live-state snapshot, the full
-  evidence trail behind every merged WP back to project start — is in
-  [`progress-archive/`](progress-archive/README.md).
-- Day-to-day session narrative lives in
-  [`diary/`](diary/INDEX.md) (see `diary/CURRENT-BRIEFING.md` for the latest).
+  evidence trail behind every merged WP back to project start — and the
+  day-to-day session narrative both live in [`diary/`](diary/INDEX.md), one
+  file per day under `diary/YYYY/Mon/DD.md`. See
+  [`diary/CURRENT-BRIEFING.md`](diary/CURRENT-BRIEFING.md) for the live
+  operator briefing and Steward resume state.
 - Per-item briefs, where they exist, live under
   [`wp/`](wp/) and are linked from the corresponding
   `docs/program/issues/<ID>.md` file.

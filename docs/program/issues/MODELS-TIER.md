@@ -1,6 +1,6 @@
 ---
 id: MODELS-TIER
-title: "agent/MODELS.md — Roles-to-tier column is a DEFAULT, not uniform"
+title: "agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception"
 status: ready
 owner: steward
 size: S
@@ -11,18 +11,29 @@ github: null
 origin: operator correction, 2026-07-21 (agent/MODELS.md commentary)
 ---
 
-Doc-only fix to `agent/MODELS.md`: the Roles column in the tier table reads
-as if build roles are uniformly T2, which is a DEFAULT, not the landed
-seating. Documents Runtime's actual (inverted) seating —
-`runtime-implementer` is T1, `runtime-leader` is T2 — because implementation
-is the hard part on that team, not coordination. Fleet playbook accuracy
-only, feeds no gate.
+**The original erratum has LANDED** — `agent/MODELS.md` on `origin/main`
+now carries "★ The Roles column is a DEFAULT, not the landed seating
+(operator, 2026-07-21)", merged as `f4f8e06a`. Verified by content against
+`origin/main`, not inferred from a branch or a tracker line.
 
-Held on branch `wp/MODELS-TIER-erratum @ 55576c05` (doc-only, +32/−0 lines
-per the tracker) — "ready to publish" per the current slim tracker as of
-this migration. Note: an earlier `STEWARD-DECISION-LOG.md` entry (PR #793)
-records this branch as already published and verified on `main`; the slim
-tracker, which this migration treats as authoritative on disagreement, still
-lists it as held. This discrepancy is flagged here rather than resolved by
-guessing — verify against `origin/main` before treating either source as
-current.
+The branch `wp/MODELS-TIER-erratum @ 55576c05` is a **stale local
+leftover**, not held work: it has a zero diff against `origin/main` for
+`agent/MODELS.md`, and it exists only locally (not on origin). Do not
+publish it. It can be deleted.
+
+## What actually remains
+
+A narrower reframing. The landed text calls Runtime **"the standing
+exception, and it is INVERTED vs the table"**, but the full-fleet sweep
+showed `implementer = T1` / `leader = QA = T2` is the **fleet-wide
+convention** — Runtime is the norm, not a deviation. One paragraph, doc-only,
+no gate.
+
+## Provenance note
+
+The migration that created this file flagged a conflict between two sources:
+the decision log (now folded into [`diary/`](../diary/INDEX.md)) recorded
+this as already published, while the slim tracker still listed it "held."
+The tracker was carrying a stale claim — restructuring preserves staleness.
+The decision log was right. Resolved by checking `origin/main` directly,
+which is the only source that settles a landed-or-not question.
