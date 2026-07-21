@@ -247,14 +247,48 @@ code*, which this is not).
    `TransferCountV1::new(read, effective)` validates then **discards**
    `effective`, so neither reifier can compute the bound. Two closures with
    different blast radii ⇒ **Architect call**. Oracle
-   `adversary/R1-effective-request-repro @ 06bb9538` is pinned as AC-3 and
-   must pass **unchanged**. Detail:
+   ⛔ **AC-3 REWRITTEN — my earlier pin was VOID.** The R1 oracle's conclusion
+   compares two values computed from its OWN constants (`RAW-count` vs
+   `effective-count` = `4 == 0`) and **never reads a reifier field**, so it
+   fails on ANY implementation and its failure at `e892777c` confirmed
+   nothing. "Must pass unchanged" is **withdrawn**; the oracle must be
+   **rewritten to observe the mechanism**. ⛔ **"Confirmed by execution" was
+   also FALSE** — the defect rests on **source inspection** of the two
+   reifiers. ★ **An adversary repro demonstrates a defect; a completion oracle
+   defines correctness. Pinning does not convert one into the other — verify
+   an oracle observes the mechanism BEFORE making it an AC.** Detail:
    `docs/program/wp/BUDGET-EFF-remaining-bounded-by-effective-request.md`
 2. **SEAL-2** — re-anchor on current `main`; evidence
    `adversary/SEAL2-repros@70a603da`.
-3. Then F1 (#37) → Architect · STR-BIJ → enclave · A3 · F4 · F3 · RT-SPLIT.
-   **STOP at #38/#32/#24/#25** — title-only; reconstruct **with** the
-   operator, never invent scope.
+3. Then STR-BIJ → enclave (`ready`, S) · F1 → Architect (`ready`) · F3 ·
+   A3 · F4 · RT-SPLIT (**L**, 22k-line `cranelift_backend.rs`).
+
+> ### ⚠ WHERE THIS QUEUE CAME FROM, AND THE `#N` TRAP
+>
+> **These items are the gap between what was actually DELIVERED and what
+> `research/linux-abi-ii-work-program-proposal.md` ASSUMES was already done**
+> (operator, 2026-07-21). That proposal is the second Linux-ABI campaign; this
+> series fills the hole in front of it. Read the proposal before sizing any of
+> them — an item only makes sense against what it assumes exists.
+>
+> **`#37` / `#39` are indices in a PRE-RESTART STEWARD TASK LIST. They are NOT
+> GitHub issue numbers.** Six issue files asserted them as `github:`
+> references and the tracker propagated that into a dedicated GitHub column,
+> where a task-list index read as a verified external reference — and
+> `github: 38` pointed at whatever real issue #38 happens to be. **Corrected:
+> `github: null` on both survivors**, with the provenance stated in-file.
+>
+> **`#38`/`#32`/`#24`/`#25` are DROPPED** — they carried nothing but a number
+> (operator: *"no use to anyone"*). Do not resurrect them; there is nothing to
+> resurrect. The old `GH-` filename prefix baked the wrong origin into the
+> identifier itself — `identifiers-are-claim-artifacts`, in a schema field.
+
+**Readiness is thin behind BUDGET-EFF — only two items are releasable.**
+STR-BIJ (`ready`, enclave) and F1 (`ready`, runtime → Architect first).
+The rest are `draft`; **A3 has no owner, no size, and no brief** and blocks
+F4. ⚠ Verify "no brief" claims by *reading `docs/program/wp/`*, not by
+globbing on the ID — the F3 brief is `F2F3-reducer-degrade.md` (it covers F2
+and F3 together) and I mis-reported it as missing once already.
 
 ## In flight
 

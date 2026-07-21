@@ -59,10 +59,23 @@ four sites** — no site may still say `≤ requested` if the ruling is
 
 ## Grounding
 
-Confirmed **by execution**, not inference: `adversary/R1-effective-request-repro
-@ 06bb9538` fails at `e892777c` — a read of 8 into a 4-byte capacity reports
-`remaining = 8`, the raw request, not the effective 4. The oracle is pinned as
-BUDGET-EFF's AC-3 and must pass **unchanged**.
+⛔ **CORRECTED 2026-07-21 — the earlier "confirmed by execution" claim was
+FALSE, and it was the Steward's.** The defect is identified by **source
+inspection** of the two reifiers (`ken-interp/src/eval.rs:4934-4935` and
+`ken-runtime/src/cranelift_backend.rs:13081-13082`, both subtracting from the
+RAW length), **not** by execution. `adversary/R1-effective-request-repro @
+06bb9538` does fail at `e892777c`, but that failure is worthless as evidence:
+**the oracle's own conclusion is broken** — it compares two values computed
+from its own constants and never reads a reifier field, so it fails on any
+implementation, so it would have failed identically against a *correct* one.
+Its failure message quotes "`remaining = 8`" — but that number is the test's
+own literal, never a value read back from a reifier. **BUDGET-EFF's AC-3 has
+been rewritten accordingly** (the "pass unchanged" pinning is withdrawn).
+
+**The fixture is sound and the source reading is probably right — but nothing
+has executed that demonstrates the defect.** Establishing it by execution is
+part of BUDGET-EFF's work, not an input to it. Do not repeat "confirmed by
+execution" anywhere downstream.
 
 Full analysis:
 [`docs/program/wp/BUDGET-EFF-remaining-bounded-by-effective-request.md`](../wp/BUDGET-EFF-remaining-bounded-by-effective-request.md).
