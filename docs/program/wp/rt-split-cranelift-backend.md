@@ -266,6 +266,39 @@ move" claim auditable rather than asserted.
    > whole files.** Byte-identity goes red on lawful import and visibility
    > churn — it was ruled out (operator, 2026-07-22) and stays out. The unit
    > is the **moved item**, not the file.
+
+> ### ★ THE EVIDENCE HEURISTIC BEHIND AC-2, AC-3, AND AC-7
+>
+> Adopted 2026-07-22 from the Runtime ring's slice-2 retros (implementer
+> `evt_22zh45vfbvppj`, leader `evt_66xzjpkxg77gv`). It generalizes past this WP
+> and applies to every ledger, inventory, or count in any frame:
+>
+> > **A ledger or inventory is stronger as the OUTPUT of a mechanism than as an
+> > assertion the mechanism confirms.**
+>
+> The weaker reading — *"check your list twice"* — sounds identical and is not
+> the point. The point is that **an author's enumeration can only ever be
+> checked for the items the author thought to list.** A check that *confirms* a
+> list is bounded by the list; a check that *emits* the list is bounded by the
+> code. Only the second can surprise you.
+>
+> **Concretely, in this WP:** the AC-7 visibility ledger is the **output of the
+> AC-3 ordered diff**, not an author's enumeration that the diff later agrees
+> with. Report it that way.
+>
+> **This is the same defect the §7 rewrite corrected one layer up** — AC-2 was
+> an enumeration of module-level names checked against another enumeration of
+> module-level names, structurally blind to fields, variants, methods, and
+> trait impls. Three occurrences in two days across three artifacts, so treat
+> it as a standing review question rather than a fixed instance: **for every
+> count or list in an evidence package, ask whether it was measured or
+> asserted.**
+>
+> Applies to aggregates too. **A total is an assertion; the rows are the
+> measurement.** The slice-2 implementer twice computed an aggregate with a
+> line-anchored pattern and nearly reported a fictional coverage table — caught
+> both times by dumping rows rather than trusting the total.
+
 4. **Test preservation.** All 25 `#[cfg(test)]` blocks compile and pass. The
    total test-function count is unchanged; no test is deleted, `#[ignore]`d,
    or has an assertion weakened. Report the before/after count.
