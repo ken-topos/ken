@@ -118,7 +118,20 @@ them in the retelling is the first step back to citing the weak half alone.
 
 ## 5. Acceptance
 
-1. §3's two probes are run and reported **before** a size is set.
+1. **⛔ Corpus-wide reachability is measured before anything is authored.**
+   §3's two probes **have now run** (runtime-implementer, `evt_6mqtdc9p5bazy`):
+   `px7m_hostresult_computational_match` **2/2 green** with
+   `lower_source_dynamic_host_result_match` neutered;
+   `px8l_recursive_decl_native` **3/3 green** with
+   `lower_source_declaration_call` neutered. **Both stay unreached.**
+
+   > **That is 2 of 9 against 2 named suites. It clears nothing for the other
+   > 7 against the rest of the `ken-cli` corpus** — the author's own scoping,
+   > and the reason this WP is still `size: TBD`. The original finding was
+   > *"scoped to the lib suite in wording and unscoped in implication"*; do
+   > not let the two confirmations be read as confirming the set. **Probe all
+   > nine against the full `ken-cli` test corpus, one targeted suite at a
+   > time, and report per-method — never `--workspace`.**
 2. Each remaining unreached method gets a test whose recursive case body
    contains a match over the relevant `Lowered` shape.
 3. **Every added test fails under its own `panic!` mutation** — the same oracle
