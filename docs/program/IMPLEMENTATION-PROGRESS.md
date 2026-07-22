@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 17:23:52Z — from 34 issue file(s) in `docs/program/issues/`.
+2026-07-22 19:02:07Z — from 35 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -57,8 +57,8 @@ the committed file matches the generator's output.
 | `KW-THEOREM` | rename the surface keyword `lemma` to `theorem` | ready | spec | M | none | — |
 | `LOADER-STALE-PREMISE` | \"no disk loader yet\" is stale in 9 places — including already-landed library/ content | ready | doc | S | none | — |
 | `MODELS-TIER` | agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception | ready | steward | S | none | — |
-| `ORACLE-VIS-CHECK` | replace the text-pin oracle in px4b_native_production.rs with a real visibility check | active | runtime | S | none | — |
-| `ORACLE-VIS-PACKAGING` | replace the text-pin visibility oracle on build_process_starter_executable_artifact | active | runtime | XS | none | — |
+| `ORACLE-VIS-CHECK` | replace the text-pin oracle in px4b_native_production.rs with a real visibility check | merged | runtime | S | none | — |
+| `ORACLE-VIS-PACKAGING` | replace the text-pin visibility oracle on build_process_starter_executable_artifact | in-review | runtime | XS | none | — |
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | ready | steward | S | none | — |
 | `PX8-F-CAP-41` | PX8-F-CAP (#41) — backlog, deferred to spec-first | draft | TBD | TBD | none | 41 |
 | `PX8` | partial/positioned IO — the completion program's root; closure condition | active | runtime | L | none | — |
@@ -71,6 +71,7 @@ the committed file matches the generator's output.
 | `SEAL-2` | carrier producer closure, over a derived enumeration | draft | foundation | M | none | — |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
 | `SPEC-38-ERRATUM` | spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile | closed | spec | S | none | 827 |
+| `SRC-ATTEST` | squash-stable whole-source attestation + fresh merge-result authorization | active | doc | M | none | — |
 | `STR-BIJ` | the String/List Char 'bijection' over-claim (adversary A1 + A2) | ready | spec-enclave | S | none | — |
 
 ## Releasable frontier
@@ -93,7 +94,7 @@ Items not yet `merged`/`closed` whose `depends_on` names an id that
 is itself not yet `merged`/`closed`:
 
 - `F4` blocked by `A3` (status: draft)
-- `ORACLE-VIS-PACKAGING` blocked by `ORACLE-VIS-CHECK` (status: active)
+- `ORACLE-VIS-PACKAGING` blocked by `SRC-ATTEST` (status: active)
 
 ## Gate progress
 

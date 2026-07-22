@@ -1,14 +1,26 @@
 ---
 id: ORACLE-VIS-PACKAGING
 title: "replace the text-pin visibility oracle on build_process_starter_executable_artifact"
-status: active
+status: in-review
 owner: runtime
 size: XS
 gate: none
-depends_on: [ORACLE-VIS-CHECK]
+depends_on: [ORACLE-VIS-CHECK, SRC-ATTEST]
 blocks: []
 github: null
 origin: runtime-implementer, found while implementing ORACLE-VIS-CHECK; routed by runtime-leader
+---
+
+## ⏸ CURRENT STATE (2026-07-22) — built, QA-clean, HELD on `SRC-ATTEST`
+
+`wp/ORACLE-VIS-PACKAGING @ 8dad30de` is **QA-clean after three rounds** and the
+Librarian's content verdict is **APPROVED / benign**. It cannot merge yet: it
+edits a manifest-cited source, and until `SRC-ATTEST` lands there is **no valid
+`library/REVISION` it can carry** (Librarian impossibility proof; Architect
+ruling `dec_7q3kes0jcx1kn`). ⛔ **The hold is the Steward's sequencing call —
+there is no defect in the runtime ring's candidate.** The sections below are the
+original framing and remain accurate as the build contract.
+
 ---
 
 **Filed, not opened.** `ORACLE-VIS-CHECK` was deliberately bounded to the one
