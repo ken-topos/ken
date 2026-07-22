@@ -4,7 +4,7 @@
 is this file's one job: it is anchored to a repository revision, never a
 typed date (docs/program/12-documentation-program.md §2).
 
-**Validated revision:** `cf91ec5a4ee2b557540f6a894cb9d8825638a634`
+**Validated revision:** `7c6e03c8ea9622f9691cab982ab061e3355648f2`
 
 Recorded explicitly in `library/REVISION`, not derived from `git
 rev-parse HEAD` at generation time. A live-HEAD anchor is self-
@@ -24,10 +24,12 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/README.md` | portal | explanatory | current |
 | `library/introduction.md` | explanatory | explanatory | current |
 | `library/learn/reading-ken/fragments.md` | reference | derived-reference | current |
+| `library/learn/reading-ken/01-anatomy.md` | explanatory | explanatory | current |
+| `library/learn/reading-ken/02-types-contracts-and-proofs.md` | explanatory | explanatory | current |
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 5 registered document(s).
+**Total:** 7 registered document(s).
 
 ## Regenerating
 
