@@ -88,16 +88,22 @@ pub use surface::{
 pub(crate) use lowering::{
     NativeIntLoweringMutation, Px8trTrapProvenanceEvent, NATIVE_INT_LOWERING_MUTATION,
 };
-// `Px8trNestedRouteObject` is deliberately absent: it is the return type of
-// `emit_px8tr_nested_post_effect_object`, and its only outside consumer reads
-// its fields without ever naming the type, so re-exporting it would be dead
-// surface. The struct keeps its declared `pub(crate)` visibility at its new
-// home; only its reachable path narrows, which the compiler confirms is
-// unobserved.
 #[cfg(test)]
 pub(crate) use test_objects::{
     emit_process_entrypoint_object_with_cranelift, emit_px8tr_nested_post_effect_object,
 };
+// `Px8trNestedRouteObject` was nameable at `crate::cranelift_backend::
+// Px8trNestedRouteObject` before the move. Spelling the declaration
+// `pub(crate)` at its new home does NOT preserve that reach, because the module
+// holding it is private — the type surface would narrow even though the
+// visibility keyword is unchanged. This re-export preserves the pre-existing
+// path. It is kept separate from the block above so the `allow` covers only
+// this one intentionally path-preserving import: the absence of a named
+// consumer today is evidence that nothing currently reaches it, not authority
+// to remove the way anything could.
+#[cfg(test)]
+#[allow(unused_imports)] // Preserve the pre-existing nameable crate-private type path.
+pub(crate) use test_objects::Px8trNestedRouteObject;
 
 impl NativeArtifactIdentity {
     fn from_program(program: &RuntimeProgram) -> Self {
