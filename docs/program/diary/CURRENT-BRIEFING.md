@@ -544,8 +544,8 @@ into `docs/program/issues/` entries.
 > one** — capping threads alone still allows 30 × 2 contending.
 >
 > **Consequence you are now carrying:** loose objects accumulate forever.
-> A deliberate `git gc` is needed during a genuinely quiet window (fleet idle,
-> no WP in flight). **Never run it while a team is working.**
+> A deliberate `git gc` is needed during a genuinely quiet window (fleet
+> idle, no WP in flight). **Never run it while a team is working.**
 >
 > ⚠ **Trigger to avoid:** a `git add -A` run from `/workspaces/ken` (the MAIN
 > worktree) sweeps untracked `.cache/`, `.targets/`, `.tmp-*` into the object
@@ -574,8 +574,9 @@ into `docs/program/issues/` entries.
 > Had I trusted it I would have stacked a duplicate kickoff on a working seat.
 > **Always `capture-pane -S -` piped through `grep -v '^[[:space:]]*$'` before
 > concluding anything about a seat.** A new seat's first launch is exactly when
-> nobody is watching — the consent modal for `--dangerously-load-development-channels`
-> blocks silently and indefinitely.
+> nobody is watching — the consent modal for
+> `--dangerously-load-development-channels` blocks silently and
+> indefinitely.
 
 - ⛔⛔ **AFTER EVERY MERGE, RE-BASE `steward/work` ONTO `main` BEFORE THE
   NEXT COMMIT.** Cost three publish cycles on 2026-07-21 — the same trap
