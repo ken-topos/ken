@@ -16,6 +16,9 @@ use cranelift_module::{default_libcall_names, Linkage};
 use cranelift_object::{ObjectBuilder, ObjectModule};
 
 use crate::{RuntimeDeclaration, RuntimeExpr, RuntimeProgram, RuntimeValue};
+#[cfg(test)]
+mod test_support;
+
 pub(crate) mod artifact;
 pub(crate) mod compiled;
 mod lowering;
@@ -75,32 +78,6 @@ pub(crate) use lowering::{
 };
 use planning::*;
 pub use surface::*;
-
-#[cfg(test)]
-fn test_only_distinguished_root_join_plan() -> crate::NativeJoinPlanV1 {
-    let site_id = 0;
-    let declaration = "decl:fixture::CheckedRoot::main".to_string();
-    let checked_occurrence_path = vec![0];
-    let checked_result_type_fingerprint = 0x5058_3854_4152_4f4f;
-    crate::NativeJoinPlanV1 {
-        representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
-        sites: vec![crate::NativeJoinPlanSiteV1 {
-            site_id,
-            occurrence_binding_fingerprint:
-                crate::compiler_private_join_occurrence_binding_fingerprint(
-                    site_id,
-                    &declaration,
-                    &checked_occurrence_path,
-                    checked_result_type_fingerprint,
-                ),
-            declaration,
-            checked_occurrence_path,
-            checked_result_type_fingerprint,
-            runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
-            answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
-        }],
-    }
-}
 
 #[cfg(test)]
 #[repr(C)]
@@ -188,7 +165,7 @@ pub(crate) fn emit_process_entrypoint_object_with_cranelift(
         None,
         true,
         None,
-        Some(test_only_distinguished_root_join_plan()),
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
         None,
     )?;
     let verifier_passed = compiled.verifier_passed;
@@ -457,7 +434,7 @@ pub(crate) fn emit_px8tr_nested_post_effect_object(
         None,
         true,
         Some(&crate::NativeProcessSymbols::legacy_prelude()),
-        Some(test_only_distinguished_root_join_plan()),
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
         Some(plan),
     )?;
     let verifier_passed = compiled.verifier_passed;
@@ -502,7 +479,7 @@ fn emit_process_entrypoint_object_with_symbols(
         None,
         true,
         Some(symbols),
-        Some(test_only_distinguished_root_join_plan()),
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
         None,
     )?;
     let verifier_passed = compiled.verifier_passed;
@@ -967,7 +944,7 @@ fn run_px8n_arm_fixture(
         None,
         true,
         Some(&symbols),
-        Some(test_only_distinguished_root_join_plan()),
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
         None,
     )
     .unwrap();
