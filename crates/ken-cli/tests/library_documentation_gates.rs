@@ -831,27 +831,14 @@ fn object_present(rev: &str, cwd: &Path) -> bool {
         .success()
 }
 
-#[test]
-fn shallow_clone_self_heals_from_an_independent_full_history_origin() {
-    let pid = std::process::id();
-    let base = std::env::temp_dir().join(format!("doc-w0-synthetic-{pid}"));
-    let _ = std::fs::remove_dir_all(&base);
-    std::fs::create_dir_all(&base).expect("create scratch base dir");
-
-    struct Cleanup(PathBuf);
-    impl Drop for Cleanup {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-    let _cleanup = Cleanup(base.clone());
-
-    // Build the synthetic upstream: minimal but real library/ substrate,
-    // the actual script under test, several commits of unrelated history
-    // after the REVISION-anchored commit (so a depth=1 clone of the tip
-    // genuinely lacks it), then a final commit pointing REVISION at that
-    // distant ancestor — mirroring how this WP has actually bumped
-    // library/REVISION on every rebase fold.
+/// Builds a fully synthetic upstream in `base/origin`: the real
+/// `gen-doc-status.sh` copied byte-for-byte, a minimal `library/`
+/// substrate, several commits of unrelated history after the
+/// REVISION-anchored commit (so a depth=1 clone of the tip genuinely
+/// lacks it), then a final commit pointing `library/REVISION` at that
+/// distant ancestor — mirroring how this WP has bumped `library/REVISION`
+/// on every rebase fold. Returns `(origin_dir, revision_target, tip)`.
+fn build_synthetic_origin(base: &Path) -> (PathBuf, String, String) {
     let origin = base.join("origin");
     std::fs::create_dir_all(&origin).expect("create origin dir");
     run_git(&["init", "--quiet", "-b", "main"], &origin);
@@ -888,6 +875,35 @@ fn shallow_clone_self_heals_from_an_independent_full_history_origin() {
         &origin,
     );
     let tip = run_git(&["rev-parse", "HEAD"], &origin);
+    (origin, revision_target, tip)
+}
+
+fn ancestry_provable(rev: &str, cwd: &Path) -> bool {
+    std::process::Command::new("git")
+        .args(["merge-base", "--is-ancestor", rev, "HEAD"])
+        .current_dir(cwd)
+        .output()
+        .expect("run git merge-base --is-ancestor")
+        .status
+        .success()
+}
+
+#[test]
+fn shallow_clone_self_heals_from_an_independent_full_history_origin() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-w0-synthetic-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (origin, revision_target, tip) = build_synthetic_origin(&base);
 
     // The checkout under test: a real depth=1 clone of the SYNTHETIC
     // origin — not of this test's own (possibly shallow, in CI)
@@ -963,6 +979,95 @@ fn shallow_clone_self_heals_from_an_independent_full_history_origin() {
         String::from_utf8_lossy(&negative.stderr).contains("does not resolve to a real commit"),
         "expected the fake-revision diagnostic, got stderr:\n{}",
         String::from_utf8_lossy(&negative.stderr)
+    );
+}
+
+// Architect finding (thr_74hvpkqnxjp9q, CI-red re-review): object PRESENT
+// is not the whole predicate — a shallow clone can fetch `$REVISION` as
+// its own separate shallow root (e.g. an earlier, narrower fetch) while
+// never fetching the commits connecting it to HEAD. `cat-file -e` then
+// succeeds but `merge-base --is-ancestor` cannot prove ancestry. The
+// ORIGINAL self-heal only triggered on `cat-file` failing, so this state
+// skipped deepening entirely and fell through to a false "not an
+// ancestor" rejection of a genuine ancestor. Reproduces that exact
+// topology (a normal depth=1 clone of the tip, PLUS a separate depth=1
+// fetch of the distant ancestor by itself — object present, no
+// connecting history) against the same independent synthetic origin, so
+// this test is immune to the same nested-topology blind spot Librarian
+// found in the first cut of the sibling test above.
+#[test]
+fn shallow_clone_self_heals_when_object_present_but_ancestry_unprovable() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-w0-synthetic-ancestry-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (origin, revision_target, tip) = build_synthetic_origin(&base);
+
+    let checkout = base.join("checkout");
+    let clone_status = std::process::Command::new("git")
+        .args(["clone", "--quiet", "--depth=1"])
+        .arg(format!("file://{}", origin.display()))
+        .arg(&checkout)
+        .status()
+        .expect("run git clone --depth=1");
+    assert!(clone_status.success(), "git clone --depth=1 failed");
+    assert_eq!(
+        run_git(&["rev-parse", "HEAD"], &checkout),
+        tip,
+        "clone did not land on the intended tip commit"
+    );
+
+    // Fetch the REVISION commit as its OWN separate shallow root — the
+    // object lands in the object database, but nothing connects it to
+    // HEAD's history.
+    run_git(
+        &["fetch", "--quiet", "--depth=1", "origin", &revision_target],
+        &checkout,
+    );
+
+    assert_eq!(
+        run_git(&["rev-parse", "--is-shallow-repository"], &checkout),
+        "true",
+        "test setup did not produce an actually-shallow checkout"
+    );
+    assert!(
+        object_present(&revision_target, &checkout),
+        "test setup: the separate shallow-root fetch did not land the \
+         REVISION object — this regression proves nothing"
+    );
+    assert!(
+        !ancestry_provable(&revision_target, &checkout),
+        "test setup: ancestry must NOT be provable yet, or this regression \
+         proves nothing (the object being present alone is not the bug)"
+    );
+
+    let positive = std::process::Command::new("bash")
+        .arg(checkout.join("scripts/gen-doc-status.sh"))
+        .current_dir(&checkout)
+        .output()
+        .expect("run gen-doc-status.sh in the shallow checkout");
+    assert!(
+        positive.status.success(),
+        "gen-doc-status.sh failed when the REVISION object was present but \
+         ancestry was not yet provable — self-heal must trigger on EITHER \
+         half of the predicate failing, not just object-absence. \
+         stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&positive.stdout),
+        String::from_utf8_lossy(&positive.stderr)
+    );
+    assert!(
+        ancestry_provable(&revision_target, &checkout),
+        "generator reported success without actually fetching the \
+         connecting history — ancestry still isn't provable"
     );
 }
 

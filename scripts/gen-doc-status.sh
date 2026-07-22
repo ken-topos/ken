@@ -79,23 +79,38 @@ fi
 # exactly what broke PR #830 (a real ancestor of `main`, rejected only
 # because the CI runner's checkout never fetched it).
 #
-# Fixed by detecting a shallow repository and, only if the object is
-# still missing, deepening just enough to find it — escalating rather
-# than always paying for a full `--unshallow` (which every CI run would
-# otherwise trigger unconditionally, since CI's checkout is shallow by
-# default and this gate runs on every PR). `library/REVISION` is normally
-# bumped to a recent ancestor on each rebase (see the fold history in this
-# WP), so a modest deepen resolves the common case; an old anchor still
-# resolves via the `--unshallow` fallback, just at higher cost.
+# Architect finding (thr_74hvpkqnxjp9q, CI-red re-review): the object
+# being PRESENT is not the whole predicate. A shallow clone can fetch
+# `$REVISION` as its own separate shallow root (e.g. an earlier, narrower
+# fetch, or a shallow-since boundary) while never fetching the commits
+# connecting it to HEAD — `cat-file -e` then succeeds but `merge-base
+# --is-ancestor` cannot prove ancestry, and the ORIGINAL code below only
+# ever triggered self-heal on `cat-file` failing, so this state skipped
+# deepening entirely and fell straight through to a false "not an
+# ancestor" rejection of a genuine ancestor. Fixed by making `resolved()`
+# require BOTH conditions — object present AND ancestry provable — and
+# re-checking both after every deepen/unshallow step, not just the first.
+#
+# Escalating deepen rather than always paying for a full `--unshallow`
+# (which every CI run would otherwise trigger unconditionally, since
+# CI's checkout is shallow by default and this gate runs on every PR).
+# `library/REVISION` is normally bumped to a recent ancestor on each
+# rebase (see the fold history in this WP), so a modest deepen resolves
+# the common case; an old anchor still resolves via `--unshallow`.
+revision_resolved() {
+  git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null \
+    && git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" HEAD 2>/dev/null
+}
+
 SELF_HEAL_ATTEMPTED=0
 if [ "$(git -C "$REPO_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ] \
-   && ! git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null; then
+   && ! revision_resolved; then
   SELF_HEAL_ATTEMPTED=1
   for DEPTH in 50 500 5000 50000; do
     git -C "$REPO_ROOT" fetch --quiet --deepen="$DEPTH" origin 2>/dev/null || true
-    git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null && break
+    revision_resolved && break
   done
-  if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null; then
+  if ! revision_resolved; then
     git -C "$REPO_ROOT" fetch --quiet --unshallow origin 2>/dev/null || true
   fi
 fi
@@ -121,7 +136,20 @@ if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null; then
   exit 1
 fi
 if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" HEAD 2>/dev/null; then
-  echo "gen-doc-status: library/REVISION '${REVISION}' is not an ancestor of the current tree (HEAD)" >&2
+  if [ "$SELF_HEAL_ATTEMPTED" = "1" ]; then
+    # Architect finding: the object can be present (a separate shallow
+    # root) while the connecting history to HEAD is still missing. If
+    # deepening/unshallowing ran and ancestry STILL can't be proven, full
+    # history is now present (or fetching failed) — this is no longer a
+    # "maybe just needs more history" case, so say so distinctly from the
+    # plain (never-shallow) case below.
+    echo "gen-doc-status: library/REVISION '${REVISION}' is not an ancestor of the current tree" >&2
+    echo "  (HEAD) even after deepening this shallow clone — the object was present but" >&2
+    echo "  the connecting history was not, and still isn't after fetching; this revision" >&2
+    echo "  is genuinely not an ancestor, or 'origin' was unreachable during the fetch" >&2
+  else
+    echo "gen-doc-status: library/REVISION '${REVISION}' is not an ancestor of the current tree (HEAD)" >&2
+  fi
   exit 1
 fi
 
