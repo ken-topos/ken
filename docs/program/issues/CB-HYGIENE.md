@@ -112,3 +112,73 @@ loop has no natural termination when two contention-free tracks interleave"*) is
 exactly about disjoint-but-concurrent candidates, and it applies here.
 
 ⇒ **@runtime-leader owns it; @steward sequences the start.**
+
+## ⛔ AMENDMENT — AC #2 vs AC #4 were CONTRADICTORY. Adversary `evt_3jx7dwph09qcg`
+
+**My acceptance criteria as first written were unsatisfiable.** AC #2 said *"no
+WP token in any non-test region"*; AC #4 said *"move + comment edit only,
+production behavior byte-identical."* Four rows in `:1-127` are WP-tokened
+**production** and dischargeable only by a **rename** — so the implementer had
+to violate one AC or the other. Every claim below re-derived by the Steward on
+`origin/main @ eba56ab3`, cfg-aware, not on report.
+
+### ✅ NEW CLASS C — "left in place, must not change." PRE-AUTHORIZED
+
+**These four rows stay exactly as they are. Renaming them is out of scope and
+is a rejectable change.** They are recorded here so the leave is *pre-approved
+in the brief*, not argued for by the implementer against an AC that reads
+absolute.
+
+| line | row | why it stays |
+|---|---|---|
+| `:51` | `run_nc6_seed_examples` (unconditional `pub use`) | production API rename — forbidden by AC #4 |
+| `:52` | `run_nc8_validated_seed_examples` (unconditional `pub use`) | production API rename — forbidden by AC #4 |
+| `:90` | `#[cfg(feature = "px8-ds-test-support")]` | **Cargo feature** rename — cross-crate contract |
+| `:91` | `pub use lowering::with_px8ds_retired_flat_order;` | cross-crate consumer, see below |
+
+⇒ **AC #2 is hereby scoped to Class A (comments) only.** Identifiers, exported
+names, and feature names in production are **Class C** and out of scope.
+
+### ★★ `:90-91` IS THE DANGEROUS ROW — and AC #5's gate is blind to it
+
+```
+crates/ken-runtime/Cargo.toml:13   px8-ds-test-support = []     <- default OFF, no `default` key
+crates/ken-cli/Cargo.toml:25       features = ["px8-ds-test-support"]
+sole consumer                      ken-cli/tests/px8ta_oriented_subcontinuation.rs:272
+```
+
+**`ken-cargo test -p ken-runtime` — AC #5's named gate — never compiles
+`:90-91` at all.** A change there is **green locally** and surfaces only in CI,
+in a **different crate**, in a **test**. ⛔ **The implementer's entire iteration
+loop is blind to the one row most able to break something.**
+
+★ `:90-91` is also **neither Class A nor Class B** — it is production code,
+under a feature literally named `test-support`, whose only consumer is a test in
+another crate. It sits on the **cfg-condition axis**, which my two-class
+taxonomy did not enumerate over. A careful implementer could have classified it
+either way and **one of those ways is destructive**.
+
+### ⛔ `:86-89` IS LOAD-BEARING — OUT OF SCOPE FOR TRIMMING
+
+The comment at `:86-89` explains precisely this blind spot — that
+`with_px8ds_retired_flat_order` is reached cross-crate and *"neither
+`-p ken-runtime` build config can observe the break — only the consumer can."*
+
+**It sits four lines below Class-A narration at `:68` that this WP authorizes
+removing.** ⇒ **The most dangerous row in this WP was guarded only by prose the
+same WP was licensed to delete.** It stays. This is @adversary's slice-5
+principle at its terminus — *"a fix protects one commit; that comment protects
+the next four"* — and it already survived one 95% rewrite.
+
+### Corrected classification vocabulary
+
+Rows classify as **removed / restated / relocated / left-in-place-with-reason**.
+The fourth category was missing, so the honest answer was unrepresentable and a
+reviewer would have seen a classification that *looked* complete.
+
+### ⚠ Correction to my own "~127 lines" figure
+
+That number is **itself cfg-conflated** — a substantial share of `:1-127` is
+`#[cfg(test)] use`. The real production surface is **smaller still**. An error
+in the safe direction, but the same conflation AC #2 would have inherited.
+**Define "non-test region" cfg-aware, never by line range.**
