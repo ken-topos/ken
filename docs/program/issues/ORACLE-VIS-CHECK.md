@@ -1,7 +1,7 @@
 ---
 id: ORACLE-VIS-CHECK
 title: "replace the text-pin oracle in px4b_native_production.rs with a real visibility check"
-status: ready
+status: active
 owner: runtime
 size: S
 gate: none

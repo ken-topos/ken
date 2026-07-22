@@ -1,7 +1,7 @@
 ---
 id: CI-SKIPPED-NATIVE-TESTS
 title: "Restore rt_parity_native — one test at 221s is the blocker"
-status: ready
+status: active
 owner: verify
 size: S
 gate: none
