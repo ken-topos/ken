@@ -6068,6 +6068,292 @@ mod px5b_effect_observation_tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    // BUDGET-EFF AC-3, relocated here per the Architect ruling
+    // (dec_1m6xdwjp2ttyn) — `remaining` is not observable from ken-host's
+    // own `effect_v1` test module, so the oracle must live at a reification
+    // seat. This is the interp seat; `rt_parity_native.rs` is the native one.
+    //
+    // The prior test above (`short_read_reifies_remaining_and_request_budget`)
+    // does NOT discriminate this defect: its buffer (capacity 8) is larger
+    // than the request (4), so `effective == requested` and raw-vs-effective
+    // agree by coincidence. The two tests below force `effective < requested`
+    // via a buffer capacity smaller than the request, which is the only way
+    // to separate the spec-required bound from the pre-fix one.
+    //
+    // Per the ruling's own oracle-discipline note: capped-full ALONE is
+    // satisfiable by the wrong shortcut `effective := count` (both diverge
+    // from raw budget only because they happen to equal the count in the
+    // full-buffer case). capped-short is the load-bearing pair member — it
+    // is the only shape where `effective` and `count` differ, so it is the
+    // only shape that can catch an implementation that quietly substitutes
+    // one for the other.
+    #[test]
+    fn budget_eff_capped_full_read_reifies_effective_not_raw_remaining() {
+        let ids = console_ids();
+        let fs = fs_ids();
+        let mut store = EvalStore::new();
+        let root = rt_parity_root("budget-eff-capped-full-read");
+        std::fs::write(root.join("source"), b"abcdefgh").unwrap();
+        let mut host = PosixHost::new_at(&root);
+        let capability = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_PARTIAL));
+        let mut resources = ken_host::ResourceTableV1::default();
+        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
+        let file = open_file(
+            b"source",
+            read_mode,
+            capability,
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        // capacity 4 < requested 8 -> effective = min(8, 4) = 4, and the file
+        // has 8 bytes available so the read fills the buffer exactly: count
+        // == effective == 4. Pre-fix, `remaining` was `requested - count`
+        // = 8 - 4 = 4 (the buffer reads as having budget left while it is
+        // completely full); post-fix it must be `effective - count` = 0.
+        let buffer_result = allocate_buffer(4, &mut host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
+
+        let result = run_fs(
+            fs.private_fs_read_at_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(file),
+                EvalVal::Int(0),
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(0),
+                EvalVal::Int(8),
+            ],
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let payload = result_payload(&result, ids.ok_id);
+        let EvalVal::Ctor {
+            id: read_some_id,
+            args: read_args,
+            ..
+        } = payload
+        else {
+            panic!("expected ReadSome, got {payload:?}")
+        };
+        assert_eq!(*read_some_id, fs.read_some_id);
+        let EvalVal::Ctor {
+            id: span_id,
+            args: span_args,
+            ..
+        } = read_args.first().expect("ReadSome span")
+        else {
+            panic!("expected BufferSpan")
+        };
+        assert_eq!(*span_id, fs.private_buffer_span_id);
+        assert_eq!(nat_value(&span_args[1], &fs), 4, "span must be capacity-full");
+        let EvalVal::Ctor {
+            id: transfer_count_id,
+            args: count_args,
+            ..
+        } = read_args.get(1).expect("ReadSome count")
+        else {
+            panic!("expected TransferCount")
+        };
+        assert_eq!(*transfer_count_id, fs.private_transfer_count_id);
+        let transferred = 1 + nat_value(&count_args[0], &fs);
+        let remaining = nat_value(&count_args[1], &fs);
+        assert_eq!(transferred, 4);
+        assert_eq!(
+            remaining, 0,
+            "buffer is completely full; the spec-required remaining is 0, not requested(8) - count(4) = 4"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn budget_eff_capped_short_read_reifies_effective_not_raw_remaining() {
+        let ids = console_ids();
+        let fs = fs_ids();
+        let mut store = EvalStore::new();
+        let root = rt_parity_root("budget-eff-capped-short-read");
+        // Only 2 bytes available, so the real read is short of BOTH the
+        // capacity-4 buffer and the length-8 request: count = 2 < effective
+        // (4) < requested (8). This is the discriminating shape the ruling
+        // calls load-bearing -- effective and count differ, so a shortcut
+        // that substitutes one for the other cannot pass both this test and
+        // the capped-full test above.
+        std::fs::write(root.join("source"), b"ab").unwrap();
+        let mut host = PosixHost::new_at(&root);
+        let capability = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_PARTIAL));
+        let mut resources = ken_host::ResourceTableV1::default();
+        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
+        let file = open_file(
+            b"source",
+            read_mode,
+            capability,
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let buffer_result = allocate_buffer(4, &mut host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
+
+        let result = run_fs(
+            fs.private_fs_read_at_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(file),
+                EvalVal::Int(0),
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(0),
+                EvalVal::Int(8),
+            ],
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let payload = result_payload(&result, ids.ok_id);
+        let EvalVal::Ctor {
+            id: read_some_id,
+            args: read_args,
+            ..
+        } = payload
+        else {
+            panic!("expected ReadSome, got {payload:?}")
+        };
+        assert_eq!(*read_some_id, fs.read_some_id);
+        let EvalVal::Ctor {
+            id: transfer_count_id,
+            args: count_args,
+            ..
+        } = read_args.get(1).expect("ReadSome count")
+        else {
+            panic!("expected TransferCount")
+        };
+        assert_eq!(*transfer_count_id, fs.private_transfer_count_id);
+        let transferred = 1 + nat_value(&count_args[0], &fs);
+        let remaining = nat_value(&count_args[1], &fs);
+        assert_eq!(transferred, 2, "short file yields a short real read");
+        assert_eq!(
+            remaining, 2,
+            "spec-required remaining is effective(4) - count(2) = 2, not requested(8) - count(2) = 6"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn budget_eff_capped_full_write_reifies_effective_not_raw_remaining() {
+        let ids = console_ids();
+        let fs = fs_ids();
+        let mut store = EvalStore::new();
+        let root = rt_parity_root("budget-eff-capped-full-write");
+        // A buffer only carries real bytes through an actual `FsReadAt`
+        // installing its window (`BufferFreeze` only reads back an already-
+        // installed window; it does not populate one). So: read exactly
+        // capacity(4) bytes from a source file into the buffer first, then
+        // write it out with a request length larger than the buffer.
+        std::fs::write(root.join("source"), b"abcdefgh").unwrap();
+        std::fs::write(root.join("target"), Vec::new()).unwrap();
+        let mut host = PosixHost::new_at(&root);
+        let capability = EvalVal::Cap(host.mint_fs_cap(capabilities::AUTH_FULL));
+        let mut resources = ken_host::ResourceTableV1::default();
+        let read_mode = make_ctor(fs.resource_read_id, vec![], &mut store);
+        let source_file = open_file(
+            b"source",
+            read_mode,
+            capability.clone(),
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let create_keep = make_ctor(fs.create_or_keep_id, vec![], &mut store);
+        let write_mode = make_ctor(fs.resource_write_create_id, vec![create_keep], &mut store);
+        let file = open_file(
+            b"target",
+            write_mode,
+            capability,
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let buffer_result = allocate_buffer(4, &mut host, &mut resources, &fs, &ids, &mut store);
+        let buffer = expect_resource_token(&buffer_result, &ids);
+        let fill = run_fs(
+            fs.private_fs_read_at_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(source_file),
+                EvalVal::Int(0),
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(0),
+                EvalVal::Int(4),
+            ],
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let _ = result_payload(&fill, ids.ok_id);
+
+        // capacity 4 < requested 8; the buffer's whole window (4 bytes, just
+        // installed) is available to write -- count == effective == 4,
+        // buffer completely full. Same defect shape as the read side:
+        // pre-fix `remaining` was `requested - count` = 4, not 0.
+        let result = run_fs(
+            fs.private_fs_write_at_id,
+            &[
+                EvalVal::Unknown,
+                EvalVal::ResourceToken(file),
+                EvalVal::Int(0),
+                EvalVal::ResourceToken(buffer),
+                EvalVal::Int(0),
+                EvalVal::Int(8),
+            ],
+            &mut host,
+            &mut resources,
+            &fs,
+            &ids,
+            &mut store,
+        );
+        let payload = result_payload(&result, ids.ok_id);
+        let EvalVal::Ctor {
+            id: wrote_id,
+            args: wrote_args,
+            ..
+        } = payload
+        else {
+            panic!("expected Wrote, got {payload:?}")
+        };
+        assert_eq!(*wrote_id, fs.wrote_id);
+        let EvalVal::Ctor {
+            id: transfer_count_id,
+            args: count_args,
+            ..
+        } = wrote_args.first().expect("Wrote count")
+        else {
+            panic!("expected TransferCount")
+        };
+        assert_eq!(*transfer_count_id, fs.private_transfer_count_id);
+        let transferred = 1 + nat_value(&count_args[0], &fs);
+        let remaining = nat_value(&count_args[1], &fs);
+        assert_eq!(transferred, 4);
+        assert_eq!(
+            remaining, 0,
+            "buffer is completely full; the spec-required remaining is 0, not requested(8) - count(4) = 4"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     fn with_host_width_fixture(
         label: &str,
         test: impl FnOnce(
