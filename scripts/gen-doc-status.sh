@@ -411,9 +411,47 @@ case "$LEDGER_HEADER" in
     ;;
 esac
 
+# Architect finding (dec_1n8mxg2b0m54w, terminal review on ccf89fda): `git
+# ls-tree` and Rust's path normalization both resolve `docs/./x` and
+# `docs//x` to the same blob as `docs/x` — so a noncanonical manifest
+# citation paired with a matching noncanonical ledger row would agree with
+# each other as RAW STRINGS while both naming an alias of the real path,
+# and exact set equality on raw strings alone would silently accept the
+# alias pair instead of enforcing the one canonical spelling Part 1 rule 4
+# requires. Applied to BOTH the required population (below) and every
+# ledger row (the parsing loop that follows) — checking only one side
+# would still let a matching noncanonical pair through.
+path_is_noncanonical() {
+  local p="$1" part
+  [ -z "$p" ] && return 0
+  while IFS= read -r part; do
+    case "$part" in
+      ""|.|..) return 0 ;;
+    esac
+  done <<<"$(printf '%s' "$p" | tr '/' '\n')"
+  return 1
+}
+
 # Required population = every unique manifest-cited path (anchor stripped),
 # same source list content-currency has always used, sorted+deduped.
 REQUIRED_PATHS="$(printf '%s\n' "$CITED_SOURCES" | sed 's/#.*//;s/^library\/REVISION$//' | sort -u | sed '/^$/d')"
+
+NONCANONICAL_CITATION=""
+while IFS= read -r path; do
+  [ -z "$path" ] && continue
+  if path_is_noncanonical "$path"; then
+    NONCANONICAL_CITATION="${NONCANONICAL_CITATION}  - ${path}
+"
+  fi
+done <<<"$REQUIRED_PATHS"
+if [ -n "$NONCANONICAL_CITATION" ]; then
+  echo "gen-doc-status: manifest citation(s) are not in canonical" >&2
+  echo "  repository-relative form (a leading/trailing/doubled slash, or a" >&2
+  echo "  '.'/'..' component, is an alias of a different spelling the" >&2
+  echo "  ledger could equally attest — cite the canonical path instead):" >&2
+  printf '%s' "$NONCANONICAL_CITATION" >&2
+  exit 1
+fi
 
 # Ledger rows, tab-separated `<oid>\t<path>`, after the one header line.
 # Exact shape enforced before any semantic check: exactly one tab per row,
@@ -438,13 +476,11 @@ while IFS= read -r row; do
 "
     continue
   fi
-  case "$path" in
-    /*|*..*)
-      BAD_ROW="${BAD_ROW}  - path escapes the repository: ${row}
+  if path_is_noncanonical "$path"; then
+    BAD_ROW="${BAD_ROW}  - path escapes the repository or is not canonical (leading/trailing/doubled slash or a '.'/'..' component): ${row}
 "
-      continue
-      ;;
-  esac
+    continue
+  fi
   if [ -n "$PREV_PATH" ] && [ "$(printf '%s\n%s' "$PREV_PATH" "$path" | sort | head -n1)" != "$PREV_PATH" ]; then
     BAD_ROW="${BAD_ROW}  - ledger rows are not sorted by path at: ${row}
 "

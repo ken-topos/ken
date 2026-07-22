@@ -71,17 +71,32 @@ REQUIRED_PATHS="$(awk '
 
 OBJECT_FORMAT="$(git -C "$REPO_ROOT" rev-parse --show-object-format 2>/dev/null || echo sha1)"
 
+# Same canonical-path test as scripts/gen-doc-status.sh's checker (kept as
+# a literal duplicate, per this file's own extraction-duplication note
+# above) — Architect finding dec_1n8mxg2b0m54w: `git ls-tree`/Rust both
+# resolve `docs/./x` and `docs//x` to the same blob as `docs/x`, so
+# attesting a noncanonical spelling would let a later noncanonical
+# manifest citation match it as a raw string while aliasing the real path.
+path_is_noncanonical() {
+  local p="$1" part
+  [ -z "$p" ] && return 0
+  while IFS= read -r part; do
+    case "$part" in
+      ""|.|..) return 0 ;;
+    esac
+  done <<<"$(printf '%s' "$p" | tr '/' '\n')"
+  return 1
+}
+
 BAD=""
 ROWS=""
 while IFS= read -r path; do
   [ -z "$path" ] && continue
-  case "$path" in
-    /*|*..*)
-      BAD="${BAD}  - ${path} (escapes the repository)
+  if path_is_noncanonical "$path"; then
+    BAD="${BAD}  - ${path} (escapes the repository or is not canonical spelling)
 "
-      continue
-      ;;
-  esac
+    continue
+  fi
   entry="$(git -C "$REPO_ROOT" ls-tree HEAD -- "$path" 2>/dev/null)"
   mode="$(printf '%s' "$entry" | awk '{print $1; exit}')"
   oid="$(printf '%s' "$entry" | awk '{print $3; exit}')"

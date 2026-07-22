@@ -1867,6 +1867,124 @@ fn ledger_rejects_a_path_escaping_the_repository() {
     );
 }
 
+// Architect finding (dec_1n8mxg2b0m54w, terminal review on `ccf89fda`):
+// `git ls-tree`/Rust both normalize `docs/./x` and `docs//x` to the same
+// blob as `docs/x` — so a noncanonical manifest citation paired with a
+// matching noncanonical ledger row would agree as RAW STRINGS while both
+// aliasing the real path, defeating exact set equality's intent (Part 1
+// rule 4). These prove the fix rejects both the ledger-row half and the
+// manifest-citation half, and that they can't hide behind each other.
+#[test]
+fn ledger_rejects_a_dot_slash_alias_row_even_though_the_manifest_matches_it() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-alias-row-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (repo, _revision) = build_currency_fixture(&base);
+
+    let example_oid = run_git(&["rev-parse", "HEAD:docs/example.md"], &repo);
+    let fmt = object_format(&repo);
+    // Both the manifest citation AND the ledger row use the SAME alias
+    // spelling (`docs/./example.md`), so a raw-string set-equality check
+    // alone would see them agree and never reach the OID comparison — the
+    // exact defect under test.
+    std::fs::write(
+        repo.join("library/SOURCE-ATTESTATIONS"),
+        format!(
+            "# ken-source-attestation-v1 object-format={fmt}\n\
+             {example_oid}\tdocs/./example.md\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = [\n  \
+         \"docs/./example.md\",\n]\n",
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "matching alias citation+row"],
+        &repo,
+    );
+
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a `docs/./example.md` alias even though \
+         the manifest citation used the identical alias spelling — raw \
+         string agreement between a noncanonical citation and a matching \
+         noncanonical ledger row must not substitute for canonical-form \
+         enforcement"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("canonical") || stderr.contains("escapes the repository"),
+        "expected a canonical-path diagnostic (from either the citation \
+         check or the row check), got stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn ledger_rejects_a_doubled_slash_row() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-doubleslash-row-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (repo, _revision) = build_currency_fixture(&base);
+
+    let example_oid = run_git(&["rev-parse", "HEAD:docs/example.md"], &repo);
+    let fmt = object_format(&repo);
+    std::fs::write(
+        repo.join("library/SOURCE-ATTESTATIONS"),
+        format!(
+            "# ken-source-attestation-v1 object-format={fmt}\n\
+             {example_oid}\tdocs//example.md\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = []\n",
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "doubled-slash ledger row"],
+        &repo,
+    );
+
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a ledger row with a doubled slash \
+         (`docs//example.md`), a path git/Rust normalize to `docs/example.md`"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("canonical") || stderr.contains("escapes the repository"),
+        "expected a canonical-path diagnostic, got stderr:\n{stderr}"
+    );
+}
+
 #[test]
 fn check_and_write_modes_never_mutate_the_ledger() {
     let pid = std::process::id();
