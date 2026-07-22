@@ -40,39 +40,56 @@ for. The rest of this chapter walks all four against real fragments.
 
 ## 2. `proved`, read from a real certificate
 
-`catalog/packages/Core/Logic/Transport.ken.md`'s own **Trust &
-derivation** section states, exactly: **"`trusted_base()` delta. Zero."**
-That is not the file's prose asserting its own authority — it is checked
-by a real producer: `transport_package_adds_zero_trusted_base_delta`
-(`crates/ken-elaborator/tests/surface_transport_acceptance.rs`) loads the
-package and asserts `trusted_base()` is set-equal before and after —
-every combinator reduces through the already-trusted `J`/`cast`, adding
-**nothing**.
+A `proved` verdict is a fact about one **claim and its certificate**, not
+about a file as a whole. `catalog/packages/Core/Logic/EmptyDec.ken.md`'s
+own Laws & proofs section states two such claims directly:
 
-`catalog/packages/Core/Logic/EmptyDec.ken.md`'s own Trust & derivation
-section says something narrower, in different words: **"Zero new trust
-category."** That distinction is real, not a paraphrase of the same fact.
-Its own producers (`ac3_trusted_base_delta_is_ordinary_inductive_admission_only`,
-`ac4_bridge_demonstrated_over_deceq_bool_not_only_deceq_int`,
-`crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs`) establish that
-`Empty`/`Dec`'s own *admission* is ordinary inductive machinery — zero
-`declare_primitive`/`declare_postulate` delta — not that every claim
-reachable through the file is postulate-free regardless of instance.
-Section 5 below shows exactly why the difference matters: this same file
-also shows a worked example whose delta is **not** zero, once a
-particular instance is chosen.
+```ken
+proof yes_is_true for decide : Equal Bool (decide (Equal Bool True True) true_is_true) True =
+  Proved
 
-Both are `proved` verdicts in the sense that matters — the kernel
-re-checked each certificate and recorded no postulate for it — but
-"whole-file delta is zero" and "this admission is ordinary, delta-free
-machinery" are different claims, and only Transport's producer actually
-established the first one
+proof no_is_false for decide
+    : Equal Bool (decide (Equal Bool True False) true_is_not_false) False =
+  Proved
+```
+
+Each is `proved`: the kernel re-checked the `Proved` certificate against
+its stated `Equal Bool …` claim, and this file's whole-file elaboration —
+Definition, Using it, and this Laws & proofs section together — is exactly
+what `ac4_bridge_demonstrated_over_deceq_bool_not_only_deceq_int`
+(`crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs`) exercises when
+it loads the entry standalone
 (`spec/20-verification/21-spec-syntax.md`
 [§5.3](../../../spec/20-verification/21-spec-syntax.md#53-how-the-verdict-and-the-status-relate-the-projection)).
 A `proved` verdict adds nothing to what a consumer must trust beyond the
 kernel itself — the certificate is a closed term `check` validates, and a
 wrong certificate simply fails to validate; it cannot manufacture a false
 `proved`.
+
+That per-claim fact is separate from what a file's **Trust &
+derivation** section reports about the assumptions the whole artifact
+inherits — a different kind of accounting, not itself a verdict.
+`catalog/packages/Core/Logic/Transport.ken.md`'s own Trust & derivation
+section states, exactly: **"`trusted_base()` delta. Zero."** That
+sentence is checked by a real producer,
+`transport_package_adds_zero_trusted_base_delta`
+(`crates/ken-elaborator/tests/surface_transport_acceptance.rs`), which
+loads the package and asserts `trusted_base()` is set-equal before and
+after — every combinator reduces through the already-trusted `J`/`cast`,
+adding **nothing**.
+
+`EmptyDec.ken.md`'s own Trust & derivation section says something
+narrower, in different words: **"Zero new trust category."** That
+distinction is real, not a paraphrase of the same fact. Its own producer,
+`ac3_trusted_base_delta_is_ordinary_inductive_admission_only`
+(same file), establishes that `Empty`/`Dec`'s own *admission* is ordinary
+inductive machinery — zero `declare_primitive`/`declare_postulate` delta
+for the two new inductives themselves — which is a narrower claim than
+"every claim reachable through this file is postulate-free regardless of
+instance." Section 5 below shows exactly why the difference is real
+rather than pedantic: the same entry's own Design notes name a possible
+*instantiation* whose delta is not zero, even though the entry's own §3
+worked examples never actually build that instantiation.
 
 ## 3. `delegated`, read from a fragment's own honest prose
 
@@ -120,18 +137,21 @@ rather than assume the two are the same thing because they rhyme.
 
 ## 5. `unknown` and the postulate it names
 
-`EmptyDec.ken.md`'s own Design notes section states a caveat about one of
-its worked examples: `DecEq Int.sound` is "`Axiom`-backed (`Int` is an
-opaque primitive, no induction)" — usable, but its `Yes` branch's proof
-rides that axiom rather than a kernel-checked derivation. An axiom admitted
-this way is exactly a **postulate**: an assumed proposition entered via
-`declare_postulate`, one of Ken's exactly three trusted-computing-base
-categories, alongside the kernel itself and the primitive declarations
+`EmptyDec.ken.md`'s own Design notes section states a caveat about an
+instantiation the entry itself never builds as a **worked example**:
+`dec_eq_decides Int (DecEq Int) x y` type-checks and is usable, but
+`DecEq Int.sound` is "`Axiom`-backed (`Int` is an opaque primitive, no
+induction)" — its `Yes` branch's proof rides that axiom rather than a
+kernel-checked derivation. An axiom admitted this way is exactly a
+**postulate**: an assumed proposition entered via `declare_postulate`, one
+of Ken's exactly three trusted-computing-base categories, alongside the
+kernel itself and the primitive declarations
 (`spec/60-security/64-trust-model.md`
 [§1](../../../spec/60-security/64-trust-model.md#1-the-trusted-computing-base-tcb-precisely)).
 Nothing else is trusted — not the elaborator, not the prover, not the
 surface compiler — they all produce artifacts the kernel re-checks. This is
-also why the entry's §3 worked examples deliberately use `DecEq Bool`
+exactly *why* the entry's actual §3 worked examples deliberately use
+`DecEq Bool`
 instead: an inductive carrier proved by no-confusion, honest and
 zero-delta, so the showcase itself is not quietly resting on the axiom the
 Design notes names.
