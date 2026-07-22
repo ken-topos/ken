@@ -710,10 +710,9 @@ fn validate_transfer_request_bound(
     request: &CanonicalRequestV1,
     outcome: &CanonicalOutcomeV1,
 ) -> Result<(), EffectTraceWireError> {
-    match outcome {
-        CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
-            crate::ReadProgressV1::ReadSome { transferred, .. },
-        )) => match request {
+    match outcome.transfer_request_bound() {
+        None => Ok(()),
+        Some(crate::TransferRequestBoundV1::ReadAt(transferred)) => match request {
             CanonicalRequestV1::FsReadAt { length, .. }
                 if transferred.effective_request() <= *length =>
             {
@@ -721,9 +720,7 @@ fn validate_transfer_request_bound(
             }
             _ => Err(EffectTraceWireError),
         },
-        CanonicalOutcomeV1::Success(CanonicalReplyV1::WriteProgress(
-            crate::WriteProgressV1::Wrote(transferred),
-        )) => match request {
+        Some(crate::TransferRequestBoundV1::WriteAt(transferred)) => match request {
             CanonicalRequestV1::FsWriteAt { length, .. }
                 if transferred.effective_request() <= *length =>
             {
@@ -731,7 +728,6 @@ fn validate_transfer_request_bound(
             }
             _ => Err(EffectTraceWireError),
         },
-        _ => Ok(()),
     }
 }
 

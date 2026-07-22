@@ -2118,6 +2118,57 @@ pub enum CanonicalOutcomeV1 {
     Error(SemanticErrorV1),
 }
 
+/// Sole population classifier for BUDGET-EXHAUST (`dec_7kcbc14ybndbq`): the
+/// set of outcome shapes that carry a `TransferCountV1` budget to bound. No
+/// arm at any level (`CanonicalOutcomeV1`, `CanonicalReplyV1`,
+/// `ReadProgressV1`, `WriteProgressV1`, `SemanticErrorV1`) is a `_`
+/// catch-all, so a future budget-carrying reply variant is a compile error
+/// here rather than an absence a reviewer must notice. Population is one
+/// fact; `effect_wire`'s and `ken-interp`'s validators stay independent
+/// consumers of it (wire admission and interpreter reification are two
+/// boundaries).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransferRequestBoundV1 {
+    ReadAt(TransferCountV1),
+    WriteAt(TransferCountV1),
+}
+
+impl CanonicalOutcomeV1 {
+    pub fn transfer_request_bound(&self) -> Option<TransferRequestBoundV1> {
+        match self {
+            CanonicalOutcomeV1::Success(reply) => match reply {
+                CanonicalReplyV1::Unit
+                | CanonicalReplyV1::Bool(_)
+                | CanonicalReplyV1::Bytes(_)
+                | CanonicalReplyV1::ReadChunk(_)
+                | CanonicalReplyV1::ReadEof
+                | CanonicalReplyV1::Instant(_)
+                | CanonicalReplyV1::FileMetadata(_)
+                | CanonicalReplyV1::DirectoryEntries(_)
+                | CanonicalReplyV1::ResourceAcquired { .. }
+                | CanonicalReplyV1::ResourceSettlement(_) => None,
+                CanonicalReplyV1::ReadProgress(progress) => match progress {
+                    ReadProgressV1::ReadEof => None,
+                    ReadProgressV1::ReadSome { transferred, .. } => {
+                        Some(TransferRequestBoundV1::ReadAt(*transferred))
+                    }
+                },
+                CanonicalReplyV1::WriteProgress(progress) => match progress {
+                    WriteProgressV1::Wrote(transferred) => {
+                        Some(TransferRequestBoundV1::WriteAt(*transferred))
+                    }
+                },
+            },
+            CanonicalOutcomeV1::Error(error) => match error {
+                SemanticErrorV1::Io(_)
+                | SemanticErrorV1::File(_)
+                | SemanticErrorV1::Capability(_)
+                | SemanticErrorV1::Resource(_) => None,
+            },
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ResourceBindingRole {
     File,
