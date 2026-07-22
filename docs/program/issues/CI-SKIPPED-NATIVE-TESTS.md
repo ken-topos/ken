@@ -28,15 +28,18 @@ touching the sharded lane's critical path.
 problem** (bring the 221s outlier down to sibling range, ~90s total, and it
 fits inside the shard). Re-measured fresh against current `main` for this
 WP: the outlier is still present (**250.5s**, if anything slightly worse
-after intervening native-lowering commits) and is **not** a bug to fix —
-traced to `fs_write_at_malformed_offset_narrows_to_invalid_offset` opening
-**two nested resource brackets** where every sibling test opens exactly one,
-which is load-bearing to the property that test isolates (dispatch-skip
-under a rights-clean write, distinct from its sibling's rights-fault-overlap
-case). **This WP takes Option 2 below instead: a dedicated job**, mirroring
-`native-buffer`/`native-write-partition` — the binary's own ~266.7s total
-fits the same headroom pattern as its two siblings without needing the
-outlier fixed at all.
+after intervening native-lowering commits) and this WP does **not** treat
+it as a bug to fix. `fs_write_at_malformed_offset_narrows_to_invalid_offset`
+is the only one of the seven that opens **two nested resource brackets**
+where every sibling test opens exactly one — a topology fact that is
+load-bearing to the property that test isolates (dispatch-skip under a
+rights-clean write, distinct from its sibling's rights-fault-overlap case).
+That topology is correlated with the timing outlier, but nothing here
+isolates it as the *cause* — see "Closed" below for the unisolated-
+hypothesis framing. **This WP takes Option 2 below instead: a dedicated
+job**, mirroring `native-buffer`/`native-write-partition` — the binary's
+own ~266.7s total fits the same headroom pattern as its two siblings
+without needing the outlier fixed, or its cause established, at all.
 
 ## Why they were skipped
 
