@@ -1,35 +1,55 @@
-//! Lowering state, support methods, and the lowering SCC (RT-SPLIT §10.1).
+//! Lowering state, the acyclic support methods, and the lowered-value,
+//! continuation/control, source-machine, bounded-Nat and dynamic-constructor
+//! data model, plus their free helpers (RT-SPLIT §10.1/§10.2).
 //!
-//! Slice 4 creates this module as a **scaffold**. Only `core` — the indivisible
-//! 29-method SCC plus `compile_expr_into_module` — lives here today; the
-//! `Lowering` state and the 79 acyclic support methods arrive in slice 5.
+//! The indivisible 29-method lowering SCC lives in the child module `core`,
+//! which consumes this module's private items as its ancestor and therefore
+//! needs no widening (§10.4, "hierarchy is load-bearing").
 //!
-//! Until then this module privately imports the still-residual parent items so
-//! that `core` imports only from its own parent (§10.5). That is what lets
-//! slice 5 move the residual state in without touching `core.rs` again.
+//! Imports below name their **owning** module, crate root, or external
+//! dependency directly. This module must never import through the facade:
+//! §10.3 forbids an implementation module doing so, and an omnibus
+//! `use super::*` would hide the real `compiled` / `planning` / `surface`
+//! edges behind a namespace. The `pub(in crate::cranelift_backend)` on each
+//! is namespace wiring, not a widening — it re-exports names at their existing
+//! visibility so `core` and its subject tests inherit them, and it cannot
+//! escape `crate::cranelift_backend`.
 
 pub(in crate::cranelift_backend) mod core;
 
-// Re-exported at facade scope (never crate scope) so `core` and its tests can
-// glob from their own parent. This is namespace wiring, not a widening: every
-// underlying declaration keeps its visibility, and the re-export cannot escape
-// `crate::cranelift_backend`. Slice 5 replaces it with the real declarations,
-// which is what lets `core.rs` stay untouched (§10.5).
-// Public/re-exported parent surface (surface.rs, compiled.rs, planning.rs
-// and the parent's own `pub use`s) comes through the glob; ancestor-PRIVATE
-// items cannot be glob-imported and are listed explicitly below.
-pub(in crate::cranelift_backend) use super::*;
+// --- external dependencies -------------------------------------------------
+pub(in crate::cranelift_backend) use std::collections::{BTreeMap, BTreeSet};
 
-pub(in crate::cranelift_backend) use super::{
-    backend_module, types, AbiParam, BTreeMap, BTreeSet, CompiledModule, CraneliftBackendError,
-    Function, FunctionBuilder, FunctionBuilderContext, Linkage, MemFlags, Module,
-    NativeSeedEnvironment, RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr,
-    RuntimePartiality, RuntimePrimitive, RuntimeSymbol, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
-    StackSlotData, StackSlotKind, UserFuncName,
+pub(in crate::cranelift_backend) use cranelift_codegen::ir::{
+    types, AbiParam, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
+    UserFuncName,
+};
+pub(in crate::cranelift_backend) use cranelift_codegen::verify_function;
+pub(in crate::cranelift_backend) use cranelift_frontend::{
+    FunctionBuilder, FunctionBuilderContext,
+};
+pub(in crate::cranelift_backend) use cranelift_module::{Linkage, Module};
+
+// --- crate root ------------------------------------------------------------
+pub(in crate::cranelift_backend) use crate::{
+    RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr, RuntimeGroundValue, RuntimePartiality,
+    RuntimePrimitive, RuntimeSymbol, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
 
-// `#[cfg(test)]`-only parent items: an unconditional `use` of these breaks
-// the non-test build, which the test build cannot show you.
+// --- sibling backend modules, named at their OWNERS (§10.3 DAG:
+//     `lowering support -> surface`, `lowering::core -> compiled`) ----------
+pub(in crate::cranelift_backend) use super::compiled::{CompiledModule, ResultDecoder};
+pub(in crate::cranelift_backend) use super::planning::{
+    collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
+    validate_oriented_subcontinuation_transport, CheckedOrientedMarkerSets,
+};
+pub(in crate::cranelift_backend) use super::surface::{
+    backend, backend_module, unsupported, BackendFailure, CraneliftBackendError,
+    NativeSeedEnvironment,
+};
+
+// `#[cfg(test)]`-only: an unconditional `use` of this breaks the non-test
+// build, which the test build cannot show you.
 #[cfg(test)]
 pub(in crate::cranelift_backend) use crate::RuntimeMatchCase;
 

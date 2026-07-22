@@ -9,16 +9,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
-use cranelift_codegen::ir::{
-    types, AbiParam, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
-    UserFuncName,
-};
 use cranelift_codegen::isa::OwnedTargetIsa;
 use cranelift_codegen::settings::{self, Configurable};
-use cranelift_codegen::verify_function;
-use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{default_libcall_names, Linkage, Module};
+use cranelift_module::{default_libcall_names, Linkage};
 use cranelift_object::{ObjectBuilder, ObjectModule};
 
 use crate::{
@@ -27,9 +21,8 @@ use crate::{
     ProofErasureBoundaryWitnessError, ProofErasureBoundaryWitnessStage, RuntimeArtifactCertificate,
     RuntimeArtifactIdentity, RuntimeArtifactValidationError, RuntimeArtifactValidationReport,
     RuntimeDeclaration, RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExample, RuntimeExpr,
-    RuntimeGroundValue, RuntimeIrRunReport, RuntimeIrTargetIdentity, RuntimeLowerabilityStatus,
-    RuntimeObservation, RuntimePartiality, RuntimePrimitive, RuntimeProgram, RuntimeSymbol,
-    RuntimeTrap, RuntimeTrapCode, RuntimeValue,
+    RuntimeIrRunReport, RuntimeIrTargetIdentity, RuntimeLowerabilityStatus, RuntimeObservation,
+    RuntimeProgram, RuntimeValue,
 };
 
 pub(crate) mod compiled;

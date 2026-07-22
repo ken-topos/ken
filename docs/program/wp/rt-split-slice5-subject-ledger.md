@@ -142,7 +142,7 @@ public entrypoint the subject:
 | unsupported_effect_is_distinct_from_backend_failure | 5221 | Console Effect errors Unsupported("Effect") | expr-lowering `RuntimeExpr::Effect` arm | effects |
 | pattern_default_trap_is_observation_not_backend_error | 5250 | default-arm trap surfaces as observation | Match default-arm trap codegen | constructors |
 
-## Rows — stays for slices 6/7 (28)
+## Rows — stays for slices 6/7 (29)
 
 `artifact` (2): `px8i_jit_and_object_construct_identical_local_helper_clif`
 (`:5080`), `px8i_local_helpers_reject_invalid_zero_stale_and_wrong_arena_slots`
