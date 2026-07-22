@@ -84,7 +84,7 @@ misleading.
 | ID | Objective | Owner | Size |
 |---|---|---|---|
 | **ABI-R1** | Correct stale capability prose: `Capability/Filesystem/Errors.ken.md` still says filesystem authority is coarse and not path-confined, though scoped roots, rights, symlink policy, and no-follow resolution have landed. | Foundation | S |
-| **ABI-R2** | Rename `Capability/Filesystem/Path/Posix.ken.md` — the portability name the Linux-direct ruling rejected. Sweep every citation, not just the file. | Foundation | S |
+| ~~**ABI-R2**~~ | ⛔ **WITHDRAWN 2026-07-22 — the premise was false.** See §4.1. | — | — |
 | **ABI-R3** | Generated inventory of operation identity, availability, rights, request/reply schema, and differential fixture per operation. Derived from the catalog's own structure so a new operation is a build break. Tests assert **named** memberships and properties, never total counts. | Runtime | M |
 
 **ABI-R3 is the load-bearing one.** It is the same mechanism SEAL-2 builds for
@@ -140,12 +140,43 @@ re-touching every operation added in between.
 | **PX11** | Sockets: typed IPv4/IPv6/Unix addresses, stream and datagram kinds, bounded send/receive, accept/connect/listen/shutdown, socket-error context, explicit socket **option families** rather than integer pairs, and an **injected resolver capability** whose trust source and policy are visible. DNS is a service boundary, not a syscall. | Runtime + Foundation | L |
 | **PX12** | Readiness: nonblocking-mode transitions, `epoll`/`eventfd`/`timerfd`/`signalfd` resources, explicit one-shot/level/edge registration, **cancellation and timeout in the operation type rather than in prose**, normalized event observations for differential tests. | Runtime + Foundation | L |
 
+## 4.1 ⛔ ABI-R2 WITHDRAWN — the rename premise was false
+
+**Operator, 2026-07-22, on being shown the item:** *"Aren't linux paths posix
+compliant? Calling it linux would be over-specific."* Correct, and it kills the
+WP. Verified against the file before withdrawing:
+
+`catalog/packages/Capability/Filesystem/Path/Posix.ken.md` is **1793 lines with
+ZERO** occurrences of `linux`, `syscall`, `errno`, `cfg(`, or any syscall name.
+It declares **no imports, no effects, no FFI**, and its own closing line states
+its **`trusted_base()` delta is zero**. It is pure total lexical parsing of byte
+sequences around `/`.
+
+**So `Posix` names the PATH GRAMMAR, and names it accurately.** Linux paths
+*are* POSIX paths. Nothing in the file is Linux-specific, and renaming it
+`Linux` would make the tree **less** accurate — over-specific, exactly as the
+operator said.
+
+**Where the error came from.** The charter (`09:149-151`) reasoned: *"the `cfg`
+gate must be `linux` and the ABI facts are Linux facts … *Consequence to
+sweep:* the existing `…/Posix.ken.md` name is now a misnomer."* The premise is
+**true** — the syscall/ABI layer is Linux-specific. The conclusion is **false**,
+because **there is no ABI in this file at all.** A true statement about the ABI
+layer was allowed to stand in for a claim about a pure-lexical package that
+happens to sit in the same directory tree.
+
+**This is the same defect class as the DOC-W0 family** (`issues/DOC-W0.md`,
+eight findings): *a true statement standing in for the property that mattered.*
+Recorded here rather than merely deleted so the rename is not "rediscovered"
+and re-proposed from `09` later. **If a future reader thinks this package is
+misnamed, the burden is to show Linux-specific content in it — there is none
+today.**
+
 ## 5. Dependency graph
 
 ```mermaid
 flowchart TD
     ABI_R1[ABI-R1 stale capability prose]
-    ABI_R2[ABI-R2 Posix naming sweep]
     ABI_R3[ABI-R3 derived operation inventory]
     ABI_A1[ABI-A1 console and clock]
     ABI_A2[ABI-A2 metadata and rename]
@@ -186,7 +217,7 @@ flowchart TD
     ABI_S3 --> PX12
 ```
 
-ABI-R1 and ABI-R2 are documentation-only and depend on nothing.
+ABI-R1 is documentation-only and depends on nothing. (ABI-R2 was withdrawn — §4.1.)
 
 ## 6. Exit
 
@@ -231,7 +262,7 @@ work per token**, and the graph above is shaped for it:
   evidence shape share elaboration; a ring that has just reasoned about
   normalized nondeterministic observation should spend that context on all of
   it, not half.
-- **ABI-R1 and ABI-R2 are unblocked doc-only work.** They are the right filler for a
+- **ABI-R1 is unblocked doc-only work.** It is the right filler for a
   window where the enclave or a build ring is otherwise blocked, and they cost
   a T2 seat rather than a T1 one.
 - **Frames must state the mechanism, not name one.** The last two weeks cost
@@ -263,7 +294,7 @@ not from memory:
 
 | Track | Items | Issues existing |
 |---|---|---|
-| R — reconcile | ABI-R1, ABI-R2, ABI-R3 | **0 of 3** |
+| R — reconcile | ABI-R1, ABI-R3 (ABI-R2 withdrawn) | **0 of 2** |
 | A — availability | ABI-A1, ABI-A2, ABI-A3 | **0 of 3** |
 | M — manifest | ABI-M1, ABI-M2 | **0 of 2** |
 | S — synchronous floor | PX9, ABI-S1–ABI-S6 | **0 of 7** |

@@ -164,7 +164,8 @@ not pre-committing the fleet to seven waves of work sight-unseen.
 | Wave | Content | State |
 |---|---|---|
 | **0** | Charter + currency substrate: `README.md`, `manifest.toml`, generated `STATUS.md`, first gates, migration ledger | ✅ **RELEASED** — `issues/DOC-W0.md` |
-| 1 | The read-Ken spine: introduction, quickstart, seven-part reading curriculum on one real catalog program | not framed — ⛔ **GATED on `issues/DOC-CURRENCY-ANCHOR.md`** |
+| 1 | The read-Ken spine, **fragment-based** — introduction, quickstart, reading curriculum taught from real checked package fragments. **Complete-program work DEFERRED to Wave 1b** | not framed — ⛔ **GATED on `issues/DOC-CURRENCY-ANCHOR.md`** |
+| **1b** | The whole-program reading pass: curriculum ch. 7, worked end-to-end review with an explicit verdict, on one real catalog **program** | not framed — ⛔ **gated on basic capabilities landing** (operator, 2026-07-22) |
 | 2 | Agent core + task packs; refactor product facts out of `write-ken`; cold-context evals | not framed |
 | 3 | Conceptual guide + how-tos; `catalog/guide/` migration (**gated on the fence gate, §3**) | not framed |
 | 4 | Complete reader-oriented reference | not framed |
@@ -190,3 +191,51 @@ right before Wave 1 produces content at volume.
 > `REVISION` bump when one moves. The first time a cited chapter's body
 > changes under a stable heading, every derived page claims a currency it does
 > not have, with every gate green.
+
+### ⛔ Wave 1 RE-SCOPED 2026-07-22 (operator): defer the complete-program work
+
+**Operator ruling, verbatim:** *"we're still focusing on basic capabilities.
+defer complete program work (revise wave 1)."*
+
+The proposal's Wave 1 requires *"one real catalog program throughout rather
+than unrelated snippets"* and exits when *"a technically experienced human …
+can read one non-trivial Ken program and accurately state its contract,
+assumptions, authority, and execution status."* **That is premature while the
+basic capability surface is still landing** — and the survey that prompted the
+ruling found the concrete reason:
+
+- **The catalog contains exactly one actual program** —
+  `catalog/examples/CommandLine/Forge.ken.md`, 55 lines. Everything else under
+  `catalog/packages/` is a package.
+- `Forge` is **pure spec-data with no effects**, so curriculum chapters **04**
+  (effects/capabilities/authority) and **06** (execution) would have had
+  nothing local to teach from — forcing exactly the *"unrelated snippets"* the
+  proposal forbids.
+- Neither the proposal nor this document ever named the program, and **the
+  exit condition depends on the choice.** Writing the curriculum first and
+  picking the program later inverts the dependency.
+
+**So Wave 1 becomes fragment-based.** It teaches the reading discipline from
+**real checked package fragments**, which exist today in volume and are
+already fence-checked. It keeps: introduction, quickstart, and curriculum
+chapters **01–06**. Its exit condition is correspondingly narrowed:
+
+> **Wave 1 exit:** a technically experienced human unfamiliar with dependent
+> types can read a real Ken **declaration or package fragment** and accurately
+> state its contract, its assurance class, and the authority it requires —
+> without yet being asked to synthesize a whole program.
+
+**Wave 1b carries what was removed:** curriculum chapter **07**
+(`07-review-worked-example.md`), the complete worked review with an explicit
+verdict, and the original *"read one non-trivial Ken program"* exit condition.
+**It is gated on the basic capability surface being complete enough that a
+real catalog program exercises effects, capabilities, and execution** — i.e.
+on enough of `docs/program/10-linux-abi-completion.md` landing that such a
+program exists to read. **Do not frame Wave 1b until then, and do not
+substitute a purpose-built toy** — the proposal's *"an existing catalog
+program, not a toy syntax collage"* constraint survives the deferral intact.
+
+> **⚠ Framing note for Wave 1.** `library/introduction.md` **already landed in
+> Wave 0** and is in `manifest.toml`. The proposal assigns "write the
+> introduction" to Wave 1. Wave 1's frame must therefore say **revise**, not
+> **author**, for that one file, or the ring will duplicate it.
