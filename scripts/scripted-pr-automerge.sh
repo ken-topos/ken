@@ -258,7 +258,22 @@ if [ "$doc_only" -eq 1 ]; then
   }
   trap cleanup_doc_gate EXIT    # left armed on every path out of here
 
-  git fetch origin main --quiet 2>/dev/null || true
+  # F13 (@adversary): this was `|| true` with stderr suppressed. It was SAFE —
+  # `:112` fetches unguarded under `set -e`, so a genuine fetch failure aborts
+  # long before here, and the publisher is serialized so `main` rarely advances
+  # in the `:112 → here` window. But it was **safe because of an invariant
+  # enforced somewhere else**, and nothing here recorded that dependency: if
+  # serialization ever ends or a second publish path appears, a silently stale
+  # `origin/main` makes the gate evaluate one base while `gh pr merge` squashes
+  # onto another — F10's structural split, one layer down, with no diff to
+  # review. Guarding costs nothing and slots into the taxonomy, so guard it.
+  if ! git fetch origin main --quiet; then
+    die "doc-only gate: CANNOT EVALUATE -- could not refresh origin/main.
+
+The gate must compare against the base the merge will actually land on. A stale
+local origin/main would silently evaluate a different merge result than the one
+GitHub produces. Re-run once the fetch succeeds."
+  fi
   if ! git worktree add --detach "$doc_gate_wt" origin/main >/dev/null 2>&1; then
     die "doc-only gate: could not create a worktree at origin/main to evaluate the merge result"
   fi
