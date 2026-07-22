@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 14:34:29Z — from 30 issue file(s) in `docs/program/issues/`.
+2026-07-22 14:38:37Z — from 30 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -62,7 +62,7 @@ the committed file matches the generator's output.
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | draft | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
-| `RT-SPLIT` | decompose cranelift_backend.rs | active | runtime | L | none | — |
+| `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | draft | foundation | M | none | — |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
@@ -90,7 +90,6 @@ is itself not yet `merged`/`closed`:
 - `BUDGET-EXHAUST` blocked by `BUDGET-EFF` (status: active)
 - `DOC-W2` blocked by `DOC-W1` (status: active)
 - `F4` blocked by `A3` (status: draft)
-- `RT-SRC-DISPATCH-COVER` blocked by `RT-SPLIT` (status: active)
 - `SEAL-2` blocked by `BUDGET-EFF` (status: active)
 
 ## Gate progress
