@@ -367,6 +367,43 @@ move" claim auditable rather than asserted.
    the **count** of items so widened is reported per slice in the PR body
    (it is the metric from §4).
 
+8. **`test_support` has no production consumer — CHECKED, not asserted**
+   (slice 7; adversary detector-gap `evt_457npdbe9zmp9`). **Every reference to
+   `test_support` in the final tree sits under a `tests` module or a
+   `#[cfg(test)]` item that is itself a test.** Report the reference list in
+   the PR body alongside the AC-7 ledger.
+
+   > **Why this AC exists.** §10.2a rule 2 says *"production modules must not
+   > import it"* and rule 7 restates it as a stop-and-return — but **that was
+   > the one constraint in the seven-point rule with no enforcing mechanism.**
+   > Its siblings are all checkable: rules 1 and 7a are structural (`cfg`),
+   > 2a and 3 are greppable, 5 defers to §10.5a, 6 rides AC-3. **2b/7b had
+   > nothing**, so it lived only in prose.
+   >
+   > **The reach is created by the ruling itself.** `pub(super)` on an item in
+   > `cranelift_backend::test_support` **is** `pub(in crate::cranelift_backend)`
+   > — visible to the facade **and every descendant, including production
+   > ones**. A helper sitting in `lowering/core/tests/` is not visible to
+   > production siblings this way; hoisting to facade level is the *widest*
+   > test-only visibility in the subtree, and rules 2b/7b are the compensating
+   > constraint. **Compiled repro:** a production `fn` importing a
+   > `test_support` item under `#[cfg(test)]` builds green under `--test`
+   > while returning the fixture value, and returns something else in release.
+   > Nothing in the rule, the compiler, or any existing gate objects.
+   >
+   > **Latent, not live** — reconciled on `origin/main`: `#[cfg(test)] use`
+   > occurrences in `crates/ken-runtime/src` = **0**; references to
+   > `test_support` anywhere under `crates/` = **0**; the module does not exist
+   > yet. **This AC is written before the reach is created, which is the only
+   > cheap moment** — retrofitting after slice 7 costs a re-ruling.
+   >
+   > ★ **The general form is the expressibility audit (§2c b‴), run on this
+   > frame by the adversary:** an obligation whose only discharge is prose is
+   > *"a reach outside the shape's own checked vocabulary."* Naming a
+   > stop-and-return does not make it detectable. **Every rule in a ruled list
+   > should be able to name what would catch its violation** — and if one
+   > can't, that is the finding.
+
 ## 8. Guardrails — do not reopen
 
 - **Do not redesign the backend.** If you find something that looks wrong
