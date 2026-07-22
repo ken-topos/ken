@@ -47,9 +47,9 @@ use lowering::core::*;
 // call tokens (AC-3) and costs zero production seams. Slice 6 replaces each
 // with an explicit import at the new home and does not touch `lowering`.
 #[cfg(test)]
-use lowering::verify_cranelift_function_for_artifact_tests as verify_cranelift_function;
-#[cfg(test)]
 use lowering::require_i64_for_artifact_tests;
+#[cfg(test)]
+use lowering::verify_cranelift_function_for_artifact_tests as verify_cranelift_function;
 #[cfg(test)]
 use lowering::{PX8TR_DISABLE_DEFORESTED_ANSWER_ROUTE, PX8TR_TRAP_PROVENANCE};
 
@@ -70,7 +70,6 @@ pub(crate) use lowering::{
 };
 use planning::*;
 pub use surface::*;
-
 
 pub fn run_nc6_seed_examples(
     program: &RuntimeProgram,
@@ -325,9 +324,7 @@ struct NativeInvocationFixture {
     native_int_arena: *mut crate::NativeIntArenaV1,
 }
 #[cfg(test)]
-fn self_consistent_root_join_site(
-    site_id: u64,
-) -> crate::NativeJoinPlanSiteV1 {
+fn self_consistent_root_join_site(site_id: u64) -> crate::NativeJoinPlanSiteV1 {
     let declaration = "decl:fixture::PX8H::main".to_string();
     let checked_occurrence_path = vec![0];
     let checked_result_type_fingerprint = 19;
@@ -347,9 +344,7 @@ fn self_consistent_root_join_site(
     }
 }
 #[cfg(test)]
-fn oriented_test_interface(
-    name: u8,
-) -> crate::CheckedAnswerInterfaceV1 {
+fn oriented_test_interface(name: u8) -> crate::CheckedAnswerInterfaceV1 {
     let mut bytes = crate::CHECKED_ANSWER_INTERFACE_V1_HEADER.to_vec();
     bytes.push(name);
     crate::CheckedAnswerInterfaceV1::new(bytes).unwrap()
@@ -1402,19 +1397,6 @@ fn compile_expr_with_declarations_and_process_input<'a>(
     )
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 fn compile_program_expr_object(
     program: &RuntimeProgram,
     expr: &RuntimeExpr,
@@ -1471,112 +1453,6 @@ fn new_object_module(name: &str) -> Result<ObjectModule, CraneliftBackendError> 
 fn native_platform_target_name() -> String {
     format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // RT-SPLIT slice 5: shared test helpers whose final users span the
 // lowering subject subtree AND the facade's residual artifact/api tests.
@@ -1793,13 +1669,12 @@ fn self_consistent_join_site(
     let checked_result_type_fingerprint = 17;
     crate::NativeJoinPlanSiteV1 {
         site_id,
-        occurrence_binding_fingerprint:
-            crate::compiler_private_join_occurrence_binding_fingerprint(
-                site_id,
-                &declaration,
-                &checked_occurrence_path,
-                checked_result_type_fingerprint,
-            ),
+        occurrence_binding_fingerprint: crate::compiler_private_join_occurrence_binding_fingerprint(
+            site_id,
+            &declaration,
+            &checked_occurrence_path,
+            checked_result_type_fingerprint,
+        ),
         declaration,
         checked_occurrence_path,
         checked_result_type_fingerprint,
@@ -1834,10 +1709,7 @@ struct Px8nHostReplyFixture {
 }
 #[cfg(test)]
 fn px8n_write_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
-    px8n_write_arm_fixture_with_start(
-        symbols,
-        RuntimeExpr::Value(RuntimeValue::Int((7).into())),
-    )
+    px8n_write_arm_fixture_with_start(symbols, RuntimeExpr::Value(RuntimeValue::Int((7).into())))
 }
 #[cfg(test)]
 fn run_px8n_arm_fixture(
@@ -2227,14 +2099,6 @@ mod tests {
         RuntimeSymbolMetadata,
     };
 
-
-
-
-
-
-
-
-
     #[test]
     fn px8n_fs_write_at_arm_rejects_over_bound_reply_before_observation() {
         let (result, fixture) = run_px8n_write_arm_fixture(PX8N_OVER_BOUND_WRITE);
@@ -2316,11 +2180,6 @@ mod tests {
         );
     }
 
-
-
-
-
-
     fn px8i_invalid_allocate(
         symbols: &crate::NativeProcessSymbols,
         capacity: RuntimeExpr,
@@ -2377,8 +2236,6 @@ mod tests {
     fn px8i_oversize_narrow_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
         px8i_invalid_allocate(symbols, big(crate::Sign::NonNegative, &[0, 1]), 72)
     }
-
-
 
     fn px8i_wrapping_write_start_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
         px8n_write_arm_fixture_with_start(symbols, big(crate::Sign::NonNegative, &[u64::MAX - 1]))
@@ -2581,12 +2438,9 @@ mod tests {
         }
     }
 
-
-
     fn run_px8n_read_arm_fixture(scenario: u64) -> (i64, Px8nHostReplyFixture) {
         run_px8n_arm_fixture(scenario, px8n_read_arm_fixture)
     }
-
 
     fn nested_computational_fixture(
         outer_binders: usize,
@@ -2697,7 +2551,6 @@ mod tests {
         }
     }
 
-
     fn heterogeneous_eliminator_fixture(
         inner_constructor: &str,
         inner_case_constructor: &str,
@@ -2792,7 +2645,6 @@ mod tests {
         }
     }
 
-
     fn constructor_field_selected_case_fixture(
         selected_binders: usize,
         selected_field_var: u32,
@@ -2837,8 +2689,6 @@ mod tests {
             },
         }
     }
-
-
 
     #[test]
     fn dynamic_host_result_producer_wrong_arity_rejects_specifically() {
@@ -3329,7 +3179,6 @@ mod tests {
         .expect("HostResult fields remain owned by ordinary dynamic matching");
     }
 
-
     fn console_write_effect() -> RuntimeExpr {
         RuntimeExpr::Effect {
             family: "Console".to_string(),
@@ -3539,9 +3388,6 @@ mod tests {
         .expect("a dynamic Bool remains available to its enclosing Bool consumer");
     }
 
-
-
-
     #[test]
     fn dynamic_constructor_binder_arity_rejects_exactly() {
         let mut symbols = crate::NativeProcessSymbols::legacy_prelude();
@@ -3623,15 +3469,9 @@ mod tests {
         .expect("match-selected HostResult remains owned by ordinary dynamic matching");
     }
 
-
     fn recursive_computational_result(leaf_body: RuntimeExpr) -> RuntimeExpr {
         recursive_computational_result_depth(0, leaf_body)
     }
-
-
-
-
-
 
     #[test]
     fn recursive_computational_host_result_keeps_established_dynamic_lane() {
@@ -3658,13 +3498,6 @@ mod tests {
         )
         .expect("recursive aggregate traverses the active ordinary frame");
     }
-
-
-
-
-
-
-
 
     #[test]
     fn heterogeneous_bridge_removal_recovers_exact_ordinary_match_refusal() {
@@ -3858,8 +3691,6 @@ mod tests {
         ));
     }
 
-
-
     #[test]
     fn heterogeneous_ordinary_arity_rejects_specifically() {
         let err = emit_process_entrypoint_object_with_cranelift(
@@ -3909,9 +3740,6 @@ mod tests {
             }) if reason == "sub_int only supports Int arguments in native lowering"
         ));
     }
-
-
-
 
     fn seed_program_with_lowerability(status: Option<RuntimeLowerabilityStatus>) -> RuntimeProgram {
         let symbol = "decl:fixture::Main::main".to_string();
@@ -3977,8 +3805,6 @@ mod tests {
             }],
         }
     }
-
-
 
     #[test]
     fn recursive_declaration_shape_change_hits_typed_boundary() {
@@ -4072,7 +3898,6 @@ mod tests {
             }) if reason.contains("marker was not consumed")
         ));
     }
-
 
     #[test]
     fn process_lowering_without_checked_root_authority_rejects_before_cfg() {
@@ -4283,7 +4108,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn valid_root_plus_missing_marked_scalar_cut_rejects_before_emission() {
         let expression = RuntimeExpr::CheckedJoinSite {
@@ -4323,7 +4147,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn self_consistent_appended_orphan_join_site_rejects_before_emission() {
         let result = compile_expr_into_module(
@@ -4357,9 +4180,6 @@ mod tests {
             }) if reason.contains("unconsumed or orphan site")
         ));
     }
-
-
-
 
     #[test]
     fn program_runner_preflights_metadata_before_backend_lowering() {
@@ -5255,17 +5075,6 @@ mod tests {
             })
         ));
     }
-
-
-
-
-
-
-
-
-
-
-
 
     #[test]
     fn px8i_jit_and_object_construct_identical_local_helper_clif() {

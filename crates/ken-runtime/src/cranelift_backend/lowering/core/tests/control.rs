@@ -4,13 +4,13 @@
 
 use super::*;
 
-    #[derive(Clone, Copy)]
-    enum Px8jInstallMalformation {
-        SelectionRole,
-        UnwindRole,
-        UnwindOrigin,
-        RepeatedScopeIdentity,
-    }
+#[derive(Clone, Copy)]
+enum Px8jInstallMalformation {
+    SelectionRole,
+    UnwindRole,
+    UnwindOrigin,
+    RepeatedScopeIdentity,
+}
 
 #[derive(Clone, Copy, Debug)]
 enum Px8dsEdgeMutation {
@@ -20,9 +20,7 @@ enum Px8dsEdgeMutation {
     CrossSibling,
     WrongStaticParent,
 }
-fn root_authority_test_lowering<'a>(
-    seed_env: &'a NativeSeedEnvironment,
-) -> Lowering<'a> {
+fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowering<'a> {
     Lowering {
         seed_env,
         declarations: BTreeMap::new(),
@@ -804,91 +802,120 @@ fn px8j_release_validator_rejects_repeated_and_broken_scope_lineage() {
     }
 }
 
-    fn run_px8j_source_machine_install(
-        malformation: Option<Px8jInstallMalformation>,
-    ) -> Result<SourceContinuation<'static>, CraneliftBackendError> {
-        let seed_env = NativeSeedEnvironment::empty();
-        let mut compiler = root_authority_test_lowering(&seed_env);
-        compiler.native_join_plan = None;
-        compiler.root_terminal_authority = None;
-        compiler.process_object = false;
+fn run_px8j_source_machine_install(
+    malformation: Option<Px8jInstallMalformation>,
+) -> Result<SourceContinuation<'static>, CraneliftBackendError> {
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = root_authority_test_lowering(&seed_env);
+    compiler.native_join_plan = None;
+    compiler.root_terminal_authority = None;
+    compiler.process_object = false;
 
-        let origin = RecursorProducerOriginId(17);
-        let layer = |role| ComputationalRecursorLayer {
-            cases: Vec::new(),
-            default: RuntimeTrap {
-                code: RuntimeTrapCode::ExplicitTrap,
-                message: "PX8-J-ERR source install".to_string(),
-            },
-            outer_env: Vec::new(),
-            provenance: RecursorFrameProvenance(18),
-            role,
-            checked_frame_id: None,
-            checked_invocation_id: None,
-            checked_invocation_source: None,
-            checked_invocation_depth: 0,
-            semantic_pending: matches!(role, RecursorLayerRole::SelectsOccurrence { .. }),
-        };
-        let selection = match malformation {
-            Some(Px8jInstallMalformation::SelectionRole) => layer(RecursorLayerRole::ExitsScope {
+    let origin = RecursorProducerOriginId(17);
+    let layer = |role| ComputationalRecursorLayer {
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "PX8-J-ERR source install".to_string(),
+        },
+        outer_env: Vec::new(),
+        provenance: RecursorFrameProvenance(18),
+        role,
+        checked_frame_id: None,
+        checked_invocation_id: None,
+        checked_invocation_source: None,
+        checked_invocation_depth: 0,
+        semantic_pending: matches!(role, RecursorLayerRole::SelectsOccurrence { .. }),
+    };
+    let selection = match malformation {
+        Some(Px8jInstallMalformation::SelectionRole) => layer(RecursorLayerRole::ExitsScope {
+            origin,
+            scope_origin: RecursorProducerOriginId(18),
+            parent_scope: None,
+        }),
+        _ => layer(RecursorLayerRole::SelectsOccurrence { origin }),
+    };
+    let unwind = match malformation {
+        None => Vec::new(),
+        Some(Px8jInstallMalformation::SelectionRole) => Vec::new(),
+        Some(Px8jInstallMalformation::UnwindRole) => {
+            vec![layer(RecursorLayerRole::SelectsOccurrence { origin })]
+        }
+        Some(Px8jInstallMalformation::UnwindOrigin) => {
+            vec![layer(RecursorLayerRole::ExitsScope {
+                origin: RecursorProducerOriginId(99),
+                scope_origin: RecursorProducerOriginId(19),
+                parent_scope: None,
+            })]
+        }
+        Some(Px8jInstallMalformation::RepeatedScopeIdentity) => vec![
+            layer(RecursorLayerRole::ExitsScope {
                 origin,
-                scope_origin: RecursorProducerOriginId(18),
+                scope_origin: RecursorProducerOriginId(19),
                 parent_scope: None,
             }),
-            _ => layer(RecursorLayerRole::SelectsOccurrence { origin }),
-        };
-        let unwind = match malformation {
-            None => Vec::new(),
-            Some(Px8jInstallMalformation::SelectionRole) => Vec::new(),
-            Some(Px8jInstallMalformation::UnwindRole) => {
-                vec![layer(RecursorLayerRole::SelectsOccurrence { origin })]
-            }
-            Some(Px8jInstallMalformation::UnwindOrigin) => {
-                vec![layer(RecursorLayerRole::ExitsScope {
-                    origin: RecursorProducerOriginId(99),
-                    scope_origin: RecursorProducerOriginId(19),
-                    parent_scope: None,
-                })]
-            }
-            Some(Px8jInstallMalformation::RepeatedScopeIdentity) => vec![
-                layer(RecursorLayerRole::ExitsScope {
-                    origin,
-                    scope_origin: RecursorProducerOriginId(19),
-                    parent_scope: None,
-                }),
-                layer(RecursorLayerRole::ExitsScope {
-                    origin,
-                    scope_origin: RecursorProducerOriginId(19),
-                    parent_scope: Some(RecursorProducerOriginId(19)),
-                }),
-            ],
-        };
-        let invocation = RecursorInvocationSegment::new(
-            origin,
-            0,
-            selection,
-            RecursorUnwindStack {
-                later_wrappers_in_construction_order: unwind,
-            },
-            ContinuationCursorId(20),
-            None,
-            None,
-        );
-        assert!(!recursor_invocation_is_checked(&invocation));
+            layer(RecursorLayerRole::ExitsScope {
+                origin,
+                scope_origin: RecursorProducerOriginId(19),
+                parent_scope: Some(RecursorProducerOriginId(19)),
+            }),
+        ],
+    };
+    let invocation = RecursorInvocationSegment::new(
+        origin,
+        0,
+        selection,
+        RecursorUnwindStack {
+            later_wrappers_in_construction_order: unwind,
+        },
+        ContinuationCursorId(20),
+        None,
+        None,
+    );
+    assert!(!recursor_invocation_is_checked(&invocation));
 
-        compiler.install_recursor_invocation(
-            SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue),
-            ContinuationActivationId(21),
-            invocation,
-            None,
-        )
-    }
+    compiler.install_recursor_invocation(
+        SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue),
+        ContinuationActivationId(21),
+        invocation,
+        None,
+    )
+}
 
-    #[test]
-    fn px8j_source_machine_install_rejects_repeated_scope_identity() {
-        let error = match run_px8j_source_machine_install(Some(
-            Px8jInstallMalformation::RepeatedScopeIdentity,
-        )) {
+#[test]
+fn px8j_source_machine_install_rejects_repeated_scope_identity() {
+    let error =
+        match run_px8j_source_machine_install(Some(Px8jInstallMalformation::RepeatedScopeIdentity))
+        {
+            Ok(_) => panic!("the unchecked source-machine install must validate before CFG"),
+            Err(error) => error,
+        };
+    assert!(matches!(
+        error,
+        CraneliftBackendError::Unsupported(UnsupportedLowering {
+            construct: "ComputationalRecursor",
+            reason,
+        }) if reason == "recursor unwind repeats a selected scope identity"
+    ));
+}
+
+#[test]
+fn px8j_source_machine_install_rejects_wrong_control_roles_and_origins() {
+    for (malformation, expected_reason) in [
+        (
+            Px8jInstallMalformation::SelectionRole,
+            "recursor selection role does not select the invocation origin",
+        ),
+        (
+            Px8jInstallMalformation::UnwindRole,
+            "recursor unwind role does not exit the invocation origin",
+        ),
+        (
+            Px8jInstallMalformation::UnwindOrigin,
+            "recursor unwind role does not exit the invocation origin",
+        ),
+    ] {
+        let error = match run_px8j_source_machine_install(Some(malformation)) {
             Ok(_) => panic!("the unchecked source-machine install must validate before CFG"),
             Err(error) => error,
         };
@@ -896,50 +923,21 @@ fn px8j_release_validator_rejects_repeated_and_broken_scope_lineage() {
             error,
             CraneliftBackendError::Unsupported(UnsupportedLowering {
                 construct: "ComputationalRecursor",
-                reason,
-            }) if reason == "recursor unwind repeats a selected scope identity"
+                ref reason,
+            }) if reason == expected_reason
         ));
     }
+}
 
-    #[test]
-    fn px8j_source_machine_install_rejects_wrong_control_roles_and_origins() {
-        for (malformation, expected_reason) in [
-            (
-                Px8jInstallMalformation::SelectionRole,
-                "recursor selection role does not select the invocation origin",
-            ),
-            (
-                Px8jInstallMalformation::UnwindRole,
-                "recursor unwind role does not exit the invocation origin",
-            ),
-            (
-                Px8jInstallMalformation::UnwindOrigin,
-                "recursor unwind role does not exit the invocation origin",
-            ),
-        ] {
-            let error = match run_px8j_source_machine_install(Some(malformation)) {
-                Ok(_) => panic!("the unchecked source-machine install must validate before CFG"),
-                Err(error) => error,
-            };
-            assert!(matches!(
-                error,
-                CraneliftBackendError::Unsupported(UnsupportedLowering {
-                    construct: "ComputationalRecursor",
-                    ref reason,
-                }) if reason == expected_reason
-            ));
-        }
-    }
-
-    #[test]
-    fn px8j_source_machine_install_accepts_valid_unchecked_segment() {
-        let installed = run_px8j_source_machine_install(None)
-            .expect("a valid unchecked source-machine invocation still installs");
-        assert!(matches!(
-            installed,
-            SourceContinuation::ApplyRecursorSelection { .. }
-        ));
-    }
+#[test]
+fn px8j_source_machine_install_accepts_valid_unchecked_segment() {
+    let installed = run_px8j_source_machine_install(None)
+        .expect("a valid unchecked source-machine invocation still installs");
+    assert!(matches!(
+        installed,
+        SourceContinuation::ApplyRecursorSelection { .. }
+    ));
+}
 
 #[test]
 fn oriented_open_control_obligations_are_affine_and_mint_exact() {
@@ -1183,8 +1181,7 @@ fn px8j_all_three_producer_paths_reach_real_consumers() {
             args: Vec::new(),
         }],
     };
-    let expression =
-        host_result_closure_match(recursive_computational_result_depth(2, aggregate));
+    let expression = host_result_closure_match(recursive_computational_result_depth(2, aggregate));
     let (result, trace) =
         px8j_capture_source_trace(&expression, false, "ken_px8j_live_source_paths");
     result.expect("the composed and source-machine producer paths lower");
@@ -1269,9 +1266,7 @@ fn px8j_siblings_share_an_origin_and_nested_ih_gets_a_child_origin() {
                 cursor,
                 sibling_position,
                 ..
-            } if *origin == sibling_origin && *cursor == sibling_cursor => {
-                Some(*sibling_position)
-            }
+            } if *origin == sibling_origin && *cursor == sibling_cursor => Some(*sibling_position),
             _ => None,
         })
         .collect();
@@ -1434,8 +1429,7 @@ fn unmarked_equal_shape_frame_cannot_consume_retained_join_site() {
         code: RuntimeTrapCode::PatternMatchFailure,
         message: "px8h unmarked equal-shape default".to_string(),
     };
-    let fingerprint =
-        crate::compiler_private_ordinary_match_frame_fingerprint(&cases, &default);
+    let fingerprint = crate::compiler_private_ordinary_match_frame_fingerprint(&cases, &default);
     let expression = RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Construct {
             constructor: "ctor:fixture::PX8H::Only".to_string(),
@@ -1472,13 +1466,9 @@ fn unmarked_equal_shape_frame_cannot_consume_retained_join_site() {
         }) if reason.contains("unconsumed or orphan site")
     ));
 }
-fn px8j_scope_chain_observation_result(
-    transform_layers: usize,
-    input_depth: usize,
-) -> RuntimeExpr {
-    let tree_constructor = |_layer: usize, constructor: &str| {
-        format!("ctor:fixture::PX8JScopeTree::{constructor}")
-    };
+fn px8j_scope_chain_observation_result(transform_layers: usize, input_depth: usize) -> RuntimeExpr {
+    let tree_constructor =
+        |_layer: usize, constructor: &str| format!("ctor:fixture::PX8JScopeTree::{constructor}");
     fn child(depth: usize, node: &str, leaf: &str) -> RuntimeExpr {
         RuntimeExpr::LexicalClosure {
             captures: Vec::new(),
@@ -1685,8 +1675,7 @@ fn oriented_test_invocation() -> RecursorInvocationSegment {
 #[test]
 fn px8j_one_two_three_scope_segments_reach_selection_hole_and_unwind() {
     for depth in 1..=3 {
-        let expression =
-            host_result_closure_match(px8j_scope_chain_observation_result(depth, 0));
+        let expression = host_result_closure_match(px8j_scope_chain_observation_result(depth, 0));
         let (result, trace) = px8j_capture_source_trace(
             &expression,
             false,
@@ -2066,9 +2055,8 @@ fn px8j_deferred_recursive_field_fixture() -> RuntimeExpr {
     }
 }
 fn px8j_layered_recursive_result(transform_layers: usize, input_depth: usize) -> RuntimeExpr {
-    let tree_constructor = |layer: usize, constructor: &str| {
-        format!("ctor:fixture::PX8JTree{layer}::{constructor}")
-    };
+    let tree_constructor =
+        |layer: usize, constructor: &str| format!("ctor:fixture::PX8JTree{layer}::{constructor}");
     let unit = || RuntimeExpr::Construct {
         constructor: "ctor:prelude::Unit::MkUnit".to_string(),
         args: Vec::new(),
@@ -2238,8 +2226,7 @@ fn px8j_equal_payload_hole_placement(placement: Px8jSelectedScopePlacement) -> R
     }
 }
 #[cfg(test)]
-fn oriented_test_ih_plan() -> crate::OrientedSubcontinuationPlanV1
-{
+fn oriented_test_ih_plan() -> crate::OrientedSubcontinuationPlanV1 {
     let mut plan = oriented_test_plan();
     for frame_id in 0..=2 {
         let slot_template_id = 200 + frame_id;
@@ -2311,10 +2298,7 @@ fn oriented_test_instance_layer(
     layer
 }
 #[cfg(test)]
-fn oriented_test_layer(
-    frame_id: u64,
-    role: RecursorLayerRole,
-) -> ComputationalRecursorLayer {
+fn oriented_test_layer(frame_id: u64, role: RecursorLayerRole) -> ComputationalRecursorLayer {
     ComputationalRecursorLayer {
         cases: Vec::new(),
         default: RuntimeTrap {

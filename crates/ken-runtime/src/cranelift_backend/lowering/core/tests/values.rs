@@ -47,9 +47,8 @@ fn cranelift_reports_bytes_and_string_immediates_as_ground_values() {
             observation,
         };
 
-        let report =
-            run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
-                .expect("native run succeeds");
+        let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+            .expect("native run succeeds");
 
         assert!(report.verifier_passed);
         assert_eq!(report.observation, example.observation);
@@ -66,9 +65,8 @@ fn cranelift_runs_closure_seed_with_explicit_runtime_capture_environment() {
         .find(|example| example.name == "closure-capture-application")
         .expect("seed exists");
 
-    let report =
-        run_example_with_seed_observation(&example, &NativeSeedEnvironment::nc5_seed())
-            .expect("native run succeeds");
+    let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::nc5_seed())
+        .expect("native run succeeds");
 
     assert!(report.verifier_passed);
     assert_eq!(report.observation, example.observation);
@@ -190,9 +188,8 @@ fn safe_bytes_slice_and_decode_native_results_are_explicit() {
     ];
 
     for example in examples {
-        let report =
-            run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
-                .expect("safe Bytes native lowering succeeds");
+        let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+            .expect("safe Bytes native lowering succeeds");
         assert!(report.verifier_passed);
         assert_eq!(report.observation, example.observation);
     }
@@ -390,12 +387,10 @@ fn px8i_wrapping_and_trap_mutations_are_causal_at_live_binop_lowering() {
         )),
     };
 
-    NATIVE_INT_LOWERING_MUTATION
-        .with(|mutation| mutation.set(NativeIntLoweringMutation::Wrapping));
+    NATIVE_INT_LOWERING_MUTATION.with(|mutation| mutation.set(NativeIntLoweringMutation::Wrapping));
     let wrapping = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
         .expect("wrapping mutation still emits the live native expression");
-    NATIVE_INT_LOWERING_MUTATION
-        .with(|mutation| mutation.set(NativeIntLoweringMutation::Exact));
+    NATIVE_INT_LOWERING_MUTATION.with(|mutation| mutation.set(NativeIntLoweringMutation::Exact));
     assert_ne!(wrapping.observation, example.observation);
     assert_eq!(
         wrapping.observation,
@@ -404,8 +399,7 @@ fn px8i_wrapping_and_trap_mutations_are_causal_at_live_binop_lowering() {
 
     NATIVE_INT_LOWERING_MUTATION.with(|mutation| mutation.set(NativeIntLoweringMutation::Trap));
     let trapped = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty());
-    NATIVE_INT_LOWERING_MUTATION
-        .with(|mutation| mutation.set(NativeIntLoweringMutation::Exact));
+    NATIVE_INT_LOWERING_MUTATION.with(|mutation| mutation.set(NativeIntLoweringMutation::Exact));
     assert!(matches!(
         trapped,
         Err(CraneliftBackendError::Unsupported(UnsupportedLowering {
@@ -432,8 +426,7 @@ fn px8i_jit_terminal_requires_uncorrupted_local_export_evidence() {
         NativeIntLoweringMutation::CorruptTerminalExport,
     ] {
         NATIVE_INT_LOWERING_MUTATION.with(|cell| cell.set(mutation));
-        let result =
-            run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty());
+        let result = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty());
         NATIVE_INT_LOWERING_MUTATION.with(|cell| cell.set(NativeIntLoweringMutation::Exact));
         assert!(matches!(
             result,
@@ -444,9 +437,8 @@ fn px8i_jit_terminal_requires_uncorrupted_local_export_evidence() {
     }
 }
 fn run_exact_int(expr: RuntimeExpr, expected: crate::RuntimeIntV1) {
-    let direct =
-        crate::evaluate_runtime_ir_expr(&expr, &crate::RuntimeIrSeedEnvironment::empty())
-            .expect("backend-neutral Runtime IR evaluates exact Int expression");
+    let direct = crate::evaluate_runtime_ir_expr(&expr, &crate::RuntimeIrSeedEnvironment::empty())
+        .expect("backend-neutral Runtime IR evaluates exact Int expression");
     let example = RuntimeExample {
         name: "px8i-exact-int".to_string(),
         checked_core_shape: "PX8-I exact Int discriminator".to_string(),

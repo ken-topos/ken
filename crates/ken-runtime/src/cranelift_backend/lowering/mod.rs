@@ -21,39 +21,17 @@ pub(in crate::cranelift_backend) mod core;
 pub(in crate::cranelift_backend) use super::*;
 
 pub(in crate::cranelift_backend) use super::{
-    AbiParam,
-    backend_module,
-    BTreeMap,
-    BTreeSet,
-    CompiledModule,
-    CraneliftBackendError,
-    Function,
-    FunctionBuilder,
-    FunctionBuilderContext,
-    Linkage,
-    MemFlags,
-    Module,
-    NativeSeedEnvironment,
-    RuntimeDeclaration,
-    RuntimeDeclarationKind,
-    RuntimeExpr,
-    RuntimePartiality,
-    RuntimePrimitive,
-    RuntimeSymbol,
-    RuntimeTrap,
-    RuntimeTrapCode,
-    RuntimeValue,
-    StackSlotData,
-    StackSlotKind,
-    types,
-    UserFuncName,
+    backend_module, types, AbiParam, BTreeMap, BTreeSet, CompiledModule, CraneliftBackendError,
+    Function, FunctionBuilder, FunctionBuilderContext, Linkage, MemFlags, Module,
+    NativeSeedEnvironment, RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr,
+    RuntimePartiality, RuntimePrimitive, RuntimeSymbol, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
+    StackSlotData, StackSlotKind, UserFuncName,
 };
 
 // `#[cfg(test)]`-only parent items: an unconditional `use` of these breaks
 // the non-test build, which the test build cannot show you.
 #[cfg(test)]
 pub(in crate::cranelift_backend) use crate::RuntimeMatchCase;
-
 
 const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [
     ken_host::HostOpV1::ConsoleWrite,
