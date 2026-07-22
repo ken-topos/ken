@@ -343,9 +343,11 @@ claim with no conformance case is a claim no one can rely on
   default, **monotone-downward attenuation** (the order-dual non-degenerate pair
   — weaker-accepts/stronger-rejects — over a trusted-Rust + conformance-netted
   refinement bound; plus the enumerated absence of any amplifying operation),
-  transitive revocation (static contract; runtime membrane `(oracle)`-deferred),
-  statically-known audit points + declassify-in-delta, authority+flow
-  composition, and I-5's **RED-UNTIL-I-5** least-privilege FS roots: named
+  transitive revocation plus the **RED-UNTIL-ABI-REVOKE** bounded OS-operation
+  contract (selective lineage, two exact `Revoked` projections, admission, and
+  settlement; mechanism/general spaces remain open), statically-known audit
+  points + declassify-in-delta, authority+flow composition, and I-5's
+  **RED-UNTIL-I-5** least-privilege FS roots: named
   pre-syscall denials, paired scope/right/symlink discriminators, product-meet
   narrowing, byte-path-bypass absence, and the inode-pinned structural TOCTOU
   oracle.

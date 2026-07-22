@@ -3,8 +3,9 @@
 Format: `../../README.md`. These pin the **authority discipline** of
 `spec/60-security/62-authority.md` (Sec2, elaborated impl-ready): no ambient
 authority, capabilities as static/visible/least tokens, **monotone-downward
-attenuation**, transitive revocation (static contract), statically-known audit
-points, and authority+flow composition. They sit beside the Sec1 IFC seed
+attenuation**, transitive revocation plus its bounded OS-operation behavior,
+statically-known audit points, and authority+flow composition. They sit beside
+the Sec1 IFC seed
 (`../ifc/seed-ifc.md`), with which it **composes** (AC6), and **supersede**
 the two `authority/` placeholders in `../seed-security.md` (`attenuation-cannot-
 amplify` → AC3, `no-ambient-authority` → AC1; retired there in this WP — see
@@ -12,8 +13,9 @@ amplify` → AC3, `no-ambient-authority` → AC1; retired there in this WP — s
 
 Grounding (landed `§`-bodies + landed code on this branch, content-reconciled —
 not the plan): `62 §1`–`§9`/`§H` (no-ambient, the authority lattice, attenuation
-as an emitted but direction-degenerate refinement obligation, revocation static
-contract, audit, compose, trust-boundary table); `36 §2.5`/`§3`/`§3.1` (the
+as an emitted but direction-degenerate refinement obligation, revocation
+lineage/admission/projection/settlement contract, audit, compose, trust-boundary
+table); `36 §2.5`/`§3`/`§3.1` (the
 capability-passing
 translation: `Cap E` is a value parameter via ordinary Π, minted by a handler;
 the cross-workstream contract "capability `Cap E` → a value parameter (Π) → read
@@ -36,8 +38,10 @@ place `attenuate` in Ken's source environment. The program-facing I-4 wrappers
 only consume opaque capabilities minted from the parsed program header:
 `readFile` is authority-polymorphic and `writeFile` requires `Cap AFull`. Ken
 source exposes neither an opaque-`Cap` constructor nor any capability-producing
-attenuation function. Section C therefore observes host-derived capability
-values and their real authority checks; a Ken source call is not its fixture.
+attenuation function. Raw `attenuate` and `revoke` are trusted host management
+actions and both remain unbound in Ken. Sections C and D therefore observe
+host-managed capability values and their real authority checks; a Ken source
+management call is not their fixture.
 
 ## Reading these cases — the Sec2-specific disciplines
 
@@ -82,24 +86,25 @@ direction and passes green-vs-green under a flipped order.
 "Downward-only" rests on three facts: the trusted-Rust, conformance-netted
 semantic bound (above),
 the **enumerated absence** of any Ken-callable capability producer
-(`attenuate`/`strengthen`/`amplify`/public-`Cap` constructor), and
+(`attenuate`/`revoke`/`strengthen`/`amplify`/public-`Cap` constructor), and
 **unforgeability** (`62 §2.2`: `Cap E` is opaque). The semantic host operation
 still satisfies the `⊑` bound at `w = ⊤`; that does not expose it to Ken source.
 
-**Static contract vs runtime face — the deferred runtime is `(oracle)`-tagged,
-named not omitted (`62 §4`/`§5`/`§H`).** Revocation and audit each have a STATIC
-face (delivered here: the typed interface + the transitivity/boundary property)
-and a RUNTIME face (DEFERRED to `40-runtime`/`Ward`: the membrane that fails
-closed at eval; the record emission/tamper-evidence). Each case states **which
-face it pins** and `(oracle)`-tags the deferred face — never asserts the runtime
-guarantee as if delivered (that would over-claim past Sec2's locked scope).
+**Runtime contract vs mechanism (`62 §4`/`§5`/`§H`).** ABI-REVOKE makes
+lineage, admission, the two `Revoked` projections, and settlement normative for
+the current implicit-root OS-operation face. Section D pins those observations
+as `(oracle)` cases that are **RED UNTIL ABI-REVOKE**. It does not select the
+runtime representation or claim general spaces, cross-space revocation,
+transport, or distributed isolation. Audit-record emission remains separately
+deferred to runtime/`Ward`; its static boundary set is already fixed.
 
 **Tags.** `(soundness)` = a real authority commitment that must never regress
-(AC1, AC3, AC6, and the static contracts of AC4/AC5). `(oracle)` = confirm
-against Ken's reference elaborator once it exists, and (defer-spelling-not-
-concept) the literal source spellings `Cap_FS`/`using`/`revoke` stay
-`OQ-syntax`-deferred. `attenuate` is only the semantic host-operation name, not
-a deferred Ken token. Cases pin the **value-set + invariants** (a typed
+(AC1, AC3, AC6, and the contracts of AC4/AC5). `(oracle)` = confirm against
+Ken's reference elaborator/runtime once the owning build lands, and
+(defer-spelling-not-concept) the literal source spellings `Cap_FS`/`using` stay
+`OQ-syntax`-deferred. Raw `attenuate` and `revoke` are semantic host-operation
+names that must remain unbound in Ken, not deferred Ken tokens. Cases pin the
+**value-set + invariants** (a typed
 unforgeable token; the `⊑`-bounded semantic derivation; the audited boundary),
 not a capability-producing surface spelling; deferred runtime mechanisms remain
 `(oracle)` likewise.
@@ -200,7 +205,7 @@ not a capability-producing surface spelling; deferred runtime mechanisms remain
 ### security/capabilities/no-amplifying-operation-exists
 - spec: `62 §3.2`/`§2.2`
 - given: a holder of `c : Cap E` seeking a `c'' : Cap E` with `authority c'' ⊐
-  authority c` — enumerate Ken's source environment for `attenuate`/
+  authority c` — enumerate Ken's source environment for `attenuate`/`revoke`/
   `strengthen`/`amplify`/a public `Cap` constructor, while separately applying
   the runner/host semantic attenuation at `w = ⊤`
 - expect: **no Ken-callable capability producer exists** and `Cap E` exposes no
@@ -213,23 +218,88 @@ not a capability-producing surface spelling; deferred runtime mechanisms remain
   operation, so the **absence** is the guard. (Absorbs `../seed-security.md`'s
   `attenuation-cannot-amplify` — a child cannot exceed `w`.)
 
-## D. Revocation — transitive (AC4, static contract)
+## D. Revocation — lineage and bounded OS-operation behavior (AC4)
 
-### security/capabilities/revoke-is-transitive-static-contract
-- spec: `62 §4`/`§H`, `36 §4`/`§4.4` (`(oracle)` runtime)
-- given: the runner/host derives `c_child` from `c` and `w`, delegates the
-  child, then applies the semantic `revoke c` operation
-- expect: **(static face — delivered)** the typed contract holds: `c_child`'s
-  validity is **derived from** `c`'s, so "`c` revoked ⇒ `c_child` (and its
-  descendants) revoked" follows from the delegation tree — transitive, fail-
-  closed. **(runtime face — `(oracle)`/DEFERRED)** the membrane that *realizes*
-  fail-closed at evaluation (forwarder / validity cell flip, `36 §4`) is
-  `40-runtime`/`OQ-Space` — **named, not asserted here**
-- why: (soundness, static face) AC4. **Transitivity is the discriminator:** a
-  non-transitive impl revoking only `c` (leaving `c_child` live) would pass a
-  parent-only check — so the case asserts the **child** fails closed too. The
-  runtime fail-closed behavior is the deferred face, `(oracle)`-tagged — Sec2
-  pins the contract, not the mechanism (static-vs-runtime-face split, named).
+Every case in this section is `(oracle)` and **RED UNTIL ABI-REVOKE**. Fixtures
+use a trusted host-management harness for raw attenuation/revocation and expose
+only later ordinary capability-consuming operations to Ken. They observe the
+logical admission boundary without requiring a validity-cell, forwarder,
+generation, or other representation. They make no general-space, cross-space,
+transport, or distributed claim.
+
+### security/capabilities/revocation-lineage-is-selective-and-transitive
+- spec: `62 §4`/`§4.3`/`§H`
+- given: the host mints parent `p`; attenuates siblings `a` and `b` from `p`;
+  attenuates grandchild `g` from `a`; copies `a`; and acquires then duplicates a
+  resource under `g`. All identities are opaque to Ken. Revoke `a`, then issue
+  otherwise-valid operations through every capability/resource. In a second
+  arm, start from the same live tree and revoke `p`.
+- expect: after revoking `a`, `a`, its copy, `g`, and both resource tokens are
+  denied as revoked on their next operation, while `p` and sibling `b` remain
+  live and their controls reach the backend. After revoking `p`, both sibling
+  subtrees are revoked. Copying never forks revocation identity, and consuming
+  a resource token never bypasses its sponsoring lineage.
+- why: (soundness) the descendant, parent, sibling, copy, and resource controls
+  distinguish exact subtree closure from parent-only, leaf-only, global, or
+  capability-table-only invalidation. No identity inspection is a Ken fixture.
+
+### security/capabilities/revoked-path-operation-is-distinct-fileerror
+- spec: `62 §4.1`/`§4.2`, `38 §1.3.1`
+- given: use the same `readFile APartial cap path` request with a readable file,
+  a well-formed/live/sufficient grant, and an empty capture-host trace. The live
+  arm runs unchanged. In the negative arm the host revokes the grant after the
+  request is formed but before admission. Separate neighbouring controls keep
+  the grant live and trigger the existing insufficient/malformed denial or a
+  real host I/O failure.
+- expect: the live arm returns the bytes and records one backend read. The
+  revoked arm returns exactly
+  `Err (MkFileError OpReadFile (Some path) Revoked)` and records no backend
+  operation. `Revoked` is an `IOError` cause beside `CapabilityDenied`: it is
+  not `CapabilityDenied`, a malformed/stale capability identity, or any host
+  I/O error. Each neighbouring control retains its existing non-revocation
+  identity and never reports `Revoked`.
+- why: (soundness) this is the path/capability projection discriminator. A
+  generic denial or empty trace alone cannot pass: the exact constructor and
+  the live/neighbor controls make every ruled collapse observable.
+
+### security/capabilities/revoked-resource-operation-is-distinct-resourceerror
+- spec: `62 §4.1`/`§4.2`, `38 §1.3.1`/`§1.7.2`
+- given: acquire a live, sufficiently-righted resource under a live grant and
+  issue one ordinary resource operation. Repeat after the host revokes that
+  grant before admission. Controlled neighbours instead use a released token,
+  a never-minted token, insufficient rights, a live wrong-kind token, or a
+  backend forced to return a known host I/O error.
+- expect: the live control reaches the backend. The revoked arm returns exactly
+  nullary `ResourceError.Revoked` and has no backend operation. The five
+  neighbours respectively remain `Closed`, `MalformedResource`,
+  `RightNotHeld`, `ResourceKindMismatch`, and `ResourceHostIO <known-error>`;
+  stale generation remains the lifetime identity `Closed`. None becomes
+  `Revoked`, and revocation is never wrapped as `ResourceHostIO Revoked` or
+  `ResourceHostIO CapabilityDenied`.
+- why: (soundness) this binds the second type-local projection without inventing
+  a shared sum. Holding the operation well formed, live, and sufficiently
+  righted in the revoked arm avoids unspecified precedence among invalid inputs.
+
+### security/capabilities/revoke-admission-race-preserves-real-settlement
+- spec: `62 §4.2`/`§4.3`, ADR 0021 settlement discipline
+- given: a controlled host scheduler runs two arms of the same resource write.
+  The revoke-wins arm pauses before admission, revokes the sponsor, then resumes.
+  The admission-wins arm pauses immediately after live-ancestry admission and
+  before the backend write, revokes the sponsor, then lets the backend return a
+  known result and commit a known byte change. Attempt one new operation through
+  the same lineage while the admitted operation drains. Configure settlement
+  once for close success and once for a known `ReleaseFailed` outcome.
+- expect: revoke-wins returns `ResourceError.Revoked` with no backend trace.
+  Admission-wins returns the backend's real result, records exactly one backend
+  write/known side effect, and is never rewritten to `Revoked`; the new operation
+  is denied as `ResourceError.Revoked` without another backend call. The owned
+  resource is not closed while admitted work remains, then records exactly one
+  close success or one configured `ReleaseFailed`. Settlement failure never
+  reopens authority.
+- why: (soundness) the two controlled schedules flip at admission, the normative
+  linearization point. The result, side-effect trace, new-admission trace, and
+  exactly-once terminal settlement jointly reject rollback, cancellation,
+  premature close, result rewriting, and post-failure reopening.
 
 ## E. Audit points statically known (AC5)
 
@@ -453,7 +523,9 @@ against a naive path-string implementation is not an acceptable substitute.
   dual non-degenerate pair), C3
   (`attenuate-bound-discharge-mirrors-elaborator`, emitted-but-degenerate
   mechanism), C4 (`no-amplifying-operation-exists`, the absence).
-- **AC4** revocation transitive → D1 (static contract; runtime `(oracle)`).
+- **AC4** revocation lineage + bounded OS-operation behavior → D1 (selective
+  transitive closure and resource provenance), D2/D3 (the two exact local
+  `Revoked` projections and forbidden collapses), D4 (admission and settlement).
 - **AC5** audit points static → E1 (`unaudited-boundary-effect-is-impossible`),
   E2 (`declassify-every-use-audited-and-in-delta`).
 - **AC6** authority + flow compose → F1 (`net-write-needs-capability-and-
@@ -493,17 +565,18 @@ against a naive path-string implementation is not an acceptable substitute.
   non-degenerate conformance net for the orientation that C3 cannot distinguish
   at the meet. Treating C3 as a stronger kernel net, or C2 as redundant, is the
   bug this pair forecloses (`62 §3.2`/`§H`, ADR-0017 §2).
-- **Semantic operation vs Ken surface {C1–C4}** — all four attenuation cases
-  observe the runner/host operation and real `Cap` values. C4 independently
-  requires the Ken source environment to expose neither `attenuate` nor any
-  other `Cap` producer. A reading that turns the semantic operation into a
-  source wrapper contradicts the I-4 §C RESHAPE and fails this class.
-- **Static-vs-runtime faces {D1, E1, E2}** — agree on scope: Sec2 delivers the
-  **static** contract (typed interface, transitivity, type-determined boundary
-  set, delta-completeness); the **runtime** faces (revocation membrane fail-
-  closed, audit-record emission) are `(oracle)`/DEFERRED to `40-runtime`/`Ward`,
-  **named not omitted**. No case asserts a runtime guarantee as delivered — that
-  would over-claim past the locked Sec2 scope (`62 §H`).
+- **Semantic operation vs Ken surface {C1–C4, D1–D4}** — attenuation and
+  revocation use the trusted host harness and real opaque values. C4 and the I-4
+  surface case independently require both raw management names and every `Cap`
+  producer to remain absent from Ken. A source wrapper fails this class.
+- **Bounded runtime contract {D1–D4}** — all cases agree on copied identity,
+  selective descendant closure, resource provenance, two distinct public
+  projections, admission, and settlement. They are RED until ABI-REVOKE, but the
+  behavior is normative now. They neither choose the runtime mechanism nor
+  extend the claim to general/cross-space/distributed realization.
+- **Audit split {E1, E2}** — the static boundary set and delta-completeness are
+  fixed; runtime audit-record emission/tamper-evidence remains `(oracle)` and
+  deferred to runtime/`Ward`, named rather than omitted.
 - **Compose class {F1}** — both concessions independent and required; the cap
   discriminator (kernel-backed) and the flow discriminator (trusted-by-typing)
   each flip on the same sink shape — composes Sec1 + Sec2.
@@ -535,14 +608,17 @@ AC1–AC3 + AC5-static + AC6 exercise the landed capability-passing,
 authority-check, and refinement-obligation machinery (`36 §2.5`, `34 §5`/
 `21 §2`). Section C reaches `capabilities.rs::attenuate` and its discharge
 directly at the semantic host boundary; it deliberately has no Ken-callable
-attenuation fixture. The **deferred runtime faces** — the revocation membrane
-(D1) and audit-record emission (E1) — land in `40-runtime`/`OQ-Space` and carry
-`(oracle)` reify-tags, **not** Sec2. The authority lattice `⊑` rides `Ω`
+attenuation fixture. Section D is the **RED UNTIL ABI-REVOKE** runtime contract;
+Runtime may choose its mechanism, but must satisfy D1–D4 before the bounded
+OS-operation face is conformant. General space realization remains open. Audit
+record emission (E1) remains deferred to runtime/`Ward`. The authority lattice
+`⊑` rides `Ω`
 (`16 §1`, level 0 for finite carriers); the semantic refinement `{c' | …}`
 lands at `level(Cap E) = ℓ_op` (predicative, same as the carrier, `21 §2`/
-`62 §9`). Literal source spellings `Cap_FS`/`revoke` stay
-`OQ-syntax`-deferred; cases pin value-sets + invariants, never a Ken-callable
-`attenuate` token. Sec2 **unblocks B4** (the agentic boundary = Sec1 + Sec2
+`62 §9`). Literal source spelling `Cap_FS` stays `OQ-syntax`-deferred; raw
+`attenuate` and `revoke` remain non-Ken-visible management actions. Cases pin
+value-sets + invariants, never a Ken-callable management token. Sec2 **unblocks
+B4** (the agentic boundary = Sec1 + Sec2
 envelope) and contributes to **G-Sec**. Section G is a land-together companion
 to Runtime I-5: it remains RED until that integrated build reaches the cases and
 must not be published through a standalone conformance route.
