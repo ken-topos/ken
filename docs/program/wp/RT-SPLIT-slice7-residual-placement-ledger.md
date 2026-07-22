@@ -64,18 +64,33 @@ per AC-9's quantifier, an item reachable **only** through a lower-LCA owner
 | 34 | `emit_px8tr_nested_post_effect_object` | **facade (retained)** |  ⬅ **above-facade user:** object_linker_packaging.rs:681 (crate::cranelift_backend::…) |
 | 35 | `px8tr_nested_post_effect_fixture` | **facade (retained)** | via emit_px8tr_nested_post_effect_object |
 | 36 | `px8tr_test_interface` | **facade (retained)** | via px8tr_nested_post_effect_fixture |
-| 37 | `total_primitive` | **facade (retained)** | api_tests×5, effects×2, values×10 |
+| 37 | `total_primitive` | **`cranelift_backend/test_support.rs`** | api_tests×5, effects×2, values×10 |
 
 ## Totals
 
 | destination | items |
 |---|---:|
-| `lowering/core/tests/control.rs` | 5 |
+| `lowering/core/tests/control.rs` | 4 |
 | `lowering/core/tests/constructors.rs` | 1 |
 | `lowering/core/tests/effects.rs` | 20 |
-| `lowering/core/tests/mod.rs` | 5 |
-| **facade (retained)** | 6 |
+| `lowering/core/tests/mod.rs` | 6 |
+| **facade (retained)** | 5 |
+| `cranelift_backend/test_support.rs` | 1 |
 | **TOTAL** | **37** |
 
 `values.rs` receives nothing: every item with a `values` user also has a user
 in another subject module, so its LCA lifts to `tests/mod.rs`.
+
+## Corrections found by executing the fold
+
+Two rows were wrong and **compiling is what found them** — both the same
+window defect, a user site outside the scan:
+
+1. **`recursive_computational_result_depth`** — `tests/mod.rs`'s **own code**
+   calls it, and the first scan treated `tests/mod.rs` only as a destination,
+   never as a *user site*. Placing it in `control.rs` broke that caller: a
+   parent cannot see a child's privates. → `tests/mod.rs`.
+2. **`total_primitive`** — placement overturned by Architect
+   `evt_1s7nxrjje35tk`: a genuine facade-LCA *fixture helper* has a lawful
+   lower namespace home in `test_support.rs` under §10.2a rule 2, so rule 8
+   point 3 cannot leave it at facade file scope. → `test_support.rs`.

@@ -155,18 +155,22 @@ fn native_platform_target_name() -> String {
 // `cfg(test)`, so "absent from production" is licensed here).
 //
 // ⛔ THE POPULATION IS THE ITEM-AXIS CENSUS OUTPUT, NOT A FIXED CARDINALITY.
-// Re-derived at `7c6e03c8`; it EXTENDS the §10.5a′ table from three artifact-
-// owned adapters to five, which that clause explicitly sanctions ("a later
-// item-axis census may extend the table without contradicting the rule").
-// The two additions are `native_isa` and `native_platform_target_name`, whose
-// crossing consumers are facade-scope `#[cfg(test)]` fixtures rather than
-// lowering subject tests — a population the cf91ec5a census did not range over
-// because those operations had not yet moved below the facade.
+// It EXTENDS the §10.5a′ table from three to five, which that clause
+// explicitly sanctions ("a later item-axis census may extend the table without
+// contradicting the rule"). The additions are `native_isa` and
+// `native_platform_target_name` — operations the cf91ec5a census could not
+// range over, because they had not yet moved below the facade.
 //
-// The three ruled names are reproduced VERBATIM from the frame. Note that
-// `new_object_module_for_lowering_tests` now serves facade fixtures too; the
-// ruled name is narrower than its consumer set, and renaming a ruled row is
-// not this slice's call.
+// ⛔ DERIVED **AFTER** THE RULE-8 PLACEMENT FOLD, WHICH IS THE BINDING ORDER:
+// an adapter must not be justified by a helper that should itself have moved
+// lower. That is not hypothetical here — pre-fold, `native_isa`'s only
+// crossing consumer was the facade fixture `run_px8n_arm_fixture`, and the
+// fold moved that fixture to `effects.rs`. Deriving first and folding second
+// would have left this adapter named for a caller that no longer exists.
+// All five crossing consumers are now genuine lowering subject tests, so the
+// ruled `_for_lowering_tests` naming is accurate for every one of them;
+// `new_object_module` and `native_platform_target_name` additionally serve the
+// two facade fixtures that rule 8 correctly retains at facade scope.
 
 #[cfg(test)]
 pub(super) fn new_jit_module_for_lowering_tests() -> Result<JITModule, CraneliftBackendError> {

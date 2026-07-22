@@ -910,20 +910,36 @@ Classify first:
    | slice | what lands in `test_support` | when |
    |---|---|---|
    | **6** | create/seed the module with `test_only_distinguished_root_join_plan` | **once its API-side users have moved below the facade** |
-   | **7** | **nothing further** — see the withdrawn row below | — |
+   | **7** | `total_primitive` | **at the rule-8 whole-residual placement fold** |
 
    **API and lowering tests use the already-ruled direct rooted path.** This is
    an **accumulating namespace scaffold** — ⛔ **not a production-module
    retouch and not a production widening**, so it stays outside the 22/24
    ledger and §10.5's no-re-touch rule is not engaged.
 
-   **`test_support.rs` holds exactly ONE fixture** (Architect
-   `evt_h69xwchqqxmj`, superseding the two-fixture reading of
-   `evt_5ztpb40gf6d0x`):
+   **`test_support.rs` holds the facade-LCA fixtures the whole-residual census
+   emits — currently TWO** (Architect `evt_1s7nxrjje35tk`, superseding the
+   "exactly ONE" reading of `evt_h69xwchqqxmj`):
 
    | fixture | final users span | LCA |
    |---|---|---|
    | `test_only_distinguished_root_join_plan` | `lowering` + `artifact/api` | facade |
+   | `total_primitive` | `artifact/api/tests.rs` ×5 + `effects` ×2 + `values` ×10 | facade |
+
+   > ⛔ **"exactly ONE" and "slice 7: nothing further" are WITHDRAWN.** They were
+   > the output of the earlier *grounded-fixture* census, whose job was to
+   > correct the false `NativeInvocationFixture` row — **not a universal cap.**
+   > The rule-8 whole-residual ledger has now falsified that enumerative output.
+   > ⛔ **Reading it as a cap would make rule 2 and the binding 37-item placement
+   > test self-contradictory** — rule 2 sends a genuine facade-LCA fixture helper
+   > here, and rule 8 point 3 cannot leave one at facade file scope when
+   > `test_support.rs` is its lawful lower namespace home.
+   >
+   > ★ **This is the THIRD enumeration in this clause family falsified by a
+   > later census** — two adapters → the `NativeInvocationFixture` row →
+   > "exactly ONE". The pattern is stable: **a count written beside a rule
+   > cannot stay in step with the derivation that produces it.** State the rule;
+   > let the census emit the members.
 
    > ### ⛔ WITHDRAWN ROW — `NativeInvocationFixture` / `BorrowedFixtureValue`
    > (Architect `evt_h69xwchqqxmj`, 2026-07-22, at `origin/main @ 7c6e03c8`)
