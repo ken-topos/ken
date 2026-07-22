@@ -191,6 +191,46 @@ if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" HEAD 2>/dev/null; 
   exit 1
 fi
 
+# --- REVISION must survive a squash-merge onto main, checked ON THE BRANCH,
+# --- BEFORE publish (DOC-CURRENCY-ANCHOR hotfix) ---------------------------
+#
+# Landed post-merge outage (thr_15yrvjrpap9td, 2026-07-22): the checks above
+# only ever verify REVISION is an ancestor of *local HEAD* — on a WP branch,
+# that includes the branch's own not-yet-merged commits, which VANISH as
+# ancestors the moment the publisher squash-merges (the squash commit's sole
+# parent is the pre-merge `main` tip, never the branch). A branch-local
+# REVISION value resolves fine on the branch, at every review round, in CI —
+# and only fails once HEAD becomes `main` after the last check anyone runs.
+#
+# Librarian QA (thr_15yrvjrpap9td, hotfix re-review, live commit `61f07dc1`):
+# the first cut of this hotfix's regression tested only a fully SYNTHETIC
+# repo — it proved the SCRIPT's post-squash behavior in the abstract but
+# never touched this repository's actual `library/REVISION`, so a
+# branch-local value here would still pass every existing check, reproducing
+# the exact outage undetected. This check closes that: while still ON THE
+# BRANCH, verify REVISION is an ancestor of `origin/main` (not merely of
+# local HEAD) — `origin/main` only ever moves forward on this repository's
+# linear history, so a commit that is genuinely on it now stays on it
+# forever, and a commit that ISN'T yet (a branch-local one) is caught here,
+# before publish, instead of after.
+#
+# Best-effort: skip silently if no `origin/main` ref is resolvable at all —
+# a synthetic fixture with no configured remote (most of this file's own
+# regressions) has no such ref, and this check augments the HEAD-ancestry
+# check above rather than replacing it.
+if git -C "$REPO_ROOT" rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1 \
+   || git -C "$REPO_ROOT" fetch --quiet origin main 2>/dev/null; then
+  if git -C "$REPO_ROOT" rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1 \
+     && ! git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" refs/remotes/origin/main 2>/dev/null; then
+    echo "gen-doc-status: library/REVISION '${REVISION}' is not an ancestor of" >&2
+    echo "  origin/main — it resolves on this branch right now, but a branch-local" >&2
+    echo "  commit does not survive a squash-merge onto main. REVISION must name a" >&2
+    echo "  commit that is already on main (e.g. the branch's merge base), never a" >&2
+    echo "  commit that exists only on this branch." >&2
+    exit 1
+  fi
+fi
+
 # --- currency: REVISION must certify something about the CORPUS, not just --
 # --- name a real ancestor commit (DOC-CURRENCY-ANCHOR) ---------------------
 #

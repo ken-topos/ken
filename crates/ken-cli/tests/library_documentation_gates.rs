@@ -1608,18 +1608,38 @@ fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_ki
 // squash landed -- a property that was true at every check anyone ran and
 // became false only after the last one.
 //
-// Steward/Librarian/doc-leader jointly verified the fix and its regression
-// shape before it was built (not accepted on assertion): `REVISION` must
-// name the branch's MERGE BASE -- the `origin/main` tip the branch was cut
-// or last rebased onto -- never the branch's own parent commit. On this
-// repository's linear (no-merge-commit) history, a squash commit `S`'s sole
-// parent is always the pre-merge main tip `T`, and the reviewed candidate's
-// merge base is always `T` or an ancestor of `T`; therefore the merge base
-// is always an ancestor of `S`. A bare `merge-base --is-ancestor` assertion
-// on its own would be a WEAKER check than this: it must be run against a
-// topology that actually has the squash-merge shape, which is what this
-// test constructs, rather than against the branch (where the bug is
-// invisible by construction).
+// Architect ruling (thr_tq8z3dda5khk, evt_2aj7bxb164cp8): the fix is NOT
+// "REVISION must equal the candidate's exact/latest merge base" -- that
+// overclaims a single canonical value where the real contract is a
+// conjunction any qualifying commit `R` can satisfy:
+//   1. `R` is a squash-stable ancestor of the integrated tree -- an
+//      already-`main` commit, never a candidate-only parent;
+//   2. `library/manifest.toml` exists at `R` (the bootstrap check);
+//   3. every current non-status document's cited source blob is
+//      byte-identical at `R` and `HEAD` (the content-currency check);
+//   4. `STATUS.md` is generated from that exact `R`.
+// This test proves ONLY predicate 1's topology distinction: a branch-local
+// commit (`C1`) does not survive a squash-merge onto `main`, while a
+// commit that is already on `main` (`B`) does, by construction, on this
+// repository's linear (no-merge-commit) history -- a squash commit `S`'s
+// sole parent is always the pre-merge main tip `T`, and any candidate's
+// merge base is always `T` or an ancestor of `T`, hence always an ancestor
+// of `S`. A bare `merge-base --is-ancestor` assertion on its own would be
+// a WEAKER check than this: it must run against a topology that actually
+// has the squash-merge shape, which is what this test constructs, rather
+// than against the branch (where the bug was invisible by construction).
+//
+// ⚠ Residual, stated explicitly rather than left implicit: this test
+// CANNOT and does not select which on-`main` ancestor is the "right" one
+// among several that would all pass it -- it only distinguishes on-`main`
+// from branch-local. Predicates 2-4 above are the independent, separately-
+// tested acceptance checks (`gate_manifest_rejects_a_field_line_...`,
+// `content_currency_gate_rejects_a_drifted_cited_source_and_recovers`,
+// `content_currency_gate_rejects_revision_predating_librarys_own_
+// introduction`) that narrow "any ancestor of main" down to a valid one.
+// Picking `638fe6d4` specifically over some other qualifying ancestor is a
+// review judgment (it was the last reviewed DOC-CURRENCY base and
+// demonstrably contains the manifest), not a fact this or any test proves.
 #[test]
 fn revision_must_survive_a_simulated_squash_merge_not_just_the_branch() {
     let pid = std::process::id();
@@ -1657,12 +1677,58 @@ fn revision_must_survive_a_simulated_squash_merge_not_just_the_branch() {
     );
     let b = run_git(&["rev-parse", "HEAD"], &repo);
 
+    // A synthetic `origin/main` ref pointing at B -- no real remote needed,
+    // git only needs the ref to exist for `merge-base --is-ancestor` to
+    // read it. This is what lets the ON-BRANCH check below run at all.
+    run_git(
+        &["update-ref", "refs/remotes/origin/main", &b],
+        &repo,
+    );
+
     // C1: first branch commit (filler) -- the shape that used to be
     // (incorrectly) treated as "the immediate parent, so it's fine."
     std::fs::write(repo.join("filler-1.txt"), "filler\n").unwrap();
     run_git(&["add", "-A"], &repo);
     run_git(&["commit", "--quiet", "-m", "C1: branch commit"], &repo);
     let c1 = run_git(&["rev-parse", "HEAD"], &repo);
+
+    // Librarian QA (thr_15yrvjrpap9td, hotfix re-review, live commit
+    // `61f07dc1`): the first cut of this test proved the script's
+    // post-squash behavior only on a FULLY SYNTHETIC repo -- it never
+    // touched THIS repository's actual `library/REVISION`, so a
+    // branch-local value there would still pass every check unchanged,
+    // reproducing the exact outage undetected. This is the primary arm
+    // that closes that: on the BRANCH itself (HEAD = C1, no squash yet),
+    // with REVISION = C1 (a value that trivially resolves as an ancestor
+    // of local HEAD, since C1 IS HEAD) -- the new origin/main check must
+    // still reject it, because C1 is not yet on `origin/main`.
+    std::fs::write(repo.join("library/REVISION"), format!("{c1}\n")).unwrap();
+    let on_branch_negative = run_gen_doc_status(&repo);
+    assert!(
+        !on_branch_negative.status.success(),
+        "gen-doc-status.sh accepted a branch-local REVISION value ON THE \
+         BRANCH itself, before any squash -- this is the actual landed \
+         outage's precondition: a value that only fails once it's too \
+         late to catch before publish"
+    );
+    assert!(
+        String::from_utf8_lossy(&on_branch_negative.stderr).contains("origin/main"),
+        "expected the origin/main-ancestry diagnostic, got stderr:\n{}",
+        String::from_utf8_lossy(&on_branch_negative.stderr)
+    );
+
+    // Same branch state, REVISION = B (the merge base, already on
+    // origin/main by construction) -- must pass, proving the check isn't
+    // simply rejecting everything.
+    std::fs::write(repo.join("library/REVISION"), format!("{b}\n")).unwrap();
+    let on_branch_positive = run_gen_doc_status(&repo);
+    assert!(
+        on_branch_positive.status.success(),
+        "gen-doc-status.sh rejected REVISION naming the merge base, on the \
+         branch, before any squash. stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&on_branch_positive.stdout),
+        String::from_utf8_lossy(&on_branch_positive.stderr)
+    );
 
     // C2: branch tip (the WP's final fold). Its exact content doesn't
     // matter beyond establishing the tree the squash carries forward.
