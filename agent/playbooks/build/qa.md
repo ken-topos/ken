@@ -82,24 +82,25 @@ load and follow it after this generic archetype.
    discard it via β). A green suite that only explores single-variable/closed
    instances is **Blocked**, not Approved (COORDINATION §7).
    - **For an elaborator / translator / codegen, assert the *emitted output*, not
-     just that it succeeds — elaborate-and-check ≠ elaborate-and-correct (promoted
-     V1-fix; a 2-WP-latency bug).** A test that asserts only "elaboration
-     succeeds / the result type-checks" passes even when the output is **wrong but
-     well-typed** — so a producer bug ships green and propagates. V1's de Bruijn
-     shift bug rode through **V1 *and* V2** because the test used **same-type
-     params** (both `Nat`), making the mis-shifted body coincidentally type-correct,
-     and the suite checked *success* not *the term*. Require **both**:
-     **non-degenerate inputs** (distinct types/indices so a wrong output can't be
-     coincidentally valid) **and** a **structural assertion on the emitted term**
-     (the core/AST, resolved de Bruijn indices, the obligation/cert shape) — the
-     same "assert the structural output, at non-degenerate endpoints" rule the
-     trust-root uses, here for any producer whose output a *later* checker accepts.
-     **A round-trip test (`parse(repr(x)) == x`) checks self-*consistency*, not
-     *truth* (promoted T1-build).** A mis-serialized value — a `verdict` written
-     `false` when V3 said `unknown` — **round-trips green** (it deserializes back
-     to the same wrong value), so round-trip alone is vacuously self-satisfying.
-     Pair **every** round-trip case with ≥1 **structural assertion on the
-     serialized form** (the exact tag/field on the wire), or it guards nothing.
+     just that it succeeds — elaborate-and-check ≠ elaborate-and-correct
+     (promoted V1-fix; a 2-WP-latency bug).** A test that asserts only
+     "elaboration succeeds / the result type-checks" passes even when the output
+     is **wrong but well-typed** — so a producer bug ships green and propagates.
+     V1's de Bruijn shift bug rode through **V1 *and* V2** because the test used
+     **same-type params** (both `Nat`), making the mis-shifted body coincidentally
+     type-correct, and the suite checked *success* not *the term*. Require
+     **both**: **non-degenerate inputs** (distinct types/indices so a wrong output
+     can't be coincidentally valid) **and** a **structural assertion on the
+     emitted term** (the core/AST, resolved de Bruijn indices, the
+     obligation/cert shape) — the same "assert the structural output, at
+     non-degenerate endpoints" rule the trust-root uses, here for any producer
+     whose output a *later* checker accepts. **A round-trip test
+     (`parse(repr(x)) == x`) checks self-*consistency*, not *truth* (promoted
+     T1-build).** A mis-serialized value — a `verdict` written `false` when V3
+     said `unknown` — **round-trips green** (it deserializes back to the same
+     wrong value), so round-trip alone is vacuously self-satisfying. Pair
+     **every** round-trip case with ≥1 **structural assertion on the serialized
+     form** (the exact tag/field on the wire), or it guards nothing.
    - **For a NEW-surface WP, grep the producer registration BEFORE counting green
      — a HARD gate (promoted L6-build; the hand-feeds-the-deliverable trap).** A
      test for a new capability passes **green-vs-green** if it **hand-feeds the
