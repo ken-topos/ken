@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 14:51:15Z — from 31 issue file(s) in `docs/program/issues/`.
+2026-07-22 15:51:53Z — from 33 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -40,10 +40,10 @@ the committed file matches the generator's output.
 |---|---|---|---|---|---|---|
 | `A3` | catalog-coverage walker | draft | TBD | TBD | none | — |
 | `ABI-REVOKE` | runtime revocation membrane — the deferred runtime face of 62 §4 | draft | runtime | TBD | none | — |
-| `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | active | verify | M | none | — |
+| `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | merged | verify | M | none | — |
 | `BUDGET-EXHAUST` | transfer-budget bound checks are fail-open on variant extension | merged | verify | S | none | — |
 | `CAT-CAPEX` | catalog exhibits no checked capability/authority exemplar | draft | steward | TBD | none | — |
-| `CB-HYGIENE` | cranelift_backend facade: strip WP-token narration, separate test material from implementation | ready | runtime | S | none | — |
+| `CB-HYGIENE` | cranelift_backend facade: strip WP-token narration, separate test material from implementation | merged | runtime | S | none | — |
 | `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | ready | steward | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
@@ -55,7 +55,9 @@ the committed file matches the generator's output.
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
 | `KW-THEOREM` | rename the surface keyword `lemma` to `theorem` | ready | spec | M | none | — |
+| `LOADER-STALE-PREMISE` | \"no disk loader yet\" is stale in 9 places — including already-landed library/ content | ready | doc | S | none | — |
 | `MODELS-TIER` | agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception | ready | steward | S | none | — |
+| `ORACLE-VIS-CHECK` | replace the text-pin oracle in px4b_native_production.rs with a real visibility check | ready | runtime | S | none | — |
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | ready | steward | S | none | — |
 | `PX8-F-CAP-41` | PX8-F-CAP (#41) — backlog, deferred to spec-first | draft | TBD | TBD | none | 41 |
 | `PX8` | partial/positioned IO — the completion program's root; closure condition | active | runtime | L | none | — |
@@ -75,13 +77,14 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `CB-HYGIENE` — cranelift_backend facade: strip WP-token narration, separate test material from implementation
 - `CI-SKIPPED-NATIVE-TESTS` — Restore rt_parity_native — one test at 221s is the blocker
 - `DOC-VALIDATION-BINDING` — validation vocabulary claims a 1:1 binding to the gates; nothing binds it
 - `DOC-W1` — documentation Wave 1 — the read-Ken spine, taught from checked fragments
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
+- `LOADER-STALE-PREMISE` — \"no disk loader yet\" is stale in 9 places — including already-landed library/ content
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
+- `ORACLE-VIS-CHECK` — replace the text-pin oracle in px4b_native_production.rs with a real visibility check
 - `PUB-VERIFY` — scripted-pr-automerge.sh exits 0 on a failed push
 - `Q-CLAIM-CLOSURE` — Q-RESIDUE adversary findings — claim-loss in multi-claim test blocks, plus R1/R2/R3
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
@@ -94,7 +97,6 @@ is itself not yet `merged`/`closed`:
 - `DOC-W2` blocked by `DOC-W1` (status: ready)
 - `F4` blocked by `A3` (status: draft)
 - `RT-SRC-DISPATCH-COVER` blocked by `RT-SPLIT` (status: active)
-- `SEAL-2` blocked by `BUDGET-EFF` (status: active)
 
 ## Gate progress
 

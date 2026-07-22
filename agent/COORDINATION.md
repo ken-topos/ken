@@ -764,9 +764,48 @@ satisfy the gate.
   **EMPTY**, taking **all** the author's commits since merge-base (a dropped
   follow-up is invisible if you only diff the section you read); **base/scope** —
   `git diff --stat origin/main <assembled>` is **only** the WP's intended files and
-  **the WP's deps are ancestors of the tip** (a stale base silently reverts
-  unrelated landed siblings). A correct-content tip on a stale base is as
-  unmergeable as the reverse — the base axis is a distinct failure mode.
+  **the WP's deps are ancestors of the tip** (a dep that is not an ancestor is
+  simply absent from the candidate — the WP builds on something it does not
+  contain).
+
+  > ⛔ **CORRECTION (2026-07-22, Steward). The former parenthetical here —
+  > *"a stale base silently reverts unrelated landed siblings"* — was FALSE, and
+  > it was mine.** This repo squash-merges, and a squash applies
+  > **merge-base → branch**, never **main → branch**. A candidate that merely
+  > *lacks* files `main` gained does **not** delete them. Demonstrated: a
+  > candidate on a stale base lacking two chapters merged, and both chapters
+  > survived.
+  >
+  > ⇒ **`git diff origin/main <sha>` is NOT a staleness detector.** It fires
+  > identically on safe and unsafe candidates, so it cannot discriminate. The
+  > **only** thing that makes a stale base material is the **intersection** —
+  > files the candidate touches that `main` also changed since the merge base:
+  >
+  > ```sh
+  > BASE=$(git merge-base <sha> origin/main)
+  > comm -12 <(git diff --name-only $BASE <sha>   | sort) \
+  >          <(git diff --name-only $BASE origin/main | sort)
+  > ```
+  >
+  > **Empty ⇒ immaterial; do NOT require a rebase.** Non-empty ⇒ inspect and
+  > take the union deliberately.
+  >
+  > ⚠ **Run it PRE-merge only.** Once the candidate is merged, `main` contains
+  > its squash, so the candidate's file set is necessarily a subset of what
+  > `main` gained and the test **self-fires on every candidate**. Post-landing,
+  > verify **content-emptiness on the candidate's own paths** plus **sibling
+  > survival by content**. A squash-merged SHA never becomes an ancestor of
+  > `main`; that is expected, not a flag.
+  >
+  > **Cost of the false version:** it mandated rebases that were provably
+  > unnecessary. On 2026-07-22 a 7-commit candidate re-anchored twice in ~25
+  > minutes against a contention-free doc track — each cycle a full re-verify
+  > plus a second QA pass — for an intersection that was empty every time. **The
+  > requirement to check the base axis stands; the reason and the test change.**
+
+  A correct-content tip on a genuinely-intersecting stale base is as unmergeable
+  as the reverse — the base axis is a distinct failure mode, but it is
+  **intersection-gated**, not automatic.
   **Lane note:** the independent checker (conformance-validator) is *stronger
   verifying the assembler's tip against these gates than performing the rebase
   itself* — when grounding surfaces an assembly hazard, **flag it to the
