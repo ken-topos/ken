@@ -502,8 +502,23 @@ while :; do
   fi
 
   if [ "$pending_count" -eq 0 ]; then
+    # ⛔ GREEN CI IS NOT AUTHORIZATION. This is the whole point of SRC-ATTEST
+    #   Part 2, and the normal path needs it MORE than `--doc-only` does, not
+    #   less: this path just spent minutes polling, and `main` can advance many
+    #   times inside that window. The checks that passed attest to a merge
+    #   result computed when the run STARTED.
+    #
+    #   #885, measured: a PR's green check formed against a base with zero
+    #   citations; `main` then gained those citations; the PR merged on the old
+    #   green and left `main` red. Nothing in the PR changed — the base did.
+    #
+    #   So re-derive the merge result on a freshly fetched origin/main and run
+    #   origin/main's checker on it, under the lock, immediately before merging.
+    acquire_merge_lock
+    fresh_result_gate
     merge_pr
     printf 'PR #%s checks passed and merge command succeeded.\n' "$pr_number"
+    verify_landed_tree
     exit 0
   fi
 
