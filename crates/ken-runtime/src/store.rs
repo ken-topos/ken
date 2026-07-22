@@ -602,7 +602,9 @@ mod tests {
         match store.intern(&existing) {
             InternResult::Hit(_) => {} // correct
             InternResult::CapacityExhausted { .. } => {
-                panic!("repeat at limit must not trip CapacityExhausted (dedup short-circuits first)")
+                panic!(
+                    "repeat at limit must not trip CapacityExhausted (dedup short-circuits first)"
+                )
             }
             InternResult::New(_) => panic!("expected Hit for existing value"),
         }

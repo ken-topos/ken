@@ -7,15 +7,24 @@
 //! Ken-observable meaning.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::mem;
 
-use cranelift_codegen::isa::OwnedTargetIsa;
-use cranelift_codegen::settings::{self, Configurable};
+// ⛔ RT-SPLIT slice 7: once the nine internals moved into `artifact`, these
+// became unused in the LIB build while the residual `#[cfg(test)]` fixtures
+// still need them. The `cfg(test)` build asymmetry is bidirectional, so the
+// lib build's unused-import warning is NOT authority to delete them --
+// pruning was taken over the INTERSECTION of both configs, never either
+// alone. Gated rather than deleted, per this file's existing rule for the
+// same situation at `fnv1a_64` below: "gate rather than choose a side."
+#[cfg(test)]
 use cranelift_jit::{JITBuilder, JITModule};
+#[cfg(test)]
 use cranelift_module::{default_libcall_names, Linkage};
-use cranelift_object::{ObjectBuilder, ObjectModule};
 
-use crate::{RuntimeDeclaration, RuntimeExpr, RuntimeProgram, RuntimeValue};
+// `RuntimeProgram` is still used by the lib build; the other three are
+// test-only after the move, so this splits rather than gating wholesale.
+use crate::RuntimeProgram;
+#[cfg(test)]
+use crate::{RuntimeDeclaration, RuntimeExpr, RuntimeValue};
 #[cfg(test)]
 mod test_support;
 
@@ -24,7 +33,6 @@ pub(crate) mod compiled;
 mod lowering;
 pub(crate) mod planning;
 pub(crate) mod surface;
-use compiled::*;
 
 // §10.1: the facade preserves the exact old `ken_runtime::<name>` surface.
 // Re-exporting an already-exported name at its PRE-EXISTING visibility is not
@@ -46,20 +54,32 @@ pub use artifact::api::{
     run_nc8_validated_seed_examples, run_runtime_ir_report_with_cranelift,
     run_validated_example_with_interpreter_observation,
 };
+// Test-only after slice 7: the production consumers of this glob moved into
+// `artifact`. Gated, not deleted -- see the bidirectional-asymmetry note above.
+#[cfg(test)]
 use lowering::core::*;
 
-// RT-SPLIT slice 5 — temporary `#[cfg(test)]` facade wiring (Architect
-// `evt_3tgaw9ws44fqg`). These tests are artifact-subject and move to
-// `artifact/tests.rs` in slice 6; until then they stay here and reach the
-// now-lowering-owned items by item-level test wiring, which preserves their
-// call tokens (AC-3) and costs zero production seams. Slice 6 replaces each
-// with an explicit import at the new home and does not touch `lowering`.
-#[cfg(test)]
-use lowering::require_i64_for_artifact_tests;
-#[cfg(test)]
-use lowering::verify_cranelift_function_for_artifact_tests as verify_cranelift_function;
+// RT-SPLIT slice 5 — `#[cfg(test)]` facade wiring (Architect
+// `evt_3tgaw9ws44fqg`) for lowering-owned items the remaining facade fixtures
+// still reach. `verify_cranelift_function_for_artifact_tests` left with the
+// two `px8i_*` tests in slice 7 and is now imported at their new home,
+// `artifact/tests.rs`; `lowering` itself was not touched by either slice.
 #[cfg(test)]
 use lowering::{PX8TR_DISABLE_DEFORESTED_ANSWER_ROUTE, PX8TR_TRAP_PROVENANCE};
+
+// RT-SPLIT slice 7 — owner-adjacent test adapters (§10.5a′) for the three
+// artifact privates that the facade's own `#[cfg(test)]` fixtures still reach
+// after the internals moved down. Aliasing at the import keeps every call
+// token in those fixture bodies byte-identical, so this is an IMPORT-ONLY
+// edit and the fixtures stay ordered item-level moves (AC-3) — the same shape
+// as the slice-5 wiring above and as §10.5a′'s lowering-test wiring.
+// Zero production visibility is spent; the adapters are `#[cfg(test)]`.
+#[cfg(test)]
+use artifact::{
+    native_isa_for_facade_fixtures as native_isa,
+    native_platform_target_name_for_facade_fixtures as native_platform_target_name,
+    new_object_module_for_lowering_tests as new_object_module,
+};
 
 // Facade re-exports preserving PRE-EXISTING reach for the four non-private
 // declarations this slice moved into `lowering` (§10.2: "the facade explicitly
@@ -76,7 +96,6 @@ pub use lowering::with_px8ds_retired_flat_order;
 pub(crate) use lowering::{
     NativeIntLoweringMutation, Px8trTrapProvenanceEvent, NATIVE_INT_LOWERING_MUTATION,
 };
-use planning::*;
 pub use surface::*;
 
 #[cfg(test)]
@@ -554,115 +573,6 @@ impl NativeRunEvidence {
         );
         evidence
     }
-}
-
-fn compile_expr(
-    expr: &RuntimeExpr,
-    seed_env: &NativeSeedEnvironment,
-) -> Result<CompiledExpr, CraneliftBackendError> {
-    compile_expr_with_declarations(expr, seed_env, BTreeMap::new())
-}
-
-fn compile_program_expr(
-    program: &RuntimeProgram,
-    expr: &RuntimeExpr,
-    seed_env: &NativeSeedEnvironment,
-) -> Result<CompiledExpr, CraneliftBackendError> {
-    compile_expr_with_declarations(
-        expr,
-        seed_env,
-        program
-            .declarations
-            .iter()
-            .map(|declaration| (declaration.symbol.as_str(), declaration))
-            .collect(),
-    )
-}
-
-fn compile_expr_with_declarations<'a>(
-    expr: &RuntimeExpr,
-    seed_env: &'a NativeSeedEnvironment,
-    declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
-) -> Result<CompiledExpr, CraneliftBackendError> {
-    compile_expr_with_declarations_and_process_input(expr, seed_env, declarations, None)
-}
-
-fn compile_expr_with_declarations_and_process_input<'a>(
-    expr: &RuntimeExpr,
-    seed_env: &'a NativeSeedEnvironment,
-    declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
-    staged_process_input: Option<&RuntimeValue>,
-) -> Result<CompiledExpr, CraneliftBackendError> {
-    compile_expr_into_module(
-        new_jit_module()?,
-        "ken_nc6_seed",
-        Linkage::Local,
-        expr,
-        seed_env,
-        declarations,
-        staged_process_input,
-        false,
-        None,
-        None,
-        None,
-    )
-}
-
-fn compile_program_expr_object(
-    program: &RuntimeProgram,
-    expr: &RuntimeExpr,
-    seed_env: &NativeSeedEnvironment,
-    entry_symbol: &str,
-) -> Result<CompiledModule<ObjectModule>, CraneliftBackendError> {
-    compile_expr_into_module(
-        new_object_module("ken-runtime-cranelift-object")?,
-        entry_symbol,
-        Linkage::Export,
-        expr,
-        seed_env,
-        program
-            .declarations
-            .iter()
-            .map(|declaration| (declaration.symbol.as_str(), declaration))
-            .collect(),
-        None,
-        false,
-        None,
-        native_join_plan_for_program(program)?,
-        oriented_subcontinuation_plan_for_program(program)?,
-    )
-}
-
-fn native_isa() -> Result<OwnedTargetIsa, CraneliftBackendError> {
-    let mut flag_builder = settings::builder();
-    flag_builder
-        .set("use_colocated_libcalls", "false")
-        .map_err(|err| backend(BackendFailure::Target(err.to_string())))?;
-    flag_builder
-        .set("is_pic", "true")
-        .map_err(|err| backend(BackendFailure::Target(err.to_string())))?;
-    let isa_builder = cranelift_native::builder()
-        .map_err(|err| backend(BackendFailure::Target(err.to_string())))?;
-    isa_builder
-        .finish(settings::Flags::new(flag_builder))
-        .map_err(|err| backend(BackendFailure::Target(err.to_string())))
-}
-
-fn new_jit_module() -> Result<JITModule, CraneliftBackendError> {
-    let isa = native_isa()?;
-    let builder = JITBuilder::with_isa(isa, default_libcall_names());
-    Ok(JITModule::new(builder))
-}
-
-fn new_object_module(name: &str) -> Result<ObjectModule, CraneliftBackendError> {
-    let isa = native_isa()?;
-    let builder = ObjectBuilder::new(isa, name.as_bytes().to_vec(), default_libcall_names())
-        .map_err(|err| backend_module(err.to_string()))?;
-    Ok(ObjectModule::new(builder))
-}
-
-fn native_platform_target_name() -> String {
-    format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS)
 }
 
 // RT-SPLIT slice 5: shared test helpers whose final users span the
@@ -1298,148 +1208,3 @@ const PX8N_READ_EOF: u64 = 4;
 const PX8N_OVER_BOUND_READ: u64 = 5;
 #[cfg(test)]
 const PX8I_BIG_READ_START: u64 = 7;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn px8i_jit_and_object_construct_identical_local_helper_clif() {
-        let mut jit = new_jit_module().expect("JIT module constructs");
-        let jit_clif = crate::native_int_clif::capture_native_int_local_graph(&mut jit)
-            .expect("JIT local helper graph emits");
-        let mut object =
-            new_object_module("px8i-local-helper-identity").expect("object module constructs");
-        let object_clif = crate::native_int_clif::capture_native_int_local_graph(&mut object)
-            .expect("object local helper graph emits");
-        assert_eq!(jit_clif, object_clif);
-        assert!(!jit_clif.is_empty());
-        // Rework (Q-RESIDUE, 2026-07-21): the bare `5` was unverified
-        // provenance. Grounded against `emit_native_int_local_graph`, which
-        // calls exactly six `define_*` helpers (resolve, intern, compare,
-        // narrow, export, binop); `capture_native_int_local_graph` joins
-        // their captured CLIF bodies with "-- helper --", so N helpers yield
-        // N-1 separators. This is a fixed property of the compiler's own
-        // small, deliberately-enumerated local-helper set, not an external or
-        // growable corpus -- pinning it here catches a helper silently
-        // failing to emit a body.
-        const LOCAL_HELPER_COUNT: usize = 6;
-        assert_eq!(
-            jit_clif.matches("-- helper --").count(),
-            LOCAL_HELPER_COUNT - 1,
-            "expected all {LOCAL_HELPER_COUNT} native-Int local helpers (resolve, intern, compare, narrow, export, binop) to emit a captured CLIF body"
-        );
-    }
-
-    #[test]
-    fn px8i_local_helpers_reject_invalid_zero_stale_and_wrong_arena_slots() {
-        let mut module = new_jit_module().expect("JIT module constructs");
-        let helpers = crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
-            .expect("local helper graph emits");
-        let pointer = module.target_config().pointer_type();
-
-        let mut mint_signature = module.make_signature();
-        mint_signature.params.push(AbiParam::new(pointer));
-        mint_signature.returns.push(AbiParam::new(types::I64));
-        let mint_id = module
-            .declare_function("px8i_mint_probe", Linkage::Local, &mint_signature)
-            .expect("mint probe declares");
-        let mut mint_context = module.make_context();
-        mint_context.func =
-            Function::with_name_signature(UserFuncName::user(2, mint_id.as_u32()), mint_signature);
-        let intern = module.declare_func_in_func(helpers.intern, &mut mint_context.func);
-        let mut frontend = FunctionBuilderContext::new();
-        {
-            let mut builder = FunctionBuilder::new(&mut mint_context.func, &mut frontend);
-            let entry = builder.create_block();
-            builder.append_block_params_for_function_params(entry);
-            builder.switch_to_block(entry);
-            let arena = builder.block_params(entry)[0];
-            let limbs = builder.create_sized_stack_slot(StackSlotData::new(
-                StackSlotKind::ExplicitSlot,
-                16,
-                3,
-            ));
-            let zero = builder.ins().iconst(types::I64, 0);
-            let one = builder.ins().iconst(types::I64, 1);
-            builder.ins().stack_store(zero, limbs, 0);
-            builder.ins().stack_store(one, limbs, 8);
-            let output = builder.create_sized_stack_slot(StackSlotData::new(
-                StackSlotKind::ExplicitSlot,
-                16,
-                3,
-            ));
-            let limbs = builder.ins().stack_addr(pointer, limbs, 0);
-            let output_pointer = builder.ins().stack_addr(pointer, output, 0);
-            let two = builder.ins().iconst(types::I64, 2);
-            let call = builder
-                .ins()
-                .call(intern, &[arena, zero, limbs, two, output_pointer]);
-            let status = builder.inst_results(call)[0];
-            require_i64_for_artifact_tests(&mut builder, status, 0);
-            let slot = builder.ins().stack_load(types::I64, output, 8);
-            builder.ins().return_(&[slot]);
-            builder.seal_all_blocks();
-            builder.finalize();
-        }
-        verify_cranelift_function(&mint_context.func, module.isa()).expect("mint verifies");
-        module
-            .define_function(mint_id, &mut mint_context)
-            .expect("mint defines");
-
-        let mut check_signature = module.make_signature();
-        check_signature.params.push(AbiParam::new(pointer));
-        check_signature.params.push(AbiParam::new(types::I64));
-        check_signature.params.push(AbiParam::new(types::I64));
-        check_signature.returns.push(AbiParam::new(types::I64));
-        let check_id = module
-            .declare_function("px8i_slot_probe", Linkage::Local, &check_signature)
-            .expect("slot probe declares");
-        let mut check_context = module.make_context();
-        check_context.func = Function::with_name_signature(
-            UserFuncName::user(2, check_id.as_u32()),
-            check_signature,
-        );
-        let compare = module.declare_func_in_func(helpers.compare, &mut check_context.func);
-        let mut frontend = FunctionBuilderContext::new();
-        {
-            let mut builder = FunctionBuilder::new(&mut check_context.func, &mut frontend);
-            let entry = builder.create_block();
-            builder.append_block_params_for_function_params(entry);
-            builder.switch_to_block(entry);
-            let params = builder.block_params(entry).to_vec();
-            let eq = builder.ins().iconst(types::I64, 0);
-            let call = builder.ins().call(
-                compare,
-                &[params[0], eq, params[1], params[2], params[1], params[2]],
-            );
-            let status = builder.inst_results(call)[0];
-            builder.ins().return_(&[status]);
-            builder.seal_all_blocks();
-            builder.finalize();
-        }
-        verify_cranelift_function(&check_context.func, module.isa()).expect("check verifies");
-        module
-            .define_function(check_id, &mut check_context)
-            .expect("check defines");
-        module
-            .finalize_definitions()
-            .expect("probe module finalizes");
-
-        let mint = module.get_finalized_function(mint_id);
-        let check = module.get_finalized_function(check_id);
-        let mint = unsafe {
-            mem::transmute::<_, extern "C" fn(*mut crate::NativeIntArenaV1) -> u64>(mint)
-        };
-        let check = unsafe {
-            mem::transmute::<_, extern "C" fn(*mut crate::NativeIntArenaV1, u64, u64) -> i64>(check)
-        };
-        let mut first = crate::NativeIntArenaV1::default();
-        let mut second = crate::NativeIntArenaV1::default();
-        let slot = mint(&mut first);
-        assert_ne!(slot, 0);
-        assert_eq!(check(&mut first, crate::NATIVE_INT_BIG_TAG_V1, slot), 1);
-        assert_eq!(check(&mut first, crate::NATIVE_INT_BIG_TAG_V1, 0), -1);
-        assert_eq!(check(&mut second, crate::NATIVE_INT_BIG_TAG_V1, slot), -1);
-        assert_eq!(check(&mut first, 9, slot), -1);
-    }
-}
