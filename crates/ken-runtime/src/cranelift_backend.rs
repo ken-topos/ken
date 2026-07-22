@@ -33,9 +33,7 @@ use crate::{
 };
 
 pub(crate) mod compiled;
-#[cfg(test)]
-pub(crate) mod test_support;
-pub(crate) mod lowering;
+mod lowering;
 pub(crate) mod planning;
 pub(crate) mod surface;
 
@@ -293,6 +291,191 @@ fn test_only_distinguished_root_join_plan() -> crate::NativeJoinPlanV1 {
             runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
             answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
         }],
+    }
+}
+
+#[cfg(test)]
+fn oriented_test_ih_plan() -> crate::OrientedSubcontinuationPlanV1
+{
+    let mut plan = oriented_test_plan();
+    for frame_id in 0..=2 {
+        let slot_template_id = 200 + frame_id;
+        let mut slot = crate::CheckedComputationalIHSlotTemplateV1 {
+            slot_template_id,
+            declaration: "decl:fixture::oriented".to_string(),
+            checked_match_ordinal: frame_id,
+            checked_occurrence_path: vec![20, frame_id],
+            frame_template_id: frame_id,
+            constructor: format!("Ctor{frame_id}"),
+            recursive_position: 0,
+            method_binder_ordinal: 0,
+            local_telescope: Vec::new(),
+            ih_interface: oriented_test_interface(frame_id as u8),
+            segment_site_id: 9,
+            frame_templates: vec![frame_id],
+            input_interface: oriented_test_interface(frame_id as u8),
+            output_interface: oriented_test_interface(frame_id as u8 + 1),
+            runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+                declaration: "decl:fixture::oriented".to_string(),
+                runtime_path: vec![0, frame_id],
+            }],
+            occurrence_binding_fingerprint: 0,
+        };
+        slot.occurrence_binding_fingerprint =
+            crate::compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+        plan.computational_ih_slots.push(slot);
+
+        let mut call = crate::CheckedComputationalIHCallTemplateV1 {
+            call_template_id: 100 + frame_id,
+            declaration: "decl:fixture::oriented".to_string(),
+            checked_occurrence_path: vec![30, frame_id],
+            slot_template_id,
+            arity: 1,
+            local_telescope: Vec::new(),
+            result_interface: oriented_test_interface(frame_id as u8 + 1),
+            callee_segment_site_id: 9,
+            callee_frame_templates: vec![frame_id],
+            parent_frame_template_id: Some(frame_id),
+            parent_segment_site_id: Some(9),
+            caller_interface: oriented_test_interface(frame_id as u8 + 1),
+            runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+                declaration: "decl:fixture::oriented".to_string(),
+                runtime_path: vec![1, frame_id],
+            }],
+            occurrence_binding_fingerprint: 0,
+        };
+        call.occurrence_binding_fingerprint =
+            crate::compiler_private_computational_ih_call_binding_fingerprint(&call);
+        plan.computational_ih_calls.push(call);
+    }
+    plan.validate().unwrap();
+    plan
+}
+#[cfg(test)]
+fn oriented_test_instance_layer(
+    frame_id: u64,
+    invocation_id: u64,
+    semantic_depth: usize,
+    semantic_pending: bool,
+    role: RecursorLayerRole,
+) -> ComputationalRecursorLayer {
+    let mut layer = oriented_test_layer(frame_id, role);
+    layer.checked_invocation_id = Some(invocation_id);
+    layer.checked_invocation_source =
+        Some(InvocationTemplateRef::ComputationalIHCall(100 + frame_id));
+    layer.checked_invocation_depth = semantic_depth;
+    layer.semantic_pending = semantic_pending;
+    layer
+}
+#[cfg(test)]
+#[repr(C)]
+struct BorrowedFixtureValue {
+    kind: u64,
+    tag: u64,
+    data: *const std::ffi::c_void,
+    len: usize,
+}
+#[cfg(test)]
+#[repr(C)]
+struct NativeInvocationFixture {
+    process_input: *const BorrowedFixtureValue,
+    host_context: *mut std::ffi::c_void,
+    capability: u64,
+    native_int_arena: *mut crate::NativeIntArenaV1,
+}
+#[cfg(test)]
+fn self_consistent_root_join_site(
+    site_id: u64,
+) -> crate::NativeJoinPlanSiteV1 {
+    let declaration = "decl:fixture::PX8H::main".to_string();
+    let checked_occurrence_path = vec![0];
+    let checked_result_type_fingerprint = 19;
+    crate::NativeJoinPlanSiteV1 {
+        site_id,
+        occurrence_binding_fingerprint: crate::compiler_private_join_occurrence_binding_fingerprint(
+            site_id,
+            &declaration,
+            &checked_occurrence_path,
+            checked_result_type_fingerprint,
+        ),
+        declaration,
+        checked_occurrence_path,
+        checked_result_type_fingerprint,
+        runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
+        answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
+    }
+}
+#[cfg(test)]
+fn oriented_test_interface(
+    name: u8,
+) -> crate::CheckedAnswerInterfaceV1 {
+    let mut bytes = crate::CHECKED_ANSWER_INTERFACE_V1_HEADER.to_vec();
+    bytes.push(name);
+    crate::CheckedAnswerInterfaceV1::new(bytes).unwrap()
+}
+#[cfg(test)]
+fn oriented_test_frame(
+    frame_id: u64,
+    semantic_position: u64,
+    input: u8,
+    output: u8,
+    parent: Option<u64>,
+) -> crate::OrientedSubcontinuationFramePlanV1 {
+    let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+        frame_id,
+        segment_site_id: 9,
+        declaration: "decl:fixture::oriented".to_string(),
+        checked_occurrence_path: vec![frame_id],
+        semantic_position,
+        input_interface: oriented_test_interface(input),
+        output_interface: oriented_test_interface(output),
+        runtime_frame_fingerprint: frame_id + 100,
+        occurrence_binding_fingerprint: 0,
+        control_witness: parent.map_or(
+            crate::OrientedControlWitnessV1::DistinguishedRoot,
+            crate::OrientedControlWitnessV1::ParentFrame,
+        ),
+    };
+    frame.occurrence_binding_fingerprint =
+        crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+    frame
+}
+#[cfg(test)]
+fn oriented_test_layer(
+    frame_id: u64,
+    role: RecursorLayerRole,
+) -> ComputationalRecursorLayer {
+    ComputationalRecursorLayer {
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: format!("oriented frame {frame_id}"),
+        },
+        outer_env: Vec::new(),
+        provenance: RecursorFrameProvenance(frame_id),
+        role,
+        checked_frame_id: Some(frame_id),
+        checked_invocation_id: Some(0),
+        checked_invocation_source: None,
+        checked_invocation_depth: 0,
+        semantic_pending: true,
+    }
+}
+#[cfg(test)]
+fn oriented_test_plan() -> crate::OrientedSubcontinuationPlanV1 {
+    crate::OrientedSubcontinuationPlanV1 {
+        representation_rule_version:
+            crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+        // Checked postorder is p2, p1, p0 even though control returns
+        // through o0, o4, o3 below.
+        frames: vec![
+            oriented_test_frame(0, 2, 2, 3, None),
+            oriented_test_frame(1, 1, 1, 2, Some(0)),
+            oriented_test_frame(2, 0, 0, 1, Some(1)),
+        ],
+        recursive_calls: Vec::new(),
+        computational_ih_slots: Vec::new(),
+        computational_ih_calls: Vec::new(),
     }
 }
 
@@ -11577,151 +11760,6 @@ mod tests {
                 "{error:?}"
             );
         }
-    }
-
-    #[derive(Clone, Copy)]
-    enum Px8jInstallMalformation {
-        SelectionRole,
-        UnwindRole,
-        UnwindOrigin,
-        RepeatedScopeIdentity,
-    }
-
-    fn run_px8j_source_machine_install(
-        malformation: Option<Px8jInstallMalformation>,
-    ) -> Result<SourceContinuation<'static>, CraneliftBackendError> {
-        let seed_env = NativeSeedEnvironment::empty();
-        let mut compiler = root_authority_test_lowering(&seed_env);
-        compiler.native_join_plan = None;
-        compiler.root_terminal_authority = None;
-        compiler.process_object = false;
-
-        let origin = RecursorProducerOriginId(17);
-        let layer = |role| ComputationalRecursorLayer {
-            cases: Vec::new(),
-            default: RuntimeTrap {
-                code: RuntimeTrapCode::ExplicitTrap,
-                message: "PX8-J-ERR source install".to_string(),
-            },
-            outer_env: Vec::new(),
-            provenance: RecursorFrameProvenance(18),
-            role,
-            checked_frame_id: None,
-            checked_invocation_id: None,
-            checked_invocation_source: None,
-            checked_invocation_depth: 0,
-            semantic_pending: matches!(role, RecursorLayerRole::SelectsOccurrence { .. }),
-        };
-        let selection = match malformation {
-            Some(Px8jInstallMalformation::SelectionRole) => layer(RecursorLayerRole::ExitsScope {
-                origin,
-                scope_origin: RecursorProducerOriginId(18),
-                parent_scope: None,
-            }),
-            _ => layer(RecursorLayerRole::SelectsOccurrence { origin }),
-        };
-        let unwind = match malformation {
-            None => Vec::new(),
-            Some(Px8jInstallMalformation::SelectionRole) => Vec::new(),
-            Some(Px8jInstallMalformation::UnwindRole) => {
-                vec![layer(RecursorLayerRole::SelectsOccurrence { origin })]
-            }
-            Some(Px8jInstallMalformation::UnwindOrigin) => {
-                vec![layer(RecursorLayerRole::ExitsScope {
-                    origin: RecursorProducerOriginId(99),
-                    scope_origin: RecursorProducerOriginId(19),
-                    parent_scope: None,
-                })]
-            }
-            Some(Px8jInstallMalformation::RepeatedScopeIdentity) => vec![
-                layer(RecursorLayerRole::ExitsScope {
-                    origin,
-                    scope_origin: RecursorProducerOriginId(19),
-                    parent_scope: None,
-                }),
-                layer(RecursorLayerRole::ExitsScope {
-                    origin,
-                    scope_origin: RecursorProducerOriginId(19),
-                    parent_scope: Some(RecursorProducerOriginId(19)),
-                }),
-            ],
-        };
-        let invocation = RecursorInvocationSegment::new(
-            origin,
-            0,
-            selection,
-            RecursorUnwindStack {
-                later_wrappers_in_construction_order: unwind,
-            },
-            ContinuationCursorId(20),
-            None,
-            None,
-        );
-        assert!(!recursor_invocation_is_checked(&invocation));
-
-        compiler.install_recursor_invocation(
-            SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue),
-            ContinuationActivationId(21),
-            invocation,
-            None,
-        )
-    }
-
-    #[test]
-    fn px8j_source_machine_install_rejects_repeated_scope_identity() {
-        let error = match run_px8j_source_machine_install(Some(
-            Px8jInstallMalformation::RepeatedScopeIdentity,
-        )) {
-            Ok(_) => panic!("the unchecked source-machine install must validate before CFG"),
-            Err(error) => error,
-        };
-        assert!(matches!(
-            error,
-            CraneliftBackendError::Unsupported(UnsupportedLowering {
-                construct: "ComputationalRecursor",
-                reason,
-            }) if reason == "recursor unwind repeats a selected scope identity"
-        ));
-    }
-
-    #[test]
-    fn px8j_source_machine_install_rejects_wrong_control_roles_and_origins() {
-        for (malformation, expected_reason) in [
-            (
-                Px8jInstallMalformation::SelectionRole,
-                "recursor selection role does not select the invocation origin",
-            ),
-            (
-                Px8jInstallMalformation::UnwindRole,
-                "recursor unwind role does not exit the invocation origin",
-            ),
-            (
-                Px8jInstallMalformation::UnwindOrigin,
-                "recursor unwind role does not exit the invocation origin",
-            ),
-        ] {
-            let error = match run_px8j_source_machine_install(Some(malformation)) {
-                Ok(_) => panic!("the unchecked source-machine install must validate before CFG"),
-                Err(error) => error,
-            };
-            assert!(matches!(
-                error,
-                CraneliftBackendError::Unsupported(UnsupportedLowering {
-                    construct: "ComputationalRecursor",
-                    ref reason,
-                }) if reason == expected_reason
-            ));
-        }
-    }
-
-    #[test]
-    fn px8j_source_machine_install_accepts_valid_unchecked_segment() {
-        let installed = run_px8j_source_machine_install(None)
-            .expect("a valid unchecked source-machine invocation still installs");
-        assert!(matches!(
-            installed,
-            SourceContinuation::ApplyRecursorSelection { .. }
-        ));
     }
 
     #[test]

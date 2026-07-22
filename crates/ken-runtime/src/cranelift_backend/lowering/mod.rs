@@ -8,7 +8,7 @@
 //! that `core` imports only from its own parent (§10.5). That is what lets
 //! slice 5 move the residual state in without touching `core.rs` again.
 
-pub(crate) mod core;
+pub(in crate::cranelift_backend) mod core;
 
 // Re-exported at facade scope (never crate scope) so `core` and its tests can
 // glob from their own parent. This is namespace wiring, not a widening: every
@@ -56,11 +56,13 @@ pub(in crate::cranelift_backend) use crate::RuntimeMatchCase;
 
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::{
-    px8j_record_recursor_carrier, px8j_record_source_event, px8tr_record_trap_provenance,
-    test_only_distinguished_root_join_plan, BoundedNatFixtureObservation,
-    BoundedNatLoweringMutation, NativeIntLoweringMutation, Px8jDirectRecursorConsumer,
-    Px8jProducerPath, Px8jRecursorMalformation, Px8jSourceTraceEvent, Px8trTrapProvenanceEvent,
+    BoundedNatLoweringMutation,
+    NativeIntLoweringMutation,
+    Px8jProducerPath,
+    Px8jSourceTraceEvent,
+    Px8trTrapProvenanceEvent,
+    px8j_record_recursor_carrier,
+    px8j_record_source_event,
+    px8tr_record_trap_provenance,
 };
 
-#[cfg(test)]
-pub(in crate::cranelift_backend) use super::test_support::*;

@@ -8,6 +8,15 @@
 // the same namespace via their own `use super::*`.
 pub(in crate::cranelift_backend) use super::*;
 
+// Ruled test module: imports are permitted here (AC-8 class 2), which keeps
+// these test-only names out of the production `lowering/mod.rs` namespace.
+use super::super::super::{
+    BoundedNatFixtureObservation,
+    Px8jDirectRecursorConsumer,
+    Px8jRecursorMalformation,
+    test_only_distinguished_root_join_plan,
+};
+
 mod constructors;
 mod control;
 mod effects;
