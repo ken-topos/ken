@@ -37,8 +37,8 @@ the answer yourself rather than take it on this page's authority.
    its own producer test confirms `trusted_base()` is set-equal before and
    after loading the package
    (`catalog/packages/Data/Sums/Combinators.ken.md`;
-   `crates/ken-elaborator/tests/surface_transport_acceptance.rs`,
-   `transport_package_adds_zero_trusted_base_delta`). EmptyDec's "Zero new
+   `crates/ken-elaborator/tests/ds3_sum_combinators_acceptance.rs`,
+   `trusted_base_delta_is_empty_across_the_file`). EmptyDec's "Zero new
    trust category" is narrower: its own Design notes name a possible
    instantiation (`dec_eq_decides Int`) whose `DecEq Int.sound` rides an
    axiom, so EmptyDec's zero covers only the *admission* of its own two
@@ -62,12 +62,13 @@ the answer yourself rather than take it on this page's authority.
    anywhere the host process can access — it does not yet narrow to
    particular paths, the kind of scoping `attenuate` is built to express
    (`catalog/packages/Capability/Filesystem/Errors.ken.md`).
-2. True. A grep of every file under `catalog/packages/` for an explicit
+2. True. No file anywhere under `catalog/packages/` carries an explicit
    capability-typed signature, an `attenuate` call, or an authority
-   comparison used as live code returns none — this was checked across the
-   **whole** tree, not just this curriculum's seven registered entries
+   comparison used as live code — a whole-tree measurement, not limited
+   to this curriculum's seven registered entries
    (`library/learn/reading-ken/04-effects-capabilities-and-authority.md`
-   §3).
+   §3; grounded in the same whole-catalog measurement this page's
+   manifest record cites directly).
 
 ## 05 — Packages and provenance
 

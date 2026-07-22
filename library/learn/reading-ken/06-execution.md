@@ -263,8 +263,8 @@ sources that already establish the mechanism exists.
 Authority class: `explanatory` — this page orders and interprets those
 sections and the cited fragment/code's own text; it does not assert a rule
 they do not already state. Every citation rests on the **content-currency**
-predicate (`DOC-CURRENCY-ANCHOR`): the cited byte ranges are re-verified
-unchanged between `library/REVISION` and `HEAD` by
+predicate (`source-currency` in `manifest.toml`): the cited byte ranges are
+re-verified unchanged between `library/REVISION` and `HEAD` by
 `scripts/gen-doc-status.sh`. Content currency is necessary but not
 sufficient — the same discipline chapter 05's footer states: a citation can
 be byte-unchanged and still not carry the semantic claim made from it.
@@ -299,9 +299,5 @@ it; this page states no language rule on its own authority. The mechanism
 used to check this is a re-read of each paragraph against its own
 footnoted citation, confirming the citation's text actually supports the
 sentence made from it — the same check applied to every prior chapter.
-Separately, this page was swept for coordination/review-process and
-program-tracker narration — role names, thread/event identifiers, issue
-identifiers, revision-in-flight phrasing, ownership/status commentary, and
-program-decision labels — by grepping the finished text for each such
-token individually and confirming zero hits outside this sentence
-describing the check itself.
+Separately, this page carries no coordination or workflow detail from how
+it was produced — it was checked for that before landing.
