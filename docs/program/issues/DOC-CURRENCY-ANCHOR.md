@@ -1,7 +1,7 @@
 ---
 id: DOC-CURRENCY-ANCHOR
 title: "library/REVISION certifies nothing about the corpus — currency is unchecked"
-status: ready
+status: closed
 owner: doc
 size: S
 gate: none
@@ -115,6 +115,41 @@ git diff --quiet $REVISION HEAD -- <source>
 
 **Not prescribing the mechanism** — whether this becomes a hard gate, a
 warning, or a standing Librarian as-built duty is the doc ring's design call.
+
+## ✅ CLOSED — 2026-07-22 (Steward), acceptance re-derived on `origin/main`
+
+**Wave 1 is UNBLOCKED.** The `⛔ This BLOCKS Wave 1` banner above is
+**discharged**, not withdrawn — it was correct when written.
+
+Closure was verified by reading the landed `scripts/gen-doc-status.sh` **on
+`origin/main` through the git object store**, not from a working tree and not
+from the Steward's own open-item list:
+
+| AC | how it is met on `origin/main` |
+|---|---|
+| 1 — property, not mechanism | the content-currency gate compares **each cited source's bytes at `REVISION` against `HEAD`** and fails on drift, so the currency claim is backed rather than asserted |
+| 2 — bootstrap explicit | the introducing-commit case is handled and **messaged distinctly** from a stale one (*"nothing was there to validate… this is distinct from a cited source"*) |
+| 3 — two-sided | body-drift-under-unchanged-heading is **detected**; an unchanged corpus stays green. Both arms mutation-proofed against the real tree |
+| 4 — grep the emission | the check reads source bytes **at `REVISION`** via the object store — the exact operation that was absent |
+| 5 — CI | green in CI on the merge that landed it; **no local `--workspace` run** |
+
+**Three folds were needed, and each fixed a genuinely different defect** —
+worth keeping, because the first two both looked like the whole fix:
+
+1. `REVISION` named a **pre-squash branch commit**, unreachable once `main`
+   squash-merged the branch. Now checked **on the branch, against the
+   publication topology.**
+2. The regression drove a **synthetic fixture** and never consumed the
+   repository's **real** `library/REVISION` — so a branch-local bad value
+   passed every existing check.
+3. **The check silently skipped itself** when `origin/main` was unresolvable
+   (shallow CI checkout). A gate that no-ops on an environment condition
+   reports success for *"I did not run"* — the failure mode the adversary's
+   sharpening below predicts exactly.
+
+⛔ **Fold 3 is the transferable one:** the first two folds were found by review,
+the third only by **running the probe that had been offered as skippable.** An
+escape clause is a fallback, never an equal option.
 
 ## Acceptance criteria
 

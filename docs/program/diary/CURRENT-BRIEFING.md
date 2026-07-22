@@ -5,110 +5,88 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-22 ~04:3xZ. OPERATOR IS AWAY until ~11:30Z.**
+**As of 2026-07-22 ~10:2xZ. OPERATOR IS AWAY until ~11:30Z.**
 
 ## Standing state
 
-> ### ⛔⛔ `origin/main` IS RED ON ITS OWN DOCUMENTATION GATE — FIX FIRST
->
-> **As of `835ce1c4`.** `DOC-CURRENCY-ANCHOR` merged (PR #843) with
-> `library/REVISION = cc2af484`, a **pre-squash branch commit**. `main` merges
-> are **squash** merges, so that commit is **not reachable from `main`**:
->
-> ```
-> $ git merge-base --is-ancestor cc2af484 origin/main   → FAILS
-> $ bash scripts/gen-doc-status.sh --check
-> gen-doc-status: library/REVISION '...' is not an ancestor of the current tree
-> ```
->
-> Found by the **librarian** and independently by the **adversary**.
->
-> **★ The mechanism was structurally incompatible with the merge model, and
-> nothing in the WP could see it** — on the branch, in every worktree, at every
-> review, `cc2af484` *is* an ancestor. **The property only becomes false at the
-> moment of merge, which is after the last check anyone runs.** Three folds, an
-> Architect approval, a Librarian QA pass and a green CI run all held.
->
-> **Proposed fix (routed to the doc ring, `evt_7wsasgr07bz10`, to be challenged
-> not just implemented):** `REVISION` must name a commit **on `main`** — the
-> candidate's merge base — not the branch's own parent, since the merge base is
-> an ancestor both before and after the squash. **Two things to verify first:**
-> does it break `status_md_generation_is_idempotent` (the test that drove
-> bump-to-own-parent)? and is the merge base always an ancestor of the squashed
-> result? **Plus a regression that checks ancestry against a SIMULATED SQUASH
-> RESULT**, or the next WP reproduces it exactly.
->
-> ⛔ **Do NOT close `DOC-CURRENCY-ANCHOR`** — merged, but its own acceptance
-> property does not hold on `main`. Follow-on fix on current `main`, not a
-> re-open. **Wave 1 stays gated until this is green.**
-
-
-- `origin/main = 0f9a483a`. **TWO TRACKS ARE RUNNING CONCURRENTLY** (operator
-  directive 2026-07-22 ~02:35Z). Build stays single-threaded; doc is the one
-  standing exception. **Idle is no longer the default-correct state.**
+- **`origin/main = 7911e0b3`.** Green. **TWO TRACKS RUN CONCURRENTLY**
+  (operator directive 2026-07-22 ~02:35Z). Build stays single-threaded; doc is
+  the one standing exception. **Idle is no longer the default-correct state.**
 - **Do not kick a WP while the operator has an open question below.**
+
+> ### 🚨 INFRA ESCALATION FOR THE OPERATOR — `runtime-qa` convo outbound is DEAD
+>
+> **Inbound works** (it receives mentions and reviews normally); **it cannot
+> POST.** Unchanged across 4 watchdog ticks and 2 `/mcp` reconnect attempts.
+> Server-side is healthy — every other seat posts normally.
+>
+> ⛔ **Do NOT relay its self-posts to close a provenance gate.** The gate exists
+> precisely so an attestation is *not* Steward-sourced; a relayed self-post is
+> a contradiction and banks the gap permanently.
+>
+> **The working path, and it is better than a relay:** QA **commits its verdict
+> to its own branch** through the shared clone, and reviewers read it by object.
+> Slice 5 closed this way — `53501ffe`,
+> `docs/program/qa-triage/RT-SPLIT-slice5-runtime-qa-verdict.md`, binding
+> `APPROVE` on `744bda14` / base `1f70a71b`. Precedent existed already
+> (`ergo-qa @ cf791c7f`, `verify-qa @ 04efa001`). **A relay verifies the
+> selection; a commit eliminates the selection.**
 
 ### ▶ Build track — RT-SPLIT (Runtime ring)
 
-Slice 1 merged `@ 0f9a483a` (PR #834). **Slice 2 (`planning`) merged
-`@ dd838f0f` (PR #838)** — CI green, verified by content. **Five of seven
-slices remain; slice 3 (`compiled`) is next.**
+**Slice 5 merged `@ 7911e0b3` — five of seven done, budget 22/24, retros in,
+ring idle and clean.** Slices 6 (`artifact` + artifact tests) and 7
+(`artifact::api`, API tests, final facade) remain.
 
-> ⛔ **Slice 3 is gated on the Architect's §10.4a seam ruling**
-> (`evt_725trc8dfag3c`, transcribed into the frame). The visibility budget
-> forced an **encapsulated seam**: a literal `CompiledModule` field extraction
-> costs 12 and would reach **25 of a 24 cap** before slices 5–7 start. Required
-> shape is a single transparent `pub(super) fn from_parts(…)` packing
-> constructor at the three existing construction sites, four construction-only
-> fields kept **private**, and only the four externally-consumed fields widened
-> — **9 seams, not 12, counting the constructor.** Projected series total 22.
-> **Do not raise the cap.** 12 of 24 spent after slice 2.
-
-> ⛔ **AC-2 and AC-3 were REWRITTEN 2026-07-22** in
-> `docs/program/wp/rt-split-cranelift-backend.md` §7, on the adversary's
-> post-merge findings + the Architect's ruling `evt_1y255ges6mftc`. AC-2 proves
-> **module-level exported-NAME identity only** (four real public-surface
-> mutations went undetected — field→`pub`, new enum variant, new inherent
-> method, deleted `impl Display`). AC-3 now requires **ordered item-level token
-> identity**; a line multiset is a *supplemental inventory net* that produces
-> the AC-7 ledger, never a substitute. **There is no "restructuring class" that
-> relaxes move-purity** — the Architect explicitly rejected the binary the ring
-> had adopted mid-flight.
-
-### ▶ Doc track — DOC-CURRENCY-ANCHOR (doc ring)
-
-Candidate `wp/DOC-CURRENCY-ANCHOR @ 139f1442`, in **Librarian QA** (third
-fold: `library/*` blanket exclusion narrowed to a visible per-document-kind
-rule, symlink sources rejected by tracked git mode at both `REVISION` and
-`HEAD`, duplicate/out-of-order `kind`-field desync closed). 17/17 green.
-This closes DOC-W0's unmet half and **gates Wave 1**.
-
-> ### ⛔ THE LIBRARIAN STALLED ON A PROVIDER CONTENT REFUSAL — expect this again
+> ### ⛔ SLICE 6 IS BLOCKED ON THE ARCHITECT'S FIDELITY REVIEW, NOT ON THE RING
 >
-> 2026-07-22 ~04:47Z. Mid-QA, running a **parser-differential** check (does the
-> awk shell implementation agree with the Rust one on where a
-> `library/manifest.toml` record ends, given a `kind` token at column zero
-> inside a multiline `sources` array). The provider classifier read it as a
-> cybersecurity request, **the turn ended, and the seat posted nothing** —
-> `doc-author` was waiting on a mention that would never arrive. Only evidence
-> is the pane tail.
+> The **12-item frame sweep is written and committed** (`06d72bde`). It folds
+> the post-slice-5 rulings into
+> `docs/program/wp/rt-split-cranelift-backend.md`. **@architect reviews the
+> exact published SHA for fidelity; then `runtime-leader` may kick slice 6.**
 >
-> **Second occurrence in two days on `gpt-5.6-sol`** (first: `runtime-
-> implementer` on a native differential harness). **The trigger is the SHAPE of
-> adversarial QA, not the domain** — *make one implementation disagree with
-> another and demonstrate the bypass* is how a differential conformance test is
-> written and also how a parser-confusion attack is written.
+> **The three rulings that reshape slice 6:**
 >
-> ⚠ **This ring is maximally exposed**, because planted-violation and
-> mutation-proof work is its *core method* — `DOC-W1` AC-6 requires it, and the
-> program frame §0 makes the gates the ring's only independent oracle.
->
-> **Recovery that worked (one attempt, not repeated evasion):** rouse with an
-> accurate re-description of the legitimate work, **plus an explicit escape** —
-> if it will not proceed, report the case as an **explicitly unverified
-> residual**, name the exact case, and approve or reject on the rest. **The
-> escape is the important half:** a silently-dropped probe is an invisible hole
-> in a verdict that reads complete, which is worse than a detectable stall.
+> 1. **`verify_cranelift_function` is LOWERING-owned** (`evt_3tgaw9ws44fqg`),
+>    not artifact-owned. It has exactly **one** production consumer. The two
+>    test adapters are therefore **symmetric across the boundary** — the JIT
+>    bridge in `artifact/mod.rs` (slice 6), the verifier bridge
+>    `verify_cranelift_function_for_artifact_tests` in `lowering/mod.rs`
+>    (landed slice 5). ⛔ **Slice 6 must NOT re-touch `lowering/mod.rs`** — the
+>    transitional facade alias exists so it does not have to.
+> 2. **Classify by COMPILATION REACH, never by a production/`cfg(test)`
+>    binary** (`evt_2mexay4h5tr6y`, frame §10.4b). A predicate satisfiable with
+>    `test = false` is production-reachable, **and a feature name containing
+>    `test-support` does not change that** — `ken-cli` enables
+>    `px8-ds-test-support` on its ordinary `ken-runtime` dependency. Every sweep
+>    run against this file — mine, the adversary's, the implementer's —
+>    partitioned on the two-cell binary and was blind to the third cell in the
+>    same way.
+> 3. **Residual-parent closure is TWO-LAYERED** (frame AC-9): a full
+>    source-coverage partition **and** a macro-aware declaration/`cfg` ledger,
+>    plus a configuration matrix. **Neither substitutes for the other** — line
+>    coverage passed a semicolon mis-split; a declaration regex missed the
+>    indented `thread_local!` statics. ⛔ **Every "exactly two" / "closed by
+>    construction" claim is WITHDRAWN.**
+
+> ⚠ **A gate that cannot see its own subject.** `with_px8ds_retired_flat_order`
+> is bare `pub`, re-exported via `lib.rs:39`, consumed cross-crate by
+> `crates/ken-cli/tests/px8ta_oriented_subcontinuation.rs`. The feature is
+> **default-off**, so AC-2's rustdoc dump reads 338→338 whether the facade
+> re-export is right, wrong, or **missing** — *incapable*, not weak — and
+> `-p ken-runtime` compiles the block away. **Omitting it leaves every local
+> gate GREEN and another crate broken, caught only by CI.** Only local
+> evidence: `scripts/ken-cargo test -p ken-cli --test
+> px8ta_oriented_subcontinuation`. ⛔ **NOT `--workspace`.**
+
+### ▶ Doc track — WAVE 1 IS UNBLOCKED
+
+**`DOC-CURRENCY-ANCHOR` is CLOSED** (acceptance re-derived against the landed
+`scripts/gen-doc-status.sh` on `origin/main`, not from a working tree). The
+outage that made `main` red on its own documentation gate is resolved; the
+three-fold history is in [`2026/Jul/22.md`](2026/Jul/22.md) and the closure
+record. **`DOC-W1` is now ungated** — its `status: draft` means *framed and
+releasable*, and it needs the handoff gate before a kick.
 
 ### ⏭ Steward's own queue under the away-window directive
 
@@ -122,29 +100,14 @@ This closes DOC-W0's unmet half and **gates Wave 1**.
    **⏭ Remaining: Wave 1b and Waves 3–6 are a MAP, framed only when their
    predecessor's exit condition is actually met.**
 
-> **⏸ HELD, UNPUBLISHED on `steward/work`:** the §7 *ledger-is-an-output*
-> evidence heuristic (`9359c762`). Held because the doc ring has a candidate in
-> QA. **Nothing is gated on it** — §10.4a is already on `main`, which is what
-> slice 3 needs. Publish with the next batch, after DOC-CURRENCY-ANCHOR lands.
+> ✅ **PUBLISHED — the §7 *ledger-is-an-output* heuristic is on `main`**
+> (verified by CONTENT at `docs/program/wp/rt-split-cranelift-backend.md:329`,
+> not by branch-ahead). The old "held, unpublished" note is discharged.
+> The duty-assignment lesson that sat here has moved to
+> [`2026/Jul/22.md`](2026/Jul/22.md); its rule is durable: **an instruction
+> whose verb names a capability I hold and the recipient does not is mine to
+> execute** — *push, compact, merge, mint*.
 
-> ### ⛔ I ASSIGNED A STEWARD-ONLY DUTY TO A SEAT — TWICE THIS WEEK
->
-> Told `runtime-leader` to *"run the handoff gate first"* before slice 3. Under
-> §15 the gate is **mine** — leaders don't `moot compact`. They bounced it
-> back, correctly, 38 seconds after kicking off. Earlier I told `doc-author` to
-> push their WP branch; they accepted, then tested it and hit
-> `could not read Username for 'https://github.com'`.
->
-> **The tell both times: I wrote an instruction whose verb belongs to a
-> capability I hold and the recipient doesn't** — *push, compact, merge, mint*.
-> A duty assigned to a seat that cannot perform it is **worse than the open
-> gap, because everyone then believes it is handled.** A QA/leader seat may
-> carry a **detection** item; the **remedy** always routes to me.
->
-> **Owed: compact all three Runtime seats at the slice 3 → 4 seam** (28/30/30%
-> at kickoff — under the 33% mid-flight ceiling, so letting slice 3 run was the
-> right call; compacting mid-flight would have eaten the just-delivered
-> kickoff).
 3. ✅ **`issues/ABI-REVOKE.md` — FRAMED**, and it is **not shovel-ready by
    design.** Grounding found a blocking prerequisite the charter does not
    name: `62 §4` ties the membrane to a controlling **`36 §4` space cell**,
@@ -155,6 +118,17 @@ This closes DOC-W0's unmet half and **gates Wave 1**.
    a design pass + ADR before any sizing.** PX7's generation table guards
    use-after-close; revocation must deny a handle that is **still valid**.
 4. `BUDGET-EFF` — shovel-ready, queued behind RT-SPLIT, ahead of ABI-M1.
+5. ⏭ **Queued small fix:** rustfmt drift at `crates/ken-runtime/src/store.rs:602`
+   — **pre-existing on `origin/main`**, verified there and not introduced by
+   RT-SPLIT (the implementer reverted rather than bundling it — correct call).
+   One hunk. **Touches `crates/` ⇒ needs the normal ring gates**; a standalone
+   item behind RT-SPLIT, never a rider.
+6. ⏭ **`agent/COORDINATION.md §12a` — `git stash` is now fleet law.** The stash
+   stack is **one stack shared by ~70 worktrees**; a bare `pop` takes whichever
+   agent parked last. ⚠ **Do not reap the existing entries** — they belong to
+   other seats.
+7. ⏭ Sweep ~20 stale `/tmp/ken-*` worktrees. **ASK before touching any with
+   tracked changes.**
 
 ### ⛔ PUBLISH DISCIPLINE — tightened 2026-07-22 after invalidating a Decision
 
