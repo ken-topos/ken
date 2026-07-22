@@ -1,15 +1,34 @@
 ---
 id: SPEC-38-ERRATUM
 title: "spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile"
-status: active
+status: closed
 owner: spec
 size: S
 gate: none
 depends_on: []
 blocks: [BUDGET-EFF]
-github: null
+github: 827
 origin: adversary R1 via docs/program/wp/BUDGET-EFF-remaining-bounded-by-effective-request.md
 ---
+
+> ## ✅ MERGED 2026-07-22 — `origin/main @ e5a400c7` (PR #827)
+>
+> Verified **by content**, not by the publisher's exit code: the merged file
+> is byte-identical to the reviewed blob `fc1d3425`; `effective request`
+> governs both partition rows, the read contract, and the tail-cap clause;
+> the 8→4 target is recorded at `:410`; **no `≤ requested` remains.**
+> Approvals on the exact SHA from conformance-validator (Spec) and Architect;
+> Decision `dec_4mkztzh3f9rxy` resolved.
+>
+> **CLOSED 2026-07-22 — retros in.** Author `evt_6wmrgtrrm5h1t`, validator
+> `evt_7a59bn6r6yrhp`, coordination `evt_4qevmd7mhdnnm`. Carry: define shared
+> normative quantities per operation; keep semantic target / conformance
+> oracle / implementation mechanism as **separate scopes**; re-anchor with
+> both current-base *and* reviewed-subtree byte-identity checks.
+>
+> **Unblocks `BUDGET-EFF`**, which is parked pending operator go. The
+> closure-mechanism call (reply-carries-effective vs. host-caps-the-request-
+> record) is an **Architect** decision and routes with that release, not now.
 
 **Locked** `spec/30-surface/38-ffi-io.md` contradicts itself at exactly the
 point where a read is clamped. Four sites, two incompatible readings:
