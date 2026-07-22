@@ -772,23 +772,35 @@ they are production-private operations whose test-only one-call wrappers stay
 **in the module that owns the original**, under §10.5a. **⛔ Do not read "three
 cross-tree items" as "three instances of one rule."**
 
-> ⛔ **CORRECTED — the pair is NOT co-owned** (Architect `evt_3tgaw9ws44fqg`).
-> An earlier revision of this clause called **both** functions *"artifact
-> operations"* and sent **both** adapters to `artifact/mod.rs`. That premise is
-> **false for `verify_cranelift_function`**, which §10.2 now rules
-> **lowering-owned**. The contrast-case *classification* survives untouched —
-> both are owner-adjacent boundary adapters, not fixture helpers — but the
-> **owning module differs per function**, and the two adapters are therefore
-> **symmetric across the real ownership boundary**, not parallel:
+> ⛔ **CORRECTED TWICE — the population is FOUR, and it is not co-owned.**
+> An earlier revision called **both** functions *"artifact operations"* and sent
+> **both** adapters to `artifact/mod.rs`. That premise is **false for
+> `verify_cranelift_function`**, which §10.2 rules **lowering-owned** (Architect
+> `evt_3tgaw9ws44fqg`). A later revision then said **exactly two** adapters —
+> also false: the **item-axis census** finds **three** artifact-private
+> operations reached by lowering tests, not one (Architect `evt_r0ywa1s4d4j4`).
+> The contrast-case *classification* survives both corrections untouched — every
+> member is an owner-adjacent boundary adapter, not a fixture helper — but the
+> **owning module differs per operation**:
 >
 > | private original | owner | adapter lives in | adapter serves |
 > |---|---|---|---|
 > | `new_jit_module` | `artifact/mod.rs` | `artifact/mod.rs` | lowering tests |
+> | `new_object_module` | `artifact/mod.rs` | `artifact/mod.rs` | lowering tests |
+> | `compile_expr` | `artifact/mod.rs` | `artifact/mod.rs` | lowering constructor tests |
 > | `verify_cranelift_function` | `lowering/mod.rs` | `lowering/mod.rs` | artifact tests |
 >
 > **The rule that generalizes is "the adapter sits beside its private
-> original," never "the adapter sits in `artifact`."** The old wording was
-> right about this pair only by accident of a mis-assigned owner.
+> original," never "the adapter sits in `artifact`."** The old wording was right
+> about the original pair only by accident of a mis-assigned owner.
+>
+> ⛔ **And the population is a CENSUS RESULT, not a cardinality to memorize.**
+> The rule ranges over *artifact-private operations reached by a lowering test*;
+> that set is established by the **item-axis census** recorded in §10.5a′, and
+> **four is its current size, not a constraint the design imposes.** A later
+> census finding a fifth **extends the table** — it does not contradict the
+> frame. Twice now a stated cardinality here has had to be withdrawn, because
+> a number can only ever be falsified while a named population can be re-run.
 
 Classify first:
 
@@ -1139,20 +1151,96 @@ revision — it does not improvise a topical split.**
 > before slice 6 rather than discovered inside it.
 
 > The prior ruling assumed both private operations were artifact-owned. That
-> premise is withdrawn. The invariant that survives is exactly two
-> owner-adjacent `#[cfg(test)] pub(super)` one-call adapters, one per private
-> operation, with zero production visibility spend. §10.5a′ below is the sole
-> binding form.
+> premise is withdrawn. The invariant that survives is **one owner-adjacent
+> `#[cfg(test)] pub(super)` one-call adapter per private operation whose tests
+> cross the ownership boundary**, with zero production visibility spend.
+> §10.5a′ below is the sole binding form.
 
-#### 10.5a′ ⛔ THE CORRECTED SEAM (Architect, `evt_3tgaw9ws44fqg`) — BINDING
+#### 10.5a′ ⛔ THE CORRECTED SEAM — BINDING
 
-**The two adapters are symmetric across the ownership boundary, not parallel
-inside `artifact`.** Each sits beside the private original it exposes:
+**(Architect `evt_3tgaw9ws44fqg`, extended by the item-axis ruling
+`evt_r0ywa1s4d4j4` and its derivation clarification `evt_1g6c51bw45n3y`.)**
+
+> ### ⛔ THE RULE IS THE DERIVATION. THE TABLE IS ITS OUTPUT.
+>
+> **One owner-adjacent test adapter per private operation whose tests cross the
+> ownership boundary.** The **item-axis census** is the mechanism that emits
+> the population. **⛔ Do not state a bare cardinality as an invariant** — not
+> "exactly two", not "exactly four". A later item-axis census may **extend**
+> the table **without contradicting the rule**; a stated number could only be
+> falsified by one.
+>
+> **Four is the exact population this slice must implement**, not a bound the
+> design imposes.
+
+**Census output at `origin/main @ cf91ec5a`** — all nine artifact-destined
+operations were checked; the other six have **zero** lowering-test consumers.
+Each adapter sits beside the private original it exposes:
 
 | private original | owner module | adapter | added in | called by |
 |---|---|---|---|---|
-| `new_jit_module` | `artifact/mod.rs` | `new_jit_module_for_lowering_tests` | slice 6 | `lowering/core/tests/*` |
+| `new_jit_module` | `artifact/mod.rs` | `new_jit_module_for_lowering_tests` | slice 6 | lowering tests — 5 sites across `constructors`/`control`/`effects` |
+| `new_object_module` | `artifact/mod.rs` | `new_object_module_for_lowering_tests` | slice 6 | lowering tests — 6 `control` sites |
+| `compile_expr` | `artifact/mod.rs` | `compile_expr_for_lowering_tests` | slice 6 | lowering constructor tests — 3 sites |
 | `verify_cranelift_function` | **`lowering/mod.rs`** | **`verify_cranelift_function_for_artifact_tests`** | **slice 5** | the two `px8i_*` tests → `artifact/tests.rs` |
+
+> ### ⛔ TWO LEDGERS, TWO AXES — NEITHER SUBSTITUTES FOR THE OTHER
+>
+> | ledger | axis | ranges over | status |
+> |---|---|---|---|
+> | the JIT/verifier inverse-call ledger (§10.5a below) | **user** | test callers of a given operation | complete over **test users**, plus the separately named production caller |
+> | the cross-boundary adapter population (this table) | **item** | private operations reached across the ownership boundary | complete over the **item axis** at `cf91ec5a` |
+>
+> **The user ledger was completed twice — three fixtures → six — which made it
+> feel audited, while the item axis had never been enumerated at all.** The
+> rule's own quantifier says *"per private **operation**"*, so it ranges over
+> items; every ledger built for it counted users. **Completing an enumeration
+> on one axis is not evidence about any other axis**, and a correction *within*
+> an axis is the easiest thing to mistake for coverage *across* axes.
+
+**Why the tests do not move** (`evt_r0ywa1s4d4j4`): §10.2 assigns tests by the
+private behavior they **discriminate**. The six object-module cases discriminate
+oriented-control planning/transport; the three `compile_expr` cases discriminate
+constructor lowering. **Reassigning them into artifact tests would make
+placement follow a setup callee instead of the subject under test** — which
+§10.2a rule 6a and §8 both forbid. Test-user multiplicity still does not
+multiply adapters.
+
+**The three new artifact-owned adapter bodies**, adjacent to their private
+originals in `artifact/mod.rs` (the JIT one already ruled; the other two exact):
+
+```rust
+#[cfg(test)]
+pub(super) fn new_object_module_for_lowering_tests(
+    name: &str,
+) -> Result<ObjectModule, CraneliftBackendError> {
+    new_object_module(name)
+}
+
+#[cfg(test)]
+pub(super) fn compile_expr_for_lowering_tests(
+    expr: &RuntimeExpr,
+    seed_env: &NativeSeedEnvironment,
+) -> Result<CompiledExpr, CraneliftBackendError> {
+    compile_expr(expr, seed_env)
+}
+```
+
+**Existing leaf-test call tokens are preserved through test-only namespace
+wiring** in `lowering/core/tests/mod.rs` — an **import-only** edit, the same
+already-authorized slice-6 test-boundary wiring as the JIT adapter, now complete
+on the item axis:
+
+```rust
+pub(in crate::cranelift_backend) use crate::cranelift_backend::artifact::{
+    compile_expr_for_lowering_tests as compile_expr,
+    new_jit_module_for_lowering_tests as new_jit_module,
+    new_object_module_for_lowering_tests as new_object_module,
+};
+```
+
+⛔ **No production item is widened. No facade alias is added. `lowering/mod.rs`
+remains untouched in slice 6.** No production DAG edge; **budget stays 22/24.**
 
 **Lowering's own tests use the private original — NOT a bridge.** Slice 5 adds
 the explicit private import in `lowering/core/tests/mod.rs` so descendant
@@ -1252,13 +1340,22 @@ and §10.2's subject rule determines their destinations:
 | **`run_borrowed_fixture`** | **`:18535`** | **`lowering/core/tests/effects.rs`** |
 | `px8i_*` (two tests) | `:20977`, `:21005` | `artifact/tests.rs` — calls `new_jit_module` privately, and `verify_cranelift_function_for_artifact_tests` across the boundary (§10.5a′) |
 
-**The user count does not multiply the adapters.** There are exactly **two**
-one-call adapters — one per private operation crossing the ownership boundary —
-not one per tree or per fixture. The five lowering fixture helpers collectively
-use the single artifact-owned `new_jit_module_for_lowering_tests`; the two
-`px8i_*` artifact tests use the single lowering-owned
+**The user count does not multiply the adapters.** There is **one** one-call
+adapter **per private operation crossing the ownership boundary** — not one per
+tree and not one per fixture. The five lowering fixture helpers collectively use
+the single artifact-owned `new_jit_module_for_lowering_tests`; the two `px8i_*`
+artifact tests use the single lowering-owned
 `verify_cranelift_function_for_artifact_tests`. Lowering's own tests call the
-private verifier original. This is why the correction completes
+private verifier original.
+
+> ⚠ **This ledger is the USER axis and settles only user multiplicity.** How
+> many *operations* are in the population is the **item** axis, answered by the
+> census in §10.5a′ — which found **three** artifact-private operations reached
+> by lowering tests, not one. **Completing this ledger said nothing about
+> that**, and reading it as though it had is what left the adapter table short
+> for two revisions. Do not infer the adapter count from anything on this page.
+
+This is why the correction completes
 the ledger without reopening the ruling: **it would only have mattered under a
 per-tree-duplication remedy, which the bridge shape removes from
 consideration.** Moving the production functions to the facade would weaken a
