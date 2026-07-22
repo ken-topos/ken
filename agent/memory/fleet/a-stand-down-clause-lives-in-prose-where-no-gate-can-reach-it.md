@@ -95,6 +95,30 @@ adversary holds no build seat, so it read the kickoff as an outsider rather
 than as someone about to comply. Same as the `pane-busy` identity defect —
 *the author's own seat is the least informative place to test this.*
 
+## ⚠ This is the BOUNDARY of `a-red-base-gate-is-not-your-bug`
+
+[[a-red-base-gate-is-not-your-bug-hold-your-green-candidate]] is real and
+still holds: *a red gate on files you do not own is not your bug — hold the
+green candidate and route the red.* **The clause that failed today was that
+lesson, applied one step too far.**
+
+The difference is **tense**, and it is the whole lesson:
+
+| | |
+|---|---|
+| ✅ **Diagnostic, past tense** | *"`main` is red right now, on a gate your branch did not touch."* A **statement about an observed artifact** — checkable, and wrong only if the observation is wrong. |
+| ⛔ **Predictive, future tense** | *"If your CI shows X, it is not yours."* A **claim about a signal that does not exist yet**, on a diff that does not exist yet. |
+
+The predictive form silently asserts that **nothing the recipient is about to
+write could produce that signal** — and here that assertion was false by
+construction, because the WP's whole job was to edit a file the library corpus
+cites.
+
+⇒ **A true diagnosis of the present becomes a stand-down clause the moment you
+project it onto a future run.** If you catch yourself writing *"if you see X"*,
+you have left the territory the red-base lesson covers. State what is red
+**now**, and route the future case instead of pre-judging it.
+
 ---
 
 Companion to [[when-closure-cannot-be-proven-install-a-known-answer-oracle]]
