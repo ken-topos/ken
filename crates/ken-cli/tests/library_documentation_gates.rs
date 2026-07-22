@@ -774,6 +774,198 @@ fn status_md_generation_is_idempotent() {
     );
 }
 
+// --- library/REVISION resolves in a SHALLOW clone (Steward, PR #830) ------
+//
+// `status_md_generation_is_idempotent` above only ever runs against this
+// worktree, which has full history — it could not have caught PR #830's
+// CI failure. CI's default `actions/checkout` is SHALLOW (depth 1), so
+// `git cat-file -e "${REVISION}^{commit}"` failed for a genuine ancestor
+// of `main` purely because the object was never fetched into that
+// checkout, not because the revision was invalid. The all-zeros mutation
+// proof from an earlier fold only proved the gate REJECTS a fake
+// revision; nobody proved it ACCEPTS a real one in the environment where
+// it actually runs — that is exactly the half that shipped broken.
+//
+// Librarian QA (thr_74hvpkqnxjp9q, CI-red fold): a first cut of this test
+// cloned `--depth=1` from `file://{repo_root()}` — but in CI, `repo_root`
+// IS the shallow checkout under test, so its own `origin` can't supply
+// the missing object either, and the test would fail in exactly the
+// environment it exists to protect (a self-defeating regression, worse
+// than none — it would have permanently blocked this fold from ever
+// going green in CI). Fixed by building a fully SYNTHETIC upstream in a
+// scratch directory: real git history, the real `gen-doc-status.sh`
+// script copied byte-for-byte, its own manifest/REVISION — independent of
+// whatever state this test's own checkout happens to be in. The synthetic
+// `origin` plays the role CI's real GitHub remote plays for the real
+// script: it always has full history, regardless of how shallow the
+// checkout that clones from it is.
+fn run_git(args: &[&str], cwd: &Path) -> String {
+    let out = std::process::Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .env("GIT_AUTHOR_NAME", "doc-w0-fixture")
+        .env("GIT_AUTHOR_EMAIL", "fixture@example.invalid")
+        .env("GIT_COMMITTER_NAME", "doc-w0-fixture")
+        .env("GIT_COMMITTER_EMAIL", "fixture@example.invalid")
+        .output()
+        .unwrap_or_else(|e| panic!("run git {args:?}: {e}"));
+    assert!(
+        out.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+fn object_present(rev: &str, cwd: &Path) -> bool {
+    // `output()`, not `status()`: git's own "not a valid object name"
+    // diagnostic on the expected-absent pre-check would otherwise leak to
+    // the test harness's terminal even though this call succeeding
+    // (returning `false`) is the correct, asserted-for outcome.
+    std::process::Command::new("git")
+        .args(["cat-file", "-e", &format!("{rev}^{{commit}}")])
+        .current_dir(cwd)
+        .output()
+        .expect("run git cat-file")
+        .status
+        .success()
+}
+
+#[test]
+fn shallow_clone_self_heals_from_an_independent_full_history_origin() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-w0-synthetic-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    // Build the synthetic upstream: minimal but real library/ substrate,
+    // the actual script under test, several commits of unrelated history
+    // after the REVISION-anchored commit (so a depth=1 clone of the tip
+    // genuinely lacks it), then a final commit pointing REVISION at that
+    // distant ancestor — mirroring how this WP has actually bumped
+    // library/REVISION on every rebase fold.
+    let origin = base.join("origin");
+    std::fs::create_dir_all(&origin).expect("create origin dir");
+    run_git(&["init", "--quiet", "-b", "main"], &origin);
+    std::fs::create_dir_all(origin.join("scripts")).unwrap();
+    std::fs::create_dir_all(origin.join("library")).unwrap();
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(origin.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        origin.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\n",
+    )
+    .unwrap();
+    std::fs::write(origin.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(origin.join("library/REVISION"), "0".repeat(40)).unwrap();
+    run_git(&["add", "-A"], &origin);
+    run_git(&["commit", "--quiet", "-m", "initial"], &origin);
+    let revision_target = run_git(&["rev-parse", "HEAD"], &origin);
+
+    for i in 0..20 {
+        std::fs::write(origin.join(format!("filler-{i}.txt")), format!("filler {i}\n")).unwrap();
+        run_git(&["add", "-A"], &origin);
+        run_git(&["commit", "--quiet", "-m", &format!("filler {i}")], &origin);
+    }
+    std::fs::write(
+        origin.join("library/REVISION"),
+        format!("{revision_target}\n"),
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &origin);
+    run_git(
+        &["commit", "--quiet", "-m", "anchor REVISION at the distant ancestor"],
+        &origin,
+    );
+    let tip = run_git(&["rev-parse", "HEAD"], &origin);
+
+    // The checkout under test: a real depth=1 clone of the SYNTHETIC
+    // origin — not of this test's own (possibly shallow, in CI)
+    // checkout. Same topology as CI's `actions/checkout`, but the source
+    // of truth is self-contained.
+    let checkout = base.join("checkout");
+    let clone_status = std::process::Command::new("git")
+        .args(["clone", "--quiet", "--depth=1"])
+        .arg(format!("file://{}", origin.display()))
+        .arg(&checkout)
+        .status()
+        .expect("run git clone --depth=1");
+    assert!(clone_status.success(), "git clone --depth=1 failed");
+
+    assert_eq!(
+        run_git(&["rev-parse", "HEAD"], &checkout),
+        tip,
+        "clone did not land on the intended tip commit"
+    );
+    assert_eq!(
+        run_git(&["rev-parse", "--is-shallow-repository"], &checkout),
+        "true",
+        "test setup did not produce an actually-shallow checkout"
+    );
+    assert!(
+        !object_present(&revision_target, &checkout),
+        "test setup: the shallow checkout must NOT already have the \
+         REVISION object, or this regression proves nothing"
+    );
+
+    // Positive: the real, committed REVISION — a genuine distant ancestor
+    // whose object this shallow checkout did not fetch up front — must
+    // resolve by self-healing from the synthetic origin.
+    let positive = std::process::Command::new("bash")
+        .arg(checkout.join("scripts/gen-doc-status.sh"))
+        .current_dir(&checkout)
+        .output()
+        .expect("run gen-doc-status.sh in the shallow checkout");
+    assert!(
+        positive.status.success(),
+        "gen-doc-status.sh failed on a real ancestor revision in a shallow \
+         checkout against an independent full-history origin — this is the \
+         exact PR #830 CI failure shape. stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&positive.stdout),
+        String::from_utf8_lossy(&positive.stderr)
+    );
+    assert!(
+        object_present(&revision_target, &checkout),
+        "generator reported success without actually fetching the \
+         REVISION object into the checkout"
+    );
+
+    // Negative, same checkout: a fake all-zero id must still be rejected
+    // — self-healing a shallow clone must not turn into accepting
+    // anything just because deepening happened to occur.
+    std::fs::write(
+        checkout.join("library/REVISION"),
+        "0000000000000000000000000000000000000000",
+    )
+    .expect("overwrite REVISION with a fake id");
+    let negative = std::process::Command::new("bash")
+        .arg(checkout.join("scripts/gen-doc-status.sh"))
+        .current_dir(&checkout)
+        .output()
+        .expect("run gen-doc-status.sh with a fake REVISION");
+    assert!(
+        !negative.status.success(),
+        "gen-doc-status.sh accepted an all-zero fake REVISION in a shallow \
+         checkout — the shallow-clone self-heal must not mask a genuinely \
+         invalid revision"
+    );
+    assert!(
+        String::from_utf8_lossy(&negative.stderr).contains("does not resolve to a real commit"),
+        "expected the fake-revision diagnostic, got stderr:\n{}",
+        String::from_utf8_lossy(&negative.stderr)
+    );
+}
+
 // --- authority class is one of D1's closed set -----------------------------
 
 #[test]

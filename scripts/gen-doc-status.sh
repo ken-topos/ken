@@ -66,8 +66,58 @@ if ! printf '%s' "$REVISION" | grep -qE '^[0-9a-f]{40}$'; then
   echo "gen-doc-status: library/REVISION must be a full 40-hex commit id, got: '${REVISION}'" >&2
   exit 1
 fi
+
+# Environment assumption this check makes, stated explicitly (Steward,
+# thr_74hvpkqnxjp9q, PR #830 CI failure): `cat-file -e`/`merge-base` need
+# the commit OBJECT present in the local object database, not merely a
+# valid-looking hex string — but CI's default checkout (and any local
+# `git clone --depth=N`) is SHALLOW, so a real ancestor's object can be
+# genuinely absent even though it truly is an ancestor in the repository's
+# full history. "Not present in this shallow clone" and "not a real
+# commit" are indistinguishable from `cat-file -e`'s exit code alone, so a
+# bare shallow clone would silently condemn a valid revision — which is
+# exactly what broke PR #830 (a real ancestor of `main`, rejected only
+# because the CI runner's checkout never fetched it).
+#
+# Fixed by detecting a shallow repository and, only if the object is
+# still missing, deepening just enough to find it — escalating rather
+# than always paying for a full `--unshallow` (which every CI run would
+# otherwise trigger unconditionally, since CI's checkout is shallow by
+# default and this gate runs on every PR). `library/REVISION` is normally
+# bumped to a recent ancestor on each rebase (see the fold history in this
+# WP), so a modest deepen resolves the common case; an old anchor still
+# resolves via the `--unshallow` fallback, just at higher cost.
+SELF_HEAL_ATTEMPTED=0
+if [ "$(git -C "$REPO_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ] \
+   && ! git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null; then
+  SELF_HEAL_ATTEMPTED=1
+  for DEPTH in 50 500 5000 50000; do
+    git -C "$REPO_ROOT" fetch --quiet --deepen="$DEPTH" origin 2>/dev/null || true
+    git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null && break
+  done
+  if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null; then
+    git -C "$REPO_ROOT" fetch --quiet --unshallow origin 2>/dev/null || true
+  fi
+fi
+
 if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null; then
-  echo "gen-doc-status: library/REVISION '${REVISION}' does not resolve to a real commit object" >&2
+  if [ "$SELF_HEAL_ATTEMPTED" = "1" ]; then
+    # Librarian QA (thr_74hvpkqnxjp9q, CI-red fold): distinguish "we
+    # deepened a shallow clone and the object is still missing" — which
+    # points at the REMOTE (unreachable, or the object genuinely isn't
+    # there) — from the plain shape-only case below, where deepening was
+    # never even attempted because the checkout already had full history.
+    # Conflating them into one message hides which side of the fence the
+    # failure is on. Keeps the "does not resolve to a real commit object"
+    # phrase as a common substring with the plain case so a caller
+    # matching on that text doesn't need to special-case this branch.
+    echo "gen-doc-status: library/REVISION '${REVISION}' does not resolve to a real commit object" >&2
+    echo "  even after deepening this shallow clone (tried --deepen=50/500/5000/50000" >&2
+    echo "  and --unshallow against 'origin') — either the object does not exist" >&2
+    echo "  upstream, or 'origin' was unreachable" >&2
+  else
+    echo "gen-doc-status: library/REVISION '${REVISION}' does not resolve to a real commit object" >&2
+  fi
   exit 1
 fi
 if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" HEAD 2>/dev/null; then
