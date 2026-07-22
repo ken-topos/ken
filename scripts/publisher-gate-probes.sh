@@ -462,14 +462,36 @@ if grep -q 'currency checker is green' <<<"$out"; then bad "printed the GREEN se
 if [ -f "$(marker)" ]; then ok "publication FROZEN"; else bad "no freeze marker"; fi
 rm -f "$(marker)"
 
-head_ "Probe 12c -- a freeze that cannot be PERSISTED must not report success"
+head_ "Probe 12c -- an unpersistable freeze, called the way PRODUCTION calls it"
+# ⛔ The previous 12c `if`-wrapped freeze_publication. That puts the body in a
+#    CONDITION CONTEXT, which suppresses `set -e` inside it -- so the probe ran
+#    a different execution mode from production and reported the diagnosis
+#    firing when in production the shell aborted at the failed redirect, before
+#    the diagnosis and before the caller's die(). @architect caught it.
+#    ⇒ The discriminator is a PLAIN call under `set -e`: does the diagnosis
+#      survive at all? Under the old code it cannot.
 build_sandbox
 out="$(run_gate '
+  set -e
   freeze_marker_path() { printf "%s\n" "/nonexistent-dir-$$/ken-publisher-FROZEN"; }
-  if freeze_publication "planted reason"; then echo FREEZE_RC=0; else echo FREEZE_RC=1; fi
+  freeze_publication "planted reason"
+  echo UNREACHABLE_IF_SET_E_FIRES=1')"
+if grep -q 'COULD NOT BE PERSISTED' <<<"$out"; then
+  ok "PLAIN call under set -e: the diagnosis still reaches the operator"
+else
+  bad "PLAIN call under set -e: shell aborted at the failed write -- NO diagnosis, and the caller's die() never runs"
+fi
+
+# And in the production CALL SHAPE, execution must continue so die() can name
+# the reason the freeze was attempted in the first place.
+out="$(run_gate '
+  set -e
+  freeze_marker_path() { printf "%s\n" "/nonexistent-dir-$$/ken-publisher-FROZEN"; }
+  freeze_publication "planted reason" || true
+  echo REACHED_DIE_POINT=1
   refuse_if_frozen && echo NEXT_PUBLISH_PROCEEDED=1')"
-if grep -q 'FREEZE_RC=0' <<<"$out"; then bad "freeze_publication returned SUCCESS while writing nothing"; else ok "freeze_publication reported failure when it could not persist"; fi
-if grep -q 'COULD NOT BE PERSISTED' <<<"$out"; then ok "and said so loudly, naming that later publishes are NOT blocked"; else bad "silent about the unpersisted freeze"; fi
+if grep -q 'REACHED_DIE_POINT=1' <<<"$out"; then ok "production call shape: control reaches die(), so the REASON is still reported"; else bad "control never reached the die() point -- the alarm's reason would be lost"; fi
+if grep -q 'NEXT_PUBLISH_PROCEEDED=1' <<<"$out"; then ok "and it does NOT pretend the next publish is frozen (it is not)"; else bad "claims a freeze that was never written"; fi
 
 printf '\n=== %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
