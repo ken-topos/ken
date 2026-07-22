@@ -485,6 +485,64 @@ shared boundary and may consume most of one slice's allowance. The `Lowering`
 fields and the 79 support methods should consume **zero** new visibility,
 because `core` is their descendant.
 
+### 10.4a ⛔ SLICE 3 SEAM REVISION — the budget forced an encapsulated seam
+
+**Architect ruling `evt_725trc8dfag3c`, 2026-07-22, after slice 2's ledger.**
+This is a **§10.5 seam revision**, binding on slice 3. It is **not** permission
+to spend through the cap.
+
+**The arithmetic from landed code is decisive:**
+
+| slice | new widenings |
+|---|---:|
+| 1 `surface` | 3 |
+| 2 `planning` (candidate) | 9 → **cumulative 12** |
+| 3 `compiled`, **literal** extraction — `CompiledModule` + its eight fields + `CompiledExpr` + `ResultDecoder` + `run` | **12** |
+| 4 — `lowering::core::compile_expr_into_module` exposed to sibling `artifact` at `pub(in crate::cranelift_backend)`, unavoidable | ≥ 1 |
+
+**A literal field widening reaches 25 before slices 5–7 even start.** The 24
+cap is therefore **doing its job**: it forces an encapsulated seam rather than
+normalizing a bag of public-to-parent fields. **Do not raise the cap.**
+
+**Required slice-3 shape:**
+
+1. Move `CompiledModule`, `CompiledExpr`, `ResultDecoder`, and `run` to
+   `compiled.rs` as already ruled.
+2. Add **one** parent-confined associated constructor, exact intent
+   `pub(super) fn from_parts(...) -> Self`, used at the existing **three**
+   `CompiledModule { … }` construction sites. **Its body is a transparent
+   one-to-one struct literal: no validation, no defaults, no clones, no
+   reordering, no policy.** This is the explicitly authorized
+   **namespace-wiring delta** — ledger it and review it **separately** from
+   ordered moved-item identity (§7 AC-3).
+3. **Keep construction-only fields private:** `func_id`, `decoder`,
+   `result_table`, `trap`.
+4. **Only the four fields consumed outside `compiled` may be `pub(super)`:**
+   `module`, `verifier_passed`, `assumptions`, `unsupported`. Their reachable
+   set is **delta-zero** relative to parent-private fields before extraction.
+5. `CompiledModule`, `CompiledExpr`, `ResultDecoder`, `from_parts`, `run`, and
+   those four fields are **9 slice-3 seams, not 12. Count the new constructor
+   as a seam.**
+6. Slice 4's `compile_expr_into_module` is the forecast **tenth** post-planning
+   seam. **Projected series total 22**, leaving two items of contingency.
+   Slices 5–7 are still expected to consume **zero** new widenings, because
+   `core` is a descendant of lowering support and `api` is a descendant of
+   `artifact`. **Any contrary dry-run stops before cutting.**
+
+**Before slice 3 moves any code:** produce the proposed exact visibility ledger
+and confirm projected cumulative **≤ 24**. **If the constructor cannot remain
+the transparent packing seam described above, stop and return the actual
+consumer graph** — do not improvise a validating or defaulting constructor to
+make the arithmetic work.
+
+> **⚠ Why this is worth the ceremony.** The tempting move at slice 3 is to
+> widen the eight fields and note that the budget is "nearly" fine. That
+> normalizes a container whose internals are public to its parent, which is the
+> precise outcome the decomposition exists to avoid — and it would be
+> discovered at slice 6, when there is no cheap way back. **The budget is not a
+> resource to consume efficiently; it is a detector for a seam that should have
+> been encapsulated.**
+
 ### 10.5 Slice order
 
 1. `surface`
