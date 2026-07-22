@@ -219,26 +219,46 @@ fi
 # matching this file's other single-pass, controlled-subset parsers) so a
 # `status`-kind document's own sources are excluded from extraction
 # entirely, not filtered out downstream by path.
+# Librarian QA (thr_15yrvjrpap9td, second pass): TOML duplicate keys are
+# invalid but NEITHER consumer here rejects them, and an earlier cut of
+# this awk decided "is this record's sources checked" the instant a
+# `sources = [...]` block closed — using whatever `kind` had been seen SO
+# FAR. Live repro (scratch probe `e9927bec`): `kind = "status"` placed
+# right before `sources`, `kind = "portal"` restored right after it — the
+# Rust gate's `parse_manifest` (which, like the render awk elsewhere in
+# this file, keeps whatever `key =` value it saw LAST for the whole
+# record) computes a final `kind` of `portal` and expects `source-currency`
+# to apply; this awk, deciding at `sources`-close time, saw `status` and
+# silently dropped the source from `CITED_SOURCES` — a body-drifted cited
+# source stayed green end-to-end. Fixed by making the decision at the
+# SAME point Rust makes it: buffer this record's sources text and defer
+# the "checked or not" decision to the record's END (the next
+# `[[document]]`, or EOF) — using the FINAL `kind` for the whole record,
+# identically to the Rust parser and to this file's own render awk, so a
+# duplicate/out-of-order `kind` line can no longer desync the two.
 CITED_SOURCES="$(awk '
-  /^\[\[document\]\]/ { kind = "" }
-  /^kind[[:space:]]*=/ {
-    k = $0
-    sub(/^kind[[:space:]]*=[[:space:]]*"/, "", k)
-    sub(/".*/, "", k)
-    kind = k
-  }
-  /^sources[[:space:]]*=/ { capture = 1; buf = "" }
-  capture { buf = buf "\n" $0 }
-  capture && /\]/ {
-    capture = 0
-    if (kind != "status") {
+  function flush_record() {
+    if (kind != "status" && buf != "") {
       line = buf
       while (match(line, /"[^"]*"/)) {
         print substr(line, RSTART + 1, RLENGTH - 2)
         line = substr(line, RSTART + RLENGTH)
       }
     }
+    kind = ""; buf = ""; capture = 0
   }
+  /^\[\[document\]\]/ { flush_record(); next }
+  /^kind[[:space:]]*=/ {
+    k = $0
+    sub(/^kind[[:space:]]*=[[:space:]]*"/, "", k)
+    sub(/".*/, "", k)
+    kind = k
+    next
+  }
+  /^sources[[:space:]]*=/ { capture = 1; buf = "" }
+  capture { buf = buf "\n" $0 }
+  capture && /\]/ { capture = 0 }
+  END { flush_record() }
 ' "$MANIFEST" | sed 's/#.*//' | sort -u)"
 
 # Librarian QA (thr_15yrvjrpap9td, first pass, finding 2): a cited source
@@ -263,7 +283,7 @@ while IFS= read -r path; do
   mode_head="$(git -C "$REPO_ROOT" ls-tree HEAD -- "$path" 2>/dev/null | awk '{print $1; exit}')"
   mode_rev="$(git -C "$REPO_ROOT" ls-tree "$REVISION" -- "$path" 2>/dev/null | awk '{print $1; exit}')"
   if [ "$mode_head" = "120000" ] || [ "$mode_rev" = "120000" ]; then
-    DRIFTED="${DRIFTED}  - ${path} (symlink source — content-currency cannot verify through a\n    symlink indirection; cite the real file the symlink resolves to instead)
+    DRIFTED="${DRIFTED}  - ${path} (symlink source — content-currency cannot verify through a symlink indirection; cite the real file it resolves to instead)
 "
     continue
   fi

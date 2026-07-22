@@ -1416,6 +1416,95 @@ fn content_currency_gate_rejects_a_symlink_source_even_when_its_target_is_unchan
     );
 }
 
+// Librarian QA (thr_15yrvjrpap9td, second pass), reproduced as a committed
+// regression (their scratch probe `e9927bec` was detached, not committed):
+// a duplicate, out-of-order `kind` field desynced the two consumers. The
+// Rust gate's `parse_manifest` keeps whatever `kind =` value it saw LAST
+// for the whole record (same as this file's render awk elsewhere); an
+// earlier cut of the shell's source-extraction awk instead decided
+// "checked or not" the instant `sources = [...]` closed, using whatever
+// `kind` had been seen SO FAR — so `kind = "status"` placed immediately
+// before `sources`, with `kind = "explanatory"` restored immediately
+// after, made the shell see `status` (skip the source) while the record's
+// real, final kind is `explanatory` (source-currency applies). Proves the
+// fix: the shell must defer to the record's final `kind`, exactly like
+// the Rust parser, so this can no longer stay green.
+#[test]
+fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_kind_field() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-dup-kind-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::create_dir_all(repo.join("library")).unwrap();
+    std::fs::create_dir_all(repo.join("docs")).unwrap();
+    run_git(&["init", "--quiet", "-b", "main"], &repo);
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(repo.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        repo.join("docs/example.md"),
+        "# Example\n\n## A Heading\n\noriginal content\n",
+    )
+    .unwrap();
+    // `kind = "status"` right before `sources`, `kind = "explanatory"`
+    // (the record's REAL, final kind) restored right after — the exact
+    // field placement from the live probe.
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"status\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = [\n  \
+         \"docs/example.md#a-heading\",\n]\nkind = \"explanatory\"\n",
+    )
+    .unwrap();
+    std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "initial: manifest + duplicate kind"],
+        &repo,
+    );
+    let revision = run_git(&["rev-parse", "HEAD"], &repo);
+    std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+
+    // Drift the cited source's body under an unchanged heading, WITHOUT
+    // bumping REVISION — this must be caught despite the duplicate-kind
+    // decoy.
+    std::fs::write(
+        repo.join("docs/example.md"),
+        "# Example\n\n## A Heading\n\nMUTATED — must be caught despite the decoy.\n",
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "drift the cited source"], &repo);
+
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a drifted cited source because a \
+         duplicate, out-of-order `kind` field made the shell's extraction \
+         see a stale (`status`) kind at the moment `sources` closed, \
+         instead of the record's real final kind (`explanatory`)"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("docs/example.md") && stderr.contains("changed between REVISION"),
+        "expected a diagnostic naming the drifted source, got stderr:\n{stderr}"
+    );
+}
+
 // --- authority class is one of D1's closed set -----------------------------
 
 #[test]
