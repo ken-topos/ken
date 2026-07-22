@@ -14,12 +14,15 @@ transitively-inferred behavior, and a disagreement in either direction is a
 hard error at the definition site
 (`spec/30-surface/36-effects.md`
 [§1.6.2](../../../spec/30-surface/36-effects.md#162-the-bidirectional-check--the-keyword-cannot-lie)).
-Concretely: an `fn` that performs an effect is rejected, and a `proc` whose
-body turns out to be provably pure — carrying no real effect — is flagged
-as a should-be-`fn` mismatch. This is why reading a signature first (chapter
-01, §4) is not just a convenient habit: the signature is a promise the
-elaborator itself enforces, not a description the author could have gotten
-away with getting wrong.
+Concretely: an `fn` that performs an effect is rejected, and a `proc`
+whose *declared* row is empty — and which is not a `space` operation — is
+flagged as a should-be-`fn`/`const` mismatch. A `proc` that declares a
+non-empty row is still honest even when its current body happens to be
+pure: declaring more than the body presently uses is legitimate stable-
+interface headroom, not a violation. This is why reading a signature
+first (chapter 01, §4) is not just a convenient habit: the signature is a
+promise the elaborator itself enforces, not a description the author
+could have gotten away with getting wrong.
 
 That promise is about **purity and effects**. It says nothing yet about
 *which value* a function returns for a given input, or *why* — that is a
@@ -78,7 +81,8 @@ proof some for get_or_else (a : Type) (d : a) (v : a) : Equal a (get_or_else a d
   Refl
 ```
 
-The signature promises only "pure function, `a → a → Option a → a`." The
+The signature promises only "pure function, `(a : Type) → a → Option a →
+a`." The
 two attached proofs are the actual contract a reader wants: at `None`, the
 result is exactly the default `d`; at `Some v`, the result is exactly `v`.
 Each is proved by `Refl` — the equation holds by computation alone, because
@@ -99,22 +103,28 @@ looking at, or only after further computation.
 every attached proof and lemma, against the kernel. A passing check
 therefore does establish that every stated equation is proved. It does
 not, by itself, tell you *which closing term* discharged each one, and
-that closing term is itself informative. `get_or_else`'s two proofs above
-both close with `Refl`, over the open, still-abstract variables `a` and
-`d` — the two sides of each equation reduce to the identical term without
-either side ever becoming a fully closed, concrete value.
+that closing term is itself informative. The normative rule is stated
+directly, not merely illustrated by occurrence: a claim closes by `Refl`
+when its two endpoints reduce to a **neutral** term — stuck, still open —
+so the goal stays `Eq`-shaped; it closes by `Proved` when both endpoints
+instead reduce to the **same constructor head**, which observationally
+collapses the equality itself to `Top`, a shape `Refl` (which requires a
+live `Eq` goal) no longer applies to
+(`spec/50-stdlib/55-lawful-functors.md`
+[§3.2](../../../spec/50-stdlib/55-lawful-functors.md#32-the-proved-vs-refl-discrimination-a-load-bearing-k7-subtlety)).
+`get_or_else`'s two proofs above both close with `Refl`, over the open,
+still-abstract variables `a` and `d` — the two sides of each equation
+reduce to the identical, but not fully closed, neutral term.
 `catalog/packages/Core/Logic/EmptyDec.ken.md`'s own Laws & proofs section
 closes a different kind of claim — `decide`/`true_is_true`/
 `true_is_not_false`, all closed, fully-applied terms — with `Proved`
-instead, because there both sides reduce all the way to the same concrete
-`Bool` constructor and the equality itself collapses to `Top` before
-`Proved` is even checked; the entry states explicitly that `Refl` would
-not apply there, "since neither side is stuck." Reading which closing term
-a proof actually uses, and whether the terms it relates are still open or
-already fully closed, tells you something `ken check`'s bare exit code
-does not: this is the discipline chapter 03 builds on directly — a checked
-file tells you a stated claim was proved, not by itself which of Ken's
-several honest verification statuses that claim carries.
+instead, exactly because both sides there reduce all the way to the same
+concrete `Bool` constructor. Reading which closing term a proof actually
+uses, and whether the terms it relates are still open or already fully
+closed, tells you something `ken check`'s bare exit code does not: this
+is the discipline chapter 03 builds on directly — a checked file tells
+you a stated claim was proved, not by itself which of Ken's several
+honest verification statuses that claim carries.
 
 ## Reader can now answer
 
@@ -131,7 +141,8 @@ several honest verification statuses that claim carries.
 **Grounds this page:**
 `spec/30-surface/36-effects.md` §1.6.2;
 `spec/30-surface/33-declarations.md` §§8, 8.1–8.3;
-`docs/program/07-catalog-style-guide.md` §6.
+`docs/program/07-catalog-style-guide.md` §6;
+`spec/50-stdlib/55-lawful-functors.md` §3.2.
 Authority class: `explanatory` — this page orders and interprets those
 sections and the cited fragments' own text; it does not assert a rule they
 do not already state. Fragments cited are drawn from the already-selected,

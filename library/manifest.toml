@@ -124,6 +124,7 @@ availability = "current"
 sources = [
   "docs/program/07-catalog-style-guide.md#1-the-entry-is-a-literate-kenmd-document",
   "docs/program/07-catalog-style-guide.md#2-the-standard-entry-format",
+  "docs/program/07-catalog-style-guide.md#5-findings--retired-from-the-catalog-entry-2026-07-11",
   "spec/30-surface/33-declarations.md#1-definitions",
   "catalog/packages/Core/Logic/EmptyDec.ken.md",
   "catalog/packages/Data/Sums/Combinators.ken.md",
@@ -153,6 +154,7 @@ sources = [
   "spec/30-surface/33-declarations.md#82-attached-proofs--proof",
   "spec/30-surface/33-declarations.md#83-standalone-lemmas--lemma",
   "docs/program/07-catalog-style-guide.md#6-proof-presentation",
+  "spec/50-stdlib/55-lawful-functors.md#32-the-proved-vs-refl-discrimination-a-load-bearing-k7-subtlety",
   "catalog/packages/Core/Logic/Transport.ken.md",
   "catalog/packages/Data/Sums/Combinators.ken.md",
   "catalog/packages/Core/Logic/EmptyDec.ken.md",

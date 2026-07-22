@@ -1,8 +1,9 @@
 # 01 — Anatomy: orienting in a source file
 
-Every Ken source file you will read in this corpus is a **literate
-`.ken.md` document** — narrative prose and checked code in one file, not a
-separate doc comment bolted onto a separate source file
+Each of this curriculum's selected fragments is a **literate `.ken.md`
+document** — a catalog package's primary artifact, carrying narrative
+prose and checked code in one file, not a separate doc comment bolted onto
+a separate source file
 (`docs/program/07-catalog-style-guide.md`
 [§1](../../../docs/program/07-catalog-style-guide.md#1-the-entry-is-a-literate-kenmd-document)).
 This chapter teaches the shape that gives you: where to look first, what
@@ -15,10 +16,14 @@ A standard catalog entry has a fixed **front matter** — an H1 title with a
 one-line statement of intent, an index of anchor links, and a set of named
 reading paths that route a *Newcomer*, a *Practitioner*, a *Researcher*, and
 someone *porting from Haskell/Lean/Agda* to a different depth — followed by
-eight **required sections, in this order**: Motivation, Definition, Using
-it, Laws & proofs, Design notes, Findings, References, Trust & derivation
+**required sections, in order**: Motivation, Definition, Using it, Laws &
+proofs, Design notes, References, Trust & derivation
 (`07-catalog-style-guide.md`
 [§2](../../../docs/program/07-catalog-style-guide.md#2-the-standard-entry-format)).
+A **Findings** section is retired from new entries — its function moved to
+a live gap-escalation flow outside the catalog entry itself
+(`07-catalog-style-guide.md`
+[§5](../../../docs/program/07-catalog-style-guide.md#5-findings--retired-from-the-catalog-entry-2026-07-11)).
 That fixed order is itself information: it tells you, before you read a
 single declaration, where the checked code lives (Definition), where the
 checked contract lives (Laws & proofs), and where the trust accounting
@@ -110,7 +115,7 @@ a stylistic habit; it is the discipline the next chapter builds on.
 ---
 
 **Grounds this page:**
-`docs/program/07-catalog-style-guide.md` §§1–2;
+`docs/program/07-catalog-style-guide.md` §§1, 2, 5;
 `spec/30-surface/33-declarations.md` §1.
 Authority class: `explanatory` — this page orders and interprets those
 sections and the cited fragments' own text; it does not assert a rule they
