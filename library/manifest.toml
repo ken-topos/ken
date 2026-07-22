@@ -103,6 +103,7 @@ sources = [
   "catalog/examples/CommandLine/Forge.ken.md",
   "docs/program/07-catalog-style-guide.md#3-code-block-roles-the-fence-taxonomy",
   "docs/program/07-catalog-style-guide.md#13-path--import--the-normative-rule",
+  "spec/30-surface/33-declarations.md#32-importing-and-exporting",
 ]
 validation = [
   "manifest-coverage",
