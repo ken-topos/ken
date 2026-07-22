@@ -559,9 +559,10 @@ producer does not satisfy any gate.
 
 The I-4 §C RESHAPE keeps `readFile` authority-polymorphic and `writeFile`
 monomorphic at `AFull`. Both wrappers only consume the opaque capability minted
-from the parsed header. Ken source has no capability constructor and no
-capability-producing `attenuate`; the separate monotone-downward semantic
-operation remains runner-internal (`62 §3`).
+from the parsed header. Ken source has no capability constructor,
+capability-producing `attenuate`, or callable `revoke`; the separate
+monotone-downward and revocation management actions remain runner/host-internal
+(`62 §3`/`§4`).
 
 ### surface/modules/program-capabilities-clause-carries-declared-authority
 
@@ -710,23 +711,24 @@ operation remains runner-internal (`62 §3`).
 
 ### surface/modules/no-ken-callable-capability-introduction
 
-- spec: `38 §1.3.1`, `62 §2.2`/`§3`, and the I-4 §C RESHAPE ruling
+- spec: `38 §1.3.1`, `62 §2.2`/`§3`/`§4`, and the I-4 §C RESHAPE ruling
 - fixture: after §B registers `readFile` and `writeFile`, inspect the real Ken
-  source environment and separately attempt to resolve `attenuate`. Enumerate
-  the opaque `Cap` declaration's constructor surface rather than guessing a
-  constructor spelling.
-- expect: the two consuming wrappers are present, `attenuate` resolution fails
-  with the named `UnboundName { name = attenuate }` surface diagnostic, and
-  `Cap` exposes no constructor. No other Ken-callable global has a result headed
-  by `Cap`. The runner's internal mint and semantic attenuation remain outside
-  this source environment.
-- gate: **RED UNTIL I-4 §B.** Before the positive wrappers land, an absent
-  `attenuate` alone is vacuous. The gate is reachable only when the same real
-  environment contains both wrapper consumers while still exposing no
-  capability producer or constructor.
+  source environment and separately attempt to resolve `attenuate` and `revoke`.
+  Enumerate the opaque `Cap` declaration's constructor surface rather than
+  guessing a constructor spelling.
+- expect: the two consuming wrappers are present; resolution fails with the
+  named `UnboundName { name = attenuate }` and
+  `UnboundName { name = revoke }` surface diagnostics; and `Cap` exposes no
+  constructor. No other Ken-callable global has a result headed by `Cap`. The
+  runner/host's internal mint, attenuation, and revocation management remain
+  outside this source environment.
+- gate: **RED UNTIL I-4 §B.** Before the positive wrappers land, absent
+  management names alone are vacuous. The gate is reachable only when the same
+  real environment contains both wrapper consumers while still exposing no
+  capability producer, constructor, attenuator, or revoker.
 - why: the positive-and-absence conjunction prevents green-vs-green. A build
-  that drops all three names, or exposes a differently named capability
-  constructor, fails the structural enumeration.
+  that drops the wrappers or exposes either raw action or a differently named
+  capability producer fails the structural enumeration.
 
 ### surface/modules/admits-only-does-not-mint-capability
 
@@ -901,8 +903,9 @@ operation remains runner-internal (`62 §3`).
 - **Capability introduction is runner-only.** The polymorphic read pair and
   monomorphic write pair consume only header-derived `ProgramCaps` fields. The
   adjacent surface-enumeration case requires those consumers to exist while
-  `attenuate` and every `Cap` constructor remain absent. Semantic attenuation
-  in `62 §3` is preserved at the runner boundary, never re-exported to Ken.
+  `attenuate`, `revoke`, and every `Cap` constructor/producer remain absent.
+  Semantic management in `62 §3`/`§4` stays at the runner/host boundary, never
+  re-exported to Ken.
 
 ## Subsumed / not-duplicated (one home per property)
 
