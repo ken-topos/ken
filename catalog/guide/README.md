@@ -84,11 +84,13 @@ forgotten or deferred on purpose:
 - **Modules, imports, and the package system** (`spec/30-surface/33-declarations.md
   §3`) are not covered in depth — the catalog tree now mirrors Section >
   Domain and a dotted `import A.B.C` is regular addressing for it
-  (`07-catalog-style-guide.md` "Path ⇔ import"), but **cross-file `import`
-  does not resolve yet** (no disk loader) — the working pattern for a
+  (`07-catalog-style-guide.md` "Path ⇔ import"). The loader itself resolves
+  cross-file `import` (`spec/30-surface/33-declarations.md:147-158`), but
+  **no landed catalog entry yet exercises the cross-file case** — a
+  corpus-coverage gap, not a capability one. The working pattern for a
   catalog entry that needs another package's helper is still DS-1's
-  inline-a-small-helper idiom (`Core/Logic/EmptyDec.ken.md §6`), not a working
-  cross-file mechanism.
+  inline-a-small-helper idiom (`Core/Logic/EmptyDec.ken.md §6`), not a
+  cross-file `import`.
 - **Effect handlers beyond `visits [Console]`/`visits [FS]`** — the row
   *type* is covered (Surface reference §5) because catalog entries declare
   rows on I/O boundaries, but handler composition, `space`, and the state
