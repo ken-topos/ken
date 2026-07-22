@@ -1,7 +1,7 @@
 ---
 id: DOC-W1
 title: "documentation Wave 1 — the read-Ken spine, taught from checked fragments"
-status: ready
+status: closed
 owner: doc
 size: L
 gate: none
