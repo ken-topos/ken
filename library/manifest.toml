@@ -82,6 +82,55 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/learn/reading-ken/fragments.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+  "catalog/packages/Core/Logic/Transport.ken.md",
+  "catalog/packages/Data/Sums/Combinators.ken.md",
+  "catalog/packages/Capability/Console/Text.ken.md",
+  "catalog/packages/Capability/Filesystem/Errors.ken.md",
+  "catalog/packages/Capability/System/IO.ken.md",
+  "catalog/packages/Tooling/Testing/Property.ken.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/quickstart.md"
+kind = "tutorial"
+audience = ["human-reader"]
+authority = "tutorial"
+availability = "current"
+sources = [
+  "README.md#build",
+  "catalog/guide/decomposition-abstraction.ken.md",
+  "spec/20-verification/21-spec-syntax.md#5-the-verification-status-model",
+  "docs/program/07-catalog-style-guide.md#3-code-block-roles-the-fence-taxonomy",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/STATUS.md"
 kind = "status"
 audience = ["human-reader", "agent-reader"]
