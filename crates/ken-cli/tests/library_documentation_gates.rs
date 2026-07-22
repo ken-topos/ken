@@ -247,40 +247,59 @@ fn load_manifest() -> Vec<DocEntry> {
     entries
 }
 
-/// Every `.md` file under `library/`, repo-relative with forward slashes.
-fn library_markdown_files() -> Vec<String> {
-    let mut out = Vec::new();
+/// Result of walking `library/`: every `.md` file found (repo-relative,
+/// forward slashes), and every symlink found (same form) — file or
+/// directory, at any depth.
+struct LibraryWalk {
+    markdown_files: Vec<String>,
+    symlinks: Vec<String>,
+}
+
+/// Walks `library/`, never following a symlink (`DirEntry::file_type()`
+/// reports the symlink itself, unlike `path.is_dir()`/`path.is_file()`,
+/// which follow it — so a symlinked directory is never descended into and
+/// a symlinked file is never opened). Architect finding (`thr_74hvpkqnxjp9q`,
+/// fourth round): NOT following a symlink is not the same as REJECTING
+/// one. An earlier fix made `library_markdown_files` silently `continue`
+/// past any symlink — safe against the escape, but it made every symlink
+/// under `library/` invisible to gate 1 rather than invalid, so an
+/// unregistered `library/rogue.md` symlink (or worse, `library/guide ->
+/// ../catalog/guide`, smuggling the not-yet-fence-gated guide tree under
+/// the product portal ahead of its Wave-0 ordering constraint) would pass
+/// every coverage gate simply by never being seen. Fixed by recording
+/// every symlink encountered instead of dropping it, so gate 1 can fail
+/// closed on it explicitly.
+fn walk_library() -> LibraryWalk {
+    let mut markdown_files = Vec::new();
+    let mut symlinks = Vec::new();
     let mut stack = vec![repo_root().join("library")];
     let root = repo_root();
     while let Some(dir) = stack.pop() {
         for entry in std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
         {
             let entry = entry.expect("dir entry");
-            // Architect finding (thr_74hvpkqnxjp9q, third round):
-            // `entry.file_type()` reports the symlink itself, unlike
-            // `path.is_dir()`/`path.is_file()`, which follow it. A
-            // symlinked directory under `library/` must not be walked
-            // into (it can lead straight out of the repository), and a
-            // symlinked file must not be discovered at all — this walk
-            // is the ONLY place that finds these files, so a symlinked
-            // `.md` excluded here never reaches a consumer's
-            // `read_to_string` at all, not just `resolve_confined`'s
-            // manifest-path/source/link checks.
             let file_type = entry.file_type().expect("dir entry file type");
+            let path = entry.path();
+            let rel = path.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
             if file_type.is_symlink() {
+                symlinks.push(rel);
                 continue;
             }
-            let path = entry.path();
             if file_type.is_dir() {
                 stack.push(path);
             } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
-                let rel = path.strip_prefix(&root).unwrap();
-                out.push(rel.to_string_lossy().replace('\\', "/"));
+                markdown_files.push(rel);
             }
         }
     }
-    out.sort();
-    out
+    markdown_files.sort();
+    symlinks.sort();
+    LibraryWalk { markdown_files, symlinks }
+}
+
+/// Every `.md` file under `library/`, repo-relative with forward slashes.
+fn library_markdown_files() -> Vec<String> {
+    walk_library().markdown_files
 }
 
 // GitHub-style heading slug: lowercase; drop everything that is not a
@@ -331,8 +350,21 @@ fn gate1_manifest_covers_every_document_and_every_path_exists() {
     let entries = load_manifest();
     let root = repo_root();
 
+    let walk = walk_library();
+    // Architect finding (thr_74hvpkqnxjp9q, fourth round): a symlink under
+    // `library/` must fail this gate, not be silently excluded from it —
+    // an unregistered symlink otherwise passes coverage by never being
+    // seen at all. Fail closed and name every one found.
+    assert!(
+        walk.symlinks.is_empty(),
+        "library/ contains symlink(s), which this inventory rejects rather \
+         than silently omits — a symlink cannot be a manifest-covered \
+         document nor a container this walk descends into: {:?}",
+        walk.symlinks
+    );
+
     let registered: HashSet<String> = entries.iter().map(|e| e.path.clone()).collect();
-    let on_disk: Vec<String> = library_markdown_files();
+    let on_disk: Vec<String> = walk.markdown_files;
 
     let mut missing_from_manifest = Vec::new();
     for path in &on_disk {
@@ -824,19 +856,34 @@ fn symlink_escape_is_rejected_by_confinement_and_by_the_walk() {
     symlink(&outside_dir, &dir_link).expect("create dir-symlink probe");
 
     let file_rel = format!("__doc_w0_symlink_file_probe_{pid}.md");
+    let dir_rel = format!("__doc_w0_symlink_dir_probe_{pid}");
     assert!(
         resolve_confined(&library, &file_rel, &root).is_none(),
         "resolve_confined followed an in-repo symlink to a file outside the repository"
     );
 
-    let files = library_markdown_files();
+    let walk = walk_library();
+    // Architect finding (thr_74hvpkqnxjp9q, fourth round): a symlink must
+    // be REPORTED, not silently omitted from discovery — omission is what
+    // let an unregistered/misdirected symlink pass gate 1 by never being
+    // seen. Both planted symlinks must show up in `walk.symlinks`.
     assert!(
-        !files.contains(&format!("library/{file_rel}")),
-        "library_markdown_files() discovered a symlinked file instead of skipping it"
+        walk.symlinks.contains(&format!("library/{file_rel}")),
+        "walk_library() silently omitted a symlinked file instead of reporting it: {:?}",
+        walk.symlinks
     );
     assert!(
-        !files.iter().any(|f| f.contains("leaked")),
-        "library_markdown_files() walked into a symlinked directory and found a file outside the repository"
+        walk.symlinks.contains(&format!("library/{dir_rel}")),
+        "walk_library() silently omitted a symlinked directory instead of reporting it: {:?}",
+        walk.symlinks
+    );
+    assert!(
+        !walk.markdown_files.contains(&format!("library/{file_rel}")),
+        "walk_library() discovered a symlinked file as an ordinary markdown file"
+    );
+    assert!(
+        !walk.markdown_files.iter().any(|f| f.contains("leaked")),
+        "walk_library() walked into a symlinked directory and found a file outside the repository"
     );
 }
 
