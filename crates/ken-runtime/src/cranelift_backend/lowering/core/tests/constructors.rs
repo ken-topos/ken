@@ -6,6 +6,16 @@ use super::*;
 // Ruled test module: imports permitted here (AC-8 class 2).
 use crate::nc5_seed_examples;
 
+// RT-SPLIT slice 7, rule 8: dependencies carried in with the moved
+// `emit_process_entrypoint_object_with_symbols` closure -- used ONLY by it, so
+// they travel with it (AC-9). Ruled test module, `use` permitted (AC-8 class 2).
+//
+// `native_platform_target_name` is an `artifact` private after slice 7, so it
+// arrives through its owner-adjacent adapter (§10.5a′), aliased back to the
+// original name so the moved body's call token is unchanged.
+use crate::cranelift_backend::artifact::native_platform_target_name_for_lowering_tests as native_platform_target_name;
+use crate::fnv1a_64;
+
 #[cfg(test)]
 fn run_dynamic_constructor_dispatch_fixture(
     discriminator: i64,
@@ -1525,4 +1535,51 @@ fn fs_read_effect() -> RuntimeExpr {
             b"dynamic-constructor.bin".to_vec(),
         ))],
     }
+}
+
+// ── RT-SPLIT slice 7, rule 8 finalization ─────────────────────────────────
+// Residual facade test fixtures whose final-user LCA is this module. Facade
+// file scope was a TRANSITIONAL zero-widening holding position, never final
+// ownership (Architect `evt_h69xwchqqxmj`); slice 7 discharges it. Moved
+// verbatim -- ordered item-level identity, no body edits.
+
+#[cfg(test)]
+fn emit_process_entrypoint_object_with_symbols(
+    entrypoint: &RuntimeExpr,
+    symbols: &crate::NativeProcessSymbols,
+    entry_symbol: &str,
+) -> Result<CraneliftObjectArtifact, CraneliftBackendError> {
+    let compiled = compile_expr_into_module(
+        new_object_module("ken-runtime-process-entrypoint")?,
+        entry_symbol,
+        Linkage::Export,
+        entrypoint,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(symbols),
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
+        None,
+    )?;
+    let verifier_passed = compiled.verifier_passed;
+    let assumptions = compiled.assumptions.clone();
+    let unsupported = compiled.unsupported.clone();
+    let object_bytes = compiled
+        .module
+        .finish()
+        .emit()
+        .map_err(|err| backend_module(err.to_string()))?;
+    let object_hash = fnv1a_64(&object_bytes);
+    Ok(CraneliftObjectArtifact {
+        example: "native-process-entrypoint".to_string(),
+        entry_symbol: entry_symbol.to_string(),
+        object_bytes,
+        object_hash,
+        platform_target: native_platform_target_name(),
+        backend_name: "Cranelift process object".to_string(),
+        verifier_passed,
+        assumptions,
+        unsupported,
+    })
 }

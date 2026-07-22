@@ -8,7 +8,9 @@ use super::*;
 
 use std::collections::BTreeSet;
 
-use crate::cranelift_backend::total_primitive;
+// RT-SPLIT slice 7, rule 8: `total_primitive` moved from facade file scope to
+// its lawful facade-LCA home. Import-only edit in a ruled test module.
+use crate::cranelift_backend::test_support::total_primitive;
 use crate::{
     evaluate_runtime_ir_example, nc5_seed_examples, ErasedExecutableCore,
     RuntimeArtifactValidationStage, RuntimeArtifactValidationTier, RuntimeAssumptionTrustKind,
