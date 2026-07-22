@@ -164,7 +164,7 @@ not pre-committing the fleet to seven waves of work sight-unseen.
 | Wave | Content | State |
 |---|---|---|
 | **0** | Charter + currency substrate: `README.md`, `manifest.toml`, generated `STATUS.md`, first gates, migration ledger | ✅ **RELEASED** — `issues/DOC-W0.md` |
-| 1 | The read-Ken spine: introduction, quickstart, seven-part reading curriculum on one real catalog program | not framed |
+| 1 | The read-Ken spine: introduction, quickstart, seven-part reading curriculum on one real catalog program | not framed — ⛔ **GATED on `issues/DOC-CURRENCY-ANCHOR.md`** |
 | 2 | Agent core + task packs; refactor product facts out of `write-ken`; cold-context evals | not framed |
 | 3 | Conceptual guide + how-tos; `catalog/guide/` migration (**gated on the fence gate, §3**) | not framed |
 | 4 | Complete reader-oriented reference | not framed |
@@ -175,3 +175,18 @@ not pre-committing the fleet to seven waves of work sight-unseen.
 without declaring what it is, what grounds it, and how its currency is
 checked. Everything after it inherits that substrate, so it is worth getting
 right before Wave 1 produces content at volume.
+
+> ### ⛔ Wave 0 met that exit condition only STRUCTURALLY. Wave 1 is gated.
+>
+> DOC-W0 merged (`origin/main @ 6be9754b`, 2026-07-22) and **records** a
+> revision, validated as a real ancestor. But **no code path reads a cited
+> source's bytes at `REVISION`** — so the recorded revision certifies nothing
+> about the corpus, which is *"a date with extra steps"*, the exact thing §121
+> forbids. Found by the adversary post-merge, after nine review rounds.
+>
+> **Whoever frames Wave 1: take `depends_on: [DOC-CURRENCY-ANCHOR]` and read
+> `issues/DOC-CURRENCY-ANCHOR.md` first.** Wave 1 is where this bites — its
+> derived-reference pages cite **live spec chapters**, and nothing forces a
+> `REVISION` bump when one moves. The first time a cited chapter's body
+> changes under a stable heading, every derived page claims a currency it does
+> not have, with every gate green.

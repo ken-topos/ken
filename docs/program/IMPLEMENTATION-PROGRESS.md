@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 00:29:55Z — from 20 issue file(s) in `docs/program/issues/`.
+2026-07-22 01:53:45Z — from 22 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -42,7 +42,9 @@ the committed file matches the generator's output.
 | `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | draft | TBD | M | none | — |
 | `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | ready | steward | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
-| `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | active | doc | M | none | — |
+| `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | ready | doc | S | none | — |
+| `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | ready | doc | S | none | — |
+| `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
@@ -65,6 +67,8 @@ Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
 - `CI-SKIPPED-NATIVE-TESTS` — Restore rt_parity_native — one test at 221s is the blocker
+- `DOC-CURRENCY-ANCHOR` — library/REVISION certifies nothing about the corpus — currency is unchecked
+- `DOC-VALIDATION-BINDING` — validation vocabulary claims a 1:1 binding to the gates; nothing binds it
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `PUB-VERIFY` — scripted-pr-automerge.sh exits 0 on a failed push
