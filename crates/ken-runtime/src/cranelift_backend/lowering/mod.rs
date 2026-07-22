@@ -36,8 +36,17 @@ pub(in crate::cranelift_backend) use crate::{
     RuntimePrimitive, RuntimeSymbol, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
 
-// --- sibling backend modules, named at their OWNERS (§10.3 DAG:
-//     `lowering support -> surface`, `lowering::core -> compiled`) ----------
+// --- sibling backend modules, named at their OWNERS -----------------------
+// §10.3 DAG: `lowering support -> compiled, planning, surface`.
+//
+// These are SEMANTIC support edges, not namespace wiring for `core`:
+// `Lowering::emit_result` returns and constructs `compiled::ResultDecoder`,
+// and `source_case_has_no_checked_control_markers` calls the `planning`
+// collectors and constructs `CheckedOrientedMarkerSets`. Acyclic, because
+// `compiled` and `planning` each depend only on `surface` and neither imports
+// lowering. No `artifact` / `artifact::api` edge, and no reverse edge.
+// (Architect `evt_8vhe6rd6r80c`; the landed §10.3 line said support -> surface
+// only, which these four imports and two production bodies refute.)
 pub(in crate::cranelift_backend) use super::compiled::{CompiledModule, ResultDecoder};
 pub(in crate::cranelift_backend) use super::planning::{
     collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
