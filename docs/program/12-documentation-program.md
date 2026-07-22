@@ -161,16 +161,30 @@ Dependency-ordered, per the proposal. **Not time estimates.** Each wave is
 framed as its own issue when its predecessor's exit condition is met — I am
 not pre-committing the fleet to seven waves of work sight-unseen.
 
+**Capacity and cadence (operator, 2026-07-22): three seats, waves run
+SEQUENTIALLY.** The doc ring does not fan out across waves. This is the
+program's shape, and it is why §4a below matters more than the wave list: with
+one wave in flight at a time, **a wave that exits on a proxy poisons every wave
+that inherits its substrate**, and there is no parallel track to catch it.
+
+> **⛔ Scope of what is FRAMED versus what is WRITTEN DOWN** (operator,
+> 2026-07-22). This document describes **all six waves** so the shape is
+> visible and the dependencies are checkable. **Only Waves 1 and 2 are framed
+> as executable issues.** Waves 3–6 are a map, not a commitment: each is framed
+> when its predecessor's exit condition is *actually met*, re-grounded against
+> the landed corpus at that moment. Do not treat a §4 subsection below as a
+> release.
+
 | Wave | Content | State |
 |---|---|---|
 | **0** | Charter + currency substrate: `README.md`, `manifest.toml`, generated `STATUS.md`, first gates, migration ledger | ✅ **RELEASED** — `issues/DOC-W0.md` |
-| 1 | The read-Ken spine, **fragment-based** — introduction, quickstart, reading curriculum taught from real checked package fragments. **Complete-program work DEFERRED to Wave 1b** | not framed — ⛔ **GATED on `issues/DOC-CURRENCY-ANCHOR.md`** |
+| 1 | The read-Ken spine, **fragment-based** — introduction, quickstart, reading curriculum taught from real checked package fragments. **Complete-program work DEFERRED to Wave 1b** | ✅ **FRAMED** — `issues/DOC-W1.md` · ⛔ gated on `issues/DOC-CURRENCY-ANCHOR.md` |
 | **1b** | The whole-program reading pass: curriculum ch. 7, worked end-to-end review with an explicit verdict, on one real catalog **program** | not framed — ⛔ **gated on basic capabilities landing** (operator, 2026-07-22) |
-| 2 | Agent core + task packs; refactor product facts out of `write-ken`; cold-context evals | not framed |
-| 3 | Conceptual guide + how-tos; `catalog/guide/` migration (**gated on the fence gate, §3**) | not framed |
-| 4 | Complete reader-oriented reference | not framed |
-| 5 | Comprehensive catalog reference (**re-check D4 first**) | not framed |
-| 6 | Release, offline, continuous as-built operation | not framed |
+| 2 | Agent core + task packs; refactor product facts out of `write-ken`; cold-context evals. **`ffi-and-platform` deferred** | ✅ **FRAMED** — `issues/DOC-W2.md` · ⛔ gated on Wave 1 |
+| 3 | Conceptual guide + how-tos; `catalog/guide/` migration (**gated on the fence gate, §3**) | map only — §4b |
+| 4 | Complete reader-oriented reference | map only — §4b |
+| 5 | Comprehensive catalog reference (**re-check D4 first**) | map only — §4b |
+| 6 | Release, offline, continuous as-built operation | map only — §4b |
 
 **Wave 0's exit condition is the one that matters:** a new page cannot land
 without declaring what it is, what grounds it, and how its currency is
@@ -239,3 +253,242 @@ program, not a toy syntax collage"* constraint survives the deferral intact.
 > Wave 0** and is in `manifest.toml`. The proposal assigns "write the
 > introduction" to Wave 1. Wave 1's frame must therefore say **revise**, not
 > **author**, for that one file, or the ring will duplicate it.
+
+---
+
+## 4a. The failure mode this program is actually designed against
+
+Waves 0 through 6 are a dependency order. **They are not the hard part.** The
+hard part is that documentation's characteristic defect is invisible to every
+cheap check, and DOC-W0 demonstrated it inside this very program before Wave 1
+had written a line.
+
+DOC-W0 took **nine review rounds** and produced **eight findings**, and not one
+was a different kind of mistake. Every single one was **a proxy standing in for
+the property**:
+
+| # | the proxy that was checked | the property that mattered |
+|---|---|---|
+| 1 | the gate rejects a *fake* revision | it **accepts a real one, in CI's environment** |
+| 2 | the test clones `file://{repo_root}` | an **independent** history source |
+| 3 | `cat-file` says the object is present | present **AND** ancestry provable |
+| 4 | the symlink was not *discovered* | the symlink is **rejected and reported** |
+| 5 | the SHA was reviewed and approved | the SHA is **on `origin`** |
+| 6 | the process fix was *agreed to* | the seat **can perform it** |
+| 7 | `REVISION` names a real ancestor | a cited source's **bytes** were read at it |
+| 8 | validation tokens are **declared** | a validation token is **consumed by a gate** |
+
+Findings 7 and 8 were found **after merge**, by the adversary, and 7 gates
+Wave 1. What finally stopped the recursion was not any individual fix: it was
+**naming the predicate once** — `revision_resolved()` = *object present AND
+ancestry provable* — and deriving self-heal, every deepen checkpoint, the
+unshallow fallback, and all diagnostics from it.
+
+**⇒ THE STANDING RULE FOR EVERY WAVE FRAME BELOW.** Each wave's exit condition
+is stated as a **property with a named predicate**, never as a deliverable list.
+A frame that says *"land these six pages and the gate passes"* has already
+failed: it inherits the blind spots of whatever the gate happens to check
+without anyone re-deriving them. Three specific carries:
+
+- **State environment preconditions as named predicates BEFORE writing a
+  check.** History depth, credentials, checkout topology, network reachability.
+  A gate whose precondition is unwritten gets discovered one CI-red at a time,
+  each round closing an instance and leaving the next layer live.
+- **A completeness gate must be bidirectional.** Finding 8 was an enumeration
+  checked against another enumeration of the same kind: every token in
+  `KNOWN_VALIDATION_TOKENS` occurred exactly twice, both times in constants,
+  and **zero** times in any gate body. Declared-set equals consumed-set, both
+  directions, or the gate certifies its own vocabulary.
+- **Where a generated library fact matters, it needs an anchor the generator
+  does not produce.** Generation removes transcription error; it does not make
+  the generator right. Both sides of a consistency check coming from one
+  generator will agree with each other while pinning nothing.
+
+---
+
+## 4b. Wave-by-wave
+
+Each subsection states: what the wave produces, the **property** it exits on,
+what gates it, and the framing traps I have already found. Waves 1 and 2 are
+framed as issues; 3 through 6 are the map.
+
+### Wave 1 — the read-Ken spine (FRAMED · gated on `DOC-CURRENCY-ANCHOR`)
+
+**Produces.** A revision of `library/introduction.md`; `library/quickstart.md`;
+and `library/learn/reading-ken/` chapters **01–06** — anatomy, types/contracts/
+proofs, assurance and trust, effects/capabilities/authority, packages and
+provenance, execution. Plus the first checked exercises under
+`library/learn/exercises/`.
+
+**Taught from real checked package fragments**, not from one whole program and
+not from invented snippets — see the re-scoping ruling above. Fragments exist
+today in volume under `catalog/packages/` and are already fence-checked.
+
+**Exit property.** *A technically experienced human unfamiliar with dependent
+types can read a real Ken declaration or package fragment and accurately state
+its contract, its assurance class, and the authority it requires.* Note what
+this does **not** claim: nothing about synthesizing a whole program. That is
+Wave 1b's exit and it is deferred.
+
+**Gated on `issues/DOC-CURRENCY-ANCHOR.md`.** Wave 1 is exactly where DOC-W0's
+unmet half bites: its derived-reference pages cite **live spec chapters**, and
+nothing today forces a `REVISION` bump when one moves. The first time a cited
+chapter's body changes under a stable heading, every derived page claims a
+currency it does not have, **with every gate green.**
+
+**Framing traps, both already paid for once:**
+- `library/introduction.md` **already landed in Wave 0** and is in
+  `manifest.toml`. The frame says **revise**, not **author**, or the ring
+  duplicates it.
+- **Do not name the curriculum's source fragments in the frame without
+  checking they still exist and still check.** Every anchor in a frame is
+  perishable; a fragment citation is an anchor.
+
+### Wave 2 — agent core and task packs (FRAMED)
+
+**Produces.** `library/agents/manifest.toml`; the **four core modules** —
+`read-ken`, `write-ken`, `proof-and-trust`, `toolchain`; and **six task
+modules** — `read-review`, `write-program`, `author-package`,
+`prove-or-repair`, `diagnose`, `effects-and-capabilities`. Plus pack integrity
+checks and the first cold-context evaluation suite.
+
+**`ffi-and-platform` is the DEFERRED seventh task module.** The proposal lists
+it with the other six. It cannot be written honestly yet: the FFI/platform
+surface is the exact surface `docs/program/10-linux-abi-completion.md` is
+still landing, and a module that documents it today would be obsolete before
+the wave closed — or, worse, would document *aspirational* syntax, which §2
+forbids outright. It is framed with Wave 1b or after PX8 closes, whichever is
+later.
+
+**Every module answers the proposal's ten-point contract in order** — use-when
+with explicit non-triggers, prerequisites, current capability, canonical
+forms, invariants and prohibitions, decision procedure, failure signatures,
+validation, authority and sources, and known-unavailable behavior.
+
+> **★ Point 10 is the load-bearing one and it is the one that will get
+> shortchanged.** *Known unavailable or partial behavior — fail closed rather
+> than invite the agent to improvise.* An agent module's characteristic harm
+> is not being incomplete; it is being **confidently silent** about a boundary,
+> which reads to the consuming agent as permission. The negative knowledge —
+> unsupported forms, misleading near-syntax, `tt` versus `Refl`, the point at
+> which an agent must **stop** instead of inventing a proof, primitive,
+> capability, or package — is the part of these modules that pays.
+
+**Exit property.** *A Ken-untrained coding agent can perform the core
+read/write/prove/diagnose tasks without loading the entire spec, catalog
+guide, or fleet memory* — and, on the tasks it cannot do, **refuses honestly
+rather than improvising.**
+
+**The seven-item cold-context eval suite**, from the proposal: explain a small
+program's contract and trust posture; write and check a pure function with one
+real law; distinguish and repair `tt` versus `Refl`; find and use a catalog
+package **by task rather than guessed name**; author an effectful boundary
+without omitting its capability or row; **refuse an unsupported or unproved
+request honestly**; and diagnose one parse, one elaboration, one kernel, and
+one runtime failure.
+
+> **⚠ The eval suite records more than correctness** — it records unnecessary
+> file loads, invented syntax or capabilities, and **whether the agent cited
+> the authority it used**. The goal is *not* the smallest token count; it is
+> the smallest context that reliably produces a correct, reviewable result.
+> **Do not let the frame's ACs collapse this into a pass rate.** A run that
+> passes six of seven while inventing a capability on the seventh is a worse
+> outcome than one that passes five and refuses two, and a pass-rate AC cannot
+> express that.
+
+**Boundary reminder (D3, settled).** These modules carry **product knowledge
+only.** Roles, merge flow, model routing, WP lifecycle, the memory corpus, and
+the compaction discipline stay under `agent/` and stay mine.
+`agent/playbooks/tools/write-ken.md` keeps its **workflow trigger** and moves
+its **product facts** into `library/agents/core/write-ken.md`; the skill then
+selects a pack. **This is a refactor with two live consumers — the fleet's own
+seats and any external agent — so the frame must inventory both before moving
+a fact.**
+
+### Wave 3 — conceptual guide and how-tos (MAP · gated on the fence gate)
+
+**Produces.** `library/guide/` filled in demand order — contracts, dependent
+data, proofs, effects, security, packages, execution — plus `library/how-to/`
+recipes driven by **actual diagnostics and recurring fleet failures**, not by
+an imagined task list. And the `catalog/guide/` migration.
+
+**⛔ This wave carries the program's one hard ordering constraint (§3).**
+`catalog/guide/`'s four files are literate `.ken.md` whose fences are
+**checked**. Moved into `library/` as prose they silently stop being checked
+and become the exact drift-prone duplicate D1 exists to prevent — **and they
+will still look authoritative.** The `ken example` / `ken reject` fence gate
+**must exist and pass before any `catalog/guide/` content moves.** Gate before
+migration, not after.
+
+**Exit property.** *Tutorials teach, how-tos direct work, and conceptual pages
+explain; no single page is forced to do all three.* Keep explanatory pages free
+of internal campaign and WP history — a reader does not care which WP landed a
+feature.
+
+### Wave 4 — complete reader-oriented reference (MAP)
+
+**Produces.** `library/reference/` across language, verification, toolchain,
+runtime, platform, and diagnostics, plus the symbol, keyword, diagnostic, and
+glossary indexes. Exact syntax, CLI, target, and public-declaration facts are
+**generated**.
+
+**Exit property.** *A reader who knows what they are looking for can find a
+complete, current answer without reading the normative spec front to back.*
+
+> **⚠ `reference/platform/` is where D1 will be hardest to hold.** It documents
+> **explicit unavailable lanes**, and cross-platform is indefinitely deferred
+> (operator, L2-1). A page that describes a deferred lane in the present tense
+> is aspirational syntax by another name. Label it `unavailable` and say why,
+> or leave it out.
+
+### Wave 5 — comprehensive catalog reference (MAP · re-check D4 FIRST)
+
+**Produces.** One generated reference page or card per live package, plus
+subject, declaration/type, law, effect/capability, assurance, platform,
+maturity, dependency, and reverse-dependency indexes.
+
+**⛔ D4 is a commitment the toolchain must actually be able to keep, and Wave 0
+did not establish that it can.** Before this wave is framed, the Librarian
+reports which of those facts the checked artifact format can express **today**
+and which cannot. **A fact we cannot generate gets authored and labelled as
+authored — never generated-looking prose.** Do not approximate type- and
+proposition-shaped search with prose tags; the proposal is explicit and it is
+right.
+
+**Exit property.** *The catalog is discoverable both by what a reader wants to
+accomplish and by the exact checked abstractions available.*
+
+**Carry §3's second risk into this frame verbatim:** a generated corpus can be
+confidently wrong, and where a generated fact matters it needs an anchor the
+generator does not produce.
+
+### Wave 6 — release, offline, continuous as-built operation (MAP)
+
+**Produces.** Static searchable HTML and an offline artifact from the same
+sources; versioned snapshots and migration notes once public releases begin;
+post-merge source changes wired to the Librarian's as-built queue; and the
+measurement set — dead ends, failed searches, stale-source detections,
+tutorial completion, agent-pack evaluation results.
+
+**Exit property.** *Documentation currency is an observable product property
+rather than the Librarian's memory of what changed.* This is the wave that
+retires the Librarian's standing as-built mandate as a **backstop** and makes
+it a mechanism — §2's *"the as-built pass is the backstop, not the primary
+mechanism"* only becomes true here.
+
+> **⚠ `library/releases/` is absent until Ken has versioned public releases**
+> and must stay absent. Creating it early invites migration notes for
+> migrations nobody performed.
+
+---
+
+## 4c. What is NOT in this program, and why
+
+- **Ken has no compatibility obligation to anyone**, so there is no
+  deprecation path, no versioned doc branches, and no parallel maintained
+  guide. That is D2 applied forward.
+- **No `library/` page is normative.** If a reader needs the rule rather than
+  the explanation, the page's job is to **name the spec section**, not to
+  restate it well. A polished duplicate that can drift is worse than an
+  incomplete page that names its source.
+- **Nothing here documents the federation.** D3, settled.
