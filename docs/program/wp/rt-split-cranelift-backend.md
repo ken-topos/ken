@@ -368,8 +368,11 @@ move" claim auditable rather than asserted.
    (it is the metric from §4).
 
 8. **`test_support` has no production consumer — CHECKED, not asserted**
-   (slice 7; adversary detector-gap `evt_457npdbe9zmp9`, predicate corrected
-   by the Architect `evt_vd1xkmfhrkrp`).
+   (**slices 6–7** — the module is seeded in slice 6 and completed in slice 7
+   under the reversed order, §10.2a rule 6; adversary detector-gap
+   `evt_457npdbe9zmp9`, predicate corrected by the Architect
+   `evt_vd1xkmfhrkrp`). **AC-8 applies from the moment the module exists**, not
+   only at series end.
 
    > **Outside ruled `tests.rs` / `tests/**` modules: every consumer must
    > spell `crate::cranelift_backend::test_support::<item>` at the direct
@@ -453,6 +456,15 @@ move" claim auditable rather than asserted.
    THE OTHER.** (Architect `evt_2mexay4h5tr6y`.) Binding on every slice from 5
    onward, and the condition under which any "no further assignment gap" claim
    may be made.
+
+   > ⚠ **Slice 6 creates a SECOND scaffold-import population**, in
+   > `artifact/mod.rs`: the six still-residual parent operations named in
+   > §10.5. **Slice 7 must delete all six**, and the same two-layer closure
+   > applies to it — the import list is one instrument and the parent
+   > source-coverage partition is the other. **Do not reuse slice 5's
+   > reconciliation numbers**; this is a different population in a different
+   > module, and the lesson that produced this AC is precisely that closing an
+   > enumeration for one population says nothing about another.
 
    **What is already closed, and exactly how far it reaches.** The 92-name
    scaffold-import reconciliation is valid and **closes the emitted import
@@ -828,12 +840,23 @@ Classify first:
    withdrawn — *"the JIT/verifier bridges stay in `artifact/mod.rs`"* (the
    co-ownership premise) and a two-item *"the JIT bridge … the verifier bridge
    …"* pair (the two-adapter population). See the contrast-case table above.
-6. Move the **grounded facade-LCA fixtures** to `test_support.rs` in
-   **slice 7**, when `artifact::api` and the final facade are cut. Until then
-   they remain at **residual-parent file scope under item-level
-   `#[cfg(test)]`**, private; **no temporary widening is needed.**
+6. Move the **grounded facade-LCA fixtures** to `test_support.rs` — **⛔ split
+   across slices 6 and 7 under the reversed order** (Architect
+   `evt_2j4gnwffr7h63`). Until each fixture's slice arrives it remains at
+   **residual-parent file scope under item-level `#[cfg(test)]`**, private;
+   **no temporary widening is needed.**
 
-   **There are two, not one** (Architect `evt_5ztpb40gf6d0x`):
+   | slice | what lands in `test_support` | when |
+   |---|---|---|
+   | **6** | create/seed the module with `test_only_distinguished_root_join_plan` | **once its API-side users have moved below the facade** |
+   | **7** | add `NativeInvocationFixture` and `BorrowedFixtureValue` | when the artifact tests move |
+
+   **API and lowering tests use the already-ruled direct rooted path.** This is
+   an **accumulating namespace scaffold** — ⛔ **not a production-module
+   retouch and not a production widening**, so it stays outside the 22/24
+   ledger and §10.5's no-re-touch rule is not engaged.
+
+   **There are two fixtures, not one** (Architect `evt_5ztpb40gf6d0x`):
 
    | fixture | final users span | LCA |
    |---|---|---|
@@ -1023,6 +1046,27 @@ normalizing a bag of public-to-parent fields. **Do not raise the cap.**
    `core` is a descendant of lowering support and `api` is a descendant of
    `artifact`. **Any contrary dry-run stops before cutting.**
 
+   > ⛔ **THAT DESCENDANCY PREMISE IS TRUE ONLY IN THE FINAL TOPOLOGY, AND THE
+   > SLICE ORDER MUST MAKE IT TRUE *DURING* EACH SLICE TOO.**
+   >
+   > *"`api` is a descendant of `artifact`"* holds **once `api` is cut**. It is
+   > **false for the whole of a slice that cuts `artifact` first**, when the
+   > api-destined callers are still in the residual parent and the items they
+   > call have just become private to a child. The slice-6 dry-run measured
+   > exactly that: **seven widenings, 22 → 29, cap 24** (Architect
+   > `evt_2j4gnwffr7h63`).
+   >
+   > **The zero-widening forecast is therefore conditional on ordering**, and
+   > §10.5 now orders slices 6–7 **api-first** so the premise holds throughout
+   > each slice, not only at the end of the series. **The forecast stands at
+   > 22/24 under that order and only under it.**
+   >
+   > ★ **This is the generalizable half:** a visibility forecast derived from
+   > the *final* module graph says nothing about the *transitional* graph a
+   > slice actually compiles against. **Re-derive every such premise against
+   > the intermediate state each slice creates** — that is what "any contrary
+   > dry-run stops before cutting" is for, and it is what caught this.
+
 **Before slice 3 moves any code:** produce the proposed exact visibility ledger
 and confirm projected cumulative **≤ 24**. **If the constructor cannot remain
 the transparent packing seam described above, stop and return the actual
@@ -1033,7 +1077,8 @@ make the arithmetic work.
 > widen the eight fields and note that the budget is "nearly" fine. That
 > normalizes a container whose internals are public to its parent, which is the
 > precise outcome the decomposition exists to avoid — and it would be
-> discovered at slice 6, when there is no cheap way back. **The budget is not a
+> discovered in the artifact slices, when there is no cheap way back. **The
+> budget is not a
 > resource to consume efficiently; it is a detector for a seam that should have
 > been encapsulated.**
 
@@ -1123,11 +1168,60 @@ Budget remains 22/24.**
 3. `compiled`
 4. `lowering::core` plus its subject tests
 5. `lowering` support/state plus its remaining subject tests
-6. `artifact` plus artifact tests
-7. `artifact::api`, API tests, and the final explicit facade
+6. **`artifact::api` plus API tests** — and the `artifact/mod.rs` namespace
+   scaffold
+7. **`artifact` internals, the artifact tests, and the final explicit facade**
+
+> ### ⛔ SLICES 6 AND 7 ARE REVERSED FROM LEAF-FIRST — API LEADS INTERNALS
+>
+> **(Architect `evt_2j4gnwffr7h63`, on a slice-6 dry-run stop.)** This is the
+> **second** deliberate exception to leaf-first, and it is **the same exception
+> as the lowering one, one module over.**
+>
+> **The counterexample that forced it.** Cutting `artifact` first makes six
+> production operations private below their **still-parent** `artifact::api`
+> callers, plus `native_isa` private below its still-parent artifact test.
+> Satisfying that needs **seven `pub(super)` widenings — 22 + 7 = 29 against a
+> cap of 24.** The stop condition did its job.
+>
+> **Why the demand is transitional and not real:** every one of those callers
+> is `artifact::api`-destined, so in the **final** topology they are
+> *descendants* of `artifact` and reach those items with **zero** widening.
+> The demand exists **only** in the window created by cutting `artifact`
+> before `artifact::api`. Reversing the order removes the window.
+>
+> **Slice 6 shape:** create the final `artifact/mod.rs` namespace scaffold and
+> extract `artifact/api.rs` plus its subject tests. The scaffold **privately
+> imports** the six still-residual parent operations — `compile_expr`,
+> `compile_expr_with_declarations_and_process_input`, `compile_program_expr`,
+> `compile_program_expr_object`, `new_object_module`,
+> `native_platform_target_name` — and `artifact::api` consumes them through
+> `super::…`. **When slice 7 moves those declarations into `artifact/mod.rs`
+> the imports disappear and `artifact/api.rs` does not change.**
+>
+> The namespace edge for the facade's explicit re-exports may be
+> **`pub(super) mod api`**. That is **module wiring, not a widened owned
+> declaration, and does not enter the 22/24 ledger** — the Architect compiled
+> the exact privacy shape: a descendant can consume a private ancestor import,
+> and the facade can re-export public items through a `pub(super)` child module.
+>
+> **Slice 7 shape:** move the nine private artifact items and the exact
+> JIT/object/ISA tests, **delete the six scaffold imports**, add the three
+> current item-axis adapters beside their private originals, and perform the
+> final explicit-facade cut. **`native_isa` stays with its artifact test until
+> this slice, so it never needs transitional visibility.**
+>
+> **Rejected, with reasons:** temporary widening is forbidden by the cap
+> (§10.4a — the cap is a *detector*, not a resource); a seven-operation
+> transitional mux is an artificial API encoding the wrong ownership; and
+> **merging 6+7 would close the counterexample but needlessly discard the
+> independent-merge boundary**, which the inverse order preserves.
+>
+> **Budget remains 22/24 after both slices**, no reverse DAG edge, and no
+> production facade dependency from an implementation module.
 
 Slices 1–3 are true leaves. **The control SCC then LEADS rather than trails
-the lowerer extraction — the one deliberate exception to leaf-first.** In
+the lowerer extraction — the first deliberate exception to leaf-first.** In
 slice 4, create the final `lowering/mod.rs` scaffold with a private import of
 the still-residual parent items, and make `core.rs` import only from its
 parent. In slice 5, move those residual state/support items into
@@ -1141,11 +1235,12 @@ re-touch a previously moved module. **If move-purity, the visibility budget,
 or the DAG cannot be demonstrated for a slice, that slice stops for seam
 revision — it does not improvise a topical split.**
 
-### 10.5a ⛔ SLICE-6 TEST-BOUNDARY SEAM (Architect, `evt_473mn1qmaw7bf`)
+### 10.5a ⛔ THE ARTIFACT/LOWERING TEST-BOUNDARY SEAM (Architect, `evt_473mn1qmaw7bf`)
 
-> **Fold this before slice 6 is framed.** Surfaced by the slice-4 dry-run
+> **Fold this before the artifact-internals slice is framed** — that is
+> **slice 7** under the reversed order (§10.5). Surfaced by the slice-4 dry-run
 > (`§10.4a`) — which is exactly what that dry-run exists to do — and ruled
-> before slice 6 rather than discovered inside it.
+> before it rather than discovered inside it.
 
 > The prior ruling assumed both private operations were artifact-owned. That
 > premise is withdrawn. The invariant that survives is **one owner-adjacent
@@ -1176,9 +1271,9 @@ Each adapter sits beside the private original it exposes:
 
 | private original | owner module | adapter | added in | called by |
 |---|---|---|---|---|
-| `new_jit_module` | `artifact/mod.rs` | `new_jit_module_for_lowering_tests` | slice 6 | lowering tests — 5 sites across `constructors`/`control`/`effects` |
-| `new_object_module` | `artifact/mod.rs` | `new_object_module_for_lowering_tests` | slice 6 | lowering tests — 6 `control` sites |
-| `compile_expr` | `artifact/mod.rs` | `compile_expr_for_lowering_tests` | slice 6 | lowering constructor tests — 3 sites |
+| `new_jit_module` | `artifact/mod.rs` | `new_jit_module_for_lowering_tests` | **slice 7** | lowering tests — 5 sites across `constructors`/`control`/`effects` |
+| `new_object_module` | `artifact/mod.rs` | `new_object_module_for_lowering_tests` | **slice 7** | lowering tests — 6 `control` sites |
+| `compile_expr` | `artifact/mod.rs` | `compile_expr_for_lowering_tests` | **slice 7** | lowering constructor tests — 3 sites |
 | `verify_cranelift_function` | **`lowering/mod.rs`** | **`verify_cranelift_function_for_artifact_tests`** | **slice 5** | the two `px8i_*` tests → `artifact/tests.rs` |
 
 > ### ⛔ TWO LEDGERS, TWO AXES — NEITHER SUBSTITUTES FOR THE OTHER
@@ -1225,8 +1320,8 @@ pub(super) fn compile_expr_for_lowering_tests(
 
 **Existing leaf-test call tokens are preserved through test-only namespace
 wiring** in `lowering/core/tests/mod.rs` — an **import-only** edit, the same
-already-authorized slice-6 test-boundary wiring as the JIT adapter, now complete
-on the item axis:
+already-authorized artifact/lowering test-boundary wiring as the JIT adapter,
+now complete on the item axis:
 
 ```rust
 pub(in crate::cranelift_backend) use crate::cranelift_backend::artifact::{
@@ -1237,7 +1332,8 @@ pub(in crate::cranelift_backend) use crate::cranelift_backend::artifact::{
 ```
 
 ⛔ **No production item is widened. No facade alias is added. `lowering/mod.rs`
-remains untouched in slice 6.** No production DAG edge; **budget stays 22/24.**
+remains untouched in slices 6 and 7.** No production DAG edge; **budget stays
+22/24.**
 
 **Lowering's own tests use the private original — NOT a bridge.** Slice 5 adds
 the explicit private import in `lowering/core/tests/mod.rs` so descendant
@@ -1260,7 +1356,7 @@ pub(super) fn verify_cranelift_function_for_artifact_tests(
 }
 ```
 
-**Slice-5 transitional wiring, and its slice-6 retirement.** While the two
+**Slice-5 transitional wiring, and its retirement in slice 7.** While the two
 `px8i_*` tests remain in the residual facade during slice 5, preserve their
 call tokens with temporary **item-level** test wiring:
 
@@ -1269,17 +1365,17 @@ call tokens with temporary **item-level** test wiring:
 use lowering::verify_cranelift_function_for_artifact_tests as verify_cranelift_function;
 ```
 
-⛔ **When slice 6 moves those tests to `artifact/tests.rs`, replace that
+⛔ **When slice 7 moves those tests to `artifact/tests.rs`, replace that
 temporary facade alias with an explicit import/call of
 `verify_cranelift_function_for_artifact_tests`. Do NOT touch `lowering/mod.rs`
 again** — re-touching a completed module is exactly what §10.5's
-no-re-touch rule forbids, and the transitional alias exists so that slice 6
+no-re-touch rule forbids, and the transitional alias exists so that slice 7
 does not have to.
 
 **Why the clearance sentence had to be withdrawn.** An earlier revision said
 *"the implementer is not touching `verify_cranelift_function` in slice 5."*
-Leaving it for slice 6 would have forced **either** a retouch of the completed
-lowering module **or** a reverse `lowering::core → artifact` edge. The branch
+Leaving it for the artifact slice would have forced **either** a retouch of the
+completed lowering module **or** a reverse `lowering::core → artifact` edge. The branch
 was still clean when the dry-run fired, which is why this was the cheap seam —
 **the stop condition paid for itself in the slice it fired in.**
 
@@ -1358,7 +1454,7 @@ the ledger without reopening the ruling: **it would only have mattered under a
 per-tree-duplication remedy, which the bridge shape removes from
 consideration.** Moving the production functions to the facade would weaken a
 ruled ownership boundary to solve a test-only reachability problem that is
-already solved without production exposure. **Expand the slice-6 deferred
+already solved without production exposure. **Expand the artifact-slice deferred
 ledger from the original three fixtures to this complete set.**
 
 **And enumerate type placement explicitly in the slice-5 dry-run.** §10.2
