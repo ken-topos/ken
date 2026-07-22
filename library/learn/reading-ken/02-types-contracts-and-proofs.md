@@ -42,8 +42,8 @@ terms — none adds a new kernel declaration class or an ambient proof search
 - **`lemma`** — a standalone checked proof theorem in the ordinary module
   namespace, used when no single subject owns the theorem
   ([§8.3](../../../spec/30-surface/33-declarations.md#83-standalone-lemmas--lemma)).
-- **`prop`** — names a proposition family / claim shape, not itself a proof
-  ([§8.1](../../../spec/30-surface/33-declarations.md#81-proposition-families--prop)).
+- **`prop`** — names a proposition family / claim shape, not itself a proof (
+  [§8.1](../../../spec/30-surface/33-declarations.md#81-proposition-families--prop)).
 
 You can see both of the proof forms in the fragments this curriculum draws
 from. `catalog/packages/Core/Logic/Transport.ken.md` states `cong`, `sym`,
