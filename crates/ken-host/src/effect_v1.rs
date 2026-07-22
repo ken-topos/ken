@@ -327,10 +327,7 @@ pub fn host_effect_wire_layout_v1(
         reply_align_shift: align_shift(align("HostReplyV1")?)?,
         reply_tag_offset: checked_u32(offset("HostReplyV1", "tag")?)?,
         reply_detail_offset: checked_u32(offset("HostReplyV1", "detail")?)?,
-        reply_effective_request_offset: checked_u32(offset(
-            "HostReplyV1",
-            "effective_request",
-        )?)?,
+        reply_effective_request_offset: checked_u32(offset("HostReplyV1", "effective_request")?)?,
         reply_bytes_data_offset: checked_u32(reply_bytes + slice_data)?,
         reply_bytes_len_offset: checked_u32(reply_bytes + slice_len)?,
         reply_resource_error_schema_offset: checked_u32(
@@ -2638,6 +2635,7 @@ mod tests {
             "layout=SIZE_HostReplyV1|",
             "layout=SIZE_ResourceErrorReplyV1|64",
             "layout=OFFSET_HostReplyV1_resource_error|32",
+            "layout=OFFSET_HostReplyV1_effective_request|96",
             "error=io.BrokenPipe|3",
             "error=resource.ReleaseFailed|3",
             "error=resource.ResourceKindMismatch|4",
