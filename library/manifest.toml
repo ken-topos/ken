@@ -82,6 +82,66 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/learn/reading-ken/fragments.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+  "catalog/packages/Core/Logic/Transport.ken.md",
+  "catalog/packages/Data/Sums/Combinators.ken.md",
+  "catalog/packages/Capability/Console/Text.ken.md",
+  "catalog/packages/Capability/Filesystem/Errors.ken.md",
+  "catalog/packages/Capability/System/IO.ken.md",
+  "catalog/packages/Tooling/Testing/Property.ken.md",
+  "catalog/packages/Core/Classes/LawfulFunctors.ken.md",
+  "catalog/packages/Core/Classes/LawfulClasses.ken.md",
+  "catalog/packages/Core/Classes/EffectfulClasses.ken.md",
+  "catalog/packages/Data/Numeric/Nat/Arithmetic.ken.md",
+  "catalog/packages/Data/Numeric/Nat/Order.ken.md",
+  "catalog/examples/CommandLine/Forge.ken.md",
+  "docs/program/07-catalog-style-guide.md#3-code-block-roles-the-fence-taxonomy",
+  "docs/program/07-catalog-style-guide.md#13-path--import--the-normative-rule",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/quickstart.md"
+kind = "tutorial"
+audience = ["human-reader"]
+authority = "tutorial"
+availability = "current"
+sources = [
+  "README.md#build",
+  "catalog/guide/decomposition-abstraction.ken.md",
+  "spec/20-verification/21-spec-syntax.md#52-the-epistemic-status-per-claim-export-facing--oq-spec-decided",
+  "spec/20-verification/21-spec-syntax.md#53-how-the-verdict-and-the-status-relate-the-projection",
+  "spec/30-surface/33-declarations.md#321-admission-boundary-headers",
+  "spec/30-surface/36-effects.md#1-effects-as-a-static-row",
+  "docs/program/07-catalog-style-guide.md#3-code-block-roles-the-fence-taxonomy",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/STATUS.md"
 kind = "status"
 audience = ["human-reader", "agent-reader"]
