@@ -229,12 +229,65 @@ move" claim auditable rather than asserted.
    > same kind, while the property that matters lives outside the domain
    > either one iterates.**
 
-3. **Move-purity — ORDERED item-level identity.** For each slice, every moved
-   production **declaration, function/method body, trait impl, and macro
-   invocation** is compared against its source as an **ordered token
-   sequence**, and the only permitted deltas are enumerated and reviewed
-   **separately**: module/import paths, namespace wiring, and the exact AC-7
-   visibility ledger. State the mechanism in the PR body.
+3. **Move-purity — ORDERED item-level identity, PLUS removed-line closure.**
+   For each slice, every moved production **declaration, function/method body,
+   trait impl, and macro invocation** is compared against its source as an
+   **ordered token sequence**, and the only permitted deltas are enumerated and
+   reviewed **separately**: module/import paths, namespace wiring, and the
+   exact AC-7 visibility ledger. **AND: every line removed from the parent is
+   either present in the new module or listed in the AC-7 ledger.** State both
+   mechanisms in the PR body.
+
+   > ### ⛔ THE SECOND HALF IS NOT OPTIONAL — ORDERED IDENTITY CANNOT SEE A DELETION
+   >
+   > Added 2026-07-22 on the adversary's slice-2 finding (`evt_58rd48tw0vdjp`),
+   > which measured the first half of this AC against its own four blind spots:
+   > field→`pub`, new enum variant, and new inherent method are **caught** (each
+   > lives inside a moved declaration, so its token sequence changes). **A
+   > deleted `impl Display` is not**, and the reason is structural:
+   >
+   > **Ordered identity compares every moved item *against its source* — a
+   > comparison over items present on BOTH sides. A deleted item has no
+   > post-image, so it is never in the compared set.** It is a **presence
+   > check, not a closure check**, and no amount of ordering strengthens it in
+   > that direction.
+   >
+   > **⛔ And no other AC catches it either.** Walking a dropped *unreferenced*
+   > item through all seven: **AC-1** module list unchanged → blind; **AC-2**
+   > only module-level *public* names, and the item may be private → blind;
+   > **AC-3** not in the compared set → blind; **AC-4** count preserved, nothing
+   > references it → blind; **AC-5** compiles, being unreferenced → blind;
+   > **AC-6** not codegen → blind; **AC-7** a deletion widens nothing → blind.
+   >
+   > **The removed-line multiset was the only net for absence, and it was not a
+   > criterion** — it appeared only in prose. On slice 2 it produced:
+   > `removed-from-parent 270 unique non-blank, present in planning.rs 261,
+   > NOT present exactly 9` — and those 9 are byte-for-byte the AC-7 ledger
+   > (5 fns, 1 struct, 3 fields). **Slice 2 was clean; it just was not clean
+   > *because of an AC*.** It costs one command.
+   >
+   > **The worst case this closes is a silently-lost `impl Drop`** — invisible
+   > to AC-2 (not a module-level name), invisible to AC-3 (no post-image),
+   > compiles clean when removed, and behaviourally load-bearing. The residual
+   > parent has exactly **three**; `:3188` `impl Drop for Restore` is genuinely
+   > load-bearing (pure save/restore with no entry normalization — losing it
+   > latches `PX8DS_RETIRED_FLAT_ORDER` true for the rest of the thread) and is
+   > defended by a real two-arm discriminator at
+   > `ken-cli/tests/px8ta_oriented_subcontinuation.rs:272-300`. The other two
+   > are defensively redundant, clearing state at entry as well as in `drop`.
+   >
+   > This is [[completeness-gate-must-be-bidirectional]] in an AC: **a check
+   > that ranges over what survived can only ever confirm what survived.**
+
+   > ### ⚠ AC-2 CALIBRATION — a private-only slice must SAY SO, not cite a number
+   >
+   > All nine items slice 2 moved were **private** pre-split, so they were never
+   > among the 338 module-level names. **`338 → 338` was incapable of moving for
+   > that slice** — it is not weak evidence there, it is *no* evidence.
+   > Consistent with "necessary, never sufficient," but a reader tallying green
+   > checks will over-count. **If a slice moves only private items, state that
+   > AC-2 is vacuous for it rather than reporting the unchanged number.**
+   > Slices 3 and 4 move behavior and will not have this property.
 
    > ⛔ **Order is load-bearing; a multiset is not enough.** A normalized line
    > multiset is excellent as a **second inventory net** — it exposes
@@ -266,6 +319,39 @@ move" claim auditable rather than asserted.
    > whole files.** Byte-identity goes red on lawful import and visibility
    > churn — it was ruled out (operator, 2026-07-22) and stays out. The unit
    > is the **moved item**, not the file.
+
+> ### ★ THE EVIDENCE HEURISTIC BEHIND AC-2, AC-3, AND AC-7
+>
+> Adopted 2026-07-22 from the Runtime ring's slice-2 retros (implementer
+> `evt_22zh45vfbvppj`, leader `evt_66xzjpkxg77gv`). It generalizes past this WP
+> and applies to every ledger, inventory, or count in any frame:
+>
+> > **A ledger or inventory is stronger as the OUTPUT of a mechanism than as an
+> > assertion the mechanism confirms.**
+>
+> The weaker reading — *"check your list twice"* — sounds identical and is not
+> the point. The point is that **an author's enumeration can only ever be
+> checked for the items the author thought to list.** A check that *confirms* a
+> list is bounded by the list; a check that *emits* the list is bounded by the
+> code. Only the second can surprise you.
+>
+> **Concretely, in this WP:** the AC-7 visibility ledger is the **output of the
+> AC-3 ordered diff**, not an author's enumeration that the diff later agrees
+> with. Report it that way.
+>
+> **This is the same defect the §7 rewrite corrected one layer up** — AC-2 was
+> an enumeration of module-level names checked against another enumeration of
+> module-level names, structurally blind to fields, variants, methods, and
+> trait impls. Three occurrences in two days across three artifacts, so treat
+> it as a standing review question rather than a fixed instance: **for every
+> count or list in an evidence package, ask whether it was measured or
+> asserted.**
+>
+> Applies to aggregates too. **A total is an assertion; the rows are the
+> measurement.** The slice-2 implementer twice computed an aggregate with a
+> line-anchored pattern and nearly reported a fictional coverage table — caught
+> both times by dumping rows rather than trusting the total.
+
 4. **Test preservation.** All 25 `#[cfg(test)]` blocks compile and pass. The
    total test-function count is unchanged; no test is deleted, `#[ignore]`d,
    or has an assertion weakened. Report the before/after count.

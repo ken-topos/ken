@@ -43,16 +43,74 @@ slices remain; slice 3 (`compiled`) is next.**
 
 ### ▶ Doc track — DOC-CURRENCY-ANCHOR (doc ring)
 
-Kicked from `origin/main @ 0f9a483a`; doc-author authoring, librarian preflight
-done. This closes DOC-W0's unmet half (a recorded revision that certifies
-nothing) and **gates Wave 1**.
+Candidate `wp/DOC-CURRENCY-ANCHOR @ 139f1442`, in **Librarian QA** (third
+fold: `library/*` blanket exclusion narrowed to a visible per-document-kind
+rule, symlink sources rejected by tracked git mode at both `REVISION` and
+`HEAD`, duplicate/out-of-order `kind`-field desync closed). 17/17 green.
+This closes DOC-W0's unmet half and **gates Wave 1**.
+
+> ### ⛔ THE LIBRARIAN STALLED ON A PROVIDER CONTENT REFUSAL — expect this again
+>
+> 2026-07-22 ~04:47Z. Mid-QA, running a **parser-differential** check (does the
+> awk shell implementation agree with the Rust one on where a
+> `library/manifest.toml` record ends, given a `kind` token at column zero
+> inside a multiline `sources` array). The provider classifier read it as a
+> cybersecurity request, **the turn ended, and the seat posted nothing** —
+> `doc-author` was waiting on a mention that would never arrive. Only evidence
+> is the pane tail.
+>
+> **Second occurrence in two days on `gpt-5.6-sol`** (first: `runtime-
+> implementer` on a native differential harness). **The trigger is the SHAPE of
+> adversarial QA, not the domain** — *make one implementation disagree with
+> another and demonstrate the bypass* is how a differential conformance test is
+> written and also how a parser-confusion attack is written.
+>
+> ⚠ **This ring is maximally exposed**, because planted-violation and
+> mutation-proof work is its *core method* — `DOC-W1` AC-6 requires it, and the
+> program frame §0 makes the gates the ring's only independent oracle.
+>
+> **Recovery that worked (one attempt, not repeated evasion):** rouse with an
+> accurate re-description of the legitimate work, **plus an explicit escape** —
+> if it will not proceed, report the case as an **explicitly unverified
+> residual**, name the exact case, and approve or reject on the rest. **The
+> escape is the important half:** a silently-dropped probe is an invisible hole
+> in a verdict that reads complete, which is worse than a detectable stall.
 
 ### ⏭ Steward's own queue under the away-window directive
 
-1. Wave 1 frame (fragment-based, `depends_on: [DOC-CURRENCY-ANCHOR]`,
-   **revise** not author for `library/introduction.md`) + Wave 2 frame.
-   **Operator: frame Waves 1–2 ONLY.**
-2. The full six-wave program body in `12-documentation-program.md`.
+1. ✅ **DONE — Waves 1 and 2 framed** (`issues/DOC-W1.md`, `issues/DOC-W2.md`,
+   `origin/main @ a87e1cae`). Both `status: draft` meaning **GATED, not
+   unscoped** — the schema has no `blocked` state. Wave 1b and
+   `tasks/ffi-and-platform.md` are deferred with reasons stated in-file.
+2. ✅ **DONE — the six-wave body** is `12-documentation-program.md` §4a/§4b/§4c.
+   §4a is the load-bearing part: DOC-W0's eight findings tabulated as one
+   defect class, with the three carries every wave frame inherits.
+   **⏭ Remaining: Wave 1b and Waves 3–6 are a MAP, framed only when their
+   predecessor's exit condition is actually met.**
+
+> **⏸ HELD, UNPUBLISHED on `steward/work`:** the §7 *ledger-is-an-output*
+> evidence heuristic (`9359c762`). Held because the doc ring has a candidate in
+> QA. **Nothing is gated on it** — §10.4a is already on `main`, which is what
+> slice 3 needs. Publish with the next batch, after DOC-CURRENCY-ANCHOR lands.
+
+> ### ⛔ I ASSIGNED A STEWARD-ONLY DUTY TO A SEAT — TWICE THIS WEEK
+>
+> Told `runtime-leader` to *"run the handoff gate first"* before slice 3. Under
+> §15 the gate is **mine** — leaders don't `moot compact`. They bounced it
+> back, correctly, 38 seconds after kicking off. Earlier I told `doc-author` to
+> push their WP branch; they accepted, then tested it and hit
+> `could not read Username for 'https://github.com'`.
+>
+> **The tell both times: I wrote an instruction whose verb belongs to a
+> capability I hold and the recipient doesn't** — *push, compact, merge, mint*.
+> A duty assigned to a seat that cannot perform it is **worse than the open
+> gap, because everyone then believes it is handled.** A QA/leader seat may
+> carry a **detection** item; the **remedy** always routes to me.
+>
+> **Owed: compact all three Runtime seats at the slice 3 → 4 seam** (28/30/30%
+> at kickoff — under the 33% mid-flight ceiling, so letting slice 3 run was the
+> right call; compacting mid-flight would have eaten the just-delivered
+> kickoff).
 3. ✅ **`issues/ABI-REVOKE.md` — FRAMED**, and it is **not shovel-ready by
    design.** Grounding found a blocking prerequisite the charter does not
    name: `62 §4` ties the membrane to a controlling **`36 §4` space cell**,
