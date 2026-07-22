@@ -1,7 +1,7 @@
 ---
 id: KW-THEOREM
 title: "rename the surface keyword `lemma` to `theorem`"
-status: draft
+status: ready
 owner: spec
 size: M
 gate: none
@@ -102,23 +102,60 @@ surviving `lemma` is indistinguishable from a missed one.
    enumerates them), but it means the change is not confined to the elaborator.
 6. **Conformance seeds pin exact surface text** (19 files) and run in CI.
 
-## ⛔ OPEN FORK — needs an Architect/enclave ruling BEFORE decomposition
+## ✅ FORK RULED — (A) HARD RENAME. `dec_5bb4zsfafgkm5` RESOLVED
 
-**Is this a hard rename or a transitional period?**
+**Architect ruling `evt_5aem3ec5kmsg8`.** `theorem` becomes the **sole**
+standalone checked-theorem declaration keyword. **`lemma` is NOT retained as an
+accepted or deprecated alias.**
 
-- **(A) Hard rename.** `lemma` ceases to lex; every existing `.ken` program
-  using it breaks. Cleanest end state, one flip, no dual-spelling era.
-- **(B) Accept both, `lemma` deprecated.** `lemma` continues to lex as a
-  deprecated alias for some window. No corpus breaks, but the spec carries two
-  spellings for one concept — which cuts against **subsume-don't-proliferate**.
+Rationale, as ruled: the semantic object is already *theorem* in the AST field,
+`elaborate_checked_theorem`, and implementation prose, while `theorem` is
+collision-free in Ken source; every known surface consumer is first-party and
+migrates in-repo. **An alias buys no compatibility beneficiary and creates two
+normative spellings for one construct.**
 
-The operator's wording (*"rename"*) reads as **(A)**, and the corpus is
-first-party and fully in-repo, so (A) has no external-breakage cost that
-normally motivates (B). **I lean (A) and am not deciding it** — it is a surface
-contract question, and the answer determines whether this is one WP or a
-two-phase campaign. Route before slicing.
+### ⛔ ONE WP, ONE ATOMIC MERGE CANDIDATE
 
-## Suggested sequencing (only after the fork is ruled)
+The sequencing objection was acknowledged as **real but not sufficient to
+justify language proliferation**. Therefore:
+
+- **Spec-first authoring may happen first on the integration branch.**
+- ⛔ **NO partial spec/lexer/corpus slice may land on `main`.**
+- The exact candidate must contain **all** of: normative grammar + heading
+  changes; lexer/parser/resolved-AST vocabulary (`KwTheorem`, `TheoremDecl`,
+  `RDeclKind::Theorem` **and consumers**); formatter keyword strings; catalog;
+  conformance; library/docs/agent/tooling surface references; **and every
+  changed anchor plus its inbound consumers.**
+
+⇒ **The flip is atomic at the only boundary users observe.** The five-area
+ordering below is *authoring* order on the branch, **not** a landing sequence.
+
+### Acceptance — the classification made falsifiable
+
+1. **Emit the fixed-base occurrence set** for `lemma`/`lemmas` plus
+   surface-derived identifiers and anchors.
+2. **Classify every row** as (a) keyword-contract rename, (b) derived
+   identifier/anchor rename **with its consumers**, or (c) **intentional
+   ordinary-English leave**.
+3. **Make both changes AND leaves review-visible**, then **re-emit against the
+   exact candidate** so no newly introduced or unclassified hit escapes.
+4. **Positively prove** `theorem` parses, elaborates, and formats.
+   **Negatively prove** `lemma name ...` is **rejected, not aliased.**
+5. **Exhaustive internal enum breakage is ONE detector, not the net** — also run
+   the catalog corpus, conformance/CI, the formatter oracle, and the
+   stale-anchor detector.
+
+★ **Ordinary mathematical English remains ordinary English** — a helper result
+may still be *called* a lemma. What must disappear is `lemma` **as Ken syntax**,
+and identifiers/anchors derived from that surface spelling.
+
+### Merge authority
+
+The single merge Decision requires **Spec/conformance AND Architect** authority,
+because normative grammar and implementation surface change together. This is
+**not** a §14a doc-only path.
+
+## Authoring order on the branch (NOT a landing sequence — the merge is atomic)
 
 **Normative first, then implementation, then corpus** — the spec is the sole
 authority (D1), so a catalog edit ahead of it would be unanchored.
@@ -145,13 +182,7 @@ PUB-VERIFY · MODELS-TIER · CI-SKIPPED-NATIVE-TESTS (steward)
 ```
 …and behind the in-flight `active` set (PX8, RT-SPLIT, DOC-W1, BUDGET-EFF).
 
-⛔ **Status stays `draft`, and that is NOT the same as "not queued."** It is
-queued last; it is not yet *releasable*, because §2 `ready` requires open
-questions resolved and **the (A)/(B) fork above is still open**. Marking it
-`ready` with an unresolved surface-contract fork would hand a ring a WP whose
-first act is to stop and ask.
-
-⇒ **The fork is routed to @architect now**, deliberately ahead of pickup and
-flagged non-urgent, so the ruling lands long before this reaches the front of
-the queue and the WP is shovel-ready when it does. **Flip to `ready` on that
-ruling** — nothing else gates it.
+✅ **Now `ready`** — the (A)/(B) fork is ruled (`dec_5bb4zsfafgkm5`) and nothing
+else gates it. **Queue position is unchanged: LAST**, per both the operator and
+the Architect. Ready means *releasable when it reaches the front*, not *start
+now*.

@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 14:38:37Z — from 30 issue file(s) in `docs/program/issues/`.
+2026-07-22 14:39:12Z — from 30 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -53,7 +53,7 @@ the committed file matches the generator's output.
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
-| `KW-THEOREM` | rename the surface keyword `lemma` to `theorem` | draft | spec | M | none | — |
+| `KW-THEOREM` | rename the surface keyword `lemma` to `theorem` | ready | spec | M | none | — |
 | `MODELS-TIER` | agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception | ready | steward | S | none | — |
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | ready | steward | S | none | — |
 | `PX8-F-CAP-41` | PX8-F-CAP (#41) — backlog, deferred to spec-first | draft | TBD | TBD | none | 41 |
@@ -77,6 +77,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `CI-SKIPPED-NATIVE-TESTS` — Restore rt_parity_native — one test at 221s is the blocker
 - `DOC-VALIDATION-BINDING` — validation vocabulary claims a 1:1 binding to the gates; nothing binds it
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
+- `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `PUB-VERIFY` — scripted-pr-automerge.sh exits 0 on a failed push
 - `Q-CLAIM-CLOSURE` — Q-RESIDUE adversary findings — claim-loss in multi-claim test blocks, plus R1/R2/R3
