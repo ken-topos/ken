@@ -18,7 +18,7 @@ use cranelift_codegen::settings::{self, Configurable};
 use cranelift_codegen::verify_function;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{default_libcall_names, FuncId, Linkage, Module};
+use cranelift_module::{default_libcall_names, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule};
 
 use crate::{
@@ -32,9 +32,11 @@ use crate::{
     RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
 
+pub(crate) mod compiled;
 pub(crate) mod planning;
 pub(crate) mod surface;
 
+use compiled::*;
 pub(crate) use planning::*;
 pub use surface::*;
 
@@ -1258,69 +1260,6 @@ fn runtime_ir_comparison_error_report(
     }
 }
 
-struct CompiledModule<M> {
-    module: M,
-    func_id: FuncId,
-    decoder: Option<ResultDecoder>,
-    result_table: BTreeMap<i64, RuntimeGroundValue>,
-    trap: Option<RuntimeTrap>,
-    verifier_passed: bool,
-    assumptions: BTreeSet<String>,
-    unsupported: Vec<String>,
-}
-
-type CompiledExpr = CompiledModule<JITModule>;
-
-#[derive(Clone, Copy)]
-enum ResultDecoder {
-    Int,
-    ProcessStatus,
-    Bool,
-    Table,
-}
-
-impl CompiledModule<JITModule> {
-    fn run(
-        mut self,
-        process_root: Option<*const std::ffi::c_void>,
-    ) -> Result<(RuntimeObservation, Option<i64>), CraneliftBackendError> {
-        if let Some(trap) = self.trap {
-            return Ok((RuntimeObservation::Trapped(trap), None));
-        }
-
-        self.module
-            .finalize_definitions()
-            .map_err(|err| backend_module(err.to_string()))?;
-        let code = self.module.get_finalized_function(self.func_id);
-        // Named native-code-execution boundary. This is tested/validated JIT
-        // execution, never a proof and never a host-ABI syscall boundary.
-        let mut native_int_arena = crate::NativeIntArenaV1::default();
-        let process_root = process_root
-            .unwrap_or_else(|| (&mut native_int_arena as *mut crate::NativeIntArenaV1).cast());
-        let native =
-            unsafe { mem::transmute::<_, extern "C" fn(*const std::ffi::c_void) -> i64>(code) };
-        let token = native(process_root);
-        let decoder = self
-            .decoder
-            .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
-        let ground = match decoder {
-            ResultDecoder::Int => RuntimeGroundValue::Int(
-                native_int_arena
-                    .decode_final_export()
-                    .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?,
-            ),
-            ResultDecoder::ProcessStatus => RuntimeGroundValue::Int(token.into()),
-            ResultDecoder::Bool => RuntimeGroundValue::Bool(token != 0),
-            ResultDecoder::Table => self
-                .result_table
-                .get(&token)
-                .cloned()
-                .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?,
-        };
-        Ok((RuntimeObservation::Returned(ground), Some(token)))
-    }
-}
-
 fn compile_expr(
     expr: &RuntimeExpr,
     seed_env: &NativeSeedEnvironment,
@@ -1910,16 +1849,16 @@ fn run_checked_bounded_nat_fixture(
     module
         .define_function(func_id, &mut context)
         .map_err(|error| backend_module(error.to_string()))?;
-    let compiled = CompiledModule {
+    let compiled = CompiledModule::from_parts(
         module,
         func_id,
-        decoder: Some(ResultDecoder::ProcessStatus),
-        result_table: compiler.result_table,
-        trap: None,
-        verifier_passed: true,
-        assumptions: compiler.assumptions,
-        unsupported: compiler.unsupported,
-    };
+        Some(ResultDecoder::ProcessStatus),
+        compiler.result_table,
+        None,
+        true,
+        compiler.assumptions,
+        compiler.unsupported,
+    );
     compiled
         .run(None)
         .map(|(_, value)| value.expect("PX8-N fixture returns one scalar"))
@@ -2056,16 +1995,16 @@ fn run_dynamic_constructor_dispatch_fixture(
     module
         .define_function(func_id, &mut context)
         .map_err(|error| backend_module(error.to_string()))?;
-    let compiled = CompiledModule {
+    let compiled = CompiledModule::from_parts(
         module,
         func_id,
-        decoder: Some(ResultDecoder::ProcessStatus),
-        result_table: compiler.result_table,
-        trap: None,
-        verifier_passed: true,
-        assumptions: compiler.assumptions,
-        unsupported: compiler.unsupported,
-    };
+        Some(ResultDecoder::ProcessStatus),
+        compiler.result_table,
+        None,
+        true,
+        compiler.assumptions,
+        compiler.unsupported,
+    );
     compiled
         .run(None)
         .map(|(_, token)| token.expect("fixture returns one scalar"))
@@ -2283,16 +2222,16 @@ fn compile_expr_into_module<'a, M: Module>(
         .define_function(func_id, &mut ctx)
         .map_err(|err| backend_module(err.to_string()))?;
 
-    Ok(CompiledModule {
+    Ok(CompiledModule::from_parts(
         module,
         func_id,
         decoder,
-        result_table: compiler.result_table,
-        trap: maybe_trap,
-        verifier_passed: true,
-        assumptions: compiler.assumptions,
-        unsupported: compiler.unsupported,
-    })
+        compiler.result_table,
+        maybe_trap,
+        true,
+        compiler.assumptions,
+        compiler.unsupported,
+    ))
 }
 
 fn native_isa() -> Result<OwnedTargetIsa, CraneliftBackendError> {
