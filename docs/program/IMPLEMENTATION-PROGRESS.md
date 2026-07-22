@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 01:53:45Z — from 22 issue file(s) in `docs/program/issues/`.
+2026-07-22 03:22:49Z — from 23 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -51,6 +51,7 @@ the committed file matches the generator's output.
 | `MODELS-TIER` | agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception | ready | steward | S | none | — |
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | ready | steward | S | none | — |
 | `PX8-F-CAP-41` | PX8-F-CAP (#41) — backlog, deferred to spec-first | draft | TBD | TBD | none | 41 |
+| `PX8` | partial/positioned IO — the completion program's root; closure condition | active | runtime | L | none | — |
 | `Q-CLAIM-CLOSURE` | Q-RESIDUE adversary findings — claim-loss in multi-claim test blocks, plus R1/R2/R3 | ready | runtime | S | none | — |
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | draft | runtime | TBD | none | — |
