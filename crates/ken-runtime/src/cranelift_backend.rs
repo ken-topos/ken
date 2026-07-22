@@ -7,7 +7,6 @@
 //! Ken-observable meaning.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
 use std::mem;
 
 use cranelift_codegen::ir::{
@@ -33,6 +32,10 @@ use crate::{
     RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
 
+pub(crate) mod surface;
+
+pub use surface::*;
+
 const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [
     ken_host::HostOpV1::ConsoleWrite,
     ken_host::HostOpV1::ConsoleFlush,
@@ -48,265 +51,6 @@ const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [
     ken_host::HostOpV1::BufferAllocate,
     ken_host::HostOpV1::BufferFreeze,
 ];
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CraneliftRunReport {
-    pub example: String,
-    pub observation: RuntimeObservation,
-    pub verifier_passed: bool,
-    pub native_returned: Option<i64>,
-    pub trust: NativeTrustReport,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CraneliftObjectArtifact {
-    pub example: String,
-    pub entry_symbol: String,
-    pub object_bytes: Vec<u8>,
-    pub object_hash: u64,
-    pub platform_target: String,
-    pub backend_name: String,
-    pub verifier_passed: bool,
-    pub assumptions: BTreeSet<String>,
-    pub unsupported: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeTrustReport {
-    pub backend: &'static str,
-    pub fidelity: NativeFidelity,
-    pub verifier_passed: bool,
-    pub artifact_validation: Option<RuntimeArtifactValidationReport>,
-    pub ken_checked_proof_erasure_boundary: Option<KenCheckedProofErasureBoundaryReport>,
-    pub toolchain: NativeToolchainReport,
-    pub evidence: NativeRunEvidence,
-    pub assumptions: BTreeSet<String>,
-    pub unsupported: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeToolchainReport {
-    pub cranelift: NativeEvidenceFact,
-    pub linker: NativeEvidenceFact,
-    pub runtime: NativeEvidenceFact,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NativeEvidenceFact {
-    Available {
-        value: String,
-        evidence_source: String,
-    },
-    Unavailable {
-        reason: String,
-    },
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct NativeRunEvidence {
-    pub package_identity: Option<String>,
-    pub core_semantic_hash: Option<u64>,
-    pub runtime_artifact_hash: Option<u64>,
-    pub evidence_sources: BTreeMap<String, String>,
-    pub unavailable: BTreeSet<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct InterpreterOracleObservation {
-    pub artifact: NativeArtifactIdentity,
-    pub observation: RuntimeObservation,
-    pub evidence_source: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeDifferentialReport {
-    pub example: String,
-    pub artifact: NativeArtifactIdentity,
-    pub oracle: InterpreterOracleObservation,
-    pub native: Option<CraneliftRunReport>,
-    pub verdict: NativeDifferentialVerdict,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeRuntimeIrComparisonReport {
-    pub example: String,
-    pub artifact: NativeArtifactIdentity,
-    pub runtime_ir: RuntimeIrRunReport,
-    pub native: Option<CraneliftRunReport>,
-    pub verdict: NativeRuntimeIrComparisonVerdict,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeArtifactIdentity {
-    pub package_identity: String,
-    pub core_semantic_hash: u64,
-    pub runtime_artifact_hash: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NativeDifferentialVerdict {
-    F1InterpreterAgreement {
-        stage: NativeDifferentialStage,
-    },
-    Unsupported {
-        stage: NativeDifferentialStage,
-        construct: &'static str,
-        reason: String,
-    },
-    Mismatch {
-        stage: NativeDifferentialStage,
-        interpreter: RuntimeObservation,
-        native: RuntimeObservation,
-    },
-    BackendFailure {
-        stage: NativeDifferentialStage,
-        reason: String,
-    },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NativeRuntimeIrComparisonVerdict {
-    RuntimeIrNativeAgreement {
-        stage: NativeDifferentialStage,
-    },
-    Unsupported {
-        stage: NativeDifferentialStage,
-        construct: &'static str,
-        reason: String,
-    },
-    Mismatch {
-        stage: NativeDifferentialStage,
-        runtime_ir: RuntimeObservation,
-        native: RuntimeObservation,
-    },
-    BackendFailure {
-        stage: NativeDifferentialStage,
-        reason: String,
-    },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NativeDifferentialStage {
-    BoundaryPreflight,
-    NativeLoweringOrExecution,
-    InterpreterNativeCompare,
-    RuntimeIrNativeCompare,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NativeFidelity {
-    F0NativeExample,
-    F1SeedObservationAgreement,
-    F1InterpreterDifferentialAgreement,
-    F1RuntimeIrEvaluatorAgreement,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CraneliftBackendError {
-    Unsupported(UnsupportedLowering),
-    Backend(BackendFailure),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ValidatedNativeRunError {
-    Validation(RuntimeArtifactValidationError),
-    Backend(CraneliftBackendError),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UnsupportedLowering {
-    pub construct: &'static str,
-    pub reason: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BackendFailure {
-    Target(String),
-    Verifier(String),
-    Module(String),
-    NativeResultDecode { token: i64 },
-}
-
-impl fmt::Display for CraneliftBackendError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CraneliftBackendError::Unsupported(err) => {
-                write!(f, "unsupported runtime-IR lowering: {err}")
-            }
-            CraneliftBackendError::Backend(err) => write!(f, "Cranelift backend failure: {err}"),
-        }
-    }
-}
-
-impl std::error::Error for CraneliftBackendError {}
-
-impl fmt::Display for ValidatedNativeRunError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ValidatedNativeRunError::Validation(err) => {
-                write!(f, "runtime artifact validation failed: {err}")
-            }
-            ValidatedNativeRunError::Backend(err) => write!(f, "{err}"),
-        }
-    }
-}
-
-impl std::error::Error for ValidatedNativeRunError {}
-
-impl From<RuntimeArtifactValidationError> for ValidatedNativeRunError {
-    fn from(err: RuntimeArtifactValidationError) -> Self {
-        ValidatedNativeRunError::Validation(err)
-    }
-}
-
-impl From<CraneliftBackendError> for ValidatedNativeRunError {
-    fn from(err: CraneliftBackendError) -> Self {
-        ValidatedNativeRunError::Backend(err)
-    }
-}
-
-impl fmt::Display for UnsupportedLowering {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.construct, self.reason)
-    }
-}
-
-impl fmt::Display for BackendFailure {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BackendFailure::Target(msg) => write!(f, "target setup failed: {msg}"),
-            BackendFailure::Verifier(msg) => write!(f, "verifier rejected function: {msg}"),
-            BackendFailure::Module(msg) => write!(f, "module operation failed: {msg}"),
-            BackendFailure::NativeResultDecode { token } => {
-                write!(f, "native result token {token} is not in the result table")
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct NativeSeedEnvironment {
-    values: BTreeMap<String, RuntimeGroundValue>,
-}
-
-impl NativeSeedEnvironment {
-    pub fn empty() -> Self {
-        Self::default()
-    }
-
-    pub fn nc5_seed() -> Self {
-        let mut values = BTreeMap::new();
-        values.insert(
-            "decl:fixture::Local::y".to_string(),
-            RuntimeGroundValue::Int((2).into()),
-        );
-        Self { values }
-    }
-
-    pub fn insert(&mut self, symbol: impl Into<String>, value: RuntimeGroundValue) {
-        self.values.insert(symbol.into(), value);
-    }
-}
 
 pub fn run_nc6_seed_examples(
     program: &RuntimeProgram,
@@ -14994,21 +14738,6 @@ fn borrowed_constructor_identity(
     } else {
         None
     }
-}
-
-fn unsupported(construct: &'static str, reason: impl Into<String>) -> CraneliftBackendError {
-    CraneliftBackendError::Unsupported(UnsupportedLowering {
-        construct,
-        reason: reason.into(),
-    })
-}
-
-fn backend(failure: BackendFailure) -> CraneliftBackendError {
-    CraneliftBackendError::Backend(failure)
-}
-
-pub(crate) fn backend_module(reason: String) -> CraneliftBackendError {
-    backend(BackendFailure::Module(reason))
 }
 
 #[cfg(test)]
