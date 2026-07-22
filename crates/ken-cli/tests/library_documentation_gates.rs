@@ -1594,6 +1594,132 @@ fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_ki
     );
 }
 
+// --- REVISION must survive a squash-merge, not just resolve on the branch --
+//
+// Landed post-merge outage (thr_15yrvjrpap9td/thr_sq41qedhmtas, adversary
+// evt_504x5h9t6veqq, 2026-07-22): `DOC-CURRENCY-ANCHOR` merged with
+// `library/REVISION` naming `cc2af484`, the WP branch's own immediate-parent
+// commit -- correct on the branch (where `status_md_generation_is_idempotent`
+// demanded exactly that bump) and where three folds, an Architect approval,
+// a Librarian QA pass, and green CI all checked it. The publisher
+// **squash-merges**: the merged commit's sole parent is the pre-merge `main`
+// tip, so no pre-squash branch commit survives as an ancestor of `main`.
+// `origin/main` went CI-red on its own documentation gate the moment the
+// squash landed -- a property that was true at every check anyone ran and
+// became false only after the last one.
+//
+// Steward/Librarian/doc-leader jointly verified the fix and its regression
+// shape before it was built (not accepted on assertion): `REVISION` must
+// name the branch's MERGE BASE -- the `origin/main` tip the branch was cut
+// or last rebased onto -- never the branch's own parent commit. On this
+// repository's linear (no-merge-commit) history, a squash commit `S`'s sole
+// parent is always the pre-merge main tip `T`, and the reviewed candidate's
+// merge base is always `T` or an ancestor of `T`; therefore the merge base
+// is always an ancestor of `S`. A bare `merge-base --is-ancestor` assertion
+// on its own would be a WEAKER check than this: it must be run against a
+// topology that actually has the squash-merge shape, which is what this
+// test constructs, rather than against the branch (where the bug is
+// invisible by construction).
+#[test]
+fn revision_must_survive_a_simulated_squash_merge_not_just_the_branch() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-squash-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::create_dir_all(repo.join("library")).unwrap();
+    run_git(&["init", "--quiet", "-b", "main"], &repo);
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(repo.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = []\n",
+    )
+    .unwrap();
+    std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "B: merge base (simulated main tip)"],
+        &repo,
+    );
+    let b = run_git(&["rev-parse", "HEAD"], &repo);
+
+    // C1: first branch commit (filler) -- the shape that used to be
+    // (incorrectly) treated as "the immediate parent, so it's fine."
+    std::fs::write(repo.join("filler-1.txt"), "filler\n").unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "C1: branch commit"], &repo);
+    let c1 = run_git(&["rev-parse", "HEAD"], &repo);
+
+    // C2: branch tip (the WP's final fold). Its exact content doesn't
+    // matter beyond establishing the tree the squash carries forward.
+    std::fs::write(repo.join("filler-2.txt"), "filler 2\n").unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "C2: branch tip"], &repo);
+
+    // S: the synthetic squash commit -- C2's TREE, but B as the SOLE
+    // PARENT. This is exactly what a squash-merge produces
+    // (`git commit-tree <tree> -p <pre-merge-main-tip>`): a new commit
+    // carrying the content, parented on `main`, never on the branch.
+    let tree = run_git(&["rev-parse", "HEAD^{tree}"], &repo);
+    let s = run_git(
+        &["commit-tree", &tree, "-p", &b, "-m", "S: simulated squash merge"],
+        &repo,
+    );
+    run_git(&["checkout", "--quiet", &s], &repo);
+    assert_eq!(
+        run_git(&["rev-parse", "HEAD"], &repo),
+        s,
+        "checkout of the synthetic squash commit landed somewhere else"
+    );
+
+    // Negative: REVISION names the branch-local commit C1 -- exactly the
+    // landed bug. Must be rejected AT S, even though it resolved fine on
+    // the branch (that is the entire failure mode: true on the branch,
+    // false only after the squash).
+    std::fs::write(repo.join("library/REVISION"), format!("{c1}\n")).unwrap();
+    let negative = run_gen_doc_status(&repo);
+    assert!(
+        !negative.status.success(),
+        "gen-doc-status.sh accepted REVISION naming a branch-local commit \
+         at a simulated squash-merge commit -- this is the exact \
+         DOC-CURRENCY-ANCHOR main outage (cc2af484 unreachable after \
+         d03151d3's squash)"
+    );
+    assert!(
+        String::from_utf8_lossy(&negative.stderr).contains("is not an ancestor"),
+        "expected the ancestry-rejection diagnostic, got stderr:\n{}",
+        String::from_utf8_lossy(&negative.stderr)
+    );
+
+    // Positive: REVISION names the merge base B -- an ancestor of S by
+    // construction (S's sole parent IS B), exactly like a real
+    // squash-merge landing on main.
+    std::fs::write(repo.join("library/REVISION"), format!("{b}\n")).unwrap();
+    let positive = run_gen_doc_status(&repo);
+    assert!(
+        positive.status.success(),
+        "gen-doc-status.sh rejected REVISION naming the branch's merge \
+         base at the simulated squash commit -- the fix's core claim \
+         (merge base survives squash) does not hold. stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&positive.stdout),
+        String::from_utf8_lossy(&positive.stderr)
+    );
+}
+
 // --- authority class is one of D1's closed set -----------------------------
 
 #[test]
