@@ -298,6 +298,46 @@ reference):**
 8. **Causality** — before Approve, demonstrate breaking the claimed mechanism at
    its seam makes the unchanged test fail with the expected opposite (scratch
    mutation / prior-commit run / test-only selector; don't keep the mutation).
+   - **Enumerate your probes by the STATE each one builds, then look for the
+     missing cell (promoted ORACLE-VIS-*; four instances, three seats, one day).**
+     The probes that **follow the diff** — the happy path and the error path —
+     get written for free, because the change itself puts that state in front of
+     you. The probe that has to **manufacture a violation** is *orthogonal to the
+     change*, so it is the one nobody writes — **and its absence is invisible,
+     because the suite still reads as complete.** A publisher gate shipped with
+     three probes, two green:
+     `green→PERMIT ✅ · red→PERMIT ⛔ · conflict→CANNOT-EVALUATE ✅`.
+     Two of three passed **and the two that passed were exactly the ones
+     exercising the code that had just changed**; the red probe — the only one
+     that had to *construct* a violation — was the only discriminator. So don't
+     ask *"did I test it?"*; **tabulate the states (satisfied / violated /
+     unevaluable) and name which probe builds each.** An empty cell is the
+     finding. Same shape as a `compile_fail` block that passes for any reason at
+     all, and as a detector arm whose real job is *rejecting* a signal.
+   - **Mutate to the property's NEAREST legal neighbour, not to an obvious
+     break.** A mutation only proves what it varies. On ORACLE-VIS-PACKAGING the
+     obvious widening (`pub fn f(`) went red correctly, while the **legal
+     line-split** form
+     — `#[cfg(test)]` / `pub` / `fn build_process_starter_executable_artifact(` —
+     compiled clean and **passed green, 13/13** over a genuine widening, because
+     the text pin matched visibility against the *same line's* prefix, empty on
+     the `fn` line. Enumerate the spellings the language actually admits
+     (whitespace, line breaks, attribute placement, re-export paths, glob
+     re-exports at the crate root) and mutate to the **worst legal one**. ★ Where
+     the property is a *language* fact, prefer asking the **compiler** over
+     matching source text — a text pin's blind spots are exactly the forms you
+     did not imagine.
+   - ⛔ **A mutation that breaks the BUILD proves nothing** — the checks then
+     "pass" against rubble. Confirm the crate still compiles under the mutation;
+     use a compile-preserving stand-in (e.g. a `#[cfg(not(test))]` sibling) when
+     the direct edit would collide with a gated declaration.
+   - ⛔ **When a mutation passes where it should FAIL, suspect a STALE INPUT
+     before you doubt the mutation.** Freshness is a **third axis**, independent
+     of correctness and of the positive control: a control proves the harness
+     *works*, never that it read **current** code. A probe selecting among 15
+     accumulated rlibs by filename hash reported on hours-old source **with every
+     signal healthy, the positive control included**. Check *which artifact the
+     probe actually compiled against* before concluding the property holds.
 9. **Maintenance** — the test states which intended extensions stay green and
    which incompatible changes go red. If both answers are "any change," it's a
    snapshot/sentinel, not an invariant — label it.
