@@ -1,13 +1,15 @@
 ---
 id: DOC-W0
 title: "documentation Wave 0 — library/ charter and currency substrate"
-status: active
+status: closed
 owner: doc
 size: M
 gate: none
 depends_on: []
 blocks: []
-github: null
+closed: 2026-07-22
+merged: 6be9754b5fc3c6c7f9d026ef3f113b754c658c8b
+github: 830
 origin: docs/program/12-documentation-program.md (Steward frame, 2026-07-21) from research/librarian-documentation-program-proposal.md
 ---
 
@@ -89,3 +91,67 @@ this wave, stop.
   flow and fleet memory stay under `agent/` and remain Steward-owned (**D3**).
 - If this starts feeling larger than an M, **stop and tell me** rather than
   growing the scope.
+
+## ✅ CLOSED 2026-07-22 — merged `origin/main @ 6be9754b` (PR #830)
+
+Verified on `main` **by content**, not by the publisher's exit code: all eight
+delivered blobs byte-identical to reviewed `d56abbb1`; `revision_resolved()`
+present in `scripts/gen-doc-status.sh`; both shallow-history regressions
+present by name; `walk_library()` reports symlinks and gate 1 rejects them.
+
+**Retros in (all four):** doc-author `evt_5xd2xss4byfv4`, librarian
+`evt_48xce0bsy51kq`, Architect `evt_7702wanstax1h`, doc-leader coordination
+`evt_4dd99cbsx6e8h`.
+
+### ⚠ AC-1 was met STRUCTURALLY, not SUBSTANTIVELY — the record must not overclaim
+
+AC-1 required *"a new page cannot land without declaring what it is, what
+grounds it, and **how its currency is checked**."* A revision **is** recorded
+and validated as a real ancestor — but the recorded revision **certifies
+nothing about the corpus**: no code path reads a cited source's bytes at
+`REVISION`. The unmet half is carried by
+[`DOC-CURRENCY-ANCHOR`](DOC-CURRENCY-ANCHOR.md), which **blocks Wave 1**.
+A second, lower-severity gap is carried by
+[`DOC-VALIDATION-BINDING`](DOC-VALIDATION-BINDING.md).
+
+Both were found by the **adversary, post-merge** — after nine review rounds by
+a T1 QA seat and the Architect. That is not a criticism of the ring; it is the
+strongest available evidence for why the post-merge adversary pass exists.
+
+### ★ The durable output — nine rounds, EIGHT findings, ONE defect class
+
+Every finding was **a proxy standing in for the property**:
+
+| # | proxy checked | property that mattered | found by |
+|---|---|---|---|
+| 1 | rejects a *fake* revision | accepts a real one, **in CI's env** | CI (red) |
+| 2 | test clones `file://{repo_root}` | an **independent** history source | librarian |
+| 3 | `cat-file` says object present | present **AND** ancestry provable | architect |
+| 4 | symlink not *discovered* | symlink **rejected and reported** | architect |
+| 5 | SHA reviewed + approved | SHA **on `origin`** | steward |
+| 6 | process fix *agreed to* | seat **can perform it** | doc-author |
+| 7 | `REVISION` is a real ancestor | **corpus validated against it** | adversary |
+| 8 | vocabulary is a closed set | **bound to the gates it names** | adversary |
+
+**What stopped the in-review recursion** was naming the predicate once
+(`revision_resolved()` = object present AND ancestry provable) and deriving
+self-heal, every deepen checkpoint, the unshallow fallback, and all diagnostics
+from it — not any individual fix.
+
+**What the last two show is that it did not go far enough.** In the adversary's
+framing, which is the sharpest statement of the whole wave:
+
+> Object-present was true. Ancestry-provable is true. `REVISION`-is-an-ancestor
+> is true. **A false proxy gets caught in review; a _true_ one is what ships.**
+> Nine rounds of careful review kept converging on better and better *true
+> statements about the anchor* without anyone asking what the anchor was *for*.
+
+**⇒ Standing carry for every gate-authoring WP** (adopted from the Architect's
+and Librarian's retros): before implementing *or reviewing* an
+environment-dependent gate, **state its complete success predicate once, from
+every downstream consumer**, then build one probe per independence boundary
+between its clauses. Tests, self-healing, and diagnostics all key on that
+predicate — never on a convenient observable that merely implies it in the
+authoring environment. And ask at **frame** time (doc-leader's carry): *what
+does this check assume about where it runs, and is that assumption itself
+checked?*
