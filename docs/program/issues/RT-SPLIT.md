@@ -1,7 +1,7 @@
 ---
 id: RT-SPLIT
 title: decompose cranelift_backend.rs
-status: active
+status: merged
 owner: runtime
 size: L
 gate: none

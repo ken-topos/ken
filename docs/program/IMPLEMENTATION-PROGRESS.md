@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 15:51:53Z — from 33 issue file(s) in `docs/program/issues/`.
+2026-07-22 16:18:46Z — from 33 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -44,7 +44,7 @@ the committed file matches the generator's output.
 | `BUDGET-EXHAUST` | transfer-budget bound checks are fail-open on variant extension | merged | verify | S | none | — |
 | `CAT-CAPEX` | catalog exhibits no checked capability/authority exemplar | draft | steward | TBD | none | — |
 | `CB-HYGIENE` | cranelift_backend facade: strip WP-token narration, separate test material from implementation | merged | runtime | S | none | — |
-| `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | ready | steward | S | none | — |
+| `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | ready | verify | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | ready | doc | S | none | — |
@@ -65,7 +65,7 @@ the committed file matches the generator's output.
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | draft | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
-| `RT-SPLIT` | decompose cranelift_backend.rs | active | runtime | L | none | — |
+| `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | draft | foundation | M | none | — |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
@@ -96,7 +96,6 @@ is itself not yet `merged`/`closed`:
 
 - `DOC-W2` blocked by `DOC-W1` (status: ready)
 - `F4` blocked by `A3` (status: draft)
-- `RT-SRC-DISPATCH-COVER` blocked by `RT-SPLIT` (status: active)
 
 ## Gate progress
 
