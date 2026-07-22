@@ -353,12 +353,6 @@ sources = [
   "catalog/packages/Tooling/Testing/Property.ken.md",
   "catalog/packages/Capability/Filesystem/Errors.ken.md",
   "catalog/packages/Capability/System/IO.ken.md",
-  "library/learn/reading-ken/01-anatomy.md",
-  "library/learn/reading-ken/02-types-contracts-and-proofs.md",
-  "library/learn/reading-ken/03-assurance-and-trust.md",
-  "library/learn/reading-ken/04-effects-capabilities-and-authority.md",
-  "library/learn/reading-ken/05-packages-and-provenance.md",
-  "library/learn/reading-ken/06-execution.md",
 ]
 validation = [
   "manifest-coverage",
@@ -378,11 +372,6 @@ audience = ["human-reader"]
 authority = "tutorial"
 availability = "current"
 sources = [
-  "library/learn/reading-ken/01-anatomy.md",
-  "library/learn/reading-ken/03-assurance-and-trust.md",
-  "library/learn/reading-ken/04-effects-capabilities-and-authority.md",
-  "library/learn/reading-ken/05-packages-and-provenance.md",
-  "library/learn/reading-ken/06-execution.md",
   "spec/20-verification/21-spec-syntax.md#54-the-honesty-guard-unknowntesteddelegated-never-read-proved",
   "spec/30-surface/30-taxonomy.md#3-the-built-in-set--the-surface-tcb-irreducible",
   "spec/30-surface/30-taxonomy.md#4-the-prelude-tier--ken-defined-always-present-closed",
