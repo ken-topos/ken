@@ -744,19 +744,164 @@ fn native_build_subcommand_reaches_the_same_public_producer() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Compile `snippet` as a standalone crate against a built `ken_runtime`
+/// rlib, and report whether it compiled together with rustc's stderr.
+///
+/// `ken-cli` is a different crate from `ken-runtime`, so this is the real
+/// cross-crate question rather than a proxy for it.
+fn compile_probe_against_ken_runtime(
+    rlib: &std::path::Path,
+    deps: &std::path::Path,
+    snippet: &str,
+) -> (bool, String) {
+    let dir = output_dir("vis-probe");
+    let source = dir.join("probe.rs");
+    std::fs::write(&source, snippet).expect("probe source is written");
+    let compiled = Command::new(std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string()))
+        .args(["--edition", "2021", "--crate-type", "lib"])
+        .arg("--extern")
+        .arg(format!("ken_runtime={}", rlib.display()))
+        .arg("-L")
+        .arg(format!("dependency={}", deps.display()))
+        .arg("--out-dir")
+        .arg(&dir)
+        .arg(&source)
+        .output()
+        .expect("rustc runs");
+    let stderr = String::from_utf8_lossy(&compiled.stderr).into_owned();
+    let succeeded = compiled.status.success();
+    let _ = std::fs::remove_dir_all(&dir);
+    (succeeded, stderr)
+}
+
+/// Assert that the test-only cranelift helper is not reachable as public API
+/// from outside `ken-runtime`, by asking the compiler rather than by matching
+/// the declaration's text.
+///
+/// Both externally reachable paths are probed. `ken-runtime`'s `lib.rs` has
+/// `pub use cranelift_backend::*`, a public glob, so a widened item surfaces
+/// at the crate root as well as under the module path; a check on one path
+/// alone would miss the other, and neither is visible to a text match.
+///
+/// Each probe is a bare `use ... as _;`. That form resolves a path and checks
+/// its visibility and nothing else -- no call, no argument types, no
+/// inference. This is load-bearing rather than stylistic: the helper takes
+/// `impl Into<String>`, so a probe that *used* the item would fail to compile
+/// on type inference whether or not the path resolved, and would keep
+/// reporting success even after the helper was made public.
+fn assert_helper_is_not_reachable_from_outside_ken_runtime() {
+    const CONTROL: &str =
+        "use ken_runtime::cranelift_backend::emit_runtime_ir_object_with_cranelift as _;";
+    const PROBES: [&str; 2] = [
+        "use ken_runtime::cranelift_backend::emit_process_entrypoint_object_with_cranelift as _;",
+        "use ken_runtime::emit_process_entrypoint_object_with_cranelift as _;",
+    ];
+
+    // An integration test binary lives in `target/<profile>/deps`, alongside
+    // the rlibs it was linked against.
+    let deps = std::env::current_exe()
+        .expect("test binary path")
+        .parent()
+        .expect("test binary has a parent directory")
+        .to_path_buf();
+    let mut candidates = std::fs::read_dir(&deps)
+        .expect("deps directory is readable")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map_or(false, |name| {
+                    name.starts_with("libken_runtime-") && name.ends_with(".rlib")
+                })
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !candidates.is_empty(),
+        "no libken_runtime-*.rlib under {}",
+        deps.display()
+    );
+    // ⛔ NEWEST FIRST, and this is a correctness requirement rather than a
+    // tidiness one. `deps` accumulates an rlib per build over the life of the
+    // target directory -- there were 15 here when this was written, spanning
+    // one day -- and every stale one still compiles the positive control.
+    // Ordering by anything else (the filename hash, say) selects an arbitrary
+    // rlib, and the probe then reports on source that may be hours old while
+    // every signal looks healthy. Cargo has brought the dependency up to date
+    // before this test runs, so the most recently written rlib is the current
+    // one; stale ones are strictly older.
+    //
+    // The positive control cannot catch this on its own: it proves the harness
+    // WORKS, never that the harness is looking at the CURRENT code. Freshness
+    // is a separate axis, and the direction-1 mutation proof is what exercises
+    // it -- a stale selection makes that proof fail to fail.
+    candidates.sort_by_key(|path| {
+        std::cmp::Reverse(
+            path.metadata()
+                .and_then(|meta| meta.modified())
+                .expect("rlib modification time is readable"),
+        )
+    });
+
+    // The positive control both validates the harness and SELECTS the rlib.
+    // Several may be present -- `ken-cli` builds `ken-runtime` twice, once
+    // with the `px8-ds-test-support` dev-dependency feature -- and a
+    // "did not compile" result only means something against an rlib this
+    // probe form can actually resolve against. Without this, a misconfigured
+    // rustc invocation would make every negative probe fail for its own
+    // reasons and the whole check would pass while testing nothing.
+    let mut control_failures = Vec::new();
+    let mut selected = None;
+    for candidate in &candidates {
+        let (compiled, stderr) = compile_probe_against_ken_runtime(candidate, &deps, CONTROL);
+        if compiled {
+            selected = Some(candidate.clone());
+            break;
+        }
+        control_failures.push(format!("{}:\n{stderr}", candidate.display()));
+    }
+    let rlib = selected.unwrap_or_else(|| {
+        panic!(
+            "the positive control failed to compile against every candidate ken_runtime \
+             rlib, so this harness is what broke, not the property under test:\n{}",
+            control_failures.join("\n")
+        )
+    });
+
+    for probe in PROBES {
+        let (compiled, stderr) = compile_probe_against_ken_runtime(&rlib, &deps, probe);
+        assert!(
+            !compiled,
+            "`{probe}` COMPILED against {}, so the test-only helper is reachable as \
+             public production API",
+            rlib.display()
+        );
+        // Failing is not enough: a `compile_fail`-shaped check passes when the
+        // snippet fails for ANY reason, a typo included. Requiring a
+        // resolution/visibility error code is what makes the negative result
+        // evidence for the property. Error codes are stable rustc surface;
+        // the diagnostic prose deliberately is not asserted on.
+        assert!(
+            ["E0432", "E0433", "E0603"]
+                .iter()
+                .any(|code| stderr.contains(code)),
+            "`{probe}` did not compile, but not with a resolution or visibility error, \
+             so its failure does not establish the property:\n{stderr}"
+        );
+    }
+}
+
 #[test]
 fn naked_process_ir_helpers_are_not_public_production_api() {
-    // `emit_process_entrypoint_object_with_cranelift` now lives in the gated
-    // `test_objects` child module, so the "test-only" half of this property is
-    // carried by the module's declaration and the "not public production API"
-    // half by the item's own visibility. Both conjuncts are asserted below;
-    // dropping either one would let the other pass alone.
-    let facade = include_str!("../../ken-runtime/src/cranelift_backend.rs");
-    let cranelift = include_str!("../../ken-runtime/src/cranelift_backend/test_objects.rs");
+    // `emit_process_entrypoint_object_with_cranelift` is checked by compiling
+    // probes against the built `ken_runtime` rlib, below. The assertions that
+    // used to live here matched a literal declaration string, so they tracked
+    // attribute placement, visibility spelling, whitespace, and file location
+    // — none of which are the property — and they broke on every relocation of
+    // the helper, twice during `CB-HYGIENE` alone.
+    assert_helper_is_not_reachable_from_outside_ken_runtime();
+
     let packaging = include_str!("../../ken-runtime/src/object_linker_packaging.rs");
-    assert!(facade.contains("#[cfg(test)]\nmod test_objects;"));
-    assert!(cranelift.contains("pub(crate) fn emit_process_entrypoint_object_with_cranelift("));
-    assert!(!cranelift.contains("\npub fn emit_process_entrypoint_object_with_cranelift("));
     assert!(packaging.contains("#[cfg(test)]\nfn build_process_starter_executable_artifact("));
     assert!(!packaging.contains("\npub fn build_process_starter_executable_artifact("));
     assert!(!packaging.contains("\npub(crate) fn build_process_starter_executable_artifact("));

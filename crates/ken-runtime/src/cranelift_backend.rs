@@ -11,6 +11,34 @@
 //! re-exports) plus the two inherent `impl` blocks at the foot of the file,
 //! which are production code on `surface`'s own types and are reached from
 //! `artifact::api`.
+//!
+//! # Test-only helpers are not public production API
+//!
+//! `emit_process_entrypoint_object_with_cranelift` is a test-only helper, and
+//! that it is not reachable from outside this crate is asserted by
+//! `ken-cli/tests/px4b_native_production.rs`, in
+//! `naked_process_ir_helpers_are_not_public_production_api`. That test asks
+//! the *compiler* the question, by compiling probe snippets against this
+//! crate's built rlib; a source-text assertion on the declaration would only
+//! test its spelling and would break on every relocation.
+//!
+//! Both reachable paths are covered there. `lib.rs` re-exports this module
+//! with a `pub use cranelift_backend::*`, so a widened item would surface at
+//! the crate root as well as under the module path, and a check on one path
+//! alone would miss the other:
+//!
+//! ```text
+//! use ken_runtime::cranelift_backend::emit_process_entrypoint_object_with_cranelift as _;   // must not compile
+//! use ken_runtime::emit_process_entrypoint_object_with_cranelift as _;                      // must not compile
+//! use ken_runtime::cranelift_backend::emit_runtime_ir_object_with_cranelift as _;           // positive control
+//! ```
+//!
+//! ⛔ These fences are `text` on purpose — they are illustration, not a
+//! running check. `nextest` does not run doctests and CI has no `--doc` step,
+//! so a real `compile_fail` block here would assert the property in a lane
+//! that never executes, and a green gate would say nothing about it. The
+//! executable form lives in the test named above, which runs in the sharded
+//! lane. Keep it that way unless a doctest lane is actually wired up.
 
 use std::collections::{BTreeMap, BTreeSet};
 
