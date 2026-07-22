@@ -96,7 +96,37 @@ pub use lowering::with_px8ds_retired_flat_order;
 pub(crate) use lowering::{
     NativeIntLoweringMutation, Px8trTrapProvenanceEvent, NATIVE_INT_LOWERING_MUTATION,
 };
-pub use surface::*;
+// §10.4 THE FINAL EXPLICIT FACADE CUT (slice 7): the facade uses explicit
+// re-export lists ONLY -- no internal `pub use child::*`. This replaces
+// `pub use surface::*;`, the last internal glob in the module.
+//
+// ⛔ This list is the whole point of the cut and it is DERIVED, not authored:
+// it is exactly the set of module-level bare-`pub` items in `surface.rs`,
+// enumerated mechanically and checked for set equality in BOTH directions.
+// A name dropped here vanishes from `ken_runtime::*` via `lib.rs:39` and can
+// still compile green across the whole workspace -- slice 6 measured that 6 of
+// 10 re-exported names had ZERO in-repo consumers, so the compiler is not a
+// net for this edit. `NativeSeedEnvironment::{empty, nc5_seed, insert}` are
+// impl METHODS, not module items, and correctly do not appear.
+//
+// Re-exporting an already-exported name at its pre-existing visibility is not
+// a widening (§10.4) -- the AC-7 ledger is unchanged.
+// `backend_module` is `pub(crate)` in `surface` and the GLOB was re-exporting
+// it: `native_int_clif.rs:14`, a SIBLING of this module, imports it as
+// `crate::cranelift_backend::backend_module`. Restricted-visibility items are
+// re-exported by a glob too, so enumerating only bare-`pub` declarations drops
+// them -- the compiler caught this one because it happens to have an in-crate
+// consumer, which is luck, not a net. Re-exported at its PRE-EXISTING
+// `pub(crate)`, so this is not a widening (§10.4).
+pub(crate) use surface::backend_module;
+pub use surface::{
+    BackendFailure, CraneliftBackendError, CraneliftObjectArtifact, CraneliftRunReport,
+    InterpreterOracleObservation, NativeArtifactIdentity, NativeDifferentialReport,
+    NativeDifferentialStage, NativeDifferentialVerdict, NativeEvidenceFact, NativeFidelity,
+    NativeRunEvidence, NativeRuntimeIrComparisonReport, NativeRuntimeIrComparisonVerdict,
+    NativeSeedEnvironment, NativeToolchainReport, NativeTrustReport, UnsupportedLowering,
+    ValidatedNativeRunError,
+};
 
 #[cfg(test)]
 #[repr(C)]
