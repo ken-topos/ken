@@ -1,7 +1,7 @@
 ---
 id: BUDGET-EFF
 title: TransferCount.remaining must be bounded by the effective request
-status: active
+status: merged
 owner: verify
 size: M
 gate: none

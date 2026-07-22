@@ -1,7 +1,7 @@
 ---
 id: CB-HYGIENE
 title: "cranelift_backend facade: strip WP-token narration, separate test material from implementation"
-status: ready
+status: merged
 owner: runtime
 size: S
 gate: none
@@ -182,3 +182,19 @@ That number is **itself cfg-conflated** — a substantial share of `:1-127` is
 `#[cfg(test)] use`. The real production surface is **smaller still**. An error
 in the safe direction, but the same conflation AC #2 would have inherited.
 **Define "non-test region" cfg-aware, never by line range.**
+
+## ✅ MERGED — `origin/main @ 30250515` (PR #875, CI-gated). Retros in.
+
+Verified by content across all three paths. Facade **492 → 158** lines, zero
+`#[cfg(test)]` content, zero narration tokens; `test_objects.rs` hosts the five
+moved items; `Px8trNestedRouteObject`'s re-export preserved.
+
+All four **Class C** rows byte-stable, and the load-bearing `:86-89` guard
+comment survived — the one that sat four lines beneath narration this WP
+authorized deleting.
+
+★ **The AC defects were mine, four of them, all caught pre-merge by others:**
+AC #2/#4 contradictory (adversary); no taxonomy cell for the honest answer
+(adversary); AC-1's residue needing two categories not one (implementer);
+AC #5's named gate blind to a cross-crate feature-gated export (adversary).
+**The candidate was never the problem.**
