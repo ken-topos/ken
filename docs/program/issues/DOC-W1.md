@@ -1,7 +1,7 @@
 ---
 id: DOC-W1
 title: "documentation Wave 1 — the read-Ken spine, taught from checked fragments"
-status: draft
+status: ready
 owner: doc
 size: L
 gate: none
@@ -11,14 +11,19 @@ github: null
 origin: research/librarian-documentation-program-proposal.md Wave 1; re-scoped by operator ruling 2026-07-22 (docs/program/12-documentation-program.md §4b)
 ---
 
-**⛔ BLOCKED on `DOC-CURRENCY-ANCHOR`.** Do not cut a branch until it merges.
-Wave 1 is precisely where DOC-W0's unmet half bites — see §3 below.
+**✅ RELEASED 2026-07-22 — both dependencies are closed.** `DOC-W0` closed on
+its deliverables; **`DOC-CURRENCY-ANCHOR` closed at `origin/main @ 10da4cf6`**,
+acceptance re-derived against the landed `scripts/gen-doc-status.sh` through the
+git object store. `status:` is now `ready`.
 
-> **⚠ `status: draft` here means GATED, not unscoped.** The issue schema has no
-> `blocked` state, so an unmet `depends_on` and an unfinished scope share one
-> word. **This brief is complete and shovel-ready** — the state reflects the
-> dependency only. Same convention as `SEAL-2`. Contrast `A3`, whose `draft`
-> genuinely means no owner, no size, and no brief.
+> ⛔ **AC-2 is the reason the gate existed, and it is now DISCHARGEABLE rather
+> than discharged.** Wave 1 is precisely where DOC-W0's unmet half bites: every
+> cited spec section's currency must be anchored by the **content-currency**
+> mechanism — the check that reads a source's bytes *at `REVISION`* — **not by a
+> recorded revision that merely names a real ancestor.** That distinction is the
+> entire content of the eight-finding DOC-W0 defect class (`12-documentation-
+> program.md` §4a). **State which predicate each citation rests on**; a green
+> gate must not assert more than it checked.
 
 The program frame is `docs/program/12-documentation-program.md`. **Read §4a
 (the failure mode this program is designed against) and §4b Wave 1 before

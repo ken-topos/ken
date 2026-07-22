@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 10:24:39Z — from 27 issue file(s) in `docs/program/issues/`.
+2026-07-22 10:34:00Z — from 27 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -46,7 +46,7 @@ the committed file matches the generator's output.
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | ready | doc | S | none | — |
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
-| `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | draft | doc | L | none | — |
+| `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | ready | doc | L | none | — |
 | `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | draft | doc | L | none | — |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
@@ -74,6 +74,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `BUDGET-EFF` — TransferCount.remaining must be bounded by the effective request
 - `CI-SKIPPED-NATIVE-TESTS` — Restore rt_parity_native — one test at 221s is the blocker
 - `DOC-VALIDATION-BINDING` — validation vocabulary claims a 1:1 binding to the gates; nothing binds it
+- `DOC-W1` — documentation Wave 1 — the read-Ken spine, taught from checked fragments
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `PUB-VERIFY` — scripted-pr-automerge.sh exits 0 on a failed push
@@ -85,7 +86,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 Items not yet `merged`/`closed` whose `depends_on` names an id that
 is itself not yet `merged`/`closed`:
 
-- `DOC-W2` blocked by `DOC-W1` (status: draft)
+- `DOC-W2` blocked by `DOC-W1` (status: ready)
 - `F4` blocked by `A3` (status: draft)
 - `RT-SRC-DISPATCH-COVER` blocked by `RT-SPLIT` (status: active)
 - `SEAL-2` blocked by `BUDGET-EFF` (status: ready)
