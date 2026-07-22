@@ -5,7 +5,7 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-22 ~14:30Z. OPERATOR IS PRESENT.**
+**As of 2026-07-22 ~13:49Z. OPERATOR IS PRESENT.**
 
 ## Standing state
 
@@ -38,7 +38,7 @@
   on an Architect mechanism ruling respectively). Nothing to kick.
 - **Do not kick a WP while the operator has an open question below.**
 
-### ⛔ Retraction: the stale-base "near-miss" was FALSE (2026-07-22 ~14:10Z)
+### ⛔ Retraction: the stale-base "near-miss" was FALSE (2026-07-22 ~13:43Z)
 
 I held ABI-REVOKE claiming a stale base *"would have silently DELETED"* two
 DOC-W1-2 chapters, and wrote it up as a general rule. **Disproved by
