@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 03:48:23Z — from 23 issue file(s) in `docs/program/issues/`.
+2026-07-22 04:27:47Z — from 25 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -45,6 +45,8 @@ the committed file matches the generator's output.
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | ready | doc | S | none | — |
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | ready | doc | S | none | — |
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
+| `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | draft | doc | L | none | — |
+| `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | draft | doc | L | none | — |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
 | `F4` | content-addressing + value-model design (aka PX8-F-PROOF) | draft | foundation+spec-enclave | M | none | — |
@@ -82,6 +84,8 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 Items not yet `merged`/`closed` whose `depends_on` names an id that
 is itself not yet `merged`/`closed`:
 
+- `DOC-W1` blocked by `DOC-CURRENCY-ANCHOR` (status: ready)
+- `DOC-W2` blocked by `DOC-W1` (status: draft)
 - `F4` blocked by `A3` (status: draft)
 - `SEAL-2` blocked by `BUDGET-EFF` (status: ready)
 
