@@ -194,11 +194,14 @@ flowchart TD
     PX10[PX10 processes]
     PX11[PX11 sockets and resolver]
     PX12[PX12 nonblocking and event loop]
+    ABI_REVOKE[ABI-REVOKE runtime revocation membrane]
 
     PX8 --> ABI_R3
-    ABI_R3 --> ABI_A1
-    ABI_R3 --> ABI_A2
-    ABI_R3 --> ABI_A3
+    ABI_R3 --> ABI_REVOKE
+    ABI_REVOKE --> ABI_A1
+    ABI_REVOKE --> ABI_A2
+    ABI_REVOKE --> ABI_A3
+    ABI_REVOKE --> PX9
     ABI_R3 --> ABI_M1
     ABI_M1 --> ABI_M2
     PX8 --> PX9
@@ -255,6 +258,16 @@ work per token**, and the graph above is shaped for it:
   instead of re-litigating a hand-maintained list — and it converts the
   drift class into a build break. Doing it after would mean re-touching every
   operation added in between.
+- **ABI-REVOKE between ABI-R3 and ABI-A1–ABI-A3/PX9** (Architect,
+  `dec_p1dv4gw6bsc2`). Same argument in both directions. **ABI-R3 first**
+  because the membrane *adds and guards operation identities*, and the
+  generated inventory is what makes a new operation a build break — landing
+  the membrane earlier would put un-inventoried operations in the dispatcher.
+  **ABI-REVOKE before PX9** so PX9 absorbs the distinct `revoked` identity
+  *before* the synchronous/Track-T expansion, instead of retrofitting an error
+  identity across every operation added after it. `ABI-M1`/`ABI-M2` stay on
+  their existing inventory/probe path unless the revised manifest explicitly
+  carries revocation evidence.
 - **PX9 before PX10/PX11.** Same argument, stronger: error context retrofitted
   after sockets and processes exist means re-opening both.
 - **ABI-A1/ABI-A2/ABI-A3 split by evidence shape, not by count.** Operations
@@ -299,13 +312,38 @@ not from memory:
 | M — manifest | ABI-M1, ABI-M2 | **0 of 2** |
 | S — synchronous floor | PX9, ABI-S1–ABI-S6 | **0 of 7** |
 | T — committed exit | PX10, PX11, PX12 | **0 of 3** |
+| **capability membrane** | ABI-REVOKE | ✅ **1 of 1** |
 
-**0 of 18.** The only node of §5's graph with live work is **PX8**, its
+**1 of 19** (was 0 of 18 — see §9.1; ABI-REVOKE is the item this document
+originally omitted, now framed and in the graph).
+
+The only node of §5's graph with live work is **PX8**, its
 root, in flight as `BUDGET-EFF` / `SEAL-2` / `RT-ESCAPE` / `RT-SPLIT`
 (+ merged `SPAN-SEAL`, `RT-PARITY`). Everything downstream of `PX8 --> ABI-R3`
 and `PX8 --> PX9` is unframed. This document is the whole record of it.
 
-### 9.1 ⚠ Gap in this document — the runtime revocation membrane
+### 9.1 ✅ CLOSED — the revocation-membrane gap is now framed and in the graph
+
+> **Resolved 2026-07-22.** This section recorded a hole in this document: the
+> charter's **runtime revocation membrane** was absent from §4, §5's graph, and
+> §9's coverage record. It is now **`docs/program/issues/ABI-REVOKE.md`**
+> (split out on the operator's instruction), sequenced
+> `PX8 -> ABI-R3 -> ABI-REVOKE -> {ABI-A1..A3, PX9}` per the Architect's
+> ruling `dec_p1dv4gw6bsc2`, and present in §5's graph and §7's sequencing
+> rationale. **Owner Runtime; `size: TBD` until an ADR and a Spec-owned
+> behavioral slice land — both precede sizing.**
+>
+> ⚠ **Two of the findings below are WRONG and are corrected in the issue.**
+> `ABI-REVOKE.md` §2 and §3 carry the corrections; read them there rather than
+> re-deriving from this section. In short: `44 §3` says verbatim that a surface
+> `36 §4` space *realizes as* a store `Space` (one abstraction with a landed
+> memory projection, not two unrelated concepts), and `CapabilityTableV1`'s
+> generation **is** a validity cell that is simply never flipped — the real gap
+> is that **derivation has no substrate**, so transitivity cannot be expressed.
+>
+> **The original text is kept below** because how the hole was found — and how
+> two of its conclusions turned out to be over-strong — is worth more than a
+> tidy record.
 
 **The charter names a surviving capability gap that §4 above omits
 entirely.** `09` §5 lists the **runtime revocation membrane** as one of two

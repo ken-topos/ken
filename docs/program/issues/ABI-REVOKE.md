@@ -2,7 +2,7 @@
 id: ABI-REVOKE
 title: "runtime revocation membrane — the deferred runtime face of 62 §4"
 status: draft
-owner: TBD
+owner: runtime
 size: TBD
 gate: none
 depends_on: []
@@ -16,13 +16,40 @@ origin: docs/program/09-posix-linux-abi-campaign.md §5 (charter gap); split out
 grows."* **It is not the same machinery** (§2), and PX7 has landed, so the
 fold-in option is gone regardless.
 
-> ### ⛔ THIS IS NOT SHOVEL-READY AND MUST NOT BE RELEASED TO A BUILD TEAM
+> ### ⛔ STILL NOT SHOVEL-READY — DO NOT RELEASE TO A BUILD TEAM
 >
-> `owner: TBD` / `size: TBD` are honest, not placeholders I forgot to fill.
-> **Grounding it turned up a blocking prerequisite the charter does not
-> mention** (§3), and until that is resolved by the Architect there is no
-> mechanism to brief. **Route to the Architect for a design pass and an ADR
-> before any sizing.** Do not let a leader pull this.
+> **The Architect has ruled** (`dec_p1dv4gw6bsc2`, §4), so the *design* question
+> is settled and `owner: runtime` is now correct. **`size: TBD` is not a
+> placeholder I forgot to fill:** the ruling requires **an ADR, and a
+> Spec-owned behavioral slice, both BEFORE sizing.** Until those exist there is
+> no mechanism to brief. **Do not let a leader pull this.**
+>
+> **Two prerequisites, in order:** (1) route the narrow observable contract to
+> the **Spec enclave** — revoke/attenuate operation shape, distinct `revoked`
+> identity, settlement observation; (2) the **ADR**, whose isolation argument
+> must be structural and closed-world (§4). Then size it.
+>
+> ### ⛔ ABI-R3 GATES THIS, and the dependency is bound HERE, not in `depends_on:`
+>
+> **`PX8 -> ABI-R3 -> ABI-REVOKE`** (Architect, `dec_p1dv4gw6bsc2`).
+> **ABI-R3 must land first**, and the reason is load-bearing rather than
+> sequencing hygiene: the membrane **adds and guards operation identities**,
+> and ABI-R3's generated inventory is what makes a new operation a **build
+> break**. Landing the membrane first would put un-inventoried operations in
+> the dispatcher — the precise failure ABI-R3 exists to prevent.
+>
+> **ABI-REVOKE then gates `ABI-A1`-`ABI-A3` and `PX9`**, so PX9 absorbs revoked
+> identity *before* the synchronous/Track-T expansion rather than retrofitting
+> it. `ABI-M1`/`ABI-M2` stay on their existing inventory/probe path unless the
+> revised manifest explicitly carries revocation evidence.
+>
+> **Why `depends_on:` is empty.** `ABI-R3` is an unframed item in
+> `10-linux-abi-completion.md`, **not a tracked issue**, so there is no id to
+> reference — the schema gate rejects one. **Minting a stub purely to satisfy a
+> schema field would be inventing scope.** The gate has now caught me doing
+> exactly that three times, and it has been right each time. When `ABI-R3` is
+> framed it takes `blocks: [ABI-REVOKE]`, this issue takes
+> `depends_on: [ABI-R3]`, and this note comes out.
 
 ## 1. What exists today, measured
 
