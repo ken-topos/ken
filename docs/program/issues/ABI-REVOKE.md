@@ -8,7 +8,7 @@ gate: none
 depends_on: []
 blocks: []
 github: null
-origin: docs/program/09-posix-linux-abi-campaign.md §5 (charter gap); split out per operator directive 2026-07-22; absent from docs/program/10-linux-abi-completion.md
+origin: docs/program/09-posix-linux-abi-campaign.md §5 (charter gap); split out per operator directive 2026-07-22; was absent from docs/program/10-linux-abi-completion.md, added to its graph and coverage count in 835ce1c4
 ---
 
 **Split out on the operator's instruction (2026-07-22).** The charter said
@@ -308,8 +308,12 @@ NOT SHOVEL-READY until the ADR plus the Spec-owned behavioral slice exist.**
 ## 6. Why it matters now
 
 `docs/program/10-linux-abi-completion.md` **§8.1 gate 9 assumes L2 has it.**
-The completion program is built on an assumption that no code satisfies, and
-the item is not in that document's graph at all — the hole I found when the
-operator asked for the coverage answer. **Whatever the Architect rules,
-`10-…` §5 and §9 must be updated to reflect it**, so that the next coverage
-question gets a true answer.
+The completion program is built on an assumption that no code satisfies — the
+hole I found when the operator asked for the coverage answer.
+
+> **Status of the graph hole (updated `835ce1c4`).** When this issue was first
+> written the item was **not in that document's graph at all**. That has been
+> repaired: `10-…` §5 now carries `ABI-R3 → ABI-REVOKE → {ABI-A1, ABI-A2,
+> ABI-A3, PX9}`, and §9's coverage count went `0 of 18` → **`1 of 19`**. The
+> gate-9 assumption above is still unsatisfied by any code — that is the open
+> part; the *documentation* hole is closed.

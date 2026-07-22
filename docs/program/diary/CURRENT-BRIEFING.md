@@ -9,6 +9,40 @@
 
 ## Standing state
 
+> ### ⛔⛔ `origin/main` IS RED ON ITS OWN DOCUMENTATION GATE — FIX FIRST
+>
+> **As of `835ce1c4`.** `DOC-CURRENCY-ANCHOR` merged (PR #843) with
+> `library/REVISION = cc2af484`, a **pre-squash branch commit**. `main` merges
+> are **squash** merges, so that commit is **not reachable from `main`**:
+>
+> ```
+> $ git merge-base --is-ancestor cc2af484 origin/main   → FAILS
+> $ bash scripts/gen-doc-status.sh --check
+> gen-doc-status: library/REVISION '...' is not an ancestor of the current tree
+> ```
+>
+> Found by the **librarian** and independently by the **adversary**.
+>
+> **★ The mechanism was structurally incompatible with the merge model, and
+> nothing in the WP could see it** — on the branch, in every worktree, at every
+> review, `cc2af484` *is* an ancestor. **The property only becomes false at the
+> moment of merge, which is after the last check anyone runs.** Three folds, an
+> Architect approval, a Librarian QA pass and a green CI run all held.
+>
+> **Proposed fix (routed to the doc ring, `evt_7wsasgr07bz10`, to be challenged
+> not just implemented):** `REVISION` must name a commit **on `main`** — the
+> candidate's merge base — not the branch's own parent, since the merge base is
+> an ancestor both before and after the squash. **Two things to verify first:**
+> does it break `status_md_generation_is_idempotent` (the test that drove
+> bump-to-own-parent)? and is the merge base always an ancestor of the squashed
+> result? **Plus a regression that checks ancestry against a SIMULATED SQUASH
+> RESULT**, or the next WP reproduces it exactly.
+>
+> ⛔ **Do NOT close `DOC-CURRENCY-ANCHOR`** — merged, but its own acceptance
+> property does not hold on `main`. Follow-on fix on current `main`, not a
+> re-open. **Wave 1 stays gated until this is green.**
+
+
 - `origin/main = 0f9a483a`. **TWO TRACKS ARE RUNNING CONCURRENTLY** (operator
   directive 2026-07-22 ~02:35Z). Build stays single-threaded; doc is the one
   standing exception. **Idle is no longer the default-correct state.**

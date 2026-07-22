@@ -367,6 +367,88 @@ move" claim auditable rather than asserted.
    the **count** of items so widened is reported per slice in the PR body
    (it is the metric from §4).
 
+8. **`test_support` has no production consumer — CHECKED, not asserted**
+   (slice 7; adversary detector-gap `evt_457npdbe9zmp9`, predicate corrected
+   by the Architect `evt_vd1xkmfhrkrp`).
+
+   > **Outside ruled `tests.rs` / `tests/**` modules: every consumer must
+   > spell `crate::cranelift_backend::test_support::<item>` at the direct
+   > semantic use, inside an entire item carrying item-level `#[cfg(test)]`.
+   > A `#[cfg(test)]` statement, block, or branch inside an otherwise
+   > production item does **not** qualify. **No `use`, `pub use`, re-export,
+   > or other cross-item alias/binding may launder a `test_support` item into
+   > a name consumed elsewhere.** The exact facade wiring declaration
+   > `#[cfg(test)] mod test_support;` remains the sole non-consumer
+   > exception.**
+
+   **Evidence is a closed ledger with exactly three classes:**
+
+   > 1. the exact facade wiring declaration;
+   > 2. a ruled test-module reference — **imports are allowed here**;
+   > 3. an outside-test **direct rooted non-import/non-alias** use inside an
+   >    entire item with item-level `#[cfg(test)]` — **name the enclosing item
+   >    and show its item-level attribute.**
+   >
+   > Report the raw search command and hit count. **Raw code-reference hits
+   > and classified rows must reconcile one-for-one; comments and strings
+   > cannot satisfy a row.**
+
+   **⛔ The detector is the CONJUNCTION of item-level confinement and the
+   no-laundering rule. Neither half is sufficient, and an earlier draft of
+   this AC claimed otherwise.** Item-level confinement alone is defeated by a
+   `use`: a `use` declaration **is** an item, so
+   `#[cfg(test)] use …::test_support::helper;` carries a genuine item-level
+   `#[cfg(test)]` and classifies **cleanly** — while the call site then reads
+   `helper()` and **never lexically names `test_support`.** The ledger
+   inspects the *import* site, where the attribute innocently sits; the leak
+   is at the *use* site, which the search cannot see at all. **The reference
+   and the leak end up in different items, and only the innocent one is
+   greppable** (adversary `evt_6baweq79m4fkf`, compiled repro; Architect
+   `evt_ez3766tp1gbn` withdrawing the contrary claim).
+
+   **Why "rooted" and not merely "fully-qualified."** `test_support::<item>`
+   is not enough — it can itself rest on `use crate::…::test_support;`, which
+   reintroduces the laundering one level up. The path must be **rooted at
+   `crate::`** so the checked name appears at the point of use.
+
+   **Checked bidirectionally, per AC-8's own earlier lesson:** the facade
+   declaration is carved out ✅; the object-emission helpers at former `:311`,
+   `:580`, `:625` are entire `#[cfg(test)]` items and classify under class 3
+   ✅; ruled tests modules keep `use` ✅; the compiled import repro is
+   rejected ✅. **Still a human-audited grep ledger — no parser, no topology
+   change.**
+
+   > **Why this AC exists.** §10.2a rule 2 says *"production modules must not
+   > import it"* and rule 7 restates it as a stop-and-return — but **that was
+   > the one constraint in the seven-point rule with no enforcing mechanism.**
+   > Its siblings are all checkable: rules 1 and 7a are structural (`cfg`),
+   > 2a and 3 are greppable, 5 defers to §10.5a, 6 rides AC-3. **2b/7b had
+   > nothing**, so it lived only in prose.
+   >
+   > **The reach is created by the ruling itself.** `pub(super)` on an item in
+   > `cranelift_backend::test_support` **is** `pub(in crate::cranelift_backend)`
+   > — visible to the facade **and every descendant, including production
+   > ones**. A helper sitting in `lowering/core/tests/` is not visible to
+   > production siblings this way; hoisting to facade level is the *widest*
+   > test-only visibility in the subtree, and rules 2b/7b are the compensating
+   > constraint. **Compiled repro:** a production `fn` importing a
+   > `test_support` item under `#[cfg(test)]` builds green under `--test`
+   > while returning the fixture value, and returns something else in release.
+   > Nothing in the rule, the compiler, or any existing gate objects.
+   >
+   > **Latent, not live** — reconciled on `origin/main`: `#[cfg(test)] use`
+   > occurrences in `crates/ken-runtime/src` = **0**; references to
+   > `test_support` anywhere under `crates/` = **0**; the module does not exist
+   > yet. **This AC is written before the reach is created, which is the only
+   > cheap moment** — retrofitting after slice 7 costs a re-ruling.
+   >
+   > ★ **The general form is the expressibility audit (§2c b‴), run on this
+   > frame by the adversary:** an obligation whose only discharge is prose is
+   > *"a reach outside the shape's own checked vocabulary."* Naming a
+   > stop-and-return does not make it detectable. **Every rule in a ruled list
+   > should be able to name what would catch its violation** — and if one
+   > can't, that is the finding.
+
 ## 8. Guardrails — do not reopen
 
 - **Do not redesign the backend.** If you find something that looks wrong
@@ -451,8 +533,10 @@ each `.rs` module body too.
 `artifact/api/tests.rs` · `lowering/core/tests/mod.rs` (shared test-only
 fixtures) · `lowering/core/tests/control.rs` ·
 `lowering/core/tests/constructors.rs` · `lowering/core/tests/effects.rs` ·
-`lowering/core/tests/values.rs`. The 6,500-line ceiling applies to these too.
-**No residual omnibus `mod tests` remains in the facade.**
+`lowering/core/tests/values.rs` · **`cranelift_backend/test_support.rs`**
+(§10.2a — facade-level shared fixtures only, **not** a `mod tests`). The
+6,500-line ceiling applies to these too. **No residual omnibus `mod tests`
+remains in the facade.**
 
 ### 10.2 Assignment rule
 
@@ -507,7 +591,99 @@ fixtures) · `lowering/core/tests/control.rs` ·
   helpers belong to **lowering support**; their callers in the SCC do not make
   them part of the SCC.
 - Test helpers go in the lowest `tests/mod.rs` ancestor shared by their actual
-  users. **They never justify widening a production item.**
+  users. **They never justify widening a production item.** ⚠ That sentence
+  **presumes a helper has a single subject tree, which is false for this
+  file** — see §10.2a for the cross-tree case.
+
+#### 10.2a Cross-tree test helpers (Architect, `evt_5nbk14ckbbe6z`)
+
+**The rationale is one unhandled branch, NOT a recurrence count.** §10.2
+already says a shared helper goes at its actual-user LCA. The gap is that when
+that LCA is **the facade**, the final topology offers **no lawful narrow
+home** — `test_support.rs` supplies exactly that missing structural case
+without reviving an omnibus test module. **One grounded counterexample is
+sufficient to make the placement rule total**; there is no threshold to reach,
+and future items follow the decision procedure below rather than analogy or
+counts.
+
+**The one grounded counterexample** is `test_only_distinguished_root_join_plan`
+`:270` — a genuine shared fixture helper (it constructs plan/site fixture
+state), census **seven occurrences**: one declaration, three calls in test-only
+object-emission/API helpers at `:311`, `:580`, `:625`, and three in
+lowering-subject fixtures at `:15822`, `:18546`, `:18821`. Its users span
+`lowering` and `artifact/api`; LCA is the facade.
+
+**`new_jit_module` and `verify_cranelift_function` are CONTRAST CASES, not
+precedents.** They are also cross-tree, and they resolve **differently** —
+they are production-private artifact operations whose test-only one-call
+wrappers stay in `artifact/mod.rs` under §10.5a. **⛔ Do not read "three
+cross-tree items" as "three instances of one rule."** Classify first:
+
+| category | test | disposition |
+|---|---|---|
+| **owner-adjacent boundary adapter** — one call, no setup or fixture construction | body is a single delegating call | **§10.5a** — `#[cfg(test)] pub(super)` adapter beside the private original, in its **owning** module |
+| **genuine fixture/setup helper** — body constructs shared state | e.g. builds `NativeJoinPlanV1`, site metadata, fingerprints | **this clause** — `test_support.rs`, but only when the actual-user LCA is the facade |
+
+**The rule:**
+
+1. Add `#[cfg(test)] mod test_support;` as a **private child of
+   `cranelift_backend`**, and `cranelift_backend/test_support.rs` in the final
+   tree.
+2. A genuine fixture/setup helper whose users span **two or more** ruled
+   subject-test subtrees **and** whose LCA is the facade lives there. Items are
+   `pub(super)` only; **production modules must not import it.**
+3. `test_support.rs` contains **no `#[test]` cases, assertions, subject-specific
+   tests, production policy, or owner-private boundary adapters** — only the
+   minimal shared fixture constructors/data that cannot live in a lower
+   `tests/mod.rs` ancestor. **This is what keeps it from becoming the forbidden
+   residual omnibus `mod tests`.**
+4. **Single-subtree helpers still follow the existing rule.**
+   `oriented_dynamic_sibling_fixture` and `root_authority_test_lowering` stay
+   in `lowering/core/tests/control.rs`.
+5. **Owner-adjacent transparent adapters remain governed by §10.5a**, not this
+   clause. The JIT/verifier bridges stay in `artifact/mod.rs` as approved.
+6. Move `test_only_distinguished_root_join_plan` to `test_support.rs` in
+   **slice 7**, when `artifact::api` and the final facade are cut. Until then
+   it may remain at the residual parent; **no temporary widening is needed.**
+
+   > ### ⛔ 6a. COMPUTE LCA FROM FINAL RULED DESTINATIONS
+   > (Architect `evt_3eg25g63vyc5h`, after slice 4 got this wrong)
+   >
+   > **A helper's LCA is the lowest common ancestor of its users' FINAL RULED
+   > subject-test subtrees — never of wherever those users happen to sit
+   > mid-decomposition. A transient residual-parent location never justifies
+   > early facade hoisting.**
+   >
+   > **Why this is not a detail.** During a multi-slice split, *some* users of
+   > almost every shared fixture have moved and *others* are still in the
+   > residual facade. Reading LCA off current locations therefore manufactures
+   > a **facade LCA for nearly every shared helper**, and `test_support.rs`
+   > becomes precisely the residual omnibus §10.1 forbids — arriving by the
+   > front door, one slice at a time, while each individual hoist looks
+   > locally justified.
+   >
+   > **The inversion is the tell.** Slice 4 hoisted **eleven** declarations on
+   > transient splits while correctly leaving `test_only_distinguished_root_join_plan`
+   > — *the one grounded facade-LCA case* — in the parent. Two counterexamples
+   > settle it: `Px8dsEdgeMutation` has **every** use in
+   > `lowering/core/tests/control.rs`, so its LCA is `control.rs`;
+   > `root_authority_test_lowering` is **named by rule 4 above** as a
+   > `control.rs` helper, and its remaining parent caller is a source-install
+   > test that §10.2 assigns to `control`.
+   >
+   > **Current residual location is not ownership.** Descendant test modules
+   > may reference ancestor-private test helpers by explicit private/rooted
+   > path — **no production-module re-export and no visibility widening is
+   > needed** to keep a helper where it belongs until its slice arrives.
+   > **"Test-only" waives neither placement nor AC-8.**
+7. Absent from production builds; **zero** against the AC-7 production seam
+   budget; reported in the separate test-scaffolding ledger. **Any production
+   consumer, subject logic, or helper that could live under a lower common test
+   ancestor is a stop-and-return, not permission to grow the module.**
+
+**Deterministic placement test for slices 5–7:** classify adapter vs fixture
+helper → for a fixture helper, compute the **actual-user** LCA → use
+`test_support.rs` **only** when that LCA is the facade.
 
 **Test assignment is by subject:** `oriented_*`, `px8j_*`, root-authority,
 join-site, source-install and recursor tests → `control`; constructor-field,
@@ -653,3 +829,73 @@ landed `origin/main`, moves one production module plus its tests, and does not
 re-touch a previously moved module. **If move-purity, the visibility budget,
 or the DAG cannot be demonstrated for a slice, that slice stops for seam
 revision — it does not improvise a topical split.**
+
+### 10.5a ⛔ SLICE-6 TEST-BOUNDARY SEAM (Architect, `evt_473mn1qmaw7bf`)
+
+> **Fold this before slice 6 is framed.** Surfaced by the slice-4 dry-run
+> (`§10.4a`) — which is exactly what that dry-run exists to do — and ruled
+> before slice 6 rather than discovered inside it.
+
+> **Slice-6 test-boundary seam.** Keep `new_jit_module` and
+> `verify_cranelift_function` private in `artifact/mod.rs`. Their production
+> ownership does not move. Because lowering's subject fixtures become a
+> sibling test subtree, slice 6 adds exactly two adjacent
+> `#[cfg(test)] pub(super)` one-call bridge functions in `artifact/mod.rs`,
+> named `new_jit_module_for_lowering_tests` and
+> `verify_cranelift_function_for_lowering_tests`. Only `lowering/core/tests/*`
+> calls the bridges; `artifact/tests.rs` calls the private originals. The
+> bridges contain no ISA flags, validation, defaults, transformation, or error
+> remapping. They are reported separately as test scaffolding, absent from
+> production builds, and consume zero of the AC-7 production visibility
+> budget. No facade `mod tests`, shared production helper, helper duplication,
+> production widening, or DAG edge is introduced. A slice-6 dry-run that finds
+> any non-test lowering consumer stops and returns the actual graph.
+
+**Why this does not engage the constraints that appeared to exclude it.** A
+`#[cfg(test)]` bridge is **not a production item**, so §10.2's *"test helpers
+never justify widening a **production** item"* is not engaged; the bridge lives
+in `artifact/mod.rs`, so §10.1's residual-omnibus-facade ban is not engaged;
+and the pair stays artifact-owned, so §10.2's assignment stands unamended.
+
+> **The bridges are not shared test helpers under that placement rule:** they
+> contain no setup, fixture construction, assertion, policy, or duplicated
+> helper logic. They are artifact-owned, `cfg(test)`-only boundary adapters
+> adjacent to the private operations they expose; all actual test-helper logic
+> remains in the ruled subject test modules.
+
+That last point answers §10.2's **first** sentence — *test helpers go in the
+lowest `tests/mod.rs` ancestor shared by their users* — which the
+production-widening argument alone leaves open. **§10.2 ownership does not
+change** — this is a test-boundary note under §10.4/§10.5, not a reassignment.
+
+**The complete inverse-call ledger** (Architect, `evt_445j846aqqtwp`). The
+JIT/verifier pair has **six** distinct test users, not the two trees first
+reported. Two of them appeared in no ledger — both inside the omnibus
+`#[cfg(test)] mod tests` at `:14096–:21177` that §10.1 requires be dissolved —
+and §10.2's subject rule determines their destinations:
+
+| fixture | line | destination |
+|---|---|---|
+| `run_px8j_malformed_recursor_consumer` | `:1463` | `lowering/core/tests/control.rs` |
+| `run_checked_bounded_nat_fixture` | `:1641` | `lowering/core/tests/effects.rs` |
+| `run_dynamic_constructor_dispatch_fixture` | `:1868` | `lowering/core/tests/constructors.rs` |
+| **`run_px8ds_edge_consumer`** | **`:14741`** | **`lowering/core/tests/control.rs`** |
+| **`run_borrowed_fixture`** | **`:18535`** | **`lowering/core/tests/effects.rs`** |
+| `px8i_*` (two tests) | `:20977`, `:21005` | `artifact/tests.rs` — calls the private originals |
+
+**The user count does not multiply the bridges.** There are exactly **two**
+one-call adapters — one per private artifact operation — not one per tree or
+per fixture. Five lowering fixture helpers across `control`, `effects`, and
+`constructors` call the same two bridges. This is why the correction completes
+the ledger without reopening the ruling: **it would only have mattered under a
+per-tree-duplication remedy, which the bridge shape removes from
+consideration.** Moving the production functions to the facade would weaken a
+ruled ownership boundary to solve a test-only reachability problem that is
+already solved without production exposure. **Expand the slice-6 deferred
+ledger from the original three fixtures to this complete set.**
+
+**And enumerate type placement explicitly in the slice-5 dry-run.** §10.2
+assigns *functions* explicitly and leaves **type** placement implicit. The
+fixtures name 20 parent-private types and all 20 happen to be lowering-side,
+so exposure came out zero — **fortunate, not established.** Do not let a clean
+result recur twice and start reading as a property.
