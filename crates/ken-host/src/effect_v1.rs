@@ -171,6 +171,7 @@ pub struct HostEffectWireLayoutV1 {
     pub reply_align_shift: u8,
     pub reply_tag_offset: u32,
     pub reply_detail_offset: u32,
+    pub reply_effective_request_offset: u32,
     pub reply_bytes_data_offset: u32,
     pub reply_bytes_len_offset: u32,
     pub reply_resource_error_schema_offset: u32,
@@ -326,6 +327,10 @@ pub fn host_effect_wire_layout_v1(
         reply_align_shift: align_shift(align("HostReplyV1")?)?,
         reply_tag_offset: checked_u32(offset("HostReplyV1", "tag")?)?,
         reply_detail_offset: checked_u32(offset("HostReplyV1", "detail")?)?,
+        reply_effective_request_offset: checked_u32(offset(
+            "HostReplyV1",
+            "effective_request",
+        )?)?,
         reply_bytes_data_offset: checked_u32(reply_bytes + slice_data)?,
         reply_bytes_len_offset: checked_u32(reply_bytes + slice_len)?,
         reply_resource_error_schema_offset: checked_u32(
@@ -2055,16 +2060,32 @@ impl BufferSpanV1 {
     }
 }
 
+/// Inseparable validated carrier (Architect ruling `dec_1m6xdwjp2ttyn`,
+/// Option 1): the effective (post-clamp) request travels inside the count
+/// itself, never as a loose sibling value that can drift from it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TransferCountV1(pub(crate) u64);
+pub struct TransferCountV1 {
+    transferred: u64,
+    effective_request: u64,
+}
 
 impl TransferCountV1 {
-    fn new(value: u64, upper_bound: u64) -> Option<Self> {
-        (value > 0 && value <= upper_bound).then_some(Self(value))
+    pub(crate) fn new(transferred: u64, effective_request: u64) -> Option<Self> {
+        (transferred > 0 && transferred <= effective_request).then_some(Self {
+            transferred,
+            effective_request,
+        })
     }
 
     pub fn get(self) -> u64 {
-        self.0
+        self.transferred
+    }
+
+    /// The post-clamp request this count was minted against. `remaining`
+    /// (both reifiers) is `effective_request - get()` — never derived from
+    /// the raw pre-clamp request length.
+    pub fn effective_request(self) -> u64 {
+        self.effective_request
     }
 }
 
@@ -3428,7 +3449,10 @@ mod tests {
             read.outcome,
             CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
                 ReadProgressV1::ReadSome { ref span, ref transferred }
-            )) if span.start == 0 && span.length == 4 && transferred.get() == 4
+            )) if span.start == 0
+               && span.length == 4
+               && transferred.get() == 4
+               && transferred.effective_request() == 4
         ));
         assert_eq!(
             read.resource_bindings,
@@ -3577,7 +3601,7 @@ mod tests {
             short_write.outcome,
             CanonicalOutcomeV1::Success(CanonicalReplyV1::WriteProgress(
                 WriteProgressV1::Wrote(ref count)
-            )) if count.get() == 2
+            )) if count.get() == 2 && count.effective_request() == 4
         ));
         backend.write_limit = Some(0);
         let zero_write = dispatch_host_op_v1(
@@ -3630,7 +3654,7 @@ mod tests {
             short_read.outcome,
             CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
                 ReadProgressV1::ReadSome { ref transferred, .. }
-            )) if transferred.get() == 1
+            )) if transferred.get() == 1 && transferred.effective_request() == 4
         ));
         let eof = dispatch_host_op_v1(
             &mut backend,

@@ -50,6 +50,7 @@ struct HostReplyV1 {
     uint64_t detail;
     struct SliceV1 bytes;
     struct ResourceErrorReplyV1 resource_error;
+    uint64_t effective_request;
 };
 
 #define FACT_SIZE(T) printf("SIZE_%s=%zu\n", #T, sizeof(struct T))
@@ -80,6 +81,6 @@ int main(void) {
     FACT_SIZE(BufferAllocateRequestV1); FACT_ALIGN(BufferAllocateRequestV1); FACT_OFFSET(BufferAllocateRequestV1, capacity);
     FACT_SIZE(BufferFreezeRequestV1); FACT_ALIGN(BufferFreezeRequestV1); FACT_OFFSET(BufferFreezeRequestV1, resource); FACT_OFFSET(BufferFreezeRequestV1, start); FACT_OFFSET(BufferFreezeRequestV1, length);
     FACT_SIZE(ResourceErrorReplyV1); FACT_ALIGN(ResourceErrorReplyV1); FACT_OFFSET(ResourceErrorReplyV1, schema_version); FACT_OFFSET(ResourceErrorReplyV1, resource_kind); FACT_OFFSET(ResourceErrorReplyV1, identity); FACT_OFFSET(ResourceErrorReplyV1, io); FACT_OFFSET(ResourceErrorReplyV1, required); FACT_OFFSET(ResourceErrorReplyV1, held); FACT_OFFSET(ResourceErrorReplyV1, expected_kind); FACT_OFFSET(ResourceErrorReplyV1, actual_kind);
-    FACT_SIZE(HostReplyV1); FACT_ALIGN(HostReplyV1); FACT_OFFSET(HostReplyV1, tag); FACT_OFFSET(HostReplyV1, detail); FACT_OFFSET(HostReplyV1, bytes); FACT_OFFSET(HostReplyV1, resource_error);
+    FACT_SIZE(HostReplyV1); FACT_ALIGN(HostReplyV1); FACT_OFFSET(HostReplyV1, tag); FACT_OFFSET(HostReplyV1, detail); FACT_OFFSET(HostReplyV1, bytes); FACT_OFFSET(HostReplyV1, resource_error); FACT_OFFSET(HostReplyV1, effective_request);
     return 0;
 }

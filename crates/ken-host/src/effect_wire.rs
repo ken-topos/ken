@@ -292,6 +292,7 @@ fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTr
                     put_u64(out, span.start());
                     put_u64(out, span.length());
                     put_u64(out, transferred.get());
+                    put_u64(out, transferred.effective_request());
                 }
                 crate::ReadProgressV1::ReadEof => put_u8(out, 1),
             }
@@ -299,6 +300,7 @@ fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTr
         CanonicalReplyV1::WriteProgress(crate::WriteProgressV1::Wrote(transferred)) => {
             put_u8(out, 11);
             put_u64(out, transferred.get());
+            put_u64(out, transferred.effective_request());
         }
     }
     Ok(())
@@ -735,12 +737,15 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
                     let start = cursor.u64()?;
                     let length = cursor.u64()?;
                     let transferred = cursor.u64()?;
-                    if length != transferred || transferred == 0 {
+                    let effective_request = cursor.u64()?;
+                    if length != transferred {
                         return Err(EffectTraceWireError);
                     }
+                    let transferred = crate::TransferCountV1::new(transferred, effective_request)
+                        .ok_or(EffectTraceWireError)?;
                     crate::ReadProgressV1::ReadSome {
                         span: crate::BufferSpanV1 { start, length },
-                        transferred: crate::TransferCountV1(transferred),
+                        transferred,
                     }
                 }
                 1 => crate::ReadProgressV1::ReadEof,
@@ -750,12 +755,10 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
         }
         11 => {
             let count = cursor.u64()?;
-            if count == 0 {
-                return Err(EffectTraceWireError);
-            }
-            CanonicalReplyV1::WriteProgress(crate::WriteProgressV1::Wrote(crate::TransferCountV1(
-                count,
-            )))
+            let effective_request = cursor.u64()?;
+            let transferred = crate::TransferCountV1::new(count, effective_request)
+                .ok_or(EffectTraceWireError)?;
+            CanonicalReplyV1::WriteProgress(crate::WriteProgressV1::Wrote(transferred))
         }
         _ => return Err(EffectTraceWireError),
     })
@@ -1078,7 +1081,8 @@ mod tests {
                                 start: 1,
                                 length: 2,
                             },
-                            transferred: crate::TransferCountV1(2),
+                            transferred: crate::TransferCountV1::new(2, 3)
+                                .expect("2 <= effective 3"),
                         },
                     )),
                 },
