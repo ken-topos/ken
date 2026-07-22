@@ -11,6 +11,10 @@
 //! 1c. `validation` is a closed, known vocabulary that names exactly the
 //!     checks this file actually runs against that record — not free
 //!     prose (AC1: "how its currency is checked" must be mechanical).
+//! 1d. no manifest scalar/array-string value contains a literal `|` —
+//!     the generator's row transport delimiter — so gate and generator
+//!     can't silently disagree about where one field ends and the next
+//!     begins.
 //! 2. internal links resolve to a real file **and a real anchor**
 //!    (same-file or cross-file), and external links are syntactically
 //!    well-formed;
@@ -455,6 +459,53 @@ fn gate_validation_tokens_are_closed_and_match_applicable_checks() {
     assert!(
         bad.is_empty(),
         "document(s) with an unknown or incomplete validation list:\n{}",
+        bad.join("\n")
+    );
+}
+
+// Librarian QA (thr_74hvpkqnxjp9q, fourth pass): switching the generator's
+// row transport from tab to `|` fixed the empty-field collapse but
+// introduced an unguarded delimiter collision — `|` is legal in the
+// manifest's quoted TOML subset and in a real filename
+// (`library/pipe|page.md` regenerated a STATUS row with every column
+// shifted, exactly the green-but-generator-disagrees class this fold
+// exists to close). Chosen fix (option (b) from the finding): make the
+// controlled grammar explicitly reject `|` in every transported scalar,
+// enforced here AND independently in `gen-doc-status.sh` itself (so a
+// direct script run, not just this gate, fails closed).
+fn all_string_fields(entry: &DocEntry) -> Vec<(&'static str, &str)> {
+    let mut fields = vec![
+        ("path", entry.path.as_str()),
+        ("kind", entry.kind.as_str()),
+        ("authority", entry.authority.as_str()),
+        ("availability", entry.availability.as_str()),
+        ("owner", entry.owner.as_str()),
+    ];
+    fields.extend(entry.audience.iter().map(|s| ("audience", s.as_str())));
+    fields.extend(entry.sources.iter().map(|s| ("sources", s.as_str())));
+    fields.extend(entry.validation.iter().map(|s| ("validation", s.as_str())));
+    fields
+}
+
+#[test]
+fn gate_manifest_scalars_reject_the_transport_delimiter() {
+    let entries = load_manifest();
+    let mut bad = Vec::new();
+    for entry in &entries {
+        for (field_name, value) in all_string_fields(entry) {
+            if value.contains('|') {
+                bad.push(format!(
+                    "{}: `{field_name}` contains a literal '|', which \
+                     gen-doc-status.sh's row transport uses as its field \
+                     separator: {value:?}",
+                    entry.path
+                ));
+            }
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "manifest scalar(s) containing the transport delimiter '|':\n{}",
         bad.join("\n")
     );
 }

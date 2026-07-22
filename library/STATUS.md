@@ -4,7 +4,7 @@
 is this file's one job: it is anchored to a repository revision, never a
 typed date (docs/program/12-documentation-program.md §2).
 
-**Validated revision:** `15db65766f4c9ade5db30d4050ec49ff356cdc77`
+**Validated revision:** `e5a400c7ba6c171af8e9f2ac0f078fd7791fab01`
 
 Recorded explicitly in `library/REVISION`, not derived from `git
 rev-parse HEAD` at generation time. A live-HEAD anchor is self-

@@ -115,8 +115,23 @@ awk '
 
 ROWS=""
 COUNT=0
-while IFS='|' read -r path kind authority availability; do
+# Librarian QA (thr_74hvpkqnxjp9q, fourth pass): `|` is legal in the
+# manifest's quoted TOML subset and in a real filename, and it is this
+# transport's field separator — a value containing one silently shifts
+# every column after it. Reading a 5th, unnamed `extra` field catches any
+# row with more than four `|`-delimited fields: bash `read` slurps
+# whatever is left over (including any embedded `|`) into the LAST named
+# variable when there are more fields than names, so a non-empty `extra`
+# means a scalar smuggled the delimiter. This is independent of, and a
+# backstop for, the Rust gate that rejects `|` at the manifest level.
+while IFS='|' read -r path kind authority availability extra; do
   [ -z "$path" ] && continue
+  if [ -n "$extra" ]; then
+    echo "gen-doc-status: a manifest field for '$path' contains a literal" >&2
+    echo "  '|', which this transport cannot distinguish from a field" >&2
+    echo "  separator — reject '|' from every manifest scalar instead." >&2
+    exit 1
+  fi
   COUNT=$((COUNT + 1))
   ROWS="${ROWS}| \`${path}\` | ${kind} | ${authority} | ${availability} |
 "
