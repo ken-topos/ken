@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 16:31:18Z — from 34 issue file(s) in `docs/program/issues/`.
+2026-07-22 17:10:06Z — from 34 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -49,7 +49,7 @@ the committed file matches the generator's output.
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | ready | doc | S | none | — |
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
-| `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | ready | doc | L | none | — |
+| `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | closed | doc | L | none | — |
 | `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | draft | doc | L | none | — |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
@@ -79,7 +79,6 @@ Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
 - `DOC-VALIDATION-BINDING` — validation vocabulary claims a 1:1 binding to the gates; nothing binds it
-- `DOC-W1` — documentation Wave 1 — the read-Ken spine, taught from checked fragments
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
 - `LOADER-STALE-PREMISE` — \"no disk loader yet\" is stale in 9 places — including already-landed library/ content
@@ -93,7 +92,6 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 Items not yet `merged`/`closed` whose `depends_on` names an id that
 is itself not yet `merged`/`closed`:
 
-- `DOC-W2` blocked by `DOC-W1` (status: ready)
 - `F4` blocked by `A3` (status: draft)
 - `ORACLE-VIS-PACKAGING` blocked by `ORACLE-VIS-CHECK` (status: active)
 
