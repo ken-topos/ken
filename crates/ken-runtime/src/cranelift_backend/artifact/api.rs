@@ -9,6 +9,9 @@
 //! `super::…`; when slice 7 moves those declarations into `artifact/mod.rs`
 //! the scaffold imports disappear and THIS FILE DOES NOT CHANGE.
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::BTreeMap;
 
 use cranelift_module::Linkage;
