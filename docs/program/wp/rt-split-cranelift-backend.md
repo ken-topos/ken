@@ -451,8 +451,10 @@ each `.rs` module body too.
 `artifact/api/tests.rs` · `lowering/core/tests/mod.rs` (shared test-only
 fixtures) · `lowering/core/tests/control.rs` ·
 `lowering/core/tests/constructors.rs` · `lowering/core/tests/effects.rs` ·
-`lowering/core/tests/values.rs`. The 6,500-line ceiling applies to these too.
-**No residual omnibus `mod tests` remains in the facade.**
+`lowering/core/tests/values.rs` · **`cranelift_backend/test_support.rs`**
+(§10.2a — facade-level shared fixtures only, **not** a `mod tests`). The
+6,500-line ceiling applies to these too. **No residual omnibus `mod tests`
+remains in the facade.**
 
 ### 10.2 Assignment rule
 
@@ -507,7 +509,68 @@ fixtures) · `lowering/core/tests/control.rs` ·
   helpers belong to **lowering support**; their callers in the SCC do not make
   them part of the SCC.
 - Test helpers go in the lowest `tests/mod.rs` ancestor shared by their actual
-  users. **They never justify widening a production item.**
+  users. **They never justify widening a production item.** ⚠ That sentence
+  **presumes a helper has a single subject tree, which is false for this
+  file** — see §10.2a for the cross-tree case.
+
+#### 10.2a Cross-tree test helpers (Architect, `evt_5nbk14ckbbe6z`)
+
+**The rationale is one unhandled branch, NOT a recurrence count.** §10.2
+already says a shared helper goes at its actual-user LCA. The gap is that when
+that LCA is **the facade**, the final topology offers **no lawful narrow
+home** — `test_support.rs` supplies exactly that missing structural case
+without reviving an omnibus test module. **One grounded counterexample is
+sufficient to make the placement rule total**; there is no threshold to reach,
+and future items follow the decision procedure below rather than analogy or
+counts.
+
+**The one grounded counterexample** is `test_only_distinguished_root_join_plan`
+`:270` — a genuine shared fixture helper (it constructs plan/site fixture
+state), census **seven occurrences**: one declaration, three calls in test-only
+object-emission/API helpers at `:311`, `:580`, `:625`, and three in
+lowering-subject fixtures at `:15822`, `:18546`, `:18821`. Its users span
+`lowering` and `artifact/api`; LCA is the facade.
+
+**`new_jit_module` and `verify_cranelift_function` are CONTRAST CASES, not
+precedents.** They are also cross-tree, and they resolve **differently** —
+they are production-private artifact operations whose test-only one-call
+wrappers stay in `artifact/mod.rs` under §10.5a. **⛔ Do not read "three
+cross-tree items" as "three instances of one rule."** Classify first:
+
+| category | test | disposition |
+|---|---|---|
+| **owner-adjacent boundary adapter** — one call, no setup or fixture construction | body is a single delegating call | **§10.5a** — `#[cfg(test)] pub(super)` adapter beside the private original, in its **owning** module |
+| **genuine fixture/setup helper** — body constructs shared state | e.g. builds `NativeJoinPlanV1`, site metadata, fingerprints | **this clause** — `test_support.rs`, but only when the actual-user LCA is the facade |
+
+**The rule:**
+
+1. Add `#[cfg(test)] mod test_support;` as a **private child of
+   `cranelift_backend`**, and `cranelift_backend/test_support.rs` in the final
+   tree.
+2. A genuine fixture/setup helper whose users span **two or more** ruled
+   subject-test subtrees **and** whose LCA is the facade lives there. Items are
+   `pub(super)` only; **production modules must not import it.**
+3. `test_support.rs` contains **no `#[test]` cases, assertions, subject-specific
+   tests, production policy, or owner-private boundary adapters** — only the
+   minimal shared fixture constructors/data that cannot live in a lower
+   `tests/mod.rs` ancestor. **This is what keeps it from becoming the forbidden
+   residual omnibus `mod tests`.**
+4. **Single-subtree helpers still follow the existing rule.**
+   `oriented_dynamic_sibling_fixture` and `root_authority_test_lowering` stay
+   in `lowering/core/tests/control.rs`.
+5. **Owner-adjacent transparent adapters remain governed by §10.5a**, not this
+   clause. The JIT/verifier bridges stay in `artifact/mod.rs` as approved.
+6. Move `test_only_distinguished_root_join_plan` to `test_support.rs` in
+   **slice 7**, when `artifact::api` and the final facade are cut. Until then
+   it may remain at the residual parent; **no temporary widening is needed.**
+7. Absent from production builds; **zero** against the AC-7 production seam
+   budget; reported in the separate test-scaffolding ledger. **Any production
+   consumer, subject logic, or helper that could live under a lower common test
+   ancestor is a stop-and-return, not permission to grow the module.**
+
+**Deterministic placement test for slices 5–7:** classify adapter vs fixture
+helper → for a fixture helper, compute the **actual-user** LCA → use
+`test_support.rs` **only** when that LCA is the facade.
 
 **Test assignment is by subject:** `oriented_*`, `px8j_*`, root-authority,
 join-site, source-install and recursor tests → `control`; constructor-field,
