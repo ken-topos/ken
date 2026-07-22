@@ -1064,8 +1064,16 @@ fn assert_packaging_helper_is_declared_module_private() {
 
     let mut declarations = Vec::new();
     for file in ken_runtime_source_files() {
-        let text = std::fs::read_to_string(&file)
+        let raw = std::fs::read_to_string(&file)
             .unwrap_or_else(|error| panic!("reading {}: {error}", file.display()));
+        // Comments are removed ONCE, scanning forward, rather than stripped
+        // backwards a form at a time. Backward stripping is where this check
+        // kept going wrong: `/*` and `*/` are not mirror images, so a
+        // backwards `rfind("/*")` lands on the INNERMOST open and Rust -- unlike
+        // C -- permits nested block comments. Forward scanning tracks depth
+        // naturally. Comment bytes become spaces and newlines are kept, so
+        // every offset and line number below is still the real file's.
+        let text = blank_comments(&raw);
         for (at, _) in text.match_indices(NAME) {
             // Require the name to be followed by `(` or a generic list, and
             // preceded by the `fn` keyword -- so a call site never matches.
@@ -1109,29 +1117,51 @@ fn assert_packaging_helper_is_declared_module_private() {
                     // An `extern "C"` ABI string sits between the two.
                     bounded.then(|| strip_trailing_quoted(rest.trim_end()))
                 });
-                if let Some(rest) = stripped {
-                    head = rest;
-                    continue;
+                match stripped {
+                    Some(rest) => head = rest,
+                    None => break,
                 }
-                let uncommented = strip_trailing_comment(head);
-                if uncommented.len() < head.len() {
-                    head = uncommented;
-                    continue;
-                }
-                break;
             }
             // `pub(crate)` reduces to `pub` for the test, but the failure
             // message reports the spelling as written -- which of the two
             // widenings happened is the useful part of the diagnostic.
             let spelled = head;
-            let visibility = strip_trailing_group(head)
+            let reduced = strip_trailing_group(head);
+            let last = reduced
                 .rsplit(|character: char| character.is_whitespace())
                 .next()
-                .filter(|token| *token == "pub")
-                .and_then(|_| spelled.rfind("pub"))
-                .map(|at| spelled[at..].trim().to_string());
+                .unwrap_or_default();
+            // ⛔ THREE outcomes, not two, and this is the fix for the CLASS
+            // rather than for the last form that defeated it. Every previous
+            // revision of this walk answered "no visibility keyword" -- i.e.
+            // PASS -- for any input it did not understand, so each gap in its
+            // parsing was a silent green. Three separate legal forms reached
+            // that default (a line-split keyword, a comment, a NESTED
+            // comment), and the third arrived after I had already "closed" the
+            // second.
+            //
+            // So an unrecognised predecessor is now its own verdict. The walk
+            // may conclude "private" only when it lands on something that
+            // genuinely ends the preceding item -- an attribute's `]`, a block
+            // or item terminator, or the start of the file. Anything else is
+            // reported as undetermined and FAILS, because "I could not tell"
+            // and "it is private" are different answers and only one of them
+            // is evidence.
+            let verdict = if last == "pub" {
+                let at = spelled.rfind("pub").expect("`pub` was just matched");
+                DeclaredVisibility::Widened(spelled[at..].trim().to_string())
+            } else if reduced.is_empty() || reduced.ends_with([']', '}', '{', ';', ')']) {
+                DeclaredVisibility::ModulePrivate
+            } else {
+                let context = reduced
+                    .char_indices()
+                    .rev()
+                    .nth(60)
+                    .map_or(reduced, |(at, _)| &reduced[at..]);
+                DeclaredVisibility::Undetermined(context.trim().to_string())
+            };
             let line = text[..at].matches('\n').count() + 1;
-            declarations.push((file.clone(), line, visibility));
+            declarations.push((file.clone(), line, verdict));
         }
     }
 
@@ -1144,35 +1174,140 @@ fn assert_packaging_helper_is_declared_module_private() {
          The helper was renamed or removed, and this assertion has been passing \
          vacuously rather than checking anything."
     );
-    for (file, line, visibility) in &declarations {
-        assert!(
-            visibility.is_none(),
-            "{}:{line} declares the test-only packaging helper as `{} fn {NAME}(`. \
-             It must stay private to its own module: `pub` makes it public \
-             production API, and `pub(crate)` widens it to the whole crate. \
-             Neither is observable from outside `ken-runtime`, which is why this \
-             check reads the declaration instead of asking the compiler.",
-            file.display(),
-            visibility.as_deref().unwrap_or_default()
-        );
+    for (file, line, verdict) in &declarations {
+        match verdict {
+            DeclaredVisibility::ModulePrivate => {}
+            DeclaredVisibility::Widened(spelling) => panic!(
+                "{}:{line} declares the test-only packaging helper as `{spelling} \
+                 fn {NAME}(`. It must stay private to its own module: `pub` makes \
+                 it public production API, and `pub(crate)` widens it to the whole \
+                 crate. Neither is observable from outside `ken-runtime`, which is \
+                 why this check reads the declaration instead of asking the \
+                 compiler.",
+                file.display()
+            ),
+            DeclaredVisibility::Undetermined(context) => panic!(
+                "{}:{line} declares the test-only packaging helper, but this check \
+                 could not determine its visibility -- it walked back from `fn` and \
+                 found `{context}`, which it does not recognise as either a \
+                 visibility keyword or the end of the preceding item.\n\nThis is \
+                 reported as a FAILURE on purpose. Not being able to tell is not \
+                 evidence that the helper is private, and treating it as though it \
+                 were is exactly how this check passed green over three separate \
+                 real widenings already. Either the declaration uses a form the \
+                 walk does not handle -- extend it, and add the form to the \
+                 mutation matrix -- or the helper genuinely moved.",
+                file.display()
+            ),
+        }
     }
 }
 
-/// Strip one trailing comment, block or line, so `pub /* note */ fn` and
-/// `pub // note` + newline + `fn` both still expose the `pub`.
-fn strip_trailing_comment(head: &str) -> &str {
-    if let Some(rest) = head.strip_suffix("*/") {
-        if let Some(at) = rest.rfind("/*") {
-            return head[..at].trim_end();
+/// What the backward walk concluded about one declaration. `Undetermined` is
+/// a first-class outcome rather than an absence, so a parsing gap cannot be
+/// read as "private".
+enum DeclaredVisibility {
+    ModulePrivate,
+    Widened(String),
+    Undetermined(String),
+}
+
+/// Replace every comment with spaces, preserving newlines so byte offsets and
+/// line numbers are identical to the original text.
+///
+/// String literals are copied verbatim: `ken-runtime` embeds C source as Rust
+/// string literals, and a `/*` inside one is not a comment. Treating it as one
+/// could blank an arbitrary span of real code -- including, in the worst case,
+/// a declaration this check exists to inspect, which would be a silent pass.
+fn blank_comments(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut at = 0usize;
+    let mut depth = 0usize;
+    while at < bytes.len() {
+        let rest = &bytes[at..];
+        if depth > 0 {
+            // Rust permits NESTED block comments, unlike C.
+            if rest.starts_with(b"/*") {
+                depth += 1;
+                out.extend_from_slice(b"  ");
+                at += 2;
+            } else if rest.starts_with(b"*/") {
+                depth -= 1;
+                out.extend_from_slice(b"  ");
+                at += 2;
+            } else {
+                out.push(if bytes[at] == b'\n' { b'\n' } else { b' ' });
+                at += 1;
+            }
+            continue;
+        }
+        if rest.starts_with(b"/*") {
+            depth = 1;
+            out.extend_from_slice(b"  ");
+            at += 2;
+        } else if rest.starts_with(b"//") {
+            while at < bytes.len() && bytes[at] != b'\n' {
+                out.push(b' ');
+                at += 1;
+            }
+        } else if let Some(end) = string_literal_end(bytes, at) {
+            out.extend_from_slice(&bytes[at..end]);
+            at = end;
+        } else {
+            out.push(bytes[at]);
+            at += 1;
         }
     }
-    // A line comment runs to end of line, so it can only be the tail of the
-    // last line -- and only if that line does not also close a block comment.
-    let last_line_at = head.rfind('\n').map_or(0, |at| at + 1);
-    if let Some(at) = head[last_line_at..].find("//") {
-        return head[..last_line_at + at].trim_end();
+    String::from_utf8(out).expect("blanking comments preserves UTF-8 boundaries")
+}
+
+/// If a string literal starts at `at`, return the byte index just past it.
+/// Handles `"..."` with escapes and raw strings `r"..."` / `r#"..."#`.
+fn string_literal_end(bytes: &[u8], at: usize) -> Option<usize> {
+    if bytes[at] == b'r' {
+        // Only when `r` opens a literal rather than ending an identifier.
+        if at > 0 && (bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_') {
+            return None;
+        }
+        let mut cursor = at + 1;
+        let mut hashes = 0usize;
+        while cursor < bytes.len() && bytes[cursor] == b'#' {
+            hashes += 1;
+            cursor += 1;
+        }
+        if cursor >= bytes.len() || bytes[cursor] != b'"' {
+            return None;
+        }
+        cursor += 1;
+        while cursor < bytes.len() {
+            if bytes[cursor] == b'"' {
+                let mut seen = 0usize;
+                let mut ahead = cursor + 1;
+                while seen < hashes && ahead < bytes.len() && bytes[ahead] == b'#' {
+                    seen += 1;
+                    ahead += 1;
+                }
+                if seen == hashes {
+                    return Some(ahead);
+                }
+            }
+            cursor += 1;
+        }
+        return Some(bytes.len());
     }
-    head
+    if bytes[at] == b'"' {
+        let mut cursor = at + 1;
+        while cursor < bytes.len() {
+            match bytes[cursor] {
+                b'\\' => cursor += 2,
+                b'"' => return Some(cursor + 1),
+                _ => cursor += 1,
+            }
+        }
+        return Some(bytes.len());
+    }
+    None
 }
 
 /// Strip one trailing string literal, for the ABI in `extern "C" fn`.
