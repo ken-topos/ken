@@ -218,31 +218,88 @@ if [ "$doc_only" -eq 1 ]; then
   # red for an unrelated reason does not block a doc-only publish — and the
   # Librarian's re-validation commit is precisely the publish that PASSES it,
   # so the gate unblocks itself rather than deadlocking.
+  # ⚠ THREE FIXES over the first version of this gate (adversary F10/F11/F12
+  #   against `fae86d13`). All three were in the PLUMBING, not the idea — which
+  #   is the standing lesson: when you harden a mechanism, audit what holds it
+  #   up separately, because that gets one round of attention while the
+  #   interesting part gets five.
+  #
+  #   F10. Check the MERGE RESULT, not the candidate. The gate is a function of
+  #        (library/REVISION, cited-source content). At the branch tip both come
+  #        from the branch; after squash the cited sources come from `main`.
+  #        Different inputs, so green-at-candidate does not imply green-on-main.
+  #        (The silent-REVISION-regression route originally described is NOT
+  #        reachable — both sides editing that one-line file conflicts loudly,
+  #        measured. The structural split is real regardless, and checking the
+  #        merge result also stops a doc-only merge landing onto an already-red
+  #        `main`.)
+  #   F11. Use the PUBLISHER's checker, not the candidate's. Otherwise a PR
+  #        editing `gen-doc-status.sh` can be published `--doc-only`, skip CI
+  #        entirely, and be gated by the very code it introduces. `--doc-only`
+  #        is a bare caller assertion — nothing here verifies the diff really is
+  #        doc-only — so on a path with no CI nothing in the candidate is
+  #        trusted to guard itself. The cost (the candidate's own gate changes
+  #        go untested here) is the correct trade.
+  #   F12. CHAIN the pre-existing EXIT trap, never clobber it. Bash EXIT traps
+  #        are single-slot; the first version overwrote `trap cleanup EXIT` and
+  #        then cleared it, leaking $tmpdir on every doc-only run.
+  #
+  # ⚠ Note the three DISTINCT outcomes. A merge conflict reports CANNOT
+  #   EVALUATE, not "currency gate failed": a message naming a specific remedy
+  #   must be reachable only on the condition that implies that remedy. The
+  #   same day, `library_documentation_gates.rs` printed a hardcoded
+  #   "rerun the generator" for any non-zero exit and sent this author to
+  #   entirely the wrong mechanism.
   doc_gate_wt="$(mktemp -d -t ken-docgate-XXXXXX)"
   cleanup_doc_gate() {
     git worktree remove --force "$doc_gate_wt" >/dev/null 2>&1 || true
     rm -rf "$doc_gate_wt" >/dev/null 2>&1 || true
+    cleanup                     # F12: chain, never clobber
   }
-  trap cleanup_doc_gate EXIT
-  if ! git worktree add --detach "$doc_gate_wt" "$head_sha" >/dev/null 2>&1; then
-    die "doc-only gate: could not create a worktree at $head_sha to check it"
-  fi
-  if ! ( cd "$doc_gate_wt" && ./scripts/gen-doc-status.sh --check ); then
-    cleanup_doc_gate
-    trap - EXIT
-    die "doc-only gate: the library currency gate FAILS at $head_sha.
+  trap cleanup_doc_gate EXIT    # left armed on every path out of here
 
-Merging this with --doc-only would land it on main WITHOUT CI and leave main
-red for the next PR that runs the full suite -- which will look like that PR's
-failure, not this one's.
+  git fetch origin main --quiet 2>/dev/null || true
+  if ! git worktree add --detach "$doc_gate_wt" origin/main >/dev/null 2>&1; then
+    die "doc-only gate: could not create a worktree at origin/main to evaluate the merge result"
+  fi
+
+  # ⛔ `git merge --squash` STAGES without COMMITTING, so HEAD would still be
+  #    origin/main and `gen-doc-status.sh` — which compares REVISION against
+  #    HEAD, a commit — would not see the candidate's content at all. Caught by
+  #    this gate's own three-outcome falsification: the red probe returned
+  #    PERMIT. Without the commit below, this whole fix silently degrades into
+  #    "is origin/main currently green?", which is NOT what it claims.
+  #    ⇒ The squash must be committed for the merge result to exist as a tree
+  #      HEAD points at. `--no-verify` because repo hooks regenerate tracked
+  #      files, which would contaminate the very tree under test.
+  if ! ( cd "$doc_gate_wt" \
+           && git merge --squash "$head_sha" >/dev/null 2>&1 \
+           && git commit --no-verify -q -m "doc-only gate: merge-result probe" >/dev/null 2>&1 ); then
+    die "doc-only gate: CANNOT EVALUATE -- $head_sha does not merge cleanly onto origin/main.
+
+This is NOT a currency-gate failure and re-running the generator will not help.
+The candidate needs rebasing onto current origin/main; re-request the merge once
+it applies cleanly."
+  fi
+
+  # F11: the candidate does not get to supply the checker that clears it.
+  if ! git show origin/main:scripts/gen-doc-status.sh > "$doc_gate_wt/scripts/gen-doc-status.sh"; then
+    die "doc-only gate: could not read scripts/gen-doc-status.sh from origin/main"
+  fi
+  chmod +x "$doc_gate_wt/scripts/gen-doc-status.sh"
+
+  if ! ( cd "$doc_gate_wt" && ./scripts/gen-doc-status.sh --check ); then
+    die "doc-only gate: the library currency gate FAILS on the MERGE RESULT of $head_sha onto origin/main.
+
+Merging this with --doc-only would land it WITHOUT CI and leave main red for the
+next PR that runs the full suite -- which will look like that PR's failure, not
+this one's.
 
 Re-validate the cited sources and bump library/REVISION (the Librarian's
 mandate), then publish. Do not bypass: gen-doc-status.sh refuses to auto-bump
 because the bump IS the claim that someone re-validated."
   fi
-  cleanup_doc_gate
-  trap - EXIT
-  printf 'Doc-only gate: library currency check passed at %s.\n' "$head_sha"
+  printf 'Doc-only gate: library currency check passed on the merge result of %s onto origin/main.\n' "$head_sha"
 
   merge_pr
   printf 'Doc-only PR #%s merge command succeeded.\n' "$pr_number"
