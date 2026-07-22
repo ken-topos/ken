@@ -200,8 +200,31 @@ The write boundary remains static: a program holding only `Cap APartial` cannot
 apply `writeFile`, so the attempt is ill-typed before the driver runs. The
 driver's `CapabilityDenied` result remains defense in depth for writes and is
 the primary authority floor for reads. User code has no public capability
-constructor or Ken-callable attenuation function. The wrappers are ordinary
-checked Ken definitions and add neither a kernel rule nor a trusted primitive.
+constructor, capability-producing wrapper, Ken-callable attenuation function,
+or Ken-callable revocation function. In particular, `readFile` and `writeFile`
+are bound while the raw management names `attenuate` and `revoke` both resolve
+as `UnboundName`, and no `Cap` constructor or producer is present in the Ken
+environment. The wrappers are ordinary checked Ken definitions and add neither
+a kernel rule nor a trusted primitive.
+
+Raw attenuation and revocation are trusted runner/host management actions over
+non-Ken-visible grant identities (`62 §4`), not source operations. Attenuation
+records child lineage; revocation closes the selected identity and its
+descendants. A program observes neither action directly. It observes revocation
+only when a later existing capability-consuming operation returns one of these
+exact type-local projections:
+
+- a path/capability operation returns
+  `MkFileError <operation> <path> Revoked`, where `Revoked` is a new `IOError`
+  cause beside and distinct from `CapabilityDenied`;
+- a resource-token operation returns the nullary constructor
+  `ResourceError.Revoked`.
+
+The two enclosing error families remain distinct; no shared sum is introduced.
+The runtime/host mapping preserves their common semantic meaning and never maps
+either to `CapabilityDenied`, `ResourceHostIO CapabilityDenied`, `Closed`,
+malformed capability/resource, stale-generation, `RightNotHeld`,
+`ResourceKindMismatch`, `ResourceHostIO _`, or another host I/O failure.
 
 ### 1.4 Text is explicit `bytes_encode` / `bytes_decode` — no hidden charset
 
@@ -430,13 +453,16 @@ For a positive effective request, the partition is exact:
 `NoProgress` is the surface identity for the write-zero condition (also called
 `WriteZero` at a host boundary); it is not a successful progress value.
 
-The following are errors, never progress: `Closed`, `MalformedResource`,
-`ResourceKindMismatch`, `RightNotHeld`, invalid offset/window/bounds,
-buffer-limit or allocation failure, unsupported/nonblocking posture, and host
-I/O failure. `Interrupted` is a named error unless a separately specified and
-tested backend retry policy consumes it internally. `WouldBlock` belongs to
-PX12 and is not a PX8 progress status. PX9 may refine error payloads but must not
-change this progress partition.
+The following are errors, never progress: `Revoked`, `Closed`,
+`MalformedResource`, `ResourceKindMismatch`, `RightNotHeld`, invalid
+offset/window/bounds, buffer-limit or allocation failure,
+unsupported/nonblocking posture, and host I/O failure. `Revoked` means an
+otherwise well-formed, live, sufficiently-righted operation lost at `62 §4.2`'s
+admission boundary; it is not an alias for a neighbouring error. `Interrupted`
+is a named error unless a separately specified and tested backend retry policy
+consumes it internally. `WouldBlock` belongs to PX12 and is not a PX8 progress
+status. PX9 may refine error payloads but must not change this progress partition
+or collapse the `Revoked` identity.
 
 The primitive contracts exposed to checked Ken code include these propositions:
 
