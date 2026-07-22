@@ -20,9 +20,8 @@ passage or spec section that decides it, verified current by the same
 **content-currency** mechanism as every other page
 (`scripts/gen-doc-status.sh`, `library/REVISION`). A reader can verify any
 answer by opening the cited source directly, rather than trusting this
-page's authority for it — the same `explanatory`-class discipline the
-chapters follow (`docs/program/12-documentation-program.md` §1's four
-settled decisions, D1).
+page's authority for it — the same discipline every chapter in this
+curriculum already follows.
 
 ## Structure
 
@@ -43,8 +42,7 @@ of exactly this trap).
 
 ---
 
-**Grounds this page:** `docs/program/issues/DOC-W1.md`;
-`docs/program/12-documentation-program.md`;
-`library/learn/reading-ken/fragments.md`. Authority class: `tutorial` — this
-page organizes practice against material chapters 01–06 already ground; it
-introduces no new source claim. Content-currency predicate, as elsewhere.
+**Grounds this page:** `library/learn/reading-ken/fragments.md`. Authority
+class: `tutorial` — this page organizes practice against material chapters
+01–06 already ground; it introduces no new source claim. Content-currency
+predicate, as elsewhere.

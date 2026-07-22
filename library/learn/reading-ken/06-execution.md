@@ -55,8 +55,12 @@ Read that precisely against what `ken check` actually calls: `check_file`
 constructs an `ElabEnv` and elaborates the file — it never constructs a
 `ken_interp` host, never calls `run_program`, and never invokes the native
 backend. **None of the seven fragments this curriculum is built from declares
-a `proc main`** (`grep -c "proc main"` on each returns zero), so **every
-"still checks" claim `fragments.md` makes rests on elaboration alone** — the
+a `proc main`** — checked directly in each of `Core/Logic/EmptyDec.ken.md`,
+`Core/Logic/Transport.ken.md`, `Data/Sums/Combinators.ken.md`,
+`Capability/Console/Text.ken.md`, `Capability/Filesystem/Errors.ken.md`,
+`Capability/System/IO.ken.md`, and `Tooling/Testing/Property.ken.md`
+(`grep -c "proc main"` on each returns zero) — so **every "still checks"
+claim `fragments.md` makes rests on elaboration alone** — the
 kernel's own conversion checking, not a single step of the reference
 interpreter or the native backend running on any of them. This is exactly
 chapter [05](05-packages-and-provenance.md) §4's shape, one layer down: a real
@@ -121,12 +125,29 @@ runtime behavior
    **diverge at runtime**, an explicit, surfaced choice, never a default
    (`spec/40-runtime/42-evaluation.md` §3.3, "δ").
 5. **Resource-limit exhaustion** — the content-addressed store hitting its
-   capacity bound raises a loud, catchable `CapacityExhausted` at the `space`
-   boundary. This is distinct from the other four: the program stays
-   logically total, so Ken generates no static "never exhausts" obligation —
-   the stance is detect-and-fail-loud, not prevent-by-proof
+   capacity bound **MUST** surface a loud, catchable `CapacityExhausted` at
+   the `space` boundary, never a silent drop to a null/sentinel slot; this is
+   distinct from the other four because the program stays logically total,
+   so Ken generates no static "never exhausts" obligation — the stance is
+   detect-and-fail-loud, not prevent-by-proof
    (`spec/40-runtime/44-capacity.md`
    [§2](../../../spec/40-runtime/44-capacity.md#2-capacity-is-an-engineering-choice-not-numerology-oq-5)).
+   That same section also flags a **landed gap**: at the time it was written,
+   `ken-interp`'s intern shim mapped `CapacityExhausted` to the null slot — a
+   silent drop, exactly what the MUST forbids. Reading the current code
+   against that flag rather than assuming it: `crates/ken-interp/src/eval.rs`
+   now records the error on the store (`EvalStore::capacity_error`,
+   `take_capacity_error`) rather than only collapsing to the null slot, and a
+   real, in-crate test drives a store to its limit and asserts the error is
+   recorded, not dropped, at exactly the point of overflow, while a repeated
+   value at the same limit correctly does not trip it
+   (`crates/ken-interp/src/eval.rs`, `capacity_tests::
+   interp_loud_capacity_error_not_silent`,
+   `capacity_tests::interp_at_limit_repeat_does_not_trip`). That is real
+   evidence the silent-drop gap the spec flags has been repaired at this
+   layer — it is not evidence that every layer above this store surfaces the
+   error to a user as a catchable fault; this page traces only as far as the
+   test above establishes and does not extend the claim further.
 
 None of the seven registered fragments contains an open hole, an opaque
 non-total definition, or an unguarded partial primitive — this is a
@@ -134,26 +155,34 @@ statement about what this specific, small, deliberately-conservative
 teaching set contains, not a claim that these traps are rare in general Ken
 code; they are ordinary, named, and marked wherever they occur.
 
-## 5. The native backend: real, landed code — and a spec decision still open
+## 5. The native backend: two sources that disagree, stated plainly
 
-Two facts are both true at once here, and neither cancels the other. The
-**target/toolchain decision** for the native backend, `OQ-backend-target`, is
-recorded **OPEN, operator-ratifiable** in the spec's own open-decisions
-register (`spec/90-open-decisions.md`) — no target is written into normative
-prose as decided. At the same time, a Cranelift-lowering native backend is
-**real, landed, and under active development**:
-`crates/ken-runtime/src/cranelift_backend/` exists, `ken native-build` is a
-working CLI subcommand that calls it (`crates/ken-cli/src/main.rs`,
-`native_build_file`), and a substantial `ken-cli` integration-test population
-(for example `crates/ken-cli/tests/px4b_native_production.rs`) drives real
-programs through it and asserts on their exit codes and output today. Reading
-this precisely: an *open design-register entry* records that the toolchain
-choice has not been formally ratified as a locked spec decision; it does not
-mean no code exists — engineering work can, and here does, proceed on the
-design ring's stated on-principle lean (Cranelift) while the operator
-ratification remains open in the register. State the fact you can check
-(the code exists and runs) separately from the fact the register states
-(the decision is open) — neither one lets you infer the other.
+Two real, checkable facts sit side by side here, and this page does not
+resolve the tension between them. `spec/40-runtime/45-native-backend.md`
+[§5](../../../spec/40-runtime/45-native-backend.md#5-the-backend-target--oq-backend-target-open-operator-ratifiable)
+states plainly that the native backend's build effort **"does not start
+until"** the target/toolchain decision (`OQ-backend-target`) is
+operator-ratified, and the spec's own open-decisions register
+(`spec/90-open-decisions.md`) still records that decision as **OPEN**, not
+ratified. At the same time, a Cranelift-lowering native backend is **real
+and present in the tree**: `crates/ken-runtime/src/cranelift_backend/`
+exists, `ken native-build` is a working CLI subcommand that calls it
+(`crates/ken-cli/src/main.rs`, `native_build_file`), and a substantial
+`ken-cli` integration-test population (for example
+`crates/ken-cli/tests/px4b_native_production.rs`) drives real programs
+through it and asserts on their exit codes and output today.
+
+Read this precisely, without smoothing it over: the cited spec section's own
+words gate the *start* of this work on a ratification the cited
+open-decisions register says has not happened, and landed, tested code
+inconsistent with that gate exists anyway. Neither source authorizes
+treating this as resolved — this page states both observed facts and leaves
+the inconsistency exactly where it is, rather than supplying a reading that
+would explain it away. What a reader can take from this honestly: a spec
+record and an implementation can diverge, and noticing that divergence by
+checking both directly is itself part of the reading discipline this
+curriculum teaches — chapter [05](05-packages-and-provenance.md)'s citation
+chain lesson applies here too, one layer up.
 
 The differential discipline chapter [45](../../../spec/40-runtime/45-native-backend.md)
 prescribes — same term, interpreter and native backend, identical value —
@@ -164,32 +193,26 @@ through both executors and asserts on the exact result variant, not merely
 excluded from the sharded CI test run** — `.github/workflows/ci.yml` names it
 explicitly in an `-E 'not (binary(rt_parity_native) or …))'` filter — because
 one of its seven cases costs over three minutes of wall time on its own, not
-because any case fails; this is recorded, in progress, and owned outside this
-chapter (`docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md`). Read this
-precisely too: the differential discipline is real, and this specific test
-file asserts it faithfully — but a green CI run today does not currently
-execute this file, so it is not, right now, part of what a green CI run
-tells you. That is a fact about **which suite currently has a running home**,
-not about whether the native backend agrees with the interpreter — a claim
-this chapter cannot make or refute from the suite's exclusion alone, and does
-not attempt to fix or re-derive here.
+because any case fails. Read this precisely too: the differential discipline
+is real, and this specific test file asserts it faithfully — but a green CI
+run as of this page's `REVISION` does not currently execute this file, so it
+is not, right now, part of what a green CI run tells you. That is a fact
+about **which suite currently has a running home**, not about whether the
+native backend agrees with the interpreter — a claim this chapter cannot
+make or refute from the suite's exclusion alone.
 
 ## 6. Authority at execution time — the same unavailable gap, now at the boundary
 
 Chapter [04](04-effects-capabilities-and-authority.md) §3 already showed you
-that no checked fragment in `catalog/packages/` carries an explicit capability
-token, an attenuation call, or an authority comparison. That gap has an
-execution-time consequence worth stating plainly, not re-deriving: a real
+that no checked fragment anywhere in `catalog/packages/` carries an explicit
+capability token, an attenuation call, or an authority comparison — a
+whole-catalog measurement, not limited to this curriculum's seven entries.
+That gap has an execution-time consequence worth stating plainly: a real
 program's `main` is resolved by an ABI-shaped name and supplied capabilities
 by the host at the moment `ken run` drives it (`crates/ken-cli/src/lib.rs`,
 `run_program`) — real, working machinery — but since no registered fragment
 is a program with a capability parameter, nothing in this corpus ever
-exercises that supply step for you to read. The catalog-wide measurement
-behind chapter 04's claim was taken across the whole `catalog/packages/`
-tree, not just this curriculum's seven entries, so this is the same
-recorded gap, not a new one: **zero capability-typed signatures, `attenuate`
-calls, or authority-lattice code exist anywhere in the catalog today**
-(`docs/program/issues/CAT-CAPEX.md`). Label it, once more, precisely:
+exercises that supply step for you to read. Label it, once more, precisely:
 **unavailable** in checked-fragment form — the corpus does not yet show a
 program whose execution is authority-gated, not that authority-gating is
 unreal or unimplemented; §3's Filesystem/Errors.ken.md limitation and §1's
@@ -206,9 +229,11 @@ sources that already establish the mechanism exists.
 - Name the five marked points where a total, kernel-admitted program can still
   behave partially at runtime, and which one is the only one that can produce
   an outright non-terminating run.
-- Why can both of these be true without contradiction: the native backend's
-  target/toolchain decision is recorded open in the spec, and real, tested
-  native-backend code already exists and runs programs today?
+- One spec section says the native backend's build effort does not start
+  until its target/toolchain decision is ratified; the open-decisions
+  register says that decision is still open; real, tested native-backend
+  code exists in the tree today. What do you do with three facts that do
+  not fit together, rather than reach for a reading that makes them fit?
 - What does it mean that a real differential test file can assert a true
   property faithfully while currently being excluded from the CI run that
   gates every merge — and why doesn't that exclusion, by itself, cast doubt
@@ -217,16 +242,24 @@ sources that already establish the mechanism exists.
 ---
 
 **Grounds this page:**
-`spec/40-runtime/42-evaluation.md` §§1, 4, 5, 6, and §3.3's `δ`/opaque-
-definition rule;
+`spec/40-runtime/42-evaluation.md` §§1, 3.3, 4, 5, 6;
 `spec/40-runtime/43-termination.md` §§1, 2;
 `spec/40-runtime/44-capacity.md` §2;
-`spec/40-runtime/45-native-backend.md` §§1, 2, 4;
-`spec/90-open-decisions.md` (the `OQ-backend-target` entry, cited whole-file,
-no anchor — its own heading carries no stable slug worth pinning here);
+`spec/40-runtime/45-native-backend.md` §§1, 2, 4, 5;
+`spec/90-open-decisions.md` (the `OQ-backend-target` entry, cited whole-file
+— see the note below on why an anchor into it is not pinned);
 `docs/program/07-catalog-style-guide.md` §3;
-`docs/program/issues/DOC-W1.md`; `docs/program/issues/CAT-CAPEX.md`;
-`docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md`.
+`catalog/packages/Core/Logic/EmptyDec.ken.md`,
+`catalog/packages/Core/Logic/Transport.ken.md`,
+`catalog/packages/Data/Sums/Combinators.ken.md`,
+`catalog/packages/Capability/Console/Text.ken.md`,
+`catalog/packages/Capability/Filesystem/Errors.ken.md`,
+`catalog/packages/Capability/System/IO.ken.md`,
+`catalog/packages/Tooling/Testing/Property.ken.md`;
+`crates/ken-cli/src/main.rs`; `crates/ken-cli/src/lib.rs`;
+`crates/ken-cli/tests/rt_parity_native.rs`;
+`crates/ken-cli/tests/px4b_native_production.rs`;
+`crates/ken-interp/src/eval.rs`; `.github/workflows/ci.yml`.
 Authority class: `explanatory` — this page orders and interprets those
 sections and the cited fragment/code's own text; it does not assert a rule
 they do not already state. Every citation rests on the **content-currency**
@@ -234,35 +267,41 @@ predicate (`DOC-CURRENCY-ANCHOR`): the cited byte ranges are re-verified
 unchanged between `library/REVISION` and `HEAD` by
 `scripts/gen-doc-status.sh`. Content currency is necessary but not
 sufficient — the same discipline chapter 05's footer states: a citation can
-be byte-unchanged and still not carry the semantic claim made from it, which
-is exactly the trap the ch05 review caught and this chapter was written
-against from the start.
+be byte-unchanged and still not carry the semantic claim made from it.
 
 Section 2's "no registered fragment declares `proc main`" claim is grounded
 in a direct grep of the seven registered files, not an assertion, and in
 `crates/ken-cli/src/main.rs`'s own `check_file`/`run_file`/`native_build_file`
 bodies, read to confirm which of `ken_elaborator`/`ken_interp`/the native
-backend each subcommand actually calls. Section 5's landed-code claim is
-grounded directly in `crates/ken-runtime/src/cranelift_backend/`,
+backend each subcommand actually calls. Section 4's capacity claim is
+grounded in both the spec's own normative MUST and its own flagged gap, and
+separately in the real, current test named in §4 above
+(`crates/ken-interp/src/eval.rs`, `capacity_tests` module) — the spec text
+and the code are cited as two distinct kinds of evidence, not blended into
+one. Section 5's landed-code claim is grounded directly in
+`crates/ken-runtime/src/cranelift_backend/`,
 `crates/ken-cli/src/main.rs`'s `native_build_file`, and
-`crates/ken-cli/tests/px4b_native_production.rs` existing and passing at the
-candidate SHA; its open-decision claim is grounded directly in
-`spec/90-open-decisions.md`'s own recorded `OQ-backend-target` status — the
-two are cited from two different, independently-checked sources precisely
-because neither implies the other. Section 5's CI-exclusion claim is
-grounded directly in `.github/workflows/ci.yml`'s own exclusion filter and
-the linked, already-filed, in-progress issue — this page does not
-re-derive, re-litigate, or attempt to close that issue; it reports the
-state as of this page's `REVISION` only. Fragments cited are drawn from the
+`crates/ken-cli/tests/px4b_native_production.rs` existing and passing at
+this page's `REVISION`; its open-decision claim is grounded directly in
+`spec/90-open-decisions.md`'s own recorded `OQ-backend-target` status and
+`spec/40-runtime/45-native-backend.md` §5's own "does not start until"
+wording — three independently-checked sources, stated as a genuine, unfixed
+inconsistency, not reconciled by this page. Section 5's CI-exclusion claim
+is grounded directly in `.github/workflows/ci.yml`'s own exclusion filter,
+current as of this page's `REVISION`; this page does not speculate about
+when or whether that will change. Fragments cited are drawn from the
 already-selected, registered set in [`fragments.md`](fragments.md); this
 chapter does not introduce a fresh selection.
 
 **No normative language.** Every declarative sentence above about what the
 language does or guarantees carries an explicit spec/code citation next to
-it; this page states no rule on its own authority (D1). The mechanism used
-to check this is a re-read of each paragraph against its own footnoted
-citation, confirming the citation's text actually supports the sentence
-made from it — the same check applied to every prior chapter. Separately,
-this page was swept for coordination/review-process narration (thread,
-event, WP, or role-name references) with a whole-file grep for
-`librarian|thr_|evt_|doc-leader|steward|kickoff`; zero hits.
+it; this page states no language rule on its own authority. The mechanism
+used to check this is a re-read of each paragraph against its own
+footnoted citation, confirming the citation's text actually supports the
+sentence made from it — the same check applied to every prior chapter.
+Separately, this page was swept for coordination/review-process and
+program-tracker narration — role names, thread/event identifiers, issue
+identifiers, revision-in-flight phrasing, ownership/status commentary, and
+program-decision labels — by grepping the finished text for each such
+token individually and confirming zero hits outside this sentence
+describing the check itself.

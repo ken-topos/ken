@@ -285,6 +285,7 @@ authority = "explanatory"
 availability = "current"
 sources = [
   "spec/40-runtime/42-evaluation.md#1-relationship-to-the-kernels-reduction",
+  "spec/40-runtime/42-evaluation.md#33-per-form-reduction-reconciled-with-17-1",
   "spec/40-runtime/42-evaluation.md#4-unknown-propagation",
   "spec/40-runtime/42-evaluation.md#5-the-interpreter-as-oracle-and-the-repl",
   "spec/40-runtime/42-evaluation.md#6-effect-evaluation-running-the-interaction-tree",
@@ -294,16 +295,23 @@ sources = [
   "spec/40-runtime/45-native-backend.md#1-why-a-native-backend-and-where-it-sits",
   "spec/40-runtime/45-native-backend.md#2-the-trust-posture--the-backend-is-not-in-the-tcb",
   "spec/40-runtime/45-native-backend.md#4-the-differential-equivalence-discipline--the-interpreter-is-the-oracle",
+  "spec/40-runtime/45-native-backend.md#5-the-backend-target--oq-backend-target-open-operator-ratifiable",
   "spec/90-open-decisions.md",
   "docs/program/07-catalog-style-guide.md#3-code-block-roles-the-fence-taxonomy",
   "docs/program/issues/DOC-W1.md",
-  "docs/program/issues/CAT-CAPEX.md",
-  "docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md",
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+  "catalog/packages/Core/Logic/Transport.ken.md",
+  "catalog/packages/Data/Sums/Combinators.ken.md",
+  "catalog/packages/Capability/Console/Text.ken.md",
+  "catalog/packages/Capability/Filesystem/Errors.ken.md",
   "catalog/packages/Capability/System/IO.ken.md",
+  "catalog/packages/Tooling/Testing/Property.ken.md",
   "crates/ken-cli/src/main.rs",
   "crates/ken-cli/src/lib.rs",
   "crates/ken-cli/tests/rt_parity_native.rs",
   "crates/ken-cli/tests/px4b_native_production.rs",
+  "crates/ken-interp/src/eval.rs",
+  "crates/ken-runtime/src/cranelift_backend.rs",
   ".github/workflows/ci.yml",
   "library/learn/reading-ken/fragments.md",
 ]
@@ -325,8 +333,6 @@ audience = ["human-reader"]
 authority = "tutorial"
 availability = "current"
 sources = [
-  "docs/program/issues/DOC-W1.md",
-  "docs/program/12-documentation-program.md",
   "library/learn/reading-ken/fragments.md",
 ]
 validation = [
@@ -372,12 +378,27 @@ audience = ["human-reader"]
 authority = "tutorial"
 availability = "current"
 sources = [
+  "spec/20-verification/21-spec-syntax.md#52-the-epistemic-status-per-claim-export-facing--oq-spec-decided",
   "spec/20-verification/21-spec-syntax.md#54-the-honesty-guard-unknowntesteddelegated-never-read-proved",
+  "spec/20-verification/21-spec-syntax.md#55-scope-ruling--disposition-tag-syntax-is-deferred",
   "spec/30-surface/30-taxonomy.md#3-the-built-in-set--the-surface-tcb-irreducible",
   "spec/30-surface/30-taxonomy.md#4-the-prelude-tier--ken-defined-always-present-closed",
   "spec/30-surface/36-effects.md#1-effects-as-a-static-row",
-  "docs/program/issues/CAT-CAPEX.md",
+  "spec/40-runtime/45-native-backend.md#5-the-backend-target--oq-backend-target-open-operator-ratifiable",
+  "spec/90-open-decisions.md",
+  "catalog/packages/Capability/Console/Text.ken.md",
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+  "catalog/packages/Core/Logic/Transport.ken.md",
+  "catalog/packages/Data/Sums/Combinators.ken.md",
+  "catalog/packages/Capability/Filesystem/Errors.ken.md",
   "catalog/packages/Capability/System/IO.ken.md",
+  "catalog/packages/Tooling/Testing/Property.ken.md",
+  "crates/ken-elaborator/tests/surface_transport_acceptance.rs",
+  "crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs",
+  "crates/ken-elaborator/tests/n2_in_repo_loader.rs",
+  "crates/ken-cli/src/main.rs",
+  "crates/ken-cli/tests/px4b_native_production.rs",
+  "crates/ken-runtime/src/cranelift_backend.rs",
 ]
 validation = [
   "manifest-coverage",
