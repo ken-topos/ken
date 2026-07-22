@@ -7,23 +7,28 @@ inbound notifications kept working throughout — same pattern as
 
 ## Verdict
 
-**APPROVE — `wp/rt-split-7-artifact-internals @ 1b2d3e96b28d82e090787bc22a6595b3cad2090b`**,
-base exact `origin/main @ ab7ad89fd998eb1c6e5c353f9d294349d24d5d8b` (merge-base
-verified myself, exact match; the one commit landed on `origin/main` since —
-`9d2b4feb`, DOC-W1-2 — touches nothing under `crates/ken-runtime/src`).
+**APPROVE — `wp/rt-split-7-artifact-internals @ 34afc54508ee9d9bc313473dd9522e53de1dbaea`**
+— ⚠ **anchor any Decision on THIS SHA, not `1b2d3e96`.** `1b2d3e96` was the
+original candidate tip and still carries a self-caught out-of-scope
+formatting hunk in `store.rs` (confirmed by direct diff: `git diff ab7ad89f
+1b2d3e96 -- store.rs` is non-empty; `git diff ab7ad89f 34afc545 -- store.rs`
+is empty). `34afc545` is the fixed tip and is what this APPROVE covers.
+Base exact `origin/main @ ab7ad89fd998eb1c6e5c353f9d294349d24d5d8b`
+(merge-base verified myself, exact match; the one commit landed on
+`origin/main` since — `9d2b4feb`, DOC-W1-2 — touches nothing under
+`crates/ken-runtime/src`).
 
-**Addendum, post this verdict:** runtime-implementer self-caught an
-out-of-scope diff hunk in `crates/ken-runtime/src/store.rs` (a `panic!()`
-call incidentally line-wrapped — semantically inert, but `store.rs` is
-outside slice 7's stated scope, `cranelift_backend/` only) and handed the
-branch to me rather than taking it back themselves
-(`evt_2365rqwnmg71f`). I reverted the one hunk directly (byte-identical to
-`store.rs` on base `ab7ad89f`), re-ran `cargo build -p ken-runtime` (same 1
-pre-existing warning) and `cargo test -p ken-runtime --lib` (301/301), and
-committed the fix at
-**`34afc54508ee9d9bc313473dd9522e53de1dbaea`** — the new candidate tip.
-Nothing else in this verdict changes — the fix touches a file none of the
-above evidence depended on. Branch released back immediately after.
+**How the fix landed:** runtime-implementer self-caught the out-of-scope
+diff hunk in `crates/ken-runtime/src/store.rs` (a `panic!()` call
+incidentally line-wrapped — semantically inert, but `store.rs` is outside
+slice 7's stated scope, `cranelift_backend/` only) and handed the branch to
+me rather than taking it back themselves (`evt_2365rqwnmg71f`). I reverted
+the one hunk directly (byte-identical to `store.rs` on base `ab7ad89f`),
+re-ran `cargo build -p ken-runtime` (same 1 pre-existing warning) and
+`cargo test -p ken-runtime --lib` (301/301), and committed the fix at
+`34afc54508ee9d9bc313473dd9522e53de1dbaea`. Nothing else in this verdict's
+evidence changes — the fix touches a file none of it depended on. Branch
+released back immediately after both passes.
 
 This is the seventh and final RT-SPLIT slice: `cranelift_backend.rs` goes from
 1,445 to **492 lines** (independently counted).
@@ -46,10 +51,12 @@ This is the seventh and final RT-SPLIT slice: `cranelift_backend.rs` goes from
 
 ### No-re-touch (SIXTH consecutive slice) — independently reproduced
 
-- `git diff ab7ad89f..1b2d3e96 -- .../lowering/core.rs` → **0 bytes**.
-- `git diff ab7ad89f..1b2d3e96 -- .../lowering/mod.rs` → **0 bytes**.
-- `git diff 7c6e03c8..1b2d3e96 -- .../artifact/api.rs` → **0 bytes** (byte-
-  identical against the slice-6 tip, as claimed).
+- `git diff ab7ad89f..34afc545 -- .../lowering/core.rs` → **0 bytes**.
+- `git diff ab7ad89f..34afc545 -- .../lowering/mod.rs` → **0 bytes**.
+- `git diff 7c6e03c8..34afc545 -- .../artifact/api.rs` → **0 bytes** (byte-
+  identical against the slice-6 tip, as claimed). Re-confirmed against the
+  fixed candidate tip `34afc545`, not just the pre-fix `1b2d3e96` — the
+  `store.rs` fix touches none of these three files.
 
 ### AC-2 — exported symbol identity
 
