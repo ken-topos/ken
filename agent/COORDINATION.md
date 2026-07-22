@@ -667,6 +667,38 @@ one GitHub identity; it does not give teams GitHub access, does not make the
 Steward a code author, and does not replace the mootup review/Decision record
 (`../docs/program/04-git-and-integration.md`).
 
+### 14a. ⛔ THE ARCHITECT DOES NOT VOTE ON DOC-ONLY WPs
+
+**Operator ruling, 2026-07-22:** *"architect does not need to rule on docs."*
+
+**A WP whose diff is confined to `library/` merges on its QA approval plus the
+diff-scope check.** No Architect vote. The Steward resolves the merge Decision
+and publishes.
+
+**The Architect's vote is still required** when a documentation change touches
+**`agent/` law**, makes a **normative claim about the language** (`spec/` is the
+sole authority — `library/` is explanatory/derived), or reaches outside
+`library/` into `crates/`, `spec/`, `conformance/`, or `catalog/`.
+
+> **Why this is a structural fix, not a convenience.** The doc track runs
+> **concurrently** with the build track on the basis that it is
+> **path-disjoint** — `library/` and `agent/` versus `crates/`. But routing
+> every doc WP's merge Decision through the Architect **re-couples the two
+> tracks at the review seat**, which reintroduces exactly the serialization the
+> concurrency exception exists to avoid. **The paths do not contend; the
+> reviewer does.**
+>
+> This surfaced live: DOC-W1-1 was QA-approved 34 minutes after kickoff and
+> then sat unpublished behind an Architect who was working through seven
+> consecutive build-track frame reviews. The operator noticed the absence of
+> `library/` commits on `main` before the Steward escalated it — **a queue is
+> invisible from the outside, and "the ring is running" and "work is landing"
+> are different claims.**
+
+**Steward duty:** when a track is nominally concurrent, check that its *review
+and merge path* is disjoint too — not just its file paths. **Concurrency that
+funnels into one reviewer is sequencing with extra steps.**
+
 The publisher path pushes `wp/<ID>` branches to trigger CI, reads checks,
 merges, fetches `main`, and mirrors GitHub state into mootup. If GitHub reports
 that a separate review or branch-protection change is required, the script must
