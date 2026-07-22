@@ -477,20 +477,50 @@ move" claim auditable rather than asserted.
    > closure to its lowest ruled test ancestor** (§10.2a rule 8). The candidate
    > measured **30 of 37** with a lowering-only final LCA.
    >
-   > **This is a THIRD population and the AC's own lesson applies to it
-   > unchanged:** closing the scaffold-import enumeration and closing the
-   > declaration partition say **nothing** about the test-item placement set.
-   > Neither existing layer can see it — both range over *production*
-   > declarations, and these items are `#[cfg(test)]` at facade **file** scope,
-   > which is not a `mod tests` and therefore not caught by §10.1 either. **It
-   > is invisible to all three prior instruments by construction.**
+   > **⛔ This is a new PROPERTY AXIS, not an invisible population — state it
+   > exactly.** (Architect `evt_73kn217kzjdvv`, correcting an earlier
+   > overclaim in this block.) The three prior instruments stand in **three
+   > different** relations to these 37 items, and collapsing them is precisely
+   > the error this AC exists to prevent:
+   >
+   > | instrument | can it SEE these items? | can it establish their PLACEMENT? |
+   > |---|---|---|
+   > | scaffold-import list | **no** — blind to these declarations | no |
+   > | source-coverage partition | **yes** — ranges over every non-trivia source span | **no** |
+   > | semantic declaration inventory | **yes** — ranges over every declaration, including its `cfg` reach | **no** |
+   >
+   > **Two of the three can enumerate the population perfectly well.** What none
+   > of them establishes is the *different property* now required: **each item's
+   > final-user LCA and its lawful final placement.** The new ledger closes
+   > **that property axis** — it does not close an allegedly invisible set.
+   >
+   > ★ **Why this correction matters more than its size.** The overclaimed
+   > version reasoned *"a new deliverable is needed, therefore the existing
+   > instruments must not have been able to see this"* — inventing a blindness
+   > to justify a real requirement. **The requirement was real and the
+   > justification was false.** An enumeration being complete over a population
+   > says nothing about *which property* it measured over that population; that
+   > is the same conflation, one level up, as the item-axis/user-axis lesson
+   > below.
    >
    > **The ledger is the deliverable, not the count.** "30 of 37" is a
    > measurement a reviewer cannot re-derive from a number; the per-item
    > final-user LCA is. ⛔ **Do not report a residual count in place of the
-   > ledger** — and note that a *transitive closure* is what moves, so an item
-   > whose own LCA is the facade may still move if it is only reachable through
-   > one that is not.
+   > ledger.**
+   >
+   > **What travels with a moving item** (Architect `evt_73kn217kzjdvv`):
+   > move each lower-LCA item together with **the dependency declarations used
+   > ONLY by that closure**, and **retain a dependency at the facade only when
+   > it has an independent, genuine facade-LCA user.** Recompute over **final
+   > direct users**.
+   >
+   > ⛔ An earlier gloss here had this backwards — it said an item *"whose own
+   > LCA is the facade may still move if it is only reachable through one that
+   > is not."* **That reverses the quantifier**: under this frame's
+   > actual-final-user-LCA definition, an item reachable *only* through a
+   > lower-LCA owner **does not have a facade LCA in the first place**. The
+   > wording as written would have authorized a genuine facade-LCA declaration
+   > to be dragged down merely because one lower item also depends on it.
    >
    > **Production content stays frozen.** `core.rs`, `lowering/mod.rs`, and
    > `artifact/api.rs` production content is unchanged by this fold — it is
@@ -1017,7 +1047,11 @@ Classify first:
    > 1. **Emit the final-user-LCA ledger for all 37 residual test items** — the
    >    ledger is the deliverable, not a count. Ledger-as-output, per AC-9.
    > 2. **Move every lower-LCA transitive closure to its lowest ruled test
-   >    ancestor.**
+   >    ancestor** — carrying the dependency declarations used **only** by that
+   >    closure, and **retaining at the facade any dependency that has an
+   >    independent genuine facade-LCA user.** Recompute over **final direct
+   >    users**. ⛔ **AC-9 states the quantifier and the way it has already been
+   >    reversed once — read it there; it is not restated here.**
    > 3. The final facade **retains only** test scaffolding whose actual
    >    final-user LCA **really is the facade** and which has **no lawful lower
    >    home**.
@@ -1408,19 +1442,38 @@ in the table, never when its counts were taken. **These are not the same
 question**, and conflating them is how a row acquires a stale justification
 while looking freshly measured.
 
+> ⛔ **A CALL SITE IS NOT A DECLARATION SITE.** (Architect `evt_73kn217kzjdvv`,
+> verified against the exact `7c6e03c8` tree.) A first pass at this refresh
+> reported **6 / 7+3 / 4** — each inflated by exactly one, because **the
+> function's own declaration line was counted as a call**: `new_jit_module`
+> `:651`, `new_object_module` `:657`, `compile_expr` `:559`. A bare name grep
+> cannot tell a definition from a use, and the error is **uniform**, so the
+> inflated set looks internally consistent and survives a sanity check.
+> Additionally, `new_jit_module`'s two facade `px8i` calls at `:1307`/`:1335`
+> become **owner-local artifact tests** and therefore **do not cross the
+> ownership boundary** at all.
+
 | private original | owner module | adapter | added in | called by (@ `7c6e03c8`) | first emitted |
 |---|---|---|---|---|---|
-| `new_jit_module` | `artifact/mod.rs` | `new_jit_module_for_lowering_tests` | **slice 7** | lowering tests — 6 sites | `cf91ec5a` |
-| `new_object_module` | `artifact/mod.rs` | `new_object_module_for_lowering_tests` | **slice 7** | lowering tests — 7 sites **+ 3 facade fixtures** | `cf91ec5a` |
-| `compile_expr` | `artifact/mod.rs` | `compile_expr_for_lowering_tests` | **slice 7** | lowering constructor tests — 4 sites | `cf91ec5a` |
+| `new_jit_module` | `artifact/mod.rs` | `new_jit_module_for_lowering_tests` | **slice 7** | lowering tests — **5** sites (`constructors`:14, `control`:81/525, `effects`:18/333) | `cf91ec5a` |
+| `new_object_module` | `artifact/mod.rs` | `new_object_module_for_lowering_tests` | **slice 7** | **6** lowering sites **+ 3 genuine facade fixture sites** (`:159`/`:428`/`:473`) | `cf91ec5a` |
+| `compile_expr` | `artifact/mod.rs` | `compile_expr_for_lowering_tests` | **slice 7** | lowering constructor tests — **3** sites (`:627`/`:715`/`:934`) | `cf91ec5a` |
 | **`native_isa`** | `artifact/mod.rs` | *(name at implementation)* | **slice 7** | the effects-owned `run_px8n_arm_fixture` | **`7c6e03c8`** |
 | **`native_platform_target_name`** | `artifact/mod.rs` | *(name at implementation)* | **slice 7** | the genuinely facade-LCA / cross-tree object-emission test helpers | **`7c6e03c8`** |
 | `verify_cranelift_function` | **`lowering/mod.rs`** | **`verify_cranelift_function_for_artifact_tests`** | **slice 5** | the two `px8i_*` tests → `artifact/tests.rs` | landed ✅ |
 
-⚠ **The three `cf91ec5a` rows' counts MOVED between bases** (5→6, 6→7+3, 3→4).
-Nothing was wrong with the original measurement; the tree grew under it. **That
-is the ordinary case, not an anomaly** — which is exactly why the clause above
-tells you to re-run rather than implement the stated number.
+⚠ **The lowering call-site counts did NOT move between bases** — 5 / 6 / 3 at
+both. What the re-run actually added is the **three previously unrecorded
+facade fixture users** on the `new_object_module` row. **So this refresh
+corrects USER-SITE EVIDENCE; it does not change the item-axis result**, and the
+five-operation adapter population stands ratified on its own derivation.
+
+★ **Do not read that as "the re-run was unnecessary."** It surfaced three real
+unrecorded users and two genuinely new operations (`native_isa`,
+`native_platform_target_name`). It also produced a uniform off-by-one that a
+count-versus-count check could not catch — **which is the argument for the
+per-site enumeration in the table above rather than a bare total.** A number
+cannot be audited; a site list can.
 
 > ⛔ **`native_platform_target_name` is justified by the facade-LCA helpers —
 > NOT by the 30 lower-LCA residue items** (§10.2a rule 8). That distinction is
