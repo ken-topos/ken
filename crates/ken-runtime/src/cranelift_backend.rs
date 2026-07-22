@@ -11,6 +11,43 @@
 //! re-exports) plus the two inherent `impl` blocks at the foot of the file,
 //! which are production code on `surface`'s own types and are reached from
 //! `artifact::api`.
+//!
+//! # Test-only helpers are not public production API
+//!
+//! `emit_process_entrypoint_object_with_cranelift` is a test-only helper. The
+//! checks below ask the *compiler* whether it is reachable from outside this
+//! crate, which is the actual property; a source-text assertion on the
+//! declaration only ever tests its spelling and breaks on every relocation.
+//!
+//! Both reachable paths are covered. `lib.rs` re-exports this module with a
+//! `pub use cranelift_backend::*`, so a widened item would surface at the
+//! crate root as well as under the module path, and a check on one path alone
+//! would miss the other.
+//!
+//! Each snippet is a bare `use ... as _;`. That form resolves a path and
+//! checks its visibility and nothing else — no call, no argument types, no
+//! inference. The distinction is load-bearing: a snippet that *used* the item
+//! would also fail to compile on a type-inference error, so a generic helper
+//! would keep these blocks passing even after it was made public, which is
+//! the same vacuous pass the source-text assertion had.
+//!
+//! ```compile_fail
+//! use ken_runtime::cranelift_backend::emit_process_entrypoint_object_with_cranelift as _;
+//! ```
+//!
+//! ```compile_fail
+//! use ken_runtime::emit_process_entrypoint_object_with_cranelift as _;
+//! ```
+//!
+//! A `compile_fail` block passes when the snippet fails to compile for *any*
+//! reason, a typo in the path included, so on its own it can pass vacuously.
+//! This positive control names a genuinely public item from the same module
+//! in the same import form: it must compile, and it fails if the crate name,
+//! the module path, or the doctest harness itself ever stops resolving.
+//!
+//! ```
+//! use ken_runtime::cranelift_backend::emit_runtime_ir_object_with_cranelift as _;
+//! ```
 
 use std::collections::{BTreeMap, BTreeSet};
 
