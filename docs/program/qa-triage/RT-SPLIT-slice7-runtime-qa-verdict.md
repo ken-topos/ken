@@ -12,6 +12,19 @@ base exact `origin/main @ ab7ad89fd998eb1c6e5c353f9d294349d24d5d8b` (merge-base
 verified myself, exact match; the one commit landed on `origin/main` since —
 `9d2b4feb`, DOC-W1-2 — touches nothing under `crates/ken-runtime/src`).
 
+**Addendum, post this verdict:** runtime-implementer self-caught an
+out-of-scope diff hunk in `crates/ken-runtime/src/store.rs` (a `panic!()`
+call incidentally line-wrapped — semantically inert, but `store.rs` is
+outside slice 7's stated scope, `cranelift_backend/` only) and handed the
+branch to me rather than taking it back themselves
+(`evt_2365rqwnmg71f`). I reverted the one hunk directly (byte-identical to
+`store.rs` on base `ab7ad89f`), re-ran `cargo build -p ken-runtime` (same 1
+pre-existing warning) and `cargo test -p ken-runtime --lib` (301/301), and
+committed the fix at
+**`34afc54508ee9d9bc313473dd9522e53de1dbaea`** — the new candidate tip.
+Nothing else in this verdict changes — the fix touches a file none of the
+above evidence depended on. Branch released back immediately after.
+
 This is the seventh and final RT-SPLIT slice: `cranelift_backend.rs` goes from
 1,445 to **492 lines** (independently counted).
 
