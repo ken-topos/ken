@@ -371,58 +371,52 @@ move" claim auditable rather than asserted.
    (slice 7; adversary detector-gap `evt_457npdbe9zmp9`, predicate corrected
    by the Architect `evt_vd1xkmfhrkrp`).
 
-   > **Every value or import reference to `test_support` in the final tree is
-   > either inside a ruled `tests.rs` / `tests/**` module or lexically inside
-   > an entire item whose **item-level** attributes include `#[cfg(test)]`. A
-   > `#[cfg(test)]` statement, block, or branch inside an otherwise production
-   > item does **not** qualify. The sole non-consumer occurrence outside those
-   > locations is the exact facade wiring declaration
-   > `#[cfg(test)] mod test_support;`.**
+   > **Outside ruled `tests.rs` / `tests/**` modules: every consumer must
+   > spell `crate::cranelift_backend::test_support::<item>` at the direct
+   > semantic use, inside an entire item carrying item-level `#[cfg(test)]`.
+   > A `#[cfg(test)]` statement, block, or branch inside an otherwise
+   > production item does **not** qualify. **No `use`, `pub use`, re-export,
+   > or other cross-item alias/binding may launder a `test_support` item into
+   > a name consumed elsewhere.** The exact facade wiring declaration
+   > `#[cfg(test)] mod test_support;` remains the sole non-consumer
+   > exception.**
 
-   **⛔ And the ledger is only total if no `use` launders the name**
-   (adversary `evt_6baweq79m4fkf`):
+   **Evidence is a closed ledger with exactly three classes:**
 
-   > **Outside ruled `tests.rs` / `tests/**` modules, a reference to
-   > `test_support` may NOT be a `use` import — it must be a fully-qualified
-   > path at each use site.** The facade wiring declaration is the sole
-   > exception. Inside ruled tests modules, `use` remains permitted.
+   > 1. the exact facade wiring declaration;
+   > 2. a ruled test-module reference — **imports are allowed here**;
+   > 3. an outside-test **direct rooted non-import/non-alias** use inside an
+   >    entire item with item-level `#[cfg(test)]` — **name the enclosing item
+   >    and show its item-level attribute.**
+   >
+   > Report the raw search command and hit count. **Raw code-reference hits
+   > and classified rows must reconcile one-for-one; comments and strings
+   > cannot satisfy a row.**
 
-   **Why this clause is load-bearing, not tidiness.** A `use` declaration **is
-   an item**, and `#[cfg(test)] use …::test_support::helper;` therefore carries
-   an item-level `#[cfg(test)]` and classifies **cleanly** under the category
-   above. But after that import the call site reads `helper()` and **never
-   lexically names `test_support`** — so a grep ledger inspects the *import*
-   site, where the attribute innocently sits, while the leak happens at the
-   *use* site, which the search **cannot see at all**. The reference and the
-   leak end up in **different items, and only the innocent one is greppable.**
-   Forbidding the `use` makes every use site name `test_support::…`, which is
-   what makes the ledger **total**. (The alternative — a transitive name-flow
-   clause — closes it exactly but needs more than grep, and no-parser-
-   dependency is a property of this AC worth keeping.)
+   **⛔ The detector is the CONJUNCTION of item-level confinement and the
+   no-laundering rule. Neither half is sufficient, and an earlier draft of
+   this AC claimed otherwise.** Item-level confinement alone is defeated by a
+   `use`: a `use` declaration **is** an item, so
+   `#[cfg(test)] use …::test_support::helper;` carries a genuine item-level
+   `#[cfg(test)]` and classifies **cleanly** — while the call site then reads
+   `helper()` and **never lexically names `test_support`.** The ledger
+   inspects the *import* site, where the attribute innocently sits; the leak
+   is at the *use* site, which the search cannot see at all. **The reference
+   and the leak end up in different items, and only the innocent one is
+   greppable** (adversary `evt_6baweq79m4fkf`, compiled repro; Architect
+   `evt_ez3766tp1gbn` withdrawing the contrary claim).
+
+   **Why "rooted" and not merely "fully-qualified."** `test_support::<item>`
+   is not enough — it can itself rest on `use crate::…::test_support;`, which
+   reintroduces the laundering one level up. The path must be **rooted at
+   `crate::`** so the checked name appears at the point of use.
 
    **Checked bidirectionally, per AC-8's own earlier lesson:** the facade
    declaration is carved out ✅; the object-emission helpers at former `:311`,
-   `:580`, `:625` are entire `#[cfg(test)]` items naming `test_support::…` at
-   each site and classify under the existing category ✅; ruled tests modules
-   keep `use` ✅. **No parser, no topology change, no new category.**
-
-   **Evidence is a closed ledger, not an unqualified list:**
-
-   > **Report the raw search command and hit count, then reconcile every hit
-   > one-for-one in the PR body as facade declaration, test-module
-   > value/import use, or item-level-`cfg(test)` value/import use. For the
-   > last category, name the enclosing item and show its item-level attribute.
-   > The classified row count must equal the raw hit count.**
-
-   **The item-level/inner distinction is the whole detector.** It is exactly
-   what catches the adversary's repro — that `test_support` use sits inside a
-   **production** function, and an inner `cfg(test)` branch does not convert
-   the enclosing item into test scaffolding. It also **admits** the ruled
-   tree: the required facade declaration, and the test-only object-emission
-   helper items at former `:311`, `:580`, `:625`, whose entire items are
-   `#[cfg(test)]` but which are not `#[test]` cases and which §10.2 assigns to
-   `artifact/api.rs`. No parser dependency and no new topology — **the
-   exhaustive reconciled ledger is the detector.**
+   `:580`, `:625` are entire `#[cfg(test)]` items and classify under class 3
+   ✅; ruled tests modules keep `use` ✅; the compiled import repro is
+   rejected ✅. **Still a human-audited grep ledger — no parser, no topology
+   change.**
 
    > **Why this AC exists.** §10.2a rule 2 says *"production modules must not
    > import it"* and rule 7 restates it as a stop-and-return — but **that was
