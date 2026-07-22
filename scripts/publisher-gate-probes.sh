@@ -47,11 +47,84 @@ sed -n '/^publisher_state_dir() {/,/^refuse_if_frozen$/p' "$PUBLISHER" \
   | sed '$d' > "$GATE_LIB"
 
 head_ "Extraction integrity (the harness's own plumbing)"
-for fn in publisher_state_dir acquire_merge_lock freeze_marker_path refuse_if_frozen \
-          freeze_publication release_gate_worktree build_and_check_merge_result \
-          fresh_result_gate verify_landed_tree; do
-  if grep -q "^$fn() {" "$GATE_LIB"; then ok "extracted $fn"; else bad "MISSING $fn -- extraction anchors have drifted; every probe below is vacuous"; fi
+
+# ⛔ FIRST: is the slice WELL-FORMED? An earlier version asked only "are the
+#    nine functions I know about present?", which asserts each function's
+#    OPENING LINE and never its body. Truncation removes TAILS, so that check
+#    was structurally blind to the one drift it existed to catch: a slice cut
+#    mid-function passed all nine name assertions, failed `bash -n`, and -- the
+#    runner having no `set -e` and no guard on `source` -- still exited 0 with
+#    every negative assertion passing vacuously.
+#
+#    That is the exact failure this file's own header warns about. It was
+#    written down at the top and implemented forty lines below it.
+#
+#    `bash -n` subsumes the whole class: it catches ANY truncation regardless of
+#    where it lands, and it needs no one to maintain a list.
+if bash -n "$GATE_LIB" 2>/dev/null; then
+  ok "the extracted slice PARSES (bash -n) -- not truncated mid-function"
+else
+  bad "the extracted slice does NOT parse -- truncated or malformed; every probe below would be vacuous"
+fi
+
+# ⛔ SECOND: assert SET EQUALITY against the set DERIVED from the publisher's
+#    gate region -- not containment against a hand-kept list. Containment proves
+#    "my names are present"; it cannot notice a TENTH function, so anything
+#    added to the gate is invisible to it forever. Measured: `cleanup_gate` was
+#    in the slice and unasserted, green, live on the branch.
+#    Adding it to a list is the enumeration move. Deriving the list is the fix.
+expected_fns="$(sed -n 's/^\([a-z_][a-z_0-9]*\)() {$/\1/p' "$GATE_LIB" | sort -u)"
+declared_fns="$( ( set +u; unset -f $(compgen -A function) 2>/dev/null
+                   cleanup() { :; }; die() { :; }   # the slice installs an EXIT trap calling these
+                   # shellcheck disable=SC1090
+                   source "$GATE_LIB" >/dev/null 2>&1
+                   compgen -A function ) | sort -u )"
+if [ -z "$expected_fns" ]; then
+  bad "derived ZERO function names from the slice -- extraction anchors have drifted entirely"
+else
+  ok "derived $(printf '%s\n' "$expected_fns" | wc -l | tr -d ' ') gate function names from the publisher"
+fi
+missing="$(comm -23 <(printf '%s\n' "$expected_fns") <(printf '%s\n' "$declared_fns"))"
+if [ -z "$missing" ]; then
+  ok "every function in the gate region actually DEFINES on source (set equality, not containment)"
+else
+  bad "in the slice but not defined after sourcing: $(printf '%s' "$missing" | tr '\n' ' ')"
+fi
+
+# ⛔ THIRD: every gate function must be ACCOUNTED FOR -- driven by a named probe,
+#    or excluded with a stated reason. Asserted as SET EQUALITY against the
+#    derived set, so a function added to the gate cannot slip in silently.
+#
+#    ⚠ This is a DECLARED map, not a measurement. An earlier version grepped the
+#    probe file for each function name, which is a PROXY: `freeze_publication`
+#    is genuinely exercised (probe 11 asserts the marker it writes) but is never
+#    named, so the proxy called it uncovered -- while a mere mention in a comment
+#    would have satisfied it. A name-grep measures neither direction correctly.
+#    A declared map at least states a claim someone can check.
+COVERAGE="
+acquire_merge_lock|probe 8 (cross-worktree mutual exclusion)
+build_and_check_merge_result|probes 9a/9b/10/11 (every probe runs it)
+fresh_result_gate|probes 9a (reconstruct) and 9b (abort)
+verify_landed_tree|probes 10, 11a, 11b
+refuse_if_frozen|probe 11a (the freeze must BITE the next publish)
+freeze_publication|probes 11a/11b (asserted via the marker it writes)
+publisher_state_dir|EXCLUDED: pure accessor, driven by the containment guard
+freeze_marker_path|EXCLUDED: pure accessor, driven by every freeze assertion
+release_gate_worktree|EXCLUDED: cleanup helper, no observable of its own
+cleanup_gate|EXCLUDED: EXIT trap, not reachable as a unit under test
+"
+declared_cov="$(printf '%s' "$COVERAGE" | sed '/^$/d' | cut -d'|' -f1 | sort -u)"
+if [ "$declared_cov" = "$expected_fns" ]; then
+  ok "coverage map accounts for ALL $(printf '%s\n' "$expected_fns" | wc -l | tr -d ' ') gate functions (set equality)"
+else
+  bad "coverage map does not match the gate's function set"
+  printf '     | in gate, unaccounted: %s\n' "$(comm -23 <(printf '%s\n' "$expected_fns") <(printf '%s\n' "$declared_cov") | tr '\n' ' ')"
+  printf '     | in map, not in gate:  %s\n' "$(comm -13 <(printf '%s\n' "$expected_fns") <(printf '%s\n' "$declared_cov") | tr '\n' ' ')"
+fi
+printf '%s' "$COVERAGE" | sed '/^$/d' | grep 'EXCLUDED' | while IFS='|' read -r f r; do
+  printf '  ▪ %s -- %s\n' "$f" "$r"
 done
+
 [ "$fail" -eq 0 ] || { echo; echo "Extraction failed; refusing to report on probes that would be vacuous."; exit 1; }
 
 # ---------------------------------------------------------------------------
@@ -148,7 +221,11 @@ need_cmd() { command -v "\$1" >/dev/null 2>&1 || die "missing \$1"; }
 cleanup() { :; }
 head_sha="\$(git rev-parse origin/candidate)"
 pr_number=9001
-source "$GATE_LIB"
+# ⛔ GUARD THE SOURCE. Without this the runner has no 'set -e', so a slice that
+#    fails to parse produces a syntax error, execution CONTINUES into the
+#    snippet, and the run exits 0 with every negative assertion passing
+#    vacuously -- the harness reporting green about a gate it never loaded.
+source "$GATE_LIB" || { echo "HARNESS BROKEN: could not source the gate slice"; exit 3; }
 $snippet
 RUNNER
     bash "$SANDBOX/run.sh" 2>&1 )
@@ -172,6 +249,57 @@ case "$sd" in
 esac
 [ -f "$(marker)" ] && { bad "sandbox started already frozen"; exit 1; }
 ok "no freeze marker present at start (negative control for probe 11)"
+
+# ---------------------------------------------------------------------------
+# PROBE 8 -- two publisher invocations cannot both hold the merge critical
+# section. Proved ACROSS TWO WORKTREES sharing one object store, never two
+# shells in one: the lock lives in the COMMON git dir, so a per-worktree lock
+# path would pass a same-worktree test and then never contend in production --
+# a lock that always succeeds, indistinguishable from no lock until it matters.
+#
+# This row was previously discharged by a hand-run transcript. A transcript is
+# not re-runnable and does not fail when someone changes the lock path, which is
+# exactly the change it exists to catch.
+# ---------------------------------------------------------------------------
+head_ "Probe 8 -- the merge lock excludes ACROSS WORKTREES"
+build_sandbox
+LOCK_WT="$SANDBOX/second-worktree"
+git -C "$SANDBOX/clone" worktree add --detach "$LOCK_WT" HEAD >/dev/null 2>&1
+
+lock_snippet='acquire_merge_lock && echo LOCK=ACQUIRED || echo LOCK=REFUSED'
+mk_runner() {
+  cat >"$1" <<RUNNER
+set -uo pipefail
+die() { printf '%s\n' "\$*" >&2; echo LOCK=REFUSED; exit 1; }
+need_cmd() { command -v "\$1" >/dev/null 2>&1 || die "missing \$1"; }
+cleanup() { :; }
+head_sha=HEAD
+pr_number=9001
+source "$GATE_LIB" || { echo "HARNESS BROKEN"; exit 3; }
+$lock_snippet
+sleep "\${HOLD:-0}"
+RUNNER
+}
+mk_runner "$SANDBOX/lock.sh"
+
+# NEGATIVE CONTROL FIRST: with nobody holding it, the second worktree must
+# ACQUIRE. Without this, "REFUSED" below could mean the lock is simply broken.
+out="$( cd "$LOCK_WT" && bash "$SANDBOX/lock.sh" 2>&1 )"
+if grep -q 'LOCK=ACQUIRED' <<<"$out"; then ok "control: uncontended, the second worktree ACQUIRES"; else bad "control FAILED: lock refused with nobody holding it"; fi
+
+# Now hold it from worktree A and attempt from worktree B.
+( cd "$SANDBOX/clone" && HOLD=6 bash "$SANDBOX/lock.sh" >"$SANDBOX/holder.out" 2>&1 ) &
+holder_pid=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q 'LOCK=' "$SANDBOX/holder.out" 2>/dev/null && break; sleep 0.3; done
+if grep -q 'LOCK=ACQUIRED' "$SANDBOX/holder.out" 2>/dev/null; then ok "worktree A ACQUIRED the lock"; else bad "worktree A failed to acquire"; fi
+out="$( cd "$LOCK_WT" && bash "$SANDBOX/lock.sh" 2>&1 )"
+if grep -q 'LOCK=REFUSED' <<<"$out"; then ok "worktree B REFUSED while A holds it (cross-worktree exclusion)"; else bad "worktree B acquired a lock A was holding -- the lock does not contend"; fi
+if grep -q 'another merge critical section is active' <<<"$out"; then ok "refusal carries the diagnosis, not a bare failure"; else bad "refusal has no diagnosis"; fi
+wait "$holder_pid" 2>/dev/null
+# And it must be RELEASED, not permanently stuck.
+out="$( cd "$LOCK_WT" && bash "$SANDBOX/lock.sh" 2>&1 )"
+if grep -q 'LOCK=ACQUIRED' <<<"$out"; then ok "lock RELEASED after the holder exits"; else bad "lock never released -- the gate would deadlock the fleet"; fi
+git -C "$SANDBOX/clone" worktree remove --force "$LOCK_WT" >/dev/null 2>&1 || true
 
 # ---------------------------------------------------------------------------
 # PROBE 9a -- a base advance during evaluation forces RECONSTRUCTION.

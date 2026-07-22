@@ -232,7 +232,8 @@ Four more required proofs, each executed and shown:
 
 ### Where the probes live, and why they are not vacuous
 
-**`scripts/publisher-gate-probes.sh`** — 31 assertions, all green.
+**`scripts/publisher-gate-probes.sh`** — 41 assertions, all green, including
+row 8, which is now a re-runnable probe rather than a transcript.
 
 ⛔ **It sources the gate's REAL function definitions out of
 `scripted-pr-automerge.sh`; it does not carry a copy**, and it asserts the
@@ -255,6 +256,55 @@ mutants, each against a copy, each caught by the probe that targets it:
 passes for any reason** — including a gate that never reverts anything because
 it never got that far. Without a mutant that actually reverts, that row proves
 nothing.
+
+### ⛔ The harness itself was defeated — @adversary, and it was the plumbing again
+
+The first version of this harness **contained the failure its own header warns
+about.** The header says *"a harness that silently sources nothing passes every
+negative check"*; forty lines below, it did exactly that. Three findings,
+measured, all fixed:
+
+1. **A truncated slice passed the integrity check AND the runner.**
+   `grep -q "^$fn() {"` asserts each function's **opening line** and never its
+   body. Truncation removes *tails*, so the check was structurally blind to the
+   one drift it existed to catch. The runner used `set -uo pipefail` with **no
+   `-e`** and no guard on `source`, so the syntax error stopped nothing — **exit
+   0, every negative assertion passing vacuously.**
+2. **Containment cannot notice its own list going stale, and it already had.**
+   The slice defined **10** gate functions; the check asserted **9**.
+   `cleanup_gate` was unasserted, green, live on the branch.
+3. `source` was never checked for success.
+
+**Fixes — none of them an enumeration:** `bash -n` on the slice (catches *any*
+truncation, wherever it lands, and needs no list); **derive** the function set
+from the publisher's gate region and assert **equality**, not containment; guard
+the `source` with an explicit `exit 3`.
+
+★ **The shape:** the old check asked *"are the things I know about present?"*
+Each replacement asks *"is this artifact well-formed and complete on its own
+terms?"* — the same move as a row-count post-condition and a duration-agnostic
+regex. **The question that does not require a correct list is the one that
+survives.**
+
+⚠ **Two further gaps surfaced only because the derived check exists**, which is
+the argument for it:
+
+- **`acquire_merge_lock` had no probe at all.** Row 8 had been discharged by a
+  hand-run transcript — not re-runnable, and it does not fail when someone
+  changes the lock path, *which is the change it exists to catch*. Now **probe
+  8**, in-harness: uncontended control → A acquires → **B refuses across a
+  second worktree** → refusal carries its diagnosis → lock releases.
+- **The first coverage check was a name-grep, i.e. a proxy**, and wrong in both
+  directions: `freeze_publication` is genuinely exercised (probe 11 asserts the
+  marker it writes) but never *named*, so the proxy called it uncovered — while
+  a bare mention in a comment would have satisfied it. Replaced with a
+  **declared coverage map asserted for set equality** against the derived set:
+  every gate function is either driven by a named probe or excluded **with a
+  stated reason**, and a new one forces acknowledgment.
+
+**Plumbing mutants, both caught, harness exits 1:** anchor drift yielding a
+truncated slice (caught **three** ways — parse, set equality, coverage) · a new
+gate function added and unaccounted for.
 
 ### ⛔ Two gate defects the probes found — both latent, both live on a CI runner
 
