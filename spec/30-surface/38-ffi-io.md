@@ -402,22 +402,29 @@ data WriteProgress
 ```
 
 `TransferCount` is constructor-private, strictly positive, and bounded by the
-effective request. It has an `Int` projection. `ReadSome`'s `BufferSpan` and
-count are minted together, and the span length equals the count by
-construction. `Complete` and `Partial` are derived comparisons between the
-count and effective request; they are not runtime constructors or statuses.
-The checked view of a count carries its positivity and upper-bound witnesses;
-user code cannot detach those witnesses from the value or construct a count
-that violates them. The downstream proof therefore eliminates the checked
-result structure rather than postulating a fact about an arbitrary `Int`.
+effective request: the post-validation length after any in-range tail cap. For
+`readAt`, this is the post-cap window length; for `writeAt`, it is the remaining
+input-span length. For a count `n`, `0 < n ≤ effective request`, and its
+remaining request budget is `effective request - n`; the raw caller-requested
+length is not a progress bound after capping. Thus a tail-capped `readAt` with
+raw request 8, effective request 4, and count and span length 4 has remaining
+request budget 0 and total request budget `count + remaining = 4`. It has an
+`Int` projection. `ReadSome`'s `BufferSpan` and count are minted together, and
+the span length equals the count by construction.
+`Complete` and `Partial` are derived comparisons between the count and effective
+request; they are not runtime constructors or statuses. The checked view of a
+count carries its positivity and upper-bound witnesses; user code cannot detach
+those witnesses from the value or construct a count that violates them. The
+downstream proof therefore eliminates the checked result structure rather than
+postulating a fact about an arbitrary `Int`.
 
 For a positive effective request, the partition is exact:
 
 | Host observation | Result |
 |---|---|
 | read returns zero | `ReadEof` |
-| read returns `0 < n ≤ requested` | `ReadSome span n`, including a short read |
-| write returns `0 < n ≤ requested` | `Wrote n`, including a short write |
+| read returns `0 < n ≤ effective request` | `ReadSome span n`, including a short read |
+| write returns `0 < n ≤ effective request` | `Wrote n`, including a short write |
 | write returns zero | error `NoProgress`, never `Wrote` |
 
 `NoProgress` is the surface identity for the write-zero condition (also called
@@ -437,11 +444,12 @@ The primitive contracts exposed to checked Ken code include these propositions:
   yields `Wrote n` with `0 < n ≤ remaining`;
 - **read positivity/bounds:** successful `readAt` on a positive effective
   request yields either `ReadEof` or `ReadSome span n` with
-  `0 < n ≤ requested` and `length span = n`;
+  `0 < n ≤ effective request` and `length span = n`;
 - **position and bounds:** every transfer uses the explicit nonnegative file
   offset and an overflow-checked effective range; and
 - **tail capping:** a request that starts in range but extends beyond the buffer
-  tail uses the capped effective range, while an out-of-range start fails.
+  tail uses the capped effective range for every progress bound and remaining
+  request budget, while an out-of-range start fails.
 
 The positivity propositions are reasonable-from contracts of the opaque
 runtime operation. They are fixed, audited primitive guarantees rather than a
