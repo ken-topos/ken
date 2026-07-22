@@ -1138,29 +1138,11 @@ revision — it does not improvise a topical split.**
 > (`§10.4a`) — which is exactly what that dry-run exists to do — and ruled
 > before slice 6 rather than discovered inside it.
 
-> ### ⛔⛔ SUPERSEDED IN PART — READ THE CORRECTION BELOW BEFORE THE BOX
->
-> The box below was ruled on `evt_473mn1qmaw7bf` under the premise that
-> **both** private operations are artifact-owned. **That premise is false for
-> `verify_cranelift_function`** (Architect `evt_3tgaw9ws44fqg`; §10.2). The
-> *shape* of the seam — exactly two `#[cfg(test)] pub(super)` one-call adapters,
-> zero production spend — **survives unchanged**. What changes is **which side
-> owns which adapter, and in which slice it lands.**
-
-> **Slice-6 test-boundary seam (ORIGINAL, retained for provenance).** Keep
-> `new_jit_module` and `verify_cranelift_function` private in `artifact/mod.rs`.
-> Their production ownership does not move. Because lowering's subject fixtures
-> become a sibling test subtree, slice 6 adds exactly two adjacent
-> `#[cfg(test)] pub(super)` one-call bridge functions in `artifact/mod.rs`,
-> named `new_jit_module_for_lowering_tests` and
-> `verify_cranelift_function_for_lowering_tests`. Only `lowering/core/tests/*`
-> calls the bridges; `artifact/tests.rs` calls the private originals. The
-> bridges contain no ISA flags, validation, defaults, transformation, or error
-> remapping. They are reported separately as test scaffolding, absent from
-> production builds, and consume zero of the AC-7 production visibility
-> budget. No facade `mod tests`, shared production helper, helper duplication,
-> production widening, or DAG edge is introduced. A slice-6 dry-run that finds
-> any non-test lowering consumer stops and returns the actual graph.
+> The prior ruling assumed both private operations were artifact-owned. That
+> premise is withdrawn. The invariant that survives is exactly two
+> owner-adjacent `#[cfg(test)] pub(super)` one-call adapters, one per private
+> operation, with zero production visibility spend. §10.5a′ below is the sole
+> binding form.
 
 #### 10.5a′ ⛔ THE CORRECTED SEAM (Architect, `evt_3tgaw9ws44fqg`) — BINDING
 
@@ -1270,10 +1252,13 @@ and §10.2's subject rule determines their destinations:
 | **`run_borrowed_fixture`** | **`:18535`** | **`lowering/core/tests/effects.rs`** |
 | `px8i_*` (two tests) | `:20977`, `:21005` | `artifact/tests.rs` — calls `new_jit_module` privately, and `verify_cranelift_function_for_artifact_tests` across the boundary (§10.5a′) |
 
-**The user count does not multiply the bridges.** There are exactly **two**
-one-call adapters — one per private artifact operation — not one per tree or
-per fixture. Five lowering fixture helpers across `control`, `effects`, and
-`constructors` call the same two bridges. This is why the correction completes
+**The user count does not multiply the adapters.** There are exactly **two**
+one-call adapters — one per private operation crossing the ownership boundary —
+not one per tree or per fixture. The five lowering fixture helpers collectively
+use the single artifact-owned `new_jit_module_for_lowering_tests`; the two
+`px8i_*` artifact tests use the single lowering-owned
+`verify_cranelift_function_for_artifact_tests`. Lowering's own tests call the
+private verifier original. This is why the correction completes
 the ledger without reopening the ruling: **it would only have mattered under a
 per-tree-duplication remedy, which the bridge shape removes from
 consideration.** Moving the production functions to the facade would weaken a
