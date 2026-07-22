@@ -278,6 +278,130 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/learn/reading-ken/06-execution.md"
+kind = "explanatory"
+audience = ["human-reader"]
+authority = "explanatory"
+availability = "current"
+sources = [
+  "spec/40-runtime/42-evaluation.md#1-relationship-to-the-kernels-reduction",
+  "spec/40-runtime/42-evaluation.md#4-unknown-propagation",
+  "spec/40-runtime/42-evaluation.md#5-the-interpreter-as-oracle-and-the-repl",
+  "spec/40-runtime/42-evaluation.md#6-effect-evaluation-running-the-interaction-tree",
+  "spec/40-runtime/43-termination.md#1-the-total-core",
+  "spec/40-runtime/43-termination.md#2-where-partiality-can-appear-and-is-marked",
+  "spec/40-runtime/44-capacity.md#2-capacity-is-an-engineering-choice-not-numerology-oq-5",
+  "spec/40-runtime/45-native-backend.md#1-why-a-native-backend-and-where-it-sits",
+  "spec/40-runtime/45-native-backend.md#2-the-trust-posture--the-backend-is-not-in-the-tcb",
+  "spec/40-runtime/45-native-backend.md#4-the-differential-equivalence-discipline--the-interpreter-is-the-oracle",
+  "spec/90-open-decisions.md",
+  "docs/program/07-catalog-style-guide.md#3-code-block-roles-the-fence-taxonomy",
+  "docs/program/issues/DOC-W1.md",
+  "docs/program/issues/CAT-CAPEX.md",
+  "docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md",
+  "catalog/packages/Capability/System/IO.ken.md",
+  "crates/ken-cli/src/main.rs",
+  "crates/ken-cli/src/lib.rs",
+  "crates/ken-cli/tests/rt_parity_native.rs",
+  "crates/ken-cli/tests/px4b_native_production.rs",
+  ".github/workflows/ci.yml",
+  "library/learn/reading-ken/fragments.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/learn/exercises/README.md"
+kind = "tutorial"
+audience = ["human-reader"]
+authority = "tutorial"
+availability = "current"
+sources = [
+  "docs/program/issues/DOC-W1.md",
+  "docs/program/12-documentation-program.md",
+  "library/learn/reading-ken/fragments.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/learn/exercises/exercises.md"
+kind = "tutorial"
+audience = ["human-reader"]
+authority = "tutorial"
+availability = "current"
+sources = [
+  "catalog/packages/Capability/Console/Text.ken.md",
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+  "catalog/packages/Data/Sums/Combinators.ken.md",
+  "catalog/packages/Tooling/Testing/Property.ken.md",
+  "catalog/packages/Capability/Filesystem/Errors.ken.md",
+  "catalog/packages/Capability/System/IO.ken.md",
+  "library/learn/reading-ken/01-anatomy.md",
+  "library/learn/reading-ken/02-types-contracts-and-proofs.md",
+  "library/learn/reading-ken/03-assurance-and-trust.md",
+  "library/learn/reading-ken/04-effects-capabilities-and-authority.md",
+  "library/learn/reading-ken/05-packages-and-provenance.md",
+  "library/learn/reading-ken/06-execution.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/learn/exercises/solutions.md"
+kind = "tutorial"
+audience = ["human-reader"]
+authority = "tutorial"
+availability = "current"
+sources = [
+  "library/learn/reading-ken/01-anatomy.md",
+  "library/learn/reading-ken/03-assurance-and-trust.md",
+  "library/learn/reading-ken/04-effects-capabilities-and-authority.md",
+  "library/learn/reading-ken/05-packages-and-provenance.md",
+  "library/learn/reading-ken/06-execution.md",
+  "spec/20-verification/21-spec-syntax.md#54-the-honesty-guard-unknowntesteddelegated-never-read-proved",
+  "spec/30-surface/30-taxonomy.md#3-the-built-in-set--the-surface-tcb-irreducible",
+  "spec/30-surface/30-taxonomy.md#4-the-prelude-tier--ken-defined-always-present-closed",
+  "spec/30-surface/36-effects.md#1-effects-as-a-static-row",
+  "docs/program/issues/CAT-CAPEX.md",
+  "catalog/packages/Capability/System/IO.ken.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/quickstart.md"
 kind = "tutorial"
 audience = ["human-reader"]
