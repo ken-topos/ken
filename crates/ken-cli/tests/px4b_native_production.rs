@@ -746,10 +746,16 @@ fn native_build_subcommand_reaches_the_same_public_producer() {
 
 #[test]
 fn naked_process_ir_helpers_are_not_public_production_api() {
-    let cranelift = include_str!("../../ken-runtime/src/cranelift_backend.rs");
+    // `emit_process_entrypoint_object_with_cranelift` now lives in the gated
+    // `test_objects` child module, so the "test-only" half of this property is
+    // carried by the module's declaration and the "not public production API"
+    // half by the item's own visibility. Both conjuncts are asserted below;
+    // dropping either one would let the other pass alone.
+    let facade = include_str!("../../ken-runtime/src/cranelift_backend.rs");
+    let cranelift = include_str!("../../ken-runtime/src/cranelift_backend/test_objects.rs");
     let packaging = include_str!("../../ken-runtime/src/object_linker_packaging.rs");
-    assert!(cranelift
-        .contains("#[cfg(test)]\npub(crate) fn emit_process_entrypoint_object_with_cranelift("));
+    assert!(facade.contains("#[cfg(test)]\nmod test_objects;"));
+    assert!(cranelift.contains("pub(crate) fn emit_process_entrypoint_object_with_cranelift("));
     assert!(!cranelift.contains("\npub fn emit_process_entrypoint_object_with_cranelift("));
     assert!(packaging.contains("#[cfg(test)]\nfn build_process_starter_executable_artifact("));
     assert!(!packaging.contains("\npub fn build_process_starter_executable_artifact("));
