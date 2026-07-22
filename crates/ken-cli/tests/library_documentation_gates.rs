@@ -614,6 +614,95 @@ fn gate_manifest_scalars_reject_the_transport_delimiter() {
     );
 }
 
+// Librarian QA (thr_15yrvjrpap9td, third pass): a `key = value`-shaped line
+// at column 0 INSIDE a still-open multi-line `sources = [ ... ]` array
+// desyncs `parse_manifest` (above) from `gen-doc-status.sh`'s awk parsers.
+// `parse_manifest`'s array continuation (see its `multi-line array` branch)
+// never reinterprets a line as a field once inside an open array — it just
+// accumulates raw text and quote-extracts from it, so `kind = "status"`
+// sitting inside the array is swallowed as literal text and `"status"` is
+// extracted as a spurious extra `sources` entry, while this record's real,
+// final `kind` stays whatever the last PROPER `kind =` line (outside the
+// array) set it to. `gen-doc-status.sh`'s awk instead matches
+// `/^kind[[:space:]]*=/` unconditionally at column 0, with no notion of
+// "inside an open array" — so the same line flips ITS view of the
+// document's `kind` instead. Live repro (librarian, scratch commit
+// `1fab9704`): this spoofed a document's `kind` to `status` in the awk's
+// eyes only, exempting it from the new content-currency gate and silently
+// dropping a genuinely drifted cited source. Rejected outright — closing
+// the ambiguity is simpler than making three independent parsers agree on
+// how to resolve it.
+fn field_lines_inside_open_arrays(src: &str) -> Vec<String> {
+    let mut bad = Vec::new();
+    let mut open = false;
+    for (i, raw_line) in src.lines().enumerate() {
+        if open {
+            if let Some((key, _)) = raw_line.split_once('=') {
+                let key = key.trim();
+                if !key.is_empty()
+                    && raw_line.starts_with(|c: char| c.is_ascii_lowercase())
+                    && key.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+                {
+                    bad.push(format!("line {}: {raw_line:?}", i + 1));
+                }
+            }
+            if raw_line.contains(']') {
+                open = false;
+            }
+            continue;
+        }
+        if let Some((_, value)) = raw_line.split_once('=') {
+            let value = value.trim();
+            if value.starts_with('[') && !value.contains(']') {
+                open = true;
+            }
+        }
+    }
+    bad
+}
+
+#[test]
+fn gate_manifest_rejects_a_field_line_inside_an_open_multiline_array() {
+    let manifest_path = repo_root().join("library/manifest.toml");
+    let src = std::fs::read_to_string(&manifest_path).expect("read manifest.toml");
+    let bad = field_lines_inside_open_arrays(&src);
+    assert!(
+        bad.is_empty(),
+        "manifest.toml has a field-looking line inside a still-open \
+         multi-line array — this is the exact shape that desyncs \
+         parse_manifest from gen-doc-status.sh's awk parsers:\n{}",
+        bad.join("\n")
+    );
+}
+
+// Mutation proof for the detector itself, on a synthetic manifest string —
+// proves the mechanism fires on the librarian's exact reported shape,
+// rather than merely asserting the real manifest happens to be clean today.
+#[test]
+fn field_lines_inside_open_arrays_detects_the_reported_shape() {
+    let clean = "[[document]]\npath = \"library/fixture.md\"\nkind = \"portal\"\n\
+        authority = \"explanatory\"\navailability = \"current\"\nsources = [\n  \
+        \"docs/foo.md\",\n]\n";
+    assert!(
+        field_lines_inside_open_arrays(clean).is_empty(),
+        "detector false-positived on a clean manifest record"
+    );
+
+    let malformed = "[[document]]\npath = \"library/fixture.md\"\nkind = \"portal\"\n\
+        authority = \"explanatory\"\navailability = \"current\"\nsources = [\nkind = \"status\"\n  \
+        \"docs/foo.md\",\n]\n";
+    let bad = field_lines_inside_open_arrays(malformed);
+    assert_eq!(
+        bad.len(),
+        1,
+        "expected exactly one offending line, got: {bad:?}"
+    );
+    assert!(
+        bad[0].contains("kind") && bad[0].contains("status"),
+        "expected the offending line to name the spoofed kind, got: {bad:?}"
+    );
+}
+
 // --- gate 2: links valid ---------------------------------------------------
 
 fn markdown_links(contents: &str) -> Vec<String> {

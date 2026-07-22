@@ -47,6 +47,44 @@ if [ ! -f "$MANIFEST" ]; then
   exit 1
 fi
 
+# Librarian QA (thr_15yrvjrpap9td, third pass): a `key = value`-shaped line
+# at column 0 INSIDE a still-open multi-line `sources = [ ... ]` array
+# desyncs the two manifest consumers. Rust's `parse_manifest` never
+# reinterprets a line as a field once it is inside array continuation — it
+# just accumulates raw text and quote-extracts from it, so `kind = "status"`
+# sitting inside the array is swallowed as literal text and `"status"` is
+# extracted as a spurious extra `sources` entry, while the document's real,
+# final `kind` is whatever the LAST proper `kind =` line outside the array
+# set it to. Both awk parsers in this script instead match `/^kind[[:space:]
+# ]*=/` unconditionally at column 0, with no notion of "am I inside an open
+# array" — so the exact same line flips their view of the document's `kind`
+# instead. Live repro (librarian, scratch commit `1fab9704`): this spoofed a
+# document's `kind` to `status` in the awk's eyes only, which made the new
+# content-currency check (gate 7) treat it as exempt and silently drop a
+# genuinely drifted cited source. Rejected outright here, once, before any
+# awk touches the manifest — closing the ambiguity is simpler and safer than
+# trying to make three independent parsers agree on how to resolve it.
+MALFORMED_ARRAY_LINE="$(awk '
+  BEGIN { open = 0 }
+  {
+    if (open) {
+      if ($0 ~ /^[a-z_]+[[:space:]]*=/) { print NR": "$0 }
+      if ($0 ~ /\]/) { open = 0 }
+      next
+    }
+    if ($0 ~ /=[[:space:]]*\[[[:space:]]*$/) { open = 1 }
+  }
+' "$MANIFEST")"
+if [ -n "$MALFORMED_ARRAY_LINE" ]; then
+  echo "gen-doc-status: library/manifest.toml has a field-looking line" >&2
+  echo "  (\"key = value\" at column 0) inside a still-open multi-line array" >&2
+  echo "  — the manifest's two consumers (this script's awk, the Rust gate's" >&2
+  echo "  parser) do not agree on where the array ends for a shape like this," >&2
+  echo "  which can spoof a document's kind or smuggle an extra source:" >&2
+  echo "$MALFORMED_ARRAY_LINE" | sed 's/^/  /' >&2
+  exit 1
+fi
+
 if [ ! -f "$REVISION_FILE" ]; then
   echo "gen-doc-status: $REVISION_FILE not found — record the validated" >&2
   echo "  revision explicitly (e.g. \`git rev-parse HEAD > library/REVISION\`" >&2
