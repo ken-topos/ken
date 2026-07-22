@@ -77,6 +77,36 @@ Four misses accumulated because there was no case where the true answer was know
 unfalsifiable; "does it get the known case right?" fires the moment the answer is
 no.
 
+## ★ The audit move: find the probe that constructs a VIOLATION
+
+**Addendum, same day.** The Steward's fix for a gate defect silently did nothing
+— `git merge --squash` *stages* without committing, so `HEAD` never moved and the
+gate compared `REVISION` against a tree the candidate had never touched. The fix
+degraded into *"is `origin/main` currently green?"* while reading as a thoroughly
+commented mechanism. Their three-outcome test caught it:
+
+```
+green     want=PERMIT           got=PERMIT           ✅
+red       want=BLOCK-CURRENCY   got=PERMIT           ⛔  <- the only discriminator
+conflict  want=CANNOT-EVALUATE  got=CANNOT-EVALUATE  ✅
+```
+
+★ **Two of three passed, and the two that passed were the ones exercising the
+code that had changed.** The happy path and the error path both come for free —
+they follow the diff. The probe that has to **construct a genuine violation** is
+orthogonal to the change, so it is the one nobody writes, and its absence is
+invisible because the suite still looks complete.
+
+⇒ **Audit move: enumerate a gate's probes by the STATE each one builds, then look
+for the missing cell — the one requiring you to manufacture the bad state.** A
+suite of positives plus error-handling is the default shape and it can pass
+against rubble. Three instances in one session: a `compile_fail` block that
+passes for any reason at all, a busy-detector arm whose real job is *rejecting*
+`✻ Worked for 13m 42s`, and this gate.
+
+Sibling of the oracle point above — both ask what the suite **cannot** tell you,
+rather than whether it is green.
+
 ## How to use it
 
 - **When auditing any classifier, first ask what instance you know the answer to
