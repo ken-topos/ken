@@ -292,6 +292,7 @@ fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTr
                     put_u64(out, span.start());
                     put_u64(out, span.length());
                     put_u64(out, transferred.get());
+                    put_u64(out, transferred.effective_request());
                 }
                 crate::ReadProgressV1::ReadEof => put_u8(out, 1),
             }
@@ -299,6 +300,7 @@ fn put_reply(out: &mut Vec<u8>, reply: &CanonicalReplyV1) -> Result<(), EffectTr
         CanonicalReplyV1::WriteProgress(crate::WriteProgressV1::Wrote(transferred)) => {
             put_u8(out, 11);
             put_u64(out, transferred.get());
+            put_u64(out, transferred.effective_request());
         }
     }
     Ok(())
@@ -697,6 +699,42 @@ fn get_request(cursor: &mut Cursor<'_>) -> Result<CanonicalRequestV1, EffectTrac
     })
 }
 
+/// Fail-closed correlation the reply decoder cannot perform on its own: it
+/// sees only a cursor, so `TransferCountV1::new` can prove `0 < count <=
+/// effective_request` but nothing bounds `effective_request` against the
+/// caller's own raw request length. A crafted trace with a valid count/
+/// effective pair but an inflated `effective_request` would otherwise
+/// decode. Reject mismatched request/reply shapes outright rather than
+/// inferring a budget from a request the reply doesn't correspond to.
+fn validate_transfer_request_bound(
+    request: &CanonicalRequestV1,
+    outcome: &CanonicalOutcomeV1,
+) -> Result<(), EffectTraceWireError> {
+    match outcome {
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
+            crate::ReadProgressV1::ReadSome { transferred, .. },
+        )) => match request {
+            CanonicalRequestV1::FsReadAt { length, .. }
+                if transferred.effective_request() <= *length =>
+            {
+                Ok(())
+            }
+            _ => Err(EffectTraceWireError),
+        },
+        CanonicalOutcomeV1::Success(CanonicalReplyV1::WriteProgress(
+            crate::WriteProgressV1::Wrote(transferred),
+        )) => match request {
+            CanonicalRequestV1::FsWriteAt { length, .. }
+                if transferred.effective_request() <= *length =>
+            {
+                Ok(())
+            }
+            _ => Err(EffectTraceWireError),
+        },
+        _ => Ok(()),
+    }
+}
+
 fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWireError> {
     Ok(match cursor.u8()? {
         0 => CanonicalReplyV1::Unit,
@@ -735,12 +773,15 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
                     let start = cursor.u64()?;
                     let length = cursor.u64()?;
                     let transferred = cursor.u64()?;
-                    if length != transferred || transferred == 0 {
+                    let effective_request = cursor.u64()?;
+                    if length != transferred {
                         return Err(EffectTraceWireError);
                     }
+                    let transferred = crate::TransferCountV1::new(transferred, effective_request)
+                        .ok_or(EffectTraceWireError)?;
                     crate::ReadProgressV1::ReadSome {
                         span: crate::BufferSpanV1 { start, length },
-                        transferred: crate::TransferCountV1(transferred),
+                        transferred,
                     }
                 }
                 1 => crate::ReadProgressV1::ReadEof,
@@ -750,12 +791,10 @@ fn get_reply(cursor: &mut Cursor<'_>) -> Result<CanonicalReplyV1, EffectTraceWir
         }
         11 => {
             let count = cursor.u64()?;
-            if count == 0 {
-                return Err(EffectTraceWireError);
-            }
-            CanonicalReplyV1::WriteProgress(crate::WriteProgressV1::Wrote(crate::TransferCountV1(
-                count,
-            )))
+            let effective_request = cursor.u64()?;
+            let transferred = crate::TransferCountV1::new(count, effective_request)
+                .ok_or(EffectTraceWireError)?;
+            CanonicalReplyV1::WriteProgress(crate::WriteProgressV1::Wrote(transferred))
         }
         _ => return Err(EffectTraceWireError),
     })
@@ -936,6 +975,7 @@ pub fn decode_linked_effect_trace(bytes: &[u8]) -> Result<LinkedEffectTrace, Eff
             1 => CanonicalOutcomeV1::Error(get_error(&mut cursor)?),
             _ => return Err(EffectTraceWireError),
         };
+        validate_transfer_request_bound(&request, &outcome)?;
         effect_trace.push(EffectEvent {
             sequence,
             operation,
@@ -1078,7 +1118,8 @@ mod tests {
                                 start: 1,
                                 length: 2,
                             },
-                            transferred: crate::TransferCountV1(2),
+                            transferred: crate::TransferCountV1::new(2, 3)
+                                .expect("2 <= effective 3"),
                         },
                     )),
                 },
@@ -1218,6 +1259,125 @@ mod tests {
         assert_eq!(
             encode_linked_effect_trace(&mismatched_class),
             Err(EffectTraceWireError)
+        );
+    }
+
+    fn single_read_some_trace(request_length: u64) -> LinkedEffectTrace {
+        LinkedEffectTrace {
+            plan_hash: 7,
+            target_abi_hash: [3; 32],
+            host_effect_abi_hash: [5; 32],
+            terminal_value: 0,
+            terminal_error: None,
+            effect_trace: vec![EffectEvent {
+                sequence: 0,
+                operation: HostOpV1::FsReadAt,
+                capability: None,
+                resource_bindings: Vec::new(),
+                request: CanonicalRequestV1::FsReadAt {
+                    file_offset: 0,
+                    buffer_start: 0,
+                    length: request_length,
+                },
+                outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::ReadProgress(
+                    crate::ReadProgressV1::ReadSome {
+                        span: crate::BufferSpanV1 {
+                            start: 0,
+                            length: 4,
+                        },
+                        transferred: crate::TransferCountV1::new(4, 4).expect("4 <= effective 4"),
+                    },
+                )),
+            }],
+            terminal_exit: TerminalExitClass::NormalReturn,
+        }
+    }
+
+    /// The gap the Architect found in `dec_3fz801fangyp`'s first review: the
+    /// reply decoder alone can only prove `0 < count <= effective_request`
+    /// (`TransferCountV1::new`'s own invariant, exercised by the first two
+    /// mutations below); it cannot bound `effective_request` against the
+    /// caller's own raw request length without `validate_transfer_request_
+    /// bound` correlating the decoded request. `effective_request` is the
+    /// trailing 8 bytes of this single-event trace's `ReadSome` payload
+    /// (the last thing `put_reply` writes), so mutating the tail exercises
+    /// exactly that field.
+    #[test]
+    fn wire_decoder_rejects_read_some_effective_request_zero_below_count_and_above_raw() {
+        let encoded = encode_linked_effect_trace(&single_read_some_trace(8)).unwrap();
+        assert!(
+            decode_linked_effect_trace(&encoded).is_ok(),
+            "baseline must be valid"
+        );
+        let tail = encoded.len() - 8;
+
+        let mut effective_zero = encoded.clone();
+        effective_zero[tail..].copy_from_slice(&0u64.to_le_bytes());
+        assert_eq!(
+            decode_linked_effect_trace(&effective_zero),
+            Err(EffectTraceWireError),
+            "effective_request == 0"
+        );
+
+        let mut effective_below_count = encoded.clone();
+        effective_below_count[tail..].copy_from_slice(&3u64.to_le_bytes());
+        assert_eq!(
+            decode_linked_effect_trace(&effective_below_count),
+            Err(EffectTraceWireError),
+            "effective_request(3) < count(4)"
+        );
+
+        let mut effective_above_raw = encoded;
+        effective_above_raw[tail..].copy_from_slice(&9u64.to_le_bytes());
+        assert_eq!(
+            decode_linked_effect_trace(&effective_above_raw),
+            Err(EffectTraceWireError),
+            "effective_request(9) > raw request.length(8) — the fold-in fix"
+        );
+    }
+
+    /// Boundary constraint 4 (`dec_1m6xdwjp2ttyn`): applies to both
+    /// `ReadSome` and `Wrote`. Confirms the `effective_request > raw`
+    /// correlation fix is symmetric, not `ReadSome`-only.
+    #[test]
+    fn wire_decoder_rejects_wrote_effective_request_above_raw_request() {
+        let trace = LinkedEffectTrace {
+            plan_hash: 7,
+            target_abi_hash: [3; 32],
+            host_effect_abi_hash: [5; 32],
+            terminal_value: 0,
+            terminal_error: None,
+            effect_trace: vec![EffectEvent {
+                sequence: 0,
+                operation: HostOpV1::FsWriteAt,
+                capability: None,
+                resource_bindings: Vec::new(),
+                request: CanonicalRequestV1::FsWriteAt {
+                    file_offset: 0,
+                    buffer_start: 0,
+                    length: 8,
+                },
+                outcome: CanonicalOutcomeV1::Success(CanonicalReplyV1::WriteProgress(
+                    crate::WriteProgressV1::Wrote(
+                        crate::TransferCountV1::new(4, 4).expect("4 <= effective 4"),
+                    ),
+                )),
+            }],
+            terminal_exit: TerminalExitClass::NormalReturn,
+        };
+        let encoded = encode_linked_effect_trace(&trace).unwrap();
+        assert!(
+            decode_linked_effect_trace(&encoded).is_ok(),
+            "baseline must be valid"
+        );
+
+        let mut effective_above_raw = encoded;
+        let tail = effective_above_raw.len() - 8;
+        effective_above_raw[tail..].copy_from_slice(&9u64.to_le_bytes());
+        assert_eq!(
+            decode_linked_effect_trace(&effective_above_raw),
+            Err(EffectTraceWireError),
+            "effective_request(9) > raw request.length(8)"
         );
     }
 }

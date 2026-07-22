@@ -276,6 +276,10 @@ struct HostReplyV1 {
     detail: u64,
     bytes: SliceV1,
     resource_error: ResourceErrorReplyV1,
+    /// Named success-path field carrying the post-clamp effective request
+    /// (BUDGET-EFF, `dec_1m6xdwjp2ttyn`). Set only for `ReadSome`/`Wrote`;
+    /// zero otherwise. Never smuggled through `bytes`/`resource_error`.
+    effective_request: u64,
 }
 
 const REPLY_UNIT: u64 = 0;
@@ -914,6 +918,7 @@ fn write_observation(
 
 fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut ProcessContext) {
     reply.detail = 0;
+    reply.effective_request = 0;
     reply.bytes = SliceV1 {
         data: std::ptr::null(),
         len: 0,
@@ -947,6 +952,7 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
             crate::ReadProgressV1::ReadSome { span, transferred } => {
                 reply.tag = REPLY_READ_PROGRESS;
                 reply.detail = transferred.get();
+                reply.effective_request = transferred.effective_request();
                 reply.bytes.data = std::ptr::null();
                 reply.bytes.len = span.start() as usize;
             }
@@ -959,6 +965,7 @@ fn set_reply(reply: &mut HostReplyV1, outcome: CanonicalOutcomeV1, context: &mut
             let crate::WriteProgressV1::Wrote(transferred) = progress;
             reply.tag = REPLY_WRITE_PROGRESS;
             reply.detail = transferred.get();
+            reply.effective_request = transferred.effective_request();
         }
         CanonicalOutcomeV1::Success(CanonicalReplyV1::FileMetadata(metadata)) => {
             reply.tag = REPLY_METADATA;
@@ -1944,6 +1951,7 @@ mod tests {
                 expected_kind: u64::MAX,
                 actual_kind: u64::MAX,
             },
+            effective_request: u64::MAX,
         };
 
         let mut project = |error| {
@@ -2434,6 +2442,7 @@ mod tests {
                 len: 0,
             },
             resource_error: ResourceErrorReplyV1::default(),
+            effective_request: u64::MAX,
         };
         let status = unsafe {
             ken_host_dispatch_v1(
@@ -2494,6 +2503,7 @@ mod tests {
                 len: 0,
             },
             resource_error: ResourceErrorReplyV1::default(),
+            effective_request: u64::MAX,
         };
         let status = unsafe {
             ken_host_dispatch_v1(
@@ -2547,6 +2557,7 @@ mod tests {
                 len: 0,
             },
             resource_error: ResourceErrorReplyV1::default(),
+            effective_request: u64::MAX,
         };
         let status = unsafe {
             ken_host_dispatch_v1(
