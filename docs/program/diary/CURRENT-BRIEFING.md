@@ -11,7 +11,7 @@
 
 - Fleet is **SINGLE-THREADED**. Nothing is owed to any ring; every idle ring
   is **correct**, not a stall.
-- `origin/main = 9fb90aab`. Nothing is blocked.
+- `origin/main = 6be9754b`. Nothing is blocked.
 - **Do not kick a WP while the operator has an open question below.**
 
 ## Operator rulings — 2026-07-21 ~12:45Z. SETTLED, do not reopen.
@@ -313,17 +313,41 @@ and F3 together) and I mis-reported it as missing once already.
 
 ## In flight
 
-**`DOC-W0` — doc team, active, SIXTH review round.** Nothing else.
-Every round has found a real mechanism hole, so the loop is working, not
-spinning: librarian passes 1-5 (self-referential STATUS, revision anchor,
-validation vocabulary, transport-delimiter injection, delimiter counting),
-then Architect found (a) the Rust gate and the bash generator implementing
-**different manifest grammars** — indented TOML passes the gate and the
-generator silently omits it, with idempotency staying green — and (b) no
-repository-path confinement, now (c) `resolve_confined` being **lexical-only**
-so symlinks still escape filesystem resolution. `doc-leader` will open a
-**fresh** Decision; `dec_4hrvf6bkce8fk` is rejected and its immutable text
-names a stale SHA.
+**`DOC-W0` — ✅ MERGED `origin/main @ 6be9754b` (PR #830), 2026-07-22 ~01:43Z.**
+Verified by content: all 8 blobs byte-identical to reviewed `d56abbb1`;
+`revision_resolved` in `scripts/gen-doc-status.sh`; both shallow-clone
+regressions present by name. The fleet's first `library/` tree. Retros were
+being collected at time of writing — **check they are in before treating the
+issue as closed.**
+
+**Nine review rounds, six findings, and NOT ONE was a different kind of
+mistake.** Every one was a **proxy standing in for the property**:
+
+| # | proxy checked | property that mattered | found by |
+|---|---|---|---|
+| 1 | rejects a *fake* revision | **accepts a real one, in CI's env** | CI (red) |
+| 2 | test clones `file://{repo_root}` | an **independent** history source | librarian |
+| 3 | `cat-file` says object present | present **AND** ancestry provable | architect |
+| 4 | symlink not *discovered* | symlink **rejected and reported** | architect |
+| 5 | SHA reviewed + approved | SHA **on `origin`** (see below) | steward |
+| 6 | process fix *agreed to* | seat **can perform it** (see below) | doc-author |
+
+**5 and 6 were mine.** #3 held because the Architect built an isolated depth-1
+probe rather than reasoning from source. **What finally stopped the recursion
+was naming the predicate once** (`revision_resolved()` = object present AND
+ancestry provable) and deriving self-heal, every deepen checkpoint, the
+unshallow fallback, and all diagnostics from it — not any individual fix.
+
+**⇒ Carry for DOC-W1 and every gate after it: when a gate depends on an
+environment property (history depth, credentials, checkout topology), state
+that precondition as a NAMED PREDICATE before writing the check.** A gate whose
+precondition is unwritten gets discovered one CI-red at a time, each round
+closing an instance and leaving the next layer live.
+
+**New behavior worth watching:** `gen-doc-status.sh` now performs **network
+fetches inside a test gate**. Fail-closed-on-unreachable-origin was verified,
+but hermeticity under a flaky remote was not reasoned through. Flagged to the
+adversary at merge.
 
 **`SPEC-38-ERRATUM` — CLOSED.** Merged `origin/main @ e5a400c7` (PR #827),
 retros in. Enclave carry: *keep semantic target / conformance oracle /
@@ -626,6 +650,47 @@ Two amplifiers, both real:
 
 Same family as the whole week: **verify the mechanism, not a proxy.**
 "Committed" is the proxy; "on `main`" is the mechanism.
+
+## ⛔ A `git_request` SHA IS *REVIEWED*, NOT *PUBLISHED* — `ls-remote` FIRST
+
+**2026-07-22, DOC-W0, caught with ~30 seconds to spare.** `doc-leader` sent a
+`git_request` for `d56abbb1`. **`origin` was still at `8f14ff83` — the exact
+SHA that had already failed CI on PR #830.** Four folds lived only in
+doc-author's worktree. Running the publisher as requested would have rebuilt
+the known-red commit and looked like a *regression of an already-fixed bug*.
+
+**Why nothing upstream catches it:** the agent worktrees **share one object
+store** (`/workspaces/ken/.git`), so an unpushed SHA resolves **perfectly** for
+`git log`, `git diff`, `merge-base --is-ancestor`, `git grep`, and a full
+detached test run. **Librarian exact-SHA QA and Architect exact-identity review
+both passed on a commit that was not on `origin`.** `git ls-remote` is the
+*only* check that separates reviewed from published.
+
+**What actually exposed it:** a **number disagreeing with a report** — my scope
+diff printed **900** lines for the gate test where doc-author reported ~1200.
+Cross-checking a reported magnitude against my own measurement caught it; no
+identity check I ran did.
+
+**⇒ HARD PRECONDITION of every publish, before `scripts/scripted-pr-automerge.sh`:**
+
+```sh
+git ls-remote origin refs/heads/<branch>   # MUST equal the requested SHA
+```
+
+If it does not match, **push it yourself** — mint via
+`.devcontainer/mint-gh-token.sh`, then
+`git push https://x-access-token:$TOKEN@github.com/ken-topos/ken.git <sha>:refs/heads/<branch>`,
+and **re-verify with `ls-remote` after**. Often a clean fast-forward (the stale
+head is an ancestor) — check before assuming a force is needed.
+
+**⛔ DO NOT delegate this push to the authoring seat. NO BUILD SEAT HAS GITHUB
+CREDENTIALS** — only the scripted publisher and the Steward. I issued exactly
+that carry, doc-author accepted it, then *tested* it and hit `could not read
+Username for 'https://github.com'`. **A process rule assigned to a seat that
+cannot execute it is worse than the gap it closes** — everyone believes it is
+handled. **Verify a seat CAN do a thing before making it their duty.** QA seats
+may carry "candidate SHA present on `origin`" as a **detection** item; the
+remedy always routes to the Steward.
 
 ## Standing discipline
 
