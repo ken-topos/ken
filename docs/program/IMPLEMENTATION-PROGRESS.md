@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 10:34:00Z — from 27 issue file(s) in `docs/program/issues/`.
+2026-07-22 12:56:23Z — from 27 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -40,7 +40,7 @@ the committed file matches the generator's output.
 |---|---|---|---|---|---|---|
 | `A3` | catalog-coverage walker | draft | TBD | TBD | none | — |
 | `ABI-REVOKE` | runtime revocation membrane — the deferred runtime face of 62 §4 | draft | runtime | TBD | none | — |
-| `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | ready | runtime | M | none | — |
+| `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | active | verify | M | none | — |
 | `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | ready | steward | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
@@ -71,7 +71,6 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `BUDGET-EFF` — TransferCount.remaining must be bounded by the effective request
 - `CI-SKIPPED-NATIVE-TESTS` — Restore rt_parity_native — one test at 221s is the blocker
 - `DOC-VALIDATION-BINDING` — validation vocabulary claims a 1:1 binding to the gates; nothing binds it
 - `DOC-W1` — documentation Wave 1 — the read-Ken spine, taught from checked fragments
@@ -89,7 +88,7 @@ is itself not yet `merged`/`closed`:
 - `DOC-W2` blocked by `DOC-W1` (status: ready)
 - `F4` blocked by `A3` (status: draft)
 - `RT-SRC-DISPATCH-COVER` blocked by `RT-SPLIT` (status: active)
-- `SEAL-2` blocked by `BUDGET-EFF` (status: ready)
+- `SEAL-2` blocked by `BUDGET-EFF` (status: active)
 
 ## Gate progress
 

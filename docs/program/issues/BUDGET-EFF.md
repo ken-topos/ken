@@ -1,8 +1,8 @@
 ---
 id: BUDGET-EFF
 title: TransferCount.remaining must be bounded by the effective request
-status: ready
-owner: runtime
+status: active
+owner: verify
 size: M
 gate: none
 depends_on: [SPEC-38-ERRATUM]
