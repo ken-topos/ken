@@ -4670,6 +4670,7 @@ impl<'a> Lowering<'a> {
                 wire.reply_resource_error_actual_kind_offset,
                 wire.reply_bytes_data_offset,
                 wire.reply_bytes_len_offset,
+                wire.reply_effective_request_offset,
             ] {
                 builder.ins().stack_store(
                     zero,
@@ -5079,12 +5080,19 @@ impl<'a> Lowering<'a> {
                 Self::require_when(builder, read_some, eof_data);
                 let (request_start, request_length) = positioned_bounds
                     .expect("positioned request bounds were narrowed before dispatch");
+                let effective_request = builder.ins().stack_load(
+                    types::I64,
+                    reply,
+                    i32::try_from(wire.reply_effective_request_offset)
+                        .expect("reply effective request offset is u32"),
+                );
                 let (count, predecessor, remaining) = Self::mint_validated_progress_nat(
                     builder,
                     read_some,
                     detail,
                     request_start,
                     request_length,
+                    effective_request,
                     Some(reply_start),
                 );
                 let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
@@ -5117,12 +5125,19 @@ impl<'a> Lowering<'a> {
             } else if operation == ken_host::HostOpV1::FsWriteAt {
                 let (request_start, request_length) = positioned_bounds
                     .expect("positioned request bounds were narrowed before dispatch");
+                let effective_request = builder.ins().stack_load(
+                    types::I64,
+                    reply,
+                    i32::try_from(wire.reply_effective_request_offset)
+                        .expect("reply effective request offset is u32"),
+                );
                 let (_count, predecessor, remaining) = Self::mint_validated_progress_nat(
                     builder,
                     success,
                     detail,
                     request_start,
                     request_length,
+                    effective_request,
                     None,
                 );
                 Lowered::Constructor {
