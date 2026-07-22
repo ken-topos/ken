@@ -115,23 +115,28 @@ awk '
 
 ROWS=""
 COUNT=0
-# Librarian QA (thr_74hvpkqnxjp9q, fourth pass): `|` is legal in the
-# manifest's quoted TOML subset and in a real filename, and it is this
-# transport's field separator — a value containing one silently shifts
-# every column after it. Reading a 5th, unnamed `extra` field catches any
-# row with more than four `|`-delimited fields: bash `read` slurps
-# whatever is left over (including any embedded `|`) into the LAST named
-# variable when there are more fields than names, so a non-empty `extra`
-# means a scalar smuggled the delimiter. This is independent of, and a
-# backstop for, the Rust gate that rejects `|` at the manifest level.
-while IFS='|' read -r path kind authority availability extra; do
-  [ -z "$path" ] && continue
-  if [ -n "$extra" ]; then
-    echo "gen-doc-status: a manifest field for '$path' contains a literal" >&2
-    echo "  '|', which this transport cannot distinguish from a field" >&2
-    echo "  separator — reject '|' from every manifest scalar instead." >&2
+# Librarian QA (thr_74hvpkqnxjp9q, fifth pass): a 5th `extra` `read`
+# variable does NOT catch every embedded `|` — when the smuggled `|` is
+# the LAST character of the last field (e.g. `availability = "current|"`),
+# the trailing empty remainder `read` would assign to `extra` is
+# discarded, not preserved, so `extra` comes back empty and the row
+# silently passes with the delimiter stripped from the value. `read`'s
+# field-slurping is the wrong tool for "did this row have the right shape
+# at all" — count the delimiter directly instead. A well-formed row has
+# EXACTLY three `|` characters (four fields); any other count — whether
+# from a smuggled `|` in a middle field or a trailing one — is rejected
+# before `read` ever gets to (mis)parse it.
+while IFS= read -r row; do
+  [ -z "$row" ] && continue
+  pipe_count=$(printf '%s' "$row" | tr -cd '|' | wc -c)
+  if [ "$pipe_count" -ne 3 ]; then
+    echo "gen-doc-status: a manifest row has $pipe_count '|' characters" >&2
+    echo "  (expected exactly 3 — one field separator too many or too few," >&2
+    echo "  which means a scalar smuggled the transport delimiter): $row" >&2
     exit 1
   fi
+  IFS='|' read -r path kind authority availability <<<"$row"
+  [ -z "$path" ] && continue
   COUNT=$((COUNT + 1))
   ROWS="${ROWS}| \`${path}\` | ${kind} | ${authority} | ${availability} |
 "
