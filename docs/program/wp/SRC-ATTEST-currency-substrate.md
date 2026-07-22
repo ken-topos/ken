@@ -213,11 +213,72 @@ Four more required proofs, each executed and shown:
    against the lock in the shared `--git-common-dir`.)*
 9. **A base advance before the final read forces reconstruction or abort** —
    manufacture the advance; do not reason about it.
+   *(Done — probe 9a: an advance during one evaluation is detected, the gate
+   reconstructs, and the base it finally pins is the **advanced** base, not the
+   stale one. Probe 9b: a base advancing on **every** evaluation aborts after 3
+   with the bounded-retry diagnosis rather than looping. Both advances are
+   manufactured from **inside** `build_and_check_merge_result`, by the checker it
+   invokes, so the gate itself is never stubbed and the race is real.)*
 10. **On the normal path, the landed tree OID equals the synthetic checked tree
-    OID.**
+    OID.** *(Done — probe 10, confirmed twice: once by the gate's own report and
+    once independently against the sandbox origin.)*
 11. **A planted landed-tree mismatch, and a planted red checker on the landed
     tree, each produce an alarm and NO automatic revert** — and leave publication
     frozen. Both arms, planted, not argued.
+    *(Done — probes 11a and 11b. Each asserts four things separately: the alarm
+    fires, success is **not** reported, the freeze marker is written, and
+    `origin/main` is **byte-identical before and after** the alarm. 11a also
+    proves the freeze **bites** — the next publish refuses to start.)*
+
+### Where the probes live, and why they are not vacuous
+
+**`scripts/publisher-gate-probes.sh`** — 31 assertions, all green.
+
+⛔ **It sources the gate's REAL function definitions out of
+`scripted-pr-automerge.sh`; it does not carry a copy**, and it asserts the
+extraction succeeded before running anything. A harness that silently sources
+nothing passes every negative check — and a *copied* gate drifts from the
+shipped gate in silence, which is exactly how `scripts/pane-busy.sh` came to
+have an arm-check suite that asserted its own defect as the specification.
+
+★ **Mutation-proved — the suite is shown to FAIL, not merely to pass.** Four
+mutants, each against a copy, each caught by the probe that targets it:
+
+| mutant | caught by |
+|---|---|
+| `fresh_result_gate` never re-reads the base | 9a + 9b (incl. their positive controls) |
+| landed-tree comparison disabled | 11a |
+| `freeze_publication` made a no-op | 11a + 11b |
+| the gate **auto-reverts** `main` after the alarm | 11a's no-revert assertion |
+
+⚠ The last mutant exists because **"no revert" is a negative assertion and
+passes for any reason** — including a gate that never reverts anything because
+it never got that far. Without a mutant that actually reverts, that row proves
+nothing.
+
+### ⛔ Two gate defects the probes found — both latent, both live on a CI runner
+
+Building the probes changed the gate, which is the point of building them:
+
+1. **`merge` and `commit` shared one `&&` chain under a single diagnosis naming
+   only the merge.** A commit failing for its *own* reasons reported *"the
+   candidate needs rebasing onto current origin/main"* — **false**, and it sends
+   the ring to rebase a branch that is fine. Now separated, with the second arm
+   saying explicitly that this is a publisher environment fault and **not** a
+   candidate defect.
+2. **The scratch worktree inherited ambient git identity.** This repository sets
+   `user.email` **per-repo, not globally**. `git merge --squash` needs a
+   committer identity **only when the merge is not a fast-forward** — i.e.
+   exactly when `origin/main` has advanced past the candidate's base, *the case
+   this gate exists for*. So the failure is invisible on the happy path and
+   appears on the adverse one.
+
+★ **Worth recording how #2 was fixed, because the first fix was wrong in a
+familiar way:** I covered `git commit`, the one call I had watched fail. That
+passed the fast-forward probe and failed the advanced-base probe. **Enumerating
+the calls observed to fail is the same move that has failed all day**; identity
+is now set **once for the whole scratch worktree**, so the class cannot recur as
+operations are added.
 
 ⚠ **8–11 are the probes nobody writes**, for the same reason row 5 is: each
 requires *manufacturing* a condition orthogonal to the change. Per the build-QA
