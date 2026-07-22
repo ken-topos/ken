@@ -16,8 +16,19 @@
 
 ### ▶ Build track — RT-SPLIT (Runtime ring)
 
-Slice 1 merged `origin/main @ 0f9a483a` (PR #834), verified by content.
-**Slice 2 (`planning`) is being cut now.** Six of seven slices remain.
+Slice 1 merged `@ 0f9a483a` (PR #834). **Slice 2 (`planning`) merged
+`@ dd838f0f` (PR #838)** — CI green, verified by content. **Five of seven
+slices remain; slice 3 (`compiled`) is next.**
+
+> ⛔ **Slice 3 is gated on the Architect's §10.4a seam ruling**
+> (`evt_725trc8dfag3c`, transcribed into the frame). The visibility budget
+> forced an **encapsulated seam**: a literal `CompiledModule` field extraction
+> costs 12 and would reach **25 of a 24 cap** before slices 5–7 start. Required
+> shape is a single transparent `pub(super) fn from_parts(…)` packing
+> constructor at the three existing construction sites, four construction-only
+> fields kept **private**, and only the four externally-consumed fields widened
+> — **9 seams, not 12, counting the constructor.** Projected series total 22.
+> **Do not raise the cap.** 12 of 24 spent after slice 2.
 
 > ⛔ **AC-2 and AC-3 were REWRITTEN 2026-07-22** in
 > `docs/program/wp/rt-split-cranelift-backend.md` §7, on the adversary's
@@ -42,10 +53,27 @@ nothing) and **gates Wave 1**.
    **revise** not author for `library/introduction.md`) + Wave 2 frame.
    **Operator: frame Waves 1–2 ONLY.**
 2. The full six-wave program body in `12-documentation-program.md`.
-3. The **revocation-membrane WP** (operator: split it out) — needs an
-   Architect/ADR pass first. Requirements at `09:495-500`; the charter's
-   `capabilities.rs:468-471` citation is **STALE** (actual ~250-282).
+3. ✅ **`issues/ABI-REVOKE.md` — FRAMED**, and it is **not shovel-ready by
+   design.** Grounding found a blocking prerequisite the charter does not
+   name: `62 §4` ties the membrane to a controlling **`36 §4` space cell**,
+   and **no `36 §4` space exists in any runtime crate.** The `Space` in
+   `ken-runtime/src/store.rs:198` is the **`44 §3` arena reclamation unit** — a
+   different concept sharing the word, which greps positively and is why the
+   charter's *"fold into PX7"* read as plausible. **Routed to the Architect for
+   a design pass + ADR before any sizing.** PX7's generation table guards
+   use-after-close; revocation must deny a handle that is **still valid**.
 4. `BUDGET-EFF` — shovel-ready, queued behind RT-SPLIT, ahead of ABI-M1.
+
+### ⛔ PUBLISH DISCIPLINE — tightened 2026-07-22 after invalidating a Decision
+
+I moved `origin/main` under RT-SPLIT slice 2's merge Decision **22 seconds**
+after it opened, with a docs-only publish. Third occurrence. **`list_decisions`
+run at the top of the work answers a question about the wrong moment**, and no
+adjacent check catches a 22-second race. **So the trigger is earlier: hold
+Steward publishes whenever a build ring holds a QA-APPROVED CANDIDATE, not
+merely an open Decision.** Re-check immediately before the publisher call; if a
+publish is urgent, **announce the window in-channel first.** Path disjointness
+is irrelevant — §14 is about identity, not conflict.
 
 ## Operator rulings — 2026-07-21 ~12:45Z. SETTLED, do not reopen.
 
