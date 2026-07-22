@@ -18,7 +18,7 @@ ce14859e845fd991b8d9e231714b55cd412b5cca	catalog/packages/README.md
 12e5a09894219b33a190c47c13ebb9a6d524155f	catalog/packages/Tooling/Testing/Property.ken.md
 33f92d708befd8332739582806b48c0e6a597662	crates/ken-cli/src/lib.rs
 65b1ec769d7957263e1a66689edc6f9cd9b68979	crates/ken-cli/src/main.rs
-9e9c66ac1a367a45e65b1617819057fe230e5b04	crates/ken-cli/tests/px4b_native_production.rs
+1b52546e737f0922fa9e8af2f04e8dbcf96cacb2	crates/ken-cli/tests/px4b_native_production.rs
 b2df2bbd00644b907cae5d05efa76edd9df1b3f2	crates/ken-cli/tests/rt_parity_native.rs
 edd50ecd5efb52c84d616709b8758505ccde231a	crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs
 ea5ae1500f631b35f886df23c6e1d004715815ac	crates/ken-elaborator/tests/ds3_sum_combinators_acceptance.rs
