@@ -123,15 +123,15 @@ and visibility are surface-only, adding no kernel feature
 (`crates/ken-elaborator/tests/es3_modules_acceptance.rs`,
 `module_elaborates_to_identical_flat_sigma`).
 
-This is not merely a single-file mechanism, and this chapter's first draft
-understated it: the loader that follows an `import` edge across two
-**separate files on disk** is real and tested today. The elaborator's
-`elaborate_module_from_roots` writes an `A` file that `import`s a `B` file
-from a genuine, separate compilation unit and confirms `A`'s reference
-resolves to `B`'s real declaration — lazily (an unrelated third file with
-invalid syntax is never touched, because nothing imports it) and with a
-cache, so loading the same module twice reuses the first result rather
-than re-elaborating it
+This is not merely a single-file mechanism: the loader that follows an
+`import` edge across two **separate files on disk** is real and tested
+today. A real acceptance test writes an `A` file that `import`s a `B` file
+as a genuine, separate compilation unit, and elaborating `A` through the
+elaborator's `elaborate_module_from_roots` resolves `A`'s reference to
+`B`'s real declaration — lazily (an unrelated third file with invalid
+syntax is never touched, because nothing imports it) and with a cache, so
+loading the same module twice reuses the first result rather than
+re-elaborating it
 (`spec/30-surface/33-declarations.md`
 [§3.2](../../../spec/30-surface/33-declarations.md#32-importing-and-exporting);
 `crates/ken-elaborator/tests/n2_in_repo_loader.rs`,
@@ -211,10 +211,11 @@ do not already state. Every citation here rests on the **content-currency**
 predicate (`DOC-CURRENCY-ANCHOR`): the cited byte ranges are re-verified
 unchanged between `library/REVISION` and `HEAD` by
 `scripts/gen-doc-status.sh`, not merely confirmed to name a real ancestor
-commit — and, per Librarian QA (thread `thr_100tgh4cbkthe`), content
-currency is necessary but not sufficient: a citation can be current *and*
-still not carry the semantic claim made from it, which is exactly what the
-first version of this page's §4/§5 did. Section 2's derivation-path and
+commit. Content currency is necessary but not sufficient: a citation can
+be current *and* still not carry the semantic claim made from it, which is
+why every claim below is checked against what its cited source actually
+says, not just whether the source's bytes are unchanged. Section 2's
+derivation-path and
 `trusted_base()` claims are grounded in real, current, checked fragment
 prose (`Combinators.ken.md`, `Property.ken.md`, `Transport.ken.md`,
 `EmptyDec.ken.md`), each quoted precisely enough to preserve the
@@ -229,11 +230,9 @@ and cross-file-resolution claims are grounded in real producer tests
 not fragment prose, because no fragment exercises either mechanism
 directly. **This page does not cite `docs/program/07-catalog-style-guide.md`
 §13 or `catalog/packages/README.md`'s prose for any claim about whether
-cross-file `import` resolves** — both contain a stale "no disk loader yet"
-premise that contradicts the current, tested mechanism (tracked separately,
-`LOADER-STALE-PREMISE`, not this WP's to repair); this page's own import/
-module/export gap claim is instead grounded directly in the whole-catalog
-grep reported in section 4 and the `ken check` single-file elaboration path
+cross-file `import` resolves** — this page's own import/module/export gap
+claim is instead grounded directly in the whole-catalog grep reported in
+section 4 and the `ken check` single-file elaboration path
 (`crates/ken-cli/src/main.rs::check_file`), and is scoped precisely to
 "no fragment exercises this, and the fragment-checking CLI path doesn't
 invoke the loader" — not to "the loader doesn't exist." Fragments cited
