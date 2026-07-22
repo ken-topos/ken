@@ -2,7 +2,7 @@
 id: SRC-ATTEST
 title: "squash-stable whole-source attestation + fresh merge-result authorization"
 status: ready
-owner: unassigned
+owner: doc (Part 1) + steward spillover (Part 2)
 size: M
 gate: none
 depends_on: []
@@ -158,7 +158,88 @@ in `crates/ken-cli/tests/library_documentation_gates.rs`.
 **Out:** anchor-existence checking (stays a separate gate, unchanged); any
 Markdown span extraction; any relaxation of a predicate to make a candidate pass.
 
-⛔ **The Librarian's attestation remains a human act.** The ledger makes it
-*representable*; it must not make it *automatic*. A generated-on-demand ledger
-that always matches `HEAD` asserts nothing — it would be the same defect as an
-auto-bumped `REVISION`, which the current gate refuses for exactly this reason.
+## ⛔ The non-automation boundary (@librarian, authoritative — they hold it)
+
+The Steward's first cut said "no generator." **That was drawn in the wrong
+place.** The Librarian's correction, which is the binding version:
+
+> **The ledger MAY and SHOULD have a deterministic generator** — hand-transcribing
+> dozens of blob OIDs adds error without adding judgment. **What must remain
+> human is the AUTHORIZATION to update and commit its output.**
+
+1. The **gate/check path is read-only** and fails on mismatch.
+2. The generator is invoked **only after the Librarian has closed the
+   reverse-citation claim ledger**.
+3. ⛔ **No CI, publisher, status generator, or ordinary build step may auto-run
+   it in write mode.**
+4. The handoff **records which changed sources/pages were revalidated.**
+
+⇒ *"Generated on demand"* is acceptable **only** when "demand" means an explicit
+Librarian action **after semantic review**. ⛔ **"Regenerate whenever `HEAD`
+differs" is the vacuous auto-bump and must remain impossible.**
+
+★ **Therefore the generator and the check are SEPARATE entry points / flags, and
+acceptance evidence must show the CHECK path CANNOT MUTATE the ledger.** (Add as
+an eighth required proof.) This is the distinction that keeps the attestation an
+assertion rather than a restatement of `HEAD`.
+
+## Ring — **doc**, one WP, not split
+
+Assigned to the **doc ring** (@librarian's read, adopted):
+
+- **`doc-author`** built the existing `gen-doc-status.sh` + Rust
+  documentation-gate substrate through `DOC-W0` and `DOC-CURRENCY-ANCHOR` —
+  strongest file/mechanism familiarity; this is continuation, not a new lane.
+- **@librarian** is the **only seat authorized to accept the ledger semantics**,
+  and QAs the proof matrix.
+- **`doc-leader`** owns sequencing and the merge Decision.
+- The publisher-script generalization is **bounded by this frame and reuses an
+  existing block** — it does not justify moving the currency substrate to a
+  build ring.
+
+⛔ **NOT a §14a library-only merge.** The diff reaches `scripts/` and `crates/`,
+so **full CI and Architect terminal review remain required.**
+
+⛔ **Do NOT split Part 1 from Part 2.** They close different halves of **one**
+guarantee, and landing either alone leaves a known hole: *representable-but-stale
+authorization*, or *fresh authorization over an unrepresentable attestation*.
+
+### Branch and assignment (@architect, `evt_677j2nrpkv3c9`)
+
+**One `wp/SRC-ATTEST` integration branch, one merge Decision.**
+
+| part | owner | scope |
+|---|---|---|
+| **Part 1** | **doc ring** (owns the branch) | `library/SOURCE-ATTESTATIONS`, `library/STATUS.md`, `scripts/gen-doc-status.sh`, `crates/ken-cli/tests/library_documentation_gates.rs` — one documentation-currency component the ring already built and QA'd through DOC-W0 / DOC-CURRENCY-ANCHOR |
+| **Part 2** | ⭐ **Steward spillover, same branch** | `scripts/scripted-pr-automerge.sh` — publisher/process machinery |
+
+★ **Why Part 2 is not the ring's:** `scripted-pr-automerge.sh` is publisher
+semantics, and *"a build ring should generalize that block only from a
+Steward-supplied exact commit/contract, not independently reinterpret publisher
+semantics."* The Steward authored and proved the existing guard; the
+generalization is the Steward's to write.
+
+⛔ **Runtime is the BLOCKED CONSUMER, not the owner.** Assigning this to Runtime
+would couple a generic documentation substrate to the first WP that exposed it,
+and add a second external semantic handoff to the Librarian.
+
+**Gate order:** Librarian QA binds the **assembled exact SHA** → Architect
+reviews the **combined contract/process diff**. **No Spec vote** unless scope
+unexpectedly reaches `spec/` or `conformance/`. **Do not merge either part
+alone.**
+
+### Two integration checks, in addition to the proof matrix
+
+1. ⛔ **Part 1 without Part 2 is INCOMPLETE even if its tests are green** —
+   stale merge-result authorization remains open.
+2. ⛔ **Part 2 must call the SAME SHARED GUARD for doc-only and normal
+   publishes.** Generalize the existing block; **do not leave two
+   implementations that can drift.**
+
+### ⚠ Architect's precision on the automation boundary
+
+A helper **may mechanically render a *proposed* canonical ledger** to avoid
+hand-copying OIDs — but **neither the normal generator nor `--check` may
+silently install it.** The committed ledger change remains **the Librarian's
+reviewed assertion**. ⛔ *"Recompute and accept `HEAD` during the gate"* is
+**forbidden.**
