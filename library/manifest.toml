@@ -116,7 +116,10 @@ availability = "current"
 sources = [
   "README.md#build",
   "catalog/guide/decomposition-abstraction.ken.md",
-  "spec/20-verification/21-spec-syntax.md#5-the-verification-status-model",
+  "spec/20-verification/21-spec-syntax.md#52-the-epistemic-status-per-claim-export-facing--oq-spec-decided",
+  "spec/20-verification/21-spec-syntax.md#53-how-the-verdict-and-the-status-relate-the-projection",
+  "spec/30-surface/33-declarations.md#321-admission-boundary-headers",
+  "spec/30-surface/36-effects.md#1-effects-as-a-static-row",
   "docs/program/07-catalog-style-guide.md#3-code-block-roles-the-fence-taxonomy",
 ]
 validation = [

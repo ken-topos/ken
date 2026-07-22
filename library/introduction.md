@@ -63,14 +63,13 @@ Ken is not:
 [`quickstart.md`](quickstart.md) takes you from a clean checkout through
 building the toolchain, checking and running one real program, formatting
 it, and a short trust-aware reading exercise applying the four-class
-vocabulary above. It is available now (Wave 1).
+vocabulary above.
 
 The fuller reading curriculum this introduction anchors — program anatomy,
 contracts and proofs, assurance and trust, effects and capabilities,
 packages and provenance, and execution — is in progress under
-[`learn/reading-ken/`](learn/reading-ken/fragments.md) (Wave 1); a worked
-review chapter is deferred to Wave 1b. See [`STATUS.md`](STATUS.md) for
-what is landed versus planned.
+[`learn/reading-ken/`](learn/reading-ken/fragments.md). See
+[`STATUS.md`](STATUS.md) for what is landed versus planned.
 
 ---
 
