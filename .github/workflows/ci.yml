@@ -89,24 +89,26 @@ jobs:
       # FLAKY, but because each does a full native codegen-and-link per test
       # case and would dominate whichever shard drew it. Measured at 56.5% of
       # a 47-minute run (docs/program/11-test-suite-and-ci-remediation.md §1):
-      #   - crates/ken-cli/tests/rt_parity_native.rs        (14m41s, 7 tests)  SKIPPED
+      #   - crates/ken-cli/tests/rt_parity_native.rs        (14m41s, 7 tests)  RESTORED
       #   - crates/ken-cli/tests/px8f_buffer_native.rs      ( 5m10s, 1 test)   RESTORED
       #   - crates/ken-verify/tests/px8f_write_partition.rs ( 5m09s, 1 test)   RESTORED
       #
-      # Two of the three now run in their own dedicated jobs below, in
-      # parallel, where they cost no wall clock. They stay in THIS exclusion
-      # so they are not ALSO drawn into a shard: the exclusion here and the
+      # All three now run in their own dedicated jobs below, in parallel,
+      # where they cost no wall clock. They stay in THIS exclusion so they
+      # are not ALSO drawn into a shard: the exclusion here and the
       # inclusions there must stay complementary, or a test is silently
       # duplicated or silently dropped — and a dropped test still shows a
       # green gate.
       #
-      # `rt_parity_native` remains skipped, and it is a ONE-TEST problem, not
-      # a binary-wide one: measured 7 tests / 266.7s wall / 470.6s CPU, where
+      # `rt_parity_native` is a differential (interp-vs-native) oracle, not
+      # CI hygiene — see `native-rt-parity` below and
+      # docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md. Measured 7 tests /
+      # 266.7s wall / 470.6s CPU as one binary, where
       # `fs_write_at_malformed_offset_narrows_to_invalid_offset` alone takes
-      # 221.4s against 42.2s for its near-identical sibling. Fix that one test
-      # and the binary lands ~90s and fits. See
-      # docs/program/11-test-suite-and-ci-remediation.md §1d and
-      # docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md.
+      # ~250s against ~35s for its near-identical sibling — traced to that
+      # test opening two nested resource brackets where every sibling opens
+      # one (load-bearing to the property under test, not a simplification
+      # target). See docs/program/11-test-suite-and-ci-remediation.md §1d.
       - name: Test
         run: >-
           cargo nextest run --workspace --locked
@@ -202,6 +204,41 @@ jobs:
       - name: Test
         run: cargo nextest run --locked -p ken-cli --test px8f_buffer_native
 
+  # ~266.7s wall measured as one binary (7 tests). Not a wall-clock-only
+  # restoration: this binary is the interp/native RT-PARITY differential
+  # oracle (`assert_narrowed_alike`, `crates/ken-cli/tests/rt_parity_native.rs`),
+  # and while it was excluded here it ran nowhere — a green CI carried no
+  # information about whether native and interp agreed on these narrowing
+  # cases. See docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md.
+  native-rt-parity:
+    name: native-slow (rt_parity_native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Install cargo-nextest
+        # SHA-PINNED, not tag-tracked. `@nextest` / `@v2` are FLOATING tags the
+        # maintainer can repoint at any commit, so a compromised or moved tag
+        # would execute new code in our build with no diff and no review. A SHA
+        # cannot be moved; upgrading is an explicit, reviewable commit.
+        #
+        # Pinned to the RELEASE commit (v2.84.0) with the tool passed
+        # explicitly, NOT to the `@nextest` alias commit (37ba6721). The alias
+        # is auto-generated at publish time and sits off the release lineage
+        # with a one-word message, so it is immutable but not reviewable — you
+        # cannot map it back to a version without digging. This form is both.
+        #
+        # To upgrade: pick the new release SHA from
+        # https://github.com/taiki-e/install-action/releases and update the
+        # comment to match. Keep the version comment in sync with the SHA — a
+        # stale version comment is a false provenance claim.
+        uses: taiki-e/install-action@a6b2e2dcd845ddd7f509ce4f3ed3d922b80cc5d9 # v2.84.0
+        with:
+          tool: nextest
+      - name: Test
+        run: cargo nextest run --locked -p ken-cli --test rt_parity_native
+
   # ⛔ DO NOT RENAME OR DELETE THIS JOB. `build + test` is a REQUIRED status
   # check in branch protection (docs/ops/github-setup.md §"Required status
   # checks"). The sharded matrix above publishes checks named `test shard
@@ -221,7 +258,7 @@ jobs:
   build-test:
     name: build + test
     runs-on: ubuntu-latest
-    needs: [test-shard, native-write-partition, native-buffer]
+    needs: [test-shard, native-write-partition, native-buffer, native-rt-parity]
     # `always()` so this reports a definite conclusion even when a job fails
     # or is skipped. Without it, a failed dependency leaves this job *skipped*,
     # and a skipped required check blocks the PR with no useful signal.
@@ -232,13 +269,16 @@ jobs:
           shards='${{ needs.test-shard.result }}'
           write='${{ needs.native-write-partition.result }}'
           buffer='${{ needs.native-buffer.result }}'
+          rt_parity='${{ needs.native-rt-parity.result }}'
           echo "test-shard matrix:      $shards"
           echo "native-write-partition: $write"
           echo "native-buffer:          $buffer"
+          echo "native-rt-parity:       $rt_parity"
           failed=0
           for pair in "test shards:$shards" \
                       "native-write-partition:$write" \
-                      "native-buffer:$buffer"; do
+                      "native-buffer:$buffer" \
+                      "native-rt-parity:$rt_parity"; do
             name="${pair%:*}"; result="${pair##*:}"
             if [ "$result" != "success" ]; then
               echo "::error::$name did not pass ($result)." >&2

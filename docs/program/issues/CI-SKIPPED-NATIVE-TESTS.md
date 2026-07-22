@@ -11,42 +11,32 @@ github: null
 origin: docs/program/11-test-suite-and-ci-remediation.md §3 (Track C, C2)
 ---
 
-**Updated 2026-07-21: one of the three is back. Two remain skipped.**
+**Updated 2026-07-22: all three restored — see "Closed" below.**
 
 | Binary | Tests | Measured | State |
 |---|---:|---:|---|
-| `ken-cli/tests/rt_parity_native.rs` | 7 | 14m41s | **skipped** |
+| `ken-cli/tests/rt_parity_native.rs` | 7 | ~266.7s wall (250.5s outlier test) | ✅ restored, `native-rt-parity` job |
 | `ken-cli/tests/px8f_buffer_native.rs` | 1 | 5m10s | ✅ restored, `native-buffer` job |
 | `ken-verify/tests/px8f_write_partition.rs` | 1 | 5m09s | ✅ restored, `native-slow` job |
 
-`px8f_write_partition` runs in its own parallel `native-slow` job, where it
-costs no wall clock: the worst shard is ~471s and that job is ~374s, so it
-finishes first and never sets the pace.
+Each runs in its own parallel job, where it costs no wall clock: the worst
+shard is ~471s and each of these jobs is ~250-374s, so they finish first and
+never set the pace — that headroom is what let all three land without
+touching the sharded lane's critical path.
 
-**`px8f_buffer_native` is now restored too** (own `native-buffer` job).
-**Only `rt_parity_native` remains skipped.**
-
-**`rt_parity_native` was measured directly** (experiment PR #808, closed —
-see `docs/program/11-test-suite-and-ci-remediation.md` §1d). It parallelizes
-fine under nextest: 7 tests, 266.7s wall against 470.6s of CPU. It does not
-fit because of **one outlier test**:
-
-| Test | Duration |
-|---|---:|
-| `fs_write_at_malformed_offset_narrows_to_invalid_offset` | **221.4s** |
-| `fs_write_at_malformed_offset_without_write_right_...` | 42.2s |
-| three `fs_read_at_*` | ~53s each |
-| `buffer_allocate_malformed_capacity_...` | 45.3s |
-| `buffer_freeze_malformed_span_...` | 1.2s |
-
-**So this is a one-test problem, not a binary-wide one.** The 221s test is
-5x its near-identical sibling and 4x the read-side equivalents, which looks
-pathological rather than inherent. Bring it into sibling range and the
-binary lands near 90s and fits with room to spare — 7 tests of coverage
-restored for one test's worth of investigation.
-
-**Do not simply re-enable it.** At ~470s job total against a ~471s critical
-shard it fits by about a second, which is noise, not headroom.
+**`rt_parity_native` was previously believed to be a one-test-fix-away
+problem** (bring the 221s outlier down to sibling range, ~90s total, and it
+fits inside the shard). Re-measured fresh against current `main` for this
+WP: the outlier is still present (**250.5s**, if anything slightly worse
+after intervening native-lowering commits) and is **not** a bug to fix —
+traced to `fs_write_at_malformed_offset_narrows_to_invalid_offset` opening
+**two nested resource brackets** where every sibling test opens exactly one,
+which is load-bearing to the property that test isolates (dispatch-skip
+under a rights-clean write, distinct from its sibling's rights-fault-overlap
+case). **This WP takes Option 2 below instead: a dedicated job**, mirroring
+`native-buffer`/`native-write-partition` — the binary's own ~266.7s total
+fits the same headroom pattern as its two siblings without needing the
+outlier fixed at all.
 
 ## Why they were skipped
 
@@ -83,22 +73,37 @@ lands and the skip is lifted.
 
 Either of:
 
-1. **Rework the three binaries for speed** (this is exactly what C4 in
-   `docs/program/11-test-suite-and-ci-remediation.md` is for —
-   nextest's per-test timing is now available to ground that work),
-   then remove the `-E` filter from the `Test` step in
-   `.github/workflows/ci.yml`.
-2. Move them to a separate, non-blocking scheduled/nightly job instead of
-   dropping them outright, if reworking them for speed turns out not to be
-   feasible.
+1. Rework the binary for speed, then remove the `-E` filter from the sharded
+   `Test` step in `.github/workflows/ci.yml` and let it run inside a shard.
+2. **[TAKEN, this WP]** Give it a dedicated job, same pattern as its two
+   siblings — the binary's own wall clock fits the same headroom as
+   `native-buffer`/`native-write-partition` without needing the outlier
+   fixed. It stays excluded from the sharded lane (so it is not duplicated
+   there) and runs in its own `native-rt-parity` job instead.
 
 ## Undo
 
-The skip is a single edit: delete the
-`-E 'not (binary(rt_parity_native) or binary(px8f_buffer_native) or
-binary(px8f_write_partition))'` argument from the `Test` step's
-`run:` line in `.github/workflows/ci.yml`. No other file encodes the
-exclusion.
+Each of the three binaries is named in exactly two places, which must stay
+complementary (`.github/workflows/ci.yml`, both noted in-file): the `-E`
+exclusion in the sharded lane's `Test` step, and its own dedicated job
+(`native-rt-parity` / `native-buffer` / `native-write-partition`) wired into
+`build-test`'s `needs:` list and pass/fail check. To fully undo the
+restoration for one binary, remove it from both places together — removing
+from only one either duplicates the test (if dropped from the exclusion
+only) or silently drops it from the gate (if the job is removed but the
+exclusion stays), and either way `build-test` still reports green.
+
+## Closed 2026-07-22
+
+All three binaries now run in CI on every PR/push, each in its own
+dedicated job (`native-rt-parity`, `native-buffer`, `native-write-partition`),
+none on the sharded lane's critical path. `rt_parity_native`'s 221s-outlier
+concern is grounded but not fixed — see the finding above; it is native
+Cranelift codegen cost scaling with nested-resource-bracket depth, out of
+Verify's lane and not necessary to close this WP, since the dedicated-job
+approach doesn't need the outlier gone. Recorded for the runtime team /
+Architect as a follow-on, not filed as its own tracker issue (not currently
+blocking anything).
 
 ## ⇒ REASSIGNED to Verify, 2026-07-22 — and BUDGET-EFF is why
 
