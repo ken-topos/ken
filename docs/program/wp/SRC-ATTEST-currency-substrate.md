@@ -232,8 +232,40 @@ Four more required proofs, each executed and shown:
 
 ### Where the probes live, and why they are not vacuous
 
-**`scripts/publisher-gate-probes.sh`** — 41 assertions, all green, including
-row 8, which is now a re-runnable probe rather than a transcript.
+**`scripts/publisher-gate-probes.sh`** — **39 assertions, all green** (the count
+read off the executable, not estimated), including row 8, which is now a
+re-runnable probe rather than a transcript.
+
+### ⛔ @librarian QA found three FAIL-CLOSED defects in Part 2 — all folded
+
+Not prose nits: three states where the gate returned a green, confident, wrong
+answer. Each now has a durable probe, and each probe was verified to **FAIL
+against the pre-fix publisher**.
+
+1. **A freeze created during the CI wait was ignored.** `refuse_if_frozen` ran
+   once at startup — before the lock and before a minutes-long wait. Another
+   publisher's alarm inside that window left this invocation free to acquire the
+   released lock and merge into a state someone else had declared unsafe. Now
+   re-read **inside the lock**, on **both** paths, immediately before evaluating.
+2. **Post-merge worktree creation failed open and manufactured green.** The
+   verification was one condition: `if worktree_add && ! checker; then alarm`. A
+   failed `worktree add` makes it false, skipping the alarm and falling through
+   to the success message — **claiming a checker was green that never ran**,
+   after a merge. Now separated: inability to construct the worktree freezes and
+   dies as `LANDED STATE UNVERIFIED`.
+   ★ Same fail-open default the runtime ring hit today in the visibility walk:
+   a step that cannot reach an answer returning the permissive one.
+3. **Failure to persist the freeze was swallowed** by a trailing `|| true` —
+   the function returned 0, no marker existed, and the next publish proceeded
+   while every message said publication was frozen. Now checked and loud.
+
+⚠ **Probe 12a was vacuous on its first draft and is worth recording as such.**
+It drove `refuse_if_frozen` twice from its *own* snippet and asserted the merge
+boundary was not reached — and **passed against the unfixed publisher**, because
+it tested the sequence the probe wrote rather than the sequence the script runs.
+**A probe that supplies the behaviour it checks for is vacuous no matter how
+green it is.** Rewritten as a structural assertion over the publisher's
+top-level flow, labelled structural, and verified to fail pre-fix.
 
 ⛔ **It sources the gate's REAL function definitions out of
 `scripted-pr-automerge.sh`; it does not carry a copy**, and it asserts the

@@ -107,7 +107,7 @@ build_and_check_merge_result|probes 9a/9b/10/11 (every probe runs it)
 fresh_result_gate|probes 9a (reconstruct) and 9b (abort)
 verify_landed_tree|probes 10, 11a, 11b
 refuse_if_frozen|probe 11a (the freeze must BITE the next publish)
-freeze_publication|probes 11a/11b (asserted via the marker it writes)
+freeze_publication|probes 11a/11b + probe 12c (persistence failure is reported)
 publisher_state_dir|EXCLUDED: pure accessor, driven by the containment guard
 freeze_marker_path|EXCLUDED: pure accessor, driven by every freeze assertion
 release_gate_worktree|EXCLUDED: cleanup helper, no observable of its own
@@ -409,6 +409,67 @@ lb="$(grep -o 'LANDED_BEFORE=[0-9a-f]*' <<<"$out" | cut -d= -f2)"
 la="$(cd "$SANDBOX/advancer" && git ls-remote origin main | cut -f1)"
 if [ -n "$lb" ] && [ "$lb" = "$la" ]; then ok "NO REVERT: origin/main unchanged at ${la:0:8} after the alarm"; else bad "origin/main MOVED after the alarm ($lb -> $la)"; fi
 rm -f "$(marker)"
+
+
+# ---------------------------------------------------------------------------
+# PROBE 12 -- @librarian QA, three fail-closed defects in Part 2. Each is a
+# state that had to be MANUFACTURED, and each previously produced a green,
+# confident, wrong answer.
+# ---------------------------------------------------------------------------
+head_ "Probe 12a -- the freeze must be re-read INSIDE the lock, on BOTH paths"
+# ⚠ STRUCTURAL, and labelled as such. The ordering under test lives in the
+#   script's TOP-LEVEL flow, which is not in the sourced slice, so this asserts
+#   the publisher's control flow as text rather than executing it.
+#
+#   ⛔ The first version of this probe drove `refuse_if_frozen` twice from its
+#      OWN snippet and then asserted the merge boundary was not reached. It
+#      PASSED against the unfixed publisher, because it was testing the sequence
+#      the probe wrote, not the sequence the script runs. A probe that supplies
+#      the behaviour it is checking for is vacuous no matter how green it is.
+flow="$(sed -n '/^refuse_if_frozen$/,$p' "$PUBLISHER")"
+# One record per publish path: from each `acquire_merge_lock` to the FIRST
+# `merge_pr` after it, flattened to a single line so the reader below counts
+# PATHS and not lines. (The first version read line-by-line and reported 8
+# "paths" for 2 -- a wrong denominator makes the ratio meaningless even when
+# the pass/fail verdict happens to land correctly.)
+blocks="$(printf '%s\n' "$flow" | awk '
+  /acquire_merge_lock/ { cap=1; buf=""; next }
+  cap && /merge_pr/    { print buf; cap=0; next }
+  cap                  { buf = buf " " $0 }')"
+paths="$(printf '%s\n' "$blocks" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+guarded="$(printf '%s\n' "$blocks" | sed '/^[[:space:]]*$/d' | grep -c 'refuse_if_frozen' || true)"
+if [ "$paths" -eq 2 ]; then ok "found exactly 2 publish paths (doc-only + normal) between the lock and the merge"; else bad "found $paths publish paths, expected 2 -- the scan is not seeing what it claims to"; fi
+if [ "$paths" -gt 0 ] && [ "$guarded" -eq "$paths" ]; then
+  ok "ALL $paths paths re-read the freeze inside the lock before merging"
+else
+  bad "only $guarded of $paths paths re-check the freeze inside the lock -- a freeze created during the CI wait would be ignored"
+fi
+
+head_ "Probe 12b -- an unbuildable verification worktree must NOT read as green"
+build_sandbox
+out="$(run_gate '
+  fresh_result_gate
+  ( cd '"$SANDBOX"'/advancer && git fetch -q origin && git checkout -q -B main origin/main \
+      && git merge -q --squash origin/candidate >/dev/null 2>&1 \
+      && git -c user.email=p@x -c user.name=p commit -q --no-verify -m squash \
+      && git push -q origin main ) >/dev/null 2>&1
+  # Break ONLY `git worktree add`; every other git operation stays real.
+  git() { if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "add" ]; then return 1; fi; command git "$@"; }
+  verify_landed_tree; echo "VERIFY_RC=$?"')"
+if grep -q 'VERIFY_RC=0' <<<"$out"; then bad "FAILS OPEN: reported success though the checker never ran"; else ok "did not report success when the checker could not run"; fi
+if grep -q 'UNVERIFIED' <<<"$out"; then ok "alarmed as UNVERIFIED -- absence of evidence, not evidence of green"; else bad "no UNVERIFIED alarm"; fi
+if grep -q 'currency checker is green' <<<"$out"; then bad "printed the GREEN sentence about a checker that never ran"; else ok "did not print the green sentence"; fi
+if [ -f "$(marker)" ]; then ok "publication FROZEN"; else bad "no freeze marker"; fi
+rm -f "$(marker)"
+
+head_ "Probe 12c -- a freeze that cannot be PERSISTED must not report success"
+build_sandbox
+out="$(run_gate '
+  freeze_marker_path() { printf "%s\n" "/nonexistent-dir-$$/ken-publisher-FROZEN"; }
+  if freeze_publication "planted reason"; then echo FREEZE_RC=0; else echo FREEZE_RC=1; fi
+  refuse_if_frozen && echo NEXT_PUBLISH_PROCEEDED=1')"
+if grep -q 'FREEZE_RC=0' <<<"$out"; then bad "freeze_publication returned SUCCESS while writing nothing"; else ok "freeze_publication reported failure when it could not persist"; fi
+if grep -q 'COULD NOT BE PERSISTED' <<<"$out"; then ok "and said so loudly, naming that later publishes are NOT blocked"; else bad "silent about the unpersisted freeze"; fi
 
 printf '\n=== %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

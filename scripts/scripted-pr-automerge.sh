@@ -272,8 +272,34 @@ by hand, once you understand what happened:
   fi
 }
 
+# ⛔ FAILURE TO PERSIST THE FREEZE MUST NOT BE SWALLOWED (@librarian QA).
+#    This ended `|| true`. With the marker path unwritable, the function
+#    returned 0, no marker existed, and the NEXT publish proceeded normally --
+#    while every caller's message said publication was frozen. The artifact
+#    promises persistent state; a write that did not happen cannot be reported
+#    as success, least of all by the function whose entire job is that write.
+#    ⇒ verify the marker EXISTS and is non-empty, and say so loudly if not.
+#      There is nothing to fall back to: if the freeze cannot be persisted, the
+#      only true statement is that this invocation failed and subsequent
+#      publication is NOT frozen. Say that instead of claiming it is.
 freeze_publication() {
-  printf '%s\n' "$1" >"$(freeze_marker_path)" 2>/dev/null || true
+  local marker
+  marker="$(freeze_marker_path)"
+  printf '%s\n' "$1" >"$marker" 2>/dev/null
+  if [ ! -s "$marker" ]; then
+    printf '%s\n' "
+⛔⛔ PUBLICATION FREEZE COULD NOT BE PERSISTED at: $marker
+
+The condition that triggered the freeze STILL HAPPENED, and the freeze that was
+supposed to block the next publish DOES NOT EXIST. Subsequent publishes will
+NOT be stopped. Do not read any later 'frozen' message as protection.
+
+  reason: $1
+
+Freeze publication BY HAND before anything else runs." >&2
+    return 1
+  fi
+  return 0
 }
 
 gate_wt=""
@@ -450,8 +476,30 @@ green, then clear the freeze by hand."
   # this is what still catches a red main.
   release_gate_worktree
   gate_wt="$(mktemp -d -t ken-pubverify-XXXXXX)"
-  if git worktree add --detach "$gate_wt" origin/main >/dev/null 2>&1 &&
-     ! ( cd "$gate_wt" && ./scripts/gen-doc-status.sh --check ); then
+
+  # ⛔ FAILS OPEN -- @librarian QA. This was one condition:
+  #      if worktree_add && ! checker; then alarm; fi
+  #    A FAILED `worktree add` makes the whole condition false, so the alarm is
+  #    SKIPPED and control falls through to the success message -- claiming the
+  #    checker is green on a checker THAT NEVER RAN. Proved by wrapping only
+  #    `git worktree add`: verify_landed_tree returned 0 and printed the green
+  #    sentence, after a merge.
+  #
+  #    This is the SAME fail-open default the runtime ring hit today in the
+  #    visibility walk: a step that cannot reach an answer returning the
+  #    permissive one. "Cannot determine" is a THIRD outcome and it must fail.
+  if ! git worktree add --detach "$gate_wt" origin/main >/dev/null 2>&1; then
+    freeze_publication "PR #$pr_number ($head_sha) merged, but the post-merge verification worktree could not be created. The landed state was never checked."
+    die "PUBLISHER ALARM: PR #$pr_number MERGED and the landed state is UNVERIFIED.
+
+Could not create the verification worktree at origin/main, so the currency
+checker never ran. This is NOT evidence that main is green -- it is the absence
+of evidence either way, after a merge that has already happened.
+
+Not reverting. Publication is FROZEN pending diagnosis."
+  fi
+
+  if ! ( cd "$gate_wt" && ./scripts/gen-doc-status.sh --check ); then
     freeze_publication "PR #$pr_number ($head_sha) landed and the tree OID matched, but origin/main's own currency checker is RED on the landed tree."
     die "PUBLISHER ALARM: PR #$pr_number landed with the expected tree, but the
 currency checker is RED on origin/main.
@@ -483,6 +531,15 @@ if [ "$doc_only" -eq 1 ]; then
   #   `library/manifest.toml` cites `crates/` and `docs/program/` files, so
   #   either side can invalidate the other's claim without sharing a path.
   acquire_merge_lock
+  # ⛔ RE-CHECK THE FREEZE HERE, not only at startup -- @librarian QA.
+  #    The startup `refuse_if_frozen` runs BEFORE the lock and, on the normal
+  #    path, before a minutes-long wait for CI. Another publisher's alarm can
+  #    freeze publication inside that window: this invocation passed the startup
+  #    check, waits, acquires the now-released lock, and merges into a state
+  #    someone else has already declared unsafe. Proved to the merge boundary.
+  #    The freeze is only meaningful if it is read INSIDE the lock, immediately
+  #    before evaluating and merging.
+  refuse_if_frozen
   fresh_result_gate
   merge_pr
   printf 'Doc-only PR #%s merge command succeeded.\n' "$pr_number"
@@ -546,6 +603,15 @@ while :; do
     #   So re-derive the merge result on a freshly fetched origin/main and run
     #   origin/main's checker on it, under the lock, immediately before merging.
     acquire_merge_lock
+    # ⛔ RE-CHECK THE FREEZE HERE, not only at startup -- @librarian QA.
+    #    The startup `refuse_if_frozen` runs BEFORE the lock and, on the normal
+    #    path, before a minutes-long wait for CI. Another publisher's alarm can
+    #    freeze publication inside that window: this invocation passed the startup
+    #    check, waits, acquires the now-released lock, and merges into a state
+    #    someone else has already declared unsafe. Proved to the merge boundary.
+    #    The freeze is only meaningful if it is read INSIDE the lock, immediately
+    #    before evaluating and merging.
+    refuse_if_frozen
     fresh_result_gate
     merge_pr
     printf 'PR #%s checks passed and merge command succeeded.\n' "$pr_number"
