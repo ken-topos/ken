@@ -208,13 +208,16 @@ does **not** inherit from either);
 Authority class: `explanatory` — this page orders and interprets those
 sections and the cited fragments' own text; it does not assert a rule they
 do not already state. Every citation here rests on the **content-currency**
-predicate (`DOC-CURRENCY-ANCHOR`): the cited byte ranges are re-verified
-unchanged between `library/REVISION` and `HEAD` by
-`scripts/gen-doc-status.sh`, not merely confirmed to name a real ancestor
-commit. Content currency is necessary but not sufficient: a citation can
-be current *and* still not carry the semantic claim made from it, which is
-why every claim below is checked against what its cited source actually
-says, not just whether the source's bytes are unchanged. Section 2's
+predicate: the committed ledger, `library/SOURCE-ATTESTATIONS`, binds each
+cited path to its exact tracked blob OID as of a Librarian review, and
+`scripts/gen-doc-status.sh` compares the current tracked blob for every
+cited path against that ledger — not merely confirming `library/REVISION`
+names a real ancestor commit (`REVISION` is a provenance/bootstrap anchor
+only; it does not re-verify cited bytes). Content currency is necessary
+but not sufficient: a citation can be current *and* still not carry the
+semantic claim made from it, which is why every claim below is checked
+against what its cited source actually says, not just whether the
+source's bytes are unchanged. Section 2's
 derivation-path and
 `trusted_base()` claims are grounded in real, current, checked fragment
 prose (`Combinators.ken.md`, `Property.ken.md`, `Transport.ken.md`,

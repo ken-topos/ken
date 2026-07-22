@@ -108,21 +108,73 @@ the required population after CI has formed its verdict.
 Immediately before **every** merge — **not only `--doc-only`** — the publisher
 must:
 
+0. **acquire a repository-wide, fail-closed merge lock** (see the boundary
+   below — without it clause 2 has no support at all);
 1. read current `origin/main`;
 2. construct the exact squash result with the candidate;
 3. run **`origin/main`'s checker**, not the candidate's, on that result;
-4. **re-read `origin/main` before merging** and abort/reconstruct if it moved.
+4. **re-read `origin/main` before merging** and abort/reconstruct if it moved;
+5. **after merging, verify the LANDED tree** against the checked tree OID and
+   re-run the checker on it — **alarm and freeze on mismatch, never auto-revert.**
 
-Because the publisher is the sole merge router, that makes **the checked result
-the result it lands.** ⇒ **Old green CI attached to a prior merge result is not
-authorization.**
+⇒ **Old green CI attached to a prior merge result is not authorization.** That
+much is unconditional, and it is what closes #885's stale-CI defect.
 
-★ **Steward note:** steps 1–3 already exist in `scripts/scripted-pr-automerge.sh`
+### ⛔ CORRECTED — the identity claim this frame originally made is WITHDRAWN
+
+The first version of this section said: *"Because the publisher is the sole merge
+router, that makes the checked result the result it lands."* **The second half
+does not follow, and I wrote it. @architect ruling `dec_50fdjy68gm01j`.**
+
+`gh pr merge` offers `--match-head-commit`, which pins the **PR head**. **GitHub
+exposes no base-SHA compare-and-swap**, so the squash lands on whatever `main` is
+at the instant the API executes, and nothing the publisher passes can pin that.
+
+State the guarantee in three parts, and do not collapse them:
+
+| | claim | holds because |
+|---|---|---|
+| **Unconditional** | old CI is never authorization | every publish re-derives the result on a fresh `origin/main` and runs `origin/main`'s checker immediately before merge |
+| **Conditional** | the checked tree **is** the landed tree | ⚠ only within ADR-0003's exclusive-publisher model, and **only because all sanctioned merges share one enforced critical section** — the lock |
+| **Residual** | ⛔ **NOT closed** | an out-of-band writer violates that precondition; with no base-CAS it can still move `main` inside the final round-trip |
+
+⇒ *"Closes #885's stale-CI authorization defect"* is **true**.
+⇒ *"Eliminates every final-round-trip race"* is **FALSE — do not write it.**
+
+★ **Why the lock is enforced rather than documented.** The predecessor guard was
+correct *because* the publisher happened to be serialized, and **nothing recorded
+that dependency** — the F13 finding. This frame then reproduced the identical
+defect one layer up by asserting the identity outright. **A load-bearing
+precondition that lives only in prose is not a precondition; it is a hope.**
+That is why step 0 exists.
+
+★ **Steward note:** steps 1–3 already existed in `scripts/scripted-pr-automerge.sh`
 as the `--doc-only` currency guard (landed `a9554a07`, F10/F11/F12 folded in).
-**The mechanism is built and proved; this WP generalizes its scope to every
-merge and adds step 4, which is new.** Read that block before writing a new one —
+**The mechanism was built and proved; this WP generalizes its scope to every
+merge.** Steps **0, 4 and 5** are new. Read that block before writing a new one —
 it carries the F10/F11/F12 reasoning in-file, including why the checker must come
 from `origin/main` and why `git merge --squash` must be followed by a commit.
+
+> ### ⚠ THE SCOPE GAP COST A PUBLISH THE SAME DAY — PR #903, measured
+>
+> `wp/CI-SKIPPED-NATIVE-TESTS @ aa0330e1` (the operator's declared top priority)
+> failed CI on `library_documentation_gates`, because it edits
+> `.github/workflows/ci.yml` — **a manifest-cited source** (`manifest.toml:316`)
+> — and no valid `REVISION` can ride it. Reproduced locally: `origin/main`'s
+> checker on the merge result returns *"cited source(s) changed between REVISION
+> and HEAD"*, while the same checker on `main` alone passes.
+>
+> ⛔ **The existing guard would have caught it before the PR was created. It did
+> not run, because it was gated on `--doc-only` and that was a full-CI publish.**
+> The right mechanism existed, proved, and scoped to the one path that did not
+> need it — which is the whole argument for this WP, arriving as evidence rather
+> than as reasoning.
+>
+> ★ **And `ci.yml` became cited only at `1e148908` (2026-07-22 17:07, DOC-W1-5).**
+> Every prior `ci.yml` commit landed the day before, *before the citation
+> existed*. So this is **#885's time-of-check defect again** — a citation added
+> after other work formed its assumptions — now on its **third** WP.
+> ⇒ **Row 5 is not hypothetical. It has fired in production, twice.**
 
 ## Acceptance — the Architect's proof matrix, verbatim
 
@@ -148,6 +200,172 @@ name which probe builds row 5. **If it has no probe, the WP is not done.**
 depth-1 case must be executed, not reasoned about. The prior gate carried a
 comment saying nobody had proved it **accepts** a real revision in the
 environment where it runs — do not repeat that.
+
+### Acceptance additions for Part 2 (@architect, `dec_50fdjy68gm01j`)
+
+Four more required proofs, each executed and shown:
+
+8. **Two concurrent publisher invocations cannot both enter the merge critical
+   section.** ⚠ Prove it **across two different worktrees**, not two shells in
+   one — a per-worktree lock path would pass the same-worktree test and still
+   never contend in production. *(Done: `A: ACQUIRED` / `B: REFUSED`, and
+   `C-from-librarian-worktree: ACQUIRED` / `D-from-steward-worktree: REFUSED`,
+   against the lock in the shared `--git-common-dir`.)*
+9. **A base advance before the final read forces reconstruction or abort** —
+   manufacture the advance; do not reason about it.
+   *(Done — probe 9a: an advance during one evaluation is detected, the gate
+   reconstructs, and the base it finally pins is the **advanced** base, not the
+   stale one. Probe 9b: a base advancing on **every** evaluation aborts after 3
+   with the bounded-retry diagnosis rather than looping. Both advances are
+   manufactured from **inside** `build_and_check_merge_result`, by the checker it
+   invokes, so the gate itself is never stubbed and the race is real.)*
+10. **On the normal path, the landed tree OID equals the synthetic checked tree
+    OID.** *(Done — probe 10, confirmed twice: once by the gate's own report and
+    once independently against the sandbox origin.)*
+11. **A planted landed-tree mismatch, and a planted red checker on the landed
+    tree, each produce an alarm and NO automatic revert** — and leave publication
+    frozen. Both arms, planted, not argued.
+    *(Done — probes 11a and 11b. Each asserts four things separately: the alarm
+    fires, success is **not** reported, the freeze marker is written, and
+    `origin/main` is **byte-identical before and after** the alarm. 11a also
+    proves the freeze **bites** — the next publish refuses to start.)*
+
+### Where the probes live, and why they are not vacuous
+
+**`scripts/publisher-gate-probes.sh`** — **39 assertions, all green** (the count
+read off the executable, not estimated), including row 8, which is now a
+re-runnable probe rather than a transcript.
+
+### ⛔ @librarian QA found three FAIL-CLOSED defects in Part 2 — all folded
+
+Not prose nits: three states where the gate returned a green, confident, wrong
+answer. Each now has a durable probe, and each probe was verified to **FAIL
+against the pre-fix publisher**.
+
+1. **A freeze created during the CI wait was ignored.** `refuse_if_frozen` ran
+   once at startup — before the lock and before a minutes-long wait. Another
+   publisher's alarm inside that window left this invocation free to acquire the
+   released lock and merge into a state someone else had declared unsafe. Now
+   re-read **inside the lock**, on **both** paths, immediately before evaluating.
+2. **Post-merge worktree creation failed open and manufactured green.** The
+   verification was one condition: `if worktree_add && ! checker; then alarm`. A
+   failed `worktree add` makes it false, skipping the alarm and falling through
+   to the success message — **claiming a checker was green that never ran**,
+   after a merge. Now separated: inability to construct the worktree freezes and
+   dies as `LANDED STATE UNVERIFIED`.
+   ★ Same fail-open default the runtime ring hit today in the visibility walk:
+   a step that cannot reach an answer returning the permissive one.
+3. **Failure to persist the freeze was swallowed** by a trailing `|| true` —
+   the function returned 0, no marker existed, and the next publish proceeded
+   while every message said publication was frozen. Now checked and loud.
+
+⚠ **Probe 12a was vacuous on its first draft and is worth recording as such.**
+It drove `refuse_if_frozen` twice from its *own* snippet and asserted the merge
+boundary was not reached — and **passed against the unfixed publisher**, because
+it tested the sequence the probe wrote rather than the sequence the script runs.
+**A probe that supplies the behaviour it checks for is vacuous no matter how
+green it is.** Rewritten as a structural assertion over the publisher's
+top-level flow, labelled structural, and verified to fail pre-fix.
+
+⛔ **It sources the gate's REAL function definitions out of
+`scripted-pr-automerge.sh`; it does not carry a copy**, and it asserts the
+extraction succeeded before running anything. A harness that silently sources
+nothing passes every negative check — and a *copied* gate drifts from the
+shipped gate in silence, which is exactly how `scripts/pane-busy.sh` came to
+have an arm-check suite that asserted its own defect as the specification.
+
+★ **Mutation-proved — the suite is shown to FAIL, not merely to pass.** Four
+mutants, each against a copy, each caught by the probe that targets it:
+
+| mutant | caught by |
+|---|---|
+| `fresh_result_gate` never re-reads the base | 9a + 9b (incl. their positive controls) |
+| landed-tree comparison disabled | 11a |
+| `freeze_publication` made a no-op | 11a + 11b |
+| the gate **auto-reverts** `main` after the alarm | 11a's no-revert assertion |
+
+⚠ The last mutant exists because **"no revert" is a negative assertion and
+passes for any reason** — including a gate that never reverts anything because
+it never got that far. Without a mutant that actually reverts, that row proves
+nothing.
+
+### ⛔ The harness itself was defeated — @adversary, and it was the plumbing again
+
+The first version of this harness **contained the failure its own header warns
+about.** The header says *"a harness that silently sources nothing passes every
+negative check"*; forty lines below, it did exactly that. Three findings,
+measured, all fixed:
+
+1. **A truncated slice passed the integrity check AND the runner.**
+   `grep -q "^$fn() {"` asserts each function's **opening line** and never its
+   body. Truncation removes *tails*, so the check was structurally blind to the
+   one drift it existed to catch. The runner used `set -uo pipefail` with **no
+   `-e`** and no guard on `source`, so the syntax error stopped nothing — **exit
+   0, every negative assertion passing vacuously.**
+2. **Containment cannot notice its own list going stale, and it already had.**
+   The slice defined **10** gate functions; the check asserted **9**.
+   `cleanup_gate` was unasserted, green, live on the branch.
+3. `source` was never checked for success.
+
+**Fixes — none of them an enumeration:** `bash -n` on the slice (catches *any*
+truncation, wherever it lands, and needs no list); **derive** the function set
+from the publisher's gate region and assert **equality**, not containment; guard
+the `source` with an explicit `exit 3`.
+
+★ **The shape:** the old check asked *"are the things I know about present?"*
+Each replacement asks *"is this artifact well-formed and complete on its own
+terms?"* — the same move as a row-count post-condition and a duration-agnostic
+regex. **The question that does not require a correct list is the one that
+survives.**
+
+⚠ **Two further gaps surfaced only because the derived check exists**, which is
+the argument for it:
+
+- **`acquire_merge_lock` had no probe at all.** Row 8 had been discharged by a
+  hand-run transcript — not re-runnable, and it does not fail when someone
+  changes the lock path, *which is the change it exists to catch*. Now **probe
+  8**, in-harness: uncontended control → A acquires → **B refuses across a
+  second worktree** → refusal carries its diagnosis → lock releases.
+- **The first coverage check was a name-grep, i.e. a proxy**, and wrong in both
+  directions: `freeze_publication` is genuinely exercised (probe 11 asserts the
+  marker it writes) but never *named*, so the proxy called it uncovered — while
+  a bare mention in a comment would have satisfied it. Replaced with a
+  **declared coverage map asserted for set equality** against the derived set:
+  every gate function is either driven by a named probe or excluded **with a
+  stated reason**, and a new one forces acknowledgment.
+
+**Plumbing mutants, both caught, harness exits 1:** anchor drift yielding a
+truncated slice (caught **three** ways — parse, set equality, coverage) · a new
+gate function added and unaccounted for.
+
+### ⛔ Two gate defects the probes found — both latent, both live on a CI runner
+
+Building the probes changed the gate, which is the point of building them:
+
+1. **`merge` and `commit` shared one `&&` chain under a single diagnosis naming
+   only the merge.** A commit failing for its *own* reasons reported *"the
+   candidate needs rebasing onto current origin/main"* — **false**, and it sends
+   the ring to rebase a branch that is fine. Now separated, with the second arm
+   saying explicitly that this is a publisher environment fault and **not** a
+   candidate defect.
+2. **The scratch worktree inherited ambient git identity.** This repository sets
+   `user.email` **per-repo, not globally**. `git merge --squash` needs a
+   committer identity **only when the merge is not a fast-forward** — i.e.
+   exactly when `origin/main` has advanced past the candidate's base, *the case
+   this gate exists for*. So the failure is invisible on the happy path and
+   appears on the adverse one.
+
+★ **Worth recording how #2 was fixed, because the first fix was wrong in a
+familiar way:** I covered `git commit`, the one call I had watched fail. That
+passed the fast-forward probe and failed the advanced-base probe. **Enumerating
+the calls observed to fail is the same move that has failed all day**; identity
+is now set **once for the whole scratch worktree**, so the class cannot recur as
+operations are added.
+
+⚠ **8–11 are the probes nobody writes**, for the same reason row 5 is: each
+requires *manufacturing* a condition orthogonal to the change. Per the build-QA
+playbook (`:299`), enumerate the probes by the state each builds and name which
+probe builds each of these. **If any has no probe, Part 2 is not done.**
 
 ## Scope boundary
 

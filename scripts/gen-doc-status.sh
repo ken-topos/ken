@@ -254,16 +254,14 @@ fi
 # --- name a real ancestor commit (DOC-CURRENCY-ANCHOR) ---------------------
 #
 # Everything above establishes that REVISION names a real commit and that
-# it is an ancestor of HEAD — and nothing more. `library/STATUS.md`'s claim
-# is "the corpus was validated as of REVISION"; neither fact above reads a
-# single byte of anything the corpus cites. Grounded, un-mutated, on
+# it is an ancestor of HEAD — and nothing more. Grounded, un-mutated, on
 # `origin/main @ 6be9754b` (adversary, `evt_6c9mhr3tg9pfg`): `STATUS.md`
 # stamped "Validated revision e5a400c7", and `git ls-tree e5a400c7 --
 # library/` returns ZERO entries — the corpus is stamped validated at a
 # revision where it did not yet exist, and every check above still passes.
-#
-# Two DISTINCT properties, checked separately so their diagnostics don't
-# get conflated (AC-2 asks for exactly this distinguishability):
+# REVISION alone is a PROVENANCE anchor only (SRC-ATTEST Part 1, below) — it
+# is checked here for the same bootstrap reason, not as a claim about cited
+# source bytes.
 
 # (a) library/'s own corpus must already exist at REVISION — otherwise
 # nothing was there to validate. This is the bootstrap gap made explicit:
@@ -281,13 +279,28 @@ fi
 
 # (b) every manifest `sources` entry cited by a NON-generated document —
 # the external claims the corpus actually rests its authority on — must be
-# byte-unchanged between REVISION and HEAD. Librarian QA (thr_15yrvjrpap9td,
-# first pass): an earlier cut of this check blanket-skipped every
-# `library/`-prefixed source, which silently exempted `library/STATUS.md`'s
-# own declared `sources` (`library/manifest.toml`, `library/REVISION`) from
-# the very token (`source-currency`) its manifest record claimed to carry —
-# a hidden exception contradicting AC-1's own text, not the issue's
-# sanctioned "visibly weakened" branch. Fixed two ways:
+# attested by `library/SOURCE-ATTESTATIONS`, a squash-stable whole-source
+# ledger (SRC-ATTEST Part 1). The `REVISION → HEAD` cited-byte diff this
+# comment used to describe is GONE — the Librarian proved it impossible for
+# any WP that itself edits a cited source (evt_6t6wz1aw18291): no commit can
+# be simultaneously an ancestor of `origin/main` (survives a squash) and a
+# holder of the not-yet-merged bytes that make the citation current. A
+# candidate-time BLOB-OID attestation dissolves that: the blob survives even
+# though the branch commit does not, so the ledger can be updated in the
+# same commit that changes the cited source, and `REVISION` no longer needs
+# to certify cited content at all — it stays a provenance/bootstrap anchor
+# only (checked above). Replacing rather than layering this on top of the
+# old check is deliberate: keeping both preserves the exact impossibility
+# this WP exists to dissolve.
+#
+# Librarian QA (thr_15yrvjrpap9td, first pass): an earlier cut of the OLD
+# check blanket-skipped every `library/`-prefixed source, which silently
+# exempted `library/STATUS.md`'s own declared `sources`
+# (`library/manifest.toml`, `library/REVISION`) from the very token
+# (`source-currency`) its manifest record claimed to carry — a hidden
+# exception contradicting AC-1's own text, not the issue's sanctioned
+# "visibly weakened" branch. The ledger population below inherits that fix
+# unchanged, two ways:
 #
 # - `library/manifest.toml` is NOT exempted by path — it is bound like any
 #   other source, but ONLY for documents whose `kind` is not `status`.
@@ -358,51 +371,205 @@ CITED_SOURCES="$(awk '
   END { flush_record() }
 ' "$MANIFEST" | sed 's/#.*//' | sort -u)"
 
-# Librarian QA (thr_15yrvjrpap9td, first pass, finding 2): a cited source
-# that is a SYMLINK passes `git diff --quiet REVISION HEAD -- path` by
-# comparing the symlink's own (unchanged) target-path blob, never the
-# real file's content the symlink resolves to — demonstrated live: a
-# manifest source pointing at a symlink whose TARGET body changed stayed
-# green end-to-end. `git diff`/`cat-file` operate on git's tracked blob for
-# that path, which for a symlink IS the target-path string, not the
-# resolved content — this is the exact same escape class gate 1's
-# `walk_library` already rejects (fail closed on a symlink rather than
-# silently reading through it). Checked via the tracked git MODE
-# (`120000` = symlink), at both endpoints — a source that is a regular
-# file at REVISION but a symlink at HEAD (or vice versa) is just as
-# unverifiable as one that is a symlink throughout.
-DRIFTED=""
+# --- ledger: library/SOURCE-ATTESTATIONS is the source-currency authority -
+# (SRC-ATTEST Part 1). This block is READ-ONLY — it never writes the ledger
+# file. Generation is a separate entry point (`scripts/gen-source-
+# attestations.sh`), invoked only by the Librarian after semantic review,
+# and it never writes the real ledger path either (it writes a `.proposed`
+# sibling) — see that script's header for why the two are kept apart.
+TMP_LEDGER_PAIRS="$(mktemp)"
+trap 'rm -f "$TMP_LEDGER_PAIRS"' EXIT
+
+LEDGER_FILE="$REPO_ROOT/library/SOURCE-ATTESTATIONS"
+if [ ! -f "$LEDGER_FILE" ]; then
+  echo "gen-doc-status: $LEDGER_FILE not found — every manifest-cited source" >&2
+  echo "  needs an attested blob OID. Run scripts/gen-source-attestations.sh" >&2
+  echo "  to produce a proposed ledger for review, then commit it as" >&2
+  echo "  library/SOURCE-ATTESTATIONS once the Librarian has reviewed it." >&2
+  exit 1
+fi
+
+OBJECT_FORMAT="$(git -C "$REPO_ROOT" rev-parse --show-object-format 2>/dev/null || echo sha1)"
+case "$OBJECT_FORMAT" in
+  sha1) OID_RE='^[0-9a-f]{40}$' ;;
+  sha256) OID_RE='^[0-9a-f]{64}$' ;;
+  *) OID_RE='^[0-9a-f]{40,64}$' ;;
+esac
+
+LEDGER_HEADER="$(head -n1 "$LEDGER_FILE")"
+case "$LEDGER_HEADER" in
+  "# ken-source-attestation-v1 object-format=${OBJECT_FORMAT}") : ;;
+  "# ken-source-attestation-v1 object-format="*)
+    echo "gen-doc-status: $LEDGER_FILE declares an object-format that does" >&2
+    echo "  not match this repository's ('${OBJECT_FORMAT}'): '${LEDGER_HEADER}'" >&2
+    exit 1
+    ;;
+  *)
+    echo "gen-doc-status: $LEDGER_FILE has no recognized" >&2
+    echo "  '# ken-source-attestation-v1 object-format=...' header line" >&2
+    exit 1
+    ;;
+esac
+
+# Architect finding (dec_1n8mxg2b0m54w, terminal review on ccf89fda): `git
+# ls-tree` and Rust's path normalization both resolve `docs/./x` and
+# `docs//x` to the same blob as `docs/x` — so a noncanonical manifest
+# citation paired with a matching noncanonical ledger row would agree with
+# each other as RAW STRINGS while both naming an alias of the real path,
+# and exact set equality on raw strings alone would silently accept the
+# alias pair instead of enforcing the one canonical spelling Part 1 rule 4
+# requires. Applied to BOTH the required population (below) and every
+# ledger row (the parsing loop that follows) — checking only one side
+# would still let a matching noncanonical pair through.
+path_is_noncanonical() {
+  local p="$1" part
+  [ -z "$p" ] && return 0
+  while IFS= read -r part; do
+    case "$part" in
+      ""|.|..) return 0 ;;
+    esac
+  done <<<"$(printf '%s' "$p" | tr '/' '\n')"
+  return 1
+}
+
+# Required population = every unique manifest-cited path (anchor stripped),
+# same source list content-currency has always used, sorted+deduped.
+REQUIRED_PATHS="$(printf '%s\n' "$CITED_SOURCES" | sed 's/#.*//;s/^library\/REVISION$//' | sort -u | sed '/^$/d')"
+
+NONCANONICAL_CITATION=""
 while IFS= read -r path; do
   [ -z "$path" ] && continue
-  case "$path" in
-    library/REVISION) continue ;;
-  esac
-  mode_head="$(git -C "$REPO_ROOT" ls-tree HEAD -- "$path" 2>/dev/null | awk '{print $1; exit}')"
-  mode_rev="$(git -C "$REPO_ROOT" ls-tree "$REVISION" -- "$path" 2>/dev/null | awk '{print $1; exit}')"
-  if [ "$mode_head" = "120000" ] || [ "$mode_rev" = "120000" ]; then
+  if path_is_noncanonical "$path"; then
+    NONCANONICAL_CITATION="${NONCANONICAL_CITATION}  - ${path}
+"
+  fi
+done <<<"$REQUIRED_PATHS"
+if [ -n "$NONCANONICAL_CITATION" ]; then
+  echo "gen-doc-status: manifest citation(s) are not in canonical" >&2
+  echo "  repository-relative form (a leading/trailing/doubled slash, or a" >&2
+  echo "  '.'/'..' component, is an alias of a different spelling the" >&2
+  echo "  ledger could equally attest — cite the canonical path instead):" >&2
+  printf '%s' "$NONCANONICAL_CITATION" >&2
+  exit 1
+fi
+
+# Ledger rows, tab-separated `<oid>\t<path>`, after the one header line.
+# Exact shape enforced before any semantic check: exactly one tab per row,
+# a well-formed OID for this repository's object format, sorted, unique
+# paths, no path escaping the repository (leading `/`, `..` component).
+LEDGER_ROWS="$(tail -n +2 "$LEDGER_FILE")"
+LEDGER_PATHS=""
+PREV_PATH=""
+BAD_ROW=""
+while IFS= read -r row; do
+  [ -z "$row" ] && continue
+  tab_count=$(printf '%s' "$row" | tr -cd '\t' | wc -c)
+  if [ "$tab_count" -ne 1 ]; then
+    BAD_ROW="${BAD_ROW}  - malformed row (expected exactly one tab): ${row}
+"
+    continue
+  fi
+  oid="${row%%$'\t'*}"
+  path="${row#*$'\t'}"
+  if ! printf '%s' "$oid" | grep -qE "$OID_RE"; then
+    BAD_ROW="${BAD_ROW}  - malformed OID for object-format=${OBJECT_FORMAT}: ${row}
+"
+    continue
+  fi
+  if path_is_noncanonical "$path"; then
+    BAD_ROW="${BAD_ROW}  - path escapes the repository or is not canonical (leading/trailing/doubled slash or a '.'/'..' component): ${row}
+"
+    continue
+  fi
+  if [ -n "$PREV_PATH" ] && [ "$(printf '%s\n%s' "$PREV_PATH" "$path" | sort | head -n1)" != "$PREV_PATH" ]; then
+    BAD_ROW="${BAD_ROW}  - ledger rows are not sorted by path at: ${row}
+"
+  fi
+  if [ "$path" = "$PREV_PATH" ]; then
+    BAD_ROW="${BAD_ROW}  - duplicate path row: ${row}
+"
+  fi
+  PREV_PATH="$path"
+  LEDGER_PATHS="${LEDGER_PATHS}${path}
+"
+  # oid:path pairs, one per line, for the per-path lookup below.
+  printf '%s\t%s\n' "$oid" "$path" >> "$TMP_LEDGER_PAIRS"
+done <<<"$LEDGER_ROWS"
+
+if [ -n "$BAD_ROW" ]; then
+  echo "gen-doc-status: $LEDGER_FILE has malformed row(s):" >&2
+  printf '%s' "$BAD_ROW" >&2
+  exit 1
+fi
+
+LEDGER_PATHS="$(printf '%s' "$LEDGER_PATHS" | sort -u)"
+
+MISSING_FROM_LEDGER="$(comm -23 <(printf '%s\n' "$REQUIRED_PATHS") <(printf '%s\n' "$LEDGER_PATHS"))"
+EXTRA_IN_LEDGER="$(comm -13 <(printf '%s\n' "$REQUIRED_PATHS") <(printf '%s\n' "$LEDGER_PATHS"))"
+if [ -n "$MISSING_FROM_LEDGER" ] || [ -n "$EXTRA_IN_LEDGER" ]; then
+  echo "gen-doc-status: library/SOURCE-ATTESTATIONS does not exactly match the" >&2
+  echo "  current manifest-cited source set:" >&2
+  if [ -n "$MISSING_FROM_LEDGER" ]; then
+    echo "  missing from ledger (cited, not attested):" >&2
+    printf '%s\n' "$MISSING_FROM_LEDGER" | sed 's/^/    - /' >&2
+  fi
+  if [ -n "$EXTRA_IN_LEDGER" ]; then
+    echo "  stale in ledger (attested, no longer cited):" >&2
+    printf '%s\n' "$EXTRA_IN_LEDGER" | sed 's/^/    - /' >&2
+  fi
+  echo "  Run scripts/gen-source-attestations.sh, review, and commit the" >&2
+  echo "  updated ledger." >&2
+  exit 1
+fi
+
+# Librarian QA (thr_15yrvjrpap9td, first pass, finding 2), preserved under
+# the ledger: a cited source that is a SYMLINK at HEAD is unverifiable
+# through the indirection (its tracked blob IS the target-path string, not
+# the resolved content) — the exact escape class gate 1's `walk_library`
+# already rejects. Checked via the tracked git MODE (`120000`), at HEAD.
+DRIFTED=""
+while IFS= read -r pair; do
+  [ -z "$pair" ] && continue
+  ledger_oid="${pair%%$'\t'*}"
+  path="${pair#*$'\t'}"
+  head_entry="$(git -C "$REPO_ROOT" ls-tree HEAD -- "$path" 2>/dev/null)"
+  mode_head="$(printf '%s' "$head_entry" | awk '{print $1; exit}')"
+  oid_head="$(printf '%s' "$head_entry" | awk '{print $3; exit}')"
+  if [ "$mode_head" = "120000" ]; then
     DRIFTED="${DRIFTED}  - ${path} (symlink source — content-currency cannot verify through a symlink indirection; cite the real file it resolves to instead)
 "
     continue
   fi
-  if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}:${path}" 2>/dev/null; then
-    DRIFTED="${DRIFTED}  - ${path} (does not exist at REVISION)
+  if [ -z "$oid_head" ]; then
+    DRIFTED="${DRIFTED}  - ${path} (does not exist at HEAD)
 "
     continue
   fi
-  if ! git -C "$REPO_ROOT" diff --quiet "$REVISION" HEAD -- "$path" 2>/dev/null; then
-    DRIFTED="${DRIFTED}  - ${path}
+  if [ "$mode_head" != "100644" ] && [ "$mode_head" != "100755" ]; then
+    DRIFTED="${DRIFTED}  - ${path} (not a regular tracked file at HEAD — mode ${mode_head})
+"
+    continue
+  fi
+  if [ "$oid_head" != "$ledger_oid" ]; then
+    DRIFTED="${DRIFTED}  - ${path} (attested ${ledger_oid}, actual ${oid_head})
 "
   fi
-done <<<"$CITED_SOURCES"
+done < "$TMP_LEDGER_PAIRS"
 
 if [ -n "$DRIFTED" ]; then
-  echo "gen-doc-status: cited source(s) changed between REVISION and HEAD — the" >&2
-  echo "  currency claim is no longer backed by evidence for:" >&2
+  echo "gen-doc-status: cited source(s) changed since their last attestation —" >&2
+  echo "  the currency claim is no longer backed by evidence for:" >&2
   printf '%s' "$DRIFTED" >&2
-  echo "  Re-validate the corpus against the new content, then bump" >&2
-  echo "  library/REVISION to reflect that." >&2
+  echo "  Re-validate the corpus against the new content, then run" >&2
+  echo "  scripts/gen-source-attestations.sh and commit the updated ledger." >&2
   exit 1
 fi
+
+# Attested source-set digest: a single value `STATUS.md` can render distinct
+# from `REVISION` (the provenance anchor, above), so a reader isn't left
+# inferring "which value actually backs source-currency" from prose alone —
+# rendered next to REVISION, not in place of it (SRC-ATTEST Part 1 row 6).
+LEDGER_DIGEST="$(sha256sum "$LEDGER_FILE" | awk '{print $1}')"
 
 # --- manifest parsing -----------------------------------------------------
 # library/manifest.toml is a small, hand-controlled TOML subset: a run of
@@ -412,7 +579,7 @@ fi
 
 TMP_TABLE="$(mktemp)"
 TMP_OUT="$(mktemp)"
-trap 'rm -f "$TMP_TABLE" "$TMP_OUT"' EXIT
+trap 'rm -f "$TMP_TABLE" "$TMP_OUT" "$TMP_LEDGER_PAIRS"' EXIT
 
 # Field separator is `|`, not a tab. Bash `read` (and, with some awk
 # implementations, `OFS`) treats a tab as an IFS *whitespace* character
@@ -478,18 +645,30 @@ render() {
 # Library status
 
 **Generated by \`scripts/gen-doc-status.sh\` — do not hand-edit.** Currency
-is this file's one job: it is anchored to a repository revision, never a
+is this file's one job: it is anchored to two DISTINCT values, never a
 typed date (docs/program/12-documentation-program.md §2).
 
-**Validated revision:** \`${REVISION}\`
+**Provenance revision:** \`${REVISION}\`
 
 Recorded explicitly in \`library/REVISION\`, not derived from \`git
 rev-parse HEAD\` at generation time. A live-HEAD anchor is self-
 referential for the commit that introduces or updates this file; an
 explicit, deliberately-set input has no such cycle, and \`--check\`
 regenerating from the same recorded value reproduces this file
-byte-for-byte (AC3). Bump \`library/REVISION\` only when you have
-revalidated the corpus against that commit.
+byte-for-byte (AC3). This value is a **bootstrap anchor only** — it
+proves \`library/\` already existed at some point on \`main\`'s history.
+**It does not, by itself, certify any cited source's bytes** (SRC-ATTEST
+Part 1) — that claim is the attested source-set digest below.
+
+**Attested source-set digest:** \`${LEDGER_DIGEST}\`
+
+The SHA-256 of \`library/SOURCE-ATTESTATIONS\`, the ledger binding every
+manifest-cited source to its exact blob OID at the commit the Librarian
+last reviewed it. This is the source-currency authority: it is
+squash-stable (a blob OID survives even though the commit that introduced
+it does not), so it can be updated in the very commit that changes a
+cited source, unlike \`REVISION\`. Regenerate a proposed ledger with
+\`scripts/gen-source-attestations.sh\`; only the Librarian commits it.
 
 ## Registered documents
 
@@ -504,8 +683,10 @@ ${ROWS}
 ## Regenerating
 
 \`\`\`
-scripts/gen-doc-status.sh          # regenerate in place from library/REVISION
-scripts/gen-doc-status.sh --check  # verify committed file matches that input (CI)
+scripts/gen-doc-status.sh              # regenerate this file in place (CI-checked)
+scripts/gen-doc-status.sh --check      # verify committed file matches (CI)
+scripts/gen-source-attestations.sh     # render a PROPOSED ledger for review;
+                                        # only the Librarian commits it
 \`\`\`
 EOF
 }
