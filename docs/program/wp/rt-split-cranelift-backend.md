@@ -189,21 +189,79 @@ series.
 Each is checkable by a reviewer; AC-2/3/7 are the ones that make the "pure
 move" claim auditable rather than asserted.
 
+> **★ AC-2 and AC-3 were REWRITTEN 2026-07-22, after slice 1 merged**, on the
+> adversary's post-merge findings and the Architect's ruling
+> (`evt_1y255ges6mftc`). Slice 1's verdict is **unchanged and clean** — it was
+> established by an independent line-multiset check, **not** by AC-2. What
+> changed is the *evidence contract for slices 2–7*: AC-2 was carrying a claim
+> it had never established, and AC-3 named a mechanism loosely enough that a
+> multiset could be read as discharging it. **If you cut a slice against the
+> pre-2026-07-22 wording of these two ACs, re-read them now.**
+
 1. **Decomposition matches the ruling.** The resulting modules are exactly the
    Architect's ruled list, and no module exceeds the ruled ceiling.
-2. **Exported-symbol-set identity.** The set of names reachable as
-   `ken_runtime::<name>` is **identical** before and after — verified by a
-   sorted symbol dump taken at the merge-base and at the candidate tip, diffed
-   to **empty**. The command used goes in the PR body. *(This is the checkable
-   home for "no public surface change"; a green suite does not prove it,
-   because a surface that only ever grows breaks no in-repo caller.)*
-3. **Move-purity.** For each slice, the moved text is identical to the source
-   text modulo module path and the visibility annotations required by AC-7. A
-   reviewer must be able to confirm this cheaply — state the mechanism in the
-   PR body (`git diff --find-renames`, or a normalized before/after token
-   diff over the moved ranges showing zero net content delta). **"The tests
-   pass" is not evidence of move-purity** — it is evidence of behavior on the
-   paths the tests reach.
+2. **Module-level exported-NAME identity.** The set of *module-level item
+   names* reachable as `ken_runtime::<name>` is **identical** before and
+   after — verified by a sorted symbol dump taken at the merge-base and at the
+   candidate tip, diffed to **empty**. The command used goes in the PR body.
+
+   > ⛔ **State this check at its measured strength and no further** (Architect
+   > ruling `evt_1y255ges6mftc`, 2026-07-22, on the adversary's measurement).
+   > `cargo doc --no-deps` + hrefs from `all.html` enumerates **module-level
+   > item names only.** Fields, enum variants, inherent methods, and trait
+   > impls are **not names in that namespace**, so they cannot move the diff.
+   > Four real public-surface mutations were run against the landed oracle and
+   > **all four went undetected** (baseline 14 hrefs → mutated 14 hrefs, diff
+   > empty): private field → `pub`; new public enum **variant**; new public
+   > inherent **method**; **deleted `impl Display`**.
+   >
+   > **AC-2 is necessary, never sufficient.** Cite it in a PR body as *"no
+   > module-level item name changed"* — that sentence, not "no public surface
+   > change." The whole-public-surface claim is carried by **AC-3**, which is
+   > where impls, methods, variants, and fields are actually held.
+   >
+   > This is the same defect as `DOC-VALIDATION-BINDING`, one day later in
+   > another team: **an enumeration checked against another enumeration of the
+   > same kind, while the property that matters lives outside the domain
+   > either one iterates.**
+
+3. **Move-purity — ORDERED item-level identity.** For each slice, every moved
+   production **declaration, function/method body, trait impl, and macro
+   invocation** is compared against its source as an **ordered token
+   sequence**, and the only permitted deltas are enumerated and reviewed
+   **separately**: module/import paths, namespace wiring, and the exact AC-7
+   visibility ledger. State the mechanism in the PR body.
+
+   > ⛔ **Order is load-bearing; a multiset is not enough.** A normalized line
+   > multiset is excellent as a **second inventory net** — it exposes
+   > dropped/added lines and it *produces* the AC-7 ledger as a measurement
+   > rather than as an author's enumeration confirmed after the fact — but it
+   > **discards order and context.** Swapping two effectful statements
+   > preserves the multiset and changes behavior. Use it; do not let it stand
+   > in for ordered identity.
+   >
+   > ⛔ **"The tests pass" is not evidence of move-purity.** It is evidence of
+   > behavior on the paths the tests reach. Retain pre-move coverage
+   > measurement plus targeted green as the **behavior** net — especially for
+   > trait impls and macro-generated behavior — but **never substitute tests
+   > for ordered move identity.**
+   >
+   > ⛔ **There is no "restructuring class" that relaxes this.** Every RT-SPLIT
+   > **production** slice remains move-pure under this AC and §10.5. The word
+   > *restructuring* may describe namespace scaffolding, imports, test-file
+   > redistribution, or the final facade — it **does not authorize production
+   > logic or content change** in any slice. Applied to the ruled order:
+   > slices **2** (`planning`), **3** (`compiled`), **5** (lowering support),
+   > and **6** (`artifact`) are predominantly ordered item moves; slice **4**
+   > (`lowering::core`) adds hierarchy and test scaffolding and slice **7**
+   > adds `artifact::api` plus the explicit facade — for those two, the **new
+   > wiring** gets its own separate review pass, and the moved production text
+   > is still held to ordered identity.
+   >
+   > ⛔ **And nothing in this AC is discharged by a byte-identity check of
+   > whole files.** Byte-identity goes red on lawful import and visibility
+   > churn — it was ruled out (operator, 2026-07-22) and stays out. The unit
+   > is the **moved item**, not the file.
 4. **Test preservation.** All 25 `#[cfg(test)]` blocks compile and pass. The
    total test-function count is unchanged; no test is deleted, `#[ignore]`d,
    or has an assertion weakened. Report the before/after count.
