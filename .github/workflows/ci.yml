@@ -89,24 +89,29 @@ jobs:
       # FLAKY, but because each does a full native codegen-and-link per test
       # case and would dominate whichever shard drew it. Measured at 56.5% of
       # a 47-minute run (docs/program/11-test-suite-and-ci-remediation.md §1):
-      #   - crates/ken-cli/tests/rt_parity_native.rs        (14m41s, 7 tests)  SKIPPED
+      #   - crates/ken-cli/tests/rt_parity_native.rs        (14m41s, 7 tests)  RESTORED
       #   - crates/ken-cli/tests/px8f_buffer_native.rs      ( 5m10s, 1 test)   RESTORED
       #   - crates/ken-verify/tests/px8f_write_partition.rs ( 5m09s, 1 test)   RESTORED
       #
-      # Two of the three now run in their own dedicated jobs below, in
-      # parallel, where they cost no wall clock. They stay in THIS exclusion
-      # so they are not ALSO drawn into a shard: the exclusion here and the
+      # All three now run in their own dedicated jobs below, in parallel,
+      # where they cost no wall clock. They stay in THIS exclusion so they
+      # are not ALSO drawn into a shard: the exclusion here and the
       # inclusions there must stay complementary, or a test is silently
       # duplicated or silently dropped — and a dropped test still shows a
       # green gate.
       #
-      # `rt_parity_native` remains skipped, and it is a ONE-TEST problem, not
-      # a binary-wide one: measured 7 tests / 266.7s wall / 470.6s CPU, where
+      # `rt_parity_native` is a differential (interp-vs-native) oracle, not
+      # CI hygiene — see `native-rt-parity` below and
+      # docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md. Measured 7 tests /
+      # 266.7s wall / 470.6s CPU as one binary, where
       # `fs_write_at_malformed_offset_narrows_to_invalid_offset` alone takes
-      # 221.4s against 42.2s for its near-identical sibling. Fix that one test
-      # and the binary lands ~90s and fits. See
-      # docs/program/11-test-suite-and-ci-remediation.md §1d and
-      # docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md.
+      # ~250s against ~35s for its near-identical sibling. That test is the
+      # only one of the 7 that opens two nested resource brackets where
+      # every sibling opens one — load-bearing to the property under test,
+      # not a simplification target — and the two are correlated, but
+      # nothing here isolates the topology as the CAUSE of the timing; see
+      # docs/program/11-test-suite-and-ci-remediation.md §1f for the
+      # unisolated-hypothesis framing.
       - name: Test
         run: >-
           cargo nextest run --workspace --locked
@@ -122,12 +127,18 @@ jobs:
 
   # ── Slow native binaries, each restored to the gate in its own job ───────
   #
-  # WHY A JOB EACH rather than letting them back into the shards: each is a
-  # SINGLE #[test] running ~4 minutes, so no scheduler can subdivide one. In
-  # a shard it would simply become that shard's critical path and push the
-  # whole gate out. Alone and in parallel each costs NOTHING: the worst shard
-  # is ~471s and each of these is ~250-300s, so they finish first and never
-  # set the pace. That headroom is the budget for restoring coverage.
+  # WHY A JOB EACH rather than letting them back into the shards: two of the
+  # three (native-write-partition, native-buffer) are a SINGLE #[test] each,
+  # running ~4 minutes, so no scheduler can subdivide either one. The third
+  # (native-rt-parity) is 7 tests in one binary, dominated by one outlier
+  # test — see the exclusion comment below — so it would still become
+  # whichever shard drew it, the same problem the single-test binaries have.
+  # In a shard any of the three would simply become that shard's critical
+  # path and push the whole gate out. Alone and in parallel each costs
+  # NOTHING: the worst shard is ~471s and each of these jobs is ~240-332s
+  # (native-rt-parity's Build+Test total is the largest of the three), so
+  # they finish first and never set the pace. That headroom is the budget
+  # for restoring coverage.
   #
   # ⚠ SCOPED ON PURPOSE — `-p <crate> --test <name>`, NOT `--workspace`.
   # With `--workspace`, nextest compiles all 200 test binaries in order to
@@ -138,9 +149,17 @@ jobs:
   # it is what proves the whole workspace still compiles under `--locked`.
   #
   # ⚠ THESE FILTERS MUST STAY COMPLEMENTARY TO THE SHARD EXCLUSION ABOVE.
-  # Each binary is named in two places: excluded there, included here. Change
-  # one without the other and the test is silently duplicated or silently
-  # dropped — and a dropped test still shows a green gate.
+  # Each binary is named in FOUR places: excluded from the shard filter
+  # above, included in its own dedicated job below, listed in build-test's
+  # `needs:`, and checked in the pass/fail loop below that. The four do NOT
+  # fail the same way if one drifts from the others — see
+  # docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md's Undo section for the
+  # per-case reasoning. The two ends of the risk: dropping only the
+  # dedicated job while `needs:`/the check loop still name it is a workflow
+  # syntax error (loud, nothing runs); dropping only the check-loop entry
+  # while the job and `needs:` stay is the dangerous one — the job still
+  # runs and gates the schedule, but its result is never inspected, so a
+  # real failure there can still leave `build-test` green.
   native-write-partition:
     name: native-slow (px8f_write_partition)
     runs-on: ubuntu-latest
@@ -202,6 +221,41 @@ jobs:
       - name: Test
         run: cargo nextest run --locked -p ken-cli --test px8f_buffer_native
 
+  # ~266.7s wall measured as one binary (7 tests). Not a wall-clock-only
+  # restoration: this binary is the interp/native RT-PARITY differential
+  # oracle (`assert_narrowed_alike`, `crates/ken-cli/tests/rt_parity_native.rs`),
+  # and while it was excluded here it ran nowhere — a green CI carried no
+  # information about whether native and interp agreed on these narrowing
+  # cases. See docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md.
+  native-rt-parity:
+    name: native-slow (rt_parity_native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Install cargo-nextest
+        # SHA-PINNED, not tag-tracked. `@nextest` / `@v2` are FLOATING tags the
+        # maintainer can repoint at any commit, so a compromised or moved tag
+        # would execute new code in our build with no diff and no review. A SHA
+        # cannot be moved; upgrading is an explicit, reviewable commit.
+        #
+        # Pinned to the RELEASE commit (v2.84.0) with the tool passed
+        # explicitly, NOT to the `@nextest` alias commit (37ba6721). The alias
+        # is auto-generated at publish time and sits off the release lineage
+        # with a one-word message, so it is immutable but not reviewable — you
+        # cannot map it back to a version without digging. This form is both.
+        #
+        # To upgrade: pick the new release SHA from
+        # https://github.com/taiki-e/install-action/releases and update the
+        # comment to match. Keep the version comment in sync with the SHA — a
+        # stale version comment is a false provenance claim.
+        uses: taiki-e/install-action@a6b2e2dcd845ddd7f509ce4f3ed3d922b80cc5d9 # v2.84.0
+        with:
+          tool: nextest
+      - name: Test
+        run: cargo nextest run --locked -p ken-cli --test rt_parity_native
+
   # ⛔ DO NOT RENAME OR DELETE THIS JOB. `build + test` is a REQUIRED status
   # check in branch protection (docs/ops/github-setup.md §"Required status
   # checks"). The sharded matrix above publishes checks named `test shard
@@ -221,7 +275,7 @@ jobs:
   build-test:
     name: build + test
     runs-on: ubuntu-latest
-    needs: [test-shard, native-write-partition, native-buffer]
+    needs: [test-shard, native-write-partition, native-buffer, native-rt-parity]
     # `always()` so this reports a definite conclusion even when a job fails
     # or is skipped. Without it, a failed dependency leaves this job *skipped*,
     # and a skipped required check blocks the PR with no useful signal.
@@ -232,13 +286,16 @@ jobs:
           shards='${{ needs.test-shard.result }}'
           write='${{ needs.native-write-partition.result }}'
           buffer='${{ needs.native-buffer.result }}'
+          rt_parity='${{ needs.native-rt-parity.result }}'
           echo "test-shard matrix:      $shards"
           echo "native-write-partition: $write"
           echo "native-buffer:          $buffer"
+          echo "native-rt-parity:       $rt_parity"
           failed=0
           for pair in "test shards:$shards" \
                       "native-write-partition:$write" \
-                      "native-buffer:$buffer"; do
+                      "native-buffer:$buffer" \
+                      "native-rt-parity:$rt_parity"; do
             name="${pair%:*}"; result="${pair##*:}"
             if [ "$result" != "success" ]; then
               echo "::error::$name did not pass ($result)." >&2

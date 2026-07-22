@@ -189,17 +189,18 @@ prescribes — same term, interpreter and native backend, identical value —
 has a real test for it:
 `crates/ken-cli/tests/rt_parity_native.rs`, which runs the same fixture
 through both executors and asserts on the exact result variant, not merely
-`is_err`. **As of this chapter's `REVISION`, that specific test binary is
-excluded from the sharded CI test run** — `.github/workflows/ci.yml` names it
-explicitly in an `-E 'not (binary(rt_parity_native) or …))'` filter — because
-one of its seven cases costs over three minutes of wall time on its own, not
-because any case fails. Read this precisely too: the differential discipline
-is real, and this specific test file asserts it faithfully — but a green CI
-run as of this page's `REVISION` does not currently execute this file, so it
-is not, right now, part of what a green CI run tells you. That is a fact
-about **which suite currently has a running home**, not about whether the
-native backend agrees with the interpreter — a claim this chapter cannot
-make or refute from the suite's exclusion alone.
+`is_err`. That test binary remains excluded from the **sharded** test run —
+`.github/workflows/ci.yml` names it explicitly in an
+`-E 'not (binary(rt_parity_native) or …))'` filter — because one of its seven
+cases costs over three minutes of wall time on its own, not because any case
+fails. It now has a separate `native-rt-parity` job that runs all seven cases;
+the required `build + test` job both depends on that job and checks its result.
+Read this precisely too: the shard exclusion prevents duplicate execution; it
+no longer means the binary is absent from CI. A green required CI run now
+includes this differential file through its dedicated running home. That is a
+fact about **which suite runs where**, not evidence that the native backend and
+interpreter must agree — the test's result, rather than its placement, carries
+that evidence.
 
 ## 6. Authority at execution time — the same unavailable gap, now at the boundary
 
@@ -234,10 +235,9 @@ sources that already establish the mechanism exists.
   register says that decision is still open; real, tested native-backend
   code exists in the tree today. What do you do with three facts that do
   not fit together, rather than reach for a reading that makes them fit?
-- What does it mean that a real differential test file can assert a true
-  property faithfully while currently being excluded from the CI run that
-  gates every merge — and why doesn't that exclusion, by itself, cast doubt
-  on the property the file asserts?
+- Why does `rt_parity_native` remain excluded from the sharded test command
+  even though a green required CI run now includes all seven of its cases, and
+  which separate workflow edges make that true?
 
 ---
 
@@ -285,15 +285,17 @@ and the code are cited as two distinct kinds of evidence, not blended into
 one. Section 5's landed-code claim is grounded directly in
 `crates/ken-runtime/src/cranelift_backend/`,
 `crates/ken-cli/src/main.rs`'s `native_build_file`, and
-`crates/ken-cli/tests/px4b_native_production.rs` existing and passing at
-this page's `REVISION`; its open-decision claim is grounded directly in
+`crates/ken-cli/tests/px4b_native_production.rs` existing in the attested
+source set and its real program-driving tests passing when this claim was last
+checked; its open-decision claim is grounded directly in
 `spec/90-open-decisions.md`'s own recorded `OQ-backend-target` status and
 `spec/40-runtime/45-native-backend.md` §5's own "does not start until"
 wording — three independently-checked sources, stated as a genuine, unfixed
-inconsistency, not reconciled by this page. Section 5's CI-exclusion claim
-is grounded directly in `.github/workflows/ci.yml`'s own exclusion filter,
-current as of this page's `REVISION`; this page does not speculate about
-when or whether that will change. Fragments cited are drawn from the
+inconsistency, not reconciled by this page. Section 5's CI-routing claim is
+grounded directly in `.github/workflows/ci.yml`'s complementary shard
+exclusion, dedicated `native-rt-parity` job, `build-test` dependency, and
+result check, all bound by this page's source attestation. Fragments cited are
+drawn from the
 already-selected, registered set in [`fragments.md`](fragments.md); this
 chapter does not introduce a fresh selection.
 

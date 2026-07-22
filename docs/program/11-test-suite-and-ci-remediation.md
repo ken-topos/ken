@@ -225,8 +225,8 @@ sets the pace. That is the budget for buying coverage back.
 | Binary | Tests | Measured | Fits? |
 |---|---:|---:|---|
 | `px8f_write_partition` | 1 | 309s | ✅ **restored** — ~374s with build |
-| `px8f_buffer_native` | 1 | 310s | ✅ fits identically — restore next |
-| `rt_parity_native` | 7 | 881s | ❌ ~2x the critical path |
+| `px8f_buffer_native` | 1 | 310s | ✅ **restored** — own job |
+| `rt_parity_native` | 7 | 881s (`--workspace`, unscoped) | ✅ **restored** — see §1d/§1f, scoped it fits |
 
 Each goes in **its own job**, not back into a shard. A single 5-minute
 `#[test]` cannot be subdivided, so inside a shard it just becomes that
@@ -240,12 +240,16 @@ shard's critical path and pushes the whole gate out.
 > is the cleanest read we will get on what C6 actually bought, and it is
 > free: the number falls out of the next run.
 
-> ⚠ **The filter is stated in two places and they must stay complementary.**
-> The binary is *excluded* from the shard lane and *included* in its own job.
-> Change one without the other and the test is silently duplicated, or
-> silently dropped — **and a dropped test still shows a green gate.** Likewise
-> every test-running job must appear in the aggregator's `needs` *and* be
-> checked in its script; a job missing there reports green however it failed.
+> ⚠ **Each binary is named in four places and they must all stay
+> complementary.** It is *excluded* from the shard lane, *included* in its
+> own job, listed in the aggregator's `needs`, and checked in its pass/fail
+> script. **The four do not fail the same way if one drifts** — dropping
+> the job while `needs`/the check still name it is a workflow syntax error
+> (loud, nothing runs); dropping only the check-loop entry while the job
+> and `needs` stay is the dangerous one, since the job still runs and gates
+> the schedule but its result is never inspected. See
+> `docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md`'s Undo section for the
+> full per-case reasoning.
 
 ### 1d. Experiment: does `rt_parity_native` parallelize? (PR #808, closed)
 
@@ -269,9 +273,11 @@ shard's critical path and pushes the whole gate out.
 > test. Pre-registering the readings was still right — it is what made the
 > miss obvious instead of something to narrate around.
 
-**Not restored.** Job total ~470s against a ~471s critical shard fits by
-about a second — noise, not headroom, and it would make `rt_parity`
-co-critical with zero margin.
+**Not restored inside a shard** — job total ~470s against a ~471s critical
+shard fits by about a second — noise, not headroom, and it would make
+`rt_parity` co-critical with zero margin. **§1f: restored instead as its own
+dedicated job**, same pattern as its two siblings — outside the sharded
+lane, its ~266.7s total costs zero wall clock in parallel.
 
 **The target is narrow and specific.** Compare two tests with near-identical
 names and nominally the same shape of work:
@@ -280,9 +286,11 @@ names and nominally the same shape of work:
 - `fs_write_at_malformed_offset_narrows_to_invalid_offset` — **221s**
 
 **5x**, where the three read-side counterparts are all ~53s. That asymmetry
-looks pathological rather than inherent. Bring that one test into sibling
-range and the binary lands near 90s and fits trivially — restoring 7 tests
-of coverage for one test's worth of investigation.
+looks pathological rather than inherent, and **§1f documents a correlate**
+(a unique nested-resource-bracket topology, load-bearing to the property
+under test — not a bug) **without isolating it as the cause** of the timing.
+It no longer needs fixing to close `CI-SKIPPED-NATIVE-TESTS`, since the
+dedicated-job approach doesn't require the outlier gone.
 
 ### 1e. ✅ TAKEN and CONFIRMED: the dedicated jobs no longer over-compile
 
@@ -325,12 +333,54 @@ which binaries can come back.
 and a scoped job no longer proves the rest of the workspace still compiles —
 which is fine only because the shards already do.
 
+### 1f. ✅ CLOSED: `rt_parity_native` restored as a dedicated job, outlier not fixed
+
+`CI-SKIPPED-NATIVE-TESTS` reframed as verification integrity, not CI
+hygiene, after `BUDGET-EFF`: because this binary ran nowhere, a green CI on
+that WP carried no information about whether native and interp agreed on
+the fix. Re-measured fresh against current `main` before acting (recent PX8
+native-lowering commits landed since §1d): the 221s-class outlier is **still
+present at ~250.5s**, unimproved.
+
+**Traced the topology rather than accepting the timing as pathological
+noise, but stopped short of a causal claim.**
+`fs_write_at_malformed_offset_narrows_to_invalid_offset` (250.5s) is the
+*only* one of the 7 tests that opens **two nested resource brackets**
+(`withResource "source" ResourceRead` wrapping `withResource "sink"
+ResourceWriteCreate`); every sibling test opens exactly one. This is not
+incidental: the second bracket is what lets the write succeed at the rights
+layer (source read-only, sink freshly write-created), isolating the
+dispatch-skip property from a coincident rights fault — its near-identical
+sibling (`..._without_write_right_...`, 35.5s) instead reuses the same
+read-only file specifically to construct the rights-fault-overlap case. The
+two-bracket topology looks load-bearing to the property under test, not a
+simplification target — and it is a unique topology among the comparable FS
+cases, coincident with a ~7x timing outlier. **That is a correlation, not an
+isolated cause**: nothing here rules out other explanations, and no
+experiment varied bracket-nesting depth alone while holding everything else
+fixed. Whether it is native Cranelift codegen cost scaling super-linearly
+with resource-bracket nesting depth is an unisolated hypothesis — squarely
+runtime team's native-lowering domain to investigate if it's worth chasing,
+not Verify's, and not asserted here as established.
+
+**Closed via Option 2 (§1c), not Option 1**: the binary doesn't need to get
+faster to close this — its own ~266.7s total already fits the same headroom
+that let `native-buffer`/`native-write-partition` return, so it gets the
+same dedicated-job treatment (`native-rt-parity` in `.github/workflows/ci.yml`).
+All 7 previously-skipped assertions — the `assert_narrowed_alike`
+interp/native differential oracle (6 tests) plus the pure elaborator-scope
+probe (1 test) — now run in CI on every PR/push. See
+`docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md` for the closure record and
+this section for the nested-bracket topology/timing correlation, recorded
+here as a follow-on hypothesis for the runtime team/Architect (not an
+established cause) rather than filed as its own tracker issue.
+
 ### ⛔ Stop here
 
 The per-test distribution is flat (§1a), so there is no fat left to cut. The
-remaining levers are each worth 1-2 minutes for real complexity. **The next
-genuine reduction has to come from the three skipped binaries
-(`CI-SKIPPED-NATIVE-TESTS`) getting faster, not from scheduling.**
+remaining levers are each worth 1-2 minutes for real complexity. **All three
+previously-skipped binaries (`CI-SKIPPED-NATIVE-TESTS`) are now restored
+(§1e/§1f) — none by getting faster, all by dedicated job.**
 
 ## 2. The suite, measured
 

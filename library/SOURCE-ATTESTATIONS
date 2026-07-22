@@ -1,5 +1,5 @@
 # ken-source-attestation-v1 object-format=sha1
-39ef26aeefddbc8b184fc3075b454158aa8ee990	.github/workflows/ci.yml
+69ab5775a2e9380ce0c26e109204a1c42310757d	.github/workflows/ci.yml
 996ca2137ff8141755ba7cf31157ef1212ba606e	README.md
 ba72396b7fac154fdb333017840100d26e25f961	catalog/examples/CommandLine/Forge.ken.md
 8ece24e734baf90ea149c11326229202eaeca404	catalog/guide/decomposition-abstraction.ken.md
