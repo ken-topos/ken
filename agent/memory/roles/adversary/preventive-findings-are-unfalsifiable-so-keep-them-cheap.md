@@ -63,3 +63,30 @@ ones takeable.
 
 Related: [[the-post-merge-yield-is-vantage-not-seat-quality]],
 [[a-repro-is-evidence-not-a-completion-oracle]].
+
+## ⚠ Blind spot — a TRUE record becomes a false preventive claim by time alone
+
+**Added 2026-07-22 (COORDINATION §7a).** The rule above prices a preventive
+finding by what it costs to act on. It assumes the claim's truth is fixed. **For
+mutable external state it is not.**
+
+A fleet memory note recorded, correctly and from measurement, that the publisher
+App lacked `Workflows` permission. Nine days later the operator had granted it.
+**Nothing changed in any file, nothing went red, and the note simply became false
+in place** — then cost a full ring an escalation, because two seats cited it
+instead of testing it.
+
+⇒ **A cheap-to-act-on finding about mutable state may still be expensive if it is
+CITED rather than RETESTED.** The cost model holds; what fails is the assumption
+that a measured claim stays measured.
+
+- **Never let a capability, permission, quota, remote-ref, or infra fact into a
+  durable artifact as a claim.** Record the *test* — the one command that answers
+  it — not the answer. `§7a`: tested at point of use, never cited.
+- **When something I wrote is cited back at me as grounds for a decision, the
+  first question is when it was measured**, not whether it was right.
+- ⚠ **Interacts with §10⁻ rule 2**, which batches lesson artifacts on the
+  rationale that *"a lesson is not perishable — it is equally true an hour
+  later."* True for principles, **false for state records**, and batching
+  lengthens the decay window. The two are consistent only if §7a is actually
+  enforced upstream, i.e. no state claim ever becomes a lesson.
