@@ -191,8 +191,12 @@ move" claim auditable rather than asserted.
 
 > **★ AC-2 and AC-3 were REWRITTEN 2026-07-22, after slice 1 merged**, on the
 > adversary's post-merge findings and the Architect's ruling
-> (`evt_1y255ges6mftc`). Slice 1's verdict is **unchanged and clean** — it was
-> established by an independent line-multiset check, **not** by AC-2. What
+> (`evt_1y255ges6mftc`). **Slice 1's verdict is unchanged and clean**, and it
+> rests on a *conjunction*, not on any single oracle: its ordered moved content
+> was reviewed directly; the adversary's line-multiset check independently
+> established inventory and visibility-ledger completeness; and Runtime QA's
+> pre-move coverage plus targeted tests covered the moved behavior and impl
+> surface. **AC-2 established only module-level item-name identity.** What
 > changed is the *evidence contract for slices 2–7*: AC-2 was carrying a claim
 > it had never established, and AC-3 named a mechanism loosely enough that a
 > multiset could be read as discharging it. **If you cut a slice against the
