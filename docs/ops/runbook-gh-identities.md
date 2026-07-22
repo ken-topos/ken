@@ -107,8 +107,36 @@ Org → **Settings → Developer settings → GitHub Apps → New GitHub App** (
 - [ ] **Webhook: uncheck Active** for now (re-enable later only for the mootup
       bridge).
 - [ ] **Repository permissions:** Contents = **Read & write**; Pull requests =
-      **Read & write**; Checks = **Read & write**; Actions = **Read**; Metadata =
-      **Read** (auto). Leave everything else No access.
+      **Read & write**; Checks = **Read & write**; Actions = **Read**;
+      **Workflows = Read & write**; Metadata = **Read** (auto). Leave everything
+      else No access.
+
+> ### ⚠ `Workflows` is a SEPARATE permission from `Contents`, and it is REQUIRED
+>
+> GitHub treats any path under `.github/workflows/` as governed by the
+> **`Workflows`** permission, *not* `Contents`. Without it a push carrying such a
+> path is rejected outright — **before** a PR or CI run exists:
+>
+> ```
+> ! [remote rejected] wp/<branch> -> wp/<branch>
+>   (refusing to allow a GitHub App to create or update workflow
+>    `.github/workflows/ci.yml` without `workflows` permission)
+> ```
+>
+> **Granted by the operator 2026-07-21**, ahead of sharding the CI jobs. This
+> line previously omitted `Workflows`, which was accurate when written and became
+> false the moment the grant happened.
+>
+> ⛔ **Two seats independently concluded a WP was undeliverable from the stale
+> version of this list on 2026-07-22**, and one of them escalated to the operator
+> to request a permission that already existed. The disconfirming evidence was in
+> the repo throughout — three `ci.yml` commits authored `ken-ci[bot]`.
+>
+> ★ **A provisioning runbook records what was configured ONCE; the App's actual
+> permissions are LIVE STATE that changes without touching this file.** Treat
+> this list as a starting point with a timestamp, never as the current answer.
+> **To answer "can the publisher push X?", test it or ask the operator — do not
+> read it off this page.**
 - [ ] Create the App. **Note the App ID.**
 - [ ] **Generate a private key** → download the `.pem`. Store it in your secret
       manager — it is a credential equal to all the App's powers; never commit it.
