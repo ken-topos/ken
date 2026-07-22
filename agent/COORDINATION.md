@@ -32,6 +32,45 @@ what you need; polling burns tokens for zero value. A missing notification is a
 *stall* — catching stalls is the team leader's watchdog job, not yours. Only
 team leaders and the Steward run schedulers.
 
+### 1a. ⛔ "Event-driven" REQUIRES A NAMED EVENT. A hold you cannot name is a stall.
+
+**Measured, 2026-07-22 — a three-way circular wait that no participant could
+see, and that no watchdog would ever have broken:**
+
+| seat | believed it was waiting for | actually |
+|---|---|---|
+| `verify-leader` | the implementer to pick up a new kickoff | idle |
+| `verify-implementer` | *the leader's merge Decision* on work already finished | idle |
+| `verify-qa` | nothing — verdict delivered, handed back | idle |
+
+Every seat was **correctly** event-driven by the letter of §1. The events they
+were each waiting for were **each other**. A QA-approved WP sat with no Decision
+opened, and the ring would have held indefinitely: nothing was going to arrive.
+
+⇒ **The rule §1 was missing is that a wait must have an ADDRESS.**
+
+1. **When you hold, you must be able to name (a) the `evt_`/`dec_` id or the
+   concrete act you are waiting for, and (b) the SEAT that owes it.** If you
+   cannot name both, you are not event-driven — **you are stalled, and it is
+   your job to find out, not to keep holding.**
+2. **When you hand work back, name the owed act AND its owner explicitly.**
+   *"Handed back to X"* is what created the deadlock above: it says who received
+   it, not what they owe. Write *"@X owes the merge Decision on `<sha>`"*.
+3. **A leader holding for a member must confirm the member is actually working**
+   — pane, status, or post. §13's *delivery ≠ engagement* rule applies to your
+   own ring, not only to kickoffs you receive.
+4. ⛔ **A ring silent with no member able to name its blocking event is the
+   single cheapest stall to detect and the most expensive to miss.** Detect it
+   at the ring, before the Steward's backstop is the only thing left.
+
+★ **Why the backstop cannot be the answer:** the Steward's liveness sweep read
+all three of those seats as BUSY for hours — a completed turn holding an
+orphaned shell reads identical to a running one unless the detector is
+specifically built to tell them apart. **A liveness instrument you did not
+falsify in the false-BUSY direction reports "all clear" over exactly this.**
+The ring knowing what it waits for is the primary mechanism; the watchdog is
+insurance, and insurance failed.
+
 ## 2. Mention discipline
 
 **Mention an agent iff you are (a) asking them a question or (b) expecting a
@@ -308,6 +347,54 @@ reality: "X exists" → grep for it; "matches pattern Y" → read Y end-to-end. 
 a *verified* language a spec claim about the kernel must be checked against the
 kernel, not assumed.
 
+### 7a. ⛔ MUTABLE EXTERNAL STATE IS TESTED AT POINT OF USE, NEVER CITED
+
+Grounding a premise in a **document** works for facts that are true by
+construction — what a function does, what a spec says. It **fails** for
+**credentials, permissions, scopes, quotas, remote refs, and infrastructure**,
+because those change *without touching any file that describes them.* Nothing
+goes red when such a note goes stale; the note simply becomes false in place.
+
+**Measured, 2026-07-22.** A finished, QA-approved WP was declared undeliverable
+by **two seats independently** — one citing a fleet memory note, one citing
+`docs/ops/runbook-gh-identities.md:109` — both saying the publisher App lacked
+`Workflows` permission. **The operator had granted it the day before.** The
+Steward escalated and asked for a permission that already existed.
+
+The disconfirming evidence was in the repository the entire time: three commits
+under `.github/workflows/` authored by that very App.
+
+**Two rules, and the second is the one that was actually missing:**
+
+1. **Test it.** A capability question — *"can this credential push that path?"*
+   — is answered by attempting it, usually in one command. ⛔ **Never escalate a
+   capability claim you have not tried.**
+2. ★ **When an observation contradicts a record, the RECORD is what you
+   re-verify — not the observation you explain away.** `verify-leader` found the
+   three commits, held both facts side by side, and wrote *"I can't tell which;
+   flagging that I don't know rather than guessing."* **That is the correct
+   move and it is what got this corrected.** The Steward saw the same evidence
+   and explained it away as "probably operator-pushed" — reconciling the anomaly
+   *to* the record instead of testing the record against the anomaly.
+
+⇒ A note about mutable state is **evidence about the past**, carrying a
+timestamp whether or not one is written. Cite it to form a hypothesis; never to
+close a question. And when you find such a note false, **fix it in place and say
+when it became false** — a silently corrected doc teaches the next reader
+nothing.
+
+### 7b. ⛔ NEVER DEFAULT A VALUE YOUR WHOLE CONCLUSION RESTS ON
+
+Related failure, same day, three instances: an operand chosen without checking
+which point in the graph it sat at (`dd715950^` — a point on `main`'s history —
+used to answer a question about a *PR's base*); a precedent asserted from a
+branch **name** rather than its diff; a claim about a file cited from another
+seat's characterization rather than by opening the line.
+
+Each returned a **confident, wrong** answer rather than an obviously broken one.
+⇒ **Read the assertion back out of the artifact, and check the operand sits at
+the point in the graph your question is about.**
+
 **Verify the *property*, not the representative case (promoted from F4 + K1).**
 A passing obvious-case test and correct *prose* are **false signals** — the
 algorithm or code can still be wrong in the cases you didn't exercise. (F4: a
@@ -446,6 +533,50 @@ correction extends it.
 
 This is a fixed *assignment* rule, not a new edge — it **removes** edges (the
 whole negotiation cluster) rather than adding one.
+
+## 10⁻. ⛔ PROCESS WORK IS SUBORDINATE TO PRODUCT FLOW — the Steward's hard ceiling
+
+**Measured, 2026-07-22.** Between 17:10 and 19:45 — **two and a half hours** —
+every one of eleven merges to `main` was process: five memory files, three
+publisher-script changes, one playbook, one frame, one tracker sync, plus a
+`library/REVISION` bump that existed only to repair `main` after one of those
+merges reddened it. **Zero touched `crates/`, `spec/`, or `conformance/`.**
+Meanwhile a QA-approved verify WP sat undelivered and a QA-clean runtime WP sat
+held. The operator noticed from outside and asked what was going on.
+
+★ **Nothing external was pulling that work. The chain was self-sustaining:** a
+publisher bug produced a playbook lesson, which produced a memory promotion,
+which produced an adversary finding, which produced a frame, which produced an
+Architect escalation. **Every link was individually correct and defensible.**
+That is precisely why it ran unchecked — there was no step at which the right
+local decision was to stop. The Steward was both producer and consumer, so the
+loop had no external brake.
+
+⇒ **The corpus exists to make the build better. When it competes with the build,
+it has inverted its purpose.** Three binding rules:
+
+1. ⛔ **NO process merge while a ring holds finished, unmerged work.** If any WP
+   is QA-approved-and-unpublished, or held on the Steward, **that is the queue** —
+   playbook edits, memory promotions, and corpus refactors wait. A finished WP
+   that cannot land is the most expensive object in the federation: it has
+   consumed a full ring's build + review + QA and is returning nothing.
+2. **Retro and lesson artifacts BATCH; they do not each get a merge.** A lesson
+   is not perishable — it is equally true an hour later. Accumulate them and land
+   them in one publish at a genuine seam. **Publishing them individually converts
+   reflection into throughput and makes a stalled fleet look busy** — from the
+   outside, an active merge stream is indistinguishable from progress.
+3. ★ **A process change must name the product WP it unblocks, or wait.** If you
+   cannot name one, it is not urgent by definition. ⚠ Watch for the inverted
+   form specifically: *"I must harden this mechanism before I can safely use
+   it."* That reasoning is how the loop above sustained itself, and it is
+   **almost always** an invitation to do the process work first — check whether
+   the mechanism has actually failed on the work in front of you, or whether you
+   are hardening it against an imagined future call.
+
+★ **The tell, and it is available in one command:** `git log --since=<3h ago>
+origin/main` with paths. **If nothing in the window touched product, stop and
+find out why** — the answer is never "the corpus needed attention." It is
+usually that a ring is stalled and something is reporting it as fine.
 
 ## 10. Knowledge promotion: retro → synthesis → promotion ladder
 

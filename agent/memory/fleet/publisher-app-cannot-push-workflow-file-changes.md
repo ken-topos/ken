@@ -7,6 +7,41 @@ metadata:
   scope: fleet
 ---
 
+# ⛔⛔ SUPERSEDED 2026-07-22 — THE PERMISSION WAS GRANTED. THIS TITLE IS NOW FALSE.
+
+**The operator granted the `ken-ci` App the `Workflows` permission on
+2026-07-21**, ahead of sharding the CI jobs. `.github/workflows/**` changes ARE
+deliverable through the scripted publisher. Everything below describes a real
+constraint that was real *when written* and is no longer true.
+
+## ★ How this note caused harm, which is the reusable part
+
+On 2026-07-22 two seats independently concluded that a finished, QA-approved WP
+(`CI-SKIPPED-NATIVE-TESTS`) was undeliverable — one from this note, one from the
+matching stale line in `docs/ops/runbook-gh-identities.md`. The Steward escalated
+to the operator and **asked them to grant a permission they had already granted.**
+
+The disconfirming evidence was in the repository the whole time: three commits
+under `.github/workflows/ci.yml` authored `ken-ci[bot]`. `verify-leader` FOUND
+them, and did the right thing — held the documented claim and the contradicting
+observation side by side and said *"I can't tell which; flagging that I don't
+know rather than guessing."* The Steward did the wrong thing: explained the
+observation away as "probably operator-pushed" and acted on the nine-day-old note.
+
+⇒ **A recorded constraint about MUTABLE EXTERNAL STATE — credentials, scopes,
+quotas, infra — is evidence about the past, not a fact about the present.** It
+carries a timestamp whether or not one is written down. When an observation
+contradicts such a record, **the record is what needs re-verifying, not the
+observation that needs explaining away.**
+
+⇒ **The generalization is not "keep notes fresh"** — you cannot notice that a
+note went stale, because nothing changes when it does. It is: **for mutable
+external state, TEST AT POINT OF USE.** A push either works or it doesn't, and
+finding out costs one command. Never escalate a capability claim you have not
+tried.
+
+---
+
 **2026-07-13 — kenfmt capstone C publish blocked.** C was Architect+QA
 APPROVED (`91ea984d`) and honesty-gate-clean, but the scripted publisher
 (`scripts/scripted-pr-automerge.sh`) failed at the **branch push** — not CI, not
