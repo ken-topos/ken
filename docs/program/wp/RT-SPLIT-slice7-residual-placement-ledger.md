@@ -30,7 +30,7 @@ per AC-9's quantifier, an item reachable **only** through a lower-LCA owner
 |---:|---|---|---|
 | 1 | `oriented_test_frame` | `lowering/core/tests/control.rs` | control×3 |
 | 2 | `oriented_test_interface` | `lowering/core/tests/control.rs` | control×13, via oriented_test_frame |
-| 3 | `recursive_computational_result_depth` | `lowering/core/tests/control.rs` | control×1 |
+| 3 | `recursive_computational_result_depth` | `lowering/core/tests/mod.rs` | control×1 (`control.rs:1185`) + `tests/mod.rs`×1 (`mod.rs:140`, `recursive_computational_result`) — LCA of a `control` user and a `tests/mod.rs` user is `tests/mod.rs` |
 | 4 | `self_consistent_join_site` | `lowering/core/tests/control.rs` | control×2 |
 | 5 | `self_consistent_root_join_site` | `lowering/core/tests/control.rs` | control×4 |
 | 6 | `emit_process_entrypoint_object_with_symbols` | `lowering/core/tests/constructors.rs` | constructors×1 |
@@ -82,6 +82,23 @@ per AC-9's quantifier, an item reachable **only** through a lower-LCA owner
 in another subject module, so its LCA lifts to `tests/mod.rs`.
 
 ## Corrections found by executing the fold
+
+> ⛔ **Row 3 was left stale by this very section, and that is the finding.**
+> The correction below, and the totals, were both updated to agree with the
+> code — **the row they correct was not.** A reader checking the table got one
+> answer and a reader reading the corrections got another, from one document
+> that declares every row re-derivable and binding.
+>
+> This is the same defect the corrections describe, one level up: **a claim and
+> its correction living in two places with no mechanism keeping them in step.**
+> Appending a correction is not making a correction. The row is the
+> authoritative statement; the appendix explains it, and must never be the only
+> place the truth appears.
+>
+> Caught by @architect on `dec_42h3pjehkpwfg`. On the fold I re-derived **all
+> 37 rows** against the tree rather than spot-fixing the one reported —
+> 36 were already consistent, row 3 was the only divergence.
+
 
 Two rows were wrong and **compiling is what found them** — both the same
 window defect, a user site outside the scan:
