@@ -449,6 +449,81 @@ move" claim auditable rather than asserted.
    > should be able to name what would catch its violation** — and if one
    > can't, that is the finding.
 
+9. **⛔ RESIDUAL-PARENT CLOSURE IS TWO-LAYERED — NEITHER LAYER SUBSTITUTES FOR
+   THE OTHER.** (Architect `evt_2mexay4h5tr6y`.) Binding on every slice from 5
+   onward, and the condition under which any "no further assignment gap" claim
+   may be made.
+
+   **What is already closed, and exactly how far it reaches.** The 92-name
+   scaffold-import reconciliation is valid and **closes the emitted import
+   population** with zero residue:
+
+   ```
+   lowering/mod.rs unconditional scaffold import list        92 names
+     -66  moved into lowering/mod.rs in slice 5
+     - 4  repository-owned, already assigned and landed:
+            backend_module          -> surface.rs   (slice 1)
+            CraneliftBackendError   -> surface.rs   (slice 1)
+            NativeSeedEnvironment   -> surface.rs   (slice 1)
+            CompiledModule          -> compiled.rs  (slice 3, pub(super))
+     -22  external deps: cranelift 13 + crate-level Runtime* 9  (no destination)
+     =  0  residue
+   ```
+
+   ⛔ **It does NOT close the residual-parent DECLARATION population**, and the
+   distinction is the whole point of this AC. **A closed enumeration is not a
+   closed class.** The scaffold list is complete over *imported names*; the
+   property that matters is *every parent declaration that must move*. **A
+   facade-declared, facade-only-consumed item is in the second set and not the
+   first** — so it is invisible to that instrument by construction, not by
+   oversight.
+
+   **Both layers are required:**
+
+   a. **A complete source-coverage partition.** Every non-trivia source span in
+      the residual parent is attributed to exactly one of: a moved
+      item/macro invocation, a retained facade declaration/re-export, or an
+      explicitly forbidden deletion.
+
+   b. **A macro-aware semantic inventory.** Every declaration — **including
+      declarations generated inside macro invocations** — with its `cfg` reach
+      (§10.4b) and its destination recorded.
+
+   **Why both, empirically:** line coverage alone passed the earlier semicolon
+   mis-split; a declaration regex missed the indented `thread_local!` statics.
+   **`thread_local!` is a macro invocation, so its statics are not items a
+   declaration enumerator matches, and they are not names in the import list
+   either** — invisible to *both* single instruments simultaneously, which is
+   precisely why neither closure found them.
+
+   c. **The configuration matrix is the independent shape net.** Default
+      non-test, test, and non-test-with-`px8-ds-test-support` must **all**
+      compile in the appropriate targeted/CI gates, **with public/visibility
+      ledgers compared in the default AND the feature-enabled domains.** A
+      ledger taken in one domain is silent about items whose reach is in
+      another (§10.4b).
+
+   **⛔ Frame corrections this AC carries — do not restore the withdrawn text:**
+   - **Withdraw every "exactly two declarations" and every "closed by
+     construction" claim, in any form.** *"Exactly two consts in the scaffold
+     list"* remains true **and is not a population bound.** The "exactly two"
+     figure was itself a **column-0 regex artifact**: re-run at any indentation,
+     the facade production region holds **eight** bare-value declarations — the
+     2 ruled consts plus **6 indented `static`s inside `thread_local!` blocks**.
+   - Item 6's assignment gap may claim closure **only** when the 92-row scaffold
+     reconciliation, the full parent source-coverage partition, the macro-aware
+     declaration/`cfg` ledger, **and** the configuration evidence all reconcile
+     with **zero residue**.
+
+   > ★ **The transferable bar, and why it is the one to write:** prefer
+   > *"every line of the parent is attributed to a destination"* over *"every
+   > name in list L is assigned."* The first is **checkable by construction and
+   > has no window in which it can be narrower than the class**; the second is
+   > only ever as complete as whoever built L. **Compute the complement of your
+   > own enumerator** — the lines your instrument covers, subtracted from the
+   > file — and read what falls out. It is one coverage subtraction, and it is
+   > the step that found all three missing `thread_local!` blocks.
+
 ## 8. Guardrails — do not reopen
 
 - **Do not redesign the backend.** If you find something that looks wrong
@@ -468,6 +543,44 @@ move" claim auditable rather than asserted.
   `lib.rs:39` citation were measured at `origin/main @ c4f55c19`. Re-verify at
   pickup; **if a fixed input turns out false against the landed code, say so
   and escalate — do not quietly build around it.**
+
+### 8a. ★ The method this frame keeps re-learning — state your frame as a claim
+
+**Every disposition in §10 that had to be corrected was rigorous inside a frame
+nobody audited, because the frame was never stated as a claim.** This is not a
+retrospective; it is the working instruction for slices 6–7.
+
+**Four instances, one shape:**
+
+| the reasoning | the unstated frame | what it missed |
+|---|---|---|
+| *"these constraints jointly exclude every option"* | ranged over **the reporter's search**, not over the constraint set | a fourth option existed — the `#[cfg(test)] pub(super)` adapter |
+| *"the complete inverse-call ledger"* | complete over **test** users | the sole **production** caller — the basis of the ownership ruling |
+| *"exactly two consts"* | items matched at **column 0** | six indented `thread_local!` statics |
+| *"reconcile every name in the scaffold import list"* | complete over **imported** names | facade-declared, facade-only-consumed declarations |
+
+**None of these were careless.** Each was a correct statement about its own
+domain, restated as a property of the class. **An unstated exhaustiveness claim
+is never audited, because nobody notices a claim that was never made aloud.**
+
+**So, three standing instructions:**
+
+1. **Write the quantifier at the point of assertion.** *"Complete"*, *"every"*,
+   *"exactly N"*, *"the only"* — each must name the population it ranges over,
+   in the sentence that makes the claim. A reader cannot supply a scope the
+   author left implicit; they will supply the **widest** one.
+2. **Let the artifact emit the population, then partition it on an axis the
+   rule is silent about.** The instrument that actually *closed* a class here
+   did not search harder — it took the scaffold's own emitted import list and
+   split it by **item kind**, an axis §10.2's family language never mentions,
+   and the unclassifiable cell fell out immediately. Ask what your partition
+   **cannot express** (§10.4b is exactly that question asked of
+   production-vs-`cfg(test)`).
+3. **Distinguish "the ruling is defective" from "the ruling has an option I did
+   not enumerate."** They read alike and **route completely differently** — the
+   first re-opens a settled ruling and spends the Architect's attention; the
+   second is answered in one reply. **Check which one you have before
+   escalating**, and say which one you are claiming.
 
 ## 9. Sequencing and branches
 
@@ -551,8 +664,8 @@ remains in the facade.**
   their directly-owned decoding state. **It does not own compilation policy.**
 - **`artifact/mod.rs`** — `compile_expr`, `compile_program_expr`,
   `compile_expr_with_declarations{,_and_process_input}`, object/JIT module
-  creation, verifier invocation, target naming, private object/JIT
-  materializers.
+  creation, target naming, private object/JIT materializers. **⛔ NOT verifier
+  invocation** — see the `verify_cranelift_function` ruling below.
 - **`artifact/api.rs`** — all outward runners, preflight and
   differential/report orchestration, existing object-emission entrypoints.
 - **`lowering/core.rs`** — `compile_expr_into_module` and exactly this SCC:
@@ -583,8 +696,48 @@ remains in the facade.**
 - `with_px8ds_retired_flat_order` and the PX8 test/mutation ledgers stay with
   lowering; the facade explicitly re-exports their pre-existing visibility.
 - `Px8trTrapProvenanceEvent`, `NativeIntLoweringMutation`, and
-  `NATIVE_INT_LOWERING_MUTATION` remain **test-only lowering** ownership — not
-  artifact, not surface.
+  `NATIVE_INT_LOWERING_MUTATION` are **lowering-owned** — not artifact, not
+  surface. ⛔ **Their ownership is lowering; their *reach* is not "test-only"
+  and this frame no longer says so** (Architect `evt_2mexay4h5tr6y`).
+  `PX8DS_RETIRED_FLAT_ORDER` and `with_px8ds_retired_flat_order` carry
+  `#[cfg(any(test, feature = "px8-ds-test-support"))]` and are therefore
+  **lowering-owned, feature-enabled production/test instrumentation.** See
+  §10.4b — classify by compilation reach, never by a production/`cfg(test)`
+  binary.
+- **`verify_cranelift_function` is LOWERING-OWNED** (Architect
+  `evt_3tgaw9ws44fqg`), moved byte-for-byte and private into `lowering/mod.rs`
+  in **slice 5**. It has exactly **one** production consumer — the unchanged
+  call in `lowering::core::compile_expr_into_module`. Verification of the CLIF
+  function immediately produced by the lowering engine is **lowering-completion
+  policy**. Moving it to sibling `artifact` would create the forbidden
+  `lowering::core → artifact → lowering::core` production cycle and would spend
+  a seam to encode the wrong ownership. `core.rs` is **not** touched; it
+  resolves the private ancestor item through its existing `use super::*`.
+  Production budget remains **22/24**.
+- **`CRANELIFT_HOST_EFFECT_CONSUMERS_V1` → `lowering/mod.rs`** (private);
+  its invariant test → `lowering/core/tests/effects.rs`
+  (Architect `evt_kvk63qgafqfh`).
+- **`MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS` → `lowering/mod.rs`** (private,
+  byte-for-byte); its test → `lowering/core/tests/constructors.rs`
+  (Architect `evt_5habt0mvvhhm9`). Its existing `core.rs` uses are unchanged —
+  the constant resolves from the private lowering ancestor, so **no adapter and
+  no widening**. The DAG is unchanged.
+
+  > ⛔ **Both constants carry TWO independent obligations, and a sweep
+  > naturally flattens them into one. Keep them separate:**
+  >
+  > - **That it must move** is §10.1 closure — the final
+  >   `cranelift_backend/mod.rs` is *"facade only: module declarations and
+  >   explicit re-exports,"* and **a private constant cannot survive there.**
+  >   This is true regardless of which module receives it.
+  > - **Where it goes** is consumer ownership — every production consumer is
+  >   inside lowering, and there are **zero** in artifact, API, planning,
+  >   compiled, or surface.
+  >
+  > ⛔ **Do not encode "and these are the last two" as a proved frame claim.**
+  > The 92-name partition proves only that these are the two *consts in the
+  > scaffold import list*. It does not prove the other 68 repository-owned
+  > declarations have §10.2 destinations. That is AC-9's job.
 - `ResultDecoder` belongs to `compiled`, **not** value lowering.
 - `reject_program_blockers` belongs to `artifact/api`, **not** planning.
 - Dynamic-constructor validation/selection and source-continuation free
@@ -615,9 +768,29 @@ lowering-subject fixtures at `:15822`, `:18546`, `:18821`. Its users span
 
 **`new_jit_module` and `verify_cranelift_function` are CONTRAST CASES, not
 precedents.** They are also cross-tree, and they resolve **differently** —
-they are production-private artifact operations whose test-only one-call
-wrappers stay in `artifact/mod.rs` under §10.5a. **⛔ Do not read "three
-cross-tree items" as "three instances of one rule."** Classify first:
+they are production-private operations whose test-only one-call wrappers stay
+**in the module that owns the original**, under §10.5a. **⛔ Do not read "three
+cross-tree items" as "three instances of one rule."**
+
+> ⛔ **CORRECTED — the pair is NOT co-owned** (Architect `evt_3tgaw9ws44fqg`).
+> An earlier revision of this clause called **both** functions *"artifact
+> operations"* and sent **both** adapters to `artifact/mod.rs`. That premise is
+> **false for `verify_cranelift_function`**, which §10.2 now rules
+> **lowering-owned**. The contrast-case *classification* survives untouched —
+> both are owner-adjacent boundary adapters, not fixture helpers — but the
+> **owning module differs per function**, and the two adapters are therefore
+> **symmetric across the real ownership boundary**, not parallel:
+>
+> | private original | owner | adapter lives in | adapter serves |
+> |---|---|---|---|
+> | `new_jit_module` | `artifact/mod.rs` | `artifact/mod.rs` | lowering tests |
+> | `verify_cranelift_function` | `lowering/mod.rs` | `lowering/mod.rs` | artifact tests |
+>
+> **The rule that generalizes is "the adapter sits beside its private
+> original," never "the adapter sits in `artifact`."** The old wording was
+> right about this pair only by accident of a mis-assigned owner.
+
+Classify first:
 
 | category | test | disposition |
 |---|---|---|
@@ -641,7 +814,11 @@ cross-tree items" as "three instances of one rule."** Classify first:
    `oriented_dynamic_sibling_fixture` and `root_authority_test_lowering` stay
    in `lowering/core/tests/control.rs`.
 5. **Owner-adjacent transparent adapters remain governed by §10.5a**, not this
-   clause. The JIT/verifier bridges stay in `artifact/mod.rs` as approved.
+   clause. **Each bridge stays beside its own private original** — the JIT
+   bridge in `artifact/mod.rs`, the verifier bridge in `lowering/mod.rs`. ⛔ The
+   superseded wording *"the JIT/verifier bridges stay in `artifact/mod.rs`"*
+   rested on the withdrawn co-ownership premise; see the contrast-case table
+   above.
 6. Move the **grounded facade-LCA fixtures** to `test_support.rs` in
    **slice 7**, when `artifact::api` and the final facade are cut. Until then
    they remain at **residual-parent file scope under item-level
@@ -697,7 +874,12 @@ cross-tree items" as "three instances of one rule."** Classify first:
    > path — **no production-module re-export and no visibility widening is
    > needed** to keep a helper where it belongs until its slice arrives.
    > **"Test-only" waives neither placement nor AC-8.**
-7. Absent from production builds; **zero** against the AC-7 production seam
+7. Absent from production builds — ⚠ **and here that phrase is licensed only
+   because every item in this clause carries a bare `#[cfg(test)]`, a predicate
+   that implies `test = true`. It is NOT a general property of "test" items:
+   see §10.4b.** A feature-gated item is present in production builds whenever
+   the feature is on. **Check the predicate before writing "absent from
+   production" anywhere in this frame.** Zero against the AC-7 production seam
    budget; reported in the separate test-scaffolding ledger. **Any production
    consumer, subject logic, or helper that could live under a lower common test
    ancestor is a stop-and-return, not permission to grow the module.**
@@ -725,16 +907,35 @@ facade          -> artifact::api, surface, existing lowering test hooks
 artifact::api   -> artifact, planning, surface
 artifact        -> lowering::core, compiled, planning, surface
 lowering::core  -> lowering support, compiled, planning, surface
-lowering support-> surface
+lowering support-> compiled, planning, surface
 planning        -> surface
 compiled        -> surface
 ```
 
+> ⛔ **`lowering support -> compiled, planning, surface` — CORRECTED from the
+> old support→surface-only claim** (Architect `evt_1zethb9bspsr1`). Exact
+> grounding: support-owned `Lowering::emit_result` constructs
+> `compiled::ResultDecoder`; support-owned
+> `source_case_has_no_checked_control_markers` calls the planning collectors and
+> uses `CheckedOrientedMarkerSets`. **§10.2 pins all four ownerships**, and both
+> target modules depend only on `surface`, **so the corrected graph remains
+> acyclic.** This line was the only occurrence of the old claim in the frame.
+
 **There are no reverse edges.** In particular: `artifact` never imports
-`artifact::api`; lowering support never calls `lowering::core`; and no
-implementation module imports through the facade. Module declarations and
-facade re-exports are **namespace wiring, not permission to introduce a
-semantic back-edge**.
+`artifact::api`; lowering support never calls `lowering::core`; **there is no
+reverse edge from lowering to artifact**; and no implementation module imports
+through the facade. Module declarations and facade re-exports are **namespace
+wiring, not permission to introduce a semantic back-edge**.
+
+> ⛔ **State the lowering/artifact constraint as "no reverse edge from lowering
+> to artifact" — NOT as "add a `lowering::core -> lowering::mod.rs` self-edge."**
+> The self-edge framing is wrong twice over: a parent/child resolution inside
+> one subtree is not a dependency edge in this graph at all, and naming it
+> obscures the constraint that actually decides the
+> `verify_cranelift_function` ruling. The production DAG after that ruling is
+> `artifact → lowering::core → lowering support`, and **test-only adapter reach
+> does not enter this DAG in either direction** — which is precisely why two
+> adapters can point opposite ways across the boundary without creating a cycle.
 
 ### 10.4 Visibility policy
 
@@ -826,6 +1027,85 @@ make the arithmetic work.
 > resource to consume efficiently; it is a detector for a seam that should have
 > been encapsulated.**
 
+### 10.4b ⛔ CLASSIFY BY COMPILATION REACH, NOT BY A PRODUCTION/`cfg(test)` BINARY
+
+**(Architect `evt_2mexay4h5tr6y` — binding on every sweep, ledger, and AC in
+this frame.)**
+
+`#[cfg(any(test, feature = "px8-ds-test-support"))]` occupies **two** reachable
+domains: test builds **and** non-test feature-enabled builds. The second is
+**production-capable and not hypothetical in this repository** —
+`crates/ken-cli/Cargo.toml` enables `px8-ds-test-support` on its ordinary
+`ken-runtime` dependency. **Calling such a declaration "test-only" is false.**
+
+**The durable classification rule:**
+
+1. Record each declaration's **or macro invocation's** original `cfg`
+   predicate.
+2. A predicate **satisfiable with `test = false` is production-reachable.** A
+   feature name containing `test-support` **does not change that.**
+3. A predicate that **implies `test = true`** is test-only.
+4. A predicate such as `any(test, feature = …)` **spans both domains and must
+   be represented as such** — ⛔ do not force it into one exclusive label.
+5. **Preserve the predicate byte-for-byte** during a pure move. **Visibility
+   and surface checks run in every reachable domain, not only the default
+   build.**
+
+> ### ⛔ WHY THIS IS AN AXIS CORRECTION, NOT A ONE-ITEM FIX
+>
+> `lowering/mod.rs` has exactly **two** import lists — unconditional and
+> `#[cfg(test)]` — and **every sweep run against this file partitioned on that
+> same binary**: the Steward's, the adversary's, and the implementer's. A
+> feature-gated item is invisible to a *"production items"* sweep **and** to a
+> *"`cfg(test)` items"* sweep **simultaneously**. The vocabulary could not
+> express the third cell, so no amount of care within it would have found the
+> item. **The instrument agreed with itself three times because all three runs
+> inherited the same premise** — which is why the finding came from asking what
+> the partition could not say, not from running it more carefully.
+>
+> The instance that surfaced it (`PX8DS_RETIRED_FLAT_ORDER`) is facade-local,
+> so it was not itself a reach problem. **The axis is not local, and the axis
+> is the ruling.**
+
+**Disposition for the six `thread_local!` state cells.** Move each cell with the
+lowering-owned function/type cluster that reads or mutates it, into
+`lowering/mod.rs`, **with its enclosing attribute and visibility unchanged**:
+
+| cell | disposition |
+|---|---|
+| `PX8DS_RETIRED_FLAT_ORDER` | stays **private** beside the lowering-owned `with_px8ds_retired_flat_order` / retired-order helper path. Its existing feature-gated bare-`pub` function keeps the old public surface through an **explicit facade re-export under the same feature predicate**. |
+| `NATIVE_INT_LOWERING_MUTATION` | retains its pre-existing **`pub(crate)`** visibility and gets the explicit facade re-export needed by `object_linker_packaging.rs`. **This is preservation, not a new widening.** |
+| `PX8J_SOURCE_TRACE`, `PX8J_DELETE_OWNED_SELECTED_SCOPE`, `PX8TR_TRAP_PROVENANCE`, `PX8TR_DISABLE_DEFORESTED_ANSWER_ROUTE` | remain **private lowering state**; no facade exposure needed. |
+
+**No logic change, no new DAG edge, no new production visibility spend.
+Budget remains 22/24.**
+
+> ### ⚠ LIVE HAZARD — THE GATE THAT CANNOT SEE THIS CLASS
+>
+> `with_px8ds_retired_flat_order` is **bare `pub`**, re-exported via
+> `lib.rs:39`, and consumed **cross-crate** by
+> `crates/ken-cli/tests/px8ta_oriented_subcontinuation.rs`. It is the public
+> door to `PX8DS_RETIRED_FLAT_ORDER`.
+>
+> **The feature is default-off and only `ken-cli` enables it**, so:
+> - **AC-2's rustdoc dump runs on default features and reads 338→338 whether
+>   the facade re-export is correct, wrong, or entirely MISSING.** That is
+>   **incapable, not merely weak** — the item is not in the dump's domain at
+>   all.
+> - **`-p ken-runtime` compiles the block away**, so the crate-local build is
+>   equally blind.
+>
+> ⇒ **Omitting the re-export leaves every local gate GREEN and a different
+> crate broken**, caught only by the CI workspace build.
+>
+> **The only local evidence is:**
+> ```
+> scripts/ken-cargo test -p ken-cli --test px8ta_oriented_subcontinuation
+> ```
+> ⛔ **NOT `--workspace`** (COORDINATION §12). This is the general shape of
+> rule 5 above: **a surface check that runs in only one configuration domain is
+> silent about every item whose reach lies in another.**
+
 ### 10.5 Slice order
 
 1. `surface`
@@ -857,10 +1137,19 @@ revision — it does not improvise a topical split.**
 > (`§10.4a`) — which is exactly what that dry-run exists to do — and ruled
 > before slice 6 rather than discovered inside it.
 
-> **Slice-6 test-boundary seam.** Keep `new_jit_module` and
-> `verify_cranelift_function` private in `artifact/mod.rs`. Their production
-> ownership does not move. Because lowering's subject fixtures become a
-> sibling test subtree, slice 6 adds exactly two adjacent
+> ### ⛔⛔ SUPERSEDED IN PART — READ THE CORRECTION BELOW BEFORE THE BOX
+>
+> The box below was ruled on `evt_473mn1qmaw7bf` under the premise that
+> **both** private operations are artifact-owned. **That premise is false for
+> `verify_cranelift_function`** (Architect `evt_3tgaw9ws44fqg`; §10.2). The
+> *shape* of the seam — exactly two `#[cfg(test)] pub(super)` one-call adapters,
+> zero production spend — **survives unchanged**. What changes is **which side
+> owns which adapter, and in which slice it lands.**
+
+> **Slice-6 test-boundary seam (ORIGINAL, retained for provenance).** Keep
+> `new_jit_module` and `verify_cranelift_function` private in `artifact/mod.rs`.
+> Their production ownership does not move. Because lowering's subject fixtures
+> become a sibling test subtree, slice 6 adds exactly two adjacent
 > `#[cfg(test)] pub(super)` one-call bridge functions in `artifact/mod.rs`,
 > named `new_jit_module_for_lowering_tests` and
 > `verify_cranelift_function_for_lowering_tests`. Only `lowering/core/tests/*`
@@ -872,25 +1161,101 @@ revision — it does not improvise a topical split.**
 > production widening, or DAG edge is introduced. A slice-6 dry-run that finds
 > any non-test lowering consumer stops and returns the actual graph.
 
+#### 10.5a′ ⛔ THE CORRECTED SEAM (Architect, `evt_3tgaw9ws44fqg`) — BINDING
+
+**The two adapters are symmetric across the ownership boundary, not parallel
+inside `artifact`.** Each sits beside the private original it exposes:
+
+| private original | owner module | adapter | added in | called by |
+|---|---|---|---|---|
+| `new_jit_module` | `artifact/mod.rs` | `new_jit_module_for_lowering_tests` | slice 6 | `lowering/core/tests/*` |
+| `verify_cranelift_function` | **`lowering/mod.rs`** | **`verify_cranelift_function_for_artifact_tests`** | **slice 5** | the two `px8i_*` tests → `artifact/tests.rs` |
+
+**Lowering's own tests use the private original — NOT a bridge.** Slice 5 adds
+the explicit private import in `lowering/core/tests/mod.rs` so descendant
+subject modules inherit it:
+
+```rust
+use super::super::verify_cranelift_function;
+```
+
+The lowering-side adapter is added adjacent to the private original in
+`lowering/mod.rs`:
+
+```rust
+#[cfg(test)]
+pub(super) fn verify_cranelift_function_for_artifact_tests(
+    func: &Function,
+    isa: &dyn cranelift_codegen::isa::TargetIsa,
+) -> Result<(), CraneliftBackendError> {
+    verify_cranelift_function(func, isa)
+}
+```
+
+**Slice-5 transitional wiring, and its slice-6 retirement.** While the two
+`px8i_*` tests remain in the residual facade during slice 5, preserve their
+call tokens with temporary **item-level** test wiring:
+
+```rust
+#[cfg(test)]
+use lowering::verify_cranelift_function_for_artifact_tests as verify_cranelift_function;
+```
+
+⛔ **When slice 6 moves those tests to `artifact/tests.rs`, replace that
+temporary facade alias with an explicit import/call of
+`verify_cranelift_function_for_artifact_tests`. Do NOT touch `lowering/mod.rs`
+again** — re-touching a completed module is exactly what §10.5's
+no-re-touch rule forbids, and the transitional alias exists so that slice 6
+does not have to.
+
+**Why the clearance sentence had to be withdrawn.** An earlier revision said
+*"the implementer is not touching `verify_cranelift_function` in slice 5."*
+Leaving it for slice 6 would have forced **either** a retouch of the completed
+lowering module **or** a reverse `lowering::core → artifact` edge. The branch
+was still clean when the dry-run fired, which is why this was the cheap seam —
+**the stop condition paid for itself in the slice it fired in.**
+
 **Why this does not engage the constraints that appeared to exclude it.** A
-`#[cfg(test)]` bridge is **not a production item**, so §10.2's *"test helpers
-never justify widening a **production** item"* is not engaged; the bridge lives
-in `artifact/mod.rs`, so §10.1's residual-omnibus-facade ban is not engaged;
-and the pair stays artifact-owned, so §10.2's assignment stands unamended.
+`#[cfg(test)]` adapter is **not a production item**, so §10.2's *"test helpers
+never justify widening a **production** item"* is not engaged; each adapter
+lives in a ruled production module rather than the facade, so §10.1's
+residual-omnibus-facade ban is not engaged; and **each adapter matches its
+original's §10.2 ownership**, so §10.2's assignment stands unamended. **Note
+what changed and what did not:** the ownership of one function moved; the
+argument for the seam shape did not depend on which module owned it.
 
 > **The bridges are not shared test helpers under that placement rule:** they
 > contain no setup, fixture construction, assertion, policy, or duplicated
-> helper logic. They are artifact-owned, `cfg(test)`-only boundary adapters
-> adjacent to the private operations they expose; all actual test-helper logic
-> remains in the ruled subject test modules.
+> helper logic. They are **owner-adjacent** `cfg(test)`-only boundary adapters
+> sitting beside the private operations they expose — **one artifact-owned, one
+> lowering-owned** (§10.5a′); all actual test-helper logic remains in the ruled
+> subject test modules.
 
 That last point answers §10.2's **first** sentence — *test helpers go in the
 lowest `tests/mod.rs` ancestor shared by their users* — which the
 production-widening argument alone leaves open. **§10.2 ownership does not
 change** — this is a test-boundary note under §10.4/§10.5, not a reassignment.
 
-**The complete inverse-call ledger** (Architect, `evt_445j846aqqtwp`). The
-JIT/verifier pair has **six** distinct test users, not the two trees first
+**The complete TEST-USER ledger, plus the separately named production caller**
+(Architect, `evt_445j846aqqtwp`; qualifier required by `evt_3tgaw9ws44fqg`).
+
+> ⛔ **The word "complete" here ranges over TEST users only, and the frame must
+> say so.** An earlier revision called this *"the complete inverse-call
+> ledger"* unqualified — which reads as *every* caller and is false. **The
+> production caller is not in this table and must be named separately:**
+>
+> | production caller | callee | status |
+> |---|---|---|
+> | `lowering::core::compile_expr_into_module` | `verify_cranelift_function` | **the sole production consumer**; the call site is unchanged by the move |
+>
+> That single production edge is the entire basis of the lowering-ownership
+> ruling. A ledger that silently omitted it while calling itself *complete*
+> would have made the ruling's own premise unauditable — **the ledger and the
+> ruling would have contradicted each other, and only the ledger was being
+> read.** Qualify the scope of every enumeration in this frame at the point it
+> is asserted, not in the reader's head.
+
+The JIT/verifier pair has **six** distinct test users, not the two trees first
 reported. Two of them appeared in no ledger — both inside the omnibus
 `#[cfg(test)] mod tests` at `:14096–:21177` that §10.1 requires be dissolved —
 and §10.2's subject rule determines their destinations:
@@ -902,7 +1267,7 @@ and §10.2's subject rule determines their destinations:
 | `run_dynamic_constructor_dispatch_fixture` | `:1868` | `lowering/core/tests/constructors.rs` |
 | **`run_px8ds_edge_consumer`** | **`:14741`** | **`lowering/core/tests/control.rs`** |
 | **`run_borrowed_fixture`** | **`:18535`** | **`lowering/core/tests/effects.rs`** |
-| `px8i_*` (two tests) | `:20977`, `:21005` | `artifact/tests.rs` — calls the private originals |
+| `px8i_*` (two tests) | `:20977`, `:21005` | `artifact/tests.rs` — calls `new_jit_module` privately, and `verify_cranelift_function_for_artifact_tests` across the boundary (§10.5a′) |
 
 **The user count does not multiply the bridges.** There are exactly **two**
 one-call adapters — one per private artifact operation — not one per tree or
