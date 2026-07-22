@@ -653,3 +653,51 @@ landed `origin/main`, moves one production module plus its tests, and does not
 re-touch a previously moved module. **If move-purity, the visibility budget,
 or the DAG cannot be demonstrated for a slice, that slice stops for seam
 revision — it does not improvise a topical split.**
+
+### 10.5a ⛔ SLICE-6 TEST-BOUNDARY SEAM (Architect, `evt_473mn1qmaw7bf`)
+
+> **Fold this before slice 6 is framed.** Surfaced by the slice-4 dry-run
+> (`§10.4a`) — which is exactly what that dry-run exists to do — and ruled
+> before slice 6 rather than discovered inside it.
+
+> **Slice-6 test-boundary seam.** Keep `new_jit_module` and
+> `verify_cranelift_function` private in `artifact/mod.rs`. Their production
+> ownership does not move. Because lowering's subject fixtures become a
+> sibling test subtree, slice 6 adds exactly two adjacent
+> `#[cfg(test)] pub(super)` one-call bridge functions in `artifact/mod.rs`,
+> named `new_jit_module_for_lowering_tests` and
+> `verify_cranelift_function_for_lowering_tests`. Only `lowering/core/tests/*`
+> calls the bridges; `artifact/tests.rs` calls the private originals. The
+> bridges contain no ISA flags, validation, defaults, transformation, or error
+> remapping. They are reported separately as test scaffolding, absent from
+> production builds, and consume zero of the AC-7 production visibility
+> budget. No facade `mod tests`, shared production helper, helper duplication,
+> production widening, or DAG edge is introduced. A slice-6 dry-run that finds
+> any non-test lowering consumer stops and returns the actual graph.
+
+**Why this does not engage the constraints that appeared to exclude it.** A
+`#[cfg(test)]` bridge is **not a production item**, so §10.2's *"test helpers
+never justify widening a **production** item"* is not engaged; the bridge lives
+in `artifact/mod.rs`, so §10.1's residual-omnibus-facade ban is not engaged;
+and the pair stays artifact-owned, so §10.2's assignment stands unamended.
+**§10.2 ownership does not change** — this is a test-boundary note under
+§10.4/§10.5, not a reassignment.
+
+**⚠ The enumeration correction that rides with it, because the count is
+load-bearing if this ruling is ever revisited.** The JIT/verifier pair has
+**six** distinct test users, not the two trees first reported: the three ruled
+lowering fixtures (`:1463`, `:1641`, `:1868`), the `px8i_*` artifact tests
+(`:20977`, `:21005`), **and two that appeared in no ledger** —
+`run_px8ds_edge_consumer` (`:14741`) and `run_borrowed_fixture` (`:18535`),
+both inside the omnibus `#[cfg(test)] mod tests` at `:14096–:21177` that §10.1
+requires be dissolved. **Their destination modules are not yet assigned.** The
+bridge shape is robust to that (every test tree is a descendant of
+`cranelift_backend`), but a per-tree-duplication alternative would not be —
+its cost is unknowable until those two are placed. **Assign them in the
+slice-5 dry-run.**
+
+**And enumerate type placement explicitly in the slice-5 dry-run.** §10.2
+assigns *functions* explicitly and leaves **type** placement implicit. The
+fixtures name 20 parent-private types and all 20 happen to be lowering-side,
+so exposure came out zero — **fortunate, not established.** Do not let a clean
+result recur twice and start reading as a property.
