@@ -469,6 +469,64 @@ move" claim auditable rather than asserted.
    > module, and the lesson that produced this AC is precisely that closing an
    > enumeration for one population says nothing about another.
 
+   > ### ⛔ SLICE 7 ADDS A THIRD POPULATION — THE 37 RESIDUAL TEST ITEMS
+   > (Architect `evt_h69xwchqqxmj`, 2026-07-22)
+   >
+   > Slice 7 must additionally **emit the final-user-LCA ledger for all 37
+   > residual facade-scope test items** and **move every lower-LCA transitive
+   > closure to its lowest ruled test ancestor** (§10.2a rule 8). The candidate
+   > measured **30 of 37** with a lowering-only final LCA.
+   >
+   > **⛔ This is a new PROPERTY AXIS, not an invisible population — state it
+   > exactly.** (Architect `evt_73kn217kzjdvv`, correcting an earlier
+   > overclaim in this block.) The three prior instruments stand in **three
+   > different** relations to these 37 items, and collapsing them is precisely
+   > the error this AC exists to prevent:
+   >
+   > | instrument | can it SEE these items? | can it establish their PLACEMENT? |
+   > |---|---|---|
+   > | scaffold-import list | **no** — blind to these declarations | no |
+   > | source-coverage partition | **yes** — ranges over every non-trivia source span | **no** |
+   > | semantic declaration inventory | **yes** — ranges over every declaration, including its `cfg` reach | **no** |
+   >
+   > **Two of the three can enumerate the population perfectly well.** What none
+   > of them establishes is the *different property* now required: **each item's
+   > final-user LCA and its lawful final placement.** The new ledger closes
+   > **that property axis** — it does not close an allegedly invisible set.
+   >
+   > ★ **Why this correction matters more than its size.** The overclaimed
+   > version reasoned *"a new deliverable is needed, therefore the existing
+   > instruments must not have been able to see this"* — inventing a blindness
+   > to justify a real requirement. **The requirement was real and the
+   > justification was false.** An enumeration being complete over a population
+   > says nothing about *which property* it measured over that population; that
+   > is the same conflation, one level up, as the item-axis/user-axis lesson
+   > below.
+   >
+   > **The ledger is the deliverable, not the count.** "30 of 37" is a
+   > measurement a reviewer cannot re-derive from a number; the per-item
+   > final-user LCA is. ⛔ **Do not report a residual count in place of the
+   > ledger.**
+   >
+   > **What travels with a moving item** (Architect `evt_73kn217kzjdvv`):
+   > move each lower-LCA item together with **the dependency declarations used
+   > ONLY by that closure**, and **retain a dependency at the facade only when
+   > it has an independent, genuine facade-LCA user.** Recompute over **final
+   > direct users**.
+   >
+   > ⛔ An earlier gloss here had this backwards — it said an item *"whose own
+   > LCA is the facade may still move if it is only reachable through one that
+   > is not."* **That reverses the quantifier**: under this frame's
+   > actual-final-user-LCA definition, an item reachable *only* through a
+   > lower-LCA owner **does not have a facade LCA in the first place**. The
+   > wording as written would have authorized a genuine facade-LCA declaration
+   > to be dragged down merely because one lower item also depends on it.
+   >
+   > **Production content stays frozen.** `core.rs`, `lowering/mod.rs`, and
+   > `artifact/api.rs` production content is unchanged by this fold — it is
+   > test-only finalization, and the no-re-touch rule that has governed five
+   > consecutive slices is **not** relaxed by it.
+
    **What is already closed, and exactly how far it reaches.** The 92-name
    scaffold-import reconciliation is valid and **closes the emitted import
    population** with zero residue:
@@ -852,24 +910,64 @@ Classify first:
    | slice | what lands in `test_support` | when |
    |---|---|---|
    | **6** | create/seed the module with `test_only_distinguished_root_join_plan` | **once its API-side users have moved below the facade** |
-   | **7** | add `NativeInvocationFixture` and `BorrowedFixtureValue` | when the artifact tests move |
+   | **7** | **nothing further** — see the withdrawn row below | — |
 
    **API and lowering tests use the already-ruled direct rooted path.** This is
    an **accumulating namespace scaffold** — ⛔ **not a production-module
    retouch and not a production widening**, so it stays outside the 22/24
    ledger and §10.5's no-re-touch rule is not engaged.
 
-   **There are two fixtures, not one** (Architect `evt_5ztpb40gf6d0x`):
+   **`test_support.rs` holds exactly ONE fixture** (Architect
+   `evt_h69xwchqqxmj`, superseding the two-fixture reading of
+   `evt_5ztpb40gf6d0x`):
 
    | fixture | final users span | LCA |
    |---|---|---|
    | `test_only_distinguished_root_join_plan` | `lowering` + `artifact/api` | facade |
-   | **`NativeInvocationFixture`** | `lowering/core/tests/effects.rs` + `artifact/tests.rs` | facade |
+
+   > ### ⛔ WITHDRAWN ROW — `NativeInvocationFixture` / `BorrowedFixtureValue`
+   > (Architect `evt_h69xwchqqxmj`, 2026-07-22, at `origin/main @ 7c6e03c8`)
+   >
+   > This clause previously carried a second row claiming
+   > `NativeInvocationFixture`'s users span
+   > `lowering/core/tests/effects.rs` **+ `artifact/tests.rs`**, giving it a
+   > facade LCA. **That `artifact/tests.rs` user does not exist and never
+   > will.** Measured direct users close exactly at:
+   >
+   > - `NativeInvocationFixture` → `run_px8n_arm_fixture`,
+   >   `px8n_scripted_host_dispatch`, `run_borrowed_fixture`;
+   > - `BorrowedFixtureValue` → that same effects-owned fixture closure;
+   > - every caller of `run_px8n_arm_fixture` sits in `effects.rs`;
+   > - **zero** use or alias in the residual `mod tests` that becomes
+   >   `artifact/tests.rs`.
+   >
+   > **⇒ The pair is lowering/effects-only. Move it, with its direct-user
+   > fixture closure, to `lowering/core/tests/effects.rs`. ⛔ Do NOT add either
+   > to facade `test_support.rs`.** The pair still moves together (see the
+   > transitive-dependency note below); only its destination changed.
+   >
+   > **How the row went stale — the failure is reusable.** It inherited a
+   > slice-4 premise that read *"parent `px8i_*` (**artifact** tests)"*, whose
+   > named case was
+   > `px8i_positioned_start_and_metadata_promote_u64_above_i64_max`. **Slice 5's
+   > semantic-subject pass reclassified that case as `effects` and moved it** —
+   > and this frame kept the **pre-partition lexical** classification. So the
+   > row was not wrong when written; it was **invalidated by a later ruling that
+   > nobody swept back into it.** ⚠ Any row whose justification cites a
+   > pre-partition subject name must be re-derived after each semantic-subject
+   > pass — see [§8a] on stating a frame's claim so it can be falsified.
+   >
+   > Corroborated independently by @adversary at the same SHA, which
+   > specifically closed the **alias-laundering** blind spot (`use super::X as
+   > Y;` puts a consumption site beyond a name grep): an alias declaration
+   > necessarily contains the literal name, and the grep spanned the entire
+   > file including `mod tests` — seven occurrences, all at or below `:997`,
+   > `mod tests` beginning at `:1303`.
 
    **`BorrowedFixtureValue` travels with `NativeInvocationFixture`** as its
    minimal transitive type dependency through
    `NativeInvocationFixture.process_input`. The pair moves together or not at
-   all.
+   all — **to `effects.rs`**, per the withdrawn-row ruling above.
 
    > ⚠ **"Residual-parent file scope" does NOT mean inside the parent's
    > `mod tests`.** `cranelift_backend::tests` is a **sibling** of
@@ -920,9 +1018,62 @@ Classify first:
    consumer, subject logic, or helper that could live under a lower common test
    ancestor is a stop-and-return, not permission to grow the module.**
 
+8. > ### ⛔ 8. SLICE 7 FINALIZATION — LOWER-LCA RESIDUE MAY NOT REMAIN AT
+   > ### FACADE FILE SCOPE
+   > (Architect `evt_h69xwchqqxmj`, 2026-07-22, ratifying the candidate's own
+   > item-3 observation)
+   >
+   > **Residual-parent file scope was a TRANSITIONAL ZERO-WIDENING HOLDING
+   > POSITION. It was never final ownership.** Slice 7 is where the facade stops
+   > being provisional, so it is the slice at which that holding position must
+   > be discharged.
+   >
+   > The candidate measured that **30 of the 37 remaining facade-scope test
+   > fixtures have a lowering-only final LCA** and that slice 7 scheduled none of
+   > them to move. **That fires rule 7's stop-and-return**, and the ruling is
+   > that it is binding, not benign:
+   >
+   > **⛔ Three things do NOT legalize lower-LCA residue at facade scope —
+   > and each one was offered in good faith as a reason it was fine:**
+   >
+   > | offered justification | why it does not apply |
+   > |---|---|
+   > | `#[cfg(test)]`, so the production budget is unaffected | true, and irrelevant — **the production budget is not the placement rule.** `cfg(test)` waives neither placement nor AC-8 |
+   > | the facade lands ~700 lines against a 6,500 cap | **a line cap is not an ownership argument.** Fitting is not belonging |
+   > | it is file scope, not a `mod tests`, so §10.1's omnibus prohibition is not engaged | correct about §10.1 and **beside the point** — rule 7 is a *placement* rule and applies independently |
+   >
+   > **The obligation, before handoff:**
+   >
+   > 1. **Emit the final-user-LCA ledger for all 37 residual test items** — the
+   >    ledger is the deliverable, not a count. Ledger-as-output, per AC-9.
+   > 2. **Move every lower-LCA transitive closure to its lowest ruled test
+   >    ancestor** — carrying the dependency declarations used **only** by that
+   >    closure, and **retaining at the facade any dependency that has an
+   >    independent genuine facade-LCA user.** Recompute over **final direct
+   >    users**. ⛔ **AC-9 states the quantifier and the way it has already been
+   >    reversed once — read it there; it is not restated here.**
+   > 3. The final facade **retains only** test scaffolding whose actual
+   >    final-user LCA **really is the facade** and which has **no lawful lower
+   >    home**.
+   >
+   > **This is test-only finalization, NOT a production-module retouch.**
+   > `core.rs`, `lowering/mod.rs`, and `artifact/api.rs` **production content
+   > remains frozen** — the no-re-touch rule that has now governed five
+   > consecutive slices is not relaxed by this clause.
+   >
+   > ⚠ **Coupling to the adapter census (§10.5a′):** the five-adapter population
+   > is an output of the census *after* final placement. **The final ledger must
+   > identify the direct user item for each adapter after the 37-item placement
+   > fold** — so that **an adapter cannot be justified by a helper that should
+   > itself have moved lower.** Run the placement fold first, then re-derive the
+   > adapters; doing it in the other order can manufacture an adapter for a
+   > helper that is about to leave.
+
 **Deterministic placement test for slices 5–7:** classify adapter vs fixture
 helper → for a fixture helper, compute the **actual-user** LCA → use
-`test_support.rs` **only** when that LCA is the facade.
+`test_support.rs` **only** when that LCA is the facade. **At slice 7 this test
+is applied to the entire 37-item residual, not only to items a slice happens to
+schedule** — see rule 8.
 
 **Test assignment is by subject:** `oriented_*`, `px8j_*`, root-authority,
 join-site, source-install and recursor tests → `control`; constructor-field,
@@ -1209,10 +1360,19 @@ Budget remains 22/24.**
 > and the facade can re-export public items through a `pub(super)` child module.
 >
 > **Slice 7 shape:** move the nine private artifact items and the exact
-> JIT/object/ISA tests, **delete the six scaffold imports**, add the three
-> current item-axis adapters beside their private originals, and perform the
+> JIT/object/ISA tests, **delete the six scaffold imports**, **run the 37-item
+> residual-placement fold (§10.2a rule 8)**, add **the item-axis adapters the
+> census emits at that point** beside their private originals, and perform the
 > final explicit-facade cut. **`native_isa` stays with its artifact test until
 > this slice, so it never needs transitional visibility.**
+>
+> ⛔ **Order matters and it is not cosmetic: the placement fold runs BEFORE the
+> adapter derivation.** An adapter derived first can be justified by a helper
+> that the fold is about to move lower — manufacturing an adapter for a caller
+> that will not be there. **⛔ Do not read "the adapters" as a fixed count**;
+> the census at `7c6e03c8` emitted **five** (§10.5a′), which the Architect
+> ratified as a sound extension of the frame's earlier three — *as census
+> output at a base*, never as an invariant.
 >
 > **Rejected, with reasons:** temporary widening is forbidden by the cap
 > (§10.4a — the cap is a *detector*, not a resource); a seven-operation
@@ -1265,26 +1425,69 @@ revision — it does not improvise a topical split.**
 > the table **without contradicting the rule**; a stated number could only be
 > falsified by one.
 >
-> **Four is the exact population this slice must implement**, not a bound the
-> design imposes.
+> **The population below is what the census emitted at its stated base**, not a
+> bound the design imposes. **⛔ Re-run it at your own base before
+> implementing** — the frame's number is evidence of a past derivation, never a
+> substitute for the derivation.
 
-**Census output at `origin/main @ cf91ec5a`** — all nine artifact-destined
-operations were checked; the other six have **zero** lowering-test consumers.
-Each adapter sits beside the private original it exposes:
+**Census output at `origin/main @ cf91ec5a`, EXTENDED by the re-run at
+`origin/main @ 7c6e03c8`** (candidate `evt_4yt2sw90hy00s`; ratified by the
+Architect in `evt_h69xwchqqxmj` as a sound extension under this clause, **not**
+a contradiction of it). All nine artifact-destined operations were checked at
+each base. Each adapter sits beside the private original it exposes:
 
-| private original | owner module | adapter | added in | called by |
-|---|---|---|---|---|
-| `new_jit_module` | `artifact/mod.rs` | `new_jit_module_for_lowering_tests` | **slice 7** | lowering tests — 5 sites across `constructors`/`control`/`effects` |
-| `new_object_module` | `artifact/mod.rs` | `new_object_module_for_lowering_tests` | **slice 7** | lowering tests — 6 `control` sites |
-| `compile_expr` | `artifact/mod.rs` | `compile_expr_for_lowering_tests` | **slice 7** | lowering constructor tests — 3 sites |
-| `verify_cranelift_function` | **`lowering/mod.rs`** | **`verify_cranelift_function_for_artifact_tests`** | **slice 5** | the two `px8i_*` tests → `artifact/tests.rs` |
+**⚠ Every "called by" count below is measured at `7c6e03c8`** — the later base.
+The `first emitted` column records only which census run **first** put the row
+in the table, never when its counts were taken. **These are not the same
+question**, and conflating them is how a row acquires a stale justification
+while looking freshly measured.
+
+> ⛔ **A CALL SITE IS NOT A DECLARATION SITE.** (Architect `evt_73kn217kzjdvv`,
+> verified against the exact `7c6e03c8` tree.) A first pass at this refresh
+> reported **6 / 7+3 / 4** — each inflated by exactly one, because **the
+> function's own declaration line was counted as a call**: `new_jit_module`
+> `:651`, `new_object_module` `:657`, `compile_expr` `:559`. A bare name grep
+> cannot tell a definition from a use, and the error is **uniform**, so the
+> inflated set looks internally consistent and survives a sanity check.
+> Additionally, `new_jit_module`'s two facade `px8i` calls at `:1307`/`:1335`
+> become **owner-local artifact tests** and therefore **do not cross the
+> ownership boundary** at all.
+
+| private original | owner module | adapter | added in | called by (@ `7c6e03c8`) | first emitted |
+|---|---|---|---|---|---|
+| `new_jit_module` | `artifact/mod.rs` | `new_jit_module_for_lowering_tests` | **slice 7** | lowering tests — **5** sites (`constructors`:14, `control`:81/525, `effects`:18/333) | `cf91ec5a` |
+| `new_object_module` | `artifact/mod.rs` | `new_object_module_for_lowering_tests` | **slice 7** | **6** lowering sites **+ 3 genuine facade fixture sites** (`:159`/`:428`/`:473`) | `cf91ec5a` |
+| `compile_expr` | `artifact/mod.rs` | `compile_expr_for_lowering_tests` | **slice 7** | lowering constructor tests — **3** sites (`:627`/`:715`/`:934`) | `cf91ec5a` |
+| **`native_isa`** | `artifact/mod.rs` | *(name at implementation)* | **slice 7** | the effects-owned `run_px8n_arm_fixture` | **`7c6e03c8`** |
+| **`native_platform_target_name`** | `artifact/mod.rs` | *(name at implementation)* | **slice 7** | the genuinely facade-LCA / cross-tree object-emission test helpers | **`7c6e03c8`** |
+| `verify_cranelift_function` | **`lowering/mod.rs`** | **`verify_cranelift_function_for_artifact_tests`** | **slice 5** | the two `px8i_*` tests → `artifact/tests.rs` | landed ✅ |
+
+⚠ **The lowering call-site counts did NOT move between bases** — 5 / 6 / 3 at
+both. What the re-run actually added is the **three previously unrecorded
+facade fixture users** on the `new_object_module` row. **So this refresh
+corrects USER-SITE EVIDENCE; it does not change the item-axis result**, and the
+five-operation adapter population stands ratified on its own derivation.
+
+★ **Do not read that as "the re-run was unnecessary."** It surfaced three real
+unrecorded users and two genuinely new operations (`native_isa`,
+`native_platform_target_name`). It also produced a uniform off-by-one that a
+count-versus-count check could not catch — **which is the argument for the
+per-site enumeration in the table above rather than a bare total.** A number
+cannot be audited; a site list can.
+
+> ⛔ **`native_platform_target_name` is justified by the facade-LCA helpers —
+> NOT by the 30 lower-LCA residue items** (§10.2a rule 8). That distinction is
+> load-bearing: those 30 are scheduled to move lower, and an adapter resting on
+> one of them would be resting on a caller that is about to leave. **Run the
+> placement fold first, then re-derive this table** — the ratification of five
+> is explicitly conditioned on that order.
 
 > ### ⛔ TWO LEDGERS, TWO AXES — NEITHER SUBSTITUTES FOR THE OTHER
 >
 > | ledger | axis | ranges over | status |
 > |---|---|---|---|
 > | the JIT/verifier inverse-call ledger (§10.5a below) | **user** | test callers of a given operation | complete over **test users**, plus the separately named production caller |
-> | the cross-boundary adapter population (this table) | **item** | private operations reached across the ownership boundary | complete over the **item axis** at `cf91ec5a` |
+> | the cross-boundary adapter population (this table) | **item** | private operations reached across the ownership boundary | complete over the **item axis** at `7c6e03c8` (re-run; extended `cf91ec5a`) |
 >
 > **The user ledger was completed twice — three fixtures → six — which made it
 > feel audited, while the item axis had never been enumerated at all.** The

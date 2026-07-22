@@ -5,14 +5,57 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-22 ~10:2xZ. OPERATOR IS AWAY until ~11:30Z.**
+**As of 2026-07-22 ~13:00Z. OPERATOR IS PRESENT.**
 
 ## Standing state
 
-- **`origin/main = 7911e0b3`.** Green. **TWO TRACKS RUN CONCURRENTLY**
-  (operator directive 2026-07-22 ~02:35Z). Build stays single-threaded; doc is
-  the one standing exception. **Idle is no longer the default-correct state.**
+- **`origin/main = 7c6e03c8`.** Green.
+- **★ FOUR TRACKS RUN CONCURRENTLY** (operator directive 2026-07-22 ~12:30Z —
+  *"double the rate of use… as soon as we can parallelize to two tracks on the
+  implementation side, we should"*). **Idle is not the default-correct state.**
+
+| track | ring | work | state |
+|---|---|---|---|
+| impl 1 | runtime | **RT-SPLIT slice 7** — the last slice | active |
+| impl 2 | verify | **BUDGET-EFF** | active, `ken-host` landed |
+| doc | doc | **DOC-W1-2** (Wave 1, slice 2 of 5) | active |
+| spec | enclave | **ABI-REVOKE behavioral contract** | active |
+
+- **Build side is capped at TWO implementation tracks** (operator). Doc is the
+  standing exception; the enclave is not a build team, so it does not count
+  against the cap.
+- **⛔ The binding constraint is NOT the two-track cap — it is the READY
+  QUEUE.** `kernel`, `language`, `ergo`, and `foundation` are all idle and have
+  **zero** ready items owned by them; every ready WP is runtime-, doc-,
+  spec- or steward-owned. **Opening a third implementation track requires
+  authoring WPs for those rings, not operator permission.** That authoring is
+  T1 enclave/Steward work and is the real cost. **Surface this to the operator
+  before promising throughput the queue cannot supply.**
 - **Do not kick a WP while the operator has an open question below.**
+
+### ★ QA bound-verdict attestations are now on `origin` (2026-07-22 ~12:53Z)
+
+The commit-your-verdict workaround (used when a QA seat's convo outbound dies)
+left verdicts on **one local ref in one clone** — `a4473ab0` had **no second
+copy anywhere off this box**, and `handoff-gate-compact.sh` has already
+hard-reset that exact branch once (`preserved/runtime-qa-work-7c86db36`).
+Pushed to durable refs, each verified by `ls-remote`:
+
+```
+attest/runtime-qa-verdicts   a4473ab0   (53501ffe is an ancestor — both carried)
+attest/ergo-qa-verdicts      cf791c7f
+attest/verify-qa-verdicts    04efa001
+```
+
+**This fixes durability, NOT discoverability** — a branch name nobody watches
+is still a pointer someone must deliver. **Transcribing these into the repo
+proper is the actual close and needs a WP.** ⛔ Do not reset, clean, or
+re-anchor `runtime-qa/work`, `ergo-qa/work`, or `verify-qa/work`.
+
+★ **The transferable lesson:** *when a workaround relocates a failure mode, the
+new location inherits none of the scrutiny the old one had.* The pattern fixed
+a real selection error and quietly moved the fragility from the message layer
+to the storage layer, where nobody was looking.
 
 > ### 🚨 INFRA ESCALATION FOR THE OPERATOR — `runtime-qa` convo outbound is DEAD
 >
@@ -32,11 +75,58 @@
 > (`ergo-qa @ cf791c7f`, `verify-qa @ 04efa001`). **A relay verifies the
 > selection; a commit eliminates the selection.**
 
-### ▶ Build track — RT-SPLIT (Runtime ring)
+### ▶ Build track — RT-SPLIT (Runtime ring) — **SLICE 7, THE LAST ONE**
 
-**Slice 5 merged `@ 7911e0b3` — five of seven done, budget 22/24, retros in,
-ring idle and clean.** Slices 6 (`artifact` + artifact tests) and 7
-(`artifact::api`, API tests, final facade) remain.
+**Slice 6 merged `@ 7c6e03c8` — six of seven done, budget 22/24, retros in.**
+`cranelift_backend.rs` is down to **1,445 lines** from 22,081; `core.rs` and
+`lowering/mod.rs` were **0-byte diffs** (the no-re-touch rule has now held
+across five consecutive slices).
+
+⛔ **Slices 6 and 7 were REVERSED mid-series** (Architect `evt_2j4gnwffr7h63`):
+`artifact::api` led, artifact internals follow. Artifact-first would have cost
+7 `pub(super)` widenings (22→29 vs cap 24) because api-destined callers were
+still in the residual parent — **a visibility forecast from the FINAL module
+graph says nothing about the TRANSITIONAL graph a slice compiles against.**
+
+**Slice 7 is kicked** (`evt_1aj141722jfq3`) on `wp/rt-split-7-artifact-internals`
+off `7c6e03c8`. Four things bind it:
+
+1. **Delete all six scaffold imports in `artifact/mod.rs`** — and **`api.rs`
+   must NOT change at that point. If it does, the scaffold was wrong.** The
+   adversary will test exactly this on merge; it makes slice 6 retroactively
+   falsifiable by slice 7's diff.
+2. Module comment → *"final ruled users span `lowering` and `artifact::api`"*.
+3. **Re-run the final-destination census** — recompute from rows in code with
+   the blocking assertion; do not implement the number the frame states.
+4. **Placement changes ONLY on a changed DIRECT-use population** — the
+   quantifier, not a paraphrase.
+
+**`cranelift_backend/**` is slice 7's exclusive territory**, and its landing
+**releases Verify's deferred BUDGET-EFF half** (the native reifier in
+`lowering/core.rs`). Slice 7 is therefore the release point for the other
+track, not just the end of this one.
+
+### ▶ Build track 2 — BUDGET-EFF (Verify ring)
+
+**Scope split ruled `evt_2sw8883abc3m4`** after I asserted path-disjointness
+**from a string literal** and `verify-implementer` caught it (my grep matched
+`"ctor:prelude::TransferCount::PrivateTransferCount"` — a constructor *name*
+inside quotes — while the real reifier sits in `cranelift_backend/lowering/`).
+
+- **In scope:** `ken-host`, `ken-interp`, **AC-3 oracle rewrite**
+- **⛔ Deferred until slice 7 lands:** anything under `cranelift_backend*`
+
+`ken-host` piece landed on `wp/BUDGET-EFF @ f4a86050` — two-field inseparable
+`TransferCountV1` carrier per Architect ruling `dec_1m6xdwjp2ttyn`, 46/46 green.
+`ken-interp` in progress.
+
+★ **Load-bearing oracle shape:** capped-full alone (raw 8, effective 4, count 4
+→ remaining 0) is satisfiable by the wrong shortcut `effective := count`. The
+suite needs **both capped-full AND capped-short** to discriminate.
+
+★ **RULE ADOPTED:** *path-disjointness is re-derived BY THE RECEIVING RING at
+pickup and reported before implementation starts — never asserted by me in a
+kickoff.*
 
 > ### ⛔ SLICE 6 IS BLOCKED ON THE ARCHITECT'S FIDELITY REVIEW, NOT ON THE RING
 >

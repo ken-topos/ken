@@ -29,6 +29,13 @@ fold-in option is gone regardless.
 > identity, settlement observation; (2) the **ADR**, whose isolation argument
 > must be structural and closed-world (§4). Then size it.
 >
+> **▶ Prerequisite (1) is IN FLIGHT as of 2026-07-22 ~12:54Z** — routed to the
+> Spec enclave by the Steward in `evt_2btjbdwarvwme`. **`status: draft` is
+> still correct for this item**: what is active is the enclave's behavioral
+> slice, not the runtime membrane. This issue does not become `ready` until
+> that contract **and** the ADR land and it is sized. **Do not let a build
+> leader read the enclave's activity as a release signal.**
+>
 > ### ⛔ ABI-R3 GATES THIS, and the dependency is bound HERE, not in `depends_on:`
 >
 > **`PX8 -> ABI-R3 -> ABI-REVOKE`** (Architect, `dec_p1dv4gw6bsc2`).
