@@ -96,8 +96,43 @@ three times in one session at three different layers:
 | detector | "have I enumerated every busy state?" | self-test against a pane whose state is certain |
 | verification | `grep 'tail -4'` — **hit the comment documenting its absence** | the self-test passing |
 
+## ★★★ THE ACTUAL THROUGH-LINE — stop completing the list; make it FAIL LOUDLY
+
+**Three times in one session the fix was the same move**, and it is more general
+than the table above:
+
+> **Replace an unbounded enumeration with a structural guarantee — something that
+> fails loudly when the list is wrong, instead of a longer list.**
+
+| the unbounded list | the structural guarantee |
+|---|---|
+| "which merge mechanism lost the rows?" | **post-condition on the merged artifact** — catches union, wholesale-take, and bad resolution alike |
+| "have I enumerated every busy state?" | **known-answer oracle** — the self pane, busy by definition |
+| "which vantage axes must I vary — identity, env, cwd, privileges?" | **a second pair of hands** — get it executed by someone who is not you |
+
+**The list was never going to be finished in any of the three cases.**
+
+⚠ **The third row is the one that keeps being re-derived as a checklist, so state
+it structurally.** The author's own seat is the least informative place to test
+anything whose behavior depends on vantage — but *"remember to vary caller
+identity, environment, cwd, privileges…"* is **just another unbounded
+enumeration**, the same defect one level up.
+
+★ **The adversary did not catch the `pane-busy.sh` identity defect by thinking to
+vary the caller. It caught it because it has exactly one seat and it was not the
+author's** — running it from anywhere else was not an option available to it.
+**The catch was POSITIONAL, not insightful.** ⇒ A second seat varies **every**
+vantage-dependent axis at once, including the ones neither party would have
+listed. **That is why it needs no enumeration.**
+
+⇒ Practical form: for anything vantage-dependent, **do not review it — have
+someone else RUN it.** Reading it from another seat is not the same test;
+executing it is.
+
+---
+
 A post-condition on the result catches every variant **without needing to know
 which occurred** — which is exactly why it survives your mechanism story being
-wrong. The third row is [[an-oracle-that-greps-a-name-fires-on-prose-that-denies-it]]
+wrong. The `grep` row is [[an-oracle-that-greps-a-name-fires-on-prose-that-denies-it]]
 arriving again, one layer down: *a grep for a string is not a check of a
 property.*
