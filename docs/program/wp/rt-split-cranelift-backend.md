@@ -1298,9 +1298,10 @@ argument for the seam shape did not depend on which module owned it.
 > **The bridges are not shared test helpers under that placement rule:** they
 > contain no setup, fixture construction, assertion, policy, or duplicated
 > helper logic. They are **owner-adjacent** `cfg(test)`-only boundary adapters
-> sitting beside the private operations they expose — **one artifact-owned, one
-> lowering-owned** (§10.5a′); all actual test-helper logic remains in the ruled
-> subject test modules.
+> sitting beside the private operations they expose — **each in the owner named
+> by the current census: artifact for `new_jit_module`, `new_object_module`, and
+> `compile_expr`; lowering for `verify_cranelift_function`** (§10.5a′); all
+> actual test-helper logic remains in the ruled subject test modules.
 
 That last point answers §10.2's **first** sentence — *test helpers go in the
 lowest `tests/mod.rs` ancestor shared by their users* — which the
