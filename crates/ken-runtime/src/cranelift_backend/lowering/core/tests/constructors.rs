@@ -3,6 +3,9 @@
 
 use super::*;
 
+// Ruled test module: imports permitted here (AC-8 class 2).
+use crate::nc5_seed_examples;
+
 #[cfg(test)]
 fn run_dynamic_constructor_dispatch_fixture(
     discriminator: i64,
@@ -183,4 +186,145 @@ fn dynamic_constructor_unknown_tag_runs_malformed_not_source_default() {
     assert_eq!(malformed, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
     assert_eq!(malformed, -3);
     assert_ne!(malformed, -4);
+}
+
+#[test]
+fn heterogeneous_later_ordinary_missing_selects_exact_default() {
+    let later_cases = vec![RuntimeMatchCase {
+        constructor: "ctor:fixture::Outer::Hit".to_string(),
+        binders: 1,
+        body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+    }];
+    let first_default = RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "px7o exact first ordinary default".to_string(),
+    };
+    let later_default = RuntimeTrap {
+        code: RuntimeTrapCode::ExplicitTrap,
+        message: "px7o exact later ordinary default".to_string(),
+    };
+    let trap = select_ordinary_case(
+        OrdinaryEliminatorFrame {
+            cases: &later_cases,
+            default: &later_default,
+            env: &[],
+            retained_scrutinee_index: None,
+            deferred_constructor_case: None,
+        },
+        "ctor:fixture::Outer::Missing",
+    )
+    .expect_err("the later ordinary frame must select its own default");
+    assert_eq!(trap, later_default);
+    assert_ne!(trap, first_default);
+}
+#[test]
+fn dynamic_constructor_duplicate_tag_and_identity_reject_exactly() {
+    let duplicate_tag = validate_dynamic_constructor_alternatives([
+        (0, "ctor:fixture::Dynamic::A"),
+        (0, "ctor:fixture::Dynamic::B"),
+    ])
+    .expect_err("closed alternatives require unique tags");
+    assert!(matches!(
+        duplicate_tag,
+        CraneliftBackendError::Unsupported(UnsupportedLowering {
+            construct: "DynamicConstructor",
+            reason,
+        }) if reason == "duplicate alternative tag 0"
+    ));
+
+    let duplicate_identity = validate_dynamic_constructor_alternatives([
+        (0, "ctor:fixture::Dynamic::A"),
+        (1, "ctor:fixture::Dynamic::A"),
+    ])
+    .expect_err("closed alternatives require unique constructor identities");
+    assert!(matches!(
+        duplicate_identity,
+        CraneliftBackendError::Unsupported(UnsupportedLowering {
+            construct: "DynamicConstructor",
+            reason,
+        }) if reason == "duplicate alternative constructor ctor:fixture::Dynamic::A"
+    ));
+}
+#[test]
+fn dynamic_constructor_known_omission_owns_source_default() {
+    let alternative = DynamicConstructorAlternativeV1 {
+        tag: 0,
+        constructor: "ctor:fixture::Dynamic::Missing".to_string(),
+        fields: Vec::new(),
+    };
+    let owned = RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "exact source match default".to_string(),
+    };
+    let unrelated = RuntimeTrap {
+        code: RuntimeTrapCode::ExplicitTrap,
+        message: "unrelated outer default".to_string(),
+    };
+    let selected = select_dynamic_constructor_case(&[], &alternative, &owned)
+        .expect("a well-formed omission selects the source default")
+        .expect_err("the constructor is intentionally omitted");
+    assert_eq!(selected, &owned);
+    assert_ne!(selected, &unrelated);
+}
+#[test]
+fn heterogeneous_first_ordinary_missing_selects_exact_default() {
+    let first_cases = vec![RuntimeMatchCase {
+        constructor: "ctor:fixture::Inner::Hit".to_string(),
+        binders: 1,
+        body: RuntimeExpr::Value(RuntimeValue::Int((1).into())),
+    }];
+    let first_default = RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "px7o exact first ordinary default".to_string(),
+    };
+    let later_default = RuntimeTrap {
+        code: RuntimeTrapCode::ExplicitTrap,
+        message: "px7o exact later ordinary default".to_string(),
+    };
+    let trap = select_ordinary_case(
+        OrdinaryEliminatorFrame {
+            cases: &first_cases,
+            default: &first_default,
+            env: &[],
+            retained_scrutinee_index: None,
+            deferred_constructor_case: None,
+        },
+        "ctor:fixture::Inner::Missing",
+    )
+    .expect_err("the first ordinary frame must select its own default");
+    assert_eq!(trap, first_default);
+    assert_ne!(trap, later_default);
+}
+#[test]
+fn dynamic_constructor_fields_precede_outer_environment_in_declaration_order() {
+    let alternative = DynamicConstructorAlternativeV1 {
+        tag: 7,
+        constructor: "ctor:fixture::Dynamic::Pair".to_string(),
+        fields: vec![
+            Lowered::Bytes(b"first".to_vec()),
+            Lowered::String("second".to_string()),
+        ],
+    };
+    let env =
+        materialize_dynamic_constructor_env(&alternative, &[Lowered::Bytes(b"outer".to_vec())]);
+    assert!(matches!(&env[0], Lowered::Bytes(value) if value == b"first"));
+    assert!(matches!(&env[1], Lowered::String(value) if value == "second"));
+    assert!(matches!(&env[2], Lowered::Bytes(value) if value == b"outer"));
+}
+
+#[test]
+fn cranelift_runs_constructor_match_and_record_projection_seeds() {
+    let env = NativeSeedEnvironment::empty();
+    for name in ["adt-constructor-match", "record-construction-projection"] {
+        let example = nc5_seed_examples()
+            .into_iter()
+            .find(|example| example.name == name)
+            .expect("seed exists");
+
+        let report =
+            run_example_with_seed_observation(&example, &env).expect("native run succeeds");
+
+        assert!(report.verifier_passed);
+        assert_eq!(report.observation, example.observation);
+    }
 }

@@ -475,3 +475,126 @@ fn borrowed_ingress_bytes_at_preserves_safe_none_bounds() {
     };
     assert_eq!(run_borrowed_fixture(&expr, &root), 7);
 }
+
+#[test]
+fn dynamic_host_result_producer_missing_case_routes_to_default() {
+    assert!(
+        dynamic_host_result_producer_case(&[], "ctor:prelude::Result::Ok")
+            .expect("missing case is a fail-closed default route")
+            .is_none()
+    );
+    emit_process_entrypoint_object_with_cranelift(
+        &host_result_computational_fixture(1, false, true),
+        "ken_px7m_missing_case_default",
+    )
+    .expect("the absent dynamic arm lowers through the producer default trap");
+}
+#[test]
+fn px8n_fs_write_at_arm_constructs_short_wrote_and_exact_no_progress() {
+    let (short, fixture) = run_px8n_write_arm_fixture(PX8N_SHORT_WROTE);
+    assert_eq!(fixture.malformed_request, 0);
+    assert_eq!(fixture.call_index, 3);
+    assert_eq!(
+        short, 3,
+        "Wrote 1 of 4 exposes predecessor Zero and remaining structural Nat 3",
+    );
+
+    let (zero, fixture) = run_px8n_write_arm_fixture(PX8N_ZERO_WRITE);
+    assert_eq!(fixture.malformed_request, 0);
+    assert_eq!(fixture.call_index, 3);
+    assert_eq!(
+        zero, 70,
+        "zero write reaches exact ResourceError.NoProgress"
+    );
+}
+#[test]
+fn live_effect_emitter_inventory_and_generated_layout_mutations_are_closed() {
+    assert_eq!(
+        CRANELIFT_HOST_EFFECT_CONSUMERS_V1,
+        ken_host::NATIVE_TESTED_TARGETS_V1
+    );
+    for operation in CRANELIFT_HOST_EFFECT_CONSUMERS_V1 {
+        let layout = ken_host::host_effect_wire_layout_v1(operation).unwrap();
+        assert_eq!(
+            ken_host::verify_host_effect_wire_layout_v1(operation, &layout),
+            Ok(())
+        );
+        let mut mutations = Vec::new();
+        let mut changed = layout.clone();
+        changed.request_size ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.request_align_shift ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.request_offsets[0] ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_size ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_tag_offset ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_error_tag ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_resource_error_tag ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_resource_error_schema_offset ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_resource_error_kind_offset ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_resource_error_identity_offset ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_resource_error_io_offset ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_resource_error_required_offset ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_resource_error_held_offset ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.resource_error_closed ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.resource_error_malformed ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.resource_error_right_not_held ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.resource_error_release_failed ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.resource_kind_fs_handle ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.resource_error_reply_schema ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_unit_tag ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_bool_tag ^= 1;
+        mutations.push(changed);
+        let mut changed = layout.clone();
+        changed.reply_bytes_tag ^= 1;
+        mutations.push(changed);
+        for mutation in mutations {
+            assert!(ken_host::verify_host_effect_wire_layout_v1(operation, &mutation).is_err());
+        }
+    }
+}
+#[cfg(test)]
+#[derive(Clone, Copy)]
+enum BoundedNatFixtureObservation {
+    OrdinaryCount,
+    OrdinaryRemaining,
+    ComputationalCount,
+}
