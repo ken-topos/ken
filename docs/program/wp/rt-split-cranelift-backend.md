@@ -309,11 +309,14 @@ move" claim auditable rather than asserted.
    > redistribution, or the final facade — it **does not authorize production
    > logic or content change** in any slice. Applied to the ruled order:
    > slices **2** (`planning`), **3** (`compiled`), **5** (lowering support),
-   > and **6** (`artifact`) are predominantly ordered item moves; slice **4**
-   > (`lowering::core`) adds hierarchy and test scaffolding and slice **7**
-   > adds `artifact::api` plus the explicit facade — for those two, the **new
-   > wiring** gets its own separate review pass, and the moved production text
-   > is still held to ordered identity.
+   > and the **artifact-internals body in 7** are predominantly ordered item
+   > moves. Slice **4** (`lowering::core`) adds hierarchy and test scaffolding;
+   > slice **6** adds the `artifact/mod.rs` namespace scaffold,
+   > `artifact::api`, and its API/test-support wiring; and slice **7** adds the
+   > adapter/test-support/final-facade wiring around the ordered artifact-item
+   > move. **For slices 4, 6, and 7, each new wiring delta gets its own
+   > separate review pass**, while moved production text remains held to
+   > ordered identity.
    >
    > ⛔ **And nothing in this AC is discharged by a byte-identity check of
    > whole files.** Byte-identity goes red on lawful import and visibility
