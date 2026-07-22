@@ -85,6 +85,15 @@ TMP_TABLE="$(mktemp)"
 TMP_OUT="$(mktemp)"
 trap 'rm -f "$TMP_TABLE" "$TMP_OUT"' EXIT
 
+# Field separator is `|`, not a tab. Bash `read` (and, with some awk
+# implementations, `OFS`) treats a tab as an IFS *whitespace* character
+# regardless of a custom `IFS=$'\t'` setting — it collapses runs of it
+# and drops empty fields between them, silently SHIFTING every field
+# after a blank one. `|` isn't in that whitespace class, so an empty
+# `authority`/`availability` (the exact shape a malformed manifest
+# record produces) round-trips as a genuinely empty field, not a
+# shifted one. Verified: `printf 'a|b||c\n' | { IFS='|' read ...; }`
+# preserves the empty third field; the tab form did not.
 awk '
   function field(line,  v) {
     v = line
@@ -93,7 +102,7 @@ awk '
     return v
   }
   /^\[\[document\]\]/ {
-    if (path != "") print path "\t" kind "\t" authority "\t" availability
+    if (path != "") print path "|" kind "|" authority "|" availability
     path = ""; kind = ""; authority = ""; availability = ""
     next
   }
@@ -101,12 +110,12 @@ awk '
   /^kind[[:space:]]*=/         { kind = field($0) }
   /^authority[[:space:]]*=/    { authority = field($0) }
   /^availability[[:space:]]*=/ { availability = field($0) }
-  END { if (path != "") print path "\t" kind "\t" authority "\t" availability }
+  END { if (path != "") print path "|" kind "|" authority "|" availability }
 ' "$MANIFEST" > "$TMP_TABLE"
 
 ROWS=""
 COUNT=0
-while IFS=$'\t' read -r path kind authority availability; do
+while IFS='|' read -r path kind authority availability; do
   [ -z "$path" ] && continue
   COUNT=$((COUNT + 1))
   ROWS="${ROWS}| \`${path}\` | ${kind} | ${authority} | ${availability} |

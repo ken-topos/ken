@@ -24,9 +24,20 @@
 //! proven to fail on a planted violation in the DOC-W0 handoff — see the
 //! before/after pasted there; this file is the gate's resting (green)
 //! state.
+//!
+//! Two substrate-soundness properties Architect review added
+//! (`dec_4hrvf6bkce8fk`): this parser's `[[document]]`/`key =`
+//! recognition is anchored at column 0, byte-identical to
+//! `scripts/gen-doc-status.sh`'s awk grammar, so a manifest record either
+//! parses the same way on both sides or is rejected by gate 1b on
+//! neither — the two can no longer silently disagree. And every path
+//! (document `path`, `sources`, internal links) resolves through
+//! `resolve_confined`, which rejects an absolute target or a `..` climb
+//! past the repository root before ever touching the filesystem, so an
+//! existing host file outside the repo can't satisfy a manifest entry.
 
 use std::collections::{BTreeSet, HashSet};
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 fn repo_root() -> PathBuf {
     // crates/ken-cli -> repo root is two levels up.
@@ -36,6 +47,52 @@ fn repo_root() -> PathBuf {
         .parent()
         .unwrap()
         .to_path_buf()
+}
+
+// --- repository-path confinement (Architect finding 2, thr_74hvpkqnxjp9q) -
+//
+// `root.join(rel)` has a sharp Rust `PathBuf` gotcha: if `rel` is
+// ABSOLUTE, `join` doesn't concatenate — it REPLACES the base entirely
+// (`PathBuf::push` docs). So a manifest `path`/`source` or an internal
+// link of `/etc/passwd` silently resolved to the real host file
+// `/etc/passwd`, existence-checks and all — an anti-drift gate that is
+// host-dependent, not repository-confined. A lexical `..` climb has the
+// same effect without even needing an absolute string. Fixed by
+// normalizing PURELY LEXICALLY (no filesystem access, so it rejects an
+// escape even when the target doesn't exist) and requiring the result
+// stay under the repository root.
+
+fn lexically_normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+/// Resolve `rel` against `base`, confined to `repo_root`: rejects an
+/// absolute `rel` and any `..` climb that lands outside `repo_root`.
+/// Returns the normalized absolute path if it stays confined, `None`
+/// otherwise. A legitimate cross-tree relative link (e.g.
+/// `library/README.md` citing `../catalog/packages/README.md`) still
+/// resolves fine — only an escape past `repo_root` itself is rejected.
+fn resolve_confined(base: &Path, rel: &str, repo_root: &Path) -> Option<PathBuf> {
+    if rel.is_empty() {
+        return None;
+    }
+    let normalized = lexically_normalize(&base.join(rel));
+    let repo_root_norm = lexically_normalize(repo_root);
+    if normalized.starts_with(&repo_root_norm) {
+        Some(normalized)
+    } else {
+        None
+    }
 }
 
 // --- a hand-rolled parser for library/manifest.toml's controlled subset ---
@@ -74,16 +131,26 @@ fn extract_quoted_strings(s: &str) -> Vec<String> {
 }
 
 fn parse_manifest(src: &str) -> Vec<DocEntry> {
+    // Architect finding 1 (thr_74hvpkqnxjp9q): this parser used to `.trim()`
+    // every line before recognizing a `[[document]]` header or a `key =`
+    // field, but `gen-doc-status.sh`'s awk companion anchors both at
+    // column 0 (`/^\[\[document\]\]/`, `/^path[[:space:]]*=/`, …) — an
+    // INDENTED field passed this gate while the generator silently
+    // dropped it. The two must accept identical input. Fixed here by
+    // matching awk's column-0 anchoring exactly: only a comment/blank
+    // check trims; `[[document]]` and `key =` recognition run against the
+    // UNTRIMMED line, so a leading space, tab, or anything else before
+    // the token makes it invisible to both parsers alike, not just one.
     let mut entries = Vec::new();
     let mut current: Option<DocEntry> = None;
     let mut lines = src.lines().peekable();
 
     while let Some(raw_line) = lines.next() {
-        let line = raw_line.trim();
-        if line.starts_with('#') || line.is_empty() {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        if line == "[[document]]" {
+        if raw_line.starts_with("[[document]]") {
             if let Some(entry) = current.take() {
                 entries.push(entry);
             }
@@ -93,7 +160,12 @@ fn parse_manifest(src: &str) -> Vec<DocEntry> {
         let Some(entry) = current.as_mut() else {
             continue;
         };
-        let Some((key, mut value)) = line.split_once('=') else {
+        // Column-0 anchor: an indented `key = value` line is not a field
+        // in either parser (see the fn-level note above).
+        if raw_line.starts_with(char::is_whitespace) {
+            continue;
+        }
+        let Some((key, mut value)) = raw_line.split_once('=') else {
             continue;
         };
         let key = key.trim();
@@ -232,13 +304,29 @@ fn gate1_manifest_covers_every_document_and_every_path_exists() {
         "library/*.md file(s) with no manifest.toml [[document]] entry: {missing_from_manifest:?}"
     );
 
+    // Architect finding 2: a document `path` must resolve UNDER
+    // `library/`, confined to the repo — reject absolute paths and `..`
+    // escapes before ever touching the filesystem, so an existing host
+    // file outside the repo can't satisfy a manifest entry.
+    let library_root = root.join("library");
+    let mut escaping_entries = Vec::new();
     let mut dangling_entries = Vec::new();
     for entry in &entries {
         assert!(!entry.path.is_empty(), "a [[document]] entry has no `path`");
-        if !root.join(&entry.path).is_file() {
-            dangling_entries.push(entry.path.clone());
+        match resolve_confined(&root, &entry.path, &root) {
+            Some(resolved) if resolved.starts_with(&library_root) => {
+                if !resolved.is_file() {
+                    dangling_entries.push(entry.path.clone());
+                }
+            }
+            _ => escaping_entries.push(entry.path.clone()),
         }
     }
+    assert!(
+        escaping_entries.is_empty(),
+        "manifest.toml [[document]] path(s) that are absolute, escape the \
+         repository, or fall outside library/: {escaping_entries:?}"
+    );
     assert!(
         dangling_entries.is_empty(),
         "manifest.toml [[document]] path(s) that do not exist on disk: {dangling_entries:?}"
@@ -446,7 +534,15 @@ fn gate2_links_are_valid() {
                 continue;
             }
 
-            let resolved = file_dir.join(target_path);
+            // Architect finding 2: confine link resolution to the repo —
+            // an absolute target or a `..` climb past `root` must not
+            // resolve to a real host file outside it.
+            let Some(resolved) = resolve_confined(file_dir, target_path, &root) else {
+                broken.push(format!(
+                    "{rel_path}: link target is absolute or escapes the repository: {link:?}"
+                ));
+                continue;
+            };
             if !resolved.exists() {
                 broken.push(format!(
                     "{rel_path}: link target does not exist: {link:?} (resolved {})",
@@ -481,7 +577,14 @@ fn gate3_every_manifest_source_path_and_anchor_exists() {
     for entry in &entries {
         for source in &entry.sources {
             let (path, anchor) = split_source(source);
-            let abs = root.join(path);
+            // Architect finding 2: confine source resolution to the repo.
+            let Some(abs) = resolve_confined(&root, path, &root) else {
+                bad.push(format!(
+                    "{}: source path is absolute or escapes the repository: {source:?}",
+                    entry.path
+                ));
+                continue;
+            };
             if !abs.is_file() {
                 bad.push(format!(
                     "{}: source path does not exist: {source:?}",
