@@ -22,19 +22,32 @@ semantic re-run over all **75** residual tests.
 
 ## Headline
 
-**47 of the 75 residual tests are lowering-subject.** The lexical predicate
-found 35 movers; the semantic re-run finds 47 more still sitting in the facade.
+**46 of the 75 residual tests are lowering-subject.** The lexical predicate
+found 35 movers; the semantic re-run found 46 more, and slice 5 moves all of
+them (@architect `evt_4p2c7tc37j84a` — no 5b; §10.5 makes a slice one
+production module **plus its tests**).
+
+> ⛔ **This headline previously read "47" while the rows below summed to 46.**
+> 47 was the *pre-correction* figure: when the `px8i_local_helpers_*` row was
+> reclassified `effects → artifact`, the table and per-bucket counts were
+> updated and **the headline was not**. Caught by @architect. Every count in
+> this file is now recomputed from the rows programmatically rather than
+> carried by hand — *a total is an assertion; the rows are the measurement*
+> (§7's own heuristic, which this document was written to discharge).
 
 | destination | count | disposition |
 |---|---:|---|
-| `constructors` | 27 | lowering-subject — belongs in slice 5 |
-| `effects` | 12 | lowering-subject — belongs in slice 5 |
-| `control` | 6 | lowering-subject — belongs in slice 5 |
-| `values` | 1 | lowering-subject — belongs in slice 5 |
+| `constructors` | 30 | lowering-subject — moved in slice 5 |
+| `effects` | 10 | lowering-subject — moved in slice 5 |
+| `control` | 6 | lowering-subject — moved in slice 5 |
+| `values` | 0 | zero *additional* residual rows; its 12 ruled tests already landed |
 | `artifact/api` | 27 | stays for slice 7 |
 | `artifact` | 2 | stays for slice 6 |
 | **UNCERTAIN** | **0** | — |
 | **total** | **75** | |
+
+**Reconciliation, verified post-move:** `75 = 46 + 29` · `110 = 81 + 29` ·
+crate-wide `#[test]` `145 → 145` · subject-module gain `81` = omnibus loss `81`.
 
 ## ⛔ One correction applied against the generated ledger
 
@@ -59,11 +72,24 @@ re-derived.
    and `px8i_local_helpers_reject_invalid_...` (`artifact`)** both exercise
    `native_int_clif`. With the correction above they now land together, which is
    the outcome the ruling implies.
-2. **`recursive_declaration_shape_change_hits_typed_boundary` (`:3810`)** is
-   placed in `control` on a native-argument-representation consistency check
-   tied to recursion machinery. An argument exists for `values`, since the
-   vocabulary's `values` bucket names int value lowering. **Left in `control`;
-   flagged for the reviewer rather than decided quietly.**
+2. **`recursive_declaration_shape_change_hits_typed_boundary` (`:3810`) —
+   RESOLVED, stays `control`** (@architect `evt_4p2c7tc37j84a`). The invariant
+   is stability of recursive-call argument representation across the active
+   recursive declaration, enforced by the core recursive-declaration call sites
+   consuming `same_recursive_argument_shapes`. The `Int` nested in
+   `Option::Some` is only the **witness** that makes the recursive shape change;
+   it does not make the subject value lowering.
+
+### Three destination corrections (@architect `evt_4p2c7tc37j84a`)
+
+Each had **the observer mistaken for the owner** — the same error as calling a
+public entrypoint the subject:
+
+| row | was | now | why |
+|---|---|---|---|
+| `nested_computational_payload_kind_rejects_specifically` | values | constructors | the Int guard observes; the nested producer/aggregate path owns |
+| `constructor_field_host_result_stays_on_ordinary_dynamic_match` | effects | constructors | discriminates the constructor-field bridge excluding an effect-produced field |
+| `pattern_default_trap_is_observation_not_backend_error` | effects | constructors | ordinary constructor-match default selection; no host/IO/bounded-Nat mechanism |
 
 ## Rows — lowering-subject (move)
 
@@ -76,7 +102,7 @@ re-derived.
 | nested_computational_outer_arity_rejects_specifically | 2744 | 0-binder case rejects 1-arg value | producer arity check | constructors |
 | nested_computational_malformed_recursive_position_rejects_specifically | 2760 | out-of-range recursive position rejects | recursive_positions bounds check | constructors |
 | nested_computational_final_merge_kind_rejects_specifically | 2776 | scalar and ExitCode arms must not merge | `record_merge_kind` | constructors |
-| nested_computational_payload_kind_rejects_specifically | 2792 | non-Int payload into sub_int rejects | `lower_int_binop` Int-only guard | values |
+| nested_computational_payload_kind_rejects_specifically | 2792 | non-Int payload into sub_int rejects | `lower_int_binop` Int-only guard | constructors |
 | heterogeneous_eliminator_well_formed_control_emits | 2808 | Bool producer composes through nested ordinary frames | `requires_heterogeneous_deforestation` gate | constructors |
 | constructor_field_selected_case_composes_before_field_lowering | 2826 | selected trailing field stays structural | constructor-field bridge | constructors |
 | constructor_field_composes_through_computational_consumer | 2835 | field composes via computational consumer | constructor-field bridge | constructors |
@@ -87,7 +113,7 @@ re-derived.
 | constructor_field_outer_arity_rejects_before_field_lowering | 3058 | outer field-count mismatch rejects early | dispatch `argument_binders != args.len()` | constructors |
 | constructor_field_missing_case_owns_default_before_fields | 3074 | unmatched constructor takes frame default | dispatch `None => Lowered::Trap(default)` | constructors |
 | constructor_field_aggregate_unconsumed_sibling_stays_ordinary | 3101 | non-scrutinizing sibling stays ordinary | `immediate_binder_eliminator` | constructors |
-| constructor_field_host_result_stays_on_ordinary_dynamic_match | 3141 | effect-produced field not bridged into splice | deforestation excludes `RuntimeExpr::Effect` | effects |
+| constructor_field_host_result_stays_on_ordinary_dynamic_match | 3141 | effect-produced field not bridged into splice | deforestation excludes `RuntimeExpr::Effect` | constructors |
 | dynamic_constructor_dispatches_ordinary_continuation_with_mixed_arities | 3365 | mixed nullary/unary alternatives lower | `select_dynamic_constructor_case` arity check | constructors |
 | dynamic_constructor_dispatches_producer_continuation_with_all_frames | 3374 | dispatch preserves active computational frame | `lower_dynamic_constructor_match` frame threading | constructors |
 | dynamic_constructor_ordinary_continuation_preserves_bool_kind | 3383 | dynamic Bool usable by enclosing consumer | scalar/Bool kind preserved across arm merge | constructors |
@@ -114,7 +140,7 @@ re-derived.
 | px8i_host_narrowing_rejects_negative_and_over_u64_before_dispatch | 2141 | out-of-range host int rejected pre-dispatch | `narrow_native_int_u64` validity | effects |
 | px8i_positioned_start_and_metadata_promote_u64_above_i64_max | 2154 | narrowed start kept; metadata promotes to Big | `narrow_native_int_u64` + `lower_unsigned_u64_int` | effects |
 | unsupported_effect_is_distinct_from_backend_failure | 5221 | Console Effect errors Unsupported("Effect") | expr-lowering `RuntimeExpr::Effect` arm | effects |
-| pattern_default_trap_is_observation_not_backend_error | 5250 | default-arm trap surfaces as observation | Match default-arm trap codegen | effects |
+| pattern_default_trap_is_observation_not_backend_error | 5250 | default-arm trap surfaces as observation | Match default-arm trap codegen | constructors |
 
 ## Rows — stays for slices 6/7 (28)
 

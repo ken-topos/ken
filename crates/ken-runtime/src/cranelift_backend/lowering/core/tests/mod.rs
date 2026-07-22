@@ -16,3 +16,23 @@ mod constructors;
 mod control;
 mod effects;
 mod values;
+
+// Shared by >1 subject module: §10.2 places a helper at the lowest
+// tests/mod.rs ancestor shared by its actual users.
+fn console_write_effect() -> RuntimeExpr {
+    RuntimeExpr::Effect {
+        family: "Console".to_string(),
+        operation: ken_host::HostOpV1::ConsoleWrite,
+        capability: None,
+        args: vec![
+            RuntimeExpr::Construct {
+                constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                args: Vec::new(),
+            },
+            RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec())),
+        ],
+    }
+}
+fn recursive_computational_result(leaf_body: RuntimeExpr) -> RuntimeExpr {
+    recursive_computational_result_depth(0, leaf_body)
+}

@@ -3,6 +3,7 @@
 //! root-authority, join-site, source-install and recursor tests -> `control`).
 
 use super::*;
+use crate::RuntimeSymbolMetadata;
 
 #[derive(Clone, Copy)]
 enum Px8jInstallMalformation {
@@ -2345,4 +2346,370 @@ enum Px8jRecursorMalformation {
     SelectionRole,
     RepeatedScopeIdentity,
     BrokenScopeParent,
+}
+
+#[test]
+fn recursive_declaration_shape_change_hits_typed_boundary() {
+    let symbol = "decl:fixture::Loop::run".to_string();
+    let declaration = RuntimeDeclaration {
+        symbol: symbol.clone(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["state".to_string()],
+                body: Box::new(RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::DeclarationRef {
+                        symbol: symbol.clone(),
+                    }),
+                    args: vec![RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::Option::Some".to_string(),
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int((1).into()))],
+                    }],
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: symbol.clone(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Option::None".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let declarations = BTreeMap::from([(symbol.as_str(), &declaration)]);
+    let result = compile_expr_into_module(
+        new_object_module("px8l-recursive-shape").unwrap(),
+        "ken_px8l_recursive_shape",
+        Linkage::Export,
+        &entry,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    );
+    let error = match result {
+        Ok(_) => panic!("a changing recursive native representation must fail closed"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        CraneliftBackendError::Unsupported(UnsupportedLowering {
+            construct: "DeclarationRef",
+            reason,
+        }) if reason.contains("changes its native argument representation")
+    ));
+}
+#[test]
+fn checked_join_marker_without_exact_plan_site_rejects_before_emission() {
+    let expression = RuntimeExpr::CheckedJoinSite {
+        site_id: 41,
+        body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((7).into()))),
+    };
+    let result = compile_expr_into_module(
+        new_object_module("px8h-missing-join-site").unwrap(),
+        "ken_px8h_missing_join_site",
+        Linkage::Export,
+        &expression,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        false,
+        None,
+        None,
+        None,
+    );
+    let error = match result {
+        Ok(_) => panic!("a live checked occurrence without its plan site must reject"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        CraneliftBackendError::Unsupported(UnsupportedLowering {
+            construct: "NativeJoinPlanV1",
+            reason,
+        }) if reason.contains("marker was not consumed")
+    ));
+}
+#[test]
+fn process_lowering_without_checked_root_authority_rejects_before_cfg() {
+    let result = compile_expr_into_module(
+        new_object_module("px8ta-missing-root-authority").unwrap(),
+        "ken_px8ta_missing_root_authority",
+        Linkage::Export,
+        &RuntimeExpr::Construct {
+            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+            args: Vec::new(),
+        },
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        None,
+        None,
+        None,
+    );
+    let error = match result {
+        Ok(_) => panic!("process lowering must not invent root authority from process mode"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        CraneliftBackendError::Unsupported(UnsupportedLowering {
+            construct: "NativeJoinPlanV1",
+            reason,
+        }) if reason == "process-object lowering has no checked distinguished-root answer authority"
+    ));
+}
+#[test]
+fn checked_marker_census_rejects_duplicate_call_and_slot_occurrences_before_cfg() {
+    let (entry, declaration, plan) = occurrence_exact_marker_fixture(false, false);
+    let declarations = BTreeMap::from([(declaration.symbol.as_str(), &declaration)]);
+    validate_oriented_subcontinuation_transport(&entry, &declarations, Some(&plan))
+        .expect("the exact checked Runtime marker occurrence ledger closes");
+
+    for (duplicate_call, duplicate_slot, expected) in [
+        (
+            true,
+            false,
+            "computational-IH call Runtime occurrences differ",
+        ),
+        (
+            false,
+            true,
+            "computational-IH slot Runtime occurrences differ",
+        ),
+    ] {
+        let (entry, declaration, plan) =
+            occurrence_exact_marker_fixture(duplicate_call, duplicate_slot);
+        let declarations = BTreeMap::from([(declaration.symbol.as_str(), &declaration)]);
+        let error = validate_oriented_subcontinuation_transport(&entry, &declarations, Some(&plan))
+            .expect_err("an extra static marker occurrence must reject before CFG emission");
+        assert!(
+            matches!(
+                error,
+                CraneliftBackendError::Unsupported(UnsupportedLowering {
+                    construct: "OrientedSubcontinuationPlanV1",
+                    ref reason,
+                }) if reason.contains(expected)
+            ),
+            "{error:?}"
+        );
+    }
+}
+#[test]
+fn valid_root_plus_missing_marked_scalar_cut_rejects_before_emission() {
+    let expression = RuntimeExpr::CheckedJoinSite {
+        site_id: 41,
+        body: Box::new(host_result_computational_fixture(1, true, false)),
+    };
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let result = compile_expr_into_module(
+        new_object_module("px8h-root-marker-class-separation").unwrap(),
+        "ken_px8h_root_marker_class_separation",
+        Linkage::Export,
+        &expression,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&symbols),
+        Some(crate::NativeJoinPlanV1 {
+            representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+            sites: vec![self_consistent_root_join_site(0)],
+        }),
+        None,
+    );
+    let error = match result {
+        Ok(_) => panic!("the root must not discharge a missing marked scalar-cut site"),
+        Err(error) => error,
+    };
+    assert!(
+        matches!(
+            error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "NativeJoinPlanV1",
+                ref reason,
+            }) if reason.contains("marker was not consumed")
+        ),
+        "{error:?}"
+    );
+}
+#[test]
+fn self_consistent_appended_orphan_join_site_rejects_before_emission() {
+    let result = compile_expr_into_module(
+        new_object_module("px8h-orphan-join-site").unwrap(),
+        "ken_px8h_orphan_join_site",
+        Linkage::Export,
+        &RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        false,
+        None,
+        Some(crate::NativeJoinPlanV1 {
+            representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+            sites: vec![
+                self_consistent_root_join_site(0),
+                self_consistent_join_site(52, 23),
+            ],
+        }),
+        None,
+    );
+    let error = match result {
+        Ok(_) => panic!("a self-consistent orphan plan row must reject"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        CraneliftBackendError::Unsupported(UnsupportedLowering {
+            construct: "NativeJoinPlanV1",
+            reason,
+        }) if reason.contains("unconsumed or orphan site")
+    ));
+}
+fn occurrence_exact_marker_fixture(
+    duplicate_call: bool,
+    duplicate_slot: bool,
+) -> (
+    RuntimeExpr,
+    RuntimeDeclaration,
+    crate::OrientedSubcontinuationPlanV1,
+) {
+    let declaration = "decl:fixture::PX8TA::markers".to_string();
+    let slot_marker = RuntimeExpr::CheckedComputationalIHSlots {
+        slot_template_ids: vec![200],
+        checked_occurrence_paths: vec![vec![20]],
+        body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((1).into()))),
+    };
+    let call_marker = RuntimeExpr::CheckedComputationalIHInvocation {
+        call_template_id: 100,
+        checked_occurrence_path: vec![30],
+        body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((2).into()))),
+    };
+    let slot_value = if duplicate_slot {
+        RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Pair".to_string(),
+            args: vec![slot_marker.clone(), slot_marker],
+        }
+    } else {
+        slot_marker
+    };
+    let call_body = if duplicate_call {
+        RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Pair".to_string(),
+            args: vec![call_marker.clone(), call_marker],
+        }
+    } else {
+        call_marker
+    };
+    let cases = vec![crate::RuntimeComputationalMatchCase {
+        constructor: "ctor:fixture::Only".to_string(),
+        argument_binders: 0,
+        recursive_positions: Vec::new(),
+        body: RuntimeExpr::Let {
+            value: Box::new(slot_value),
+            body: Box::new(call_body),
+        },
+    }];
+    let default = RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "PX8-TA marker fixture default".to_string(),
+    };
+    let runtime_frame_fingerprint =
+        crate::compiler_private_computational_match_frame_fingerprint(&cases, &default);
+    let body = RuntimeExpr::CheckedSubcontinuationFrame {
+        frame_id: 0,
+        body: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Only".to_string(),
+                args: Vec::new(),
+            }),
+            cases,
+            default,
+        }),
+    };
+    let runtime_declaration = RuntimeDeclaration {
+        symbol: declaration.clone(),
+        kind: RuntimeDeclarationKind::Transparent { body },
+        metadata: RuntimeSymbolMetadata::empty(),
+    };
+    let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+        frame_id: 0,
+        segment_site_id: 9,
+        declaration: declaration.clone(),
+        checked_occurrence_path: vec![10],
+        semantic_position: 0,
+        input_interface: oriented_test_interface(0),
+        output_interface: oriented_test_interface(1),
+        runtime_frame_fingerprint,
+        occurrence_binding_fingerprint: 0,
+        control_witness: crate::OrientedControlWitnessV1::DistinguishedRoot,
+    };
+    frame.occurrence_binding_fingerprint =
+        crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+    let mut slot = crate::CheckedComputationalIHSlotTemplateV1 {
+        slot_template_id: 200,
+        declaration: declaration.clone(),
+        checked_match_ordinal: 0,
+        checked_occurrence_path: vec![20],
+        frame_template_id: 0,
+        constructor: "ctor:fixture::Only".to_string(),
+        recursive_position: 0,
+        method_binder_ordinal: 0,
+        local_telescope: Vec::new(),
+        ih_interface: oriented_test_interface(0),
+        segment_site_id: 9,
+        frame_templates: vec![0],
+        input_interface: oriented_test_interface(0),
+        output_interface: oriented_test_interface(1),
+        runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+            declaration: declaration.clone(),
+            runtime_path: vec![0, 1, 0],
+        }],
+        occurrence_binding_fingerprint: 0,
+    };
+    slot.occurrence_binding_fingerprint =
+        crate::compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+    let mut call = crate::CheckedComputationalIHCallTemplateV1 {
+        call_template_id: 100,
+        declaration: declaration.clone(),
+        checked_occurrence_path: vec![30],
+        slot_template_id: 200,
+        arity: 1,
+        local_telescope: Vec::new(),
+        result_interface: oriented_test_interface(1),
+        callee_segment_site_id: 9,
+        callee_frame_templates: vec![0],
+        parent_frame_template_id: Some(0),
+        parent_segment_site_id: Some(9),
+        caller_interface: oriented_test_interface(1),
+        runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+            declaration,
+            runtime_path: vec![0, 1, 1],
+        }],
+        occurrence_binding_fingerprint: 0,
+    };
+    call.occurrence_binding_fingerprint =
+        crate::compiler_private_computational_ih_call_binding_fingerprint(&call);
+    (
+        RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+        runtime_declaration,
+        crate::OrientedSubcontinuationPlanV1 {
+            representation_rule_version:
+                crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+            frames: vec![frame],
+            recursive_calls: Vec::new(),
+            computational_ih_slots: vec![slot],
+            computational_ih_calls: vec![call],
+        },
+    )
 }

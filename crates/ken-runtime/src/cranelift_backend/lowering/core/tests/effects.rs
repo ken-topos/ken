@@ -598,3 +598,428 @@ enum BoundedNatFixtureObservation {
     OrdinaryRemaining,
     ComputationalCount,
 }
+
+#[test]
+fn direct_host_result_closure_match_keeps_established_dynamic_lane() {
+    emit_process_entrypoint_object_with_cranelift(
+        &host_result_closure_match(console_write_effect()),
+        "ken_px7o_direct_host_result_closure_match",
+    )
+    .expect("direct HostResult remains owned by ordinary dynamic matching");
+}
+#[test]
+fn call_returned_host_result_keeps_established_dynamic_lane() {
+    let effect_call = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["ignored".to_string()],
+            body: Box::new(console_write_effect()),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
+    };
+
+    emit_process_entrypoint_object_with_cranelift(
+        &host_result_closure_match(effect_call),
+        "ken_px7o_call_returned_host_result_closure_match",
+    )
+    .expect("call-returned HostResult remains owned by ordinary dynamic matching");
+}
+#[test]
+fn match_selected_call_returned_host_result_keeps_established_dynamic_lane() {
+    let effect_call = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["ignored".to_string()],
+            body: Box::new(RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Bool::True".to_string(),
+                    args: Vec::new(),
+                }),
+                cases: ["ctor:prelude::Bool::True", "ctor:prelude::Bool::False"]
+                    .into_iter()
+                    .map(|constructor| RuntimeMatchCase {
+                        constructor: constructor.to_string(),
+                        binders: 0,
+                        body: console_write_effect(),
+                    })
+                    .collect(),
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "static Bool default".to_string(),
+                },
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
+    };
+
+    emit_process_entrypoint_object_with_cranelift(
+        &host_result_closure_match(effect_call),
+        "ken_px7o_match_selected_call_returned_host_result",
+    )
+    .expect("match-selected HostResult remains owned by ordinary dynamic matching");
+}
+#[test]
+fn recursive_computational_host_result_keeps_established_dynamic_lane() {
+    emit_process_entrypoint_object_with_cranelift(
+        &host_result_closure_match(recursive_computational_result(console_write_effect())),
+        "ken_px7o_recursive_computational_host_result",
+    )
+    .expect("recursive computational HostResult remains on ordinary dynamic matching");
+}
+#[test]
+fn px8n_fs_write_at_arm_rejects_over_bound_reply_before_observation() {
+    let (result, fixture) = run_px8n_write_arm_fixture(PX8N_OVER_BOUND_WRITE);
+    assert_eq!(fixture.malformed_request, 0);
+    assert_eq!(fixture.call_index, 3);
+    assert_eq!(
+        result, -1,
+        "Wrote 5 for an effective request of 4 rejects before a Nat is observable",
+    );
+}
+#[test]
+fn px8n_fs_read_at_arm_distinguishes_eof_and_short_read_some() {
+    let (eof, fixture) = run_px8n_read_arm_fixture(PX8N_READ_EOF);
+    assert_eq!(fixture.malformed_request, 0);
+    assert_eq!(fixture.call_index, 3);
+    assert_eq!(eof, 10, "zero read constructs exact ReadEof");
+
+    let (short, fixture) = run_px8n_read_arm_fixture(PX8N_SHORT_READ);
+    assert_eq!(fixture.malformed_request, 0);
+    assert_eq!(fixture.call_index, 3);
+    assert_eq!(
+        short, 12,
+        "ReadSome 1 of 4 carries the same structural Nat 1 in BufferSpan",
+    );
+}
+#[test]
+fn px8n_fs_read_at_arm_rejects_over_bound_span_before_observation() {
+    let (result, fixture) = run_px8n_read_arm_fixture(PX8N_OVER_BOUND_READ);
+    assert_eq!(fixture.malformed_request, 0);
+    assert_eq!(fixture.call_index, 3);
+    assert_eq!(
+        result, -1,
+        "ReadSome 5 for an effective request of 4 rejects before a Nat is observable",
+    );
+}
+#[test]
+fn px8i_host_narrowing_rejects_negative_and_over_u64_before_dispatch() {
+    let (negative, negative_fixture) =
+        run_px8n_arm_fixture(PX8N_SHORT_WROTE, px8i_negative_narrow_fixture);
+    assert_eq!(negative, 71);
+    assert_eq!(negative_fixture.call_index, 0);
+
+    let (oversize, oversize_fixture) =
+        run_px8n_arm_fixture(PX8N_SHORT_WROTE, px8i_oversize_narrow_fixture);
+    assert_eq!(oversize, 72);
+    assert_eq!(oversize_fixture.call_index, 0);
+}
+#[test]
+fn px8i_positioned_start_and_metadata_promote_u64_above_i64_max() {
+    let (read, read_fixture) =
+        run_px8n_arm_fixture(PX8I_BIG_READ_START, px8i_big_read_start_fixture);
+    assert_eq!(read_fixture.malformed_request, 0);
+    assert_eq!(read_fixture.call_index, 3);
+    assert_eq!(
+        read, 13,
+        "ReadAt keeps the narrowed start through validation"
+    );
+
+    let (write, write_fixture) =
+        run_px8n_arm_fixture(PX8I_WRAPPING_WRITE_START, px8i_wrapping_write_start_fixture);
+    assert_eq!(write_fixture.malformed_request, 0);
+    assert_eq!(write_fixture.call_index, 3);
+    assert_eq!(
+        write, -1,
+        "WriteAt validates progress against the narrowed start and rejects wrap"
+    );
+
+    let (metadata, metadata_fixture) =
+        run_px8n_arm_fixture(PX8I_METADATA_BIG, px8i_metadata_big_fixture);
+    assert_eq!(metadata_fixture.malformed_request, 0);
+    assert_eq!(metadata_fixture.call_index, 2);
+    assert_eq!(
+        metadata, 14,
+        "metadata detail is promoted to canonical Big rather than a negative Small"
+    );
+}
+#[test]
+fn unsupported_effect_is_distinct_from_backend_failure() {
+    let example = RuntimeExample {
+        name: "unsupported-effect".to_string(),
+        checked_core_shape: "diagnostic label only".to_string(),
+        ir: RuntimeExpr::Effect {
+            family: "Console".to_string(),
+            operation: ken_host::HostOpV1::ConsoleRead,
+            capability: None,
+            args: vec![],
+        },
+        observation: RuntimeObservation::Trapped(RuntimeTrap {
+            code: RuntimeTrapCode::UnsupportedErasure,
+            message: "unsupported".to_string(),
+        }),
+    };
+
+    let err = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+        .expect_err("effect must reject");
+
+    assert!(matches!(
+        err,
+        CraneliftBackendError::Unsupported(UnsupportedLowering {
+            construct: "Effect",
+            ..
+        })
+    ));
+}
+fn px8i_negative_narrow_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8i_invalid_allocate(
+        symbols,
+        RuntimeExpr::Value(RuntimeValue::Int((-1).into())),
+        71,
+    )
+}
+fn px8i_oversize_narrow_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8i_invalid_allocate(symbols, big(crate::Sign::NonNegative, &[0, 1]), 72)
+}
+fn px8i_wrapping_write_start_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8n_write_arm_fixture_with_start(symbols, big(crate::Sign::NonNegative, &[u64::MAX - 1]))
+}
+fn px8i_big_read_start_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8n_read_arm_fixture_with_start(
+        symbols,
+        big(crate::Sign::NonNegative, &[PX8I_BIG_U64]),
+        true,
+    )
+}
+fn px8i_metadata_big_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    let trap = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "PX8-I metadata result default".to_string(),
+    };
+    let metadata = RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::FsHandleMetadata,
+        capability: None,
+        args: vec![RuntimeExpr::Var(0)],
+    };
+    let observe = RuntimeExpr::Match {
+        scrutinee: Box::new(metadata),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((98).into()))),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: px8n_failure(
+                    symbols,
+                    RuntimeExpr::If {
+                        scrutinee: Box::new(total_primitive(
+                            "eq_int",
+                            vec![
+                                RuntimeExpr::Var(0),
+                                big(crate::Sign::NonNegative, &[PX8I_BIG_U64]),
+                            ],
+                        )),
+                        then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((14).into()))),
+                        else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((99).into()))),
+                    },
+                ),
+            },
+        ],
+        default: trap(),
+    };
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::BufferAllocate,
+            capability: None,
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
+        }),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((97).into()))),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: observe,
+            },
+        ],
+        default: trap(),
+    }
+}
+fn run_px8n_read_arm_fixture(scenario: u64) -> (i64, Px8nHostReplyFixture) {
+    run_px8n_arm_fixture(scenario, px8n_read_arm_fixture)
+}
+fn px8i_invalid_allocate(
+    symbols: &crate::NativeProcessSymbols,
+    capacity: RuntimeExpr,
+    code: i64,
+) -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::BufferAllocate,
+            capability: None,
+            args: vec![capacity],
+        }),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![crate::RuntimeMatchCase {
+                        constructor: symbols.resource_invalid_bounds.clone(),
+                        binders: 0,
+                        body: px8n_failure(
+                            symbols,
+                            RuntimeExpr::Value(RuntimeValue::Int(code.into())),
+                        ),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "PX8-I expected InvalidBounds".to_string(),
+                    },
+                },
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int(99.into()))),
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-I expected Result".to_string(),
+        },
+    }
+}
+fn px8n_read_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8n_read_arm_fixture_with_start(
+        symbols,
+        RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+        false,
+    )
+}
+fn px8n_read_arm_fixture_with_start(
+    symbols: &crate::NativeProcessSymbols,
+    start: RuntimeExpr,
+    observe_big_start: bool,
+) -> RuntimeExpr {
+    let trap = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "PX8-N checked read result default".to_string(),
+    };
+    let allocate = || RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::BufferAllocate,
+        capability: None,
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
+    };
+    let read = RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::FsReadAt,
+        capability: None,
+        args: vec![
+            RuntimeExpr::Var(1),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Var(0),
+            start,
+            RuntimeExpr::Value(RuntimeValue::Int((4).into())),
+        ],
+    };
+    let exact = if observe_big_start {
+        RuntimeExpr::If {
+            scrutinee: Box::new(total_primitive(
+                "eq_int",
+                vec![
+                    RuntimeExpr::Var(1),
+                    big(crate::Sign::NonNegative, &[PX8I_BIG_U64]),
+                ],
+            )),
+            then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((13).into()))),
+            else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int((99).into()))),
+        }
+    } else {
+        RuntimeExpr::Value(RuntimeValue::Int((12).into()))
+    };
+    let read_some = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![crate::RuntimeMatchCase {
+            constructor: symbols.private_buffer_span.clone(),
+            binders: 2,
+            body: px8n_exact_nat(symbols, RuntimeExpr::Var(1), 1, exact),
+        }],
+        default: trap(),
+    };
+    let read_some = px8n_failure(symbols, read_some);
+    let progress = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.read_some.clone(),
+                binders: 2,
+                body: read_some,
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.read_eof.clone(),
+                binders: 0,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((10).into()))),
+            },
+        ],
+        default: trap(),
+    };
+    let read_result = RuntimeExpr::Match {
+        scrutinee: Box::new(read),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((82).into()))),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: progress,
+            },
+        ],
+        default: trap(),
+    };
+    let second = RuntimeExpr::Match {
+        scrutinee: Box::new(allocate()),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((81).into()))),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: read_result,
+            },
+        ],
+        default: trap(),
+    };
+    RuntimeExpr::Match {
+        scrutinee: Box::new(allocate()),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((80).into()))),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: second,
+            },
+        ],
+        default: trap(),
+    }
+}
