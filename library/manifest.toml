@@ -48,6 +48,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "source-currency",
 ]
 owner = "doc"
 
@@ -73,6 +74,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "source-currency",
 ]
 owner = "doc"
 
@@ -90,6 +92,7 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
+  "source-currency",
   "generated-current",
 ]
 owner = "doc"

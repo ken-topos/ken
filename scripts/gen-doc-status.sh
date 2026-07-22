@@ -153,6 +153,82 @@ if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" HEAD 2>/dev/null; 
   exit 1
 fi
 
+# --- currency: REVISION must certify something about the CORPUS, not just --
+# --- name a real ancestor commit (DOC-CURRENCY-ANCHOR) ---------------------
+#
+# Everything above establishes that REVISION names a real commit and that
+# it is an ancestor of HEAD — and nothing more. `library/STATUS.md`'s claim
+# is "the corpus was validated as of REVISION"; neither fact above reads a
+# single byte of anything the corpus cites. Grounded, un-mutated, on
+# `origin/main @ 6be9754b` (adversary, `evt_6c9mhr3tg9pfg`): `STATUS.md`
+# stamped "Validated revision e5a400c7", and `git ls-tree e5a400c7 --
+# library/` returns ZERO entries — the corpus is stamped validated at a
+# revision where it did not yet exist, and every check above still passes.
+#
+# Two DISTINCT properties, checked separately so their diagnostics don't
+# get conflated (AC-2 asks for exactly this distinguishability):
+
+# (a) library/'s own corpus must already exist at REVISION — otherwise
+# nothing was there to validate. This is the bootstrap gap made explicit:
+# a REVISION set before library/manifest.toml was ever introduced is not a
+# stale-but-once-valid revision, it is a revision that never had a corpus
+# to certify anything about.
+if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}:library/manifest.toml" 2>/dev/null; then
+  echo "gen-doc-status: library/REVISION '${REVISION}' predates library/'s own" >&2
+  echo "  introduction — library/manifest.toml did not exist at that revision, so" >&2
+  echo "  nothing was there to validate. This is distinct from a cited source" >&2
+  echo "  drifting (below): REVISION must point at or after the commit that" >&2
+  echo "  first introduced library/manifest.toml." >&2
+  exit 1
+fi
+
+# (b) every manifest `sources` entry outside library/ itself — the claims
+# the corpus actually cites — must be byte-unchanged between REVISION and
+# HEAD. `library/`-prefixed sources (currently only STATUS.md's own
+# `manifest.toml`/`REVISION`) are the corpus's own generation inputs,
+# already covered by gate 1/1b/1c and check (a) above; they are not an
+# external claim needing currency evidence, and REVISION's own file
+# content differs from itself by construction on every bump (the parent-
+# commit self-reference this script's header explains), so diffing it here
+# would fail on every legitimate bump.
+# `grep -o` exits 1 on zero matches (a manifest with no `sources` array at
+# all, or all-empty ones) — under `set -o pipefail` that kills the whole
+# pipeline, and under `set -e` kills the script SILENTLY (no diagnostic,
+# just a bare exit 1) before `CITED_SOURCES` is even assigned. `|| true`
+# on that one stage only converts "found nothing" into an empty, valid
+# result, not into swallowing a genuine failure elsewhere in the pipeline.
+CITED_SOURCES="$(awk '
+  /^sources[[:space:]]*=/ { capture = 1 }
+  capture { print }
+  capture && /\]/ { capture = 0 }
+' "$MANIFEST" | { grep -o '"[^"]*"' || true; } | tr -d '"' | sed 's/#.*//' | sort -u)"
+
+DRIFTED=""
+while IFS= read -r path; do
+  [ -z "$path" ] && continue
+  case "$path" in
+    library/*) continue ;;
+  esac
+  if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}:${path}" 2>/dev/null; then
+    DRIFTED="${DRIFTED}  - ${path} (does not exist at REVISION)
+"
+    continue
+  fi
+  if ! git -C "$REPO_ROOT" diff --quiet "$REVISION" HEAD -- "$path" 2>/dev/null; then
+    DRIFTED="${DRIFTED}  - ${path}
+"
+  fi
+done <<<"$CITED_SOURCES"
+
+if [ -n "$DRIFTED" ]; then
+  echo "gen-doc-status: cited source(s) changed between REVISION and HEAD — the" >&2
+  echo "  currency claim is no longer backed by evidence for:" >&2
+  printf '%s' "$DRIFTED" >&2
+  echo "  Re-validate the corpus against the new content, then bump" >&2
+  echo "  library/REVISION to reflect that." >&2
+  exit 1
+fi
+
 # --- manifest parsing -----------------------------------------------------
 # library/manifest.toml is a small, hand-controlled TOML subset: a run of
 # `[[document]]` tables, each with flat `key = "value"` scalar fields. This
