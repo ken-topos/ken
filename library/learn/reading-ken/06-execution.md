@@ -256,3 +256,13 @@ re-derive, re-litigate, or attempt to close that issue; it reports the
 state as of this page's `REVISION` only. Fragments cited are drawn from the
 already-selected, registered set in [`fragments.md`](fragments.md); this
 chapter does not introduce a fresh selection.
+
+**No normative language.** Every declarative sentence above about what the
+language does or guarantees carries an explicit spec/code citation next to
+it; this page states no rule on its own authority (D1). The mechanism used
+to check this is a re-read of each paragraph against its own footnoted
+citation, confirming the citation's text actually supports the sentence
+made from it — the same check applied to every prior chapter. Separately,
+this page was swept for coordination/review-process narration (thread,
+event, WP, or role-name references) with a whole-file grep for
+`librarian|thr_|evt_|doc-leader|steward|kickoff`; zero hits.
