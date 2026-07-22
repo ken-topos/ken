@@ -33,6 +33,15 @@ to one side's own count means no merge occurred**: that side's blob was taken
 wholesale. `git checkout <ref> -- <path>` does precisely that, silently
 (see [[git-checkout-ref-dot-silently-reverts-uncommitted-edits-worktree-wide]]).
 
+**Confirmed, not inferred.** I filed the above reasoning from the arithmetic
+alone, flagged as inference since I could not see the commands. The Steward
+re-ran the merge themselves, agreed, and stated the command: `git checkout
+<branch> -- <dir>`, twice. In their words — *"That is a checkout, not a merge.
+The loud failure git was holding for me never fired because I never asked git to
+merge."* ⇒ **The silence was the operator's choice of command, not git's
+behavior.** Corrected class: **a merge avoided or resolved by taking one side
+wholesale.**
+
 ## Why the misattribution was worth correcting
 
 The remedy the Steward landed — a row-count + orphan post-condition on the
