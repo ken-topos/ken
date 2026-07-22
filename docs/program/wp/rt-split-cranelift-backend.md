@@ -645,6 +645,37 @@ cross-tree items" as "three instances of one rule."** Classify first:
 6. Move `test_only_distinguished_root_join_plan` to `test_support.rs` in
    **slice 7**, when `artifact::api` and the final facade are cut. Until then
    it may remain at the residual parent; **no temporary widening is needed.**
+
+   > ### ⛔ 6a. COMPUTE LCA FROM FINAL RULED DESTINATIONS
+   > (Architect `evt_3eg25g63vyc5h`, after slice 4 got this wrong)
+   >
+   > **A helper's LCA is the lowest common ancestor of its users' FINAL RULED
+   > subject-test subtrees — never of wherever those users happen to sit
+   > mid-decomposition. A transient residual-parent location never justifies
+   > early facade hoisting.**
+   >
+   > **Why this is not a detail.** During a multi-slice split, *some* users of
+   > almost every shared fixture have moved and *others* are still in the
+   > residual facade. Reading LCA off current locations therefore manufactures
+   > a **facade LCA for nearly every shared helper**, and `test_support.rs`
+   > becomes precisely the residual omnibus §10.1 forbids — arriving by the
+   > front door, one slice at a time, while each individual hoist looks
+   > locally justified.
+   >
+   > **The inversion is the tell.** Slice 4 hoisted **eleven** declarations on
+   > transient splits while correctly leaving `test_only_distinguished_root_join_plan`
+   > — *the one grounded facade-LCA case* — in the parent. Two counterexamples
+   > settle it: `Px8dsEdgeMutation` has **every** use in
+   > `lowering/core/tests/control.rs`, so its LCA is `control.rs`;
+   > `root_authority_test_lowering` is **named by rule 4 above** as a
+   > `control.rs` helper, and its remaining parent caller is a source-install
+   > test that §10.2 assigns to `control`.
+   >
+   > **Current residual location is not ownership.** Descendant test modules
+   > may reference ancestor-private test helpers by explicit private/rooted
+   > path — **no production-module re-export and no visibility widening is
+   > needed** to keep a helper where it belongs until its slice arrives.
+   > **"Test-only" waives neither placement nor AC-8.**
 7. Absent from production builds; **zero** against the AC-7 production seam
    budget; reported in the separate test-scaffolding ledger. **Any production
    consumer, subject logic, or helper that could live under a lower common test
