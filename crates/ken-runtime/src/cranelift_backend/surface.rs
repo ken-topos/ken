@@ -281,9 +281,13 @@ mod surface_diagnostics_tests {
 
     #[test]
     fn backend_failure_renders_every_variant_distinctly() {
-        // Exhaustive by construction: this `match` has no `_` arm, so adding a
-        // `BackendFailure` variant is a compile error here rather than a
-        // silently unrendered case.
+        // The expectation `match` below has no `_` arm, so a new
+        // `BackendFailure` variant forces an expected-rendering arm to be
+        // written here. That is all it forces: `cases` is hand-maintained, so
+        // a new variant is NOT automatically exercised, and nothing makes
+        // omitting it fail. A variant added to the enum and to the `match`
+        // but not to `cases` is silently untested — including one whose
+        // rendering collides with an existing variant's.
         let cases = [
             BackendFailure::Target("no isa for wasm64".to_string()),
             BackendFailure::Verifier("inst12 has no type".to_string()),
