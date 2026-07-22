@@ -105,10 +105,13 @@ jobs:
       # docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md. Measured 7 tests /
       # 266.7s wall / 470.6s CPU as one binary, where
       # `fs_write_at_malformed_offset_narrows_to_invalid_offset` alone takes
-      # ~250s against ~35s for its near-identical sibling — traced to that
-      # test opening two nested resource brackets where every sibling opens
-      # one (load-bearing to the property under test, not a simplification
-      # target). See docs/program/11-test-suite-and-ci-remediation.md §1d.
+      # ~250s against ~35s for its near-identical sibling. That test is the
+      # only one of the 7 that opens two nested resource brackets where
+      # every sibling opens one — load-bearing to the property under test,
+      # not a simplification target — and the two are correlated, but
+      # nothing here isolates the topology as the CAUSE of the timing; see
+      # docs/program/11-test-suite-and-ci-remediation.md §1f for the
+      # unisolated-hypothesis framing.
       - name: Test
         run: >-
           cargo nextest run --workspace --locked
@@ -148,9 +151,15 @@ jobs:
   # ⚠ THESE FILTERS MUST STAY COMPLEMENTARY TO THE SHARD EXCLUSION ABOVE.
   # Each binary is named in FOUR places: excluded from the shard filter
   # above, included in its own dedicated job below, listed in build-test's
-  # `needs:`, and checked in the pass/fail loop below that. Change one
-  # without updating the other three and the test is silently duplicated or
-  # silently dropped — and a dropped test still shows a green gate.
+  # `needs:`, and checked in the pass/fail loop below that. The four do NOT
+  # fail the same way if one drifts from the others — see
+  # docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md's Undo section for the
+  # per-case reasoning. The two ends of the risk: dropping only the
+  # dedicated job while `needs:`/the check loop still name it is a workflow
+  # syntax error (loud, nothing runs); dropping only the check-loop entry
+  # while the job and `needs:` stay is the dangerous one — the job still
+  # runs and gates the schedule, but its result is never inspected, so a
+  # real failure there can still leave `build-test` green.
   native-write-partition:
     name: native-slow (px8f_write_partition)
     runs-on: ubuntu-latest

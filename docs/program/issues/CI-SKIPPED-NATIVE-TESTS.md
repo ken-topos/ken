@@ -87,13 +87,36 @@ Each of the three binaries is named in exactly four places, all in
 `.github/workflows/ci.yml`: the `-E` exclusion in the sharded lane's `Test`
 step, its own dedicated job (`native-rt-parity` / `native-buffer` /
 `native-write-partition`), `build-test`'s `needs:` list, and the pass/fail
-check loop. All four must stay complementary. To fully undo the restoration
-for one binary, remove it from all four together — removing from only the
-exclusion duplicates the test; removing the job but leaving `needs:`/the
-check loop breaks the workflow at parse time; removing from `needs:`/the
-check loop but leaving the job silently drops the test from the gate (the
-job runs but nothing gates on its result) — and in every partial-removal
-case `build-test` can still report green.
+check loop. All four must stay complementary — but they do **not** fail the
+same way when one drifts from the others. Removing each alone (leaving the
+other three) reasoned through GitHub Actions' `needs:`/context semantics
+below, not exhaustively executed against a live run:
+
+- **Drop only the exclusion** (job/`needs:`/check loop untouched): the
+  binary now runs in *both* the sharded lane and its own job — silently
+  duplicated, no failure signal, just wasted CI compute.
+- **Drop only the dedicated job** (`needs:`/check loop still name it):
+  `needs:` referencing an undefined job is a workflow *syntax* error —
+  GitHub Actions rejects the whole workflow file before any job runs. Loud
+  and immediate, not silent.
+- **Drop only the `needs:` entry** (job and check loop untouched): the
+  check loop's `${{ needs.native-rt-parity.result }}` reference resolves to
+  empty for a job outside the current job's own `needs:` list, which fails
+  the loop's `!= "success"` comparison, so `build-test` reports red. This
+  case also loses the ordering guarantee — `build-test` no longer waits for
+  the job — so a red result here may not reflect the job's real outcome.
+  Either way: red, not a silent green.
+- **Drop only the check-loop entry** (job and `needs:` untouched): this is
+  the dangerous one. `build-test` still waits for the job via `needs:`, but
+  the loop never inspects its result, so a genuine failure in that job can
+  leave `build-test` green regardless. This is the only one of the four
+  that reproduces "a dropped test still shows a green gate."
+
+So a simpler universal claim ("any partial removal duplicates or silently
+drops the test, and either way `build-test` still reports green") would
+overstate it: only the last case above is actually silent-green; the other
+three fail loud or merely waste compute. To fully undo the restoration for
+one binary, remove it from all four places together.
 
 ## Closed 2026-07-22
 

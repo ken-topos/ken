@@ -243,9 +243,13 @@ shard's critical path and pushes the whole gate out.
 > ⚠ **Each binary is named in four places and they must all stay
 > complementary.** It is *excluded* from the shard lane, *included* in its
 > own job, listed in the aggregator's `needs`, and checked in its pass/fail
-> script. Change one without the other three and the test is silently
-> duplicated or silently dropped — **and a dropped test still shows a green
-> gate.**
+> script. **The four do not fail the same way if one drifts** — dropping
+> the job while `needs`/the check still name it is a workflow syntax error
+> (loud, nothing runs); dropping only the check-loop entry while the job
+> and `needs` stay is the dangerous one, since the job still runs and gates
+> the schedule but its result is never inspected. See
+> `docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md`'s Undo section for the
+> full per-case reasoning.
 
 ### 1d. Experiment: does `rt_parity_native` parallelize? (PR #808, closed)
 
