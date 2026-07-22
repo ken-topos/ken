@@ -2,7 +2,7 @@
 id: CI-SKIPPED-NATIVE-TESTS
 title: "Restore rt_parity_native — one test at 221s is the blocker"
 status: ready
-owner: steward
+owner: verify
 size: S
 gate: none
 depends_on: []
@@ -99,3 +99,24 @@ The skip is a single edit: delete the
 binary(px8f_write_partition))'` argument from the `Test` step's
 `run:` line in `.github/workflows/ci.yml`. No other file encodes the
 exclusion.
+
+## ⇒ REASSIGNED to Verify, 2026-07-22 — and BUDGET-EFF is why
+
+**Owner moved `steward` → `verify`.** The skip stopped being a CI-hygiene chore
+and became a **verification-integrity** problem, which is Verify's lane.
+
+@adversary's BUDGET-EFF native finding: because `rt_parity_native.rs` does not
+run, **a green CI on that WP carried no information** about whether the native
+`remaining` defect was fixed — no test asserted it, and the binary that would
+host one was skipped. The acceptance criterion had to be *"assert the numbers
+and demonstrate fail-first"* precisely to route around this suite.
+
+@verify-implementer then solved it for that WP by putting the new tests in
+`-p ken-runtime --lib` instead — **closing the gap better than the fallback the
+adversary proposed.** That is the ring that should own the general fix.
+
+★ **The durable question this WP answers is not "why is a suite slow."** It is:
+**which assertions currently have no running home, and what would a green CI
+therefore fail to tell us?** Restoring the suite is one answer; relocating its
+load-bearing assertions to a suite that runs may be a better one. **Both are in
+scope — the WP is the question, not the restoration.**

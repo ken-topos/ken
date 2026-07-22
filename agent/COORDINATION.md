@@ -790,6 +790,28 @@ satisfy the gate.
   > **Empty ⇒ immaterial; do NOT require a rebase.** Non-empty ⇒ inspect and
   > take the union deliberately.
   >
+  > ★ **A non-empty intersection fails loudly ONLY where the hunks overlap.**
+  > Overlapping hunks produce a merge conflict that blocks the merge (confirmed
+  > 2026-07-22: a Steward tracker branch with a four-file intersection was
+  > refused — `Pull Request has merge conflicts` — and reconciled by taking the
+  > union explicitly). **But disjoint edits to a *shared file* merge cleanly and
+  > SILENTLY as a union** — measured: branch edits line 10, `main` edits line 90
+  > of the same file, intersection non-empty, `git merge-tree` merges with no
+  > conflict.
+  >
+  > ⇒ **Git takes that union without asking.** It is usually correct, but
+  > **nothing checks it**, and the residual risk is **semantic, not textual** —
+  > two halves of one file merged while each assumes a different state (a status
+  > table reading `active` in one row and `merged` in another).
+  >
+  > ⛔ **This is exactly why the rule is *inspect*, not *rebase*.** Inspection
+  > presupposes a reader, and it only makes sense *because git will not do it
+  > for you*. Do not reduce this to "the failure is loud" — that removes the
+  > reason the rule exists.
+  >
+  > **The empty case is untouched by any of this: empty ⇒ immaterial, do not
+  > rebase.** That is every case that has cost this fleet time.
+  >
   > ⚠ **Run it PRE-merge only.** Once the candidate is merged, `main` contains
   > its squash, so the candidate's file set is necessarily a subset of what
   > `main` gained and the test **self-fires on every candidate**. Post-landing,
