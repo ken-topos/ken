@@ -4919,6 +4919,10 @@ fn reify_host_reply_v1(
         )) => match progress {
             ken_host::ReadProgressV1::ReadEof => make_ctor(fs.read_eof_id, vec![], store),
             ken_host::ReadProgressV1::ReadSome { span, transferred } => {
+                // BUDGET-EFF: raw request length is an outer consistency
+                // ceiling/audit input only, never the progress budget — the
+                // budget is `effective_request`, carried inside `transferred`
+                // per the Architect ruling (dec_1m6xdwjp2ttyn).
                 let requested = match request {
                     ken_host::CanonicalRequestV1::FsReadAt { length, .. } => *length,
                     _ => return Err(()),
@@ -4930,9 +4934,13 @@ fn reify_host_reply_v1(
                     store,
                 );
                 let count = transferred.get();
+                let effective = transferred.effective_request();
+                if effective > requested {
+                    return Err(());
+                }
                 let predecessor = buffer_nat_value(count.checked_sub(1).ok_or(())?, fs, store)?;
                 let remaining =
-                    buffer_nat_value(requested.checked_sub(count).ok_or(())?, fs, store)?;
+                    buffer_nat_value(effective.checked_sub(count).ok_or(())?, fs, store)?;
                 let count = make_ctor(
                     fs.private_transfer_count_id,
                     vec![predecessor, remaining],
@@ -4949,8 +4957,12 @@ fn reify_host_reply_v1(
                 _ => return Err(()),
             };
             let count = transferred.get();
+            let effective = transferred.effective_request();
+            if effective > requested {
+                return Err(());
+            }
             let predecessor = buffer_nat_value(count.checked_sub(1).ok_or(())?, fs, store)?;
-            let remaining = buffer_nat_value(requested.checked_sub(count).ok_or(())?, fs, store)?;
+            let remaining = buffer_nat_value(effective.checked_sub(count).ok_or(())?, fs, store)?;
             let count = make_ctor(
                 fs.private_transfer_count_id,
                 vec![predecessor, remaining],
