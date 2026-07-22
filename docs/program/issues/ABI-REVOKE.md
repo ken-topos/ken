@@ -324,3 +324,33 @@ hole I found when the operator asked for the coverage answer.
 > ABI-A3, PX9}`, and §9's coverage count went `0 of 18` → **`1 of 19`**. The
 > gate-9 assumption above is still unsatisfied by any code — that is the open
 > part; the *documentation* hole is closed.
+
+## ✅ Behavioral contract MERGED — the membrane itself is NOT done
+
+**`origin/main @ 9ebebb8e` (PR #865, CI-gated).** Decision `dec_hf76w9mvzvt9`;
+CV Spec/conformance APPROVE + Architect design/scope APPROVE; retros in
+(spec-author `evt_y6a917adrt2w`, conformance-validator `evt_4sgb6kf8jegvd`,
+spec-leader coordination retro) — **that WP is closed.**
+
+⛔ **This issue stays `draft`. "The contract landed" and "the membrane is
+implemented" are different claims** and the shared name invites collapsing
+them. What merged is spec + conformance only, `crates/` untouched:
+
+- **I-4 RETAINED** — `attenuate`/`revoke` stay **non-Ken-visible host
+  management actions**; the conformance guard is *extended* to require both
+  resolve as `UnboundName`. The settled public surface is **strengthened, not
+  reopened**.
+- Denial identity split by existing type family: `MkFileError <op> <path>
+  Revoked` (`IOError.Revoked`, distinct from `CapabilityDenied`) on the path
+  side; nullary `ResourceError.Revoked` on the resource side.
+- Admission/settlement semantics pinned; **representation, forwarders, validity
+  cells, region lifetimes, and the ADR mechanism all remain deferred to
+  `40-runtime`.**
+- `62-authority.md §H` marks the mechanism deferred, and
+  `seed-capabilities.md:96,223` mark the matching cases `(oracle)` / **RED
+  UNTIL ABI-REVOKE** — so neither artifact reads the deferral as delivery
+  (adversary-verified at `9ebebb8e`, `evt_9vn3rjc5qcvq`).
+
+**Still required before this can be sized:** the **Runtime ADR** (the second of
+two prerequisites — route it once the contract settles), and **`ABI-R3`, which
+gates the implementation**. Ordering: `PX8 → ABI-R3 → ABI-REVOKE`.

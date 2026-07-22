@@ -79,9 +79,25 @@ assume).
   would make a new carrier a **compile error** — and explicitly declined to
   choose. Route the mechanism decision before implementation.
 - Acceptance must include a **planted-extension proof**: add a third
-  budget-carrying variant in a scratch tree and confirm it **fails to compile**
-  (or fails a test) *before* the fix, and that the proof is what establishes
-  completeness — not the assertion that the match is exhaustive.
+  budget-carrying variant in a scratch tree and confirm it **fails closed**
+  *before* the fix, and that the proof is what establishes completeness — not
+  the assertion that the match is exhaustive.
+
+  ⛔ **THE PLANTED VARIANT MUST FAIL CLOSED IN BOTH LAYERS — `effect_wire.rs`
+  AND `eval.rs:4938`/`:4961`.** The finding is **the conjunction** ("neither
+  layer would catch it"), not the wire catch-all alone. A proof scoped to the
+  wire arm can go **green with interp unchanged and the finding half-open** —
+  interp's per-variant checks are *also* hand-written and would still silently
+  accept the planted carrier.
+
+  **If the implementer or the Architect scopes interp out, that is allowed but
+  must be explicit** — record the interp residue as a remaining open item
+  rather than letting a one-layer proof close a two-layer finding.
+
+  ★ *This correction is the adversary's* (`evt_9vn3rjc5qcvq`), *not mine.* My
+  first phrasing named the mechanism (the wire match) and inherited exactly its
+  blind spot — the same defect class this issue is about, committed in the
+  acceptance criterion written to catch it.
 - ⛔ **Do not fold this into BUDGET-EFF's deferred native half.** That half is a
   parity change on a different file set (`cranelift_backend/lowering/`); this is
   a structural-completeness change in `ken-host` + `ken-interp`. Bundling them
