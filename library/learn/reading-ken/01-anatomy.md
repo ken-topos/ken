@@ -20,8 +20,8 @@ someone *porting from Haskell/Lean/Agda* to a different depth — followed by
 proofs, Design notes, References, Trust & derivation
 (`07-catalog-style-guide.md`
 [§2](../../../docs/program/07-catalog-style-guide.md#2-the-standard-entry-format)).
-A **Findings** section is retired from new entries — its function moved to
-a live gap-escalation flow outside the catalog entry itself
+Current entries therefore have seven required sections; `Findings` is not
+one of them
 (`07-catalog-style-guide.md`
 [§5](../../../docs/program/07-catalog-style-guide.md#5-findings--retired-from-the-catalog-entry-2026-07-11)).
 That fixed order is itself information: it tells you, before you read a
