@@ -75,5 +75,23 @@ is no longer exclusive territory.
 `TransferCountV1` references, which is what made the two tracks safely
 concurrent; the native half introduces the first.
 
-⏳ Retros outstanding from the runtime ring — the WP is not closed until they
-are in (COORDINATION §10).
+### ✅ RETROS IN — RT-SPLIT IS CLOSED (COORDINATION §10)
+
+- runtime-leader `evt_36mx1rfmzb4tt`
+- runtime-implementer `evt_mxphcrqdpmgk`
+- **runtime-qa — committed direct at `67b3c8ca`** on `runtime-qa/work`
+  (`RT-SPLIT series: runtime-qa retro`, covering slices 5-7). ⚠ Its convo
+  outbound is still **DOWN**; the commit-your-verdict path is the working
+  substitute. **Mirrored to `attest/runtime-qa-verdicts @ 67b3c8ca`**, verified
+  by `ls-remote` with the prior tip `9145c6cc` confirmed as an ancestor so no
+  earlier verdict was orphaned.
+
+★ **The retro class worth carrying out of this series** is the one
+runtime-implementer named against itself: *a corrections section that records a
+fix but never applies it to the row it corrects.* The ledger both stated the
+correction and kept the uncorrected total — the same **claim-in-two-places**
+defect that has now bitten this frame repeatedly, and it is why the acceptance
+criterion moved to a re-emitted ledger rather than a narrated one.
+
+⇒ Directly reusable in **`KW-THEOREM`**, whose acceptance is a re-emitted
+occurrence classification for exactly this reason.
