@@ -182,33 +182,91 @@ if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}:library/manifest.toml" 2>/dev/
   exit 1
 fi
 
-# (b) every manifest `sources` entry outside library/ itself — the claims
-# the corpus actually cites — must be byte-unchanged between REVISION and
-# HEAD. `library/`-prefixed sources (currently only STATUS.md's own
-# `manifest.toml`/`REVISION`) are the corpus's own generation inputs,
-# already covered by gate 1/1b/1c and check (a) above; they are not an
-# external claim needing currency evidence, and REVISION's own file
-# content differs from itself by construction on every bump (the parent-
-# commit self-reference this script's header explains), so diffing it here
-# would fail on every legitimate bump.
-# `grep -o` exits 1 on zero matches (a manifest with no `sources` array at
-# all, or all-empty ones) — under `set -o pipefail` that kills the whole
-# pipeline, and under `set -e` kills the script SILENTLY (no diagnostic,
-# just a bare exit 1) before `CITED_SOURCES` is even assigned. `|| true`
-# on that one stage only converts "found nothing" into an empty, valid
-# result, not into swallowing a genuine failure elsewhere in the pipeline.
+# (b) every manifest `sources` entry cited by a NON-generated document —
+# the external claims the corpus actually rests its authority on — must be
+# byte-unchanged between REVISION and HEAD. Librarian QA (thr_15yrvjrpap9td,
+# first pass): an earlier cut of this check blanket-skipped every
+# `library/`-prefixed source, which silently exempted `library/STATUS.md`'s
+# own declared `sources` (`library/manifest.toml`, `library/REVISION`) from
+# the very token (`source-currency`) its manifest record claimed to carry —
+# a hidden exception contradicting AC-1's own text, not the issue's
+# sanctioned "visibly weakened" branch. Fixed two ways:
+#
+# - `library/manifest.toml` is NOT exempted by path — it is bound like any
+#   other source, but ONLY for documents whose `kind` is not `status`.
+#   Nothing currently cites it except `STATUS.md` itself, so this has no
+#   live effect today; it stops being a silent carve-out and becomes a
+#   principled per-document-kind rule instead.
+# - `library/REVISION` remains the ONE exemption, and it is structural, not
+#   a convenience: it is `STATUS.md`'s own anchor value, not an external
+#   claim, and its file content differs from itself by construction on
+#   every legitimate bump (the parent-commit self-reference this script's
+#   header explains) — checking it would fail every time REVISION is used
+#   correctly. `STATUS.md`'s manifest record visibly narrows its own claim
+#   (`crates/ken-cli/tests/library_documentation_gates.rs`,
+#   `applicable_validation_tokens`): a `kind = "status"` document does not
+#   carry `source-currency` at all — its freshness is what `generated-
+#   current` (idempotency) already establishes, which subsumes "unchanged
+#   since REVISION" for a document that is, by definition, always
+#   regenerated fresh from the current working tree.
+#
+# Extraction lives entirely in the awk below (no `grep -o` stage this
+# time — an earlier cut piped through one and had to guard its "zero
+# matches" exit-1 with `|| true` under `set -o pipefail`/`set -e`; folding
+# the quoted-string extraction into awk itself avoids re-introducing that
+# trap). It emits one bare source path per line, tracking each document's
+# `kind` field (which the manifest always states BEFORE `sources`,
+# matching this file's other single-pass, controlled-subset parsers) so a
+# `status`-kind document's own sources are excluded from extraction
+# entirely, not filtered out downstream by path.
 CITED_SOURCES="$(awk '
-  /^sources[[:space:]]*=/ { capture = 1 }
-  capture { print }
-  capture && /\]/ { capture = 0 }
-' "$MANIFEST" | { grep -o '"[^"]*"' || true; } | tr -d '"' | sed 's/#.*//' | sort -u)"
+  /^\[\[document\]\]/ { kind = "" }
+  /^kind[[:space:]]*=/ {
+    k = $0
+    sub(/^kind[[:space:]]*=[[:space:]]*"/, "", k)
+    sub(/".*/, "", k)
+    kind = k
+  }
+  /^sources[[:space:]]*=/ { capture = 1; buf = "" }
+  capture { buf = buf "\n" $0 }
+  capture && /\]/ {
+    capture = 0
+    if (kind != "status") {
+      line = buf
+      while (match(line, /"[^"]*"/)) {
+        print substr(line, RSTART + 1, RLENGTH - 2)
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
+  }
+' "$MANIFEST" | sed 's/#.*//' | sort -u)"
 
+# Librarian QA (thr_15yrvjrpap9td, first pass, finding 2): a cited source
+# that is a SYMLINK passes `git diff --quiet REVISION HEAD -- path` by
+# comparing the symlink's own (unchanged) target-path blob, never the
+# real file's content the symlink resolves to — demonstrated live: a
+# manifest source pointing at a symlink whose TARGET body changed stayed
+# green end-to-end. `git diff`/`cat-file` operate on git's tracked blob for
+# that path, which for a symlink IS the target-path string, not the
+# resolved content — this is the exact same escape class gate 1's
+# `walk_library` already rejects (fail closed on a symlink rather than
+# silently reading through it). Checked via the tracked git MODE
+# (`120000` = symlink), at both endpoints — a source that is a regular
+# file at REVISION but a symlink at HEAD (or vice versa) is just as
+# unverifiable as one that is a symlink throughout.
 DRIFTED=""
 while IFS= read -r path; do
   [ -z "$path" ] && continue
   case "$path" in
-    library/*) continue ;;
+    library/REVISION) continue ;;
   esac
+  mode_head="$(git -C "$REPO_ROOT" ls-tree HEAD -- "$path" 2>/dev/null | awk '{print $1; exit}')"
+  mode_rev="$(git -C "$REPO_ROOT" ls-tree "$REVISION" -- "$path" 2>/dev/null | awk '{print $1; exit}')"
+  if [ "$mode_head" = "120000" ] || [ "$mode_rev" = "120000" ]; then
+    DRIFTED="${DRIFTED}  - ${path} (symlink source — content-currency cannot verify through a\n    symlink indirection; cite the real file the symlink resolves to instead)
+"
+    continue
+  fi
   if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}:${path}" 2>/dev/null; then
     DRIFTED="${DRIFTED}  - ${path} (does not exist at REVISION)
 "

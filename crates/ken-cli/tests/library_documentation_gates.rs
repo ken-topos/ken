@@ -22,16 +22,23 @@
 //!    any) names a real heading in that file — the drift gate D1 requires;
 //! 6. every registered document labels an `availability` of exactly
 //!    current/partial/planned/unavailable.
-//! 7. every manifest `sources` entry outside `library/` itself is
-//!    byte-unchanged between `library/REVISION` and `HEAD` — `revision_
+//! 7. every manifest `sources` entry cited by a non-`status`-kind document
+//!    is byte-unchanged between `library/REVISION` and `HEAD` — `revision_
 //!    resolved()` (DOC-W0) only proves `REVISION` names a real ancestor
 //!    commit; it never reads a cited source's bytes AT that revision, so
 //!    it is blind to content drift under an unchanged heading
-//!    (`DOC-CURRENCY-ANCHOR`). Enforced in `scripts/gen-doc-status.sh`,
-//!    verified here by driving the real script against synthetic
-//!    fixtures — also covers the bootstrap case: `REVISION` must name a
-//!    point at or after `library/manifest.toml`'s own introduction, not
-//!    merely an ancestor.
+//!    (`DOC-CURRENCY-ANCHOR`). A `status`-kind document (`STATUS.md`) is
+//!    exempt from this token entirely (it carries `generated-current`
+//!    instead — always regenerated fresh, so idempotency subsumes it), and
+//!    `library/REVISION` itself is the one path-level exemption (self-
+//!    referential by construction); nothing else is exempted by path. A
+//!    symlinked source is rejected outright rather than diffed through —
+//!    `git diff` on a symlink path compares the symlink's own target-path
+//!    blob, not the resolved file's content. Enforced in `scripts/gen-doc-
+//!    status.sh`, verified here by driving the real script against
+//!    synthetic fixtures — also covers the bootstrap case: `REVISION` must
+//!    name a point at or after `library/manifest.toml`'s own introduction,
+//!    not merely an ancestor.
 //!
 //! Targeted `scripts/ken-cargo -p ken-cli` check, not an out-of-band
 //! script (doc-leader kickoff, `thr_74hvpkqnxjp9q`). Each gate below is
@@ -480,10 +487,25 @@ fn gate_manifest_records_declare_the_complete_required_shape_and_unique_paths() 
 // known vocabulary tied 1:1 to the gates this file actually runs, not free
 // prose (librarian QA, thr_74hvpkqnxjp9q, second pass, finding 2): a
 // `["banana"]` list passed every other gate. Every current gate below runs
-// unconditionally over every entry except `generated-current`
-// (`status_md_generation_is_idempotent`), which only applies to the one
-// generated (`kind = "status"`) document — so the applicable set is exact,
-// not merely a subset check.
+// unconditionally over every entry except `generated-current` (`status_md_
+// generation_is_idempotent`) and `source-currency`, which apply in exactly
+// opposite directions on `kind = "status"` — so the applicable set is
+// exact, not merely a subset check.
+//
+// Librarian QA (thr_15yrvjrpap9td, first pass, finding 1): an earlier cut
+// gave EVERY document `source-currency`, including `library/STATUS.md` —
+// but `scripts/gen-doc-status.sh`'s implementation blanket-skipped every
+// `library/`-prefixed source, so `STATUS.md`'s own declared `sources`
+// (`manifest.toml`, `REVISION`) were silently never checked at all. That
+// is a hidden exception, not the issue's sanctioned "visibly weakened"
+// branch (AC-1). Fixed by making the exemption VISIBLE here instead:
+// `source-currency` does not apply to a `kind = "status"` document at
+// all — its currency is what `generated-current` (idempotency: it is
+// always regenerated fresh from the current working tree) already
+// establishes, which subsumes "unchanged since REVISION" for a document
+// that has no independent existence apart from its own generation. Every
+// OTHER document's `library/`-referencing sources (none exist today, but
+// none are exempted by path either) are bound like any other citation.
 const KNOWN_VALIDATION_TOKENS: &[&str] = &[
     "manifest-coverage",
     "manifest-completeness",
@@ -503,12 +525,13 @@ fn applicable_validation_tokens(entry: &DocEntry) -> BTreeSet<&'static str> {
         "source-anchors",
         "availability-label",
         "authority-class",
-        "source-currency",
     ]
     .into_iter()
     .collect();
     if entry.kind == "status" {
         set.insert("generated-current");
+    } else {
+        set.insert("source-currency");
     }
     set
 }
@@ -1309,6 +1332,87 @@ fn content_currency_gate_rejects_revision_predating_librarys_own_introduction() 
          at library/'s own introducing commit. stdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&recovered.stdout),
         String::from_utf8_lossy(&recovered.stderr)
+    );
+}
+
+// Librarian QA (thr_15yrvjrpap9td, first pass, finding 2), reproduced as a
+// committed regression rather than left as handoff-only evidence: a cited
+// source that is a symlink must be REJECTED outright, not silently
+// diffed via its own (target-path) blob — `git diff --quiet` on a symlink
+// path compares the symlink's target string, which can stay byte-identical
+// while the file it resolves to changes underneath it, so a content-
+// currency check that doesn't special-case symlinks would report "clean"
+// without ever having read the real content. This fixture proves the
+// stronger fail-closed claim: EVEN WITH THE TARGET UNCHANGED, a symlink
+// source must still be rejected, because nothing here can distinguish that
+// case from the exact one that slips through undetected — "verified"
+// through indirection is not verified.
+#[cfg(unix)]
+#[test]
+fn content_currency_gate_rejects_a_symlink_source_even_when_its_target_is_unchanged() {
+    use std::os::unix::fs::symlink;
+
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-symlink-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::create_dir_all(repo.join("library")).unwrap();
+    std::fs::create_dir_all(repo.join("docs")).unwrap();
+    run_git(&["init", "--quiet", "-b", "main"], &repo);
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(repo.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        repo.join("docs/target.md"),
+        "# Target\n\n## A Heading\n\nreal content\n",
+    )
+    .unwrap();
+    symlink(repo.join("docs/target.md"), repo.join("docs/link.md"))
+        .expect("create the symlink source probe");
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = [\n  \
+         \"docs/link.md\",\n]\n",
+    )
+    .unwrap();
+    std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "initial: manifest + symlink source"],
+        &repo,
+    );
+    let revision = run_git(&["rev-parse", "HEAD"], &repo);
+    std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+
+    // Target is UNCHANGED since REVISION — the only variable under test is
+    // "is the cited path a symlink", not "did the content drift".
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a symlink cited as a manifest source, \
+         even with its target byte-unchanged since REVISION — content- \
+         currency through a symlink is unverifiable and must be rejected \
+         outright, not silently diffed via the symlink's own blob"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("symlink source"),
+        "expected the symlink-rejection diagnostic, got stderr:\n{stderr}"
     );
 }
 

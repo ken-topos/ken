@@ -21,9 +21,12 @@
 #   validation    the CLOSED set of gate names that apply to this record:
 #                 manifest-coverage, manifest-completeness, links,
 #                 source-anchors, availability-label, authority-class
-#                 (all documents), plus generated-current (status docs
-#                 only) — see KNOWN_VALIDATION_TOKENS in
-#                 crates/ken-cli/tests/library_documentation_gates.rs,
+#                 (all documents), plus EITHER source-currency (every
+#                 non-status document — every cited source is unchanged
+#                 since REVISION) OR generated-current (status docs only
+#                 — always regenerated fresh, so idempotency subsumes
+#                 source-currency for it) — see KNOWN_VALIDATION_TOKENS
+#                 in crates/ken-cli/tests/library_documentation_gates.rs,
 #                 the single source of truth for this vocabulary
 #   owner         the team responsible
 #
@@ -92,7 +95,6 @@ validation = [
   "source-anchors",
   "availability-label",
   "authority-class",
-  "source-currency",
   "generated-current",
 ]
 owner = "doc"
