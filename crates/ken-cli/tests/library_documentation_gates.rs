@@ -1251,7 +1251,22 @@ fn build_currency_fixture(base: &Path) -> (PathBuf, String) {
     std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
     run_git(&["add", "-A"], &repo);
     run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+    // Librarian QA (thr_15yrvjrpap9td, hotfix fold-2 re-review): the
+    // origin/main trust-anchor check is now MANDATORY (fail closed, never
+    // silently skipped) -- every fixture that wants a green arm must
+    // supply its own synthetic anchor. HEAD is the natural "main" for a
+    // fixture with no separate branch/squash concerns.
+    set_origin_main_to_head(&repo);
     (repo, revision)
+}
+
+/// Points a synthetic `refs/remotes/origin/main` at the fixture's current
+/// HEAD -- no real remote needed, `merge-base --is-ancestor` only reads the
+/// ref. Fixtures that don't call this deliberately test the missing-anchor
+/// path instead.
+fn set_origin_main_to_head(repo: &Path) {
+    let head = run_git(&["rev-parse", "HEAD"], repo);
+    run_git(&["update-ref", "refs/remotes/origin/main", &head], repo);
 }
 
 // Plain write mode, not `--check`: these fixtures don't pre-populate a
@@ -1388,6 +1403,7 @@ fn content_currency_gate_rejects_revision_predating_librarys_own_introduction() 
         &["commit", "--quiet", "-m", "introduce library/, REVISION mis-anchored"],
         &repo,
     );
+    set_origin_main_to_head(&repo);
 
     let out = run_gen_doc_status(&repo);
     assert!(
@@ -1487,6 +1503,7 @@ fn content_currency_gate_rejects_a_symlink_source_even_when_its_target_is_unchan
     std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
     run_git(&["add", "-A"], &repo);
     run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+    set_origin_main_to_head(&repo);
 
     // Target is UNCHANGED since REVISION — the only variable under test is
     // "is the cited path a symlink", not "did the content drift".
@@ -1567,6 +1584,7 @@ fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_ki
     std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
     run_git(&["add", "-A"], &repo);
     run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+    set_origin_main_to_head(&repo);
 
     // Drift the cited source's body under an unchanged heading, WITHOUT
     // bumping REVISION — this must be caught despite the duplicate-kind
@@ -1783,6 +1801,73 @@ fn revision_must_survive_a_simulated_squash_merge_not_just_the_branch() {
          (merge base survives squash) does not hold. stdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&positive.stdout),
         String::from_utf8_lossy(&positive.stderr)
+    );
+}
+
+// Librarian QA (thr_15yrvjrpap9td, hotfix fold-2 re-review): a "best-effort,
+// skip if no anchor resolves" version of the origin/main check FAILS OPEN
+// in exactly the topology it exists to guard. Live proof from the review:
+// delete `refs/remotes/origin/main`, point `origin` at an unreachable repo,
+// set a real REVISION to a real branch-local commit -- the best-effort
+// check silently skipped and `gen-doc-status.sh`/`--check` both exited 0,
+// reproducing the outage undetected. Committed here as a permanent
+// regression: with NO origin/main ref and NO working `origin` remote at
+// all, the script must reject outright with a dedicated diagnostic naming
+// the missing anchor -- never silently fall back to the (insufficient)
+// HEAD-only ancestry check that caused the original outage.
+#[test]
+fn missing_origin_main_anchor_is_rejected_not_silently_skipped() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-no-anchor-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::create_dir_all(repo.join("library")).unwrap();
+    run_git(&["init", "--quiet", "-b", "main"], &repo);
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(repo.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = []\n",
+    )
+    .unwrap();
+    std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "initial"], &repo);
+    let revision = run_git(&["rev-parse", "HEAD"], &repo);
+    std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "anchor REVISION at own parent"], &repo);
+
+    // Deliberately: no `refs/remotes/origin/main`, no `origin` remote
+    // configured at all -- `git fetch origin` has nothing to fetch from.
+    // REVISION genuinely resolves against local HEAD (it's the immediate
+    // parent), so every check that stops at HEAD-ancestry would pass this.
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a REVISION with no origin/main trust \
+         anchor available at all -- it must fail closed here, not fall \
+         back to the HEAD-only ancestry check that caused the real outage"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("cannot establish the origin/main trust anchor"),
+        "expected the dedicated missing-anchor diagnostic (distinct from \
+         the ancestry-rejection one), got stderr:\n{stderr}"
     );
 }
 

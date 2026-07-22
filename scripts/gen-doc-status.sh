@@ -214,21 +214,40 @@ fi
 # forever, and a commit that ISN'T yet (a branch-local one) is caught here,
 # before publish, instead of after.
 #
-# Best-effort: skip silently if no `origin/main` ref is resolvable at all —
-# a synthetic fixture with no configured remote (most of this file's own
-# regressions) has no such ref, and this check augments the HEAD-ancestry
-# check above rather than replacing it.
-if git -C "$REPO_ROOT" rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1 \
-   || git -C "$REPO_ROOT" fetch --quiet origin main 2>/dev/null; then
-  if git -C "$REPO_ROOT" rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1 \
-     && ! git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" refs/remotes/origin/main 2>/dev/null; then
-    echo "gen-doc-status: library/REVISION '${REVISION}' is not an ancestor of" >&2
-    echo "  origin/main — it resolves on this branch right now, but a branch-local" >&2
-    echo "  commit does not survive a squash-merge onto main. REVISION must name a" >&2
-    echo "  commit that is already on main (e.g. the branch's merge base), never a" >&2
-    echo "  commit that exists only on this branch." >&2
-    exit 1
-  fi
+# Librarian QA (thr_15yrvjrpap9td, hotfix fold-2 re-review): a "best-effort,
+# skip if no anchor resolves" version of this check fails OPEN in exactly
+# the shallow/no-configured-remote topology it exists to guard. Live proof:
+# delete `refs/remotes/origin/main`, point `origin` at an unreachable repo,
+# set REVISION to a genuine branch-local commit — the "best-effort" check
+# silently skipped and the script exited 0, reproducing the outage this
+# whole mechanism exists to prevent. A trust-anchor check that degrades to
+# a no-op when the anchor is unavailable is not a check.
+#
+# Fixed: resolving the anchor now ends in exactly two states — a verified
+# ref used for the ancestry check, or an explicit diagnostic and exit 1.
+# There is no third, silent-pass state. The fetch destination is explicit
+# (`main:refs/remotes/origin/main`), not assumed from a bare `fetch origin
+# main` — the resulting ref is verified afterward either way, not trusted
+# because the fetch command exited 0.
+if ! git -C "$REPO_ROOT" rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
+  git -C "$REPO_ROOT" fetch --quiet origin main:refs/remotes/origin/main 2>/dev/null || true
+fi
+if ! git -C "$REPO_ROOT" rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
+  echo "gen-doc-status: cannot establish the origin/main trust anchor —" >&2
+  echo "  refs/remotes/origin/main does not resolve, and fetching 'main' from" >&2
+  echo "  'origin' failed. REVISION's ancestry can only be verified against" >&2
+  echo "  local HEAD without this anchor, which is exactly the check that let" >&2
+  echo "  a branch-local commit reach main once already. Fix 'origin' access" >&2
+  echo "  (or the local ref) — this check does not skip." >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" refs/remotes/origin/main 2>/dev/null; then
+  echo "gen-doc-status: library/REVISION '${REVISION}' is not an ancestor of" >&2
+  echo "  origin/main — it resolves on this branch right now, but a branch-local" >&2
+  echo "  commit does not survive a squash-merge onto main. REVISION must name a" >&2
+  echo "  commit that is already on main (e.g. the branch's merge base), never a" >&2
+  echo "  commit that exists only on this branch." >&2
+  exit 1
 fi
 
 # --- currency: REVISION must certify something about the CORPUS, not just --
