@@ -1251,7 +1251,22 @@ fn build_currency_fixture(base: &Path) -> (PathBuf, String) {
     std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
     run_git(&["add", "-A"], &repo);
     run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+    // Librarian QA (thr_15yrvjrpap9td, hotfix fold-2 re-review): the
+    // origin/main trust-anchor check is now MANDATORY (fail closed, never
+    // silently skipped) -- every fixture that wants a green arm must
+    // supply its own synthetic anchor. HEAD is the natural "main" for a
+    // fixture with no separate branch/squash concerns.
+    set_origin_main_to_head(&repo);
     (repo, revision)
+}
+
+/// Points a synthetic `refs/remotes/origin/main` at the fixture's current
+/// HEAD -- no real remote needed, `merge-base --is-ancestor` only reads the
+/// ref. Fixtures that don't call this deliberately test the missing-anchor
+/// path instead.
+fn set_origin_main_to_head(repo: &Path) {
+    let head = run_git(&["rev-parse", "HEAD"], repo);
+    run_git(&["update-ref", "refs/remotes/origin/main", &head], repo);
 }
 
 // Plain write mode, not `--check`: these fixtures don't pre-populate a
@@ -1388,6 +1403,7 @@ fn content_currency_gate_rejects_revision_predating_librarys_own_introduction() 
         &["commit", "--quiet", "-m", "introduce library/, REVISION mis-anchored"],
         &repo,
     );
+    set_origin_main_to_head(&repo);
 
     let out = run_gen_doc_status(&repo);
     assert!(
@@ -1487,6 +1503,7 @@ fn content_currency_gate_rejects_a_symlink_source_even_when_its_target_is_unchan
     std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
     run_git(&["add", "-A"], &repo);
     run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+    set_origin_main_to_head(&repo);
 
     // Target is UNCHANGED since REVISION — the only variable under test is
     // "is the cited path a symlink", not "did the content drift".
@@ -1567,6 +1584,7 @@ fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_ki
     std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
     run_git(&["add", "-A"], &repo);
     run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+    set_origin_main_to_head(&repo);
 
     // Drift the cited source's body under an unchanged heading, WITHOUT
     // bumping REVISION — this must be caught despite the duplicate-kind
@@ -1591,6 +1609,265 @@ fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_ki
     assert!(
         stderr.contains("docs/example.md") && stderr.contains("changed between REVISION"),
         "expected a diagnostic naming the drifted source, got stderr:\n{stderr}"
+    );
+}
+
+// --- REVISION must survive a squash-merge, not just resolve on the branch --
+//
+// Landed post-merge outage (thr_15yrvjrpap9td/thr_sq41qedhmtas, adversary
+// evt_504x5h9t6veqq, 2026-07-22): `DOC-CURRENCY-ANCHOR` merged with
+// `library/REVISION` naming `cc2af484`, the WP branch's own immediate-parent
+// commit -- correct on the branch (where `status_md_generation_is_idempotent`
+// demanded exactly that bump) and where three folds, an Architect approval,
+// a Librarian QA pass, and green CI all checked it. The publisher
+// **squash-merges**: the merged commit's sole parent is the pre-merge `main`
+// tip, so no pre-squash branch commit survives as an ancestor of `main`.
+// `origin/main` went CI-red on its own documentation gate the moment the
+// squash landed -- a property that was true at every check anyone ran and
+// became false only after the last one.
+//
+// Architect ruling (thr_tq8z3dda5khk, evt_2aj7bxb164cp8): the fix is NOT
+// "REVISION must equal the candidate's exact/latest merge base" -- that
+// overclaims a single canonical value where the real contract is a
+// conjunction any qualifying commit `R` can satisfy:
+//   1. `R` is a squash-stable ancestor of the integrated tree -- an
+//      already-`main` commit, never a candidate-only parent;
+//   2. `library/manifest.toml` exists at `R` (the bootstrap check);
+//   3. every current non-status document's cited source blob is
+//      byte-identical at `R` and `HEAD` (the content-currency check);
+//   4. `STATUS.md` is generated from that exact `R`.
+// This test proves ONLY predicate 1's topology distinction: a branch-local
+// commit (`C1`) does not survive a squash-merge onto `main`, while a
+// commit that is already on `main` (`B`) does, by construction, on this
+// repository's linear (no-merge-commit) history -- a squash commit `S`'s
+// sole parent is always the pre-merge main tip `T`, and any candidate's
+// merge base is always `T` or an ancestor of `T`, hence always an ancestor
+// of `S`. A bare `merge-base --is-ancestor` assertion on its own would be
+// a WEAKER check than this: it must run against a topology that actually
+// has the squash-merge shape, which is what this test constructs, rather
+// than against the branch (where the bug was invisible by construction).
+//
+// ⚠ Residual, stated explicitly rather than left implicit: this test
+// CANNOT and does not select which on-`main` ancestor is the "right" one
+// among several that would all pass it -- it only distinguishes on-`main`
+// from branch-local. Predicates 2-4 above are the independent, separately-
+// tested acceptance checks (`gate_manifest_rejects_a_field_line_...`,
+// `content_currency_gate_rejects_a_drifted_cited_source_and_recovers`,
+// `content_currency_gate_rejects_revision_predating_librarys_own_
+// introduction`) that narrow "any ancestor of main" down to a valid one.
+// Picking `638fe6d4` specifically over some other qualifying ancestor is a
+// review judgment (it was the last reviewed DOC-CURRENCY base and
+// demonstrably contains the manifest), not a fact this or any test proves.
+#[test]
+fn revision_must_survive_a_simulated_squash_merge_not_just_the_branch() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-squash-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::create_dir_all(repo.join("library")).unwrap();
+    run_git(&["init", "--quiet", "-b", "main"], &repo);
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(repo.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = []\n",
+    )
+    .unwrap();
+    std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "B: merge base (simulated main tip)"],
+        &repo,
+    );
+    let b = run_git(&["rev-parse", "HEAD"], &repo);
+
+    // A synthetic `origin/main` ref pointing at B -- no real remote needed,
+    // git only needs the ref to exist for `merge-base --is-ancestor` to
+    // read it. This is what lets the ON-BRANCH check below run at all.
+    run_git(
+        &["update-ref", "refs/remotes/origin/main", &b],
+        &repo,
+    );
+
+    // C1: first branch commit (filler) -- the shape that used to be
+    // (incorrectly) treated as "the immediate parent, so it's fine."
+    std::fs::write(repo.join("filler-1.txt"), "filler\n").unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "C1: branch commit"], &repo);
+    let c1 = run_git(&["rev-parse", "HEAD"], &repo);
+
+    // Librarian QA (thr_15yrvjrpap9td, hotfix re-review, live commit
+    // `61f07dc1`): the first cut of this test proved the script's
+    // post-squash behavior only on a FULLY SYNTHETIC repo -- it never
+    // touched THIS repository's actual `library/REVISION`, so a
+    // branch-local value there would still pass every check unchanged,
+    // reproducing the exact outage undetected. This is the primary arm
+    // that closes that: on the BRANCH itself (HEAD = C1, no squash yet),
+    // with REVISION = C1 (a value that trivially resolves as an ancestor
+    // of local HEAD, since C1 IS HEAD) -- the new origin/main check must
+    // still reject it, because C1 is not yet on `origin/main`.
+    std::fs::write(repo.join("library/REVISION"), format!("{c1}\n")).unwrap();
+    let on_branch_negative = run_gen_doc_status(&repo);
+    assert!(
+        !on_branch_negative.status.success(),
+        "gen-doc-status.sh accepted a branch-local REVISION value ON THE \
+         BRANCH itself, before any squash -- this is the actual landed \
+         outage's precondition: a value that only fails once it's too \
+         late to catch before publish"
+    );
+    assert!(
+        String::from_utf8_lossy(&on_branch_negative.stderr).contains("origin/main"),
+        "expected the origin/main-ancestry diagnostic, got stderr:\n{}",
+        String::from_utf8_lossy(&on_branch_negative.stderr)
+    );
+
+    // Same branch state, REVISION = B (the merge base, already on
+    // origin/main by construction) -- must pass, proving the check isn't
+    // simply rejecting everything.
+    std::fs::write(repo.join("library/REVISION"), format!("{b}\n")).unwrap();
+    let on_branch_positive = run_gen_doc_status(&repo);
+    assert!(
+        on_branch_positive.status.success(),
+        "gen-doc-status.sh rejected REVISION naming the merge base, on the \
+         branch, before any squash. stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&on_branch_positive.stdout),
+        String::from_utf8_lossy(&on_branch_positive.stderr)
+    );
+
+    // C2: branch tip (the WP's final fold). Its exact content doesn't
+    // matter beyond establishing the tree the squash carries forward.
+    std::fs::write(repo.join("filler-2.txt"), "filler 2\n").unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "C2: branch tip"], &repo);
+
+    // S: the synthetic squash commit -- C2's TREE, but B as the SOLE
+    // PARENT. This is exactly what a squash-merge produces
+    // (`git commit-tree <tree> -p <pre-merge-main-tip>`): a new commit
+    // carrying the content, parented on `main`, never on the branch.
+    let tree = run_git(&["rev-parse", "HEAD^{tree}"], &repo);
+    let s = run_git(
+        &["commit-tree", &tree, "-p", &b, "-m", "S: simulated squash merge"],
+        &repo,
+    );
+    run_git(&["checkout", "--quiet", &s], &repo);
+    assert_eq!(
+        run_git(&["rev-parse", "HEAD"], &repo),
+        s,
+        "checkout of the synthetic squash commit landed somewhere else"
+    );
+
+    // Negative: REVISION names the branch-local commit C1 -- exactly the
+    // landed bug. Must be rejected AT S, even though it resolved fine on
+    // the branch (that is the entire failure mode: true on the branch,
+    // false only after the squash).
+    std::fs::write(repo.join("library/REVISION"), format!("{c1}\n")).unwrap();
+    let negative = run_gen_doc_status(&repo);
+    assert!(
+        !negative.status.success(),
+        "gen-doc-status.sh accepted REVISION naming a branch-local commit \
+         at a simulated squash-merge commit -- this is the exact \
+         DOC-CURRENCY-ANCHOR main outage (cc2af484 unreachable after \
+         d03151d3's squash)"
+    );
+    assert!(
+        String::from_utf8_lossy(&negative.stderr).contains("is not an ancestor"),
+        "expected the ancestry-rejection diagnostic, got stderr:\n{}",
+        String::from_utf8_lossy(&negative.stderr)
+    );
+
+    // Positive: REVISION names the merge base B -- an ancestor of S by
+    // construction (S's sole parent IS B), exactly like a real
+    // squash-merge landing on main.
+    std::fs::write(repo.join("library/REVISION"), format!("{b}\n")).unwrap();
+    let positive = run_gen_doc_status(&repo);
+    assert!(
+        positive.status.success(),
+        "gen-doc-status.sh rejected REVISION naming the branch's merge \
+         base at the simulated squash commit -- the fix's core claim \
+         (merge base survives squash) does not hold. stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&positive.stdout),
+        String::from_utf8_lossy(&positive.stderr)
+    );
+}
+
+// Librarian QA (thr_15yrvjrpap9td, hotfix fold-2 re-review): a "best-effort,
+// skip if no anchor resolves" version of the origin/main check FAILS OPEN
+// in exactly the topology it exists to guard. Live proof from the review:
+// delete `refs/remotes/origin/main`, point `origin` at an unreachable repo,
+// set a real REVISION to a real branch-local commit -- the best-effort
+// check silently skipped and `gen-doc-status.sh`/`--check` both exited 0,
+// reproducing the outage undetected. Committed here as a permanent
+// regression: with NO origin/main ref and NO working `origin` remote at
+// all, the script must reject outright with a dedicated diagnostic naming
+// the missing anchor -- never silently fall back to the (insufficient)
+// HEAD-only ancestry check that caused the original outage.
+#[test]
+fn missing_origin_main_anchor_is_rejected_not_silently_skipped() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-no-anchor-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::create_dir_all(repo.join("library")).unwrap();
+    run_git(&["init", "--quiet", "-b", "main"], &repo);
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(repo.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = []\n",
+    )
+    .unwrap();
+    std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "initial"], &repo);
+    let revision = run_git(&["rev-parse", "HEAD"], &repo);
+    std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "anchor REVISION at own parent"], &repo);
+
+    // Deliberately: no `refs/remotes/origin/main`, no `origin` remote
+    // configured at all -- `git fetch origin` has nothing to fetch from.
+    // REVISION genuinely resolves against local HEAD (it's the immediate
+    // parent), so every check that stops at HEAD-ancestry would pass this.
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a REVISION with no origin/main trust \
+         anchor available at all -- it must fail closed here, not fall \
+         back to the HEAD-only ancestry check that caused the real outage"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("cannot establish the origin/main trust anchor"),
+        "expected the dedicated missing-anchor diagnostic (distinct from \
+         the ancestry-rejection one), got stderr:\n{stderr}"
     );
 }
 
