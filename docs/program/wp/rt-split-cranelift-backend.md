@@ -368,10 +368,34 @@ move" claim auditable rather than asserted.
    (it is the metric from §4).
 
 8. **`test_support` has no production consumer — CHECKED, not asserted**
-   (slice 7; adversary detector-gap `evt_457npdbe9zmp9`). **Every reference to
-   `test_support` in the final tree sits under a `tests` module or a
-   `#[cfg(test)]` item that is itself a test.** Report the reference list in
-   the PR body alongside the AC-7 ledger.
+   (slice 7; adversary detector-gap `evt_457npdbe9zmp9`, predicate corrected
+   by the Architect `evt_vd1xkmfhrkrp`).
+
+   > **Every value or import reference to `test_support` in the final tree is
+   > either inside a ruled `tests.rs` / `tests/**` module or lexically inside
+   > an entire item whose **item-level** attributes include `#[cfg(test)]`. A
+   > `#[cfg(test)]` statement, block, or branch inside an otherwise production
+   > item does **not** qualify. The sole non-consumer occurrence outside those
+   > locations is the exact facade wiring declaration
+   > `#[cfg(test)] mod test_support;`.**
+
+   **Evidence is a closed ledger, not an unqualified list:**
+
+   > **Report the raw search command and hit count, then reconcile every hit
+   > one-for-one in the PR body as facade declaration, test-module
+   > value/import use, or item-level-`cfg(test)` value/import use. For the
+   > last category, name the enclosing item and show its item-level attribute.
+   > The classified row count must equal the raw hit count.**
+
+   **The item-level/inner distinction is the whole detector.** It is exactly
+   what catches the adversary's repro — that `test_support` use sits inside a
+   **production** function, and an inner `cfg(test)` branch does not convert
+   the enclosing item into test scaffolding. It also **admits** the ruled
+   tree: the required facade declaration, and the test-only object-emission
+   helper items at former `:311`, `:580`, `:625`, whose entire items are
+   `#[cfg(test)]` but which are not `#[test]` cases and which §10.2 assigns to
+   `artifact/api.rs`. No parser dependency and no new topology — **the
+   exhaustive reconciled ledger is the detector.**
 
    > **Why this AC exists.** §10.2a rule 2 says *"production modules must not
    > import it"* and rule 7 restates it as a stop-and-return — but **that was
