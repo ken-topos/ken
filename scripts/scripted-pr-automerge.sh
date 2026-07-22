@@ -314,6 +314,22 @@ The gate must compare against the base the merge will actually land on."
   git worktree add --detach "$gate_wt" "$checked_base" >/dev/null 2>&1 ||
     die "publisher gate: could not create a worktree at origin/main"
 
+  # ⛔ Give the SCRATCH WORKTREE its own identity, once, rather than passing
+  #    `-c user.*` to the operations we happen to know need it.
+  #
+  #    Measured: `git merge --squash` needs a committer identity too, but ONLY
+  #    when the merge is not a fast-forward -- i.e. exactly when origin/main has
+  #    advanced past the candidate's base, which is the case this gate exists
+  #    for. A first fix that covered only `git commit` passed the fast-forward
+  #    probe and failed the advanced-base one. Enumerating the calls observed to
+  #    fail is how that happened; this sets it for every git operation in the
+  #    worktree instead, so the class cannot recur as new operations are added.
+  #
+  #    This repository configures user.email PER-REPO, not globally, so a gate
+  #    that inherits ambient identity is silently environment-sensitive.
+  git -C "$gate_wt" config user.email 'publisher-gate@ken-topos.local' >/dev/null 2>&1 || true
+  git -C "$gate_wt" config user.name  'ken publisher gate'             >/dev/null 2>&1 || true
+
   # ⛔ `git merge --squash` STAGES without COMMITTING, so HEAD would still be
   #    origin/main and a checker that compares a recorded revision against HEAD
   #    -- a commit -- would not see the candidate's content at all. Caught once
@@ -322,13 +338,28 @@ The gate must compare against the base the merge will actually land on."
   #    "is origin/main currently green?", which is NOT what it claims.
   #    `--no-verify` because repo hooks regenerate tracked files, which would
   #    contaminate the very tree under test.
-  ( cd "$gate_wt" &&
-      git merge --squash "$head_sha" >/dev/null 2>&1 &&
-      git commit --no-verify -q -m "publisher gate: merge-result probe" >/dev/null 2>&1 ) ||
+  # ⛔ SEPARATE the two failures. An earlier version ran merge and commit in one
+  #    `&&` chain under a single diagnosis naming only the merge. A commit that
+  #    failed for its OWN reasons -- no configured author identity being the
+  #    live one, since this repo sets user.email per-repo and not globally --
+  #    then reported "the candidate needs rebasing onto current origin/main",
+  #    which is FALSE and sends the ring to rebase a branch that is fine.
+  #    Measured, not imagined: it is how the row 9-11 probe harness first failed,
+  #    and the misdiagnosis was convincing enough to survive two readings.
+  ( cd "$gate_wt" && git merge --squash "$head_sha" >/dev/null 2>&1 ) ||
     die "publisher gate: CANNOT EVALUATE -- $head_sha does not merge cleanly onto origin/main.
 
 This is NOT a currency-gate failure and re-running any generator will not help.
 The candidate needs rebasing onto current origin/main."
+
+  ( cd "$gate_wt" &&
+      git commit --no-verify -q -m "publisher gate: merge-result probe" >/dev/null 2>&1 ) ||
+    die "publisher gate: CANNOT EVALUATE -- the merge-result probe COMMIT failed.
+
+$head_sha merges onto origin/main cleanly; the failure is in committing the
+staged result inside the scratch worktree. This is an environment fault in the
+publisher, NOT a defect in the candidate -- do NOT rebase it. Check that the
+scratch worktree is writable and that git can create a commit there."
 
   # Capture the tree BEFORE the F11 overwrite below, so $checked_tree_oid is the
   # true merge result and is comparable with what GitHub lands.
