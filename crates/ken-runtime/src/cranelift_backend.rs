@@ -284,6 +284,183 @@ impl fmt::Display for BackendFailure {
     }
 }
 
+/// Diagnostic-rendering coverage for the backend's outward error surface.
+///
+/// These types are the crate's user-facing failure vocabulary, reachable as
+/// `ken_runtime::<name>` through the `lib.rs` glob re-export. Before these
+/// tests, six of the seven format strings below occurred exactly once each in
+/// the whole workspace — at their own `write!` site — so any edit to a
+/// rendered message was unobservable to the suite. (The seventh,
+/// `"unsupported runtime-IR lowering: "`, is pinned indirectly by
+/// `native_process_entrypoint.rs`'s report assertion.)
+///
+/// The two properties worth pinning are not the individual strings but the
+/// *composition rules*, which is where a plausible "tidy-up" edit would land:
+/// `CraneliftBackendError` prefixes both of its arms, while
+/// `ValidatedNativeRunError` prefixes `Validation` and deliberately delegates
+/// `Backend` verbatim. Each is asserted against its opposite so neither can be
+/// normalized into the other without a failure.
+#[cfg(test)]
+mod surface_diagnostics_tests {
+    use super::*;
+    use crate::artifact_validation::{
+        RuntimeArtifactValidationError, RuntimeArtifactValidationStage,
+    };
+
+    fn validation_error() -> RuntimeArtifactValidationError {
+        RuntimeArtifactValidationError {
+            stage: RuntimeArtifactValidationStage::ClaimMismatch,
+            fact: "core_semantic_hash",
+            reason: "recomputed claim disagrees".to_string(),
+        }
+    }
+
+    #[test]
+    fn backend_failure_renders_every_variant_distinctly() {
+        // Exhaustive by construction: this `match` has no `_` arm, so adding a
+        // `BackendFailure` variant is a compile error here rather than a
+        // silently unrendered case.
+        let cases = [
+            BackendFailure::Target("no isa for wasm64".to_string()),
+            BackendFailure::Verifier("inst12 has no type".to_string()),
+            BackendFailure::Module("duplicate symbol".to_string()),
+            BackendFailure::NativeResultDecode { token: -7 },
+        ];
+        for case in &cases {
+            let rendered = case.to_string();
+            let expected = match case {
+                BackendFailure::Target(msg) => format!("target setup failed: {msg}"),
+                BackendFailure::Verifier(msg) => format!("verifier rejected function: {msg}"),
+                BackendFailure::Module(msg) => format!("module operation failed: {msg}"),
+                BackendFailure::NativeResultDecode { token } => {
+                    format!("native result token {token} is not in the result table")
+                }
+            };
+            assert_eq!(rendered, expected, "BackendFailure rendering drifted");
+        }
+
+        // The variants must stay mutually distinguishable in text: a reader of
+        // a log line has only this string to go on.
+        let rendered: Vec<String> = cases.iter().map(|c| c.to_string()).collect();
+        let distinct: BTreeSet<&String> = rendered.iter().collect();
+        assert_eq!(
+            distinct.len(),
+            rendered.len(),
+            "two BackendFailure variants render identically: {rendered:?}"
+        );
+    }
+
+    #[test]
+    fn unsupported_lowering_renders_construct_then_reason() {
+        let err = UnsupportedLowering {
+            construct: "Effect",
+            reason: "no native lowering".to_string(),
+        };
+        assert_eq!(err.to_string(), "Effect: no native lowering");
+    }
+
+    #[test]
+    fn cranelift_backend_error_prefixes_both_arms() {
+        let unsupported = CraneliftBackendError::Unsupported(UnsupportedLowering {
+            construct: "Effect",
+            reason: "no native lowering".to_string(),
+        });
+        assert_eq!(
+            unsupported.to_string(),
+            "unsupported runtime-IR lowering: Effect: no native lowering"
+        );
+
+        let backend =
+            CraneliftBackendError::Backend(BackendFailure::Module("duplicate symbol".to_string()));
+        assert_eq!(
+            backend.to_string(),
+            "Cranelift backend failure: module operation failed: duplicate symbol"
+        );
+    }
+
+    #[test]
+    fn validated_run_error_prefixes_validation_but_delegates_backend_verbatim() {
+        // The asymmetry is deliberate and is the whole point of this test: an
+        // edit that gave `Backend` a prefix "for consistency", or dropped
+        // `Validation`'s, would leave every other test in the crate green.
+        let validation = ValidatedNativeRunError::Validation(validation_error());
+        assert_eq!(
+            validation.to_string(),
+            format!("runtime artifact validation failed: {}", validation_error()),
+            "the Validation arm must prefix"
+        );
+
+        let inner =
+            CraneliftBackendError::Backend(BackendFailure::Target("no isa for wasm64".to_string()));
+        let backend = ValidatedNativeRunError::Backend(inner.clone());
+        assert_eq!(
+            backend.to_string(),
+            inner.to_string(),
+            "the Backend arm must delegate verbatim, adding no prefix of its own"
+        );
+        assert!(
+            !backend
+                .to_string()
+                .starts_with("runtime artifact validation failed"),
+            "the Backend arm must not acquire the Validation arm's prefix"
+        );
+    }
+
+    #[test]
+    fn validated_run_error_from_impls_select_the_matching_arm() {
+        // Both `From` impls are unreferenced outside their own declaration, so
+        // nothing else in the suite would notice if they were crossed.
+        let from_validation: ValidatedNativeRunError = validation_error().into();
+        assert_eq!(
+            from_validation,
+            ValidatedNativeRunError::Validation(validation_error())
+        );
+
+        let inner = CraneliftBackendError::Backend(BackendFailure::Verifier("inst12".to_string()));
+        let from_backend: ValidatedNativeRunError = inner.clone().into();
+        assert_eq!(from_backend, ValidatedNativeRunError::Backend(inner));
+    }
+
+    #[test]
+    fn backend_errors_are_usable_as_std_error_trait_objects() {
+        // `impl std::error::Error` on these types is load-bearing for callers
+        // that box them; nothing else in the crate exercises it.
+        let boxed: Box<dyn std::error::Error> = Box::new(CraneliftBackendError::Backend(
+            BackendFailure::Module("duplicate symbol".to_string()),
+        ));
+        assert_eq!(
+            boxed.to_string(),
+            "Cranelift backend failure: module operation failed: duplicate symbol"
+        );
+
+        let boxed: Box<dyn std::error::Error> =
+            Box::new(ValidatedNativeRunError::Validation(validation_error()));
+        assert!(boxed
+            .to_string()
+            .starts_with("runtime artifact validation failed: "));
+    }
+
+    #[test]
+    fn error_constructors_build_the_arms_they_name() {
+        assert_eq!(
+            unsupported("Effect", "no native lowering"),
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "Effect",
+                reason: "no native lowering".to_string(),
+            })
+        );
+        assert_eq!(
+            backend(BackendFailure::Target("no isa".to_string())),
+            CraneliftBackendError::Backend(BackendFailure::Target("no isa".to_string()))
+        );
+        assert_eq!(
+            backend_module("duplicate symbol".to_string()),
+            CraneliftBackendError::Backend(BackendFailure::Module("duplicate symbol".to_string())),
+            "backend_module must select the Module variant, not Target or Verifier"
+        );
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NativeSeedEnvironment {
     values: BTreeMap<String, RuntimeGroundValue>,
