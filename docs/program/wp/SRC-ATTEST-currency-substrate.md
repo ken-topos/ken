@@ -108,21 +108,73 @@ the required population after CI has formed its verdict.
 Immediately before **every** merge — **not only `--doc-only`** — the publisher
 must:
 
+0. **acquire a repository-wide, fail-closed merge lock** (see the boundary
+   below — without it clause 2 has no support at all);
 1. read current `origin/main`;
 2. construct the exact squash result with the candidate;
 3. run **`origin/main`'s checker**, not the candidate's, on that result;
-4. **re-read `origin/main` before merging** and abort/reconstruct if it moved.
+4. **re-read `origin/main` before merging** and abort/reconstruct if it moved;
+5. **after merging, verify the LANDED tree** against the checked tree OID and
+   re-run the checker on it — **alarm and freeze on mismatch, never auto-revert.**
 
-Because the publisher is the sole merge router, that makes **the checked result
-the result it lands.** ⇒ **Old green CI attached to a prior merge result is not
-authorization.**
+⇒ **Old green CI attached to a prior merge result is not authorization.** That
+much is unconditional, and it is what closes #885's stale-CI defect.
 
-★ **Steward note:** steps 1–3 already exist in `scripts/scripted-pr-automerge.sh`
+### ⛔ CORRECTED — the identity claim this frame originally made is WITHDRAWN
+
+The first version of this section said: *"Because the publisher is the sole merge
+router, that makes the checked result the result it lands."* **The second half
+does not follow, and I wrote it. @architect ruling `dec_50fdjy68gm01j`.**
+
+`gh pr merge` offers `--match-head-commit`, which pins the **PR head**. **GitHub
+exposes no base-SHA compare-and-swap**, so the squash lands on whatever `main` is
+at the instant the API executes, and nothing the publisher passes can pin that.
+
+State the guarantee in three parts, and do not collapse them:
+
+| | claim | holds because |
+|---|---|---|
+| **Unconditional** | old CI is never authorization | every publish re-derives the result on a fresh `origin/main` and runs `origin/main`'s checker immediately before merge |
+| **Conditional** | the checked tree **is** the landed tree | ⚠ only within ADR-0003's exclusive-publisher model, and **only because all sanctioned merges share one enforced critical section** — the lock |
+| **Residual** | ⛔ **NOT closed** | an out-of-band writer violates that precondition; with no base-CAS it can still move `main` inside the final round-trip |
+
+⇒ *"Closes #885's stale-CI authorization defect"* is **true**.
+⇒ *"Eliminates every final-round-trip race"* is **FALSE — do not write it.**
+
+★ **Why the lock is enforced rather than documented.** The predecessor guard was
+correct *because* the publisher happened to be serialized, and **nothing recorded
+that dependency** — the F13 finding. This frame then reproduced the identical
+defect one layer up by asserting the identity outright. **A load-bearing
+precondition that lives only in prose is not a precondition; it is a hope.**
+That is why step 0 exists.
+
+★ **Steward note:** steps 1–3 already existed in `scripts/scripted-pr-automerge.sh`
 as the `--doc-only` currency guard (landed `a9554a07`, F10/F11/F12 folded in).
-**The mechanism is built and proved; this WP generalizes its scope to every
-merge and adds step 4, which is new.** Read that block before writing a new one —
+**The mechanism was built and proved; this WP generalizes its scope to every
+merge.** Steps **0, 4 and 5** are new. Read that block before writing a new one —
 it carries the F10/F11/F12 reasoning in-file, including why the checker must come
 from `origin/main` and why `git merge --squash` must be followed by a commit.
+
+> ### ⚠ THE SCOPE GAP COST A PUBLISH THE SAME DAY — PR #903, measured
+>
+> `wp/CI-SKIPPED-NATIVE-TESTS @ aa0330e1` (the operator's declared top priority)
+> failed CI on `library_documentation_gates`, because it edits
+> `.github/workflows/ci.yml` — **a manifest-cited source** (`manifest.toml:316`)
+> — and no valid `REVISION` can ride it. Reproduced locally: `origin/main`'s
+> checker on the merge result returns *"cited source(s) changed between REVISION
+> and HEAD"*, while the same checker on `main` alone passes.
+>
+> ⛔ **The existing guard would have caught it before the PR was created. It did
+> not run, because it was gated on `--doc-only` and that was a full-CI publish.**
+> The right mechanism existed, proved, and scoped to the one path that did not
+> need it — which is the whole argument for this WP, arriving as evidence rather
+> than as reasoning.
+>
+> ★ **And `ci.yml` became cited only at `1e148908` (2026-07-22 17:07, DOC-W1-5).**
+> Every prior `ci.yml` commit landed the day before, *before the citation
+> existed*. So this is **#885's time-of-check defect again** — a citation added
+> after other work formed its assumptions — now on its **third** WP.
+> ⇒ **Row 5 is not hypothetical. It has fired in production, twice.**
 
 ## Acceptance — the Architect's proof matrix, verbatim
 
@@ -148,6 +200,29 @@ name which probe builds row 5. **If it has no probe, the WP is not done.**
 depth-1 case must be executed, not reasoned about. The prior gate carried a
 comment saying nobody had proved it **accepts** a real revision in the
 environment where it runs — do not repeat that.
+
+### Acceptance additions for Part 2 (@architect, `dec_50fdjy68gm01j`)
+
+Four more required proofs, each executed and shown:
+
+8. **Two concurrent publisher invocations cannot both enter the merge critical
+   section.** ⚠ Prove it **across two different worktrees**, not two shells in
+   one — a per-worktree lock path would pass the same-worktree test and still
+   never contend in production. *(Done: `A: ACQUIRED` / `B: REFUSED`, and
+   `C-from-librarian-worktree: ACQUIRED` / `D-from-steward-worktree: REFUSED`,
+   against the lock in the shared `--git-common-dir`.)*
+9. **A base advance before the final read forces reconstruction or abort** —
+   manufacture the advance; do not reason about it.
+10. **On the normal path, the landed tree OID equals the synthetic checked tree
+    OID.**
+11. **A planted landed-tree mismatch, and a planted red checker on the landed
+    tree, each produce an alarm and NO automatic revert** — and leave publication
+    frozen. Both arms, planted, not argued.
+
+⚠ **8–11 are the probes nobody writes**, for the same reason row 5 is: each
+requires *manufacturing* a condition orthogonal to the change. Per the build-QA
+playbook (`:299`), enumerate the probes by the state each builds and name which
+probe builds each of these. **If any has no probe, Part 2 is not done.**
 
 ## Scope boundary
 
