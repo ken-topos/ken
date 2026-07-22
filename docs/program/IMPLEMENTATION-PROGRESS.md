@@ -32,14 +32,14 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 04:32:55Z — from 26 issue file(s) in `docs/program/issues/`.
+2026-07-22 05:13:02Z — from 26 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
 | ID | Title | Status | Owner | Size | Gate | GitHub |
 |---|---|---|---|---|---|---|
 | `A3` | catalog-coverage walker | draft | TBD | TBD | none | — |
-| `ABI-REVOKE` | runtime revocation membrane — the deferred runtime face of 62 §4 | draft | TBD | TBD | none | — |
+| `ABI-REVOKE` | runtime revocation membrane — the deferred runtime face of 62 §4 | draft | runtime | TBD | none | — |
 | `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | ready | runtime | M | none | — |
 | `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | ready | steward | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
