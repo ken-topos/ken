@@ -35,15 +35,51 @@ constructive form of the family in [[forecasting-a-merge-is-not-evidence-about-i
 and the fleet's `verify-the-mechanism-not-a-proxy` corpus: those say widen the
 window; this says pick a partition that proves there is nothing outside it.
 
+## ★ AMENDED — I violated this lesson four minutes after writing it
+
+The version above is missing its precondition, and the omission cost a withdrawn
+claim. I reported `fn 31 · struct 23 · enum 14 · const 2` and called the class
+"closed by construction." **The pattern was anchored at column 0**, so it never saw
+six indented `static`s inside `thread_local!` blocks — a third of the population.
+The Steward had already relayed "closed by construction" to the Architect before I
+caught it.
+
+**A partition is only as sound as the population it partitions.** Partitioning is
+the *second* step and it inherits every blind spot of the enumeration that produced
+the set. A clean partition over a wrong population reads *more* authoritative than a
+plain grep, because the arithmetic looks like proof — which is what made this worse
+than an ordinary miss.
+
+**The correct order, which I got right on the next finding:**
+
+1. **Enumerate the population** with a pattern that tolerates the ways members hide
+   — leading whitespace, macro bodies, multi-line attributes, re-exports.
+2. **Close the enumeration against its own hiding-places** and say which you ruled
+   out. For the bare-pub sweep that was: multi-line `#[cfg(` opens = 0,
+   `cfg_attr` = 0. Two named negatives are what let the count be believed.
+3. **Only then partition**, on the property the rule is silent about.
+4. **State the population and the method with the number**, so a reader can attack
+   the partition instead of inheriting it.
+
 **How to apply:**
 
 - Before grepping a closure yourself, ask **whether the artifact already declares
   the population** — an explicit import list, a sealed enum, a manifest. A
   declared list is auditable; an inferred one is only as good as your pattern.
+  **But a declared list closes only over what it declares**: the six statics were
+  facade-declared and facade-only-consumed, so they were absent from the import
+  list *and* invisible to an item enumerator, because `thread_local!` is a macro
+  invocation and not an item. Two instruments, one simultaneous blind spot.
+- The stronger bar, from `runtime-implementer` on the same defect: make the
+  criterion **"every line of the parent is attributed to a destination."**
+  Checkable by construction, and it has no window that can be narrower than the
+  claim. Prefer it to any name-based or kind-based enumeration.
 - To close a class, find the **property the rule is silent about** (item kind,
-  visibility, arity, lifetime) and partition on it. If one cell of the partition
-  is what the rule can't name, that cell *is* the class.
+  visibility, arity, lifetime, cfg-gating) and partition on it. If one cell of the
+  partition is what the rule can't name, that cell *is* the class.
 - Report the partition, not just the new instance — "exactly 2 consts, here is
-  why consts are the blind cell" is a closure; "found another one" is not.
+  why consts are the blind cell" is a closure; "found another one" is not. **And
+  if the closure turns out unsound, withdraw the phrase explicitly** — a bounded
+  correction costs one message, an inherited wrong closure gets ruled on.
 - Corollary: when you find yourself about to run the first search again with a
   wider pattern, that is the signal to change axis instead.
