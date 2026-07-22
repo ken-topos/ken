@@ -4640,12 +4640,20 @@ impl<'a> Lowering<'a> {
         builder.switch_to_block(done);
     }
 
+    /// `request_length` is the RAW pre-clamp request length — an outer
+    /// consistency ceiling and audit input only, never a progress bound
+    /// (`BUDGET-EFF`, Architect ruling `dec_1m6xdwjp2ttyn`, boundary
+    /// constraint 3). `effective_request` is the host's post-clamp bound,
+    /// carried in the reply; range/no-wrap/span-containment and `remaining`
+    /// are all derived from it, and `0 < count <= effective_request <=
+    /// request_length` is asserted before minting.
     fn mint_validated_progress_nat(
         builder: &mut FunctionBuilder<'_>,
         success: cranelift_codegen::ir::Value,
         count: cranelift_codegen::ir::Value,
         request_start: cranelift_codegen::ir::Value,
         request_length: cranelift_codegen::ir::Value,
+        effective_request: cranelift_codegen::ir::Value,
         reply_start: Option<cranelift_codegen::ir::Value>,
     ) -> (BoundedNatV1, BoundedNatV1, BoundedNatV1) {
         let positive = builder.ins().icmp_imm(
@@ -4656,12 +4664,17 @@ impl<'a> Lowering<'a> {
         let bounded = builder.ins().icmp(
             cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
             count,
+            effective_request,
+        );
+        let effective_within_raw = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
+            effective_request,
             request_length,
         );
-        let request_end = builder.ins().iadd(request_start, request_length);
-        let request_no_wrap = builder.ins().icmp(
+        let effective_end = builder.ins().iadd(request_start, effective_request);
+        let effective_no_wrap = builder.ins().icmp(
             cranelift_codegen::ir::condcodes::IntCC::UnsignedGreaterThanOrEqual,
-            request_end,
+            effective_end,
             request_start,
         );
         let span_start = reply_start.unwrap_or(request_start);
@@ -4679,12 +4692,13 @@ impl<'a> Lowering<'a> {
         let inside = builder.ins().icmp(
             cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
             span_end,
-            request_end,
+            effective_end,
         );
         let valid = [
             positive,
             bounded,
-            request_no_wrap,
+            effective_within_raw,
+            effective_no_wrap,
             span_no_wrap,
             starts_at_request,
             inside,
@@ -4697,7 +4711,7 @@ impl<'a> Lowering<'a> {
         let minted = BoundedNatV1::mint_after_reply_validation(count);
         let predecessor = minted.predecessor(builder);
         let remaining =
-            BoundedNatV1::derived_from_validated(builder.ins().isub(request_length, count));
+            BoundedNatV1::derived_from_validated(builder.ins().isub(effective_request, count));
         (minted, predecessor, remaining)
     }
 

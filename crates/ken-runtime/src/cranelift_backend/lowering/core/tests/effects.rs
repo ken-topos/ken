@@ -20,7 +20,11 @@ fn run_checked_bounded_nat_fixture(
     count: u64,
     request_start: u64,
     request_length: u64,
-    reply_start: u64,
+    effective_request: u64,
+    // `Some` mirrors the `ReadSome` call site (a reply-carried span start
+    // distinct from the request); `None` mirrors `Wrote` (no reply span —
+    // `mint_validated_progress_nat` falls back to `request_start`).
+    reply_start: Option<u64>,
     observation: BoundedNatFixtureObservation,
     mutation: BoundedNatLoweringMutation,
 ) -> Result<i64, CraneliftBackendError> {
@@ -92,7 +96,8 @@ fn run_checked_bounded_nat_fixture(
         let count = builder.ins().iconst(types::I64, count as i64);
         let request_start = builder.ins().iconst(types::I64, request_start as i64);
         let request_length = builder.ins().iconst(types::I64, request_length as i64);
-        let reply_start = builder.ins().iconst(types::I64, reply_start as i64);
+        let effective_request = builder.ins().iconst(types::I64, effective_request as i64);
+        let reply_start = reply_start.map(|start| builder.ins().iconst(types::I64, start as i64));
         let one = builder.ins().iconst(types::I64, 1);
         let success =
             builder
@@ -104,120 +109,148 @@ fn run_checked_bounded_nat_fixture(
             count,
             request_start,
             request_length,
-            Some(reply_start),
+            effective_request,
+            reply_start,
         );
         let nat = match observation {
             BoundedNatFixtureObservation::OrdinaryCount
             | BoundedNatFixtureObservation::ComputationalCount => count,
-            BoundedNatFixtureObservation::OrdinaryRemaining => remaining,
+            BoundedNatFixtureObservation::OrdinaryRemaining
+            | BoundedNatFixtureObservation::RawRemainingScalar => remaining,
         };
         let default = RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
             message: "PX8-N exact structural Nat default".to_string(),
         };
-        let lowered = match observation {
-            BoundedNatFixtureObservation::OrdinaryCount
-            | BoundedNatFixtureObservation::OrdinaryRemaining => {
-                let cases = vec![
-                    crate::RuntimeMatchCase {
-                        constructor: compiler.process_symbols.nat_zero.clone(),
-                        binders: 0,
-                        body: RuntimeExpr::Value(RuntimeValue::Int((10).into())),
-                    },
-                    crate::RuntimeMatchCase {
-                        constructor: compiler.process_symbols.nat_suc.clone(),
-                        binders: 1,
-                        body: RuntimeExpr::Match {
-                            scrutinee: Box::new(RuntimeExpr::Var(0)),
-                            cases: vec![
-                                crate::RuntimeMatchCase {
-                                    constructor: compiler.process_symbols.nat_zero.clone(),
-                                    binders: 0,
-                                    body: RuntimeExpr::Value(RuntimeValue::Int((21).into())),
-                                },
-                                crate::RuntimeMatchCase {
-                                    constructor: compiler.process_symbols.nat_suc.clone(),
-                                    binders: 1,
-                                    body: RuntimeExpr::Value(RuntimeValue::Int((22).into())),
-                                },
-                            ],
-                            default: default.clone(),
+        // BUDGET-EFF: `RawRemainingScalar` returns `nat`'s raw scalar
+        // directly, bypassing the eliminator match below — the structural
+        // zero/one/many buckets it produces can't distinguish a correct
+        // capped-short `remaining` from one wrongly derived from the raw
+        // (pre-clamp) length, since both are >= 2 and collapse to the same
+        // bucket ("22"). Still enters solely through
+        // `mint_validated_progress_nat`; no second constructor, just a
+        // different tail on the one minted value.
+        let value = if let BoundedNatFixtureObservation::RawRemainingScalar = observation {
+            nat.value
+        } else {
+            let lowered = match observation {
+                BoundedNatFixtureObservation::RawRemainingScalar => {
+                    unreachable!("handled above, before eliminator lowering")
+                }
+                BoundedNatFixtureObservation::OrdinaryCount
+                | BoundedNatFixtureObservation::OrdinaryRemaining => {
+                    let cases = vec![
+                        crate::RuntimeMatchCase {
+                            constructor: compiler.process_symbols.nat_zero.clone(),
+                            binders: 0,
+                            body: RuntimeExpr::Value(RuntimeValue::Int((10).into())),
                         },
-                    },
-                ];
-                compiler.lower_bounded_nat_match(&mut builder, nat, false, &cases, &default, &[])?
-            }
-            BoundedNatFixtureObservation::ComputationalCount => {
-                let cases = vec![
-                    crate::RuntimeComputationalMatchCase {
-                        constructor: compiler.process_symbols.nat_zero.clone(),
-                        argument_binders: 0,
-                        recursive_positions: Vec::new(),
-                        body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
-                    },
-                    crate::RuntimeComputationalMatchCase {
-                        constructor: compiler.process_symbols.nat_suc.clone(),
-                        argument_binders: 1,
-                        recursive_positions: vec![0],
-                        body: RuntimeExpr::Match {
-                            scrutinee: Box::new(RuntimeExpr::Var(1)),
-                            cases: vec![
-                                crate::RuntimeMatchCase {
-                                    constructor: compiler.process_symbols.nat_zero.clone(),
-                                    binders: 0,
-                                    body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
-                                },
-                                crate::RuntimeMatchCase {
-                                    constructor: compiler.process_symbols.nat_suc.clone(),
-                                    binders: 1,
-                                    body: RuntimeExpr::Match {
-                                        scrutinee: Box::new(RuntimeExpr::Var(1)),
-                                        cases: vec![
-                                            crate::RuntimeMatchCase {
-                                                constructor: compiler
-                                                    .process_symbols
-                                                    .bool_false
-                                                    .clone(),
-                                                binders: 0,
-                                                body: RuntimeExpr::Value(RuntimeValue::Bool(true)),
-                                            },
-                                            crate::RuntimeMatchCase {
-                                                constructor: compiler
-                                                    .process_symbols
-                                                    .bool_true
-                                                    .clone(),
-                                                binders: 0,
-                                                body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
-                                            },
-                                        ],
-                                        default: default.clone(),
+                        crate::RuntimeMatchCase {
+                            constructor: compiler.process_symbols.nat_suc.clone(),
+                            binders: 1,
+                            body: RuntimeExpr::Match {
+                                scrutinee: Box::new(RuntimeExpr::Var(0)),
+                                cases: vec![
+                                    crate::RuntimeMatchCase {
+                                        constructor: compiler.process_symbols.nat_zero.clone(),
+                                        binders: 0,
+                                        body: RuntimeExpr::Value(RuntimeValue::Int((21).into())),
                                     },
-                                },
-                            ],
-                            default: default.clone(),
+                                    crate::RuntimeMatchCase {
+                                        constructor: compiler.process_symbols.nat_suc.clone(),
+                                        binders: 1,
+                                        body: RuntimeExpr::Value(RuntimeValue::Int((22).into())),
+                                    },
+                                ],
+                                default: default.clone(),
+                            },
                         },
-                    },
-                ];
-                let frames = [EliminatorFrame::Computational(
-                    ComputationalEliminatorFrame {
-                        cases: &cases,
-                        default: &default,
-                        env: &[],
-                        retained_scrutinee_index: None,
-                        deferred_constructor_case: None,
-                        provenance: compiler.mint_recursor_frame_provenance(),
-                        checked_frame_id: None,
-                        checked_invocation_id: None,
-                        checked_invocation_source: None,
-                        checked_invocation_depth: 0,
-                    },
-                )];
-                compiler.lower_bounded_nat_computational(&mut builder, nat, false, &frames)?
+                    ];
+                    compiler.lower_bounded_nat_match(
+                        &mut builder,
+                        nat,
+                        false,
+                        &cases,
+                        &default,
+                        &[],
+                    )?
+                }
+                BoundedNatFixtureObservation::ComputationalCount => {
+                    let cases = vec![
+                        crate::RuntimeComputationalMatchCase {
+                            constructor: compiler.process_symbols.nat_zero.clone(),
+                            argument_binders: 0,
+                            recursive_positions: Vec::new(),
+                            body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
+                        },
+                        crate::RuntimeComputationalMatchCase {
+                            constructor: compiler.process_symbols.nat_suc.clone(),
+                            argument_binders: 1,
+                            recursive_positions: vec![0],
+                            body: RuntimeExpr::Match {
+                                scrutinee: Box::new(RuntimeExpr::Var(1)),
+                                cases: vec![
+                                    crate::RuntimeMatchCase {
+                                        constructor: compiler.process_symbols.nat_zero.clone(),
+                                        binders: 0,
+                                        body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
+                                    },
+                                    crate::RuntimeMatchCase {
+                                        constructor: compiler.process_symbols.nat_suc.clone(),
+                                        binders: 1,
+                                        body: RuntimeExpr::Match {
+                                            scrutinee: Box::new(RuntimeExpr::Var(1)),
+                                            cases: vec![
+                                                crate::RuntimeMatchCase {
+                                                    constructor: compiler
+                                                        .process_symbols
+                                                        .bool_false
+                                                        .clone(),
+                                                    binders: 0,
+                                                    body: RuntimeExpr::Value(RuntimeValue::Bool(
+                                                        true,
+                                                    )),
+                                                },
+                                                crate::RuntimeMatchCase {
+                                                    constructor: compiler
+                                                        .process_symbols
+                                                        .bool_true
+                                                        .clone(),
+                                                    binders: 0,
+                                                    body: RuntimeExpr::Value(RuntimeValue::Bool(
+                                                        false,
+                                                    )),
+                                                },
+                                            ],
+                                            default: default.clone(),
+                                        },
+                                    },
+                                ],
+                                default: default.clone(),
+                            },
+                        },
+                    ];
+                    let frames = [EliminatorFrame::Computational(
+                        ComputationalEliminatorFrame {
+                            cases: &cases,
+                            default: &default,
+                            env: &[],
+                            retained_scrutinee_index: None,
+                            deferred_constructor_case: None,
+                            provenance: compiler.mint_recursor_frame_provenance(),
+                            checked_frame_id: None,
+                            checked_invocation_id: None,
+                            checked_invocation_source: None,
+                            checked_invocation_depth: 0,
+                        },
+                    )];
+                    compiler.lower_bounded_nat_computational(&mut builder, nat, false, &frames)?
+                }
+            };
+            match lowered {
+                Lowered::Int { value, .. } => value,
+                other => compiler.emit_result(&mut builder, other)?.0,
             }
-        };
-        let value = match lowered {
-            Lowered::Int { value, .. } => value,
-            other => compiler.emit_result(&mut builder, other)?.0,
         };
         builder.ins().return_(&[value]);
         builder.seal_all_blocks();
@@ -249,7 +282,8 @@ fn px8n_bounded_nat_observes_exact_zero_successor_and_recursive_order() {
             3,
             7,
             3,
-            7,
+            3,
+            Some(7),
             BoundedNatFixtureObservation::OrdinaryRemaining,
             BoundedNatLoweringMutation::Exact,
         )
@@ -262,7 +296,8 @@ fn px8n_bounded_nat_observes_exact_zero_successor_and_recursive_order() {
             3,
             7,
             5,
-            7,
+            5,
+            Some(7),
             BoundedNatFixtureObservation::OrdinaryCount,
             BoundedNatLoweringMutation::Exact,
         )
@@ -275,7 +310,8 @@ fn px8n_bounded_nat_observes_exact_zero_successor_and_recursive_order() {
             3,
             7,
             5,
-            7,
+            5,
+            Some(7),
             BoundedNatFixtureObservation::ComputationalCount,
             BoundedNatLoweringMutation::Exact,
         )
@@ -298,7 +334,8 @@ fn px8n_bounded_nat_rejects_zero_over_bound_misaligned_and_wrapping_progress() {
                 count,
                 start,
                 length,
-                reply_start,
+                length,
+                Some(reply_start),
                 BoundedNatFixtureObservation::OrdinaryCount,
                 BoundedNatLoweringMutation::Exact,
             )
@@ -316,7 +353,8 @@ fn px8n_decrement_and_raw_scalar_mutations_fail_the_structural_oracle() {
             3,
             7,
             5,
-            7,
+            5,
+            Some(7),
             BoundedNatFixtureObservation::ComputationalCount,
             mutation,
         )
@@ -335,6 +373,113 @@ fn px8n_decrement_and_raw_scalar_mutations_fail_the_structural_oracle() {
             1,
             "the live producer exposes the exact wrong result when its Suc binder receives the raw scalar",
         );
+}
+
+// BUDGET-EFF native half (Architect ruling `dec_1m6xdwjp2ttyn`,
+// `docs/program/issues/BUDGET-EFF.md`). `remaining` must derive from the
+// post-clamp `effective_request`, never the raw pre-clamp request length —
+// `mint_validated_progress_nat` is the exact native reification seat the
+// WP's AC-3 rewrite requires a test at. `RawRemainingScalar` reads the
+// minted value's magnitude directly (see its doc comment above), because the
+// structural zero/one/many buckets the other observations use cannot tell a
+// correct capped-short `remaining` (2) from a raw-derived one (6) — both
+// land in the same "many" bucket.
+//
+// capped-full ALONE would be green under the wrong shortcut
+// `effective := count` (remaining 0 either way) — capped-short is the
+// discriminating shape and is not optional.
+
+#[test]
+fn budget_eff_native_read_some_capped_full_and_short_reify_effective_not_raw_remaining() {
+    assert_eq!(
+        run_checked_bounded_nat_fixture(
+            4,
+            0,
+            8,
+            4,
+            Some(0),
+            BoundedNatFixtureObservation::RawRemainingScalar,
+            BoundedNatLoweringMutation::Exact,
+        )
+        .unwrap(),
+        0,
+        "ReadSome capped-full: raw 8, effective 4, count 4 -> remaining 0",
+    );
+    assert_eq!(
+        run_checked_bounded_nat_fixture(
+            2,
+            0,
+            8,
+            4,
+            Some(0),
+            BoundedNatFixtureObservation::RawRemainingScalar,
+            BoundedNatLoweringMutation::Exact,
+        )
+        .unwrap(),
+        2,
+        "ReadSome capped-short: raw 8, effective 4, count 2 -> remaining 2 \
+         (NOT 6 == raw 8 - count 2, the pre-fix defect this WP closes)",
+    );
+}
+
+#[test]
+fn budget_eff_native_wrote_capped_full_and_short_reify_effective_not_raw_remaining() {
+    assert_eq!(
+        run_checked_bounded_nat_fixture(
+            4,
+            0,
+            8,
+            4,
+            None,
+            BoundedNatFixtureObservation::RawRemainingScalar,
+            BoundedNatLoweringMutation::Exact,
+        )
+        .unwrap(),
+        0,
+        "Wrote capped-full: raw 8, effective 4, count 4 -> remaining 0",
+    );
+    assert_eq!(
+        run_checked_bounded_nat_fixture(
+            2,
+            0,
+            8,
+            4,
+            None,
+            BoundedNatFixtureObservation::RawRemainingScalar,
+            BoundedNatLoweringMutation::Exact,
+        )
+        .unwrap(),
+        2,
+        "Wrote capped-short: raw 8, effective 4, count 2 -> remaining 2 \
+         (NOT 6 == raw 8 - count 2, the pre-fix defect this WP closes)",
+    );
+}
+
+#[test]
+fn budget_eff_native_fails_closed_on_effective_zero_below_count_and_above_raw() {
+    // Boundary constraint 3: `0 < count <= effective_request <= raw_length`.
+    // Each row violates exactly one conjunct; `mint_validated_progress_nat`
+    // must reject all three rather than mint a carrier.
+    for (label, count, request_length, effective_request) in [
+        ("effective_request == 0", 2, 8, 0),
+        ("effective_request(3) < count(4)", 4, 8, 3),
+        ("effective_request(9) > raw request_length(8)", 2, 8, 9),
+    ] {
+        assert_eq!(
+            run_checked_bounded_nat_fixture(
+                count,
+                0,
+                request_length,
+                effective_request,
+                Some(0),
+                BoundedNatFixtureObservation::OrdinaryCount,
+                BoundedNatLoweringMutation::Exact,
+            )
+            .unwrap(),
+            -1,
+            "{label} must fail closed, not mint a carrier",
+        );
+    }
 }
 
 fn run_borrowed_fixture(expr: &RuntimeExpr, root: &BorrowedFixtureValue) -> i64 {
@@ -606,6 +751,7 @@ enum BoundedNatFixtureObservation {
     OrdinaryCount,
     OrdinaryRemaining,
     ComputationalCount,
+    RawRemainingScalar,
 }
 
 #[test]
@@ -1228,6 +1374,15 @@ extern "C" fn px8n_scripted_host_dispatch(
         store(wire.reply_tag_offset, wire.reply_metadata_tag);
         store(wire.reply_detail_offset, PX8I_BIG_U64);
     } else {
+        // BUDGET-EFF: every scripted FsReadAt/FsWriteAt scenario here uses
+        // the uniform, unclamped request length 4 (validated above at
+        // `request_offsets[4]`) — this scripted host never exercises a
+        // buffer-capacity clamp, so the effective request equals the raw
+        // one. Without this the reply's `effective_request` field stays at
+        // the write_bytes zero-fill above and every reply with a nonzero
+        // transferred count fails the new `count <= effective_request`
+        // bound this WP added.
+        store(wire.reply_effective_request_offset, 4);
         match fixture.scenario {
             PX8N_SHORT_WROTE | PX8I_WRAPPING_WRITE_START => {
                 store(wire.reply_tag_offset, wire.reply_write_progress_tag);
