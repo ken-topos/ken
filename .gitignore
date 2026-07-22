@@ -24,6 +24,10 @@
 /local/*
 !/local/README.md
 
+# scripts/gen-source-attestations.sh never writes the real ledger — only
+# this proposed sibling, pending deliberate Librarian review (SRC-ATTEST).
+library/SOURCE-ATTESTATIONS.proposed
+
 # Keep Cargo.lock committed (this workspace ships a binary).
 
 # Claude Code: ignore per-session state, but keep the role-skill corpus tracked

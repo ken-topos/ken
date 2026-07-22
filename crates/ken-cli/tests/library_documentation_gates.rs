@@ -955,6 +955,46 @@ fn object_present(rev: &str, cwd: &Path) -> bool {
         .success()
 }
 
+/// Ledger test helpers (SRC-ATTEST Part 1). Every fixture below needs
+/// `library/SOURCE-ATTESTATIONS` to exist unconditionally — the check path
+/// now treats a missing ledger as a hard failure regardless of whether the
+/// manifest cites anything.
+fn object_format(cwd: &Path) -> String {
+    std::process::Command::new("git")
+        .args(["rev-parse", "--show-object-format"])
+        .current_dir(cwd)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|| "sha1".to_string())
+}
+
+/// Content-addressed blob OID of a working-tree file, independent of
+/// whether it has been committed yet — matches how the real ledger binds a
+/// path to a blob OID.
+fn hash_object(repo: &Path, rel_path: &str) -> String {
+    run_git(&["hash-object", rel_path], repo)
+}
+
+/// Writes `library/SOURCE-ATTESTATIONS` with exactly the given
+/// `(oid, path)` rows, sorted by path, matching the real generator's shape.
+fn write_ledger(repo: &Path, rows: &[(&str, &str)]) {
+    let fmt = object_format(repo);
+    let mut sorted: Vec<&(&str, &str)> = rows.iter().collect();
+    sorted.sort_by_key(|(_, path)| *path);
+    let mut body = format!("# ken-source-attestation-v1 object-format={fmt}\n");
+    for (oid, path) in sorted {
+        body.push_str(&format!("{oid}\t{path}\n"));
+    }
+    std::fs::write(repo.join("library/SOURCE-ATTESTATIONS"), body).unwrap();
+}
+
+/// Header-only ledger for fixtures whose manifest cites no sources at all.
+fn write_empty_ledger(repo: &Path) {
+    write_ledger(repo, &[]);
+}
+
 /// Builds a fully synthetic upstream in `base/origin`: the real
 /// `gen-doc-status.sh` copied byte-for-byte, a minimal `library/`
 /// substrate, several commits of unrelated history after the
@@ -979,6 +1019,7 @@ fn build_synthetic_origin(base: &Path) -> (PathBuf, String, String) {
     .unwrap();
     std::fs::write(origin.join("library/fixture.md"), "# Fixture\n").unwrap();
     std::fs::write(origin.join("library/REVISION"), "0".repeat(40)).unwrap();
+    write_empty_ledger(&origin);
     run_git(&["add", "-A"], &origin);
     run_git(&["commit", "--quiet", "-m", "initial"], &origin);
     let revision_target = run_git(&["rev-parse", "HEAD"], &origin);
@@ -1211,9 +1252,10 @@ fn shallow_clone_self_heals_when_object_present_but_ancestry_unprovable() {
 // Builds a small self-contained repo (same byte-copy-the-real-script
 // pattern as `build_synthetic_origin`) with one document citing an external
 // `docs/` file, so the mutation proof can act directly on git history
-// rather than needing shallow-clone gymnastics — content diffing across two
-// commits needs only those two commit's objects, not a particular checkout
-// depth.
+// rather than needing shallow-clone gymnastics. Since SRC-ATTEST Part 1,
+// the currency claim is a `library/SOURCE-ATTESTATIONS` ledger row (a
+// blob OID for the cited path) checked against HEAD, not a REVISION-to-HEAD
+// diff — the fixture below writes that ledger explicitly.
 fn build_currency_fixture(base: &Path) -> (PathBuf, String) {
     let repo = base.join("repo");
     std::fs::create_dir_all(&repo).expect("create repo dir");
@@ -1229,6 +1271,7 @@ fn build_currency_fixture(base: &Path) -> (PathBuf, String) {
         "# Example\n\n## A Heading\n\noriginal content\n",
     )
     .unwrap();
+    let example_oid = hash_object(&repo, "docs/example.md");
     std::fs::write(
         repo.join("library/manifest.toml"),
         "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
@@ -1238,6 +1281,7 @@ fn build_currency_fixture(base: &Path) -> (PathBuf, String) {
     .unwrap();
     std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
     std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    write_ledger(&repo, &[(&example_oid, "docs/example.md")]);
     run_git(&["add", "-A"], &repo);
     run_git(
         &["commit", "--quiet", "-m", "initial: manifest + cited source"],
@@ -1329,13 +1373,13 @@ fn content_currency_gate_rejects_a_drifted_cited_source_and_recovers() {
     );
     let red_stderr = String::from_utf8_lossy(&red.stderr);
     assert!(
-        red_stderr.contains("docs/example.md") && red_stderr.contains("changed between REVISION"),
+        red_stderr.contains("docs/example.md") && red_stderr.contains("attested"),
         "expected a diagnostic naming the drifted source, got stderr:\n{red_stderr}"
     );
 
     // Green again: revert the content — proves the gate isn't just
     // permanently red once tripped, and that the check is genuinely keyed
-    // on content, not on commit count/history shape.
+    // on content (the ledger never moved), not on commit count/history shape.
     std::fs::write(
         repo.join("docs/example.md"),
         "# Example\n\n## A Heading\n\noriginal content\n",
@@ -1398,6 +1442,7 @@ fn content_currency_gate_rejects_revision_predating_librarys_own_introduction() 
         format!("{pre_library_revision}\n"),
     )
     .unwrap();
+    write_empty_ledger(&repo);
     run_git(&["add", "-A"], &repo);
     run_git(
         &["commit", "--quiet", "-m", "introduce library/, REVISION mis-anchored"],
@@ -1499,14 +1544,24 @@ fn content_currency_gate_rejects_a_symlink_source_even_when_its_target_is_unchan
         &["commit", "--quiet", "-m", "initial: manifest + symlink source"],
         &repo,
     );
+    // The ledger must list a row for the symlink path to reach the
+    // mode-check at all (a missing row would instead trip the
+    // set-equality "missing from ledger" branch, a different diagnostic) —
+    // use the path's OWN tracked blob OID (the symlink's target-string
+    // blob), exactly what a real generator run against this fixture would
+    // produce, since attesting it is possible; the check must still refuse
+    // to trust it.
+    let link_oid = run_git(&["rev-parse", "HEAD:docs/link.md"], &repo);
+    write_ledger(&repo, &[(&link_oid, "docs/link.md")]);
     let revision = run_git(&["rev-parse", "HEAD"], &repo);
     std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
     run_git(&["add", "-A"], &repo);
-    run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+    run_git(&["commit", "--quiet", "-m", "anchor REVISION + ledger"], &repo);
     set_origin_main_to_head(&repo);
 
-    // Target is UNCHANGED since REVISION — the only variable under test is
-    // "is the cited path a symlink", not "did the content drift".
+    // Target is UNCHANGED since the ledger was written — the only variable
+    // under test is "is the cited path a symlink", not "did the content
+    // drift".
     let out = run_gen_doc_status(&repo);
     assert!(
         !out.status.success(),
@@ -1563,6 +1618,7 @@ fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_ki
         "# Example\n\n## A Heading\n\noriginal content\n",
     )
     .unwrap();
+    let example_oid = hash_object(&repo, "docs/example.md");
     // `kind = "status"` right before `sources`, `kind = "explanatory"`
     // (the record's REAL, final kind) restored right after — the exact
     // field placement from the live probe.
@@ -1575,6 +1631,7 @@ fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_ki
     .unwrap();
     std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
     std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    write_ledger(&repo, &[(&example_oid, "docs/example.md")]);
     run_git(&["add", "-A"], &repo);
     run_git(
         &["commit", "--quiet", "-m", "initial: manifest + duplicate kind"],
@@ -1607,8 +1664,337 @@ fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_ki
     );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("docs/example.md") && stderr.contains("changed between REVISION"),
+        stderr.contains("docs/example.md") && stderr.contains("attested"),
         "expected a diagnostic naming the drifted source, got stderr:\n{stderr}"
+    );
+}
+
+// --- SRC-ATTEST Part 1 proof matrix, rows 3/4/8 -----------------------------
+//
+// Rows 1 (drift, ledger unchanged), 2 (candidate-time update goes green), and
+// the symlink-row case of row 4 are proved above by the tests already
+// adapted to the ledger. These close the remaining rows the frame names as
+// required: 3 (citation add/remove -> set mismatch), 4's remaining shapes
+// (duplicate/wrong-path row), and 8 (the check path cannot mutate the
+// ledger).
+
+#[test]
+fn ledger_set_mismatch_when_a_citation_is_added_without_a_ledger_row() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-add-cite-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (repo, _revision) = build_currency_fixture(&base);
+
+    // A second cited source appears with no corresponding ledger row — the
+    // exact "citation add" half of row 3.
+    std::fs::write(repo.join("docs/second.md"), "# Second\n\nnever attested\n").unwrap();
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = [\n  \
+         \"docs/example.md#a-heading\",\n  \"docs/second.md\",\n]\n",
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "add an unattested citation"],
+        &repo,
+    );
+
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a manifest citation with no matching \
+         ledger row"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("missing from ledger") && stderr.contains("docs/second.md"),
+        "expected a diagnostic naming the unattested new citation, got \
+         stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn ledger_set_mismatch_when_a_citation_is_removed_but_its_ledger_row_stays() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-remove-cite-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (repo, _revision) = build_currency_fixture(&base);
+
+    // Drop the citation from the manifest; the ledger still names it — the
+    // "citation remove" half of row 3. A stale ledger row is exactly as
+    // wrong as a missing one: it asserts an attestation for a claim the
+    // corpus no longer makes.
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = []\n",
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &[
+            "commit",
+            "--quiet",
+            "-m",
+            "remove the citation, ledger untouched",
+        ],
+        &repo,
+    );
+
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a stale ledger row for a citation that \
+         no longer exists in the manifest"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("stale in ledger") && stderr.contains("docs/example.md"),
+        "expected a diagnostic naming the stale ledger row, got stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn ledger_rejects_a_duplicate_path_row() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-dup-row-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (repo, _revision) = build_currency_fixture(&base);
+
+    let example_oid = run_git(&["rev-parse", "HEAD:docs/example.md"], &repo);
+    let fmt = object_format(&repo);
+    std::fs::write(
+        repo.join("library/SOURCE-ATTESTATIONS"),
+        format!(
+            "# ken-source-attestation-v1 object-format={fmt}\n\
+             {example_oid}\tdocs/example.md\n\
+             {example_oid}\tdocs/example.md\n"
+        ),
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "duplicate ledger row"], &repo);
+
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a ledger with a duplicate path row"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("duplicate path row"),
+        "expected the duplicate-row diagnostic, got stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn ledger_rejects_a_path_escaping_the_repository() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-escape-row-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (repo, _revision) = build_currency_fixture(&base);
+
+    let example_oid = run_git(&["rev-parse", "HEAD:docs/example.md"], &repo);
+    let fmt = object_format(&repo);
+    // The escaping row REPLACES the legitimate one, so the only variable
+    // under test is row-shape rejection, not a set-mismatch on the real
+    // citation (which would fire first and mask this).
+    std::fs::write(
+        repo.join("library/SOURCE-ATTESTATIONS"),
+        format!(
+            "# ken-source-attestation-v1 object-format={fmt}\n\
+             {example_oid}\t../outside-the-repo.md\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = []\n",
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "escaping ledger row"], &repo);
+
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a ledger row whose path escapes the \
+         repository"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("escapes the repository"),
+        "expected the path-escape diagnostic, got stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn check_and_write_modes_never_mutate_the_ledger() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-check-immutable-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (repo, _revision) = build_currency_fixture(&base);
+    let ledger_path = repo.join("library/SOURCE-ATTESTATIONS");
+    let before = std::fs::read(&ledger_path).unwrap();
+
+    // Default (write) mode regenerates STATUS.md; the ledger is a read
+    // input to it, never a write target.
+    let write_out = run_gen_doc_status(&repo);
+    assert!(
+        write_out.status.success(),
+        "gen-doc-status.sh (write mode) failed on a green fixture. \
+         stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&write_out.stdout),
+        String::from_utf8_lossy(&write_out.stderr)
+    );
+    assert_eq!(
+        std::fs::read(&ledger_path).unwrap(),
+        before,
+        "gen-doc-status.sh (write mode) mutated library/SOURCE-ATTESTATIONS \
+         — the check/generate paths must stay separate entry points (SRC- \
+         ATTEST row 8)"
+    );
+
+    // `--check` mode.
+    let check_out = std::process::Command::new("bash")
+        .arg(repo.join("scripts/gen-doc-status.sh"))
+        .arg("--check")
+        .current_dir(&repo)
+        .output()
+        .expect("run gen-doc-status.sh --check");
+    assert!(
+        check_out.status.success(),
+        "gen-doc-status.sh --check failed on a freshly-regenerated fixture. \
+         stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&check_out.stdout),
+        String::from_utf8_lossy(&check_out.stderr)
+    );
+    assert_eq!(
+        std::fs::read(&ledger_path).unwrap(),
+        before,
+        "gen-doc-status.sh --check mutated library/SOURCE-ATTESTATIONS"
+    );
+}
+
+#[test]
+fn generator_only_ever_writes_the_proposed_sibling_never_the_real_ledger() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-generator-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (repo, _revision) = build_currency_fixture(&base);
+    let real_generator =
+        std::fs::read_to_string(repo_root().join("scripts/gen-source-attestations.sh"))
+            .expect("read the real gen-source-attestations.sh to copy into the fixture");
+    std::fs::write(
+        repo.join("scripts/gen-source-attestations.sh"),
+        &real_generator,
+    )
+    .unwrap();
+
+    let ledger_path = repo.join("library/SOURCE-ATTESTATIONS");
+    let proposed_path = repo.join("library/SOURCE-ATTESTATIONS.proposed");
+    let _ = std::fs::remove_file(&proposed_path);
+    let before = std::fs::read(&ledger_path).unwrap();
+
+    // Deliberately stale the real ledger relative to what the generator
+    // would compute (drift the cited source, don't touch the ledger), so a
+    // generator that silently "fixed" the real file would be observable.
+    std::fs::write(
+        repo.join("docs/example.md"),
+        "# Example\n\n## A Heading\n\nchanged after attestation\n",
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "drift after attestation"],
+        &repo,
+    );
+
+    let out = std::process::Command::new("bash")
+        .arg(repo.join("scripts/gen-source-attestations.sh"))
+        .current_dir(&repo)
+        .output()
+        .expect("run gen-source-attestations.sh");
+    assert!(
+        out.status.success(),
+        "gen-source-attestations.sh failed to render a proposed ledger. \
+         stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        proposed_path.is_file(),
+        "gen-source-attestations.sh did not write the .proposed sibling"
+    );
+    assert_eq!(
+        std::fs::read(&ledger_path).unwrap(),
+        before,
+        "gen-source-attestations.sh mutated the REAL ledger — generation \
+         must never install its own output; only a reviewed, deliberate \
+         commit may (SRC-ATTEST non-automation boundary)"
+    );
+    let proposed = std::fs::read_to_string(&proposed_path).unwrap();
+    assert!(
+        proposed.contains("docs/example.md"),
+        "proposed ledger did not include the (now drifted) cited source: \
+         {proposed}"
     );
 }
 
@@ -1688,6 +2074,7 @@ fn revision_must_survive_a_simulated_squash_merge_not_just_the_branch() {
     .unwrap();
     std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
     std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    write_empty_ledger(&repo);
     run_git(&["add", "-A"], &repo);
     run_git(
         &["commit", "--quiet", "-m", "B: merge base (simulated main tip)"],
