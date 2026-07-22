@@ -102,11 +102,19 @@ the buffer is FULL (span.length 4 == capacity 4), yet the reified count reports
 remaining = 8, which is the RAW request 8, not the effective request 4.
 ```
 
-Its **three premise assertions all pass** — the tail cap fires
-(`effective == capacity`), the capped read fills the buffer exactly, and
-`span.length == count` per `:406`. So the fixture genuinely exercises
-`:443-444` and **only the spec bound fails**. Not green-for-the-wrong-reason in
-either direction, which matters for a test whose whole job is to flip.
+⛔ **The paragraph that stood here was FALSE and is retracted.** It read:
+*"the fixture genuinely exercises `:443-444` and only the spec bound fails —
+not green-for-the-wrong-reason in either direction."* That is the adversary's
+own characterization of its own artifact (commit message of `06bb9538`), which
+the Steward repeated back as grounds for trusting it. **Neither of us had
+checked the conclusion.**
+
+What is true: the **three premise assertions** do pass and do drive real work
+(a real `dispatch_host_op_v1`, a real file, a real buffer) — the tail cap
+fires, the capped read fills the buffer exactly, `span.length == count` per
+`:406`. **The conclusion observes none of it.** *Real premises wrapped around
+a vacuous conclusion is far more convincing than an obviously thin test* —
+that is the shape, and it is why the assurance read as credible.
 
 **⛔ The effective value is NOT AVAILABLE at the reification site.**
 `TransferCountV1` is a single-field newtype
@@ -151,9 +159,16 @@ assert_eq!(derived_remaining, spec_remaining) // 4 == 0 — always fails
 ```
 
 **Both sides are computed from the test's own constants. It never observes a
-reifier field** — not `remaining`, not `transfer_count_request_budget`. It
-fails identically against a perfect implementation, so its observed failure at
-`e892777c` confirmed nothing. It is a *proxy* (arithmetic over its own
+reifier field** — not `remaining`, not `transfer_count_request_budget`.
+
+**⛔ It is UNSATISFIABLE, which is strictly worse than non-discriminating**
+(adversary, verified 2026-07-22). `count` appears on both sides and
+**cancels**, so the assertion reduces to `RAW_LENGTH == effective` — i.e.
+`8 == 4`. The adversary swept every value `count` can take (`0..=CAPACITY`)
+and it is false for all of them. **No implementation, correct or defective,
+could ever have discharged AC-3 as originally written.** A ring given it would
+not have found it merely unhelpful — it would have worked until it either
+edited an oracle pinned *"unchanged"* or escalated. It is a *proxy* (arithmetic over its own
 literals) standing in for the *mechanism*, which is precisely the defect class
 `Q-RESIDUE` existed to remove. Its commit message compounds this: the
 "absolute oracle" and "not green-for-the-wrong-reason" claims describe the
@@ -166,12 +181,49 @@ output** and assert it equals `effective - count`, on **both** interp and
 native. It then passes. **"Unchanged" is withdrawn** — it pinned a broken
 instrument as the definition of done.
 
+> ### ⛔ AC-3 CANNOT BE SATISFIED IN PLACE — it must RELOCATE
+>
+> **Do not try to fix the oracle where it sits.** It lives in `ken-host`'s
+> `effect_v1` dispatch test module (it needed the module-private
+> `PositionedBackend`), and **`remaining` is not reachable from there** —
+> verified: the string does not occur anywhere in
+> `crates/ken-host/src/effect_v1.rs`. The field is constructed on the two
+> reifier sides only:
+>
+> - `ken-interp/src/eval.rs:4934-4935` — `requested.checked_sub(count)`, into
+>   the interpreter's value store via `make_ctor(fs.private_transfer_count_id, …)`
+> - `ken-runtime/src/cranelift_backend.rs:13081-13082` —
+>   `isub(request_length, count)`, as Cranelift IR
+>
+> **⇒ The rewrite is two new tests at seats that can observe a reified
+> `TransferCount`:** an interp-level test, and a native one alongside
+> `rt_parity_native.rs`. **Budget it as plumbing, not a formula swap** — the
+> same shape as the underlying defect. (Adversary, `evt_521sw77qxkqxb`;
+> independently re-verified by the Steward against the landed source before
+> folding.)
+
 > ⚠ **The general lesson, worth more than this WP.** An adversary's repro is
 > built to *demonstrate a defect* (expected-fail); a completion oracle is built
 > to *define correctness*. **They are different artifacts and one does not
 > become the other by being pinned.** Before pinning any oracle as an AC,
 > verify it observes the mechanism — a red result is not evidence that it
 > can ever go green for the right reason.
+>
+> **And the sharper half, which is the oracle-builder's** (adversary's own
+> carry, recorded here so it is not lost): before handing over any artifact as
+> evidence, check whether the concluding assertion **can fail for a reason
+> other than the one you want** — specifically, **whether the observed value
+> appears on both sides of the comparison and cancels.** The instrument was
+> the adversary's; the pin was the Steward's; **the assurance that stopped
+> either of us looking was the commit message.** A seat's characterization of
+> its own evidence is not evidence.
+>
+> **The R1 defect itself is UNAFFECTED and still stands**, on source
+> inspection of the two reifier sites above. What was broken was the
+> demonstration, not the finding — do not discount the defect along with the
+> instrument. The corrected artifact is
+> `adversary/R1-effective-request-repro @ bede2a37` (doc-comment retraction
+> only; test body byte-identical so the defect stays inspectable).
 **AC-4** — `38` is self-consistent at `:404-405`, `:419-420`, `:438-440`,
 `:443-444`; no site still says `≤ requested` if the ruling is `effective`.
 **AC-5** — the catalog lemma/contract are re-grounded on the settled bound.
