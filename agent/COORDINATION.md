@@ -537,6 +537,42 @@ configuration: `../docs/ops/compute-budget.md`.
   hardware grows (the Steward/operator raises the caps; do not raise them
   unilaterally).
 
+### 12a. ⛔ NEVER `git stash` — the stash stack is SHARED across every worktree
+
+**Binding on every seat, no exceptions** (Steward, 2026-07-22, after a live
+near-miss).
+
+`git stash` stores entries in `refs/stash` on the **shared repository**, not
+per-worktree. The fleet runs **~70 agent worktrees over one clone**, so every
+seat sees and mutates **one stack**. A bare `git stash pop` from *any* worktree
+takes `stash@{0}` — **whichever agent parked something last**, which is almost
+never you. Observed live: **12 entries from at least four different agents.**
+
+**The near-miss.** A build implementer ran `git stash pop` mid-slice and nearly
+consumed another team's parked diagnostic work. It was saved **only because the
+apply hit a merge conflict** — git retains the entry on conflict rather than
+dropping it. **On a clean apply it would have silently destroyed another
+agent's work**, and the owner would have found an empty stack with no error, no
+log, and no way to learn who took it. **This is the failure class no individual
+seat can detect**, which is why it is fleet law and not a team retro item.
+
+**Use one of these instead — all per-branch, so they cannot collide:**
+
+- **Commit it.** A WP commit on your own `<role>/work` branch is the normal
+  move, and is what the handoff gate expects anyway.
+- **`git worktree add`** a scratch worktree for the experiment.
+- If you genuinely must stash: **`git stash push -m "<role>: <what>"`**, and
+  thereafter **only `git stash apply stash@{n}`** on an entry whose message you
+  wrote yourself. **Never `pop`. Never a bare index.** Prefer committing.
+
+**⚠ Do not reap the existing stack.** Those entries belong to other seats.
+
+> Same shared-substrate family as the **single object store** (a commit that
+> verifies locally may never have been pushed — §14) and the **shared `/tmp`**
+> (at 99% full it silently dropped a git write). **Worktrees look isolated and
+> are not** — before assuming any git state is yours alone, ask whether the
+> underlying ref lives in the clone or in the worktree.
+
 ## 13. Liveness: keep the rings turning
 
 Token rings stall — an agent finishes, forgets to hand off, and the ring goes
