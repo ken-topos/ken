@@ -95,6 +95,14 @@ sources = [
   "catalog/packages/Capability/Filesystem/Errors.ken.md",
   "catalog/packages/Capability/System/IO.ken.md",
   "catalog/packages/Tooling/Testing/Property.ken.md",
+  "catalog/packages/Core/Classes/LawfulFunctors.ken.md",
+  "catalog/packages/Core/Classes/LawfulClasses.ken.md",
+  "catalog/packages/Core/Classes/EffectfulClasses.ken.md",
+  "catalog/packages/Data/Numeric/Nat/Arithmetic.ken.md",
+  "catalog/packages/Data/Numeric/Nat/Order.ken.md",
+  "catalog/examples/CommandLine/Forge.ken.md",
+  "docs/program/07-catalog-style-guide.md#3-code-block-roles-the-fence-taxonomy",
+  "docs/program/07-catalog-style-guide.md#13-path--import--the-normative-rule",
 ]
 validation = [
   "manifest-coverage",
