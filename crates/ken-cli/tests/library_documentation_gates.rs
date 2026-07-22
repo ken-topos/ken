@@ -80,8 +80,29 @@ fn lexically_normalize(path: &Path) -> PathBuf {
     out
 }
 
+// The lexical check alone is not enough: every consumer (`Path::is_file`,
+// `Path::exists`, `read_to_string`, `path.is_dir`) resolves symlinks when
+// it touches the filesystem, so an in-repository symlink whose target is
+// outside the repository passes the lexical prefix check (the symlink
+// itself is an ordinary path component under `library/`) and then reads
+// straight through to a real host file — a green-but-host-dependent bypass
+// of the same confinement boundary (Architect, `thr_74hvpkqnxjp9q`, third
+// round). Fixed by canonicalizing whenever the lexically-confined target
+// exists (canonicalization fully resolves symlinks) and re-checking
+// containment against the canonicalized repository root. A target that
+// does not exist cannot leak anything yet — the lexical check already
+// rejected an absolute/`..` escape for it, and the "does this exist"
+// checks downstream correctly report the rest as missing.
+fn is_symlink_escape(path: &Path, repo_root: &Path) -> bool {
+    match (path.canonicalize(), repo_root.canonicalize()) {
+        (Ok(canon), Ok(canon_root)) => !canon.starts_with(&canon_root),
+        _ => false,
+    }
+}
+
 /// Resolve `rel` against `base`, confined to `repo_root`: rejects an
-/// absolute `rel` and any `..` climb that lands outside `repo_root`.
+/// absolute `rel`, any `..` climb that lands outside `repo_root`, and any
+/// existing target a symlink component resolves outside `repo_root`.
 /// Returns the normalized absolute path if it stays confined, `None`
 /// otherwise. A legitimate cross-tree relative link (e.g.
 /// `library/README.md` citing `../catalog/packages/README.md`) still
@@ -92,11 +113,13 @@ fn resolve_confined(base: &Path, rel: &str, repo_root: &Path) -> Option<PathBuf>
     }
     let normalized = lexically_normalize(&base.join(rel));
     let repo_root_norm = lexically_normalize(repo_root);
-    if normalized.starts_with(&repo_root_norm) {
-        Some(normalized)
-    } else {
-        None
+    if !normalized.starts_with(&repo_root_norm) {
+        return None;
     }
+    if is_symlink_escape(&normalized, repo_root) {
+        return None;
+    }
+    Some(normalized)
 }
 
 // --- a hand-rolled parser for library/manifest.toml's controlled subset ---
@@ -233,8 +256,22 @@ fn library_markdown_files() -> Vec<String> {
         for entry in std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
         {
             let entry = entry.expect("dir entry");
+            // Architect finding (thr_74hvpkqnxjp9q, third round):
+            // `entry.file_type()` reports the symlink itself, unlike
+            // `path.is_dir()`/`path.is_file()`, which follow it. A
+            // symlinked directory under `library/` must not be walked
+            // into (it can lead straight out of the repository), and a
+            // symlinked file must not be discovered at all — this walk
+            // is the ONLY place that finds these files, so a symlinked
+            // `.md` excluded here never reaches a consumer's
+            // `read_to_string` at all, not just `resolve_confined`'s
+            // manifest-path/source/link checks.
+            let file_type = entry.file_type().expect("dir entry file type");
+            if file_type.is_symlink() {
+                continue;
+            }
             let path = entry.path();
-            if path.is_dir() {
+            if file_type.is_dir() {
                 stack.push(path);
             } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
                 let rel = path.strip_prefix(&root).unwrap();
@@ -731,6 +768,75 @@ fn every_document_declares_a_closed_authority_class() {
         bad.is_empty(),
         "document(s) with an invalid authority class:\n{}",
         bad.join("\n")
+    );
+}
+
+// --- symlink escape (Architect finding, thr_74hvpkqnxjp9q, third round) ---
+//
+// Committed regression, not just handoff evidence: plants a real
+// in-repository symlink pointing at a real file outside the repository
+// and a real symlinked directory, and proves both `resolve_confined` and
+// `library_markdown_files` reject them. Unix-only (`std::os::unix::fs::
+// symlink`) — consistent with the rest of this WP's tooling
+// (`scripts/gen-doc-status.sh` is bash).
+#[cfg(unix)]
+#[test]
+fn symlink_escape_is_rejected_by_confinement_and_by_the_walk() {
+    use std::os::unix::fs::symlink;
+
+    struct Cleanup(Vec<PathBuf>);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            for p in &self.0 {
+                let _ = std::fs::remove_file(p);
+                let _ = std::fs::remove_dir_all(p);
+            }
+        }
+    }
+
+    let root = repo_root();
+    let library = root.join("library");
+    let pid = std::process::id();
+
+    // An outside-the-repo target a symlink will point at.
+    let outside_file = std::env::temp_dir().join(format!("doc-w0-symlink-target-{pid}.md"));
+    std::fs::write(&outside_file, "host content outside the repository\n")
+        .expect("write outside probe file");
+
+    // A symlinked FILE under library/ pointing at it.
+    let file_link = library.join(format!("__doc_w0_symlink_file_probe_{pid}.md"));
+
+    // A symlinked DIRECTORY under library/ pointing at a tmp dir that
+    // itself contains a .md file — proves the walk does not descend.
+    let outside_dir = std::env::temp_dir().join(format!("doc-w0-symlink-dir-{pid}"));
+    std::fs::create_dir_all(&outside_dir).expect("create outside probe dir");
+    std::fs::write(outside_dir.join("leaked.md"), "leaked\n").expect("write leaked probe file");
+    let dir_link = library.join(format!("__doc_w0_symlink_dir_probe_{pid}"));
+
+    let _cleanup = Cleanup(vec![
+        file_link.clone(),
+        dir_link.clone(),
+        outside_file.clone(),
+        outside_dir.clone(),
+    ]);
+
+    symlink(&outside_file, &file_link).expect("create file-symlink probe");
+    symlink(&outside_dir, &dir_link).expect("create dir-symlink probe");
+
+    let file_rel = format!("__doc_w0_symlink_file_probe_{pid}.md");
+    assert!(
+        resolve_confined(&library, &file_rel, &root).is_none(),
+        "resolve_confined followed an in-repo symlink to a file outside the repository"
+    );
+
+    let files = library_markdown_files();
+    assert!(
+        !files.contains(&format!("library/{file_rel}")),
+        "library_markdown_files() discovered a symlinked file instead of skipping it"
+    );
+    assert!(
+        !files.iter().any(|f| f.contains("leaked")),
+        "library_markdown_files() walked into a symlinked directory and found a file outside the repository"
     );
 }
 
