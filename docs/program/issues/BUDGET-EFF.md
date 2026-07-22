@@ -47,3 +47,29 @@ decomposition lands first). ⛔ **Sequenced BEFORE `ABI-M1`** (Architect
 constraint 6).
 
 Full brief: [`docs/program/wp/BUDGET-EFF-remaining-bounded-by-effective-request.md`](../wp/BUDGET-EFF-remaining-bounded-by-effective-request.md).
+
+## ⚠ HALF LANDED — host/interp MERGED, native half STILL OPEN
+
+**`origin/main @ 214bf4de` (PR #863, CI-gated).** Decision `dec_mpr5xcbrrnkf`
+resolved; Architect APPROVE on exact `99076768`, QA APPROVE from verify-qa on
+the whole assembled and rebased diff. Verified by content on `main`, not by the
+publisher's exit code.
+
+Landed in `crates/ken-host` + `crates/ken-interp`: the two-field inseparable
+`TransferCountV1 { transferred, effective_request }` carrier with constructor
+invariant `0 < transferred <= effective_request`; the named `effective_request`
+reply field appended last (no offset shift); and post-decode correlation
+`validate_transfer_request_bound` proving the full chain
+`0 < count <= effective_request <= raw request.length`.
+
+⛔ **The native half is NOT in this merge and the issue stays `active`.** The
+native reifier is in `crates/ken-runtime/src/cranelift_backend/lowering/`,
+inside the in-flight RT-SPLIT slice-7 tree; a concurrent logic edit there would
+break that slice's move-pure ordered-identity criterion.
+
+**⇒ `main` currently carries an intentional asymmetry: host/interp derive
+`remaining` from the effective request, the native path still derives it from
+the raw length.** That divergence closes when slice 7 lands and the deferred
+half is released to Verify. It is sequenced, not forgotten — but it is live on
+`main` and anyone reading only the host side will draw the wrong conclusion
+about what the runtime as a whole guarantees today.
