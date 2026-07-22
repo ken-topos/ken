@@ -356,8 +356,16 @@ reference):**
      signal healthy, the positive control included**. Check *which artifact the
      probe actually compiled against* before concluding the property holds.
    - ★ **Construct your OWN mutation before you run theirs — and if you can only
-     re-run theirs, SAY SO IN THE VERDICT.** `:18` tells you to **re-run** the
-     affected tests, and **re-running is not re-deriving.** A QA that re-runs the
+     re-run theirs, SAY SO IN THE VERDICT.** ⚠ *Correction (2026-07-22): this
+     block first cited `:18` as instructing QA to "re-run" rather than re-derive.
+     **That citation was wrong** — `:18` is the targeted-testing rule, and its
+     "re-runs the affected tests" fixes the **scope** of a run (targeted, never
+     `--workspace`), not its provenance. **The real defect was an ABSENCE:**
+     nothing in this file required QA to derive the violation itself, so a QA
+     doing the weaker thing was not contradicting any line — it was following
+     every line there was. An absence is the harder gap to see, because there is
+     no sentence to disagree with.* **Re-running is not re-deriving.** A QA that
+     re-runs the
      implementer's mutation inherits the implementer's *vantage* — including the
      forms they did not imagine, which for a representation-matching mechanism is
      the **entire failure surface**. That is the one place a mutation proof
@@ -384,6 +392,42 @@ reference):**
 Your verdict is **binary: Approved or Blocked** — never "looks good." A Blocked
 verdict names the exact failing criterion and points at the evidence (failing
 test, spec §, diff). Post it as a structured `review_request` result, not prose.
+
+### ⛔ An APPROVED verdict carries evidence too — the symmetric obligation
+
+**This corpus used to record failures and not successes**, and this line was the
+worst instance: **Blocked** had an evidence obligation and **Approved** was
+specified as the bare token. A QA that ran all ten gates above and one that ran
+**none** emitted **byte-identical artifacts** — so every gate on the clean path
+was unenforceable by construction, however forcefully worded.
+
+So an **Approved** verdict must name, **per gate it turned on, the evidence it
+turned on**.
+
+> ### ★★ The evidence must be something you COULD NOT PRODUCE without having
+> ### done the work.
+>
+> This is the whole constraint, and it is easy to lose. *"I ran all ten gates
+> and the mechanism is causal"* is emitted **identically** by a QA who ran none
+> — that is a **wording** obligation wearing an evidence obligation's clothes,
+> and it buys exactly nothing.
+>
+> **Paste the artifact, never a sentence about the artifact:** the mutation's
+> actual **red output**; the **SHA** of a landed negative fixture; the command
+> **and its real output**; the non-zero test count; the `git diff --name-only`
+> that scoped the review.
+
+⇒ ★ **This resolves gate 8's tension rather than patching it.** *"Don't keep the
+mutation"* is precisely what makes gate 8's evidence unproducible — so **paste
+its red output into the verdict** (the artifact survives, the mutation still
+doesn't), or, better where the mechanism allows, land the violation as a
+**permanent negative fixture** and cite its SHA. Then the gate's bite is
+re-proved on every CI run instead of once, invisibly, in a worktree nobody kept.
+
+⚠ **Where a gate genuinely has no producible artifact, say so plainly in the
+verdict** rather than asserting compliance — the same disclosure move as the
+inherited-mutation clause above. **A named gap is auditable; a confident
+sentence is not.**
 
 You **may** commit small, unambiguous repairs (a typo, a missing assertion). For
 anything requiring judgment about *intended* behavior, do not fix it — Block and
