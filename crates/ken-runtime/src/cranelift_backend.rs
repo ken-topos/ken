@@ -52,19 +52,6 @@ const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [
     ken_host::HostOpV1::BufferFreeze,
 ];
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CraneliftObjectArtifact {
-    pub example: String,
-    pub entry_symbol: String,
-    pub object_bytes: Vec<u8>,
-    pub object_hash: u64,
-    pub platform_target: String,
-    pub backend_name: String,
-    pub verifier_passed: bool,
-    pub assumptions: BTreeSet<String>,
-    pub unsupported: Vec<String>,
-}
-
 pub fn run_nc6_seed_examples(
     program: &RuntimeProgram,
 ) -> Result<Vec<CraneliftRunReport>, CraneliftBackendError> {

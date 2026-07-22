@@ -22,6 +22,19 @@ pub struct CraneliftRunReport {
     pub native_returned: Option<i64>,
     pub trust: NativeTrustReport,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CraneliftObjectArtifact {
+    pub example: String,
+    pub entry_symbol: String,
+    pub object_bytes: Vec<u8>,
+    pub object_hash: u64,
+    pub platform_target: String,
+    pub backend_name: String,
+    pub verifier_passed: bool,
+    pub assumptions: BTreeSet<String>,
+    pub unsupported: Vec<String>,
+}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeTrustReport {
     pub backend: &'static str,
