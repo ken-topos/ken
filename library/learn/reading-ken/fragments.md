@@ -110,12 +110,15 @@ whole-program crutch or an invented toy.
 
 This file's own manifest record cites all seven fragment paths above as its
 `sources`. Its currency claim rests on the **content-currency** predicate
-(`source-currency` in `manifest.toml`): each cited path's tracked git blob
-is byte-identical between `library/REVISION` and `HEAD`
-(`scripts/gen-doc-status.sh`). That predicate proves the cited *bytes* are
-unchanged; it does not, by itself, re-run `ken check` — the exit-code table
-above is the separate, explicit record of that mechanism, current as of
-the SHA stated there. A later `REVISION` bump re-verifies byte-identity
-automatically; it does not re-verify `ken check` automatically, so any
-future edit that bumps `REVISION` past this file's citations should re-run
-the table above rather than assume it still holds.
+(`source-currency` in `manifest.toml`): the committed ledger,
+`library/SOURCE-ATTESTATIONS`, binds each cited path to its exact tracked
+git blob OID as of the commit a Librarian review last attested it; the
+check (`scripts/gen-doc-status.sh`) compares the current tracked blob for
+every cited path against that ledger, on exact population as well as exact
+OID. That predicate proves the cited *bytes* match what was reviewed; it
+does not, by itself, re-run `ken check` — the exit-code table above is the
+separate, explicit record of that mechanism, current as of the SHA stated
+there. A cited source's bytes changing requires both a fresh Librarian
+ledger refresh (a deliberate act, never automatic) and, separately,
+re-running the table above — `library/REVISION` is a provenance/bootstrap
+anchor only and neither refreshes nor authorizes source bytes.

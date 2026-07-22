@@ -263,11 +263,15 @@ sources that already establish the mechanism exists.
 Authority class: `explanatory` — this page orders and interprets those
 sections and the cited fragment/code's own text; it does not assert a rule
 they do not already state. Every citation rests on the **content-currency**
-predicate (`source-currency` in `manifest.toml`): the cited byte ranges are
-re-verified unchanged between `library/REVISION` and `HEAD` by
-`scripts/gen-doc-status.sh`. Content currency is necessary but not
-sufficient — the same discipline chapter 05's footer states: a citation can
-be byte-unchanged and still not carry the semantic claim made from it.
+predicate (`source-currency` in `manifest.toml`): the committed ledger,
+`library/SOURCE-ATTESTATIONS`, binds each cited path to its exact tracked
+blob OID as of a Librarian review, and `scripts/gen-doc-status.sh` compares
+the current tracked blob for every cited path against that ledger, on
+exact population as well as exact OID — `library/REVISION` is a
+provenance/bootstrap anchor only and does not itself re-verify cited
+bytes. Content currency is necessary but not sufficient — the same
+discipline chapter 05's footer states: a citation can be byte-unchanged
+and still not carry the semantic claim made from it.
 
 Section 2's "no registered fragment declares `proc main`" claim is grounded
 in a direct grep of the seven registered files, not an assertion, and in
