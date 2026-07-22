@@ -138,6 +138,115 @@ not the Steward's and not the ring's:**
 The adversary explicitly declined to choose and was right to. **Route this to
 the Architect with the enclave ruling**, before sizing the implementation half.
 
+## ✅ ARCHITECT DESIGN RULING — DELIVERED, BINDING (2026-07-22)
+
+Decision `dec_1m6xdwjp2ttyn` — **resolved**. Ruling `evt_1g6j2p7jnwbfb`. The
+two-option fork above is **closed**; the enclave ruling it waited on
+(`SPEC-38-ERRATUM`) merged at `e5a400c7`.
+
+### Option 1, refined as an INSEPARABLE VALIDATED CARRIER
+
+**Preserve the caller-authored request unchanged.** Carry the effective request
+as private reply data *inside* the transfer count:
+
+```rust
+pub struct TransferCountV1 {
+    transferred: u64,
+    effective_request: u64,
+}
+
+impl TransferCountV1 {
+    fn new(transferred: u64, effective_request: u64) -> Option<Self> {
+        (transferred > 0 && transferred <= effective_request).then_some(Self {
+            transferred, effective_request,
+        })
+    }
+    pub fn get(self) -> u64 { self.transferred }
+    pub fn effective_request(self) -> u64 { self.effective_request }
+}
+```
+
+Spelling may follow local convention; **the two private scalars and the
+constructor invariant are the required shape.** `ReadSome { span, transferred }`
+and `Wrote(transferred)` may keep their Rust enum arity — the budget lives
+inside the constructor-private count, **not as a loose sibling field that can
+drift from it.**
+
+**Why.** The host is the only layer that knows the post-validation cap
+(`effect_v1.rs:1621-1623`, `1679-1681`) and today destroys it in
+`TransferCountV1::new` (`:2059-2068`). Interp receives the typed canonical
+reply; native receives `HostReplyV1` and has **neither buffer capacity nor any
+lawful way to reconstruct the cap.** So any solution preserving the raw request
+must transport the fact across *both* reply boundaries. Inferring it from
+`span.length` is **wrong on a short read**; inferring it from raw `length` **is
+the defect**.
+
+**Option 2 REJECTED.** `CanonicalRequestV1`/`FsPositionedRequestV1.length` is
+the caller's request and the effect trace records it as such. Mutating it after
+dispatch turns an input into an **undocumented in/out channel**, erases the
+raw/effective distinction the landed spec now states explicitly, and leaves
+audits unable to compare caller intent against host normalization.
+
+### Boundary constraints — all six are binding
+
+1. **The native reply gets a NAMED `effective_request: u64` success field.**
+   Do **not** smuggle it through `bytes.data`, `resource_error.*`, or any
+   tag-unrelated slot. Update Rust/C `HostReplyV1`, the C probe, the generated
+   layout accessor, the **host-effect ABI hash**, and the Cranelift consumer
+   **together**. ⚠ **This is a real semantic ABI change even if spare bytes
+   exist — record it honestly.**
+2. **The private effect-trace codec preserves BOTH raw and effective.**
+   Encode/decode the new pair and **invoke the validating constructor on
+   decode** — never deserialize an unchecked tuple, never reconstruct the budget
+   from count. Follow the existing single-schema/fail-closed policy; do not
+   invent a compatibility lane.
+3. **Native validation is `0 < count <= effective_request <= raw_length`.**
+   Range / no-wrap / span-containment use **effective_request**; only then may
+   the private structural Nat be minted. Both reifiers compute exactly
+   `remaining = effective_request - count`. **Raw remains an outer consistency
+   ceiling and audit input — never a progress budget.**
+4. **Applies to BOTH `ReadSome` and `Wrote`.** Write usually has effective equal
+   to the valid remaining input span, but **the constructor and ABI must not
+   encode a read-only invariant into the shared `TransferCount` type.**
+5. **Preserve the one-mint property** — span length, transferred count,
+   predecessor, and remaining all derive from one validated reply. No public
+   `Int` budget, no caller-selected fuel, no surface constructor.
+6. **⇒ BUDGET-EFF SEQUENCES BEFORE ABI-M1.** ABI-M1 must manifest the
+   *post-fix* host-effect family projection/hash rather than generate a manifest
+   over a knowingly incomplete reply and churn immediately.
+
+> **On the obsolete guard.** PX8-N's *"no ABI expansion"* guard was conditional
+> on the then-believed scalar reply being sufficient. `SPEC-38-ERRATUM` shows
+> that premise is **false**. **Do not preserve that guard by corrupting request
+> semantics** — the guard is what expires, not the spec.
+
+### ★ Oracle constraints — the capped-SHORT case is load-bearing
+
+AC-2 and AC-3 stand exactly as settled below (independent spec-absolute tests
+at the reification seats). **Add two discriminator shapes on each side:**
+
+| shape | raw | effective | count | ⇒ remaining | ⇒ total budget |
+|---|---|---|---|---|---|
+| capped-full | 8 | 4 | 4 | **0** | 4 |
+| **capped-short** | 8 | 4 | **< 4** | **4 − count** | 4 |
+
+**⛔ capped-short is not optional. Capped-full ALONE is green under the wrong
+shortcut `effective := count`** — it cannot distinguish a correct
+implementation from one that simply echoes the count. This is the
+discriminating-axis discipline: one case that passes proves less than two cases
+that separate the hypotheses.
+
+Also add **fail-closed** native/wire mutations for `effective == 0`,
+`effective < count`, and `effective > raw`. **A parity assertion may remain
+supplementary — never the AC oracle** (parity is the instrument that missed
+this defect).
+
+### Sizing surface
+
+`ken-host` typed carrier + dispatch + ABI/C probe + private trace codec ·
+`ken-interp` reifier + test · `ken-runtime` layout consumption + validated mint
++ test · generated/hash fixtures.
+
 ## Acceptance criteria (draft — finalize after the enclave ruling)
 
 **AC-1** — `remaining` and `transfer_count_request_budget` derive from the
