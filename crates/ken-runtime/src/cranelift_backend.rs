@@ -14,40 +14,31 @@
 //!
 //! # Test-only helpers are not public production API
 //!
-//! `emit_process_entrypoint_object_with_cranelift` is a test-only helper. The
-//! checks below ask the *compiler* whether it is reachable from outside this
-//! crate, which is the actual property; a source-text assertion on the
-//! declaration only ever tests its spelling and breaks on every relocation.
+//! `emit_process_entrypoint_object_with_cranelift` is a test-only helper, and
+//! that it is not reachable from outside this crate is asserted by
+//! `ken-cli/tests/px4b_native_production.rs`, in
+//! `naked_process_ir_helpers_are_not_public_production_api`. That test asks
+//! the *compiler* the question, by compiling probe snippets against this
+//! crate's built rlib; a source-text assertion on the declaration would only
+//! test its spelling and would break on every relocation.
 //!
-//! Both reachable paths are covered. `lib.rs` re-exports this module with a
-//! `pub use cranelift_backend::*`, so a widened item would surface at the
-//! crate root as well as under the module path, and a check on one path alone
-//! would miss the other.
+//! Both reachable paths are covered there. `lib.rs` re-exports this module
+//! with a `pub use cranelift_backend::*`, so a widened item would surface at
+//! the crate root as well as under the module path, and a check on one path
+//! alone would miss the other:
 //!
-//! Each snippet is a bare `use ... as _;`. That form resolves a path and
-//! checks its visibility and nothing else — no call, no argument types, no
-//! inference. The distinction is load-bearing: a snippet that *used* the item
-//! would also fail to compile on a type-inference error, so a generic helper
-//! would keep these blocks passing even after it was made public, which is
-//! the same vacuous pass the source-text assertion had.
-//!
-//! ```compile_fail
-//! use ken_runtime::cranelift_backend::emit_process_entrypoint_object_with_cranelift as _;
+//! ```text
+//! use ken_runtime::cranelift_backend::emit_process_entrypoint_object_with_cranelift as _;   // must not compile
+//! use ken_runtime::emit_process_entrypoint_object_with_cranelift as _;                      // must not compile
+//! use ken_runtime::cranelift_backend::emit_runtime_ir_object_with_cranelift as _;           // positive control
 //! ```
 //!
-//! ```compile_fail
-//! use ken_runtime::emit_process_entrypoint_object_with_cranelift as _;
-//! ```
-//!
-//! A `compile_fail` block passes when the snippet fails to compile for *any*
-//! reason, a typo in the path included, so on its own it can pass vacuously.
-//! This positive control names a genuinely public item from the same module
-//! in the same import form: it must compile, and it fails if the crate name,
-//! the module path, or the doctest harness itself ever stops resolving.
-//!
-//! ```
-//! use ken_runtime::cranelift_backend::emit_runtime_ir_object_with_cranelift as _;
-//! ```
+//! ⛔ These fences are `text` on purpose — they are illustration, not a
+//! running check. `nextest` does not run doctests and CI has no `--doc` step,
+//! so a real `compile_fail` block here would assert the property in a lane
+//! that never executes, and a green gate would say nothing about it. The
+//! executable form lives in the test named above, which runs in the sharded
+//! lane. Keep it that way unless a doctest lane is actually wired up.
 
 use std::collections::{BTreeMap, BTreeSet};
 

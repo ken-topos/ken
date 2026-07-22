@@ -112,26 +112,13 @@ jobs:
           cargo nextest run --workspace --locked
           --partition count:${{ matrix.shard }}/4
           -E 'not (binary(rt_parity_native) or binary(px8f_buffer_native) or binary(px8f_write_partition))'
-      # nextest does not run doctests, so they need their own step. This
-      # workspace previously had none — every ``` fence under crates/ opened
-      # ```text — and this step was correspondingly absent, with a note to
-      # restore it if a real doctest was ever added. `ORACLE-VIS-CHECK` added
-      # the first ones: the `compile_fail` blocks on
-      # `ken_runtime::cranelift_backend` that assert a test-only helper is not
-      # reachable as public production API.
-      #
-      # ⛔ Without this step those doctests have NO running home, and a green
-      # gate would carry no information about the property they assert — the
-      # failure mode `CI-SKIPPED-NATIVE-TESTS` exists to close. `--doc` is
-      # cheap here precisely because the collected set is tiny.
-      #
-      # Runs on one shard only. Doctests are not partitionable, so leaving this
-      # ungated would run the identical set four times. Shard 1 has already
-      # built the workspace above, so it reuses that build rather than paying
-      # for a job of its own.
-      - name: Doctests
-        if: matrix.shard == 1
-        run: cargo test --workspace --doc --locked
+      # No `cargo test --workspace --doc --locked` step: nextest does not run
+      # doctests, but this workspace has none to lose. Every ``` fence inside
+      # a `///`/`//!` doc comment under crates/ is opened ```text (rustdoc's
+      # explicit non-Rust marker), so `cargo test --doc` collects zero tests
+      # today (checked via `grep -rn '```' crates/ --include=*.rs` — every
+      # opening fence is `text`). If a real ```rust doctest is ever added,
+      # add a `cargo test --workspace --doc --locked` step back here.
 
   # ── Slow native binaries, each restored to the gate in its own job ───────
   #
