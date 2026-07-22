@@ -192,6 +192,249 @@ merge_pr() {
     "$@"
 }
 
+# ── PART 2 (SRC-ATTEST): FRESH MERGE-RESULT AUTHORIZATION ────────────────────
+#
+# What this delivers, stated exactly — @architect ruling dec_50fdjy68gm01j.
+# Read the boundary before trusting the guarantee.
+#
+#   1. UNCONDITIONAL. Old CI is never authorization. EVERY publish -- doc-only
+#      and normal alike -- reconstructs the candidate on a freshly fetched
+#      origin/main and runs origin/main's trusted checker immediately before
+#      merge. This is what closes #885's stale-CI-authorization defect.
+#
+#   2. CONDITIONAL IDENTITY. "The tree we checked is the tree GitHub landed" is
+#      true only within ADR-0003's exclusive-publisher model, and only because
+#      all sanctioned merge attempts share ONE enforced critical section. That
+#      is the lock below. Without it the claim has no support at all.
+#
+#   3. ⛔ RESIDUAL BOUNDARY -- NOT CLOSED, AND WE DO NOT CLAIM IT IS.
+#      `gh pr merge --match-head-commit` pins the PR HEAD. GitHub exposes NO
+#      base-SHA compare-and-swap. So an OUT-OF-BAND writer -- anything merging
+#      outside this script -- can still move `main` inside the final API
+#      round-trip, and the landed tree will not be the checked tree.
+#      Step 4 narrows that window from the CI-poll duration (minutes) to one
+#      round-trip. It does not eliminate it.
+#      ⇒ "Closes #885's stale-CI authorization defect" is TRUE.
+#        "Eliminates every final-round-trip race" is FALSE. Do not write it.
+#
+#   4. DETECTOR, NOT ROLLBACK. After the merge, compare the landed tree OID
+#      against the synthetic checked tree OID and re-run the checker on what
+#      actually landed. A mismatch or a red result is a loud publisher failure
+#      that FREEZES further publication for diagnosis.
+#      ⛔ NEVER auto-revert `main`. An automatic revert of a merge someone else
+#        may already have built on is worse than the defect it responds to.
+#
+# ★ Why the dependency is enforced rather than documented: the previous version
+#   of this gate was correct *because* the publisher happened to be serialized,
+#   and nothing recorded that. That is the F13 finding, and it recurred one
+#   layer up when the SRC-ATTEST frame asserted the identity claim outright. A
+#   load-bearing precondition that lives only in prose is not a precondition --
+#   it is a hope. So: acquire a real lock, or fail closed.
+
+publisher_state_dir() {
+  git rev-parse --path-format=absolute --git-common-dir 2>/dev/null ||
+    die "publisher gate: cannot resolve the shared Git directory"
+}
+
+# ⚠ The lock MUST live in the COMMON git dir, not a per-worktree path. This
+#   repository is checked out as ~70 linked worktrees that share one object
+#   store; a per-worktree lock file would be a different file for every agent
+#   and would therefore never contend -- a lock that always succeeds, which is
+#   indistinguishable from no lock at all until the day it matters.
+acquire_merge_lock() {
+  need_cmd flock
+  local common_dir
+  common_dir="$(publisher_state_dir)"
+  exec 8>"$common_dir/ken-publisher-merge.lock"
+  flock -n 8 || die "publisher gate: another merge critical section is active.
+
+Only one publish may hold the fetch -> check -> merge -> verify window at a
+time; that mutual exclusion is the ONLY reason the checked tree is the landed
+tree. Wait for the other publish to finish and re-run. Do not bypass."
+}
+
+freeze_marker_path() {
+  printf '%s/ken-publisher-FROZEN\n' "$(publisher_state_dir)"
+}
+
+refuse_if_frozen() {
+  local marker
+  marker="$(freeze_marker_path)"
+  if [ -f "$marker" ]; then
+    die "publisher gate: PUBLICATION IS FROZEN -- a previous publish failed its
+post-merge verification and further publishing is blocked pending diagnosis.
+
+$(cat "$marker")
+
+Diagnose the landed state on origin/main first. Clear the freeze deliberately,
+by hand, once you understand what happened:
+  rm $marker"
+  fi
+}
+
+freeze_publication() {
+  printf '%s\n' "$1" >"$(freeze_marker_path)" 2>/dev/null || true
+}
+
+gate_wt=""
+checked_base=""
+checked_tree_oid=""
+
+release_gate_worktree() {
+  if [ -n "$gate_wt" ]; then
+    git worktree remove --force "$gate_wt" >/dev/null 2>&1 || true
+    rm -rf "$gate_wt" >/dev/null 2>&1 || true
+    gate_wt=""
+  fi
+}
+
+# F12: CHAIN the pre-existing EXIT trap, never clobber it. Bash EXIT traps are
+# single-slot; an earlier version overwrote `trap cleanup EXIT` and leaked
+# $tmpdir on every run.
+cleanup_gate() {
+  release_gate_worktree
+  cleanup
+}
+trap cleanup_gate EXIT
+
+# Build the exact squash result on current origin/main and run origin/main's
+# checker against it. Sets $checked_base and $checked_tree_oid.
+build_and_check_merge_result() {
+  # F13: guard the fetch. A silently stale origin/main makes the gate evaluate
+  # one base while GitHub squashes onto another -- the F10 split, one layer
+  # down, with no diff to review.
+  git fetch origin main --quiet ||
+    die "publisher gate: CANNOT EVALUATE -- could not refresh origin/main.
+
+The gate must compare against the base the merge will actually land on."
+
+  checked_base="$(git rev-parse origin/main)"
+
+  gate_wt="$(mktemp -d -t ken-pubgate-XXXXXX)"
+  git worktree add --detach "$gate_wt" "$checked_base" >/dev/null 2>&1 ||
+    die "publisher gate: could not create a worktree at origin/main"
+
+  # ⛔ `git merge --squash` STAGES without COMMITTING, so HEAD would still be
+  #    origin/main and a checker that compares a recorded revision against HEAD
+  #    -- a commit -- would not see the candidate's content at all. Caught once
+  #    by this gate's own three-outcome falsification: the red probe returned
+  #    PERMIT. Without the commit the whole mechanism silently degrades into
+  #    "is origin/main currently green?", which is NOT what it claims.
+  #    `--no-verify` because repo hooks regenerate tracked files, which would
+  #    contaminate the very tree under test.
+  ( cd "$gate_wt" &&
+      git merge --squash "$head_sha" >/dev/null 2>&1 &&
+      git commit --no-verify -q -m "publisher gate: merge-result probe" >/dev/null 2>&1 ) ||
+    die "publisher gate: CANNOT EVALUATE -- $head_sha does not merge cleanly onto origin/main.
+
+This is NOT a currency-gate failure and re-running any generator will not help.
+The candidate needs rebasing onto current origin/main."
+
+  # Capture the tree BEFORE the F11 overwrite below, so $checked_tree_oid is the
+  # true merge result and is comparable with what GitHub lands.
+  checked_tree_oid="$(git -C "$gate_wt" rev-parse 'HEAD^{tree}')"
+
+  # F11: the candidate does not get to supply the checker that clears it.
+  # Otherwise a PR editing the checker can be published, skip CI, and be gated
+  # by the very code it introduces. The cost -- the candidate's own gate changes
+  # go untested here -- is the correct trade; CI covers those.
+  git show "$checked_base:scripts/gen-doc-status.sh" >"$gate_wt/scripts/gen-doc-status.sh" ||
+    die "publisher gate: could not read scripts/gen-doc-status.sh from origin/main"
+  chmod +x "$gate_wt/scripts/gen-doc-status.sh"
+
+  ( cd "$gate_wt" && ./scripts/gen-doc-status.sh --check ) ||
+    die "publisher gate: the library currency gate FAILS on the MERGE RESULT of
+$head_sha onto origin/main.
+
+Merging would leave main red for the next PR that runs the full suite -- which
+will look like that PR's failure, not this one's.
+
+Re-validate the cited sources and refresh the attestation ledger (the
+Librarian's mandate), then publish. Do not bypass: the check path is read-only
+and refuses to repair a mismatch, because the attestation IS the claim that
+someone re-validated."
+}
+
+# Step 4: re-read origin/main after the check. If the base moved while we were
+# evaluating, the result we just cleared is not the result that would land, so
+# reconstruct against the new base.
+fresh_result_gate() {
+  local attempt=0
+  while :; do
+    build_and_check_merge_result
+
+    git fetch origin main --quiet ||
+      die "publisher gate: CANNOT EVALUATE -- could not re-read origin/main before merging."
+
+    if [ "$(git rev-parse origin/main)" = "$checked_base" ]; then
+      printf 'Publisher gate: currency check passed on the merge result of %s onto %s.\n' \
+        "$head_sha" "$(git rev-parse --short "$checked_base")"
+      return 0
+    fi
+
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 3 ]; then
+      die "publisher gate: origin/main advanced during 3 consecutive evaluations.
+
+The base is moving faster than the gate can evaluate it. Something else is
+publishing concurrently -- which also means the lock above is not covering it.
+Investigate before retrying."
+    fi
+    printf 'Publisher gate: origin/main advanced during evaluation; reconstructing (attempt %s).\n' \
+      "$attempt"
+    release_gate_worktree
+  done
+}
+
+# Clause 4: the detector. Runs AFTER the merge, still holding the lock.
+verify_landed_tree() {
+  git fetch origin main --quiet || {
+    freeze_publication "Could not fetch origin/main after merging PR #$pr_number ($head_sha). Landed state UNVERIFIED."
+    die "publisher gate: merged PR #$pr_number but could NOT verify the landed tree."
+  }
+
+  local landed_tree
+  landed_tree="$(git rev-parse 'origin/main^{tree}')"
+
+  if [ "$landed_tree" != "$checked_tree_oid" ]; then
+    freeze_publication "PR #$pr_number ($head_sha) landed tree $landed_tree but the checked tree was $checked_tree_oid. origin/main moved inside the final round-trip -- an out-of-band writer, or a second publish path outside the lock."
+    die "PUBLISHER ALARM: PR #$pr_number merged, but the LANDED TREE IS NOT THE
+CHECKED TREE.
+
+  checked: $checked_tree_oid
+  landed:  $landed_tree
+
+This is the residual boundary in clause 3 -- something moved origin/main inside
+the final API round-trip. The merge HAS happened and is NOT being reverted:
+an automatic revert of a commit others may already have built on is worse than
+the defect. Publication is now FROZEN.
+
+Diagnose what else wrote to main, confirm whether the landed tree is actually
+green, then clear the freeze by hand."
+  fi
+
+  # Redundant BY CONSTRUCTION when the OIDs match -- identical tree, identical
+  # checker, identical result. It is here deliberately anyway: it is the check
+  # on the OID comparison ITSELF. If the comparison logic above is ever wrong,
+  # this is what still catches a red main.
+  release_gate_worktree
+  gate_wt="$(mktemp -d -t ken-pubverify-XXXXXX)"
+  if git worktree add --detach "$gate_wt" origin/main >/dev/null 2>&1 &&
+     ! ( cd "$gate_wt" && ./scripts/gen-doc-status.sh --check ); then
+    freeze_publication "PR #$pr_number ($head_sha) landed and the tree OID matched, but origin/main's own currency checker is RED on the landed tree."
+    die "PUBLISHER ALARM: PR #$pr_number landed with the expected tree, but the
+currency checker is RED on origin/main.
+
+Not reverting. Publication is FROZEN pending diagnosis."
+  fi
+  release_gate_worktree
+
+  printf 'Post-merge verification: landed tree %s matches the checked tree, and the currency checker is green on origin/main.\n' \
+    "$(git rev-parse --short 'origin/main^{tree}')"
+}
+
+refuse_if_frozen
+
 if [ "$doc_only" -eq 1 ]; then
   # ── THE DOC-ONLY BLIND SPOT ────────────────────────────────────────────────
   # `--doc-only` merges with NO CI. That is the point of the flag, and it is
