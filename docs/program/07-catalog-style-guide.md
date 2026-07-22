@@ -472,10 +472,13 @@ file, and back, without a lookup table.
   checked header enforcing `header == path` is a future ergonomic add, not
   part of this rule.)
 - **Import-availability honesty (must agree with the `write-ken` guide).**
-  This rule fixes *addressing* — it does **not** mean cross-file `import`
-  resolves. There is no disk loader yet (module path → file on disk is a
-  named follow-on capability); within one compilation unit, dotted module
-  refs already work, but a catalog entry that needs another package's helper
-  today still inlines it (the DS-1 pattern, `Core/Logic/EmptyDec.ken.md §6`), not
-  imports it. State this plainly in any entry or guide passage that
-  demonstrates the dotted syntax — don't imply cross-file import works.
+  This rule fixes *addressing* — it is a separate fact from whether the
+  catalog corpus exercises the resolution the addressing names. The loader
+  resolves cross-file `import` and facade `export M (…)` edges lazily across
+  compilation units (`spec/30-surface/33-declarations.md:147-158`); within
+  one compilation unit, dotted module refs already work too. What's still
+  true is narrower: no landed catalog entry yet exercises the cross-file
+  case — a catalog entry that needs another package's helper today still
+  inlines it (the DS-1 pattern, `Core/Logic/EmptyDec.ken.md §6`), not imports
+  it. State this plainly — a corpus-coverage gap, not a loader capability
+  gap — in any entry or guide passage that demonstrates the dotted syntax.

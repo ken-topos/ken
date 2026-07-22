@@ -44,8 +44,11 @@ second copy:
   API, the DERIVATION-PATH + `trusted_base()`-DELTA declaration) beside a
   bare `<Section>/<Pkg>.ken`, or one shared `MANIFEST.md` inside a Domain
   directory covering every leaf package in it.
-- Cross-file `import` does **not** resolve yet (no disk loader) — see `07`'s
-  honesty note; within one compilation unit, dotted refs already work.
+- The loader resolves cross-file `import`
+  (`spec/30-surface/33-declarations.md:147-158`); within one compilation
+  unit, dotted refs already work too. **No landed catalog entry yet
+  exercises the cross-file case** — see `07`'s honesty note — a
+  corpus-coverage gap, not a capability one.
 
 The **discipline that distinguishes these from a typical stdlib** (`50-stdlib
 §`): a package's core abstractions **carry their laws as propositions — proved,
