@@ -240,6 +240,44 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/learn/reading-ken/05-packages-and-provenance.md"
+kind = "explanatory"
+audience = ["human-reader"]
+authority = "explanatory"
+availability = "current"
+sources = [
+  "catalog/packages/README.md",
+  "docs/program/07-catalog-style-guide.md#13-path--import--the-normative-rule",
+  "spec/30-surface/30-taxonomy.md#2-the-three-tiers",
+  "spec/30-surface/30-taxonomy.md#3-the-built-in-set--the-surface-tcb-irreducible",
+  "spec/30-surface/30-taxonomy.md#4-the-prelude-tier--ken-defined-always-present-closed",
+  "spec/30-surface/30-taxonomy.md#5-the-standard-package-tier--the-dissolved-stdlib",
+  "spec/30-surface/33-declarations.md#31-declaring-modules",
+  "spec/30-surface/33-declarations.md#32-importing-and-exporting",
+  "spec/30-surface/33-declarations.md#321-admission-boundary-headers",
+  "spec/30-surface/33-declarations.md#33-name-resolution-surface-only-never-reaches-the-kernel",
+  "docs/program/issues/DOC-W1.md",
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+  "catalog/packages/Core/Logic/Transport.ken.md",
+  "catalog/packages/Data/Sums/Combinators.ken.md",
+  "catalog/packages/Tooling/Testing/Property.ken.md",
+  "crates/ken-elaborator/tests/es3_modules_acceptance.rs",
+  "crates/ken-elaborator/tests/n2_in_repo_loader.rs",
+  "crates/ken-cli/src/main.rs",
+  "library/learn/reading-ken/fragments.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/quickstart.md"
 kind = "tutorial"
 audience = ["human-reader"]
