@@ -262,6 +262,8 @@ sources = [
   "catalog/packages/Data/Sums/Combinators.ken.md",
   "catalog/packages/Tooling/Testing/Property.ken.md",
   "crates/ken-elaborator/tests/es3_modules_acceptance.rs",
+  "crates/ken-elaborator/tests/n2_in_repo_loader.rs",
+  "crates/ken-cli/src/main.rs",
   "library/learn/reading-ken/fragments.md",
 ]
 validation = [
