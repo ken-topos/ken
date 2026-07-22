@@ -133,6 +133,25 @@ authority (D1), so a catalog edit ahead of it would be unanchored.
 5. **`docs/` + `agent/`** — prose; **largest file count, lowest risk**, and the
    place where the leave-it-in-English class dominates.
 
-⛔ **Not ready to release.** Blocked on the (A)/(B) ruling, and the build side is
-at its two-track cap (runtime + verify) per operator directive. This is filed
-and sized, not queued.
+## 📍 QUEUE POSITION — LAST (operator directive, 2026-07-22)
+
+**Operator: *"put it at the end of the current work queue."*** This sits behind
+every currently-`ready` item:
+
+```
+BUDGET-EXHAUST (verify) · F1-37 (runtime) · Q-CLAIM-CLOSURE (runtime)
+STR-BIJ (spec-enclave) · DOC-VALIDATION-BINDING (doc)
+PUB-VERIFY · MODELS-TIER · CI-SKIPPED-NATIVE-TESTS (steward)
+```
+…and behind the in-flight `active` set (PX8, RT-SPLIT, DOC-W1, BUDGET-EFF).
+
+⛔ **Status stays `draft`, and that is NOT the same as "not queued."** It is
+queued last; it is not yet *releasable*, because §2 `ready` requires open
+questions resolved and **the (A)/(B) fork above is still open**. Marking it
+`ready` with an unresolved surface-contract fork would hand a ring a WP whose
+first act is to stop and ask.
+
+⇒ **The fork is routed to @architect now**, deliberately ahead of pickup and
+flagged non-urgent, so the ruling lands long before this reaches the front of
+the queue and the WP is shovel-ready when it does. **Flip to `ready` on that
+ruling** — nothing else gates it.
