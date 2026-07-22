@@ -39,7 +39,7 @@ pub(crate) mod surface;
 
 use compiled::*;
 use lowering::core::*;
-pub(crate) use planning::*;
+use planning::*;
 pub use surface::*;
 
 const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [
