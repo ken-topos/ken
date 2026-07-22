@@ -642,9 +642,30 @@ cross-tree items" as "three instances of one rule."** Classify first:
    in `lowering/core/tests/control.rs`.
 5. **Owner-adjacent transparent adapters remain governed by §10.5a**, not this
    clause. The JIT/verifier bridges stay in `artifact/mod.rs` as approved.
-6. Move `test_only_distinguished_root_join_plan` to `test_support.rs` in
+6. Move the **grounded facade-LCA fixtures** to `test_support.rs` in
    **slice 7**, when `artifact::api` and the final facade are cut. Until then
-   it may remain at the residual parent; **no temporary widening is needed.**
+   they remain at **residual-parent file scope under item-level
+   `#[cfg(test)]`**, private; **no temporary widening is needed.**
+
+   **There are two, not one** (Architect `evt_5ztpb40gf6d0x`):
+
+   | fixture | final users span | LCA |
+   |---|---|---|
+   | `test_only_distinguished_root_join_plan` | `lowering` + `artifact/api` | facade |
+   | **`NativeInvocationFixture`** | `lowering/core/tests/effects.rs` + `artifact/tests.rs` | facade |
+
+   **`BorrowedFixtureValue` travels with `NativeInvocationFixture`** as its
+   minimal transitive type dependency through
+   `NativeInvocationFixture.process_input`. The pair moves together or not at
+   all.
+
+   > ⚠ **"Residual-parent file scope" does NOT mean inside the parent's
+   > `mod tests`.** `cranelift_backend::tests` is a **sibling** of
+   > `cranelift_backend::lowering::core::tests`, not an ancestor — a descendant
+   > test module cannot reach into it by rooted path (`E0603`, probed). File
+   > scope under `#[cfg(test)]` **is** ancestor-private, so descendants reach
+   > it with zero widening. The Architect withdrew the looser wording
+   > explicitly.
 
    > ### ⛔ 6a. COMPUTE LCA FROM FINAL RULED DESTINATIONS
    > (Architect `evt_3eg25g63vyc5h`, after slice 4 got this wrong)
