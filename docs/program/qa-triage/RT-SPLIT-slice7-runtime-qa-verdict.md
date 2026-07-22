@@ -7,16 +7,30 @@ inbound notifications kept working throughout — same pattern as
 
 ## Verdict
 
-**APPROVE — `wp/rt-split-7-artifact-internals @ 34afc54508ee9d9bc313473dd9522e53de1dbaea`**
-— ⚠ **anchor any Decision on THIS SHA, not `1b2d3e96`.** `1b2d3e96` was the
-original candidate tip and still carries a self-caught out-of-scope
-formatting hunk in `store.rs` (confirmed by direct diff: `git diff ab7ad89f
-1b2d3e96 -- store.rs` is non-empty; `git diff ab7ad89f 34afc545 -- store.rs`
-is empty). `34afc545` is the fixed tip and is what this APPROVE covers.
-Base exact `origin/main @ ab7ad89fd998eb1c6e5c353f9d294349d24d5d8b`
-(merge-base verified myself, exact match; the one commit landed on
-`origin/main` since — `9d2b4feb`, DOC-W1-2 — touches nothing under
-`crates/ken-runtime/src`).
+**APPROVE — `wp/rt-split-7-artifact-internals @ 9983b6a876401ff6e40e0a5f74e619d2eead429f`**
+— ⚠ **anchor any Decision on THIS SHA.** History of re-anchors, most recent
+first, so a reader who lands on this line has the current truth without
+reading further:
+
+1. `9983b6a8` (current) — re-anchored onto current `origin/main @ b6ed5445`
+   (was `ab7ad89f`; the intervening main commits touch nothing under
+   `crates/ken-runtime/src`, independently confirmed) plus one doc-only
+   commit folding a stale ledger row (Architect `dec_42h3pjehkpwfg` blocker
+   1). **All 9 touched `crates/` paths independently verified blob-identical
+   to `34afc545`** via `git rev-parse <sha>:<path>` on each, myself, not
+   taken on report. `store.rs` re-confirmed still byte-identical to base.
+   Build/test re-run on this exact tip: same 1 pre-existing warning,
+   301/301.
+2. `34afc545` — my own fix for the `store.rs` scope leak (see below).
+3. `1b2d3e96` — the ORIGINAL candidate tip. **Do not anchor on this SHA** —
+   it still carries the out-of-scope `store.rs` formatting hunk (`git diff
+   ab7ad89f 1b2d3e96 -- store.rs` is non-empty).
+
+Base at the time of the original review: `origin/main @
+ab7ad89fd998eb1c6e5c353f9d294349d24d5d8b` (merge-base verified myself, exact
+match; the one commit landed on `origin/main` since — `9d2b4feb`, DOC-W1-2 —
+touched nothing under `crates/ken-runtime/src`). Base is now `b6ed5445` per
+the re-anchor above.
 
 **How the fix landed:** runtime-implementer self-caught the out-of-scope
 diff hunk in `crates/ken-runtime/src/store.rs` (a `panic!()` call
