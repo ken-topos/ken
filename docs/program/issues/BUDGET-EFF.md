@@ -1,8 +1,8 @@
 ---
 id: BUDGET-EFF
 title: TransferCount.remaining must be bounded by the effective request
-status: draft
-owner: TBD
+status: ready
+owner: runtime
 size: M
 gate: none
 depends_on: [SPEC-38-ERRATUM]
@@ -29,10 +29,21 @@ validation and reaches neither reifier, so two closures see different blast
 radii. Prioritized ahead of `SEAL-2` — SEAL-2 closes a gate with no live
 defect, this is a live contradiction of locked normative text.
 
-**Blocked on `SPEC-38-ERRATUM`, which is ACTIVE with the Spec enclave
-(released 2026-07-21):** `spec/30-surface/38-ffi-io.md` currently contradicts itself, so a
-code-first fix would re-derive from broken citation text. The Architect call
-on the erratum routes together with this WP. Owning team not yet assigned
-(tracker: `*TBD — not yet assigned*`) — do not guess.
+## ✅ BOTH BLOCKERS CLEARED — ready to release
+
+- **`SPEC-38-ERRATUM` MERGED** (`origin/main @ e5a400c7`, PR #827, retros in).
+  `spec/30-surface/38-ffi-io.md` is now self-consistent: `TransferCount` is
+  bounded by the **effective** request, and *"the raw caller-requested length is
+  not a progress bound after capping."*
+- **Architect design ruling DELIVERED and BINDING** — Decision
+  `dec_1m6xdwjp2ttyn` resolved, `evt_1g6j2p7jnwbfb`. **Option 1**, refined as an
+  inseparable validated carrier. Six boundary constraints + the load-bearing
+  **capped-short** oracle case. **Transcribed in the brief — read it there, it
+  is the authority.**
+
+**Owner: Runtime.** ⛔ **Sequenced AFTER `RT-SPLIT`** (operator, dev
+efficiency: this WP edits `cranelift_backend.rs:13081-13082`, so the
+decomposition lands first). ⛔ **Sequenced BEFORE `ABI-M1`** (Architect
+constraint 6).
 
 Full brief: [`docs/program/wp/BUDGET-EFF-remaining-bounded-by-effective-request.md`](../wp/BUDGET-EFF-remaining-bounded-by-effective-request.md).
