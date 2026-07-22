@@ -5,13 +5,13 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-21 ~12:30Z. Operator is BACK and engaged.**
+**As of 2026-07-22 ~00:5xZ. Operator is engaged.**
 
 ## Standing state
 
 - Fleet is **SINGLE-THREADED**. Nothing is owed to any ring; every idle ring
   is **correct**, not a stall.
-- `origin/main = 4a06cf90`. Nothing is blocked.
+- `origin/main = 9fb90aab`. Nothing is blocked.
 - **Do not kick a WP while the operator has an open question below.**
 
 ## Operator rulings — 2026-07-21 ~12:45Z. SETTLED, do not reopen.
@@ -61,12 +61,33 @@ workflow-bearing push was accepted. Close the issue once PR #804 lands.
 > is not already authenticated, so a cached ~1h token keeps its old scopes;
 > force a fresh mint before concluding anything.
 
-## The completion program — written, NOT started
+## The completion program — written, NOT started · COVERAGE VERIFIED
 
-`docs/program/10-linux-abi-completion.md` (commit `f2b98c37`, unpublished).
-Five tracks — **R** reconcile, **A** availability promotion, **M** manifest
-(native-target only), **S** synchronous floor, **T** the committed exit
-(PX10/PX11/PX12).
+`docs/program/10-linux-abi-completion.md` — **on `main`**. Four tracks:
+**ABI-R** reconcile, **ABI-A** availability promotion, **ABI-M** manifest
+(native-target only), **ABI-S** synchronous floor, plus **Track T** the
+committed exit (PX10/PX11/PX12).
+
+> **⚠ IDs RENAMED 2026-07-22 (operator).** Tracks R/A/M/S now carry an
+> **`ABI-` prefix** — the bare `A3` collided with `issues/A3.md`
+> (catalog-coverage walker) and `R1`-`R3` collided with the adversary's
+> finding labels. **`PX9`-`PX12` keep their charter IDs.** `L` was rejected
+> as a prefix: `L1`-`L7` are existing WPs.
+
+> **★ COVERAGE ANSWER (operator asked 2026-07-21; verified file-by-file):
+> 0 of 18 items have an issue.** The only live node of §5's graph is
+> **PX8**, its *root*. Everything downstream of `PX8 -> ABI-R3` and
+> `PX8 -> PX9` is unframed. §9 of that document is the record.
+>
+> **AND the document had a hole:** the charter's **runtime revocation
+> membrane** (`09` §5) is absent from it. `RevocationHandle { revoked: bool }`
+> (`ken-elaborator/src/capabilities.rs:256`) is still the static contract —
+> **its own doc comment says the runtime membrane is DEFERRED** — and there is
+> **zero** revocation code in `ken-host`/`ken-runtime`/`ken-interp`/`catalog`.
+> PX7's generation-checked handle table is a *different* property
+> (use-after-close, not withdrawal of delegated authority). **L2 assumes it**
+> (§8.1 gate 9). **AWAITING OPERATOR: fold into Track ABI-S / split as its own
+> WP / accept as a known limitation.**
 
 Verified against `main`, not taken from the advisory: 22 ops, 13
 `NativeTested` / 9 `RepresentedUnavailable`, no process/socket/poll family in
@@ -292,7 +313,34 @@ and F3 together) and I mis-reported it as missing once already.
 
 ## In flight
 
-**`DOC-W0` — doc team, active.** Nothing else. Branch aligned on
+**`DOC-W0` — doc team, active, SIXTH review round.** Nothing else.
+Every round has found a real mechanism hole, so the loop is working, not
+spinning: librarian passes 1-5 (self-referential STATUS, revision anchor,
+validation vocabulary, transport-delimiter injection, delimiter counting),
+then Architect found (a) the Rust gate and the bash generator implementing
+**different manifest grammars** — indented TOML passes the gate and the
+generator silently omits it, with idempotency staying green — and (b) no
+repository-path confinement, now (c) `resolve_confined` being **lexical-only**
+so symlinks still escape filesystem resolution. `doc-leader` will open a
+**fresh** Decision; `dec_4hrvf6bkce8fk` is rejected and its immutable text
+names a stale SHA.
+
+**`SPEC-38-ERRATUM` — CLOSED.** Merged `origin/main @ e5a400c7` (PR #827),
+retros in. Enclave carry: *keep semantic target / conformance oracle /
+implementation mechanism as **separate scopes**; re-anchor with both
+current-base and reviewed-subtree byte-identity checks.*
+**This unblocks `BUDGET-EFF`, which stays PARKED pending operator go.** The
+closure-mechanism call (reply-carries-effective vs. host-caps-the-request-
+record) is an **Architect** decision routing *with* that release, not before.
+
+**⛔ `BUDGET-EFF` AC-3 was UNSATISFIABLE and is corrected on `main`.** `count`
+cancels on both sides, reducing it to `8 == 4` — no implementation could ever
+have discharged it. **And it cannot be fixed in place:** `remaining` does not
+occur in `ken-host/src/effect_v1.rs` where the oracle lives; it is built at
+`ken-interp/src/eval.rs:4934-4935` and
+`ken-runtime/src/cranelift_backend.rs:13081-13082`. The rewrite is **two new
+tests** — budget it as plumbing. **The R1 defect itself still stands** on
+source inspection; only its demonstration was broken. Branch aligned on
 `origin/main`, clean, no orphaned polls. Build fleet idle and home-clean,
 which is **correct**, not a stall.
 
@@ -313,7 +361,9 @@ built. **Cross-platform is indefinitely deferred (operator) — so this is dead
 code for a deferred lane and cannot bite.** Recorded as an observation; no
 action, no decision pending. See the L2-1 ruling above.
 
-Recently landed and verified by content: **#818** (Q-RESIDUE), **#819**
+Recently landed and verified by content: **#827** (SPEC-38-ERRATUM →
+`e5a400c7`), **#828** (AC-3 correction + ABI gap status → `9fb90aab`),
+**#818** (Q-RESIDUE), **#819**
 (Track Q closeout), **#820** (doc program frame), **#821** (doc team),
 **#822** (librarian T1 + DOC-W0 release).
 
@@ -488,6 +538,14 @@ into `docs/program/issues/` entries.
 > | pane **entirely blank** (even `-S -200`) | alive, blocked on a **consent modal** rendered at the buffer's START | capture from `-S -` and `grep -v '^\s*$'`, then `Enter` |
 > | empty prompt, looks idle | **actively working** — narrow `tail` caught a gap between renders | capture WIDE before repairing |
 >
+> **★ The third one recurred TWICE on 2026-07-22** — once reading `doc-author`
+> as never-engaged (it had already finished), once rousing it *while it was
+> mid-fix* with `is_symlink_escape` already in its diff. **Interrupting a
+> working agent is forbidden by the playbook and I did it anyway**, because a
+> `tail -4` showed a bare `❯`. The spinner renders **above** the prompt. A
+> `WORKING` check must grep the whole capture for `esc to interrupt` — never
+> judge from the last few lines.
+>
 > The third one bit me *while running the check designed to catch the first*.
 > Had I trusted it I would have stacked a duplicate kickoff on a working seat.
 > **Always `capture-pane -S -` piped through `grep -v '^[[:space:]]*$'` before
@@ -544,6 +602,30 @@ into `docs/program/issues/` entries.
 - Liveness: `tmux capture-pane -p -S -300 -t moot-<seat>` — **`-S` must be
   negative**; a positive value returns ~1 line and reads every seat as dead.
 - `Press up to edit queued messages` = **busy + queued. Do not resend.**
+
+## ⛔ "COMMITTED" IS NOT "REACHABLE" — publish, then verify ON MAIN
+
+**2026-07-22, caught by the adversary, not by me.** I corrected `BUDGET-EFF`'s
+AC-3, announced *"all four folds are in"*, and it was true **about
+`steward/work` only**. `COORDINATION §15` sends rings to **`main`**, so for
+the whole window a ring picking up the WP would have read the **unsatisfiable**
+AC-3. Five commits, zero publishes.
+
+**The rule, mechanically:** a Steward doc edit is not done at `git commit`. It
+is done when `git grep '<plain phrase>' origin/main -- <file>` returns the new
+text. Route via `§6a` (corpus branch off *current* `origin/main` → publisher
+path → **verify by content**).
+
+Two amplifiers, both real:
+- **The publisher prints `merge command succeeded` on a failed push** — that is
+  the open `PUB-VERIFY` issue. Its exit code is worthless; only content on
+  `main` counts.
+- **`git grep` is case-sensitive and false-negatives on a phrase spanning a
+  line break.** Three greps false-negatived on 2026-07-22 alone. Grep a short,
+  lowercase, single-line fragment — never a sentence, never across `**bold**`.
+
+Same family as the whole week: **verify the mechanism, not a proxy.**
+"Committed" is the proxy; "on `main`" is the mechanism.
 
 ## Standing discipline
 
