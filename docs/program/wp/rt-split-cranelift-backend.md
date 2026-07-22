@@ -683,18 +683,31 @@ and the pair stays artifact-owned, so §10.2's assignment stands unamended.
 **§10.2 ownership does not change** — this is a test-boundary note under
 §10.4/§10.5, not a reassignment.
 
-**⚠ The enumeration correction that rides with it, because the count is
-load-bearing if this ruling is ever revisited.** The JIT/verifier pair has
-**six** distinct test users, not the two trees first reported: the three ruled
-lowering fixtures (`:1463`, `:1641`, `:1868`), the `px8i_*` artifact tests
-(`:20977`, `:21005`), **and two that appeared in no ledger** —
-`run_px8ds_edge_consumer` (`:14741`) and `run_borrowed_fixture` (`:18535`),
-both inside the omnibus `#[cfg(test)] mod tests` at `:14096–:21177` that §10.1
-requires be dissolved. **Their destination modules are not yet assigned.** The
-bridge shape is robust to that (every test tree is a descendant of
-`cranelift_backend`), but a per-tree-duplication alternative would not be —
-its cost is unknowable until those two are placed. **Assign them in the
-slice-5 dry-run.**
+**The complete inverse-call ledger** (Architect, `evt_445j846aqqtwp`). The
+JIT/verifier pair has **six** distinct test users, not the two trees first
+reported. Two of them appeared in no ledger — both inside the omnibus
+`#[cfg(test)] mod tests` at `:14096–:21177` that §10.1 requires be dissolved —
+and §10.2's subject rule determines their destinations:
+
+| fixture | line | destination |
+|---|---|---|
+| `run_px8j_malformed_recursor_consumer` | `:1463` | `lowering/core/tests/control.rs` |
+| `run_checked_bounded_nat_fixture` | `:1641` | `lowering/core/tests/effects.rs` |
+| `run_dynamic_constructor_dispatch_fixture` | `:1868` | `lowering/core/tests/constructors.rs` |
+| **`run_px8ds_edge_consumer`** | **`:14741`** | **`lowering/core/tests/control.rs`** |
+| **`run_borrowed_fixture`** | **`:18535`** | **`lowering/core/tests/effects.rs`** |
+| `px8i_*` (two tests) | `:20977`, `:21005` | `artifact/tests.rs` — calls the private originals |
+
+**The user count does not multiply the bridges.** There are exactly **two**
+one-call adapters — one per private artifact operation — not one per tree or
+per fixture. Five lowering fixture helpers across `control`, `effects`, and
+`constructors` call the same two bridges. This is why the correction completes
+the ledger without reopening the ruling: **it would only have mattered under a
+per-tree-duplication remedy, which the bridge shape removes from
+consideration.** Moving the production functions to the facade would weaken a
+ruled ownership boundary to solve a test-only reachability problem that is
+already solved without production exposure. **Expand the slice-6 deferred
+ledger from the original three fixtures to this complete set.**
 
 **And enumerate type placement explicitly in the slice-5 dry-run.** §10.2
 assigns *functions* explicitly and leaves **type** placement implicit. The
