@@ -2713,3 +2713,89 @@ fn occurrence_exact_marker_fixture(
         },
     )
 }
+
+// ── RT-SPLIT slice 7, rule 8 finalization ─────────────────────────────────
+// Residual facade test fixtures whose final-user LCA is this module. Facade
+// file scope was a TRANSITIONAL zero-widening holding position, never final
+// ownership (Architect `evt_h69xwchqqxmj`); slice 7 discharges it. Moved
+// verbatim -- ordered item-level identity, no body edits.
+
+#[cfg(test)]
+fn self_consistent_root_join_site(site_id: u64) -> crate::NativeJoinPlanSiteV1 {
+    let declaration = "decl:fixture::PX8H::main".to_string();
+    let checked_occurrence_path = vec![0];
+    let checked_result_type_fingerprint = 19;
+    crate::NativeJoinPlanSiteV1 {
+        site_id,
+        occurrence_binding_fingerprint: crate::compiler_private_join_occurrence_binding_fingerprint(
+            site_id,
+            &declaration,
+            &checked_occurrence_path,
+            checked_result_type_fingerprint,
+        ),
+        declaration,
+        checked_occurrence_path,
+        checked_result_type_fingerprint,
+        runtime_frame_fingerprint: crate::NATIVE_JOIN_INVOCATION_RETURN_FRAME_V1,
+        answer_kind: crate::NativeJoinAnswerKindV1::ExitCode,
+    }
+}
+
+#[cfg(test)]
+fn oriented_test_interface(name: u8) -> crate::CheckedAnswerInterfaceV1 {
+    let mut bytes = crate::CHECKED_ANSWER_INTERFACE_V1_HEADER.to_vec();
+    bytes.push(name);
+    crate::CheckedAnswerInterfaceV1::new(bytes).unwrap()
+}
+
+#[cfg(test)]
+fn oriented_test_frame(
+    frame_id: u64,
+    semantic_position: u64,
+    input: u8,
+    output: u8,
+    parent: Option<u64>,
+) -> crate::OrientedSubcontinuationFramePlanV1 {
+    let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+        frame_id,
+        segment_site_id: 9,
+        declaration: "decl:fixture::oriented".to_string(),
+        checked_occurrence_path: vec![frame_id],
+        semantic_position,
+        input_interface: oriented_test_interface(input),
+        output_interface: oriented_test_interface(output),
+        runtime_frame_fingerprint: frame_id + 100,
+        occurrence_binding_fingerprint: 0,
+        control_witness: parent.map_or(
+            crate::OrientedControlWitnessV1::DistinguishedRoot,
+            crate::OrientedControlWitnessV1::ParentFrame,
+        ),
+    };
+    frame.occurrence_binding_fingerprint =
+        crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+    frame
+}
+
+#[cfg(test)]
+fn self_consistent_join_site(
+    site_id: u64,
+    runtime_frame_fingerprint: u64,
+) -> crate::NativeJoinPlanSiteV1 {
+    let declaration = "decl:fixture::PX8H::main".to_string();
+    let checked_occurrence_path = vec![1, site_id];
+    let checked_result_type_fingerprint = 17;
+    crate::NativeJoinPlanSiteV1 {
+        site_id,
+        occurrence_binding_fingerprint: crate::compiler_private_join_occurrence_binding_fingerprint(
+            site_id,
+            &declaration,
+            &checked_occurrence_path,
+            checked_result_type_fingerprint,
+        ),
+        declaration,
+        checked_occurrence_path,
+        checked_result_type_fingerprint,
+        runtime_frame_fingerprint,
+        answer_kind: crate::NativeJoinAnswerKindV1::Int,
+    }
+}

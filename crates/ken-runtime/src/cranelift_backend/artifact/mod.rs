@@ -189,11 +189,11 @@ pub(super) fn compile_expr_for_lowering_tests(
 }
 
 #[cfg(test)]
-pub(super) fn native_isa_for_facade_fixtures() -> Result<OwnedTargetIsa, CraneliftBackendError> {
+pub(super) fn native_isa_for_lowering_tests() -> Result<OwnedTargetIsa, CraneliftBackendError> {
     native_isa()
 }
 
 #[cfg(test)]
-pub(super) fn native_platform_target_name_for_facade_fixtures() -> String {
+pub(super) fn native_platform_target_name_for_lowering_tests() -> String {
     native_platform_target_name()
 }

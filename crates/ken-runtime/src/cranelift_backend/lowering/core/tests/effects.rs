@@ -3,6 +3,15 @@
 
 use super::*;
 
+// RT-SPLIT slice 7, rule 8: dependency declarations carried in for the moved
+// px8n fixture closure. These are used ONLY by that closure, so they travel
+// with it (AC-9's "what travels with a moving item"). Ruled test module, so a
+// `use` is permitted here (AC-8 class 2).
+use cranelift_jit::{JITBuilder, JITModule};
+use cranelift_module::default_libcall_names;
+
+use crate::cranelift_backend::artifact::native_isa_for_lowering_tests as native_isa;
+
 /// Exercise the checked-reply mint without involving any resource operation.
 /// The fixture deliberately enters through `mint_validated_progress_nat`, so
 /// tests cannot manufacture the compact carrier through a second constructor.
@@ -1023,3 +1032,430 @@ fn px8n_read_arm_fixture_with_start(
         default: trap(),
     }
 }
+
+// ── RT-SPLIT slice 7, rule 8 finalization ─────────────────────────────────
+// Residual facade test fixtures whose final-user LCA is this module. Facade
+// file scope was a TRANSITIONAL zero-widening holding position, never final
+// ownership (Architect `evt_h69xwchqqxmj`); slice 7 discharges it. Moved
+// verbatim -- ordered item-level identity, no body edits.
+
+#[cfg(test)]
+#[repr(C)]
+struct BorrowedFixtureValue {
+    kind: u64,
+    tag: u64,
+    data: *const std::ffi::c_void,
+    len: usize,
+}
+
+#[cfg(test)]
+#[repr(C)]
+struct NativeInvocationFixture {
+    process_input: *const BorrowedFixtureValue,
+    host_context: *mut std::ffi::c_void,
+    capability: u64,
+    native_int_arena: *mut crate::NativeIntArenaV1,
+}
+
+// RT-SPLIT slice 5: shared test helpers whose final users span the
+// lowering subject subtree AND the facade's residual artifact/api tests.
+// Final-user LCA is the facade, so they sit at facade FILE SCOPE under
+// item-level `#[cfg(test)]` -- ancestor-private, reachable by descendants
+// with zero widening. A sibling `mod tests` could not be reached at all.
+#[cfg(test)]
+const PX8N_SHORT_WROTE: u64 = 0;
+
+#[cfg(test)]
+const PX8N_ZERO_WRITE: u64 = 1;
+
+#[cfg(test)]
+fn run_px8n_write_arm_fixture(scenario: u64) -> (i64, Px8nHostReplyFixture) {
+    run_px8n_arm_fixture(scenario, px8n_write_arm_fixture)
+}
+
+#[cfg(test)]
+#[repr(C)]
+struct Px8nHostReplyFixture {
+    scenario: u64,
+    call_index: u64,
+    malformed_request: u64,
+}
+
+#[cfg(test)]
+fn px8n_write_arm_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    px8n_write_arm_fixture_with_start(symbols, RuntimeExpr::Value(RuntimeValue::Int((7).into())))
+}
+
+#[cfg(test)]
+fn run_px8n_arm_fixture(
+    scenario: u64,
+    expression: fn(&crate::NativeProcessSymbols) -> RuntimeExpr,
+) -> (i64, Px8nHostReplyFixture) {
+    let isa = native_isa().unwrap();
+    let mut builder = JITBuilder::with_isa(isa, default_libcall_names());
+    builder.symbol(
+        "ken_host_dispatch_v1",
+        px8n_scripted_host_dispatch as *const u8,
+    );
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let compiled = compile_expr_into_module(
+        JITModule::new(builder),
+        "px8n_fs_write_at",
+        Linkage::Local,
+        &expression(&symbols),
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&symbols),
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .unwrap();
+    let input = BorrowedFixtureValue {
+        kind: 1,
+        tag: 0,
+        data: std::ptr::null(),
+        len: 0,
+    };
+    let mut fixture = Px8nHostReplyFixture {
+        scenario,
+        call_index: 0,
+        malformed_request: 0,
+    };
+    let mut native_int_arena = crate::NativeIntArenaV1::default();
+    let invocation = NativeInvocationFixture {
+        process_input: &input,
+        host_context: (&mut fixture as *mut Px8nHostReplyFixture).cast(),
+        capability: 0,
+        native_int_arena: &mut native_int_arena,
+    };
+    let (_, result) = compiled
+        .run(Some((&invocation as *const NativeInvocationFixture).cast()))
+        .unwrap();
+    (result.unwrap(), fixture)
+}
+
+#[cfg(test)]
+extern "C" fn px8n_scripted_host_dispatch(
+    invocation: *const std::ffi::c_void,
+    operation: i64,
+    request: *const std::ffi::c_void,
+    request_size: i64,
+    reply: *mut std::ffi::c_void,
+) -> i64 {
+    // SAFETY: this symbol is installed only into the test JIT below, which
+    // supplies these exact call-scoped fixtures for one synchronous call.
+    let invocation = unsafe { &*(invocation.cast::<NativeInvocationFixture>()) };
+    // SAFETY: `host_context` points to the live fixture for the duration of
+    // the compiled call and is never retained by the dispatcher.
+    let fixture = unsafe { &mut *(invocation.host_context.cast::<Px8nHostReplyFixture>()) };
+    let expected = if fixture.call_index == 0
+        || (fixture.call_index == 1 && fixture.scenario != PX8I_METADATA_BIG)
+    {
+        ken_host::HostOpV1::BufferAllocate
+    } else if fixture.scenario == PX8I_METADATA_BIG {
+        ken_host::HostOpV1::FsHandleMetadata
+    } else if fixture.scenario == PX8I_WRAPPING_WRITE_START {
+        ken_host::HostOpV1::FsWriteAt
+    } else if fixture.scenario >= PX8N_SHORT_READ {
+        ken_host::HostOpV1::FsReadAt
+    } else {
+        ken_host::HostOpV1::FsWriteAt
+    };
+    if operation != expected as i64 {
+        fixture.malformed_request = 1;
+        return -1;
+    }
+    let wire = ken_host::host_effect_wire_layout_v1(expected)
+        .expect("PX8-N scripted operation has a generated wire layout");
+    if request_size != i64::from(wire.request_size) {
+        fixture.malformed_request = 2;
+        return -1;
+    }
+    let load = |offset: u32| {
+        // SAFETY: each offset is generated from the target-C layout for
+        // this exact request record and the lowering supplied its size.
+        unsafe { *(request.cast::<u8>().add(offset as usize).cast::<u64>()) }
+    };
+    if expected == ken_host::HostOpV1::BufferAllocate {
+        if load(wire.request_offsets[0]) != 8 {
+            fixture.malformed_request = 3;
+            return -1;
+        }
+    } else if expected == ken_host::HostOpV1::FsHandleMetadata {
+        if load(wire.request_offsets[0]) != 11 {
+            fixture.malformed_request = 5;
+            return -1;
+        }
+    } else if [
+        load(wire.request_offsets[0]),
+        load(wire.request_offsets[1]),
+        load(wire.request_offsets[2]),
+        load(wire.request_offsets[3]),
+        load(wire.request_offsets[4]),
+    ] != [
+        11,
+        22,
+        0,
+        match fixture.scenario {
+            PX8I_BIG_READ_START => PX8I_BIG_U64,
+            PX8I_WRAPPING_WRITE_START => u64::MAX - 1,
+            _ => 7,
+        },
+        4,
+    ] {
+        fixture.malformed_request = 4;
+        return -1;
+    }
+    // SAFETY: the reply pointer names the target-C-sized stack record
+    // supplied by the compiled caller for this exact operation.
+    unsafe { std::ptr::write_bytes(reply.cast::<u8>(), 0, wire.reply_size as usize) };
+    let store = |offset: u32, value: u64| {
+        // SAFETY: generated offsets are aligned u64 fields within the
+        // zeroed reply record above.
+        unsafe {
+            *(reply.cast::<u8>().add(offset as usize).cast::<u64>()) = value;
+        }
+    };
+    if expected == ken_host::HostOpV1::BufferAllocate {
+        store(wire.reply_tag_offset, wire.reply_resource_tag);
+        store(
+            wire.reply_detail_offset,
+            if fixture.call_index == 0 { 11 } else { 22 },
+        );
+    } else if expected == ken_host::HostOpV1::FsHandleMetadata {
+        store(wire.reply_tag_offset, wire.reply_metadata_tag);
+        store(wire.reply_detail_offset, PX8I_BIG_U64);
+    } else {
+        match fixture.scenario {
+            PX8N_SHORT_WROTE | PX8I_WRAPPING_WRITE_START => {
+                store(wire.reply_tag_offset, wire.reply_write_progress_tag);
+                store(wire.reply_detail_offset, 1);
+            }
+            PX8N_ZERO_WRITE => {
+                store(wire.reply_tag_offset, wire.reply_resource_error_tag);
+                store(wire.reply_detail_offset, wire.resource_error_no_progress);
+            }
+            PX8N_OVER_BOUND_WRITE => {
+                store(wire.reply_tag_offset, wire.reply_write_progress_tag);
+                store(wire.reply_detail_offset, 5);
+            }
+            PX8N_SHORT_READ => {
+                store(wire.reply_tag_offset, wire.reply_read_progress_tag);
+                store(wire.reply_detail_offset, 1);
+                store(wire.reply_bytes_len_offset, 7);
+            }
+            PX8N_READ_EOF => {
+                store(wire.reply_tag_offset, wire.reply_read_progress_tag);
+            }
+            PX8N_OVER_BOUND_READ => {
+                store(wire.reply_tag_offset, wire.reply_read_progress_tag);
+                store(wire.reply_detail_offset, 5);
+                store(wire.reply_bytes_len_offset, 7);
+            }
+            PX8I_BIG_READ_START => {
+                store(wire.reply_tag_offset, wire.reply_read_progress_tag);
+                store(wire.reply_detail_offset, 1);
+                store(wire.reply_bytes_len_offset, PX8I_BIG_U64);
+            }
+            _ => return -1,
+        }
+    }
+    fixture.call_index += 1;
+    0
+}
+
+#[cfg(test)]
+fn px8n_write_arm_fixture_with_start(
+    symbols: &crate::NativeProcessSymbols,
+    start: RuntimeExpr,
+) -> RuntimeExpr {
+    let trap = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "PX8-N checked result default".to_string(),
+    };
+    let allocate = || RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::BufferAllocate,
+        capability: None,
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
+    };
+    let write = RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::FsWriteAt,
+        capability: None,
+        args: vec![
+            RuntimeExpr::Var(1),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Var(0),
+            start,
+            RuntimeExpr::Value(RuntimeValue::Int((4).into())),
+        ],
+    };
+    let transfer_observation = px8n_exact_nat(
+        symbols,
+        RuntimeExpr::Var(0),
+        0,
+        px8n_exact_nat(
+            symbols,
+            RuntimeExpr::Var(1),
+            3,
+            RuntimeExpr::Value(RuntimeValue::Int((3).into())),
+        ),
+    );
+    let success = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![crate::RuntimeMatchCase {
+            constructor: symbols.wrote.clone(),
+            binders: 1,
+            body: RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Var(0)),
+                cases: vec![crate::RuntimeMatchCase {
+                    constructor: symbols.private_transfer_count.clone(),
+                    binders: 2,
+                    body: px8n_failure(symbols, transfer_observation),
+                }],
+                default: trap(),
+            },
+        }],
+        default: trap(),
+    };
+    let error = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![crate::RuntimeMatchCase {
+            constructor: symbols.resource_no_progress.clone(),
+            binders: 0,
+            body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((70).into()))),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-N expected exact NoProgress".to_string(),
+        },
+    };
+    let write_result = RuntimeExpr::Match {
+        scrutinee: Box::new(write),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: error,
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: success,
+            },
+        ],
+        default: trap(),
+    };
+    let second = RuntimeExpr::Match {
+        scrutinee: Box::new(allocate()),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((81).into()))),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: write_result,
+            },
+        ],
+        default: trap(),
+    };
+    RuntimeExpr::Match {
+        scrutinee: Box::new(allocate()),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: px8n_failure(symbols, RuntimeExpr::Value(RuntimeValue::Int((80).into()))),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: second,
+            },
+        ],
+        default: trap(),
+    }
+}
+
+#[cfg(test)]
+const PX8N_SHORT_READ: u64 = 3;
+
+#[cfg(test)]
+const PX8I_METADATA_BIG: u64 = 6;
+
+#[cfg(test)]
+const PX8I_WRAPPING_WRITE_START: u64 = 8;
+
+#[cfg(test)]
+const PX8I_BIG_U64: u64 = i64::MAX as u64 + 97;
+
+#[cfg(test)]
+fn px8n_exact_nat(
+    symbols: &crate::NativeProcessSymbols,
+    nat: RuntimeExpr,
+    depth: usize,
+    exact: RuntimeExpr,
+) -> RuntimeExpr {
+    let mismatch = RuntimeExpr::Value(RuntimeValue::Int((99).into()));
+    let cases = if depth == 0 {
+        vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.nat_zero.clone(),
+                binders: 0,
+                body: exact,
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.nat_suc.clone(),
+                binders: 1,
+                body: mismatch,
+            },
+        ]
+    } else {
+        vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.nat_zero.clone(),
+                binders: 0,
+                body: mismatch,
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.nat_suc.clone(),
+                binders: 1,
+                body: px8n_exact_nat(symbols, RuntimeExpr::Var(0), depth - 1, exact),
+            },
+        ]
+    };
+    RuntimeExpr::Match {
+        scrutinee: Box::new(nat),
+        cases,
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: format!("PX8-N expected exact structural Nat depth {depth}"),
+        },
+    }
+}
+
+#[cfg(test)]
+fn px8n_failure(symbols: &crate::NativeProcessSymbols, code: RuntimeExpr) -> RuntimeExpr {
+    RuntimeExpr::Construct {
+        constructor: symbols.exit_failure.clone(),
+        args: vec![code],
+    }
+}
+
+#[cfg(test)]
+const PX8N_OVER_BOUND_WRITE: u64 = 2;
+
+#[cfg(test)]
+const PX8N_READ_EOF: u64 = 4;
+
+#[cfg(test)]
+const PX8N_OVER_BOUND_READ: u64 = 5;
+
+#[cfg(test)]
+const PX8I_BIG_READ_START: u64 = 7;
