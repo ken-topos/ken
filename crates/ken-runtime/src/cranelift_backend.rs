@@ -1388,6 +1388,200 @@ fn oriented_subcontinuation_plan_for_program(
     }
 }
 
+/// Coverage for the two plan extractors that bridge checked-package metadata
+/// to the planning validators.
+///
+/// Measured before the RT-SPLIT slice-2 move: neutering either extractor to
+/// return `Ok(None)` unconditionally left all 293 lib tests green. The
+/// validators downstream *are* covered -- neutering
+/// `validate_oriented_subcontinuation_transport`,
+/// `require_exact_marker_locations`, `planned_marker_locations_for_declaration`
+/// or any of the three collectors each turns the suite red -- but they are
+/// exercised by tests that hand-build a plan and call them directly. Nothing
+/// covered the step that *produces* that plan from a program's metadata, so
+/// the metadata-to-plan wiring was unverified in both directions: a program
+/// carrying a plan could be read as carrying none, and the multi-plan and
+/// decode-failure rejections could stop firing, all without a red test.
+///
+/// The round-trip assertions are what make this more than a smoke test: each
+/// extractor must return *the plan that was encoded*, not merely some plan, so
+/// `Ok(None)` and "return a default" are both excluded.
+#[cfg(test)]
+mod plan_extraction_tests {
+    use super::*;
+    use crate::{ErasedExecutableCore, RuntimeMetadata};
+
+    fn program_with_checked_metadata(entries: &[(&str, Vec<u8>)]) -> RuntimeProgram {
+        let mut metadata = RuntimeMetadata::default();
+        for (symbol, bytes) in entries {
+            metadata
+                .checked_core
+                .metadata
+                .insert((*symbol).to_string(), bytes.clone());
+        }
+        RuntimeProgram {
+            package_identity: "module:fixture::planning".to_string(),
+            core_semantic_hash: 1,
+            artifact_hash: 2,
+            erased_core: ErasedExecutableCore {
+                symbols: BTreeSet::new(),
+                metadata,
+            },
+            declarations: Vec::new(),
+            examples: Vec::new(),
+        }
+    }
+
+    fn native_join_plan() -> crate::NativeJoinPlanV1 {
+        let site_id = 7;
+        let declaration = "decl:fixture::Main::main".to_string();
+        let checked_occurrence_path = vec![1, 2];
+        let checked_result_type_fingerprint = 11;
+        crate::NativeJoinPlanV1 {
+            representation_rule_version: crate::NativeJoinPlanV1::REPRESENTATION_RULE_VERSION,
+            sites: vec![crate::NativeJoinPlanSiteV1 {
+                site_id,
+                declaration: declaration.clone(),
+                checked_occurrence_path: checked_occurrence_path.clone(),
+                checked_result_type_fingerprint,
+                // Derived, not a literal: `decode` rejects a site whose
+                // binding fingerprint is not exactly this function of the
+                // other four fields, so a hand-picked constant makes the
+                // fixture undecodable rather than merely unrealistic.
+                occurrence_binding_fingerprint:
+                    crate::compiler_private_join_occurrence_binding_fingerprint(
+                        site_id,
+                        &declaration,
+                        &checked_occurrence_path,
+                        checked_result_type_fingerprint,
+                    ),
+                runtime_frame_fingerprint: 17,
+                answer_kind: crate::NativeJoinAnswerKindV1::Int,
+            }],
+        }
+    }
+
+    fn oriented_plan() -> crate::OrientedSubcontinuationPlanV1 {
+        crate::OrientedSubcontinuationPlanV1 {
+            representation_rule_version:
+                crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+            frames: Vec::new(),
+            recursive_calls: Vec::new(),
+            computational_ih_slots: Vec::new(),
+            computational_ih_calls: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn native_join_plan_absent_when_no_metadata_carries_the_header() {
+        // The discriminating half: unrelated metadata must not be mistaken for
+        // a plan, so this is not vacuously None.
+        let program = program_with_checked_metadata(&[(
+            "decl:fixture::Other",
+            b"SomeOtherMetadataV1\0payload".to_vec(),
+        )]);
+        assert_eq!(native_join_plan_for_program(&program).unwrap(), None);
+    }
+
+    #[test]
+    fn native_join_plan_round_trips_the_encoded_plan() {
+        let plan = native_join_plan();
+        let program =
+            program_with_checked_metadata(&[("decl:fixture::Main", plan.canonical_bytes())]);
+        assert_eq!(
+            native_join_plan_for_program(&program).unwrap(),
+            Some(plan),
+            "the extractor must return the plan that was encoded, not merely some plan"
+        );
+    }
+
+    #[test]
+    fn native_join_plan_rejects_two_plans_in_one_package() {
+        let bytes = native_join_plan().canonical_bytes();
+        let program = program_with_checked_metadata(&[
+            ("decl:fixture::A", bytes.clone()),
+            ("decl:fixture::B", bytes),
+        ]);
+        let err = native_join_plan_for_program(&program).unwrap_err();
+        assert_eq!(
+            err,
+            unsupported(
+                "NativeJoinPlanV1",
+                "checked package contains multiple native join plans"
+            )
+        );
+    }
+
+    #[test]
+    fn native_join_plan_surfaces_a_decode_failure_rather_than_dropping_it() {
+        // Header present so the entry is selected, payload truncated so decode
+        // must fail: this is the arm that distinguishes "no plan" from
+        // "unreadable plan", and conflating them would silently disable native
+        // join lowering.
+        let mut bytes = crate::NATIVE_JOIN_PLAN_V1_HEADER.to_vec();
+        bytes.extend_from_slice(&[0x00, 0x01]);
+        let program = program_with_checked_metadata(&[("decl:fixture::Main", bytes)]);
+        let err = native_join_plan_for_program(&program).unwrap_err();
+        assert!(
+            matches!(&err, CraneliftBackendError::Unsupported(u) if u.construct == "NativeJoinPlanV1"),
+            "expected an Unsupported(NativeJoinPlanV1) decode failure, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn oriented_plan_absent_when_no_metadata_carries_the_header() {
+        let program = program_with_checked_metadata(&[(
+            "decl:fixture::Other",
+            b"SomeOtherMetadataV1\0payload".to_vec(),
+        )]);
+        assert_eq!(
+            oriented_subcontinuation_plan_for_program(&program).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn oriented_plan_round_trips_the_encoded_plan() {
+        let plan = oriented_plan();
+        let program =
+            program_with_checked_metadata(&[("decl:fixture::Main", plan.canonical_bytes())]);
+        assert_eq!(
+            oriented_subcontinuation_plan_for_program(&program).unwrap(),
+            Some(plan),
+            "the extractor must return the plan that was encoded, not merely some plan"
+        );
+    }
+
+    #[test]
+    fn oriented_plan_rejects_two_plans_in_one_package() {
+        let bytes = oriented_plan().canonical_bytes();
+        let program = program_with_checked_metadata(&[
+            ("decl:fixture::A", bytes.clone()),
+            ("decl:fixture::B", bytes),
+        ]);
+        let err = oriented_subcontinuation_plan_for_program(&program).unwrap_err();
+        assert_eq!(
+            err,
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked package contains multiple oriented subcontinuation plans"
+            )
+        );
+    }
+
+    #[test]
+    fn oriented_plan_surfaces_a_decode_failure_rather_than_dropping_it() {
+        let mut bytes = crate::ORIENTED_SUBCONTINUATION_PLAN_V1_HEADER.to_vec();
+        bytes.extend_from_slice(&[0x00, 0x01]);
+        let program = program_with_checked_metadata(&[("decl:fixture::Main", bytes)]);
+        let err = oriented_subcontinuation_plan_for_program(&program).unwrap_err();
+        assert!(
+            matches!(&err, CraneliftBackendError::Unsupported(u) if u.construct == "OrientedSubcontinuationPlanV1"),
+            "expected an Unsupported(OrientedSubcontinuationPlanV1) decode failure, got {err:?}"
+        );
+    }
+}
+
 fn collect_checked_subcontinuation_frames(
     expr: &RuntimeExpr,
     frames: &mut BTreeMap<u64, u64>,
