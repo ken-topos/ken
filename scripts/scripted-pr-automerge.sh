@@ -461,24 +461,50 @@ Investigate before retrying."
 }
 
 # Clause 4: the detector. Runs AFTER the merge, still holding the lock.
+# ⛔ TERMINAL REPORTING MUST BE CONDITIONAL ON PERSISTENCE -- @architect.
+#    Every caller used to run `freeze_publication ... || true` and then die()
+#    with text asserting "Publication is now FROZEN ... clear the freeze by
+#    hand." When the marker could not be written, the SAME output said both
+#    "Subsequent publishes will NOT be stopped" AND "Publication is now FROZEN".
+#    The second is false, and it is the one an operator acts on.
+#
+#    ⚠ Probe 12c could not see this because it substituted `echo
+#    REACHED_DIE_POINT` for the real caller's terminal diagnosis -- a probe that
+#    replaces the thing under test cannot observe the thing under test. Fourth
+#    instance today of a probe passing by supplying the condition it was meant
+#    to detect.
+#
+#    ⇒ ONE exit point for every freeze alarm, and the protection claim is made
+#      only when the protection actually exists.
+freeze_and_alarm() {
+  local marker_reason="$1" alarm_body="$2"
+  if freeze_publication "$marker_reason"; then
+    die "$alarm_body
+
+Publication is now FROZEN. Diagnose before publishing again, then clear it
+deliberately, by hand."
+  fi
+  die "$alarm_body
+
+⛔ AND THE FREEZE DID NOT PERSIST. Publication is **NOT** frozen and the next
+publish will proceed unblocked -- see the diagnosis above. There is nothing
+protecting main right now. Freeze by hand before anything else runs."
+}
+
 verify_landed_tree() {
   git fetch origin main --quiet || {
-    # `|| true` ONLY so a failed freeze cannot pre-empt the die() below, which
-    # carries the REASON. The failure is not swallowed -- freeze_publication
-    # printed a loud diagnosis before returning non-zero.
-    freeze_publication "Could not fetch origin/main after merging PR #$pr_number ($head_sha). Landed state UNVERIFIED." || true
-    die "publisher gate: merged PR #$pr_number but could NOT verify the landed tree."
+    freeze_and_alarm \
+      "Could not fetch origin/main after merging PR #$pr_number ($head_sha). Landed state UNVERIFIED." \
+      "publisher gate: merged PR #$pr_number but could NOT verify the landed tree."
   }
 
   local landed_tree
   landed_tree="$(git rev-parse 'origin/main^{tree}')"
 
   if [ "$landed_tree" != "$checked_tree_oid" ]; then
-    # `|| true` ONLY so a failed freeze cannot pre-empt the die() below, which
-    # carries the REASON. The failure is not swallowed -- freeze_publication
-    # printed a loud diagnosis before returning non-zero.
-    freeze_publication "PR #$pr_number ($head_sha) landed tree $landed_tree but the checked tree was $checked_tree_oid. origin/main moved inside the final round-trip -- an out-of-band writer, or a second publish path outside the lock." || true
-    die "PUBLISHER ALARM: PR #$pr_number merged, but the LANDED TREE IS NOT THE
+    freeze_and_alarm \
+      "PR #$pr_number ($head_sha) landed tree $landed_tree but the checked tree was $checked_tree_oid. origin/main moved inside the final round-trip -- an out-of-band writer, or a second publish path outside the lock." \
+      "PUBLISHER ALARM: PR #$pr_number merged, but the LANDED TREE IS NOT THE
 CHECKED TREE.
 
   checked: $checked_tree_oid
@@ -487,10 +513,7 @@ CHECKED TREE.
 This is the residual boundary in clause 3 -- something moved origin/main inside
 the final API round-trip. The merge HAS happened and is NOT being reverted:
 an automatic revert of a commit others may already have built on is worse than
-the defect. Publication is now FROZEN.
-
-Diagnose what else wrote to main, confirm whether the landed tree is actually
-green, then clear the freeze by hand."
+the defect."
   fi
 
   # Redundant BY CONSTRUCTION when the OIDs match -- identical tree, identical
@@ -512,28 +535,22 @@ green, then clear the freeze by hand."
   #    visibility walk: a step that cannot reach an answer returning the
   #    permissive one. "Cannot determine" is a THIRD outcome and it must fail.
   if ! git worktree add --detach "$gate_wt" origin/main >/dev/null 2>&1; then
-    # `|| true` ONLY so a failed freeze cannot pre-empt the die() below, which
-    # carries the REASON. The failure is not swallowed -- freeze_publication
-    # printed a loud diagnosis before returning non-zero.
-    freeze_publication "PR #$pr_number ($head_sha) merged, but the post-merge verification worktree could not be created. The landed state was never checked." || true
-    die "PUBLISHER ALARM: PR #$pr_number MERGED and the landed state is UNVERIFIED.
+    freeze_and_alarm \
+      "PR #$pr_number ($head_sha) merged, but the post-merge verification worktree could not be created. The landed state was never checked." \
+      "PUBLISHER ALARM: PR #$pr_number MERGED and the landed state is UNVERIFIED.
 
 Could not create the verification worktree at origin/main, so the currency
 checker never ran. This is NOT evidence that main is green -- it is the absence
 of evidence either way, after a merge that has already happened.
-
-Not reverting. Publication is FROZEN pending diagnosis."
+Not reverting."
   fi
 
   if ! ( cd "$gate_wt" && ./scripts/gen-doc-status.sh --check ); then
-    # `|| true` ONLY so a failed freeze cannot pre-empt the die() below, which
-    # carries the REASON. The failure is not swallowed -- freeze_publication
-    # printed a loud diagnosis before returning non-zero.
-    freeze_publication "PR #$pr_number ($head_sha) landed and the tree OID matched, but origin/main's own currency checker is RED on the landed tree." || true
-    die "PUBLISHER ALARM: PR #$pr_number landed with the expected tree, but the
+    freeze_and_alarm \
+      "PR #$pr_number ($head_sha) landed and the tree OID matched, but origin/main's own currency checker is RED on the landed tree." \
+      "PUBLISHER ALARM: PR #$pr_number landed with the expected tree, but the
 currency checker is RED on origin/main.
-
-Not reverting. Publication is FROZEN pending diagnosis."
+Not reverting."
   fi
   release_gate_worktree
 

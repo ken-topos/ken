@@ -108,6 +108,7 @@ fresh_result_gate|probes 9a (reconstruct) and 9b (abort)
 verify_landed_tree|probes 10, 11a, 11b
 refuse_if_frozen|probe 11a (the freeze must BITE the next publish)
 freeze_publication|probes 11a/11b + probe 12c (persistence failure is reported)
+freeze_and_alarm|probe 12c (terminal text conditional on persistence) + 11a/11b
 publisher_state_dir|EXCLUDED: pure accessor, driven by the containment guard
 freeze_marker_path|EXCLUDED: pure accessor, driven by every freeze assertion
 release_gate_worktree|EXCLUDED: cleanup helper, no observable of its own
@@ -462,36 +463,40 @@ if grep -q 'currency checker is green' <<<"$out"; then bad "printed the GREEN se
 if [ -f "$(marker)" ]; then ok "publication FROZEN"; else bad "no freeze marker"; fi
 rm -f "$(marker)"
 
-head_ "Probe 12c -- an unpersistable freeze, called the way PRODUCTION calls it"
-# ⛔ The previous 12c `if`-wrapped freeze_publication. That puts the body in a
-#    CONDITION CONTEXT, which suppresses `set -e` inside it -- so the probe ran
-#    a different execution mode from production and reported the diagnosis
-#    firing when in production the shell aborted at the failed redirect, before
-#    the diagnosis and before the caller's die(). @architect caught it.
-#    ⇒ The discriminator is a PLAIN call under `set -e`: does the diagnosis
-#      survive at all? Under the old code it cannot.
+head_ "Probe 12c -- unpersistable freeze, driven through the REAL caller"
+# ⛔ The previous 12c substituted `echo REACHED_DIE_POINT` for the caller's
+#    terminal diagnosis, so it could not observe what the operator actually
+#    reads. @architect ran the real `verify_landed_tree` mismatch branch with an
+#    unwritable marker and got BOTH "Subsequent publishes will NOT be stopped"
+#    and "Publication is now FROZEN ... clear the freeze by hand." The second is
+#    false and it is the one an operator acts on.
+#    ⇒ Drive the REAL branch and assert on the COMPLETE output. A probe that
+#      replaces the thing under test cannot observe the thing under test.
 build_sandbox
 out="$(run_gate '
   set -e
+  fresh_result_gate >/dev/null 2>&1
+  ( cd '"$SANDBOX"'/advancer && git fetch -q origin && git checkout -q -B main origin/main \
+      && git merge -q --squash origin/candidate >/dev/null 2>&1 \
+      && echo intruder > intruder.txt && git add -A \
+      && git -c user.email=p@x -c user.name=p commit -q --no-verify -m "squash + intruder" \
+      && git push -q origin main ) >/dev/null 2>&1
   freeze_marker_path() { printf "%s\n" "/nonexistent-dir-$$/ken-publisher-FROZEN"; }
-  freeze_publication "planted reason"
-  echo UNREACHABLE_IF_SET_E_FIRES=1')"
-if grep -q 'COULD NOT BE PERSISTED' <<<"$out"; then
-  ok "PLAIN call under set -e: the diagnosis still reaches the operator"
-else
-  bad "PLAIN call under set -e: shell aborted at the failed write -- NO diagnosis, and the caller's die() never runs"
-fi
+  verify_landed_tree || true
+  echo PROBE_END=1')"
 
-# And in the production CALL SHAPE, execution must continue so die() can name
-# the reason the freeze was attempted in the first place.
-out="$(run_gate '
-  set -e
-  freeze_marker_path() { printf "%s\n" "/nonexistent-dir-$$/ken-publisher-FROZEN"; }
-  freeze_publication "planted reason" || true
-  echo REACHED_DIE_POINT=1
-  refuse_if_frozen && echo NEXT_PUBLISH_PROCEEDED=1')"
-if grep -q 'REACHED_DIE_POINT=1' <<<"$out"; then ok "production call shape: control reaches die(), so the REASON is still reported"; else bad "control never reached the die() point -- the alarm's reason would be lost"; fi
-if grep -q 'NEXT_PUBLISH_PROCEEDED=1' <<<"$out"; then ok "and it does NOT pretend the next publish is frozen (it is not)"; else bad "claims a freeze that was never written"; fi
+if grep -q 'LANDED TREE IS NOT THE' <<<"$out"; then ok "the real alarm fired and still reports the TRIGGER"; else bad "trigger not reported"; fi
+if grep -q 'COULD NOT BE PERSISTED' <<<"$out"; then ok "the persistence failure is reported"; else bad "persistence failure not reported"; fi
+# ★ The discriminator: the COMPLETE output must never claim protection exists.
+if grep -qE 'Publication is now FROZEN|Publication is FROZEN|clear the freeze' <<<"$out"; then
+  bad "output CLAIMS PUBLICATION IS FROZEN while no marker exists -- the operator acts on a protection that is not there"
+else
+  ok "output never claims FROZEN/protection after persistence failed"
+fi
+if grep -q 'NOT.*frozen\|will proceed unblocked' <<<"$out"; then ok "and it says plainly that the next publish is NOT blocked"; else bad "does not state that main is unprotected"; fi
+# And prove it: the next publish really does proceed.
+out2="$(run_gate 'refuse_if_frozen && echo NEXT_PUBLISH_PROCEEDED=1')"
+if grep -q 'NEXT_PUBLISH_PROCEEDED=1' <<<"$out2"; then ok "proved: the next publish proceeds (so the FROZEN claim would have been false)"; else bad "next publish blocked -- then a marker exists and this probe is not testing what it claims"; fi
 
 printf '\n=== %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
