@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 13:51:58Z — from 28 issue file(s) in `docs/program/issues/`.
+2026-07-22 13:53:26Z — from 29 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -42,6 +42,7 @@ the committed file matches the generator's output.
 | `ABI-REVOKE` | runtime revocation membrane — the deferred runtime face of 62 §4 | draft | runtime | TBD | none | — |
 | `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | active | verify | M | none | — |
 | `BUDGET-EXHAUST` | transfer-budget bound checks are fail-open on variant extension | ready | verify | S | none | — |
+| `CAT-CAPEX` | catalog exhibits no checked capability/authority exemplar | draft | steward | TBD | none | — |
 | `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | ready | steward | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
