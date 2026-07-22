@@ -5,33 +5,63 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-22 ~13:00Z. OPERATOR IS PRESENT.**
+**As of 2026-07-22 ~13:49Z. OPERATOR IS PRESENT.**
 
 ## Standing state
 
-- **`origin/main = 7c6e03c8`.** Green.
-- **★ FOUR TRACKS RUN CONCURRENTLY** (operator directive 2026-07-22 ~12:30Z —
-  *"double the rate of use… as soon as we can parallelize to two tracks on the
-  implementation side, we should"*). **Idle is not the default-correct state.**
+- **`origin/main = 9ebebb8e`.** Green. **Three merges landed this window:**
+  `9d2b4feb` DOC-W1-2 → `214bf4de` BUDGET-EFF (host/interp) → `9ebebb8e`
+  ABI-REVOKE (spec + conformance).
+- **★ FOUR TRACKS** (operator directive 2026-07-22 ~12:30Z — *"double the rate
+  of use… as soon as we can parallelize to two tracks on the implementation
+  side, we should"*).
 
 | track | ring | work | state |
 |---|---|---|---|
-| impl 1 | runtime | **RT-SPLIT slice 7** — the last slice | active |
-| impl 2 | verify | **BUDGET-EFF** | active, `ken-host` landed |
-| doc | doc | **DOC-W1-2** (Wave 1, slice 2 of 5) | active |
-| spec | enclave | **ABI-REVOKE behavioral contract** | active |
+| impl 1 | runtime | **RT-SPLIT slice 7** — the last slice | active, with QA |
+| impl 2 | verify | BUDGET-EFF | **host/interp MERGED**; native half deferred |
+| doc | doc | **DOC-W1-3** (Wave 1, slice 3 of 5) | active, kicked 13:44Z |
+| spec | enclave | ABI-REVOKE contract | **MERGED `9ebebb8e`**; retros pending |
 
 - **Build side is capped at TWO implementation tracks** (operator). Doc is the
   standing exception; the enclave is not a build team, so it does not count
   against the cap.
-- **⛔ The binding constraint is NOT the two-track cap — it is the READY
-  QUEUE.** `kernel`, `language`, `ergo`, and `foundation` are all idle and have
-  **zero** ready items owned by them; every ready WP is runtime-, doc-,
-  spec- or steward-owned. **Opening a third implementation track requires
-  authoring WPs for those rings, not operator permission.** That authoring is
-  T1 enclave/Steward work and is the real cost. **Surface this to the operator
-  before promising throughput the queue cannot supply.**
+- **⛔ IDLE BUILD RINGS ARE CORRECT — DO NOT "FIX" IT.** Operator ruling
+  2026-07-22 ~13:1xZ: *"just doc plus two implementation tracks."* `kernel`,
+  `language`, `ergo`, `foundation` sitting idle with zero ready items is the
+  **intended** state, not a stall to diagnose. **There is NO WP-authoring
+  obligation for them.** (This supersedes the earlier framing of the ready
+  queue as the binding constraint — that framing was correct as an observation
+  and wrong as a call to action.)
+- **Verify is idle by construction, not by neglect:** both of its next items —
+  BUDGET-EFF's native half and `BUDGET-EXHAUST` — are blocked (on slice 7 and
+  on an Architect mechanism ruling respectively). Nothing to kick.
 - **Do not kick a WP while the operator has an open question below.**
+
+### ⛔ Retraction: the stale-base "near-miss" was FALSE (2026-07-22 ~13:43Z)
+
+I held ABI-REVOKE claiming a stale base *"would have silently DELETED"* two
+DOC-W1-2 chapters, and wrote it up as a general rule. **Disproved by
+measurement:** BUDGET-EFF was on the **same stale base**, **also lacked both
+chapters entirely**, and after merging **both chapters survived** — `214bf4de`
+has one parent (squash). **GitHub squash-merge applies `merge-base → branch`,
+not `main → branch`.** Absence from a stale candidate is not a deletion.
+
+★ **`git diff --name-status origin/main <sha>` is NOT a staleness detector** —
+it fired identically on the safe candidate and the suspect one. **The correct
+test is the INTERSECTION:**
+
+```sh
+BASE=$(git merge-base <sha> origin/main)
+comm -12 <(git diff --name-only $BASE <sha> | sort) \
+         <(git diff --name-only $BASE origin/main | sort)
+```
+
+Empty ⇒ staleness immaterial, publish. Non-empty ⇒ inspect those files, take
+the union deliberately. The ABI-REVOKE rebase was still the **right call** —
+its `library/REVISION` + `manifest.toml` bump was a genuine non-empty
+intersection — **but for a reason I stated wrongly.** Retracted publicly in
+`evt_54t014vnef2xr`.
 
 ### ★ QA bound-verdict attestations are now on `origin` (2026-07-22 ~12:53Z)
 
