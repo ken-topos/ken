@@ -16,6 +16,7 @@ broadest scope where every reader must apply it (much of the fleet corpus's
 | Lesson | One-line |
 |---|---|
 | [a-repro-is-evidence-not-a-completion-oracle](a-repro-is-evidence-not-a-completion-oracle.md) | A repro answers *does this defect exist?* and is discharged once believed; a completion oracle answers *what would make this correct?* and binds until the fix merges — file the repro as evidence, let the ring build its own oracle, and leave the AC a weakening clause |
+| [rank-subclaims-by-load-bearing-not-by-checkability](rank-subclaims-by-load-bearing-not-by-checkability.md) | Handed a claim to refute, I verified the tractable sub-claim and confirmed a false one whose disproof was one grep — rank by what the claim RESTS on, not by what is quick to check; and index a lesson by its SHAPE, not the venue that taught it, or it won't fire in new clothes |
 | [the-post-merge-yield-is-vantage-not-seat-quality](the-post-merge-yield-is-vantage-not-seat-quality.md) | When a post-merge pass finds what a careful ring missed, the cause is the VANTAGE (reading without a candidate in front of you, asking what the mechanism is *for*) not the seat — correct credit framed as seat quality, or the lesson won't transfer |
 
 These are **lessons, not law** — verify a named file/flag/function still exists
