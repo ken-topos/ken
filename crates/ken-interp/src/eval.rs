@@ -4856,6 +4856,37 @@ fn buffer_nat_value(value: u64, fs: &FSIds, store: &mut EvalStore) -> Result<Eva
     Ok(result)
 }
 
+/// Interp's own private entry gate over the shared classifier
+/// (`CanonicalOutcomeV1::transfer_request_bound`, `dec_7kcbc14ybndbq`) —
+/// independent of `effect_wire`'s validator because wire admission and
+/// interpreter reification are two boundaries, neither trusting the other.
+/// No wildcard arm: a future `TransferRequestBoundV1` variant is a compile
+/// error here, not a silently-accepted budget.
+fn validate_transfer_request_bound(
+    request: &ken_host::CanonicalRequestV1,
+    outcome: &ken_host::CanonicalOutcomeV1,
+) -> Result<(), ()> {
+    match outcome.transfer_request_bound() {
+        None => Ok(()),
+        Some(ken_host::TransferRequestBoundV1::ReadAt(transferred)) => match request {
+            ken_host::CanonicalRequestV1::FsReadAt { length, .. }
+                if transferred.effective_request() <= *length =>
+            {
+                Ok(())
+            }
+            _ => Err(()),
+        },
+        Some(ken_host::TransferRequestBoundV1::WriteAt(transferred)) => match request {
+            ken_host::CanonicalRequestV1::FsWriteAt { length, .. }
+                if transferred.effective_request() <= *length =>
+            {
+                Ok(())
+            }
+            _ => Err(()),
+        },
+    }
+}
+
 fn reify_host_reply_v1(
     outcome: ken_host::CanonicalOutcomeV1,
     resource_token: Option<ken_host::ResourceTokenV1>,
@@ -4865,6 +4896,7 @@ fn reify_host_reply_v1(
     ids: &ConsoleIds,
     store: &mut EvalStore,
 ) -> Result<EvalVal, ()> {
+    validate_transfer_request_bound(request, &outcome)?;
     let value = match outcome {
         ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::Unit) => {
             make_ctor(ids.unit_id, vec![], store)
@@ -4922,11 +4954,11 @@ fn reify_host_reply_v1(
                 // BUDGET-EFF: raw request length is an outer consistency
                 // ceiling/audit input only, never the progress budget — the
                 // budget is `effective_request`, carried inside `transferred`
-                // per the Architect ruling (dec_1m6xdwjp2ttyn).
-                let requested = match request {
-                    ken_host::CanonicalRequestV1::FsReadAt { length, .. } => *length,
-                    _ => return Err(()),
-                };
+                // per the Architect ruling (dec_1m6xdwjp2ttyn). The
+                // request/reply shape correlation and the
+                // `effective_request <= raw length` bound are now enforced
+                // once, up front, by `validate_transfer_request_bound`
+                // (BUDGET-EXHAUST, dec_7kcbc14ybndbq) — not re-derived here.
                 let budget = buffer_nat_value(span.length(), fs, store)?;
                 let span = make_ctor(
                     fs.private_buffer_span_id,
@@ -4935,9 +4967,6 @@ fn reify_host_reply_v1(
                 );
                 let count = transferred.get();
                 let effective = transferred.effective_request();
-                if effective > requested {
-                    return Err(());
-                }
                 let predecessor = buffer_nat_value(count.checked_sub(1).ok_or(())?, fs, store)?;
                 let remaining =
                     buffer_nat_value(effective.checked_sub(count).ok_or(())?, fs, store)?;
@@ -4952,15 +4981,11 @@ fn reify_host_reply_v1(
         ken_host::CanonicalOutcomeV1::Success(ken_host::CanonicalReplyV1::WriteProgress(
             ken_host::WriteProgressV1::Wrote(transferred),
         )) => {
-            let requested = match request {
-                ken_host::CanonicalRequestV1::FsWriteAt { length, .. } => *length,
-                _ => return Err(()),
-            };
+            // Shape correlation + `effective_request <= raw length` are
+            // enforced up front by `validate_transfer_request_bound`
+            // (BUDGET-EXHAUST, dec_7kcbc14ybndbq).
             let count = transferred.get();
             let effective = transferred.effective_request();
-            if effective > requested {
-                return Err(());
-            }
             let predecessor = buffer_nat_value(count.checked_sub(1).ok_or(())?, fs, store)?;
             let remaining = buffer_nat_value(effective.checked_sub(count).ok_or(())?, fs, store)?;
             let count = make_ctor(
