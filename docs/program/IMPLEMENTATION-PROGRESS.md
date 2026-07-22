@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 03:22:49Z — from 23 issue file(s) in `docs/program/issues/`.
+2026-07-22 03:26:02Z — from 23 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -56,7 +56,7 @@ the committed file matches the generator's output.
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | draft | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
-| `RT-SPLIT` | decompose cranelift_backend.rs | draft | runtime | L | none | — |
+| `RT-SPLIT` | decompose cranelift_backend.rs | active | runtime | L | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | draft | foundation | M | none | — |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
 | `SPEC-38-ERRATUM` | spec 38-ffi-io self-contradicts on the transfer bound — rule and reconcile | closed | spec | S | none | 827 |
@@ -82,7 +82,6 @@ Items not yet `merged`/`closed` whose `depends_on` names an id that
 is itself not yet `merged`/`closed`:
 
 - `F4` blocked by `A3` (status: draft)
-- `RT-SPLIT` blocked by `F3-39` (status: draft)
 - `SEAL-2` blocked by `BUDGET-EFF` (status: draft)
 
 ## Gate progress
