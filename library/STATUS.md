@@ -16,7 +16,7 @@ proves `library/` already existed at some point on `main`'s history.
 **It does not, by itself, certify any cited source's bytes** (SRC-ATTEST
 Part 1) — that claim is the attested source-set digest below.
 
-**Attested source-set digest:** `68a922727b8efb1c67f570639c56bb0dd442413f9fd9a92c921aa846618b28aa`
+**Attested source-set digest:** `f38e823776c4e2ce8ad2314ff19336bcbc63d9ee6b86726e91b264c72f578a4f`
 
 The SHA-256 of `library/SOURCE-ATTESTATIONS`, the ledger binding every
 manifest-cited source to its exact blob OID at the commit the Librarian
