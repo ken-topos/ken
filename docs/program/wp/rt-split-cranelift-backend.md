@@ -826,11 +826,14 @@ Classify first:
    `oriented_dynamic_sibling_fixture` and `root_authority_test_lowering` stay
    in `lowering/core/tests/control.rs`.
 5. **Owner-adjacent transparent adapters remain governed by §10.5a**, not this
-   clause. **Each bridge stays beside its own private original** — the JIT
-   bridge in `artifact/mod.rs`, the verifier bridge in `lowering/mod.rs`. ⛔ The
-   superseded wording *"the JIT/verifier bridges stay in `artifact/mod.rs`"*
-   rested on the withdrawn co-ownership premise; see the contrast-case table
-   above.
+   clause. **Each adapter stays beside its own private original, in the module
+   §10.2 assigns that original** — ⛔ **do not enumerate the adapters here.**
+   Their population is the item-axis census output in §10.5a′ and it is the
+   single place that enumerates them; a second list in this clause can only go
+   stale against it. ⛔ Two superseded wordings rested on premises since
+   withdrawn — *"the JIT/verifier bridges stay in `artifact/mod.rs`"* (the
+   co-ownership premise) and a two-item *"the JIT bridge … the verifier bridge
+   …"* pair (the two-adapter population). See the contrast-case table above.
 6. Move the **grounded facade-LCA fixtures** to `test_support.rs` in
    **slice 7**, when `artifact::api` and the final facade are cut. Until then
    they remain at **residual-parent file scope under item-level
