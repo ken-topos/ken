@@ -1,7 +1,7 @@
 ---
 id: BUDGET-EXHAUST
 title: "transfer-budget bound checks are fail-open on variant extension"
-status: ready
+status: merged
 owner: verify
 size: S
 gate: none
@@ -166,3 +166,24 @@ restating the constraint independently).
   parity change on a different file set (`cranelift_backend/lowering/`); this is
   a structural-completeness change in `ken-host` + `ken-interp`. Bundling them
   would put two mechanisms behind one flip.
+
+## ✅ MERGED — `origin/main @ e7b2a8a5` (PR #870, CI-gated, 11/11 checks green)
+
+Verified by content across all three paths, not by the publisher's exit code:
+`effect_v1.rs`, `effect_wire.rs`, `eval.rs` all empty vs `5d485dcf`;
+`TransferRequestBoundV1` + `transfer_request_bound()` present at
+`effect_v1.rs:2131/:2137`; `validate_transfer_request_bound` at `eval.rs:4865`,
+called as the first statement of `reify_host_reply_v1` at `:4899`; the old
+`_ => Ok(())` residual arm is **gone** from the wire validator.
+
+Siblings intact across the window: facade still 492 lines, `api.rs`
+byte-identical to `b9c23a6b`, DOC-W1-3's library files present.
+
+⚠ **Instrument note.** The merge-base intersection test **self-fires** when run
+against **post-merge** `main` — post-merge `main` contains the candidate's own
+squash commit, so the candidate's touched-file set is necessarily a subset of
+what main gained. It reported all three files as intersecting; re-run against
+pre-merge `b9c23a6b` it was empty. **The intersection test is a pre-merge
+question about an unmerged candidate** and has no meaning once the candidate is
+an ancestor of `main`. Post-landing, use content-emptiness on the candidate's
+own paths plus **sibling survival by content**.
