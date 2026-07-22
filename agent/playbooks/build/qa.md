@@ -298,7 +298,9 @@ reference):**
    tests do not count as conformance.
 8. **Causality** — before Approve, demonstrate breaking the claimed mechanism at
    its seam makes the unchanged test fail with the expected opposite (scratch
-   mutation / prior-commit run / test-only selector; don't keep the mutation).
+   mutation / prior-commit run / test-only selector; don't keep the mutation)
+   — **and when it does NOT fail, suspect a stale input or a broken build before
+   concluding the property holds.**
    - **Enumerate your probes by the STATE each one builds, then look for the
      missing cell (promoted ORACLE-VIS-*; four instances, three seats, one day).**
      The probes that **follow the diff** — the happy path and the error path —
@@ -316,18 +318,32 @@ reference):**
      finding. Same shape as a `compile_fail` block that passes for any reason at
      all, and as a detector arm whose real job is *rejecting* a signal.
    - **Mutate to the property's NEAREST legal neighbour, not to an obvious
-     break.** A mutation only proves what it varies. On ORACLE-VIS-PACKAGING the
-     obvious widening (`pub fn f(`) went red correctly, while the **legal
-     line-split** form
-     — `#[cfg(test)]` / `pub` / `fn build_process_starter_executable_artifact(` —
+     break.** A mutation only proves what it varies, so the question is *which
+     variation the check is blind to*. The invariant, which is not about
+     programming-language syntax:
+
+     > **The property is semantic; the check operates on a REPRESENTATION. The
+     > nearest legal neighbour is where two representations denote the SAME
+     > thing but differ in the part the check inspects.**
+
+     That is where a check goes vacuous, and it applies to every substrate we
+     gate — a TOML key that may be quoted or re-nested, a manifest defeated by
+     an equivalent array spelling, a shell command line admitting different
+     quoting, a JSON payload with reordered or aliased fields. Enumerate the
+     spellings the **substrate** admits and mutate to the **worst legal one**.
+     ★ Then prefer **asking the substrate's own parser over running a matcher
+     against its text** — the compiler is the Rust instance of that rule, not
+     the rule itself. A text matcher's blind spots are exactly the forms you did
+     not imagine, which is why they cannot be enumerated from the armchair.
+
+     Worked example (promoted ORACLE-VIS-PACKAGING; **caught by runtime-qa**,
+     who constructed it rather than inheriting it): the obvious widening
+     `pub fn f(` went red correctly, while the **legal line-split** form —
+     `#[cfg(test)]` / `pub` / `fn build_process_starter_executable_artifact(` —
      compiled clean and **passed green, 13/13** over a genuine widening, because
-     the text pin matched visibility against the *same line's* prefix, empty on
-     the `fn` line. Enumerate the spellings the language actually admits
-     (whitespace, line breaks, attribute placement, re-export paths, glob
-     re-exports at the crate root) and mutate to the **worst legal one**. ★ Where
-     the property is a *language* fact, prefer asking the **compiler** over
-     matching source text — a text pin's blind spots are exactly the forms you
-     did not imagine.
+     the text pin matched visibility against the *same line's* prefix, which is
+     empty on the `fn` line. Same denotation, different representation, and the
+     difference sat precisely in the part the check read.
    - ⛔ **A mutation that breaks the BUILD proves nothing** — the checks then
      "pass" against rubble. Confirm the crate still compiles under the mutation;
      use a compile-preserving stand-in (e.g. a `#[cfg(not(test))]` sibling) when
@@ -339,6 +355,23 @@ reference):**
      accumulated rlibs by filename hash reported on hours-old source **with every
      signal healthy, the positive control included**. Check *which artifact the
      probe actually compiled against* before concluding the property holds.
+   - ★ **Construct your OWN mutation before you run theirs — and if you can only
+     re-run theirs, SAY SO IN THE VERDICT.** `:18` tells you to **re-run** the
+     affected tests, and **re-running is not re-deriving.** A QA that re-runs the
+     implementer's mutation inherits the implementer's *vantage* — including the
+     forms they did not imagine, which for a representation-matching mechanism is
+     the **entire failure surface**. That is the one place a mutation proof
+     degrades silently into agreement, and it leaves no trace: the verdict reads
+     identical either way.
+     ⇒ **Agreement counts as corroboration only when neither seat inherited the
+     other's premise.** So derive the violation independently from the *property*,
+     not from their test. (ORACLE-VIS-PACKAGING: QA mutation-proved across three
+     axes with its own construction, and the finding that blocked the WP was a
+     form the implementer's own probes could not have suggested.)
+     The second clause is the load-bearing one — **an inherited mutation is not a
+     defect, but an inherited mutation reported as an independent one is.**
+     Naming the limitation makes the degraded case visible instead of
+     indistinguishable from the real thing.
 9. **Maintenance** — the test states which intended extensions stay green and
    which incompatible changes go red. If both answers are "any change," it's a
    snapshot/sentinel, not an invariant — label it.
