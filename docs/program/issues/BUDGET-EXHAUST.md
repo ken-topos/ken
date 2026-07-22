@@ -71,13 +71,51 @@ defenses that share the same premise are one defense
 (the shared-premise trap — a differential check is blind to what both sides
 assume).
 
-## Scope
+## ✅ MECHANISM RULED — `dec_7kcbc14ybndbq` RESOLVED (Architect, `evt_1q82xqdrqd2ma`)
 
-- **The mechanism is the Architect's call, not the reporter's.** The adversary
-  named a candidate shape — matching exhaustively on the two small sealed
-  progress enums instead of falling through on the outer outcome enum, which
-  would make a new carrier a **compile error** — and explicitly declined to
-  choose. Route the mechanism decision before implementation.
+**One exhaustive population classifier, two independent fail-closed consumers.**
+Against the landed `origin/main @ 9ebebb8e` shape, in
+`crates/ken-host/src/effect_v1.rs`:
+
+```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransferRequestBoundV1 {
+    ReadAt(TransferCountV1),
+    WriteAt(TransferCountV1),
+}
+
+impl CanonicalOutcomeV1 {
+    pub fn transfer_request_bound(&self) -> Option<TransferRequestBoundV1>;
+}
+```
+
+That method is the **sole population classifier.** Its body exhaustively
+enumerates `CanonicalOutcomeV1`, `CanonicalReplyV1`, `ReadProgressV1`,
+`WriteProgressV1`, and the current `SemanticErrorV1`, with **no `_`/catch-all at
+any of those levels.** Every current non-budget outcome is named and maps to
+`None`; `ReadSome → ReadAt(*transferred)`; `Wrote → WriteAt(*transferred)`.
+
+★ **This is the whole point:** it converts *"remember whether a new reply
+carries a budget"* from **an absence a reviewer must notice** into **an explicit
+classifier arm the compiler demands.**
+
+**Keep TWO validators, not one shared validator:**
+
+1. `effect_wire.rs::validate_transfer_request_bound` exhaustively matches
+   `Option<TransferRequestBoundV1>`, correlating `ReadAt` only with
+   `CanonicalRequestV1::FsReadAt` and `WriteAt` only with `FsWriteAt`, enforcing
+   `effective_request <= length`.
+2. `ken-interp/eval.rs` gets **its own private validator** over the same
+   classification and the same raw request, called **once at the entry to
+   `reify_host_reply_v1`**, before the outcome is consumed. ⛔ **Only after that
+   entry gate exists** may the duplicated per-`ReadSome`/`Wrote` outer-bound
+   checks be removed.
+
+**Both consumer matches have no wildcard.** A **request-side** `_ => Err`
+remains correct — unlike the old outcome-side `_ => Ok`, every residual request
+shape is uniformly *rejected*, so extension stays fail-closed. **The classifier
+is shared because population is one fact; the validators stay independent
+because wire admission and interpreter reification are two boundaries.**
 - Acceptance must include a **planted-extension proof**: add a third
   budget-carrying variant in a scratch tree and confirm it **fails closed**
   *before* the fix, and that the proof is what establishes completeness — not
@@ -98,6 +136,32 @@ assume).
   first phrasing named the mechanism (the wire match) and inherited exactly its
   blind spot — the same defect class this issue is about, committed in the
   acceptance criterion written to catch it.
+
+### The Architect's staged proof (binding — supersedes the sketch above)
+
+**Acceptance is the adversary-corrected conjunction, proved in two stages.**
+
+**Stage 0 — remove the false-positive source first.** Mechanically fill the
+unrelated encoder/decoder/ABI arms for a scratch
+`ProbeProgress(TransferCountV1)`, so their *existing* exhaustive matches cannot
+manufacture a failure that looks like the one under test. ★ Without this, every
+later step could go red for the wrong reason and still read as success.
+
+**Stage 1 — each layer must fail SPECIFICALLY, in order:**
+
+| planted state | targeted check | must fail specifically at |
+|---|---|---|
+| probe absent from `transfer_request_bound` | `ken-host` | **the classifier** |
+| probe mapped to a new `TransferRequestBoundV1::Probe`, both consumers unchanged | `ken-host` | **the wire validator** |
+| scratch **wire** arm filled only | `ken-interp` | **the interpreter validator** |
+| interpreter arm filled | both | an inflated-effective probe **rejects in both** layer-specific tests |
+| planted extension reverted | — | **zero residue** |
+
+**Retain the current `ReadSome` and `Wrote` above-raw negatives** — this is
+additive to the landed coverage, not a replacement for it.
+
+⛔ **Do not fold this WP into the native BUDGET-EFF parity half** (Architect,
+restating the constraint independently).
 - ⛔ **Do not fold this into BUDGET-EFF's deferred native half.** That half is a
   parity change on a different file set (`cranelift_backend/lowering/`); this is
   a structural-completeness change in `ken-host` + `ken-interp`. Bundling them
