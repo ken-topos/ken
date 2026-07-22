@@ -110,12 +110,13 @@ today.** I grepped every file under `catalog/packages/` for `import`,
 code — the only hits anywhere in the tree are prose: `README.md`'s own
 description of the rule, and `Data/Sums/Combinators.ken.md`'s references
 section naming Haskell's `Data.Either` *module* as an external citation.
-No fragment declares or resolves any of these forms. This is not an oversight this chapter papers over — it is the
-catalog's own stated boundary, and stating it plainly is the rule, not an
-exception: "there is no disk loader yet… a catalog entry that needs
-another package's helper today still inlines it… not imports it. State
-this plainly in any entry or guide passage that demonstrates the dotted
-syntax — don't imply cross-file import works"
+No fragment declares or resolves any of these forms. This is not an
+oversight this chapter papers over — it is the catalog's own stated
+boundary, and stating it plainly is the rule, not an exception: "there is
+no disk loader yet… a catalog entry that needs another package's helper
+today still inlines it… not imports it. State this plainly in any entry
+or guide passage that demonstrates the dotted syntax — don't imply
+cross-file import works"
 (`docs/program/07-catalog-style-guide.md`
 [§13](../../../docs/program/07-catalog-style-guide.md#13-path--import--the-normative-rule)).
 So: path ⇔ import addressing is real and mechanical (section 1); the
