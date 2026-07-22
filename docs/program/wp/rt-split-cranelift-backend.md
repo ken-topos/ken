@@ -379,6 +379,33 @@ move" claim auditable rather than asserted.
    > locations is the exact facade wiring declaration
    > `#[cfg(test)] mod test_support;`.**
 
+   **⛔ And the ledger is only total if no `use` launders the name**
+   (adversary `evt_6baweq79m4fkf`):
+
+   > **Outside ruled `tests.rs` / `tests/**` modules, a reference to
+   > `test_support` may NOT be a `use` import — it must be a fully-qualified
+   > path at each use site.** The facade wiring declaration is the sole
+   > exception. Inside ruled tests modules, `use` remains permitted.
+
+   **Why this clause is load-bearing, not tidiness.** A `use` declaration **is
+   an item**, and `#[cfg(test)] use …::test_support::helper;` therefore carries
+   an item-level `#[cfg(test)]` and classifies **cleanly** under the category
+   above. But after that import the call site reads `helper()` and **never
+   lexically names `test_support`** — so a grep ledger inspects the *import*
+   site, where the attribute innocently sits, while the leak happens at the
+   *use* site, which the search **cannot see at all**. The reference and the
+   leak end up in **different items, and only the innocent one is greppable.**
+   Forbidding the `use` makes every use site name `test_support::…`, which is
+   what makes the ledger **total**. (The alternative — a transitive name-flow
+   clause — closes it exactly but needs more than grep, and no-parser-
+   dependency is a property of this AC worth keeping.)
+
+   **Checked bidirectionally, per AC-8's own earlier lesson:** the facade
+   declaration is carved out ✅; the object-emission helpers at former `:311`,
+   `:580`, `:625` are entire `#[cfg(test)]` items naming `test_support::…` at
+   each site and classify under the existing category ✅; ruled tests modules
+   keep `use` ✅. **No parser, no topology change, no new category.**
+
    **Evidence is a closed ledger, not an unqualified list:**
 
    > **Report the raw search command and hit count, then reconcile every hit
