@@ -5,14 +5,47 @@
 > Appending is what grew the old tracker to 2.23 MB.
 > History: [`INDEX.md`](INDEX.md) · Work items: `docs/program/issues/*.md`
 
-**As of 2026-07-22 ~00:5xZ. Operator is engaged.**
+**As of 2026-07-22 ~04:3xZ. OPERATOR IS AWAY until ~11:30Z.**
 
 ## Standing state
 
-- Fleet is **SINGLE-THREADED**. Nothing is owed to any ring; every idle ring
-  is **correct**, not a stall.
-- `origin/main = 6be9754b`. Nothing is blocked.
+- `origin/main = 0f9a483a`. **TWO TRACKS ARE RUNNING CONCURRENTLY** (operator
+  directive 2026-07-22 ~02:35Z). Build stays single-threaded; doc is the one
+  standing exception. **Idle is no longer the default-correct state.**
 - **Do not kick a WP while the operator has an open question below.**
+
+### ▶ Build track — RT-SPLIT (Runtime ring)
+
+Slice 1 merged `origin/main @ 0f9a483a` (PR #834), verified by content.
+**Slice 2 (`planning`) is being cut now.** Six of seven slices remain.
+
+> ⛔ **AC-2 and AC-3 were REWRITTEN 2026-07-22** in
+> `docs/program/wp/rt-split-cranelift-backend.md` §7, on the adversary's
+> post-merge findings + the Architect's ruling `evt_1y255ges6mftc`. AC-2 proves
+> **module-level exported-NAME identity only** (four real public-surface
+> mutations went undetected — field→`pub`, new enum variant, new inherent
+> method, deleted `impl Display`). AC-3 now requires **ordered item-level token
+> identity**; a line multiset is a *supplemental inventory net* that produces
+> the AC-7 ledger, never a substitute. **There is no "restructuring class" that
+> relaxes move-purity** — the Architect explicitly rejected the binary the ring
+> had adopted mid-flight.
+
+### ▶ Doc track — DOC-CURRENCY-ANCHOR (doc ring)
+
+Kicked from `origin/main @ 0f9a483a`; doc-author authoring, librarian preflight
+done. This closes DOC-W0's unmet half (a recorded revision that certifies
+nothing) and **gates Wave 1**.
+
+### ⏭ Steward's own queue under the away-window directive
+
+1. Wave 1 frame (fragment-based, `depends_on: [DOC-CURRENCY-ANCHOR]`,
+   **revise** not author for `library/introduction.md`) + Wave 2 frame.
+   **Operator: frame Waves 1–2 ONLY.**
+2. The full six-wave program body in `12-documentation-program.md`.
+3. The **revocation-membrane WP** (operator: split it out) — needs an
+   Architect/ADR pass first. Requirements at `09:495-500`; the charter's
+   `capabilities.rs:468-471` citation is **STALE** (actual ~250-282).
+4. `BUDGET-EFF` — shovel-ready, queued behind RT-SPLIT, ahead of ABI-M1.
 
 ## Operator rulings — 2026-07-21 ~12:45Z. SETTLED, do not reopen.
 
