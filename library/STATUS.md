@@ -26,10 +26,12 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/learn/reading-ken/fragments.md` | reference | derived-reference | current |
 | `library/learn/reading-ken/01-anatomy.md` | explanatory | explanatory | current |
 | `library/learn/reading-ken/02-types-contracts-and-proofs.md` | explanatory | explanatory | current |
+| `library/learn/reading-ken/03-assurance-and-trust.md` | explanatory | explanatory | current |
+| `library/learn/reading-ken/04-effects-capabilities-and-authority.md` | explanatory | explanatory | current |
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 7 registered document(s).
+**Total:** 9 registered document(s).
 
 ## Regenerating
 

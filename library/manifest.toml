@@ -172,6 +172,68 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/learn/reading-ken/03-assurance-and-trust.md"
+kind = "explanatory"
+audience = ["human-reader"]
+authority = "explanatory"
+availability = "current"
+sources = [
+  "spec/20-verification/21-spec-syntax.md#51-the-verdict-per-obligation-operational",
+  "spec/20-verification/21-spec-syntax.md#52-the-epistemic-status-per-claim-export-facing--oq-spec-decided",
+  "spec/20-verification/21-spec-syntax.md#53-how-the-verdict-and-the-status-relate-the-projection",
+  "spec/20-verification/21-spec-syntax.md#54-the-honesty-guard-unknowntesteddelegated-never-read-proved",
+  "spec/60-security/64-trust-model.md#1-the-trusted-computing-base-tcb-precisely",
+  "spec/60-security/64-trust-model.md#11-the-enumeration-contract-soundness-landed-producer",
+  "spec/60-security/64-trust-model.md#12-the-completeness-net-no-hidden-assumption-by-construction",
+  "spec/60-security/64-trust-model.md#4-the-honest-limits-what-a-language-cannot-fix-normative",
+  "catalog/packages/Core/Logic/Transport.ken.md",
+  "catalog/packages/Core/Logic/EmptyDec.ken.md",
+  "catalog/packages/Capability/System/IO.ken.md",
+  "catalog/packages/Tooling/Testing/Property.ken.md",
+  "catalog/packages/Capability/Filesystem/Errors.ken.md",
+  "library/learn/reading-ken/fragments.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/learn/reading-ken/04-effects-capabilities-and-authority.md"
+kind = "explanatory"
+audience = ["human-reader"]
+authority = "explanatory"
+availability = "current"
+sources = [
+  "spec/30-surface/36-effects.md#1-effects-as-a-static-row",
+  "spec/30-surface/36-effects.md#162-the-bidirectional-check--the-keyword-cannot-lie",
+  "spec/60-security/62-authority.md#1-no-ambient-authority",
+  "spec/60-security/62-authority.md#2-capabilities-are-static-visible-and-least",
+  "spec/60-security/62-authority.md#3-attenuation--hand-a-child-a-strictly-weaker-token-the-headline",
+  "spec/60-security/62-authority.md#7-worked-examples",
+  "docs/program/issues/DOC-W1.md",
+  "catalog/packages/Capability/Console/Text.ken.md",
+  "catalog/packages/Capability/Filesystem/Errors.ken.md",
+  "library/learn/reading-ken/fragments.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/quickstart.md"
 kind = "tutorial"
 audience = ["human-reader"]
