@@ -772,35 +772,29 @@ they are production-private operations whose test-only one-call wrappers stay
 **in the module that owns the original**, under §10.5a. **⛔ Do not read "three
 cross-tree items" as "three instances of one rule."**
 
-> ⛔ **CORRECTED TWICE — the population is FOUR, and it is not co-owned.**
-> An earlier revision called **both** functions *"artifact operations"* and sent
-> **both** adapters to `artifact/mod.rs`. That premise is **false for
-> `verify_cranelift_function`**, which §10.2 rules **lowering-owned** (Architect
-> `evt_3tgaw9ws44fqg`). A later revision then said **exactly two** adapters —
-> also false: the **item-axis census** finds **three** artifact-private
-> operations reached by lowering tests, not one (Architect `evt_r0ywa1s4d4j4`).
-> The contrast-case *classification* survives both corrections untouched — every
-> member is an owner-adjacent boundary adapter, not a fixture helper — but the
-> **owning module differs per operation**:
+> ⛔ **THIS CLAUSE CLASSIFIES. IT DOES NOT ENUMERATE.**
 >
-> | private original | owner | adapter lives in | adapter serves |
-> |---|---|---|---|
-> | `new_jit_module` | `artifact/mod.rs` | `artifact/mod.rs` | lowering tests |
-> | `new_object_module` | `artifact/mod.rs` | `artifact/mod.rs` | lowering tests |
-> | `compile_expr` | `artifact/mod.rs` | `artifact/mod.rs` | lowering constructor tests |
-> | `verify_cranelift_function` | `lowering/mod.rs` | `lowering/mod.rs` | artifact tests |
+> **The classification:** every one of these items is an **owner-adjacent
+> boundary adapter**, not a fixture helper, and each sits **beside its private
+> original, in the module §10.2 assigns that original.** The generalizing rule
+> is *"the adapter sits beside its private original"* — **never** *"the adapter
+> sits in `artifact`."*
 >
-> **The rule that generalizes is "the adapter sits beside its private
-> original," never "the adapter sits in `artifact`."** The old wording was right
-> about the original pair only by accident of a mis-assigned owner.
+> **⛔ For the population — which operations, how many, and in whose module —
+> see §10.5a′'s item-axis census. That is the sole enumerating site.** Do not
+> restate the members or the count here, and do not infer either from the two
+> contrast cases named above: they are illustrations of the classification, not
+> the population.
 >
-> ⛔ **And the population is a CENSUS RESULT, not a cardinality to memorize.**
-> The rule ranges over *artifact-private operations reached by a lowering test*;
-> that set is established by the **item-axis census** recorded in §10.5a′, and
-> **four is its current size, not a constraint the design imposes.** A later
-> census finding a fifth **extends the table** — it does not contradict the
-> frame. Twice now a stated cardinality here has had to be withdrawn, because
-> a number can only ever be falsified while a named population can be re-run.
+> **Two withdrawn premises, kept as non-normative history only** — an earlier
+> revision called **both** named functions *"artifact operations"* and sent both
+> adapters to `artifact/mod.rs`, which is false for `verify_cranelift_function`
+> (§10.2 rules it lowering-owned, Architect `evt_3tgaw9ws44fqg`); a later
+> revision then asserted a two-adapter population, also false (item-axis ruling
+> `evt_r0ywa1s4d4j4`). **The classification survived both corrections
+> untouched.** What failed each time was an enumeration kept in a clause that
+> had no way to stay in step with the census — which is exactly why this clause
+> no longer keeps one.
 
 Classify first:
 
