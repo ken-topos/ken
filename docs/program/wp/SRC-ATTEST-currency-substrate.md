@@ -1,0 +1,245 @@
+---
+id: SRC-ATTEST
+title: "squash-stable whole-source attestation + fresh merge-result authorization"
+status: ready
+owner: doc (Part 1) + steward spillover (Part 2)
+size: M
+gate: none
+depends_on: []
+blocks: [ORACLE-VIS-PACKAGING]
+github: null
+origin: >
+  Librarian impossibility proof (evt_6t6wz1aw18291) during ORACLE-VIS-PACKAGING
+  re-validation; Architect ruling dec_7q3kes0jcx1kn (evt_5vp06mb9v26mh).
+  Framed by the Steward from that contract.
+---
+
+## Why this exists
+
+**The Librarian proved that no valid `library/REVISION` can ride a PR that
+edits a cited source.** Constructed and executed, both arms:
+
+| choice | outcome |
+|---|---|
+| `REVISION` = current `origin/main` | **source-currency fails** — the cited source differs between `REVISION` and `HEAD` |
+| `REVISION` = the branch tip | **squash-stability fails** — branch-local, not an ancestor of `origin/main` |
+
+⇒ **No third commit is simultaneously an ancestor of `origin/main` and a holder
+of bytes that have not merged yet.** That is a proof by the gate's two
+predicates, not a tooling inconvenience, and **rebase does not help** — it makes
+`main` an ancestor of the candidate, but the cited source still differs from
+`main`.
+
+★ **This generalizes to every WP that touches a manifest-cited source, forever.**
+`ORACLE-VIS-CHECK` hit it, `ORACLE-VIS-PACKAGING` is held by it, and the next one
+will hit it too. It is not a property of any candidate.
+
+## ⛔ The anomaly, and the wrong explanation it nearly got
+
+PR #885 changed `px4b_native_production.rs` — cited — left `REVISION` stale, and
+shard 4/4 came back **SUCCESS**. Two explanations were proposed and **both were
+wrong**:
+
+- *"The predicate tightened since."* **Measured false** — `gen-doc-status.sh` is
+  byte-identical between `dd715950` and `b2fd95ac`.
+- *"CI's shallow checkout makes the PR-time gate weaker."* **Measured false** —
+  the Librarian reproduced the current merge result at depth 1 and got the same
+  red. The shallow-heal path is not the divergence.
+
+**The Architect's graph reconstruction is the actual cause:** `c0890b13` (#885's
+base) had **zero** `px4b` citations and its exact-tree check exits 0; **DOC-W1-5
+added the two citations at `1e148908`, after #885's green check had already
+formed.** Reconstructing the *later* merge result at `dd715950` makes the
+**unchanged** checker exit 1.
+
+⇒ **#885 carried a green check for an OLDER merge result after `main` advanced.
+It is a TIME-OF-CHECK defect, not a weaker PR-time predicate.**
+
+⚠ **Framing note for whoever builds this, because it cost two seats a wrong
+lead:** the citation-presence question is a **PR-base** question and was twice
+measured against **post-merge `main`** (`dd715950^`), which is a different point
+in the graph. *Asking a pre-merge question of post-merge state returns a
+confident, wrong answer.* Check `c0890b13`, not `dd715950^`.
+
+## Part 1 — source-currency representation
+
+Keep `library/REVISION`, but **narrow it to an already-on-`main` provenance /
+bootstrap anchor.** It is **no longer** the proof that every current cited byte
+existed at that commit, and `STATUS.md` must stop describing it as a "validated
+revision" in a way that implies branch-only bytes are in it.
+
+Add a canonical ledger, e.g. `library/SOURCE-ATTESTATIONS`:
+
+```
+# ken-source-attestation-v1 object-format=<git object format>
+<full blob oid><TAB><normalized repository-relative path>
+...
+```
+
+**The filename is not load-bearing. These semantics are:**
+
+1. **Population** = every source path selected by the current manifest records to
+   which `source-currency` applies.
+2. Strip `#anchor` **only** to deduplicate the path. **Anchor existence remains a
+   separate gate.**
+3. Rows sorted by path, binding each path to its **whole tracked-file Git blob
+   OID at `HEAD`**.
+   ⛔ **Do NOT hash extracted Markdown spans** — that introduces a new
+   section-boundary parser and **weakens** the current conservative whole-file
+   predicate.
+4. **Exact set equality.** Missing, extra, duplicate, noncanonical, nonexistent,
+   non-blob, or symlink rows **fail closed**.
+5. **Exact OID equality.** Changed bytes without a fresh Librarian attestation
+   are red. ★ **A candidate-time attestation is squash-stable because the blob
+   survives even though the branch commit does not** — this is the whole point,
+   and it is what dissolves the impossibility.
+6. Render both values **distinctly** in `STATUS.md`: **provenance revision** and
+   **attested source-set digest/root**. The ledger is the source-currency
+   authority; `REVISION` is provenance.
+7. ⛔ **Replace** the old cited-byte `REVISION → HEAD` equality with ledger
+   `→ HEAD` equality. **Keeping both preserves the impossibility and defeats
+   the design.**
+
+## Part 2 — fresh merge-result authorization
+
+**The ledger does not by itself close #885.** A later manifest change can alter
+the required population after CI has formed its verdict.
+
+Immediately before **every** merge — **not only `--doc-only`** — the publisher
+must:
+
+1. read current `origin/main`;
+2. construct the exact squash result with the candidate;
+3. run **`origin/main`'s checker**, not the candidate's, on that result;
+4. **re-read `origin/main` before merging** and abort/reconstruct if it moved.
+
+Because the publisher is the sole merge router, that makes **the checked result
+the result it lands.** ⇒ **Old green CI attached to a prior merge result is not
+authorization.**
+
+★ **Steward note:** steps 1–3 already exist in `scripts/scripted-pr-automerge.sh`
+as the `--doc-only` currency guard (landed `a9554a07`, F10/F11/F12 folded in).
+**The mechanism is built and proved; this WP generalizes its scope to every
+merge and adds step 4, which is new.** Read that block before writing a new one —
+it carries the F10/F11/F12 reasoning in-file, including why the checker must come
+from `origin/main` and why `git merge --squash` must be followed by a commit.
+
+## Acceptance — the Architect's proof matrix, verbatim
+
+Each row is a **required proof, executed and shown**, not an assertion:
+
+1. cited body drift, ledger unchanged → **red**
+2. exact candidate-time ledger update → **green** on candidate **and** on the
+   synthetic squash result
+3. citation add/remove → **set mismatch** until the ledger follows
+4. extra / duplicate / wrong-path / wrong-OID / symlink row → **red**
+5. old-green CI followed by a citation-bearing `main` advance → **fresh
+   publisher check red**
+6. **depth-1 and full-history runs agree**
+7. `ORACLE-VIS-PACKAGING` + the Librarian's exact whole-source attestation →
+   **green without weakening either predicate**
+
+⚠ Row 5 is the one that closes #885 and it is the one a happy-path suite will
+omit — it requires *manufacturing* a stale-CI-then-advance sequence. Per the
+build-QA playbook (`:299`), enumerate the probes by the state each builds and
+name which probe builds row 5. **If it has no probe, the WP is not done.**
+
+⚠ Row 6 is a **freshness/environment** axis, independent of correctness: the
+depth-1 case must be executed, not reasoned about. The prior gate carried a
+comment saying nobody had proved it **accepts** a real revision in the
+environment where it runs — do not repeat that.
+
+## Scope boundary
+
+**In:** `library/SOURCE-ATTESTATIONS` (or equivalent), `scripts/gen-doc-status.sh`,
+`scripts/scripted-pr-automerge.sh`, `library/STATUS.md` rendering, and the gates
+in `crates/ken-cli/tests/library_documentation_gates.rs`.
+
+**Out:** anchor-existence checking (stays a separate gate, unchanged); any
+Markdown span extraction; any relaxation of a predicate to make a candidate pass.
+
+## ⛔ The non-automation boundary (@librarian, authoritative — they hold it)
+
+The Steward's first cut said "no generator." **That was drawn in the wrong
+place.** The Librarian's correction, which is the binding version:
+
+> **The ledger MAY and SHOULD have a deterministic generator** — hand-transcribing
+> dozens of blob OIDs adds error without adding judgment. **What must remain
+> human is the AUTHORIZATION to update and commit its output.**
+
+1. The **gate/check path is read-only** and fails on mismatch.
+2. The generator is invoked **only after the Librarian has closed the
+   reverse-citation claim ledger**.
+3. ⛔ **No CI, publisher, status generator, or ordinary build step may auto-run
+   it in write mode.**
+4. The handoff **records which changed sources/pages were revalidated.**
+
+⇒ *"Generated on demand"* is acceptable **only** when "demand" means an explicit
+Librarian action **after semantic review**. ⛔ **"Regenerate whenever `HEAD`
+differs" is the vacuous auto-bump and must remain impossible.**
+
+★ **Therefore the generator and the check are SEPARATE entry points / flags, and
+acceptance evidence must show the CHECK path CANNOT MUTATE the ledger.** (Add as
+an eighth required proof.) This is the distinction that keeps the attestation an
+assertion rather than a restatement of `HEAD`.
+
+## Ring — **doc**, one WP, not split
+
+Assigned to the **doc ring** (@librarian's read, adopted):
+
+- **`doc-author`** built the existing `gen-doc-status.sh` + Rust
+  documentation-gate substrate through `DOC-W0` and `DOC-CURRENCY-ANCHOR` —
+  strongest file/mechanism familiarity; this is continuation, not a new lane.
+- **@librarian** is the **only seat authorized to accept the ledger semantics**,
+  and QAs the proof matrix.
+- **`doc-leader`** owns sequencing and the merge Decision.
+- The publisher-script generalization is **bounded by this frame and reuses an
+  existing block** — it does not justify moving the currency substrate to a
+  build ring.
+
+⛔ **NOT a §14a library-only merge.** The diff reaches `scripts/` and `crates/`,
+so **full CI and Architect terminal review remain required.**
+
+⛔ **Do NOT split Part 1 from Part 2.** They close different halves of **one**
+guarantee, and landing either alone leaves a known hole: *representable-but-stale
+authorization*, or *fresh authorization over an unrepresentable attestation*.
+
+### Branch and assignment (@architect, `evt_677j2nrpkv3c9`)
+
+**One `wp/SRC-ATTEST` integration branch, one merge Decision.**
+
+| part | owner | scope |
+|---|---|---|
+| **Part 1** | **doc ring** (owns the branch) | `library/SOURCE-ATTESTATIONS`, `library/STATUS.md`, `scripts/gen-doc-status.sh`, `crates/ken-cli/tests/library_documentation_gates.rs` — one documentation-currency component the ring already built and QA'd through DOC-W0 / DOC-CURRENCY-ANCHOR |
+| **Part 2** | ⭐ **Steward spillover, same branch** | `scripts/scripted-pr-automerge.sh` — publisher/process machinery |
+
+★ **Why Part 2 is not the ring's:** `scripted-pr-automerge.sh` is publisher
+semantics, and *"a build ring should generalize that block only from a
+Steward-supplied exact commit/contract, not independently reinterpret publisher
+semantics."* The Steward authored and proved the existing guard; the
+generalization is the Steward's to write.
+
+⛔ **Runtime is the BLOCKED CONSUMER, not the owner.** Assigning this to Runtime
+would couple a generic documentation substrate to the first WP that exposed it,
+and add a second external semantic handoff to the Librarian.
+
+**Gate order:** Librarian QA binds the **assembled exact SHA** → Architect
+reviews the **combined contract/process diff**. **No Spec vote** unless scope
+unexpectedly reaches `spec/` or `conformance/`. **Do not merge either part
+alone.**
+
+### Two integration checks, in addition to the proof matrix
+
+1. ⛔ **Part 1 without Part 2 is INCOMPLETE even if its tests are green** —
+   stale merge-result authorization remains open.
+2. ⛔ **Part 2 must call the SAME SHARED GUARD for doc-only and normal
+   publishes.** Generalize the existing block; **do not leave two
+   implementations that can drift.**
+
+### ⚠ Architect's precision on the automation boundary
+
+A helper **may mechanically render a *proposed* canonical ledger** to avoid
+hand-copying OIDs — but **neither the normal generator nor `--check` may
+silently install it.** The committed ledger change remains **the Librarian's
+reviewed assertion**. ⛔ *"Recompute and accept `HEAD` during the gate"* is
+**forbidden.**
