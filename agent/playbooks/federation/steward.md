@@ -252,6 +252,43 @@ brief** — the implementer should execute mostly mechanically, not design
 >    makes the Steward the de-facto leader. See
 >    [[verify-a-tmux-rouse-actually-submitted]].
 >
+> 8. **★ FLIP THE WP's TRACKER STATUS TO `active` — as part of the kickoff, not
+>    "later."** The kickoff is not complete until the catalog says the work is
+>    in flight. Edit `status:` in `docs/program/issues/<ID>.md`, run
+>    `scripts/gen-progress.sh`, and bundle it into your next publish.
+>
+>    **This is a real, repeated defect, not hygiene.** 2026-07-22: I kicked
+>    **three** WPs and flipped **zero** — the tracker read `ready` for work
+>    already sitting with QA, and separately `RT-SPLIT` sat at `active` for hours
+>    *after* I had announced "tracker updated." **Three instances in one
+>    session.** The root cause is structural: the gate ended at "confirm the seat
+>    is `Working`", so the flip had no step to live in and depended on my
+>    remembering — which is precisely the condition under which it does not
+>    happen.
+>
+>    ⇒ A stale `ready` is not cosmetic: it is the **frontier** the next
+>    sequencing pass reads, and it invites releasing a WP that is already out.
+>    Same lesson as the ctx%-scan and the stranded-paste sweep: **where a
+>    backstop depends on you remembering to look, convert it into a step.**
+>
+> 9. **★ ON PUBLISH — ack "PR #N is open at `<SHA>` — the branch is FROZEN" into
+>    the WP thread, immediately.** A `git_request` becoming a live PR is
+>    **invisible to the ring that produced it**: the branch is now the head of an
+>    open PR with reviewers attached, and any force-push re-points it at a SHA
+>    **no reviewer approved**.
+>
+>    **Near-miss, 2026-07-22:** my "STOP, do not rebase" and a leader's "rebase
+>    now" crossed **two seconds apart** with opposite content, on a branch already
+>    in CI as PR #875. The implementer picked correctly — on which instruction
+>    matched an observable fact — but the ring had no way to *know* the branch was
+>    frozen, because nothing had told it.
+>
+>    ★ **Independently reached by `verify-leader` in its own retro** (*"once I
+>    send a `git_request` the branch is live and no longer mine or my ring's to
+>    touch — not even a safe rebase — until the publish result comes back"*).
+>    **Two seats, one lesson ⇒ it promotes** (§3). Not a new edge or a new party
+>    (§4) — it is *content added to a message you already send*.
+>
 > **★ Helper script — the CANONICAL way to run the compaction start step (gate
 > step 4). Prefer it; do NOT hand-drive `tmux send-keys /compact` pane-by-pane**
 > — that races the text/Enter split and double-queues `/compact` on a busy pane
@@ -1177,6 +1214,57 @@ This is COORDINATION §14 landing-integrity applied to your *own* edits: a
 "shipped" notification proves nothing; only verify-on-main does. A multi-piece
 corpus change is **one branch** (§14); width-check markdown at 80 **display
 columns** (codepoints, not bytes) before routing.
+
+> ### ★★ STEP 5b — VERIFY WITH A POST-CONDITION ON THE ARTIFACT, NOT A GREP FOR
+> ### ONE PHRASE. And check what you BROADCAST, not only what you committed.
+>
+> **(i) When a corpus change carries an INDEX (a `README.md` table, a manifest,
+> a catalog), assert the post-condition, not the phrase.** Step 5's plain-text
+> grep proves *one* string landed; it says nothing about whether the change
+> landed **whole**.
+>
+> ```sh
+> # rows vs files, and BOTH orphan directions
+> grep -c '^| \[' <dir>/README.md;  ls <dir>/*.md | grep -vc README
+> grep -o '^| \[[^]]*\]' <dir>/README.md | sed 's/^| \[//;s/\]$//' \
+>   | while read n; do [ -f "<dir>/$n.md" ] || echo "ORPHAN ROW: $n"; done
+> for f in <dir>/*.md; do b=$(basename $f .md); [ "$b" = README ] && continue
+>   grep -q "\[$b\]" <dir>/README.md || echo "ORPHAN FILE: $b"; done
+> ```
+>
+> ⛔ **`git checkout <ref> -- <path>` is a CHECKOUT, NOT A MERGE.** It takes the
+> ref's blob **wholesale** and destroys what was there — including step 3's own
+> tracker pull, which is safe only because it is *one* file from *one* source and
+> the overwrite is intended. **Applying two branches that share a file this way
+> silently keeps only the second.** (2026-07-22: two adversary memory branches,
+> both appending to one index → `10 base + 3 = 13` where `10 + 5 = 15` was due;
+> two lessons landed on disk with **no index row**. Both commits clean, no
+> warning.) ⇒ To combine branches use `cherry-pick`/`merge` so conflicts are
+> *raised*, or hand-build the union — then **run the post-condition regardless**.
+>
+> ★ **Predict the number BEFORE you look:** `base + Δ₁ + Δ₂`. That one line of
+> arithmetic *is* the detector.
+>
+> ★★ **Why a post-condition and not a mechanism guard:** I first blamed the loss
+> on git's silent-union-of-disjoint-hunks. **Measured, that was false** — those
+> branches *conflict loudly*; the loss came from a command with no merge
+> semantics at all. **A guard keyed to a mechanism story fails when the story is
+> wrong.** A post-condition on the merged artifact catches unions, wholesale
+> takes, and bad conflict resolutions **alike, without needing to know which
+> occurred.** ⇒ **Prefer a post-condition on the result over a guard keyed to a
+> mechanism.**
+>
+> **(ii) CHECK WHAT WAS BROADCAST, NOT ONLY WHAT WAS COMMITTED.** The artifact
+> and the announcement **fail independently**, and it is the announcement that
+> reaches rings as *binding instruction*. Twice in one session a **correct**
+> landed artifact was published alongside **prose carrying a false mechanism** —
+> once to two build rings as the *reason* for a rule. ⇒ After any publish that
+> you also narrate to the fleet, **re-read your own message against the artifact**
+> and ask: *does the explanation reproduce what actually happened?* An
+> explanation that merely sounds consistent with a true rule is not thereby true.
+> ⚠ Watch especially for a clause whose function is to tell the reader they need
+> not look ("you can't lose X by accident", "errs in the safe direction",
+> "immaterial") — see the fleet lesson on reassurance-as-finding.
 
 **Keep `steward/work` fresh against `origin/main` — do not let it drift
 (operator 2026-07-09).** `steward/work` is a *working copy*, not a durable log:
