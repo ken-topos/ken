@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 16:18:46Z — from 33 issue file(s) in `docs/program/issues/`.
+2026-07-22 16:31:18Z — from 34 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -44,7 +44,7 @@ the committed file matches the generator's output.
 | `BUDGET-EXHAUST` | transfer-budget bound checks are fail-open on variant extension | merged | verify | S | none | — |
 | `CAT-CAPEX` | catalog exhibits no checked capability/authority exemplar | draft | steward | TBD | none | — |
 | `CB-HYGIENE` | cranelift_backend facade: strip WP-token narration, separate test material from implementation | merged | runtime | S | none | — |
-| `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | ready | verify | S | none | — |
+| `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | active | verify | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | ready | doc | S | none | — |
@@ -57,7 +57,8 @@ the committed file matches the generator's output.
 | `KW-THEOREM` | rename the surface keyword `lemma` to `theorem` | ready | spec | M | none | — |
 | `LOADER-STALE-PREMISE` | \"no disk loader yet\" is stale in 9 places — including already-landed library/ content | ready | doc | S | none | — |
 | `MODELS-TIER` | agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception | ready | steward | S | none | — |
-| `ORACLE-VIS-CHECK` | replace the text-pin oracle in px4b_native_production.rs with a real visibility check | ready | runtime | S | none | — |
+| `ORACLE-VIS-CHECK` | replace the text-pin oracle in px4b_native_production.rs with a real visibility check | active | runtime | S | none | — |
+| `ORACLE-VIS-PACKAGING` | replace the text-pin visibility oracle on build_process_starter_executable_artifact | ready | runtime | XS | none | — |
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | ready | steward | S | none | — |
 | `PX8-F-CAP-41` | PX8-F-CAP (#41) — backlog, deferred to spec-first | draft | TBD | TBD | none | 41 |
 | `PX8` | partial/positioned IO — the completion program's root; closure condition | active | runtime | L | none | — |
@@ -77,14 +78,12 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `CI-SKIPPED-NATIVE-TESTS` — Restore rt_parity_native — one test at 221s is the blocker
 - `DOC-VALIDATION-BINDING` — validation vocabulary claims a 1:1 binding to the gates; nothing binds it
 - `DOC-W1` — documentation Wave 1 — the read-Ken spine, taught from checked fragments
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
 - `LOADER-STALE-PREMISE` — \"no disk loader yet\" is stale in 9 places — including already-landed library/ content
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
-- `ORACLE-VIS-CHECK` — replace the text-pin oracle in px4b_native_production.rs with a real visibility check
 - `PUB-VERIFY` — scripted-pr-automerge.sh exits 0 on a failed push
 - `Q-CLAIM-CLOSURE` — Q-RESIDUE adversary findings — claim-loss in multi-claim test blocks, plus R1/R2/R3
 - `STR-BIJ` — the String/List Char 'bijection' over-claim (adversary A1 + A2)
@@ -96,6 +95,7 @@ is itself not yet `merged`/`closed`:
 
 - `DOC-W2` blocked by `DOC-W1` (status: ready)
 - `F4` blocked by `A3` (status: draft)
+- `ORACLE-VIS-PACKAGING` blocked by `ORACLE-VIS-CHECK` (status: active)
 
 ## Gate progress
 
