@@ -15,12 +15,30 @@
 #
 # ── WHY THIS EXISTS ──────────────────────────────────────────────────────────
 #
-# The watchdog's busy detector produced FIVE consecutive false-IDLE readings and
-# never a false BUSY. The asymmetry is structural: the detector is a disjunction
-# of POSITIVE busy signals, so any state left un-enumerated defaults to "idle" —
-# and a false idle is the reading that makes you interrupt real work.
+# The watchdog's busy detector produced FIVE consecutive false-IDLE readings.
+# The asymmetry looked structural: the detector is a disjunction of POSITIVE busy
+# signals, so any state left un-enumerated defaults to "idle" — and a false idle
+# is the reading that makes you interrupt real work.
 #
-# Adding arms is unfalsifiable maintenance. Two assertions replace it.
+# ⛔ THE "AND NEVER A FALSE BUSY" HALF OF THAT CLAIM WAS FALSE, and this script
+#   asserted it for hours. On 2026-07-22 the BACKGROUND arm reported
+#   `runtime-implementer` and `verify-qa` BUSY on every 15-minute watchdog tick
+#   while both sat idle — a COMPLETED turn (`Baked for 9m 3s`) still holding an
+#   ORPHANED shell (`· 1 shell still running`). The operator caught it by looking
+#   at the panes; the watchdog reported "all clear" throughout.
+#
+#   Two lessons, now enforced by controls below rather than by this comment:
+#   (a) the false-BUSY direction is the EXPENSIVE one. A false idle costs one
+#       spurious nudge. A false BUSY costs an INVISIBLE STALL — and it silences
+#       the very backstop that exists to notice.
+#   (b) "never observed X" is a statement about the observer. This detector's
+#       live self-test runs in its OWN pane, which is BUSY by definition while
+#       the script executes, so it was structurally incapable of ever observing a
+#       false BUSY. The absence of that reading was a property of the instrument,
+#       not of the world — and it got written down as if it were a fact.
+#
+# Adding arms is unfalsifiable maintenance. Assertions replace it — and every arm
+# now carries a NEGATIVE control, not only a positive one.
 #
 # ── LAYER 1: THE SELF-TEST (does the detector see the live known case?) ──────
 #
@@ -119,9 +137,9 @@ arm_checks() {
            '❯ check for new mentions'; do
     grep -qE "$SPINNER" <<<"$d" && { echo "ARM SPINNER wrongly ACCEPTED: $d" >&2; fail=1; }
   done
-  # BACKGROUND must ACCEPT work with no spinner and no timer of its own
-  for d in '✻ Cogitated for 36s · 2 shells still running' \
-           '✻ Baked for 37s · 1 shell still running' \
+  # BACKGROUND must ACCEPT a turn BLOCKED on a shell — no spinner, NO timer.
+  # The absence of a `for <time>` completion is what makes it live.
+  for d in '✻ Cogitated · 2 shells still running' \
            '  ⎿ 2 shells still running' \
            '✻ Waiting for 1 background agent to finish'; do
     grep -qE "$BACKGROUND" <<<"$d" || { echo "ARM BACKGROUND failed to ACCEPT: $d" >&2; fail=1; }
@@ -132,17 +150,63 @@ arm_checks() {
            'I wrote: Waiting for 1 background agent to finish'; do
     grep -qE "$BACKGROUND" <<<"$d" && { echo "ARM BACKGROUND wrongly ACCEPTED: $d" >&2; fail=1; }
   done
+  # ⛔⛔ THE FALSE-BUSY CONTROL — the case this script got WRONG in production.
+  # 2026-07-22: `runtime-implementer` and `verify-qa` were reported BUSY on every
+  # 15-minute watchdog tick while both sat IDLE. The operator caught it; the
+  # script never could. Both panes read:
+  #     ✻ Baked for 9m 3s · 1 shell still running
+  # A COMPLETED turn (`Verb for <time>`) that ORPHANED a background shell. The
+  # phrase "1 shell still running" persists indefinitely after the turn ends, so
+  # the seat reads BUSY forever and the watchdog never nudges it.
+  #
+  # ★ The previous version of this suite listed exactly these two strings as
+  #   things BACKGROUND must ACCEPT. The bug was not an un-enumerated case —
+  #   it was ENCODED AS THE SPECIFICATION, and the suite passed green proving it.
+  #
+  # ★★ Why it survived a self-test: the live check runs against THIS pane, which
+  #   is BUSY by definition while the script executes. That is a positive control
+  #   and ONLY a positive control — it can confirm "BUSY reads BUSY" and can
+  #   never confirm "idle reads idle". A false IDLE costs one spurious nudge; a
+  #   false BUSY costs an INVISIBLE STALL. The arm with no negative control was
+  #   the arm that failed, in the expensive direction.
+  for d in '✻ Baked for 9m 3s · 1 shell still running' \
+           '✻ Crunched for 3m 14s · 1 shell still running' \
+           '✻ Cogitated for 36s · 2 shells still running'; do
+    classify_pane_text "$d" | grep -qx idle ||
+      { echo "FALSE-BUSY CONTROL: completed turn + orphan shell classified BUSY: $d" >&2; fail=1; }
+  done
+  # …and the end-to-end positive control, so the fix above cannot be "return idle".
+  for d in '✻ Catapulting… (12m 40s · ↓ 45.9k tokens)' \
+           '✻ Cogitated · 2 shells still running'; do
+    classify_pane_text "$d" | grep -qx BUSY ||
+      { echo "BUSY CONTROL: live turn classified idle: $d" >&2; fail=1; }
+  done
   return $fail
+}
+
+# A completed turn stamps `Verb for <elapsed>`. A live one stamps `Verb… (`.
+# The elapsed counter appears in BOTH, so the counter is NOT a discriminator —
+# the preposition is.
+COMPLETED='[A-Z][a-z]+ for [0-9]+(m [0-9]+)?s'
+
+classify_pane_text() { # $1 = pane text; echoes BUSY|idle
+  local out="$1"
+  if grep -qE "$SPINNER" <<<"$out"; then
+    echo "BUSY"; return
+  fi
+  # A background signal counts only on a line that is NOT a completion stamp.
+  # `Baked for 9m 3s · 1 shell still running` is a finished turn holding an
+  # orphaned shell, not an agent doing work.
+  if grep -E "$BACKGROUND" <<<"$out" | grep -qvE "$COMPLETED"; then
+    echo "BUSY"; return
+  fi
+  echo "idle"
 }
 
 pane_is_busy() { # $1 = role; echoes BUSY|idle
   local out
   out=$(tmux capture-pane -t "moot-$1" -p 2>/dev/null) || { echo "idle"; return; }
-  if grep -qE "$SPINNER" <<<"$out" || grep -qE "$BACKGROUND" <<<"$out"; then
-    echo "BUSY"
-  else
-    echo "idle"
-  fi
+  classify_pane_text "$out"
 }
 
 QUIET=0
