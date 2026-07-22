@@ -680,8 +680,17 @@ revision — it does not improvise a topical split.**
 never justify widening a **production** item"* is not engaged; the bridge lives
 in `artifact/mod.rs`, so §10.1's residual-omnibus-facade ban is not engaged;
 and the pair stays artifact-owned, so §10.2's assignment stands unamended.
-**§10.2 ownership does not change** — this is a test-boundary note under
-§10.4/§10.5, not a reassignment.
+
+> **The bridges are not shared test helpers under that placement rule:** they
+> contain no setup, fixture construction, assertion, policy, or duplicated
+> helper logic. They are artifact-owned, `cfg(test)`-only boundary adapters
+> adjacent to the private operations they expose; all actual test-helper logic
+> remains in the ruled subject test modules.
+
+That last point answers §10.2's **first** sentence — *test helpers go in the
+lowest `tests/mod.rs` ancestor shared by their users* — which the
+production-widening argument alone leaves open. **§10.2 ownership does not
+change** — this is a test-boundary note under §10.4/§10.5, not a reassignment.
 
 **The complete inverse-call ledger** (Architect, `evt_445j846aqqtwp`). The
 JIT/verifier pair has **six** distinct test users, not the two trees first
