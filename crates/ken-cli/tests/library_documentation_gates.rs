@@ -22,6 +22,23 @@
 //!    any) names a real heading in that file — the drift gate D1 requires;
 //! 6. every registered document labels an `availability` of exactly
 //!    current/partial/planned/unavailable.
+//! 7. every manifest `sources` entry cited by a non-`status`-kind document
+//!    is byte-unchanged between `library/REVISION` and `HEAD` — `revision_
+//!    resolved()` (DOC-W0) only proves `REVISION` names a real ancestor
+//!    commit; it never reads a cited source's bytes AT that revision, so
+//!    it is blind to content drift under an unchanged heading
+//!    (`DOC-CURRENCY-ANCHOR`). A `status`-kind document (`STATUS.md`) is
+//!    exempt from this token entirely (it carries `generated-current`
+//!    instead — always regenerated fresh, so idempotency subsumes it), and
+//!    `library/REVISION` itself is the one path-level exemption (self-
+//!    referential by construction); nothing else is exempted by path. A
+//!    symlinked source is rejected outright rather than diffed through —
+//!    `git diff` on a symlink path compares the symlink's own target-path
+//!    blob, not the resolved file's content. Enforced in `scripts/gen-doc-
+//!    status.sh`, verified here by driving the real script against
+//!    synthetic fixtures — also covers the bootstrap case: `REVISION` must
+//!    name a point at or after `library/manifest.toml`'s own introduction,
+//!    not merely an ancestor.
 //!
 //! Targeted `scripts/ken-cargo -p ken-cli` check, not an out-of-band
 //! script (doc-leader kickoff, `thr_74hvpkqnxjp9q`). Each gate below is
@@ -470,10 +487,25 @@ fn gate_manifest_records_declare_the_complete_required_shape_and_unique_paths() 
 // known vocabulary tied 1:1 to the gates this file actually runs, not free
 // prose (librarian QA, thr_74hvpkqnxjp9q, second pass, finding 2): a
 // `["banana"]` list passed every other gate. Every current gate below runs
-// unconditionally over every entry except `generated-current`
-// (`status_md_generation_is_idempotent`), which only applies to the one
-// generated (`kind = "status"`) document — so the applicable set is exact,
-// not merely a subset check.
+// unconditionally over every entry except `generated-current` (`status_md_
+// generation_is_idempotent`) and `source-currency`, which apply in exactly
+// opposite directions on `kind = "status"` — so the applicable set is
+// exact, not merely a subset check.
+//
+// Librarian QA (thr_15yrvjrpap9td, first pass, finding 1): an earlier cut
+// gave EVERY document `source-currency`, including `library/STATUS.md` —
+// but `scripts/gen-doc-status.sh`'s implementation blanket-skipped every
+// `library/`-prefixed source, so `STATUS.md`'s own declared `sources`
+// (`manifest.toml`, `REVISION`) were silently never checked at all. That
+// is a hidden exception, not the issue's sanctioned "visibly weakened"
+// branch (AC-1). Fixed by making the exemption VISIBLE here instead:
+// `source-currency` does not apply to a `kind = "status"` document at
+// all — its currency is what `generated-current` (idempotency: it is
+// always regenerated fresh from the current working tree) already
+// establishes, which subsumes "unchanged since REVISION" for a document
+// that has no independent existence apart from its own generation. Every
+// OTHER document's `library/`-referencing sources (none exist today, but
+// none are exempted by path either) are bound like any other citation.
 const KNOWN_VALIDATION_TOKENS: &[&str] = &[
     "manifest-coverage",
     "manifest-completeness",
@@ -481,6 +513,7 @@ const KNOWN_VALIDATION_TOKENS: &[&str] = &[
     "source-anchors",
     "availability-label",
     "authority-class",
+    "source-currency",
     "generated-current",
 ];
 
@@ -497,6 +530,8 @@ fn applicable_validation_tokens(entry: &DocEntry) -> BTreeSet<&'static str> {
     .collect();
     if entry.kind == "status" {
         set.insert("generated-current");
+    } else {
+        set.insert("source-currency");
     }
     set
 }
@@ -576,6 +611,95 @@ fn gate_manifest_scalars_reject_the_transport_delimiter() {
         bad.is_empty(),
         "manifest scalar(s) containing the transport delimiter '|':\n{}",
         bad.join("\n")
+    );
+}
+
+// Librarian QA (thr_15yrvjrpap9td, third pass): a `key = value`-shaped line
+// at column 0 INSIDE a still-open multi-line `sources = [ ... ]` array
+// desyncs `parse_manifest` (above) from `gen-doc-status.sh`'s awk parsers.
+// `parse_manifest`'s array continuation (see its `multi-line array` branch)
+// never reinterprets a line as a field once inside an open array — it just
+// accumulates raw text and quote-extracts from it, so `kind = "status"`
+// sitting inside the array is swallowed as literal text and `"status"` is
+// extracted as a spurious extra `sources` entry, while this record's real,
+// final `kind` stays whatever the last PROPER `kind =` line (outside the
+// array) set it to. `gen-doc-status.sh`'s awk instead matches
+// `/^kind[[:space:]]*=/` unconditionally at column 0, with no notion of
+// "inside an open array" — so the same line flips ITS view of the
+// document's `kind` instead. Live repro (librarian, scratch commit
+// `1fab9704`): this spoofed a document's `kind` to `status` in the awk's
+// eyes only, exempting it from the new content-currency gate and silently
+// dropping a genuinely drifted cited source. Rejected outright — closing
+// the ambiguity is simpler than making three independent parsers agree on
+// how to resolve it.
+fn field_lines_inside_open_arrays(src: &str) -> Vec<String> {
+    let mut bad = Vec::new();
+    let mut open = false;
+    for (i, raw_line) in src.lines().enumerate() {
+        if open {
+            if let Some((key, _)) = raw_line.split_once('=') {
+                let key = key.trim();
+                if !key.is_empty()
+                    && raw_line.starts_with(|c: char| c.is_ascii_lowercase())
+                    && key.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+                {
+                    bad.push(format!("line {}: {raw_line:?}", i + 1));
+                }
+            }
+            if raw_line.contains(']') {
+                open = false;
+            }
+            continue;
+        }
+        if let Some((_, value)) = raw_line.split_once('=') {
+            let value = value.trim();
+            if value.starts_with('[') && !value.contains(']') {
+                open = true;
+            }
+        }
+    }
+    bad
+}
+
+#[test]
+fn gate_manifest_rejects_a_field_line_inside_an_open_multiline_array() {
+    let manifest_path = repo_root().join("library/manifest.toml");
+    let src = std::fs::read_to_string(&manifest_path).expect("read manifest.toml");
+    let bad = field_lines_inside_open_arrays(&src);
+    assert!(
+        bad.is_empty(),
+        "manifest.toml has a field-looking line inside a still-open \
+         multi-line array — this is the exact shape that desyncs \
+         parse_manifest from gen-doc-status.sh's awk parsers:\n{}",
+        bad.join("\n")
+    );
+}
+
+// Mutation proof for the detector itself, on a synthetic manifest string —
+// proves the mechanism fires on the librarian's exact reported shape,
+// rather than merely asserting the real manifest happens to be clean today.
+#[test]
+fn field_lines_inside_open_arrays_detects_the_reported_shape() {
+    let clean = "[[document]]\npath = \"library/fixture.md\"\nkind = \"portal\"\n\
+        authority = \"explanatory\"\navailability = \"current\"\nsources = [\n  \
+        \"docs/foo.md\",\n]\n";
+    assert!(
+        field_lines_inside_open_arrays(clean).is_empty(),
+        "detector false-positived on a clean manifest record"
+    );
+
+    let malformed = "[[document]]\npath = \"library/fixture.md\"\nkind = \"portal\"\n\
+        authority = \"explanatory\"\navailability = \"current\"\nsources = [\nkind = \"status\"\n  \
+        \"docs/foo.md\",\n]\n";
+    let bad = field_lines_inside_open_arrays(malformed);
+    assert_eq!(
+        bad.len(),
+        1,
+        "expected exactly one offending line, got: {bad:?}"
+    );
+    assert!(
+        bad[0].contains("kind") && bad[0].contains("status"),
+        "expected the offending line to name the spoofed kind, got: {bad:?}"
     );
 }
 
@@ -1068,6 +1192,405 @@ fn shallow_clone_self_heals_when_object_present_but_ancestry_unprovable() {
         ancestry_provable(&revision_target, &checkout),
         "generator reported success without actually fetching the \
          connecting history — ancestry still isn't provable"
+    );
+}
+
+// --- gate 7: cited source content is unchanged since REVISION (DOC-CURRENCY-
+// --- ANCHOR) ----------------------------------------------------------------
+//
+// The tests above prove `revision_resolved()` correctly establishes "REVISION
+// names a real ancestor commit." That is a PROXY for the property
+// `library/STATUS.md` actually claims — "the corpus was validated as of
+// REVISION" — and a TRUE proxy is exactly the shape that shipped in DOC-W0:
+// nine review rounds converged on ever-better true statements about the
+// anchor without anyone reading a single cited byte AT it. Grounded,
+// un-mutated, on `origin/main @ 6be9754b`: `STATUS.md` stamped "Validated
+// revision e5a400c7" while `git ls-tree e5a400c7 -- library/` returns zero
+// entries — every check above still passes.
+//
+// Builds a small self-contained repo (same byte-copy-the-real-script
+// pattern as `build_synthetic_origin`) with one document citing an external
+// `docs/` file, so the mutation proof can act directly on git history
+// rather than needing shallow-clone gymnastics — content diffing across two
+// commits needs only those two commit's objects, not a particular checkout
+// depth.
+fn build_currency_fixture(base: &Path) -> (PathBuf, String) {
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    run_git(&["init", "--quiet", "-b", "main"], &repo);
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::create_dir_all(repo.join("library")).unwrap();
+    std::fs::create_dir_all(repo.join("docs")).unwrap();
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(repo.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        repo.join("docs/example.md"),
+        "# Example\n\n## A Heading\n\noriginal content\n",
+    )
+    .unwrap();
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = [\n  \
+         \"docs/example.md#a-heading\",\n]\n",
+    )
+    .unwrap();
+    std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "initial: manifest + cited source"],
+        &repo,
+    );
+    let revision = run_git(&["rev-parse", "HEAD"], &repo);
+
+    // Point REVISION at the commit just made — a follow-up commit, matching
+    // the self-referential-parent design this script's header explains
+    // (REVISION can't name the commit that sets it).
+    std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+    (repo, revision)
+}
+
+// Plain write mode, not `--check`: these fixtures don't pre-populate a
+// committed `library/STATUS.md` to diff against (irrelevant to what's under
+// test — the currency checks below run and can fail BEFORE render/--check
+// would ever touch that file), so `--check` would spuriously fail on a
+// missing comparison file on the recovery/green arms.
+fn run_gen_doc_status(repo: &Path) -> std::process::Output {
+    std::process::Command::new("bash")
+        .arg(repo.join("scripts/gen-doc-status.sh"))
+        .current_dir(repo)
+        .output()
+        .expect("run gen-doc-status.sh")
+}
+
+#[test]
+fn content_currency_gate_rejects_a_drifted_cited_source_and_recovers() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-drift-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let (repo, _revision) = build_currency_fixture(&base);
+
+    // Green: the cited source is unchanged since REVISION (REVISION is its
+    // own immediate ancestor here, so this is trivially true — the baseline
+    // that must NOT be flagged).
+    let green = run_gen_doc_status(&repo);
+    assert!(
+        green.status.success(),
+        "gen-doc-status.sh failed on an unmutated cited source. \
+         stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&green.stdout),
+        String::from_utf8_lossy(&green.stderr)
+    );
+
+    // Red: mutate the cited source's BODY under an UNCHANGED heading — the
+    // exact adversary forward-repro shape (a structural anchor gate stays
+    // green while content drifts underneath it).
+    std::fs::write(
+        repo.join("docs/example.md"),
+        "# Example\n\n## A Heading\n\nMUTATED — this must be caught.\n",
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "mutate cited source"], &repo);
+
+    let red = run_gen_doc_status(&repo);
+    assert!(
+        !red.status.success(),
+        "gen-doc-status.sh accepted a cited source whose body changed \
+         under an unchanged heading since REVISION"
+    );
+    let red_stderr = String::from_utf8_lossy(&red.stderr);
+    assert!(
+        red_stderr.contains("docs/example.md") && red_stderr.contains("changed between REVISION"),
+        "expected a diagnostic naming the drifted source, got stderr:\n{red_stderr}"
+    );
+
+    // Green again: revert the content — proves the gate isn't just
+    // permanently red once tripped, and that the check is genuinely keyed
+    // on content, not on commit count/history shape.
+    std::fs::write(
+        repo.join("docs/example.md"),
+        "# Example\n\n## A Heading\n\noriginal content\n",
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "revert cited source"], &repo);
+
+    let recovered = run_gen_doc_status(&repo);
+    assert!(
+        recovered.status.success(),
+        "gen-doc-status.sh stayed red after the cited source's content \
+         was reverted to match REVISION. stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&recovered.stdout),
+        String::from_utf8_lossy(&recovered.stderr)
+    );
+}
+
+#[test]
+fn content_currency_gate_rejects_revision_predating_librarys_own_introduction() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-bootstrap-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    run_git(&["init", "--quiet", "-b", "main"], &repo);
+
+    // Commit 1: a repository that does not have library/ yet at all —
+    // this is the state DOC-W0's real REVISION (`e5a400c7`) pointed at.
+    std::fs::write(repo.join("README.md"), "pre-library state\n").unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "pre-library"], &repo);
+    let pre_library_revision = run_git(&["rev-parse", "HEAD"], &repo);
+
+    // Commit 2: introduce library/, but (the bug under test) anchor
+    // REVISION at the PRE-library commit rather than at-or-after this one.
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::create_dir_all(repo.join("library")).unwrap();
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(repo.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = []\n",
+    )
+    .unwrap();
+    std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(
+        repo.join("library/REVISION"),
+        format!("{pre_library_revision}\n"),
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "introduce library/, REVISION mis-anchored"],
+        &repo,
+    );
+
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a REVISION that predates \
+         library/manifest.toml's own introduction — the exact DOC-W0 shape \
+         (STATUS.md stamped validated at a revision where library/ had zero \
+         entries)"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("predates library/'s own"),
+        "expected the bootstrap-distinguishing diagnostic, got stderr:\n{stderr}"
+    );
+
+    // Recovery: re-anchor REVISION at the commit that introduced library/
+    // itself (the earliest legitimate value) — must now pass.
+    let introducing_commit = run_git(&["rev-parse", "HEAD"], &repo);
+    std::fs::write(
+        repo.join("library/REVISION"),
+        format!("{introducing_commit}\n"),
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "re-anchor REVISION at library/'s introduction"], &repo);
+
+    let recovered = run_gen_doc_status(&repo);
+    assert!(
+        recovered.status.success(),
+        "gen-doc-status.sh stayed red after REVISION was re-anchored \
+         at library/'s own introducing commit. stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&recovered.stdout),
+        String::from_utf8_lossy(&recovered.stderr)
+    );
+}
+
+// Librarian QA (thr_15yrvjrpap9td, first pass, finding 2), reproduced as a
+// committed regression rather than left as handoff-only evidence: a cited
+// source that is a symlink must be REJECTED outright, not silently
+// diffed via its own (target-path) blob — `git diff --quiet` on a symlink
+// path compares the symlink's target string, which can stay byte-identical
+// while the file it resolves to changes underneath it, so a content-
+// currency check that doesn't special-case symlinks would report "clean"
+// without ever having read the real content. This fixture proves the
+// stronger fail-closed claim: EVEN WITH THE TARGET UNCHANGED, a symlink
+// source must still be rejected, because nothing here can distinguish that
+// case from the exact one that slips through undetected — "verified"
+// through indirection is not verified.
+#[cfg(unix)]
+#[test]
+fn content_currency_gate_rejects_a_symlink_source_even_when_its_target_is_unchanged() {
+    use std::os::unix::fs::symlink;
+
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-symlink-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::create_dir_all(repo.join("library")).unwrap();
+    std::fs::create_dir_all(repo.join("docs")).unwrap();
+    run_git(&["init", "--quiet", "-b", "main"], &repo);
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(repo.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        repo.join("docs/target.md"),
+        "# Target\n\n## A Heading\n\nreal content\n",
+    )
+    .unwrap();
+    symlink(repo.join("docs/target.md"), repo.join("docs/link.md"))
+        .expect("create the symlink source probe");
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"explanatory\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = [\n  \
+         \"docs/link.md\",\n]\n",
+    )
+    .unwrap();
+    std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "initial: manifest + symlink source"],
+        &repo,
+    );
+    let revision = run_git(&["rev-parse", "HEAD"], &repo);
+    std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+
+    // Target is UNCHANGED since REVISION — the only variable under test is
+    // "is the cited path a symlink", not "did the content drift".
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a symlink cited as a manifest source, \
+         even with its target byte-unchanged since REVISION — content- \
+         currency through a symlink is unverifiable and must be rejected \
+         outright, not silently diffed via the symlink's own blob"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("symlink source"),
+        "expected the symlink-rejection diagnostic, got stderr:\n{stderr}"
+    );
+}
+
+// Librarian QA (thr_15yrvjrpap9td, second pass), reproduced as a committed
+// regression (their scratch probe `e9927bec` was detached, not committed):
+// a duplicate, out-of-order `kind` field desynced the two consumers. The
+// Rust gate's `parse_manifest` keeps whatever `kind =` value it saw LAST
+// for the whole record (same as this file's render awk elsewhere); an
+// earlier cut of the shell's source-extraction awk instead decided
+// "checked or not" the instant `sources = [...]` closed, using whatever
+// `kind` had been seen SO FAR — so `kind = "status"` placed immediately
+// before `sources`, with `kind = "explanatory"` restored immediately
+// after, made the shell see `status` (skip the source) while the record's
+// real, final kind is `explanatory` (source-currency applies). Proves the
+// fix: the shell must defer to the record's final `kind`, exactly like
+// the Rust parser, so this can no longer stay green.
+#[test]
+fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_kind_field() {
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("doc-currency-dup-kind-{pid}"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("create scratch base dir");
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(base.clone());
+
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::create_dir_all(repo.join("library")).unwrap();
+    std::fs::create_dir_all(repo.join("docs")).unwrap();
+    run_git(&["init", "--quiet", "-b", "main"], &repo);
+    let real_script = std::fs::read_to_string(repo_root().join("scripts/gen-doc-status.sh"))
+        .expect("read the real gen-doc-status.sh to copy into the fixture");
+    std::fs::write(repo.join("scripts/gen-doc-status.sh"), &real_script).unwrap();
+    std::fs::write(
+        repo.join("docs/example.md"),
+        "# Example\n\n## A Heading\n\noriginal content\n",
+    )
+    .unwrap();
+    // `kind = "status"` right before `sources`, `kind = "explanatory"`
+    // (the record's REAL, final kind) restored right after — the exact
+    // field placement from the live probe.
+    std::fs::write(
+        repo.join("library/manifest.toml"),
+        "[[document]]\npath = \"library/fixture.md\"\nkind = \"status\"\n\
+         authority = \"explanatory\"\navailability = \"current\"\nsources = [\n  \
+         \"docs/example.md#a-heading\",\n]\nkind = \"explanatory\"\n",
+    )
+    .unwrap();
+    std::fs::write(repo.join("library/fixture.md"), "# Fixture\n").unwrap();
+    std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(
+        &["commit", "--quiet", "-m", "initial: manifest + duplicate kind"],
+        &repo,
+    );
+    let revision = run_git(&["rev-parse", "HEAD"], &repo);
+    std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "anchor REVISION"], &repo);
+
+    // Drift the cited source's body under an unchanged heading, WITHOUT
+    // bumping REVISION — this must be caught despite the duplicate-kind
+    // decoy.
+    std::fs::write(
+        repo.join("docs/example.md"),
+        "# Example\n\n## A Heading\n\nMUTATED — must be caught despite the decoy.\n",
+    )
+    .unwrap();
+    run_git(&["add", "-A"], &repo);
+    run_git(&["commit", "--quiet", "-m", "drift the cited source"], &repo);
+
+    let out = run_gen_doc_status(&repo);
+    assert!(
+        !out.status.success(),
+        "gen-doc-status.sh accepted a drifted cited source because a \
+         duplicate, out-of-order `kind` field made the shell's extraction \
+         see a stale (`status`) kind at the moment `sources` closed, \
+         instead of the record's real final kind (`explanatory`)"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("docs/example.md") && stderr.contains("changed between REVISION"),
+        "expected a diagnostic naming the drifted source, got stderr:\n{stderr}"
     );
 }
 

@@ -47,6 +47,44 @@ if [ ! -f "$MANIFEST" ]; then
   exit 1
 fi
 
+# Librarian QA (thr_15yrvjrpap9td, third pass): a `key = value`-shaped line
+# at column 0 INSIDE a still-open multi-line `sources = [ ... ]` array
+# desyncs the two manifest consumers. Rust's `parse_manifest` never
+# reinterprets a line as a field once it is inside array continuation — it
+# just accumulates raw text and quote-extracts from it, so `kind = "status"`
+# sitting inside the array is swallowed as literal text and `"status"` is
+# extracted as a spurious extra `sources` entry, while the document's real,
+# final `kind` is whatever the LAST proper `kind =` line outside the array
+# set it to. Both awk parsers in this script instead match `/^kind[[:space:]
+# ]*=/` unconditionally at column 0, with no notion of "am I inside an open
+# array" — so the exact same line flips their view of the document's `kind`
+# instead. Live repro (librarian, scratch commit `1fab9704`): this spoofed a
+# document's `kind` to `status` in the awk's eyes only, which made the new
+# content-currency check (gate 7) treat it as exempt and silently drop a
+# genuinely drifted cited source. Rejected outright here, once, before any
+# awk touches the manifest — closing the ambiguity is simpler and safer than
+# trying to make three independent parsers agree on how to resolve it.
+MALFORMED_ARRAY_LINE="$(awk '
+  BEGIN { open = 0 }
+  {
+    if (open) {
+      if ($0 ~ /^[a-z_]+[[:space:]]*=/) { print NR": "$0 }
+      if ($0 ~ /\]/) { open = 0 }
+      next
+    }
+    if ($0 ~ /=[[:space:]]*\[[[:space:]]*$/) { open = 1 }
+  }
+' "$MANIFEST")"
+if [ -n "$MALFORMED_ARRAY_LINE" ]; then
+  echo "gen-doc-status: library/manifest.toml has a field-looking line" >&2
+  echo "  (\"key = value\" at column 0) inside a still-open multi-line array" >&2
+  echo "  — the manifest's two consumers (this script's awk, the Rust gate's" >&2
+  echo "  parser) do not agree on where the array ends for a shape like this," >&2
+  echo "  which can spoof a document's kind or smuggle an extra source:" >&2
+  echo "$MALFORMED_ARRAY_LINE" | sed 's/^/  /' >&2
+  exit 1
+fi
+
 if [ ! -f "$REVISION_FILE" ]; then
   echo "gen-doc-status: $REVISION_FILE not found — record the validated" >&2
   echo "  revision explicitly (e.g. \`git rev-parse HEAD > library/REVISION\`" >&2
@@ -150,6 +188,160 @@ if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" HEAD 2>/dev/null; 
   else
     echo "gen-doc-status: library/REVISION '${REVISION}' is not an ancestor of the current tree (HEAD)" >&2
   fi
+  exit 1
+fi
+
+# --- currency: REVISION must certify something about the CORPUS, not just --
+# --- name a real ancestor commit (DOC-CURRENCY-ANCHOR) ---------------------
+#
+# Everything above establishes that REVISION names a real commit and that
+# it is an ancestor of HEAD — and nothing more. `library/STATUS.md`'s claim
+# is "the corpus was validated as of REVISION"; neither fact above reads a
+# single byte of anything the corpus cites. Grounded, un-mutated, on
+# `origin/main @ 6be9754b` (adversary, `evt_6c9mhr3tg9pfg`): `STATUS.md`
+# stamped "Validated revision e5a400c7", and `git ls-tree e5a400c7 --
+# library/` returns ZERO entries — the corpus is stamped validated at a
+# revision where it did not yet exist, and every check above still passes.
+#
+# Two DISTINCT properties, checked separately so their diagnostics don't
+# get conflated (AC-2 asks for exactly this distinguishability):
+
+# (a) library/'s own corpus must already exist at REVISION — otherwise
+# nothing was there to validate. This is the bootstrap gap made explicit:
+# a REVISION set before library/manifest.toml was ever introduced is not a
+# stale-but-once-valid revision, it is a revision that never had a corpus
+# to certify anything about.
+if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}:library/manifest.toml" 2>/dev/null; then
+  echo "gen-doc-status: library/REVISION '${REVISION}' predates library/'s own" >&2
+  echo "  introduction — library/manifest.toml did not exist at that revision, so" >&2
+  echo "  nothing was there to validate. This is distinct from a cited source" >&2
+  echo "  drifting (below): REVISION must point at or after the commit that" >&2
+  echo "  first introduced library/manifest.toml." >&2
+  exit 1
+fi
+
+# (b) every manifest `sources` entry cited by a NON-generated document —
+# the external claims the corpus actually rests its authority on — must be
+# byte-unchanged between REVISION and HEAD. Librarian QA (thr_15yrvjrpap9td,
+# first pass): an earlier cut of this check blanket-skipped every
+# `library/`-prefixed source, which silently exempted `library/STATUS.md`'s
+# own declared `sources` (`library/manifest.toml`, `library/REVISION`) from
+# the very token (`source-currency`) its manifest record claimed to carry —
+# a hidden exception contradicting AC-1's own text, not the issue's
+# sanctioned "visibly weakened" branch. Fixed two ways:
+#
+# - `library/manifest.toml` is NOT exempted by path — it is bound like any
+#   other source, but ONLY for documents whose `kind` is not `status`.
+#   Nothing currently cites it except `STATUS.md` itself, so this has no
+#   live effect today; it stops being a silent carve-out and becomes a
+#   principled per-document-kind rule instead.
+# - `library/REVISION` remains the ONE exemption, and it is structural, not
+#   a convenience: it is `STATUS.md`'s own anchor value, not an external
+#   claim, and its file content differs from itself by construction on
+#   every legitimate bump (the parent-commit self-reference this script's
+#   header explains) — checking it would fail every time REVISION is used
+#   correctly. `STATUS.md`'s manifest record visibly narrows its own claim
+#   (`crates/ken-cli/tests/library_documentation_gates.rs`,
+#   `applicable_validation_tokens`): a `kind = "status"` document does not
+#   carry `source-currency` at all — its freshness is what `generated-
+#   current` (idempotency) already establishes, which subsumes "unchanged
+#   since REVISION" for a document that is, by definition, always
+#   regenerated fresh from the current working tree.
+#
+# Extraction lives entirely in the awk below (no `grep -o` stage this
+# time — an earlier cut piped through one and had to guard its "zero
+# matches" exit-1 with `|| true` under `set -o pipefail`/`set -e`; folding
+# the quoted-string extraction into awk itself avoids re-introducing that
+# trap). It emits one bare source path per line, tracking each document's
+# `kind` field (which the manifest always states BEFORE `sources`,
+# matching this file's other single-pass, controlled-subset parsers) so a
+# `status`-kind document's own sources are excluded from extraction
+# entirely, not filtered out downstream by path.
+# Librarian QA (thr_15yrvjrpap9td, second pass): TOML duplicate keys are
+# invalid but NEITHER consumer here rejects them, and an earlier cut of
+# this awk decided "is this record's sources checked" the instant a
+# `sources = [...]` block closed — using whatever `kind` had been seen SO
+# FAR. Live repro (scratch probe `e9927bec`): `kind = "status"` placed
+# right before `sources`, `kind = "portal"` restored right after it — the
+# Rust gate's `parse_manifest` (which, like the render awk elsewhere in
+# this file, keeps whatever `key =` value it saw LAST for the whole
+# record) computes a final `kind` of `portal` and expects `source-currency`
+# to apply; this awk, deciding at `sources`-close time, saw `status` and
+# silently dropped the source from `CITED_SOURCES` — a body-drifted cited
+# source stayed green end-to-end. Fixed by making the decision at the
+# SAME point Rust makes it: buffer this record's sources text and defer
+# the "checked or not" decision to the record's END (the next
+# `[[document]]`, or EOF) — using the FINAL `kind` for the whole record,
+# identically to the Rust parser and to this file's own render awk, so a
+# duplicate/out-of-order `kind` line can no longer desync the two.
+CITED_SOURCES="$(awk '
+  function flush_record() {
+    if (kind != "status" && buf != "") {
+      line = buf
+      while (match(line, /"[^"]*"/)) {
+        print substr(line, RSTART + 1, RLENGTH - 2)
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
+    kind = ""; buf = ""; capture = 0
+  }
+  /^\[\[document\]\]/ { flush_record(); next }
+  /^kind[[:space:]]*=/ {
+    k = $0
+    sub(/^kind[[:space:]]*=[[:space:]]*"/, "", k)
+    sub(/".*/, "", k)
+    kind = k
+    next
+  }
+  /^sources[[:space:]]*=/ { capture = 1; buf = "" }
+  capture { buf = buf "\n" $0 }
+  capture && /\]/ { capture = 0 }
+  END { flush_record() }
+' "$MANIFEST" | sed 's/#.*//' | sort -u)"
+
+# Librarian QA (thr_15yrvjrpap9td, first pass, finding 2): a cited source
+# that is a SYMLINK passes `git diff --quiet REVISION HEAD -- path` by
+# comparing the symlink's own (unchanged) target-path blob, never the
+# real file's content the symlink resolves to — demonstrated live: a
+# manifest source pointing at a symlink whose TARGET body changed stayed
+# green end-to-end. `git diff`/`cat-file` operate on git's tracked blob for
+# that path, which for a symlink IS the target-path string, not the
+# resolved content — this is the exact same escape class gate 1's
+# `walk_library` already rejects (fail closed on a symlink rather than
+# silently reading through it). Checked via the tracked git MODE
+# (`120000` = symlink), at both endpoints — a source that is a regular
+# file at REVISION but a symlink at HEAD (or vice versa) is just as
+# unverifiable as one that is a symlink throughout.
+DRIFTED=""
+while IFS= read -r path; do
+  [ -z "$path" ] && continue
+  case "$path" in
+    library/REVISION) continue ;;
+  esac
+  mode_head="$(git -C "$REPO_ROOT" ls-tree HEAD -- "$path" 2>/dev/null | awk '{print $1; exit}')"
+  mode_rev="$(git -C "$REPO_ROOT" ls-tree "$REVISION" -- "$path" 2>/dev/null | awk '{print $1; exit}')"
+  if [ "$mode_head" = "120000" ] || [ "$mode_rev" = "120000" ]; then
+    DRIFTED="${DRIFTED}  - ${path} (symlink source — content-currency cannot verify through a symlink indirection; cite the real file it resolves to instead)
+"
+    continue
+  fi
+  if ! git -C "$REPO_ROOT" cat-file -e "${REVISION}:${path}" 2>/dev/null; then
+    DRIFTED="${DRIFTED}  - ${path} (does not exist at REVISION)
+"
+    continue
+  fi
+  if ! git -C "$REPO_ROOT" diff --quiet "$REVISION" HEAD -- "$path" 2>/dev/null; then
+    DRIFTED="${DRIFTED}  - ${path}
+"
+  fi
+done <<<"$CITED_SOURCES"
+
+if [ -n "$DRIFTED" ]; then
+  echo "gen-doc-status: cited source(s) changed between REVISION and HEAD — the" >&2
+  echo "  currency claim is no longer backed by evidence for:" >&2
+  printf '%s' "$DRIFTED" >&2
+  echo "  Re-validate the corpus against the new content, then bump" >&2
+  echo "  library/REVISION to reflect that." >&2
   exit 1
 fi
 
