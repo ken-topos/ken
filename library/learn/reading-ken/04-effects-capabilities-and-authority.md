@@ -32,20 +32,35 @@ against `Stdout`/`Stderr`. A function with **no** `visits` clause — every
 `fn` and `const` in every fragment you have read so far — carries the empty
 row: it can compute, and nothing else.
 
-## 2. Effects are checked both ways — a signature cannot over- or under-claim
+## 2. The declared row is a checked upper bound, not an exact equation
 
-The row is not a comment the elaborator merely tolerates: a definition's
-*declared* row and its body's actual, transitively-inferred behavior are
-checked against each other, in both directions
-(`spec/30-surface/36-effects.md` §1.6.2, already cited in chapter
-[02](02-types-contracts-and-proofs.md) §1 for the `fn`/`proc` purity rule).
-`print`'s body calls `write`, a `Console`-effectful primitive; if its
-signature had omitted `visits [Console]`, the same rule chapter 02 already
-taught you — an effect the row doesn't declare is a hard error at the
-definition site — would reject it. The declared row is therefore not
-decoration: it is the one place a reader can find, by construction, the
-complete list of what a definition might do beyond computing a return
-value.
+The row is not a comment the elaborator merely tolerates, but the rule is
+an **inclusion**, not an equation: the body's actual, transitively-inferred
+effects must be a **subset** of the declared row — `ρ_inf ⊆ ρ_decl` — not
+equal to it
+(`spec/30-surface/36-effects.md`
+[§1.4](../../../spec/30-surface/36-effects.md#14-checking--declared-rows-and-the-escape-error)).
+Under-declaring is the error: `print`'s body calls `write`, a
+`Console`-effectful primitive, so if its signature had omitted
+`visits [Console]` the missing effect would escape the declared (empty)
+row and be rejected. **Over-declaring is not an error** — a `proc` may
+name more in its row than its current body actually performs, reserving
+headroom for a stable interface that grows later without a signature
+change. So the declared row is the complete list of what a definition is
+**permitted** to do, an upper bound a reader can trust; it is not, by
+itself, proof of what the body currently *does* do.
+
+A second, narrower check reads the row the other way, but only to police
+the *keyword*, not the row's contents: a `proc` whose declared row is
+**empty** (and which isn't a `space` operation) is flagged as a
+should-be-`fn`/`const` mismatch — the reverse-direction purity check
+chapter [02](02-types-contracts-and-proofs.md) §1 already taught, restated
+here at the row level rather than the keyword level
+(`spec/30-surface/36-effects.md`
+[§1.6.2](../../../spec/30-surface/36-effects.md#162-the-bidirectional-check--the-keyword-cannot-lie)).
+A `proc` that declares `visits [Console]` and never performs it in its
+current body is still perfectly honest under this check — only an
+*empty*-row `proc` is suspect.
 
 ## 3. What performing an effect actually requires — and the gap this curriculum is honest about
 
@@ -83,24 +98,48 @@ you could open and run.
   (`spec/60-security/62-authority.md`
   [§2](../../../spec/60-security/62-authority.md#2-capabilities-are-static-visible-and-least)).
 - **Attenuation derives a strictly weaker capability, never a stronger
-  one** — `attenuate : (c : Cap E) (w : Authority) → { c' : Cap E |
-  authority c' ⊑ authority c ⊓ w }`, so a delegated helper cannot exceed
-  the authority its caller handed it, by construction rather than by
-  review
+  one — and it is not something Ken code calls.** A trusted runner/host
+  action derives a child capability `c'` from a held `c` and a bound `w`
+  satisfying `authority c' ⊑ authority c ⊓ w`; this relation is **not a Ken
+  declaration or callable signature**
   (`spec/60-security/62-authority.md`
   [§3](../../../spec/60-security/62-authority.md#3-attenuation--hand-a-child-a-strictly-weaker-token-the-headline)).
+  Ken code never invokes `attenuate` — the name is deliberately absent
+  from the Ken environment (§3.2 below) — it instead **receives** an
+  already-attenuated capability as an ordinary parameter, refined by that
+  same bound, through an existing privileged route
+  (`spec/60-security/62-authority.md`
+  [§2.2](../../../spec/60-security/62-authority.md#22-unforgeability-the-abstraction-boundary)):
+  a child helper's signature can require exactly
+  `{ c' : Cap_FS | authority c' ⊑ authority c ⊓ only_dir "/tmp" }`, and
+  the caller supplies a capability already narrowed that way — the
+  narrowing itself happened outside Ken, not by a Ken-callable operation.
+- **No amplifying or attenuating operation is bound in Ken at all.**
+  `attenuate`, `revoke`, `strengthen`, and any public `Cap` constructor or
+  producer are simply **unbound names** — calling any of them from Ken
+  code is rejected as `UnboundName`, the same class of error as
+  referencing any other undeclared identifier
+  (`spec/60-security/62-authority.md`
+  [§3.2](../../../spec/60-security/62-authority.md#32-no-amplification--assert-the-absence-and-net-the-orientation)).
   §7's worked examples (unavailable in checked form — spec pseudocode, not
-  a catalog fragment) show this concretely: a capability attenuated to
-  `/tmp` is accepted at a sink that only needs `/tmp`, and rejected at a
-  sink that demands `/etc`
+  a catalog fragment) show both halves together: a `sandbox` function
+  receives an already-narrowed `/tmp`-scoped capability as a plain
+  parameter and passes it on to a helper, while a later line —
+  `attenuate c (full_authority)` — is marked rejected, `UnboundName`, in
+  the same worked example
   (`spec/60-security/62-authority.md`
   [§7](../../../spec/60-security/62-authority.md#7-worked-examples)).
 
 **Read that unavailability label honestly, not as a shortcut past it.**
-This is not the same move as inventing a toy example: `62-authority.md` §7
-*is* the actual normative source for the authority discipline, presented as
+This is not the same move as inventing a toy example: `62-authority.md` is
+the actual normative source for the authority discipline, presented as
 what it is — spec prose the catalog has not yet instantiated as checked
-code — rather than as something you could go find and run today.
+code — rather than as something you could go find and run today. And read
+the mechanism precisely: the honest boundary here is not merely "no
+checked fragment exists yet" — it is that `attenuate`/`revoke` are, by
+design, never going to be something a Ken program calls at all. The
+narrowing happens in a trusted runner/host outside Ken; Ken code only ever
+*receives* the narrowed result.
 
 ## 4. A capability's own honest limit, stated in the corpus's own words
 
@@ -134,8 +173,8 @@ code, and this chapter does not present it as such.
 ---
 
 **Grounds this page:**
-`spec/30-surface/36-effects.md` §§1, 1.6.2;
-`spec/60-security/62-authority.md` §§1, 2, 3, 7.
+`spec/30-surface/36-effects.md` §§1, 1.4, 1.6.2;
+`spec/60-security/62-authority.md` §§1, 2, 2.2, 3, 3.2, 7.
 Authority class: `explanatory` — this page orders and interprets those
 sections and the cited fragments' own text; it does not assert a rule they
 do not already state. The effects half is grounded in real, current,

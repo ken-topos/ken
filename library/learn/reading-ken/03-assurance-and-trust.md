@@ -40,14 +40,33 @@ for. The rest of this chapter walks all four against real fragments.
 
 ## 2. `proved`, read from a real certificate
 
-`catalog/packages/Core/Logic/Transport.ken.md` and
-`catalog/packages/Core/Logic/EmptyDec.ken.md` — both selected fragments
-([`fragments.md`](fragments.md)) — each close their own **Trust &
-derivation** section with the same sentence: **"`trusted_base()` delta.
-Zero."** That sentence is not a promise the file's own prose is making on
-its own authority; it reports what the kernel actually did with every
-declaration in the file — re-checked each certificate, and recorded no
-postulate against any of them
+`catalog/packages/Core/Logic/Transport.ken.md`'s own **Trust &
+derivation** section states, exactly: **"`trusted_base()` delta. Zero."**
+That is not the file's prose asserting its own authority — it is checked
+by a real producer: `transport_package_adds_zero_trusted_base_delta`
+(`crates/ken-elaborator/tests/surface_transport_acceptance.rs`) loads the
+package and asserts `trusted_base()` is set-equal before and after —
+every combinator reduces through the already-trusted `J`/`cast`, adding
+**nothing**.
+
+`catalog/packages/Core/Logic/EmptyDec.ken.md`'s own Trust & derivation
+section says something narrower, in different words: **"Zero new trust
+category."** That distinction is real, not a paraphrase of the same fact.
+Its own producers (`ac3_trusted_base_delta_is_ordinary_inductive_admission_only`,
+`ac4_bridge_demonstrated_over_deceq_bool_not_only_deceq_int`,
+`crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs`) establish that
+`Empty`/`Dec`'s own *admission* is ordinary inductive machinery — zero
+`declare_primitive`/`declare_postulate` delta — not that every claim
+reachable through the file is postulate-free regardless of instance.
+Section 5 below shows exactly why the difference matters: this same file
+also shows a worked example whose delta is **not** zero, once a
+particular instance is chosen.
+
+Both are `proved` verdicts in the sense that matters — the kernel
+re-checked each certificate and recorded no postulate for it — but
+"whole-file delta is zero" and "this admission is ordinary, delta-free
+machinery" are different claims, and only Transport's producer actually
+established the first one
 (`spec/20-verification/21-spec-syntax.md`
 [§5.3](../../../spec/20-verification/21-spec-syntax.md#53-how-the-verdict-and-the-status-relate-the-projection)).
 A `proved` verdict adds nothing to what a consumer must trust beyond the
@@ -69,6 +88,17 @@ close, so it is stated and hands off to the runtime rather than proved here
 the line: five proofs are proved; settlement and liveness are not, and it
 says so in its own text rather than leaving a reader to assume the whole
 file carries one uniform guarantee.
+
+As with `tested` below, read that carefully: this is the fragment's own
+honest prose naming the *concept* `delegated` describes, not an instance
+of the formal, tagged `delegate` clause itself. That concrete clause
+spelling is deferred exactly like `tested`'s — both are named but left
+un-spelled pending the behavioral sibling and the test/generator framework
+(`spec/20-verification/21-spec-syntax.md`
+[§5.5](../../../spec/20-verification/21-spec-syntax.md#55-scope-ruling--disposition-tag-syntax-is-deferred)) —
+so treat the formal `delegated` status, like `tested`, as **unavailable**
+in this curriculum's checked fragments, even though the concept it names
+is stated plainly in real corpus prose.
 
 ## 4. `tested` — the concept, honestly labelled as not yet exhibited here
 
@@ -110,12 +140,14 @@ Design notes names.
 
 Chapter [01](01-anatomy.md) §2 already showed you that every selected
 fragment's Trust & derivation section states a `trusted_base()` delta. Now
-you can read what that number actually certifies. The kernel's
-`trusted_base()` enumerates, on demand, every postulate and primitive
-declaration an artifact rests on; it is complete by construction — the only
-two ways an unchecked assumption can enter the program are
-`declare_postulate` and `declare_primitive`, and both land exactly the
-declarations the enumerator lists, so no assumption can hide
+you can read what that number actually certifies — and, per §2 above, what
+it does not: the sentence in a fragment's prose is only as trustworthy as
+the producer that actually computed it. The kernel's `trusted_base()`
+enumerates, on demand, every postulate and primitive declaration an
+artifact rests on; it is complete by construction — the only two ways an
+unchecked assumption can enter the program are `declare_postulate` and
+`declare_primitive`, and both land exactly the declarations the enumerator
+lists, so no assumption can hide
 (`spec/60-security/64-trust-model.md`
 [§1.1](../../../spec/60-security/64-trust-model.md#11-the-enumeration-contract-soundness-landed-producer),
 [§1.2](../../../spec/60-security/64-trust-model.md#12-the-completeness-net-no-hidden-assumption-by-construction)).
@@ -127,9 +159,16 @@ no postulate carrying its goal sits in `trusted_base()` — so a file cannot
 claim `proved` for something the kernel itself would list as assumed
 (`spec/20-verification/21-spec-syntax.md`
 [§5.4](../../../spec/20-verification/21-spec-syntax.md#54-the-honesty-guard-unknowntesteddelegated-never-read-proved)).
-Reading "Trust & derivation. `trusted_base()` delta: zero" is therefore not
-reading the author's assertion — it is reading a report of what the kernel
-actually found.
+For Transport, §2's cited producer is exactly this check, run for real:
+`trusted_base()` before loading the package equals `trusted_base()` after.
+For EmptyDec, the corresponding producer instead confirms the narrower,
+accurately-worded claim its own prose makes: the admission itself carries
+no primitive/postulate delta, which is a different, smaller fact than
+"every claim in this file is delta-free regardless of instance." Reading a
+fragment's own Trust & derivation sentence is a reasonable first read, but
+what makes it a *checked fact* rather than an author's promise is the
+producer behind it — read the sentence, then, when the claim matters, find
+and read the producer that established it.
 
 ## 7. Honest limits stated in the fragment's own voice
 
@@ -151,18 +190,27 @@ outside.
 ## Reader can now answer
 
 - Given a claim in a Ken file, which of the four epistemic statuses does it
-  carry, and how do you tell from the file's own text?
+  carry, and what producer — not just which sentence of prose — would you
+  point to if asked to prove it?
 - What does an **empty** `trusted_base()` delta certify, and why is that
-  certification not just the author's word for it?
-- Why is `Property.ken.md`'s property runner useful for understanding what
-  `tested` *means*, without itself being an example of the formal `tested`
-  status?
+  certification not just the author's word for it — and why can two
+  fragments word a zero-delta claim differently and mean genuinely
+  different things?
+- Why are `Property.ken.md`'s property runner and `System/IO.ken.md`'s
+  "delegated boundary properties" prose both useful for understanding what
+  `tested` and `delegated` *mean*, without either being an example of the
+  formal, tagged construct?
 
 ---
 
 **Grounds this page:**
-`spec/20-verification/21-spec-syntax.md` §§5, 5.1, 5.2, 5.3, 5.4;
-`spec/60-security/64-trust-model.md` §§1, 1.1, 1.2, 4.
+`spec/20-verification/21-spec-syntax.md` §§5, 5.1, 5.2, 5.3, 5.4, 5.5;
+`spec/60-security/64-trust-model.md` §§1, 1.1, 1.2, 4;
+`crates/ken-elaborator/tests/surface_transport_acceptance.rs`
+(`transport_package_adds_zero_trusted_base_delta`);
+`crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs`
+(`ac3_trusted_base_delta_is_ordinary_inductive_admission_only`,
+`ac4_bridge_demonstrated_over_deceq_bool_not_only_deceq_int`).
 Authority class: `explanatory` — this page orders and interprets those
 sections and the cited fragments' own text; it does not assert a rule they
 do not already state. Fragments cited are drawn from the already-selected,
