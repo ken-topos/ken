@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-22 14:40:21Z — from 30 issue file(s) in `docs/program/issues/`.
+2026-07-22 14:48:43Z — from 31 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -43,12 +43,13 @@ the committed file matches the generator's output.
 | `BUDGET-EFF` | TransferCount.remaining must be bounded by the effective request | active | verify | M | none | — |
 | `BUDGET-EXHAUST` | transfer-budget bound checks are fail-open on variant extension | ready | verify | S | none | — |
 | `CAT-CAPEX` | catalog exhibits no checked capability/authority exemplar | draft | steward | TBD | none | — |
+| `CB-HYGIENE` | cranelift_backend facade: strip WP-token narration, separate test material from implementation | ready | runtime | S | none | — |
 | `CI-SKIPPED-NATIVE-TESTS` | Restore rt_parity_native — one test at 221s is the blocker | ready | steward | S | none | — |
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
 | `DOC-VALIDATION-BINDING` | validation vocabulary claims a 1:1 binding to the gates; nothing binds it | ready | doc | S | none | — |
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
-| `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | active | doc | L | none | — |
+| `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | ready | doc | L | none | — |
 | `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | draft | doc | L | none | — |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
 | `F3-39` | F3 [task-list #39] — reducer: degrade-not-wrap + retire legacy arms | draft | runtime | TBD | none | — |
@@ -62,7 +63,7 @@ the committed file matches the generator's output.
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | draft | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
-| `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
+| `RT-SPLIT` | decompose cranelift_backend.rs | active | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | draft | foundation | M | none | — |
 | `SPAN-SEAL` | seal the BufferSpan producer surface | merged | foundation | M | none | — |
@@ -74,8 +75,10 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
+- `CB-HYGIENE` — cranelift_backend facade: strip WP-token narration, separate test material from implementation
 - `CI-SKIPPED-NATIVE-TESTS` — Restore rt_parity_native — one test at 221s is the blocker
 - `DOC-VALIDATION-BINDING` — validation vocabulary claims a 1:1 binding to the gates; nothing binds it
+- `DOC-W1` — documentation Wave 1 — the read-Ken spine, taught from checked fragments
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `KW-THEOREM` — rename the surface keyword `lemma` to `theorem`
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
@@ -89,8 +92,9 @@ Items not yet `merged`/`closed` whose `depends_on` names an id that
 is itself not yet `merged`/`closed`:
 
 - `BUDGET-EXHAUST` blocked by `BUDGET-EFF` (status: active)
-- `DOC-W2` blocked by `DOC-W1` (status: active)
+- `DOC-W2` blocked by `DOC-W1` (status: ready)
 - `F4` blocked by `A3` (status: draft)
+- `RT-SRC-DISPATCH-COVER` blocked by `RT-SPLIT` (status: active)
 - `SEAL-2` blocked by `BUDGET-EFF` (status: active)
 
 ## Gate progress

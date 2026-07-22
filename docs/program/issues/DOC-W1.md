@@ -1,7 +1,7 @@
 ---
 id: DOC-W1
 title: "documentation Wave 1 — the read-Ken spine, taught from checked fragments"
-status: active
+status: ready
 owner: doc
 size: L
 gate: none
@@ -124,34 +124,3 @@ must be **labelled as one in the retro**, not reported as the property itself.
   approval is therefore not the independent check a build QA's is — **the
   gates are the independent oracle.** Prove every new gate fails on a planted
   violation.
-
-## Wave 1 progress — 3 of 5 slices merged
-
-| slice | chapters | merged at |
-|---|---|---|
-| W1-1 | `00-*` orientation | ✅ |
-| W1-2 | `01-anatomy`, `02-types-contracts-and-proofs` | ✅ `9d2b4feb` |
-| W1-3 | `03-assurance-and-trust`, `04-effects-capabilities-and-authority` | ✅ `f5e08452` (PR #868) |
-| W1-4 | — | ⏳ behind the Steward seam gate |
-| W1-5 | exercises | not started |
-
-**W1-3 note — an honest gap, deliberately taught rather than papered over.**
-`doc-author` grepped the **whole** `catalog/packages/` tree and found **zero**
-checked fragments exhibiting a capability token, attenuation, or authority
-comparison, and **held ch04** rather than substituting a toy (§3 prohibition).
-`doc-leader` ruled (`evt_4b9pp185rmbpm`) that ch04 teaches the effect-row half
-from real checked fragments and the capability/authority half from
-`spec/60-security/62-authority.md` §7 labelled **unavailable in checked form** —
-reusing the pattern ch03 validated for `tested`, not a new resolution shape.
-
-⇒ The corpus gap itself is tracked as **`CAT-CAPEX`**, so the accumulating
-`unavailable` labels are counted somewhere rather than only appearing one
-chapter at a time.
-
-**Standing carries into W1-4:** (1) *name the predicate* must land in the
-kickoff as a **property the author can fail against**, not a checklist of axes;
-(2) the §5 exit-property proxy **errs optimistic** (an agent seat can open
-`spec/`/`catalog/`; the real reader cannot — green is weak evidence, red is
-strong); (3) AC-4's Wave-3 deferral is scoped to `catalog/guide/` migration
-only, **narrower than the `library/` exercises gap** — do not let it get
-restated as broader when W1-5 picks up exercises.
